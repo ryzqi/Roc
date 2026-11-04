@@ -42,6 +42,20 @@ export function createResearchRoleTools(input: {
   };
   const after = <T>(value: T): T => { assertActive(); return value; };
   const factories: Record<string, () => StructuredToolInterface> = {
+    read_source_migrations: () => tool(async ({evidenceId, offset, limit}) => {
+      assertActive();
+      const records = input.repository.evidence.sourceMigrations.list({projectId: input.run.projectId, evidenceId});
+      return {evidenceId, ...page(JSON.stringify(records), offset, limit)};
+    }, {name: 'read_source_migrations', description: '分页读取本项目同文档重解析的固定定位候选、用户捕获或拒绝决定及当前目标状态。候选与新位置均不表示科学支持已确认。',
+      schema: z.object({evidenceId: z.string().min(1), offset: z.number().int().nonnegative(),
+        limit: z.number().int().min(1).max(8000)}).strict()}),
+    read_source_replacements: () => tool(async ({evidenceId, offset, limit}) => {
+      assertActive();
+      const records = input.repository.evidence.sourceReplacements.list({projectId: input.run.projectId, evidenceId});
+      return {evidenceId, ...page(JSON.stringify(records), offset, limit)};
+    }, {name: 'read_source_replacements', description: '分页读取本项目用户明确选定的文档替代或实验重跑前后关联、两端固定来源及完整输入/环境/输出快照。包含该证据作为前序或新来源的记录；选择时needs_review与当前来源状态分开，不表示科学等价或当前人工批准。',
+      schema: z.object({evidenceId: z.string().min(1), offset: z.number().int().nonnegative(),
+        limit: z.number().int().min(1).max(8000)}).strict()}),
     inspect_evidence_source: () => tool(async ({evidenceId, offset, limit}) => {
       assertActive();
       const source = input.repository.evidence.inspectEvidence(evidenceId, input.run.projectId);

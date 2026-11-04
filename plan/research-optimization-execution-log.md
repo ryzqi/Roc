@@ -2942,3 +2942,38 @@ PDF/archive read succeeds while current verify/delivery refuses without creating
 Source replacement inspector and readonly role lineage facts remain next, followed by PR-07.
 PR-06 and the full plan remain incomplete. Earlier independent unit review-order defect remains
 recorded despite this fullunit pass; expanded P4 and external scientific/client/L2 gaps remain.
+
+
+## ROC-PR-06A5C2A — readonly role source lineage facts
+
+Verified passing. Existing readonly migration/replacement capabilities now have actual role
+tools read_source_migrations/read_source_replacements. Strict schemas accept Evidence ID and
+explicit character offset/limit only; project and active stage-run come from the bound service.
+Full fixed proposal/decision/replacement/execution snapshots paginate without invented summaries
+or science equivalence. Roles receive no human selection/review authority. Cancellation and
+terminated run reads refuse. Prompt states location capture and predecessor selection are facts
+requiring separate scientific relation review.
+
+Replacement list includes either selected endpoint in original insertion order, allowing the new
+source to discover its actual predecessor. Current target status stays separate from selection-time
+needs_review and immutable snapshot/hash. Missing/foreign sources and damaged records remain
+errors, never empty success fallbacks.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| node --test tests/unit/research-source-replacement-ipc.test.mjs tests/unit/research-model-relation-proposals.test.mjs tests/unit/research-source-migration-ipc.test.mjs | Final19/19 |
+| pnpm typecheck / pnpm build | Passed; fresh production build |
+| pnpm test:unit | 881/881 before final additional migration-tool regression |
+| pnpm harness:eval | 94/94 |
+| node scripts/run-research-p0.mjs | 13/13 native |
+| node scripts/smoke-electron.mjs | 12/12, zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; eager1132980bytes6files |
+
+Final added migration-tool regression reads an actual saved ambiguous capture, reparses again,
+and checks fixed decision/proposal/hash, stale target, superseded captured source and unchanged
+invalidated scientific support with zero read writes. Final19 includes that regression. Existing
+rerun test reads complete actual repository execution snapshots through1000-character pages.
+No renderer code, dependency, frozen fixture or DB version change. Source replacement inspector
+remains next; PR-06/full plan and external/P4 acceptance gaps remain unfinished.

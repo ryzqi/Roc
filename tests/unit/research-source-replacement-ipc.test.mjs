@@ -102,6 +102,11 @@ test('a same-parent attachment is independent until a trusted explicit source se
     assert.deepEqual(read.replacement, record);
     assert.equal(read.replacementHash, hash(JSON.stringify(record)));
     assert.equal(read.targetReferenceStatus, 'recorded');
+    const incoming = await f.adapter.invoke('research.listSourceReplacements',
+      [{projectId: f.project.id, evidenceId: f.target.evidence.id}], 31);
+    assert.deepEqual(incoming.data, [read]);
+    assert.deepEqual((await f.adapter.invoke('research.listSourceReplacements',
+      [{projectId: other.id, evidenceId: foreign.id}], 31)).data, []);
     assert.equal(f.changes(), after);
   } finally {f.close();}
 });
@@ -253,6 +258,20 @@ test('experiment rerun lineage requires two real completed executions and captur
     assert.deepEqual(f.repository.evidence.getClaim(f.claim.id), f.claim);
     assert.equal(f.repository.evidence.relations.get(f.review.id, f.project.id).status, 'invalidated');
     assert.throws(() => f.repository.evidence.assertReviewedSupport(f.claim), /research_evidence_reference_superseded/u);
+    const tools = api.createResearchRoleTools({run: f.run, context: f.repository.runs.getContext(f.run.id),
+      repository: f.repository, capabilities: {}, signal: new AbortController().signal});
+    const read = tools.find(tool => tool.name === 'read_source_replacements');
+    const after = f.changes();
+    let text = '', offset = 0;
+    do {
+      const part = await read.invoke({evidenceId: current.evidence.id, offset, limit: 1000});
+      text += part.content; offset = part.nextOffset;
+    } while (offset !== null);
+    const [inspection] = JSON.parse(text);
+    assert.deepEqual(inspection.replacement, result.data);
+    assert.deepEqual(inspection.replacement.experimentLineage, lineage);
+    assert.equal(inspection.replacementHash, hash(JSON.stringify(result.data)));
+    assert.equal(f.changes(), after);
   } finally {f.close();}
 });
 
@@ -279,5 +298,56 @@ test('unmanaged experiment records or noncompleted managed snapshots cannot masq
     'research_source_replacement_executions_required');
     assert.equal(f.changes(), after);
     assert.equal(f.repository.evidence.inspectEvidence(previous.evidence.id, f.project.id).referenceStatus, 'recorded');
+  } finally {f.close();}
+});
+
+test('actual role lineage tools page both endpoints with fixed hashes and current status, never source-selection authority', async () => {
+  const f = scene(), controller = new AbortController();
+  try {
+    const record = (await f.adapter.invoke('research.replaceEvidenceSource', [f.request], 31)).data;
+    const tools = api.createResearchRoleTools({run: f.run, context: f.repository.runs.getContext(f.run.id),
+      repository: f.repository, capabilities: {invoke: () => assert.fail('lineage reads use the bound repository')}, signal: controller.signal});
+    const replacements = tools.find(tool => tool.name === 'read_source_replacements');
+    const migrations = tools.find(tool => tool.name === 'read_source_migrations');
+    assert.ok(replacements); assert.ok(migrations);
+    assert.equal(tools.some(tool => /replace|migration/u.test(tool.name) && !tool.name.startsWith('read_')), false);
+    const before = f.changes();
+    const first = await replacements.invoke({evidenceId: f.target.evidence.id, offset: 0, limit: 37});
+    assert.equal(first.content.length, 37); assert.equal(first.nextOffset, 37);
+    let text = first.content, next = first.nextOffset;
+    while (next !== null) {
+      const part = await replacements.invoke({evidenceId: f.target.evidence.id, offset: next, limit: 8000});
+      text += part.content; next = part.nextOffset;
+    }
+    const [incoming] = JSON.parse(text);
+    assert.deepEqual(incoming.replacement, record);
+    assert.equal(incoming.replacementHash, hash(JSON.stringify(record)));
+    assert.equal(incoming.targetReferenceStatus, 'recorded');
+    assert.equal(incoming.replacement.scientificReviewAtSelection, 'needs_review');
+    const outgoing = await replacements.invoke({evidenceId: f.old.evidence.id, offset: 0, limit: 8000});
+    assert.equal(outgoing.content, text);
+    assert.equal((await replacements.invoke({evidenceId: f.target.evidence.id, offset: first.totalChars, limit: 1})).content, '');
+    assert.deepEqual(JSON.parse((await migrations.invoke({evidenceId: f.old.evidence.id, offset: 0, limit: 8000})).content), []);
+    for (const tool of [replacements, migrations]) {
+      await assert.rejects(tool.invoke({projectId: 'forged', evidenceId: f.target.evidence.id, offset: 0, limit: 8000}));
+      await assert.rejects(tool.invoke({evidenceId: f.target.evidence.id, offset: 0, limit: 8001}));
+      await assert.rejects(tool.invoke({evidenceId: 'foreign-or-missing', offset: 0, limit: 8000}), /research_evidence_not_found/u);
+    }
+    assert.equal(f.changes(), before);
+    f.repository.evidence.invalidateEvidence(f.target.evidence.id, f.project.id);
+    const invalidated = f.changes();
+    const [current] = JSON.parse((await replacements.invoke({evidenceId: f.target.evidence.id, offset: 0, limit: 8000})).content);
+    assert.equal(current.targetReferenceStatus, 'superseded');
+    assert.deepEqual(current.replacement, record);
+    assert.equal(current.replacementHash, incoming.replacementHash);
+    assert.equal(f.changes(), invalidated);
+    controller.abort(new Error('synthetic_lineage_cancelled'));
+    await assert.rejects(replacements.invoke({evidenceId: f.target.evidence.id, offset: 0, limit: 8000}), /synthetic_lineage_cancelled/u);
+    assert.equal(f.changes(), invalidated);
+    const activeTools = api.createResearchRoleTools({run: f.run, context: f.repository.runs.getContext(f.run.id),
+      repository: f.repository, capabilities: {}, signal: new AbortController().signal});
+    f.repository.runs.terminate(f.run.id, f.project.id, 'cancelled', 'synthetic_lineage_terminated');
+    await assert.rejects(activeTools.find(tool => tool.name === 'read_source_replacements').invoke(
+      {evidenceId: f.target.evidence.id, offset: 0, limit: 8000}), /research_run_not_current/u);
   } finally {f.close();}
 });

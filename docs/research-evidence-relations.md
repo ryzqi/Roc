@@ -280,3 +280,5 @@ window96 明确选择真实执行前后端点，保留旧代码/环境/输入/�
 导出 record/sourceHash/scientific-review/archive/PDF 保持原字节，当前交付拒绝。
 这些窗口为明确 synthetic 用户传输测试，不表示真实用户或独立科学审查。冻结
 fixtures 未修改。本增量是后端与可信传输；检查器选择界面和只读角色事实继续接入。
+
+只读角色工具 `read_source_migrations` 与 `read_source_replacements` 按字符分页返回完整固定记录；项目与运行由服务绑定，取消或终止后拒绝读取。替代记录列表包含证据作为前序或新来源的两种情况，按保存顺序返回。工具不会接受用户身份、写入替代决定或恢复科学支持；`nextOffset` 用于继续读取完整实验输入、环境和输出快照。

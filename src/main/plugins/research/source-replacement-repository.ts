@@ -79,8 +79,9 @@ export class ResearchSourceReplacementRepository {
   list(input: {projectId: string; evidenceId: string}): ResearchSourceReplacementInspection[] {
     const request = researchSourceReplacementListSchema.parse(input);
     this.evidence.inspectEvidence(request.evidenceId, request.projectId);
-    const rows = this.db.prepare('SELECT * FROM research_source_replacements WHERE project_id=? AND evidence_id=? ORDER BY rowid')
-      .all(request.projectId, request.evidenceId) as Row[];
+    const rows = this.db.prepare(`SELECT * FROM research_source_replacements
+      WHERE project_id=? AND (evidence_id=? OR target_evidence_id=?) ORDER BY rowid`)
+      .all(request.projectId, request.evidenceId, request.evidenceId) as Row[];
     return rows.map(row => this.inspect(row, request.projectId));
   }
 

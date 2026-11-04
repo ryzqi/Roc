@@ -265,3 +265,39 @@ test('stale targets and archived projects refuse capture, and changed target par
     assert.equal(f.changes(), archived);
   } finally {f.close();}
 });
+
+test('active role reads actual candidate selection history and stale target facts without deciding or restoring support', async () => {
+  const f = scene();
+  try {
+    const decision = (await f.adapter.invoke('research.captureSourceMigration', [f.capture], 31)).data;
+    const tools = api.createResearchRoleTools({run: f.run, context: f.repository.runs.getContext(f.run.id),
+      repository: f.repository, capabilities: {}, signal: new AbortController().signal});
+    const read = tools.find(tool => tool.name === 'read_source_migrations');
+    assert.ok(read);
+    const before = f.changes();
+    const fullRead = async () => {
+      let text = '', offset = 0;
+      do {
+        const part = await read.invoke({evidenceId: f.old.id, offset, limit: 500});
+        text += part.content; offset = part.nextOffset;
+      } while (offset !== null);
+      return JSON.parse(text);
+    };
+    const [current] = await fullRead();
+    assert.deepEqual(current.proposal, f.inspection.proposal);
+    assert.equal(current.proposalHash, f.inspection.proposalHash);
+    assert.deepEqual(current.decision, decision);
+    assert.equal(current.targetStatus, 'current');
+    assert.equal(current.capturedReferenceStatus, 'recorded');
+    assert.equal(f.changes(), before);
+    f.publish('decision-later');
+    const after = f.changes();
+    const [stale] = await fullRead();
+    assert.deepEqual(stale.proposal, current.proposal);
+    assert.deepEqual(stale.decision, decision);
+    assert.equal(stale.targetStatus, 'stale');
+    assert.equal(stale.capturedReferenceStatus, 'superseded');
+    assert.equal(f.repository.evidence.relations.get(f.review.id, f.project.id).status, 'invalidated');
+    assert.equal(f.changes(), after);
+  } finally {f.close();}
+});
