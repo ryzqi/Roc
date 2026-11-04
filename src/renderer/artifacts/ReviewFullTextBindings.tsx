@@ -10,6 +10,7 @@ import {ReviewFullTextEligibility} from './ReviewFullTextEligibility';
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 const ReviewExtractions = lazy(async () => ({default: (await import('./ReviewExtractions')).ReviewExtractions}));
 const ReviewStudies = lazy(async () => ({default: (await import('./ReviewStudies')).ReviewStudies}));
+const ReviewReport = lazy(async () => ({default: (await import('./ReviewReport')).ReviewReport}));
 const statuses = {retrieval_pending: '待获取', not_retrieved: '未获取', source_changed: '来源已变化',
   pending: '待资格筛选', uncertain: '无法判断', conflict: '决定冲突', included: '全文纳入', excluded: '全文排除'} as const;
 export function ReviewFullTextBindings({client, protocol, projectId, corpusId, writable, onPending}: {
@@ -24,6 +25,7 @@ export function ReviewFullTextBindings({client, protocol, projectId, corpusId, w
   const [reviewNote, setReviewNote] = useState('');
   const [extractionsOpen, setExtractionsOpen] = useState(false), [extractionPending, setExtractionPending] = useState(false);
   const [studiesOpen, setStudiesOpen] = useState(false), [studiesPending, setStudiesPending] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const freeze = useAsyncAction((request: ResearchReviewFullTextFreezeRequest) => client.api.research.freezeReviewFullTextScreening(request),
     {label: '冻结全文获取与资格筛选'});
   const pending = bindingPending || eligibilityPending || freeze.pending || extractionPending || studiesPending;
@@ -67,6 +69,12 @@ export function ReviewFullTextBindings({client, protocol, projectId, corpusId, w
         {!studiesOpen ? null : <Suspense fallback={<p role="status">正在加载研究归组…</p>}>
           <ReviewStudies key={`studies:${phase.freezeHash}`} client={client} phase={phase}
             writable={writable && read.status === 'ready' && !extractionPending} onPending={value => {setStudiesPending(value); onPending(value);}} />
+        </Suspense>}
+        <button type="button" className={`${button} self-start`} disabled={pending} data-testid="artifact-review-report-inspect"
+          onClick={() => setReportOpen(true)}>核查综述计数与证据报告</button>
+        {!reportOpen ? null : <Suspense fallback={<p role="status">正在加载综述报告…</p>}>
+          <ReviewReport key={`report:${phase.freezeHash}`} client={client} projectId={projectId} corpusId={corpusId}
+            disabled={pending || read.status !== 'ready'} />
         </Suspense>}
       </section>}
       <ol start={offset + 1} className="flex flex-col gap-2">{phase.items.slice(offset, offset + 10).map((item, index) => <li key={item.hit.id}>

@@ -353,3 +353,12 @@ DB40 在现有筛选计划上保存独立 `study_group_head_hash` 和不可变�
 未审核归组仍为 null，研究数未报告；只有无纳入报告时才能明确保存空归组并得到审核的零研究。修订使用准确父版本/哈希与原因，完整历史成员来源可核查。主进程保存时核验所有真实原文；回执丢失精确重试，pending期间保留表单，禁止其他来源/提取写入和关闭。来源变化或归档保留固定的报告/研究计数并只读。
 
 本部分 Verified passing：归组原生11/11、最终联合回归134/134、后端10/10、fresh build/type、实际启动13/13零renderer错误、IPC/chunks通过。默认、hover、展开历史和归档暗色650px的截图/cut0回执位于 `.artifacts/research-optimization/pr09-a7c5-ui/`，默认与归档已视觉核查。没有独立科学研究身份准确性声明。
+
+
+## 检查器内的真实计数和只读报告
+
+全文冻结后同一检查器按需读取 `getReviewReport` 的正文/哈希和当前引用状态。界面逐条显示四项守恒等式，区分重复移除、标题摘要排除、未取得报告和全文资格排除；研究数未审核时显示未报告，明确归组后才显示真实人工声明数。查询附录保存准确日期/参数、原始来源错误和终态回执，全部原始记录、排除清单和报告级证据表各按10项分页。提取单位、missing/unjudgeable、逐域/总体质量判断和准确 Evidence/原文定位完整保留；缺少提取、框架或评价各自明确显示。没有研究级效应分配或汇总。
+
+2026-11-05 复核 [PRISMA 官方流程图](https://www.prisma-statement.org/prisma-2020-flow-diagram) 的四种模板范围及许可，并核对 [Page 等原文 Box 1](https://journals.plos.org/plosmedicine/article?id=10.1371/journal.pmed.1003583) 的 record/report/study 区别。当前只展示这些计数数据项，正式模板仍需人工确认新/更新综述及全部检索来源，不能从当前分库协议自动推断完整格式适用性。
+
+本部分 Verified passing：报表最终联合142/142、后端8/8、fresh build/type、实际启动13/13零renderer错误、IPC/chunks通过。初轮7/8仅原生details展开前读取innerText，未修改产品或原断言；等待真实条目可见后专项1/1及完整142通过。默认截图原停在入口附近，补滚动到计数正文后单独原生1/1核查截图；默认与归档暗色650px已视觉核查，所有cut0回执和展开附录/证据表图片保存于 `.artifacts/research-optimization/pr09-a7c6-ui/`。实际只读零写入、null/审核零研究、重复/null元数据、两轮主排除来源、missing单位/无法判断评价、分页与覆盖缺口、丢失收据/跨项目、重解析/归档保持正文和哈希均覆盖。助手执行与余下计划继续实施。
