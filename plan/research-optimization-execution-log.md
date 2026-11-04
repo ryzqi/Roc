@@ -3273,3 +3273,37 @@ under pr07-reader-selection/ and pr07-a3b-*; initial API/type/regex errors are i
 
 Next: reverse PDF→block location, fixed Evidence/Claim source deep links, research annotations,
 parsed table/formula assets and remaining PR07 acceptance. Full roadmap/external acceptance open.
+
+## ROC-PR-07A3C — original PDF to exact parsed block/location
+
+Verified passing. PDF pointer hits use every block region on the actual selected page projected
+through its sealed frame/current PDF viewport. A unique hit selects exact block/location; overlapping
+regions require explicit choice and zero hits never select a nearby block. Page-only histories show
+actual page-block choices without a spatial guess. Native keyboard page-block list retains selected
+cross-page location index; destination focus goes to the content group and scrolls it into view.
+Selected block has visible background/focus. Same-page candidates remain present but disabled while
+repainting; stable scrollbar gutter prevents loading/candidate heights changing the PDF width.
+No evidence, annotation, scientific-review or other database writes introduced.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm build (includes typecheck) | Final2 fresh production build passed |
+| node --test --test-concurrency=1 tests/renderer/paper-reader.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-search-plan.test.mjs tests/renderer/literature-review.test.mjs tests/renderer/document-preview-protocol.test.mjs |61/61 |
+| node --test --test-name-pattern='rotated PDF hit\|cross-page location\|without measured regions' tests/renderer/paper-reader.test.mjs | Focused audit3/3 |
+| node --test tests/renderer/paper-reader.test.mjs | Final2 15/15 after gutter/candidate repaint changes |
+| node scripts/smoke-electron.mjs | Final2 12/12, zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; eager1131738bytes6files |
+
+UI-only increment: backend unit894/Harness94/native13 from preceding A3B remain applicable to
+unchanged backend paths; not rerun or presented as fresh results here. Actual Electron/Vite tests
+cover measured crop90/UserUnit2 unique/overlap/no-hit regions, original2-page cross-page index1 and
+keyboard focus, and absent coordinate history. Layout blocks are explicitly synthetic on actual
+PDF bytes/viewports, published in separately hashed synthetic-reverse artifacts; this validates
+interaction geometry, not parser quality. Tests assert zero DB writes and worker teardown.
+Five overlap/hover/light/dark/destination-focus clip states cut0/hidden0. Overlap800light screenshot
+inspected; final screenshots and audit stored in pr07-reader-selection/reverse-*.
+
+Next: Evidence/Claim fixed parse/source links, annotations/capture, table/formula assets and full
+PR07 resource/scanned-source acceptance. Remaining roadmap and external acceptance unfinished.

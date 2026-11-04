@@ -1,6 +1,6 @@
 # 原 PDF 与解析定位
 
-PR-07 当前已完成测量坐标、原子解析快照、安全预览元数据和原 PDF/解析文本并排阅读。块到原 PDF 的页/区域定位已接入；Evidence/Claim 固定来源深链、PDF 到块的反向选择和标注捕获仍待完成。
+PR-07 当前已完成测量坐标、原子解析快照、安全预览元数据和原 PDF/解析文本并排阅读。块与 PDF 的双向定位已接入；Evidence/Claim 固定来源深链及标注捕获仍待完成。
 
 ## 坐标与版本
 
@@ -84,8 +84,18 @@ git diff --check
 
 缺少区域 frame 时明确提示仅页定位。解析器记录整页 bbox 时明确说明没有细分块区域；高亮整页不会被描述为精确段落。原文件、版本、坐标或页数不一致时显示可重试错误。
 
-每次只保留一个可见页的 DOM canvas，页位图上限为 400 万像素。翻页/缩放/重绘取消旧 render 并释放页资源；关闭或切换来源取消 fetch/loading，销毁 PDF 文档、PDF worker 和原生 Worker。尚未实现文本选择、研究标注及反向块定位。
+每次只保留一个可见页的 DOM canvas，页位图上限为 400 万像素。翻页/缩放/重绘取消旧 render 并释放页资源；关闭或切换来源取消 fetch/loading，销毁 PDF 文档、PDF worker 和原生 Worker。尚未实现文本选择和研究标注。
 
 阅读器测试由 Vite8.3.5 实际构建并加载 Electron/Chromium，直接使用 `?worker` 生成的独立 worker 文件，不模拟 worker import。场景覆盖冻结 PDF 真实文本位图、缩放、三个窗口边界、无坐标历史、原文损坏、CropBox/90°/UserUnit2、32 页跳转与关闭清理。32 页 PDF 只解析第一页，测试仍可读取原文件其他页面，不制造未解析页的区域。
 
 `actual-pdf-bitmap.json` 保存真实位图和编译 worker URL；`rotated-original-projection.json` 保存测量 frame/投影；`large-original-resources.json` 保存六次跳页的实际非零位图/worker 数量、耗时和进程内存。内存记录是观测值，不声称 RSS 硬上限。`comparison-clip-audit.json` 覆盖并排、hover 和缩放最终状态；截图保存明暗模式及 800/1099/1100 宽度。
+
+## PDF 反向定位
+
+点击原 PDF 的位置，用当前实际绘制视口中所有该页解析区域做命中判断。只有一个命中且所有页块都有区域时，选择该块的确切 `locationIndex`。多个区域覆盖位置时展示原始标签、locator 和位置序号，必须明确选择；没有命中时不选择附近块。此前选择会保持到用户作出新选择。
+
+「本页解析块」提供同等键盘入口，包括只记录页定位的历史解析。缺少区域时点击不会产生空间匹配，而是提供本页块列表并明确提示。跨页块选择保留用户所选位置，不能改回其第一个位置。
+
+返回解析块后，焦点移到可程序聚焦的块 section，并滚动到该块。选择块有背景与可见焦点；目标是内容组，避免一次 Enter 又激活块内「原文位置」按钮。
+
+反向测试使用真实 PDF/worker 和实测 crop/rotation/UserUnit frame，非重叠、重叠及跨页布局明确为合成测试块，并发布独立 SHA-256 工件。此证据建立坐标交互，不声称解析器已经精确识别这些区域。实际交互保持数据库零写入。`reverse-clip-audit.json` 保存展开、明暗、hover 和键盘目标状态；`reverse-overlap-*.png` 保存候选列表布局。

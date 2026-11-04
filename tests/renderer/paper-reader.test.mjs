@@ -165,7 +165,7 @@ function generatedPdf({pageCount = 1, crop = [0,0,612,792], rotation = 0, userUn
   return Buffer.from(text);
 }
 
-async function realPdfScene({pageOnly = false, pdfOptions = null} = {}) {
+async function realPdfScene({pageOnly = false, pdfOptions = null, pageRange = '1'} = {}) {
   const f = scene();
   f.root = await realpath(await mkdtemp(join(tmpdir(), 'roc-reader-original-')));
   const source = pdfOptions === null ? await readFile('tests/fixtures/research-workflow/source.pdf') : generatedPdf(pdfOptions);
@@ -177,7 +177,7 @@ async function realPdfScene({pageOnly = false, pdfOptions = null} = {}) {
     platform: 'node', external: ['zod'], tempDir: '.runtime/tmp'
   });
   const raw = await parseResearchDocument({projectRoot: f.root, sourcePath: path, outputDir: join(f.root, 'output'),
-    options: {tier: 'compact', device: 'cpu', pageRange: '1'}, modelFiles: null, modelManifest: ''});
+    options: {tier: 'compact', device: 'cpu', pageRange}, modelFiles: null, modelManifest: ''});
   const collected = await collectDocumentContent(f.root, join(f.root, 'output'), raw);
   const document = f.repository.documents.import({id: 'actual-original', libraryItemId: f.first.libraryItemId, projectId: f.project.id,
     filename: 'source.pdf', mediaType: 'application/pdf', sourcePath: 'source.pdf', sourceHash: hash(source), size: source.length, entry: null}, false).document;
@@ -193,6 +193,34 @@ async function realPdfScene({pageOnly = false, pdfOptions = null} = {}) {
   f.snapshot = () => ({projectId: f.project.id, selected: f.repository.library.get(document.libraryItemId),
     documents: [f.repository.documents.get(document.id)]});
   return f;
+}
+
+/** Explicit synthetic block layout; original bytes and measured PDF viewports are real. */
+async function publishReverseLayout(f, {crossPage = false, pageOnly = false} = {}) {
+  const data=structuredClone(f.collected.data), frame=f.collected.coordinates.pages[0].frame;
+  const template=data.content.blocks[0], w=frame.width, h=frame.height;
+  const location=bbox=>({page:1,bbox,coordinateOrigin:'TOPLEFT'});
+  const upperLeft=location([0,0,w/2,h/2]), upperRight=location([w/2,0,w,h/2]);
+  const make=(id,label,locations)=>({...template,id,label,text:`Explicit synthetic ${label} region.`,locator:`synthetic:${id}`,locations});
+  const leftLocations=[upperLeft];
+  if(crossPage) {
+    const second=f.collected.coordinates.pages.find(page=>page.page===2).frame;
+    leftLocations.push({page:2,bbox:[0,0,second.width,second.height],coordinateOrigin:'TOPLEFT'});
+  }
+  data.content.blocks=[make('reverse-left','Left',leftLocations),make('reverse-right','Right',[upperRight]),
+    make('reverse-overlap','Overlap',[upperLeft])];
+  data.content.content=data.content.blocks.map(block=>block.text).join('\n\n');
+  data.content.parserVersion='synthetic-reverse-layout/v1';
+  data.content.parserFingerprint=hash('synthetic-reverse-layout/v1');
+  data.content.artifacts.structuredContent='artifacts/synthetic-reverse.json';
+  const artifact=Buffer.from(JSON.stringify({seam:'explicit synthetic blocks on actual measured original',
+    blocks:data.content.blocks,coordinateFrames:f.collected.coordinates.pages}));
+  await writeFile(join(f.root,data.outputPath,data.content.artifacts.structuredContent),artifact);
+  const coordinates={...f.collected.coordinates,parseHash:hash(JSON.stringify(data.content)),
+    artifact:{path:data.content.artifacts.structuredContent,sha256:hash(artifact),size:artifact.length}};
+  f.repository.documents.begin(f.actual.id,'synthetic-reverse-parse');
+  f.repository.documents.complete(f.actual.id,'synthetic-reverse-parse',data,pageOnly ? null : coordinates);
+  f.reverse={data,coordinates};
 }
 
 async function mount(f, focus = {parseId: null, locator: null}) {
@@ -482,4 +510,86 @@ test('32-page original retains one visible bitmap across real page navigation an
   await writeFile(join(artifacts,'large-original-resources.json'),JSON.stringify({pageCount:32,
     sourceHash:f.actual.sourceHash,parsedPages:f.collected.coordinates.pages.map(page=>page.page),
     initial,steady,closed,samples,limits:'one DOM canvas, <=4M pixels per page, explicit worker teardown; no claim of process RSS hard cap'},null,2));
+});
+
+test('actual rotated PDF hit chooses a unique block while overlap and absent regions require explicit selection',async()=>{
+  const f=await realPdfScene({pdfOptions:{crop:[20,30,500,700],rotation:90,userUnit:2}});
+  const auditSource=await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8'), audits=[];
+  const audit=async state=>{
+    const result=await page.evaluate(source=>(0,eval)(source)({root:'#root',viewport:true}),auditSource);
+    audits.push({state,...result});assert.equal(result.cut,0);
+  };
+  await publishReverseLayout(f);const before=f.changes();
+  await mount(f);await textEquals('Explicit synthetic Left');
+  await page.getByTestId('reader-compare-pdf').click();await waitForOriginal();
+  const canvas=page.getByTestId('reader-pdf-canvas');
+  const clickAt=async(x,y)=>{
+    const size=await canvas.evaluate(canvas=>({width:canvas.getBoundingClientRect().width,height:canvas.getBoundingClientRect().height}));
+    await canvas.click({position:{x:size.width*x,y:size.height*y}});
+  };
+  await clickAt(.75,.25);
+  await page.waitForFunction(()=>document.activeElement?.getAttribute('data-block-id')==='reverse-right' &&
+    document.activeElement.dataset.focused==='true');
+  await waitForOriginal();await clickAt(.25,.25);
+  assert.equal(await page.getByTestId('reader-pdf-block-candidate').count(),2);
+  assert.equal(await page.locator('[data-block-id="reverse-left"]').getAttribute('data-focused'),null);
+  for(const theme of ['light','dark']) {
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);await waitForOriginal();
+    await audit(`overlap-${theme}`);
+    await page.getByTestId('reader-pdf-block-candidate').first().hover();await audit(`hover-${theme}`);
+    await page.screenshot({path:join(artifacts,`reverse-overlap-${theme}.png`)});
+  }
+  const target=page.getByRole('button',{name:'定位到Overlap synthetic:reverse-overlap 位置1',exact:true});
+  await target.focus();await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>document.activeElement?.getAttribute('data-block-id')==='reverse-overlap' &&
+    document.activeElement.dataset.focused==='true');
+  assert.equal(await page.getByTestId('reader-pdf-block-candidates').count(),0);
+  await audit('keyboard-destination-focus');
+  await writeFile(join(artifacts,'reverse-clip-audit.json'),JSON.stringify(audits,null,2));
+  await waitForOriginal();await clickAt(.75,.75);
+  await page.getByTestId('reader-pdf-block-candidates').waitFor();
+  assert.equal(await page.getByTestId('reader-pdf-block-candidate').count(),0);
+  assert.match(await page.getByTestId('reader-pdf-block-candidates').innerText(),/没有已记录/);
+  assert.equal(await page.locator('[data-block-id="reverse-overlap"]').getAttribute('data-focused'),'true');
+  assert.equal(f.changes(),before);
+  await page.getByTestId('reader-compare-pdf').click();await page.waitForFunction(()=>window.liveWorkers===0);
+});
+
+test('keyboard PDF page-block selection retains the exact cross-page location and group focus',async()=>{
+  const f=await realPdfScene({pdfOptions:{pageCount:2},pageRange:'1-2'});
+  await publishReverseLayout(f,{crossPage:true});const before=f.changes();
+  await mount(f);await textEquals('Explicit synthetic Left');
+  await page.locator('[data-block-id="reverse-left"] [data-testid="reader-block-source"]').click();await waitForOriginal();
+  await page.getByRole('combobox',{name:'解析块位置'}).selectOption('1');await waitForOriginal();
+  assert.equal(await page.getByRole('spinbutton',{name:'PDF 页码'}).inputValue(),'2');
+  const open=page.getByTestId('reader-pdf-page-blocks');
+  await open.focus();await page.keyboard.press('Enter');
+  assert.equal(await page.getByTestId('reader-pdf-block-candidate').count(),1);
+  const target=page.getByRole('button',{name:'定位到Left synthetic:reverse-left 位置2',exact:true});
+  await target.focus();await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>document.activeElement?.getAttribute('data-block-id')==='reverse-left' &&
+    document.activeElement.dataset.focused==='true');
+  await waitForOriginal();
+  assert.equal(await page.getByRole('spinbutton',{name:'PDF 页码'}).inputValue(),'2');
+  assert.equal(await page.getByRole('combobox',{name:'解析块位置'}).inputValue(),'1');
+  assert.equal(f.changes(),before);
+  await page.getByTestId('reader-compare-pdf').click();await page.waitForFunction(()=>window.liveWorkers===0);
+});
+
+test('PDF without measured regions offers page-block choices and never infers a spatial match',async()=>{
+  const f=await realPdfScene();
+  await publishReverseLayout(f,{pageOnly:true});const before=f.changes();
+  await mount(f);await textEquals('Explicit synthetic Left');
+  await page.getByTestId('reader-compare-pdf').click();await waitForOriginal();
+  await page.getByTestId('reader-pdf-canvas').click({position:{x:10,y:10}});
+  assert.equal(await page.locator('[data-focused="true"]').count(),0);
+  assert.equal(await page.getByTestId('reader-pdf-block-candidate').count(),3);
+  assert.match(await page.getByTestId('reader-pdf-block-candidates').innerText(),/仅有页定位/);
+  await page.getByRole('button',{name:'定位到Right synthetic:reverse-right 位置1',exact:true}).click();
+  await page.waitForFunction(()=>document.activeElement?.getAttribute('data-block-id')==='reverse-right');
+  await waitForOriginal();await page.getByTestId('reader-pdf-page-only').waitFor();
+  assert.equal(await page.getByTestId('reader-pdf-region').count(),0);
+  assert.equal(f.changes(),before);
+  await page.getByTestId('reader-compare-pdf').click();await page.waitForFunction(()=>window.liveWorkers===0);
+  assert.deepEqual(errors,[]);
 });

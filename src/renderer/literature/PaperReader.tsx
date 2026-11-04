@@ -722,7 +722,13 @@ export function PaperReader({
             <div className="min-h-0 w-1/2 min-w-0 border-r border-line">
               <Suspense fallback={<p role="status" className="p-2 text-muted">加载原文阅读器…</p>}>
                 <PaperPdfView client={literature.client} projectId={literature.projectId} document={activeDocument} parsed={reader.parsed}
-                  selection={selectedPdfBlock === null ? null : {blockId: selectedPdfBlock, locationIndex: selectedPdfLocation}}/>
+                  selection={selectedPdfBlock === null ? null : {blockId: selectedPdfBlock, locationIndex: selectedPdfLocation}}
+                  onSelectBlock={selection => {
+                    setPdfSelection({parseId: reader.parsed!.run.id, ...selection});
+                    const target = document.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(selection.blockId)}"]`);
+                    target?.focus({preventScroll: true});
+                    target?.scrollIntoView({block: 'center'});
+                  }}/>
               </Suspense>
             </div>
           ) : null}
@@ -765,10 +771,11 @@ export function PaperReader({
                     data-testid={`reader-block-${block.kind}`}
                     data-block-id={block.id}
                     data-locator={block.locator}
-                    data-focused={block.id === matchedBlockId ? 'true' : undefined}
+                    data-focused={block.id === selectedPdfBlock ? 'true' : undefined}
+                    tabIndex={-1}
                     className={`${BLOCK_STYLES[block.kind]} ${
-                      block.id === matchedBlockId ? 'rounded-control bg-[var(--accent-soft)] px-2 py-1' : ''
-                    }`}
+                      block.id === selectedPdfBlock ? 'rounded-control bg-[var(--accent-soft)] px-2 py-1' : ''
+                    } focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-[-2px]`}
                   >
                     {block.kind === 'heading' ? (
                       <h3 className="text-ink">{block.text}</h3>

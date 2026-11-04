@@ -11,13 +11,18 @@ import {ErrorBar} from '../shell/ErrorBar';
 type Location = ResearchDocumentParse['content']['blocks'][number]['locations'][number];
 type Props = {
   client: RocClient; projectId: string; document: ResearchDocument; parsed: ResearchDocumentParse;
-  selection: {blockId: string; locationIndex: number} | null
+  selection: {blockId: string; locationIndex: number} | null;
+  onSelectBlock: (selection: {blockId: string; locationIndex: number}) => void
 };
 type OpenDocument = {key: string; preview: ResearchDocumentPreview; pdf: PDFDocumentProxy};
+type ProjectedLocation = {
+  blockId: string; locationIndex: number; label: string; locator: string;
+  region: [number, number, number, number] | null; wholePage: boolean
+};
 const maximumCanvasPixels = 4_000_000;
 
 /** Own one PDF worker and one visible page. All geometry comes from a sealed parse and actual PDF viewport. */
-export default function PaperPdfView({client, projectId, document, parsed, selection}: Props): React.JSX.Element {
+export default function PaperPdfView({client, projectId, document, parsed, selection, onSelectBlock}: Props): React.JSX.Element {
   const [revision, setRevision] = useState(0);
   const key = JSON.stringify([projectId, document.id, parsed.run.id, document.sourceHash, revision]);
   const [opened, setOpened] = useState<OpenDocument | null>(null);
@@ -29,7 +34,8 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
   const [width, setWidth] = useState(0);
   const areaRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [painted, setPainted] = useState<{key: string; region: [number, number, number, number] | null; pageOnly: boolean; wholePage: boolean} | null>(null);
+  const [painted, setPainted] = useState<{key: string; locations: ProjectedLocation[]; region: [number, number, number, number] | null; pageOnly: boolean; wholePage: boolean} | null>(null);
+  const [candidateRequest, setCandidateRequest] = useState<{key: string; locations: ProjectedLocation[]; pageOnly: boolean; fromPoint: boolean} | null>(null);
   const current = opened?.key === key ? opened : null;
   const block = selection === null ? null : parsed.content.blocks.find(block => block.id === selection.blockId) ?? null;
   const location: Location | null = selection === null || block === null ? null : block.locations[selection.locationIndex] ?? null;
@@ -37,6 +43,7 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
   const pageNumber = pageSelection?.key === pageKey ? pageSelection.page : location?.page ?? 1;
   const zoom = zoomSelection?.key === key ? zoomSelection.value : 1;
   const paintKey = JSON.stringify([key, pageNumber, width, zoom, selection]);
+  const candidateKey = JSON.stringify([key, pageNumber]);
 
   useEffect(() => {
     let cancelled = false;
@@ -109,15 +116,14 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
       canvas.height = Math.max(1, Math.floor(viewport.height));
       canvas.style.width = `${viewport.width / ratio}px`;
       canvas.style.height = `${viewport.height / ratio}px`;
-      let region: [number, number, number, number] | null = null;
-      let pageOnly = false;
-      let wholePage = false;
-      if (location !== null && location.page === pageNumber) {
-        const frame = current.preview.coordinates?.pages.find(page => page.page === pageNumber)?.frame ?? null;
+      const frame = current.preview.coordinates?.pages.find(page => page.page === pageNumber)?.frame ?? null;
+      if (frame !== null && frame.kind !== 'pdf') throw new Error('所选解析页没有 PDF 坐标基准。');
+      const locations = parsed.content.blocks.flatMap(block => block.locations.flatMap((location, locationIndex): ProjectedLocation[] => {
+        if (location.page !== pageNumber) return [];
+        let region: [number, number, number, number] | null = null;
+        let wholePage = false;
         const [x1, y1, x2, y2] = location.bbox;
-        if (frame === null || x2 <= x1 || y2 <= y1) pageOnly = true;
-        else {
-          if (frame.kind !== 'pdf') throw new Error('所选解析页没有 PDF 坐标基准。');
+        if (frame !== null && x2 > x1 && y2 > y1) {
           wholePage = x1 === 0 && y1 === 0 && x2 === frame.width && y2 === frame.height;
           const pdfRegion = projectParsedRegionToPdf({frame, bbox: location.bbox, coordinateOrigin: location.coordinateOrigin});
           const [left, top, right, bottom] = pdfRegion;
@@ -125,10 +131,14 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
           region = [Math.min(...points.map(point => point[0])) / ratio, Math.min(...points.map(point => point[1])) / ratio,
             Math.max(...points.map(point => point[0])) / ratio, Math.max(...points.map(point => point[1])) / ratio];
         }
-      }
+        return [{blockId: block.id, locationIndex, label: block.label, locator: block.locator, region, wholePage}];
+      }));
+      const selected = selection === null ? null : locations.find(location =>
+        location.blockId === selection.blockId && location.locationIndex === selection.locationIndex) ?? null;
       task = page.render({canvas, viewport});
       await task.promise;
-      if (!cancelled) setPainted({key: paintKey, region, pageOnly, wholePage});
+      if (!cancelled) setPainted({key: paintKey, locations, region: selected?.region ?? null,
+        pageOnly: selected !== null && selected.region === null, wholePage: selected?.wholePage ?? false});
     })().catch((error: unknown) => {
       if (!cancelled) setError({key, message: error instanceof Error ? error.message : String(error)});
     });
@@ -139,10 +149,11 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
       if (task === null) release();
       else void task.promise.then(release, release);
     };
-  }, [current, width, zoom, pageNumber, paintKey, key, location]);
+  }, [current, width, zoom, pageNumber, paintKey, key, location, parsed.content]);
 
   const currentPaint = painted?.key === paintKey ? painted : null;
   const failure = error?.key === key ? error.message : null;
+  const candidates = failure === null && candidateRequest?.key === candidateKey ? candidateRequest : null;
   const navigate = (page: number): void => {setPageSelection({key: pageKey, page});};
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-col focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-[-2px]" data-testid="reader-pdf" tabIndex={0} aria-label="原 PDF 阅读"
@@ -178,16 +189,47 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
           className="rounded-control px-1 text-muted hover:bg-[var(--overlay-hover)] disabled:opacity-40">{zoom === 1 ? '适宽' : `${Math.round(zoom*100)}%`}</button>
         <button type="button" aria-label="放大 PDF" disabled={current === null || zoom >= 3} onClick={() => setZoomSelection({key, value: Math.min(3, zoom + 0.25)})}
           className="rounded-control p-1 hover:bg-[var(--overlay-hover)] disabled:opacity-40"><ZoomIn size={14}/></button>
+        <button type="button" disabled={currentPaint === null || failure !== null}
+          aria-expanded={candidates !== null} data-testid="reader-pdf-page-blocks"
+          onClick={() => setCandidateRequest(candidates === null ? {key: candidateKey, locations: currentPaint!.locations,
+            pageOnly: currentPaint!.locations.some(location => location.region === null), fromPoint: false} : null)}
+          className="rounded-control px-1 hover:bg-[var(--overlay-hover)] disabled:opacity-40">本页解析块</button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2 [scrollbar-gutter:stable]">
         {failure === null ? null : <ErrorBar error={{level: 'blocked', message: failure, retry: () => setRevision(revision => revision + 1)}}/>}
         {pageError === null ? null : <p role="alert" className="text-[var(--st-warn)]">{pageError}</p>}
         {currentPaint?.pageOnly ? <p role="note" className="mb-2 text-muted text-[var(--font-meta-size)]" data-testid="reader-pdf-page-only">该页未记录区域坐标，仅定位到页。</p> : null}
         {currentPaint?.wholePage ? <p role="note" className="mb-2 text-muted text-[var(--font-meta-size)]" data-testid="reader-pdf-whole-page">解析器记录的是整页范围，未细分块区域。</p> : null}
+        {candidates === null ? null : <div className="mb-2 text-[var(--font-meta-size)]" data-testid="reader-pdf-block-candidates">
+          {candidates.pageOnly ? <p role="note" className="text-muted">仅有页定位，请选择本页解析块。</p> :
+            candidates.fromPoint && candidates.locations.length > 1 ? <p role="note" className="text-muted">多个区域覆盖该位置，请选择解析块。</p> : null}
+          {candidates.locations.length === 0 ? <p role="note" className="text-muted">此处没有已记录的解析区域。</p> :
+            <ul>{candidates.locations.map(location => <li key={`${location.blockId}:${location.locationIndex}`}>
+              <button type="button" data-testid="reader-pdf-block-candidate"
+                disabled={currentPaint === null}
+                aria-label={`定位到${location.label} ${location.locator} 位置${location.locationIndex + 1}`}
+                className="my-0.5 w-full rounded-control px-1 py-0.5 text-left hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+                onClick={() => {setCandidateRequest(null); onSelectBlock({blockId: location.blockId, locationIndex: location.locationIndex});}}>
+                <span className="block break-words">{location.label}，{location.locator}，位置 {location.locationIndex + 1}</span>
+              </button>
+            </li>)}</ul>}
+        </div>}
         <div ref={areaRef} className="relative w-full">
           {failure !== null || currentPaint !== null ? null : <p role="status" className="flex items-center gap-1 text-muted"><Loader2 size={14} className="animate-spin"/>读取原文…</p>}
           <div className="relative" style={{visibility: failure === null && currentPaint !== null ? 'visible' : 'hidden'}}>
-            <canvas key={paintKey} ref={canvasRef} data-testid="reader-pdf-canvas" aria-label={`原 PDF 第 ${pageNumber} 页`}/>
+            <canvas key={paintKey} ref={canvasRef} data-testid="reader-pdf-canvas" aria-label={`原 PDF 第 ${pageNumber} 页`}
+              onClick={event => {
+                if (currentPaint === null || failure !== null) return;
+                const rect = event.currentTarget.getBoundingClientRect();
+                const x = event.clientX - rect.left, y = event.clientY - rect.top;
+                const matches = currentPaint.locations.filter(location => location.region !== null &&
+                  x >= location.region[0] && x <= location.region[2] && y >= location.region[1] && y <= location.region[3]);
+                const pageOnly = currentPaint.locations.some(location => location.region === null);
+                if (matches.length === 1 && !pageOnly) {
+                  setCandidateRequest(null); onSelectBlock({blockId: matches[0].blockId, locationIndex: matches[0].locationIndex});
+                }
+                else setCandidateRequest({key: candidateKey, locations: pageOnly ? currentPaint.locations : matches, pageOnly, fromPoint: true});
+              }}/>
             {currentPaint?.region ? <div data-testid="reader-pdf-region" role="note" aria-label="解析区域" className="pointer-events-none absolute border-2 border-accent bg-[var(--accent-soft)]"
               style={{left: currentPaint.region[0], top: currentPaint.region[1], width: currentPaint.region[2]-currentPaint.region[0],
                 height: currentPaint.region[3]-currentPaint.region[1]}}/> : null}
