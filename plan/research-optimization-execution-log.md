@@ -3809,3 +3809,24 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
 
 Logs pr09-a6a-* retained, including initial fullunit failure and corrected complete rerun. Migration checks retain all original values/counts, no old-schema runtime fallback or relaxed corruption assertions. Primary PRISMA2020 original glossary and official source-specific/new-update templates verified2026-11-04 and cited in docs; Jina401/BMJ403/PMC challenge changed to successfully read original PLOS article via connected Search Service. No official template/export, scientifically validated study identity, study-level effect aggregation or new UI claim. Next readonly count/query/exclusion/report Evidence data and existing inspector, then whole roadmap.
+
+
+## ROC-PR-09A6B — frozen count/query/exclusion/report Evidence data with independent live state
+
+Verified passing. getReviewReport assembles exact protocol/corpus/dedup/title/full/group receipts in one readonly SQLite transaction. Four equations and direct frozen-count crosschecks distinguish collected records, duplicate removals, title exclusions, sought/not-retrieved/assessed/full-excluded/included reports. Study count stays null until explicit human group receipt. Query appendix includes exact actual snapshots/parameters/dates/terminal receipts, Provider errors/coverage and full original metadata with repeats/nulls; pools are read by source when assembling records and each hit hash verified. Parent repositories retain their own integrity reads, no persistent cache. Primary exclusion criteria and exact vote/arbitration/binding refs, report-level latest extraction/units/Evidence and matching framework/assessment with explicit absent/unjudgeable data. Static body/bodyHash excludes live protocol/reference flags, preserving reviewed facts after true reparse/new protocol/archive. Missing marked data or corrupted pool refuses whole report; no fallback records, effect aggregation, official format or UI claim. Registered main191 readonly IPC rejects foreign scope and untrusted wire fields without scientific writes or network.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm generate:ipc / pnpm typecheck | Generation passed; first type exposed missing map closure in new service; corrected type passed |
+| pnpm build | Fresh current build/type passed; no later production changes |
+| node --check tests/unit/research-review-report.test.mjs | Passed |
+| node --test tests/unit/research-review-report.test.mjs | Initial7/8; failed-query test incorrectly expected Provider error in execution receipt |
+| node --test --test-name-pattern='failed source coverage' tests/unit/research-review-report.test.mjs | Corrected1/1; exact failed status, execution error null and retained Provider error checked |
+| pnpm test:unit / pnpm harness:eval | Final1083/1083, including all200 scoped review/source cases and8 report cases;94/94 |
+| node scripts/run-research-p0.mjs | 13/13 |
+| node scripts/smoke-electron.mjs | 12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
+
+Logs pr09-a6b-* retained. Source pool failures remain Provider-layer outcomes; execution receipt error null is the original successfully processed failed pool semantics, not a invented retry/success fallback. Original exact source/unit/framework data, source/protocol/archive static hash/current flags, genuinely uncollected and zero-review cases, corruption and real main/project/no-write boundaries covered. No new DB/dependency, renderer UI, independent scientific validity or formal PRISMA template/export claimed. Next integrated existing inspector protocol/search/screening/extraction/quality/report surfaces and real assistant links/tools; whole roadmap still open.

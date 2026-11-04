@@ -101,3 +101,6 @@ export {researchReviewQualityAssessmentSaveSchema,researchReviewQualityAssessmen
 export {ResearchReviewStudiesRepository} from '../../../src/main/plugins/research/review-studies-repository';
 export {researchReviewStudiesCapabilities,registerResearchReviewStudiesCapabilities} from '../../../src/main/plugins/research/review-studies-capabilities';
 export {researchReviewStudiesSaveSchema,researchReviewStudiesSnapshotSchema} from '../../../src/shared/schemas/research-review-studies';
+export {ResearchReviewReportService} from '../../../src/main/plugins/research/review-report-service';
+export {researchReviewReportCapability,registerResearchReviewReportCapability} from '../../../src/main/plugins/research/review-report-capability';
+export {researchReviewReportBodySchema} from '../../../src/shared/schemas/research-review-report';

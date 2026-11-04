@@ -92,6 +92,8 @@ import {ResearchReviewQualityPlanRepository} from './review-quality-plan-reposit
 import {ResearchReviewQualityAssessmentRepository} from './review-quality-assessment-repository';
 import {ResearchReviewStudiesRepository} from './review-studies-repository';
 import {researchReviewStudiesCapabilities,registerResearchReviewStudiesCapabilities} from './review-studies-capabilities';
+import {ResearchReviewReportService} from './review-report-service';
+import {researchReviewReportCapability,registerResearchReviewReportCapability} from './review-report-capability';
 import {registerResearchReviewQualityCapabilities,researchReviewQualityCapabilities} from './review-quality-capabilities';
 import {registerResearchReviewFullTextScreeningCapabilities,researchReviewFullTextScreeningCapabilities} from './review-fulltext-screening-capabilities';
 import {registerResearchReviewScreeningCapabilities, researchReviewScreeningCapabilities} from './review-screening-capabilities';
@@ -218,7 +220,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
+      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，
@@ -325,7 +327,10 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       const reviewQualityPlans=new ResearchReviewQualityPlanRepository(db,researchRepository,reviewExtractions,reviewFullTextFreeze,()=>new Date().toISOString());
       const reviewQualityAssessments=new ResearchReviewQualityAssessmentRepository(db,researchRepository,reviewQualityPlans,reviewExtractions,reviewFullTextFreeze,()=>new Date().toISOString());
       registerResearchReviewQualityCapabilities(context,reviewQualityPlans,reviewQualityAssessments);
-      registerResearchReviewStudiesCapabilities(context,new ResearchReviewStudiesRepository(db,researchRepository,reviewFullTextFreeze,reviewFullTexts,()=>new Date().toISOString()));
+      const reviewStudies=new ResearchReviewStudiesRepository(db,researchRepository,reviewFullTextFreeze,reviewFullTexts,()=>new Date().toISOString());
+      registerResearchReviewStudiesCapabilities(context,reviewStudies);
+      registerResearchReviewReportCapability(context,new ResearchReviewReportService(db,researchRepository,reviewCorpora,reviewSearches,
+        reviewDeduplication,reviewScreeningFreeze,reviewFullTextFreeze,reviewStudies,reviewExtractions,reviewQualityPlans,reviewQualityAssessments));
       registerResearchSystematicReviewCapabilities(context, researchRepository.systematicReviews);
       const effects = new ResearchProductionEffectService(researchRepository,
         new ResearchWorkspaceFileService(db, researchRepository, () => new Date().toISOString(), notifyWorkspacePathStructureChanged),

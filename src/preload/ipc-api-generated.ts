@@ -170,6 +170,7 @@ export const rocApi: RocPreloadApi = {
     replaceEvidenceSource: (...args) => ipcRenderer.invoke(ipcChannels.researchSourceReplacementsReplace, ...args),
     listSourceReplacements: (...args) => ipcRenderer.invoke(ipcChannels.researchSourceReplacementsList, ...args),
     getSourceReplacement: (...args) => ipcRenderer.invoke(ipcChannels.researchSourceReplacementsGet, ...args),
+    getReviewReport: (...args) => ipcRenderer.invoke(ipcChannels.researchReviewReportGet, ...args),
     saveReviewStudies: (...args) => ipcRenderer.invoke(ipcChannels.researchReviewStudiesSave, ...args),
     getReviewStudies: (...args) => ipcRenderer.invoke(ipcChannels.researchReviewStudiesGet, ...args),
     getReviewStudiesHistory: (...args) => ipcRenderer.invoke(ipcChannels.researchReviewStudiesHistory, ...args),
