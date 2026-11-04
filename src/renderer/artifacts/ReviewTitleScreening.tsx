@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react';
+import {lazy, Suspense, useEffect, useRef, useState} from 'react';
 import type {ResearchReviewProtocolInspection} from '../../shared/schemas/research-systematic-review';
 import type {ResearchReviewScreeningFrozenPhase, ResearchReviewScreeningPlanInspection, ResearchReviewScreeningFreezeRequest} from '../../shared/schemas/research-review-screening';
 import type {RocClient} from '../shared/roc-client';
@@ -9,6 +9,7 @@ import {ReviewTitleArbitration} from './ReviewTitleArbitration';
 import {screeningStatuses} from './ReviewScreeningOutcome';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
+const ReviewFullTextBindings = lazy(async () => ({default: (await import('./ReviewFullTextBindings')).ReviewFullTextBindings}));
 export function ReviewTitleScreening({client, protocol, plan, writable, onPending}: {
   client: RocClient; protocol: ResearchReviewProtocolInspection; plan: ResearchReviewScreeningPlanInspection;
   writable: boolean; onPending: (pending: boolean) => void
@@ -19,9 +20,10 @@ export function ReviewTitleScreening({client, protocol, plan, writable, onPendin
   const phase = phaseRead.data;
   const [hitId, setHitId] = useState<string | null>(null), [recordPending, setRecordPending] = useState(false);
   const [reviewNote, setReviewNote] = useState('');
+  const [fullOpen, setFullOpen] = useState(false), [fullPending, setFullPending] = useState(false);
   const freeze = useAsyncAction((request: ResearchReviewScreeningFreezeRequest) => client.api.research.freezeReviewScreeningPhase(request),
     {label: '冻结标题摘要人工筛选'});
-  const pending = recordPending || freeze.pending;
+  const pending = recordPending || freeze.pending || fullPending;
   const busy = useRef(false), requests = useRef(new Map<string, string>());
   const [offset, setOffset] = useState(0);
   const focus = useRef<HTMLDivElement>(null);
@@ -47,6 +49,13 @@ export function ReviewTitleScreening({client, protocol, plan, writable, onPendin
         <h3 className="font-medium">标题摘要筛选已冻结</h3>
         <p className="break-words">{phase.freeze.request.reviewNote}</p>
         <p className="text-muted break-all">审核人 {phase.freeze.actor.id} {phase.freeze.frozenAt}</p>
+        <button type="button" className={`${button} self-start`} disabled={pending}
+          data-testid="artifact-review-fulltext-inspect" onClick={() => setFullOpen(true)}>核查全文获取与资格筛选</button>
+        {!fullOpen ? null : <Suspense fallback={<p role="status">正在加载全文核查…</p>}>
+          <ReviewFullTextBindings key={`fulltext:${phase.freezeHash}`} client={client} projectId={projectId} corpusId={corpusId}
+            writable={writable && phaseRead.status === 'ready' && !recordPending && !freeze.pending}
+            onPending={value => {setFullPending(value); onPending(value);}} />
+        </Suspense>}
       </section>}
       <ol start={offset + 1} className="flex flex-col gap-2">{phase.items.slice(offset, offset + 10).map((item, index) =>
         <li key={item.hit.id} className="flex flex-col gap-1" data-testid="artifact-review-title-item">

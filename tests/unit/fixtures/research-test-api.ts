@@ -45,6 +45,7 @@ export { withLiteratureContext } from '../../../src/main/services/literature-con
 export { ResearchLibraryService } from '../../../src/main/plugins/research/library-service';
 export { ResearchDocumentService } from '../../../src/main/plugins/research/document-service';
 export {registerResearchDocumentCapabilities, researchDocumentCapabilities} from '../../../src/main/plugins/research/document-capabilities';
+export {registerResearchLibraryCapabilities, researchLibraryCapabilities} from '../../../src/main/plugins/research/library-capabilities';
 export {registerResearchSystematicReviewCapabilities, researchSystematicReviewCapabilities} from '../../../src/main/plugins/research/systematic-review-capabilities';
 export {ResearchReviewSearchService} from '../../../src/main/plugins/research/review-search-service';
 export {registerResearchReviewSearchCapabilities, researchReviewSearchCapabilities} from '../../../src/main/plugins/research/review-search-capabilities';
