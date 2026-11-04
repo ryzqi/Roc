@@ -33,11 +33,12 @@ before(async()=>{
     const root=createRoot(document.getElementById('root'));
     function Harness({request,inspector}) {
       const [readingLocations]=useState(()=>new Map());
+      const [reviewDrafts]=useState(()=>new Map());
       const [open,setOpen]=useState(true);
       window.reopen=()=>flushSync(()=>setOpen(true));
       return <main className="p-4"><button data-testid="artifact-reopen" onClick={()=>setOpen(true)}>重新打开工件</button>
-        {!open?null:inspector?<ArtifactInspector client={client} request={request} readingLocations={readingLocations}
-          onClose={()=>setOpen(false)} onOpenTask={()=>{}} onReviewContext={()=>{}}/>:
+        {!open?null:inspector?<ArtifactInspector client={client} selection={{kind:'stage',request,onReviewContext:()=>{}}} writable={true}
+          readingLocations={readingLocations} reviewDrafts={reviewDrafts} onClose={()=>setOpen(false)} onOpenTask={()=>{}}/>:
           <ArtifactProductionView client={client} request={request} initialLocation={null} onLocationChange={()=>{}}/>}
       </main>;
     }

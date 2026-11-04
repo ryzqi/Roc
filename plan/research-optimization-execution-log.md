@@ -3830,3 +3830,21 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
 
 Logs pr09-a6b-* retained. Source pool failures remain Provider-layer outcomes; execution receipt error null is the original successfully processed failed pool semantics, not a invented retry/success fallback. Original exact source/unit/framework data, source/protocol/archive static hash/current flags, genuinely uncollected and zero-review cases, corruption and real main/project/no-write boundaries covered. No new DB/dependency, renderer UI, independent scientific validity or formal PRISMA template/export claimed. Next integrated existing inspector protocol/search/screening/extraction/quality/report surfaces and real assistant links/tools; whole roadmap still open.
+
+
+## ROC-PR-09A7A — native protocol inspection, structured revisions and human freeze
+
+Verified passing for protocol UI scope. Literature header keyboard entry opens the one AppShell inspector selection, with explicit stage/review branches and lazy review module. No new route, stage navigation or duplicate library. Structured question/PICO/criteria/year/query pagination/reviewer/design-framework/extraction-unit forms save through actual main-window human APIs; separate review note and action freeze an exact persisted version. Exact parent/hash/reason creates immutable revisions; old/archived scopes display saved canonical data without write controls. Window-local project/version drafts survive closing without localStorage or scientific-authority promotion. Failed IPC replies retain exact request/payload; actual committed save/freeze replays write no duplicate. Pending protocol writes prevent selected-protocol changes, repeated submits and drawer closing. Current-vs-historical state and failed/corrupt marked receipts come directly from the backend.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm typecheck / pnpm build | Final fresh build and type passed |
+| node --test tests/unit/research-systematic-review.test.mjs tests/unit/research-systematic-review-ipc.test.mjs | 13/13 |
+| node --test --test-reporter=tap tests/renderer/review-protocol-inspector.test.mjs | Final9/9, real main bridge/SQLite and actual Electron |
+| node --test tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs | 33/33; both consumers exercise new typed wrapper |
+| node scripts/smoke-electron.mjs | 13/13; actual library keyboard entry/current route and zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; eager1132280bytes6files |
+
+Logs pr09-a7a-* and actual UI artifacts pr09-a7a-ui retained. Initial fixture omitted declared capabilities, then passed capability names to preload adapter; corrected to existing actual contracts. Intermediate4/9 UI run exposed nested-textarea label inclusion; useId/htmlFor fixes stable labels without weakening field assertions. Final screenshot audit waits real entering animation completion and checks entire panel viewport bounds plus overflow; default/hover/expanded/long and light/dark/narrow states cut0. Visually inspected final images; hidden2 are shared full-height drawer top/bottom viewport shadows, horizontal shadow intact. No backend/dependency or runtime authority changed. No full-unit/scientific integration rerun claimed for this renderer-only scope; protocol+actual bridge and affected UI/startup checks establish acceptance. Search/screening/extraction/quality/group/report UI, assistant execution, formal report export and remaining roadmap continue.

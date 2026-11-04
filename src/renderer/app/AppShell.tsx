@@ -1,7 +1,6 @@
-import type {OpenResearchArtifact} from '../artifacts/artifact-interactions';
+import type {ArtifactInspectorSelection, OpenResearchArtifact, OpenReviewInspector} from '../artifacts/artifact-interactions';
 import type {ArtifactReadingLocations} from '../artifacts/artifact-reading-location';
-import type {ResearchGateReviewContext} from '../../shared/schemas/research-gate-review';
-import type {ResearchArtifactInspectRequest} from '../../shared/schemas/research-artifact-inspector';
+import type {ReviewProtocolDrafts} from '../artifacts/review-protocol-draft';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppStatus } from '../../shared/types';
 import { canvasViewForDrawerSection, isCanvasTabId, isDrawerSectionId, type DrawerSectionId, type MenuIntent } from '../../shared/surfaces';
@@ -123,8 +122,9 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
     setSearchToken((current) => current + 1);
     setSearchOpen(true);
   }, []);
-  const [artifactSelection, setArtifactSelection] = useState<{request: ResearchArtifactInspectRequest; onReviewContext: (context: ResearchGateReviewContext) => void} | null>(null);
+  const [artifactSelection, setArtifactSelection] = useState<ArtifactInspectorSelection | null>(null);
   const [artifactReadingLocations] = useState<ArtifactReadingLocations>(() => new Map());
+  const [reviewProtocolDrafts] = useState<ReviewProtocolDrafts>(() => new Map());
   const [managementOpen, setManagementOpen] = useState(false);
   const [managementTab, setManagementTab] = useState<ManagementTabId>('memory');
   const [researchTaskSelection, setResearchTaskSelection] = useState<{ projectId: string; taskId: string } | null>(null);
@@ -152,7 +152,11 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   const { route, navigate } = useAppRoute();
   const openArtifact = useCallback<OpenResearchArtifact>((request, onReviewContext): void => {
     if (request.projectId !== route.projectId) throw new Error('research_artifact_project_mismatch');
-    setArtifactSelection({request, onReviewContext});
+    setArtifactSelection({kind: 'stage', request, onReviewContext});
+  }, [route.projectId]);
+  const openReviewInspector = useCallback<OpenReviewInspector>((request): void => {
+    if (request.projectId !== route.projectId) throw new Error('research_review_project_mismatch');
+    setArtifactSelection({kind: 'review', request});
   }, [route.projectId]);
   const layout = useLayoutState();
   useContentPreferenceSync();
@@ -345,7 +349,8 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
         setManagementOpen(false);
         navigate({ ...routeRef.current, page: 'settings' });
       },
-      openView: (view) => navigate({ ...routeRef.current, view })
+      openView: (view) => navigate({ ...routeRef.current, view }),
+      openReviewInspector
     }),
     [
       client,
@@ -357,7 +362,8 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
       boundWorkspace.path,
       boundWorkspace.status,
       boundWorkspace.error,
-      boundWorkspace.rebind
+      boundWorkspace.rebind,
+      openReviewInspector
     ]
   );
 
@@ -793,9 +799,9 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
 
       {artifactSelection === null || artifactSelection.request.projectId !== route.projectId ? null : (
         <Suspense fallback={<DelayedFallback label="正在加载工件检查器…" />}>
-          <ArtifactInspector key={JSON.stringify(artifactSelection.request)} client={client} request={artifactSelection.request}
+          <ArtifactInspector key={JSON.stringify(artifactSelection.request)} client={client} selection={artifactSelection} writable={projectWritable}
             readingLocations={artifactReadingLocations}
-            onReviewContext={artifactSelection.onReviewContext}
+            reviewDrafts={reviewProtocolDrafts}
             onClose={() => setArtifactSelection(null)} onOpenTask={(taskId) => {
               setResearchTaskSelection({projectId: artifactSelection.request.projectId, taskId});
               setArtifactSelection(null);

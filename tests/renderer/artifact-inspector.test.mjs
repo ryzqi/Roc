@@ -41,6 +41,7 @@ before(async()=>{
     function Harness({link,initialApproval}) {
       const [request,setRequest]=useState(null);
       const [readingLocations]=useState(()=>new Map());
+      const [reviewDrafts]=useState(()=>new Map());
       const [reviewCallback,setReviewCallback]=useState(null);
       window.selectArtifact=value=>flushSync(()=>setRequest(value));
       const [approval,setApproval]=useState(initialApproval);
@@ -54,9 +55,10 @@ before(async()=>{
             if(result.approval!==null) window.replaceApproval(result.approval);
           }).catch(error=>window.resumeError=error.message);
         }}/>
-        {request===null ? null : <ArtifactInspector key={JSON.stringify(request)} client={client} request={request}
-          readingLocations={readingLocations}
-          onReviewContext={context=>reviewCallback(context)} onClose={()=>setRequest(null)} onOpenTask={taskId=>{window.tasks.push(taskId);setRequest(null);}}/>}</main>;
+        {request===null ? null : <ArtifactInspector key={JSON.stringify(request)} client={client}
+          selection={{kind:'stage',request,onReviewContext:context=>reviewCallback(context)}} writable={true}
+          readingLocations={readingLocations} reviewDrafts={reviewDrafts}
+          onClose={()=>setRequest(null)} onOpenTask={taskId=>{window.tasks.push(taskId);setRequest(null);}}/>}</main>;
     }
     let generation=0;
     window.mount=(link,approval)=>{window.decisions=[];window.tasks=[];window.resumeResult=null;window.resumeError=null;flushSync(()=>root.render(

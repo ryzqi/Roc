@@ -7,3 +7,9 @@ export type OpenResearchArtifact = (
   onReviewContext: (context: ResearchGateReviewContext) => void
 ) => void;
 export type ReadResearchGateContext = (request: ResearchGateReviewRequest) => Promise<IpcResult<ResearchGateReviewContext>>;
+
+export type ReviewInspectorRequest = {projectId: string; versionId: string | null};
+export type OpenReviewInspector = (request: ReviewInspectorRequest) => void;
+export type ArtifactInspectorSelection =
+  | {kind: 'stage'; request: ResearchArtifactInspectRequest; onReviewContext: (context: ResearchGateReviewContext) => void}
+  | {kind: 'review'; request: ReviewInspectorRequest};

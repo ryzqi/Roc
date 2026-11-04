@@ -173,6 +173,18 @@ try {
   assertCheck('2 门户', '进入项目后画布渲染出来', true, '');
   await page.screenshot({ path: join(artifactDir, 'canvas.png') });
 
+  await navigate(page, `page=research&project=${preflight.projectId}&view=literature`);
+  await page.waitForSelector('[data-testid="literature-review-inspect"]', {timeout: 20_000});
+  const reviewUrl = page.url();
+  await page.locator('[data-testid="literature-review-inspect"]').focus();
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('[data-testid="artifact-review"]', {timeout: 20_000});
+  await page.waitForFunction(() => document.querySelector('[data-testid="artifact-review"]')?.textContent.includes('尚无综述协议'));
+  assertCheck('2 门户', '文献库键盘入口打开同壳综述检查器且路由保持当前项目', page.url() === reviewUrl);
+  await page.screenshot({path: join(artifactDir, 'review-inspector.png')});
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('[data-testid="artifact-inspector-panel"]', {state: 'detached', timeout: 15_000});
+
   // ---- 6 文件预览 / Git / 终端 ---------------------------------------------------
   await navigate(page, `page=research&project=${preflight.projectId}&tool=files`);
   await page.waitForSelector('[data-testid="file-tree-row-00-overview.txt"]', { timeout: 20_000 });

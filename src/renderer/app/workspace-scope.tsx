@@ -2,6 +2,7 @@ import { createContext, useContext } from 'react';
 import type { AppViewId } from './routes';
 import type { RocClient } from '../shared/roc-client';
 import type { WorkspaceBindingStatus } from '../workspace/use-bound-workspace';
+import type {OpenReviewInspector} from '../artifacts/artifact-interactions';
 
 /**
  * The project/workspace scope a canvas view renders inside (P3).
@@ -57,6 +58,7 @@ export type WorkspaceScope = {
    * the files view is the remaining caller.
    */
   openView: (view: AppViewId) => void;
+  openReviewInspector: OpenReviewInspector;
 };
 
 const WorkspaceScopeContext = createContext<WorkspaceScope | null>(null);
