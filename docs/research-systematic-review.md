@@ -122,3 +122,16 @@ DB35 固定原始命中/检索来源、标题冻结哈希、文档/论文身份�
 历史读取显示 `isLatest/currentProtocol/referenceStatus`，不重新抓取文件。`referenceStatus` 是保存来源与数据库引用的状态，不能证明当前磁盘文件已读取；物理文件损坏在实际 source/preview/verify 边界报错。工具直调、wire actor、跨项目和归档不能新写入，主进程在真实异步核验中保留窗口身份。
 
 专项10/10，连同综述、坐标与批注合跑121/121；全量单元1004/1004、Harness94/94、原生科研13/13、启动12/12零 renderer 错误、生成 IPC/type/fresh build/chunks通过。实际 PDF→原生解析→现有文档发布→source/preview、异步漂移、历史修订/损坏/重解析、main窗口111和DB34升级/SQLite重开覆盖。坐标替换回归先复现失败后修正；无独立科学对应关系、全文资格决定或完整筛选 UI 验收声明。全文逐人决定/建议、仲裁/冻结、提取/质量、检查器及真实计数报表继续实施。
+
+
+## 全文逐人资格决定与独立建议
+
+`saveReviewFullTextDecision/getReviewFullTextDecisionHistory/suggestReviewFullTextDecision/listReviewFullTextSuggestions/getReviewFullTextScreeningPhase` 使用现有 phase-keyed 决定/建议表的 `full_text` 阶段。每项固定已冻结标题摘要纳入记录、计划/标题冻结哈希、准确全文来源绑定 ID/哈希、协议声明的全文审核人、标准、理由、父版本和调用者。人工 include/exclude/uncertain 与实际工具 operation/call/version 的建议分别保存；建议不计为人工决定，明确考虑建议也不要求同意。来源不能由 wire model/run/actor 字段伪造。
+
+新人工决定和建议先调用实际 `verifyCurrent` 核验原文/坐标工件，异步后再在事务里核对准确绑定、协议、父版本和审核人；写后来源漂移、损坏或丢失新行一起回滚。未取得全文、已过期来源、另一项目、标题已排除记录、未声明审核人/标准或不完整修订均拒绝资格写入。source-only 原始字节仍可人工审查，不强制使用缺失或不可信解析。
+
+整轮只包含标题摘要已冻结的纳入记录，分别展示 `retrieval_pending/not_retrieved/source_changed/pending/uncertain/conflict/included/excluded`，其和等于 `reportsToSeek`。未取得全文不是 eligibility 排除。双人决定与主排除原因都一致才形成结论；单人按固定协议人数执行。任何审核人仍引用旧绑定时，旧决定保留为 `sourceCurrent:false`，不能成为当前共识；用户必须明确修订每位审核人的决定到新来源。旧来源建议不能作为新来源的 consideredSuggestion。
+
+同步读取把当前已核验标题快照传给同批来源/历史行，仍逐行检查源、哈希和父链；异步和写后重新取得状态，不设持久缓存。历史协议/归档可读固定决定与建议，新写入拒绝。当前决定还未包含人工仲裁或全文整轮冻结。
+
+专项12/12，综述/来源/坐标/批注合跑133/133；全量单元1016/1016、Harness94/94、原生13/13、启动12/12零 renderer 错误、生成 IPC/type/fresh build/chunks通过。覆盖真实 PDF/source/preview、双人/单人、来源重解析及全审核人重新审核、实际文件损坏/异步漂移/事务回滚、历史/归档、main窗口121及真实工具 operation 来源、DB35存量保持/SQLite重开。未声明独立科学审查或全文 UI E2E 完成；仲裁/冻结、提取/质量、检查器和真实计数报表继续实施。

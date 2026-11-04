@@ -11,6 +11,7 @@ import type {ResearchRepository} from './repository';
 import type {ResearchDocumentService} from './document-service';
 import type {ResearchReviewCorpusRepository} from './review-corpus-repository';
 import type {ResearchReviewScreeningFreeze} from './review-screening-freeze';
+import type {ResearchReviewScreeningFrozenPhase} from '../../../shared/schemas/research-review-screening';
 type Row={
   id:string;project_id:string;corpus_id:string;hit_id:string;version:number;parent_id:string|null;document_id:string|null;
   request_id:string;snapshot_json:string;snapshot_hash:string;created_at:string
@@ -38,9 +39,9 @@ export class ResearchReviewFullTextRepository {
       this.requireWritable(request.projectId);
       const repeated=this.findRequest(request.projectId,request.requestId);
       if(repeated!==undefined)return this.replay(repeated,request,requestHash,actor);
-      this.requireIncluded(request);
+      const title=this.requireIncluded(request);
       const latest=this.latest(request.corpusId,request.hitId);
-      const parent=latest===undefined?null:this.inspect(latest);
+      const parent=latest===undefined?null:this.inspect(latest,title);
       if(parent===null?request.parentBindingId!==null:
           request.parentBindingId!==parent.snapshot.id||request.expectedParentHash!==parent.snapshotHash) {
         throw new Error('research_review_fulltext_version_conflict');
@@ -68,20 +69,21 @@ export class ResearchReviewFullTextRepository {
     const row=this.db.prepare('SELECT * FROM research_review_fulltext_bindings WHERE id=?').get(request.bindingId) as Row|undefined;
     if(row===undefined)throw new Error('research_review_fulltext_binding_not_found');
     if(row.project_id!==request.projectId||row.corpus_id!==request.corpusId)throw new Error('research_review_project_mismatch');
-    return this.inspect(row);
+    return this.inspect(row,this.titles.getPhase({projectId:request.projectId,corpusId:request.corpusId,phase:'title_abstract'}));
   }
   history(input:{projectId:string;corpusId:string;hitId:string}):ResearchReviewFullTextBindingInspection[] {
     const request=researchReviewFullTextBindingListSchema.parse(input);
     this.corpora.getHit({projectId:request.projectId,corpusId:request.corpusId,hitId:request.hitId});
+    const title=this.titles.getPhase({projectId:request.projectId,corpusId:request.corpusId,phase:'title_abstract'});
     return (this.db.prepare('SELECT * FROM research_review_fulltext_bindings WHERE project_id=? AND corpus_id=? AND hit_id=? ORDER BY version')
-      .all(request.projectId,request.corpusId,request.hitId) as Row[]).map(row=>this.inspect(row));
+      .all(request.projectId,request.corpusId,request.hitId) as Row[]).map(row=>this.inspect(row,title));
   }
   list(input:{projectId:string;corpusId:string}):ResearchReviewFullTextBindingInspection[] {
     const request=researchReviewFullTextBindingsListSchema.parse(input);
-    this.titles.getPhase({...request,phase:'title_abstract'});
+    const title=this.titles.getPhase({...request,phase:'title_abstract'});
     return (this.db.prepare(`SELECT * FROM research_review_fulltext_bindings b WHERE project_id=? AND corpus_id=? AND
       version=(SELECT MAX(version) FROM research_review_fulltext_bindings WHERE corpus_id=b.corpus_id AND hit_id=b.hit_id) ORDER BY rowid`)
-      .all(request.projectId,request.corpusId) as Row[]).map(row=>this.inspect(row));
+      .all(request.projectId,request.corpusId) as Row[]).map(row=>this.inspect(row,title));
   }
 
   async verifyCurrent(input:{projectId:string;corpusId:string;bindingId:string;expectedBindingHash:string}):Promise<ResearchReviewFullTextBindingInspection> {
@@ -103,11 +105,12 @@ export class ResearchReviewFullTextRepository {
       throw new Error('research_review_fulltext_version_conflict');
     }
   }
-  private requireIncluded(request:ResearchReviewFullTextBindingSave):void {
+  private requireIncluded(request:ResearchReviewFullTextBindingSave):ResearchReviewScreeningFrozenPhase {
     const title=this.titles.requireFrozen(request.projectId,request.corpusId,request.expectedTitleFreezeHash);
     if(title.freeze===null||!title.freeze.authority.items.some(item=>item.hit.id===request.hitId&&item.status==='included')) {
       throw new Error('research_review_fulltext_hit_not_included');
     }
+    return title;
   }
   private findRequest(projectId:string,requestId:string):Row|undefined {
     return this.db.prepare('SELECT * FROM research_review_fulltext_bindings WHERE project_id=? AND request_id=?').get(projectId,requestId) as Row|undefined;
@@ -118,7 +121,7 @@ export class ResearchReviewFullTextRepository {
   }
   private replay(row:Row,request:ResearchReviewFullTextBindingSave,requestHash:string,actor:ResearchRelationReviewer):ResearchReviewFullTextBindingInspection {
     if(row.corpus_id!==request.corpusId)throw new Error('research_review_request_conflict');
-    const previous=this.inspect(row);
+    const previous=this.get({projectId:row.project_id,corpusId:row.corpus_id,bindingId:row.id});
     if(previous.snapshot.requestHash!==requestHash||previous.snapshot.actor.id!==actor.id)throw new Error('research_review_request_conflict');
     return previous;
   }
@@ -149,7 +152,7 @@ export class ResearchReviewFullTextRepository {
       filename:document.filename,mediaType:document.mediaType,size:document.size,parse
     });
   }
-  private read(row:Row):ResearchReviewFullTextBindingInspection['snapshot'] {
+  private read(row:Row,title:ResearchReviewScreeningFrozenPhase):ResearchReviewFullTextBindingInspection['snapshot'] {
     const snapshot=researchReviewFullTextBindingSnapshotSchema.parse(JSON.parse(row.snapshot_json)),request=snapshot.request;
     if(hash(row.snapshot_json)!==row.snapshot_hash||JSON.stringify(snapshot)!==row.snapshot_json||snapshot.id!==row.id||
         request.projectId!==row.project_id||request.corpusId!==row.corpus_id||request.hitId!==row.hit_id||
@@ -157,8 +160,8 @@ export class ResearchReviewFullTextRepository {
         snapshot.recordedAt!==row.created_at||snapshot.requestHash!==hash(JSON.stringify(request))||
         (snapshot.version===1)!==(request.parentBindingId===null)||
         row.document_id!==(snapshot.source===null?null:snapshot.source.documentId))throw new Error('research_review_fulltext_snapshot_invalid');
-    const title=this.titles.getPhase({projectId:request.projectId,corpusId:request.corpusId,phase:'title_abstract'});
-    if(title.freezeHash!==request.expectedTitleFreezeHash||title.freeze===null||
+    if(title.plan.snapshot.request.projectId!==request.projectId||title.plan.snapshot.request.corpusId!==request.corpusId||
+        title.freezeHash!==request.expectedTitleFreezeHash||title.freeze===null||
         !title.freeze.authority.items.some(item=>item.hit.id===request.hitId&&item.status==='included'))throw new Error('research_review_fulltext_snapshot_invalid');
     const raw=this.corpora.getHit({projectId:request.projectId,corpusId:request.corpusId,hitId:request.hitId});
     if(JSON.stringify(snapshot.hit)!==JSON.stringify(raw.reference)||JSON.stringify(snapshot.searchSource)!==JSON.stringify(raw.source)) {
@@ -183,19 +186,18 @@ export class ResearchReviewFullTextRepository {
     }
     return snapshot;
   }
-  private inspect(row:Row):ResearchReviewFullTextBindingInspection {
-    const snapshot=this.read(row);let child=snapshot;
+  private inspect(row:Row,title:ResearchReviewScreeningFrozenPhase):ResearchReviewFullTextBindingInspection {
+    const snapshot=this.read(row,title);let child=snapshot;
     while(child.request.parentBindingId!==null) {
       const parent=this.db.prepare('SELECT * FROM research_review_fulltext_bindings WHERE id=?').get(child.request.parentBindingId) as Row|undefined;
       if(parent===undefined)throw new Error('research_review_fulltext_snapshot_invalid');
-      const previous=this.read(parent);
+      const previous=this.read(parent,title);
       if(previous.version!==child.version-1||previous.request.corpusId!==child.request.corpusId||
           previous.request.hitId!==child.request.hitId||parent.snapshot_hash!==child.request.expectedParentHash)throw new Error('research_review_fulltext_snapshot_invalid');
       child=previous;
     }
     const latest=this.latest(row.corpus_id,row.hit_id);
     if(latest===undefined)throw new Error('research_review_fulltext_snapshot_invalid');
-    const title=this.titles.getPhase({projectId:row.project_id,corpusId:row.corpus_id,phase:'title_abstract'});
     let referenceStatus:ResearchReviewFullTextBindingInspection['referenceStatus']='not_retrieved';
     if(snapshot.source!==null) {
       const document=this.repository.documents.get(snapshot.source.documentId),library=this.repository.library.get(snapshot.source.libraryItemId);

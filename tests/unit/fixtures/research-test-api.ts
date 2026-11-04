@@ -85,3 +85,5 @@ export {researchReviewScreeningDecisionSaveSchema, researchReviewScreeningDecisi
 
 export {ResearchReviewFullTextRepository} from '../../../src/main/plugins/research/review-fulltext-repository';
 export {registerResearchReviewFullTextCapabilities,researchReviewFullTextCapabilities} from '../../../src/main/plugins/research/review-fulltext-capabilities';
+export {ResearchReviewFullTextScreening} from '../../../src/main/plugins/research/review-fulltext-screening';
+export {registerResearchReviewFullTextScreeningCapabilities,researchReviewFullTextScreeningCapabilities} from '../../../src/main/plugins/research/review-fulltext-screening-capabilities';

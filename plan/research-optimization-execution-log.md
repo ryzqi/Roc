@@ -3673,3 +3673,22 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
 
 Logs pr09-a4c3a-* retained. Real frozen PDF/parser/collector/publication/source/preview, canonical coordinate replacement after actual preview, postinsert rollback, history/corruption/archive/project unlink/new protocol, main111 and DB34 upgrade/reopen covered. Initial9 passed; added actual async source seal red regression and minimum exact snapshot comparison before final121/full build/checks. No new eligibility decisions, review UI, independent scientific matching or model spending claim. Next fulltext reviewer decisions and separate source-bound suggestions, arbitration/freeze, extraction/quality/inspector/reporting; whole roadmap open.
+
+
+## ROC-PR-09A4C3B1 — source-bound fulltext reviewer decisions and separate proposals
+
+Verified passing. Existing phase-keyed DB32 votes/proposals store full_text records with exact title/plan/binding refs, declared fulltext reviewer and immutable parent lineage. Actual original/coordinate bytes verified before new human/proposal writes; post-await/transaction/postinsert source state checks reject drift. Suggestions use actual capability operation/call/version provenance and never count as human decisions. Different primary exclusion criteria remain conflict. Retrieval gaps and stale-source votes remain distinct from eligibility; every reviewer must explicitly revise to the new binding after source revision. Five generated/registered APIs; main121 human authority preserved through real file awaits. Synchronous source batch/history inspection threads one verified title snapshot while retaining all individual seals/parents and fresh postawait/postinsert reads.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm generate:ipc / pnpm typecheck / pnpm build | Passed; final fresh build/type |
+| node --test tests/unit/research-review-fulltext-screening.test.mjs | Initial12/12 |
+| node --test tests/unit/research-review-fulltext-screening.test.mjs tests/unit/research-review-fulltext.test.mjs tests/unit/research-review-screening-freeze.test.mjs tests/unit/research-review-screening-arbitration.test.mjs tests/unit/research-review-screening-decisions.test.mjs tests/unit/research-review-screening-plan.test.mjs tests/unit/research-review-deduplication.test.mjs tests/unit/research-review-corpus.test.mjs tests/unit/research-review-search.test.mjs tests/unit/research-systematic-review.test.mjs tests/unit/research-systematic-review-ipc.test.mjs tests/unit/research-document-coordinates.test.mjs tests/unit/research-document-annotations.test.mjs | Final133/133; fulltext reviewer12 |
+| pnpm test:unit / pnpm harness:eval | 1016/1016 and94/94 |
+| node scripts/run-research-p0.mjs | 13/13 |
+| node scripts/smoke-electron.mjs | 12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
+
+Logs pr09-a4c3b1-* retained. Real PDF/publication/source/preview, one/two reviewers/reasons conflict/replay/parent, unavailable and superseded source refusal, explicit all-reviewer source-version revision, physical/async drift and transaction corruption/rollback, main121 actual operation provenance and disk reopen covered. Initial12/build passed; synchronous repeated-title read cleanup then final133/freshbuild/fullchecks all passed. No new DB version/backfill, persistent cache, legacy alias, model spend or full review UI/scientific independence claim. Next exact-current-reviewer human arbitration then fulltext whole-round freeze; extraction/quality/inspector/count-conserving reporting and whole roadmap remain.

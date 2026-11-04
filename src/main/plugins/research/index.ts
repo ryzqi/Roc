@@ -83,6 +83,8 @@ import {ResearchReviewScreeningArbitration} from './review-screening-arbitration
 import {ResearchReviewScreeningFreeze} from './review-screening-freeze';
 import {ResearchReviewFullTextRepository} from './review-fulltext-repository';
 import {registerResearchReviewFullTextCapabilities,researchReviewFullTextCapabilities} from './review-fulltext-capabilities';
+import {ResearchReviewFullTextScreening} from './review-fulltext-screening';
+import {registerResearchReviewFullTextScreeningCapabilities,researchReviewFullTextScreeningCapabilities} from './review-fulltext-screening-capabilities';
 import {registerResearchReviewScreeningCapabilities, researchReviewScreeningCapabilities} from './review-screening-capabilities';
 import { ResearchIndexService, type ResearchIndexWatch } from './index-service';
 import { registerResearchIndexCapabilities, researchIndexCapabilities } from './index-capabilities';
@@ -207,7 +209,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
+      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，
@@ -305,6 +307,8 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       registerResearchDocumentCapabilities(context, researchRepository.documents, documents);
       const reviewFullTexts=new ResearchReviewFullTextRepository(db,researchRepository,reviewCorpora,reviewScreeningFreeze,documents,()=>new Date().toISOString());
       registerResearchReviewFullTextCapabilities(context,reviewFullTexts);
+      const reviewFullTextScreening=new ResearchReviewFullTextScreening(db,researchRepository,reviewScreeningFreeze,reviewFullTexts,()=>new Date().toISOString());
+      registerResearchReviewFullTextScreeningCapabilities(context,reviewFullTextScreening);
       registerResearchSystematicReviewCapabilities(context, researchRepository.systematicReviews);
       const effects = new ResearchProductionEffectService(researchRepository,
         new ResearchWorkspaceFileService(db, researchRepository, () => new Date().toISOString(), notifyWorkspacePathStructureChanged),
