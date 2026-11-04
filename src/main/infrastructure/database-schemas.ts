@@ -1795,6 +1795,25 @@ CREATE TABLE research_source_migration_decisions (
 `
 });
 
+researchMigrations.push({
+  version: 24, name: 'explicit_source_replacement_lineage',
+  sql: `
+CREATE TABLE research_source_replacements (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  evidence_id TEXT NOT NULL REFERENCES research_evidence(id),
+  target_evidence_id TEXT NOT NULL REFERENCES research_evidence(id),
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id,request_id),
+  UNIQUE(project_id,evidence_id,target_evidence_id)
+);
+CREATE INDEX idx_research_source_replacement_source ON research_source_replacements(project_id,evidence_id);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

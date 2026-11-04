@@ -25,6 +25,10 @@ import {
   researchSourceMigrationListSchema, researchSourceMigrationGetSchema, researchSourceMigrationInspectionSchema,
   researchSourceMigrationCaptureSchema, researchSourceMigrationRejectSchema, researchSourceMigrationDecisionSchema
 } from '../../../shared/schemas/research-source-migrations';
+import {
+  researchSourceReplacementRequestSchema, researchSourceReplacementListSchema, researchSourceReplacementGetSchema,
+  researchSourceReplacementSchema, researchSourceReplacementInspectionSchema
+} from '../../../shared/schemas/research-source-replacements';
 
 const capabilities = {
   capture: descriptor('research.evidence.capture', researchEvidenceCaptureRequestSchema, researchEvidenceSchema),
@@ -41,7 +45,10 @@ const capabilities = {
   listSourceMigrations: descriptor('research.sourceMigrations.list', researchSourceMigrationListSchema, researchSourceMigrationInspectionSchema.array()),
   getSourceMigration: descriptor('research.sourceMigrations.get', researchSourceMigrationGetSchema, researchSourceMigrationInspectionSchema),
   captureSourceMigration: descriptor('research.sourceMigrations.capture', researchSourceMigrationCaptureSchema, researchSourceMigrationDecisionSchema),
-  rejectSourceMigration: descriptor('research.sourceMigrations.reject', researchSourceMigrationRejectSchema, researchSourceMigrationDecisionSchema)
+  rejectSourceMigration: descriptor('research.sourceMigrations.reject', researchSourceMigrationRejectSchema, researchSourceMigrationDecisionSchema),
+  replaceSource: descriptor('research.sourceReplacements.replace', researchSourceReplacementRequestSchema, researchSourceReplacementSchema),
+  listSourceReplacements: descriptor('research.sourceReplacements.list', researchSourceReplacementListSchema, researchSourceReplacementInspectionSchema.array()),
+  getSourceReplacement: descriptor('research.sourceReplacements.get', researchSourceReplacementGetSchema, researchSourceReplacementInspectionSchema)
 };
 
 export const researchEvidenceCapabilities = Object.values(capabilities);
@@ -51,17 +58,18 @@ export function registerResearchEvidenceCapabilities(context: RocPluginContext, 
     context.capabilities.register(context.pluginId, capability, async (input) => {
       try { return run(capability.inputSchema.parse(input)); }
       catch (error) {
-        // 引用失效不是普通错误：原文和证据都还在，只是块定位随重新解析失效（提案 §8.4）。
+        // 旧证据与原文仍保存；重解析或明确来源替代会撤销它作为当前支持的资格。
         if (error instanceof Error && error.message === 'research_evidence_reference_superseded') {
           throw new RocDomainError({
             code: 'research_evidence_reference_superseded',
-            message: '该证据引用的解析块已随重新解析失效；原文仍可打开，重新采集一次即可恢复定位。',
+            message: '该证据引用的来源版本已失效；核对来源变更、捕获新版本并重新审核相关主张。',
             category: 'conflict', retryable: false
           });
         }
         if (error instanceof Error && capability.name.startsWith('research.relations.')) throwRelationError(error);
         if (error instanceof Error && capability.name === 'research.evidence.inspect') throwRelationError(error);
         if (error instanceof Error && capability.name.startsWith('research.sourceMigrations.')) throwSourceMigrationError(error);
+        if (error instanceof Error && capability.name.startsWith('research.sourceReplacements.')) throwSourceReplacementError(error);
         throw error;
       }
     });
@@ -88,6 +96,10 @@ export function registerResearchEvidenceCapabilities(context: RocPluginContext, 
     repository.sourceMigrations.decide(request, requireResearchHuman('research.sourceMigrations.capture', request.projectId)));
   register(capabilities.rejectSourceMigration, request =>
     repository.sourceMigrations.decide(request, requireResearchHuman('research.sourceMigrations.reject', request.projectId)));
+  register(capabilities.replaceSource, request =>
+    repository.sourceReplacements.replace(request, requireResearchHuman('research.sourceReplacements.replace', request.projectId)));
+  register(capabilities.listSourceReplacements, request => repository.sourceReplacements.list(request));
+  register(capabilities.getSourceReplacement, request => repository.sourceReplacements.get(request));
 }
 
 function throwRelationError(error: Error): never {
@@ -137,6 +149,27 @@ function throwSourceMigrationError(error: Error): never {
     'research_evidence_source_region_invalid', 'research_evidence_source_locator_conflict',
     'research_evidence_source_parse_stale'].includes(code)) {
     throw new RocDomainError({code, message: '保存的候选、捕获或目标块校验失败。', category: 'degraded', retryable: false});
+  }
+  throw error;
+}
+
+function throwSourceReplacementError(error: Error): never {
+  const code = error.message.split(':')[0];
+  if (['research_human_required', 'research_sender_required', 'research_human_project_mismatch',
+    'research_source_replacement_project_mismatch', 'research_evidence_project_mismatch', 'research_project_archived'].includes(code)) {
+    throw new RocDomainError({code, message: '当前窗口身份或项目不能替代该证据来源。', category: 'permission', retryable: false});
+  }
+  if (['research_source_replacement_request_conflict', 'research_source_replacement_same_source',
+    'research_source_replacement_source_changed', 'research_source_replacement_target_changed', 'research_source_replacement_target_stale',
+    'research_source_replacement_already_linked', 'research_source_replacement_documents_required',
+    'research_source_replacement_executions_required', 'research_source_replacement_execution_not_completed'].includes(code)) {
+    throw new RocDomainError({code, message: '必须明确选择当前的真实文档或已完成实验版本，重新核对两端后再替代。', category: 'conflict', retryable: false});
+  }
+  if (['research_source_replacement_not_found', 'research_evidence_not_found', 'research_project_not_found'].includes(code)) {
+    throw new RocDomainError({code, message: '来源替代记录、证据或项目不存在。', category: 'not_found', retryable: false});
+  }
+  if (['research_source_replacement_snapshot_invalid', 'research_evidence_integrity_invalid'].includes(code)) {
+    throw new RocDomainError({code, message: '保存的来源或替代记录校验失败。', category: 'degraded', retryable: false});
   }
   throw error;
 }

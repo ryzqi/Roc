@@ -4,6 +4,7 @@ import type {ResearchInspectedEvidence} from '../../../shared/schemas/research-e
 import {captureEvidenceSourceLocator, inspectEvidenceSourceLocator} from './evidence-source-locator';
 import {ResearchEvidenceRelationRepository} from './evidence-relation-repository';
 import {ResearchSourceMigrationRepository} from './source-migration-repository';
+import {ResearchSourceReplacementRepository} from './source-replacement-repository';
 
 import {
   researchClaimCreateRequestSchema,
@@ -36,6 +37,7 @@ const claimColumns = `id, project_id AS projectId, artifact_id AS artifactId, su
 export class ResearchEvidenceRepository {
   readonly relations: ResearchEvidenceRelationRepository;
   readonly sourceMigrations: ResearchSourceMigrationRepository;
+  readonly sourceReplacements: ResearchSourceReplacementRepository;
   constructor(
     private readonly db: Database,
     private readonly artifacts: ArtifactAccess,
@@ -43,6 +45,7 @@ export class ResearchEvidenceRepository {
   ) {
     this.relations = new ResearchEvidenceRelationRepository(db, this, artifacts, now);
     this.sourceMigrations = new ResearchSourceMigrationRepository(db, this, now);
+    this.sourceReplacements = new ResearchSourceReplacementRepository(db, this, now);
   }
 
   capture(request: ResearchEvidenceCaptureRequest): ResearchEvidence {
@@ -236,6 +239,17 @@ export class ResearchEvidenceRepository {
         .run(this.now(), `${knowledgeDocumentId}:chunk:%`).changes;
       for (const row of rows) this.relations.invalidateEvidence(row.id);
       return changes;
+    })();
+  }
+
+  /** Explicit replacement invalidates the selected project's source; all captured data stays fixed. */
+  invalidateEvidence(id: string, projectId: string): void {
+    this.db.transaction(() => {
+      const source = this.inspectEvidence(id, projectId);
+      if (source.referenceStatus === 'superseded') return;
+      this.db.prepare('UPDATE research_evidence SET invalidated_at=? WHERE id=? AND project_id=?')
+        .run(this.now(), id, projectId);
+      this.relations.invalidateEvidence(id);
     })();
   }
 

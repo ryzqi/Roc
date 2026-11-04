@@ -2894,3 +2894,51 @@ targets/note/decisions visible, no anonymous inner scrolling or horizontal overf
 Explicit source replacement and experiment rerun lineage remain next, then PR-07 projection
 audit. PR-06 and full plan remain incomplete. Existing expanded P4 baseline defect and
 external independent scientific/client/L2 acceptance remain unresolved.
+
+
+## ROC-PR-06A5C1 — explicit document replacement and completed experiment rerun lineage
+
+Verified passing for the backend/IPC scope. DB24 stores immutable user-selected predecessor
+links between two actual project Evidence records. Importing another attachment or running an
+experiment with the same label does not infer replacement. Strict requests bind both source
+digests, kind, requestId and nullable note; actual main-process window identity supplies actor.
+Document replacement requires different managed documents and a current exact parse/chunk.
+Experiment rerun requires two real completed managed executions and records full request,
+input, environment and output snapshots/hashes. No new execution is scheduled by selection.
+
+Replacement, selected-reference invalidation and relation-review history share a transaction.
+Only selected project/evidence invalidates; original Evidence/locator, Claims/status/evidenceIds,
+run bytes and saved export seals remain fixed. Failed insert rolls back the complete change.
+Exact request/actor replay and reads perform zero writes. New target needs separate scientific
+review; scientificReviewAtSelection is a fixed needs_review fact, never current approval.
+Current target status is read separately from immutable selection history.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm generate:ipc / pnpm typecheck | Passed |
+| node --test tests/unit/research-source-replacement-ipc.test.mjs tests/unit/research-source-locator.test.mjs tests/unit/research-source-migration-ipc.test.mjs tests/unit/research-evidence-relation-ipc.test.mjs | Final32/32 |
+| pnpm test:unit | 880/880 |
+| pnpm harness:eval | 94/94 |
+| pnpm build | Final fresh typecheck/production build passed |
+| node scripts/run-research-p0.mjs | 13/13 native |
+| node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-search-plan.test.mjs | 32/32 actual Electron |
+| node scripts/smoke-electron.mjs | Final12/12, zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Final passed; eager1132980bytes6files |
+
+Final message-only correction describes source replacement as well as reparse invalidation,
+and states that capture requires renewed scientific review. Focused32/build/startup/IPC/chunks
+reran after that wording change; earlier fullunit/native/renderer/Harness results remain relevant.
+DB23→24 regression preserves actual migration decisions/source/claim/relation history without
+inventing predecessor links. Frozen tests/fixtures/research-workflow files remain unchanged.
+
+Actual native source-replacement-lineage.json under p0-production records synthetic window95
+selecting a distinct parsed PDF document/source SHA and window96 selecting completed original
+and rerun executions. Actual changed frozen inputs produce A3/B5 versus original A2/B4;
+original claims, execution and historical exports remain saved, replayWrites0. Historical sealed
+PDF/archive read succeeds while current verify/delivery refuses without creating a destination.
+
+Source replacement inspector and readonly role lineage facts remain next, followed by PR-07.
+PR-06 and the full plan remain incomplete. Earlier independent unit review-order defect remains
+recorded despite this fullunit pass; expanded P4 and external scientific/client/L2 gaps remain.

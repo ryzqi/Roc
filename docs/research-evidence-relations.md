@@ -250,3 +250,33 @@ capturedReferenceStatus，重解析不改原决定或旧证据。
 在聚焦原生折叠内的输入框时把 overflow:hidden 匿名容器内部滚动，隐藏原 locator、
 原文或候选说明。沿用现有折叠动效；没有新时长、全局 CSS 或第二套布局。真实
 Electron 验证依据最终原生区域坐标，不仅依据 getAnimations().finished 或阴影审计。
+
+
+## 明确来源替代与重跑前后关联
+
+DB24 research_source_replacements 保存用户明确选定的两个真实 Evidence。请求必须
+指定 document_replacement 或 experiment_rerun、两端 ID、两端当前 digest、requestId
+和 nullable note；窗口身份仍由主进程绑定。新文档附件或同名实验本身不会产生替代。
+文档替代必须是两个不同的托管文档；同文档重解析继续走定位候选。实验关联必须
+绑定本项目两个实际完成的托管执行，保存完整原请求、代码/输入/环境/输出文件
+和执行快照 SHA。用户选择只表达前后端点意图，不证明结果等价或科学可比。
+
+替代事务保存原来源及 digest、失效后的同一来源快照、新来源/digest、用户、时间
+与完整请求/SHA。只撤销选定项目/Evidence 的有效关系，不改 Evidence 的原文、
+sourceVersion、locator、Claim status/version/evidenceIds、原实验执行/输出或旧导出。
+其他项目对共享文档的引用不失效。新位置或新执行仍需新主张/关系与人工科学审核。
+scientificReviewAtSelection=needs_review 是选择时的固定事实，不冒充当前审核状态。
+
+新端点必须当前 recorded，真实 chunk/text/locator/hash 与固定来源一致；文档
+sourceHash 与当前 ready parse SHA 一致。实验源不可由非托管记录、未完成运行或
+同名标签代替。捕获原记录和旧关系失效共用事务，记录失败时完整回滚。相同
+project/requestId 与 actor/request SHA 重试只返回原记录；不同内容、窗口或重复
+关系拒绝。list/get 比较固定快照 SHA，当前 targetReferenceStatus 单独显示，目标
+后续失效时原前后关联仍可读取。
+
+原生离线验收创建任务临时 PDF 版本并真实解析、捕获；window95 明确选择同父
+文献下另一文档。另以任务临时 TypeScript/CSV 真实重跑，均值由2/4变为3/5；
+window96 明确选择真实执行前后端点，保留旧代码/环境/输入/结果与 Claim。原
+导出 record/sourceHash/scientific-review/archive/PDF 保持原字节，当前交付拒绝。
+这些窗口为明确 synthetic 用户传输测试，不表示真实用户或独立科学审查。冻结
+fixtures 未修改。本增量是后端与可信传输；检查器选择界面和只读角色事实继续接入。

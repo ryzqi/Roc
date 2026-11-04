@@ -1,6 +1,7 @@
 import { withLiteratureContext } from '../services/literature-context';
 import {withResearchHumanContext} from '../services/research-human-context';
 import {researchSourceMigrationCaptureSchema, researchSourceMigrationRejectSchema} from '../../shared/schemas/research-source-migrations';
+import {researchSourceReplacementRequestSchema} from '../../shared/schemas/research-source-replacements';
 import {
   researchEvidenceRelationProposalSchema, researchEvidenceRelationReviewSchema
 } from '../../shared/schemas/research-evidence-relations';
@@ -41,11 +42,13 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
       return await wrapIpc(async () => {
         const input = transformInput(target.inputTransform, args);
         if (target.capabilityName === 'research.relations.propose' || target.capabilityName === 'research.relations.review' ||
-            target.capabilityName === 'research.sourceMigrations.capture' || target.capabilityName === 'research.sourceMigrations.reject') {
+            target.capabilityName === 'research.sourceMigrations.capture' || target.capabilityName === 'research.sourceMigrations.reject' ||
+            target.capabilityName === 'research.sourceReplacements.replace') {
           const request = target.capabilityName === 'research.relations.propose' ?
             researchEvidenceRelationProposalSchema.parse(input) : target.capabilityName === 'research.relations.review' ?
             researchEvidenceRelationReviewSchema.parse(input) : target.capabilityName === 'research.sourceMigrations.capture' ?
-            researchSourceMigrationCaptureSchema.parse(input) : researchSourceMigrationRejectSchema.parse(input);
+            researchSourceMigrationCaptureSchema.parse(input) : target.capabilityName === 'research.sourceMigrations.reject' ?
+            researchSourceMigrationRejectSchema.parse(input) : researchSourceReplacementRequestSchema.parse(input);
           return withResearchHumanContext({
             capability: target.capabilityName, projectId: request.projectId, windowId
           }, () => invoker.invokeCapability(target.capabilityName, request));
