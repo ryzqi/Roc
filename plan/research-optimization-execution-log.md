@@ -3488,3 +3488,10 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check |Passed; eager1131770bytes6files |
 
 First full unit found three older literature migration tests with expected latest26 rather than new27; corrected expectations while keeping all source preservation assertions. Separate PR07 fixture placement correction570187f restored frozen corpus. Final diff review removed non-null assertion chains and scoped historical version rows before returning them; focused9 and fresh build rerun, full912 uses final source. Protocol repository actors are explicit test users; public generated IPC human binding, actual search lineage, screening/extraction and UI still next. Full PR09 and later roadmap remain open.
+
+
+## PR09 prerequisite — source observation ordering regression
+
+Verified passing. Full A2 unit run exposed an existing timestamp assumption in the review-provenance test: getReviews orders observations by newest retrieval time, while fusion orders origins by source priority. Make the fixture produce distinct timestamps with an asynchronous10ms OpenAlex delay, then compare exact source/rank/retrievedAt/review values in declared observation order. All copy/license/update/retraction, paging, cache and execution provenance checks remain. No product ordering change or weakened corpus/security assertion.
+
+From /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc: node --test --test-name-pattern='candidate review retains' tests/unit/literature-import.test.mjs passed1/1; pnpm test:unit final916/916 passed. Initial915/916 evidence retained in pr09-a2-unit-full.log; final pr09-review-order.log/pr09-a2-unit-full-final.log.

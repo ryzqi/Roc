@@ -5,6 +5,7 @@ import { after, before, test } from 'node:test';
 import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import {setTimeout as delay} from 'node:timers/promises';
 import Database from 'better-sqlite3';
 import * as esbuild from 'esbuild';
 import { createResearchFixture } from './fixtures/research-test-kit.mjs';
@@ -1931,6 +1932,7 @@ test('candidate review retains declared copy scope, updates and retraction obser
   let calls = 0;
   const search = new api.LiteratureSearchService(async url => {
     calls++;
+    if (new URL(url).hostname === 'api.openalex.org') await delay(10);
     return Response.json(new URL(url).hostname === 'api.openalex.org' ?
       {results: [{id: 'W1', doi: '10.1234/review', title: 'Review paper', type: 'article', is_retracted: true,
         primary_location: {landing_page_url: 'https://example.test/published', version: 'publishedVersion', license: 'cc-by'}}]} :
@@ -1964,7 +1966,10 @@ test('candidate review retains declared copy scope, updates and retraction obser
     assert.equal(reviews.nextOffset, 1);
     assert.equal(f.repo.library.getReviews({id, offset: 1, limit: 1}).nextOffset, null);
     const all = f.repo.library.getReviews({id});
-    assert.deepEqual(all.records.map(record => record.review), paper.origins.map(origin => origin.review));
+    const observed = [...paper.origins].sort((a,b) => b.retrievedAt.localeCompare(a.retrievedAt) ||
+      a.source.localeCompare(b.source) || a.rank-b.rank);
+    assert.deepEqual(all.records.map(({source,rank,retrievedAt,review}) => ({source,rank,retrievedAt,review})),
+      observed.map(({source,rank,retrievedAt,review}) => ({source,rank,retrievedAt,review})));
     assert.ok(all.records.every(record => record.executionId === hit.executionId));
     f.setTime('2026-11-05T00:00:00.000Z');
     const item = f.repo.library.get(id);
