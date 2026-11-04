@@ -1,4 +1,4 @@
-import {useRef, useState} from 'react';
+import {lazy, Suspense, useRef, useState} from 'react';
 import type {ResearchReviewProtocolInspection} from '../../shared/schemas/research-systematic-review';
 import type {ResearchReviewFullTextFrozenPhase} from '../../shared/schemas/research-review-fulltext-screening';
 import type {ResearchReviewFullTextBindingInspection} from '../../shared/schemas/research-review-fulltext';
@@ -9,6 +9,7 @@ import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '
 import {ReviewExtractionField, extractionFieldDraft, extractionValue, type ExtractionFieldDraft} from './ReviewExtractionField';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
+const ReviewQualityPlan = lazy(async () => ({default: (await import('./ReviewQualityPlan')).ReviewQualityPlan}));
 export function ReviewExtractionEditor({client, protocol, phase, binding, parent, writable, onPending, onSaved}: {
   client: RocClient; protocol: ResearchReviewProtocolInspection; phase: ResearchReviewFullTextFrozenPhase;
   binding: ResearchReviewFullTextBindingInspection; parent: ResearchReviewExtractionInspection | null; writable: boolean;
@@ -20,6 +21,8 @@ export function ReviewExtractionEditor({client, protocol, phase, binding, parent
   const history = useAsyncResource(`review:extraction-history:${projectId}:${corpusId}:${hitId}:${parent?.snapshotHash ?? 'new'}`,
     () => client.api.research.getReviewExtractionHistory({projectId, corpusId, hitId}), {label: '读取提取修订历史'});
   const [editing, setEditing] = useState(parent === null);
+  const [qualityOpen, setQualityOpen] = useState(false), [qualityPending, setQualityPending] = useState(false);
+  const [qualitySelection, setQualitySelection] = useState<ResearchReviewExtractionInspection | null>(null);
   const [reviewerId, setReviewerId] = useState(parent?.snapshot.request.reviewerId ?? '');
   const [reviewNote, setReviewNote] = useState(parent?.snapshot.request.reviewNote ?? ''), [revisionReason, setRevisionReason] = useState('');
   const [study, setStudy] = useState(() => extractionFieldDraft(parent?.snapshot.request.studyDesign.value ?? null, parent?.snapshot.request.studyDesign.evidence ?? []));
@@ -37,6 +40,7 @@ export function ReviewExtractionEditor({client, protocol, phase, binding, parent
       return draft.kind !== '' && draft.evidence.length > 0 && (draft.kind !== 'number' || draft.number.trim() !== '');
     });
   const canEdit = writable && phase.freezeHash !== null && phase.sourcesCurrent && binding.referenceStatus === 'current' && editing;
+  const pending = save.pending || qualityPending, qualityExtraction = qualitySelection ?? parent;
   return <section className="flex min-w-0 flex-col gap-3" data-testid="artifact-review-extraction-editor">
     {parent === null ? null : <section className="flex flex-col gap-1" data-testid="artifact-review-extraction-current">
       <h3 className="font-medium">已保存人工提取 版本 {parent.snapshot.version}</h3>
@@ -47,15 +51,17 @@ export function ReviewExtractionEditor({client, protocol, phase, binding, parent
       <details><summary className="cursor-pointer text-muted">字段值、单位与准确 Evidence</summary>
         <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">{JSON.stringify(parent.snapshot, null, 2)}</pre>
       </details>
-      {!writable || editing ? null : <button type="button" className={`${button} self-start`} data-testid="artifact-review-extraction-revise"
+      <button type="button" className={`${button} self-start`} disabled={pending} data-testid="artifact-review-quality-inspect"
+        onClick={() => {setQualitySelection(null); setQualityOpen(true);}}>核查研究设计与质量框架</button>
+      {!writable || editing ? null : <button type="button" className={`${button} self-start`} disabled={pending} data-testid="artifact-review-extraction-revise"
         onClick={() => setEditing(true)}>修订人工提取</button>}
     </section>}
     {evidence.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{evidence.error}</p>}
-    <button type="button" className={`${button} self-start`} disabled={save.pending || evidence.status === 'loading'}
+    <button type="button" className={`${button} self-start`} disabled={pending || evidence.status === 'loading'}
       onClick={evidence.reload}>重读已有 Evidence</button>
     {!canEdit ? null : <form className="flex flex-col gap-3" data-testid="artifact-review-extraction-form" onSubmit={event => {
       event.preventDefault();
-      if (busy.current || !canEdit || !complete || phase.freezeHash === null || study.kind === '' || study.kind === 'number' || evidence.status !== 'ready') return;
+      if (busy.current || pending || !canEdit || !complete || phase.freezeHash === null || study.kind === '' || study.kind === 'number' || evidence.status !== 'ready') return;
       const studyValue: ResearchReviewExtractionSave['studyDesign']['value'] = study.kind === 'text' ?
         {kind: 'text', text: study.text} : {kind: study.kind, reason: study.reason};
       const body = {projectId, corpusId, hitId, expectedFullFreezeHash: phase.freezeHash, bindingId: binding.snapshot.id,
@@ -72,7 +78,7 @@ export function ReviewExtractionEditor({client, protocol, phase, binding, parent
       busy.current = true; onPending(true);
       void save.run({...body, requestId}).then(result => {busy.current = false; onPending(false); if (result.ok) onSaved();});
     }}>
-      <fieldset disabled={save.pending || evidence.status !== 'ready'} className="flex flex-col gap-3">
+      <fieldset disabled={pending || evidence.status !== 'ready'} className="flex flex-col gap-3">
         <label className="flex flex-col gap-1 text-muted">提取审核人
           <select required aria-label="提取审核人" className={`${formInputClass} border-[0.5px]`} value={reviewerId}
             onChange={event => {setReviewerId(event.target.value); save.reset();}}>
@@ -115,7 +121,14 @@ export function ReviewExtractionEditor({client, protocol, phase, binding, parent
         <details><summary className="cursor-pointer">此版本字段与原文证据</summary>
           <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">{JSON.stringify(item.snapshot, null, 2)}</pre>
         </details>
+        <button type="button" className={`${button} self-start`} disabled={pending}
+          onClick={() => {setQualitySelection(item); setQualityOpen(true);}}>核查此提取版本的质量框架</button>
       </li>)}</ul>
     </details>}
+    {!qualityOpen || qualityExtraction === null ? null : <Suspense fallback={<p role="status">正在加载质量框架…</p>}>
+      <ReviewQualityPlan key={`quality:${qualityExtraction.snapshot.id}:${qualityExtraction.snapshotHash}`}
+        client={client} protocol={protocol} phase={phase} extraction={qualityExtraction} writable={writable && !editing && !save.pending}
+        onPending={value => {setQualityPending(value); onPending(value);}} />
+    </Suspense>}
   </section>;
 }
