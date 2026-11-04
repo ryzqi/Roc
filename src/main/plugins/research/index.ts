@@ -89,6 +89,7 @@ import {ResearchReviewFullTextFreeze} from './review-fulltext-freeze';
 import {ResearchReviewExtractionRepository} from './review-extraction-repository';
 import {registerResearchReviewExtractionCapabilities,researchReviewExtractionCapabilities} from './review-extraction-capabilities';
 import {ResearchReviewQualityPlanRepository} from './review-quality-plan-repository';
+import {ResearchReviewQualityAssessmentRepository} from './review-quality-assessment-repository';
 import {registerResearchReviewQualityCapabilities,researchReviewQualityCapabilities} from './review-quality-capabilities';
 import {registerResearchReviewFullTextScreeningCapabilities,researchReviewFullTextScreeningCapabilities} from './review-fulltext-screening-capabilities';
 import {registerResearchReviewScreeningCapabilities, researchReviewScreeningCapabilities} from './review-screening-capabilities';
@@ -320,7 +321,8 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       const reviewExtractions=new ResearchReviewExtractionRepository(db,researchRepository,reviewFullTextFreeze,reviewFullTexts,documents,()=>new Date().toISOString());
       registerResearchReviewExtractionCapabilities(context,reviewExtractions);
       const reviewQualityPlans=new ResearchReviewQualityPlanRepository(db,researchRepository,reviewExtractions,reviewFullTextFreeze,()=>new Date().toISOString());
-      registerResearchReviewQualityCapabilities(context,reviewQualityPlans);
+      const reviewQualityAssessments=new ResearchReviewQualityAssessmentRepository(db,researchRepository,reviewQualityPlans,reviewExtractions,reviewFullTextFreeze,()=>new Date().toISOString());
+      registerResearchReviewQualityCapabilities(context,reviewQualityPlans,reviewQualityAssessments);
       registerResearchSystematicReviewCapabilities(context, researchRepository.systematicReviews);
       const effects = new ResearchProductionEffectService(researchRepository,
         new ResearchWorkspaceFileService(db, researchRepository, () => new Date().toISOString(), notifyWorkspacePathStructureChanged),

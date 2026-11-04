@@ -27,3 +27,30 @@ export const researchReviewQualityPlanGetSchema=z.object({projectId:id,corpusId:
 export const researchReviewQualityPlansListSchema=researchReviewQualityPlanGetSchema.omit({extractionId:true});
 export type ResearchReviewQualityPlanCreate=z.infer<typeof researchReviewQualityPlanCreateSchema>;
 export type ResearchReviewQualityPlanInspection=z.infer<typeof researchReviewQualityPlanInspectionSchema>;
+
+const references=z.array(z.object({id,expectedHash:hash}).strict()).min(1).max(10)
+  .refine(values=>new Set(values.map(value=>value.id)).size===values.length,'review_quality_evidence_duplicate');
+const assessmentValue=z.discriminatedUnion('kind',[
+  z.object({kind:z.literal('judged'),judgement:id,reason:note}).strict(),
+  z.object({kind:z.literal('unjudgeable'),reason:note}).strict()
+]);
+export const researchReviewQualityAssessmentGetSchema=z.object({projectId:id,corpusId:id,extractionId:id,qualityPlanId:id}).strict();
+export const researchReviewQualityAssessmentSaveSchema=researchReviewQualityAssessmentGetSchema.extend({
+  requestId:id,expectedPlanHash:hash,expectedExtractionHash:hash,
+  domains:z.array(z.object({domainId:id,value:assessmentValue,evidence:references}).strict()).min(1).max(50),
+  overall:z.object({value:assessmentValue,evidence:references}).strict(),
+  reviewerId:id,reviewNote:note,parentAssessmentId:id.nullable(),expectedParentHash:hash.nullable(),revisionReason:note.nullable()
+}).strict().refine(value=>new Set(value.domains.map(domain=>domain.domainId)).size===value.domains.length,
+  'review_quality_domains_duplicate').refine(value=>value.parentAssessmentId===null?
+  value.expectedParentHash===null&&value.revisionReason===null:
+  value.expectedParentHash!==null&&value.revisionReason!==null,'review_quality_revision_requires_parent');
+export const researchReviewQualityAssessmentSnapshotSchema=z.object({
+  id,version:z.number().int().positive(),request:researchReviewQualityAssessmentSaveSchema,requestHash:hash,
+  reviewer:researchReviewScreeningReviewerSchema,actor:researchRelationReviewerSchema,recordedAt:z.iso.datetime()
+}).strict();
+export const researchReviewQualityAssessmentInspectionSchema=z.object({
+  snapshot:researchReviewQualityAssessmentSnapshotSchema,snapshotHash:hash,isLatest:z.boolean(),currentExtraction:z.boolean(),
+  currentProtocol:z.boolean(),referenceStatus:z.enum(['current','superseded'])
+}).strict();
+export type ResearchReviewQualityAssessmentSave=z.infer<typeof researchReviewQualityAssessmentSaveSchema>;
+export type ResearchReviewQualityAssessmentInspection=z.infer<typeof researchReviewQualityAssessmentInspectionSchema>;

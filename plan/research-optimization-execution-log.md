@@ -3769,3 +3769,22 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
 
 Logs pr09-a5b1-* retained. Actual managed source/preview/latest extraction, immutable plan/history/current extraction revisions, strict study-design/framework/declarations, corrupt/lost receipt/marker, transaction drift rollback, main161 and DB37 all-column/row preservation/null new marker/disk reopen covered. Initial test-only syntax error corrected without changing assertions; production build unchanged. Next per-domain human/source-bound quality judgments, inspector and real count reports; PR09 and whole roadmap remain open.
+
+
+## ROC-PR-09A5B2 — source-bound human quality judgements with immutable review history
+
+Verified passing. DB39 independent quality-plan assessment_head_hash and immutable version/parent receipts record every frozen domain's explicit judged category or unjudgeable reason, exact existing extraction Evidence digests and user-confirmed overall label/reason. Per-domain options and complete domain set required; no automatic numerical aggregation or substitute evidence. Declared fulltext/adjudicator reviewer and trusted main actor separate. Real bytes checked before new writes; exact source/plan/extraction/current parent refreshed after await and insertion. Canonically legal judgment tampering, valid late extraction/assessment and Evidence invalidation roll back receipt/head/drift. Independent human revision across await remains committed while obsolete parent request refuses. Missing latest/head or damaged payload/parent never appears unassessed. New extraction needs new framework, historical source/protocol/archive judgments remain readable with explicit stale flags.3 generated APIs, real main171, mandatory registration dependency and updated caller; no legacy alias.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm generate:ipc / pnpm typecheck / pnpm build | Passed; final fresh build/type after synchronous-context read reuse |
+| node --check tests/unit/research-review-quality-assessment.test.mjs | Passed |
+| node --test tests/unit/research-review-quality-assessment.test.mjs tests/unit/research-review-quality-plan.test.mjs | Initial18/18, before10th assessment case and synchronous-context cleanup |
+| pnpm test:unit / pnpm harness:eval | Final1065/1065, including all182 review/source cases and10 assessment cases;94/94 |
+| node scripts/run-research-p0.mjs | 13/13 |
+| node scripts/smoke-electron.mjs | 12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
+
+Logs pr09-a5b2-* retained. Synchronous stages thread one verified context without persistent cache; byte-await/postinsert stages independently reread exact state. Initial multi-file patch context mismatch applied nothing and was corrected from actual source. No assertion weakening, source duplication, official quality-score/scientific independence or UI claim. Next explicit study/report membership for accurate PRISMA counts, report/query/exclusion sections and inspector; whole roadmap remains open.

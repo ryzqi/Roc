@@ -155,7 +155,8 @@ test('registered quality plan APIs require actual main sender across verified so
   try {
     const registry=new api.CapabilityRegistry();
     for(const descriptor of api.researchReviewQualityCapabilities)registry.declare('research',descriptor);
-    api.registerResearchReviewQualityCapabilities({pluginId:'research',capabilities:registry},f.qualityPlans);
+    const assessments=new api.ResearchReviewQualityAssessmentRepository(f.db,f.repository,f.qualityPlans,f.extractions,f.fullFreezing,()=>f.time);
+    api.registerResearchReviewQualityCapabilities({pluginId:'research',capabilities:registry},f.qualityPlans,assessments);
     const bridge=api.createPluginCapabilityAdapter({invokeCapability:(name,input)=>registry.invoke(name,input)}),input=f.qualityInput(),before=f.changes();
     await assert.rejects(registry.invoke('research.reviewQuality.createPlan',input),error=>error.code==='research_human_required');
     assert.throws(()=>api.parseIpcRequestArgs('roc:research:review-quality-plan-create',[{...input,actor}]));

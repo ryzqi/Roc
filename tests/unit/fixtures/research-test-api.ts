@@ -96,3 +96,5 @@ export {registerResearchReviewExtractionCapabilities,researchReviewExtractionCap
 export {ResearchReviewQualityPlanRepository} from '../../../src/main/plugins/research/review-quality-plan-repository';
 export {registerResearchReviewQualityCapabilities,researchReviewQualityCapabilities} from '../../../src/main/plugins/research/review-quality-capabilities';
 export {researchReviewExtractionSaveSchema,researchReviewExtractionSnapshotSchema} from '../../../src/shared/schemas/research-review-extraction';
+export {ResearchReviewQualityAssessmentRepository} from '../../../src/main/plugins/research/review-quality-assessment-repository';
+export {researchReviewQualityAssessmentSaveSchema,researchReviewQualityAssessmentSnapshotSchema} from '../../../src/shared/schemas/research-review-quality';
