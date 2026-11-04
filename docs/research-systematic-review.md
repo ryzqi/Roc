@@ -50,3 +50,16 @@ DB29 的 `research_review_corpora` 只保存不可变来源引用与原始命中
 新协议使旧语料 `currentProtocol:false`，固定内容仍可读；归档允许历史读取，拒绝新捕获。相同请求与调用者重放零写入，内容/调用者漂移拒绝；事务内写入后复核来源，失败整事务回滚。DB28 升级不补造语料或决定。
 
 专项 `research-review-corpus.test.mjs` 10/10，和检索/协议/人工 API 合跑37/37；全量单元940/940、Harness94/94、原生科研流程13/13、启动12/12零 renderer 错误、生成 IPC/type/build/chunks通过。使用真实离线 Provider 服务、原始池和 SQLite 重开；窗口51是主进程适配器接缝，未声明外部科学检索或完整界面端到端验收。人工去重、两轮筛选、提取、质量评价和 PRISMA 输出继续实施。
+
+
+## 人工去重与固定筛选集合
+
+`saveReviewDuplicateDecision/getReviewDuplicateDecisionHistory/getReviewDeduplication/freezeReviewDeduplication` 记录人工两端比较并冻结语料的待筛选集合。每个决定固定两端命中、来源查询/执行/池/收据/记录哈希、规则名称/版本、理由、请求与调用者。duplicate 明确移除左项、保留右项；distinct 明确保留不同记录。系统不从 DOI 或标题自动产生决定，不复制或删除原始返回。
+
+同一无向记录对的修订追加版本，必须带最新父决定 ID/哈希和修订原因；反转保留方向仍属于同一对。旧版本和原语料字节保留。冻结必须提交所有当前决定的准确 ID/哈希，包括 distinct；缺项、旧版本、重复或漂移拒绝。人工重复链解析为最终保留项，循环、同一项多个移除目标及 distinct 与重复链矛盾均阻止冻结，未解决的决定仍可读取和修订。
+
+DB30 增加不可变决定版本与独立冻结收据，语料的收据哈希标记在同一事务保存。缺少已标记收据、来源或父版本损坏、冻结内容与当前固定决定不一致均报错，不能重置成未审查。冻结保存原始命中数、重复移除数、待筛选数和准确集合，满足 `identifiedRecords = removedDuplicates + recordsToScreen`；重复移除不是全文排除。无重复或失败零命中的语料也需明确人工冻结，原检索不完整标记不变。
+
+冻结后的决定不再修改；需要改动时显式捕获新的语料并重新记录/冻结，已有审查不被覆盖。历史协议/归档仍可读取固定决定，禁止新写入；当前筛选前要求准确且仍属当前协议的冻结哈希。主进程绑定 save/freeze 窗口身份，工具直调、wire actor、跨项目/能力上下文无法写入。窗口身份是调用出处，不能证明独立领域审核人身份。
+
+`research-review-deduplication.test.mjs` 14/14，和原始语料/检索/协议/人工 API 合跑51/51；全量单元954/954、Harness94/94、原生流程13/13、启动12/12零 renderer 错误、生成 IPC/type/build/chunks通过。实际离线 Provider、完整结果池、事务注入故障、SQLite重开/DB29升级、窗口61 main adapter均覆盖。无新增界面或外部科学检索验收；两轮筛选/模型建议分离/双人冲突、提取、质量评价、检查器和 PRISMA 继续实施。

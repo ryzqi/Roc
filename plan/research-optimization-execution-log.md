@@ -3556,3 +3556,21 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
 
 Logs pr09-a4a-* retained under .artifacts/research-optimization. Actual offline Provider/service/governor/ledger/pool/repositories and SQLite disk reopen exercised; window51 is main adapter seam. No external scientific retrieval or review UI E2E claim. Shared search fixture extracted; older latest migration expectations follow declared last version while preserving original data assertions. NextA4B explicit human duplicate decisions/freeze, followed by separate two-stage screening, extraction/quality, inspector and count-conserving reporting. Whole roadmap remains in progress.
+
+
+## ROC-PR-09A4B — human duplicate revisions and immutable corpus-wide freeze
+
+Verified passing. DB30 append-only pair decisions bind both original hit/source hashes, explicit duplicate direction or distinct result, rule/version/reason, parent/hash/revision reason and trusted caller. Four generated/declared/registered APIs. Freeze requires the complete latest decision/hash set; resolves human chains, refuses cycles/ambiguous removal/distinct conflicts, conserves identified = duplicate removed + to screen. Independent receipt/marker is atomic and missing/corrupt receipt cannot reset review. Immutable frozen/history state survives query shutdown and disk restart; archive/obsolete protocol refuse new writes. No automatic DOI/title matching or paper-library duplication; duplicate removal is not full-text exclusion.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm generate:ipc / pnpm typecheck / pnpm build | Passed; fresh generated/type/build |
+| node --test tests/unit/research-review-deduplication.test.mjs tests/unit/research-review-corpus.test.mjs tests/unit/research-review-search.test.mjs tests/unit/research-systematic-review.test.mjs tests/unit/research-systematic-review-ipc.test.mjs | Final51/51; dedup14 |
+| pnpm test:unit / pnpm harness:eval | 954/954 and94/94 |
+| node scripts/run-research-p0.mjs | 13/13 |
+| node scripts/smoke-electron.mjs | 12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
+
+Logs pr09-a4b-* retained. Actual offline Provider/pool/ledger/repositories/DB29 migration/reopen and injected transactional corruption covered; main sender61 is adapter seam and calling provenance, not independent researcher authentication. No new UI or external scientific retrieval claim. Initial patch failed atomically at a mismatched IPC line; split patch applied, first type/focused38 and final51/full checks all passed without weakening assertions. Next separate title-abstract/full-text screening, model suggestions versus human final decisions and protocol-specific reviewer/conflict handling, then extraction/quality/inspector/count-conserving reporting. Whole roadmap remains in progress.

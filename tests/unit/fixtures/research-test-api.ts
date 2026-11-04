@@ -68,3 +68,6 @@ export {researchSourceLocatorSchema} from '../../../src/shared/schemas/research-
 export {relationSourceDigest, relationClaimHash} from '../../../src/main/plugins/research/evidence-relation-repository';
 export {captureExportScientificReview, assertCurrentExportScientificReview, serializeExportScientificReview, exportScientificReviewPath} from '../../../src/main/plugins/research/export-scientific-review';
 export {researchEvidenceRelationProposalSchema, researchEvidenceRelationReviewSchema} from '../../../src/shared/schemas/research-evidence-relations';
+
+export {ResearchReviewDeduplicationRepository} from '../../../src/main/plugins/research/review-deduplication-repository';
+export {registerResearchReviewDeduplicationCapabilities, researchReviewDeduplicationCapabilities} from '../../../src/main/plugins/research/review-deduplication-capabilities';

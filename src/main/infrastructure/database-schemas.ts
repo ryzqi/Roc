@@ -1939,6 +1939,36 @@ CREATE INDEX idx_review_corpus_version ON research_review_corpora(project_id,pro
 `
 });
 
+researchMigrations.push({
+  version: 30, name: 'human_systematic_review_deduplication',
+  sql: `
+ALTER TABLE research_review_corpora ADD COLUMN dedup_freeze_hash TEXT;
+CREATE TABLE research_review_duplicate_decisions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  corpus_id TEXT NOT NULL REFERENCES research_review_corpora(id) ON DELETE CASCADE,
+  pair_key TEXT NOT NULL,
+  version INTEGER NOT NULL CHECK(version > 0),
+  parent_id TEXT REFERENCES research_review_duplicate_decisions(id),
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id,request_id),
+  UNIQUE(corpus_id,pair_key,version)
+);
+CREATE TABLE research_review_deduplication_freezes (
+  corpus_id TEXT PRIMARY KEY REFERENCES research_review_corpora(id) ON DELETE CASCADE,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id,request_id)
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,
