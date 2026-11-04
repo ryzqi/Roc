@@ -143,7 +143,7 @@ test('generated plan API binds the main caller; declared names never grant tools
   try {
     const registry=new api.CapabilityRegistry();
     for(const descriptor of api.researchReviewScreeningCapabilities)registry.declare('research',descriptor);
-    api.registerResearchReviewScreeningCapabilities({pluginId:'research',capabilities:registry},f.screening,f.decisions);
+    api.registerResearchReviewScreeningCapabilities({pluginId:'research',capabilities:registry},f.screening,f.decisions,f.arbitration);
     const bridge=api.createPluginCapabilityAdapter({invokeCapability:(name,input)=>registry.invoke(name,input)}),before=f.changes();
     await assert.rejects(registry.invoke('research.reviewScreening.createPlan',f.input),error=>error.code==='research_human_required');
     assert.throws(()=>api.parseIpcRequestArgs('roc:research:review-screening-createPlan',[{...f.input,actor}]));

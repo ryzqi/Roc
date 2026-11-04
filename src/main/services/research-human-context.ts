@@ -8,7 +8,7 @@ export type ResearchHumanCapability = 'research.relations.propose' | 'research.r
   'research.reviewProtocol.save' | 'research.reviewProtocol.freeze' |
   'research.reviewSearch.start' | 'research.reviewSearch.cancel' | 'research.reviewCorpus.create' |
   'research.reviewDeduplication.save' | 'research.reviewDeduplication.freeze' |
-  'research.reviewScreening.createPlan' | 'research.reviewScreening.save';
+  'research.reviewScreening.createPlan' | 'research.reviewScreening.save' | 'research.reviewScreening.adjudicate';
 type HumanContext = Readonly<{
   capability: ResearchHumanCapability;
   projectId: string;

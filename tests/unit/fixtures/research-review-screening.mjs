@@ -9,6 +9,7 @@ export async function createReviewScreeningPlanFixture(api,{freeze=true,...optio
   f.frozen=freeze?f.dedup.freeze(f.freeze(),reviewScreeningActorFixture):null;
   f.screening=new api.ResearchReviewScreeningRepository(f.db,f.repository,f.corpora,f.dedup,()=>f.time);
   f.decisions=new api.ResearchReviewScreeningDecisions(f.db,f.repository,f.corpora,f.dedup,f.screening,()=>f.time);
+  f.arbitration=new api.ResearchReviewScreeningArbitration(f.db,f.repository,f.decisions,()=>f.time);
   const counts=f.protocol.version.body.screening;
   f.input={...f.get,requestId:'declare-reviewers',expectedCorpusHash:f.corpus.snapshotHash,
     expectedDedupFreezeHash:f.frozen===null?'a'.repeat(64):f.frozen.freezeHash,

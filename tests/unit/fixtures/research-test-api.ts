@@ -77,3 +77,5 @@ export {registerResearchReviewScreeningCapabilities, researchReviewScreeningCapa
 
 export {ResearchReviewScreeningDecisions} from '../../../src/main/plugins/research/review-screening-decisions';
 export {createCapabilityOperationContext, runWithCapabilityOperationContext} from '../../../src/main/kernel/capability-operation-context';
+
+export {ResearchReviewScreeningArbitration} from '../../../src/main/plugins/research/review-screening-arbitration';

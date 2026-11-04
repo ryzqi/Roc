@@ -216,7 +216,7 @@ test('registered APIs enforce human decision authority and actual main tool prov
   try {
     const registry=new api.CapabilityRegistry(),receipts=[];
     for(const descriptor of api.researchReviewScreeningCapabilities)registry.declare('research',descriptor);
-    api.registerResearchReviewScreeningCapabilities({pluginId:'research',capabilities:registry},f.screening,f.decisions);
+    api.registerResearchReviewScreeningCapabilities({pluginId:'research',capabilities:registry},f.screening,f.decisions,f.arbitration);
     const bridge=api.createPluginCapabilityAdapter({invokeCapability:(name,input)=>registry.invoke(name,input)});
     const proposalRequest={...f.target(0,'proposal'),outcome:include},humanRequest=f.decision(0,reviewerA.id,'human',uncertain),before=f.changes();
     await assert.rejects(registry.invoke('research.reviewScreening.suggest',proposalRequest),error=>error.code==='research_review_screening_tool_context_required');

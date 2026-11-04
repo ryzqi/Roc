@@ -3617,3 +3617,21 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
 
 Logs pr09-a4c2a-* retained. Actual offline Provider/raw pool/DB31 migration/reopen, post-insert corruption/lost row rollback and main window81/operation-context registry seam covered; no external model call/spending or review UI E2E. Initial72/type/build passed; final review added explicit DB phase keys/read contract/capability-version replay and different-primary-reason conflict before final73. Full-unit prior ZIP deadline issue corrected separatelye2dbfb2 with controlled red/green and same30ms actual-close assertion; final976 run excludes cleaned task-only repro. Shared screening-plan fixture extracted without changing preserved data/security assertions. NextA4C2B human adjudication/current version binding and immutable whole title-abstract freeze, followed by full-text source binding/decisions, extraction/quality/inspector/reporting. Whole roadmap remains open.
+
+
+## ROC-PR-09A4C2B — immutable human adjudication with current reviewer-set binding
+
+Verified passing. DB33 arbitration revisions bind complete exact current reviewer decision refs, declared adjudicator, final explicit criterion/outcome/reason, fixed material and main caller. Two generated/registered adjudication/history APIs; existing phase read now returns resolved states, no alias. Missing reviewers/agreement/stale refs/unknown adjudicator/criteria refuse. Reviewer revision leaves old adjudication visible with currentDecisionSet=false; only latest matching judgment resolves current conflict/uncertainty and changes conserved counts. Post-insert current plan/ref check rolls back even a valid new reviewer revision. Original votes/suggestions unchanged; historical/archive reads retained, writes denied.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm generate:ipc / pnpm typecheck / pnpm build | Final passed; fresh generated/type/build |
+| node --test tests/unit/research-review-screening-arbitration.test.mjs tests/unit/research-review-screening-decisions.test.mjs tests/unit/research-review-screening-plan.test.mjs tests/unit/research-review-deduplication.test.mjs tests/unit/research-review-corpus.test.mjs tests/unit/research-review-search.test.mjs tests/unit/research-systematic-review.test.mjs tests/unit/research-systematic-review-ipc.test.mjs | Final82/82; arbitration9 |
+| pnpm test:unit / pnpm harness:eval | 985/985 and94/94 |
+| node scripts/run-research-p0.mjs | 13/13 |
+| node scripts/smoke-electron.mjs | 12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
+
+Logs pr09-a4c2b-* retained. Actual reviewer/proposal/source repositories, trigger-created valid new reviewer revision and invalid source rollback, DB32 migration/reopen and main window91 exercised. No external model/spending, independent researcher authentication or review UI E2E claim. First82/build passed, final current-ref commit recheck added before final82/full checks. Next whole title-abstract freeze, fulltext source binding/decisions, extraction/quality/inspector/count-conserving reporting. Whole roadmap remains open.

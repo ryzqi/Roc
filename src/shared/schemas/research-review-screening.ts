@@ -39,10 +39,12 @@ export type ResearchReviewScreeningPlanCreate = z.infer<typeof researchReviewScr
 export type ResearchReviewScreeningPlanInspection = z.infer<typeof researchReviewScreeningPlanInspectionSchema>;
 
 const note = z.string().trim().min(1).max(10000);
+const includeOutcome = z.object({decision: z.literal('include'), inclusionCriterionIds: z.array(id).min(1).max(50), reason: note}).strict()
+  .refine(value => new Set(value.inclusionCriterionIds).size === value.inclusionCriterionIds.length, 'review_screening_criteria_duplicate');
+const excludeOutcome = z.object({decision: z.literal('exclude'), exclusionCriterionId: id, reason: note}).strict();
+export const researchReviewScreeningFinalOutcomeSchema = z.discriminatedUnion('decision', [includeOutcome, excludeOutcome]);
 export const researchReviewScreeningOutcomeSchema = z.discriminatedUnion('decision', [
-  z.object({decision: z.literal('include'), inclusionCriterionIds: z.array(id).min(1).max(50), reason: note}).strict()
-    .refine(value => new Set(value.inclusionCriterionIds).size === value.inclusionCriterionIds.length, 'review_screening_criteria_duplicate'),
-  z.object({decision: z.literal('exclude'), exclusionCriterionId: id, reason: note}).strict(),
+  includeOutcome, excludeOutcome,
   z.object({decision: z.literal('uncertain'), reason: note}).strict()
 ]);
 const reference = z.object({id, expectedHash: hash}).strict();
@@ -106,3 +108,31 @@ export type ResearchReviewScreeningSuggestionCreate = z.infer<typeof researchRev
 export type ResearchReviewScreeningSuggestionOrigin = z.infer<typeof researchReviewScreeningSuggestionOriginSchema>;
 export type ResearchReviewScreeningSuggestionInspection = z.infer<typeof researchReviewScreeningSuggestionInspectionSchema>;
 export type ResearchReviewScreeningPhaseInspection = z.infer<typeof researchReviewScreeningPhaseInspectionSchema>;
+
+export const researchReviewScreeningArbitrationSaveSchema = screeningTarget.extend({
+  reviewerId: id, outcome: researchReviewScreeningFinalOutcomeSchema,
+  decisions: z.array(reference).min(1).max(2),
+  parentArbitrationId: id.nullable(), expectedParentHash: hash.nullable(), revisionReason: note.nullable()
+}).refine(value => new Set(value.decisions.map(decision => decision.id)).size === value.decisions.length,
+  'review_screening_arbitration_decision_duplicate')
+  .refine(value => value.parentArbitrationId === null ?
+    value.expectedParentHash === null && value.revisionReason === null :
+    value.expectedParentHash !== null && value.revisionReason !== null, 'review_screening_arbitration_revision_requires_parent');
+export const researchReviewScreeningArbitrationSnapshotSchema = z.object({
+  id, version: z.number().int().positive(), request: researchReviewScreeningArbitrationSaveSchema, requestHash: hash,
+  adjudicator: researchReviewScreeningReviewerSchema, material,
+  actor: researchRelationReviewerSchema, recordedAt: z.iso.datetime()
+}).strict();
+export const researchReviewScreeningArbitrationInspectionSchema = z.object({
+  snapshot: researchReviewScreeningArbitrationSnapshotSchema, snapshotHash: hash,
+  isLatest: z.boolean(), currentDecisionSet: z.boolean()
+}).strict();
+export const researchReviewScreeningArbitrationHistorySchema = researchReviewScreeningPlanGetSchema.extend({arbitrationId: id});
+export const researchReviewScreeningResolvedPhaseSchema = researchReviewScreeningPhaseInspectionSchema.safeExtend({
+  items: z.array(researchReviewScreeningPhaseInspectionSchema.shape.items.element.extend({
+    arbitration: researchReviewScreeningArbitrationInspectionSchema.nullable()
+  }))
+});
+export type ResearchReviewScreeningArbitrationSave = z.infer<typeof researchReviewScreeningArbitrationSaveSchema>;
+export type ResearchReviewScreeningArbitrationInspection = z.infer<typeof researchReviewScreeningArbitrationInspectionSchema>;
+export type ResearchReviewScreeningResolvedPhase = z.infer<typeof researchReviewScreeningResolvedPhaseSchema>;
