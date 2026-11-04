@@ -307,9 +307,3 @@ test('archived stale-source quality definition remains readable with exact categ
   await tid('artifact-review-quality-plan-frozen').locator('summary').click();await tid('artifact-review-quality-plan-frozen').locator('pre').waitFor({state:'visible'});
   assert.deepEqual(JSON.parse(await tid('artifact-review-quality-plan-frozen').locator('pre').innerText()),plan.snapshot);await audit('quality-archived-dark-narrow');
 });
-
-
-
-
-
-
