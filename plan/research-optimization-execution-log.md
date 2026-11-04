@@ -3711,3 +3711,22 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
 
 Logs pr09-a4c3b2-* retained. Real byte verification, complete current votes, stale arbitration after valid reviewer revision/reparse/unavailable binding, immutable parents/ref-matched historical conclusions, exact declared adjudicator/main131, corrupt material/source drift and valid-new-vote transaction trigger rollback, actual disk reopening covered. First31/build passed;10th test added before final143/fullunit1026, runtime unchanged after build. No new DB/backfill, UI/scientific independence or model spend claim. Next fulltext whole-round freeze then extraction/quality/inspector/count-conserving reporting; whole roadmap remains open.
+
+
+## ROC-PR-09A4C3B3 — complete fulltext authority freeze with independent live source state
+
+Verified passing. DB36 independent full_freeze_hash and existing phase full_text receipt fix exact current binding/vote/applied arbitration refs, primary exclusion reason and human counts. All reports explicitly not_retrieved or current-source final included/excluded; real bytes verified for all retrieved sources before transaction review-hash/completeness recheck. Valid new vote/source drift during insert rolls back receipt/marker/drift. All new binding/vote/proposal/arbitration writes guard persisted freeze, exact original requests replay readonly. Missing/corrupt marker/receipt cannot reopen. Frozen human authority reconstructed from exact same-binding votes/arbitration refs stays fixed across later doc reparse; live phase exposes source_changed/sourcesCurrent:false and requireFrozen refuses expired scientific use. Source metadata state is not a claim that readonly inspection read current disk bytes.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm generate:ipc / pnpm typecheck / pnpm build | Passed; fresh current build/type |
+| node --test tests/unit/research-review-fulltext-freeze.test.mjs tests/unit/research-review-fulltext-arbitration.test.mjs tests/unit/research-review-fulltext-screening.test.mjs tests/unit/research-review-fulltext.test.mjs tests/unit/research-review-screening-plan.test.mjs | Initial50/51; only old DB34 full-row migration comparison failed on newly added null column; all10 new freeze cases passed |
+| node --test tests/unit/research-review-fulltext-freeze.test.mjs tests/unit/research-review-fulltext-arbitration.test.mjs tests/unit/research-review-fulltext-screening.test.mjs tests/unit/research-review-fulltext.test.mjs tests/unit/research-review-screening-freeze.test.mjs tests/unit/research-review-screening-arbitration.test.mjs tests/unit/research-review-screening-decisions.test.mjs tests/unit/research-review-screening-plan.test.mjs tests/unit/research-review-deduplication.test.mjs tests/unit/research-review-corpus.test.mjs tests/unit/research-review-search.test.mjs tests/unit/research-systematic-review.test.mjs tests/unit/research-systematic-review-ipc.test.mjs tests/unit/research-document-coordinates.test.mjs tests/unit/research-document-annotations.test.mjs | Final153/153; fulltext freeze10 |
+| pnpm test:unit / pnpm harness:eval | 1036/1036 and94/94 |
+| node scripts/run-research-p0.mjs | 13/13 |
+| node scripts/smoke-electron.mjs | 12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
+
+Logs pr09-a4c3b3-* retained. Actual original/coordinate byte checks, displayed-hash race from independent human binding revision, valid new vote/source drift triggers, missing and canonically changed receipt, new-write guards/replay, frozen history after reparse with refused current scientific use, main141/history/archive, explicit canonical DB35 binding upgrade/no new final data, disk reopen/failed empty coverage covered. Existing DB34 preservation now captures all original columns through PRAGMA and compares every original field/row, separately asserts new full marker null; no compatibility bypass or assertion weakened. No review UI/scientific independence/spending claim. Next source-Evidence/unit-bound extraction with distinct missing/unjudgeable, per-design frozen quality/human review, inspector and actual reports; whole roadmap remains open.

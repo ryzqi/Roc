@@ -202,8 +202,11 @@ test('DB34 upgrade preserves fixed title authority and actual documents; disk re
     const tables=['research_documents','research_document_parses','research_library','research_review_screening_plans',
       'research_review_screening_decisions','research_review_screening_freezes','research_review_corpora','research_review_protocol_versions'];
     const before=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all()),migrations=f.db.prepare('SELECT * FROM schema_migrations').all();
+    const originalColumns=tables.map(table=>f.db.prepare(`PRAGMA table_info(${table})`).all().map(column=>column.name));
     api.applyResearchDatabaseSchema(f.db);
-    tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT * FROM ${table}`).all(),before[index]));
+    tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT * FROM ${table}`).all()
+      .map(row=>Object.fromEntries(originalColumns[index].map(key=>[key,row[key]]))),before[index]));
+    assert.equal(f.db.prepare('SELECT full_freeze_hash FROM research_review_screening_plans').pluck().get(),null);
     assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE version<=34').all(),migrations);
     assert.equal(f.db.prepare('SELECT count(*) FROM research_review_fulltext_bindings').pluck().get(),0);
     const binding=await f.fulltexts.save(f.retrieved(),actor),path=join(directory,'research.sqlite');await f.db.backup(path);

@@ -10,6 +10,7 @@ import {researchRelationReviewerSchema,type ResearchRelationReviewer} from '../.
 import type {ResearchRepository} from './repository';
 import type {ResearchReviewFullTextScreening} from './review-fulltext-screening';
 import type {ResearchReviewFullTextRepository} from './review-fulltext-repository';
+import {requireFullTextPhaseOpen} from './review-fulltext-freeze';
 type Row={
   id:string;project_id:string;corpus_id:string;phase:string;hit_id:string;version:number;parent_id:string|null;
   request_id:string;snapshot_json:string;snapshot_hash:string;created_at:string
@@ -31,6 +32,7 @@ export class ResearchReviewFullTextArbitration {
     this.requireWritable(request.projectId);
     const requestHash=hash(JSON.stringify(request)),replay=this.requestRow(request.projectId,request.requestId);
     if(replay!==undefined)return this.replay(replay,request,requestHash,actor);
+    requireFullTextPhaseOpen(this.db,request.projectId,request.corpusId);
     this.validateTarget(request,this.decisions.getPhase({projectId:request.projectId,corpusId:request.corpusId,phase:request.phase}));
     await this.bindings.verifyCurrent({projectId:request.projectId,corpusId:request.corpusId,
       bindingId:request.bindingId,expectedBindingHash:request.expectedBindingHash});
@@ -38,6 +40,7 @@ export class ResearchReviewFullTextArbitration {
       this.requireWritable(request.projectId);
       const repeated=this.requestRow(request.projectId,request.requestId);
       if(repeated!==undefined)return this.replay(repeated,request,requestHash,actor);
+      requireFullTextPhaseOpen(this.db,request.projectId,request.corpusId);
       const phase=this.decisions.getPhase({projectId:request.projectId,corpusId:request.corpusId,phase:request.phase});
       const item=this.validateTarget(request,phase);
       const latest=this.latest(request.corpusId,request.hitId),parent=latest===undefined?null:this.inspect(latest,phase);

@@ -92,3 +92,34 @@ export const researchReviewFullTextResolvedPhaseSchema=researchReviewFullTextPha
 export type ResearchReviewFullTextArbitrationSave=z.infer<typeof researchReviewFullTextArbitrationSaveSchema>;
 export type ResearchReviewFullTextArbitrationInspection=z.infer<typeof researchReviewFullTextArbitrationInspectionSchema>;
 export type ResearchReviewFullTextResolvedPhase=z.infer<typeof researchReviewFullTextResolvedPhaseSchema>;
+
+export const researchReviewFullTextAuthoritySchema=z.object({
+  corpusId:id,corpusHash:hash,planId:id,planHash:hash,titleFreezeHash:hash,phase:z.literal('full_text'),
+  items:z.array(z.object({
+    hit:researchReviewCorpusHitSchema,binding:reference.nullable(),
+    status:researchReviewFullTextPhaseInspectionSchema.shape.items.element.shape.status,
+    decisions:z.array(reference).max(2),arbitration:reference.nullable(),primaryExclusionCriterionId:id.nullable()
+  }).strict()),
+  counts:researchReviewFullTextPhaseInspectionSchema.shape.counts
+}).strict();
+export const researchReviewFullTextFreezeRequestSchema=researchReviewFullTextPhaseGetSchema.extend({
+  requestId:id,expectedReviewHash:hash,reviewNote:note
+});
+export const researchReviewFullTextFreezeReceiptSchema=z.object({
+  request:researchReviewFullTextFreezeRequestSchema,requestHash:hash,authority:researchReviewFullTextAuthoritySchema,
+  reviewHash:hash,actor:researchRelationReviewerSchema,frozenAt:z.iso.datetime()
+}).strict().refine(value=>value.authority.counts.retrieval_pending===0&&value.authority.counts.source_changed===0&&
+  value.authority.counts.pending===0&&value.authority.counts.uncertain===0&&value.authority.counts.conflict===0&&
+  value.authority.items.every(item=>item.binding!==null&&
+    (item.status==='not_retrieved'||item.status==='included'||item.status==='excluded')&&
+    (item.status==='excluded')===(item.primaryExclusionCriterionId!==null))&&
+  value.authority.counts.reportsToSeek===value.authority.items.length&&value.authority.counts.reportsToSeek===
+    value.authority.counts.not_retrieved+value.authority.counts.included+value.authority.counts.excluded,
+  'review_fulltext_freeze_requires_complete_set');
+export const researchReviewFullTextFrozenPhaseSchema=researchReviewFullTextResolvedPhaseSchema.safeExtend({
+  reviewHash:hash,freeze:researchReviewFullTextFreezeReceiptSchema.nullable(),freezeHash:hash.nullable(),sourcesCurrent:z.boolean()
+}).refine(value=>(value.freeze===null)===(value.freezeHash===null),'review_screening_freeze_receipt_required');
+export type ResearchReviewFullTextAuthority=z.infer<typeof researchReviewFullTextAuthoritySchema>;
+export type ResearchReviewFullTextFreezeRequest=z.infer<typeof researchReviewFullTextFreezeRequestSchema>;
+export type ResearchReviewFullTextFreezeReceipt=z.infer<typeof researchReviewFullTextFreezeReceiptSchema>;
+export type ResearchReviewFullTextFrozenPhase=z.infer<typeof researchReviewFullTextFrozenPhaseSchema>;

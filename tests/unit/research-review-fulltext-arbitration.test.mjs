@@ -179,7 +179,7 @@ test('generated main API requires actual sender for async fulltext adjudication 
   try {
     const registry=new api.CapabilityRegistry();
     for(const descriptor of api.researchReviewFullTextScreeningCapabilities)registry.declare('research',descriptor);
-    api.registerResearchReviewFullTextScreeningCapabilities({pluginId:'research',capabilities:registry},f.fullScreening,f.fullArbitration);
+    api.registerResearchReviewFullTextScreeningCapabilities({pluginId:'research',capabilities:registry},f.fullScreening,f.fullArbitration,f.fullFreezing);
     const bridge=api.createPluginCapabilityAdapter({invokeCapability:(name,input)=>registry.invoke(name,input)}),input=f.resolve(),before=f.changes();
     await assert.rejects(registry.invoke('research.reviewFullTextScreening.adjudicate',input),error=>error.code==='research_human_required');
     assert.throws(()=>api.parseIpcRequestArgs('roc:research:review-fulltext-adjudicate',[{...input,actor}]));

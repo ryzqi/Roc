@@ -12,6 +12,7 @@ import type {ResearchDocumentService} from './document-service';
 import type {ResearchReviewCorpusRepository} from './review-corpus-repository';
 import type {ResearchReviewScreeningFreeze} from './review-screening-freeze';
 import type {ResearchReviewScreeningFrozenPhase} from '../../../shared/schemas/research-review-screening';
+import {requireFullTextPhaseOpen} from './review-fulltext-freeze';
 type Row={
   id:string;project_id:string;corpus_id:string;hit_id:string;version:number;parent_id:string|null;document_id:string|null;
   request_id:string;snapshot_json:string;snapshot_hash:string;created_at:string
@@ -30,6 +31,7 @@ export class ResearchReviewFullTextRepository {
     const requestHash=hash(JSON.stringify(request));
     const replay=this.findRequest(request.projectId,request.requestId);
     if(replay!==undefined)return this.replay(replay,request,requestHash,actor);
+    requireFullTextPhaseOpen(this.db,request.projectId,request.corpusId);
     this.requireIncluded(request);
     const verifiedSource=request.outcome.kind==='retrieved'?this.captureSource(request.projectId,request.outcome.selection):null;
     if(request.outcome.kind==='retrieved') {
@@ -39,6 +41,7 @@ export class ResearchReviewFullTextRepository {
       this.requireWritable(request.projectId);
       const repeated=this.findRequest(request.projectId,request.requestId);
       if(repeated!==undefined)return this.replay(repeated,request,requestHash,actor);
+      requireFullTextPhaseOpen(this.db,request.projectId,request.corpusId);
       const title=this.requireIncluded(request);
       const latest=this.latest(request.corpusId,request.hitId);
       const parent=latest===undefined?null:this.inspect(latest,title);

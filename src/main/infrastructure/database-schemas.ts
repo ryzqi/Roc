@@ -2081,6 +2081,11 @@ CREATE TABLE research_review_fulltext_bindings (
 `
 });
 
+researchMigrations.push({
+  version:36,name:'fixed_systematic_review_fulltext_authority',
+  sql:'ALTER TABLE research_review_screening_plans ADD COLUMN full_freeze_hash TEXT;'
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

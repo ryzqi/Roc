@@ -16,6 +16,7 @@ import type {ResearchReviewFullTextBindingInspection} from '../../../shared/sche
 import type {ResearchRepository} from './repository';
 import type {ResearchReviewFullTextRepository} from './review-fulltext-repository';
 import type {ResearchReviewScreeningFreeze} from './review-screening-freeze';
+import {requireFullTextPhaseOpen} from './review-fulltext-freeze';
 
 type Target=ResearchReviewFullTextSuggestionCreate;
 type Row={
@@ -37,6 +38,7 @@ export class ResearchReviewFullTextScreening {
     const requestHash=hash(JSON.stringify(request));
     const replay=this.requestRow('research_review_screening_decisions',request);
     if(replay!==undefined)return this.replayDecision(replay,request,requestHash,actor);
+    requireFullTextPhaseOpen(this.db,request.projectId,request.corpusId);
     this.validateTarget(request);
     await this.bindings.verifyCurrent({projectId:request.projectId,corpusId:request.corpusId,
       bindingId:request.bindingId,expectedBindingHash:request.expectedBindingHash});
@@ -44,6 +46,7 @@ export class ResearchReviewFullTextScreening {
       this.requireWritable(request.projectId);
       const repeated=this.requestRow('research_review_screening_decisions',request);
       if(repeated!==undefined)return this.replayDecision(repeated,request,requestHash,actor);
+      requireFullTextPhaseOpen(this.db,request.projectId,request.corpusId);
       const plan=this.validateTarget(request);
       const reviewer=plan.snapshot.request.fullTextReviewers.find(value=>value.id===request.reviewerId);
       if(reviewer===undefined)throw new Error('research_review_screening_reviewer_not_declared');
@@ -75,6 +78,7 @@ export class ResearchReviewFullTextScreening {
     this.requireWritable(request.projectId);
     const requestHash=hash(JSON.stringify(request)),replay=this.requestRow('research_review_screening_suggestions',request);
     if(replay!==undefined)return this.replaySuggestion(replay,request,requestHash,origin);
+    requireFullTextPhaseOpen(this.db,request.projectId,request.corpusId);
     this.validateTarget(request);
     await this.bindings.verifyCurrent({projectId:request.projectId,corpusId:request.corpusId,
       bindingId:request.bindingId,expectedBindingHash:request.expectedBindingHash});
@@ -82,6 +86,7 @@ export class ResearchReviewFullTextScreening {
       this.requireWritable(request.projectId);
       const repeated=this.requestRow('research_review_screening_suggestions',request);
       if(repeated!==undefined)return this.replaySuggestion(repeated,request,requestHash,origin);
+      requireFullTextPhaseOpen(this.db,request.projectId,request.corpusId);
       const plan=this.validateTarget(request);
       const snapshot=researchReviewFullTextSuggestionSnapshotSchema.parse({
         id:`review_fulltext_suggestion_${randomUUID()}`,request,requestHash,material:this.material(request),origin,recordedAt:this.now()

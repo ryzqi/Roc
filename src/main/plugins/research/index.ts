@@ -85,6 +85,7 @@ import {ResearchReviewFullTextRepository} from './review-fulltext-repository';
 import {registerResearchReviewFullTextCapabilities,researchReviewFullTextCapabilities} from './review-fulltext-capabilities';
 import {ResearchReviewFullTextScreening} from './review-fulltext-screening';
 import {ResearchReviewFullTextArbitration} from './review-fulltext-arbitration';
+import {ResearchReviewFullTextFreeze} from './review-fulltext-freeze';
 import {registerResearchReviewFullTextScreeningCapabilities,researchReviewFullTextScreeningCapabilities} from './review-fulltext-screening-capabilities';
 import {registerResearchReviewScreeningCapabilities, researchReviewScreeningCapabilities} from './review-screening-capabilities';
 import { ResearchIndexService, type ResearchIndexWatch } from './index-service';
@@ -310,7 +311,8 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       registerResearchReviewFullTextCapabilities(context,reviewFullTexts);
       const reviewFullTextScreening=new ResearchReviewFullTextScreening(db,researchRepository,reviewScreeningFreeze,reviewFullTexts,()=>new Date().toISOString());
       const reviewFullTextArbitration=new ResearchReviewFullTextArbitration(db,researchRepository,reviewFullTextScreening,reviewFullTexts,()=>new Date().toISOString());
-      registerResearchReviewFullTextScreeningCapabilities(context,reviewFullTextScreening,reviewFullTextArbitration);
+      const reviewFullTextFreeze=new ResearchReviewFullTextFreeze(db,researchRepository,reviewFullTextArbitration,reviewFullTexts,()=>new Date().toISOString());
+      registerResearchReviewFullTextScreeningCapabilities(context,reviewFullTextScreening,reviewFullTextArbitration,reviewFullTextFreeze);
       registerResearchSystematicReviewCapabilities(context, researchRepository.systematicReviews);
       const effects = new ResearchProductionEffectService(researchRepository,
         new ResearchWorkspaceFileService(db, researchRepository, () => new Date().toISOString(), notifyWorkspacePathStructureChanged),

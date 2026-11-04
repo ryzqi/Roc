@@ -220,7 +220,7 @@ test('actual main window binds human save across file awaits and actual capabili
   try {
     await f.bind();const registry=new api.CapabilityRegistry(),receipts=[];
     for(const descriptor of api.researchReviewFullTextScreeningCapabilities)registry.declare('research',descriptor);
-    api.registerResearchReviewFullTextScreeningCapabilities({pluginId:'research',capabilities:registry},f.fullScreening,f.fullArbitration);
+    api.registerResearchReviewFullTextScreeningCapabilities({pluginId:'research',capabilities:registry},f.fullScreening,f.fullArbitration,f.fullFreezing);
     const bridge=api.createPluginCapabilityAdapter({invokeCapability:(name,input)=>registry.invoke(name,input)});
     const suggestionInput={...f.target(0,'proposal'),outcome:include},voteInput=f.vote(0,f.reviewerIds[0],'human',uncertain),before=f.changes();
     await assert.rejects(registry.invoke('research.reviewFullTextScreening.save',voteInput),error=>error.code==='research_human_required');
