@@ -165,7 +165,7 @@ DB26 保存不可变批注快照：完整请求及其 SHA-256、所选原始解�
 
 ## 真实扫描验收
 
-`tests/fixtures/research-workflow/scanned-source.mjs` 生成无文本层的三页受控扫描 PDF 与独立源真值：正文数值/单位、合并表头和重复组表格、带分数/求和上下标的公式。验收使用仓库固定的 complete CPU 模型包和生产 sandbox worker，实际解析、采集、入库、索引、Evidence、固定坐标与 PNG 校验均执行；不合成识别块，不调用付费语言模型。模型包下载到任务工件目录并按现有 manifest SHA/大小校验，不改变应用模型配置。
+`tests/fixtures/research-scanned-source.mjs` 生成无文本层的三页受控扫描 PDF 与独立源真值：正文数值/单位、合并表头和重复组表格、带分数/求和上下标的公式。验收使用仓库固定的 complete CPU 模型包和生产 sandbox worker，实际解析、采集、入库、索引、Evidence、固定坐标与 PNG 校验均执行；不合成识别块，不调用付费语言模型。模型包下载到任务工件目录并按现有 manifest SHA/大小校验，不改变应用模型配置。
 
 从项目根运行，每次选择新的 evidence-root（解析器拒绝覆盖输出）：
 

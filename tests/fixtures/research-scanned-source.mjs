@@ -4,7 +4,7 @@ import {createHash} from 'node:crypto';
 import {mkdir, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 
-/** Controlled raster-only source with independent text/table/formula truth, never a scientific result. */
+/** CC0-1.0 controlled raster source with independent engineering truth, outside the frozen workflow corpus. */
 export async function materializeScannedSource(root) {
   await mkdir(root,{recursive:true});
   const width=1200,height=1600,pages=[];

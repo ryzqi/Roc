@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {loadResearchWorkerTestApi,createResearchFixture} from '../unit/fixtures/research-test-kit.mjs';
 import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
-import {materializeScannedSource} from '../fixtures/research-workflow/scanned-source.mjs';
+import {materializeScannedSource} from '../fixtures/research-scanned-source.mjs';
 
 let api;
 before(async()=>{api=await loadResearchWorkerTestApi();});
