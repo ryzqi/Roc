@@ -3444,3 +3444,22 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check |Passed; eager1131770bytes6files |
 
 The four asset scenarios use explicit synthetic recognition layout and real native parser page pixels/PNG bytes/Vite/Chromium/generated registry/adapter through Node-host/window98 seam. They do not establish actual scanned/complex scientific table/formula OCR accuracy. Nonzero displayed image ink measured from actual compositor screenshot: first browser canvas readback correctly raised cross-origin taint, and policy remained unchanged. Actual native-only warning tested in genuine parser state separately from synthetic mixed mode. PNG/source corruption refuses with raw text retained; restored retry works; fixed historical/captured Evidence images and late project isolation verified. Light800/dark1099 original/raw formula/PNG and560px fixed source screenshots inspected; four comparison and source audits cut0/hidden0. Source screenshot waits decoded natural geometry/figure visibility; an ambiguous test patch insertion was detected by scoped read and corrected before executing. Logs pr07-a6a-* and assets-fixed-pixels.json/asset-compositor-table.png/asset-* artifacts retained. Backend unchanged: previous unit903/Harness94/native13 are prior evidence. Next: actual scanned-source and larger-resource PR07 acceptance, then PR09. Roadmap/external acceptances remain open.
+
+
+## ROC-PR-07A6B — actual scanned-source acceptance and asset-entry correction
+
+Verified passing. Actual complete CPU sandbox OCR of controlled raster-only3page source, retained merged-header table/formula images and raw text, strict original/version/coordinates/indexed Evidence. Reader and captured-source asset entries now follow actual imageAssetId, keeping figure classification. No model threshold change, interpretation or calibrated accuracy claim.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| node scripts/verify-research-pdf-scanned.mjs --models-root .artifacts/research-optimization/pr07-scanned/models --evidence-root .artifacts/research-optimization/pr07-scanned/acceptance-final |1/1; actual complete CPU OCR4.37s,10blocks/13images/2formulas/0tables |
+| ROC_SCAN_MODELS_ROOT="$PWD/.artifacts/research-optimization/pr07-scanned/models" ROC_SCAN_EVIDENCE_ROOT="$PWD/.artifacts/research-optimization/pr07-scanned/acceptance-final" node --test tests/acceptance/research-pdf-scanned-reader.test.mjs |3/3; actual recognized table/incorrect formula/captured Evidence assets |
+| pnpm build |Passed; includes typecheck |
+| node --test --test-concurrency=1 tests/renderer/paper-reader.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-search-plan.test.mjs tests/renderer/literature-review.test.mjs tests/renderer/document-preview-protocol.test.mjs |76/76; includes32page bounded bitmap/worker lifecycle and crosspage selection |
+| node scripts/smoke-electron.mjs |12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check |Passed; eager1131770bytes6files |
+
+Red test retained missing figure asset entry. Initial sandbox EPERM from output outside jobDir fixed in fixture only. Expanded Evidence test initially queried nonexistent block_id; corrected to actual unique indexed content/locator after DB schema inspection. Actual native pipeline uses synthetic window100; Vite/Chromium/protocol/registry/generated adapter uses Node-host/window101. Recognition-observations retains two missed body lines, figure table classification and malformed formula output. Source/raw/PNG remains verifiable; science/OCR quality is not declared passing.800light/1099dark and fixed560px screenshots retained and reviewed, hover cut0/hidden0. Logs pr07-a6b-*; final native/reader evidence at pr07-scanned/acceptance-final.
+
+PR07 local engineering scope is complete: safe metadata/URLs, lazy original PDF, measured bidirectional/page/crosspage positioning, fixed Evidence/Claim versions, trusted human note/Evidence conversion, raw images/quality facts, scan and bounded32page resource checks. Prior backend unit903/Harness94/native13 are earlier evidence, not rerun for this UI-only change. Next PR09 systematic-review workflow; external scientific retrieval/Zotero client/200-task corpus/live spending and later roadmap remain open.

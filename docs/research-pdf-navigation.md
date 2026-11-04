@@ -152,12 +152,34 @@ DB26 保存不可变批注快照：完整请求及其 SHA-256、所选原始解�
 实际 Electron 测试通过真实 Vite/PDF worker/Chromium/协议和生成主进程适配器，保存旋转90/CropBox/UserUnit2 的原始 pointer 事件坐标，与独立实际 PDF.js 换算误差小于 `1e-8`。另覆盖键盘页级批注、Escape/空框、原文件/索引损坏零写入与原请求重试、迟到保存跨项目、重解析后旧批注阅读和明暗长内容。Node-host/window98 是明确测试接缝；截图与四种裁切回执在 `pr07-reader-selection/annotation-*`，cut0/hidden0。
 
 
-## 表格/公式图像与质量提示
+## 解析图像与质量提示
 
-表格和公式块的「核对解析图像」将保存的 PNG 与未经重新解释的原始文本并排显示；每次只展开一个图像。模块独立懒加载，单独核对 PNG 不加载 PDF 引擎；与原 PDF 比较时仍只保留一个页 canvas/worker。没有 `imageAssetId` 时明确说明未保存图像，不用整页图片替代缺失块图像。HTML/LaTeX 保持原始文本，不执行为页面或数学排版。
+保存了图像资产的块提供「核对解析图像」；表格和公式块缺少资产时明确提示。该入口将保存的 PNG 与未经重新解释的原始文本并排显示；每次只展开一个图像。模块独立懒加载，单独核对 PNG 不加载 PDF 引擎；与原 PDF 比较时仍只保留一个页 canvas/worker。没有 `imageAssetId` 时明确说明未保存图像，不用整页图片替代缺失块图像。HTML/LaTeX 保持原始文本，不执行为页面或数学排版。
 
 图像先使用所选内容的规范化 parseHash 请求完整版本 preview，核对项目/文档/解析/来源，以及该块实际 asset ID、SHA-256、大小、类型、页和项目协议 URL。PNG 字节继续由主进程 asset 能力校验，使用已有 `roc-preview` URL，没有 Blob URL。来源或图像损坏显示可重试错误，原始块文本始终保留。Evidence/Claim 固定原文视图复用同一模块，旧解析图像仍绑定原始版本，迟到元数据不能替换另一来源。
 
 质量信息只使用所选解析的事实：OCR/mixed 模式提示核对数字、单位、公式；实际 native-only 警告说明没有 OCR 核查；空块提示核对原文。未知解析警告保留原记录文本。稳定内容没有校准置信分数，因此界面没有生成百分比或从 raw structured score 推断准确率。
 
 资产验证采用明确合成的表格/公式识别布局，PNG 像素从真实解析器页图裁取；这建立版本、图像协议、显示和人工公式问题→Evidence 流程，不能作为真实 OCR/复杂表格识别质量验收。`assets-fixed-pixels.json` 与 `asset-compositor-table.png` 保留实际浏览器显示像素/来源哈希；跨协议图像正确触发浏览器 canvas taint，验证改用实际 compositor 截图，没有更改 CORS 或 webSecurity。`asset-comparison-*` 和固定 Evidence 来源截图保留明暗/800/1099及560px来源抽屉布局，默认/hover/展开/最终状态 cut0/hidden0。
+
+
+## 真实扫描验收
+
+`tests/fixtures/research-workflow/scanned-source.mjs` 生成无文本层的三页受控扫描 PDF 与独立源真值：正文数值/单位、合并表头和重复组表格、带分数/求和上下标的公式。验收使用仓库固定的 complete CPU 模型包和生产 sandbox worker，实际解析、采集、入库、索引、Evidence、固定坐标与 PNG 校验均执行；不合成识别块，不调用付费语言模型。模型包下载到任务工件目录并按现有 manifest SHA/大小校验，不改变应用模型配置。
+
+从项目根运行，每次选择新的 evidence-root（解析器拒绝覆盖输出）：
+
+```sh
+node scripts/verify-research-pdf-scanned.mjs \
+  --models-root .artifacts/research-optimization/pr07-scanned/models \
+  --evidence-root .artifacts/research-optimization/pr07-scanned/acceptance-final
+ROC_SCAN_MODELS_ROOT="$PWD/.artifacts/research-optimization/pr07-scanned/models" \
+ROC_SCAN_EVIDENCE_ROOT="$PWD/.artifacts/research-optimization/pr07-scanned/acceptance-final" \
+node --test tests/acceptance/research-pdf-scanned-reader.test.mjs
+```
+
+模型包和产物必须显式提供，缺少就失败；这组独立验收不放入无模型依赖的普通 renderer suite。当前原生1/1、真实阅读器3/3通过。实际生成10块/13图像/2公式/0表格，约4.37秒；这只说明工程流程成立。`recognition-observations.json` 记录正文有两行未完整保留，表格被标成 figure，公式原文有识别错误。图像入口因此按实际资产提供，保留 figure 分类；不重新解释表格或修复公式。
+
+实际扫描表格可对照页2原图、区域 PNG 和原始单元文本，人工公式问题可转成保存准确 OCR 版本的 Evidence；固定 Evidence 原文也可查看 figure 图像。明暗800/1099截图和 hover 审计 cut0/hidden0；Node-host/窗口100、101仍是明确合成接缝，非完整生产 kernel/preload E2E。`actual-scanned-*`、原始解析/采集/真值文件位于 acceptance-final。
+
+同轮相关 renderer76/76还实际执行32页PDF资源回归和跨页选择：页2/8/16/24/32/1始终一个canvas、每页不超过400万像素，关闭后worker归零并移除canvas，保留进程内存观测。跨页识别块仍为合成布局，验证定位版本/页/索引契约。没有宣称进程RSS硬上限、扫描科学准确率或独立领域审查通过。

@@ -778,7 +778,8 @@ export function PaperReader({
                 {blocks.map((block, index) => {
                   const assetKey = JSON.stringify([literature.projectId, activeDocumentId, reader.parsed?.run.id, block.id]);
                   const comparingAsset = openAsset === assetKey;
-                  const hasAssetSurface = block.kind === 'table' || block.kind === 'formula';
+                  const hasAssetSurface = content.blocks[index].imageAssetId !== null ||
+                    block.kind === 'table' || block.kind === 'formula';
                   return (
                   <section
                     key={block.id}

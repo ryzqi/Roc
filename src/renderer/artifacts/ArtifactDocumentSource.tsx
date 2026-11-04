@@ -83,7 +83,7 @@ export function ArtifactDocumentSource({client, evidence, locator}: {
           <PaperBlockAsset client={client} projectId={evidence.projectId} document={loaded.document} parsed={loaded.parsed} block={block}/>
         </Suspense>}
         </div>
-        {(block.kind === 'table' || block.kind === 'formula') && block.imageAssetId !== null ?
+        {block.imageAssetId !== null ?
           <button type="button" aria-expanded={comparingAsset} data-testid="artifact-document-source-asset-toggle"
             onClick={() => setAssetSelection(comparingAsset ? null : assetKey)}
             className="mt-1 rounded-control px-1 py-0.5 text-[var(--font-meta-size)] text-muted hover:bg-[var(--overlay-hover)]">
