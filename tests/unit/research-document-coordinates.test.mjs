@@ -1,7 +1,7 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {mkdtemp, readFile, rm, writeFile, realpath} from 'node:fs/promises';
+import {mkdtemp, readFile, rm, writeFile, realpath, rename, symlink} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
@@ -44,6 +44,171 @@ async function scene({databaseVersion = 25} = {}) {
   f.cleanup = async () => {f.close(); await rm(f.directory, {recursive: true, force: true});};
   return f;
 }
+
+function previewScene(f) {
+  f.repository.documents.begin(f.document.id, 'preview-coordinate-parse');
+  f.repository.documents.complete(f.document.id, 'preview-coordinate-parse', f.collected.data, f.collected.coordinates);
+  f.service = new api.ResearchDocumentService(f.repository, {}, f.root);
+  const registry = new api.CapabilityRegistry();
+  for (const descriptor of api.researchDocumentCapabilities) registry.declare('research', descriptor);
+  api.registerResearchDocumentCapabilities({pluginId: 'research', capabilities: registry}, f.repository.documents, f.service);
+  f.registry = registry;
+  f.adapter = api.createPluginCapabilityAdapter({invokeCapability: (name, input) => registry.invoke(name, input)});
+  f.previewRequest = {projectId: f.project.id, documentId: f.document.id, parseId: 'preview-coordinate-parse',
+    sourceHash: f.document.sourceHash, parseHash: hash(JSON.stringify(f.collected.data.content))};
+  f.sourceRequest = {projectId: f.project.id, documentId: f.document.id, sourceHash: f.document.sourceHash};
+  f.assetRequest = {projectId: f.project.id, documentId: f.document.id, parseId: 'preview-coordinate-parse',
+    assetId: f.collected.data.content.assets[0].id, sha256: f.collected.data.content.assets[0].sha256};
+}
+
+test('generated document preview publishes only verified project-scoped metadata and byte capabilities remain readonly', async () => {
+  const f = await scene();
+  try {
+    previewScene(f);
+    const before = f.changes();
+    assert.deepEqual(api.parseIpcRequestArgs('roc:research:document-preview', [f.previewRequest]), [f.previewRequest]);
+    assert.throws(() => api.parseIpcRequestArgs('roc:research:document-preview', [{...f.previewRequest, sourcePath: '/private/file.pdf'}]));
+    assert.throws(() => api.parseIpcRequestArgs('roc:research:document-preview', [{...f.previewRequest, parseHash: undefined}]));
+    const result = await f.adapter.invoke('research.previewDocument', [f.previewRequest], 71);
+    assert.equal(result.ok, true);
+    assert.equal(result.data.parseHash, f.previewRequest.parseHash);
+    assert.equal(result.data.sourceHash, f.document.sourceHash);
+    assert.equal(result.data.parseId, f.previewRequest.parseId);
+    assert.equal(result.data.coordinates.snapshotHash, f.repository.documents.coordinates(f.document.id, f.previewRequest.parseId).snapshotHash);
+    assert.deepEqual(result.data.coordinates.pages, f.collected.coordinates.pages);
+    assert.equal(result.data.coordinates.pages[0].frame.kind, 'pdf');
+    assert.equal(result.data.sourceUrl, `roc-preview://research/projects/${f.project.id}/documents/${f.document.id}/source/${f.document.sourceHash}`);
+    assert.ok(result.data.assets[0].resourceUrl.includes(`/parses/${f.previewRequest.parseId}/${f.assetRequest.assetId}/`));
+    assert.equal(JSON.stringify(result.data).includes(f.root), false);
+    assert.equal('artifact' in result.data.coordinates, false);
+    const source = await f.registry.invoke('research.document.source', f.sourceRequest);
+    assert.equal(source.headers.get('content-type'), 'application/pdf');
+    assert.equal(source.headers.get('cache-control'), 'no-store');
+    assert.equal(source.headers.get('x-content-type-options'), 'nosniff');
+    assert.deepEqual(Buffer.from(await source.arrayBuffer()), await readFile(join(f.root, 'source.pdf')));
+    const image = await f.registry.invoke('research.document.asset', f.assetRequest);
+    assert.equal(image.headers.get('content-type'), 'image/png');
+    const bytes = Buffer.from(await image.arrayBuffer());
+    assert.equal(hash(bytes), f.assetRequest.sha256);
+    assert.deepEqual(bytes.subarray(0, 8), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    assert.equal(f.changes(), before);
+    const discovered = await f.adapter.invoke('research.previewDocument', [{...f.previewRequest, parseHash: null}], 71);
+    assert.deepEqual(discovered.data, result.data);
+    assert.equal(f.changes(), before);
+  } finally {await f.cleanup();}
+});
+
+test('preview and bytes refuse foreign projects and changed exact versions before exposing resource metadata', async () => {
+  const f = await scene();
+  try {
+    previewScene(f);
+    const other = f.repository.createProject({title: 'Unlinked project', description: '', workspacePath: '/tmp/coordinate-other'});
+    const before = f.changes();
+    const denied = await f.adapter.invoke('research.previewDocument', [{...f.previewRequest, projectId: other.id}], 71);
+    assert.equal(denied.ok, false); assert.equal(denied.error.code, 'research_document_project_mismatch');
+    assert.equal(denied.error.category, 'permission');
+    for (const [name, request] of [['research.document.source', f.sourceRequest], ['research.document.asset', f.assetRequest]]) {
+      await assert.rejects(f.registry.invoke(name, {...request, projectId: other.id}), error => error.code === 'research_document_project_mismatch');
+      const {projectId, ...unscoped} = request;
+      await assert.rejects(f.registry.invoke(name, unscoped));
+    }
+    for (const [override, code] of [
+      [{sourceHash: 'a'.repeat(64)}, 'research_document_source_changed'],
+      [{parseHash: 'a'.repeat(64)}, 'research_document_preview_parse_changed'],
+      [{parseId: 'missing-parse'}, 'research_document_parse_not_found'],
+      [{documentId: 'missing-document'}, 'research_document_not_found']
+    ]) {
+      const result = await f.adapter.invoke('research.previewDocument', [{...f.previewRequest, ...override}], 71);
+      assert.equal(result.ok, false); assert.equal(result.error.code, code);
+    }
+    assert.equal(f.changes(), before);
+  } finally {await f.cleanup();}
+});
+
+test('preview refuses missing or tampered original, coordinate artifact and snapshot; assets verify actual bytes', async () => {
+  const f = await scene();
+  try {
+    previewScene(f);
+    const sourcePath = join(f.root, 'source.pdf'), source = await readFile(sourcePath);
+    const artifactPath = join(f.root, f.collected.data.outputPath, f.collected.coordinates.artifact.path);
+    const artifact = await readFile(artifactPath);
+    const imagePath = join(f.root, f.collected.data.outputPath, f.collected.data.files[f.assetRequest.assetId]);
+    const image = await readFile(imagePath);
+    const before = f.changes();
+    await writeFile(sourcePath, Buffer.concat([source, Buffer.from('\n% Task-owned corruption\n')]));
+    let result = await f.adapter.invoke('research.previewDocument', [f.previewRequest], 71);
+    assert.equal(result.error.code, 'research_document_source_changed');
+    await assert.rejects(f.registry.invoke('research.document.source', f.sourceRequest), error => error.code === 'research_document_source_changed');
+    await writeFile(sourcePath, source);
+    await writeFile(artifactPath, Buffer.concat([artifact, Buffer.from('\n ')]));
+    result = await f.adapter.invoke('research.previewDocument', [f.previewRequest], 71);
+    assert.equal(result.error.code, 'research_document_coordinate_artifact_changed');
+    await writeFile(artifactPath, artifact);
+    await rename(sourcePath, `${sourcePath}.held`);
+    result = await f.adapter.invoke('research.previewDocument', [f.previewRequest], 71);
+    assert.equal(result.error.code, 'research_document_file_missing');
+    await symlink(`${sourcePath}.held`, sourcePath);
+    result = await f.adapter.invoke('research.previewDocument', [f.previewRequest], 71);
+    assert.equal(result.error.code, 'research_path_symlink'); assert.equal(result.error.category, 'permission');
+    await rm(sourcePath); await rename(`${sourcePath}.held`, sourcePath);
+    await writeFile(imagePath, Buffer.concat([image, Buffer.from('changed')]));
+    await assert.rejects(f.registry.invoke('research.document.asset', f.assetRequest), error => error.code === 'research_document_asset_changed');
+    await writeFile(imagePath, image);
+    assert.equal((await f.adapter.invoke('research.previewDocument', [f.previewRequest], 71)).ok, true);
+    assert.equal(f.changes(), before);
+    const original = f.db.prepare('SELECT * FROM research_document_parse_coordinates').get();
+    f.db.prepare('DELETE FROM research_document_parse_coordinates').run();
+    const missing = f.changes();
+    result = await f.adapter.invoke('research.previewDocument', [f.previewRequest], 71);
+    assert.equal(result.error.code, 'research_document_coordinate_snapshot_missing');
+    assert.equal(f.changes(), missing);
+    f.db.prepare(`INSERT INTO research_document_parse_coordinates
+      (parse_id,document_id,snapshot_json,snapshot_hash,created_at) VALUES (@parse_id,@document_id,@snapshot_json,@snapshot_hash,@created_at)`).run(original);
+    assert.equal((await f.adapter.invoke('research.previewDocument', [f.previewRequest], 71)).ok, true);
+  } finally {await f.cleanup();}
+});
+
+test('fixed historical parses keep their captured basis while uncaptured history explicitly has no measured frame', async () => {
+  const f = await scene();
+  try {
+    previewScene(f);
+    const original = (await f.adapter.invoke('research.previewDocument', [f.previewRequest], 71)).data;
+    f.repository.documents.begin(f.document.id, 'new-preview-parse');
+    f.repository.documents.complete(f.document.id, 'new-preview-parse', f.collected.data, f.collected.coordinates);
+    const before = f.changes();
+    assert.deepEqual((await f.adapter.invoke('research.previewDocument', [f.previewRequest], 71)).data, original);
+    assert.equal(f.changes(), before);
+    f.repository.documents.begin(f.document.id, 'uncaptured-preview-parse');
+    f.repository.documents.complete(f.document.id, 'uncaptured-preview-parse', f.collected.data, null);
+    const after = f.changes();
+    const historical = await f.adapter.invoke('research.previewDocument', [{...f.previewRequest, parseId: 'uncaptured-preview-parse'}], 71);
+    assert.equal(historical.ok, true); assert.equal(historical.data.coordinates, null);
+    assert.equal(historical.data.sourceHash, original.sourceHash);
+    assert.equal(f.changes(), after);
+    f.db.prepare("UPDATE research_document_parses SET status='failed',error='research_document_parse_superseded' WHERE id=?").run(f.previewRequest.parseId);
+    const invalid = f.changes();
+    const superseded = await f.adapter.invoke('research.previewDocument', [f.previewRequest], 71);
+    assert.equal(superseded.error.code, 'research_document_parse_superseded');
+    assert.equal(f.changes(), invalid);
+  } finally {await f.cleanup();}
+});
+
+test('scope removal during asynchronous original read refuses both preview metadata and source bytes', async () => {
+  const f = await scene();
+  try {
+    previewScene(f);
+    const originalPath = f.repository.documents.sourcePath.bind(f.repository.documents);
+    f.repository.documents.sourcePath = id => {
+      f.repository.library.link(f.document.libraryItemId, f.project.id, false, {notify: false});
+      return originalPath(id);
+    };
+    const result = await f.adapter.invoke('research.previewDocument', [f.previewRequest], 71);
+    assert.equal(result.error.code, 'research_document_project_mismatch');
+    f.repository.library.link(f.document.libraryItemId, f.project.id, true, {notify: false});
+    await assert.rejects(f.registry.invoke('research.document.source', f.sourceRequest), error => error.code === 'research_document_project_mismatch');
+    f.repository.documents.sourcePath = originalPath;
+  } finally {await f.cleanup();}
+});
 
 test('actual parser coordinate collection publishes the exact file/source/parse seal atomically with the parse', async () => {
   const f = await scene();

@@ -6,7 +6,8 @@ import type {
   researchDocumentAssetRequestSchema, researchDocumentImportRequestSchema, researchDocumentParseSchema, researchDocumentSourceRequestSchema
 } from '../../../shared/schemas/research-documents';import type { ResearchBibliographyEntry, ResearchLiterature } from '../../../shared/types';
 import type { ResearchParseTier } from '../../../shared/schemas/research-production';
-import { collectDocumentContent, documentMediaTypes, documentStorageRoot, maximumDocumentBytes } from './document-files';
+import type {ResearchDocumentPreview, ResearchDocumentPreviewRequest} from '../../../shared/schemas/research-document-preview';
+import { collectDocumentContent, documentMediaTypes, documentStorageRoot, maximumDocumentBytes, maximumArtifactBytes } from './document-files';
 import type { ResearchDocument } from './document-repository';
 import type { ResearchParseBudget } from './parse-budget';
 import type { ResearchRepository } from './repository';
@@ -97,12 +98,16 @@ export class ResearchDocumentService {
   }
 
   async source(request: z.infer<typeof researchDocumentSourceRequestSchema>): Promise<{ bytes: Buffer; mediaType: string; filename: string }> {
-    const document = this.repository.documents.get(request.documentId);
+    const document = this.requireProjectDocument(request.projectId, request.documentId);
     if (document.sourceHash !== request.sourceHash) throw new Error('research_document_source_changed');
-    return { bytes: await this.sourceBytes(await documentStorageRoot(this.rootPath), document), mediaType: document.mediaType, filename: document.filename };
+    const bytes = await this.sourceBytes(await documentStorageRoot(this.rootPath), document);
+    const current = this.requireProjectDocument(request.projectId, document.id);
+    if (current.sourceHash !== document.sourceHash || current.size !== document.size) throw new Error('research_document_source_changed');
+    return { bytes, mediaType: document.mediaType, filename: document.filename };
   }
 
   async asset(request: z.infer<typeof researchDocumentAssetRequestSchema>): Promise<Buffer> {
+    this.requireProjectDocument(request.projectId, request.documentId);
     const { data } = this.repository.documents.parsed(request.documentId, request.parseId);
     const asset = data.content.assets.find((entry) => entry.id === request.assetId);
     const path = data.files[request.assetId];
@@ -111,7 +116,55 @@ export class ResearchDocumentService {
     const output = await researchPath(root, data.outputPath);
     const bytes = await readResearchFile(output, path, 64 * 1024 * 1024);
     if (researchContentHash(bytes) !== asset.sha256 || bytes.length !== asset.size) throw new Error('research_document_asset_changed');
+    this.requireProjectDocument(request.projectId, request.documentId);
+    const current = this.repository.documents.parsed(request.documentId, request.parseId).data.content.assets.find(entry => entry.id === request.assetId);
+    if (current?.sha256 !== asset.sha256 || current.size !== asset.size) throw new Error('research_document_asset_changed');
     return bytes;
+  }
+
+  async preview(request: ResearchDocumentPreviewRequest): Promise<ResearchDocumentPreview> {
+    this.requireOpen();
+    const document = this.requireProjectDocument(request.projectId, request.documentId);
+    if (document.sourceHash !== request.sourceHash) throw new Error('research_document_source_changed');
+    const {data} = this.repository.documents.parsed(document.id, request.parseId);
+    const parseHash = researchContentHash(JSON.stringify(data.content));
+    if (data.content.sourceHash !== document.sourceHash ||
+        (request.parseHash !== null && request.parseHash !== parseHash)) throw new Error('research_document_preview_parse_changed');
+    const coordinates = this.repository.documents.coordinates(document.id, request.parseId);
+    const root = await documentStorageRoot(this.rootPath);
+    await this.sourceBytes(root, document);
+    if (coordinates !== null) {
+      const output = await researchPath(root, data.outputPath);
+      const bytes = await readResearchFile(output, coordinates.snapshot.artifact.path, maximumArtifactBytes);
+      if (bytes.length !== coordinates.snapshot.artifact.size ||
+          researchContentHash(bytes) !== coordinates.snapshot.artifact.sha256) throw new Error('research_document_coordinate_artifact_changed');
+    }
+    // Revalidate scope and immutable metadata after asynchronous filesystem reads.
+    const current = this.requireProjectDocument(request.projectId, document.id);
+    const currentCoordinates = this.repository.documents.coordinates(document.id, request.parseId);
+    if (current.sourceHash !== document.sourceHash || current.size !== document.size ||
+        researchContentHash(JSON.stringify(this.repository.documents.parsed(document.id, request.parseId).data.content)) !== parseHash ||
+        (currentCoordinates === null ? null : currentCoordinates.snapshotHash) !== (coordinates === null ? null : coordinates.snapshotHash)) {
+      throw new Error('research_document_preview_parse_changed');
+    }
+    const base = `roc-preview://research/projects/${encodeURIComponent(request.projectId)}/documents/${encodeURIComponent(document.id)}`;
+    return {
+      projectId: request.projectId, documentId: document.id, parseId: request.parseId, sourceHash: document.sourceHash, parseHash,
+      filename: document.filename, mediaType: document.mediaType, size: document.size, pageCount: data.content.pageCount,
+      sourceUrl: `${base}/source/${document.sourceHash}`,
+      assets: data.content.assets.map(asset => ({...asset,
+        resourceUrl: `${base}/parses/${encodeURIComponent(request.parseId)}/${encodeURIComponent(asset.id)}/${asset.sha256}.png`})),
+      coordinates: coordinates === null ? null : {snapshotHash: coordinates.snapshotHash, pages: coordinates.snapshot.pages}
+    };
+  }
+
+  private requireProjectDocument(projectId: string, documentId: string): ResearchDocument {
+    this.repository.getProject(projectId);
+    const document = this.repository.documents.get(documentId);
+    if (!this.repository.library.get(document.libraryItemId).projectIds.includes(projectId)) {
+      throw new Error('research_document_project_mismatch');
+    }
+    return document;
   }
 
   async shutdown(): Promise<void> {

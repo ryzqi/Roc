@@ -281,6 +281,7 @@ export const rocApi: RocPreloadApi = {
     cancelDocumentParse: (...args) => ipcRenderer.invoke(ipcChannels.researchDocumentCancel, ...args),
     listDocumentParses: (...args) => ipcRenderer.invoke(ipcChannels.researchDocumentRuns, ...args),
     getDocumentContent: (...args) => ipcRenderer.invoke(ipcChannels.researchDocumentContent, ...args),
+    previewDocument: (...args) => ipcRenderer.invoke(ipcChannels.researchDocumentPreview, ...args),
     getIndexStatus: (...args) => ipcRenderer.invoke(ipcChannels.researchIndexStatus, ...args),
     saveIndexSettings: (...args) => ipcRenderer.invoke(ipcChannels.researchIndexConfigure, ...args),
     controlIndex: (...args) => ipcRenderer.invoke(ipcChannels.researchIndexControl, ...args),

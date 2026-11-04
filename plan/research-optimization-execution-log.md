@@ -3121,3 +3121,56 @@ matches captured Evidence, parseSHA matches exact content, saved structured file
 and frame918x1188 match actual PDF. Reads perform no writes. Safe preview metadata and file-byte
 validation at the service/protocol boundary remain next; PR-07 and full plan still incomplete.
 Earlier independent P4/review-order and external scientific/client/L2 gaps remain unchanged.
+
+## ROC-PR-07A2B — project-scoped preview metadata and byte boundary
+
+Verified passing. Added research.previewDocument through the generated renderer/preload registry.
+Requests bind projectId/documentId/parseId/sourceHash and explicit nullable caller-known parseHash.
+Responses return verified parse/source hashes, actual page count, original/PNG protocol URLs,
+asset metadata and measured frame/snapshotHash without absolute filesystem paths or write authority.
+Known Evidence/Claim locators can request their fixed parseHash; first ordinary reading explicitly
+passes null to obtain the actual hash. No latest-parse substitution occurs in this boundary.
+
+Original and asset byte requests now require project scope, checked against library membership
+before filesystem reads and after async IO. Actual file hashes/sizes, immutable parse content and
+coordinate artifact seal are checked; missing/tampered/symlink/foreign reads fail. Historical parses
+retain fixed measured snapshots, uncaptured history is explicit null, and marked missing/corrupt
+snapshots cannot become a successful page-only fallback. Deleted old unscoped document URL routes.
+No compatibility aliases, dependency additions or source fixture changes.
+
+Actual Chromium fetch was red because roc-preview had supportFetchAPI but lacked corsEnabled.
+The exact console repro reported a scheme absent from the CORS-supported protocol list. Enabling
+corsEnabled alone made the same frozen-PDF bytes/hash check pass. No webSecurity/CSP bypass or
+wildcard origin header added; every protocol capability failure remains a failed response.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm generate:ipc / pnpm typecheck | Generated bridge and type checks passed |
+| node --test tests/unit/research-document-coordinates.test.mjs tests/unit/zotero-import.test.mjs | 49/49 |
+| node --test tests/renderer/document-preview-protocol.test.mjs | Initial0/3 red; clean final3/3 |
+| pnpm test:unit | 893/893 |
+| pnpm harness:eval | 94/94 |
+| pnpm build | Fresh production build passed |
+| node scripts/run-research-p0.mjs | Native13/13 |
+| node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs | 25/25 |
+| node --test tests/renderer/artifact-production.test.mjs | 8/8 |
+| node scripts/smoke-electron.mjs | 12/12, zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; eager1132980bytes6files |
+
+Five additional actual parser/repository/adapter tests cover exact source/parse/frame identity,
+original and PNG bytes, foreign scope, malformed request/path authority, version drift, missing or
+modified source/artifact/snapshot, historical preservation/no invented geometry and async unlink.
+The native P0 saves document-preview.json from actual registry/adapter/source/asset operations
+with explicitly synthetic sender97. Separate actual Electron/Chromium protocol tests inject the
+PDF capability response and verify the encoded route/hash/404 contract; they do not claim an
+actual user or end-to-end production main-kernel transport. Artifacts/logs retained under
+.artifacts/research-optimization/pr07-a2b-* and pr07-preview-protocol/.
+
+Renderer-check command initially named a nonexistent second file; Node ran only the real inspector
+file. The separate actual artifact-production8 check above completes the intended relevant scope.
+After broad checks, preview pageCount was aligned to the existing nonnegative document-content
+contract; final focused/type/build and static checks recorded before commit.
+Next: actual reader fixed parse/source selection, lazy PDF/structured view, bidirectional location,
+annotation capture and large-PDF memory acceptance. Full plan and external acceptance remain open.

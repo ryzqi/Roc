@@ -9,6 +9,7 @@ import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types'
 import { RocDomainError } from '../../services/errors';
 import type { ResearchDocumentRepository } from './document-repository';
 import type { ResearchDocumentService } from './document-service';
+import {researchDocumentPreviewRequestSchema, researchDocumentPreviewSchema} from '../../../shared/schemas/research-document-preview';
 
 const capabilities = {
   import: descriptor('research.document.import', researchDocumentImportRequestSchema, researchDocumentSchema),
@@ -20,7 +21,8 @@ const capabilities = {
   runs: descriptor('research.document.runs', researchDocumentIdRequestSchema, researchDocumentRunSchema.array()),
   content: descriptor('research.document.content', researchDocumentParseRequestSchema, researchDocumentParseSchema),
   source: descriptor('research.document.source', researchDocumentSourceRequestSchema, z.unknown()),
-  asset: descriptor('research.document.asset', researchDocumentAssetRequestSchema, z.unknown())
+  asset: descriptor('research.document.asset', researchDocumentAssetRequestSchema, z.unknown()),
+  preview: descriptor('research.document.preview', researchDocumentPreviewRequestSchema, researchDocumentPreviewSchema)
 };
 export const researchDocumentCapabilities = Object.values(capabilities);
 
@@ -29,6 +31,13 @@ export function registerResearchDocumentCapabilities(context: RocPluginContext, 
     context.capabilities.register(context.pluginId, capability, async (input) => {
       try { return await run(capability.inputSchema.parse(input)); }
       catch (error) {
+        if (capability === capabilities.preview || capability === capabilities.source || capability === capabilities.asset) {
+          if (error instanceof Error) {
+            const failure = documentReadFailures[error.message] ?? documentReadFailures[(error as NodeJS.ErrnoException).code ?? ''];
+            if (failure !== undefined) throw new RocDomainError({code: error.message in documentReadFailures ? error.message : failure.code,
+              message: failure.message, category: failure.category, retryable: false});
+          }
+        }
         if (error instanceof Error && error.message === 'research_document_parse_stale') {
           throw new RocDomainError({ code: error.message, message: '文档解析状态已变化，请刷新后重试。', category: 'conflict', retryable: false });
         }
@@ -52,6 +61,7 @@ export function registerResearchDocumentCapabilities(context: RocPluginContext, 
   register(capabilities.parseMany, (input) => service.parseMany(input));
   register(capabilities.cancel, (input) => service.cancel(input.documentId, input.parseId));
   register(capabilities.runs, (input) => repository.runs(input.documentId));
+  register(capabilities.preview, input => service.preview(input));
   register(capabilities.content, (input) => {
     try {
       return service.parsed(input.documentId, input.parseId);
@@ -84,3 +94,23 @@ export function registerResearchDocumentCapabilities(context: RocPluginContext, 
 function descriptor<TInput, TOutput>(name: string, inputSchema: z.ZodType<TInput>, outputSchema: z.ZodType<TOutput>): CapabilityDescriptor<TInput, TOutput> {
   return { name, version: '1.0.0', inputSchema, outputSchema };
 }
+
+const documentReadFailures: Record<string, {code: string; message: string; category: 'permission' | 'conflict' | 'not_found' | 'degraded'}> = {
+  research_document_project_mismatch: {code: 'research_document_project_mismatch', message: '该文档未关联当前项目。', category: 'permission'},
+  research_document_source_changed: {code: 'research_document_source_changed', message: '原文件与记录的版本不一致，无法预览。', category: 'conflict'},
+  research_document_preview_parse_changed: {code: 'research_document_preview_parse_changed', message: '解析内容与所选版本不一致，请重新读取。', category: 'conflict'},
+  research_document_asset_changed: {code: 'research_document_asset_changed', message: '解析图像与记录的内容不一致。', category: 'conflict'},
+  research_document_coordinate_artifact_changed: {code: 'research_document_coordinate_artifact_changed', message: '坐标工件内容已变化，无法使用区域定位。', category: 'conflict'},
+  research_document_coordinate_binding_changed: {code: 'research_document_coordinate_binding_changed', message: '坐标快照与解析版本不一致。', category: 'conflict'},
+  research_document_coordinate_snapshot_invalid: {code: 'research_document_coordinate_snapshot_invalid', message: '坐标快照校验失败。', category: 'degraded'},
+  research_document_coordinate_snapshot_missing: {code: 'research_document_coordinate_snapshot_missing', message: '所选解析的坐标快照缺失。', category: 'not_found'},
+  research_document_parse_not_found: {code: 'research_document_parse_not_found', message: '所选解析不存在。', category: 'not_found'},
+  research_document_not_found: {code: 'research_document_not_found', message: '所选文档不存在。', category: 'not_found'},
+  research_document_asset_not_found: {code: 'research_document_asset_not_found', message: '所选解析图像不存在或版本不符。', category: 'not_found'},
+  research_document_parse_not_ready: {code: 'research_document_parse_not_ready', message: '所选解析尚未完成。', category: 'conflict'},
+  research_document_parse_superseded: {code: 'research_document_parse_superseded', message: '该解析已失效，无法继续定位。', category: 'conflict'},
+  research_path_symlink: {code: 'research_path_symlink', message: '文档资源路径包含符号链接，无法读取。', category: 'permission'},
+  research_path_outside_project: {code: 'research_path_outside_project', message: '文档资源超出存储范围。', category: 'permission'},
+  ENOENT: {code: 'research_document_file_missing', message: '原文件或解析资源已缺失。', category: 'not_found'},
+  EACCES: {code: 'research_document_file_denied', message: '无法读取所选文档资源。', category: 'permission'}
+};

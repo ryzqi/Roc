@@ -44,6 +44,7 @@ export { requireConfirmedSearchStrategy, searchPlanApprovalHash } from '../../..
 export { withLiteratureContext } from '../../../src/main/services/literature-context';
 export { ResearchLibraryService } from '../../../src/main/plugins/research/library-service';
 export { ResearchDocumentService } from '../../../src/main/plugins/research/document-service';
+export {registerResearchDocumentCapabilities, researchDocumentCapabilities} from '../../../src/main/plugins/research/document-capabilities';
 export { AgentToolEffectStore, hashToolInput } from '../../../src/main/services/deep-agent/tool-effect-store';
 export { createToolEffectIdempotencyMiddleware } from '../../../src/main/services/deep-agent/tool-effect-idempotency';
 export { createMcpClientAdapter } from '../../../src/main/plugins/mcp/mcp-client-adapter';

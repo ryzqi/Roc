@@ -148,7 +148,7 @@ test('granted attachment bytes import through the real document service with ato
     assert.equal(result.document.status,'imported');assert.equal(result.libraryItemId,f.inspection.libraryItemId);
     assert.equal(result.document.sourceHash,createHash('sha256').update(bytes).digest('hex'));
     assert.equal(result.document.size,bytes.length);assert.equal(result.destinationProjectId,f.project.id);
-    assert.deepEqual((await f.documents.source({documentId:result.document.id,sourceHash:result.document.sourceHash})).bytes,bytes);
+    assert.deepEqual((await f.documents.source({projectId:f.project.id,documentId:result.document.id,sourceHash:result.document.sourceHash})).bytes,bytes);
     assert.deepEqual(result.source,f.source);assert.equal(result.grantHash,grant.contentHash);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(),before);
     const second=await f.run(()=>f.service.importZoteroAttachment({...input,requestId:'same-content-new-receipt'},f.documents));

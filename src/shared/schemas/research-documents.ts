@@ -49,5 +49,5 @@ export const researchDocumentBatchParseRequestSchema = z.object({
 export const researchDocumentBatchParseSchema = z.object({
   documents: z.array(researchDocumentSchema), failed: z.array(z.object({ documentId: z.string(), error: z.string() }).strict())
 }).strict();
-export const researchDocumentSourceRequestSchema = researchDocumentIdRequestSchema.extend({ sourceHash: hash }).strict();
-export const researchDocumentAssetRequestSchema = researchDocumentParseRequestSchema.extend({ assetId: z.string().min(1), sha256: hash }).strict();
+export const researchDocumentSourceRequestSchema = researchDocumentIdRequestSchema.extend({ projectId: z.string().min(1), sourceHash: hash }).strict();
+export const researchDocumentAssetRequestSchema = researchDocumentParseRequestSchema.extend({ projectId: z.string().min(1), assetId: z.string().min(1), sha256: hash }).strict();
