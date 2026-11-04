@@ -8,6 +8,7 @@ import {useAsyncResource} from '../app/use-async-resource';
 import {formInputClass, formSecondaryButtonClass} from '../shared/form-ui';
 import {documentContentHash} from '../literature/document-content-hash';
 import {ReviewFullTextDecision} from './ReviewFullTextDecision';
+import {ReviewFullTextArbitration} from './ReviewFullTextArbitration';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 const PaperPdfView = lazy(() => import('../literature/PaperPdfView'));
@@ -41,7 +42,9 @@ export function ReviewFullTextEligibility({client, protocol, phase, item, writab
       return {ok: true, data: {document: documentResult.data, parsed}};
     }, {label: '读取准确全文来源'});
   const loaded = read.status === 'ready' ? read.data : null;
-  const [reviewerId, setReviewerId] = useState(''), [pending, setPending] = useState(false);
+  const [reviewerId, setReviewerId] = useState(''), [decisionPending, setDecisionPending] = useState(false);
+  const [arbitrationPending, setArbitrationPending] = useState(false);
+  const pending = decisionPending || arbitrationPending;
   const [pdfOpen, setPdfOpen] = useState(false), [offset, setOffset] = useState(0);
   const [selection, setSelection] = useState<{blockId: string; locationIndex: number} | null>(null);
   const parent = item.decisions.find(decision => decision.snapshot.request.reviewerId === reviewerId) ?? null;
@@ -87,8 +90,13 @@ export function ReviewFullTextEligibility({client, protocol, phase, item, writab
         {reviewerId === '' || binding === null ? null : <ReviewFullTextDecision
           key={`full-decision:${binding.snapshotHash}:${reviewerId}:${parent?.snapshotHash ?? 'new'}`}
           client={client} protocol={protocol} plan={phase.plan} titleFreezeHash={phase.titleFreezeHash} binding={binding}
-          hitId={item.hit.id} reviewerId={reviewerId} parent={parent} writable={writable && binding.referenceStatus === 'current'}
-          onPending={value => {setPending(value); onPending(value);}} onSaved={onSaved} />}
+          hitId={item.hit.id} reviewerId={reviewerId} parent={parent} writable={writable && !arbitrationPending && binding.referenceStatus === 'current'}
+          onPending={value => {setDecisionPending(value); onPending(value);}} onSaved={onSaved} />}
+        {binding === null ? null : <ReviewFullTextArbitration
+          key={`full-arbitration:${binding.snapshotHash}:${item.arbitration?.snapshotHash ?? 'new'}:${item.decisions.map(decision => decision.snapshotHash).join(':')}`}
+          client={client} protocol={protocol} phase={phase} item={item} binding={binding}
+          writable={writable && !decisionPending}
+          onPending={value => {setArbitrationPending(value); onPending(value);}} onSaved={onSaved} />}
       </>}
     </>}
   </section>;

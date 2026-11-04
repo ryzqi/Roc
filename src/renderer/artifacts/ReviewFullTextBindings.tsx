@@ -1,8 +1,9 @@
 import {useEffect, useRef, useState} from 'react';
 import type {ResearchReviewProtocolInspection} from '../../shared/schemas/research-systematic-review';
+import type {ResearchReviewFullTextFreezeRequest} from '../../shared/schemas/research-review-fulltext-screening';
 import type {RocClient} from '../shared/roc-client';
-import {useAsyncResource} from '../app/use-async-resource';
-import {formSecondaryButtonClass} from '../shared/form-ui';
+import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
+import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
 import {ReviewFullTextBinding} from './ReviewFullTextBinding';
 import {ReviewFullTextEligibility} from './ReviewFullTextEligibility';
 
@@ -18,7 +19,14 @@ export function ReviewFullTextBindings({client, protocol, projectId, corpusId, w
   const phase = read.data;
   const [hitId, setHitId] = useState<string | null>(null), [bindingPending, setBindingPending] = useState(false);
   const [eligibilityPending, setEligibilityPending] = useState(false);
-  const pending = bindingPending || eligibilityPending;
+  const [reviewNote, setReviewNote] = useState('');
+  const freeze = useAsyncAction((request: ResearchReviewFullTextFreezeRequest) => client.api.research.freezeReviewFullTextScreening(request),
+    {label: '冻结全文获取与资格筛选'});
+  const pending = bindingPending || eligibilityPending || freeze.pending;
+  const busy = useRef(false), requests = useRef(new Map<string, string>());
+  const editable = writable && read.status === 'ready' && phase?.plan.currentProtocol === true && phase.freeze === null;
+  const complete = phase !== null && phase.sourcesCurrent && phase.counts.retrieval_pending === 0 && phase.counts.source_changed === 0 &&
+    phase.counts.pending === 0 && phase.counts.uncertain === 0 && phase.counts.conflict === 0;
   const [offset, setOffset] = useState(0);
   const selected = phase?.items.find(item => item.hit.id === hitId);
   const focus = useRef<HTMLDivElement>(null);
@@ -37,7 +45,14 @@ export function ReviewFullTextBindings({client, protocol, projectId, corpusId, w
       <p data-testid="artifact-review-fulltext-counts">需获取报告 {phase.counts.reportsToSeek} 待获取 {phase.counts.retrieval_pending}
         {' '}未获取 {phase.counts.not_retrieved} 来源变化 {phase.counts.source_changed} 待资格筛选 {phase.counts.pending}
         {' '}无法判断 {phase.counts.uncertain} 冲突 {phase.counts.conflict} 全文纳入 {phase.counts.included} 全文排除 {phase.counts.excluded}</p>
-      {phase.freeze === null ? null : <p data-testid="artifact-review-fulltext-frozen" className="text-muted">全文资格筛选已冻结</p>}
+      {phase.freeze === null ? null : <section className="flex flex-col gap-1" data-testid="artifact-review-fulltext-frozen">
+        <h3 className="font-medium">全文资格筛选已冻结</h3>
+        <p>需获取报告 {phase.freeze.authority.counts.reportsToSeek} = 未获取 {phase.freeze.authority.counts.not_retrieved}
+          {' + '}全文纳入 {phase.freeze.authority.counts.included}{' + '}全文排除 {phase.freeze.authority.counts.excluded}</p>
+        <p className="break-words">{phase.freeze.request.reviewNote}</p>
+        <p className="text-muted break-all">审核人 {phase.freeze.actor.id} {phase.freeze.frozenAt}</p>
+        {phase.sourcesCurrent ? null : <p className="text-[var(--st-warn)]">冻结后的来源引用已变化，旧审查收据保留。</p>}
+      </section>}
       <ol start={offset + 1} className="flex flex-col gap-2">{phase.items.slice(offset, offset + 10).map((item, index) => <li key={item.hit.id}>
         <button type="button" className={`${button} h-auto py-1 text-left break-words`} disabled={pending}
           data-testid="artifact-review-fulltext-select" aria-pressed={hitId === item.hit.id} onClick={() => setHitId(item.hit.id)}>
@@ -52,14 +67,34 @@ export function ReviewFullTextBindings({client, protocol, projectId, corpusId, w
       {selected === undefined ? null : <div ref={focus} tabIndex={-1} aria-label="全文来源核查" data-testid="artifact-review-fulltext-focus">
         <ReviewFullTextBinding key={`fulltext-binding:${selected.hit.id}:${selected.binding?.snapshotHash ?? 'new'}`}
           client={client} projectId={projectId} corpusId={corpusId} hitId={selected.hit.id} titleFreezeHash={phase.titleFreezeHash}
-          parent={selected.binding} writable={writable && !eligibilityPending && read.status === 'ready' && phase.plan.currentProtocol && phase.freeze === null}
+          parent={selected.binding} writable={editable && !eligibilityPending && !freeze.pending}
           onPending={value => {setBindingPending(value); onPending(value);}} onSaved={read.reload} />
         {selected.binding?.snapshot.source === null || selected.binding === null ? null : <ReviewFullTextEligibility
           key={`full-eligibility:${selected.hit.id}:${selected.binding.snapshotHash}`}
           client={client} protocol={protocol} phase={phase} item={selected}
-          writable={writable && !bindingPending && read.status === 'ready' && phase.plan.currentProtocol && phase.freeze === null}
+          writable={editable && !bindingPending && !freeze.pending}
           onPending={value => {setEligibilityPending(value); onPending(value);}} onSaved={read.reload} />}
       </div>}
+      {!editable ? null : <form className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2"
+        data-testid="artifact-review-full-freeze-form" onSubmit={event => {
+          event.preventDefault();
+          if (busy.current || pending || !editable || !complete) return;
+          const body = {projectId, corpusId, phase: 'full_text' as const, expectedReviewHash: phase.reviewHash, reviewNote};
+          const signature = JSON.stringify(body);
+          let requestId = requests.current.get(signature);
+          if (requestId === undefined) {requestId = crypto.randomUUID(); requests.current.set(signature, requestId);}
+          busy.current = true; onPending(true);
+          void freeze.run({...body, requestId}).then(result => {busy.current = false; onPending(false); if (result.ok) read.reload();});
+        }}>
+        <label className="flex flex-col gap-1 text-muted">全文整轮审核说明
+          <textarea required aria-label="全文整轮审核说明" maxLength={10000} rows={3} disabled={pending}
+            className={`${formInputClass} border-[0.5px] h-auto resize-y py-1`} value={reviewNote}
+            onChange={event => {setReviewNote(event.target.value); freeze.reset();}} />
+        </label>
+        <button type="submit" className={`${formPrimaryButtonClass} border-[0.5px] self-start`}
+          disabled={pending || !complete || reviewNote.trim() === ''} data-testid="artifact-review-full-freeze">确认并冻结整轮全文审查</button>
+      </form>}
+      {freeze.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{freeze.error}</p>}
     </>}
   </section>;
 }

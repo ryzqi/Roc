@@ -31,7 +31,8 @@ const channels = {
   listDocuments:'roc:research:document-list',previewDocument:'roc:research:document-preview',
   getDocument:'roc:research:document-get',getDocumentContent:'roc:research:document-content',
   saveReviewFullTextDecision:'roc:research:review-fulltext-decision-save',getReviewFullTextDecisionHistory:'roc:research:review-fulltext-decision-history',
-  listReviewFullTextSuggestions:'roc:research:review-fulltext-suggestions'
+  listReviewFullTextSuggestions:'roc:research:review-fulltext-suggestions',
+  getReviewFullTextArbitrationHistory:'roc:research:review-fulltext-arbitrations'
 };
 const tid = id => page.getByTestId(id);
 before(async () => {
