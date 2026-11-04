@@ -9,6 +9,7 @@ import {ReviewFullTextEligibility} from './ReviewFullTextEligibility';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 const ReviewExtractions = lazy(async () => ({default: (await import('./ReviewExtractions')).ReviewExtractions}));
+const ReviewStudies = lazy(async () => ({default: (await import('./ReviewStudies')).ReviewStudies}));
 const statuses = {retrieval_pending: '待获取', not_retrieved: '未获取', source_changed: '来源已变化',
   pending: '待资格筛选', uncertain: '无法判断', conflict: '决定冲突', included: '全文纳入', excluded: '全文排除'} as const;
 export function ReviewFullTextBindings({client, protocol, projectId, corpusId, writable, onPending}: {
@@ -22,9 +23,10 @@ export function ReviewFullTextBindings({client, protocol, projectId, corpusId, w
   const [eligibilityPending, setEligibilityPending] = useState(false);
   const [reviewNote, setReviewNote] = useState('');
   const [extractionsOpen, setExtractionsOpen] = useState(false), [extractionPending, setExtractionPending] = useState(false);
+  const [studiesOpen, setStudiesOpen] = useState(false), [studiesPending, setStudiesPending] = useState(false);
   const freeze = useAsyncAction((request: ResearchReviewFullTextFreezeRequest) => client.api.research.freezeReviewFullTextScreening(request),
     {label: '冻结全文获取与资格筛选'});
-  const pending = bindingPending || eligibilityPending || freeze.pending || extractionPending;
+  const pending = bindingPending || eligibilityPending || freeze.pending || extractionPending || studiesPending;
   const busy = useRef(false), requests = useRef(new Map<string, string>());
   const editable = writable && read.status === 'ready' && phase?.plan.currentProtocol === true && phase.freeze === null;
   const complete = phase !== null && phase.sourcesCurrent && phase.counts.retrieval_pending === 0 && phase.counts.source_changed === 0 &&
@@ -58,7 +60,13 @@ export function ReviewFullTextBindings({client, protocol, projectId, corpusId, w
           onClick={() => setExtractionsOpen(true)}>核查证据提取</button>
         {!extractionsOpen ? null : <Suspense fallback={<p role="status">正在加载证据提取…</p>}>
           <ReviewExtractions key={`extractions:${phase.freezeHash}`} client={client} protocol={protocol} phase={phase}
-            writable={writable && read.status === 'ready'} onPending={value => {setExtractionPending(value); onPending(value);}} />
+            writable={writable && read.status === 'ready' && !studiesPending} onPending={value => {setExtractionPending(value); onPending(value);}} />
+        </Suspense>}
+        <button type="button" className={`${button} self-start`} disabled={pending} data-testid="artifact-review-studies-inspect"
+          onClick={() => setStudiesOpen(true)}>核查纳入报告与研究归组</button>
+        {!studiesOpen ? null : <Suspense fallback={<p role="status">正在加载研究归组…</p>}>
+          <ReviewStudies key={`studies:${phase.freezeHash}`} client={client} phase={phase}
+            writable={writable && read.status === 'ready' && !extractionPending} onPending={value => {setStudiesPending(value); onPending(value);}} />
         </Suspense>}
       </section>}
       <ol start={offset + 1} className="flex flex-col gap-2">{phase.items.slice(offset, offset + 10).map((item, index) => <li key={item.hit.id}>
