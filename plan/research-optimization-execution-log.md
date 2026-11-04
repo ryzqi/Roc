@@ -2795,3 +2795,46 @@ Frozen research-workflow fixtures remain unchanged.
 Trusted user target capture/review, inspector presentation, explicit source replacement and
 experiment rerun lineage remain next. PR-06 and the whole plan remain incomplete. Earlier
 expanded P4 baseline defect and external scientific/client/L2 acceptance remain unresolved.
+
+
+## ROC-PR-06A5B1 — trusted user source migration capture and rejection
+
+Verified passing for this backend/IPC increment. DB23 stores one immutable user decision per
+DB22 proposal. list/get expose required proposalHash and current target/captured-reference
+status separately from saved history. Strict capture/reject requests bind proposal/source/parse
+hashes, requestId, nullable note and explicit capture chunkId. Main adapter binds actual
+window actor/project/capability; no wire actor, source payload, direct model approval or aliases.
+The generic research-human-context replaces the relation-only module and consumers.
+
+Capture validates current actual chunk/parse/block/source and invokes existing evidence.capture
+inside the decision transaction. Failure rolls back evidence/locator/decision. Reject creates no
+evidence and can bind stale/no_match snapshots. Exact request and actor replay is readonly;
+changed note/selection/action/window or repeated different request refuses. New location never
+changes original evidence, Claim evidenceIds/status/version, manuscript or scientific review.
+Original reviewed supports stay invalidated and current publication remains blocked.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm generate:ipc / pnpm typecheck | Passed; generated adapter/contract current |
+| node --test tests/unit/research-source-migration-ipc.test.mjs tests/unit/research-source-locator.test.mjs tests/unit/research-evidence-relation-ipc.test.mjs | Final24/24 |
+| pnpm test:unit | 872/872 |
+| pnpm harness:eval | 94/94 |
+| pnpm build | Fresh production build and typecheck passed |
+| node scripts/run-research-p0.mjs | 13/13 native |
+| node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-search-plan.test.mjs | 27/27 actual Electron |
+| node scripts/smoke-electron.mjs | 12/12, zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed, eager1132980bytes6files |
+
+Initial focused1 was22/23: forged indexed text reached inner capture INSERT before locator
+rollback (total_changes177 versus176). Exact pre-capture index validation fixes cause; original
+zero-write assertion retained. Actual decision-insert failure still proves complete rollback.
+Genuine DB22→23 migration retains pending snapshot/hash, evidence/locator/claims/revisions/relations
+and invents no user decisions. Native stale-approval fault reparses frozen actual PDF and records
+explicit synthetic window94 capture/request/target/source, readonly replay, unchanged old claims
+and review, and renewed gate refusal. Evidence saved in native fault.json; no frozen fixtures changed.
+
+Candidate inspector remains next, then explicit source replacement/experiment rerun lineage.
+PR-06 and full plan remain incomplete. Existing expanded P4 baseline defect and external
+scientific/client/L2 acceptance remain unresolved.

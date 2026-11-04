@@ -57,7 +57,7 @@ test('generated bridge binds human proposal and review to actual sender windows 
     assert.deepEqual(listed.data, [reviewed.data]);
     assert.deepEqual(history.data.map(row => [row.event, row.actor?.id]), [['proposed', 'window:31'], ['confirmed', 'window:42']]);
     assert.equal(f.changes(), after);
-    assert.throws(() => api.requireResearchRelationHuman('research.relations.review', f.project.id), /research_relation_human_required/u);
+    assert.throws(() => api.requireResearchHuman('research.relations.review', f.project.id), /research_human_required/u);
   } finally {f.close();}
 });
 
@@ -66,7 +66,7 @@ test('direct capability calls and forged request actors cannot acquire human app
   try {
     const before = f.changes();
     await assert.rejects(f.registry.invoke('research.relations.propose', f.request),
-      error => error.code === 'research_relation_human_required' && error.category === 'permission');
+      error => error.code === 'research_human_required' && error.category === 'permission');
     for (const payload of [
       {...f.request, actor: {kind: 'user', id: 'forged'}},
       {...f.request, proposer: {kind: 'user', id: 'forged'}},
@@ -77,15 +77,15 @@ test('direct capability calls and forged request actors cannot acquire human app
       assert.equal((await f.adapter.invoke('research.proposeEvidenceRelation', [payload], 31)).ok, false);
     }
     const missingSender = await f.adapter.invoke('research.proposeEvidenceRelation', [f.request]);
-    assert.equal(missingSender.error.code, 'research_relation_sender_required');
+    assert.equal(missingSender.error.code, 'research_sender_required');
     assert.equal(missingSender.error.category, 'permission');
     assert.equal((await f.adapter.invoke('research.proposeEvidenceRelation', [f.request], -1)).ok, false);
-    await assert.rejects(api.withResearchRelationHumanContext({capability: 'research.relations.review',
+    await assert.rejects(api.withResearchHumanContext({capability: 'research.relations.review',
       projectId: f.project.id, windowId: 31}, () => f.registry.invoke('research.relations.propose', f.request)),
-    error => error.code === 'research_relation_human_required');
-    await assert.rejects(api.withResearchRelationHumanContext({capability: 'research.relations.propose',
+    error => error.code === 'research_human_required');
+    await assert.rejects(api.withResearchHumanContext({capability: 'research.relations.propose',
       projectId: 'other-project', windowId: 31}, () => f.registry.invoke('research.relations.propose', f.request)),
-    error => error.code === 'research_relation_project_mismatch');
+    error => error.code === 'research_human_project_mismatch');
     assert.equal(f.changes(), before);
     const proposed = (await f.adapter.invoke('research.proposeEvidenceRelation', [f.request], 31)).data;
     const after = f.changes();
@@ -93,7 +93,7 @@ test('direct capability calls and forged request actors cannot acquire human app
     assert.throws(() => api.parseIpcRequestArgs('roc:research:relations-review', [forgedReview]));
     assert.equal((await f.adapter.invoke('research.reviewEvidenceRelation', [forgedReview], 31)).ok, false);
     await assert.rejects(f.registry.invoke('research.relations.review', f.reviewRequest(proposed)),
-      error => error.code === 'research_relation_human_required');
+      error => error.code === 'research_human_required');
     assert.equal(f.changes(), after);
     assert.equal(f.repository.evidence.relations.get(proposed.id, f.project.id).status, 'proposed');
   } finally {f.close();}
@@ -141,18 +141,18 @@ test('concurrent main contexts preserve each window actor across asynchronous ca
   const f = scene();
   try {
     const proposals = await Promise.all([61, 72].map(windowId =>
-      api.withResearchRelationHumanContext({capability: 'research.relations.propose', projectId: f.project.id, windowId}, async () => {
+      api.withResearchHumanContext({capability: 'research.relations.propose', projectId: f.project.id, windowId}, async () => {
         await new Promise(resolve => setImmediate(resolve));
         return await f.registry.invoke('research.relations.propose', f.request);
       })));
     assert.deepEqual(proposals.map(row => row.proposer.id), ['window:61', 'window:72']);
-    await assert.rejects(api.withResearchRelationHumanContext({capability: 'research.relations.review',
+    await assert.rejects(api.withResearchHumanContext({capability: 'research.relations.review',
       projectId: f.project.id, windowId: 61}, async () => {
       await new Promise(resolve => setImmediate(resolve));
       throw new Error('synthetic caller failure');
     }), /synthetic caller failure/u);
     await assert.rejects(f.registry.invoke('research.relations.review', f.reviewRequest(proposals[0])),
-      error => error.code === 'research_relation_human_required');
+      error => error.code === 'research_human_required');
     assert.deepEqual(f.repository.evidence.relations.list({projectId: f.project.id, claimId: f.claim.id}).map(row => row.status),
       ['proposed', 'proposed']);
   } finally {f.close();}

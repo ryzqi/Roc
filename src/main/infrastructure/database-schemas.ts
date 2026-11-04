@@ -1779,6 +1779,22 @@ CREATE INDEX idx_research_evidence_locator_document ON research_evidence_source_
 `
 });
 
+researchMigrations.push({
+  version: 23, name: 'human_source_migration_decisions',
+  sql: `
+CREATE TABLE research_source_migration_decisions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  proposal_id TEXT NOT NULL UNIQUE REFERENCES research_source_migration_proposals(id),
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id,request_id)
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

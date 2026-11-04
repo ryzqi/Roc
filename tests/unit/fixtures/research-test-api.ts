@@ -51,7 +51,7 @@ export { createMcpClientAdapter } from '../../../src/main/plugins/mcp/mcp-client
 export {registerResearchArtifactInspectorCapability, researchArtifactInspectorCapability} from '../../../src/main/plugins/research/artifact-inspector-capability';
 export {createPluginCapabilityAdapter} from '../../../src/main/ipc/plugin-capability-adapter';
 export {registerResearchEvidenceCapabilities, researchEvidenceCapabilities} from '../../../src/main/plugins/research/evidence-capabilities';
-export {withResearchRelationHumanContext, requireResearchRelationHuman} from '../../../src/main/services/research-relation-context';
+export {withResearchHumanContext, requireResearchHuman} from '../../../src/main/services/research-human-context';
 export {CapabilityRegistry} from '../../../src/main/kernel/capability-registry';
 export {researchWorkflowTransitionRequestSchema} from '../../../src/shared/schemas/research';
 export {ResearchProductionInputService} from '../../../src/main/plugins/research/production-input-service';

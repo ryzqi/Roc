@@ -19,8 +19,12 @@ import {
   researchEvidenceRelationSchema, researchEvidenceRelationListSchema,
   researchEvidenceRelationHistorySchema, researchEvidenceRelationRevisionSchema
 } from '../../../shared/schemas/research-evidence-relations';
-import {requireResearchRelationHuman} from '../../services/research-relation-context';
+import {requireResearchHuman} from '../../services/research-human-context';
 import {relationSourceDigest} from './evidence-relation-repository';
+import {
+  researchSourceMigrationListSchema, researchSourceMigrationGetSchema, researchSourceMigrationInspectionSchema,
+  researchSourceMigrationCaptureSchema, researchSourceMigrationRejectSchema, researchSourceMigrationDecisionSchema
+} from '../../../shared/schemas/research-source-migrations';
 
 const capabilities = {
   capture: descriptor('research.evidence.capture', researchEvidenceCaptureRequestSchema, researchEvidenceSchema),
@@ -33,7 +37,11 @@ const capabilities = {
   proposeRelation: descriptor('research.relations.propose', researchEvidenceRelationProposalSchema, researchEvidenceRelationSchema),
   reviewRelation: descriptor('research.relations.review', researchEvidenceRelationReviewSchema, researchEvidenceRelationSchema),
   listRelations: descriptor('research.relations.list', researchEvidenceRelationListSchema, researchEvidenceRelationSchema.array()),
-  relationHistory: descriptor('research.relations.history', researchEvidenceRelationHistorySchema, researchEvidenceRelationRevisionSchema.array())
+  relationHistory: descriptor('research.relations.history', researchEvidenceRelationHistorySchema, researchEvidenceRelationRevisionSchema.array()),
+  listSourceMigrations: descriptor('research.sourceMigrations.list', researchSourceMigrationListSchema, researchSourceMigrationInspectionSchema.array()),
+  getSourceMigration: descriptor('research.sourceMigrations.get', researchSourceMigrationGetSchema, researchSourceMigrationInspectionSchema),
+  captureSourceMigration: descriptor('research.sourceMigrations.capture', researchSourceMigrationCaptureSchema, researchSourceMigrationDecisionSchema),
+  rejectSourceMigration: descriptor('research.sourceMigrations.reject', researchSourceMigrationRejectSchema, researchSourceMigrationDecisionSchema)
 };
 
 export const researchEvidenceCapabilities = Object.values(capabilities);
@@ -53,6 +61,7 @@ export function registerResearchEvidenceCapabilities(context: RocPluginContext, 
         }
         if (error instanceof Error && capability.name.startsWith('research.relations.')) throwRelationError(error);
         if (error instanceof Error && capability.name === 'research.evidence.inspect') throwRelationError(error);
+        if (error instanceof Error && capability.name.startsWith('research.sourceMigrations.')) throwSourceMigrationError(error);
         throw error;
       }
     });
@@ -68,17 +77,23 @@ export function registerResearchEvidenceCapabilities(context: RocPluginContext, 
     return {source, sourceDigest: relationSourceDigest(source)};
   });
   register(capabilities.proposeRelation, request =>
-    repository.relations.propose(request, requireResearchRelationHuman('research.relations.propose', request.projectId)));
+    repository.relations.propose(request, requireResearchHuman('research.relations.propose', request.projectId)));
   register(capabilities.reviewRelation, request =>
-    repository.relations.review(request, requireResearchRelationHuman('research.relations.review', request.projectId)));
+    repository.relations.review(request, requireResearchHuman('research.relations.review', request.projectId)));
   register(capabilities.listRelations, request => repository.relations.list(request));
   register(capabilities.relationHistory, request => repository.relations.history(request.relationId, request.projectId));
+  register(capabilities.listSourceMigrations, request => repository.sourceMigrations.list(request));
+  register(capabilities.getSourceMigration, request => repository.sourceMigrations.get(request));
+  register(capabilities.captureSourceMigration, request =>
+    repository.sourceMigrations.decide(request, requireResearchHuman('research.sourceMigrations.capture', request.projectId)));
+  register(capabilities.rejectSourceMigration, request =>
+    repository.sourceMigrations.decide(request, requireResearchHuman('research.sourceMigrations.reject', request.projectId)));
 }
 
 function throwRelationError(error: Error): never {
   const code = error.message.split(':')[0];
   if ([
-    'research_relation_human_required', 'research_relation_sender_required', 'research_relation_project_mismatch',
+    'research_human_required', 'research_sender_required', 'research_human_project_mismatch', 'research_relation_project_mismatch',
     'research_evidence_project_mismatch', 'research_artifact_immutable', 'research_project_archived',
     'research_artifact_stage_inactive', 'research_relation_artifact_inactive', 'research_relation_stage_not_reviewable'
   ].includes(code)) {
@@ -95,6 +110,33 @@ function throwRelationError(error: Error): never {
   }
   if (['research_relation_snapshot_invalid', 'research_evidence_integrity_invalid'].includes(code)) {
     throw new RocDomainError({code, message: '保存的关系或来源校验失败。', category: 'degraded', retryable: false});
+  }
+  throw error;
+}
+
+function throwSourceMigrationError(error: Error): never {
+  const code = error.message.split(':')[0];
+  if (['research_human_required', 'research_sender_required', 'research_human_project_mismatch',
+    'research_source_migration_project_mismatch', 'research_evidence_project_mismatch', 'research_project_archived'].includes(code)) {
+    throw new RocDomainError({code, message: '当前窗口身份或项目不能决定这条定位候选。', category: 'permission', retryable: false});
+  }
+  if (['research_source_migration_request_conflict', 'research_source_migration_already_decided',
+    'research_source_migration_proposal_changed', 'research_source_migration_source_changed',
+    'research_source_migration_target_stale', 'research_source_migration_target_changed',
+    'research_source_migration_target_not_proposed', 'research_source_migration_capture_changed'].includes(code)) {
+    throw new RocDomainError({code, message: '候选、请求或来源已改变。重新读取后明确选择目标。', category: 'conflict', retryable: false});
+  }
+  if (['research_source_migration_not_found', 'research_source_migration_target_not_found',
+    'research_evidence_not_found', 'research_evidence_chunk_not_found', 'research_project_not_found'].includes(code)) {
+    throw new RocDomainError({code, message: '定位候选、解析、证据或项目不存在。', category: 'not_found', retryable: false});
+  }
+  if (['research_source_migration_snapshot_invalid', 'research_source_migration_target_invalid',
+    'research_source_migration_index_changed', 'research_evidence_integrity_invalid',
+    'research_evidence_source_identity_invalid', 'research_evidence_source_hash_invalid',
+    'research_evidence_source_block_invalid', 'research_evidence_source_page_invalid',
+    'research_evidence_source_region_invalid', 'research_evidence_source_locator_conflict',
+    'research_evidence_source_parse_stale'].includes(code)) {
+    throw new RocDomainError({code, message: '保存的候选、捕获或目标块校验失败。', category: 'degraded', retryable: false});
   }
   throw error;
 }

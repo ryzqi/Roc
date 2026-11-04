@@ -45,8 +45,7 @@ sender window ID 绑定为 `window:<id>`；请求不能指定提出者或审核�
 
 迁移只把现存 evidenceIds 保存为 historical 关联，不补造 supports、提出者、
 审核人或审核时间，不改历史 Claim status。跨项目、悬空端点或破损来源使
-整个迁移回滚，数据库保持 DB20。批准和当前导出已使用严格语义消费者准入；定位迁移候选
-仍属于后续增量，不能以当前消费者完成代替 PR-06 整体验收。
+整个迁移回滚，数据库保持 DB20。批准和当前导出已使用严格语义消费者准入；定位迁移候选与可信捕获已接通；检查器和明确替代/rerun lineage 仍待完成。
 
 ## 可信用户 IPC
 
@@ -193,11 +192,39 @@ repositories 和明确 synthetic parsed data，覆盖重复/空块、无区域�
 ## 后续验收
 
 `evidenceIds` 是来源关联，不表示已经人工确认科学支持。明确关系、版本绑定、
-人工审核、修订历史、模型支持提议与 UI 已实现；严格语义消费者准入、定位
-迁移候选及历史导出仍待接通。来源完整性、科学语义和人工审核分别报告，PR-06
+人工审核、修订历史、模型支持提议与关系 UI、严格语义消费者、历史导出封印
+及同文档定位候选/可信用户捕获已实现；候选检查器及明确来源替代/rerun lineage 待完成。来源完整性、科学语义和人工审核分别报告，PR-06
 整体尚未完成。
 
 严格批准/当前导出增量已验证 focused32/unit857/Harness94/native13/UI37/startup12。
 导出审核封印增量已验证 unit858/final focused9/Harness94/native13/UI27/startup12、
-fresh build/type/IPC/chunks1132980bytes6files。定位迁移候选仍未完成；上述离线
+fresh build/type/IPC/chunks1132980bytes6files。候选检查器与明确来源替代/rerun lineage 仍未完成；上述离线
 传输和来源验收不构成真实科学结论或整体计划完成。
+
+
+## 同文档定位候选与用户决定
+
+DB22 的候选保存不可替换的旧来源快照/digest、新 source/parse/hash/fingerprint 与
+实际索引顺序中的完整原始解析 block。算法先比较完整原文，再只规范空白；多个
+匹配保持 ambiguous，不按旧页距离挑选。改变正文保存 no_match，不猜替代。
+当前目标源与保存 parse SHA 必须一致；后续解析使旧候选 targetStatus 为 stale，
+候选原记录保持不变。原始区域尚未投影到 PDF，仍需 PR-07 坐标审计。
+
+DB23 research_source_migration_decisions 为每个候选保存一个不可替换的用户决定。
+required proposalHash 随 list/get 返回；capture/reject 必须明确提交候选、旧来源
+和目标 parse SHA、requestId 与 nullable note。capture 必须指定实际候选 chunkId，
+即使只有一个目标也不自动选择；reject 不接受 chunkId。无匹配或旧目标可拒绝，
+旧目标不能捕获。新捕获校验当前真实 chunk/parse/block/source，并调用 evidence.capture；
+证据、locator 与决定同事务，任一步失败回滚。
+
+主进程 research-human-context 绑定实际窗口与精确 capability/project，关系审核和
+定位决定共用该权限边界。wire 不接受 actor/source；直接 capability 无人审上下文
+拒绝。同 project/requestId 的重试必须保持同 actor 与完整 request SHA，返回原决定
+且不写入；改变选择、说明、动作或窗口身份拒绝。其他 request 也不能重复决定候选。
+历史决定保存当时 recorded 的真实新来源/digest；list/get 另外返回当前
+capturedReferenceStatus，重解析不改原决定或旧证据。
+
+定位捕获不改 Claim evidenceIds、status、version、正文、图稿或科学关系/修订历史。
+旧 supports 审核继续 invalidated。需用户/助手另建主张版本与关系并重新科学审核，
+原批准/当前导出不能通过新位置捕获恢复。该增量仅实现后端与可信传输，候选
+检查器仍需下一增量。

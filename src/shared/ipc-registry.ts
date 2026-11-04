@@ -33,6 +33,10 @@ import { researchTaskEventsRequestSchema, researchTaskEventsPageSchema, research
 import { researchProjectBudgetRequestSchema, researchProjectBudgetSaveSchema, researchProjectBudgetStatusSchema } from './schemas/research-project-budget';
 import {researchEvidenceInspectRequestSchema, researchEvidenceInspectionSchema} from './schemas/research-evidence-source';
 import {
+  researchSourceMigrationListSchema, researchSourceMigrationGetSchema, researchSourceMigrationInspectionSchema,
+  researchSourceMigrationCaptureSchema, researchSourceMigrationRejectSchema, researchSourceMigrationDecisionSchema
+} from './schemas/research-source-migrations';
+import {
   researchEvidenceRelationProposalSchema, researchEvidenceRelationReviewSchema, researchEvidenceRelationSchema,
   researchEvidenceRelationListSchema, researchEvidenceRelationHistorySchema, researchEvidenceRelationRevisionSchema
 } from './schemas/research-evidence-relations';
@@ -480,6 +484,10 @@ export const ipcRegistry = {
     request({ key: 'researchRelationsReview', channel: 'roc:research:relations-review', domain: 'research', method: 'reviewEvidenceRelation', kind: 'plugin', capabilityName: 'research.relations.review', inputTransform: first, contract: methodContract(oneArg(researchEvidenceRelationReviewSchema), researchEvidenceRelationSchema) }),
     request({ key: 'researchRelationsList', channel: 'roc:research:relations-list', domain: 'research', method: 'listEvidenceRelations', kind: 'plugin', capabilityName: 'research.relations.list', inputTransform: first, contract: methodContract(oneArg(researchEvidenceRelationListSchema), researchEvidenceRelationSchema.array()) }),
     request({ key: 'researchRelationsHistory', channel: 'roc:research:relations-history', domain: 'research', method: 'evidenceRelationHistory', kind: 'plugin', capabilityName: 'research.relations.history', inputTransform: first, contract: methodContract(oneArg(researchEvidenceRelationHistorySchema), researchEvidenceRelationRevisionSchema.array()) }),
+    request({ key: 'researchSourceMigrationsList', channel: 'roc:research:source-migrations-list', domain: 'research', method: 'listSourceMigrations', kind: 'plugin', capabilityName: 'research.sourceMigrations.list', inputTransform: first, contract: methodContract(oneArg(researchSourceMigrationListSchema), researchSourceMigrationInspectionSchema.array()) }),
+    request({ key: 'researchSourceMigrationsGet', channel: 'roc:research:source-migrations-get', domain: 'research', method: 'getSourceMigration', kind: 'plugin', capabilityName: 'research.sourceMigrations.get', inputTransform: first, contract: methodContract(oneArg(researchSourceMigrationGetSchema), researchSourceMigrationInspectionSchema) }),
+    request({ key: 'researchSourceMigrationsCapture', channel: 'roc:research:source-migrations-capture', domain: 'research', method: 'captureSourceMigration', kind: 'plugin', capabilityName: 'research.sourceMigrations.capture', inputTransform: first, contract: methodContract(oneArg(researchSourceMigrationCaptureSchema), researchSourceMigrationDecisionSchema) }),
+    request({ key: 'researchSourceMigrationsReject', channel: 'roc:research:source-migrations-reject', domain: 'research', method: 'rejectSourceMigration', kind: 'plugin', capabilityName: 'research.sourceMigrations.reject', inputTransform: first, contract: methodContract(oneArg(researchSourceMigrationRejectSchema), researchSourceMigrationDecisionSchema) }),
     request({ key: 'researchEvidenceList', channel: 'roc:research:evidence-list', domain: 'research', method: 'listEvidence', kind: 'plugin', capabilityName: 'research.evidence.list', inputTransform: first, contract: methodContract(oneArg(researchEvidenceListRequestSchema), researchEvidenceSchema.array()) }),
     request({ key: 'researchClaimsCreate', channel: 'roc:research:claims-create', domain: 'research', method: 'createClaim', kind: 'plugin', capabilityName: 'research.claims.create', inputTransform: first, contract: methodContract(oneArg(researchClaimCreateRequestSchema), researchClaimSchema) }),
     request({ key: 'researchClaimsUpdate', channel: 'roc:research:claims-update', domain: 'research', method: 'updateClaim', kind: 'plugin', capabilityName: 'research.claims.update', inputTransform: first, contract: methodContract(oneArg(researchClaimUpdateRequestSchema), researchClaimSchema) }),

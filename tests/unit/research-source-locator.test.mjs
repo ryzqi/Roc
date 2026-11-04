@@ -236,7 +236,7 @@ test('migration reads refuse foreign sources and corrupt snapshots or current ta
   }finally{f.close();}
 });
 
-test('DB21 to22 retains captured sources and claims without inventing migration proposals',()=>{
+test('DB21 to23 retains captured sources and claims without inventing migration proposals or decisions',()=>{
   const db=new Database(':memory:'),agentDb=new Database(':memory:');
   db.pragma('foreign_keys=ON');
   try {
@@ -257,12 +257,47 @@ test('DB21 to22 retains captured sources and claims without inventing migration 
     const claimsBefore=db.prepare('SELECT * FROM research_claims').all();
     const locationsBefore=db.prepare('SELECT * FROM research_evidence_source_locators').all();
     api.applyResearchDatabaseSchema(db,()=>timestamp);
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),22);
+    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),23);
     assert.deepEqual(db.prepare('SELECT * FROM research_evidence').all(),sourcesBefore);
     assert.deepEqual(db.prepare('SELECT * FROM research_claims').all(),claimsBefore);
     assert.deepEqual(db.prepare('SELECT * FROM research_evidence_source_locators').all(),locationsBefore);
     assert.deepEqual(repository.evidence.sourceMigrations.list({projectId:project.id,evidenceId:evidence.id}),[]);
+    assert.equal(db.prepare('SELECT count(*) FROM research_source_migration_decisions').pluck().get(),0);
     const before=db.prepare('SELECT total_changes()').pluck().get();
+    api.applyResearchDatabaseSchema(db,()=>timestamp);
+    assert.equal(db.prepare('SELECT total_changes()').pluck().get(),before);
+  }finally{db.close();agentDb.close();}
+});
+
+test('DB22 to23 preserves pending proposal snapshots and prior scientific records without inventing user decisions',()=>{
+  const db=new Database(':memory:'),agentDb=new Database(':memory:');
+  db.pragma('foreign_keys=ON');
+  try {
+    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(m=>m.version<=22)});
+    api.applyDatabaseMigrations(agentDb,{dbName:'agent',migrations:api.agentMigrations});
+    const repository=new api.ResearchRepository(db,new api.ResearchTaskRepository(agentDb,()=>timestamp),()=>timestamp);
+    const project=repository.createProject({title:'Historical pending proposal',description:'Synthetic DB22 fixture',workspacePath:'/tmp/pending-migration-history'});
+    db.prepare("UPDATE research_projects SET current_stage='reading' WHERE id=?").run(project.id);
+    db.prepare("UPDATE research_stage_states SET status='running' WHERE project_id=? AND stage='reading'").run(project.id);
+    const f={db,repository,project},document=importedDocument(f);
+    publishParse(f,document,'pending-old',[block('old')]);
+    const evidence=capture(f,'pending-old');
+    const artifact=repository.createArtifact({projectId:project.id,stage:'reading',kind:'reading_notes',title:'Historical claim',path:null});
+    repository.evidence.createClaim({projectId:project.id,artifactId:artifact.id,subjectType:'claim',
+      content:'Historical unreviewed claim.',status:'supported',evidenceIds:[evidence.id]});
+    publishParse(f,document,'pending-new',[block('new',{page:3})]);
+    const tables=['research_evidence','research_evidence_source_locators','research_claims','research_claim_revisions',
+      'research_evidence_relations','research_evidence_relation_revisions','research_source_migration_proposals'];
+    const original=tables.map(table=>db.prepare(`SELECT * FROM ${table}`).all());
+    assert.equal(original.at(-1).length,1);
+    api.applyResearchDatabaseSchema(db,()=>timestamp);
+    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),23);
+    for (const [index,table] of tables.entries()) assert.deepEqual(db.prepare(`SELECT * FROM ${table}`).all(),original[index]);
+    assert.equal(db.prepare('SELECT count(*) FROM research_source_migration_decisions').pluck().get(),0);
+    const before=db.prepare('SELECT total_changes()').pluck().get();
+    const [inspection]=repository.evidence.sourceMigrations.list({projectId:project.id,evidenceId:evidence.id});
+    assert.equal(inspection.decision,null);
+    assert.equal(inspection.proposalHash,original.at(-1)[0].snapshot_hash);
     api.applyResearchDatabaseSchema(db,()=>timestamp);
     assert.equal(db.prepare('SELECT total_changes()').pluck().get(),before);
   }finally{db.close();agentDb.close();}
