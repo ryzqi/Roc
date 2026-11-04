@@ -19,7 +19,7 @@ export function reviewSearchPayloadFixture(page,count=4) {
       publication_year:n===1?null:n===2?2010:2023,authorships:[]};
   })};
 }
-export function createReviewSearchFixture(api,{maxPages=2,fetch,queries}={}) {
+export function createReviewSearchFixture(api,{maxPages=2,fetch,queries,screening}={}) {
   const f=createResearchFixture(api,'reading');f.errors=[];f.calls=[];f.time='2026-11-04T00:00:00.000Z';
   f.search=new api.LiteratureSearchService(async(url,init)=>{
     f.calls.push({url,init});
@@ -28,6 +28,7 @@ export function createReviewSearchFixture(api,{maxPages=2,fetch,queries}={}) {
   f.imports=new api.LiteratureImportService(f.db,f.repository.library,f.search,reviewBibliographyPreparationFixture,async()=>{throw new Error('unexpected_library_mutation');},()=>f.time);
   f.reviews=new api.ResearchReviewSearchService(f.db,f.repository,f.imports,error=>f.errors.push(error),()=>f.time);
   const body=reviewProtocolBodyFixture();body.databases[0].pageSize=2;body.databases[0].maxPages=maxPages;if(queries!==undefined)body.databases[0].queries=queries;
+  if(screening!==undefined)body.screening=screening;
   const draft=f.repository.systematicReviews.save({projectId:f.project.id,requestId:'protocol',protocolId:null,
     expectedVersionId:null,expectedVersionHash:null,body,deviationReason:null},actor);
   f.protocol=f.repository.systematicReviews.freeze({projectId:f.project.id,requestId:'confirm',versionId:draft.version.id,

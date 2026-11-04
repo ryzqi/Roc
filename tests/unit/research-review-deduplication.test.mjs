@@ -6,33 +6,14 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import Database from 'better-sqlite3';
 import {loadResearchTestApi} from './fixtures/research-test-kit.mjs';
-import {createReviewSearchFixture, awaitReviewSearchFixture} from './fixtures/research-review-search.mjs';
+import {createReviewDeduplicationFixture} from './fixtures/research-review-deduplication.mjs';
 
 let api;
 before(async()=>{api=await loadResearchTestApi();});
 after(()=>api?.dispose());
 const actor={kind:'user',id:'synthetic-dedup-reviewer'};
 const hash=value=>createHash('sha256').update(value).digest('hex');
-async function scene(options={},selectedApi=api) {
-  const f=createReviewSearchFixture(selectedApi,{queries:['controlled one','controlled two'],...options});
-  const results=[];
-  for(let queryIndex=0;queryIndex<f.protocol.version.body.databases[0].queries.length;queryIndex++) {
-    results.push(await awaitReviewSearchFixture(f,f.reviews.start({...f.request,queryIndex,requestId:`query-${queryIndex}`},actor)));
-  }
-  f.corpora=new api.ResearchReviewCorpusRepository(f.db,f.repository,f.reviews,()=>f.time);
-  f.corpus=f.corpora.create({projectId:f.project.id,requestId:'capture',versionId:f.protocol.version.id,
-    expectedFreezeHash:f.protocol.freezeHash,searches:results.map(result=>({reviewSearchId:result.snapshot.id,
-      expectedSnapshotHash:result.snapshotHash,expectedReceiptHash:result.receiptHash}))},actor);
-  f.dedup=new api.ResearchReviewDeduplicationRepository(f.db,f.repository,f.corpora,()=>f.time);
-  f.get={projectId:f.project.id,corpusId:f.corpus.snapshot.id};
-  f.save=(left,right,requestId,extra={})=>({...f.get,expectedCorpusHash:f.corpus.snapshotHash,requestId,
-    leftHitId:f.corpus.snapshot.hits[left].id,rightHitId:f.corpus.snapshot.hits[right].id,decision:'duplicate',
-    rule:{name:'Human bibliographic comparison',version:'controlled-v1'},reason:'Compared the actual original metadata.',
-    parentDecisionId:null,expectedParentHash:null,revisionReason:null,...extra});
-  f.freeze=()=>({...f.get,requestId:'freeze',expectedCorpusHash:f.corpus.snapshotHash,reviewNote:'Reviewed all original returns and pair decisions.',
-    decisions:f.dedup.get(f.get).decisions.map(decision=>({decisionId:decision.snapshot.id,expectedHash:decision.snapshotHash}))});
-  return f;
-}
+const scene=(options,selectedApi)=>createReviewDeduplicationFixture(api,options,selectedApi);
 
 test('human pair snapshots retain both raw identities and source hashes; frozen counts separate duplicate removal from screening',async()=>{
   const f=await scene();
@@ -310,7 +291,8 @@ test('DB29 upgrade preserves exact corpus and protocol/search records without fa
     const before=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all()),migrations=f.db.prepare('SELECT * FROM schema_migrations').all();
     api.applyResearchDatabaseSchema(f.db);
     assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),api.researchMigrations.at(-1).version);
-    assert.deepEqual(f.db.prepare('SELECT * FROM research_review_corpora').all(),original.map(row=>({...row,dedup_freeze_hash:null})));
+    assert.deepEqual(f.db.prepare(`SELECT ${Object.keys(original[0]).join(',')} FROM research_review_corpora`).all(),original);
+    assert.deepEqual(f.db.prepare('SELECT dedup_freeze_hash,screening_plan_hash FROM research_review_corpora').all(),original.map(()=>({dedup_freeze_hash:null,screening_plan_hash:null})));
     tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT * FROM ${table}`).all(),before[index]));
     assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE version<=29').all(),migrations);
     assert.equal(f.db.prepare('SELECT count(*) FROM research_review_duplicate_decisions').pluck().get(),0);

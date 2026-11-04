@@ -3574,3 +3574,21 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
 
 Logs pr09-a4b-* retained. Actual offline Provider/pool/ledger/repositories/DB29 migration/reopen and injected transactional corruption covered; main sender61 is adapter seam and calling provenance, not independent researcher authentication. No new UI or external scientific retrieval claim. Initial patch failed atomically at a mismatched IPC line; split patch applied, first type/focused38 and final51/full checks all passed without weakening assertions. Next separate title-abstract/full-text screening, model suggestions versus human final decisions and protocol-specific reviewer/conflict handling, then extraction/quality/inspector/count-conserving reporting. Whole roadmap remains in progress.
+
+
+## ROC-PR-09A4C1 — fixed reviewer declarations before phased screening
+
+Verified passing. DB31 immutable screening plan and separate corpus marker pin exact protocol/corpus/dedup freeze, both phase reviewer IDs/names, explicit adjudicator and main caller provenance. Counts1/2 match each frozen protocol phase; duplicate IDs/inconsistent names refuse. Two generated/declared/registered create/get APIs bind main human creation. No default roster, identity authentication or screening decisions invented. Exact replay readonly, historical/archive reads retained, new writes refused; missing/corrupt plan and upstream drift fail with transactional rollback.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm generate:ipc / pnpm typecheck / pnpm build | Passed; fresh generated/type/build |
+| node --test tests/unit/research-review-screening-plan.test.mjs tests/unit/research-review-deduplication.test.mjs tests/unit/research-review-corpus.test.mjs tests/unit/research-review-search.test.mjs tests/unit/research-systematic-review.test.mjs tests/unit/research-systematic-review-ipc.test.mjs | 60/60; reviewer plan9 |
+| pnpm test:unit / pnpm harness:eval | 963/963 and94/94 |
+| node scripts/run-research-p0.mjs | 13/13 |
+| node scripts/smoke-electron.mjs | 12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
+
+Logs pr09-a4c1-* retained. Actual offline Provider/corpus/dedup/main adapter71/SQLite DB30 upgrade/reopen and fault injection covered. Shared actual corpus/dedup test fixture extracted; DB29 upgrade still compares every original column and new-null markers, preserving all byte/history assertions. Caller provenance and user-declared researcher IDs are separate; no verified independent reviewer identity/complete screening/UI claim. NextA4C2 phased immutable human decisions and separate model suggestions/conflict handling, then source extraction/quality/inspector/reporting. Whole roadmap remains in progress.

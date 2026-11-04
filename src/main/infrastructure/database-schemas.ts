@@ -1969,6 +1969,23 @@ CREATE TABLE research_review_deduplication_freezes (
 `
 });
 
+researchMigrations.push({
+  version: 31, name: 'fixed_systematic_review_screening_reviewers',
+  sql: `
+ALTER TABLE research_review_corpora ADD COLUMN screening_plan_hash TEXT;
+CREATE TABLE research_review_screening_plans (
+  id TEXT PRIMARY KEY,
+  corpus_id TEXT NOT NULL UNIQUE REFERENCES research_review_corpora(id) ON DELETE CASCADE,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id,request_id)
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

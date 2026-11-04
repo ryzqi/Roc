@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import {
+  researchReviewScreeningPlanCreateSchema, researchReviewScreeningPlanGetSchema, researchReviewScreeningPlanInspectionSchema
+} from './schemas/research-review-screening';
+import {
   researchReviewDuplicateSaveSchema, researchReviewDuplicateInspectionSchema, researchReviewDuplicateHistorySchema,
   researchReviewDeduplicationGetSchema, researchReviewDeduplicationFreezeSchema, researchReviewDeduplicationInspectionSchema
 } from './schemas/research-review-deduplication';
@@ -517,6 +520,8 @@ export const ipcRegistry = {
     request({ key: 'researchSourceReplacementsReplace', channel: 'roc:research:source-replacements-replace', domain: 'research', method: 'replaceEvidenceSource', kind: 'plugin', capabilityName: 'research.sourceReplacements.replace', inputTransform: first, contract: methodContract(oneArg(researchSourceReplacementRequestSchema), researchSourceReplacementSchema) }),
     request({ key: 'researchSourceReplacementsList', channel: 'roc:research:source-replacements-list', domain: 'research', method: 'listSourceReplacements', kind: 'plugin', capabilityName: 'research.sourceReplacements.list', inputTransform: first, contract: methodContract(oneArg(researchSourceReplacementListSchema), researchSourceReplacementInspectionSchema.array()) }),
     request({ key: 'researchSourceReplacementsGet', channel: 'roc:research:source-replacements-get', domain: 'research', method: 'getSourceReplacement', kind: 'plugin', capabilityName: 'research.sourceReplacements.get', inputTransform: first, contract: methodContract(oneArg(researchSourceReplacementGetSchema), researchSourceReplacementInspectionSchema) }),
+    request({key: 'researchReviewScreeningCreatePlan', channel: 'roc:research:review-screening-createPlan', domain: 'research', method: 'createReviewScreeningPlan', kind: 'plugin', capabilityName: 'research.reviewScreening.createPlan', inputTransform: first, contract: methodContract(oneArg(researchReviewScreeningPlanCreateSchema), researchReviewScreeningPlanInspectionSchema)}),
+    request({key: 'researchReviewScreeningGetPlan', channel: 'roc:research:review-screening-getPlan', domain: 'research', method: 'getReviewScreeningPlan', kind: 'plugin', capabilityName: 'research.reviewScreening.getPlan', inputTransform: first, contract: methodContract(oneArg(researchReviewScreeningPlanGetSchema), researchReviewScreeningPlanInspectionSchema)}),
     request({key: 'researchReviewDeduplicationSave', channel: 'roc:research:review-deduplication-save', domain: 'research', method: 'saveReviewDuplicateDecision', kind: 'plugin', capabilityName: 'research.reviewDeduplication.save', inputTransform: first, contract: methodContract(oneArg(researchReviewDuplicateSaveSchema), researchReviewDuplicateInspectionSchema)}),
     request({key: 'researchReviewDeduplicationHistory', channel: 'roc:research:review-deduplication-history', domain: 'research', method: 'getReviewDuplicateDecisionHistory', kind: 'plugin', capabilityName: 'research.reviewDeduplication.history', inputTransform: first, contract: methodContract(oneArg(researchReviewDuplicateHistorySchema), researchReviewDuplicateInspectionSchema.array())}),
     request({key: 'researchReviewDeduplicationGet', channel: 'roc:research:review-deduplication-get', domain: 'research', method: 'getReviewDeduplication', kind: 'plugin', capabilityName: 'research.reviewDeduplication.get', inputTransform: first, contract: methodContract(oneArg(researchReviewDeduplicationGetSchema), researchReviewDeduplicationInspectionSchema)}),

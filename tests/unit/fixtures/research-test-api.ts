@@ -71,3 +71,6 @@ export {researchEvidenceRelationProposalSchema, researchEvidenceRelationReviewSc
 
 export {ResearchReviewDeduplicationRepository} from '../../../src/main/plugins/research/review-deduplication-repository';
 export {registerResearchReviewDeduplicationCapabilities, researchReviewDeduplicationCapabilities} from '../../../src/main/plugins/research/review-deduplication-capabilities';
+
+export {ResearchReviewScreeningRepository} from '../../../src/main/plugins/research/review-screening-repository';
+export {registerResearchReviewScreeningCapabilities, researchReviewScreeningCapabilities} from '../../../src/main/plugins/research/review-screening-capabilities';
