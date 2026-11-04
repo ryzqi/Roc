@@ -3512,3 +3512,10 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check |Passed; eager1131770bytes6files |
 
 Source-observation test timing issue corrected in separate f645b05. Shared explicit protocol fixture now used by storage/API tests. docs/research-systematic-review.md was ignored by existing docs/* policy onA1; force-added only that authorized task doc here, no ignore/rule edits. Main registry/generated adapter tests use explicit windows17/23; production native suite and startup passed, but no new review UI/kernel E2E claim. NextA3 actual frozen-protocol search execution, raw pool lineage and failure/cancellation/restart checkpoints; screening/extraction/UI follow. Full PR09/later roadmap remains open.
+
+
+## PR09 prerequisite — watcher assertion at the synchronous boundary
+
+Verified passing. Existing watcher test checked that a5ms debounce had not published after awaiting filesystem search. A loaded full-unit run legitimately completed that timer during the await. Move the unchanged empty-publication assertion immediately after the synchronous invalidation callback; keep the actual refreshed search result and20ms eventual single-event/value checks. Product watcher unchanged.
+
+From /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc: node --test --test-name-pattern='watcher events invalidate immediately' tests/unit/file-name-search-snapshot.test.mjs passed1/1; pnpm test:unit final930/930. Initial929/930 in pr09-a3-unit-full.log, corrected pr09-watcher-order.log/pr09-a3-unit-full-final.log.

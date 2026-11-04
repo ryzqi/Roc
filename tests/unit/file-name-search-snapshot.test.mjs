@@ -347,8 +347,8 @@ test('watcher events invalidate immediately, then publish the debounced workspac
   writeFileSync(join(root, 'after.md'), '');
   changed('rename', 'after.md');
   assert.deepEqual(invalidations, [root]);
-  assert.deepEqual(names(await service.searchByName({ query: 'after' })), [['after.md', 'after.md']]);
   assert.deepEqual(published, []);
+  assert.deepEqual(names(await service.searchByName({ query: 'after' })), [['after.md', 'after.md']]);
 
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(published.length, 1);
