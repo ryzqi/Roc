@@ -3174,3 +3174,53 @@ After broad checks, preview pageCount was aligned to the existing nonnegative do
 contract; final focused/type/build and static checks recorded before commit.
 Next: actual reader fixed parse/source selection, lazy PDF/structured view, bidirectional location,
 annotation capture and large-PDF memory acceptance. Full plan and external acceptance remain open.
+
+## ROC-PR-07A3A — explicit reader parse and project/source identity
+
+Verified passing. Ordinary reader requests the selected document's currentParseId. Historical
+requests resolve parse→document through a project-scoped main capability, verify current library
+membership, then read that exact parse. Versioned content requests require projectId/documentId/
+parseId/sourceHash/nullable caller-known parseHash; the old unscoped content request is removed.
+The preview and content boundaries share exact identity validation. No replacement-parse or
+substring locator fallback remains, and duplicate exact locators stay unmatched.
+
+The old exported latest helper chose at(-1) from newest-first runs. Executed its actual body from
+4528c6f3: expected current, actual old. Red assertion and exact request/result retained under
+pr07-a3a-legacy-repro.log/json. Removed helper and unused renderer runs wrapper, without aliases.
+A request-keyed React hook suppresses stale content on project/library/document/parse/hash change
+and late responses after cleanup. Explicit retry rereads the same selection, never reparses it.
+Document tabs support native arrows/Home/End; choosing a document clears historical focus.
+Removed obsolete parse-tier descriptions and middle-dot metadata separators in the touched reader.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm generate:ipc / pnpm typecheck | Passed |
+| node --test tests/unit/research-document-coordinates.test.mjs tests/unit/zotero-import.test.mjs | Final50/50 |
+| pnpm test:unit | 894/894 |
+| pnpm harness:eval | 94/94 |
+| pnpm build | Final fresh production build passed |
+| node scripts/run-research-p0.mjs | Native13/13 with actual resolver/content/preview seam |
+| node --test tests/renderer/paper-reader.test.mjs | Final clean7/7 |
+| node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-search-plan.test.mjs tests/renderer/literature-review.test.mjs tests/renderer/document-preview-protocol.test.mjs | 44/44 |
+| node scripts/smoke-electron.mjs | Final12/12, zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; eager1131738bytes6files |
+
+Actual reader tests exercise current vs historical data, missing/foreign/superseded failure,
+ambiguous/prefix locators, native tab keys, late responses, incorrect returned identities, explicit
+retry and light1100/dark1099/light800 layouts with reduced motion. Source snapshots/window98 and
+Node-host bridge are explicitly synthetic. Real frozen PDF resolver/content consumption is asserted
+through native P0's generated adapter/registry; full PDF viewer is a later increment.
+
+Initial reader5/7 used wrong test role for ErrorBar (blocked renders note, not alert). Corrected
+selectors without changing semantic assertions/timeouts; final clean7 passes. Task-only native
+shadow audit returned cut0/hidden0 for five default/hover/large-text states; saved clip-audit.json,
+then restored clean test and removed backup. Dark1099 screenshot inspected. After full checks,
+removed unused wrapper/duplicate error handling and corrected error-state keyboard tab entry;
+focused50/build/type/cleanreader7/startup12/IPC/chunks rerun passed. Final diff caught one blank
+EOF after deleting helper; trimmed it and diff now passes. No product debugging or fixture edits.
+
+Next: lazy original PDF/structured reader, measured region projection, evidence/claim source links,
+annotation capture and large-PDF resource records. Full PR-07/roadmap and external scientific,
+actual-client, independent reviewed200 corpus and model-spending acceptance remain unfinished.

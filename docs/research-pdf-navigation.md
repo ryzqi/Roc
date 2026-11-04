@@ -26,6 +26,8 @@ PR-07 当前已完成测量坐标、原子解析快照和安全预览元数据�
 
 `parseHash` 为已知的固定解析哈希；普通阅读首次获取时显式传 null，由主进程返回实际哈希。Evidence/Claim 跳转应传来源快照中的哈希。不得把“当前解析”替换成请求的历史 parseId。
 
+`research.getDocumentContent` 使用同一版本请求合同，移除无项目的旧请求。`research.resolveDocumentParse({projectId, parseId})` 通过主进程解析实际文档身份并验证项目关联，不根据当前文档顺序猜测历史版本。
+
 主进程先核对文档所属文献是否关联请求项目，再验证解析内容、原文件字节及坐标工件。异步文件读取后重新核对项目关联与解析/快照身份。响应包含来源版本、页数、原文件 URL、解析图像 ID/类型/页/哈希/大小/URL，以及测量 frame 和 snapshotHash；没有绝对文件路径、原始字节或写权限。
 
 协议 URL 为：
@@ -61,3 +63,13 @@ git diff --check
 单元场景覆盖真实原 PDF 解析到坐标/工件发布、精确版本读取、篡改/缺失、历史无坐标、跨项目和读取过程中解除关联。原生 P0 使用实际文档服务、注册器和生成适配器，保存 `document-preview.json` 及 `document-coordinate-snapshot.json`。sender97 是明确标记的合成窗口身份，不声称真实用户预加载操作。
 
 协议测试使用实际 Electron 和 Chromium fetch，核对冻结 PDF 字节、编码 ID、PNG 路由及能力失败响应。此测试的能力响应明确注入；真实 repository/文件验证由原生 P0 和单元集成建立。协议记录位于 `.artifacts/research-optimization/pr07-preview-protocol/original-byte-routing.json`。
+
+## 阅读器版本选择
+
+普通阅读按文档记录的 `currentParseId` 请求内容。历史深链先解析请求的 parseId，再核对属于当前文献，读取该确切版本。未完成、已失效、不存在或未关联当前项目的解析显示可重读错误，不打开其他文档或邻近解析。
+
+旧辅助函数从倒序解析列表取末项，会选择最旧 ready 解析，现已删除；未保留别名。locator 跳转要求一个精确匹配；前缀、子串、重复定位均不自动选择。
+
+读取状态按项目、文献、文档、解析、来源哈希及重读次数绑定。选择变化立即阻止旧内容显示，迟到响应不能覆盖新选择。文档 tab 支持左右方向键、Home/End 和可见焦点；选择其他文档会清除历史深链。
+
+`node --test tests/renderer/paper-reader.test.mjs` 检查实际组件和生成适配器的版本、错误、键盘、迟到响应、显式重读及明暗/窄窗路径。解析数据在该测试中明确为合成版本快照，Node-host 桥和 sender98 也明确标记。真实 PDF 的版本/来源读取由原生 P0 验证。布局截图与读取请求记录保存在 `.artifacts/research-optimization/pr07-reader-selection/`。

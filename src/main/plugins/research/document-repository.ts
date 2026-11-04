@@ -60,6 +60,12 @@ export class ResearchDocumentRepository {
 
   sourcePath(id: string): string { return this.row(id).source_path; }
 
+  getForParse(parseId: string): ResearchDocument {
+    const row = this.db.prepare('SELECT document_id FROM research_document_parses WHERE id=?').get(parseId) as {document_id: string} | undefined;
+    if (row === undefined) throw new Error('research_document_parse_not_found');
+    return this.get(row.document_id);
+  }
+
   importWithReceipt(input: Parameters<ResearchDocumentRepository['import']>[0], record: (document: ResearchDocument) => void): {document: ResearchDocument; created: boolean} {
     const previous = input.libraryItemId === null ? null : this.research.library.get(input.libraryItemId);
     const result = this.db.transaction(() => {

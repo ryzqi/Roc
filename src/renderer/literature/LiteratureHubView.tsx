@@ -228,7 +228,7 @@ export function LiteratureHubView(): React.JSX.Element {
             <div className="flex min-h-0 flex-1 flex-col">
             <PaperReader
               literature={store}
-              loadDocumentContent={store.loadDocumentContent}
+              onClearFocus={() => setFocus({parseId: null, locator: null})}
               openInFilesView={scope.openFileInCanvas}
               focusParseId={focus.parseId}
               focusLocator={focus.locator}

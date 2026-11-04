@@ -210,6 +210,46 @@ test('scope removal during asynchronous original read refuses both preview metad
   } finally {await f.cleanup();}
 });
 
+test('generated resolver and content bridge read the exact historical parse with project and source authority', async () => {
+  const f = await scene();
+  try {
+    previewScene(f);
+    const old = f.service.content(f.previewRequest);
+    f.repository.documents.begin(f.document.id, 'current-reader-parse');
+    f.repository.documents.complete(f.document.id, 'current-reader-parse', f.collected.data, f.collected.coordinates);
+    assert.equal(f.repository.documents.runs(f.document.id)[0].id, 'current-reader-parse');
+    const before = f.changes();
+    const resolved = await f.adapter.invoke('research.resolveDocumentParse', [{
+      projectId: f.project.id, parseId: f.previewRequest.parseId
+    }], 71);
+    assert.equal(resolved.ok, true); assert.equal(resolved.data.id, f.document.id);
+    assert.equal(resolved.data.currentParseId, 'current-reader-parse');
+    const historical = await f.adapter.invoke('research.getDocumentContent', [f.previewRequest], 71);
+    assert.equal(historical.ok, true); assert.deepEqual(historical.data, old);
+    assert.equal(historical.data.run.id, f.previewRequest.parseId);
+    const current = await f.adapter.invoke('research.getDocumentContent', [{...f.previewRequest, parseId: 'current-reader-parse'}], 71);
+    assert.equal(current.data.run.id, 'current-reader-parse');
+    assert.equal(f.changes(), before);
+    assert.throws(() => api.parseIpcRequestArgs('roc:research:document-content', [{
+      documentId: f.document.id, parseId: f.previewRequest.parseId
+    }]), 'old unscoped content contract is removed');
+    const wrong = await f.adapter.invoke('research.getDocumentContent', [{...f.previewRequest, parseHash: 'a'.repeat(64)}], 71);
+    assert.equal(wrong.error.code, 'research_document_preview_parse_changed');
+    const other = f.repository.createProject({title: 'Unlinked reader project', description: '', workspacePath: '/tmp/reader-other'});
+    const after = f.changes();
+    for (const [method, request] of [
+      ['research.resolveDocumentParse', {projectId: other.id, parseId: f.previewRequest.parseId}],
+      ['research.getDocumentContent', {...f.previewRequest, projectId: other.id}]
+    ]) {
+      const denied = await f.adapter.invoke(method, [request], 71);
+      assert.equal(denied.error.code, 'research_document_project_mismatch'); assert.equal(denied.error.category, 'permission');
+    }
+    const missing = await f.adapter.invoke('research.resolveDocumentParse', [{projectId: f.project.id, parseId: 'missing'}], 71);
+    assert.equal(missing.error.code, 'research_document_parse_not_found');
+    assert.equal(f.changes(), after);
+  } finally {await f.cleanup();}
+});
+
 test('actual parser coordinate collection publishes the exact file/source/parse seal atomically with the parse', async () => {
   const f = await scene();
   try {

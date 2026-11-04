@@ -29,7 +29,6 @@ import {
   importLibraryRecord,
   linkLibraryItem,
   listClaims,
-  listDocumentParses,
   listDocuments,
   listEvidence,
   listLibrary,
@@ -141,7 +140,7 @@ export type LiteratureStore = {
    */
   parseInFlight: string | null;
   cancelParse: (input: { documentId: string; parseId: string }) => Promise<boolean>;
-  loadDocumentContent: (documentId: string) => Promise<IpcLikeResult<DocumentContentResult>>;
+  loadDocumentContent: (request: Parameters<RocClient['api']['research']['getDocumentContent']>[0]) => Promise<IpcLikeResult<DocumentContentResult>>;
   /**
    * Captures the chunk behind a retrieval hit as evidence.
    *
@@ -579,7 +578,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
   );
 
   const loadDocumentContent = useCallback(
-    async (documentId: string) => await getDocumentContentForLatestParse(client, documentId),
+    async (request: Parameters<RocClient['api']['research']['getDocumentContent']>[0]) => await getDocumentContent(client, request),
     [client]
   );
 
@@ -767,29 +766,4 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     askAssistantAboutSelected,
     adoptAssistantThread: () => setAssistantThreadId(null)
   };
-}
-
-/**
- * Reads the content of the document's latest finished parse.
- *
- * `document.content` needs a `parseId`, and the document row only carries
- * `currentParseId` / `activeParseId` — neither of which is guaranteed to be a
- * *finished* parse. So the parse list is read and the newest `ready` run is
- * chosen; when there is none, this returns the backend's "no content" outcome
- * rather than requesting a run that cannot answer.
- */
-export async function getDocumentContentForLatestParse(
-  client: RocClient,
-  documentId: string
-): Promise<IpcLikeResult<DocumentContentResult>> {
-  const runs = await listDocumentParses(client, documentId);
-  if (!runs.ok) {
-    return runs;
-  }
-  const ready = runs.data.filter((run) => run.status === 'ready');
-  const latest = ready.at(-1);
-  if (latest === undefined) {
-    return { ok: false, error: { message: '这篇文献还没有解析完成的内容。', code: 'document_parse_missing' } };
-  }
-  return getDocumentContent(client, { documentId, parseId: latest.id });
 }

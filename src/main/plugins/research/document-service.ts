@@ -97,6 +97,25 @@ export class ResearchDocumentService {
     return { run, content: data.content };
   }
 
+  resolveParse(projectId: string, parseId: string): ResearchDocument {
+    return this.requireProjectDocument(projectId, this.repository.documents.getForParse(parseId).id);
+  }
+
+  content(request: ResearchDocumentPreviewRequest): z.infer<typeof researchDocumentParseSchema> {
+    const {run, data} = this.requireVersionedParse(request);
+    return {run, content: data.content};
+  }
+
+  private requireVersionedParse(request: ResearchDocumentPreviewRequest) {
+    const document = this.requireProjectDocument(request.projectId, request.documentId);
+    if (document.sourceHash !== request.sourceHash) throw new Error('research_document_source_changed');
+    const {run, data} = this.repository.documents.parsed(document.id, request.parseId);
+    const parseHash = researchContentHash(JSON.stringify(data.content));
+    if (data.content.sourceHash !== document.sourceHash ||
+        (request.parseHash !== null && request.parseHash !== parseHash)) throw new Error('research_document_preview_parse_changed');
+    return {document, run, data, parseHash};
+  }
+
   async source(request: z.infer<typeof researchDocumentSourceRequestSchema>): Promise<{ bytes: Buffer; mediaType: string; filename: string }> {
     const document = this.requireProjectDocument(request.projectId, request.documentId);
     if (document.sourceHash !== request.sourceHash) throw new Error('research_document_source_changed');
@@ -124,12 +143,7 @@ export class ResearchDocumentService {
 
   async preview(request: ResearchDocumentPreviewRequest): Promise<ResearchDocumentPreview> {
     this.requireOpen();
-    const document = this.requireProjectDocument(request.projectId, request.documentId);
-    if (document.sourceHash !== request.sourceHash) throw new Error('research_document_source_changed');
-    const {data} = this.repository.documents.parsed(document.id, request.parseId);
-    const parseHash = researchContentHash(JSON.stringify(data.content));
-    if (data.content.sourceHash !== document.sourceHash ||
-        (request.parseHash !== null && request.parseHash !== parseHash)) throw new Error('research_document_preview_parse_changed');
+    const {document, data, parseHash} = this.requireVersionedParse(request);
     const coordinates = this.repository.documents.coordinates(document.id, request.parseId);
     const root = await documentStorageRoot(this.rootPath);
     await this.sourceBytes(root, document);

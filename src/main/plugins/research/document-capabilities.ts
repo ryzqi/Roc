@@ -9,7 +9,7 @@ import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types'
 import { RocDomainError } from '../../services/errors';
 import type { ResearchDocumentRepository } from './document-repository';
 import type { ResearchDocumentService } from './document-service';
-import {researchDocumentPreviewRequestSchema, researchDocumentPreviewSchema} from '../../../shared/schemas/research-document-preview';
+import {researchDocumentPreviewRequestSchema, researchDocumentPreviewSchema, researchDocumentResolveParseRequestSchema} from '../../../shared/schemas/research-document-preview';
 
 const capabilities = {
   import: descriptor('research.document.import', researchDocumentImportRequestSchema, researchDocumentSchema),
@@ -19,10 +19,11 @@ const capabilities = {
   parseMany: descriptor('research.document.parseMany', researchDocumentBatchParseRequestSchema, researchDocumentBatchParseSchema),
   cancel: descriptor('research.document.cancel', researchDocumentParseRequestSchema, researchDocumentSchema),
   runs: descriptor('research.document.runs', researchDocumentIdRequestSchema, researchDocumentRunSchema.array()),
-  content: descriptor('research.document.content', researchDocumentParseRequestSchema, researchDocumentParseSchema),
+  content: descriptor('research.document.content', researchDocumentPreviewRequestSchema, researchDocumentParseSchema),
   source: descriptor('research.document.source', researchDocumentSourceRequestSchema, z.unknown()),
   asset: descriptor('research.document.asset', researchDocumentAssetRequestSchema, z.unknown()),
-  preview: descriptor('research.document.preview', researchDocumentPreviewRequestSchema, researchDocumentPreviewSchema)
+  preview: descriptor('research.document.preview', researchDocumentPreviewRequestSchema, researchDocumentPreviewSchema),
+  resolveParse: descriptor('research.document.resolveParse', researchDocumentResolveParseRequestSchema, researchDocumentSchema)
 };
 export const researchDocumentCapabilities = Object.values(capabilities);
 
@@ -31,7 +32,8 @@ export function registerResearchDocumentCapabilities(context: RocPluginContext, 
     context.capabilities.register(context.pluginId, capability, async (input) => {
       try { return await run(capability.inputSchema.parse(input)); }
       catch (error) {
-        if (capability === capabilities.preview || capability === capabilities.source || capability === capabilities.asset) {
+        if (capability === capabilities.preview || capability === capabilities.source || capability === capabilities.asset ||
+            capability === capabilities.content || capability === capabilities.resolveParse) {
           if (error instanceof Error) {
             const failure = documentReadFailures[error.message] ?? documentReadFailures[(error as NodeJS.ErrnoException).code ?? ''];
             if (failure !== undefined) throw new RocDomainError({code: error.message in documentReadFailures ? error.message : failure.code,
@@ -62,22 +64,8 @@ export function registerResearchDocumentCapabilities(context: RocPluginContext, 
   register(capabilities.cancel, (input) => service.cancel(input.documentId, input.parseId));
   register(capabilities.runs, (input) => repository.runs(input.documentId));
   register(capabilities.preview, input => service.preview(input));
-  register(capabilities.content, (input) => {
-    try {
-      return service.parsed(input.documentId, input.parseId);
-    } catch (error) {
-      // 旧代际/已撤销的结果：明确告诉消费者「引用待重建」，不冒充 not_ready/not_found。
-      if (error instanceof Error && error.message === 'research_document_parse_superseded') {
-        throw new RocDomainError({
-          code: 'research_document_parse_superseded',
-          message: '该引用基于上一代解析结果，已随解析引擎切换失效；原文仍可打开，重新解析后可重新定位。',
-          category: 'conflict',
-          retryable: false
-        });
-      }
-      throw error;
-    }
-  });
+  register(capabilities.resolveParse, input => service.resolveParse(input.projectId, input.parseId));
+  register(capabilities.content, input => service.content(input));
   register(capabilities.source, async (input) => {
     const resource = await service.source(input);
     const html = resource.mediaType === 'text/html';

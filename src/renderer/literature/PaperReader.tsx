@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, CircleAlert, ClipboardCopy, Download, FileSearch, Loader2, Pencil, Save, Sparkles, Square, Timer, Type, X } from 'lucide-react';
-import type { ResearchDocument, ResearchDocumentContent, ResearchDocumentRun, ResearchParseTier } from '../../shared/types';
-import type { IpcLikeResult } from '../app/loaded-state';
+import type { ResearchDocument, ResearchParseTier } from '../../shared/types';
 import { useWorkspaceScope } from '../app/workspace-scope';
 import { useAsyncResource } from '../app/use-async-resource';
 import { useCopyFeedback } from '../shared/hooks/use-copy-feedback';
@@ -11,6 +10,7 @@ import { countParsedBlocks, parseDocumentBlocks, type ParsedBlockKind } from './
 import { deriveCitationKey, formatDoi, isCitationKeyValid } from './format';
 import { downloadModels, getModelsStatus } from '../shared/research-models-store';
 import type { LiteratureStore } from './use-literature-store';
+import {useReaderDocument} from './use-reader-document';
 
 const TIER_OPTIONS: ReadonlyArray<{ value: ResearchParseTier; label: string; title: string }> = [
   { value: 'compact', label: '轻量', title: 'PP-OCRv6 Tiny + 文档布局和表格识别，约 19 MB' },
@@ -22,9 +22,9 @@ const TIER_OPTIONS: ReadonlyArray<{ value: ResearchParseTier; label: string; tit
  * Scope, stated honestly: this renders what the contract can actually deliver —
  * metadata from the library record, and the parse's `blocks` (heading / paragraph /
  * table / formula / figure **as text**, each with its `locator`). It does **not**
- * draw figures or embed the original PDF, because the source bytes and assets are
- * not reachable from the renderer (no registered IPC method — B16). The footer says
- * so instead of leaving an empty box that reads as a broken image.
+ * draw figures or embed the original PDF yet. Verified source/asset metadata is
+ * available through research.previewDocument; this component currently renders
+ * structured text while the dual reader is introduced in a separate increment.
  *
  * Parse progress is the backend's own `document.runs` statuses; the contract has no
  * stage names, so none are invented. The legacy `MINERU_PIPELINE_STAGES` progression
@@ -35,8 +35,8 @@ const TIER_OPTIONS: ReadonlyArray<{ value: ResearchParseTier; label: string; tit
  *   - the parse blocks, rendered in order;
  *   - `focusLocator`, set when the user arrives from a retrieval hit. The contract
  *     gives a hit a `locator` string and gives blocks their own `locator`, so the
- *     jump is a **text match** on that field: it either finds a block and scrolls to
- *     it, or reports that it could not (never a silent no-op).
+ *     jump requires one exact match in the requested parse. Missing or ambiguous
+ *     locations are reported without selecting another parse or nearby block.
  *
  * The header actions are the contract's own operations, each one named where it
  * lands: `library.export` returns content (there is no save-as dialog — F16), so
@@ -59,8 +59,8 @@ const TIER_OPTIONS: ReadonlyArray<{ value: ResearchParseTier; label: string; tit
 
 export type PaperReaderProps = {
   literature: LiteratureStore;
-  loadDocumentContent: (documentId: string) => Promise<IpcLikeResult<{ run: ResearchDocumentRun; content: ResearchDocumentContent }>>;
   openInFilesView: (relativePath: string) => void;
+  onClearFocus: () => void;
   /** Deep link from a retrieval hit: the **parse** the hit came from (`document:<parseId>`). */
   focusParseId?: string | null;
   /** Deep link from a retrieval hit: the locator to scroll to. */
@@ -85,8 +85,8 @@ const BLOCK_STYLES: Readonly<Record<ParsedBlockKind, string>> = {
 
 export function PaperReader({
   literature,
-  loadDocumentContent,
   openInFilesView,
+  onClearFocus,
   focusParseId = null,
   focusLocator = null
 }: PaperReaderProps): React.JSX.Element {
@@ -94,10 +94,12 @@ export function PaperReader({
   const documents = literature.documents;
   const scope = useWorkspaceScope();
   const copy = useCopyFeedback();
-  const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
-  const [content, setContent] = useState<ResearchDocumentContent | null>(null);
-  const [contentError, setContentError] = useState<string | null>(null);
-  const [loadingContent, setLoadingContent] = useState(false);
+  const reader = useReaderDocument(literature, focusParseId);
+  const activeDocument = reader.document;
+  const activeDocumentId = activeDocument?.id ?? null;
+  const content = reader.parsed?.content ?? null;
+  const contentError = reader.error;
+  const loadingContent = reader.loading;
   const [actionNote, setActionNote] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [keyDraft, setKeyDraft] = useState<string | null>(null);
@@ -108,9 +110,8 @@ export function PaperReader({
   /**
    * 解析档位（`document.parse` 的 `tier`）。
    *
-   * 默认 `basic`：它不需要 VLM 权重，是唯一“只下了小模型也能成功”的档位。
-   * 选 `standard`/`advanced` 但没有 GGUF 权重时，worker 会明确失败而不是自动降档——
-   * 这正是验收要求的「不自动切换档位」，所以这里也不做任何静默回退。
+   * compact 为默认轻量档，complete 加入公式识别。模型缺失时由 worker 明确
+   * 返回失败；用户选择的档位不会自动替换。
    */
   const [parseTier, setParseTier] = useState<ResearchParseTier>('compact');
   /** 批量重解析的进行中状态：null = 没在跑；否则是这一批结束后的成/败计数。 */
@@ -169,68 +170,11 @@ export function PaperReader({
     return () => window.clearInterval(handle);
   }, [modelsDownloading, reloadModels]);
 
-  // Follow the selection, but never render one document's content under another
-  // document's header: a selection change clears the content immediately.
-  // A retrieval hit names the **parse** it came from (`document:<parseId>`), not a
-  // document id, so the target document is the one whose `currentParseId` /
-  // `activeParseId` equals it. An item can hold several documents, and falling back
-  // to `documents[0]` would open the wrong one — where the hit's locator either
-  // misses or, worse, matches an unrelated block that happens to share its text.
-  useEffect(() => {
-    setContent(null);
-    setContentError(null);
-    setActiveDocumentId((current) => {
-      if (focusParseId !== null) {
-        const targeted = documents.find(
-          (document) => document.currentParseId === focusParseId || document.activeParseId === focusParseId
-        );
-        if (targeted !== undefined) {
-          return targeted.id;
-        }
-      }
-      if (current !== null && documents.some((document) => document.id === current)) {
-        return current;
-      }
-      return documents[0]?.id ?? null;
-    });
-  }, [documents, focusParseId, selected?.id]);
-
-  const readyDocument = useMemo(
-    () => documents.find((document) => document.id === activeDocumentId && document.status === 'ready') ?? null,
-    [documents, activeDocumentId]
-  );
-
-  useEffect(() => {
-    if (readyDocument === null) {
-      setContent(null);
-      return;
-    }
-    let cancelled = false;
-    setLoadingContent(true);
-    setContentError(null);
-    void loadDocumentContent(readyDocument.id)
-      .then((result) => {
-        if (cancelled) {
-          return;
-        }
-        if (!result.ok) {
-          setContentError(result.error.message);
-          setContent(null);
-          return;
-        }
-        setContent(result.data.content);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoadingContent(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [readyDocument, loadDocumentContent]);
-
   const counts = useMemo(() => (content === null ? null : countParsedBlocks(content)), [content]);
+  const selectReaderDocument = (documentId: string): void => {
+    onClearFocus();
+    reader.selectDocument(documentId);
+  };
 
   /**
    * Jump to the locator from a retrieval hit.
@@ -244,22 +188,15 @@ export function PaperReader({
       return null;
     }
     const blocks = parseDocumentBlocks(content);
-    const exact = blocks.find((block) => block.locator === focusLocator);
-    if (exact !== undefined) {
-      return exact.id;
-    }
-    // The hit's locator may be a prefix/heading of the block's own locator (e.g.
-    // "section 3" vs "section 3.2"). A substring match is the widest defensible
-    // fallback; anything looser would jump to a wrong place silently.
-    const loose = blocks.find((block) => block.locator.includes(focusLocator) || focusLocator.includes(block.locator));
-    return loose?.id ?? null;
+    const matches = blocks.filter(block => block.locator === focusLocator);
+    return matches.length === 1 ? matches[0].id : null;
   }, [content, focusLocator]);
 
   useEffect(() => {
     if (matchedBlockId === null || activeDocumentId === null) {
       return;
     }
-    const key = `${activeDocumentId}:${focusLocator ?? ''}`;
+    const key = `${activeDocumentId}:${reader.parsed?.run.id}:${focusLocator ?? ''}`;
     if (jumpHandledFor.current === key) {
       return;
     }
@@ -267,7 +204,7 @@ export function PaperReader({
     document
       .querySelector(`[data-block-id="${CSS.escape(matchedBlockId)}"]`)
       ?.scrollIntoView({ block: 'center' });
-  }, [activeDocumentId, focusLocator, matchedBlockId]);
+  }, [activeDocumentId, focusLocator, matchedBlockId, reader.parsed?.run.id]);
 
   if (selected === null) {
     return (
@@ -280,7 +217,6 @@ export function PaperReader({
   }
 
   const blocks = content === null ? [] : parseDocumentBlocks(content);
-  const activeDocument = documents.find((document) => document.id === activeDocumentId) ?? null;
   // `null` when the record carries no DOI — never a placeholder, and never the
   // bibliography copy when the metadata one is missing (they are equal by contract:
   // `library-repository.import` rejects a mismatch).
@@ -435,10 +371,10 @@ export function PaperReader({
         <h2 className="text-ink" data-testid="reader-title">
           {selected.metadata.title.trim().length > 0 ? selected.metadata.title : selected.bibliography.title}
         </h2>
-        <p className="text-muted text-[var(--font-meta-size)]" data-testid="reader-authors">
-          {selected.metadata.authors.length === 0 ? '作者未知' : selected.metadata.authors.join(' · ')}
-          {selected.metadata.publishedYear === null ? '' : ` · ${selected.metadata.publishedYear}`}
-          {selected.metadata.citationCount === null ? '' : ` · 被引 ${selected.metadata.citationCount}`}
+        <p className="flex flex-wrap gap-x-2 text-muted text-[var(--font-meta-size)]" data-testid="reader-authors">
+          <span>{selected.metadata.authors.length === 0 ? '作者未知' : selected.metadata.authors.join('，')}</span>
+          {selected.metadata.publishedYear === null ? null : <span>{selected.metadata.publishedYear}</span>}
+          {selected.metadata.citationCount === null ? null : <span>被引 {selected.metadata.citationCount}</span>}
         </p>
         <p className="flex flex-wrap items-center gap-2 text-[var(--font-micro-size)]">
           <span className="rounded-control border border-line px-1 font-mono text-muted" data-testid="reader-citation-key">
@@ -453,8 +389,9 @@ export function PaperReader({
             revision {selected.revision}
           </span>
           {counts === null ? null : (
-            <span className="text-subtle" data-testid="reader-block-counts">
-              {counts.total} 块 · 标题 {counts.headings} · 公式 {counts.formulas} · 表格 {counts.tables} · 图 {counts.figures} · 覆盖 {counts.pagesCovered} 页
+            <span className="flex flex-wrap gap-x-2 text-subtle" data-testid="reader-block-counts">
+              <span>{counts.total} 块</span><span>标题 {counts.headings}</span><span>公式 {counts.formulas}</span>
+              <span>表格 {counts.tables}</span><span>图 {counts.figures}</span><span>覆盖 {counts.pagesCovered} 页</span>
             </span>
           )}
           {selected.archived ? <span className="text-[var(--st-warn)]">已归档</span> : null}
@@ -583,8 +520,19 @@ export function PaperReader({
                 type="button"
                 role="tab"
                 aria-selected={document.id === activeDocumentId}
-                tabIndex={document.id === activeDocumentId ? 0 : -1}
-                onClick={() => setActiveDocumentId(document.id)}
+                tabIndex={document.id === activeDocumentId || (activeDocumentId === null && document.id === documents[0].id) ? 0 : -1}
+                onClick={() => selectReaderDocument(document.id)}
+                onKeyDown={event => {
+                  const index = documents.findIndex(entry => entry.id === document.id);
+                  const next = event.key === 'ArrowRight' ? (index + 1) % documents.length :
+                    event.key === 'ArrowLeft' ? (index + documents.length - 1) % documents.length :
+                    event.key === 'Home' ? 0 : event.key === 'End' ? documents.length - 1 : null;
+                  if (next === null) return;
+                  event.preventDefault();
+                  selectReaderDocument(documents[next].id);
+                  const tabs = event.currentTarget.parentElement!.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+                  tabs[next].focus();
+                }}
                 data-testid={`reader-document-tab-${document.id}`}
                 className={
                   document.id === activeDocumentId
@@ -748,14 +696,14 @@ export function PaperReader({
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3" data-testid="reader-content-area">
             {focusLocator !== null && matchedBlockId === null && content !== null ? (
               <p role="note" className="mb-2 text-[var(--st-warn)] text-[var(--font-micro-size)]" data-testid="reader-jump-missed">
-                这次命中带的 locator「{focusLocator}」在解析块里找不到对应位置；下面是解析内容的开头。
+                locator「{focusLocator}」没有唯一的精确位置，未跳转。
               </p>
             ) : null}
             {loadingContent ? (
               <EmptyState tone="loading" icon={Loader2} title="正在读取解析内容…" testId="reader-content-loading" />
             ) : contentError !== null ? (
               <ErrorBar
-                error={{ level: 'blocked', message: contentError, actionLabel: '检查文档后重新尝试解析。' }}
+                error={{ level: 'blocked', message: contentError, retry: reader.retry, actionLabel: '核对文档版本与项目关联后重试。' }}
               />
             ) : content === null ? (
               activeDocument !== null && activeDocument.status !== 'ready' ? (
@@ -802,7 +750,7 @@ export function PaperReader({
                       </p>
                     )}
                     <p className="mt-0.5 font-mono text-subtle text-[var(--font-micro-size)]">
-                      {block.label} · {block.locator} · 第 {block.page ?? '?'} 页
+                      <span>{block.label}</span>{' '}<span>{block.locator}</span>{' '}<span>第 {block.page ?? '?'} 页</span>
                     </p>
                   </section>
                 ))}

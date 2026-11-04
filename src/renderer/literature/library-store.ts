@@ -6,7 +6,6 @@ import type {
   ResearchDocument,
   ResearchDocumentImportRequest,
   ResearchDocumentParse,
-  ResearchDocumentRun,
   ResearchEvidence,
   ResearchIndexControlRequest,
   ResearchIndexJob,
@@ -169,21 +168,9 @@ export function cancelDocumentParse(
   return client.api.research.cancelDocumentParse(input);
 }
 
-/**
- * The only source of parse progress. There are **no stage names** in the
- * contract (F16), so the UI renders these real statuses and timestamps instead
- * of the legacy `MINERU_PIPELINE_STAGES` list.
- */
-export function listDocumentParses(
-  client: RocClient,
-  documentId: string
-): Promise<IpcLikeResult<ResearchDocumentRun[]>> {
-  return client.api.research.listDocumentParses({ documentId });
-}
-
 export function getDocumentContent(
   client: RocClient,
-  input: { documentId: string; parseId: string }
+  input: Parameters<RocClient['api']['research']['getDocumentContent']>[0]
 ): Promise<IpcLikeResult<ResearchDocumentParse>> {
   return client.api.research.getDocumentContent(input);
 }

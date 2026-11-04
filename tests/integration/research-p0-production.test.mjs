@@ -469,6 +469,12 @@ ${source.replace('  const rows =', `
             const previewResult = await previewBridge.invoke('research.previewDocument', [previewRequest], 97);
             assert.equal(previewResult.ok, true, JSON.stringify(previewResult));
             produced.documentPreview = previewResult.data;
+            const resolvedReader = await previewBridge.invoke('research.resolveDocumentParse', [{
+              projectId: f.project.id, parseId: produced.sourceLocator.parseId
+            }], 97);
+            assert.equal(resolvedReader.ok, true); assert.equal(resolvedReader.data.id, produced.document.id);
+            const exactReader = await previewBridge.invoke('research.getDocumentContent', [previewRequest], 97);
+            assert.equal(exactReader.ok, true); assert.deepEqual(exactReader.data, parsed);
             assert.equal(produced.documentPreview.coordinates.snapshotHash, produced.coordinateSnapshot.snapshotHash);
             assert.equal(produced.documentPreview.parseHash, produced.sourceLocator.parseHash);
             assert.equal(produced.documentPreview.sourceHash, produced.sourceLocator.sourceHash);

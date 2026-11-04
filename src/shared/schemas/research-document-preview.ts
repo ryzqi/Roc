@@ -3,6 +3,9 @@ import {researchDocumentAssetSchema} from './research-documents';
 import {researchDocumentCoordinatePagesSchema} from './research-document-coordinates';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+export const researchDocumentResolveParseRequestSchema = z.object({
+  projectId: z.string().min(1), parseId: z.string().min(1)
+}).strict();
 export const researchDocumentPreviewRequestSchema = z.object({
   projectId: z.string().min(1), documentId: z.string().min(1), parseId: z.string().min(1),
   sourceHash: digest, parseHash: digest.nullable()
