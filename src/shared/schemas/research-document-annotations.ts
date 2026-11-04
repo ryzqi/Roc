@@ -1,5 +1,8 @@
 import {z} from 'zod';
 import {researchPdfCoordinateFrameSchema, researchPdfRegionProjectionSchema} from './research-document-coordinates';
+import {researchDocumentContentSchema} from './research-documents';
+import {researchRelationReviewerSchema} from './research-evidence-relations';
+import {researchInspectedEvidenceSchema} from './research-evidence-source';
 
 const identifier = z.string().trim().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -43,3 +46,43 @@ export const researchDocumentAnnotationCreateRequestSchema = z.object({
 
 export type ResearchDocumentAnnotationTarget = z.infer<typeof researchDocumentAnnotationTargetSchema>;
 export type ResearchDocumentAnnotationCreateRequest = z.infer<typeof researchDocumentAnnotationCreateRequestSchema>;
+
+export const researchDocumentAnnotationSchema = z.object({
+  id: identifier,
+  request: researchDocumentAnnotationCreateRequestSchema,
+  requestHash: digest,
+  block: researchDocumentContentSchema.shape.blocks.element.nullable(),
+  actor: researchRelationReviewerSchema,
+  recordedAt: identifier
+}).strict().refine(value => (value.block === null) === (value.request.target.blockId === null) &&
+  (value.block === null || (value.block.id === value.request.target.blockId &&
+    value.block.locations.some(location => location.page === value.request.target.page))),
+  'The captured block must match the selected block and page.');
+export const researchDocumentAnnotationListRequestSchema = z.object({
+  projectId: identifier, documentId: identifier, parseId: identifier
+}).strict();
+export const researchDocumentAnnotationGetRequestSchema = z.object({
+  projectId: identifier, annotationId: identifier
+}).strict();
+export const researchDocumentAnnotationCaptureRequestSchema = researchDocumentAnnotationGetRequestSchema.extend({
+  requestId: identifier, expectedAnnotationHash: digest
+}).strict();
+export const researchDocumentAnnotationCaptureSchema = z.object({
+  id: identifier,
+  request: researchDocumentAnnotationCaptureRequestSchema,
+  requestHash: digest,
+  actor: researchRelationReviewerSchema,
+  source: researchInspectedEvidenceSchema,
+  sourceDigest: digest,
+  recordedAt: identifier
+}).strict();
+export const researchDocumentAnnotationInspectionSchema = z.object({
+  annotation: researchDocumentAnnotationSchema,
+  annotationHash: digest,
+  capture: researchDocumentAnnotationCaptureSchema.nullable(),
+  capturedReferenceStatus: z.enum(['recorded', 'superseded']).nullable()
+}).strict();
+export type ResearchDocumentAnnotation = z.infer<typeof researchDocumentAnnotationSchema>;
+export type ResearchDocumentAnnotationInspection = z.infer<typeof researchDocumentAnnotationInspectionSchema>;
+export type ResearchDocumentAnnotationCapture = z.infer<typeof researchDocumentAnnotationCaptureSchema>;
+export type ResearchDocumentAnnotationCaptureRequest = z.infer<typeof researchDocumentAnnotationCaptureRequestSchema>;

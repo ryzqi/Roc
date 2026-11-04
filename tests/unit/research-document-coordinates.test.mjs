@@ -19,8 +19,8 @@ before(async () => {
   }));
 });
 after(() => api?.dispose());
-async function scene({databaseVersion = 25} = {}) {
-  const fixtureApi = databaseVersion === 25 ? api : {...api, applyResearchDatabaseSchema(db) {
+async function scene({databaseVersion = 26} = {}) {
+  const fixtureApi = databaseVersion === 26 ? api : {...api, applyResearchDatabaseSchema(db) {
     api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(migration => migration.version <= databaseVersion)});
   }};
   const f = createResearchFixture(fixtureApi, 'reading');
@@ -362,7 +362,7 @@ test('marked coordinate artifacts must match actual returned blocks and cannot s
   } finally {await f.cleanup();}
 });
 
-test('DB24 to25 preserves actual parse and user replacement snapshots without fabricating coordinate history', async () => {
+test('DB24 to26 preserves actual parse and user replacement snapshots without fabricating coordinate history', async () => {
   const f = await scene({databaseVersion: 24});
   try {
     f.repository.documents.begin(f.document.id, 'historical-coordinate-parse');
@@ -389,7 +389,7 @@ test('DB24 to25 preserves actual parse and user replacement snapshots without fa
       'research_source_replacements', 'research_evidence_relations', 'research_evidence_relation_revisions'];
     const originals = tables.map(table => f.db.prepare(`SELECT * FROM ${table}`).all());
     api.applyResearchDatabaseSchema(f.db);
-    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 25);
+    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 26);
     tables.forEach((table, index) => {
       const rows = f.db.prepare(`SELECT * FROM ${table}`).all();
       if (table === 'research_document_parses') {

@@ -2,6 +2,7 @@ import { withLiteratureContext } from '../services/literature-context';
 import {withResearchHumanContext} from '../services/research-human-context';
 import {researchSourceMigrationCaptureSchema, researchSourceMigrationRejectSchema} from '../../shared/schemas/research-source-migrations';
 import {researchSourceReplacementRequestSchema} from '../../shared/schemas/research-source-replacements';
+import {researchDocumentAnnotationCreateRequestSchema, researchDocumentAnnotationCaptureRequestSchema} from '../../shared/schemas/research-document-annotations';
 import {
   researchEvidenceRelationProposalSchema, researchEvidenceRelationReviewSchema
 } from '../../shared/schemas/research-evidence-relations';
@@ -41,6 +42,16 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
       }
       return await wrapIpc(async () => {
         const input = transformInput(target.inputTransform, args);
+        if (target.capabilityName === 'research.annotations.create') {
+          const request = researchDocumentAnnotationCreateRequestSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.target.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
+        if (target.capabilityName === 'research.annotations.capture') {
+          const request = researchDocumentAnnotationCaptureRequestSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
         if (target.capabilityName === 'research.relations.propose' || target.capabilityName === 'research.relations.review' ||
             target.capabilityName === 'research.sourceMigrations.capture' || target.capabilityName === 'research.sourceMigrations.reject' ||
             target.capabilityName === 'research.sourceReplacements.replace') {

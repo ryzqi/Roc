@@ -3392,3 +3392,21 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; eager1131738bytes6files |
 
 No renderer behavior changed; preceding UI/native acceptances are prior evidence, not new runs. Logs pr07-a5a-* and actual-parser-frames.json retain the actual basis, targets and projections. No historical sources/backfill/compatibility aliases. Next: trusted human annotation storage/read and current-block Evidence conversion, then actual selection UI. Full PR07 and roadmap remain open.
+
+
+## ROC-PR-07A5B — trusted human annotations and exact current-block Evidence conversion
+
+Verified passing. DB26 immutable user annotation/request/block/basis seals and separate Evidence conversion receipts. Four generated preload methods extend the existing document capability registry and main-only human context. Actual preview bytes/coordinate artifact checked before synchronous write binding; old notes readable after reparse, new conversion requires actual current indexed block. Evidence/SourceLocator and receipt commit atomically; no scientific writes. Region belongs to the linked user note; Evidence retains parser location rather than claiming the user region was parsed.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| pnpm generate:ipc / pnpm typecheck / pnpm build | Passed; generated contracts and fresh build |
+| node --test tests/unit/research-document-annotations.test.mjs tests/unit/research-document-coordinates.test.mjs tests/unit/research-source-locator.test.mjs | Final34/34, new actual annotation9 |
+| pnpm test:unit / pnpm harness:eval | 903/903 and94/94 |
+| node scripts/run-research-p0.mjs | 13/13 native; actual annotated PDF/current Evidence reuse, synthetic window99 |
+| node --test --test-concurrency=1 tests/renderer/paper-reader.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-search-plan.test.mjs tests/renderer/literature-review.test.mjs tests/renderer/document-preview-protocol.test.mjs | 66/66 |
+| node scripts/smoke-electron.mjs | 12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; eager1131738bytes6files |
+
+Initial capture tests correctly rejected extra write fields passed into strict get schemas; explicit get arguments fixed all three calls, without weakening schemas/assertions. Logs pr07-a5b-* and p0-production/research_task_fef4c59e-4ed3-4314-b16d-ff237f74bc06/document-annotation.json retain results. Native transport/window99 remains a test seam. Current-index refusal, old version reads, strict actor/project checks, captured invalidation, snapshot tampering and actual DB25→26 no-backfill preservation verified. No UI save/selection entry yet. Next: actual PDF region selection, keyboard page/block note workflow, list/capture UI, then assets and remaining PR07 acceptance. Full roadmap/external acceptances remain open.

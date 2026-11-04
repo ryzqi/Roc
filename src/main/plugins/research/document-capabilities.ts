@@ -10,6 +10,11 @@ import { RocDomainError } from '../../services/errors';
 import type { ResearchDocumentRepository } from './document-repository';
 import type { ResearchDocumentService } from './document-service';
 import {researchDocumentPreviewRequestSchema, researchDocumentPreviewSchema, researchDocumentResolveParseRequestSchema} from '../../../shared/schemas/research-document-preview';
+import {
+  researchDocumentAnnotationCreateRequestSchema, researchDocumentAnnotationCaptureRequestSchema,
+  researchDocumentAnnotationListRequestSchema, researchDocumentAnnotationGetRequestSchema, researchDocumentAnnotationInspectionSchema
+} from '../../../shared/schemas/research-document-annotations';
+import {requireResearchHuman} from '../../services/research-human-context';
 
 const capabilities = {
   import: descriptor('research.document.import', researchDocumentImportRequestSchema, researchDocumentSchema),
@@ -23,7 +28,11 @@ const capabilities = {
   source: descriptor('research.document.source', researchDocumentSourceRequestSchema, z.unknown()),
   asset: descriptor('research.document.asset', researchDocumentAssetRequestSchema, z.unknown()),
   preview: descriptor('research.document.preview', researchDocumentPreviewRequestSchema, researchDocumentPreviewSchema),
-  resolveParse: descriptor('research.document.resolveParse', researchDocumentResolveParseRequestSchema, researchDocumentSchema)
+  resolveParse: descriptor('research.document.resolveParse', researchDocumentResolveParseRequestSchema, researchDocumentSchema),
+  createAnnotation: descriptor('research.annotations.create', researchDocumentAnnotationCreateRequestSchema, researchDocumentAnnotationInspectionSchema),
+  captureAnnotation: descriptor('research.annotations.capture', researchDocumentAnnotationCaptureRequestSchema, researchDocumentAnnotationInspectionSchema),
+  listAnnotations: descriptor('research.annotations.list', researchDocumentAnnotationListRequestSchema, researchDocumentAnnotationInspectionSchema.array()),
+  getAnnotation: descriptor('research.annotations.get', researchDocumentAnnotationGetRequestSchema, researchDocumentAnnotationInspectionSchema)
 };
 export const researchDocumentCapabilities = Object.values(capabilities);
 
@@ -32,8 +41,12 @@ export function registerResearchDocumentCapabilities(context: RocPluginContext, 
     context.capabilities.register(context.pluginId, capability, async (input) => {
       try { return await run(capability.inputSchema.parse(input)); }
       catch (error) {
+        if (capability.name.startsWith('research.annotations.') && error instanceof Error) {
+          const failure = annotationFailures[error.message];
+          if (failure !== undefined) throw new RocDomainError({code: error.message, message: failure.message, category: failure.category, retryable: false});
+        }
         if (capability === capabilities.preview || capability === capabilities.source || capability === capabilities.asset ||
-            capability === capabilities.content || capability === capabilities.resolveParse) {
+            capability === capabilities.content || capability === capabilities.resolveParse || capability.name.startsWith('research.annotations.')) {
           if (error instanceof Error) {
             const failure = documentReadFailures[error.message] ?? documentReadFailures[(error as NodeJS.ErrnoException).code ?? ''];
             if (failure !== undefined) throw new RocDomainError({code: error.message in documentReadFailures ? error.message : failure.code,
@@ -66,6 +79,12 @@ export function registerResearchDocumentCapabilities(context: RocPluginContext, 
   register(capabilities.preview, input => service.preview(input));
   register(capabilities.resolveParse, input => service.resolveParse(input.projectId, input.parseId));
   register(capabilities.content, input => service.content(input));
+  register(capabilities.createAnnotation, input =>
+    service.createAnnotation(input, requireResearchHuman('research.annotations.create', input.target.projectId)));
+  register(capabilities.captureAnnotation, input =>
+    service.captureAnnotation(input, requireResearchHuman('research.annotations.capture', input.projectId)));
+  register(capabilities.listAnnotations, input => service.listAnnotations(input));
+  register(capabilities.getAnnotation, input => service.getAnnotation(input));
   register(capabilities.source, async (input) => {
     const resource = await service.source(input);
     const html = resource.mediaType === 'text/html';
@@ -101,4 +120,24 @@ const documentReadFailures: Record<string, {code: string; message: string; categ
   research_path_outside_project: {code: 'research_path_outside_project', message: '文档资源超出存储范围。', category: 'permission'},
   ENOENT: {code: 'research_document_file_missing', message: '原文件或解析资源已缺失。', category: 'not_found'},
   EACCES: {code: 'research_document_file_denied', message: '无法读取所选文档资源。', category: 'permission'}
+};
+
+const annotationFailures: Record<string, {message: string; category: 'permission' | 'conflict' | 'not_found' | 'degraded'}> = {
+  research_human_required: {message: '批注写入需要有效的用户窗口身份。', category: 'permission'},
+  research_human_project_mismatch: {message: '批注写入身份与项目不符。', category: 'permission'},
+  research_project_archived: {message: '归档项目不能写入批注。', category: 'permission'},
+  research_annotation_project_mismatch: {message: '该批注不属于当前项目。', category: 'permission'},
+  research_annotation_not_found: {message: '所选批注不存在。', category: 'not_found'},
+  research_annotation_source_changed: {message: '所选批注的来源或解析版本已变化，请重新读取。', category: 'conflict'},
+  research_annotation_page_invalid: {message: '批注页超出所选解析的页数。', category: 'conflict'},
+  research_annotation_basis_changed: {message: '批注坐标依据与所选解析不符。', category: 'conflict'},
+  research_annotation_block_changed: {message: '所选块与批注页不符，请重新选择。', category: 'conflict'},
+  research_annotation_request_conflict: {message: '该操作标识已用于另一条批注操作。', category: 'conflict'},
+  research_annotation_changed: {message: '批注快照与所选记录不符，请重新读取。', category: 'conflict'},
+  research_annotation_already_captured: {message: '该批注已捕获为证据。', category: 'conflict'},
+  research_annotation_block_required: {message: '捕获证据需要明确选择一个有文本的解析块。', category: 'conflict'},
+  research_annotation_parse_stale: {message: '历史批注仍可阅读；捕获新证据需要当前已索引解析。', category: 'conflict'},
+  research_annotation_index_changed: {message: '所选解析块没有一致的当前索引，无法捕获证据。', category: 'conflict'},
+  research_annotation_capture_changed: {message: '捕获结果与批注来源不符。', category: 'conflict'},
+  research_annotation_snapshot_invalid: {message: '批注记录校验失败。', category: 'degraded'}
 };

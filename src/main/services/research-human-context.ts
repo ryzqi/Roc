@@ -3,7 +3,8 @@ import type {ResearchRelationReviewer} from '../../shared/schemas/research-evide
 import {RocDomainError} from './errors';
 
 export type ResearchHumanCapability = 'research.relations.propose' | 'research.relations.review' |
-  'research.sourceMigrations.capture' | 'research.sourceMigrations.reject' | 'research.sourceReplacements.replace';
+  'research.sourceMigrations.capture' | 'research.sourceMigrations.reject' | 'research.sourceReplacements.replace' |
+  'research.annotations.create' | 'research.annotations.capture';
 type HumanContext = Readonly<{
   capability: ResearchHumanCapability;
   projectId: string;

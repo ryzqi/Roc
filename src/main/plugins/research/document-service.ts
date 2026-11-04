@@ -7,6 +7,10 @@ import type {
 } from '../../../shared/schemas/research-documents';import type { ResearchBibliographyEntry, ResearchLiterature } from '../../../shared/types';
 import type { ResearchParseTier } from '../../../shared/schemas/research-production';
 import type {ResearchDocumentPreview, ResearchDocumentPreviewRequest} from '../../../shared/schemas/research-document-preview';
+import type {
+  ResearchDocumentAnnotationCreateRequest, ResearchDocumentAnnotationCaptureRequest, ResearchDocumentAnnotationInspection
+} from '../../../shared/schemas/research-document-annotations';
+import type {ResearchRelationReviewer} from '../../../shared/schemas/research-evidence-relations';
 import { collectDocumentContent, documentMediaTypes, documentStorageRoot, maximumDocumentBytes, maximumArtifactBytes } from './document-files';
 import type { ResearchDocument } from './document-repository';
 import type { ResearchParseBudget } from './parse-budget';
@@ -104,6 +108,26 @@ export class ResearchDocumentService {
   content(request: ResearchDocumentPreviewRequest): z.infer<typeof researchDocumentParseSchema> {
     const {run, data} = this.requireVersionedParse(request);
     return {run, content: data.content};
+  }
+
+  async createAnnotation(request: ResearchDocumentAnnotationCreateRequest, actor: ResearchRelationReviewer): Promise<ResearchDocumentAnnotationInspection> {
+    this.repository.documentAnnotations.requireTarget(request.target);
+    await this.preview(request.target);
+    return this.repository.documentAnnotations.create(request, actor);
+  }
+
+  async captureAnnotation(request: ResearchDocumentAnnotationCaptureRequest, actor: ResearchRelationReviewer): Promise<ResearchDocumentAnnotationInspection> {
+    const inspection = this.repository.documentAnnotations.get({projectId: request.projectId, annotationId: request.annotationId});
+    await this.preview(inspection.annotation.request.target);
+    return this.repository.documentAnnotations.capture(request, actor);
+  }
+
+  listAnnotations(request: {projectId: string; documentId: string; parseId: string}): ResearchDocumentAnnotationInspection[] {
+    return this.repository.documentAnnotations.list(request);
+  }
+
+  getAnnotation(request: {projectId: string; annotationId: string}): ResearchDocumentAnnotationInspection {
+    return this.repository.documentAnnotations.get(request);
   }
 
   private requireVersionedParse(request: ResearchDocumentPreviewRequest) {

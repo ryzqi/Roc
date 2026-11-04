@@ -38,6 +38,7 @@ import { ResearchRunRepository } from './run-repository';
 import { ResearchReviewRepository } from './review-repository';
 import { ResearchLibraryRepository } from './library-repository';
 import { ResearchDocumentRepository } from './document-repository';
+import {ResearchDocumentAnnotationRepository} from './document-annotation-repository';
 import { ResearchIndexRepository } from './index-repository';
 import { ResearchExperimentRepository } from './experiment-repository';
 import { ResearchFigureRepository } from './figure-repository';
@@ -76,6 +77,7 @@ export class ResearchRepository {
   readonly reviews: ResearchReviewRepository;
   readonly library: ResearchLibraryRepository;
   readonly documents: ResearchDocumentRepository;
+  readonly documentAnnotations: ResearchDocumentAnnotationRepository;
   readonly indexing: ResearchIndexRepository;
   readonly experiments: ResearchExperimentRepository;
   readonly figures: ResearchFigureRepository;
@@ -106,6 +108,7 @@ export class ResearchRepository {
     this.reviews = new ResearchReviewRepository(db, this, now);
     this.library = new ResearchLibraryRepository(db, this, now);
     this.documents = new ResearchDocumentRepository(db, this, now);
+    this.documentAnnotations = new ResearchDocumentAnnotationRepository(db, this, now);
     this.indexing = new ResearchIndexRepository(db, this, now);
     this.experiments = new ResearchExperimentRepository(db, this, now);
     this.figureRuns = new ResearchFigureRunRepository(db, this, now);

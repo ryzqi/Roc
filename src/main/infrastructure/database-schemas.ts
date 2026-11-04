@@ -1829,6 +1829,35 @@ CREATE INDEX idx_research_document_coordinate_document ON research_document_pars
 `
 });
 
+researchMigrations.push({
+  version: 26, name: 'fixed_document_user_annotations',
+  sql: `
+CREATE TABLE research_document_annotations (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  document_id TEXT NOT NULL REFERENCES research_documents(id),
+  parse_id TEXT NOT NULL REFERENCES research_document_parses(id),
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id,request_id)
+);
+CREATE INDEX idx_research_document_annotations_parse ON research_document_annotations(project_id,document_id,parse_id);
+CREATE TABLE research_document_annotation_captures (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  annotation_id TEXT NOT NULL UNIQUE REFERENCES research_document_annotations(id),
+  request_id TEXT NOT NULL,
+  evidence_id TEXT NOT NULL REFERENCES research_evidence(id),
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id,request_id)
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

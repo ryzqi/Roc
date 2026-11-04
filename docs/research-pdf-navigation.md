@@ -123,6 +123,19 @@ git diff --check
 
 `research-document-annotations.ts` 定义必需的 project/document/parse、sourceHash/parseHash/parserFingerprint、页和可空 blockId。坐标依据显式为 null 或同一页的实测 PDF frame 与 snapshotHash。位置只能是明确页定位，或带 `pdf-user-space` 单位的非空 XYXY 区域；区域必须位于实际 CropBox 内，并有捕获坐标依据。没有坐标时不能发送猜测区域。
 
-问题类型为笔记、数字、单位、公式、表格和识别问题，必需用户说明。请求没有 actor 或科学审核状态。此增量完成契约与实际几何验证；可信存储、PDF 选择及 Evidence 转换将在后续增量接入，尚无用户可保存入口。
+问题类型为笔记、数字、单位、公式、表格和识别问题，必需用户说明。请求没有 actor 或科学审核状态。契约、可信存储及 Evidence 转换已完成；PDF 选择与批注界面仍待接入，尚无用户可保存入口。
 
 实际解析器/PDF.js 回归同时检查 PDF→解析 raster 投影、双向往返及整个 CropBox，与独立 `convertToViewportPoint`/`convertToPdfPoint` 对照。覆盖旋转90/270、非零裁切原点、UserUnit2 和实际缩放被限制的大页。记录保存在 `pr07-coordinates/actual-parser-frames.json`；请求中的 actor、缺失必填字段、非法单位、缺坐标和越界区域均拒绝。
+
+
+## 批注存储与证据转换
+
+DB26 保存不可变批注快照：完整请求及其 SHA-256、所选原始解析块、用户窗口身份、时间和快照哈希。独立转换收据保存批注哈希、用户身份和实际捕获的 Evidence/SourceLocator。新表为空，不补写历史用户笔记。
+
+四个生成的 preload 方法为 `createDocumentAnnotation`、`listDocumentAnnotations`、`getDocumentAnnotation`、`captureDocumentAnnotation`，对应 `research.annotations.create/list/get/capture`。创建请求没有 wire actor；主进程适配器验证请求，再绑定有效窗口/项目的可信人工上下文。直接工具调用不能获得人工写权限。归档项目不能创建或转换批注。
+
+创建先验证准确来源、解析、页、块和保存坐标依据，再通过现有 preview 验证实际原文件和坐标工件字节。返回文件验证后，在同步写事务再次核对完整目标。相同项目/requestId/请求哈希/窗口重放返回已有记录，变化则拒绝。读取记录检查固定快照与哈希，不能修复或更新损坏记录。
+
+历史批注保存原页/区域/文本，即使当前解析和索引已更新也可核查。转换需要明确文本块、当前 parse 和实际索引 chunk，不能从历史文本构造 chunk ID。复用 `Evidence.capture`，Evidence 与收据在同一事务中写入；收据失败必须撤回该事务的 Evidence/SourceLocator。区域保存在链接的批注快照，Evidence SourceLocator 保留原始解析块的完整位置，不能把人工框选区域说成解析器识别区域。
+
+已捕获后重解析仍保留原始收据；当前引用失效状态单独返回。批注和转换不修改主张、关系或科学审核。实际原生流程保存 `p0-production/<taskId>/document-annotation.json`，窗口99是明确合成身份；验证真实解析、注册器、生成适配器、Evidence复用及重放/读取零写入。单元集成还覆盖越界身份、坐标/字节变化、旧解析拒绝转换、索引损坏零写入、收据回滚和 DB25→26 保留。

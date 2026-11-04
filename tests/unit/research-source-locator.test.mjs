@@ -236,7 +236,7 @@ test('migration reads refuse foreign sources and corrupt snapshots or current ta
   }finally{f.close();}
 });
 
-test('DB21 to25 retains captured sources and claims without inventing migration proposals or decisions',()=>{
+test('DB21 to26 retains captured sources and claims without inventing migration proposals or decisions',()=>{
   const db=new Database(':memory:'),agentDb=new Database(':memory:');
   db.pragma('foreign_keys=ON');
   try {
@@ -257,7 +257,7 @@ test('DB21 to25 retains captured sources and claims without inventing migration 
     const claimsBefore=db.prepare('SELECT * FROM research_claims').all();
     const locationsBefore=db.prepare('SELECT * FROM research_evidence_source_locators').all();
     api.applyResearchDatabaseSchema(db,()=>timestamp);
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),25);
+    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),26);
     assert.deepEqual(db.prepare('SELECT * FROM research_evidence').all(),sourcesBefore);
     assert.deepEqual(db.prepare('SELECT * FROM research_claims').all(),claimsBefore);
     assert.deepEqual(db.prepare('SELECT * FROM research_evidence_source_locators').all(),locationsBefore);
@@ -269,7 +269,7 @@ test('DB21 to25 retains captured sources and claims without inventing migration 
   }finally{db.close();agentDb.close();}
 });
 
-test('DB22 to25 preserves pending proposal snapshots and prior scientific records without inventing user decisions',()=>{
+test('DB22 to26 preserves pending proposal snapshots and prior scientific records without inventing user decisions',()=>{
   const db=new Database(':memory:'),agentDb=new Database(':memory:');
   db.pragma('foreign_keys=ON');
   try {
@@ -291,7 +291,7 @@ test('DB22 to25 preserves pending proposal snapshots and prior scientific record
     const original=tables.map(table=>db.prepare(`SELECT * FROM ${table}`).all());
     assert.equal(original.at(-1).length,1);
     api.applyResearchDatabaseSchema(db,()=>timestamp);
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),25);
+    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),26);
     for (const [index,table] of tables.entries()) assert.deepEqual(db.prepare(`SELECT * FROM ${table}`).all(),original[index]);
     assert.equal(db.prepare('SELECT count(*) FROM research_source_migration_decisions').pluck().get(),0);
     const before=db.prepare('SELECT total_changes()').pluck().get();
@@ -303,7 +303,7 @@ test('DB22 to25 preserves pending proposal snapshots and prior scientific record
   }finally{db.close();agentDb.close();}
 });
 
-test('DB23 to25 preserves actual captured migration decisions and creates no inferred replacement lineage',()=>{
+test('DB23 to26 preserves actual captured migration decisions and creates no inferred replacement lineage',()=>{
   const db=new Database(':memory:'),agentDb=new Database(':memory:');
   db.pragma('foreign_keys=ON');
   try {
@@ -330,7 +330,7 @@ test('DB23 to25 preserves actual captured migration decisions and creates no inf
     const original=tables.map(table=>db.prepare(`SELECT * FROM ${table}`).all());
     assert.equal(original.at(-1).length,1);
     api.applyResearchDatabaseSchema(db,()=>timestamp);
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),25);
+    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),26);
     for (const [index,table] of tables.entries()) assert.deepEqual(db.prepare(`SELECT * FROM ${table}`).all(),original[index]);
     assert.equal(db.prepare('SELECT count(*) FROM research_source_replacements').pluck().get(),0);
     const before=db.prepare('SELECT total_changes()').pluck().get();
