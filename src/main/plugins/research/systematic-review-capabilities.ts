@@ -22,25 +22,7 @@ export function registerResearchSystematicReviewCapabilities(context: RocPluginC
   function register<TInput, TOutput>(capability: CapabilityDescriptor<TInput, TOutput>, run: (request: TInput) => TOutput): void {
     context.capabilities.register(context.pluginId, capability, async input => {
       try {return run(capability.inputSchema.parse(input));}
-      catch (error) {
-        if (!(error instanceof Error)) throw error;
-        const code = error.message.split(':')[0];
-        if (['research_human_required', 'research_sender_required', 'research_human_project_mismatch',
-          'research_review_project_mismatch', 'research_project_archived'].includes(code)) {
-          throw new RocDomainError({code, message: '当前窗口身份或项目不能修改这份综述协议。', category: 'permission', retryable: false});
-        }
-        if (['research_review_version_conflict', 'research_review_request_conflict', 'research_review_already_frozen',
-          'research_review_protocol_not_frozen'].includes(code)) {
-          throw new RocDomainError({code, message: '协议版本或请求已变化，请读取当前内容后明确确认。', category: 'conflict', retryable: false});
-        }
-        if (['research_review_protocol_not_found', 'research_project_not_found'].includes(code)) {
-          throw new RocDomainError({code, message: '综述协议版本或项目不存在。', category: 'not_found', retryable: false});
-        }
-        if (code === 'research_review_snapshot_invalid') {
-          throw new RocDomainError({code, message: '保存的综述协议或人工确认收据校验失败。', category: 'degraded', retryable: false});
-        }
-        throw error;
-      }
+      catch (error) {throwSystematicReviewError(error);}
     });
   }
   register(capabilities.save, request => repository.save(request, requireResearchHuman('research.reviewProtocol.save', request.projectId)));
@@ -48,6 +30,30 @@ export function registerResearchSystematicReviewCapabilities(context: RocPluginC
   register(capabilities.get, request => repository.get(request));
   register(capabilities.history, request => repository.history(request));
   register(capabilities.list, request => repository.list(request));
+}
+
+export function throwSystematicReviewError(error: unknown): never {
+  if (!(error instanceof Error)) throw error;
+  const code = error.message.split(':')[0];
+  if (['research_human_required', 'research_sender_required', 'research_human_project_mismatch',
+    'research_review_project_mismatch', 'research_project_archived'].includes(code)) {
+    throw new RocDomainError({code, message: '当前窗口身份或项目不能执行这项综述操作。', category: 'permission', retryable: false});
+  }
+  if (['research_review_version_conflict', 'research_review_request_conflict', 'research_review_already_frozen',
+    'research_review_protocol_not_frozen', 'research_review_search_retry_conflict', 'research_review_search_not_active',
+    'research_review_search_pool_unavailable'].includes(code)) {
+    throw new RocDomainError({code, message: '协议、请求或检索状态已变化，请读取当前内容后明确操作。', category: 'conflict', retryable: false});
+  }
+  if (['research_review_protocol_not_found', 'research_project_not_found', 'research_review_search_not_found',
+    'research_review_query_not_declared'].includes(code)) {
+    throw new RocDomainError({code, message: '综述协议、已声明查询或检索记录不存在。', category: 'not_found', retryable: false});
+  }
+  if (['research_review_snapshot_invalid', 'research_review_search_snapshot_invalid', 'research_review_search_state_lost',
+    'research_review_search_pool_invalid', 'research_review_search_ledger_conflict', 'research_review_search_ledger_missing',
+    'research_review_search_pool_missing', 'research_review_search_closed'].includes(code)) {
+    throw new RocDomainError({code, message: '保存的综述版本、检索账本或结果校验失败。', category: 'degraded', retryable: false});
+  }
+  throw error;
 }
 
 function descriptor<TInput, TOutput>(name: string, inputSchema: z.ZodType<TInput>, outputSchema: z.ZodType<TOutput>): CapabilityDescriptor<TInput, TOutput> {

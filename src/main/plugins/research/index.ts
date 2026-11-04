@@ -71,6 +71,8 @@ import { registerResearchLibraryCapabilities, researchLibraryCapabilities } from
 import { ResearchDocumentService } from './document-service';
 import { registerResearchDocumentCapabilities, researchDocumentCapabilities } from './document-capabilities';
 import {registerResearchSystematicReviewCapabilities, researchSystematicReviewCapabilities} from './systematic-review-capabilities';
+import {ResearchReviewSearchService} from './review-search-service';
+import {registerResearchReviewSearchCapabilities, researchReviewSearchCapabilities} from './review-search-capabilities';
 import { ResearchIndexService, type ResearchIndexWatch } from './index-service';
 import { registerResearchIndexCapabilities, researchIndexCapabilities } from './index-capabilities';
 import { ResearchExperimentEnvironmentService } from './experiment-environment';
@@ -181,6 +183,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
   let prose: ResearchProseLintService | null = null;
   const toolchain = new ResearchToolchain(options.toolchainRoot ?? null, options.modelsRoot ?? null);
   let literatureImports: LiteratureImportService | null = null;
+  let reviewSearch: ResearchReviewSearchService | null = null;
   const literatureService = new LiteratureSearchService(options.literatureFetch);
   const zotero = new ZoteroAdapter(options.zoteroFetch);
   const embeddingClient = new OpenAICompatibleEmbeddingClient(options.embeddingFetch);
@@ -193,7 +196,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
+      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，
@@ -266,6 +269,11 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
         await publishLibraryChange(items, 'import', result.operationId);
       });
       literatureImports.recover();
+      const reviewSearches = new ResearchReviewSearchService(db, researchRepository, literatureImports,
+        error => context.logger.error('Systematic review search persistence failed.', {error: error instanceof Error ? error.message : String(error)}));
+      reviewSearch = reviewSearches;
+      reviewSearches.recover();
+      registerResearchReviewSearchCapabilities(context, reviewSearches);
       registerLiteratureImportCapabilities(context, literatureImports);
       researchRepository.documents.recover();
       // Only text/locator derivation changes advance this index generation; artifact-only contracts keep old parses active.
@@ -327,10 +335,12 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
         researchExperiments.projectChanged(project.id);
         researchFigures.projectChanged(project.id);
         researchExports.projectChanged(project.id);
+        if (project.status === 'archived') await reviewSearches.releaseProject(project.id);
         return project;
       });
       context.capabilities.register(pluginId, workbenchCapabilities.deleteProject, async (input) => {
         const request = researchProjectIdRequestSchema.parse(input);
+        await reviewSearches.releaseProject(request.id);
         const result = researchRepository.deleteProject(request.id);
         researchIndexer.releaseProject(request.id);
         researchExperiments.releaseProject(request.id);
@@ -419,8 +429,9 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
     },
     shutdown: async () => {
       try {
-        await shutdownResearchPlugin({ literature: literatureService, zotero, literatureImports, productionInputs, exports, figures, experiments, indexer, embeddings, stageRuntime, templates, documents, library, prose });
+        await shutdownResearchPlugin({ literature: literatureService, zotero, literatureImports, productionInputs, exports, figures, experiments, indexer, embeddings, stageRuntime, reviewSearch, templates, documents, library, prose });
       } finally {
+        reviewSearch = null;
         productionInputs = null;
         exports = null;
         figures = null;

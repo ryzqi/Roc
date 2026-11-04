@@ -32,6 +32,7 @@ export async function shutdownResearchPlugin(services: {
   indexer: ShutdownService;
   embeddings: ShutdownService;
   stageRuntime: ShutdownService;
+  reviewSearch: ShutdownService;
   templates: ShutdownService;
   documents: ShutdownService;
   library: ShutdownService;
@@ -40,6 +41,7 @@ export async function shutdownResearchPlugin(services: {
   const ordered = [
     // Abort the parent before child cleanup can reject its pending tool calls.
     services.stageRuntime,
+    services.reviewSearch,
     services.literature,
     services.zotero,
     services.literatureImports,

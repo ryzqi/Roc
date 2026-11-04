@@ -4,6 +4,7 @@ import {researchSourceMigrationCaptureSchema, researchSourceMigrationRejectSchem
 import {researchSourceReplacementRequestSchema} from '../../shared/schemas/research-source-replacements';
 import {researchDocumentAnnotationCreateRequestSchema, researchDocumentAnnotationCaptureRequestSchema} from '../../shared/schemas/research-document-annotations';
 import {researchReviewProtocolSaveRequestSchema, researchReviewProtocolFreezeRequestSchema} from '../../shared/schemas/research-systematic-review';
+import {researchReviewSearchStartSchema, researchReviewSearchCancelSchema} from '../../shared/schemas/research-review-search';
 import {
   researchEvidenceRelationProposalSchema, researchEvidenceRelationReviewSchema
 } from '../../shared/schemas/research-evidence-relations';
@@ -43,6 +44,12 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
       }
       return await wrapIpc(async () => {
         const input = transformInput(target.inputTransform, args);
+        if (target.capabilityName === 'research.reviewSearch.start' || target.capabilityName === 'research.reviewSearch.cancel') {
+          const request = target.capabilityName === 'research.reviewSearch.start' ?
+            researchReviewSearchStartSchema.parse(input) : researchReviewSearchCancelSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
         if (target.capabilityName === 'research.reviewProtocol.save' || target.capabilityName === 'research.reviewProtocol.freeze') {
           const request = target.capabilityName === 'research.reviewProtocol.save' ?
             researchReviewProtocolSaveRequestSchema.parse(input) : researchReviewProtocolFreezeRequestSchema.parse(input);

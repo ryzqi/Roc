@@ -5,7 +5,8 @@ import {RocDomainError} from './errors';
 export type ResearchHumanCapability = 'research.relations.propose' | 'research.relations.review' |
   'research.sourceMigrations.capture' | 'research.sourceMigrations.reject' | 'research.sourceReplacements.replace' |
   'research.annotations.create' | 'research.annotations.capture' |
-  'research.reviewProtocol.save' | 'research.reviewProtocol.freeze';
+  'research.reviewProtocol.save' | 'research.reviewProtocol.freeze' |
+  'research.reviewSearch.start' | 'research.reviewSearch.cancel';
 type HumanContext = Readonly<{
   capability: ResearchHumanCapability;
   projectId: string;

@@ -1,5 +1,10 @@
 import { z } from 'zod';
 import {
+  researchReviewSearchStartSchema, researchReviewSearchGetSchema, researchReviewSearchListSchema,
+  researchReviewSearchInspectionSchema, researchReviewSearchPoolRequestSchema, researchReviewSearchPoolResultSchema,
+  researchReviewSearchCancelSchema
+} from './schemas/research-review-search';
+import {
   researchReviewProtocolSaveRequestSchema, researchReviewProtocolFreezeRequestSchema, researchReviewProtocolInspectionSchema,
   researchReviewProtocolGetRequestSchema, researchReviewProtocolHistoryRequestSchema, researchReviewProtocolListRequestSchema
 } from './schemas/research-systematic-review';
@@ -504,6 +509,11 @@ export const ipcRegistry = {
     request({ key: 'researchSourceReplacementsReplace', channel: 'roc:research:source-replacements-replace', domain: 'research', method: 'replaceEvidenceSource', kind: 'plugin', capabilityName: 'research.sourceReplacements.replace', inputTransform: first, contract: methodContract(oneArg(researchSourceReplacementRequestSchema), researchSourceReplacementSchema) }),
     request({ key: 'researchSourceReplacementsList', channel: 'roc:research:source-replacements-list', domain: 'research', method: 'listSourceReplacements', kind: 'plugin', capabilityName: 'research.sourceReplacements.list', inputTransform: first, contract: methodContract(oneArg(researchSourceReplacementListSchema), researchSourceReplacementInspectionSchema.array()) }),
     request({ key: 'researchSourceReplacementsGet', channel: 'roc:research:source-replacements-get', domain: 'research', method: 'getSourceReplacement', kind: 'plugin', capabilityName: 'research.sourceReplacements.get', inputTransform: first, contract: methodContract(oneArg(researchSourceReplacementGetSchema), researchSourceReplacementInspectionSchema) }),
+    request({key: 'researchReviewSearchStart', channel: 'roc:research:review-search-start', domain: 'research', method: 'startReviewSearch', kind: 'plugin', capabilityName: 'research.reviewSearch.start', inputTransform: first, contract: methodContract(oneArg(researchReviewSearchStartSchema), researchReviewSearchInspectionSchema)}),
+    request({key: 'researchReviewSearchGet', channel: 'roc:research:review-search-get', domain: 'research', method: 'getReviewSearch', kind: 'plugin', capabilityName: 'research.reviewSearch.get', inputTransform: first, contract: methodContract(oneArg(researchReviewSearchGetSchema), researchReviewSearchInspectionSchema)}),
+    request({key: 'researchReviewSearchList', channel: 'roc:research:review-search-list', domain: 'research', method: 'listReviewSearches', kind: 'plugin', capabilityName: 'research.reviewSearch.list', inputTransform: first, contract: methodContract(oneArg(researchReviewSearchListSchema), researchReviewSearchInspectionSchema.array())}),
+    request({key: 'researchReviewSearchPool', channel: 'roc:research:review-search-pool', domain: 'research', method: 'getReviewSearchPool', kind: 'plugin', capabilityName: 'research.reviewSearch.pool', inputTransform: first, contract: methodContract(oneArg(researchReviewSearchPoolRequestSchema), researchReviewSearchPoolResultSchema)}),
+    request({key: 'researchReviewSearchCancel', channel: 'roc:research:review-search-cancel', domain: 'research', method: 'cancelReviewSearch', kind: 'plugin', capabilityName: 'research.reviewSearch.cancel', inputTransform: first, contract: methodContract(oneArg(researchReviewSearchCancelSchema), researchReviewSearchInspectionSchema)}),
     request({key: 'researchReviewProtocolSave', channel: 'roc:research:review-protocol-save', domain: 'research', method: 'saveReviewProtocol', kind: 'plugin', capabilityName: 'research.reviewProtocol.save', inputTransform: first, contract: methodContract(oneArg(researchReviewProtocolSaveRequestSchema), researchReviewProtocolInspectionSchema)}),
     request({key: 'researchReviewProtocolFreeze', channel: 'roc:research:review-protocol-freeze', domain: 'research', method: 'freezeReviewProtocol', kind: 'plugin', capabilityName: 'research.reviewProtocol.freeze', inputTransform: first, contract: methodContract(oneArg(researchReviewProtocolFreezeRequestSchema), researchReviewProtocolInspectionSchema)}),
     request({key: 'researchReviewProtocolGet', channel: 'roc:research:review-protocol-get', domain: 'research', method: 'getReviewProtocol', kind: 'plugin', capabilityName: 'research.reviewProtocol.get', inputTransform: first, contract: methodContract(oneArg(researchReviewProtocolGetRequestSchema), researchReviewProtocolInspectionSchema)}),

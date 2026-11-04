@@ -1888,6 +1888,40 @@ CREATE TABLE research_review_protocol_freezes (
 `
 });
 
+researchMigrations.push({
+  version: 28, name: 'frozen_protocol_search_execution_lineage',
+  sql: `
+CREATE TABLE research_review_searches (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  protocol_version_id TEXT NOT NULL REFERENCES research_review_protocol_versions(id),
+  database_index INTEGER NOT NULL,
+  query_index INTEGER NOT NULL,
+  retry_of TEXT REFERENCES research_review_searches(id),
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('running','cancelling','complete','partial','failed','cancelled','interrupted')),
+  revision INTEGER NOT NULL CHECK(revision > 0),
+  receipt_json TEXT CHECK(receipt_json IS NULL OR json_valid(receipt_json)),
+  receipt_hash TEXT,
+  cancellation_hash TEXT,
+  updated_at TEXT NOT NULL,
+  UNIQUE(project_id,request_id),
+  UNIQUE(retry_of)
+);
+CREATE INDEX idx_review_search_version ON research_review_searches(project_id,protocol_version_id,database_index,query_index);
+CREATE TABLE research_review_search_cancellations (
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  review_search_id TEXT NOT NULL UNIQUE REFERENCES research_review_searches(id) ON DELETE CASCADE,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  PRIMARY KEY(project_id,request_id)
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

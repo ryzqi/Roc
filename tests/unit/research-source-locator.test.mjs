@@ -257,7 +257,7 @@ test('DB21 to26 retains captured sources and claims without inventing migration 
     const claimsBefore=db.prepare('SELECT * FROM research_claims').all();
     const locationsBefore=db.prepare('SELECT * FROM research_evidence_source_locators').all();
     api.applyResearchDatabaseSchema(db,()=>timestamp);
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),27);
+    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),28);
     assert.deepEqual(db.prepare('SELECT * FROM research_evidence').all(),sourcesBefore);
     assert.deepEqual(db.prepare('SELECT * FROM research_claims').all(),claimsBefore);
     assert.deepEqual(db.prepare('SELECT * FROM research_evidence_source_locators').all(),locationsBefore);
@@ -291,7 +291,7 @@ test('DB22 to26 preserves pending proposal snapshots and prior scientific record
     const original=tables.map(table=>db.prepare(`SELECT * FROM ${table}`).all());
     assert.equal(original.at(-1).length,1);
     api.applyResearchDatabaseSchema(db,()=>timestamp);
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),27);
+    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),28);
     for (const [index,table] of tables.entries()) assert.deepEqual(db.prepare(`SELECT * FROM ${table}`).all(),original[index]);
     assert.equal(db.prepare('SELECT count(*) FROM research_source_migration_decisions').pluck().get(),0);
     const before=db.prepare('SELECT total_changes()').pluck().get();
@@ -330,7 +330,7 @@ test('DB23 to26 preserves actual captured migration decisions and creates no inf
     const original=tables.map(table=>db.prepare(`SELECT * FROM ${table}`).all());
     assert.equal(original.at(-1).length,1);
     api.applyResearchDatabaseSchema(db,()=>timestamp);
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),27);
+    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),28);
     for (const [index,table] of tables.entries()) assert.deepEqual(db.prepare(`SELECT * FROM ${table}`).all(),original[index]);
     assert.equal(db.prepare('SELECT count(*) FROM research_source_replacements').pluck().get(),0);
     const before=db.prepare('SELECT total_changes()').pluck().get();

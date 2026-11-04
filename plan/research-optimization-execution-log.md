@@ -3519,3 +3519,22 @@ Source-observation test timing issue corrected in separate f645b05. Shared expli
 Verified passing. Existing watcher test checked that a5ms debounce had not published after awaiting filesystem search. A loaded full-unit run legitimately completed that timer during the await. Move the unchanged empty-publication assertion immediately after the synchronous invalidation callback; keep the actual refreshed search result and20ms eventual single-event/value checks. Product watcher unchanged.
 
 From /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc: node --test --test-name-pattern='watcher events invalidate immediately' tests/unit/file-name-search-snapshot.test.mjs passed1/1; pnpm test:unit final930/930. Initial929/930 in pr09-a3-unit-full.log, corrected pr09-watcher-order.log/pr09-a3-unit-full-final.log.
+
+
+## ROC-PR-09A3 — frozen query execution and authoritative raw-pool lineage
+
+Verified passing. One declared database/query per immutable request, exact frozen version/receipt/derived parameters; actual existing import service/governor/cache/request ledger/raw pool.5 generated search start/get/list/pool/cancel methods, main sender binding and actual plugin registration/lifecycle. Provider reported-end coverage required for complete; page limits/unknown coverage partial, failures retained. Atomic cancellation intent/marker then actual abort and terminal receipt. Explicit immutable retry parent/hash, no scope expansion. Crash/lost-write state cannot masquerade as success; raw pools remain readable beyond candidate expiry.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| pnpm generate:ipc / pnpm build |Final passed; fresh type/build/generated API |
+| node --test tests/unit/research-review-search.test.mjs tests/unit/research-systematic-review.test.mjs tests/unit/research-systematic-review-ipc.test.mjs |27/27; new search14 |
+| pnpm test:unit |Final930/930 |
+| pnpm harness:eval / node scripts/run-research-p0.mjs |94/94 and13/13 |
+| node scripts/smoke-electron.mjs |12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check |Passed; eager1131770bytes6files |
+
+Actual offline Provider processing retained raw4 records vs filtered preview2, source paging/request SHA/receipt state, limited/unknown/failed status, explicit retry cache reuse, pending cancel + actual abort, expiry reads, corrupted pools/ledger/cancel/terminal receipts, lost terminal write and recovery with actual completed pool, cross-project release and real SQLite crash-copy restart with zero new requests. DB27→28 preserves fixed protocol bytes and migration receipts without search backfill; older upgrade latest-version assertions now28 while keeping all preservation assertions. Main transport uses explicit synthetic windows; HTTP responses are offline, no independent scientific retrieval/actual-client/full-kernel review UI claim. Parent shutdown precedes child cleanup, and project deletion/archival awaits query release.
+
+Pre-existing watcher timing assumption fixed separately275746d; full930 final retains all assertions. Logs pr09-a3-* and pr09-watcher-order.log. NextA4 fixed review corpus and explicit dedup/screening decisions, then source-based extraction/quality evaluation, review inspector UI and count-conserving PRISMA/query appendices. Full PR09 and later roadmap remain open.
