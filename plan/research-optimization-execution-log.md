@@ -3347,3 +3347,32 @@ and documentation; no semantic source change or fixture alteration.
 
 Next: direct original-source entry from Claim relation records, research annotations/capture,
 parsed table/formula asset comparison and remaining full PR07 acceptance. Roadmap still open.
+
+## ROC-PR-07A4B — Claim relation captured original-source entry
+
+Verified passing. Claim relation's fixed-source disclosure now opens the shared lazy source reader
+from its immutable relation.source, including after reparse invalidates the relation. Does not
+substitute another current Evidence, change the Claim, restore a relation/review or write DB data.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm build (includes typecheck) | Final fresh production build passed |
+| node --test --test-concurrency=1 tests/renderer/paper-reader.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-search-plan.test.mjs tests/renderer/literature-review.test.mjs tests/renderer/document-preview-protocol.test.mjs |66/66; reader20 |
+| node scripts/smoke-electron.mjs |12/12, zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; eager1131738bytes6files |
+
+Actual parser→Evidence→explicit synthetic hypothesis/user98 relation→reparse→invalidated relation
+fixture retains original source/hash/text, uses generated readonly document bridge and actual
+Vite/Chromium/protocol in shared560px ModalShell/ArtifactRelations, checks zero DB writes and
+unchanged full Claim/relation records. Node-host/window98 remains an explicit test seam. Native
+nested summary/metadata geometry and destination group focus pass. Light/dark body clip audits
+cut0/hidden0; dark source/context screenshot inspected. Artifacts: claim-fixed-original.json and
+claim-original-*.png under pr07-reader-selection/. First focused test entered a hidden nested
+summary before outer details painted; explicit open/visible-state assertions fixed test timing
+without changing timeout or introducing speculative product CSS. Backend unchanged: prior
+unit894/Harness94/native13 remain prior evidence, not new runs.
+
+Next: PDF selection annotations and capture, parsed table/formula image comparison and remaining
+PR07 scanned/large-source acceptance. Full execution plan and external acceptances remain open.

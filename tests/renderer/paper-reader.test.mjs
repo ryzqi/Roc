@@ -26,6 +26,7 @@ before(async () => {
     import {PaperReader} from ${JSON.stringify(join(process.cwd(),'src/renderer/literature/PaperReader'))};
     import {WorkspaceScopeProvider} from ${JSON.stringify(join(process.cwd(),'src/renderer/app/workspace-scope'))};
     import {ArtifactEvidenceSource} from ${JSON.stringify(join(process.cwd(),'src/renderer/artifacts/ArtifactEvidenceSource'))};
+    import {ArtifactRelations} from ${JSON.stringify(join(process.cwd(),'src/renderer/artifacts/ArtifactRelations'))};
     import {ModalShell} from ${JSON.stringify(join(process.cwd(),'src/renderer/shell/ModalShell'))};
     import {LazyMotion,MotionConfig,domAnimation} from 'motion/react';
     const root=createRoot(document.getElementById('root'));
@@ -49,17 +50,19 @@ before(async () => {
     }
     let generation=0;
     window.mountReader=(snapshot,focus)=>flushSync(()=>root.render(<Harness key={++generation} initial={snapshot} initialFocus={focus}/>));
-    function SourceHarness({initial}) {
+    function SourceHarness({initial,relationSnapshot=null}) {
       const [source,setSource]=useState(initial),[open,setOpen]=useState(true);
       window.updateSource=source=>flushSync(()=>setSource(source));
       return <MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
         <ModalShell open={open} kind="drawer" title="固定来源验证" testId="source-inspector"
           widthClassName="w-[560px]" onClose={()=>setOpen(false)}>
-          <ArtifactEvidenceSource client={client} source={source} canDecide={false} onChanged={()=>{}}/>
+          {relationSnapshot===null ? <ArtifactEvidenceSource client={client} source={source} canDecide={false} onChanged={()=>{}}/> :
+            <ArtifactRelations client={client} snapshot={relationSnapshot} current={true} onChanged={()=>{}}/>}
         </ModalShell>
       </LazyMotion></MotionConfig>;
     }
     window.mountSource=source=>flushSync(()=>root.render(<SourceHarness key={++generation} initial={source}/>));
+    window.mountRelationSource=snapshot=>flushSync(()=>root.render(<SourceHarness key={++generation} initial={null} relationSnapshot={snapshot}/>));
   `,style:`
     html,body,#root{height:100%;margin:0}body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}
   `,setup:`
@@ -722,4 +725,60 @@ test('captured cross-page source preserves its selected location through origina
   assert.equal(await page.getByRole('combobox',{name:'证据原文位置',exact:true}).inputValue(),'1');
   assert.equal(f.changes(),before);
   await page.getByTestId(`artifact-document-source-toggle-${evidence.id}`).click();await page.waitForFunction(()=>window.liveWorkers===0);
+});
+
+test('Claim relation opens its retained original source after reparse without changing scientific state or disclosure geometry',async()=>{
+  const f=await realPdfScene(), source=captureOriginalSource(f);
+  const artifact=f.repository.createArtifact({projectId:f.project.id,stage:'reading',kind:'reading_notes',title:'Synthetic source-linked claim',path:null});
+  const claim=f.repository.evidence.createClaim({projectId:f.project.id,artifactId:artifact.id,subjectType:'claim',
+    content:'Explicit synthetic hypothesis remains unconfirmed.',status:'hypothesis',evidenceIds:[source.evidence.id]});
+  const proposed=f.repository.evidence.relations.propose({projectId:f.project.id,claimId:claim.id,expectedClaimVersion:claim.version,
+    evidenceId:source.evidence.id,expectedSourceDigest:api.relationSourceDigest(source),kind:'supports',condition:null,supersedesRelationId:null},
+    {kind:'user',id:'window:98'});
+  await publishReverseLayout(f);
+  const relation=f.repository.evidence.relations.get(proposed.id,f.project.id);
+  assert.equal(relation.status,'invalidated');assert.deepEqual(relation.source,source);
+  const snapshot=f.repository.inspectArtifact({projectId:f.project.id,artifactId:artifact.id,expectedVersion:null}).snapshot;
+  const before=f.changes(), oldClaim=f.repository.evidence.getClaim(claim.id);
+  active=f;calls.length=0;
+  await page.evaluate(snapshot=>window.mountRelationSource(snapshot),snapshot);
+  const group=page.locator(`#relation-claim-${claim.id}`);
+  await group.locator('summary').first().focus();await page.keyboard.press('Enter');
+  assert.equal(await group.evaluate(group=>group.open),true);
+  const record=page.getByTestId(`artifact-relation-${relation.id}`);
+  await record.waitFor({state:'visible'});
+  await record.locator('summary').first().waitFor({state:'visible'});
+  await record.locator('summary').first().focus();await page.keyboard.press('Enter');
+  assert.equal(await record.locator('details').first().evaluate(source=>source.open),true);
+  const open=page.getByTestId(`artifact-relation-document-source-toggle-${relation.id}`);
+  await open.waitFor();await open.focus();await page.keyboard.press('Enter');await waitForOriginal();
+  assert.match(await page.getByTestId('artifact-document-source-block').innerText(),/Synthetic group A mean is 2/);
+  assert.ok(calls.filter(call=>call.method==='getDocumentContent'||call.method==='previewDocument')
+    .every(call=>call.input.parseId===source.sourceLocator.parseId && call.input.parseHash===source.sourceLocator.parseHash));
+  await page.getByTestId('reader-pdf-page-blocks').click();
+  const target=page.getByTestId('reader-pdf-block-candidate').first();await target.focus();await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>document.activeElement?.getAttribute('data-testid')==='artifact-document-source-block');
+  await page.waitForFunction(({claimId,relationId})=>{
+    const group=document.getElementById(`relation-claim-${claimId}`),record=document.querySelector(`[data-testid="artifact-relation-${relationId}"]`);
+    const source=record.querySelector('details');
+    return record.getBoundingClientRect().top>=group.querySelector('summary').getBoundingClientRect().bottom-1 &&
+      source.querySelector('dl').getBoundingClientRect().top>=source.querySelector('summary').getBoundingClientRect().bottom-1;
+  },{claimId:claim.id,relationId:relation.id});
+  const geometry=await record.evaluate(record=>{
+    const source=record.querySelector('details'),group=record.closest('details');
+    return {groupSummaryBottom:group.querySelector('summary').getBoundingClientRect().bottom,recordTop:record.getBoundingClientRect().top,
+      sourceSummaryBottom:source.querySelector('summary').getBoundingClientRect().bottom,sourceMetadataTop:source.querySelector('dl').getBoundingClientRect().top};
+  });
+  assert.ok(geometry.recordTop>=geometry.groupSummaryBottom-1);assert.ok(geometry.sourceMetadataTop>=geometry.sourceSummaryBottom-1);
+  const auditSource=await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8'),audits=[];
+  for(const theme of ['light','dark']) {
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    const audit=await page.evaluate(source=>(0,eval)(source)({root:'body',viewport:true}),auditSource);
+    assert.equal(audit.cut,0);audits.push({theme,...audit});
+    await page.screenshot({path:join(artifacts,`claim-original-${theme}.png`)});
+  }
+  assert.equal(f.changes(),before);assert.deepEqual(f.repository.evidence.getClaim(claim.id),oldClaim);
+  assert.deepEqual(f.repository.evidence.relations.get(relation.id,f.project.id),relation);
+  await writeFile(join(artifacts,'claim-fixed-original.json'),JSON.stringify({relation,claim:oldClaim,geometry,audits,calls},null,2));
+  await open.click();await page.waitForFunction(()=>window.liveWorkers===0);
 });

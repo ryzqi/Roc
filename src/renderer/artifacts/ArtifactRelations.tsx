@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useRef, useState} from 'react';
+import {lazy, Suspense, useEffect, useMemo, useRef, useState} from 'react';
 import type {z} from 'zod';
 import type {researchArtifactInspectionSchema} from '../../shared/schemas/research-artifact-inspector';
 import type {ResearchEvidenceRelation} from '../../shared/schemas/research-evidence-relations';
@@ -10,6 +10,7 @@ import {formInputClass, formSecondaryButtonClass} from '../shared/form-ui';
 type Snapshot = z.infer<typeof researchArtifactInspectionSchema>;
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 const inputClass = `${formInputClass} min-w-0 border-[0.5px]`;
+const DocumentSource = lazy(async () => ({default: (await import('./ArtifactDocumentSource')).ArtifactDocumentSource}));
 const kinds = {supports: '支持', contradicts: '反对', qualifies: '限定', depends_on: '依赖', supersedes: '替代', historical: '历史关联'};
 const statuses = {proposed: '待审核', confirmed: '已确认', rejected: '已拒绝', invalidated: '已失效', historical: '未经语义审核'};
 const reasons = {claim_changed: '主张版本已改变', evidence_invalidated: '来源已失效', superseded: '已由新关系替代'};
@@ -96,6 +97,7 @@ function RelationRecord({client, relation, canReview, onChanged}: {
 }): React.JSX.Element {
   const [note, setNote] = useState('');
   const [historyNonce, setHistoryNonce] = useState(0);
+  const [showDocument, setShowDocument] = useState(false);
   const changed = useChangedAfterAction(onChanged);
   const review = useAsyncAction((decision: 'confirm' | 'reject') => client.api.research.reviewEvidenceRelation({
     projectId: relation.projectId, relationId: relation.id, expectedVersion: relation.version,
@@ -128,6 +130,16 @@ function RelationRecord({client, relation, canReview, onChanged}: {
       </dl>
       {source.sourceLocator === null ? <p>没有托管文档坐标，保留原始定位文字。</p> : <pre
         className="mt-1 whitespace-pre-wrap break-all text-[var(--font-meta-size)]">{JSON.stringify(source.sourceLocator, null, 2)}</pre>}
+      {source.sourceLocator === null ? null : <>
+        <button type="button" className={`${button} mt-2`} aria-expanded={showDocument}
+          data-testid={`artifact-relation-document-source-toggle-${relation.id}`}
+          data-reading-key={`relation-document-source-toggle:${relation.id}`} onClick={() => setShowDocument(open => !open)}>
+          {showDocument ? '收起关系原文固定版本' : '查看关系原文固定版本'}
+        </button>
+        {!showDocument ? null : <Suspense fallback={<p role="status">加载关系原文阅读器…</p>}>
+          <DocumentSource client={client} evidence={source.evidence} locator={source.sourceLocator}/>
+        </Suspense>}
+      </>}
     </details>
     {relation.status !== 'proposed' ? null : canReview ? <div className="mt-1 flex flex-col gap-2">
       <label className="flex flex-col gap-1 text-muted">审核说明（可空）

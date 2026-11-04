@@ -1,6 +1,6 @@
 # 原 PDF 与解析定位
 
-PR-07 当前已完成测量坐标、原子解析快照、安全预览元数据、原 PDF/解析文本并排阅读及工件 Evidence 的固定来源阅读。块与 PDF 的双向定位已接入；Claim 关系记录的直接原文入口及标注捕获仍待完成。
+PR-07 当前已完成测量坐标、原子解析快照、安全预览元数据、原 PDF/解析文本并排阅读及 Evidence/Claim 关系的固定来源阅读。块与 PDF 的双向定位已接入；标注捕获与解析资产核对仍待完成。
 
 ## 坐标与版本
 
@@ -111,3 +111,9 @@ git diff --check
 阅读器测试包含实际 Evidence 捕获、真实重解析失效后的旧 parse/source 读取、八种身份/哈希/内容/位置不匹配拒绝、不同原文件/项目的迟到读取，以及显式合成跨页块的固定位置。Node-host 适配器窗口98是测试接缝。来源视图在现有 560px ModalShell 抽屉中验收，源码不新增 shell、路由或前端。
 
 工件检查器、生产检查器和阅读器测试共享 Vite 实际构建入口，直接产出 lazy 模块及 worker 文件。`evidence-fixed-original.json` 保存固定来源和实际请求，`evidence-original-clip-audit.json` 保存三个窗口/主题的裁切记录；`evidence-original-*.png` 保存明暗布局。
+
+## Claim 关系的原文入口
+
+主张关系记录的「固定来源与版本」展开区提供「查看关系原文固定版本」。读取该关系保存的 `relation.source`，复用上述严格来源阅读器，不改用工件中另一条当前 Evidence。即使关系在重解析后已失效，原始 ready parse/source 仍可核查。
+
+验证用实际原 PDF 捕获 Evidence、创建明确的合成假设/用户98关系提议，再真实发布后续解析使关系失效。关系原文读取保持旧 SourceLocator/hash，假设和关系记录完全不变，数据库零写入。`claim-fixed-original.json` 保存请求、原始关系/主张、展开几何与明暗裁切审计；`claim-original-*.png` 保存布局。嵌套展开区的 summary/元数据顺序及键盘目标聚焦有实际几何断言；初始测试补齐原生展开后的渲染等待，没有加入未经验证的 CSS 修补。
