@@ -15,6 +15,7 @@ import {
 import { researchDocumentLimits, researchParseOptionsSchema, researchParsedDocumentSchema, researchParseContractVersion, researchParserVersion, type ResearchParseOptions } from '../../../shared/schemas/research-production';
 import type { z } from 'zod';
 import { ResearchProcessError } from './process-runner';
+import {researchCoordinateFrameContractVersion, researchRasterCoordinateFrameSchema, type ResearchDocumentCoordinateFrame} from '../../../shared/schemas/research-document-coordinates';
 import { runResearchJob, researchJobError, type ResearchJobPaths } from './research-job';
 import {
   extractResearchPdfPageText,
@@ -42,6 +43,7 @@ const PARSER_VERSION = researchParserVersion;
 const SUPPORTED_EXTENSIONS = ['.pdf', '.html', '.htm', '.png', '.jpg', '.jpeg', '.tif', '.tiff', '.bmp', '.webp'] as const;
 
 type Raster = { width: number; height: number; data: Uint8Array };
+type ParsedPage = {page: number; text: string; regions: unknown[]; coordinateFrame: ResearchDocumentCoordinateFrame | null};
 type ParseDocument = z.infer<typeof researchParsedDocumentSchema>;
 type ParseBlock = ParseDocument['blocks'][number];
 type ParseAsset = ParseDocument['assets'][number];
@@ -119,7 +121,7 @@ async function parsePdf(
     const pageBlocks: ParseBlock[] = [];
     const assets: ParseAsset[] = [];
     const assetBudget = { totalBytes: 0 };
-    const pageResults: Array<{ page: number; text: string; regions: unknown[] }> = [];
+    const pageResults: ParsedPage[] = [];
     const nativeTextPages: string[] = [];
     let usedOcr = false;
     let actualDevice: 'coreml' | 'cpu' = 'cpu';
@@ -166,7 +168,7 @@ async function parsePdf(
         nativeTextPages.push(nativeText);
         if (nativeTextOnly) {
           pageBlocks.push(makeBlock(`page-${pageNumber}-text`, 'paragraph', 'Page text', nativeText, pageNumber, [0, 0, pageLayout.width, pageLayout.height], null));
-          pageResults.push({ page: pageNumber, text: nativeText, regions: [] });
+          pageResults.push({ page: pageNumber, text: nativeText, regions: [], coordinateFrame: pageLayout.coordinateFrame });
           if (pageBlocks.length > researchDocumentLimits.maxBlocks) researchJobError('research_document_block_limit');
           continue;
         }
@@ -229,7 +231,7 @@ async function parsePdf(
           pageBlocks.push(makeBlock(`page-${pageNumber}-native`, 'paragraph', 'Page text', nativeText, pageNumber,
             [0, 0, pageLayout.width, pageLayout.height], null));
         }
-        pageResults.push({ page: pageNumber, text: nativeText, regions: pageRegions });
+        pageResults.push({ page: pageNumber, text: nativeText, regions: pageRegions, coordinateFrame: pageLayout.coordinateFrame });
         if (pageBlocks.length > researchDocumentLimits.maxBlocks) researchJobError('research_document_block_limit');
       } finally {
         page.cleanup();
@@ -275,7 +277,7 @@ async function parseImage(
   const blocks: ParseBlock[] = [];
   const assets: ParseAsset[] = [];
   const assetBudget = { totalBytes: 0 };
-  const pageResults: Array<{ page: number; text: string; regions: unknown[] }> = [];
+  const pageResults: ParsedPage[] = [];
   for (const pageNumber of pages) {
     throwIfAborted(signal);
     const raster = await rasterDocument.page(pageNumber);
@@ -305,7 +307,9 @@ async function parseImage(
       regions.push({ id: block.id, type: region.type, label: region.label, score: region.score, bbox: region.bbox,
         status: region.status, text, imagePath, formula: region.formula?.formula ?? null, table: region.table?.structure ?? null });
     }
-    pageResults.push({ page: pageNumber, text: '', regions });
+    pageResults.push({ page: pageNumber, text: '', regions, coordinateFrame: researchRasterCoordinateFrameSchema.parse({
+      kind: 'image', page: pageNumber, unit: 'raster-pixel', coordinateOrigin: 'TOPLEFT', width: raster.width, height: raster.height
+    }) });
     if (blocks.length > researchDocumentLimits.maxBlocks) researchJobError('research_document_block_limit');
   }
   return await writeParseResult(job, {
@@ -335,7 +339,7 @@ async function parseHtml(job: ResearchJobPaths, options: ResearchParseOptions): 
     parseMode: 'html',
     blocks,
     assets: [],
-    pageResults: [{ page: 1, text: '', regions: [] }],
+    pageResults: [{ page: 1, text: '', regions: [], coordinateFrame: null }],
     warnings: []
   });
 }
@@ -489,7 +493,7 @@ async function writeParseResult(job: ResearchJobPaths, input: {
   parseMode: ParseResult['parseMode'];
   blocks: ParseBlock[];
   assets: ParseAsset[];
-  pageResults: Array<{ page: number; text: string; regions: unknown[] }>;
+  pageResults: ParsedPage[];
   warnings: string[];
 }): Promise<ParseResult> {
   if (input.blocks.length > researchDocumentLimits.maxBlocks || input.assets.length > researchDocumentLimits.maxAssets) {
@@ -530,7 +534,8 @@ async function writeParseResult(job: ResearchJobPaths, input: {
     artifacts,
     warnings: input.warnings
   };
-  const structured = JSON.stringify({ ...result, pages: input.pageResults }, null, 2);
+  const structured = JSON.stringify({ ...result, coordinateFrameContractVersion: researchCoordinateFrameContractVersion,
+    pages: input.pageResults }, null, 2);
   await writeText(job.output, artifacts.middleJson, structured);
   await writeText(job.output, artifacts.markdown, markdown);
   await writeText(job.output, artifacts.structuredContent, structured);

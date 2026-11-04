@@ -280,6 +280,7 @@ test('keyboard source selection creates a real proposal, human confirmation refr
   await page.getByTestId('artifact-inspector-return-review').focus();await page.keyboard.press('Enter');
   assert.deepEqual(await page.evaluate(()=>decisions),[]);
   await page.getByTestId('artifact-inspector-panel').waitFor({state:'detached'});
+  await page.waitForFunction(()=>document.activeElement.dataset.testid==='assistant-gate-refresh');
   await activateRendered(page.getByTestId('assistant-gate-approve'));
   await page.waitForFunction(()=>window.resumeResult?.done===true);
   assert.equal(f.repository.getWorkflow(f.project.id).currentStage,'ideation');

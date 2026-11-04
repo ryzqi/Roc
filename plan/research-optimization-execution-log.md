@@ -3024,3 +3024,50 @@ PR-06 source-locator/relation/review/invalidation/history/migration/replacement 
 consumer integration is verified offline. PR-07 PDF coordinate-basis audit and implementation
 follow next; full plan remains incomplete. Earlier expanded P4/review-order defects and external
 scientific/client/L2 acceptance gaps remain recorded.
+
+
+## ROC-PR-07A1 — measured parse coordinate frames and PDF region projection
+
+Verified passing for parser/shared geometry scope. Actual parser audit found native and OCR
+boxes are XYXY raster pixels, not PDF points. Request scale1.5 is clamped for large pages;
+CropBox offsets, rotation and UserUnit participate in the PDF.js viewport transform.
+New strict PDF frames retain actual raster extent plus viewport dimensions/scale/rotation/
+UserUnit/viewBox/six affine values. Native image omission and actual OCR raster rendering share
+that measured path. Structured/middle pages save coordinateFrameContractVersion1 and each
+processed page frame; image frames use their own raster, HTML explicitly has no region basis.
+
+projectParsedRegionToPdf validates a nonempty in-raster region, reflects bottom-left input
+against the recorded raster and inverts the captured affine transform. Missing/invalid basis,
+singular/nonfinite matrices and outside/empty regions refuse. No fixed-scale guess, source
+migration, scientific approval, DB rewrite or historical SourceLocator/parse-content mutation.
+Text/location contract4 and frozen research-workflow fixture files stay unchanged.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| node --test --test-name-pattern='high-quality text-only pages preserve' tests/unit/architecture-repair-corpus.test.mjs | Red before fix: required frame undefined |
+| node --test --test-name-pattern='actual rotated cropped\|high-quality text-only\|OCR raster bytes\|native-text PDF with vector' tests/unit/architecture-repair-corpus.test.mjs | Final4/4 |
+| pnpm test:unit | 883/883 |
+| pnpm typecheck / pnpm build | Fresh production build/type passed |
+| node scripts/run-research-p0.mjs | 13/13 native |
+| node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-search-plan.test.mjs | Final38/38 |
+| node scripts/smoke-electron.mjs | Final12/12, zero renderer errors |
+| pnpm harness:eval | 94/94 |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; eager1132980bytes6files |
+
+Generated actual PDFs cover crop[20,30,500,700]/rotation90/UserUnit2, rotation270 and a
+12000x15000 clamped page. Captured frames/projected rectangles independently match actual
+PageViewport.convertToPdfPoint with less than1e-9 error. Large page records scale
+0.37267799624996495, raster4472x5590. Frame/error/rounding facts retained in
+pr07-coordinates/actual-parser-frames.json; no source fixture files modified.
+
+Initial related renderer37/38 exposed existing test ordering after returning whole gate context:
+acceptContext schedules actual refresh-button focus in requestAnimationFrame; old relation test
+focused approval before that restoration. Existing whole-context test already waits actual refresh
+focus. Added the same wait at relation test283, retaining active-focus/Enter/final approval assertions
+and product code/timeouts. Final38 passes; earlier independent P4/review-order defects unchanged.
+
+Safe coordinate snapshot/hash publication, renderer preview metadata/dual reader, annotations
+and large-PDF resource acceptance remain next PR-07 increments. Full plan remains incomplete;
+external scientific/client/L2 acceptance still unrun.

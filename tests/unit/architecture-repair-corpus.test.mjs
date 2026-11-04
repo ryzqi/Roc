@@ -53,6 +53,9 @@ const { renderResearchPdfPage, withResearchPdf, researchPdfPageHasVisualContent 
   external: ['@napi-rs/canvas', 'pdfjs-dist/legacy/build/pdf.mjs'],
   tempDir: join(repositoryRoot, '.runtime/tmp')
 });
+const {projectParsedRegionToPdf} = await importTypeScriptModule('src/shared/research-document-coordinates.ts', {
+  platform: 'node', external: ['zod'], tempDir: join(repositoryRoot, '.runtime/tmp')
+});
 const { decodeRasterDocument, parseResearchDocument } = await importTypeScriptModule('src/main/plugins/research/document-parser.ts', {
   platform: 'node',
   external: ['@napi-rs/canvas', 'onnxruntime-node', 'paddleocr', 'pdfjs-dist/legacy/build/pdf.mjs'],
@@ -68,7 +71,7 @@ function vectorOnlyPdf() {
   ]);
 }
 
-function textOnlyPdf({ includeVector = false } = {}) {
+function textOnlyPdf({ includeVector = false, mediaBox = [0, 0, 612, 792], cropBox = mediaBox, rotation = 0, userUnit = 1 } = {}) {
   const words = Array.from({ length: 100 }, (_, index) => `evidence${index}`);
   const lines = Array.from({ length: 10 }, (_, index) => words.slice(index * 10, index * 10 + 10).join(' '));
   const textStream = `BT\n/F1 8 Tf\n40 760 Td\n${lines.map((line) => `(${line}) Tj\n0 -12 Td`).join('\n')}\nET`;
@@ -76,7 +79,7 @@ function textOnlyPdf({ includeVector = false } = {}) {
   return buildPdf([
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
+    `<< /Type /Page /Parent 2 0 R /MediaBox [${mediaBox.join(' ')}] /CropBox [${cropBox.join(' ')}] /Rotate ${rotation} /UserUnit ${userUnit} /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>`,
     pdfStream(stream),
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
   ]);
@@ -317,6 +320,11 @@ test('high-quality text-only pages preserve coordinates without rendering page i
     assert.deepEqual(structuredBytes, middleBytes);
     const middle = JSON.parse(middleBytes.toString('utf8'));
     assert.equal(middle.pages[0].text, parsed.content);
+    assert.deepEqual(middle.pages[0].coordinateFrame, {
+      kind: 'pdf', page: 1, unit: 'raster-pixel', coordinateOrigin: 'TOPLEFT', width: 918, height: 1188,
+      viewport: {width: 918, height: 1188, scale: 1.5, rotation: 0, userUnit: 1,
+        viewBox: [0, 0, 612, 792], transform: [1.5, 0, 0, -1.5, 0, 1188]}
+    }, 'parsed regions must retain their measured raster-to-PDF coordinate basis');
     assert.ok(stages.some((event) => event.stage === 'visual-inspection'));
     assert.ok(stages.some((event) => event.stage === 'page-layout'));
     for (const stage of ['page-render', 'page-png-encode', 'page-write', 'ocr-raster', 'ocr-inference']) {
@@ -384,6 +392,8 @@ test('OCR raster bytes match the rendered page after its PNG evidence is written
     assert.ok(rendered.image);
     assert.equal(rendered.image.width, rendered.width);
     assert.equal(rendered.image.height, rendered.height);
+    assert.equal(rendered.coordinateFrame.width, rendered.image.width);
+    assert.equal(rendered.coordinateFrame.height, rendered.image.height);
     assert.equal(rendered.image.data.byteLength, rendered.width * rendered.height * 4);
     assert.ok(rendered.image.data.some((value) => value !== 0));
     const pagePng = await readFile(rendered.path);
@@ -393,6 +403,65 @@ test('OCR raster bytes match the rendered page after its PNG evidence is written
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });
   }
+});
+
+test('actual rotated cropped UserUnit and clamped PDF pages preserve their exact coordinate basis for region projection', async () => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), 'roc-pdf-coordinate-frames-'));
+  const evidenceDirectory = join(repositoryRoot, '.artifacts/research-optimization/pr07-coordinates');
+  await mkdir(evidenceDirectory, {recursive: true});
+  const observations = [];
+  try {
+    for (const [id, options] of [
+      ['rotated-cropped-unit', {cropBox: [20, 30, 500, 700], rotation: 90, userUnit: 2}],
+      ['opposite-rotation', {cropBox: [20, 30, 500, 700], rotation: 270, userUnit: 1}],
+      ['clamped-large', {mediaBox: [0, 0, 12000, 15000]}]
+    ]) {
+      const projectRoot = join(temporaryRoot, id);
+      await mkdir(projectRoot);
+      const bytes = textOnlyPdf(options);
+      const sourcePath = join(projectRoot, 'source.pdf'), outputDir = join(projectRoot, 'parsed');
+      await writeFile(sourcePath, bytes);
+      const parsed = await parseResearchDocument({projectRoot, sourcePath, outputDir,
+        options: {tier: 'compact', device: 'cpu', pageRange: '1'}, modelFiles: null, modelManifest: modelPackManifest('compact')});
+      const structured = JSON.parse(await readFile(join(outputDir, parsed.artifacts.structuredContent), 'utf8'));
+      assert.equal(structured.coordinateFrameContractVersion, 1);
+      const frame = structured.pages[0].coordinateFrame;
+      assert.equal(frame.unit, 'raster-pixel'); assert.equal(frame.coordinateOrigin, 'TOPLEFT');
+      assert.deepEqual(parsed.blocks[0].locations[0].bbox, [0, 0, frame.width, frame.height]);
+      const bbox = [frame.width * .1, frame.height * .2, frame.width * .4, frame.height * .6];
+      const projected = projectParsedRegionToPdf({frame, bbox, coordinateOrigin: 'TOPLEFT'});
+      const reflected = projectParsedRegionToPdf({frame,
+        bbox: [bbox[0], frame.height - bbox[3], bbox[2], frame.height - bbox[1]], coordinateOrigin: 'BOTTOMLEFT'});
+      await withResearchPdf(bytes, async pdf => {
+        const page = await pdf.getPage(1);
+        try {
+          const viewport = page.getViewport({scale: frame.viewport.scale});
+          assert.deepEqual(frame.viewport.transform, viewport.transform);
+          assert.deepEqual(frame.viewport.viewBox, viewport.viewBox);
+          assert.equal(frame.width, Math.round(viewport.width)); assert.equal(frame.height, Math.round(viewport.height));
+          assert.equal(frame.viewport.userUnit, page.userUnit); assert.equal(frame.viewport.rotation, page.rotate);
+          const points = [[bbox[0], bbox[1]], [bbox[0], bbox[3]], [bbox[2], bbox[1]], [bbox[2], bbox[3]]]
+            .map(([x, y]) => viewport.convertToPdfPoint(x, y));
+          const expected = [Math.min(...points.map(point => point[0])), Math.min(...points.map(point => point[1])),
+            Math.max(...points.map(point => point[0])), Math.max(...points.map(point => point[1]))];
+          projected.forEach((value, index) => assert.ok(Math.abs(value - expected[index]) < 1e-9));
+          reflected.forEach((value, index) => assert.ok(Math.abs(value - expected[index]) < 1e-9));
+          if (id === 'clamped-large') assert.ok(frame.viewport.scale < 1.5, 'store actual clamp, not requested scale');
+          else assert.equal(frame.viewport.scale, 1.5);
+        } finally {page.cleanup();}
+      });
+      observations.push({id, sourceHash: parsed.sourceHash, parseMode: parsed.parseMode, frame, bbox, projected, reflected});
+      for (const invalid of [
+        {...frame, width: frame.width + 1},
+        {...frame, viewport: {...frame.viewport, transform: [0, 0, 0, 0, 0, 0]}},
+        {...frame, viewport: {...frame.viewport, transform: [Infinity, 0, 0, 1, 0, 0]}}
+      ]) assert.throws(() => projectParsedRegionToPdf({frame: invalid, bbox, coordinateOrigin: 'TOPLEFT'}));
+      assert.throws(() => projectParsedRegionToPdf({frame, bbox: [0, 0, frame.width + 1, frame.height], coordinateOrigin: 'TOPLEFT'}));
+      assert.throws(() => projectParsedRegionToPdf({frame, bbox: [0, 0, 0, 0], coordinateOrigin: 'TOPLEFT'}));
+      assert.throws(() => projectParsedRegionToPdf({frame: null, bbox, coordinateOrigin: 'TOPLEFT'}));
+    }
+    await writeFile(join(evidenceDirectory, 'actual-parser-frames.json'), JSON.stringify(observations, null, 2));
+  } finally {await rm(temporaryRoot, {recursive: true, force: true});}
 });
 
 test('visual-only PDF retains OCR raster routing and removes output when its model pack is unavailable', async () => {

@@ -5,6 +5,7 @@ import { createCanvas } from '@napi-rs/canvas';
 import { getDocument, OPS, type PDFDocumentProxy, type PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { pdfjsAssetDirectory } from './pdfjs-assets';
 import { researchJobError, runResearchJob, type ResearchJobPaths } from './research-job';
+import {researchPdfCoordinateFrameSchema, type ResearchPdfCoordinateFrame} from '../../../shared/schemas/research-document-coordinates';
 
 const MAX_PAGE_PIXELS = 25_000_000;
 const MAX_SOURCE = 512 * 1024 * 1024;
@@ -70,12 +71,13 @@ export type ResearchPdfPageImage = {
   pageCount: number;
   width: number;
   height: number;
+  coordinateFrame: ResearchPdfCoordinateFrame;
   text: string;
   pngBytes: number;
   image: { width: number; height: number; data: Uint8Array } | null;
 };
 
-export type ResearchPdfPageLayout = Pick<ResearchPdfPageImage, 'page' | 'pageCount' | 'width' | 'height' | 'text'>;
+export type ResearchPdfPageLayout = Pick<ResearchPdfPageImage, 'page' | 'pageCount' | 'width' | 'height' | 'text' | 'coordinateFrame'>;
 export type ResearchPdfPageLayoutOptions = {
   page: PDFPageProxy;
   pageNumber: number;
@@ -100,8 +102,8 @@ export function measureResearchPdfPage(options: ResearchPdfPageLayoutOptions): R
   const { page, pageNumber, pageCount, text, scale = DEFAULT_PARSE_SCALE, clampToPixelLimit = false, onStage } = options;
   const startedAt = performance.now();
   try {
-    const { width, height } = boundedPageViewport(page, scale, clampToPixelLimit);
-    return { page: pageNumber, pageCount, width, height, text };
+    const { width, height, coordinateFrame } = boundedPageViewport(page, pageNumber, scale, clampToPixelLimit);
+    return { page: pageNumber, pageCount, width, height, text, coordinateFrame };
   } finally {
     onStage?.({ stage: 'page-layout', page: pageNumber, durationMs: performance.now() - startedAt });
   }
@@ -165,7 +167,7 @@ export async function renderResearchPdfPage(
   options: ResearchPdfPageRenderOptions = {}
 ): Promise<ResearchPdfPageImage> {
   const text = options.text ?? await extractResearchPdfPageText(page, pageNumber, options.onStage);
-  const { viewport, width, height } = boundedPageViewport(page, scale, clampToPixelLimit);
+  const { viewport, width, height, coordinateFrame } = boundedPageViewport(page, pageNumber, scale, clampToPixelLimit);
   const canvas = createCanvas(width, height);
   let startedAt = performance.now();
   await page.render({ canvasContext: canvas.getContext('2d'), viewport, canvas } as never).promise;
@@ -199,13 +201,14 @@ export async function renderResearchPdfPage(
     pageCount,
     width,
     height,
+    coordinateFrame,
     text,
     pngBytes,
     image
   };
 }
 
-function boundedPageViewport(page: PDFPageProxy, scale: number, clampToPixelLimit: boolean) {
+function boundedPageViewport(page: PDFPageProxy, pageNumber: number, scale: number, clampToPixelLimit: boolean) {
   let viewport = page.getViewport({ scale });
   let pixels = viewport.width * viewport.height;
   if (clampToPixelLimit && pixels > MAX_PAGE_PIXELS) {
@@ -218,7 +221,12 @@ function boundedPageViewport(page: PDFPageProxy, scale: number, clampToPixelLimi
   if (!Number.isFinite(pixels) || pixels <= 0 || pixels > MAX_PAGE_PIXELS || width <= 0 || height <= 0) {
     researchJobError('research_pdf_page_too_large');
   }
-  return { viewport, width, height };
+  const coordinateFrame = researchPdfCoordinateFrameSchema.parse({
+    kind: 'pdf', page: pageNumber, unit: 'raster-pixel', coordinateOrigin: 'TOPLEFT', width, height,
+    viewport: {width: viewport.width, height: viewport.height, scale: viewport.scale, rotation: viewport.rotation,
+      userUnit: page.userUnit, viewBox: viewport.viewBox, transform: viewport.transform}
+  });
+  return { viewport, width, height, coordinateFrame };
 }
 
 export async function renderResearchPdf(input: {
