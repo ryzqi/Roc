@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react';
+import {lazy, Suspense, useEffect, useRef, useState} from 'react';
 import type {ResearchReviewProtocolInspection} from '../../shared/schemas/research-systematic-review';
 import type {ResearchReviewCorpusCreate} from '../../shared/schemas/research-review-corpus';
 import type {RocClient} from '../shared/roc-client';
@@ -8,6 +8,7 @@ import {ReviewSearchQuery, reviewSearchStatuses} from './ReviewSearchQuery';
 import {ReviewSearchPool} from './ReviewSearchPool';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
+const ReviewDedupInspector = lazy(async () => ({default: (await import('./ReviewDedupInspector')).ReviewDedupInspector}));
 export function ReviewSearchCorpus({client, protocol, writable, onPending}: {
   client: RocClient; protocol: ResearchReviewProtocolInspection; writable: boolean; onPending: (pending: boolean) => void
 }): React.JSX.Element {
@@ -20,6 +21,8 @@ export function ReviewSearchCorpus({client, protocol, writable, onPending}: {
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [poolId, setPoolId] = useState<string | null>(null);
   const [queryPending, setQueryPending] = useState(false);
+  const [dedupPending, setDedupPending] = useState(false);
+  const [selectedCorpusId, setSelectedCorpusId] = useState<string | null>(null);
   const requests = useRef(new Map<string, string>());
   const busy = useRef(false);
   const active = searches.data?.some(search => search.status === 'running' || search.status === 'cancelling') === true;
@@ -34,7 +37,7 @@ export function ReviewSearchCorpus({client, protocol, writable, onPending}: {
   const completeSelection = picked.every((search, index) => search !== undefined && search.receiptHash !== null &&
     `${search.snapshot.request.databaseIndex}:${search.snapshot.request.queryIndex}` === queries[index]!.key);
   const editable = writable && protocol.isLatest && protocol.freezeHash !== null && searches.status === 'ready';
-  const pending = queryPending || create.pending;
+  const pending = queryPending || create.pending || dedupPending;
   return <section className="flex min-w-0 flex-col gap-3 border-t-[0.5px] border-line pt-2" data-testid="artifact-review-search">
     <h2 className="font-medium">冻结协议检索与语料</h2>
     <p className="text-muted">显示最近100次执行记录</p>
@@ -87,6 +90,8 @@ export function ReviewSearchCorpus({client, protocol, writable, onPending}: {
           <p>固定语料 原始记录 {corpus.identifiedRecords} 条 {corpus.currentProtocol ? '当前协议' : '历史协议'}</p>
           <p className="text-muted break-words">{corpus.snapshot.recordedAt} 记录人 {corpus.snapshot.actor.id}</p>
           <p className="text-muted">{corpus.searchCoverageComplete ? '已到所选查询报告终点' : '检索覆盖不完整'}</p>
+          <button type="button" className={`${button} self-start`} disabled={pending} data-testid="artifact-review-corpus-inspect"
+            onClick={() => setSelectedCorpusId(corpus.snapshot.id)}>核查原始记录与去重</button>
           <details><summary className="cursor-pointer text-muted">固定来源与计数</summary>
             <ul>{corpus.snapshot.sources.map(source => <li key={source.reviewSearchId} className="break-words text-muted">
               数据库 {source.databaseIndex + 1} 检索式 {source.queryIndex + 1} {reviewSearchStatuses[source.status]}
@@ -95,5 +100,9 @@ export function ReviewSearchCorpus({client, protocol, writable, onPending}: {
           </details>
         </li>)}</ul>}
     </section>
+    {selectedCorpusId === null ? null : <Suspense fallback={<p role="status">正在加载语料核查…</p>}>
+      <ReviewDedupInspector key={selectedCorpusId} client={client} projectId={projectId} corpusId={selectedCorpusId}
+        writable={writable && !queryPending && !create.pending} onPending={value => {setDedupPending(value); onPending(value);}} />
+    </Suspense>}
   </section>;
 }

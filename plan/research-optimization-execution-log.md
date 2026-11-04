@@ -3865,3 +3865,21 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; eager1132280bytes6files |
 
 Logs pr09-a7b-* retained. Initial combined9/17: same adjacent protocol/search React key duplicated3 search roots; isolated strict actual-root test and one-overlay DOM capture reproduced. Distinct component-kind keys fix underlying reconciliation; no first()/nth() root workaround. Corrected6/8: metadata read occurred before visible native details painting, kept value assertion plus open/visible prerequisites. Retry test incorrectly assumed fixed page cap retry would bypass the installed5min Provider response cache; actual unit/service confirm new ledger/cache hit/stillpartial, now asserted explicitly without production cache changes. Focused2/2 passed, final18 includes genuine101-run bound test and all earlier cases. Canonical queries/repeated8-record corpus, true25-record pagination/nulls, held Provider abort/cancel truth, exact committed-reply-loss replays/no duplicated HTTP or corpus, Provider-layer failure vs execution error null, archive/no writes, late pool scope and original pool tamper refusal covered. All saved final audits cut0; visually inspected complete-corpus and failed-archived-dark-narrow. Docs patch initially had guessed context and applied nothing; inserted at exact existing heading. No backend/dependency changes or independent scientific retrieval claim. Next human deduplication/title/fullscreening/extraction/quality/group/report UI and assistant integration, then entire remaining roadmap.
+
+
+## ROC-PR-09A7C1 — exact corpus source inspection, human duplicate decisions and frozen counts
+
+Verified passing for corpus/dedup UI scope. Existing corpus entry lazily opens an inline module in the one inspector, using actual corpus ID. Raw10-record pages batch independent getCorpusHit calls and retain full exact original metadata/unknowns, no extra library. User selects exact A/B endpoints with native focus jump; explicit same-report choice removes A/retains B only when current human whole-round freeze resolves actual graph. Rule/version/reason, exact current-parent hash/revision reason and immutable history accompany each actual main-window human decision. History/archive/frozen data remain readable, no mutable controls. Exact request/payload replay after actual committed reply loss writes no duplicates; same-hit pair, actual independent parent, cyclic graph and missing marked freeze receipts refuse without resetting facts. Pending own forms remain visible while other writes/selection/closing blocked. Actual count equation is read only from freeze receipt, not frontend prediction.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm build | Fresh build/type passed, no production changes afterward |
+| node --test tests/unit/research-review-deduplication.test.mjs | 14/14 |
+| node --test --test-reporter=tap tests/renderer/review-dedup-inspector.test.mjs | Initial8/8 |
+| node --test --test-reporter=tap tests/renderer/review-protocol-inspector.test.mjs tests/renderer/review-search-inspector.test.mjs tests/renderer/review-dedup-inspector.test.mjs | Final26/26 (protocol9+search9+dedup8) |
+| node scripts/smoke-electron.mjs | 13/13, zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; eager1132280bytes6files |
+
+Logs pr09-a7c1-* and actual UI captures retained. Real8=1+7 directed removal, immutable revision/history then8=0+8, exact committed-reply-loss replays, same-hit and explicitly reviewed empty decision set, independent new parent preserving saved authority/stale GUI draft, cyclic frozen-graph refusal preserving3 decisions, frozen/archive no-write source reads, missing marked receipt integrity covered. Default/hover/long expanded history/light/dark860/650 captures cut0; visually inspected pair-default and archived-dark-narrow with real focus. No backend/dependency change or independent scientific duplicate identity claim. Next declared screening reviewers/title-abstract/fulltext/extraction/quality/group/report UI and assistant tools/links; whole roadmap remains open.
