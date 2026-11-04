@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react';
+import {lazy, Suspense, useEffect, useRef, useState} from 'react';
 import type {ResearchReviewProtocolInspection} from '../../shared/schemas/research-systematic-review';
 import type {ResearchReviewFullTextFreezeRequest} from '../../shared/schemas/research-review-fulltext-screening';
 import type {RocClient} from '../shared/roc-client';
@@ -8,6 +8,7 @@ import {ReviewFullTextBinding} from './ReviewFullTextBinding';
 import {ReviewFullTextEligibility} from './ReviewFullTextEligibility';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
+const ReviewExtractions = lazy(async () => ({default: (await import('./ReviewExtractions')).ReviewExtractions}));
 const statuses = {retrieval_pending: '待获取', not_retrieved: '未获取', source_changed: '来源已变化',
   pending: '待资格筛选', uncertain: '无法判断', conflict: '决定冲突', included: '全文纳入', excluded: '全文排除'} as const;
 export function ReviewFullTextBindings({client, protocol, projectId, corpusId, writable, onPending}: {
@@ -20,9 +21,10 @@ export function ReviewFullTextBindings({client, protocol, projectId, corpusId, w
   const [hitId, setHitId] = useState<string | null>(null), [bindingPending, setBindingPending] = useState(false);
   const [eligibilityPending, setEligibilityPending] = useState(false);
   const [reviewNote, setReviewNote] = useState('');
+  const [extractionsOpen, setExtractionsOpen] = useState(false), [extractionPending, setExtractionPending] = useState(false);
   const freeze = useAsyncAction((request: ResearchReviewFullTextFreezeRequest) => client.api.research.freezeReviewFullTextScreening(request),
     {label: '冻结全文获取与资格筛选'});
-  const pending = bindingPending || eligibilityPending || freeze.pending;
+  const pending = bindingPending || eligibilityPending || freeze.pending || extractionPending;
   const busy = useRef(false), requests = useRef(new Map<string, string>());
   const editable = writable && read.status === 'ready' && phase?.plan.currentProtocol === true && phase.freeze === null;
   const complete = phase !== null && phase.sourcesCurrent && phase.counts.retrieval_pending === 0 && phase.counts.source_changed === 0 &&
@@ -52,6 +54,12 @@ export function ReviewFullTextBindings({client, protocol, projectId, corpusId, w
         <p className="break-words">{phase.freeze.request.reviewNote}</p>
         <p className="text-muted break-all">审核人 {phase.freeze.actor.id} {phase.freeze.frozenAt}</p>
         {phase.sourcesCurrent ? null : <p className="text-[var(--st-warn)]">冻结后的来源引用已变化，旧审查收据保留。</p>}
+        <button type="button" className={`${button} self-start`} disabled={pending} data-testid="artifact-review-extractions-inspect"
+          onClick={() => setExtractionsOpen(true)}>核查证据提取</button>
+        {!extractionsOpen ? null : <Suspense fallback={<p role="status">正在加载证据提取…</p>}>
+          <ReviewExtractions key={`extractions:${phase.freezeHash}`} client={client} protocol={protocol} phase={phase}
+            writable={writable && read.status === 'ready'} onPending={value => {setExtractionPending(value); onPending(value);}} />
+        </Suspense>}
       </section>}
       <ol start={offset + 1} className="flex flex-col gap-2">{phase.items.slice(offset, offset + 10).map((item, index) => <li key={item.hit.id}>
         <button type="button" className={`${button} h-auto py-1 text-left break-words`} disabled={pending}
