@@ -172,3 +172,15 @@ DB36 独立 `full_freeze_hash` 与现有 `full_text` 冻结收据同行提交。
 source-only 全文绑定保持原始字节权威，提取另固定实际当前 Evidence 解析。重解析后旧提取及引用保留为 superseded；用户必须明确选择实际新 Evidence 并修订提取，不能把旧数值悄悄挂到新原文。历史协议/归档只读，当前科学写入仍实际核验字节；只读 referenceStatus 是来源引用状态，不代表再次读取磁盘。
 
 专项10/10，综述/全文/证据/坐标/批注合跑163/163；单元1046/1046、Harness94/94、原生13/13、启动12/12零 renderer 错误、生成 IPC/type/fresh build/chunks通过。实际 managed PDF→索引块→Evidence/source/preview、单位/required/optional/缺失/无法判断、来源重解析/新 Evidence 人工修订、原始字节和规范化异步坐标漂移、规范化载荷篡改与证据失效回滚、main窗口151、DB36升级/真实SQLite重开覆盖。用明确 synthetic 人工值验证工程契约，不声明效应量或科研准确性。按设计冻结质量框架/人工评价、检查器及真实计数报表继续实施。
+
+## 按研究设计冻结质量框架定义
+
+`createReviewQualityPlan/getReviewQualityPlan/listReviewQualityPlans` 为准确人工提取版本冻结质量框架定义。研究设计必须来自该提取明确保存的文本，并准确匹配冻结协议声明的 `{studyDesign, framework, version}`。missing/unjudgeable 设计、未声明框架、版本不匹配均拒绝，不能猜测替代框架。
+
+用户明确声明 domains、问题、各域允许的判断类别、总体判断类别、文档说明和确认理由；定义来源固定为 `user_declared`。这记录可审查的用户定义，不宣称已实现完整官方量表，不生成统一数值评分。审核人来自已冻结的全文/仲裁名单；main 窗口 actor 单独保存，不能证明独立身份认证。
+
+DB38 在提取上保存独立 `quality_plan_hash`，并保存不可变框架收据。get/list/create 对丢失、损坏收据或标记报错，不能退回未初始化。准确原请求只读重放；同一提取不能原地改框架，新提取版本须建立新框架，旧定义保留 `currentExtraction:false`。
+
+新科学操作使用 main-only `extractions.verifyCurrent` 实际核验原文和各准确解析的坐标工件，异步后复查最新提取、协议及来源。创建框架的事务写后再次核对准确收据及当前状态；合法新提取或 Evidence 失效发生在写入期间，也使框架/标记和事务内漂移一起回滚。只读 `referenceStatus` 仍表示数据库引用状态。逐域人工评价在下一部分实现。
+
+质量框架专项9/9、全单元1055/1055（含全部172个综述/来源专项）、Harness94/94、原生科研13/13、启动12/12零 renderer 错误、生成 IPC/type/fresh build/chunks通过。实际字节/异步重解析、合法新提取与 Evidence 失效回滚、框架和提取版本历史、丢失/损坏标记收据、main窗口161、DB37所有原列原行保存及真实SQLite重开覆盖。工程样本明确为 synthetic 用户定义；不声明官方量表或独立科学质量验收。

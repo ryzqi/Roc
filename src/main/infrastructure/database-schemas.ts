@@ -2107,6 +2107,25 @@ CREATE TABLE research_review_extractions (
 `
 });
 
+researchMigrations.push({
+  version:38,name:'frozen_study_design_quality_framework',
+  sql:`
+ALTER TABLE research_review_extractions ADD COLUMN quality_plan_hash TEXT;
+CREATE TABLE research_review_quality_plans (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  corpus_id TEXT NOT NULL REFERENCES research_review_corpora(id) ON DELETE CASCADE,
+  hit_id TEXT NOT NULL,
+  extraction_id TEXT NOT NULL UNIQUE REFERENCES research_review_extractions(id),
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id,request_id)
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

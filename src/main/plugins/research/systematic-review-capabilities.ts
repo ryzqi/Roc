@@ -57,7 +57,9 @@ export function throwSystematicReviewError(error: unknown): never {
     'research_review_extraction_version_conflict', 'research_review_extraction_source_changed', 'research_review_extraction_hit_not_included',
     'research_review_extraction_required_field_missing', 'research_review_extraction_field_not_declared', 'research_review_extraction_unit_mismatch',
     'research_review_extraction_source_unlocated', 'research_review_extraction_source_mismatch', 'research_evidence_reference_superseded',
-    'research_evidence_source_parse_stale'].includes(code)) {
+    'research_evidence_source_parse_stale', 'research_review_quality_plan_already_frozen', 'research_review_quality_version_conflict',
+    'research_review_quality_study_design_unjudgeable', 'research_review_quality_study_design_mismatch',
+    'research_review_quality_framework_not_declared', 'research_review_quality_source_changed'].includes(code)) {
     throw new RocDomainError({code, message: '协议、请求或检索状态已变化，请读取当前内容后明确操作。', category: 'conflict', retryable: false});
   }
   if (['research_review_protocol_not_found', 'research_project_not_found', 'research_review_search_not_found',
@@ -71,7 +73,7 @@ export function throwSystematicReviewError(error: unknown): never {
     'research_review_search_pool_missing', 'research_review_search_closed', 'research_review_corpus_snapshot_invalid', 'research_review_duplicate_snapshot_invalid', 'research_review_screening_snapshot_invalid', 'research_review_fulltext_snapshot_invalid', 'research_document_coordinate_artifact_changed',
     'research_review_extraction_snapshot_invalid', 'research_evidence_integrity_invalid', 'research_evidence_source_identity_invalid',
     'research_evidence_source_hash_invalid', 'research_evidence_source_block_invalid', 'research_evidence_source_page_invalid',
-    'research_evidence_source_region_invalid', 'research_evidence_source_locator_conflict'].includes(code)) {
+    'research_evidence_source_region_invalid', 'research_evidence_source_locator_conflict', 'research_review_quality_snapshot_invalid'].includes(code)) {
     throw new RocDomainError({code, message: '保存的综述版本、检索账本或结果校验失败。', category: 'degraded', retryable: false});
   }
   throw error;

@@ -93,3 +93,6 @@ export {ResearchReviewFullTextFreeze} from '../../../src/main/plugins/research/r
 export {researchReviewFullTextBindingSnapshotSchema} from '../../../src/shared/schemas/research-review-fulltext';
 export {ResearchReviewExtractionRepository} from '../../../src/main/plugins/research/review-extraction-repository';
 export {registerResearchReviewExtractionCapabilities,researchReviewExtractionCapabilities} from '../../../src/main/plugins/research/review-extraction-capabilities';
+export {ResearchReviewQualityPlanRepository} from '../../../src/main/plugins/research/review-quality-plan-repository';
+export {registerResearchReviewQualityCapabilities,researchReviewQualityCapabilities} from '../../../src/main/plugins/research/review-quality-capabilities';
+export {researchReviewExtractionSaveSchema,researchReviewExtractionSnapshotSchema} from '../../../src/shared/schemas/research-review-extraction';

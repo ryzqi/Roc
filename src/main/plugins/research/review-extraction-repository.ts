@@ -37,16 +37,7 @@ export class ResearchReviewExtractionRepository {
     this.validateFields(request,context);
     const sources=this.captureSources(request,context);
     for(const source of sources)this.requireCurrentSource(source,context);
-    await this.bindings.verifyCurrent({projectId:request.projectId,corpusId:request.corpusId,
-      bindingId:request.bindingId,expectedBindingHash:request.expectedBindingHash});
-    const verifiedParses=new Set<string>();
-    for(const source of sources) {
-      const locator=source.sourceLocator,key=JSON.stringify([locator.documentId,locator.parseId,locator.parseHash]);
-      if(verifiedParses.has(key))continue;
-      await this.documents.preview({projectId:request.projectId,documentId:locator.documentId,
-        sourceHash:locator.sourceHash,parseId:locator.parseId,parseHash:locator.parseHash});
-      verifiedParses.add(key);
-    }
+    await this.verifyBytes(request.projectId,context.binding,sources);
     return this.db.transaction(()=>{
       this.requireWritable(request.projectId);
       const repeated=this.requestRow(request.projectId,request.requestId);
@@ -96,6 +87,35 @@ export class ResearchReviewExtractionRepository {
     return (this.db.prepare(`SELECT * FROM research_review_extractions e WHERE project_id=? AND corpus_id=? AND
       version=(SELECT MAX(version) FROM research_review_extractions WHERE corpus_id=e.corpus_id AND hit_id=e.hit_id) ORDER BY rowid`)
       .all(request.projectId,request.corpusId) as Row[]).map(row=>this.inspect(row));
+  }
+
+  /** Main-only prerequisite for quality consumers; each new scientific action verifies real bytes and the latest exact extraction. */
+  async verifyCurrent(input:{projectId:string;corpusId:string;extractionId:string;expectedExtractionHash:string}):Promise<ResearchReviewExtractionInspection> {
+    const request=researchReviewExtractionGetSchema.extend({expectedExtractionHash:researchReviewExtractionInspectionSchema.shape.snapshotHash}).parse(input);
+    const read=()=>this.get({projectId:request.projectId,corpusId:request.corpusId,extractionId:request.extractionId});
+    const requireSelected=(value:ResearchReviewExtractionInspection):void=>{
+      this.requireWritable(request.projectId);
+      if(!value.isLatest||!value.currentProtocol||value.referenceStatus!=='current'||value.snapshotHash!==request.expectedExtractionHash) {
+        throw new Error('research_review_extraction_version_conflict');
+      }
+      this.requireCurrent(this.context(value.snapshot.request));
+    };
+    const selected=read();requireSelected(selected);
+    await this.verifyBytes(request.projectId,this.context(selected.snapshot.request).binding,selected.snapshot.sources);
+    const current=read();requireSelected(current);return current;
+  }
+
+  private async verifyBytes(projectId:string,binding:ResearchReviewFullTextBindingInspection,sources:ResearchReviewExtractionSource[]):Promise<void> {
+    await this.bindings.verifyCurrent({projectId,corpusId:binding.snapshot.request.corpusId,
+      bindingId:binding.snapshot.id,expectedBindingHash:binding.snapshotHash});
+    const verifiedParses=new Set<string>();
+    for(const source of sources) {
+      const locator=source.sourceLocator,key=JSON.stringify([locator.documentId,locator.parseId,locator.parseHash]);
+      if(verifiedParses.has(key))continue;
+      await this.documents.preview({projectId,documentId:locator.documentId,sourceHash:locator.sourceHash,
+        parseId:locator.parseId,parseHash:locator.parseHash});
+      verifiedParses.add(key);
+    }
   }
 
   private requireWritable(projectId:string):void {

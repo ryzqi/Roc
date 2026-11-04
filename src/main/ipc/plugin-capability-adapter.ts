@@ -9,6 +9,7 @@ import {researchReviewCorpusCreateSchema} from '../../shared/schemas/research-re
 import {researchReviewFullTextBindingSaveSchema} from '../../shared/schemas/research-review-fulltext';
 import {researchReviewFullTextDecisionSaveSchema,researchReviewFullTextArbitrationSaveSchema,researchReviewFullTextFreezeRequestSchema} from '../../shared/schemas/research-review-fulltext-screening';
 import {researchReviewExtractionSaveSchema} from '../../shared/schemas/research-review-extraction';
+import {researchReviewQualityPlanCreateSchema} from '../../shared/schemas/research-review-quality';
 import {researchReviewDuplicateSaveSchema, researchReviewDeduplicationFreezeSchema} from '../../shared/schemas/research-review-deduplication';
 import {researchReviewScreeningPlanCreateSchema, researchReviewScreeningDecisionSaveSchema, researchReviewScreeningArbitrationSaveSchema,
   researchReviewScreeningFreezeRequestSchema} from '../../shared/schemas/research-review-screening';
@@ -51,6 +52,11 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
       }
       return await wrapIpc(async () => {
         const input = transformInput(target.inputTransform, args);
+        if(target.capabilityName==='research.reviewQuality.createPlan') {
+          const request=researchReviewQualityPlanCreateSchema.parse(input);
+          return withResearchHumanContext({capability:target.capabilityName,projectId:request.projectId,windowId},
+            ()=>invoker.invokeCapability(target.capabilityName,request));
+        }
         if(target.capabilityName==='research.reviewExtraction.save') {
           const request=researchReviewExtractionSaveSchema.parse(input);
           return withResearchHumanContext({capability:target.capabilityName,projectId:request.projectId,windowId},

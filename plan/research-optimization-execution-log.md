@@ -3749,3 +3749,23 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
 
 Logs pr09-a5a-* retained. Actual Evidence publication/capture/source bytes/current locator verification, units/finite values/required+optional/status distinctions, source-only old/new parse Evidence history, foreign/unlocated/missing-index/no-full-freeze refusal, physical bytes/canonical coordinate replacement after real preview, canonically rewritten payload and Evidence invalidation transaction triggers, history/archive/main151 and DB36 preservation/reopen covered. All checks passed, no production change after build. Values are explicit synthetic human engineering declarations, not scientific correctness acceptance. No paper/Evidence duplication, model-fill fallback, UI or independent-quality claim. Next explicit per-design protocol framework definition freeze and human source-bound quality judgments, then inspector/reporting; whole roadmap remains open.
+
+
+## ROC-PR-09A5B1 — extracted-design-bound immutable quality framework definition
+
+Verified passing. DB38 independent extraction quality_plan_hash and immutable quality-plan receipt fix exact human extraction/study-design and protocol-declared framework/version. User-declared domains/questions/allowed judgements/overall choices/documentation and human confirmation are frozen; no official-completeness or universal numerical-score claim. Missing/unjudgeable/mismatched design or undeclared framework/version refuses. Main-only extraction.verifyCurrent reuses real original/selected-parse coordinate-byte checks and postawait latest-source validation, no cache. Same extraction cannot mutate framework; new extraction requires new plan and old plan stays historical. Missing/corrupt marker/receipt refuses get/list/create; valid late extraction or Evidence invalidation during insert rolls back all writes.3 generated/registered APIs and actual main161 human actor separate from declared reviewer.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm generate:ipc / pnpm typecheck / pnpm build | Passed; fresh current build/type; no later production changes |
+| node --test tests/unit/research-review-extraction.test.mjs tests/unit/research-review-quality-plan.test.mjs | Initial extraction10 passed; new quality file had SyntaxError from test assignment typo and did not execute |
+| node --check tests/unit/research-review-quality-plan.test.mjs / node --check tests/unit/fixtures/research-review-quality.mjs | Passed after test-only assignment correction |
+| node --test tests/unit/research-review-quality-plan.test.mjs | 9/9 |
+| pnpm test:unit / pnpm harness:eval | 1055/1055, including all172 scoped review/source cases;94/94 |
+| node scripts/run-research-p0.mjs | 13/13 |
+| node scripts/smoke-electron.mjs | 12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
+
+Logs pr09-a5b1-* retained. Actual managed source/preview/latest extraction, immutable plan/history/current extraction revisions, strict study-design/framework/declarations, corrupt/lost receipt/marker, transaction drift rollback, main161 and DB37 all-column/row preservation/null new marker/disk reopen covered. Initial test-only syntax error corrected without changing assertions; production build unchanged. Next per-domain human/source-bound quality judgments, inspector and real count reports; PR09 and whole roadmap remain open.

@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import {
+  researchReviewQualityPlanCreateSchema,researchReviewQualityPlanInspectionSchema,researchReviewQualityPlanGetSchema,
+  researchReviewQualityPlansListSchema
+} from './schemas/research-review-quality';
+import {
   researchReviewExtractionSaveSchema,researchReviewExtractionInspectionSchema,researchReviewExtractionGetSchema,
   researchReviewExtractionHistorySchema,researchReviewExtractionListSchema
 } from './schemas/research-review-extraction';
@@ -539,6 +543,9 @@ export const ipcRegistry = {
     request({ key: 'researchSourceReplacementsReplace', channel: 'roc:research:source-replacements-replace', domain: 'research', method: 'replaceEvidenceSource', kind: 'plugin', capabilityName: 'research.sourceReplacements.replace', inputTransform: first, contract: methodContract(oneArg(researchSourceReplacementRequestSchema), researchSourceReplacementSchema) }),
     request({ key: 'researchSourceReplacementsList', channel: 'roc:research:source-replacements-list', domain: 'research', method: 'listSourceReplacements', kind: 'plugin', capabilityName: 'research.sourceReplacements.list', inputTransform: first, contract: methodContract(oneArg(researchSourceReplacementListSchema), researchSourceReplacementInspectionSchema.array()) }),
     request({ key: 'researchSourceReplacementsGet', channel: 'roc:research:source-replacements-get', domain: 'research', method: 'getSourceReplacement', kind: 'plugin', capabilityName: 'research.sourceReplacements.get', inputTransform: first, contract: methodContract(oneArg(researchSourceReplacementGetSchema), researchSourceReplacementInspectionSchema) }),
+    request({key:'researchReviewQualityPlanCreate',channel:'roc:research:review-quality-plan-create',domain:'research',method:'createReviewQualityPlan',kind:'plugin',capabilityName:'research.reviewQuality.createPlan',inputTransform:first,contract:methodContract(oneArg(researchReviewQualityPlanCreateSchema),researchReviewQualityPlanInspectionSchema)}),
+    request({key:'researchReviewQualityPlanGet',channel:'roc:research:review-quality-plan-get',domain:'research',method:'getReviewQualityPlan',kind:'plugin',capabilityName:'research.reviewQuality.getPlan',inputTransform:first,contract:methodContract(oneArg(researchReviewQualityPlanGetSchema),researchReviewQualityPlanInspectionSchema.nullable())}),
+    request({key:'researchReviewQualityPlans',channel:'roc:research:review-quality-plans',domain:'research',method:'listReviewQualityPlans',kind:'plugin',capabilityName:'research.reviewQuality.plans',inputTransform:first,contract:methodContract(oneArg(researchReviewQualityPlansListSchema),researchReviewQualityPlanInspectionSchema.array())}),
     request({key:'researchReviewExtractionSave',channel:'roc:research:review-extraction-save',domain:'research',method:'saveReviewExtraction',kind:'plugin',capabilityName:'research.reviewExtraction.save',inputTransform:first,contract:methodContract(oneArg(researchReviewExtractionSaveSchema),researchReviewExtractionInspectionSchema)}),
     request({key:'researchReviewExtractionGet',channel:'roc:research:review-extraction-get',domain:'research',method:'getReviewExtraction',kind:'plugin',capabilityName:'research.reviewExtraction.get',inputTransform:first,contract:methodContract(oneArg(researchReviewExtractionGetSchema),researchReviewExtractionInspectionSchema)}),
     request({key:'researchReviewExtractionList',channel:'roc:research:review-extraction-list',domain:'research',method:'listReviewExtractions',kind:'plugin',capabilityName:'research.reviewExtraction.list',inputTransform:first,contract:methodContract(oneArg(researchReviewExtractionListSchema),researchReviewExtractionInspectionSchema.array())}),
