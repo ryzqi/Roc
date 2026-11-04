@@ -4,6 +4,7 @@ import {mkdtemp, rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import Database from 'better-sqlite3';
+import {reviewProtocolBodyFixture as body} from './fixtures/research-review-protocol.mjs';
 import {createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
 
@@ -15,16 +16,7 @@ before(async()=>{
 });
 after(()=>api?.dispose());
 const actor={kind:'user',id:'synthetic-protocol-reviewer-1'};
-function body() {
-  return {question:'Which synthetic source reports the controlled group difference?',pico:null,
-    inclusionCriteria:[{id:'controlled',text:'Controlled synthetic group comparison.'}],
-    exclusionCriteria:[{id:'no-outcome',text:'No reported group outcome.'}],
-    publicationYears:{from:2020,to:2026},
-    databases:[{source:'openalex',queries:['controlled synthetic group'],pageSize:5,maxPages:1}],
-    screening:{titleAbstractReviewers:2,fullTextReviewers:2,conflictResolution:'human_adjudication'},
-    qualityAssessment:[{studyDesign:'Synthetic controlled engineering fixture',framework:'Explicit engineering fixture checklist',version:'1'}],
-    extractionFields:[{id:'difference',label:'Group mean difference',unit:'mg/L',required:true}]};
-}
+
 const request=(projectId,requestId='save-protocol')=>({projectId,requestId,protocolId:null,
   expectedVersionId:null,expectedVersionHash:null,body:body(),deviationReason:null});
 const freezing=(saved,requestId='freeze-protocol')=>({projectId:saved.version.projectId,requestId,

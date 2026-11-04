@@ -3495,3 +3495,20 @@ First full unit found three older literature migration tests with expected lates
 Verified passing. Full A2 unit run exposed an existing timestamp assumption in the review-provenance test: getReviews orders observations by newest retrieval time, while fusion orders origins by source priority. Make the fixture produce distinct timestamps with an asynchronous10ms OpenAlex delay, then compare exact source/rank/retrievedAt/review values in declared observation order. All copy/license/update/retraction, paging, cache and execution provenance checks remain. No product ordering change or weakened corpus/security assertion.
 
 From /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc: node --test --test-name-pattern='candidate review retains' tests/unit/literature-import.test.mjs passed1/1; pnpm test:unit final916/916 passed. Initial915/916 evidence retained in pr09-a2-unit-full.log; final pr09-review-order.log/pr09-a2-unit-full-final.log.
+
+
+## ROC-PR-09A2 — generated protocol API and trusted human binding
+
+Verified passing.5 declared/registered research-plugin capabilities and generated preload methods saveReviewProtocol/freezeReviewProtocol/getReviewProtocol/getReviewProtocolHistory/listReviewProtocols. Existing main human context validates strict requests, then binds sender/project/capability for save/freeze. Direct tools, missing sender or forged wire reviewer cannot write; fixed reads/replays are readonly. Error categories distinguish permission, version conflict, absent records and damaged receipts.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| pnpm generate:ipc / pnpm build |Passed; generated contracts and fresh type/build |
+| node --test tests/unit/research-systematic-review.test.mjs tests/unit/research-systematic-review-ipc.test.mjs tests/unit/research-evidence-relation-ipc.test.mjs tests/unit/research-source-migration-ipc.test.mjs tests/unit/research-source-replacement-ipc.test.mjs |33/33 |
+| pnpm test:unit |Final916/916 |
+| pnpm harness:eval / node scripts/run-research-p0.mjs |94/94 and13/13 |
+| node scripts/smoke-electron.mjs |12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check |Passed; eager1131770bytes6files |
+
+Source-observation test timing issue corrected in separate f645b05. Shared explicit protocol fixture now used by storage/API tests. docs/research-systematic-review.md was ignored by existing docs/* policy onA1; force-added only that authorized task doc here, no ignore/rule edits. Main registry/generated adapter tests use explicit windows17/23; production native suite and startup passed, but no new review UI/kernel E2E claim. NextA3 actual frozen-protocol search execution, raw pool lineage and failure/cancellation/restart checkpoints; screening/extraction/UI follow. Full PR09/later roadmap remains open.

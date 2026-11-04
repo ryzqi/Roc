@@ -70,6 +70,7 @@ import { ResearchLibraryService } from './library-service';
 import { registerResearchLibraryCapabilities, researchLibraryCapabilities } from './library-capabilities';
 import { ResearchDocumentService } from './document-service';
 import { registerResearchDocumentCapabilities, researchDocumentCapabilities } from './document-capabilities';
+import {registerResearchSystematicReviewCapabilities, researchSystematicReviewCapabilities} from './systematic-review-capabilities';
 import { ResearchIndexService, type ResearchIndexWatch } from './index-service';
 import { registerResearchIndexCapabilities, researchIndexCapabilities } from './index-capabilities';
 import { ResearchExperimentEnvironmentService } from './experiment-environment';
@@ -192,7 +193,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
+      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，
@@ -274,6 +275,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       documents = new ResearchDocumentService(researchRepository, toolchain, options.libraryRoot ?? null, researchIndexer.parseBudget);
       registerZoteroCapabilities(context, zotero, literatureImports, pickZoteroAttachment, documents);
       registerResearchDocumentCapabilities(context, researchRepository.documents, documents);
+      registerResearchSystematicReviewCapabilities(context, researchRepository.systematicReviews);
       const effects = new ResearchProductionEffectService(researchRepository,
         new ResearchWorkspaceFileService(db, researchRepository, () => new Date().toISOString(), notifyWorkspacePathStructureChanged),
         researchExperiments, researchFigures, researchTemplates, researchExports);

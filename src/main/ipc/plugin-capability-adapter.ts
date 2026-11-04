@@ -3,6 +3,7 @@ import {withResearchHumanContext} from '../services/research-human-context';
 import {researchSourceMigrationCaptureSchema, researchSourceMigrationRejectSchema} from '../../shared/schemas/research-source-migrations';
 import {researchSourceReplacementRequestSchema} from '../../shared/schemas/research-source-replacements';
 import {researchDocumentAnnotationCreateRequestSchema, researchDocumentAnnotationCaptureRequestSchema} from '../../shared/schemas/research-document-annotations';
+import {researchReviewProtocolSaveRequestSchema, researchReviewProtocolFreezeRequestSchema} from '../../shared/schemas/research-systematic-review';
 import {
   researchEvidenceRelationProposalSchema, researchEvidenceRelationReviewSchema
 } from '../../shared/schemas/research-evidence-relations';
@@ -42,6 +43,12 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
       }
       return await wrapIpc(async () => {
         const input = transformInput(target.inputTransform, args);
+        if (target.capabilityName === 'research.reviewProtocol.save' || target.capabilityName === 'research.reviewProtocol.freeze') {
+          const request = target.capabilityName === 'research.reviewProtocol.save' ?
+            researchReviewProtocolSaveRequestSchema.parse(input) : researchReviewProtocolFreezeRequestSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
         if (target.capabilityName === 'research.annotations.create') {
           const request = researchDocumentAnnotationCreateRequestSchema.parse(input);
           return withResearchHumanContext({capability: target.capabilityName, projectId: request.target.projectId, windowId},
