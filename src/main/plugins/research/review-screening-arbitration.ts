@@ -9,6 +9,7 @@ import {
 import {researchRelationReviewerSchema, type ResearchRelationReviewer} from '../../../shared/schemas/research-evidence-relations';
 import type {ResearchRepository} from './repository';
 import type {ResearchReviewScreeningDecisions} from './review-screening-decisions';
+import {requireScreeningPhaseOpen} from './review-screening-freeze';
 
 type ArbitrationRow = {
   id: string; project_id: string; corpus_id: string; phase: string; hit_id: string; version: number; parent_id: string | null;
@@ -40,6 +41,7 @@ export class ResearchReviewScreeningArbitration {
         return previous;
       }
       if (!phase.plan.currentProtocol || phase.plan.snapshotHash !== request.expectedPlanHash) throw new Error('research_review_screening_version_conflict');
+      requireScreeningPhaseOpen(this.db, request.projectId, request.corpusId, request.phase);
       if (phase.plan.snapshot.request.adjudicator.id !== request.reviewerId) throw new Error('research_review_screening_adjudicator_not_declared');
       const item = phase.items.find(item => item.hit.id === request.hitId);
       if (item === undefined) throw new Error('research_review_screening_hit_not_screenable');

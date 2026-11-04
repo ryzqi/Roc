@@ -95,8 +95,9 @@ test('deleted marked plan and tampered plan bytes cannot silently reset declared
     assert.throws(()=>f.screening.getPlan(f.get),/research_review_screening_snapshot_invalid/);
     assert.throws(()=>f.screening.createPlan({...f.input,requestId:'reset'},actor),/research_review_screening_snapshot_invalid/);
     assert.equal(f.changes(),before);
-    f.db.prepare('INSERT INTO research_review_screening_plans VALUES (?,?,?,?,?,?,?)')
-      .run(row.id,row.corpus_id,row.project_id,row.request_id,row.snapshot_json,row.snapshot_hash,row.created_at);
+    f.db.prepare(`INSERT INTO research_review_screening_plans
+      (id,corpus_id,project_id,request_id,snapshot_json,snapshot_hash,created_at,title_freeze_hash) VALUES (?,?,?,?,?,?,?,?)`)
+      .run(row.id,row.corpus_id,row.project_id,row.request_id,row.snapshot_json,row.snapshot_hash,row.created_at,row.title_freeze_hash);
     assert.deepEqual(f.screening.getPlan(f.get),plan);
     const changed=JSON.parse(row.snapshot_json);changed.request.adjudicator=reviewerA;const json=JSON.stringify(changed);
     f.db.prepare('UPDATE research_review_screening_plans SET snapshot_json=? WHERE id=?').run(json,row.id);
@@ -143,7 +144,7 @@ test('generated plan API binds the main caller; declared names never grant tools
   try {
     const registry=new api.CapabilityRegistry();
     for(const descriptor of api.researchReviewScreeningCapabilities)registry.declare('research',descriptor);
-    api.registerResearchReviewScreeningCapabilities({pluginId:'research',capabilities:registry},f.screening,f.decisions,f.arbitration);
+    api.registerResearchReviewScreeningCapabilities({pluginId:'research',capabilities:registry},f.screening,f.decisions,f.arbitration,f.freezing);
     const bridge=api.createPluginCapabilityAdapter({invokeCapability:(name,input)=>registry.invoke(name,input)}),before=f.changes();
     await assert.rejects(registry.invoke('research.reviewScreening.createPlan',f.input),error=>error.code==='research_human_required');
     assert.throws(()=>api.parseIpcRequestArgs('roc:research:review-screening-createPlan',[{...f.input,actor}]));

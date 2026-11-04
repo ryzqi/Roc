@@ -7,7 +7,8 @@ import {researchReviewProtocolSaveRequestSchema, researchReviewProtocolFreezeReq
 import {researchReviewSearchStartSchema, researchReviewSearchCancelSchema} from '../../shared/schemas/research-review-search';
 import {researchReviewCorpusCreateSchema} from '../../shared/schemas/research-review-corpus';
 import {researchReviewDuplicateSaveSchema, researchReviewDeduplicationFreezeSchema} from '../../shared/schemas/research-review-deduplication';
-import {researchReviewScreeningPlanCreateSchema, researchReviewScreeningDecisionSaveSchema, researchReviewScreeningArbitrationSaveSchema} from '../../shared/schemas/research-review-screening';
+import {researchReviewScreeningPlanCreateSchema, researchReviewScreeningDecisionSaveSchema, researchReviewScreeningArbitrationSaveSchema,
+  researchReviewScreeningFreezeRequestSchema} from '../../shared/schemas/research-review-screening';
 import {
   researchEvidenceRelationProposalSchema, researchEvidenceRelationReviewSchema
 } from '../../shared/schemas/research-evidence-relations';
@@ -47,6 +48,11 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
       }
       return await wrapIpc(async () => {
         const input = transformInput(target.inputTransform, args);
+        if (target.capabilityName === 'research.reviewScreening.freeze') {
+          const request = researchReviewScreeningFreezeRequestSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
         if (target.capabilityName === 'research.reviewScreening.adjudicate') {
           const request = researchReviewScreeningArbitrationSaveSchema.parse(input);
           return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},

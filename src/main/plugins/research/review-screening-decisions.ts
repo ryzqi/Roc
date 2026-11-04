@@ -15,6 +15,7 @@ import type {ResearchRepository} from './repository';
 import type {ResearchReviewCorpusRepository} from './review-corpus-repository';
 import type {ResearchReviewDeduplicationRepository} from './review-deduplication-repository';
 import type {ResearchReviewScreeningRepository} from './review-screening-repository';
+import {requireScreeningPhaseOpen} from './review-screening-freeze';
 
 type DecisionRow = {
   id: string; project_id: string; corpus_id: string; phase: string; hit_id: string; reviewer_id: string;
@@ -46,6 +47,7 @@ export class ResearchReviewScreeningDecisions {
         return previous;
       }
       this.requireCurrent(plan, request.expectedPlanHash);
+      requireScreeningPhaseOpen(this.db, request.projectId, request.corpusId, request.phase);
       const reviewer = plan.snapshot.request.titleAbstractReviewers.find(value => value.id === request.reviewerId);
       if (reviewer === undefined) throw new Error('research_review_screening_reviewer_not_declared');
       this.validateOutcome(plan, request.outcome);
@@ -92,6 +94,7 @@ export class ResearchReviewScreeningDecisions {
         return previous;
       }
       this.requireCurrent(plan, request.expectedPlanHash);
+      requireScreeningPhaseOpen(this.db, request.projectId, request.corpusId, request.phase);
       this.validateOutcome(plan, request.outcome);
       const snapshot = researchReviewScreeningSuggestionSnapshotSchema.parse({
         id: `review_screening_suggestion_${randomUUID()}`, request, requestHash, material: this.material(plan, request.hitId), origin, recordedAt: this.now()

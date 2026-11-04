@@ -3635,3 +3635,21 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
 
 Logs pr09-a4c2b-* retained. Actual reviewer/proposal/source repositories, trigger-created valid new reviewer revision and invalid source rollback, DB32 migration/reopen and main window91 exercised. No external model/spending, independent researcher authentication or review UI E2E claim. First82/build passed, final current-ref commit recheck added before final82/full checks. Next whole title-abstract freeze, fulltext source binding/decisions, extraction/quality/inspector/count-conserving reporting. Whole roadmap remains open.
+
+
+## ROC-PR-09A4C2C — complete title-abstract authority freeze
+
+Verified passing. DB34 independent whole-phase receipt and plan marker bind exact displayed review hash, fixed corpus/plan/ordered hits/current reviewer refs/applied arbitration/primary exclusion reasons/counts. Proposal counts and current-protocol presentation do not become human authority. All records must be resolved; empty failed-source subset still requires explicit freeze and retains incomplete search coverage. One generated freeze API; existing phase inspection includes receipt/hash. New votes/proposals/arbitration denied after freeze, exact old requests replay readonly. Deleted/corrupt marker/receipt or live authority drift fails; valid new reviewer revision during storage rolls back receipt/marker/revision. Historical/archive read stays exact, current hash gates later fulltext.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm generate:ipc / pnpm typecheck / pnpm build | Passed; fresh generated/type/build |
+| node --test tests/unit/research-review-screening-freeze.test.mjs tests/unit/research-review-screening-arbitration.test.mjs tests/unit/research-review-screening-decisions.test.mjs tests/unit/research-review-screening-plan.test.mjs tests/unit/research-review-deduplication.test.mjs tests/unit/research-review-corpus.test.mjs tests/unit/research-review-search.test.mjs tests/unit/research-systematic-review.test.mjs tests/unit/research-systematic-review-ipc.test.mjs | Final91/91; title freeze9 |
+| pnpm test:unit / pnpm harness:eval | 994/994 and94/94 |
+| node scripts/run-research-p0.mjs | 13/13 |
+| node scripts/smoke-electron.mjs | 12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
+
+Logs pr09-a4c2c-* retained. Actual raw/ref/reviewer/arbitration repositories, absent/broken receipt and valid-new-vote transaction triggers, main101, DB33 canonical old snapshot seeding/upgrade/reopen covered. Current runtime does not write old schemas; migration fixture seeds explicit canonical pre-freeze votes/arbitration and new code verifies all original columns/values after upgrade. Prerequisite30/31 failed only test restore7-values versus new8-column table; explicit all8 original fields restored, no assertion relaxed. Initial91/build passed; last regression adds valid late revision before final91/full checks, no later production edits. No full review UI/external scientific/model-spend claim. Next fulltext source binding and two-stage decisions, then extraction/quality/inspector/count-conserving reporting; whole roadmap open.

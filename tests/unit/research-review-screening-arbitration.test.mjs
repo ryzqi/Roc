@@ -10,6 +10,7 @@ import {createReviewScreeningPlanFixture, reviewScreeningActorFixture as actor,
   reviewScreeningReviewerAFixture as reviewerA, reviewScreeningReviewerBFixture as reviewerB,
   reviewScreeningAdjudicatorFixture as adjudicator} from './fixtures/research-review-screening.mjs';
 import {reviewProtocolBodyFixture} from './fixtures/research-review-protocol.mjs';
+import {seedPreFreezeReviewerDecision} from './fixtures/research-screening-migration-seed.mjs';
 let api;
 before(async()=>{api=await loadResearchTestApi();});
 after(()=>api?.dispose());
@@ -165,7 +166,7 @@ test('generated adjudication API binds main sender and does not grant model tool
   try {
     f.disagree();const registry=new api.CapabilityRegistry();
     for(const descriptor of api.researchReviewScreeningCapabilities)registry.declare('research',descriptor);
-    api.registerResearchReviewScreeningCapabilities({pluginId:'research',capabilities:registry},f.screening,f.decisions,f.arbitration);
+    api.registerResearchReviewScreeningCapabilities({pluginId:'research',capabilities:registry},f.screening,f.decisions,f.arbitration,f.freezing);
     const bridge=api.createPluginCapabilityAdapter({invokeCapability:(name,input)=>registry.invoke(name,input)}),input=f.inputForArbitration(),before=f.changes();
     await assert.rejects(registry.invoke('research.reviewScreening.adjudicate',input),error=>error.code==='research_human_required');
     assert.throws(()=>api.parseIpcRequestArgs('roc:research:review-screening-adjudicate',[{...input,actor}]));
@@ -204,11 +205,14 @@ test('DB32 upgrade and SQLite reopen retain exact reviewer/proposal history with
   const f=await scene({},oldApi),directory=await mkdtemp(join(tmpdir(),'roc-screening-arbitration-reopen-'));
   let db,reviews;
   try {
-    f.disagree();const tables=['research_review_screening_plans','research_review_screening_decisions','research_review_screening_suggestions',
+    seedPreFreezeReviewerDecision(api,f,f.decision(0,reviewerA.id,'a'),actor);
+    seedPreFreezeReviewerDecision(api,f,f.decision(0,reviewerB.id,'b',exclude),actor);
+    const tables=['research_review_screening_plans','research_review_screening_decisions','research_review_screening_suggestions',
       'research_review_corpora','research_review_deduplication_freezes','research_review_protocol_versions','research_review_searches'];
+    const columns=tables.map(table=>f.db.pragma(`table_info(${table})`).map(column=>column.name).join(','));
     const before=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all()),migrations=f.db.prepare('SELECT * FROM schema_migrations').all();
     api.applyResearchDatabaseSchema(f.db);
-    tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT * FROM ${table}`).all(),before[index]));
+    tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT ${columns[index]} FROM ${table}`).all(),before[index]));
     assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE version<=32').all(),migrations);
     assert.equal(f.db.prepare('SELECT count(*) FROM research_review_screening_arbitrations').pluck().get(),0);
     f.arbitration.save(f.inputForArbitration(),actor);const phase=f.arbitration.getPhase(f.phase),path=join(directory,'research.sqlite');await f.db.backup(path);

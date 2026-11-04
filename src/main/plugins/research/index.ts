@@ -80,6 +80,7 @@ import {registerResearchReviewDeduplicationCapabilities, researchReviewDeduplica
 import {ResearchReviewScreeningRepository} from './review-screening-repository';
 import {ResearchReviewScreeningDecisions} from './review-screening-decisions';
 import {ResearchReviewScreeningArbitration} from './review-screening-arbitration';
+import {ResearchReviewScreeningFreeze} from './review-screening-freeze';
 import {registerResearchReviewScreeningCapabilities, researchReviewScreeningCapabilities} from './review-screening-capabilities';
 import { ResearchIndexService, type ResearchIndexWatch } from './index-service';
 import { registerResearchIndexCapabilities, researchIndexCapabilities } from './index-capabilities';
@@ -289,7 +290,8 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       const reviewScreening = new ResearchReviewScreeningRepository(db, researchRepository, reviewCorpora, reviewDeduplication, () => new Date().toISOString());
       const reviewScreeningDecisions = new ResearchReviewScreeningDecisions(db, researchRepository, reviewCorpora, reviewDeduplication, reviewScreening, () => new Date().toISOString());
       const reviewScreeningArbitration = new ResearchReviewScreeningArbitration(db, researchRepository, reviewScreeningDecisions, () => new Date().toISOString());
-      registerResearchReviewScreeningCapabilities(context, reviewScreening, reviewScreeningDecisions, reviewScreeningArbitration);
+      const reviewScreeningFreeze = new ResearchReviewScreeningFreeze(db, researchRepository, reviewScreeningArbitration, () => new Date().toISOString());
+      registerResearchReviewScreeningCapabilities(context, reviewScreening, reviewScreeningDecisions, reviewScreeningArbitration, reviewScreeningFreeze);
       registerLiteratureImportCapabilities(context, literatureImports);
       researchRepository.documents.recover();
       // Only text/locator derivation changes advance this index generation; artifact-only contracts keep old parses active.

@@ -3,8 +3,9 @@ import {
   researchReviewScreeningPlanCreateSchema, researchReviewScreeningPlanGetSchema, researchReviewScreeningPlanInspectionSchema,
   researchReviewScreeningDecisionSaveSchema, researchReviewScreeningDecisionInspectionSchema, researchReviewScreeningDecisionHistorySchema,
   researchReviewScreeningSuggestionCreateSchema, researchReviewScreeningSuggestionInspectionSchema,
-  researchReviewScreeningSuggestionListSchema, researchReviewScreeningPhaseGetSchema, researchReviewScreeningResolvedPhaseSchema,
-  researchReviewScreeningArbitrationSaveSchema, researchReviewScreeningArbitrationInspectionSchema, researchReviewScreeningArbitrationHistorySchema
+  researchReviewScreeningSuggestionListSchema, researchReviewScreeningPhaseGetSchema, researchReviewScreeningFrozenPhaseSchema,
+  researchReviewScreeningArbitrationSaveSchema, researchReviewScreeningArbitrationInspectionSchema, researchReviewScreeningArbitrationHistorySchema,
+  researchReviewScreeningFreezeRequestSchema
 } from '../../../shared/schemas/research-review-screening';
 import type {CapabilityDescriptor, RocPluginContext} from '../../kernel/types';
 import {requireResearchHuman} from '../../services/research-human-context';
@@ -12,6 +13,7 @@ import {throwSystematicReviewError} from './systematic-review-capabilities';
 import type {ResearchReviewScreeningRepository} from './review-screening-repository';
 import type {ResearchReviewScreeningDecisions} from './review-screening-decisions';
 import type {ResearchReviewScreeningArbitration} from './review-screening-arbitration';
+import type {ResearchReviewScreeningFreeze} from './review-screening-freeze';
 
 const capabilities = {
   createPlan: descriptor('research.reviewScreening.createPlan', researchReviewScreeningPlanCreateSchema, researchReviewScreeningPlanInspectionSchema),
@@ -20,13 +22,14 @@ const capabilities = {
   history: descriptor('research.reviewScreening.history', researchReviewScreeningDecisionHistorySchema, researchReviewScreeningDecisionInspectionSchema.array()),
   suggest: descriptor('research.reviewScreening.suggest', researchReviewScreeningSuggestionCreateSchema, researchReviewScreeningSuggestionInspectionSchema),
   suggestions: descriptor('research.reviewScreening.suggestions', researchReviewScreeningSuggestionListSchema, researchReviewScreeningSuggestionInspectionSchema.array()),
-  phase: descriptor('research.reviewScreening.phase', researchReviewScreeningPhaseGetSchema, researchReviewScreeningResolvedPhaseSchema),
+  phase: descriptor('research.reviewScreening.phase', researchReviewScreeningPhaseGetSchema, researchReviewScreeningFrozenPhaseSchema),
   adjudicate: descriptor('research.reviewScreening.adjudicate', researchReviewScreeningArbitrationSaveSchema, researchReviewScreeningArbitrationInspectionSchema),
-  arbitrations: descriptor('research.reviewScreening.arbitrations', researchReviewScreeningArbitrationHistorySchema, researchReviewScreeningArbitrationInspectionSchema.array())
+  arbitrations: descriptor('research.reviewScreening.arbitrations', researchReviewScreeningArbitrationHistorySchema, researchReviewScreeningArbitrationInspectionSchema.array()),
+  freeze: descriptor('research.reviewScreening.freeze', researchReviewScreeningFreezeRequestSchema, researchReviewScreeningFrozenPhaseSchema)
 };
 export const researchReviewScreeningCapabilities = Object.values(capabilities);
 export function registerResearchReviewScreeningCapabilities(context: RocPluginContext, repository: ResearchReviewScreeningRepository,
-  decisions: ResearchReviewScreeningDecisions, arbitration: ResearchReviewScreeningArbitration): void {
+  decisions: ResearchReviewScreeningDecisions, arbitration: ResearchReviewScreeningArbitration, freezing: ResearchReviewScreeningFreeze): void {
   function register<TInput, TOutput>(capability: CapabilityDescriptor<TInput, TOutput>, run: (request: TInput) => TOutput): void {
     context.capabilities.register(context.pluginId, capability, async input => {
       try {return run(capability.inputSchema.parse(input));}
@@ -38,9 +41,10 @@ export function registerResearchReviewScreeningCapabilities(context: RocPluginCo
   register(capabilities.save, request => decisions.save(request, requireResearchHuman('research.reviewScreening.save', request.projectId)));
   register(capabilities.history, request => decisions.history(request));
   register(capabilities.suggestions, request => decisions.listSuggestions(request));
-  register(capabilities.phase, request => arbitration.getPhase(request));
+  register(capabilities.phase, request => freezing.getPhase(request));
   register(capabilities.adjudicate, request => arbitration.save(request, requireResearchHuman('research.reviewScreening.adjudicate', request.projectId)));
   register(capabilities.arbitrations, request => arbitration.history(request));
+  register(capabilities.freeze, request => freezing.freeze(request, requireResearchHuman('research.reviewScreening.freeze', request.projectId)));
   context.capabilities.register(context.pluginId, capabilities.suggest, async (input, operation) => {
     try {
       if (operation === undefined || operation.capabilityName !== capabilities.suggest.name || operation.capabilityVersion === undefined) {

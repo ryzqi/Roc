@@ -79,3 +79,6 @@ export {ResearchReviewScreeningDecisions} from '../../../src/main/plugins/resear
 export {createCapabilityOperationContext, runWithCapabilityOperationContext} from '../../../src/main/kernel/capability-operation-context';
 
 export {ResearchReviewScreeningArbitration} from '../../../src/main/plugins/research/review-screening-arbitration';
+
+export {ResearchReviewScreeningFreeze} from '../../../src/main/plugins/research/review-screening-freeze';
+export {researchReviewScreeningDecisionSaveSchema, researchReviewScreeningDecisionSnapshotSchema, researchReviewScreeningArbitrationSaveSchema, researchReviewScreeningArbitrationSnapshotSchema} from '../../../src/shared/schemas/research-review-screening';

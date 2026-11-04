@@ -49,7 +49,8 @@ export function throwSystematicReviewError(error: unknown): never {
     'research_review_screening_plan_exists', 'research_review_screening_reviewer_count_mismatch',
     'research_review_screening_reviewer_not_declared', 'research_review_screening_criterion_not_declared', 'research_review_screening_hit_not_screenable', 'research_review_screening_adjudicator_not_declared',
     'research_review_screening_arbitration_incomplete', 'research_review_screening_arbitration_not_needed',
-    'research_review_screening_arbitration_decisions_changed'].includes(code)) {
+    'research_review_screening_arbitration_decisions_changed', 'research_review_screening_already_frozen',
+    'research_review_screening_not_frozen', 'research_review_screening_incomplete'].includes(code)) {
     throw new RocDomainError({code, message: '协议、请求或检索状态已变化，请读取当前内容后明确操作。', category: 'conflict', retryable: false});
   }
   if (['research_review_protocol_not_found', 'research_project_not_found', 'research_review_search_not_found',

@@ -136,3 +136,33 @@ export const researchReviewScreeningResolvedPhaseSchema = researchReviewScreenin
 export type ResearchReviewScreeningArbitrationSave = z.infer<typeof researchReviewScreeningArbitrationSaveSchema>;
 export type ResearchReviewScreeningArbitrationInspection = z.infer<typeof researchReviewScreeningArbitrationInspectionSchema>;
 export type ResearchReviewScreeningResolvedPhase = z.infer<typeof researchReviewScreeningResolvedPhaseSchema>;
+
+export const researchReviewScreeningAuthoritySchema = z.object({
+  corpusId: id, corpusHash: hash, planId: id, planHash: hash, phase: z.literal('title_abstract'),
+  items: z.array(z.object({
+    hit: researchReviewCorpusHitSchema,
+    status: z.enum(['pending', 'uncertain', 'conflict', 'included', 'excluded']),
+    decisions: z.array(reference).max(2), arbitration: reference.nullable(),
+    primaryExclusionCriterionId: id.nullable()
+  }).strict()),
+  counts: researchReviewScreeningPhaseInspectionSchema.shape.counts
+}).strict();
+export const researchReviewScreeningFreezeRequestSchema = researchReviewScreeningPhaseGetSchema.extend({
+  requestId: id, expectedReviewHash: hash, reviewNote: note
+});
+export const researchReviewScreeningFreezeReceiptSchema = z.object({
+  request: researchReviewScreeningFreezeRequestSchema, requestHash: hash,
+  authority: researchReviewScreeningAuthoritySchema, reviewHash: hash,
+  actor: researchRelationReviewerSchema, frozenAt: z.iso.datetime()
+}).strict().refine(value => value.authority.counts.pending === 0 && value.authority.counts.uncertain === 0 &&
+  value.authority.counts.conflict === 0 && value.authority.items.every(item => item.status === 'included' || item.status === 'excluded') &&
+  value.authority.counts.recordsToScreen === value.authority.items.length &&
+  value.authority.counts.recordsToScreen === value.authority.counts.included + value.authority.counts.excluded,
+  'review_screening_freeze_requires_complete_resolved_set');
+export const researchReviewScreeningFrozenPhaseSchema = researchReviewScreeningResolvedPhaseSchema.safeExtend({
+  reviewHash: hash, freeze: researchReviewScreeningFreezeReceiptSchema.nullable(), freezeHash: hash.nullable()
+}).refine(value => (value.freeze === null) === (value.freezeHash === null), 'review_screening_freeze_receipt_required');
+export type ResearchReviewScreeningAuthority = z.infer<typeof researchReviewScreeningAuthoritySchema>;
+export type ResearchReviewScreeningFreezeRequest = z.infer<typeof researchReviewScreeningFreezeRequestSchema>;
+export type ResearchReviewScreeningFreezeReceipt = z.infer<typeof researchReviewScreeningFreezeReceiptSchema>;
+export type ResearchReviewScreeningFrozenPhase = z.infer<typeof researchReviewScreeningFrozenPhaseSchema>;

@@ -2042,6 +2042,24 @@ CREATE TABLE research_review_screening_arbitrations (
 `
 });
 
+researchMigrations.push({
+  version: 34, name: 'frozen_systematic_review_title_screening',
+  sql: `
+ALTER TABLE research_review_screening_plans ADD COLUMN title_freeze_hash TEXT;
+CREATE TABLE research_review_screening_freezes (
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  corpus_id TEXT NOT NULL REFERENCES research_review_corpora(id) ON DELETE CASCADE,
+  phase TEXT NOT NULL,
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(corpus_id,phase),
+  UNIQUE(project_id,request_id)
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

@@ -216,7 +216,7 @@ test('registered APIs enforce human decision authority and actual main tool prov
   try {
     const registry=new api.CapabilityRegistry(),receipts=[];
     for(const descriptor of api.researchReviewScreeningCapabilities)registry.declare('research',descriptor);
-    api.registerResearchReviewScreeningCapabilities({pluginId:'research',capabilities:registry},f.screening,f.decisions,f.arbitration);
+    api.registerResearchReviewScreeningCapabilities({pluginId:'research',capabilities:registry},f.screening,f.decisions,f.arbitration,f.freezing);
     const bridge=api.createPluginCapabilityAdapter({invokeCapability:(name,input)=>registry.invoke(name,input)});
     const proposalRequest={...f.target(0,'proposal'),outcome:include},humanRequest=f.decision(0,reviewerA.id,'human',uncertain),before=f.changes();
     await assert.rejects(registry.invoke('research.reviewScreening.suggest',proposalRequest),error=>error.code==='research_review_screening_tool_context_required');
@@ -262,9 +262,10 @@ test('DB31 upgrade and actual disk reopen preserve reviewed title decisions/prop
   try {
     const tables=['research_review_screening_plans','research_review_corpora','research_review_deduplication_freezes',
       'research_review_protocol_versions','research_review_searches'];
+    const columns=tables.map(table=>f.db.pragma(`table_info(${table})`).map(column=>column.name).join(','));
     const before=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all()),migrations=f.db.prepare('SELECT * FROM schema_migrations').all();
     api.applyResearchDatabaseSchema(f.db);
-    tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT * FROM ${table}`).all(),before[index]));
+    tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT ${columns[index]} FROM ${table}`).all(),before[index]));
     assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE version<=31').all(),migrations);
     assert.equal(f.db.prepare('SELECT count(*) FROM research_review_screening_decisions').pluck().get(),0);
     assert.equal(f.db.prepare('SELECT count(*) FROM research_review_screening_suggestions').pluck().get(),0);
