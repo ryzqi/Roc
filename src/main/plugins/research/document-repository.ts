@@ -5,6 +5,9 @@ import type { ResearchRepository } from './repository';
 import type { BibliographyEntry } from './library-repository';
 import type { ResearchLiterature } from '../../../shared/types';
 import {logWarn} from '../../services/errors';
+import {createHash} from 'node:crypto';
+import {researchDocumentCoordinateSnapshotSchema, type ResearchDocumentCoordinateSnapshot,
+  type ResearchDocumentCoordinateInspection} from '../../../shared/schemas/research-document-coordinates';
 
 export type ResearchDocument = z.infer<typeof researchDocumentSchema>;
 export type ResearchDocumentRun = z.infer<typeof researchDocumentRunSchema>;
@@ -84,8 +87,10 @@ export class ResearchDocumentRepository {
     })();
   }
 
-  complete(documentId: string, parseId: string, input: StoredDocumentContent): void {
+  complete(documentId: string, parseId: string, input: StoredDocumentContent, coordinateInput: ResearchDocumentCoordinateSnapshot | null): void {
     const data = storedDocumentContentSchema.parse(input);
+    const coordinates = coordinateInput === null ? null : researchDocumentCoordinateSnapshotSchema.parse(coordinateInput);
+    if (coordinates !== null) this.requireCoordinateBinding(data, coordinates);
     const indexed = this.db.transaction(() => {
       const document = this.get(documentId);
       if (document.activeParseId !== parseId) throw new Error('research_document_parse_stale');
@@ -95,6 +100,15 @@ export class ResearchDocumentRepository {
       const result = this.db.prepare("UPDATE research_document_parses SET status = 'ready', data_json = ?, finished_at = ? WHERE id = ? AND document_id = ? AND status = 'running'")
         .run(JSON.stringify(data), timestamp, parseId, documentId);
       if (result.changes !== 1) throw new Error('research_document_parse_stale');
+      if (coordinates !== null) {
+        const json = JSON.stringify(coordinates);
+        const snapshotHash = createHash('sha256').update(json).digest('hex');
+        this.db.prepare(`INSERT INTO research_document_parse_coordinates
+          (parse_id,document_id,snapshot_json,snapshot_hash,created_at) VALUES (?,?,?,?,?)`)
+          .run(parseId, documentId, json, snapshotHash, timestamp);
+        this.db.prepare('UPDATE research_document_parses SET coordinate_snapshot_hash=? WHERE id=? AND document_id=?')
+          .run(snapshotHash, parseId, documentId);
+      }
       this.db.prepare("UPDATE research_documents SET status = 'ready', current_parse_id = ?, active_parse_id = NULL, error = NULL, updated_at = ? WHERE id = ?")
         .run(parseId, timestamp, documentId);
       if (document.currentParseId !== null) this.removeIndex(document.currentParseId);
@@ -134,6 +148,47 @@ export class ResearchDocumentRepository {
     }
     if (row.status !== 'ready' || row.data_json === null) throw new Error('research_document_parse_not_ready');
     return { run: toRun(row), data: parseStoredContent(row.data_json) };
+  }
+
+  coordinates(documentId: string, parseId: string): ResearchDocumentCoordinateInspection | null {
+    const {data} = this.parsed(documentId, parseId);
+    const row = this.db.prepare(`SELECT p.coordinate_snapshot_hash AS expected_hash,c.document_id,c.snapshot_json,c.snapshot_hash
+      FROM research_document_parses p LEFT JOIN research_document_parse_coordinates c ON c.parse_id=p.id
+      WHERE p.id=? AND p.document_id=?`).get(parseId, documentId) as {
+        expected_hash: string | null; document_id: string | null; snapshot_json: string | null; snapshot_hash: string | null
+      };
+    if (row.expected_hash === null && row.snapshot_json === null) return null;
+    if (row.snapshot_json === null) throw new Error('research_document_coordinate_snapshot_missing');
+    if (row.snapshot_hash !== row.expected_hash) throw new Error('research_document_coordinate_snapshot_invalid');
+    if (row.document_id !== documentId) throw new Error('research_document_coordinate_binding_changed');
+    let value: unknown;
+    try {value = JSON.parse(row.snapshot_json);}
+    catch {throw new Error('research_document_coordinate_snapshot_invalid');}
+    const parsed = researchDocumentCoordinateSnapshotSchema.safeParse(value);
+    if (!parsed.success || createHash('sha256').update(JSON.stringify(parsed.data)).digest('hex') !== row.snapshot_hash) {
+      throw new Error('research_document_coordinate_snapshot_invalid');
+    }
+    this.requireCoordinateBinding(data, parsed.data);
+    return {snapshot: parsed.data, snapshotHash: row.snapshot_hash};
+  }
+
+  private requireCoordinateBinding(data: StoredDocumentContent, coordinates: ResearchDocumentCoordinateSnapshot): void {
+    if (coordinates.sourceHash !== data.content.sourceHash ||
+        coordinates.parseHash !== createHash('sha256').update(JSON.stringify(data.content)).digest('hex') ||
+        coordinates.artifact.path !== data.content.artifacts.structuredContent ||
+        coordinates.pages.some(page => page.page > data.content.pageCount ||
+          (page.frame === null) !== (data.content.parseMode === 'html'))) throw new Error('research_document_coordinate_binding_changed');
+    const frames = new Map(coordinates.pages.map(page => [page.page, page.frame]));
+    for (const block of data.content.blocks) for (const location of block.locations) {
+      const frame = frames.get(location.page);
+      if (frame === undefined) throw new Error('research_document_coordinate_page_missing');
+      if (frame !== null) {
+        const [x1, y1, x2, y2] = location.bbox;
+        if (x1 < 0 || y1 < 0 || x2 > frame.width || y2 > frame.height || x2 <= x1 || y2 <= y1) {
+          throw new Error('research_document_coordinate_region_invalid');
+        }
+      }
+    }
   }
 
   syncLibraryIndex(libraryItemId: string): void {

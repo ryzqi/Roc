@@ -36,7 +36,7 @@ function document(f, id, {libraryItemId = null, text = 'Original synthetic scien
     blocks: [{id: `${id}-block`, kind: 'paragraph', label: 'Synthetic paragraph', text, locator: 'page:2', imageAssetId: null,
       locations: [{page: 2, bbox: [1, 2, 30, 40], coordinateOrigin: 'TOPLEFT'}]}], assets: [],
     artifacts: {middleJson: 'artifacts/middle.json', markdown: 'artifacts/document.md', structuredContent: 'artifacts/structured.json'}, warnings: []
-  }});
+  }}, null);
   return {document: imported, evidence: f.repository.evidence.capture({projectId: f.project.id, chunkId: `document:${parseId}:chunk:0`})};
 }
 function scientificClaim(f, evidence) {

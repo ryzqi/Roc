@@ -1814,6 +1814,21 @@ CREATE INDEX idx_research_source_replacement_source ON research_source_replaceme
 `
 });
 
+researchMigrations.push({
+  version: 25, name: 'measured_document_coordinate_snapshots',
+  sql: `
+ALTER TABLE research_document_parses ADD COLUMN coordinate_snapshot_hash TEXT;
+CREATE TABLE research_document_parse_coordinates (
+  parse_id TEXT PRIMARY KEY REFERENCES research_document_parses(id) ON DELETE CASCADE,
+  document_id TEXT NOT NULL REFERENCES research_documents(id) ON DELETE CASCADE,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_research_document_coordinate_document ON research_document_parse_coordinates(document_id,parse_id);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

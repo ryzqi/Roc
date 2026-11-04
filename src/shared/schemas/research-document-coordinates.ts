@@ -33,3 +33,19 @@ export const researchParsedRegionProjectionSchema = z.object({
 export type ResearchPdfCoordinateFrame = z.infer<typeof researchPdfCoordinateFrameSchema>;
 export type ResearchDocumentCoordinateFrame = z.infer<typeof researchDocumentCoordinateFrameSchema>;
 export type ResearchParsedRegionProjection = z.infer<typeof researchParsedRegionProjectionSchema>;
+
+const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+export const researchDocumentCoordinatePagesSchema = z.array(z.object({
+  page: z.number().int().positive(), frame: researchDocumentCoordinateFrameSchema.nullable()
+}).strict()).max(500).refine(pages => new Set(pages.map(page => page.page)).size === pages.length &&
+  pages.every(page => page.frame === null || page.frame.page === page.page), 'Coordinate pages must have distinct matching page identities.');
+export const researchDocumentCoordinateSnapshotSchema = z.object({
+  contractVersion: z.literal(researchCoordinateFrameContractVersion), sourceHash: digest, parseHash: digest,
+  artifact: z.object({path: z.string().min(1), sha256: digest, size: z.number().int().positive()}).strict(),
+  pages: researchDocumentCoordinatePagesSchema
+}).strict();
+export const researchDocumentCoordinateInspectionSchema = z.object({
+  snapshot: researchDocumentCoordinateSnapshotSchema, snapshotHash: digest
+}).strict();
+export type ResearchDocumentCoordinateSnapshot = z.infer<typeof researchDocumentCoordinateSnapshotSchema>;
+export type ResearchDocumentCoordinateInspection = z.infer<typeof researchDocumentCoordinateInspectionSchema>;

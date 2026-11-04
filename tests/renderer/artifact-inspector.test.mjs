@@ -151,7 +151,7 @@ async function scene({long=false,managed=false,experiment=false}={}) {
         parseMode:'native-text',device:'cpu',sourceHash:f.document.sourceHash,pageCount:4,
         content:blocks.map(block=>block.text).join('\n\n'),blocks,assets:[],
         artifacts:{middleJson:'artifacts/middle.json',markdown:'artifacts/document.md',structuredContent:'artifacts/structured.json'},warnings:[]
-      }});
+      }}, null);
     };
     f.reparse('inspector-old');
     f.source=f.repository.evidence.capture({projectId:f.project.id,chunkId:'document:inspector-old:chunk:0'});
@@ -819,7 +819,7 @@ function replacementUiDocument(f,{long=false}={}) {
     blocks:[{id:'replacement-block',kind:'paragraph',label:'Synthetic replacement',text,locator:'page:2',imageAssetId:null,
       locations:[{page:2,bbox:[1,2,30,40],coordinateOrigin:'TOPLEFT'}]}]};
   f.repository.documents.begin(id,'ui-replacement-parse');
-  f.repository.documents.complete(id,'ui-replacement-parse',{outputPath:'/tmp/synthetic-ui-replacement',files:{},content});
+  f.repository.documents.complete(id,'ui-replacement-parse',{outputPath:'/tmp/synthetic-ui-replacement',files:{},content}, null);
   return {document,evidence:f.repository.evidence.capture({projectId:f.project.id,chunkId:'document:ui-replacement-parse:chunk:0'})};
 }
 function completedUiExperiment(f,requestId,text) {

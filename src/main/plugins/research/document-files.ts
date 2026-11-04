@@ -1,9 +1,11 @@
 import { lstat, mkdir, realpath } from 'node:fs/promises';
 import { isAbsolute, relative } from 'node:path';
-import type { z } from 'zod';
+import {z} from 'zod';
 import { researchDocumentLimits, researchParsedDocumentSchema } from '../../../shared/schemas/research-production';
-import type { StoredDocumentContent } from './document-repository';
+import {storedDocumentContentSchema, type StoredDocumentContent} from './document-repository';
 import { readResearchFile, researchContentHash, researchRelativePath } from './research-files';
+import {researchCoordinateFrameContractVersion, researchDocumentCoordinateFrameSchema, researchDocumentCoordinateSnapshotSchema,
+  type ResearchDocumentCoordinateSnapshot} from '../../../shared/schemas/research-document-coordinates';
 
 export const maximumDocumentBytes = researchDocumentLimits.maxTotalAssetBytes;
 // MiddleJson / Markdown 工件上限：P0 实测 15 页论文约 2 MB，留足两页扫描件余量。
@@ -22,7 +24,9 @@ export async function documentStorageRoot(path: string | null): Promise<string> 
   return await realpath(path);
 }
 
-export async function collectDocumentContent(root: string, output: string, input: z.infer<typeof researchParsedDocumentSchema>): Promise<StoredDocumentContent> {
+export type CollectedDocumentContent = {data: StoredDocumentContent; coordinates: ResearchDocumentCoordinateSnapshot | null};
+
+export async function collectDocumentContent(root: string, output: string, input: z.infer<typeof researchParsedDocumentSchema>): Promise<CollectedDocumentContent> {
   const parsed = researchParsedDocumentSchema.parse(input);
   if (parsed.assets.length > researchDocumentLimits.maxAssets || new Set(parsed.blocks.map((block) => block.id)).size !== parsed.blocks.length) {
     throw new Error('research_document_structure_invalid');
@@ -53,10 +57,9 @@ export async function collectDocumentContent(root: string, output: string, input
     return { ...block, imageAssetId };
   });
   // 工件是发布的一部分：缺件不能被当成一次完整成功（提案 §7/§8）。
-  for (const artifact of Object.values(parsed.artifacts)) {
-    await readResearchFile(output, researchRelativePath(artifact), maximumArtifactBytes);
-  }
-  return {
+  const [, , structured] = await Promise.all([parsed.artifacts.middleJson, parsed.artifacts.markdown, parsed.artifacts.structuredContent].map(path =>
+    readResearchFile(output, researchRelativePath(path), maximumArtifactBytes)));
+  const data = storedDocumentContentSchema.parse({
     outputPath: researchRelativePath(relative(root, output)),
     files,
     content: {
@@ -66,5 +69,25 @@ export async function collectDocumentContent(root: string, output: string, input
       parseMode: parsed.parseMode, device: parsed.device, artifacts: parsed.artifacts,
       sourceHash: parsed.sourceHash, pageCount: parsed.pageCount, content: parsed.content, warnings: parsed.warnings, blocks, assets
     }
-  };
+  });
+  const value: unknown = JSON.parse(structured.toString('utf8'));
+  if (typeof value !== 'object' || value === null) throw new Error('research_document_coordinate_artifact_invalid');
+  if (!('coordinateFrameContractVersion' in value)) return {data, coordinates: null};
+  const captured = z.object({
+    coordinateFrameContractVersion: z.literal(researchCoordinateFrameContractVersion), parserFingerprint: z.string(),
+    content: z.string(), blocks: researchParsedDocumentSchema.shape.blocks,
+    pages: z.array(z.object({page: z.number().int().positive(), text: z.string(), regions: z.array(z.unknown()),
+      coordinateFrame: researchDocumentCoordinateFrameSchema.nullable()}).strict()).max(500)
+  }).parse(value);
+  if (captured.parserFingerprint !== parsed.parserFingerprint || captured.content !== parsed.content ||
+      JSON.stringify(captured.blocks) !== JSON.stringify(parsed.blocks)) throw new Error('research_document_coordinate_artifact_mismatch');
+  if (captured.pages.some(page => (page.coordinateFrame === null) !== (parsed.parseMode === 'html'))) {
+    throw new Error('research_document_coordinate_artifact_invalid');
+  }
+  const coordinates = researchDocumentCoordinateSnapshotSchema.parse({
+    contractVersion: researchCoordinateFrameContractVersion, sourceHash: parsed.sourceHash, parseHash: researchContentHash(JSON.stringify(data.content)),
+    artifact: {path: parsed.artifacts.structuredContent, sha256: researchContentHash(structured), size: structured.length},
+    pages: captured.pages.map(page => ({page: page.page, frame: page.coordinateFrame}))
+  });
+  return {data, coordinates};
 }

@@ -195,10 +195,10 @@ export class ResearchDocumentService {
           options: tier === null ? options : { ...options, tier } });
       } finally { if (slot !== null) budget?.release(slot); }
       this.requireActive(signal);
-      const data = await collectDocumentContent(root, output, result);
+      const {data, coordinates} = await collectDocumentContent(root, output, result);
       await this.sourceBytes(root, document);
       this.requireActive(signal);
-      this.repository.documents.complete(documentId, parseId, data);
+      this.repository.documents.complete(documentId, parseId, data, coordinates);
       published = true;
       return this.repository.documents.get(documentId);
     } catch (error) {

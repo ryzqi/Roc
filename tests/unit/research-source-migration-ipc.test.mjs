@@ -32,7 +32,7 @@ function scene({targets = [block('first', 1), block('second', 3)]} = {}) {
       content: blocks.map(block => block.text).join('\n\n'), blocks, assets: [],
       artifacts: {middleJson: 'artifacts/middle.json', markdown: 'artifacts/document.md', structuredContent: 'artifacts/structured.json'},
       warnings: []
-    }});
+    }}, null);
   };
   f.publish('decision-old', [block('old', 2)]);
   f.old = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'document:decision-old:chunk:0'});

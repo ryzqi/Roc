@@ -3071,3 +3071,53 @@ and product code/timeouts. Final38 passes; earlier independent P4/review-order d
 Safe coordinate snapshot/hash publication, renderer preview metadata/dual reader, annotations
 and large-PDF resource acceptance remain next PR-07 increments. Full plan remains incomplete;
 external scientific/client/L2 acceptance still unrun.
+
+
+## ROC-PR-07A2A — atomic coordinate snapshot and artifact seals
+
+Verified passing. Research DB25 adds separate measured-coordinate snapshots plus a parse-level
+coordinate_snapshot_hash marker. Original parse JSON/content, SourceLocator/Evidence and user
+predecessor snapshots remain unchanged. Historical rows get null marker and no fabricated frames.
+New snapshot binds canonical parse/source SHA, actual structured artifact path/hash/size and
+processed-page frames. Missing/deleted captured row is an explicit error; malformed/moved/changed
+snapshot or parse/source/page/region binding refuses with zero read writes.
+
+collectDocumentContent returns explicit data and nullable coordinate capture; complete requires
+that fourth input. All six synthetic direct callers pass null explicitly, with no old-signature alias.
+Current marked artifacts must match actual parser blocks/content/fingerprint and provide valid
+frames; markerless historical artifacts have no captured region basis. Persisted schema normalizes
+content before SHA. Parse publication, frame row/marker, index replacement and prior-source
+invalidation share one transaction, with queue publication only after success.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| node --test tests/unit/research-document-coordinates.test.mjs | Initial actual publication red: coordinate binding changed; normalized schema hash fixes cause |
+| node --test tests/unit/research-document-coordinates.test.mjs tests/unit/research-source-locator.test.mjs tests/unit/research-source-migration-ipc.test.mjs tests/unit/research-source-replacement-ipc.test.mjs tests/unit/architecture-repair-corpus.test.mjs | Final49/49 |
+| pnpm test:unit | Final888/888 |
+| pnpm typecheck / pnpm build | Final fresh production build/type passed |
+| node scripts/run-research-p0.mjs | Final13/13 native |
+| node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-search-plan.test.mjs | Final38/38 |
+| node scripts/smoke-electron.mjs | Final12/12, zero renderer errors |
+| pnpm harness:eval | Final94/94 |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; eager1132980bytes6files |
+
+Five new actual parser/repository tests cover canonical source/parse/file seal publication, insertion
+rollback retaining old source/index/frame, malformed binding and tampered/deleted snapshot errors,
+marked artifact mutation/refusal/restoration, and DB24→25 retaining actual old parse and explicitly
+selected replacement snapshots without frame backfill. Migration test uses readonly frozen PDF
+plus task-owned appended-comment successor. Old parse JSON bytes remain unchanged; added
+metadata column is null. No frozen research-workflow fixture files changed.
+
+Initial expanded47/48 had test-only restore setup discarding the real page-image asset; changed
+that setup to use the retained actual parser DTO, preserving full equality assertion. Production
+canonical-hash red was separately reproduced and corrected before green. Final checks above ran
+after required missing-snapshot marker/native assertions; subsequent edits only renamed latest
+migration tests and removed one unused test import, with no behavior/assertion change.
+
+Actual native document-coordinate-snapshot.json inspected under p0-production: sourceSHA
+matches captured Evidence, parseSHA matches exact content, saved structured file2092bytes/hash
+and frame918x1188 match actual PDF. Reads perform no writes. Safe preview metadata and file-byte
+validation at the service/protocol boundary remain next; PR-07 and full plan still incomplete.
+Earlier independent P4/review-order and external scientific/client/L2 gaps remain unchanged.

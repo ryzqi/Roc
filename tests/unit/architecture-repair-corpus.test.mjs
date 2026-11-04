@@ -331,7 +331,10 @@ test('high-quality text-only pages preserve coordinates without rendering page i
       assert.equal(stages.some((event) => event.stage === stage), false, `text-only page must skip ${stage}`);
     }
 
-    const stored = await collectDocumentContent(await realpath(projectRoot), await realpath(outputDir), parsed);
+    const {data: stored, coordinates} = await collectDocumentContent(await realpath(projectRoot), await realpath(outputDir), parsed);
+    assert.deepEqual(coordinates.pages[0].frame, middle.pages[0].coordinateFrame);
+    assert.equal(coordinates.parseHash, createHash('sha256').update(JSON.stringify(stored.content)).digest('hex'));
+    assert.equal(coordinates.artifact.sha256, createHash('sha256').update(structuredBytes).digest('hex'));
     assert.deepEqual(stored.content.assets, []);
     assert.deepEqual(stored.files, {});
     assert.notEqual(stored.content.artifacts.middleJson, stored.content.artifacts.structuredContent);

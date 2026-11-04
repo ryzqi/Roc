@@ -34,8 +34,28 @@ actual OCR raster renderer share the same measured-frame path.
 
 Evidence is retained under .artifacts/research-optimization/pr07-coordinates/actual-parser-frames.json.
 SourceLocator, old parse content and frozen research-workflow fixture files remain unchanged.
-Safe frame snapshot/hash publication, renderer metadata/preview integration, selection annotations
-and large-PDF page resource acceptance remain subsequent PR-07 increments.
+Renderer metadata/preview integration, selection annotations and large-PDF page resource
+acceptance remain subsequent PR-07 increments.
 
 Primary API reference: https://github.com/mozilla/pdf.js/blob/v6.4.299/docs/contents/examples/index.md
 Installed implementation: pdfjs-dist6.4.299 PageViewport and paddleocr1.2.0 structure pipeline.
+
+## Atomic coordinate snapshot publication
+
+Research DB25 stores coordinate snapshots separately from the original parse JSON. New captures
+bind sourceHash, canonical parsed-content SHA, processed-page frames and exact structured artifact
+path/hash/size. collectDocumentContent normalizes through the persisted schema before hashing.
+Its result carries data and an explicit nullable coordinate input; complete requires that input.
+Synthetic or historical page-only records explicitly use null, with no old write-signature alias.
+
+Parse completion, coordinate insertion/hash marker, index replacement and previous source
+invalidation share a transaction. Insertion failure retains the old parse/index/source and queues
+no phantom publication. New parse records carry coordinate_snapshot_hash, allowing a lost snapshot
+to raise a missing-data error. Stored-frame corruption, changed source/parse, wrong page/region
+or an unexpected snapshot also fail. Existing rows receive only a null marker; no old parse JSON,
+Evidence, user predecessor selection or scientific history is rewritten and no frame is invented.
+
+Marked current structured artifacts must provide valid matching frames. Markerless historical
+artifacts have no captured basis and cannot be projected to a region. Coordinates are read by
+fixed document/parse identity; a later parse never replaces the old saved snapshot during reads.
+File-byte validation at the preview boundary and renderer metadata exposure follow next.
