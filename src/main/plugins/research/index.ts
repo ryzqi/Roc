@@ -86,6 +86,8 @@ import {registerResearchReviewFullTextCapabilities,researchReviewFullTextCapabil
 import {ResearchReviewFullTextScreening} from './review-fulltext-screening';
 import {ResearchReviewFullTextArbitration} from './review-fulltext-arbitration';
 import {ResearchReviewFullTextFreeze} from './review-fulltext-freeze';
+import {ResearchReviewExtractionRepository} from './review-extraction-repository';
+import {registerResearchReviewExtractionCapabilities,researchReviewExtractionCapabilities} from './review-extraction-capabilities';
 import {registerResearchReviewFullTextScreeningCapabilities,researchReviewFullTextScreeningCapabilities} from './review-fulltext-screening-capabilities';
 import {registerResearchReviewScreeningCapabilities, researchReviewScreeningCapabilities} from './review-screening-capabilities';
 import { ResearchIndexService, type ResearchIndexWatch } from './index-service';
@@ -211,7 +213,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
+      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，
@@ -313,6 +315,8 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       const reviewFullTextArbitration=new ResearchReviewFullTextArbitration(db,researchRepository,reviewFullTextScreening,reviewFullTexts,()=>new Date().toISOString());
       const reviewFullTextFreeze=new ResearchReviewFullTextFreeze(db,researchRepository,reviewFullTextArbitration,reviewFullTexts,()=>new Date().toISOString());
       registerResearchReviewFullTextScreeningCapabilities(context,reviewFullTextScreening,reviewFullTextArbitration,reviewFullTextFreeze);
+      const reviewExtractions=new ResearchReviewExtractionRepository(db,researchRepository,reviewFullTextFreeze,reviewFullTexts,documents,()=>new Date().toISOString());
+      registerResearchReviewExtractionCapabilities(context,reviewExtractions);
       registerResearchSystematicReviewCapabilities(context, researchRepository.systematicReviews);
       const effects = new ResearchProductionEffectService(researchRepository,
         new ResearchWorkspaceFileService(db, researchRepository, () => new Date().toISOString(), notifyWorkspacePathStructureChanged),

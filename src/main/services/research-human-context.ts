@@ -9,7 +9,8 @@ export type ResearchHumanCapability = 'research.relations.propose' | 'research.r
   'research.reviewSearch.start' | 'research.reviewSearch.cancel' | 'research.reviewCorpus.create' |
   'research.reviewDeduplication.save' | 'research.reviewDeduplication.freeze' |
   'research.reviewScreening.createPlan' | 'research.reviewScreening.save' | 'research.reviewScreening.adjudicate' | 'research.reviewScreening.freeze' |
-  'research.reviewFullText.save' | 'research.reviewFullTextScreening.save' | 'research.reviewFullTextScreening.adjudicate' | 'research.reviewFullTextScreening.freeze';
+  'research.reviewFullText.save' | 'research.reviewFullTextScreening.save' | 'research.reviewFullTextScreening.adjudicate' | 'research.reviewFullTextScreening.freeze' |
+  'research.reviewExtraction.save';
 type HumanContext = Readonly<{
   capability: ResearchHumanCapability;
   projectId: string;

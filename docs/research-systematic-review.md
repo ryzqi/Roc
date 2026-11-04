@@ -159,3 +159,16 @@ DB36 独立 `full_freeze_hash` 与现有 `full_text` 冻结收据同行提交。
 `sourcesCurrent` 检查当前数据库来源引用，不表示只读调用重新读过磁盘字节；科学操作仍在实际 `verifyCurrent` 边界核验文件。历史协议/归档保持收据可读，不能新写入。数据库升级保存每个原字段/原行，新标记为空，不补造终局审核或取得记录。
 
 专项10/10，全部综述/全文/坐标/批注合跑153/153；单元1036/1036、Harness94/94、原生13/13、启动12/12零 renderer 错误、生成 IPC/type/fresh build/chunks通过。实际字节、独立来源修订、合法新审核版本与来源漂移事务回滚、缺少/规范化篡改收据、冻结后全部写入拒绝、原请求重放、重解析后固定历史/活跃过期状态、main窗口141、DB35明确旧快照升级、真实SQLite重开和失败零命中覆盖。旧DB34测试改为核对全部原列并另断言新标记为空；无运行时旧schema回退。提取/质量、检查器及真实计数报表继续实施。
+
+
+## 原文证据、单位与人工提取
+
+`saveReviewExtraction/getReviewExtraction/listReviewExtractions/getReviewExtractionHistory` 只保存全文已冻结纳入记录的人工确认提取。DB37 固定全文冻结/绑定/协议哈希、原始命中、协议字段定义与单位、实际已有 Evidence/原文块/解析/坐标版本、声明审核人、主进程 actor、确认说明和不可变父版本。复用已有论文/Evidence，不另复制数据源。
+
+字段分别保存 number/text/missing/unjudgeable；缺失和无法判断各有理由，不补造数值。所有已声明 required 字段必须明确填写，optional 未填写仍未提取，不冒充缺失。数字必须有准确协议单位；单位不匹配、未声明字段/审核人、NaN/Infinity、缺少证据或陈旧父版本均拒绝。研究设计也明确保存原文支持的文本或 missing/unjudgeable，不能自动套一个质量评分。
+
+现有 managed Evidence 来源校验拆出只读 `readCurrentEvidenceSourceLocator`，供原捕获和新提取共享实际当前索引块/文档/解析/原文一致性。新提取固定静态 Evidence+locator digest 和坐标哈希，实际核验原文与各准确解析的坐标工件；异步后重捕获准确来源快照，写后核对完整预期载荷哈希和有效来源。即使插入期间把值改成另一个完全规范化的载荷，或使 Evidence 失效，也不能承认成功，整事务回滚。
+
+source-only 全文绑定保持原始字节权威，提取另固定实际当前 Evidence 解析。重解析后旧提取及引用保留为 superseded；用户必须明确选择实际新 Evidence 并修订提取，不能把旧数值悄悄挂到新原文。历史协议/归档只读，当前科学写入仍实际核验字节；只读 referenceStatus 是来源引用状态，不代表再次读取磁盘。
+
+专项10/10，综述/全文/证据/坐标/批注合跑163/163；单元1046/1046、Harness94/94、原生13/13、启动12/12零 renderer 错误、生成 IPC/type/fresh build/chunks通过。实际 managed PDF→索引块→Evidence/source/preview、单位/required/optional/缺失/无法判断、来源重解析/新 Evidence 人工修订、原始字节和规范化异步坐标漂移、规范化载荷篡改与证据失效回滚、main窗口151、DB36升级/真实SQLite重开覆盖。用明确 synthetic 人工值验证工程契约，不声明效应量或科研准确性。按设计冻结质量框架/人工评价、检查器及真实计数报表继续实施。

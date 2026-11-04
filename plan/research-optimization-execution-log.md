@@ -3730,3 +3730,22 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
 
 Logs pr09-a4c3b3-* retained. Actual original/coordinate byte checks, displayed-hash race from independent human binding revision, valid new vote/source drift triggers, missing and canonically changed receipt, new-write guards/replay, frozen history after reparse with refused current scientific use, main141/history/archive, explicit canonical DB35 binding upgrade/no new final data, disk reopen/failed empty coverage covered. Existing DB34 preservation now captures all original columns through PRAGMA and compares every original field/row, separately asserts new full marker null; no compatibility bypass or assertion weakened. No review UI/scientific independence/spending claim. Next source-Evidence/unit-bound extraction with distinct missing/unjudgeable, per-design frozen quality/human review, inspector and actual reports; whole roadmap remains open.
+
+
+## ROC-PR-09A5A — existing Evidence/source/unit-bound human extraction
+
+Verified passing. DB37 immutable human-confirmed extraction revisions pin exact fulltext frozen included hit/binding/protocol/field definitions/units, actual current existing Evidence+managed locator static digest/coordinate hash, declared reviewer and trusted main actor. Numeric/text/missing/unjudgeable remain distinct; required fields explicit, optional omitted fields uncollected, no numeric/unit fallback. Source-only frozen original can bind separately explicit current Evidence parse. Actual bytes/unique selected parse previews checked, asynchronous source seal comparison and exact postinsert payload hash/current-source checks reject canonical value tampering or Evidence invalidation with full transaction rollback. Existing Evidence source capture factored into readonly readCurrentEvidenceSourceLocator; every real current indexed block/parse/source/excerpt/location check retained, no evidence publication in extraction verification.4 generated/main human APIs and immutable histories.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm generate:ipc / pnpm typecheck / pnpm build | Passed; fresh current build/type |
+| node --test tests/unit/research-review-extraction.test.mjs tests/unit/research-document-annotations.test.mjs | Initial19/19; extraction10 |
+| node --test tests/unit/research-review-extraction.test.mjs tests/unit/research-review-fulltext-freeze.test.mjs tests/unit/research-review-fulltext-arbitration.test.mjs tests/unit/research-review-fulltext-screening.test.mjs tests/unit/research-review-fulltext.test.mjs tests/unit/research-review-screening-freeze.test.mjs tests/unit/research-review-screening-arbitration.test.mjs tests/unit/research-review-screening-decisions.test.mjs tests/unit/research-review-screening-plan.test.mjs tests/unit/research-review-deduplication.test.mjs tests/unit/research-review-corpus.test.mjs tests/unit/research-review-search.test.mjs tests/unit/research-systematic-review.test.mjs tests/unit/research-systematic-review-ipc.test.mjs tests/unit/research-document-coordinates.test.mjs tests/unit/research-document-annotations.test.mjs | Final163/163 |
+| pnpm test:unit / pnpm harness:eval | 1046/1046 and94/94 |
+| node scripts/run-research-p0.mjs | 13/13 |
+| node scripts/smoke-electron.mjs | 12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; chunks1131770bytes6files |
+
+Logs pr09-a5a-* retained. Actual Evidence publication/capture/source bytes/current locator verification, units/finite values/required+optional/status distinctions, source-only old/new parse Evidence history, foreign/unlocated/missing-index/no-full-freeze refusal, physical bytes/canonical coordinate replacement after real preview, canonically rewritten payload and Evidence invalidation transaction triggers, history/archive/main151 and DB36 preservation/reopen covered. All checks passed, no production change after build. Values are explicit synthetic human engineering declarations, not scientific correctness acceptance. No paper/Evidence duplication, model-fill fallback, UI or independent-quality claim. Next explicit per-design protocol framework definition freeze and human source-bound quality judgments, then inspector/reporting; whole roadmap remains open.

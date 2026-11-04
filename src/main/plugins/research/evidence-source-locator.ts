@@ -4,8 +4,8 @@ import type {ResearchEvidence} from '../../../shared/types';
 import {researchSourceLocatorSchema, type ResearchSourceLocator} from '../../../shared/schemas/research-source-locator';
 import {storedDocumentContentSchema} from './document-repository';
 
-/** Capture only an actual managed document/parse/block association. Other sources stay unlocated. */
-export function captureEvidenceSourceLocator(db: Database, evidence: ResearchEvidence, timestamp: string): void {
+/** Read the actual current indexed document/parse/block association without publishing evidence. */
+export function readCurrentEvidenceSourceLocator(db: Database, evidence: ResearchEvidence): ResearchSourceLocator | null {
   const row = db.prepare(`SELECT p.id AS parse_id, p.document_id, p.status, p.data_json,
     d.source_hash, d.library_item_id, d.current_parse_id, c.chunk_index
     FROM research_document_parses p JOIN research_documents d ON d.id=p.document_id
@@ -14,7 +14,7 @@ export function captureEvidenceSourceLocator(db: Database, evidence: ResearchEvi
       parse_id: string; document_id: string; status: string; data_json: string | null;
       source_hash: string; library_item_id: string; current_parse_id: string | null; chunk_index: number
     } | undefined;
-  if (row === undefined) return;
+  if (row === undefined) return null;
   if (evidence.sourceType !== 'file' || evidence.sourceId !== row.library_item_id) {
     throw new Error('research_evidence_source_identity_invalid');
   }
@@ -38,12 +38,18 @@ export function captureEvidenceSourceLocator(db: Database, evidence: ResearchEvi
     if (right <= left || bottom <= top) throw new Error('research_evidence_source_region_invalid');
     return location;
   });
-  const locator = researchSourceLocatorSchema.parse({
+  return researchSourceLocatorSchema.parse({
     documentId: row.document_id, parseId: row.parse_id, knowledgeDocumentId: evidence.documentId,
     blockId: block.id, sourceHash: row.source_hash, parseHash: hash(JSON.stringify(parsed.content)),
     parserFingerprint: parsed.content.parserFingerprint, rawLocator: evidence.locator,
     locations
   });
+}
+
+/** Capture only an actual managed document/parse/block association. Other sources stay unlocated. */
+export function captureEvidenceSourceLocator(db: Database, evidence: ResearchEvidence, timestamp: string): void {
+  const locator = readCurrentEvidenceSourceLocator(db, evidence);
+  if (locator === null) return;
   const existing = inspectEvidenceSourceLocator(db, evidence.id);
   if (existing !== null && JSON.stringify(existing) !== JSON.stringify(locator)) {
     throw new Error('research_evidence_source_locator_conflict');

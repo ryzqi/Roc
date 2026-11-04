@@ -91,3 +91,5 @@ export {ResearchReviewFullTextArbitration} from '../../../src/main/plugins/resea
 export {researchReviewFullTextDecisionSaveSchema,researchReviewFullTextDecisionSnapshotSchema} from '../../../src/shared/schemas/research-review-fulltext-screening';
 export {ResearchReviewFullTextFreeze} from '../../../src/main/plugins/research/review-fulltext-freeze';
 export {researchReviewFullTextBindingSnapshotSchema} from '../../../src/shared/schemas/research-review-fulltext';
+export {ResearchReviewExtractionRepository} from '../../../src/main/plugins/research/review-extraction-repository';
+export {registerResearchReviewExtractionCapabilities,researchReviewExtractionCapabilities} from '../../../src/main/plugins/research/review-extraction-capabilities';
