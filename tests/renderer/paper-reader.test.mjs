@@ -10,6 +10,7 @@ import electronPath from 'electron';
 import {_electron} from '@playwright/test';
 import {createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
 import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
+import {createCanvas, loadImage} from '@napi-rs/canvas';
 
 let api, directory, app, page, active;
 const fixtures = [], calls = [], errors = [];
@@ -82,8 +83,9 @@ before(async () => {
     app.setPath('userData',${JSON.stringify(join(directory, 'data'))});
     app.whenReady().then(()=>{
       protocol.registerPdfPreviewProtocol(()=>({invokeCapability:async(name,input)=>{
-        if(name!=='research.document.source') throw new Error('unsupported test resource');
-        const result=await BrowserWindow.getAllWindows()[0].webContents.executeJavaScript('window.readFromHost(\"source\",'+JSON.stringify(input)+')');
+        const method=name==='research.document.source'?'source':name==='research.document.asset'?'asset':null;
+        if(method===null) throw new Error('unsupported test resource');
+        const result=await BrowserWindow.getAllWindows()[0].webContents.executeJavaScript('window.readFromHost('+JSON.stringify(method)+','+JSON.stringify(input)+')');
         if(!result.ok) throw new Error(result.message);
         return new Response(new Uint8Array(result.bytes),{headers:result.headers});
       }}),null);
@@ -95,9 +97,9 @@ before(async () => {
   await page.exposeFunction('readFromHost', async (method, input) => {
     const f = active;
     calls.push({fixture: f.project.id, method, input});
-    if (method === 'source') {
+    if (method === 'source' || method === 'asset') {
       try {
-        const response = await f.registry.invoke('research.document.source', input);
+        const response = await f.registry.invoke(`research.document.${method}`, input);
         return {ok: true, bytes: Array.from(new Uint8Array(await response.arrayBuffer())), headers: Object.fromEntries(response.headers)};
       } catch (error) {return {ok: false, message: error.message};}
     }
@@ -1030,4 +1032,198 @@ test('annotation form and long saved source facts fit light800 dark1099 with act
   await page.screenshot({path:join(artifacts,'annotation-saved-dark-1099.png')});
   await writeFile(join(artifacts,'annotation-clip-audit.json'),JSON.stringify(audits,null,2));
   assert.equal(errors.length,0);
+});
+
+/** Explicit synthetic recognition layout; the displayed PNG pixels are cropped from the actual parser's page image. */
+async function publishAssetLayout(f) {
+  const data=structuredClone(f.collected.data),frame=f.collected.coordinates.pages[0].frame;
+  const pageAsset=data.content.assets.find(asset=>asset.kind==='page');
+  const originalImage=await loadImage(await readFile(join(f.root,data.outputPath,data.files[pageAsset.id])));
+  const specs=[
+    {id:'synthetic-table',kind:'table',text:'<table><tr><th>group</th><th>mean</th></tr><tr><td>A</td><td>2</td></tr></table>',bbox:[0,0,frame.width,Math.floor(frame.height/2)]},
+    {id:'synthetic-formula',kind:'formula',text:'mean(A) = 2; mean(B) = 4',bbox:[0,0,Math.floor(frame.width*.8),Math.floor(frame.height*.3)]}
+  ];
+  const template=data.content.blocks[0],observations=[];
+  for(const spec of specs) {
+    const [x1,y1,x2,y2]=spec.bbox,canvas=createCanvas(x2-x1,y2-y1);
+    canvas.getContext('2d').drawImage(originalImage,x1,y1,x2-x1,y2-y1,0,0,x2-x1,y2-y1);
+    const bytes=await canvas.encode('png'),assetId=`${spec.id}-image`,relativePath=`artifacts/${assetId}.png`;
+    await writeFile(join(f.root,data.outputPath,relativePath),bytes);
+    data.files[assetId]=relativePath;
+    data.content.assets.push({id:assetId,kind:spec.kind==='table'?'table':'figure',page:1,sha256:hash(bytes),size:bytes.length});
+    observations.push({spec,assetId,sha256:hash(bytes),size:bytes.length,width:canvas.width,height:canvas.height});
+  }
+  data.content.blocks=specs.map(spec=>({...template,id:spec.id,kind:spec.kind,label:spec.kind==='table'?'Synthetic table':'Synthetic formula',
+    text:spec.text,locator:`synthetic:${spec.id}`,imageAssetId:`${spec.id}-image`,
+    locations:[{page:1,bbox:spec.bbox,coordinateOrigin:'TOPLEFT'}]}));
+  data.content.blocks.push({...template,id:'synthetic-empty-formula',kind:'formula',label:'Synthetic missing formula',
+    text:'',locator:'synthetic:empty',imageAssetId:null});
+  data.content.content=data.content.blocks.filter(block=>block.text.trim()).map(block=>block.text).join('\n\n');
+  data.content.parserVersion='synthetic-asset-layout/v1';data.content.parserFingerprint=hash('synthetic-asset-layout/v1');
+  data.content.parseMode='mixed';
+  data.content.warnings=['synthetic_quality_requires_review'];
+  data.content.artifacts.structuredContent='artifacts/synthetic-assets.json';
+  const artifact=Buffer.from(JSON.stringify({seam:'synthetic table/formula recognition on actual original page pixels',
+    blocks:data.content.blocks,coordinateFrames:f.collected.coordinates.pages}));
+  await writeFile(join(f.root,data.outputPath,data.content.artifacts.structuredContent),artifact);
+  const coordinates={...f.collected.coordinates,parseHash:hash(JSON.stringify(data.content)),
+    artifact:{path:data.content.artifacts.structuredContent,sha256:hash(artifact),size:artifact.length}};
+  f.repository.documents.begin(f.actual.id,'synthetic-asset-parse');
+  f.repository.documents.complete(f.actual.id,'synthetic-asset-parse',data,coordinates);
+  f.assetLayout={data,coordinates,observations};
+}
+async function openAssetReader(f,focus={parseId:null,locator:null}) {
+  await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1100,850));
+  await page.evaluate(()=>document.documentElement.dataset.theme='light');
+  await mount(f,focus);
+  await page.getByTestId('reader-block-table').waitFor();
+}
+async function waitForAsset() {
+  await page.getByTestId('reader-block-asset-image').scrollIntoViewIfNeeded();
+  await page.waitForFunction(()=>{
+    const image=document.querySelector('[data-testid="reader-block-asset-image"]');
+    return image?.complete&&image.naturalWidth>0&&image.naturalHeight>0;
+  });
+  await page.getByTestId('reader-block-asset-image').scrollIntoViewIfNeeded();
+}
+
+test('parsed table formula assets load lazily as exact original PNG pixels beside raw text with grounded quality facts', async () => {
+  const f=await realPdfScene();
+  await mount(f);await textEquals('Synthetic group A mean is 2');
+  await page.getByText('此版本仅提取原生文本，未进行 OCR 核查。',{exact:true}).waitFor();
+  await publishAssetLayout(f);await openAssetReader(f);const before=f.changes();
+  assert.equal(calls.some(call=>call.method==='asset'||call.method==='previewDocument'),false);
+  await page.getByTestId('reader-quality-ocr').waitFor();
+  await page.getByText('解析提示：synthetic_quality_requires_review',{exact:true}).waitFor();
+  await page.getByTestId('reader-quality-empty').waitFor();
+  const table=page.getByTestId('reader-block-table');
+  const toggle=table.getByTestId('reader-block-asset-toggle');
+  await toggle.focus();await page.keyboard.press('Enter');await waitForAsset();
+  assert.equal(await table.locator('table').count(),0,'raw table HTML is not executed as markup');
+  assert.match(await table.innerText(),/<table><tr><th>group/);
+  const image=page.getByTestId('reader-block-asset-image');
+  const tableBitmap=await image.evaluate(image=>({width:image.naturalWidth,height:image.naturalHeight,url:image.src}));
+  // Protocol images correctly taint browser canvases. Inspect actual compositor pixels through a screenshot.
+  const screenshot=await image.screenshot();
+  await writeFile(join(artifacts,'asset-compositor-table.png'),screenshot);
+  const paintedImage=await loadImage(screenshot),bitmap=createCanvas(paintedImage.width,paintedImage.height);
+  const context=bitmap.getContext('2d');context.drawImage(paintedImage,0,0);
+  const pixels=context.getImageData(0,0,bitmap.width,bitmap.height).data;
+  let ink=0;
+  for(let y=3;y<bitmap.height-3;y++) for(let x=3;x<bitmap.width-3;x++) {
+    const i=(y*bitmap.width+x)*4;if(pixels[i]<200&&pixels[i+3]>0)ink++;
+  }
+  Object.assign(tableBitmap,{ink,compositorWidth:bitmap.width,compositorHeight:bitmap.height});
+  assert.equal(tableBitmap.width,f.assetLayout.observations[0].width);
+  assert.equal(tableBitmap.height,f.assetLayout.observations[0].height);assert.ok(tableBitmap.ink>30);
+  assert.equal(await page.evaluate(()=>window.liveWorkers),0,'opening parser PNG does not load the PDF engine');
+  const expected=f.assetLayout.data.content.assets.find(asset=>asset.id==='synthetic-table-image');
+  assert.deepEqual(calls.find(call=>call.method==='asset').input,{projectId:f.project.id,documentId:f.actual.id,
+    parseId:'synthetic-asset-parse',assetId:expected.id,sha256:expected.sha256});
+  const formula=page.getByTestId('reader-block-formula').filter({hasText:'mean(A)'});
+  await formula.getByTestId('reader-block-asset-toggle').click();await waitForAsset();
+  assert.equal(await page.getByTestId('reader-block-asset-image').count(),1);
+  assert.equal(await toggle.getAttribute('aria-expanded'),'false');
+  assert.match(await formula.innerText(),/mean\(A\) = 2/);
+  assert.equal(await page.getByTestId('reader-block-asset-absent').count(),1);
+  assert.equal(await page.getByText(/\d+%/).count(),0,'no calibrated confidence percentages are invented');
+  assert.equal(f.changes(),before);
+  await writeFile(join(artifacts,'assets-fixed-pixels.json'),JSON.stringify({tableBitmap,observations:f.assetLayout.observations,calls,
+    seam:'synthetic table/formula recognition; actual parser page pixels/PNG protocol/Vite/Chromium/main registry'},null,2));
+});
+
+test('parsed asset corruption displays a retry error while retaining raw text and never substitutes a page image', async () => {
+  const f=await realPdfScene();await publishAssetLayout(f);await openAssetReader(f);
+  const table=page.getByTestId('reader-block-table'),assetId='synthetic-table-image';
+  const path=join(f.root,f.assetLayout.data.outputPath,f.assetLayout.data.files[assetId]),original=await readFile(path);
+  await writeFile(path,Buffer.concat([original,Buffer.from('Task-owned changed PNG')]));
+  const before=f.changes();
+  await table.getByTestId('reader-block-asset-toggle').click();
+  await table.getByText('所选解析图像读取或解码失败，请重新核对原文。',{exact:true}).waitFor();
+  assert.match(await table.innerText(),/<table><tr><th>group/);
+  assert.equal(await table.getByTestId('reader-block-asset-image').count(),0);
+  assert.ok(calls.filter(call=>call.method==='asset').every(call=>call.input.assetId===assetId));
+  assert.equal(f.changes(),before);
+  await writeFile(path,original);
+  await table.getByRole('button',{name:/重试/}).click();await waitForAsset();
+  assert.equal(f.changes(),before);
+  await table.getByTestId('reader-block-asset-toggle').click();
+  const source=await readFile(join(f.root,'source.pdf'));await writeFile(join(f.root,'source.pdf'),'Altered source');
+  const reads=calls.filter(call=>call.method==='asset').length;
+  await table.getByTestId('reader-block-asset-toggle').click();
+  await table.getByText('原文件与记录的版本不一致，无法预览。',{exact:true}).waitFor();
+  assert.equal(calls.filter(call=>call.method==='asset').length,reads);
+  assert.match(await table.innerText(),/<table><tr><th>group/);
+  await writeFile(join(f.root,'source.pdf'),source);
+});
+
+test('historical parsed asset disclosure reads fixed parse and late image metadata cannot replace another project', async () => {
+  const f=await realPdfScene();await publishAssetLayout(f);
+  const evidence=f.repository.evidence.capture({projectId:f.project.id,chunkId:'document:synthetic-asset-parse:chunk:0'});
+  f.repository.documents.begin(f.actual.id,'next-no-assets-parse');
+  f.repository.documents.complete(f.actual.id,'next-no-assets-parse',f.collected.data,f.collected.coordinates);
+  await openAssetReader(f,{parseId:'synthetic-asset-parse',locator:'synthetic:synthetic-table'});
+  const before=f.changes();
+  await page.getByTestId('reader-block-table').getByTestId('reader-block-asset-toggle').click();await waitForAsset();
+  assert.ok(calls.filter(call=>call.method==='asset'||call.method==='previewDocument').every(call=>call.input.parseId==='synthetic-asset-parse'));
+  assert.equal(f.changes(),before);
+  await mountSource(f,f.repository.evidence.inspectEvidence(evidence.id,f.project.id));await waitForOriginal();
+  await page.getByTestId('artifact-document-source-asset-toggle').click();await waitForAsset();
+  await page.getByTestId('reader-block-asset').scrollIntoViewIfNeeded();
+  const sourceLayout=await page.getByTestId('artifact-document-source-block').evaluate(block=>({overflow:block.scrollWidth-block.clientWidth}));
+  assert.ok(sourceLayout.overflow<=1);
+  const sourceAudit=await page.evaluate(source=>(0,eval)(source)({root:'body',viewport:true}),
+    await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8'));
+  assert.equal(sourceAudit.cut,0);
+  await page.screenshot({path:join(artifacts,'asset-fixed-evidence-source.png')});
+  await writeFile(join(artifacts,'asset-source-clip-audit.json'),JSON.stringify({sourceLayout,...sourceAudit},null,2));
+  assert.ok(calls.filter(call=>call.method==='asset').every(call=>call.input.parseId==='synthetic-asset-parse'));
+  assert.equal(f.changes(),before);
+  await openAssetReader(f,{parseId:'synthetic-asset-parse',locator:'synthetic:synthetic-table'});
+  await page.getByTestId('reader-block-table').getByTestId('reader-block-asset-toggle').click();await waitForAsset();
+  await page.getByTestId('reader-block-table').getByTestId('reader-block-asset-toggle').click();
+  const ready=new Promise(resolve=>{f.deferReady=resolve;});f.defer='previewDocument';
+  await page.getByTestId('reader-block-table').getByTestId('reader-block-asset-toggle').click();await ready;
+  const other=await realPdfScene();await publishAssetLayout(other);await openAssetReader(other);
+  f.defer=null;f.finish();
+  assert.equal(await page.getByTestId('reader-block-asset-image').count(),0);
+  await page.getByTestId('reader-block-table').getByTestId('reader-block-asset-toggle').click();await waitForAsset();
+  assert.ok(calls.filter(call=>call.method==='asset').every(call=>call.input.projectId===other.project.id));
+  assert.equal(f.changes(),before);
+});
+
+test('asset text comparison and original PDF fit light800 dark1099 with one PNG one PDF worker and explicit formula issue capture', async () => {
+  const f=await realPdfScene();await publishAssetLayout(f);await openAssetReader(f);
+  const formula=page.getByTestId('reader-block-formula').filter({hasText:'mean(A)'});
+  await formula.getByTestId('reader-block-asset-toggle').click();await waitForAsset();
+  await formula.getByTestId('reader-block-source').click();await waitForOriginal();
+  const auditSource=await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8'),audits=[];
+  await page.mouse.move(10,10);
+  const defaultAudit=await page.evaluate(source=>(0,eval)(source)({root:'body',viewport:true}),auditSource);
+  assert.equal(defaultAudit.cut,0);audits.push({width:1100,theme:'light',state:'comparison-default',...defaultAudit});
+  for(const [width,theme] of [[800,'light'],[1099,'dark']]) {
+    await app.evaluate(({BrowserWindow},width)=>BrowserWindow.getAllWindows()[0].setSize(width,850),width);
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);await waitForOriginal();await waitForAsset();
+    await formula.getByTestId('reader-block-asset-toggle').hover();
+    const layout=await formula.evaluate(block=>({overflow:block.scrollWidth-block.clientWidth,
+      imageWidth:block.querySelector('img').getBoundingClientRect().width,blockWidth:block.getBoundingClientRect().width}));
+    assert.ok(layout.overflow<=1);assert.ok(layout.imageWidth>0&&layout.imageWidth<layout.blockWidth);
+    const audit=await page.evaluate(source=>(0,eval)(source)({root:'body',viewport:true}),auditSource);
+    assert.equal(audit.cut,0);audits.push({width,theme,layout,...audit});
+    await page.screenshot({path:join(artifacts,`asset-comparison-${theme}-${width}.png`)});
+  }
+  assert.equal(await page.getByTestId('reader-block-asset-image').count(),1);
+  assert.equal(await page.evaluate(()=>window.liveWorkers),1);
+  await pageNote();
+  await page.getByRole('combobox',{name:'批注解析块',exact:true}).selectOption('synthetic-formula');
+  await page.getByRole('combobox',{name:'批注类型',exact:true}).selectOption('formula');
+  await page.getByRole('textbox',{name:'批注说明',exact:true}).fill('公式文本需要核查，保留对应原文和解析图像。');
+  await page.getByRole('button',{name:'保存批注',exact:true}).click();await page.getByTestId('reader-annotation-saved').waitFor();
+  const note=f.repository.documentAnnotations.list({projectId:f.project.id,documentId:f.actual.id,parseId:'synthetic-asset-parse'})[0];
+  assert.equal(note.annotation.request.issue,'formula');assert.equal(note.annotation.block.imageAssetId,'synthetic-formula-image');
+  await page.getByRole('button',{name:'捕获所选块为证据',exact:true}).click();
+  await page.getByText('已捕获证据，科学结论待审核',{exact:true}).waitFor();
+  const audit=await page.evaluate(source=>(0,eval)(source)({root:'body',viewport:true}),auditSource);
+  assert.equal(audit.cut,0);audits.push({width:1099,theme:'dark',state:'issue-saved-final',...audit});
+  await writeFile(join(artifacts,'asset-comparison-clip-audit.json'),JSON.stringify(audits,null,2));
 });

@@ -7,6 +7,7 @@ import {ErrorBar} from '../shell/ErrorBar';
 import {documentContentHash} from '../literature/document-content-hash';
 
 const PaperPdfView = lazy(() => import('../literature/PaperPdfView'));
+const PaperBlockAsset = lazy(() => import('../literature/PaperBlockAsset'));
 
 /** Read the captured source version, including its context; never replace it with the current parse. */
 export function ArtifactDocumentSource({client, evidence, locator}: {
@@ -41,10 +42,13 @@ export function ArtifactDocumentSource({client, evidence, locator}: {
     return {ok: true as const, data: {document, parsed}};
   }, {label: '读取证据原文固定版本'});
   const [selection, setSelection] = useState<{key: string; blockId: string; locationIndex: number} | null>(null);
+  const [assetSelection, setAssetSelection] = useState<string | null>(null);
   const blockRef = useRef<HTMLDivElement>(null);
   const selected = selection?.key === key ? selection : {blockId: locator.blockId, locationIndex: 0};
   const loaded = read.status === 'ready' ? read.data : null;
   const block = loaded?.parsed.content.blocks.find(block => block.id === selected.blockId);
+  const assetKey = JSON.stringify([key, selected.blockId]);
+  const comparingAsset = assetSelection === assetKey;
   return <section className="mt-2 flex min-w-0 flex-col gap-2" data-testid="artifact-document-source" aria-label="证据原文固定版本">
     <p className="break-all font-mono text-[var(--font-meta-size)] text-muted">解析 {locator.parseId}，SHA-256 {locator.parseHash}</p>
     {read.status !== 'loading' ? null : <p role="status">读取证据原文…</p>}
@@ -73,7 +77,18 @@ export function ArtifactDocumentSource({client, evidence, locator}: {
       <div ref={blockRef} tabIndex={-1} data-testid="artifact-document-source-block"
         className="min-w-0 focus-visible:outline-2 focus-visible:outline-accent">
         <p className="break-words text-muted">{block.label}，{block.locator}</p>
+        <div className={comparingAsset ? 'grid grid-cols-2 items-start gap-2' : undefined}>
         <p className="whitespace-pre-wrap break-words text-ink">{block.text}</p>
+        {!comparingAsset ? null : <Suspense fallback={<p role="status" className="text-muted">加载固定解析图像…</p>}>
+          <PaperBlockAsset client={client} projectId={evidence.projectId} document={loaded.document} parsed={loaded.parsed} block={block}/>
+        </Suspense>}
+        </div>
+        {(block.kind === 'table' || block.kind === 'formula') && block.imageAssetId !== null ?
+          <button type="button" aria-expanded={comparingAsset} data-testid="artifact-document-source-asset-toggle"
+            onClick={() => setAssetSelection(comparingAsset ? null : assetKey)}
+            className="mt-1 rounded-control px-1 py-0.5 text-[var(--font-meta-size)] text-muted hover:bg-[var(--overlay-hover)]">
+            {comparingAsset ? '收起固定解析图像' : '核对固定解析图像'}
+          </button> : null}
       </div>
     </>}
   </section>;

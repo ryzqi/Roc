@@ -3427,3 +3427,20 @@ Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
 | pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; eager1131770bytes6files |
 
 Actual rotated90/cropped/UserUnit2 pointer event observations independently compared with native PDF.js convertToPdfPoint within1e-8 and saved/reopened dashed region geometry checked. Actual current Evidence reuse/source/index refusal, original request retries, late acknowledgment/new project and old invalidated notes tested through Node-host/window98 seam, not full production kernel/preload E2E. No backend changes: preceding unit903/Harness94/native13 are previous evidence, not reruns. Logs pr07-a5c-*; annotation-actual-rotated.json, four cut0/hidden0 audits and form/saved-details/original-page screenshots inspected. Saved screenshot now explicitly scrolls actual row into view; no claim that the original-page screenshot covered offscreen notes. Next: actual parsed table/formula assets and quality/scan/large acceptance; PR07 and full roadmap still open.
+
+
+## ROC-PR-07A6A — fixed parsed assets and grounded quality facts
+
+Verified passing. Lazy table/formula PNG comparison next to unchanged raw text, one open PNG, fixed Evidence/Claim source reuse. Exact preview source/parse/hash and captured asset metadata/URL checked; bytes validated by existing main asset capability. Missing asset and corrupt source/image surface explicit facts/errors without substitutes. OCR mode, saved parser warnings and empty-block facts shown; no invented calibrated scores/percentages or HTML/LaTeX execution.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| pnpm typecheck / pnpm build | Final passed; fresh production build |
+| node --test --test-name-pattern='parsed table formula\|parsed asset corruption\|historical parsed asset\|asset text comparison' tests/renderer/paper-reader.test.mjs | Final4/4 |
+| node --test --test-concurrency=1 tests/renderer/paper-reader.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/research-search-plan.test.mjs tests/renderer/literature-review.test.mjs tests/renderer/document-preview-protocol.test.mjs |76/76; reader30 |
+| node --test --test-name-pattern='historical parsed asset' tests/renderer/paper-reader.test.mjs | Final1/1 after post-decode/figure visibility strengthening |
+| node scripts/smoke-electron.mjs |12/12; zero renderer errors |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check |Passed; eager1131770bytes6files |
+
+The four asset scenarios use explicit synthetic recognition layout and real native parser page pixels/PNG bytes/Vite/Chromium/generated registry/adapter through Node-host/window98 seam. They do not establish actual scanned/complex scientific table/formula OCR accuracy. Nonzero displayed image ink measured from actual compositor screenshot: first browser canvas readback correctly raised cross-origin taint, and policy remained unchanged. Actual native-only warning tested in genuine parser state separately from synthetic mixed mode. PNG/source corruption refuses with raw text retained; restored retry works; fixed historical/captured Evidence images and late project isolation verified. Light800/dark1099 original/raw formula/PNG and560px fixed source screenshots inspected; four comparison and source audits cut0/hidden0. Source screenshot waits decoded natural geometry/figure visibility; an ambiguous test patch insertion was detected by scoped read and corrected before executing. Logs pr07-a6a-* and assets-fixed-pixels.json/asset-compositor-table.png/asset-* artifacts retained. Backend unchanged: previous unit903/Harness94/native13 are prior evidence. Next: actual scanned-source and larger-resource PR07 acceptance, then PR09. Roadmap/external acceptances remain open.

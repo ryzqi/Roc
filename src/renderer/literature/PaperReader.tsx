@@ -13,6 +13,7 @@ import type { LiteratureStore } from './use-literature-store';
 import {useReaderDocument} from './use-reader-document';
 
 const PaperPdfView = lazy(() => import('./PaperPdfView'));
+const PaperBlockAsset = lazy(() => import('./PaperBlockAsset'));
 
 const TIER_OPTIONS: ReadonlyArray<{ value: ResearchParseTier; label: string; title: string }> = [
   { value: 'compact', label: '轻量', title: 'PP-OCRv6 Tiny + 文档布局和表格识别，约 19 MB' },
@@ -110,6 +111,7 @@ export function PaperReader({
   const [largeText, setLargeText] = useState(false);
   const [comparePdf, setComparePdf] = useState(false);
   const [pdfSelection, setPdfSelection] = useState<{parseId: string; blockId: string; locationIndex: number} | null>(null);
+  const [openAsset, setOpenAsset] = useState<string | null>(null);
   /**
    * 解析档位（`document.parse` 的 `tier`）。
    *
@@ -734,6 +736,14 @@ export function PaperReader({
             </div>
           ) : null}
           <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-3 py-3" data-testid="reader-content-area">
+            {content?.parseMode === 'ocr' || content?.parseMode === 'mixed' ?
+              <p role="note" className="mb-2 text-[var(--font-meta-size)] text-muted" data-testid="reader-quality-ocr">
+                此版本含 OCR 识别内容，请核对数字、单位和公式。
+              </p> : null}
+            {content?.warnings.map((warning,index) => <p key={`${index}:${warning}`} role="note"
+              className="mb-2 break-words text-[var(--font-meta-size)] text-muted" data-testid="reader-quality-warning">
+              {warning === 'research_models_missing_native_text_only' ? '此版本仅提取原生文本，未进行 OCR 核查。' : `解析提示：${warning}`}
+            </p>)}
             {focusLocator !== null && matchedBlockId === null && content !== null ? (
               <p role="note" className="mb-2 text-[var(--st-warn)] text-[var(--font-micro-size)]" data-testid="reader-jump-missed">
                 locator「{focusLocator}」没有唯一的精确位置，未跳转。
@@ -765,7 +775,11 @@ export function PaperReader({
                 data-testid="reader-blocks"
                 data-text-size={largeText ? 'large' : 'standard'}
               >
-                {blocks.map((block, index) => (
+                {blocks.map((block, index) => {
+                  const assetKey = JSON.stringify([literature.projectId, activeDocumentId, reader.parsed?.run.id, block.id]);
+                  const comparingAsset = openAsset === assetKey;
+                  const hasAssetSurface = block.kind === 'table' || block.kind === 'formula';
+                  return (
                   <section
                     key={block.id}
                     id={`reader-block-${block.id}`}
@@ -778,6 +792,7 @@ export function PaperReader({
                       block.id === selectedPdfBlock ? 'rounded-control bg-[var(--accent-soft)] px-2 py-1' : ''
                     } focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-[-2px]`}
                   >
+                    <div className={comparingAsset ? 'grid grid-cols-2 items-start gap-2' : undefined}>
                     {block.kind === 'heading' ? (
                       <h3 className="text-ink">{block.text}</h3>
                     ) : block.kind === 'formula' ? (
@@ -785,14 +800,31 @@ export function PaperReader({
                         {block.text}
                       </p>
                     ) : (
-                      <p className="whitespace-pre-wrap">
+                      <p className="min-w-0 whitespace-pre-wrap break-words">
                         {block.kind === 'figure' ? <span className="text-subtle">[图] </span> : null}
                         {block.isBlank ? <span className="text-subtle">（空块）</span> : block.text}
                       </p>
                     )}
+                    {!comparingAsset || activeDocument === null || reader.parsed === null || literature.projectId === null ? null :
+                      <Suspense fallback={<p role="status" className="text-muted">加载解析图像…</p>}>
+                        <PaperBlockAsset client={literature.client} projectId={literature.projectId} document={activeDocument}
+                          parsed={reader.parsed} block={content.blocks[index]}/>
+                      </Suspense>}
+                    </div>
+                    {block.isBlank ? <p role="note" className="mt-1 text-[var(--font-meta-size)] text-muted"
+                      data-testid="reader-quality-empty">此块没有解析文本，请核对原文。</p> : null}
                     <p className="mt-0.5 font-mono text-subtle text-[var(--font-micro-size)]">
                       <span>{block.label}</span>{' '}<span>{block.locator}</span>{' '}<span>第 {block.page ?? '?'} 页</span>
                     </p>
+                    {!hasAssetSurface ? null : content.blocks[index].imageAssetId === null ?
+                      <p role="note" className="mt-1 text-[var(--font-meta-size)] text-muted" data-testid="reader-block-asset-absent">
+                        此块未保存解析图像。
+                      </p> :
+                      <button type="button" data-testid="reader-block-asset-toggle" aria-expanded={comparingAsset}
+                        onClick={() => setOpenAsset(comparingAsset ? null : assetKey)}
+                        className="mt-1 rounded-control px-1 py-0.5 text-[var(--font-meta-size)] text-muted hover:bg-[var(--overlay-hover)]">
+                        {comparingAsset ? '收起解析图像' : '核对解析图像'}
+                      </button>}
                     {activeDocument?.mediaType === 'application/pdf' ? (
                       <button type="button" disabled={content.blocks[index].locations.length === 0}
                         aria-label={`查看${block.label}原文位置`} aria-pressed={selectedPdfBlock === block.id}
@@ -802,7 +834,7 @@ export function PaperReader({
                       </button>
                     ) : null}
                   </section>
-                ))}
+                );})}
               </article>
             )}
           </div>
