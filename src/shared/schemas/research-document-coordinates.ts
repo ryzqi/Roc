@@ -29,10 +29,17 @@ export const researchParsedRegionProjectionSchema = z.object({
 }).strict().refine(({frame, bbox: [x1, y1, x2, y2]}) =>
   x1 >= 0 && y1 >= 0 && x2 <= frame.width && y2 <= frame.height && x2 > x1 && y2 > y1,
 'A parsed region must be a nonempty XYXY rectangle inside its captured raster.');
+export const researchPdfRegionProjectionSchema = z.object({
+  frame: researchPdfCoordinateFrameSchema, bbox: rectangle
+}).strict().refine(({frame, bbox: [x1, y1, x2, y2]}) => {
+  const [left, bottom, right, top] = frame.viewport.viewBox;
+  return x1 >= left && y1 >= bottom && x2 <= right && y2 <= top && x2 > x1 && y2 > y1;
+}, 'A PDF user-space region must be a nonempty XYXY rectangle inside its captured CropBox.');
 
 export type ResearchPdfCoordinateFrame = z.infer<typeof researchPdfCoordinateFrameSchema>;
 export type ResearchDocumentCoordinateFrame = z.infer<typeof researchDocumentCoordinateFrameSchema>;
 export type ResearchParsedRegionProjection = z.infer<typeof researchParsedRegionProjectionSchema>;
+export type ResearchPdfRegionProjection = z.infer<typeof researchPdfRegionProjectionSchema>;
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const researchDocumentCoordinatePagesSchema = z.array(z.object({

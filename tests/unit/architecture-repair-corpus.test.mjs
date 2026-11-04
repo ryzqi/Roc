@@ -53,9 +53,13 @@ const { renderResearchPdfPage, withResearchPdf, researchPdfPageHasVisualContent 
   external: ['@napi-rs/canvas', 'pdfjs-dist/legacy/build/pdf.mjs'],
   tempDir: join(repositoryRoot, '.runtime/tmp')
 });
-const {projectParsedRegionToPdf} = await importTypeScriptModule('src/shared/research-document-coordinates.ts', {
+const {projectParsedRegionToPdf, projectPdfRegionToParsed} = await importTypeScriptModule('src/shared/research-document-coordinates.ts', {
   platform: 'node', external: ['zod'], tempDir: join(repositoryRoot, '.runtime/tmp')
 });
+const {researchDocumentAnnotationTargetSchema, researchDocumentAnnotationCreateRequestSchema} =
+  await importTypeScriptModule('src/shared/schemas/research-document-annotations.ts', {
+    platform: 'node', external: ['zod'], tempDir: join(repositoryRoot, '.runtime/tmp')
+  });
 const { decodeRasterDocument, parseResearchDocument } = await importTypeScriptModule('src/main/plugins/research/document-parser.ts', {
   platform: 'node',
   external: ['@napi-rs/canvas', 'onnxruntime-node', 'paddleocr', 'pdfjs-dist/legacy/build/pdf.mjs'],
@@ -433,6 +437,31 @@ test('actual rotated cropped UserUnit and clamped PDF pages preserve their exact
       assert.deepEqual(parsed.blocks[0].locations[0].bbox, [0, 0, frame.width, frame.height]);
       const bbox = [frame.width * .1, frame.height * .2, frame.width * .4, frame.height * .6];
       const projected = projectParsedRegionToPdf({frame, bbox, coordinateOrigin: 'TOPLEFT'});
+      const rasterRoundTrip = projectPdfRegionToParsed({frame, bbox: projected});
+      rasterRoundTrip.forEach((value, index) => assert.ok(Math.abs(value - bbox[index]) < 1e-9));
+      const target = {projectId: 'project', documentId: 'document', parseId: 'parse', sourceHash: parsed.sourceHash,
+        parseHash: 'b'.repeat(64), parserFingerprint: 'c'.repeat(64), page: 1, blockId: parsed.blocks[0].id,
+        coordinateBasis: {snapshotHash: 'd'.repeat(64), frame}, location: {kind: 'pdf-region', unit: 'pdf-user-space', bbox: projected}};
+      assert.deepEqual(researchDocumentAnnotationTargetSchema.parse(target), target);
+      const pageTarget = {...target, blockId: null, coordinateBasis: null, location: {kind: 'page'}};
+      assert.deepEqual(researchDocumentAnnotationTargetSchema.parse(pageTarget), pageTarget);
+      assert.deepEqual(researchDocumentAnnotationTargetSchema.parse({...target, location: {kind: 'page'}}),
+        {...target, location: {kind: 'page'}});
+      for (const invalid of [
+        {...target, coordinateBasis: null},
+        {...target, page: 2},
+        {...target, location: {...target.location, unit: 'raster-pixel'}},
+        {...target, location: {...target.location, bbox: frame.viewport.viewBox.map((value, i) => value + (i === 0 ? -1 : 0))}},
+        {...target, location: {...target.location, bbox: [projected[0], projected[1], projected[0], projected[3]]}},
+        {...target, location: {...target.location, bbox: [NaN, projected[1], projected[2], projected[3]]}},
+        {...target, blockId: undefined}, {...target, parseHash: undefined}, {...target, sourceHash: 'unsealed'},
+        {...pageTarget, coordinateBasis: undefined}, {...pageTarget, location: {kind: 'page', bbox: projected}}
+      ]) assert.throws(() => researchDocumentAnnotationTargetSchema.parse(invalid));
+      const annotation = {requestId: 'annotation-selection', target, issue: 'number', note: 'Compare the source value with this parsed block.'};
+      assert.deepEqual(researchDocumentAnnotationCreateRequestSchema.parse(annotation), annotation);
+      for (const invalid of [{...annotation, actor: {kind: 'user', windowId: 1}},
+        {...annotation, issue: 'confirmed'}, {...annotation, note: ' '}])
+        assert.throws(() => researchDocumentAnnotationCreateRequestSchema.parse(invalid));
       const reflected = projectParsedRegionToPdf({frame,
         bbox: [bbox[0], frame.height - bbox[3], bbox[2], frame.height - bbox[1]], coordinateOrigin: 'BOTTOMLEFT'});
       await withResearchPdf(bytes, async pdf => {
@@ -449,11 +478,18 @@ test('actual rotated cropped UserUnit and clamped PDF pages preserve their exact
             Math.max(...points.map(point => point[0])), Math.max(...points.map(point => point[1]))];
           projected.forEach((value, index) => assert.ok(Math.abs(value - expected[index]) < 1e-9));
           reflected.forEach((value, index) => assert.ok(Math.abs(value - expected[index]) < 1e-9));
+          const crop = frame.viewport.viewBox;
+          const cropRaster = projectPdfRegionToParsed({frame, bbox: crop});
+          const viewportCorners = [[crop[0], crop[1]], [crop[0], crop[3]], [crop[2], crop[1]], [crop[2], crop[3]]]
+            .map(([x, y]) => viewport.convertToViewportPoint(x, y));
+          const expectedRaster = [Math.min(...viewportCorners.map(point => point[0])), Math.min(...viewportCorners.map(point => point[1])),
+            Math.max(...viewportCorners.map(point => point[0])), Math.max(...viewportCorners.map(point => point[1]))];
+          cropRaster.forEach((value, index) => assert.ok(Math.abs(value - expectedRaster[index]) < 1e-9));
           if (id === 'clamped-large') assert.ok(frame.viewport.scale < 1.5, 'store actual clamp, not requested scale');
           else assert.equal(frame.viewport.scale, 1.5);
         } finally {page.cleanup();}
       });
-      observations.push({id, sourceHash: parsed.sourceHash, parseMode: parsed.parseMode, frame, bbox, projected, reflected});
+      observations.push({id, sourceHash: parsed.sourceHash, parseMode: parsed.parseMode, frame, bbox, projected, reflected, rasterRoundTrip, target});
       for (const invalid of [
         {...frame, width: frame.width + 1},
         {...frame, viewport: {...frame.viewport, transform: [0, 0, 0, 0, 0, 0]}},

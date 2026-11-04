@@ -117,3 +117,12 @@ git diff --check
 主张关系记录的「固定来源与版本」展开区提供「查看关系原文固定版本」。读取该关系保存的 `relation.source`，复用上述严格来源阅读器，不改用工件中另一条当前 Evidence。即使关系在重解析后已失效，原始 ready parse/source 仍可核查。
 
 验证用实际原 PDF 捕获 Evidence、创建明确的合成假设/用户98关系提议，再真实发布后续解析使关系失效。关系原文读取保持旧 SourceLocator/hash，假设和关系记录完全不变，数据库零写入。`claim-fixed-original.json` 保存请求、原始关系/主张、展开几何与明暗裁切审计；`claim-original-*.png` 保存布局。嵌套展开区的 summary/元数据顺序及键盘目标聚焦有实际几何断言；初始测试补齐原生展开后的渲染等待，没有加入未经验证的 CSS 修补。
+
+
+## 批注目标契约
+
+`research-document-annotations.ts` 定义必需的 project/document/parse、sourceHash/parseHash/parserFingerprint、页和可空 blockId。坐标依据显式为 null 或同一页的实测 PDF frame 与 snapshotHash。位置只能是明确页定位，或带 `pdf-user-space` 单位的非空 XYXY 区域；区域必须位于实际 CropBox 内，并有捕获坐标依据。没有坐标时不能发送猜测区域。
+
+问题类型为笔记、数字、单位、公式、表格和识别问题，必需用户说明。请求没有 actor 或科学审核状态。此增量完成契约与实际几何验证；可信存储、PDF 选择及 Evidence 转换将在后续增量接入，尚无用户可保存入口。
+
+实际解析器/PDF.js 回归同时检查 PDF→解析 raster 投影、双向往返及整个 CropBox，与独立 `convertToViewportPoint`/`convertToPdfPoint` 对照。覆盖旋转90/270、非零裁切原点、UserUnit2 和实际缩放被限制的大页。记录保存在 `pr07-coordinates/actual-parser-frames.json`；请求中的 actor、缺失必填字段、非法单位、缺坐标和越界区域均拒绝。

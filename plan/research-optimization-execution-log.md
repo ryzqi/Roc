@@ -3376,3 +3376,19 @@ unit894/Harness94/native13 remain prior evidence, not new runs.
 
 Next: PDF selection annotations and capture, parsed table/formula image comparison and remaining
 PR07 scanned/large-source acceptance. Full execution plan and external acceptances remain open.
+
+
+## ROC-PR-07A5A — annotation target contract and measured geometry
+
+Verified passing. Strict source/parse/parser/page/block identity and nullable sealed measured PDF basis; explicit page-only or nonempty PDF-user-space XYXY region bounded by captured CropBox. Six note/problem kinds and required note; no wire actor or scientific confirmation. Added measured PDF→raster projection. Storage/capture/selection UI remain next.
+
+Commands from /Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc:
+
+| Check | Result |
+| --- | --- |
+| pnpm typecheck / pnpm build | Passed; fresh production build |
+| node --test --test-name-pattern='actual rotated cropped UserUnit' tests/unit/architecture-repair-corpus.test.mjs | 1/1 actual PDF parser/PDF.js scenario; crop90/270/UserUnit2/large clamp, full crop and roundtrip, invalid requests |
+| pnpm test:unit | 894/894 |
+| pnpm check:ipc / pnpm check:renderer-chunks / git diff --check | Passed; eager1131738bytes6files |
+
+No renderer behavior changed; preceding UI/native acceptances are prior evidence, not new runs. Logs pr07-a5a-* and actual-parser-frames.json retain the actual basis, targets and projections. No historical sources/backfill/compatibility aliases. Next: trusted human annotation storage/read and current-block Evidence conversion, then actual selection UI. Full PR07 and roadmap remain open.
