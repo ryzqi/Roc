@@ -3,7 +3,8 @@ import type { StructuredToolInterface } from '@langchain/core/tools';
 import { z } from 'zod';
 
 import { createLiteratureTools } from '../agent/literature-tools';
-import { researchOwnedExperimentStartSchema } from '../../../shared/schemas/research-experiments';
+import { researchOwnedExperimentStartSchema, researchExperimentEnvironmentRequestSchema,
+  researchExperimentEnvironmentSchema } from '../../../shared/schemas/research-experiments';
 import { researchOwnedFigureStartSchema } from '../../../shared/schemas/research-figures';
 import { researchOwnedExportPrepareSchema } from '../../../shared/schemas/research-exports';
 import { researchProductionInputContentSchema, researchProductionInputReadSchema, researchProductionInputSchema,
@@ -146,10 +147,33 @@ export function createResearchRoleTools(input: {
       return after({ path: file.path, sha256: file.sha256, size: file.size, revision: file.revision });
     }, { name: 'save_workspace_file', description: '按 expectedHash 写入当前项目脚本或数据。新建传 null；冲突或取消后的迟到写入会被拒绝。',
       schema: z.object({ path: z.string().min(1), content: z.string().max(1024 * 1024), expectedHash: z.string().regex(/^[a-f0-9]{64}$/u).nullable() }).strict() }),
+    list_python_environments: () => tool(async ({ offset, limit }) => {
+      assertActive();
+      const selections = input.repository.pythonEnvironments.list({ projectId: input.run.projectId });
+      return { total: selections.length, items: selections.slice(offset, offset + limit).map(({ snapshot, snapshotHash }) => ({
+        runtime: { kind: 'python', selectionId: snapshot.id, expectedHash: snapshotHash },
+        version: snapshot.version, platform: snapshot.platform, architecture: snapshot.architecture,
+        recordedAt: snapshot.recordedAt, codeHash: snapshot.codeHash, lockFile: snapshot.lockFile
+      })) };
+    }, { name: 'list_python_environments', description: '分页读取当前项目由用户明确选择的 Python 环境身份。历史选择不证明环境当前可用；启动前用 inspect_experiment_environment 取得当前环境哈希。没有选择时请用户在项目管理中选择环境。',
+      schema: z.strictObject({ offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(10) }) }),
+    inspect_experiment_environment: () => tool(async ({ runtime, offset, limit }) => {
+      assertActive();
+      const environment = researchExperimentEnvironmentSchema.parse(await input.capabilities.invoke('research.experiment.environment', {
+        projectId: input.run.projectId, runtime
+      }));
+      assertActive();
+      if (JSON.stringify(environment.runtime) !== JSON.stringify(runtime)) throw new Error('research_experiment_runtime_mismatch');
+      return { runtime: environment.runtime, expectedEnvironmentHash: environment.hash, version: environment.version,
+        platform: environment.platform, architecture: environment.architecture,
+        ...page(JSON.stringify(environment), offset, limit) };
+    }, { name: 'inspect_experiment_environment', description: '在本项目重新核验实验环境，返回 start_experiment 的 expectedEnvironmentHash 和分页环境报告。Python runtime 必须使用 list_python_environments 返回的选择身份；探针不安装依赖或创建实验。失败需解决环境后重新预览。',
+      schema: z.strictObject({ runtime: researchExperimentEnvironmentRequestSchema.shape.runtime,
+        offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(8000) }) }),
     start_experiment: () => tool(async (request) => {
       const started = await effects().startExperiment(input.run.id, input.run.projectId, request);
       return after(summarizeExperiment(started));
-    }, { name: 'start_experiment', description: '启动当前项目的脚本实验。项目和运行身份由服务绑定；相同 requestId 重复提交返回已有运行。',
+    }, { name: 'start_experiment', description: '启动当前项目的脚本实验。Python 先读取用户选择并预览环境，明确 .py 源码、sourceVersion:1、uint32 seed、arguments 和 expectedEnvironmentHash。项目和运行身份由服务绑定；相同 requestId 返回已有终态，显式新 requestId 才新运行。',
       schema: researchOwnedExperimentStartSchema }),
     start_figure: () => tool(async (request) => {
       const started = await effects().startFigure(input.run.id, input.run.projectId, request);

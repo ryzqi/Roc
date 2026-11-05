@@ -1,6 +1,6 @@
 # Python 环境预检与隔离探针
 
-PR08 当前提供环境预检、真实隔离探针、主进程确认的原生环境选择与项目绑定、Python 环境预览，以及固定版本的 Python 实验运行与冻结发布。项目管理的任务区提供环境选择入口；实验角色的环境读取工具和 Python 专项恢复验收仍待完成。
+PR08 当前提供环境预检、真实隔离探针、主进程确认的原生环境选择与项目绑定、Python 环境预览，以及固定版本的 Python 实验运行与冻结发布。项目管理的任务区提供环境选择入口；实验角色可读取选择与预览后运行，Python 专项恢复验收仍待完成。
 
 ## 用户选择与项目绑定
 
@@ -79,7 +79,17 @@ Python start 的公开、owned 和存储合同一致：`engine: 'python'`、`.py
 
 发布逐字校验冻结文件，并离线核验代码清单、原环境身份、runtime、toolchain、启动程序及真实启动报告。报告必须绑定 run、project、input、environment、源码路径、版本、种子和模块路径；重写审计字段后重新计算文件 checksum 仍不能通过身份核验。非成功实验不能发布。已有冻结发布可在原工作区改变后核验，导出复制原始审计文件和哈希。
 
+实验角色使用 `list_python_environments({ offset, limit })` 读取当前项目的用户选择，最多十条；返回选择 runtime、版本、记录时间、代码和锁文件身份。`inspect_experiment_environment({ runtime, offset, limit })` 调用实际环境预览，返回必需 `expectedEnvironmentHash` 和最多 8000 字符的分页报告。两个工具均绑定当前项目和有效阶段；迟到预览不能返回给已取消的阶段。空历史需要用户在项目管理中选择环境，模型不能打开原生选择面板、传用户 actor 或替换解释器路径。
+
+随后 `start_experiment` 绑定真实 owner/project，`get_experiment` 查询自己的运行，`publish_experiment` 发布已完成结果供人工审核。其他阶段没有新增环境工具，原有冻结阶段快照不被改写；旧工具合同不能重新执行。
+
 ## 验证
+
+A4D 实验角色接入（均从仓库根目录执行）：
+
+- `node --test tests/unit/research-experiment-environment-tools.test.mjs tests/unit/research-compute-policy.test.mjs tests/unit/research-figure-owned.test.mjs`：14/14，分页、无选择、阶段隔离、输入验证、错误与取消、迟到成功预览拒绝，以及既有计算和图稿 ownership。
+- `node --test --test-name-pattern='actual experiment role' tests/integration/research-python-experiments.test.mjs`：1/1，实际选择读取、真实探针预览、owned CPython 计算、终态查询、幂等重放、发布核验、无 owner 运行查询拒绝、模型 project 注入和阶段取消后发布拒绝。实际回执为 `.artifacts/research-optimization/pr08-a4d/python-experiments.json`。
+- `pnpm build`（含 typecheck）、`node scripts/run-research-p0.mjs`（13/13）、`pnpm harness:eval`（94/94）、`node scripts/smoke-electron.mjs`（13/13，零 renderer errors）、`pnpm check:ipc`、`pnpm check:renderer-chunks`（1132907 bytes / 6 files）均通过。
 
 A4C 服务接入（均从仓库根目录执行）：
 

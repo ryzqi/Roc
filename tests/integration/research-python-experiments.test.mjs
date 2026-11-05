@@ -13,7 +13,7 @@ let api, root;
 const receipts = [];
 before(async () => { api = await loadResearchTestApi(); root = await realpath(await mkdtemp('/private/tmp/roc-python-experiments-')); });
 after(async () => {
-  const output = join(process.cwd(), '.artifacts/research-optimization/pr08-a4c');
+  const output = join(process.cwd(), '.artifacts/research-optimization/pr08-a4d');
   await mkdir(output, { recursive: true });
   await writeFile(join(output, 'python-experiments.json'), JSON.stringify({
     python, actualIsolatedPython: true, nativePicker: 'fixture response; no user product selection', receipts
@@ -270,5 +270,44 @@ while True:
     for (const pid of pids) assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
     await assert.rejects(f.service.publish(f.project.id, active.id), /research_experiment_completed_required/u);
     receipts.push({ scenario: 'service-cancel-tree', pids, allAbsent: true });
+  } finally { await f.cleanup(); }
+});
+
+test('actual experiment role consumes selected Python preview and owns start, terminal polling and publication', async () => {
+  const f = await fixture(source, { scenario: 'owned-role-tools' });
+  try {
+    const registry = new api.CapabilityRegistry();
+    for (const descriptor of api.researchExperimentCapabilities) registry.declare('research', descriptor);
+    api.registerResearchExperimentCapabilities({ pluginId: 'research', capabilities: registry }, f.repository.experiments, f.service);
+    const effects = new api.ResearchProductionEffectService(f.repository, undefined, f.service);
+    const tools = Object.fromEntries(api.createResearchRoleTools({
+      run: f.run, context: f.repository.runs.getContext(f.run.id), repository: f.repository,
+      capabilities: registry, effects, signal: new AbortController().signal
+    }).map(tool => [tool.name, tool]));
+    const listed = await tools.list_python_environments.invoke({ offset: 0, limit: 10 });
+    assert.equal(listed.total, 1); assert.deepEqual(listed.items[0].runtime, f.runtime);
+    const preview = await tools.inspect_experiment_environment.invoke({ runtime: listed.items[0].runtime, offset: 0, limit: 8000 });
+    assert.equal(preview.expectedEnvironmentHash, f.preview.hash);
+    const { projectId: _projectId, ownerRunId: _ownerRunId, ...owned } = f.request;
+    const started = await tools.start_experiment.invoke({ ...owned, runtime: preview.runtime,
+      expectedEnvironmentHash: preview.expectedEnvironmentHash });
+    const run = await f.wait(started.experimentId);
+    assert.equal(run.status, 'completed', run.error); assert.equal(run.ownerRunId, f.run.id);
+    const polled = await tools.get_experiment.invoke({ experimentId: run.id });
+    assert.equal(polled.status, 'completed'); assert.equal(polled.ownerRunId, f.run.id);
+    const before = f.observed.length;
+    assert.deepEqual(await tools.start_experiment.invoke(owned), polled);
+    assert.equal(f.observed.length, before);
+    await assert.rejects(tools.start_experiment.invoke({ ...owned, projectId: f.project.id }));
+    const published = await tools.publish_experiment.invoke({ experimentId: run.id });
+    assert.ok(published.artifactId); await f.service.verifyPublication(f.project.id, published.artifactId);
+    const unowned = await f.execute({ ownerRunId: null, requestId: 'unowned' });
+    assert.equal(unowned.status, 'completed', unowned.error);
+    await assert.rejects(tools.get_experiment.invoke({ experimentId: unowned.id }), /research_production_owner_mismatch/u);
+    f.repository.runs.terminate(f.run.id, f.project.id, 'cancelled', 'fixture_cancelled');
+    await assert.rejects(tools.publish_experiment.invoke({ experimentId: run.id }), /research_run_not_current/u);
+    await assert.rejects(tools.inspect_experiment_environment.invoke({ runtime: f.runtime, offset: 0, limit: 100 }), /research_run_not_current/u);
+    assert.equal(f.observed.filter(entry => entry.kind === 'compute').length, 2);
+    receipts.push({ scenario: 'owned-role-tools-result', listed, preview, polled, published, actualComputations: 2 });
   } finally { await f.cleanup(); }
 });
