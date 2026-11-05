@@ -10,6 +10,7 @@ import { ResearchProcessError, type ResearchProcessRequest, type ResearchProcess
 import { createResearchDirectory, readResearchFile, researchContentHash, researchPath, researchRelativePath } from './research-files';
 import type { ResearchProcessScope } from './toolchain';
 import { discoverJuliaEnvironmentControls, parseJuliaRuntimeVersion, type JuliaEnvironmentControls } from './experiment-julia-controls';
+import { nativeCodeIdentity } from './experiment-native-code';
 
 type ProcessRun = (input: ResearchProcessRequest) => Promise<ResearchProcessResult>;
 type NativeEnvironmentInspectionInput = {
@@ -33,6 +34,7 @@ export async function inspectNativeExperimentEnvironment({ workspace, runtime, j
   const executable = await researchPath(root, runtime.kind === 'renv' ? 'bin/exec/R' : 'bin/julia');
   const beforeExecutable = researchContentHash(await readResearchFile(root, relative(root, executable), 64 * 1024 * 1024));
   const readablePaths = [tools.root, root];
+  const codeRoots = [root];
   const environment: NodeJS.ProcessEnv = { ...tools.environment };
   const lockFiles: ResearchExperimentEnvironment['lockFiles'] = [];
   let prefix: string;
@@ -40,7 +42,9 @@ export async function inspectNativeExperimentEnvironment({ workspace, runtime, j
     prefix = await researchPath(workspace, runtime.libraryPath);
     const prefixInfo = await lstat(prefix);
     if (!prefixInfo.isDirectory()) throw new Error('research_experiment_library_required');
-    readablePaths.push(prefix, ...await rPackageRoots(prefix, signal));
+    const packageRoots = await rPackageRoots(prefix, signal);
+    readablePaths.push(prefix, ...packageRoots);
+    codeRoots.push(prefix, ...packageRoots);
     for (const path of ['renv.lock', 'renv/settings.json']) {
       if (path !== 'renv.lock' && !await exists(join(workspace, path))) continue;
       const bytes = await readResearchFile(workspace, path, 16 * 1024 * 1024);
@@ -52,12 +56,16 @@ export async function inspectNativeExperimentEnvironment({ workspace, runtime, j
     prefix = await realpath(runtime.depotPath);
     const prefixInfo = await lstat(prefix);
     if (!prefixInfo.isDirectory()) throw new Error('research_experiment_depot_required');
-    for (const path of ['packages', 'artifacts', 'compiled', 'scratchspaces']) if (await exists(join(prefix, path))) readablePaths.push(await researchPath(prefix, path));
+    for (const path of ['packages', 'artifacts', 'compiled', 'scratchspaces']) if (await exists(join(prefix, path))) {
+      const directory = await researchPath(prefix, path);
+      readablePaths.push(directory); codeRoots.push(directory);
+    }
     Object.assign(environment, { JULIA_DEPOT_PATH: `${await createResearchDirectory(jobDir, 'julia-depot')}:${prefix}:${join(root, 'share/julia')}`, JULIA_LOAD_PATH: '@:@stdlib',
       JULIA_PKG_OFFLINE: 'true', JULIA_PKG_PRECOMPILE_AUTO: '0', JULIA_HISTORY: join(jobDir, 'julia-history') });
   }
   const probe = await mkdtemp(join(jobDir, `${runtime.kind}-probe-`));
   try {
+    const beforeCode = await nativeCodeIdentity(codeRoots, signal);
     let juliaControls: JuliaEnvironmentControls | null = null;
     let juliaVersion: string | null = null;
     if (runtime.kind === 'julia') {
@@ -116,13 +124,14 @@ export async function inspectNativeExperimentEnvironment({ workspace, runtime, j
     for (const file of lockFiles) if (researchContentHash(await readResearchFile(workspace, file.path, 16 * 1024 * 1024)) !== file.sha256) throw new Error('research_experiment_environment_changed');
     for (const file of juliaControls?.metadataFiles ?? []) if (researchContentHash(await readResearchFile(workspace, file.path, 16 * 1024 * 1024)) !== file.sha256) throw new Error('research_experiment_environment_changed');
     if (researchContentHash(await readResearchFile(root, relative(root, executable), 64 * 1024 * 1024)) !== beforeExecutable) throw new Error('research_experiment_runtime_changed');
+    if (await nativeCodeIdentity(codeRoots, signal) !== beforeCode) throw new Error('research_experiment_native_code_changed');
     signal.throwIfAborted();
     const packages = report.packages.map((entry) => ({ name: entry.name, version: entry.versions.length === 0 ? null : entry.versions[0] }))
       .sort((left, right) => left.name.localeCompare(right.name) || String(left.version).localeCompare(String(right.version)));
     metadata.sort((left, right) => left.path.localeCompare(right.path));
     lockFiles.sort((left, right) => left.path.localeCompare(right.path));
     const value = { runtime, executable, prefix, basePrefix: root, version: report.version, platform: report.platform, architecture: report.architecture,
-      toolchainHash: tools.hash, metadataHash: researchContentHash(JSON.stringify({ inspectionContractVersion: 3, executable: beforeExecutable, metadata,
+      toolchainHash: tools.hash, metadataHash: researchContentHash(JSON.stringify({ inspectionContractVersion: 4, executable: beforeExecutable, code: beforeCode, metadata,
         bridge: runtime.kind === 'renv' ? rProcessBridgeHash() : null })), packages, lockFiles };
     const snapshot = researchExperimentEnvironmentSchema.parse({ ...value, hash: researchContentHash(JSON.stringify(value)) });
     return { snapshot, readablePaths: [...new Set(readablePaths)], environment, typescriptRuntime: null };

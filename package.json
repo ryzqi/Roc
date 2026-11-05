@@ -28,6 +28,7 @@
     "test:review-workflow": "node --test tests/integration/research-review-workflow.test.mjs",
     "test:research-resources": "node --test tests/integration/research-process-resources.test.mjs",
     "test:research-environment-boundaries": "node --test tests/integration/research-native-environment-boundaries.test.mjs tests/integration/research-julia-environment-boundaries.test.mjs",
+    "test:research-native-code": "node --test tests/integration/research-native-code-integrity.test.mjs",
     "generate:ipc": "node scripts/generate-ipc-schema.mjs",
     "check:ipc": "node scripts/generate-ipc-schema.mjs --check",
     "check:renderer-chunks": "node scripts/check-renderer-chunks.mjs",

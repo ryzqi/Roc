@@ -116,3 +116,19 @@ JuliaProject、版本化 Manifest、显式 manifest、AppManifest、workspace、
 本增量在上述范围内为 `Verified passing`。在 `/Users/Apple_501/Desktop/Roc/Roc` 执行 `pnpm test:research-environment-boundaries`，最终 8/8（Julia 6、R 2）；`node --test tests/unit/research-julia-controls.test.mjs tests/unit/research-experiment-resources.test.mjs tests/unit/research-process-resources.test.mjs tests/unit/research-process-admission.test.mjs tests/unit/research-compute-policy.test.mjs`，24/24；`pnpm build`（含 typecheck）通过。`node scripts/run-research-p0.mjs --test-name-pattern='standard offline task'` 1/1、`pnpm harness:eval` 94/94、`node scripts/smoke-electron.mjs` 13/13 零 renderer 错误，IPC/分块检查通过，eager JS 1132907 字节、6 个文件。
 
 最初 Julia 四项红测均失败，原因是没有独立版本探针，且主进程接受未声明、遗漏的控制文件和私有包元数据。修复后初轮 6/6、相关 23/23 通过；最终补上重复成员去重，24 项、8 项原生与构建复验通过。标准 P0/Harness/启动覆盖去重调整前的同一依赖及运行时入口，其结果保留；最终专项直接覆盖调整后的遍历。日志为 `.artifacts/research-optimization/xsafe-a7b-*.log`。原生代码完整性、其余资源持久化与实际解释器验收继续执行。
+
+## 原生代码树身份
+
+环境身份现在包含所声明原生代码树的完整字节与链接拓扑摘要。R 覆盖运行时、所选 library 和已验证的 renv 缓存包根；Julia 覆盖运行时和已授予读取权限的 depot 子目录。已验证科研工具包仍使用其独立 toolchain hash。本地项目脚本沿用显式输入快照，不因环境检查获得整个项目的代码读取权限。
+
+每次环境探针开始前和完成后分别计算代码身份。包名、版本、DESCRIPTION/Project 和解释器文件不变时，动态库或其他包代码的变化仍改变环境哈希；检查期间观察到变化，返回 `research_experiment_native_code_changed`。环境检查合同升级为 4。代码树身份绑定目录/文件集合、权限、文件 SHA-256、链接文本和已解析目标；缓存链接只允许进入已声明根，未知外部目标和特殊文件拒绝。
+
+字节读取采用 1MiB 流式缓冲，单文件最多 512MiB、合计 4GiB、目录项 100000、清单元数据 64MiB。读取前后核对实际文件描述符和路径的 inode、大小、权限及纳秒时间，取消保留原始原因。文件内容每次重算，mtime 不是缓存或成功依据。超过检查范围明确失败，不产生部分成功身份。
+
+实际 C 探针通过原有 R 启动器加载不同文件名的运行时/包动态库，核对其各自函数返回值。库文件名必须不同，因为启动器的 `DYLD_LIBRARY_PATH` 会优先覆盖同名库；仅改 install name 或符号不能建立独立加载的证据。原生四项覆盖运行时库变更、renv 缓存包库变更、派发期间代码漂移和未变更重复身份。回执为 `.artifacts/research-optimization/xsafe-a7c/native-code.json`。
+
+代码身份是两次完整扫描的观测结果，不是不可变文件系统或操作系统共享库的清单；扫描之间被外部写入后又恢复的瞬态变化不因此得到持续隔离证明。实际 R/Julia 解释器验收、逐文件回执与环境探针资源持久化仍待完成，未宣称科学运行可用性或硬资源隔离。
+
+本增量在上述范围内为 `Verified passing`。在 `/Users/Apple_501/Desktop/Roc/Roc` 执行 `pnpm test:research-native-code` 4/4，`pnpm test:research-environment-boundaries` 8/8；`node --test tests/unit/research-native-code.test.mjs tests/unit/research-julia-controls.test.mjs tests/unit/research-experiment-resources.test.mjs tests/unit/research-process-resources.test.mjs tests/unit/research-process-admission.test.mjs tests/unit/research-compute-policy.test.mjs` 30/30；最终 `pnpm build`（含 typecheck）、IPC/分块检查通过，eager JS 1132907 字节、6 个文件。标准生产 P0 专项 1/1、Harness 94/94、启动 13/13 零 renderer 错误。
+
+最终相同探针在隔离的 `e128447` 源码上为 1/4：实际库函数值变化、原包元数据不变，却未改变环境身份；检查期间代码漂移也未被拒绝。有效红测日志与回执为 `xsafe-a7c-native-red-valid.log`、`xsafe-a7c/native-code-red-valid.json`。更早的同名库比较和符号调整未建立独立包加载，保留日志但不作为正确性证据。最终四项保持原值/哈希断言，日志为 `.artifacts/research-optimization/xsafe-a7c-*.log`。隔离源码副本和探针临时目录已清理。

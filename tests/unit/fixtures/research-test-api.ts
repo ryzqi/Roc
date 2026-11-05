@@ -43,6 +43,7 @@ export { ResearchExperimentService } from '../../../src/main/plugins/research/ex
 export { ResearchExperimentEnvironmentService } from '../../../src/main/plugins/research/experiment-environment';
 export { inspectNativeExperimentEnvironment } from '../../../src/main/plugins/research/experiment-native-environment';
 export { discoverJuliaEnvironmentControls, parseJuliaRuntimeVersion } from '../../../src/main/plugins/research/experiment-julia-controls';
+export { nativeCodeIdentity, nativeCodeLimits } from '../../../src/main/plugins/research/experiment-native-code';
 export { runResearchProcess, researchSandboxProfile, ResearchProcessError } from '../../../src/main/plugins/research/process-runner';
 export { researchExperimentResourceReportSchema, researchProcessResourceUsageSchema } from '../../../src/shared/schemas/research-process-resources';
 export { ResearchWorkspaceFileService } from '../../../src/main/plugins/research/workspace-files';
