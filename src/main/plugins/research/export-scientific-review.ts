@@ -5,21 +5,36 @@ import {relationClaimHash} from './evidence-relation-repository';
 import {exportSourceHash} from './export-sources';
 import {researchContentHash} from './research-files';
 import type {ResearchRepository} from './repository';
+import {captureExportIdeaOutcomes, captureExportIdeaOutcomeHistory} from './export-idea-outcomes';
 
 export const exportScientificReviewPath = 'provenance/scientific-review.json';
 
 /** Freeze actual source versions, human decisions and their history without changing sealed sources. */
 export function captureExportScientificReview(repository: ResearchRepository, sources: ResearchExportSources): ResearchExportScientificReview {
   const projectId = sources.project.id;
+  const ideaOutcomes = captureExportIdeaOutcomes(repository, projectId, sources.experimentResults);
+  if (JSON.stringify(ideaOutcomes) !== JSON.stringify(sources.ideaOutcomes)) {
+    throw new RocDomainError({code: 'research_export_semantic_snapshot_changed', category: 'conflict', retryable: false,
+      message: '导出的人工结果评估已变化。请重新生成导出并审核当前版本。'});
+  }
   for (const claim of sources.claims) repository.evidence.assertReviewedSupport(claim);
   const relations = sources.claims.flatMap(claim => repository.evidence.relations.list({projectId, claimId: claim.id}));
-  const evidenceIds = [...new Set([...sources.evidence.map(source => source.id), ...relations.map(relation => relation.evidenceId)])];
+  const evidenceIds = [...new Set([...sources.evidence.map(source => source.id), ...relations.map(relation => relation.evidenceId),
+    ...ideaOutcomes.flatMap(outcome => {
+      const plan = outcome.snapshot.material.plan.version.request.body;
+      return [...outcome.snapshot.material.evidence.map(evidence => evidence.id),
+        ...plan.novelty.comparisons.map(item => item.evidenceId),
+        ...(plan.observation.kind === 'after_data' ? plan.observation.evidenceIds : []),
+        ...(plan.sampleSize.kind === 'calculated' ? plan.sampleSize.evidenceIds : [])];
+    })])];
   return researchExportScientificReviewSchema.parse({
-    schemaVersion: 1, projectId, sourceHash: exportSourceHash(sources),
+    schemaVersion: 2, projectId, sourceHash: exportSourceHash(sources),
     claims: sources.claims.map(claim => ({claimId: claim.id, version: claim.version, hash: relationClaimHash(claim)})),
     evidence: evidenceIds.map(evidenceId => repository.evidence.inspectEvidence(evidenceId, projectId)),
     relations,
-    history: relations.map(relation => ({relationId: relation.id, revisions: repository.evidence.relations.history(relation.id, projectId)}))
+    history: relations.map(relation => ({relationId: relation.id, revisions: repository.evidence.relations.history(relation.id, projectId)})),
+    ideaOutcomes, ideaOutcomeHistory: ideaOutcomes.map(outcome => ({planVersionId: outcome.snapshot.request.plan.versionId,
+      history: captureExportIdeaOutcomeHistory(repository, outcome)}))
   });
 }
 

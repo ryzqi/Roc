@@ -99,6 +99,8 @@ export {researchProductionInputSchema, researchProductionInputContentSchema} fro
 export {researchSourceLocatorSchema} from '../../../src/shared/schemas/research-source-locator';
 export {relationSourceDigest, relationClaimHash} from '../../../src/main/plugins/research/evidence-relation-repository';
 export {captureExportScientificReview, assertCurrentExportScientificReview, serializeExportScientificReview, exportScientificReviewPath} from '../../../src/main/plugins/research/export-scientific-review';
+export {researchExportSourcesSchema} from '../../../src/shared/schemas/research-exports';
+export {researchExportScientificReviewSchema} from '../../../src/shared/schemas/research-export-review';
 export {researchEvidenceRelationProposalSchema, researchEvidenceRelationReviewSchema} from '../../../src/shared/schemas/research-evidence-relations';
 
 export {ResearchReviewDeduplicationRepository} from '../../../src/main/plugins/research/review-deduplication-repository';

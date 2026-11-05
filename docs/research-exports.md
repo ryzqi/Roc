@@ -95,6 +95,12 @@ ZIP 包含：
 - `logs/`：编译输出、诊断、`arxiv-preflight.json`。
 - `manifest.json`：文件大小/哈希、工具链版本/摘要、来源版本和归档器摘要。
 
+`provenance/sources.json` 必须包含 `ideaOutcomes`，保存正文及所选图稿实际引用结果的当前人工评估。没有评估时为空数组。关联使用精确项目、结果回执 ID/hash 和冻结方法身份；每个冻结方法只纳入最新评估，另一个结果的评估不会因属于同一项目而进入导出。
+
+`provenance/scientific-review.json` 使用 schema 2，包含完整评估回执及每个方法的全部 `stored_receipt` 历史，按每页 100 条读取。原冻结假设、预期结果、真实测量、人工结论和修订原因同时保留；历史标记只表示保存回执的完整性。schema 1 和缺少必填字段的数据被拒绝。
+
+捕获和后续审核重验当前评估 head、冻结方法、真实结果/运行时间、指标 Evidence 及计划引用的证据。来源或人工评估变化会使原导出及审核失效，必须重新准备并审核；校验不会修改原来源快照或保存的审核文件。详细验收见 [Idea 方法与结果评估](research-idea-plans.md)。
+
 ## arXiv 预检
 
 `export-builder.ts` 在写完来源后跑一次 `arxiv-preflight.ts`，结论写 `logs/arxiv-preflight.json`。

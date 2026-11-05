@@ -11,6 +11,7 @@ import type { ResearchRepository } from './repository';
 import type { ResearchTemplateService } from './template-service';
 import {researchExperimentResultEvidenceMetadataSchema,type ResearchExperimentResultReceipt} from '../../../shared/schemas/research-experiment-results';
 import {assertExperimentMetricEvidence} from './experiment-result-evidence';
+import {captureExportIdeaOutcomes} from './export-idea-outcomes';
 
 export class ResearchExportSourceService {
   constructor(private readonly repository: ResearchRepository, private readonly figures: ResearchFigureService,
@@ -130,7 +131,8 @@ export class ResearchExportSourceService {
     return researchExportSourcesSchema.parse({ project: { id: project.id, title: project.title, description: project.description, workspacePath: project.workspacePath },
       manuscriptArtifact: this.repository.getArtifact(request.manuscriptArtifactId), manuscript: bundle.manuscript, claims, evidence, figures,
       bibliography: entries, citationKeys, libraryRevisions: [...libraryRevisions].map(([id, revision]) => ({ id, revision })), provenance, modelRuns, experiments, review, template,
-      evidenceMetadata,experimentResults:[...resultReceipts.values()] });
+      evidenceMetadata,experimentResults:[...resultReceipts.values()],
+      ideaOutcomes: captureExportIdeaOutcomes(this.repository, project.id, [...resultReceipts.values()]) });
   }
 }
 

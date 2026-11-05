@@ -125,3 +125,32 @@ A3A 状态：**Verified passing**，范围为追加式存储、人工 API、真�
 初轮界面检查为 44/45：真实源码漂移被错误归为内部错误。保留现场和聚焦红测试后，删除没有生产调用方的旧错误码，登记真实 `research_experiment_snapshot_changed`；最终界面同时断言实际 service 错误、IPC 错误码和准确中文提示。诊断插桩已移除，失败日志与 `source-drift-diagnosis.json` 保留。
 
 A3B 状态：**Verified passing**，范围为现有检查器评估、来源复核和审核 snapshot。界面 fixture 使用真实 renderer 与 main capability adapter，未替代 production preload 或实际 OS picker 验收。导出绑定将在独立增量交付；没有独立科学、预注册或真实 R/Julia 验收声明。
+
+## A3C：导出来源、人工评估与完整历史
+
+现有 ZIP 的 `provenance/sources.json` 必须包含当前 `ideaOutcomes`；`provenance/scientific-review.json` 升级为 schema 2，保存完整当前评估及每个冻结方法的全部 `stored_receipt` 历史。无评估时显式为空数组，不读取 schema 1 或缺少新字段的旧合同。历史按每页 100 条收集，仍受现有文件及归档大小上限约束。
+
+导出仅纳入正文与所选图稿 Evidence 实际引用结果的评估。项目、结果 ID/hash、冻结方法/冻结 hash、真实运行时间、指标 Evidence/metadata 与计划引用证据均精确核验；同项目的无关结果和其他项目不被关联。每个冻结方法只导出最新评估 head。当前 head 或来源改变使原来源 hash 和审核 seal 失效；校验没有数据库写入，也不修改已冻结的 sources 或审核文件。
+
+### 验证
+
+所有命令均在本文件所列物理仓库根目录执行。以下最终进程退出码均为零，日志位于 `.artifacts/research-optimization/`。
+
+| 命令 | 实际结果 | 日志 |
+| --- | --- | --- |
+| `pnpm build` | 通过，含 typecheck | `xidea-a3c-verified-build.log` |
+| `node --test tests/unit/research-export-body-gate.test.mjs tests/unit/research-semantic-publication.test.mjs tests/unit/research-idea-outcomes.test.mjs` | 19/19 | `xidea-a3c-verified-focused.log` |
+| `pnpm test:unit` | 1214/1214，零失败/跳过；随后 scope 与元数据修正由最终聚焦/真实 Python 检查覆盖 | `xidea-a3c-unit.log` |
+| `node --test --test-name-pattern='actual result metric evidence traces' tests/integration/research-python-experiments.test.mjs` | 真实 CPython 3.14 1/1 | `xidea-a3c-verified-python-corrected.log` |
+| `node scripts/run-research-p0.mjs` | 13/13 | `xidea-a3c-verified-p0.log` |
+| `node --test tests/renderer/idea-outcomes.test.mjs tests/renderer/artifact-production.test.mjs` | 16/16 | `xidea-a3c-verified-renderer.log` |
+| `pnpm harness:eval` | 94/94 | `xidea-a3c-harness.log` |
+| `node scripts/smoke-electron.mjs` | 13/13，零 renderer error | `xidea-a3c-startup.log` |
+| `pnpm check:ipc` | 生成文件一致 | `xidea-a3c-verified-ipc.log` |
+| `pnpm check:renderer-chunks` | eager JS 1,134,084 bytes，6 files | `xidea-a3c-verified-chunks.log` |
+
+实际负均值 -4 ms 经过真实图稿渲染/人工关系确认与正文进入来源快照；冻结方法保留正均值预期，首条人工反驳与之后的无法判断修订同时保存。102 条历史跨分页完整导出，旧 seal 随新 head 失效，原序列化审核字节不变。指标 pointer 篡改、损坏 JSON metadata 和缺失 metadata 分别被现有精确错误边界拒绝，恢复来源后重新通过。P0 再验证真实 ZIP、PDF/LaTeX、审核文件和 manifest 哈希。
+
+初轮 typecheck 因 nullable metadata 被传入严格指标检查失败，改为明确缺失错误。另两处消费者仍期待 schema 1 或未提供评估字段，已同步新合同。最后补的 metadata 测试曾把 JSON null 与缺失行混同；最终保留两个独立回归，分别要求 `research_evidence_metadata_invalid` 和 `research_result_evidence_changed`，未放宽产品检查。原失败日志保留。
+
+A3C 状态：**Verified passing**，范围为现有导出来源/审核绑定与消费者。102 条修订使用合成审核内容和固定 fixture 时钟；不代表独立科学、预注册或真实 R/Julia 验收。未执行付费模型或远程写入。

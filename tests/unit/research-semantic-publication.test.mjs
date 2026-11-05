@@ -210,7 +210,7 @@ test('export review seal captures exact source, conditions and user history, and
     await f.complete();
     await f.approve();
     const bundle = f.repository.manuscripts.exportBundle({projectId: f.project.id, artifactId: f.artifactId});
-    const sources = {project: f.project, claims: bundle.claims, evidence: bundle.evidence};
+    const sources = {project: f.project, claims: bundle.claims, evidence: bundle.evidence, experimentResults: [], ideaOutcomes: []};
     const before = f.changes();
     const snapshot = api.captureExportScientificReview(f.repository, sources);
     const bytes = api.serializeExportScientificReview(snapshot);

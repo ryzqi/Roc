@@ -150,7 +150,7 @@ function attempt(seeded) {
     { projectId: seeded.projectId, requestId: 'r1', title: 'T', manuscriptArtifactId: seeded.manuscriptId,
       figureIds: [], template: { kind: 'default', language: 'zh' } },
     { projectId: seeded.projectId, manuscriptArtifactId: seeded.manuscriptId, figureIds: [], claims: [], evidence: [],
-      citationKeys: {}, bibliography: [], figures: [], experiments: [], experimentResults: [], libraryRevisions: [], provenance: [], modelRuns: [],
+      citationKeys: {}, bibliography: [], figures: [], experiments: [], experimentResults: [], ideaOutcomes: [], libraryRevisions: [], provenance: [], modelRuns: [],
       evidenceMetadata: {}, review: { projectId: seeded.projectId, originArtifactId: seeded.manuscriptId,
         manuscriptArtifactId: seeded.manuscriptId, revisionRound: 0, status: 'accepted', reportArtifactIds: [], updatedAt: now },
       template: null, project: { id: seeded.projectId, title: 'Gate', description: 'why', workspacePath: null },

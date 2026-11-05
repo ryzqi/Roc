@@ -364,8 +364,75 @@ test('actual result metric evidence traces claims, figures and Idea history to a
           {files:async()=>assert.fail('default template')});
         const exportRequest={projectId:f.project.id,requestId:'metric-export',title:'Metric sources',manuscriptArtifactId:artifact.id,
           figureIds:[figure.id],template:{kind:'default',language:'en'}};
+        const noAssessment=await exports.capture(exportRequest,new AbortController().signal);
+        assert.deepEqual(noAssessment.ideaOutcomes,[]);
+        f.db.prepare("UPDATE research_projects SET current_stage='ideation' WHERE id=?").run(f.project.id);
+        f.db.prepare("UPDATE research_stage_states SET status='ready' WHERE project_id=? AND stage='ideation'").run(f.project.id);
+        const methodArtifact=f.repository.createArtifact({projectId:f.project.id,stage:'ideation',kind:'idea_canvas',
+          title:'Exported negative-result method',path:null});
+        const methodCanvas=f.repository.ideas.save({...ideaCanvasContentFixture(),artifactId:methodArtifact.id,expectedVersion:null});
+        const human=(capability,action)=>api.withResearchHumanContext({capability,projectId:f.project.id,windowId:72},action);
+        const body=ideaPlanBodyFixture();
+        body.metrics[0].definition=receipt.snapshot.request.definitions[0].definition;
+        body.metrics[0].expectedOutcome='A positive mean';
+        const method=human('research.ideaPlans.save',()=>f.repository.ideaPlans.save({
+          projectId:f.project.id,artifactId:methodArtifact.id,requestId:'export-method',
+          canvas:{version:methodCanvas.version,contentHash:methodCanvas.contentHash},parent:null,revisionReason:null,body}));
+        const frozen=human('research.ideaPlans.freeze',()=>f.repository.ideaPlans.freeze({
+          projectId:f.project.id,artifactId:methodArtifact.id,versionId:method.version.id,expectedHash:method.versionHash,
+          requestId:'export-method-freeze',reviewNote:'Synthetic after-run declaration, not independently preregistered'}));
+        const outcomes=new api.ResearchIdeaOutcomeService(f.repository,service);
+        const assessmentRequest={projectId:f.project.id,artifactId:methodArtifact.id,requestId:'export-assessment',
+          plan:{versionId:frozen.version.id,versionHash:frozen.versionHash,freezeHash:frozen.freezeHash},
+          result:{resultId:receipt.snapshot.id,expectedHash:receipt.snapshotHash},
+          metrics:[{kind:'measured',plannedMetricId:'mean',evidenceId:evidence.id}],verdict:'contradicts',
+          reviewNote:'Negative measured value retained alongside original positive expectation.',parent:null,revisionReason:null};
+        const assessment=await human('research.ideaOutcomes.save',()=>outcomes.save(assessmentRequest));
+        f.db.prepare("UPDATE research_projects SET current_stage='export' WHERE id=?").run(f.project.id);
+        assert.throws(()=>exports.assertCurrent(exportRequest,noAssessment),/research_export_sources_changed/u);
         const sources=await exports.capture(exportRequest,new AbortController().signal);
         assert.deepEqual(sources.experimentResults,[receipt]);
+        assert.deepEqual(sources.ideaOutcomes,[assessment]);
+        assert.equal(api.researchExportSourcesSchema.safeParse({...sources,ideaOutcomes:undefined}).success,false);
+        assert.deepEqual(f.repository.ideaOutcomes.forResult(other.id,receipt.snapshot.id),[]);
+        assert.deepEqual(f.repository.ideaOutcomes.forResult(f.project.id,'unreferenced-result'),[]);
+        const review=api.captureExportScientificReview(f.repository,sources);
+        const reviewBytes=api.serializeExportScientificReview(review);
+        const seal={sources,sourceHash:review.sourceHash,files:[{path:api.exportScientificReviewPath,
+          sha256:createHash('sha256').update(reviewBytes).digest('hex'),size:Buffer.byteLength(reviewBytes)}]};
+        assert.equal(review.schemaVersion,2);
+        assert.equal(api.researchExportScientificReviewSchema.safeParse({...review,schemaVersion:1}).success,false);
+        assert.equal(api.researchExportScientificReviewSchema.safeParse({...review,ideaOutcomeHistory:undefined}).success,false);
+        assert.deepEqual(review.ideaOutcomes,[assessment]);
+        assert.equal(review.ideaOutcomeHistory[0].history.verification,'stored_receipt');
+        assert.deepEqual(review.ideaOutcomeHistory[0].history.items,[assessment]);
+        assert.equal(review.ideaOutcomes[0].snapshot.material.plan.version.request.body.metrics[0].expectedOutcome,'A positive mean');
+        assert.equal(review.ideaOutcomes[0].snapshot.material.result.snapshot.result.metrics[0].value,-4);
+        const reads=f.db.prepare('SELECT total_changes()').pluck().get();
+        api.assertCurrentExportScientificReview(f.repository,seal);
+        assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),reads);
+        let latest=assessment;
+        for(let version=2;version<=102;version++) {
+          latest=human('research.ideaOutcomes.save',()=>f.repository.ideaOutcomes.save({...assessmentRequest,
+            requestId:`export-assessment-${version}`,parent:{outcomeId:latest.snapshot.id,outcomeHash:latest.snapshotHash},
+            verdict:'inconclusive',reviewNote:'No control group; retain the observed value.',
+            revisionReason:`Explicit synthetic revision ${version}`},assessment.snapshot.material));
+        }
+        assert.throws(()=>exports.assertCurrent(exportRequest,sources),/research_export_sources_changed/u);
+        assert.throws(()=>api.assertCurrentExportScientificReview(f.repository,seal),
+          error=>error.code==='research_export_semantic_snapshot_changed');
+        assert.equal(api.serializeExportScientificReview(review),reviewBytes);
+        const updated=await exports.capture(exportRequest,new AbortController().signal);
+        assert.deepEqual(updated.ideaOutcomes,[latest]);
+        const currentReview=api.captureExportScientificReview(f.repository,updated);
+        assert.equal(currentReview.ideaOutcomeHistory[0].history.total,102);
+        assert.deepEqual(currentReview.ideaOutcomeHistory[0].history.items.map(item=>item.snapshot.version),
+          Array.from({length:102},(_,index)=>102-index));
+        assert.deepEqual(currentReview.ideaOutcomeHistory[0].history.items.at(-1),assessment);
+        const currentBytes=api.serializeExportScientificReview(currentReview);
+        const currentSeal={sources:updated,sourceHash:currentReview.sourceHash,files:[{path:api.exportScientificReviewPath,
+          sha256:createHash('sha256').update(currentBytes).digest('hex'),size:Buffer.byteLength(currentBytes)}]};
+        api.assertCurrentExportScientificReview(f.repository,currentSeal);
         assert.deepEqual(sources.evidence,[evidence]);
         assert.equal(sources.experiments[0].id,run.id);
         assert.equal(sources.figures[0].id,figure.id);
@@ -374,8 +441,16 @@ test('actual result metric evidence traces claims, figures and Idea history to a
           .run(JSON.stringify({...metadata,pointer:'/metrics/1'}),evidence.id);
         await assert.rejects(service.evidence({projectId:f.project.id,evidenceId:evidence.id}),/research_result_evidence_changed/u);
         assert.throws(()=>exports.assertCurrent(exportRequest,sources),/research_result_evidence_changed/u);
+        assert.throws(()=>api.assertCurrentExportScientificReview(f.repository,currentSeal),/research_result_evidence_changed/u);
         f.db.prepare('UPDATE research_evidence_source_metadata SET metadata_json=? WHERE evidence_id=?').run(JSON.stringify(metadata),evidence.id);
-        exports.assertCurrent(exportRequest,sources);
+        exports.assertCurrent(exportRequest,updated);
+        api.assertCurrentExportScientificReview(f.repository,currentSeal);
+        f.db.prepare('UPDATE research_evidence_source_metadata SET metadata_json=? WHERE evidence_id=?').run('null',evidence.id);
+        assert.throws(()=>api.assertCurrentExportScientificReview(f.repository,currentSeal),/research_evidence_metadata_invalid/u);
+        f.db.prepare('DELETE FROM research_evidence_source_metadata WHERE evidence_id=?').run(evidence.id);
+        assert.throws(()=>api.assertCurrentExportScientificReview(f.repository,currentSeal),/research_result_evidence_changed/u);
+        f.db.prepare('INSERT INTO research_evidence_source_metadata (evidence_id,metadata_json) VALUES (?,?)').run(evidence.id,JSON.stringify(metadata));
+        api.assertCurrentExportScientificReview(f.repository,currentSeal);
       }
     }
     f.db.prepare("UPDATE research_projects SET current_stage='ideation' WHERE id=?").run(f.project.id);
