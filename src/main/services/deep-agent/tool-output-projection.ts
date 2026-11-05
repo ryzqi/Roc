@@ -1,5 +1,6 @@
 import { ContextArtifactStore } from './context/context-artifact-store';
 import { redactUnknown } from './redaction';
+import {researchReviewLinksSchema, reviewLinksPayload} from '../../../shared/schemas/research-review-links';
 
 const maxInlineToolOutputChars = 4_096;
 
@@ -26,13 +27,15 @@ export function createToolOutputProjector(input: {
       toolName: name,
       workspaceHash: input.workspaceHash
     });
+    const links = reviewLinksPayload(redacted);
     return {
       kind: 'tool_result_artifact',
       artifactId: artifact.artifactId,
       originalChars: artifact.originalChars,
       preview: artifact.preview,
       sha256: artifact.sha256,
-      truncated: true
+      truncated: true,
+      ...(links === undefined ? {} : {reviewLinks: researchReviewLinksSchema.parse(links)})
     };
   };
 }

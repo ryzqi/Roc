@@ -109,7 +109,7 @@ function fixture() {
 }
 async function mount(f, versionId = null, writable = true) {
   active = f;
-  await page.evaluate(({projectId, versionId, writable}) => window.mount({projectId, versionId}, writable),
+  await page.evaluate(({projectId, versionId, writable}) => window.mount({mode: 'manage', projectId, versionId}, writable),
     {projectId: f.project.id, versionId, writable});
   await tid('artifact-review').waitFor();
   await page.waitForFunction(() => !document.querySelector('[data-testid="artifact-review-refresh"]').disabled);
@@ -280,7 +280,7 @@ test('late exact-version response from another project cannot replace selected s
   const old = fixture(), saved = old.save(), next = fixture();
   const readStarted = new Promise(resolve => {old.readStarted = resolve;});
   active = old; old.deferRead = true;
-  await page.evaluate(request => window.mount(request), {projectId: old.project.id, versionId: saved.version.id});
+  await page.evaluate(request => window.mount(request), {mode: 'manage', projectId: old.project.id, versionId: saved.version.id});
   await page.waitForFunction(() => document.querySelector('[data-testid="artifact-review"]')?.textContent.includes('正在读取协议版本'));
   await readStarted;
   assert.ok(old.releaseRead);

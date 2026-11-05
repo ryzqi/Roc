@@ -2,37 +2,11 @@ import { CheckCircle2, CirclePlay, LoaderCircle, XCircle } from 'lucide-react';
 import type { ChatTranscriptActivityBlock } from '../transcript';
 import { ActivityBlockBody, ActivityBlockShell, type ActivityTone } from './activity-shell';
 import { useActivityBlockState } from './use-activity-block-state';
+import {ReviewLinkActions} from './review-link-actions';
 
 /**
- * Tool-call block (T4.4), ported from `chat/tool-call/ToolCallBlock.tsx` (+ its
- * `ToolDataSection`, which nothing else used, so it lives here).
- *
- * Behaviour kept verbatim: the block is only expandable when it actually carries data
- * (input / output / error), and it opens itself on failure — a failed tool call is the
- * one state where the user needs the payload without asking. Everything else stays
- * collapsed so a long run reads as a list of actions rather than a wall of JSON.
- *
- * `ToolDataSection` serialises non-strings with `JSON.stringify(…, null, 2)` because
- * tool payloads are arbitrary structured data; a raw `String(data)` would print
- * `[object Object]`, which is how these blocks used to lose information.
- *
- * ## No 「前往对应视窗」 button
- *
- * A tool row could end with a jump to the canvas surface the result belongs to. Doing that
- * here needs the tool's
- * **scope**, and `run-capability-manifest.ts` is the only place that knows whether a tool
- * is `workspace` / `memory` / `app` — the transcript does not carry it
- * (`ChatTranscriptActivityBlock` hands this block a `name` and payloads, nothing more).
- * The two ways to close the gap are both worse than recording it:
- *
- *   1. a name→view table in this file — a second copy of the manifest's tool list, which
- *      drifts silently the first time a tool is renamed (the backend refuses to keep a
- *      duplicate of the reserved-name guard for exactly this reason);
- *   2. adding `scope` to the run/transcript contract — a backend change, so not a
- *      frontend port at all.
- *
- * A button that guessed the destination from a tool's name would send the user to the
- * wrong surface *and be believed*, which is worse than the missing button.
+ * Data expands on demand and failures open their payload. Successful review results
+ * carry explicit receipt links; navigation never derives an identity from the tool name.
  */
 type ToolCallBlockModel = Extract<ChatTranscriptActivityBlock, { kind: 'tool_call' }>;
 
@@ -58,7 +32,7 @@ export function ToolCallBlock({ block }: ToolCallBlockProps): React.JSX.Element 
   const { open, setOpen } = useActivityBlockState({ defaultOpen: block.status === 'error' });
   const state = TOOL_STATE[block.status];
 
-  return (
+  return <div className="flex min-w-0 flex-col gap-1.5">
     <ActivityBlockShell
       testId="assistant-activity-tool"
       icon={state.Icon}
@@ -78,7 +52,8 @@ export function ToolCallBlock({ block }: ToolCallBlockProps): React.JSX.Element 
         </ActivityBlockBody>
       ) : null}
     </ActivityBlockShell>
-  );
+    {block.status === 'end' ? <ReviewLinkActions output={block.output} /> : null}
+  </div>;
 }
 
 export function ToolDataSection({

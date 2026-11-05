@@ -1,6 +1,6 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
-import {loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 import {createReviewScreeningPlanFixture, reviewScreeningActorFixture as actor} from './fixtures/research-review-screening.mjs';
 import {createReviewFullTextScreeningFixture, fullTextInclude as include} from './fixtures/research-review-fulltext-screening.mjs';
 import {createReviewQualityFixture} from './fixtures/research-review-quality.mjs';
@@ -96,7 +96,13 @@ test('assistant reads real protocol/query/corpus/hit and pending screening pages
     const {read} = connect(f), before = f.changes(), network = f.calls.length;
     const protocols = await read.invoke({kind: 'protocols', limit: 1});
     assert.equal(protocols.capped, true); assert.deepEqual(protocols.items, [f.protocol]);
-    assert.deepEqual(await read.invoke({kind: 'protocol', versionId: f.protocol.version.id}), f.protocol);
+    const protocol = await read.invoke({kind: 'protocol', versionId: f.protocol.version.id});
+    const {reviewLinks, ...inspection} = protocol;
+    assert.deepEqual(inspection, f.protocol);
+    assert.deepEqual(reviewLinks, [{
+      projectId: f.project.id, title: '只读核查准确协议',
+      target: {kind: 'protocol', versionId: f.protocol.version.id, expectedVersionHash: f.protocol.versionHash, expectedFreezeHash: f.protocol.freezeHash}
+    }]);
     const searches = await read.invoke({kind: 'searches', versionId: f.protocol.version.id, limit: 1});
     assert.equal(searches.items.length, 1); assert.equal(searches.capped, true);
     const id = searches.items[0].snapshot.id;
@@ -109,6 +115,7 @@ test('assistant reads real protocol/query/corpus/hit and pending screening pages
     const corpus = await read.invoke(pageTarget(f, 'corpus', 2));
     assert.equal(corpus.snapshotHash, f.corpus.snapshotHash); assert.equal(corpus.page.total, 8);
     assert.equal(corpus.page.hasMore, true); assert.deepEqual(corpus.page.items, f.corpus.snapshot.hits.slice(2, 4));
+    assert.deepEqual(corpus.reviewLinks[0].target, {kind: 'corpus', corpusId: f.get.corpusId, expectedCorpusHash: f.corpus.snapshotHash});
     assert.equal('hits' in corpus.basis, false);
     const hitId = corpus.page.items[0].id;
     assert.deepEqual(await read.invoke({kind: 'hit', corpusId: f.get.corpusId, hitId}), f.corpora.getHit({...f.get, hitId}));
@@ -217,6 +224,7 @@ test('report and evidence pages retain real conserved counts, null study/quality
     const counts = await read.invoke({...pageTarget(f, 'report'), section: 'counts'});
     assert.deepEqual(counts.counts, report.body.counts); assert.equal(counts.counts.includedStudies, null);
     assert.equal(counts.bodyHash, report.bodyHash); assert.deepEqual(counts.basis, report.body.basis);
+    assert.deepEqual(counts.reviewLinks[0].target, {kind: 'report', corpusId: f.get.corpusId, expectedBodyHash: report.bodyHash});
     for (const [section, items] of [['queries', report.body.queries], ['records', report.body.records], ['exclusions', report.body.exclusions]]) {
       const result = await read.invoke({...pageTarget(f, 'report', 0, 1), section});
       assert.equal(result.page.total, items.length); assert.deepEqual(result.page.items, items.slice(0, 1));
@@ -367,4 +375,47 @@ test('cancellation after real preview stops the bound-content read before return
     assert.deepEqual(calls, ['research.reviewFullText.get', 'research.document.preview']);
     assert.equal(f.changes(), before);
   } finally {await f.cleanup();}
+});
+
+test('bounded receipt links survive real context-artifact projection with intact redaction and durable source hash', () => {
+  const f = createResearchFixture(api);
+  try {
+    const store = new api.ContextArtifactStore(f.agentDb);
+    const project = api.createToolOutputProjector({artifactStore: store, runId: 'projection-run', threadId: 'projection-thread', workspaceHash: 'projection-workspace'});
+    const link = {projectId: f.project.id, title: '只读核查准确语料',
+      target: {kind: 'corpus', corpusId: 'corpus-exact-id', expectedCorpusHash: 'a'.repeat(64)}};
+    const small = {reviewLinks: [link], data: 'small structured response'};
+    assert.deepEqual(project({callId: 'small', name: 'research_review_read', output: small}), small);
+    const large = {data: 'long actual metadata '.repeat(500), reviewLinks: [link], apiKey: 'sk-synthetic-secret'};
+    const output = project({callId: 'large', name: 'research_review_read', output: large});
+    assert.equal(output.kind, 'tool_result_artifact'); assert.equal(output.truncated, true);
+    assert.deepEqual(output.reviewLinks, [link]);
+    const original = store.readArtifact({artifactId: output.artifactId, expectedSha256: output.sha256,
+      threadId: 'projection-thread', workspaceHash: 'projection-workspace'});
+    assert.deepEqual(JSON.parse(original.content).reviewLinks, [link]);
+    assert.equal(original.content.includes('sk-synthetic-secret'), false);
+    assert.equal(original.originalChars, output.originalChars); assert.equal(original.sha256, output.sha256);
+    assert.equal(store.readArtifact({artifactId: output.artifactId, expectedSha256: output.sha256,
+      threadId: 'another-thread', workspaceHash: 'projection-workspace'}), null);
+    assert.throws(() => api.researchReviewLinksSchema.parse([{...link, target: {...link.target, expectedCorpusHash: 'guessed'}}]));
+    assert.throws(() => api.researchReviewLinksSchema.parse(Array(4).fill(link)));
+    assert.throws(() => api.researchReviewLinksSchema.parse([link, link]));
+  } finally {f.close();}
+});
+
+test('SDK ToolCall wrapping preserves explicit receipt metadata through the actual ToolMessage projection', async () => {
+  const f = await titleScene(), auxiliary = createResearchFixture(api);
+  try {
+    const {read} = connect(f), args = {kind: 'protocol', versionId: f.protocol.version.id};
+    const direct = await read.invoke(args);
+    const message = await read.invoke({type: 'tool_call', id: 'sdk-review-link-call', name: read.name, args});
+    assert.equal(message.tool_call_id, 'sdk-review-link-call');
+    assert.equal(message.artifact.kind, 'roc_review_receipt_links');
+    assert.deepEqual(message.artifact.links, direct.reviewLinks);
+    assert.deepEqual(JSON.parse(message.content), direct);
+    const project = api.createToolOutputProjector({artifactStore: new api.ContextArtifactStore(auxiliary.agentDb),
+      runId: 'sdk-link-run', threadId: 'sdk-link-thread', workspaceHash: 'sdk-link-workspace'});
+    const projected = project({callId: 'sdk-review-link-call', name: read.name, output: message});
+    assert.deepEqual(api.reviewLinksPayload(projected), direct.reviewLinks);
+  } finally {await f.dispose(); auxiliary.close();}
 });

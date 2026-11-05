@@ -136,7 +136,7 @@ async function fixture(options) {
 async function mount(f, writable = true) {
   active = f;
   await page.evaluate(({request, writable}) => window.mount(request, writable),
-    {request: {projectId: f.project.id, versionId: f.protocol.version.id}, writable});
+    {request: {mode: 'manage', projectId: f.project.id, versionId: f.protocol.version.id}, writable});
   await tid('artifact-review-corpus-inspect').first().waitFor();
   await tid('artifact-review-corpus-inspect').first().focus();
   await page.keyboard.press('Enter');

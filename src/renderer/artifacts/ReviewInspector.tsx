@@ -7,6 +7,7 @@ import type {ReviewInspectorRequest} from './artifact-interactions';
 import type {ReviewProtocolDrafts} from './review-protocol-draft';
 import {ReviewProtocolEditor} from './ReviewProtocolEditor';
 import {ReviewSearchCorpus} from './ReviewSearchCorpus';
+import {ReviewReadonlyContent} from './ReviewReadonlyContent';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 type Selection = {kind: 'new'} | {kind: 'version'; versionId: string} | null;
@@ -14,12 +15,12 @@ type Selection = {kind: 'new'} | {kind: 'version'; versionId: string} | null;
 export function ReviewInspector({client, request, writable, drafts, onClose}: {
   client: RocClient; request: ReviewInspectorRequest; writable: boolean; drafts: ReviewProtocolDrafts; onClose: () => void
 }): React.JSX.Element {
-  const [selection, setSelection] = useState<Selection>(() => request.versionId === null ? null :
+  const [selection, setSelection] = useState<Selection>(() => request.mode === 'readonly' || request.versionId === null ? null :
     {kind: 'version', versionId: request.versionId});
   const [protocolPending, setProtocolPending] = useState(false);
   const [searchPending, setSearchPending] = useState(false);
   const pending = protocolPending || searchPending;
-  const protocols = useAsyncResource(`review:protocols:${request.projectId}`,
+  const protocols = useAsyncResource(request.mode === 'readonly' ? null : `review:protocols:${request.projectId}`,
     () => client.api.research.listReviewProtocols({projectId: request.projectId, limit: 100}), {label: '读取综述协议'});
   const versionId = selection?.kind === 'version' ? selection.versionId : null;
   const protocol = useAsyncResource(versionId === null ? null : `review:protocol:${request.projectId}:${versionId}`,
@@ -37,6 +38,7 @@ export function ReviewInspector({client, request, writable, drafts, onClose}: {
   return <ModalShell open kind="drawer" title="综述核查" onClose={onClose} beforeClose={() => !pending}
     widthClassName="w-[560px]" testId="artifact-inspector">
     <div className="flex min-w-0 flex-col gap-3 text-[var(--font-body-size)]" data-testid="artifact-review">
+      {request.mode === 'readonly' ? <ReviewReadonlyContent client={client} link={request} /> : <>
       <div className="flex flex-wrap gap-2">
         <button type="button" className={button} disabled={pending || protocols.status === 'loading' || protocol.status === 'loading'}
           data-testid="artifact-review-refresh" onClick={() => {protocols.reload(); protocol.reload();}}>刷新综述</button>
@@ -84,6 +86,7 @@ export function ReviewInspector({client, request, writable, drafts, onClose}: {
             setSelection({kind: 'version', versionId: saved.version.id});
             protocols.reload(); protocol.reload();
           }} /> : null}
+      </>}
     </div>
   </ModalShell>;
 }

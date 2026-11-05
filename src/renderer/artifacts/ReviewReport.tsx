@@ -30,7 +30,7 @@ function ReportPage({label, offset, total, onOffset}: {
     <button type="button" className={button} disabled={offset + 10 >= total} onClick={() => onOffset(offset + 10)}>下一页{label}</button>
   </div>;
 }
-function ReviewReportBody({report}: {report: ResearchReviewReportInspection}): React.JSX.Element {
+export function ReviewReportBody({report}: {report: ResearchReviewReportInspection}): React.JSX.Element {
   const {body} = report, c = body.counts;
   const [recordOffset, setRecordOffset] = useState(0), [exclusionOffset, setExclusionOffset] = useState(0), [evidenceOffset, setEvidenceOffset] = useState(0);
   const evidenceStatus = new Map(report.evidenceStatus.map(status => [status.hitId, status]));

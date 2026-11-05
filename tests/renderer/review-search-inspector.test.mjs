@@ -70,6 +70,9 @@ before(async () => {
     if (method === 'getReviewSearchPool' && f.deferPool) {
       return new Promise(resolve => {f.releasePool = () => resolve(result); f.poolStarted();});
     }
+    if (method === 'listReviewSearches' && f.deferSearches) {
+      return new Promise(resolve => {f.releaseSearches = () => resolve(result); f.searchesStarted();});
+    }
     return result;
   });
   await page.waitForFunction(() => typeof window.mount === 'function');
@@ -124,7 +127,7 @@ function fixture({queries = ['synthetic query one'], count = 4, pageSize = 2, ma
 async function mount(f, writable = true) {
   active = f;
   await page.evaluate(({request, writable}) => window.mount(request, writable),
-    {request: {projectId: f.project.id, versionId: f.protocol.version.id}, writable});
+    {request: {mode: 'manage', projectId: f.project.id, versionId: f.protocol.version.id}, writable});
   await tid('artifact-review-search').waitFor();
   await page.waitForFunction(() => !document.querySelector('[data-testid="artifact-review-search-refresh"]').disabled);
 }
@@ -299,8 +302,15 @@ test('original pool corruption is a visible refusal; refresh cannot permit a cor
   await tid('artifact-review-pool').getByRole('button', {name: '重读原始记录'}).click();
   await tid('artifact-review-pool').getByRole('alert').waitFor();
   assert.equal(await tid('artifact-review-pool-record').count(), 0);
+  const refreshStarted = new Promise(resolve => {f.searchesStarted = resolve;});
+  f.deferSearches = true;
   await tid('artifact-review-search-refresh').click();
-  await tid('artifact-review-search').getByRole('alert').first().waitFor();
+  await refreshStarted;
+  await tid('artifact-review-search').getByRole('status').filter({hasText: '正在读取实际检索状态'}).waitFor();
+  assert.equal(await tid('artifact-review-corpus-create').count(), 0);
+  f.deferSearches = false;
+  f.releaseSearches();
+  await tid('artifact-review-search').locator(':scope > [role="alert"]').waitFor();
   assert.equal(await tid('artifact-review-corpus-create').count(), 0);
   assert.equal(f.changes(), unchanged);
   f.db.prepare('UPDATE research_literature_search_pools SET pool_json=? WHERE execution_id=?').run(original, run.receipt.executionId);

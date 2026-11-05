@@ -30,6 +30,9 @@ import {
 } from '../../../shared/schemas/research-review-fulltext';
 import type {ResearchDocumentParse} from '../../../shared/types';
 import type {ResearchDocumentPreview} from '../../../shared/schemas/research-document-preview';
+import {
+  researchReviewLinksSchema, reviewLinksPayload, type ResearchReviewLink, type ResearchReviewLinksArtifact
+} from '../../../shared/schemas/research-review-links';
 import {researchReviewExtractionGetSchema} from '../../../shared/schemas/research-review-extraction';
 import {
   researchReviewQualityPlanGetSchema, researchReviewQualityAssessmentGetSchema
@@ -85,8 +88,12 @@ export function createReviewTools(input: {
     return result;
   };
   return [
-    tool(async target => await read(target, invoke), {
+    tool(async (target): Promise<[unknown, ResearchReviewLinksArtifact | null]> => {
+      const result = await read(target, invoke), links = reviewLinksPayload(result);
+      return [result, links === undefined ? null : {kind: 'roc_review_receipt_links', links: researchReviewLinksSchema.parse(links)}];
+    }, {
       name: 'research_review_read',
+      responseFormat: 'content_and_artifact',
       description: '读取当前项目真实的系统综述协议、查询回执、原始记录、筛选状态、全文绑定、人工提取/质量评价和报表。'
         + '先列协议，再用返回的精确版本/语料/条目 ID 读取；列表 capped=true 时不能推断遗漏项不存在。'
         + 'fulltext_content 按准确 binding 哈希读取其原文解析块，核验真实文件与解析工件；尚无解析时明确失败，不替换来源或启动解析。'
@@ -132,7 +139,14 @@ async function read(
       const items = await invoke<ResearchReviewProtocolInspection[]>('research.reviewProtocol.list', request);
       return {limit: target.limit, capped: items.length === target.limit, items};
     }
-    case 'protocol': return await invoke('research.reviewProtocol.get', request);
+    case 'protocol': {
+      const inspection = await invoke<ResearchReviewProtocolInspection>('research.reviewProtocol.get', request);
+      const link: ResearchReviewLink = {
+        projectId: inspection.version.projectId, title: '只读核查准确协议',
+        target: {kind: 'protocol', versionId: inspection.version.id, expectedVersionHash: inspection.versionHash, expectedFreezeHash: inspection.freezeHash}
+      };
+      return {...inspection, reviewLinks: [link]};
+    }
     case 'searches': {
       const items = await invoke<ResearchReviewSearchInspection[]>('research.reviewSearch.list', request);
       return {limit: target.limit, capped: items.length === target.limit, items};
@@ -156,7 +170,8 @@ async function read(
       return {
         basis, snapshotHash: corpus.snapshotHash, currentProtocol: corpus.currentProtocol,
         identifiedRecords: corpus.identifiedRecords, queryCount: corpus.queryCount,
-        searchCoverageComplete: corpus.searchCoverageComplete, page: page(hits, target)
+        searchCoverageComplete: corpus.searchCoverageComplete, page: page(hits, target),
+        reviewLinks: [corpusLink(corpus.snapshot.request.projectId, corpus.snapshot.id, corpus.snapshotHash)]
       };
     }
     case 'hit': return await invoke('research.reviewCorpus.hit', request);
@@ -168,7 +183,8 @@ async function read(
       return {
         plan: phase.plan, phase: phase.phase, counts: phase.counts, reviewHash: phase.reviewHash, freezeHash: phase.freezeHash,
         frozenAt: phase.freeze?.frozenAt ?? null, page: page(phase.items, target),
-        frozenAuthorityPage: phase.freeze === null ? null : page(phase.freeze.authority.items, target)
+        frozenAuthorityPage: phase.freeze === null ? null : page(phase.freeze.authority.items, target),
+        reviewLinks: [corpusLink(phase.plan.snapshot.request.projectId, target.corpusId, phase.plan.snapshot.request.expectedCorpusHash)]
       };
     }
     case 'fulltext_phase': {
@@ -179,7 +195,8 @@ async function read(
         plan: phase.plan, phase: phase.phase, titleFreezeHash: phase.titleFreezeHash, counts: phase.counts,
         reviewHash: phase.reviewHash, freezeHash: phase.freezeHash, frozenAt: phase.freeze?.frozenAt ?? null,
         page: page(phase.items, target),
-        frozenAuthorityPage: phase.freeze === null ? null : page(phase.freeze.authority.items, target)
+        frozenAuthorityPage: phase.freeze === null ? null : page(phase.freeze.authority.items, target),
+        reviewLinks: [corpusLink(phase.plan.snapshot.request.projectId, target.corpusId, phase.plan.snapshot.request.expectedCorpusHash)]
       };
     }
     case 'title_suggestions': return await invoke('research.reviewScreening.suggestions', {...request, phase: 'title_abstract'});
@@ -213,7 +230,11 @@ async function read(
       const basis = {
         projectId: report.body.projectId, corpusId: report.body.corpusId, bodyHash: report.bodyHash,
         basis: report.body.basis, counts: report.body.counts, currentProtocol: report.currentProtocol,
-        sourcesCurrent: report.sourcesCurrent, searchCoverageComplete: report.body.searchCoverageComplete
+        sourcesCurrent: report.sourcesCurrent, searchCoverageComplete: report.body.searchCoverageComplete,
+        reviewLinks: [{
+          projectId: report.body.projectId, title: '只读核查准确计数与证据报告',
+          target: {kind: 'report', corpusId: report.body.corpusId, expectedBodyHash: report.bodyHash}
+        } satisfies ResearchReviewLink]
       };
       switch (target.section) {
         case 'counts': return basis;
@@ -227,6 +248,10 @@ async function read(
       }
     }
   }
+}
+
+function corpusLink(projectId: string, corpusId: string, expectedCorpusHash: string): ResearchReviewLink {
+  return {projectId, title: '只读核查准确语料', target: {kind: 'corpus', corpusId, expectedCorpusHash}};
 }
 
 function page<T>(items: T[], request: {offset: number; limit: number}): {

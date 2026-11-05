@@ -182,7 +182,7 @@ export function LiteratureHubView(): React.JSX.Element {
             className="h-7 rounded-control px-2 text-muted text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-50"
             onClick={() => {
               if (scope.projectId === null) throw new Error('research_review_project_required');
-              scope.openReviewInspector({projectId: scope.projectId, versionId: null});
+              scope.openReviewInspector({mode: 'manage', projectId: scope.projectId, versionId: null});
             }}>综述核查</button>
           {subView === 'reader' && returnToSearch ? (
             <button type="button" data-testid="literature-return-search" onClick={() => { selectSubView('rag'); setReturnToSearch(false); }}

@@ -736,6 +736,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
                   threadId={assistantThreadId}
                   onThreadIdChange={setAssistantThreadId}
                   onOpenArtifact={openArtifact}
+                  onOpenReviewInspector={openReviewInspector}
                   onOpenTask={(taskId) => {
                     if (route.projectId === null) throw new Error('research_task_project_required');
                     setResearchTaskSelection({ projectId: route.projectId, taskId });

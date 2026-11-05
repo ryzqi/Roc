@@ -1,4 +1,5 @@
-import type {OpenResearchArtifact, ReadResearchGateContext} from '../artifacts/artifact-interactions';
+import type {OpenResearchArtifact, OpenReviewInspector, ReadResearchGateContext} from '../artifacts/artifact-interactions';
+import {ReviewLinkActionsProvider} from './blocks/review-link-actions';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Bot, Loader2, Minimize2, Settings2 } from 'lucide-react';
 import type { ChatRunMode, RunBudgetStatus, SettingsSnapshot } from '../../shared/types';
@@ -91,6 +92,7 @@ export type AssistantPanelProps = {
   onThreadIdChange: (threadId: string | null) => void;
   onOpenTask: (taskId: string) => void;
   onOpenArtifact: OpenResearchArtifact;
+  onOpenReviewInspector: OpenReviewInspector;
   /** Bound workspace path, so a run is scoped to the directory the user is looking at. */
   workspacePath: string | null;
   projectName: string | null;
@@ -119,6 +121,7 @@ export function AssistantPanel({
   onThreadIdChange,
   onOpenTask,
   onOpenArtifact,
+  onOpenReviewInspector,
   workspacePath,
   projectName,
   stageLabel = null,
@@ -127,6 +130,7 @@ export function AssistantPanel({
   onComposerSeedConsumed,
   onResetWidth
 }: AssistantPanelProps): React.JSX.Element {
+  const reviewLinkScope = useMemo(() => ({projectId, open: onOpenReviewInspector}), [projectId, onOpenReviewInspector]);
   /**
    * The settings revision is part of the key, not just a reload trigger: a save in the
    * settings centre changes the model label, the image support and the skill list, and the
@@ -436,6 +440,7 @@ export function AssistantPanel({
             testId={session.history.loadingInitial ? 'assistant-history-loading' : 'assistant-empty'}
           />
         ) : (
+          <ReviewLinkActionsProvider value={reviewLinkScope}>
           <ChatTranscriptPanel
             threadId={threadId}
             messages={session.messages}
@@ -453,6 +458,7 @@ export function AssistantPanel({
             onReadGateContext={onReadGateContext}
             onResumeCheckpoint={onResumeCheckpoint}
           />
+          </ReviewLinkActionsProvider>
         )}
       </div>
 

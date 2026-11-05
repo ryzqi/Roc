@@ -7,7 +7,7 @@ import {formSecondaryButtonClass} from '../shared/form-ui';
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 export function ReviewCorpusRecords({client, corpus, disabled, onSelect}: {
   client: RocClient; corpus: ResearchReviewCorpusInspection; disabled: boolean;
-  onSelect: (side: 'left' | 'right', hitId: string) => void
+  onSelect: ((side: 'left' | 'right', hitId: string) => void) | null
 }): React.JSX.Element {
   const [offset, setOffset] = useState(0);
   const hits = corpus.snapshot.hits.slice(offset, offset + 10);
@@ -33,12 +33,12 @@ export function ReviewCorpusRecords({client, corpus, disabled, onSelect}: {
         <p className="text-muted">数据库 {item.source.databaseIndex + 1} 检索式 {item.source.queryIndex + 1} 原始记录 {item.reference.recordIndex + 1}</p>
         <p className="break-words">{item.record.record.doi ?? 'DOI 未提供'}</p>
         <p className="break-words">{item.record.record.abstract ?? '摘要未提供'}</p>
-        <div className="flex flex-wrap gap-2">
+        {onSelect === null ? null : <div className="flex flex-wrap gap-2">
           <button type="button" className={button} disabled={disabled} data-testid="artifact-review-record-left"
             onClick={() => onSelect('left', item.reference.id)}>选为记录 A</button>
           <button type="button" className={button} disabled={disabled} data-testid="artifact-review-record-right"
             onClick={() => onSelect('right', item.reference.id)}>选为记录 B</button>
-        </div>
+        </div>}
         <details><summary className="cursor-pointer text-muted">核对完整原始元数据</summary>
           <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono" tabIndex={0}>
             {JSON.stringify(item.record, null, 2)}
