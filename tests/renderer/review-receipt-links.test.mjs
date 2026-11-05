@@ -9,12 +9,15 @@ import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 import {loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
 import {createReviewScreeningPlanFixture, reviewScreeningActorFixture as actor} from '../unit/fixtures/research-review-screening.mjs';
 import {createReviewQualityFixture} from '../unit/fixtures/research-review-quality.mjs';
+import {createReviewSearchFixture, awaitReviewSearchFixture} from '../unit/fixtures/research-review-search.mjs';
 
 let api, directory, app, page, active, windowId;
 const fixtures = [], errors = [], calls = [];
 const artifacts = join(process.cwd(), '.artifacts/research-optimization/pr09-a7d2b-ui');
 const channels = {
   getReviewProtocol: 'roc:research:review-protocol-get',
+  getReviewSearch: 'roc:research:review-search-get',
+  getReviewSearchPool: 'roc:research:review-search-pool',
   getReviewCorpus: 'roc:research:review-corpus-get',
   getReviewCorpusHit: 'roc:research:review-corpus-hit',
   getReviewReport: 'roc:research:review-report-get'
@@ -80,6 +83,7 @@ async function fixture(report = false) {
   const registry = new api.CapabilityRegistry(), context = {pluginId: 'research', capabilities: registry};
   const register = (descriptors, run) => {for (const descriptor of descriptors) registry.declare('research', descriptor); run();};
   register(api.researchSystematicReviewCapabilities, () => api.registerResearchSystematicReviewCapabilities(context, f.repository.systematicReviews));
+  register(api.researchReviewSearchCapabilities, () => api.registerResearchReviewSearchCapabilities(context, f.reviews));
   register(api.researchReviewCorpusCapabilities, () => api.registerResearchReviewCorpusCapabilities(context, f.corpora));
   if (report) {
     f.studies = new api.ResearchReviewStudiesRepository(f.db, f.repository, f.fullFreezing, f.fulltexts, () => f.time);
@@ -94,6 +98,27 @@ async function fixture(report = false) {
   f.projectOutput = api.createToolOutputProjector({artifactStore: new api.ContextArtifactStore(f.agentDb),
     runId: 'exact-links-run', threadId: 'exact-links-thread', workspaceHash: 'exact-links-workspace'});
   fixtures.push(f); return f;
+}
+function queryFixture(options = {}) {
+  const f = createReviewSearchFixture(api, options), registry = new api.CapabilityRegistry();
+  const context = {pluginId: 'research', capabilities: registry};
+  for (const descriptor of [...api.researchSystematicReviewCapabilities, ...api.researchReviewSearchCapabilities]) {
+    registry.declare('research', descriptor);
+  }
+  api.registerResearchSystematicReviewCapabilities(context, f.repository.systematicReviews);
+  api.registerResearchReviewSearchCapabilities(context, f.reviews);
+  f.bridge = api.createPluginCapabilityAdapter({invokeCapability: (name, input) => registry.invoke(name, input)});
+  f.read = api.createResearchTools({capabilities: registry, projectId: f.project.id, signal: new AbortController().signal,
+    dispatchReviewQuery: async () => assert.fail('readonly cannot execute query'),
+    dispatchStage: async () => assert.fail('readonly cannot execute stage')}).find(tool => tool.name === 'research_review_read');
+  f.projectOutput = api.createToolOutputProjector({artifactStore: new api.ContextArtifactStore(f.agentDb),
+    runId: 'query-links-run', threadId: 'query-links-thread', workspaceHash: 'query-links-workspace'});
+  fixtures.push(f); return f;
+}
+async function queryOutput(f, reviewSearchId) {
+  const value = await f.read.invoke({type: 'tool_call', id: 'sdk-query-link', name: f.read.name,
+    args: {kind: 'search', reviewSearchId}});
+  return f.projectOutput({callId: 'query-link', name: f.read.name, output: value});
 }
 async function output(f, kind = 'protocol') {
   const request = kind === 'protocol' ? {kind, versionId: f.protocol.version.id} :
@@ -149,6 +174,98 @@ test('exact corpus link reads raw hit identities and frozen sources without quer
   assert.equal(calls.slice(at).filter(call => call.method === 'getReviewCorpus').length, 1);
   assert.deepEqual(calls.slice(at).filter(call => call.method === 'getReviewCorpusHit').map(call => call.input.hitId), f.corpus.snapshot.hits.map(hit => hit.id));
   assert.equal(f.changes(), before); await tid('artifact-review-readonly-corpus').scrollIntoViewIfNeeded(); await audit('corpus-records');
+});
+
+test('actual query link opens its exact request and original pool without any list, new search or scientific controls', async () => {
+  const f = queryFixture(), search = await awaitReviewSearchFixture(f, f.reviews.start(f.request, actor));
+  const value = await queryOutput(f, search.snapshot.id), before = f.changes(), requests = f.calls.length, at = calls.length;
+  assert.deepEqual(api.reviewLinksPayload(value)[0].target, {
+    kind: 'query', reviewSearchId: search.snapshot.id, expectedSnapshotHash: search.snapshotHash
+  });
+  await mount(f, value); await open(); await tid('artifact-review-pool-record').first().waitFor();
+  assert.equal(await tid('artifact-review-readonly-query-status').innerText(), '检索完成');
+  assert.match(await tid('artifact-review-readonly-query').innerText(), /原始记录 4 条/u);
+  assert.match(await tid('artifact-review-readonly-query').innerText(), new RegExp(search.snapshot.parameters.query));
+  assert.equal(await tid('artifact-review-pool-record').count(), 4);
+  assert.match(await tid('artifact-review-pool-record').first().innerText(), /发表年份未知/u);
+  assert.equal(await tid('artifact-review-query-start').count(), 0); assert.equal(await tid('artifact-review-query-cancel').count(), 0);
+  assert.equal(calls.slice(at).some(call => call.method.startsWith('list')), false);
+  assert.equal(f.calls.length, requests); assert.equal(f.changes(), before);
+  await tid('artifact-review-readonly-query').scrollIntoViewIfNeeded(); await audit('query-default');
+  await tid('artifact-review-readonly-refresh').hover(); await audit('query-hover');
+  const receipt = page.getByText('准确请求、来源与终态回执', {exact: true});
+  await receipt.click(); await receipt.locator('..').locator('pre').waitFor({state: 'visible'});
+  assert.match(await receipt.locator('..').innerText(), new RegExp(search.snapshotHash)); await audit('query-expanded');
+});
+
+test('wrong query snapshot and actual query read failure cannot display another saved receipt or expose mutations', async () => {
+  const f = queryFixture(), search = await awaitReviewSearchFixture(f, f.reviews.start(f.request, actor));
+  const actual = await queryOutput(f, search.snapshot.id), wrong = structuredClone(actual);
+  api.reviewLinksPayload(wrong)[0].target.expectedSnapshotHash = 'a'.repeat(64);
+  const before = f.changes(), requests = f.calls.length;
+  await mount(f, wrong); await open(); await page.getByRole('alert').waitFor();
+  assert.match(await page.getByRole('alert').innerText(), /查询快照与链接不一致/u);
+  assert.equal(await tid('artifact-review-readonly-query').count(), 0);
+  f.failMethod = 'getReviewSearch'; await mount(f, actual); await open(); await page.getByRole('alert').waitFor();
+  assert.match(await page.getByRole('alert').innerText(), /Synthetic actual read failure/u);
+  assert.equal(await tid('artifact-review-readonly-query').count(), 0);
+  assert.equal(f.changes(), before); assert.equal(f.calls.length, requests);
+});
+
+test('running query link preserves unknown counts and re-reads real terminal state without restarting retrieval', async () => {
+  let entered, release;
+  const ready = new Promise(resolve => {entered = resolve;});
+  const f = queryFixture({fetch: async (_url, options) => {
+    entered();
+    return new Promise((resolve, reject) => {
+      release = () => resolve(Response.json({meta: {count: 0}, results: []}));
+      options.signal.addEventListener('abort', () => reject(options.signal.reason), {once: true});
+    });
+  }});
+  const start = f.reviews.start(f.request, actor); await ready;
+  const value = await queryOutput(f, start.snapshot.id), before = f.changes(), requests = f.calls.length;
+  await mount(f, value); await open(); await tid('artifact-review-readonly-query').waitFor();
+  assert.equal(await tid('artifact-review-readonly-query-status').innerText(), '检索中');
+  assert.match(await tid('artifact-review-readonly-query').innerText(), /记录数与覆盖等待终态回执/u);
+  assert.equal(await tid('artifact-review-pool').count(), 0);
+  assert.equal(f.changes(), before); assert.equal(f.calls.length, requests);
+  release(); const terminal = await awaitReviewSearchFixture(f, start);
+  assert.equal(terminal.status, 'complete'); assert.equal(terminal.snapshotHash, start.snapshotHash);
+  const after = f.changes();
+  await tid('artifact-review-readonly-refresh').click();
+  await tid('artifact-review-readonly-query-status').getByText('检索完成', {exact: true}).waitFor();
+  await tid('artifact-review-pool').getByText('原始记录 0 条，保留重复记录与未知字段', {exact: true}).waitFor();
+  assert.equal(f.calls.length, requests); assert.equal(f.changes(), after);
+});
+
+test('archived partial query retains exact old request and visible coverage gap in dark narrow drawer', async () => {
+  const f = queryFixture({maxPages: 1}), search = await awaitReviewSearchFixture(f, f.reviews.start(f.request, actor));
+  assert.equal(search.status, 'partial');
+  const value = await queryOutput(f, search.snapshot.id);
+  f.db.prepare("UPDATE research_projects SET status='archived' WHERE id=?").run(f.project.id);
+  const before = f.changes(), requests = f.calls.length;
+  await mount(f, value); await page.emulateMedia({colorScheme: 'dark'}); await page.setViewportSize({width: 650, height: 820});
+  await page.evaluate(() => {document.documentElement.dataset.theme = 'dark';});
+  await open(); await tid('artifact-review-pool-record').first().waitFor();
+  assert.equal(await tid('artifact-review-readonly-query-status').innerText(), '结果不完整');
+  assert.match(await tid('artifact-review-readonly-query').innerText(), /检索覆盖不完整/u);
+  assert.equal(await tid('artifact-review-query-start').count(), 0); assert.equal(await tid('artifact-review-query-cancel').count(), 0);
+  assert.equal(f.changes(), before); assert.equal(f.calls.length, requests);
+  await tid('artifact-review-readonly-query').scrollIntoViewIfNeeded(); await audit('query-archive-dark650');
+});
+
+test('late query completion from another project cannot replace current exact query receipt', async () => {
+  const prior = queryFixture(), next = queryFixture({maxPages: 1});
+  const a = await awaitReviewSearchFixture(prior, prior.reviews.start(prior.request, actor));
+  const b = await awaitReviewSearchFixture(next, next.reviews.start(next.request, actor));
+  const oldOutput = await queryOutput(prior, a.snapshot.id), newOutput = await queryOutput(next, b.snapshot.id);
+  prior.deferMethod = 'getReviewSearch'; const started = new Promise(resolve => {prior.started = resolve;});
+  await mount(prior, oldOutput); await open(); await started;
+  await mount(next, newOutput); await open(); await tid('artifact-review-readonly-query').waitFor();
+  prior.deferMethod = null; prior.release();
+  assert.match(await tid('artifact-review-readonly-query').innerText(), new RegExp(b.snapshot.id));
+  assert.equal((await tid('artifact-review-readonly-query').innerText()).includes(a.snapshot.id), false);
+  assert.equal(await tid('artifact-review-readonly-query-status').innerText(), '结果不完整');
 });
 
 test('incorrect protocol/freeze hash and actual read failures show errors without displaying a current receipt as the requested version', async () => {

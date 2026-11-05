@@ -79,6 +79,9 @@ test('actual SDK query tools execute and read exact frozen receipts with trusted
     assert.equal(result.association.taskId, f.tasks.taskForChat(c.runId).id);
     assert.deepEqual(api.reviewLinksPayload(started.message), result.reviewLinks);
     assert.deepEqual(result.reviewLinks[0].target, {
+      kind: 'query', reviewSearchId: result.search.snapshot.id, expectedSnapshotHash: result.search.snapshotHash
+    });
+    assert.deepEqual(result.reviewLinks[1].target, {
       kind: 'protocol', versionId: f.protocol.version.id, expectedVersionHash: f.protocol.versionHash,
       expectedFreezeHash: f.protocol.freezeHash
     });

@@ -4,6 +4,7 @@ const id = z.string().trim().min(1).max(300);
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 export const researchReviewLinkTargetSchema = z.discriminatedUnion('kind', [
   z.object({kind: z.literal('protocol'), versionId: id, expectedVersionHash: hash, expectedFreezeHash: hash.nullable()}).strict(),
+  z.object({kind: z.literal('query'), reviewSearchId: id, expectedSnapshotHash: hash}).strict(),
   z.object({kind: z.literal('corpus'), corpusId: id, expectedCorpusHash: hash}).strict(),
   z.object({kind: z.literal('report'), corpusId: id, expectedBodyHash: hash}).strict()
 ]);

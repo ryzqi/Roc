@@ -109,7 +109,9 @@ test('assistant reads real protocol/query/corpus/hit and pending screening pages
     const searches = await read.invoke({kind: 'searches', versionId: f.protocol.version.id, limit: 1});
     assert.equal(searches.items.length, 1); assert.equal(searches.capped, true);
     const id = searches.items[0].snapshot.id;
-    assert.deepEqual(await read.invoke({kind: 'search', reviewSearchId: id}), searches.items[0]);
+    const {reviewLinks: queryLinks, ...query} = await read.invoke({kind: 'search', reviewSearchId: id});
+    assert.deepEqual(query, searches.items[0]);
+    assert.deepEqual(queryLinks[0].target, {kind: 'query', reviewSearchId: id, expectedSnapshotHash: query.snapshotHash});
     const pool = await read.invoke({kind: 'search_pool', reviewSearchId: id, offset: 1, limit: 2});
     assert.deepEqual(pool, f.reviews.readPool({projectId: f.project.id, reviewSearchId: id, offset: 1, limit: 2}));
     const corpora = await read.invoke({kind: 'corpora', versionId: f.protocol.version.id, limit: 1});

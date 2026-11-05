@@ -151,7 +151,14 @@ async function read(
       const items = await invoke<ResearchReviewSearchInspection[]>('research.reviewSearch.list', request);
       return {limit: target.limit, capped: items.length === target.limit, items};
     }
-    case 'search': return await invoke('research.reviewSearch.get', request);
+    case 'search': {
+      const search = await invoke<ResearchReviewSearchInspection>('research.reviewSearch.get', request);
+      const link: ResearchReviewLink = {
+        projectId: search.snapshot.request.projectId, title: '只读核查准确查询回执',
+        target: {kind: 'query', reviewSearchId: search.snapshot.id, expectedSnapshotHash: search.snapshotHash}
+      };
+      return {...search, reviewLinks: [link]};
+    }
     case 'search_pool': return await invoke('research.reviewSearch.pool', request);
     case 'corpora': {
       const items = await invoke<ResearchReviewCorpusInspection[]>('research.reviewCorpus.list', request);

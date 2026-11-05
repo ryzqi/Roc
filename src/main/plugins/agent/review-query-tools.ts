@@ -41,12 +41,17 @@ export function createReviewQueryTools(input: {
     const result = await input.dispatchReviewQuery(query);
     input.signal.throwIfAborted();
     const snapshot = result.search.snapshot;
-    const link: ResearchReviewLink = {
+    const queryLink: ResearchReviewLink = {
+      projectId: snapshot.request.projectId, title: '只读核查本次查询回执',
+      target: {kind: 'query', reviewSearchId: snapshot.id, expectedSnapshotHash: result.search.snapshotHash}
+    };
+    const protocolLink: ResearchReviewLink = {
       projectId: snapshot.request.projectId, title: '只读核查本次查询的冻结协议',
       target: {kind: 'protocol', versionId: snapshot.request.versionId,
         expectedVersionHash: snapshot.protocolVersionHash, expectedFreezeHash: snapshot.request.expectedFreezeHash}
     };
-    return [{...result, reviewLinks: [link]}, {kind: 'roc_review_receipt_links', links: [link]}];
+    return [{...result, reviewLinks: [queryLink, protocolLink]},
+      {kind: 'roc_review_receipt_links', links: [queryLink, protocolLink]}];
   };
   return [
     tool(request => invoke({action: 'start', request: {
