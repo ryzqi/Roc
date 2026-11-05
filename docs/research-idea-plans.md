@@ -95,3 +95,33 @@ DB46 增加独立、追加式结果评估时间线。每条评估绑定精确冻
 初轮 typecheck 暴露局部 `never` 回调缺少显式函数类型的控制流收窄问题，现已修正。时间漂移测试初轮误用与 fixture 相同的时间，被后续父版本冲突正确拒绝；改为不同时间后验证准确错误。原始失败日志保留。
 
 A3A 状态：**Verified passing**，范围为追加式存储、人工 API、真实来源绑定与现有消费者，所有表列进程退出码为零。renderer 评估 UI、审核 snapshot 的 outcome 聚合和导出绑定属于后续部分；没有扩展为全计划或独立科学验收。
+
+## A3B：结果评估界面与工件审核绑定
+
+现有 Stage drawer 按模块 lazy 加载结果评估。用户主动读取冻结方法历史、最近 200 次真实运行和分页结果，再按精确 ID/hash 复核选中来源。每个计划指标主动选择实测指标或缺失原因，人工选择结论并填写审核说明；定义、单位、方向差异逐项显示，存在差异只能保存不可比评估。真实指标 ID 经编码后作为选项值，不与缺失选项冲突。
+
+保存先逐项幂等捕获指标 Evidence，再追加人工评估。相同内容重试保留请求 ID；Evidence 已保存而评估失败时明确保留这些证据。计划与评估分别维护 dirty/pending，互相锁住修改，并共同锁住关闭、刷新、任务和审核切换。冻结审核说明也计入未保存修改；迟到写入回复不能清除新 Canvas 的修改状态。
+
+严格 inspector snapshot 必须包含每个冻结方法的最新评估 head，并将其 Evidence 聚合到既有来源审核。新计划草稿不会删除旧方法评估；修订旧方法评估会改变审核 hash。历史分页显示保存回执，独立“复核当前来源”重新读取实际文件；来源漂移时移除当前验证状态，保留可读历史，不以旧 hook 数据表示成功。
+
+### 验证
+
+下列命令均在本文件所列仓库根目录执行，退出码全部为零。日志位于 `.artifacts/research-optimization/`。
+
+| 命令 | 实际结果 | 日志 |
+| --- | --- | --- |
+| `pnpm build` | 最终通过，含 typecheck | `xidea-a3b-final-build.log` |
+| `node --test tests/unit/research-idea-outcomes.test.mjs tests/unit/research-idea-inspection.test.mjs` | 最终 5/5 | `xidea-a3b-final-focused.log` |
+| `pnpm test:unit` | 1214/1214，零失败/跳过；随后补充的错误码断言由最终聚焦检查覆盖 | `xidea-a3b-unit.log` |
+| `node --test tests/renderer/idea-outcomes.test.mjs tests/renderer/idea-plans.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs` | 最终 45/45 | `xidea-a3b-final-renderer.log` |
+| `node scripts/run-research-p0.mjs` | 13/13 | `xidea-a3b-p0.log` |
+| `pnpm harness:eval` | 94/94 | `xidea-a3b-harness.log` |
+| `node scripts/smoke-electron.mjs` | 13/13，零 renderer error | `xidea-a3b-startup.log` |
+| `pnpm check:ipc` | 生成文件一致 | 本轮终端回执 |
+| `pnpm check:renderer-chunks` | eager JS 1,134,084 bytes，6 files | 本轮终端回执 |
+
+新增七项 Electron renderer 回归使用真实 CPython 3.14 负结果，覆盖键盘保存、丢失回执后的零写入重试、差异与缺失、两个历史冻结方法在新草稿下保留独立 heads、分页/精确父评估、迟到回复、归档及真实源码漂移。浅深色 650px 截图 `xidea-a3b-ui/light-outcome.png`、`dark-outcome.png` 已目视检查焦点、固定 header 和本地滚动；六种审计状态均 `cut=0`，仅既有全高 panel 的窗口上/下/右边缘外阴影完全隐藏。
+
+初轮界面检查为 44/45：真实源码漂移被错误归为内部错误。保留现场和聚焦红测试后，删除没有生产调用方的旧错误码，登记真实 `research_experiment_snapshot_changed`；最终界面同时断言实际 service 错误、IPC 错误码和准确中文提示。诊断插桩已移除，失败日志与 `source-drift-diagnosis.json` 保留。
+
+A3B 状态：**Verified passing**，范围为现有检查器评估、来源复核和审核 snapshot。界面 fixture 使用真实 renderer 与 main capability adapter，未替代 production preload 或实际 OS picker 验收。导出绑定将在独立增量交付；没有独立科学、预注册或真实 R/Julia 验收声明。

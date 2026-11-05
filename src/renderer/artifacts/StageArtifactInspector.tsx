@@ -13,6 +13,7 @@ const StageContent = lazy(async () => ({default: (await import('./ArtifactStageC
 const ProductionView = lazy(async () => ({default: (await import('./ArtifactProductionView')).ArtifactProductionView}));
 const Relations = lazy(async () => ({default: (await import('./ArtifactRelations')).ArtifactRelations}));
 const IdeaPlans = lazy(async () => ({default: (await import('./IdeaPlans')).IdeaPlans}));
+const IdeaOutcomes = lazy(async () => ({default: (await import('./IdeaOutcomes')).IdeaOutcomes}));
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 
 export function StageArtifactInspector({client, request, writable, onClose, onOpenTask, onReviewContext, readingLocations}: {
@@ -28,7 +29,9 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
   const [relationSaved, setRelationSaved] = useState(false);
   const [planPending, setPlanPending] = useState(false);
   const [planDirty, setPlanDirty] = useState(false);
-  const planLocked = planPending || planDirty;
+  const [outcomePending, setOutcomePending] = useState(false);
+  const [outcomeDirty, setOutcomeDirty] = useState(false);
+  const planLocked = planPending || planDirty || outcomePending || outcomeDirty;
   const savedLocation = readingLocations.get(JSON.stringify([request.projectId, request.artifactId]));
   const [productionChoice,setProductionChoice] = useState<{version: string; open: boolean} | null>(null);
   const productionOpen = snapshot !== undefined && (productionChoice?.version === snapshot.version ?
@@ -71,6 +74,8 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
       {read.status === 'loading' ? <p role="status">正在读取工件…</p> : null}
       {planPending ? <p role="status">正在保存方法计划，请等待回执。</p> :
         planDirty ? <p role="status">方法计划含未保存修改，保存或放弃后可关闭工件。</p> : null}
+      {outcomePending ? <p role="status">正在关联指标证据并保存评估，请等待回执。</p> :
+        outcomeDirty ? <p role="status">结果评估含未保存修改，保存或放弃后可关闭工件。</p> : null}
       {read.error === null ? null : <p role="alert" className="break-words text-[var(--st-warn)]">{read.error}</p>}
       {result?.status === 'stale' ? <p role="alert" className="text-[var(--st-warn)]">
         工件或来源已变更。当前内容需要重新核对。
@@ -108,9 +113,17 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
         {snapshot.ideaCanvas === null ? null : <Suspense fallback={<p role="status">正在加载方法计划…</p>}>
           <IdeaPlans key={`${snapshot.artifact.id}:${snapshot.ideaCanvas.contentHash}:${snapshot.ideaPlan?.versionHash ?? 'new'}:${snapshot.ideaPlan?.freezeHash ?? 'draft'}`}
             client={client} canvas={snapshot.ideaCanvas} current={snapshot.ideaPlan}
+            locked={outcomePending || outcomeDirty}
             writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived' && snapshot.artifact.status !== 'superseded'}
             onPending={setPlanPending} onDirty={setPlanDirty}
             onSaved={() => {setPlanPending(false); setPlanDirty(false); baseline.current = null; reading.save(); read.reload();}}/>
+        </Suspense>}
+        {snapshot.ideaCanvas === null ? null : <Suspense fallback={<p role="status">正在加载结果评估…</p>}>
+          <IdeaOutcomes key={`${snapshot.artifact.id}:${snapshot.version}`} client={client} canvas={snapshot.ideaCanvas}
+            heads={snapshot.ideaOutcomes} locked={planPending || planDirty}
+            writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived' && snapshot.artifact.status !== 'superseded'}
+            onPending={setOutcomePending} onDirty={setOutcomeDirty}
+            onSaved={() => {setOutcomePending(false); setOutcomeDirty(false); baseline.current = null; reading.save(); read.reload();}}/>
         </Suspense>}
         {!productionOpen||snapshot.production===null ? null : <Suspense fallback={<p role="status">正在加载生产视图…</p>}>
           <ProductionView key={snapshot.version} client={client} writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived'} request={{projectId:request.projectId,
@@ -121,11 +134,11 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
           <h2 className="font-medium text-ink">证据来源</h2>
           {snapshot.evidence.length === 0 ? <p className="text-muted">尚无保存的证据关联。</p> :
             snapshot.evidence.map(source => <ArtifactEvidenceSource key={`${snapshot.version}:${source.evidence.id}`}
-              client={client} source={source} canDecide={result?.status === 'current' && snapshot.projectStatus !== 'archived'}
+              client={client} source={source} canDecide={!planLocked && result?.status === 'current' && snapshot.projectStatus !== 'archived'}
               onChanged={() => {reading.save(); read.reload();}}/>)}
         </section>
         <Suspense fallback={<p role="status">正在加载证据关系…</p>}>
-          <Relations key={snapshot.version} client={client} snapshot={snapshot} current={result?.status === 'current'}
+          <Relations key={snapshot.version} client={client} snapshot={snapshot} current={!planLocked && result?.status === 'current'}
             onChanged={() => {reading.save(); setRelationSaved(true); read.reload();}}/>
         </Suspense>
         <details data-reading-key="raw-snapshot" className="text-muted"><summary data-reading-key="raw-snapshot-summary" className="cursor-pointer">工件与来源快照原文</summary>

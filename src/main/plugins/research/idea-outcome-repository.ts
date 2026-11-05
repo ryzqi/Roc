@@ -93,6 +93,16 @@ export class ResearchIdeaOutcomeRepository {
     return {verification: 'stored_receipt', items: rows.map(row => this.inspect(row)), total};
   }
 
+  forArtifact(projectId: string, artifactId: string): ResearchIdeaOutcomeReceipt[] {
+    this.requireScope(projectId, artifactId);
+    const rows = this.db.prepare(`SELECT assessment.* FROM research_idea_outcomes assessment
+      WHERE assessment.artifact_id=? AND NOT EXISTS (
+        SELECT 1 FROM research_idea_outcomes newer
+        WHERE newer.plan_version_id=assessment.plan_version_id AND newer.version>assessment.version
+      ) ORDER BY assessment.plan_version_id`).all(artifactId) as Row[];
+    return rows.map(row => this.inspect(row));
+  }
+
   private requireScope(projectId: string, artifactId: string): void {
     this.research.getProject(projectId);
     const artifact = this.research.getArtifact(artifactId);

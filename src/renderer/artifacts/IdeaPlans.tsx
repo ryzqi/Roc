@@ -1,4 +1,4 @@
-import {useRef, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import type {ResearchIdeaCanvas} from '../../shared/types';
 import type {ResearchIdeaPlanBody, ResearchIdeaPlanInspection, ResearchIdeaPlanSave, ResearchIdeaPlanFreezeRequest} from '../../shared/schemas/research-idea-plans';
 import {researchIdeaPlanSaveSchema} from '../../shared/schemas/research-idea-plans';
@@ -41,8 +41,8 @@ export function IdeaPlanReceipt({plan}: {plan: ResearchIdeaPlanInspection}): Rea
   </section>;
 }
 
-export function IdeaPlans({client, canvas, current, writable, onPending, onDirty, onSaved}: {
-  client: RocClient; canvas: ResearchIdeaCanvas; current: ResearchIdeaPlanInspection | null; writable: boolean;
+export function IdeaPlans({client, canvas, current, writable, locked, onPending, onDirty, onSaved}: {
+  client: RocClient; canvas: ResearchIdeaCanvas; current: ResearchIdeaPlanInspection | null; writable: boolean; locked: boolean;
   onPending: (pending: boolean) => void; onDirty: (dirty: boolean) => void; onSaved: () => void
 }): React.JSX.Element {
   const [body, setBody] = useState(() => current === null ? newBody(canvas) : structuredClone(current.version.request.body));
@@ -58,6 +58,8 @@ export function IdeaPlans({client, canvas, current, writable, onPending, onDirty
   const [selection, setSelection] = useState<{versionId: string; expectedHash: string} | null>(null);
   const requests = useRef({save: crypto.randomUUID(), freeze: crypto.randomUUID()});
   const busy = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
   const save = useAsyncAction((request: ResearchIdeaPlanSave) => client.api.research.saveIdeaPlan(request), {label: '保存方法计划'});
   const freeze = useAsyncAction((request: ResearchIdeaPlanFreezeRequest) => client.api.research.freezeIdeaPlan(request), {label: '冻结方法计划'});
   const pending = save.pending || freeze.pending;
@@ -72,17 +74,19 @@ export function IdeaPlans({client, canvas, current, writable, onPending, onDirty
   const change = (): void => {requests.current.save = crypto.randomUUID(); onDirty(true); setValidation([]); save.reset();};
   const updateBody = (value: ResearchIdeaPlanBody): void => {setBody(value); change();};
   const finish = (result: {ok: true; data: ResearchIdeaPlanInspection} | {ok: false; error: string}): void => {
-    busy.current = false; onPending(false);
+    busy.current = false;
+    if (!mounted.current) return;
+    onPending(false);
     if (result.ok) {onDirty(false); onSaved();}
   };
   return <section className="flex min-w-0 flex-col gap-3 border-t-[0.5px] border-line pt-2" data-testid="artifact-idea-plans">
     <h2 className="font-medium">假设与方法计划</h2>
     {current === null ? <p className="text-muted">尚无已保存方法计划。</p> : <IdeaPlanReceipt plan={current}/>}
-    {!canEdit || editing ? null : <button type="button" className={button} disabled={pending} data-testid="artifact-idea-plan-revise"
+    {!canEdit || editing ? null : <button type="button" className={button} disabled={pending || locked} data-testid="artifact-idea-plan-revise"
       onClick={() => {setEditing(true); updateBody({...body, hypothesis: canvas.hypothesis});}}>修订方法计划</button>}
     {!editing ? null : <form className="flex min-w-0 flex-col gap-3" data-testid="artifact-idea-plan-form" onSubmit={event => {
       event.preventDefault();
-      if (!canEdit || busy.current) return;
+      if (!canEdit || locked || busy.current) return;
       if (observationChoice === '') {setValidation(['请选择此版本的观察时序。']); return;}
       let requestBody = body;
       if (body.sampleSize.kind === 'calculated') {
@@ -103,16 +107,16 @@ export function IdeaPlans({client, canvas, current, writable, onPending, onDirty
       if (!parsed.success) {setValidation(parsed.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`)); return;}
       busy.current = true; onPending(true); void save.run(parsed.data).then(finish);
     }}>
-      <IdeaPlanFields body={body} disabled={!canEdit || pending} onChange={updateBody} parameters={parameters}
+      <IdeaPlanFields body={body} disabled={!canEdit || pending || locked} onChange={updateBody} parameters={parameters}
         onParameters={value => {setParameters(value); change();}}
         observationChoice={observationChoice} onObservationChoice={value => {setObservationChoice(value); change();}}/>
-      {current === null ? null : <fieldset disabled={!canEdit || pending}><PlanText label="计划修订原因" value={revisionReason}
+      {current === null ? null : <fieldset disabled={!canEdit || pending || locked}><PlanText label="计划修订原因" value={revisionReason}
         onChange={value => {setRevisionReason(value); change();}}/></fieldset>}
       <div className="flex flex-wrap gap-2">
-        <button type="submit" className={primary} disabled={!canEdit || pending} data-testid="artifact-idea-plan-save">
+        <button type="submit" className={primary} disabled={!canEdit || pending || locked} data-testid="artifact-idea-plan-save">
           {pending ? '正在保存…' : current === null ? '保存方法计划' : '保存计划新版本'}
         </button>
-        <button type="button" className={button} disabled={pending} data-testid="artifact-idea-plan-discard" onClick={() => {
+        <button type="button" className={button} disabled={pending || locked} data-testid="artifact-idea-plan-discard" onClick={() => {
           const restored = current === null ? newBody(canvas) : structuredClone(current.version.request.body);
           onDirty(false); setEditing(false); setBody(restored);
           setObservationChoice(current === null ? '' : restored.observation.kind);
@@ -122,26 +126,29 @@ export function IdeaPlans({client, canvas, current, writable, onPending, onDirty
         }}>放弃未保存修改</button>
       </div>
     </form>}
-    {current !== null || editing || !canEdit ? null : <button type="button" className={button}
+    {current !== null || editing || !canEdit ? null : <button type="button" className={button} disabled={locked}
       onClick={() => setEditing(true)}>编写方法计划</button>}
     {validation.length === 0 ? null : <ul role="alert" className="break-words text-[var(--st-warn)]">
       {validation.map((issue, i) => <li key={i}>{issue}</li>)}</ul>}
     {save.error === null ? null : <p role="alert" className="break-words text-[var(--st-warn)]">{save.error}</p>}
     {current === null || !canEdit || editing || current.freeze !== null || !current.canvasCurrent ? null :
       <form className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2" onSubmit={event => {
-        event.preventDefault(); if (busy.current) return;
+        event.preventDefault(); if (busy.current || locked) return;
         busy.current = true; onPending(true);
         void freeze.run({projectId: canvas.projectId, artifactId: canvas.artifactId, versionId: current.version.id,
           expectedHash: current.versionHash, requestId: requests.current.freeze, reviewNote}).then(finish);
       }}>
-        <fieldset disabled={pending}><PlanText label="计划冻结审核说明" value={reviewNote} onChange={value => {
-          setReviewNote(value); requests.current.freeze = crypto.randomUUID(); freeze.reset();
+        <fieldset disabled={pending || locked}><PlanText label="计划冻结审核说明" value={reviewNote} onChange={value => {
+          setReviewNote(value); requests.current.freeze = crypto.randomUUID(); freeze.reset(); onDirty(value.length > 0);
         }}/></fieldset>
-        <button type="submit" className={primary} disabled={pending || reviewNote.trim().length === 0}
+        <button type="submit" className={primary} disabled={pending || locked || reviewNote.trim().length === 0}
           data-testid="artifact-idea-plan-freeze">确认并冻结方法计划</button>
+        <button type="button" className={button} disabled={pending || locked} onClick={() => {
+          setReviewNote(''); freeze.reset(); onDirty(false);
+        }}>放弃冻结审核修改</button>
       </form>}
     {freeze.error === null ? null : <p role="alert" className="break-words text-[var(--st-warn)]">{freeze.error}</p>}
-    <button type="button" className={button} disabled={pending || editing || history.status === 'loading'}
+    <button type="button" className={button} disabled={pending || locked || editing || history.status === 'loading'}
       data-testid="artifact-idea-plan-history" onClick={() => {if (historyOffset === 0) history.reload(); else setHistoryOffset(0);}}>
       读取计划历史
     </button>
@@ -151,13 +158,13 @@ export function IdeaPlans({client, canvas, current, writable, onPending, onDirty
     {history.data === null ? null : <div className="flex min-w-0 flex-col gap-2" data-testid="artifact-idea-plan-history-list">
       <p className="text-muted">共 {history.data.total} 个版本</p>
       {history.data.items.map(plan => <button type="button" className={`${button} max-w-full text-left`} key={plan.version.id}
-        data-testid="artifact-idea-plan-history-select" onClick={() => setSelection({versionId: plan.version.id, expectedHash: plan.versionHash})}>
+        disabled={pending || locked || editing} data-testid="artifact-idea-plan-history-select" onClick={() => setSelection({versionId: plan.version.id, expectedHash: plan.versionHash})}>
         版本 {plan.version.version} {plan.freeze === null ? '草稿' : '已冻结'} {plan.version.recordedAt}
       </button>)}
       <div className="flex gap-2">
-        <button type="button" className={button} disabled={historyOffset === null || historyOffset === 0 || history.status === 'loading'}
+        <button type="button" className={button} disabled={pending || locked || editing || historyOffset === null || historyOffset === 0 || history.status === 'loading'}
           onClick={() => {setSelection(null); setHistoryOffset(historyOffset! - 10);}}>上一页计划</button>
-        <button type="button" className={button} disabled={historyOffset === null || historyOffset + 10 >= history.data.total || history.status === 'loading'}
+        <button type="button" className={button} disabled={pending || locked || editing || historyOffset === null || historyOffset + 10 >= history.data.total || history.status === 'loading'}
           onClick={() => {setSelection(null); setHistoryOffset(historyOffset! + 10);}}>下一页计划</button>
       </div>
     </div>}

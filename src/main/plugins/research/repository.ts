@@ -327,7 +327,15 @@ export class ResearchRepository {
         projectId: project.id, artifactId: artifact.id, offset: 0, limit: 1
       }).items[0] ?? null;
       const planBody = ideaPlan?.version.request.body;
+      const outcomes = ideaCanvas === null ? [] : this.ideaOutcomes.forArtifact(project.id, artifact.id);
+      const ideaOutcomes = outcomes.map(({snapshot, snapshotHash}) => ({
+        outcomeId: snapshot.id, outcomeHash: snapshotHash, version: snapshot.version,
+        planVersionId: snapshot.request.plan.versionId, resultId: snapshot.request.result.resultId,
+        verdict: snapshot.request.verdict, recordedAt: snapshot.recordedAt,
+        evidenceIds: snapshot.material.evidence.map(evidence => evidence.id)
+      }));
       const ideaEvidenceIds = [...(ideaCanvas?.fields.flatMap(field => field.evidenceIds) ?? []),
+        ...ideaOutcomes.flatMap(outcome => outcome.evidenceIds),
         ...(planBody?.novelty.comparisons.map(item => item.evidenceId) ?? []),
         ...(planBody?.observation.kind === 'after_data' ? planBody.observation.evidenceIds : []),
         ...(planBody?.sampleSize.kind === 'calculated' ? planBody.sampleSize.evidenceIds : [])];
@@ -355,7 +363,7 @@ export class ResearchRepository {
       const body = researchArtifactInspectionBodySchema.parse({
         artifact, projectStatus: project.status, currentStage: project.currentStage,
         stage, content, origin, claims, evidence, relations,
-        production, ideaCanvas, ideaPlan, provenance: rows.map(toProvenance), availableActions
+        production, ideaCanvas, ideaPlan, ideaOutcomes, provenance: rows.map(toProvenance), availableActions
       });
       const version = createHash('sha256').update(JSON.stringify(body)).digest('hex');
       return researchArtifactInspectResultSchema.parse({

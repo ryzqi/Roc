@@ -61,9 +61,15 @@ export const researchIdeaOutcomeHistoryResultSchema = z.strictObject({
   verification: z.literal('stored_receipt'), items: researchIdeaOutcomeReceiptSchema.array(),
   total: z.number().int().nonnegative()
 });
+export const researchIdeaOutcomeHeadSchema = z.strictObject({
+  outcomeId: id, outcomeHash: hash, version: z.number().int().positive(), planVersionId: id,
+  resultId: id, verdict: researchIdeaOutcomeSaveSchema.shape.verdict, recordedAt: text,
+  evidenceIds: id.array().min(1).max(100)
+});
 export type ResearchIdeaOutcomeSave = z.infer<typeof researchIdeaOutcomeSaveSchema>;
 export type ResearchIdeaOutcomeGet = z.infer<typeof researchIdeaOutcomeGetSchema>;
 export type ResearchIdeaOutcomeHistory = z.infer<typeof researchIdeaOutcomeHistorySchema>;
 export type ResearchIdeaOutcomeMaterial = z.infer<typeof researchIdeaOutcomeMaterialSchema>;
 export type ResearchIdeaOutcomeReceipt = z.infer<typeof researchIdeaOutcomeReceiptSchema>;
 export type ResearchIdeaOutcomeHistoryResult = z.infer<typeof researchIdeaOutcomeHistoryResultSchema>;
+export type ResearchIdeaOutcomeHead = z.infer<typeof researchIdeaOutcomeHeadSchema>;

@@ -69,7 +69,7 @@ const errors: Record<string, {message: string; category: RocErrorCategory}> = {
   research_result_output_changed: {category: 'conflict', message: '实际结果文件已变化。'},
   research_result_source_changed: {category: 'conflict', message: '实际实验代码已变化。'},
   research_result_snapshot_invalid: {category: 'degraded', message: '结果回执校验失败。'},
-  research_experiment_manifest_file_changed: {category: 'conflict', message: '实际实验文件已变化，无法复核结果评估。'}
+  research_experiment_snapshot_changed: {category: 'conflict', message: '实际实验文件已变化，无法复核结果评估。'}
 };
 function descriptor<I, O>(name: string, inputSchema: z.ZodType<I>, outputSchema: z.ZodType<O>): CapabilityDescriptor<I, O> {
   return {name, version: '1.0.0', inputSchema, outputSchema};

@@ -101,6 +101,10 @@ test('outcome IPC retains known integrity errors and hides unexpected internal f
   const known = await bridge.invoke('research.saveIdeaOutcome', [request()], 61);
   assert.equal(known.ok, false);
   assert.equal(known.error.code, 'research_result_evidence_changed');
+  failure = new Error('research_experiment_snapshot_changed');
+  const drift = await bridge.invoke('research.saveIdeaOutcome', [request()], 61);
+  assert.equal(drift.ok, false);
+  assert.equal(drift.error.code, 'research_experiment_snapshot_changed');
   failure = new Error('private internal failure');
   const unknown = await bridge.invoke('research.saveIdeaOutcome', [request()], 61);
   assert.equal(unknown.ok, false);
