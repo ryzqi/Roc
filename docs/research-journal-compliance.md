@@ -38,8 +38,26 @@ A6A 提供主进程 schema、确定性检查、真实来源服务、不可变时
 - `node --test tests/renderer/response-matrix.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs`：42/42。
 - `node scripts/smoke-electron.mjs`：13/13，零 renderer error。
 - `pnpm check:ipc`：生成合同一致；`pnpm check:renderer-chunks`：eager JS 1,134,272 bytes / 6 files。
-- 补充 `node --test tests/unit/` 在最终源码后启动，提交时仍在运行，不作为本次通过依据。
+- 补充 `node --test tests/unit/`：1273/1273，在最终 A6A 源码后启动，提交后收集 exit 0。
 
 A6A 状态：`Verified passing`，范围为本地主进程与相关消费者回归；A6B/A6C 尚未接入。
 
 测试使用合成规则与真实本地文件/图稿执行，不声明真实期刊接受或规则解释的科学准确性。初次 fixture 调用了不存在的 archiveProject/saveArtifact，随后图稿损坏 fixture 使用错误目录；均按现有真实合同修正，未放宽产品检查。
+
+## A6B 工件抽屉
+
+既有论文工件抽屉提供惰性“检查期刊投稿”入口。原生表单明确填写期刊、文章类型、投稿阶段、规则版本、规则日期及日期来源、带时区的资料获取时间；逐条录入六种检查条件、来源原文与要求性质。无期刊、要求性质或人工决定默认值。
+
+先“检查规则与材料”取得真实材料 hash，再保存检查；规则、所选图稿或补充路径变化撤销预览。人工修订理由变化更换请求身份；同一丢失回执重试保留精确请求。异步核对、保存和未保存修改锁定整个抽屉，不能切换生产/审核、刷新或关闭。晚到的预览、保存和历史回复不能进入另一项目。
+
+自动失败与指导性建议、人工判断分别展示，保存不批准论文。历史以 stored receipt 独立分页，当前材料失败时仍可查看完整日期、来源、规则及原始判断。用户可明确从最新历史规则进入编辑；保留来源错误、清空预览，重新核对材料后才能保存。只读、已批准、归档、非当前阶段禁止写入。图稿使用真实 listFigures 合同，最多展示最近 200 项；失效或未列出的已有选择可明确移除。
+
+A6B `Verified passing`，命令均在仓库根目录执行：
+
+- `pnpm typecheck`、最终 `pnpm build`：exit 0。
+- `node --test tests/renderer/journal-compliance.test.mjs tests/renderer/response-matrix.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs`：49/49，含投稿 7 项真实 Electron 回归。
+- `node scripts/smoke-electron.mjs`：13/13，零 renderer error。
+- `pnpm check:ipc`：合同一致；`pnpm check:renderer-chunks`：见 xwrite-a6b-chunks.log。
+- macOS 本机 Electron，650px light/dark 长规则、字段/按钮焦点及 hover、减弱动效：四个完整裁切审计 cut=0；hidden 精确为抽屉在视口 top/right/bottom 的三个物理边缘，无横向溢出。截图位于 `.artifacts/research-optimization/journal-compliance-ui/`，已人工查看明暗主题。未验证 Windows。
+
+首轮 fixture 使用猜测的 journal-compliance IPC 名称，已按 registry journal-* 合同修正；第二轮两项展开断言未等待原生可见状态，补充实际可见等待后通过。未放宽产品检查。最终日志 `.artifacts/research-optimization/xwrite-a6b-{build,renderer,startup,ipc,chunks}.log`。
