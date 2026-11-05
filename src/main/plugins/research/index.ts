@@ -103,6 +103,7 @@ import { registerResearchIndexCapabilities, researchIndexCapabilities } from './
 import { ResearchExperimentEnvironmentService } from './experiment-environment';
 import { ResearchPythonEnvironmentService } from './python-environment-service';
 import { researchPythonEnvironmentCapabilities, registerResearchPythonEnvironmentCapabilities } from './python-environment-capabilities';
+import { researchNotebookCapabilities, registerResearchNotebookCapabilities } from './notebook-capabilities';
 import { ResearchExperimentService } from './experiment-service';
 import { registerResearchExperimentCapabilities, researchExperimentCapabilities } from './experiment-capabilities';
 import { ResearchFigureService } from './figure-service';
@@ -224,7 +225,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
+      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchNotebookCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，
@@ -243,6 +244,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       const researchPythonEnvironments = new ResearchPythonEnvironmentService(researchRepository);
       pythonEnvironments = researchPythonEnvironments;
       registerResearchPythonEnvironmentCapabilities(context, researchRepository.pythonEnvironments, researchPythonEnvironments);
+      registerResearchNotebookCapabilities(context, researchRepository.notebooks);
       const researchExperiments = new ResearchExperimentService(researchRepository, new ResearchExperimentEnvironmentService(toolchain, researchPythonEnvironments), options.experimentRoot ?? null, context.logger);
       experiments = researchExperiments;
       registerResearchExperimentCapabilities(context, researchRepository.experiments, researchExperiments);

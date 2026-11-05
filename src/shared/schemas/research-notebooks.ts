@@ -85,3 +85,37 @@ export type ResearchNotebook = z.infer<typeof researchNotebookSchema>;
 export type ResearchNotebookCell = ResearchNotebook['cells'][number];
 export type ResearchNotebookPreview = z.infer<typeof researchNotebookPreviewSchema>;
 export type ResearchNotebookReviewIssue = z.infer<typeof researchNotebookReviewIssueSchema>;
+
+const identifier = z.string().trim().min(1).max(300);
+const notebookPath = z.string().min(1).max(4096).regex(/\.ipynb$/iu);
+export const researchNotebookFileRequestSchema = z.strictObject({ projectId: identifier, path: notebookPath });
+export const researchNotebookImportRequestSchema = researchNotebookFileRequestSchema.extend({
+  requestId: identifier, expectedSha256: digest
+});
+export const researchNotebookGetRequestSchema = z.strictObject({
+  projectId: identifier, notebookId: identifier, expectedHash: digest
+});
+export const researchNotebookListRequestSchema = z.strictObject({
+  projectId: identifier, offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(100)
+});
+export const researchNotebookSnapshotSchema = z.strictObject({
+  schemaVersion: z.literal(1), id: identifier, request: researchNotebookImportRequestSchema,
+  actor: z.strictObject({ kind: z.literal('user'), id: z.string().regex(/^window:[1-9][0-9]*$/u) }),
+  workspacePath: z.string().startsWith('/'), sha256: digest,
+  size: z.number().int().nonnegative().max(notebookLimits.bytes), recordedAt: z.iso.datetime()
+});
+export const researchNotebookReceiptSchema = z.strictObject({
+  snapshot: researchNotebookSnapshotSchema, snapshotHash: digest
+});
+export const researchNotebookImportedSchema = z.strictObject({
+  receipt: researchNotebookReceiptSchema, preview: researchNotebookPreviewSchema
+});
+export const researchNotebookListResultSchema = z.strictObject({
+  items: researchNotebookReceiptSchema.array().max(100), total: z.number().int().nonnegative()
+});
+export type ResearchNotebookFileRequest = z.infer<typeof researchNotebookFileRequestSchema>;
+export type ResearchNotebookImportRequest = z.infer<typeof researchNotebookImportRequestSchema>;
+export type ResearchNotebookGetRequest = z.infer<typeof researchNotebookGetRequestSchema>;
+export type ResearchNotebookListRequest = z.infer<typeof researchNotebookListRequestSchema>;
+export type ResearchNotebookReceipt = z.infer<typeof researchNotebookReceiptSchema>;
+export type ResearchNotebookImported = z.infer<typeof researchNotebookImportedSchema>;

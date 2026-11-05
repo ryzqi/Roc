@@ -242,6 +242,9 @@ import {
   researchModelsRemoveRequestSchema
 } from './schemas/research-production';
 import { researchProseLintReportSchema, researchProseLintRequestSchema } from './schemas/research-prose';
+import { researchNotebookFileRequestSchema, researchNotebookImportRequestSchema, researchNotebookGetRequestSchema,
+  researchNotebookListRequestSchema, researchNotebookPreviewSchema, researchNotebookImportedSchema,
+  researchNotebookListResultSchema } from './schemas/research-notebooks';
 import { researchPythonEnvironmentSelectSchema, researchPythonEnvironmentGetSchema, researchPythonEnvironmentListSchema,
   researchPythonEnvironmentSelectionSchema } from './schemas/research-python-environments';
 import {
@@ -613,6 +616,10 @@ export const ipcRegistry = {
     request({ key: 'researchManuscriptSave', channel: 'roc:research:manuscript-save', domain: 'research', method: 'saveManuscript', kind: 'plugin', capabilityName: 'research.manuscript.save', inputTransform: first, contract: methodContract(oneArg(researchManuscriptSaveRequestSchema), researchManuscriptSchema) }),
     request({ key: 'researchManuscriptGet', channel: 'roc:research:manuscript-get', domain: 'research', method: 'getManuscript', kind: 'plugin', capabilityName: 'research.manuscript.get', inputTransform: first, contract: methodContract(oneArg(researchManuscriptGetRequestSchema), researchManuscriptSchema.nullable()) }),
     request({ key: 'researchManuscriptExportBundle', channel: 'roc:research:manuscript-export-bundle', domain: 'research', method: 'getExportBundle', kind: 'plugin', capabilityName: 'research.manuscript.exportBundle', inputTransform: first, contract: methodContract(oneArg(researchExportBundleRequestSchema), researchExportBundleSchema) }),
+    request({ key: 'researchNotebookPreview', channel: 'roc:research:notebook-preview', domain: 'research', method: 'previewNotebook', kind: 'plugin', capabilityName: 'research.notebooks.preview', inputTransform: first, contract: methodContract(oneArg(researchNotebookFileRequestSchema), researchNotebookPreviewSchema) }),
+    request({ key: 'researchNotebookImport', channel: 'roc:research:notebook-import', domain: 'research', method: 'importNotebook', kind: 'plugin', capabilityName: 'research.notebooks.import', inputTransform: first, contract: methodContract(oneArg(researchNotebookImportRequestSchema), researchNotebookImportedSchema) }),
+    request({ key: 'researchNotebookGet', channel: 'roc:research:notebook-get', domain: 'research', method: 'getNotebook', kind: 'plugin', capabilityName: 'research.notebooks.get', inputTransform: first, contract: methodContract(oneArg(researchNotebookGetRequestSchema), researchNotebookImportedSchema) }),
+    request({ key: 'researchNotebookList', channel: 'roc:research:notebook-list', domain: 'research', method: 'listNotebooks', kind: 'plugin', capabilityName: 'research.notebooks.list', inputTransform: first, contract: methodContract(oneArg(researchNotebookListRequestSchema), researchNotebookListResultSchema) }),
     request({ key: 'researchPythonEnvironmentSelect', channel: 'roc:research:python-environment-select', domain: 'research', method: 'selectPythonEnvironment', kind: 'plugin', capabilityName: 'research.pythonEnvironments.select', inputTransform: first, contract: methodContract(oneArg(researchPythonEnvironmentSelectSchema), researchPythonEnvironmentSelectionSchema.nullable()) }),
     request({ key: 'researchPythonEnvironmentGet', channel: 'roc:research:python-environment-get', domain: 'research', method: 'getPythonEnvironmentSelection', kind: 'plugin', capabilityName: 'research.pythonEnvironments.get', inputTransform: first, contract: methodContract(oneArg(researchPythonEnvironmentGetSchema), researchPythonEnvironmentSelectionSchema) }),
     request({ key: 'researchPythonEnvironmentList', channel: 'roc:research:python-environment-list', domain: 'research', method: 'listPythonEnvironmentSelections', kind: 'plugin', capabilityName: 'research.pythonEnvironments.list', inputTransform: first, contract: methodContract(oneArg(researchPythonEnvironmentListSchema), researchPythonEnvironmentSelectionSchema.array()) }),

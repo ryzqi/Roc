@@ -13,3 +13,11 @@ X-NB A1 定义解析与预览合同，项目导入、界面和执行接入随后
 魔法命令、shell/subprocess、路径字面量和扩展会保留行号核查标记；它们是静态线索，不能证明全部运行行为或替代声明输入和实际隔离。不存在 Python/Jupyter 兼容执行的默认分支，也不把已存在输出纳入科学证据。
 
 A1 验证（2026-11-06，项目根目录）：`node --test tests/unit/research-notebook-parser.test.mjs` 6/6；`pnpm typecheck`、`pnpm build` 均 exit 0。初轮 cell 哈希回归发现 Zod 重建对象改变字段顺序；修复为校验后保留原始 decoded JSON，完整原字节仍作为最高来源身份。日志 `.artifacts/research-optimization/xnb-a1-{unit-final,type,build}.log`。本提交仅验证解析合同，不代表项目导入/UI/执行已完成。
+
+## 项目冻结导入（A2）
+
+`research.notebooks.preview` 从项目工作目录完整读取 `.ipynb`；`import` 要求主进程绑定的用户窗口身份和预览文件的 SHA-256。只接受项目内普通文件，拒绝符号链接、越界路径、内部缓存路径和超限文件。导入原字节作为 BLOB 保存在研究库，附带项目、原相对路径、工作目录、用户窗口、时间和不可变回执哈希。未执行任何 cell，也不创建实验/证据工件。
+
+相同请求和用户的重放返回原记录，源码移动/删除或归档不触发重新导入。新请求要求项目可写；变化的原文件哈希、请求冲突、跨项目读取或回执损坏直接失败。`get` 在返回静态预览前重验原字节和回执身份。`list` 显式分页，每页至多 100 条回执，不传递完整字节或 rich MIME data。旧版本仅通过原始哈希的明确引用读取，不推断“最新”身份。
+
+A2 验证（2026-11-06，项目根目录）：`node --test tests/unit/research-notebook-parser.test.mjs tests/unit/research-notebook-import.test.mjs` 12/12；`pnpm test:unit` 1193/1193；`pnpm typecheck`、`pnpm build`、`pnpm check:ipc` 通过；`node scripts/run-research-p0.mjs` 13/13、`node scripts/harness-eval/run.mjs` 94/94；`node scripts/smoke-electron.mjs` 13/13，零 renderer errors；`pnpm check:renderer-chunks` 1132907 bytes / 6 files。日志 `.artifacts/research-optimization/xnb-a2-*.log`。本部分不包含预览界面或受控 cell 执行。

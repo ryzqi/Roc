@@ -43,6 +43,7 @@ import {ResearchSystematicReviewRepository} from './systematic-review-repository
 import { ResearchIndexRepository } from './index-repository';
 import { ResearchExperimentRepository } from './experiment-repository';
 import { ResearchPythonEnvironmentRepository } from './python-environment-repository';
+import { ResearchNotebookRepository } from './notebook-repository';
 import { ResearchFigureRepository } from './figure-repository';
 import { ResearchFigureRunRepository } from './figure-run-repository';
 import { ResearchExportRepository } from './export-repository';
@@ -84,6 +85,7 @@ export class ResearchRepository {
   readonly indexing: ResearchIndexRepository;
   readonly experiments: ResearchExperimentRepository;
   readonly pythonEnvironments: ResearchPythonEnvironmentRepository;
+  readonly notebooks: ResearchNotebookRepository;
   readonly figures: ResearchFigureRepository;
   readonly figureRuns: ResearchFigureRunRepository;
   readonly exports: ResearchExportRepository;
@@ -117,6 +119,7 @@ export class ResearchRepository {
     this.indexing = new ResearchIndexRepository(db, this, now);
     this.experiments = new ResearchExperimentRepository(db, this, now);
     this.pythonEnvironments = new ResearchPythonEnvironmentRepository(db, this);
+    this.notebooks = new ResearchNotebookRepository(db, this, now);
     this.figureRuns = new ResearchFigureRunRepository(db, this, now);
     this.figures = new ResearchFigureRepository(db, this, now);
     this.exports = new ResearchExportRepository(db, this, now);

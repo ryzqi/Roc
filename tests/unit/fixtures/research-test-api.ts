@@ -51,6 +51,7 @@ export {
 } from '../../../src/main/plugins/research/experiment-python-code-schema';
 export { ResearchPythonEnvironmentService } from '../../../src/main/plugins/research/python-environment-service';
 export { registerResearchPythonEnvironmentCapabilities } from '../../../src/main/plugins/research/python-environment-capabilities';
+export { registerResearchNotebookCapabilities } from '../../../src/main/plugins/research/notebook-capabilities';
 export { runEnvironmentProbe } from '../../../src/main/plugins/research/experiment-probe-resources';
 export { discoverJuliaEnvironmentControls, parseJuliaRuntimeVersion } from '../../../src/main/plugins/research/experiment-julia-controls';
 export { captureNativeCode } from '../../../src/main/plugins/research/experiment-native-code';

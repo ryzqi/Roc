@@ -2257,6 +2257,22 @@ CREATE TABLE research_python_environment_selections (
 `
 });
 
+researchMigrations.push({
+  version: 43, name: 'immutable_project_notebooks',
+  sql: `
+CREATE TABLE research_notebooks (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  source_bytes BLOB NOT NULL CHECK(length(source_bytes)<=8388608),
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id, request_id)
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,
