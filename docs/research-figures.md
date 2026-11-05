@@ -96,3 +96,15 @@ roc-preview://research/figures/{encodedProjectId}/{encodedFigureId}/{png|svg|pdf
 补充完整 unit 在断言修正及导出消费者修改前启动，结果 1235/1236；唯一失败是测试预期 experiment 文件错误，而实际为 `research_figure_snapshot_changed`。保留失败日志 `xwrite-a4c1-unit.log`，修正精确错误断言后上表最终 24 项通过，未宣称完整 unit 重跑通过。前两轮图稿测试还错误预期 y 编码原字段；实际渲染证明 stack-end 字段才是正确回执。没有放宽数值、来源或错误合同。
 
 此部分记录实际绘制数据及冻结字节。实验指标/Evidence 的人工映射、规则审核和消费者由 A4C2 接入，C1 不声明已完成图稿科学一致性，也不代替科学审核。
+
+## 图稿数据人工映射（X-WRITE A4C2A）
+
+`research.inspectFigureConsistency` 验证实际图稿冻结文件，返回编译 mark、完整编码及直接字段摘要；场景项按显式 mark、offset、limit（最多 200）分页读取。数值位置只包括直接编码的有限 datum；基线等数值也会计数，不能自动推断它们都是科学指标。条件、表达式、常量和缺失字段不接受指标映射。
+
+`research.saveFigureConsistencyReview` 将指定 mark、channel、field 和 scenePath 绑定到图稿主张及真实结果指标 Evidence。请求显式包含工件版本、图稿 manifest/trace hash、单位、转换/舍入/容差规则、最新父审核和人工理由。计算沿用正文合同；不一致照实保存，不授予科学批准。主进程在异步指标读取后再次核对图稿文件，并在事务中重查主张、Evidence、结果和工件版本。窗口身份由 IPC 绑定，完全相同的请求重试返回原回执且零重复写入。
+
+DB49 保存不可变版本，包括冻结运行、图稿、trace 引用、选中编码/实际 scene item、主张、Evidence、指标结果与计算。审核头纳入整个工件快照，保存后旧阶段审批版本失效。`research.getFigureConsistencyHistory` 独立验证保存 JSON/hash、来源清单关联、计算与父版本；当前来源失效后仍能读取明确标注的 `stored_receipt`。每条映射只保存选中项，不复制整个 trace。
+
+本部分交付主进程合同和 IPC；同壳映射界面及审批/导出消费者后续接入。核对的是实际 datum 和完整编码，不推断科学含义或最终像素位置。
+
+A4C2A 定向状态为 `Verified passing`。仓库根目录执行 `node --test tests/unit/research-figure-consistency.test.mjs tests/unit/research-consistency.test.mjs tests/unit/research-artifact-inspector.test.mjs tests/unit/research-gate-review.test.mjs tests/unit/research-export-body-gate.test.mjs`：31/31；`node --test --test-name-pattern='actual result metric evidence' tests/integration/research-python-experiments.test.mjs`：1/1，含真实负值绘制、磁盘历史和来源变化拒绝。`pnpm build`（含 typecheck）、P0 13/13、生产文件 renderer 9/9、启动 13/13 零 renderer error、IPC 当前及 chunks 1,134,192 bytes / 6 文件通过。日志位于 `.artifacts/research-optimization/xwrite-a4c2a-*.log`。完整 unit/Harness 补充检查仍运行，尚不声明通过。最初单测的工作区、待审批主张编辑及 Zod 错误断言夹具问题已修正，拒绝合同保持不变。

@@ -27,7 +27,7 @@ export function registerResearchConsistencyCapabilities(context: RocPluginContex
         if (!(error instanceof Error) || error instanceof RocDomainError) throw error;
         const code = error.name === 'ZodError' || error instanceof SyntaxError ?
           'research_consistency_contract_invalid' : error.message.split(':')[0];
-        const detail = errors[code];
+        const detail = consistencyErrors[code];
         if (detail === undefined) throw error;
         throw new RocDomainError({code, ...detail, retryable: false});
       }
@@ -37,7 +37,7 @@ export function registerResearchConsistencyCapabilities(context: RocPluginContex
   register(capabilities.history, input => repository.history(input));
   register(capabilities.inspect, input => service.inspect(input));
 }
-const errors: Record<string, {message: string; category: RocErrorCategory}> = {
+export const consistencyErrors: Record<string, {message: string; category: RocErrorCategory}> = {
   research_consistency_contract_invalid: {message: '数值映射或保存回执不符合合同。', category: 'validation'},
   research_consistency_span_invalid: {message: '请选择主张中完整的数值字符范围。', category: 'validation'},
   research_consistency_unit_mismatch: {message: '指标与展示单位不同，请明确填写转换规则。', category: 'validation'},

@@ -165,7 +165,7 @@ export class ResearchFigureService {
     return this.publishedSource(input);
   }
 
-  private async readRunFile(input: FileRequest): Promise<{ bytes: Buffer; file: ResearchExperimentFile }> {
+  async readRunFile(input: FileRequest): Promise<{ bytes: Buffer; file: ResearchExperimentFile }> {
     this.session.requireOpen();
     const run = this.repository.figureRuns.get(input.projectId, input.runId);
     const file = run.files.find((entry) => entry.area === input.area && entry.path === input.path);

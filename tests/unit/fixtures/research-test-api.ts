@@ -11,6 +11,9 @@ export {researchReviewLinksSchema, reviewLinksPayload} from '../../../src/shared
 export { getResearchStageRoleProfile } from '../../../src/main/plugins/research/role-profiles';
 export { applyResearchDatabaseSchema } from '../../../src/main/infrastructure/database-schemas';
 export { ResearchFigureService } from '../../../src/main/plugins/research/figure-service';
+export {ResearchFigureConsistencyService} from '../../../src/main/plugins/research/figure-consistency-service';
+export {registerResearchFigureConsistencyCapabilities} from '../../../src/main/plugins/research/figure-consistency-capabilities';
+export * from '../../../src/shared/schemas/research-figure-consistency';
 export { renderResearchFigure } from '../../../src/main/plugins/research/figure-renderer';
 export { ResearchTaskRepository } from '../../../src/main/plugins/research/research-task-repository';
 export { ResearchStageRuntime } from '../../../src/main/plugins/research/stage-runtime';

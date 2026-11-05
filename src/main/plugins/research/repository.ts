@@ -53,6 +53,7 @@ import {ResearchIdeaPlanRepository} from './idea-plan-repository';
 import {ResearchIdeaOutcomeRepository} from './idea-outcome-repository';
 import {ResearchCitationReviewRepository} from './citation-review-repository';
 import {ResearchConsistencyRepository} from './consistency-repository';
+import {ResearchFigureConsistencyRepository} from './figure-consistency-repository';
 import { ResearchKnowledgeRepository, type KnowledgeSourceWrite } from './knowledge-repository';
 import type { ResearchTaskRepository } from './research-task-repository';
 import {researchArtifactInspectionBodySchema, researchArtifactInspectResultSchema,
@@ -100,6 +101,7 @@ export class ResearchRepository {
   readonly ideaOutcomes: ResearchIdeaOutcomeRepository;
   readonly citationReviews: ResearchCitationReviewRepository;
   readonly consistency: ResearchConsistencyRepository;
+  readonly figureConsistency: ResearchFigureConsistencyRepository;
   readonly knowledge: ResearchKnowledgeRepository;
   private knowledgeWriter: ((input: KnowledgeSourceWrite, sourceMetadata?: Record<string, unknown>) => Promise<ResearchKnowledgeDocument>) | null = null;
   private readonly pendingKnowledgeWrites: Array<{ input: KnowledgeSourceWrite; sourceMetadata: Record<string, unknown> }> = [];
@@ -139,6 +141,7 @@ export class ResearchRepository {
     this.ideaOutcomes = new ResearchIdeaOutcomeRepository(db, this, now);
     this.citationReviews = new ResearchCitationReviewRepository(db, this, now);
     this.consistency = new ResearchConsistencyRepository(db, this, now);
+    this.figureConsistency = new ResearchFigureConsistencyRepository(db, this, now);
     this.knowledge = new ResearchKnowledgeRepository(db, (id) => { this.getProject(id); }, now);
   }
 
@@ -333,6 +336,11 @@ export class ResearchRepository {
         reviewId: consistency.snapshot.id, reviewHash: consistency.snapshotHash,
         version: consistency.snapshot.version, recordedAt: consistency.snapshot.recordedAt
       }];
+      const figureConsistency = artifact.kind === 'figure' ? this.figureConsistency.latest(project.id, artifact.id) : null;
+      if (figureConsistency !== null) consistencyReviews.push({
+        reviewId: figureConsistency.snapshot.id, reviewHash: figureConsistency.snapshotHash,
+        version: figureConsistency.snapshot.version, recordedAt: figureConsistency.snapshot.recordedAt
+      });
       const citationReviews = this.citationReviews.forArtifact(project.id, artifact.id).map(({snapshot, snapshotHash}) => ({
         reviewId: snapshot.id, reviewHash: snapshotHash, claimId: snapshot.request.claimId,
         evidenceId: snapshot.request.evidenceId, version: snapshot.version,

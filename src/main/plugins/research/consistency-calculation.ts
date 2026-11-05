@@ -41,6 +41,13 @@ export function calculateConsistency(binding: ResearchConsistencyBinding, conten
   if (!consistencyNumericLocations(content).some(token => token.start === binding.start && token.end === binding.end)) {
     throw new Error('research_consistency_span_invalid');
   }
+  return calculateConsistencyValue(binding, observedText, receipt);
+}
+export function calculateConsistencyValue(binding: Pick<ResearchConsistencyBinding, 'unit' | 'metricId' | 'rule'>,
+  observedText: string, receipt: ResearchExperimentResultReceipt): ResearchConsistencyCalculation {
+  if (observedText.length > 128 || !numeric.test(observedText) || !Number.isFinite(Number(observedText))) {
+    throw new Error('research_consistency_span_invalid');
+  }
   const metric = receipt.snapshot.result.metrics.find(item => item.id === binding.metricId);
   const definition = receipt.snapshot.request.definitions.find(item => item.id === binding.metricId);
   if (metric === undefined || definition === undefined || definition.unit !== metric.unit) {

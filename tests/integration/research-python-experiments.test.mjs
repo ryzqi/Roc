@@ -324,7 +324,7 @@ test('metric review requires actual complete output and human authority; source 
 
 test('actual result metric evidence traces claims, figures and Idea history to an immutable negative output across restart',async()=>{
   const f=await fixture(metricSource,{scenario:'metric-evidence'});
-  let reopened,figureService,figure;
+  let reopened,figureService,figure,figureConsistencyReview;
   try {
     await writeFile(join(f.workspace,'data.txt'),'-3 -2 -1\n');
     const run=await f.execute(),output=run.files.find(file=>file.path==='metrics.json');
@@ -401,6 +401,32 @@ test('actual result metric evidence traces claims, figures and Idea history to a
       const inspected=f.repository.inspectArtifact({projectId:f.project.id,artifactId:artifact.id,expectedVersion:null});
       assert.deepEqual(inspected.snapshot.evidence.map(source=>source.evidence.id),[evidence.id]);
       artifacts.push(artifact);
+      if(subjectType==='figure') {
+        const consistency=new api.ResearchFigureConsistencyService(f.repository,figureService,service);
+        const baseline=await consistency.inspect({projectId:f.project.id,artifactId:artifact.id,expectedHash:null,
+          page:{markName:null,offset:0,limit:100}});
+        const mark=baseline.report.marks.find(mark=>mark.directFields.y==='value_end');
+        assert.ok(mark,'actual compiled negative bar endpoint');
+        const data=await consistency.inspect({projectId:f.project.id,artifactId:artifact.id,expectedHash:null,
+          page:{markName:mark.name,offset:0,limit:100}});
+        assert.equal(data.report.items[0].numericFields.value_end,-4);
+        figureConsistencyReview=await api.withResearchHumanContext({
+          capability:'research.figureConsistency.save',projectId:f.project.id,windowId:72
+        },()=>consistency.save({projectId:f.project.id,artifactId:artifact.id,requestId:'actual-python-figure-mapping',
+          expectedArtifactVersion:baseline.report.artifactVersion,
+          figure:{id:figure.id,manifestHash:figure.manifestHash,traceHash:baseline.report.trace.file.sha256},
+          parent:null,rationale:'Explicitly associate the actual negative bar endpoint with the CPython metric.',
+          bindings:[{claimId:revised.id,expectedClaimHash:api.relationClaimHash(revised),markName:mark.name,
+            channel:'y',field:'value_end',scenePath:data.report.items[0].scenePath,unit:'ms',
+            evidenceId:evidence.id,resultId:receipt.snapshot.id,resultHash:receipt.snapshotHash,metricId:'mean',
+            rule:{conversion:{kind:'identity'},rounding:{kind:'none'},
+              tolerance:{absolute:0,relative:0,rationale:'Exact deterministic fixture value'}}}]}));
+        const calculation=figureConsistencyReview.snapshot.material.mappings[0].calculation;
+        assert.equal(calculation.sourceValue,-4);assert.equal(calculation.observed,-4);assert.equal(calculation.consistent,true);
+        assert.deepEqual(figureConsistencyReview.snapshot.material.mappings[0].result,receipt);
+        assert.equal((await consistency.inspect({projectId:f.project.id,artifactId:artifact.id,expectedHash:null,
+          page:{markName:null,offset:0,limit:100}})).report.counts.consistent,1);
+      }
       if(subjectType!=='claim') {
         const source=f.repository.evidence.inspectEvidence(evidence.id,f.project.id),sourceDigest=api.relationSourceDigest(source);
         const relation=f.repository.evidence.relations.propose({projectId:f.project.id,claimId:revised.id,expectedClaimVersion:revised.version,
@@ -553,6 +579,8 @@ test('actual result metric evidence traces claims, figures and Idea history to a
         {error:()=>assert.fail('no recovery error')},async()=>assert.fail('no recovery execution'));
       const history=new api.ResearchExperimentResultService(repository,reopened),dispatches=f.observed.length;
       assert.deepEqual(await history.evidence({projectId:f.project.id,evidenceId:evidence.id}),{receipt,metricId:'mean'});
+      assert.deepEqual(repository.figureConsistency.history({projectId:f.project.id,artifactId:figure.artifactId,
+        offset:0,limit:10}).items,[figureConsistencyReview]);
       assert.equal(f.observed.length,dispatches);
     }finally{await reopened?.shutdown();disk.close();}
     f.db.prepare("UPDATE research_projects SET status='archived' WHERE id=?").run(f.project.id);
@@ -564,7 +592,12 @@ test('actual result metric evidence traces claims, figures and Idea history to a
     await assert.rejects(service.evidence({projectId:f.project.id,evidenceId:evidence.id}),/research_experiment_snapshot_changed/u);
     assert.equal(f.repository.evidence.inspectEvidence(evidence.id,f.project.id).evidence.excerpt,evidence.excerpt);
     await assert.rejects(capture(request),/research_experiment_snapshot_changed/u);
-    receipts.push({scenario:'metric-evidence',receipt,evidence,artifacts,idea});
+    assert.deepEqual(f.repository.figureConsistency.history({projectId:f.project.id,artifactId:figure.artifactId,
+      offset:0,limit:10}).items,[figureConsistencyReview]);
+    const consistency=new api.ResearchFigureConsistencyService(f.repository,figureService,service);
+    await assert.rejects(consistency.inspect({projectId:f.project.id,artifactId:figure.artifactId,expectedHash:null,
+      page:{markName:null,offset:0,limit:100}}),/research_experiment_snapshot_changed/u);
+    receipts.push({scenario:'metric-evidence',receipt,evidence,artifacts,idea,figureConsistencyReview});
   }finally{await figureService?.shutdown();await f.cleanup();}
 });
 

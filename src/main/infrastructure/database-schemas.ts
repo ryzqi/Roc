@@ -2377,6 +2377,25 @@ CREATE INDEX research_consistency_reviews_artifact ON research_consistency_revie
 `
 });
 
+researchMigrations.push({
+  version: 49, name: 'human_figure_data_consistency_timeline',
+  sql: `
+CREATE TABLE research_figure_consistency_reviews (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  artifact_id TEXT NOT NULL REFERENCES research_artifacts(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL CHECK(version > 0),
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(artifact_id,version),
+  UNIQUE(project_id,request_id)
+);
+CREATE INDEX research_figure_consistency_reviews_artifact ON research_figure_consistency_reviews(artifact_id);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

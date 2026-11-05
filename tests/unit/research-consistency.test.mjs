@@ -180,7 +180,7 @@ test('direct storage cannot map a claim omitted from the saved manuscript', asyn
     assert.deepEqual(f.history().items, [saved]);
   } finally {f.close();}
 });
-test('DB47 to48 preserves complete prior migration receipts and installs only an empty consistency timeline', () => {
+test('DB47 to49 preserves complete prior migration receipts and installs empty consistency timelines', () => {
   const db = new Database(':memory:');
   try {
     db.pragma('foreign_keys=ON');
@@ -188,8 +188,9 @@ test('DB47 to48 preserves complete prior migration receipts and installs only an
     const prior = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
     api.applyResearchDatabaseSchema(db);
     assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=47 ORDER BY version').all(), prior);
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 48);
+    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 49);
     assert.equal(db.prepare('SELECT count(*) FROM research_consistency_reviews').pluck().get(), 0);
+    assert.equal(db.prepare('SELECT count(*) FROM research_figure_consistency_reviews').pluck().get(), 0);
     assert.deepEqual(db.pragma('foreign_key_check'), []);
   } finally {db.close();}
 });
