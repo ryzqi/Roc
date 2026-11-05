@@ -2,7 +2,7 @@ import {AsyncLocalStorage} from 'node:async_hooks';
 import type {ResearchRelationReviewer} from '../../shared/schemas/research-evidence-relations';
 import {RocDomainError} from './errors';
 
-export type ResearchHumanCapability = 'research.notebooks.import' | 'research.pythonEnvironments.select' | 'research.relations.propose' | 'research.relations.review' |
+export type ResearchHumanCapability = 'research.experimentResults.review' | 'research.notebooks.import' | 'research.pythonEnvironments.select' | 'research.relations.propose' | 'research.relations.review' |
   'research.sourceMigrations.capture' | 'research.sourceMigrations.reject' | 'research.sourceReplacements.replace' |
   'research.annotations.create' | 'research.annotations.capture' |
   'research.reviewProtocol.save' | 'research.reviewProtocol.freeze' |

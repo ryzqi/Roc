@@ -2273,6 +2273,23 @@ CREATE TABLE research_notebooks (
 `
 });
 
+researchMigrations.push({
+  version:44,name:'immutable_human_experiment_results',
+  sql:`
+CREATE TABLE research_experiment_results (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  run_id TEXT NOT NULL REFERENCES research_experiment_executions(run_id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id,request_id)
+);
+CREATE INDEX research_experiment_results_run ON research_experiment_results(project_id,run_id);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

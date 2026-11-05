@@ -32,6 +32,122 @@ with open(os.path.join(roc.output_dir, "result.json"), "w") as output:
 print("ACTUAL_PYTHON_RESULT", flush=True)
 `;
 
+const metricSource=`import json, os, statistics
+import roc_experiment as roc
+with open(os.path.join(roc.input_dir, "data.txt")) as data:
+    observations = [float(value) * float(roc.parameters["scale"]) for value in data.read().split()]
+result = {"schemaVersion": 1, "metrics": [{
+    "id": "mean", "value": statistics.mean(observations), "unit": "ms", "sampleSize": len(observations),
+    "uncertainty": {"kind": "recorded", "type": "standard_deviation", "value": statistics.stdev(observations)},
+    "confidenceInterval": {"kind": "unavailable", "reason": "No interval was estimated in this synthetic run"},
+    "effect": {"kind": "unavailable", "reason": "No control group was measured"}
+}]}
+with open(os.path.join(roc.output_dir, "metrics.json"), "w") as output:
+    json.dump(result, output)
+print("ACTUAL_METRIC_RESULT", flush=True)
+`;
+
+test('actual metric review freezes measured values, full method and source identity; comparisons expose changed data and parameters',async()=>{
+  const f=await fixture(metricSource);
+  try {
+    await writeFile(join(f.workspace,'data.txt'),'1 2 3\n');
+    const results=new api.ResearchExperimentResultService(f.repository,f.service);
+    const review=async(run,requestId)=>{
+      const output=run.files.find(file=>file.area==='output'&&file.path==='metrics.json');
+      return api.withResearchHumanContext({capability:'research.experimentResults.review',projectId:f.project.id,windowId:72},
+        ()=>results.review({projectId:f.project.id,requestId,runId:run.id,expectedInputHash:run.inputHash,
+          resultPath:output.path,expectedResultHash:output.sha256,
+          definitions:[{id:'mean',label:'Synthetic latency mean',definition:'Arithmetic mean of every declared data.txt observation after scale multiplication',
+            unit:'ms',direction:'lower'}],
+          method:{name:'Arithmetic mean and sample standard deviation',rationale:'Summarize every observation',
+            assumptions:'Synthetic independent observations only',limitations:'No confidence interval or control group'}}));
+    };
+    const first=await f.execute(f.request),a=await review(first,'metric-first');
+    assert.equal(a.snapshot.result.metrics[0].value,4);
+    assert.equal(a.snapshot.result.metrics[0].sampleSize,3);
+    assert.equal(a.snapshot.result.metrics[0].uncertainty.value,2);
+    assert.equal(a.snapshot.execution.source.sha256,first.files.find(file=>file.path==='analysis.py').sha256);
+    assert.equal(a.snapshot.actor.id,'window:72');
+    assert.deepEqual(await review(first,'metric-first'),a);
+    const reference=result=>({resultId:result.snapshot.id,expectedHash:result.snapshotHash});
+    const second=await f.execute({...f.request,requestId:'metric-repeat'}),b=await review(second,'metric-second');
+    const same=await results.compare({projectId:f.project.id,left:reference(a),right:reference(b)});
+    assert.equal(same.comparable,true);assert.deepEqual(same.differences,[]);
+    const scaled=await f.execute({...f.request,requestId:'metric-scaled',parameters:{scale:'3'}}),c=await review(scaled,'metric-third');
+    const changed=await results.compare({projectId:f.project.id,left:reference(a),right:reference(c)});
+    assert.equal(changed.comparable,false);assert.deepEqual(changed.differences,['parameters']);
+    assert.equal(c.snapshot.result.metrics[0].value,6);
+    await writeFile(join(f.workspace,'data.txt'),'2 3 4\n');
+    const next=await f.execute({...f.request,requestId:'metric-data'}),d=await review(next,'metric-fourth');
+    const data=await results.compare({projectId:f.project.id,left:reference(a),right:reference(d)});
+    assert.equal(data.comparable,false);assert.deepEqual(data.differences,['data']);
+    assert.deepEqual(f.repository.experimentResults.list({projectId:f.project.id,runId:first.id,offset:0,limit:20}),{items:[a],total:1});
+    assert.equal(f.repository.experiments.get(f.project.id,first.id).status,'completed');
+    const handlers=new Map();
+    api.registerResearchExperimentResultCapabilities({pluginId:'fixture',capabilities:{register(_id,descriptor,handler){handlers.set(descriptor.name,handler);}}},
+      f.repository.experimentResults,results);
+    const bridge=api.createPluginCapabilityAdapter({invokeCapability:(name,input)=>handlers.get(name)(input)});
+    const wire=await bridge.invoke('research.reviewExperimentResult',[a.snapshot.request],72);
+    assert.equal(wire.ok,true);assert.deepEqual(wire.data,a);
+    assert.equal((await bridge.invoke('research.reviewExperimentResult',[a.snapshot.request])).ok,false);
+    const read=await bridge.invoke('research.compareExperimentResults',[{projectId:f.project.id,left:reference(a),right:reference(b)}],72);
+    assert.equal(read.ok,true);assert.equal(read.data.comparable,true);
+    const databasePath=join(f.path,'result-history.sqlite');
+    await f.db.backup(databasePath);
+    const disk=new Database(databasePath);disk.pragma('foreign_keys=ON');
+    let reopened;
+    try {
+      api.applyResearchDatabaseSchema(disk);
+      assert.equal(disk.prepare('SELECT current_version FROM schema_metadata').pluck().get(),44);
+      const repository=new api.ResearchRepository(disk,f.tasks),before=f.observed.length;
+      reopened=new api.ResearchExperimentService(repository,{
+        inspect:async()=>assert.fail('result history must not inspect an execution environment')
+      },f.path,{error:()=>assert.fail('unexpected result recovery error')},
+      async()=>assert.fail('result history must not dispatch computation'));
+      const history=new api.ResearchExperimentResultService(repository,reopened);
+      assert.deepEqual(await history.get({projectId:f.project.id,...reference(a)}),a);
+      assert.deepEqual(await history.compare({projectId:f.project.id,left:reference(a),right:reference(b)}),same);
+      assert.equal(f.observed.length,before);
+      disk.prepare('UPDATE research_experiment_results SET created_at=? WHERE id=?').run('damaged',a.snapshot.id);
+      await assert.rejects(history.get({projectId:f.project.id,...reference(a)}),/research_result_snapshot_invalid/u);
+    }finally{await reopened?.shutdown();disk.close();}
+    receipts.push({scenario:'actual-metric-comparison',same,changed,data});
+  } finally {await f.cleanup();}
+});
+
+test('metric review requires actual complete output and human authority; source rehash and stale identities cannot rewrite a frozen result',async()=>{
+  const f=await fixture(metricSource);
+  try {
+    await writeFile(join(f.workspace,'data.txt'),'1 2 3\n');
+    const run=await f.execute(f.request),output=run.files.find(file=>file.path==='metrics.json');
+    const service=new api.ResearchExperimentResultService(f.repository,f.service);
+    const request={projectId:f.project.id,requestId:'review-errors',runId:run.id,expectedInputHash:run.inputHash,
+      resultPath:output.path,expectedResultHash:output.sha256,definitions:[{id:'mean',label:'Mean',definition:'Arithmetic mean',unit:'ms',direction:'lower'}],
+      method:{name:'Arithmetic mean',rationale:'Every observation',assumptions:'Synthetic independent observations',limitations:'No inference'}};
+    const human=action=>api.withResearchHumanContext({capability:'research.experimentResults.review',projectId:f.project.id,windowId:72},action);
+    await assert.rejects(service.review(request),/research_human_required/u);
+    await assert.rejects(human(()=>service.review({...request,expectedResultHash:'0'.repeat(64)})),/research_result_output_changed/u);
+    await assert.rejects(human(()=>service.review({...request,definitions:[{...request.definitions[0],unit:'s'}]})),/research_result_definition_mismatch/u);
+    await assert.rejects(human(()=>service.review({...request,expectedInputHash:'0'.repeat(64)})),/research_result_input_changed/u);
+    const saved=await human(()=>service.review(request));
+    await assert.rejects(human(()=>service.review({...request,method:{...request.method,name:'Changed after seeing data'}})),/research_result_request_conflict/u);
+    const reference={projectId:f.project.id,resultId:saved.snapshot.id,expectedHash:saved.snapshotHash};
+    assert.deepEqual(await service.get(reference),saved);
+    await assert.rejects(service.get({...reference,expectedHash:'0'.repeat(64)}),/research_result_hash_mismatch/u);
+    const path=join(f.repository.experiments.root(f.project.id,run.id),'input/analysis.py');
+    await chmod(path,0o600);await writeFile(path,metricSource+'\nprint("host changed source")\n');
+    await assert.rejects(service.get(reference),/research_experiment_snapshot_changed/u);
+    const changed={...run,files:run.files.map(file=>file.path==='analysis.py'?{...file,sha256:createHash('sha256').update(metricSource+'\nprint("host changed source")\n').digest('hex'),
+      size:Buffer.byteLength(metricSource+'\nprint("host changed source")\n')}:file)};
+    f.db.prepare('UPDATE research_experiment_executions SET snapshot_json=? WHERE run_id=?').run(JSON.stringify(changed),run.id);
+    const {artifactId:_artifact,...manifest}=changed,manifestPath=join(f.repository.experiments.root(f.project.id,run.id),'manifest.json');
+    await chmod(manifestPath,0o600);await writeFile(manifestPath,JSON.stringify(manifest,null,2));
+    await assert.rejects(service.get(reference),/research_result_execution_changed/u);
+    assert.deepEqual(await human(()=>service.review(request)),saved);
+    assert.equal(f.repository.experimentResults.list({projectId:f.project.id,runId:run.id,offset:0,limit:100}).total,1);
+  }finally{await f.cleanup();}
+});
+
 async function fixture(code = source, options = {}) {
   const path = await mkdtemp(join(root, 'case-')), workspace = join(path, 'workspace'), venv = join(path, 'venv');
   const packagePath = join(venv, 'lib/python3.14/site-packages'), executable = join(venv, 'bin/python3');

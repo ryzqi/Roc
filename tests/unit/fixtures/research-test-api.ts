@@ -40,6 +40,9 @@ export { notifyResearchTaskChanged } from '../../../src/main/plugins/research/ta
 export { ProjectBudgetLedger } from '../../../src/main/services/deep-agent/project-budget-ledger';
 export { registerResearchProjectBudgetCapabilities } from '../../../src/main/plugins/research/project-budget-capabilities';
 export { ResearchExperimentService } from '../../../src/main/plugins/research/experiment-service';
+export {ResearchExperimentResultService} from '../../../src/main/plugins/research/experiment-result-service';
+export {registerResearchExperimentResultCapabilities} from '../../../src/main/plugins/research/experiment-result-capabilities';
+export * from '../../../src/shared/schemas/research-experiment-results';
 export { ResearchExperimentEnvironmentService } from '../../../src/main/plugins/research/experiment-environment';
 export { inspectNativeExperimentEnvironment } from '../../../src/main/plugins/research/experiment-native-environment';
 export { inspectPythonExperimentEnvironment, pythonEnvironmentProbe, pythonExperimentFlags } from '../../../src/main/plugins/research/experiment-python-probe';
