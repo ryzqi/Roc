@@ -53,7 +53,8 @@ export class ResearchTemplateService {
         const archive = join(job, 'template.zip');
         await writeFile(archive, bytes, { flag: 'wx' });
         source = join(job, 'extracted');
-        await this.tools.extractTemplate({ projectRoot: workspace, sourcePath: archive, outputDir: source, jobDir: job, signal });
+        await this.tools.extractTemplate({ projectRoot: workspace, sourcePath: archive, outputDir: source, jobDir: job, signal,
+          admission: { projectId: request.projectId, priority: 'user' } });
         this.onPathStructureChanged?.(workspacePath, 'research.template-import-job-created');
       }
       const files = await listTemplateFiles(source);
@@ -241,7 +242,8 @@ export class ResearchTemplateService {
     let published = false;
     try {
       const result = await compileLatex({ rootPath: state.source, entryPath: state.template.entryPath, outputDir: join(state.job, 'output'),
-        jobDir: state.job, signal: state.controller.signal, runner: (input) => this.tools.compile(input) });
+        jobDir: state.job, signal: state.controller.signal, runner: (input) => this.tools.compile({ ...input,
+          admission: { projectId: state.template.projectId, priority: 'user' } }) });
       return await this.serial(state.template.id, async () => {
         let current = this.repository.getTemplate({ projectId: state.template.projectId, templateId: state.template.id });
         if (current.activeCompileId !== state.runId) return current;

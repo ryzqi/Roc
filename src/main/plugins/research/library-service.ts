@@ -34,7 +34,8 @@ export class ResearchLibraryService {
       const content = await readResearchFile(await researchWorkspace(dirname(request.sourcePath)), basename(request.sourcePath), 16 * 1024 * 1024);
       const source = join(directory, request.format === 'csl-json' ? 'source.json' : 'source.bib');
       await writeFile(source, content, { flag: 'wx', mode: 0o600 });
-      const entries = await this.tools.readBibliography({ projectRoot: root, sourcePath: source, outputDir: join(directory, 'parsed'), jobDir: directory, format: request.format, signal });
+      const entries = await this.tools.readBibliography({ projectRoot: root, sourcePath: source, outputDir: join(directory, 'parsed'), jobDir: directory, format: request.format, signal,
+        admission: { projectId: request.projectId, priority: 'user' } });
       this.requireActive(signal);
       return this.repository.import(entries.map((bibliography) => ({ metadata: localMetadata(bibliography), bibliography })), request.projectId);
     });
@@ -45,7 +46,8 @@ export class ResearchLibraryService {
     return await this.job(async (root, directory, signal) => {
       const source = join(directory, 'metadata.json');
       await writeFile(source, JSON.stringify([{ metadata: request.record, citationKey: request.citationKey }]), { flag: 'wx', mode: 0o600 });
-      const entries = await this.tools.normalizeBibliography({ projectRoot: root, sourcePath: source, outputDir: join(directory, 'normalized'), jobDir: directory, signal });
+      const entries = await this.tools.normalizeBibliography({ projectRoot: root, sourcePath: source, outputDir: join(directory, 'normalized'), jobDir: directory, signal,
+        admission: { projectId: request.projectId, priority: 'user' } });
       if (entries.length !== 1) throw new Error('research_bibliography_response_count_invalid');
       this.requireActive(signal);
       const bibliography = entries[0];
@@ -55,15 +57,16 @@ export class ResearchLibraryService {
 
   async importDoi(request: z.infer<typeof researchLibraryDoiImportRequestSchema>): Promise<ImportResult> {
     this.repository.validateDestination(request.projectId);
-    const entry = await this.prepareDoi(request.doi);
+    const entry = await this.prepareDoi(request.doi, request.projectId);
     return this.repository.import([entry], request.projectId);
   }
 
-  async prepareRecord(record: ResearchLiterature, signal?: AbortSignal): Promise<{ metadata: ResearchLiterature; bibliography: BibliographyEntry }> {
+  async prepareRecord(record: ResearchLiterature, projectId: string | null, signal?: AbortSignal): Promise<{ metadata: ResearchLiterature; bibliography: BibliographyEntry }> {
     return this.job(async (root, directory, jobSignal) => {
       const source = join(directory, 'metadata.json');
       await writeFile(source, JSON.stringify([{ metadata: record, citationKey: 'candidate' }]), { flag: 'wx', mode: 0o600 });
-      const entries = await this.tools.normalizeBibliography({ projectRoot: root, sourcePath: source, outputDir: join(directory, 'normalized'), jobDir: directory, signal: jobSignal });
+      const entries = await this.tools.normalizeBibliography({ projectRoot: root, sourcePath: source, outputDir: join(directory, 'normalized'), jobDir: directory, signal: jobSignal,
+        admission: { projectId, priority: 'user' } });
       this.requireActive(jobSignal);
       if (entries.length !== 1) throw new Error('research_bibliography_response_count_invalid');
       const bibliography = entries[0];
@@ -71,12 +74,13 @@ export class ResearchLibraryService {
     }, signal);
   }
 
-  async prepareZotero(record: ResearchLiterature, cslJson: string, signal?: AbortSignal): Promise<{metadata: ResearchLiterature; bibliography: BibliographyEntry}> {
+  async prepareZotero(record: ResearchLiterature, cslJson: string, projectId: string | null, signal?: AbortSignal): Promise<{metadata: ResearchLiterature; bibliography: BibliographyEntry}> {
     return this.job(async (root, directory, jobSignal) => {
       const source = join(directory, 'zotero-csl.json');
       await writeFile(source, cslJson, {flag: 'wx', mode: 0o600});
       const entries = await this.tools.readBibliography({projectRoot: root, sourcePath: source,
-        outputDir: join(directory, 'parsed'), jobDir: directory, format: 'csl-json', signal: jobSignal});
+        outputDir: join(directory, 'parsed'), jobDir: directory, format: 'csl-json', signal: jobSignal,
+        admission: { projectId, priority: 'user' }});
       this.requireActive(jobSignal);
       if (entries.length !== 1) throw new Error('research_bibliography_response_count_invalid');
       const bibliography = {...entries[0], doi: entries[0].doi === null ? null : normalizeResearchDoi(entries[0].doi)};
@@ -86,7 +90,7 @@ export class ResearchLibraryService {
     }, signal);
   }
 
-  async prepareDoi(inputDoi: string, signal?: AbortSignal): Promise<{ metadata: ResearchLiterature; bibliography: BibliographyEntry }> {
+  async prepareDoi(inputDoi: string, projectId: string | null, signal?: AbortSignal): Promise<{ metadata: ResearchLiterature; bibliography: BibliographyEntry }> {
     const doi = normalizeResearchDoi(inputDoi);
     return await this.job(async (root, directory, signal) => {
       const response = await this.fetchImpl(`https://doi.org/${encodeURIComponent(doi)}`, {
@@ -122,7 +126,8 @@ export class ResearchLibraryService {
         }
       }
       await writeFile(source, JSON.stringify([normalized]), { flag: 'wx', mode: 0o600 });
-      const entries = await this.tools.readBibliography({ projectRoot: root, sourcePath: source, outputDir: join(directory, 'parsed'), jobDir: directory, format: 'csl-json', signal });
+      const entries = await this.tools.readBibliography({ projectRoot: root, sourcePath: source, outputDir: join(directory, 'parsed'), jobDir: directory, format: 'csl-json', signal,
+        admission: { projectId, priority: 'user' } });
       if (entries.length !== 1) throw new Error('research_bibliography_response_count_invalid');
       this.requireActive(signal);
       const entry = entries[0];
@@ -186,7 +191,7 @@ export class ResearchLibraryService {
       const source = join(directory, 'entries.json');
       await writeFile(source, JSON.stringify(items.map((item) => item.bibliography)), { flag: 'wx', mode: 0o600 });
       const result = await this.tools.writeBibliography({ projectRoot: root, sourcePath: source, outputDir: join(directory, 'exported'), jobDir: directory,
-        format: request.format, signal });
+        format: request.format, signal, admission: { projectId: null, priority: 'user' } });
       this.requireActive(signal);
       return { format: request.format, ...result };
     });

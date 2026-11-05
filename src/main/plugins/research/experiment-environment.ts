@@ -3,7 +3,7 @@ import { researchExperimentEnvironmentSchema, type ResearchExperimentEnvironment
 import { researchContentHash } from './research-files';
 import { runResearchProcess, type ResearchProcessRequest } from './process-runner';
 import { inspectNativeExperimentEnvironment } from './experiment-native-environment';
-import type { ResearchToolchain, ResearchTypeScriptRuntime } from './toolchain';
+import type { ResearchProcessScope, ResearchToolchain, ResearchTypeScriptRuntime } from './toolchain';
 
 export type PreparedExperimentEnvironment = {
   snapshot: ResearchExperimentEnvironment;
@@ -20,7 +20,7 @@ export class ResearchExperimentEnvironmentService {
   constructor(private readonly tools: Pick<ResearchToolchain, 'nativeRuntime' | 'typescriptRuntime'>,
     private readonly run: ProcessRun = runResearchProcess) {}
 
-  async inspect(root: string, runtime: ResearchExperimentStartRuntime, jobDir: string, signal: AbortSignal): Promise<PreparedExperimentEnvironment> {
+  async inspect(root: string, runtime: ResearchExperimentStartRuntime, jobDir: string, signal: AbortSignal, admission: ResearchProcessScope): Promise<PreparedExperimentEnvironment> {
     signal.throwIfAborted();
     if (runtime.kind === 'bundled-node') {
       const tools = await this.tools.typescriptRuntime(jobDir);
@@ -45,6 +45,6 @@ export class ResearchExperimentEnvironmentService {
       return { snapshot, readablePaths: [tools.runnerPath, frameworks, ...tools.packageRoots], environment: tools.environment, typescriptRuntime: tools };
     }
     const tools = await this.tools.nativeRuntime(jobDir);
-    return inspectNativeExperimentEnvironment({ workspace: root, runtime, jobDir, tools, run: this.run, signal });
+    return inspectNativeExperimentEnvironment({ workspace: root, runtime, jobDir, tools, run: this.run, signal, admission });
   }
 }

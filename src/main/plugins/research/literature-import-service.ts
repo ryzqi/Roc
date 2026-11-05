@@ -627,17 +627,17 @@ export class LiteratureImportService {
         const reusable = known !== null && entry.source.kind === 'zotero' && known.object_version === entry.source.object.item.version ? known : null;
         if (reusable === null) {
           if (entry.source.kind === 'doi') {
-            prepared.push(await this.prepare.prepareDoi(entry.source.doi, signal));
+            prepared.push(await this.prepare.prepareDoi(entry.source.doi, context.projectId, signal));
           } else if (entry.source.kind === 'zotero') {
             const object = entry.source.object;
-            prepared.push({...await this.prepare.prepareZotero(object.metadata, object.cslJson, signal), providerRecord: object.metadata});
+            prepared.push({...await this.prepare.prepareZotero(object.metadata, object.cslJson, context.projectId, signal), providerRecord: object.metadata});
           } else {
             for (const {origin, executionId} of entry.source.origins) {
               this.requireActive({ ...context, signal });
               const identifierRecord = origin.rawIdentifiers === null ? undefined : {metadataHash: origin.metadataHash, executionId,
                 source: origin.source, externalId: origin.externalId, rank: origin.rank, retrievedAt: origin.retrievedAt,
                 raw: origin.rawIdentifiers, identifiers: origin.identifiers};
-              prepared.push({...await this.prepare.prepareRecord(origin.record, signal), providerRecord: origin.record, identifierRecord,
+              prepared.push({...await this.prepare.prepareRecord(origin.record, context.projectId, signal), providerRecord: origin.record, identifierRecord,
                 reviewRecord: {metadataHash: origin.metadataHash, executionId, source: origin.source, externalId: origin.externalId,
                   rank: origin.rank, retrievedAt: origin.retrievedAt, review: origin.review}});
             }

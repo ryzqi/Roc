@@ -80,6 +80,7 @@ async function request(mode, overrides = {}) {
       command: executable, args: [mode, marker], cwd: output, readablePaths: [executable, '/usr/lib', '/System/Library'],
       writablePaths: [output], environment: { PATH: '/usr/bin:/bin' }, timeoutMs: 10000,
       resourceLimits: { mode: 'monitored', cpuTimeMs: 5000, maxResidentBytes: 128 * 1024 * 1024 },
+      admission: { projectId: 'native-resource-test', priority: 'user', resourceClass: 'compute' },
       allowGpuAcceleration: false, networkAccess: 'none', allowPosixSpawn: false, ...overrides
     }
   };
@@ -175,4 +176,58 @@ test('hard CPU and memory requirements are refused before launching any code', a
   await assert.rejects(runResearchProcess(f.input), /research_process_hard_limits_unsupported/);
   await assert.rejects(readFile(f.marker), { code: 'ENOENT' });
   receipts.push({ scenario: 'hard-limits-refused', requests: 0 });
+});
+
+test('real process admission prioritizes foreground once, then runs the waiting background process ahead of later foreground', async () => {
+  const jobs = [];
+  const enqueue = async (projectId, priority) => {
+    const controller = new AbortController();
+    const f = await request('wait', { admission: { projectId, priority, resourceClass: 'compute' }, signal: controller.signal });
+    const promise = runResearchProcess(f.input).then(result => ({ result }), error => ({ error }));
+    const job = { ...f, controller, promise };
+    jobs.push(job); return job;
+  };
+  try {
+    const a = await enqueue('a', 'user'), b = await enqueue('b', 'user');
+    const aIds = await pids(a.marker), bIds = await pids(b.marker);
+    const background = await enqueue('background', 'background');
+    const firstUser = await enqueue('firstUser', 'user'), laterUser = await enqueue('laterUser', 'user');
+    await assert.rejects(readFile(background.marker), { code: 'ENOENT' });
+    await assert.rejects(readFile(firstUser.marker), { code: 'ENOENT' });
+    a.controller.abort(); await a.promise; await gone(aIds);
+    const firstIds = await pids(firstUser.marker);
+    await assert.rejects(readFile(background.marker), { code: 'ENOENT' });
+    await assert.rejects(readFile(laterUser.marker), { code: 'ENOENT' });
+    firstUser.controller.abort(); await firstUser.promise; await gone(firstIds);
+    const backgroundIds = await pids(background.marker);
+    await assert.rejects(readFile(laterUser.marker), { code: 'ENOENT' });
+    background.controller.abort(); const completedBackground = await background.promise; await gone(backgroundIds);
+    const laterIds = await pids(laterUser.marker);
+    laterUser.controller.abort(); b.controller.abort();
+    await laterUser.promise; await b.promise; await gone([...laterIds, ...bIds]);
+    assert.ok(completedBackground.error.admission.waitMs > 0);
+    assert.ok(completedBackground.error.admission.holdMs > 0);
+    receipts.push({ scenario: 'real-fair-admission', order: ['firstUser', 'background', 'laterUser'],
+      backgroundAdmission: completedBackground.error.admission });
+  } finally {
+    for (const job of jobs) job.controller.abort();
+    await Promise.all(jobs.map(job => job.promise));
+  }
+});
+
+test('cancelling a queued same-project process launches no code and does not cancel its active peer', async () => {
+  const activeController = new AbortController(), queuedController = new AbortController();
+  const active = await request('wait', { signal: activeController.signal });
+  const activePromise = runResearchProcess(active.input).catch(error => error);
+  try {
+    const ids = await pids(active.marker);
+    const queued = await request('wait', { signal: queuedController.signal });
+    const queuedPromise = runResearchProcess(queued.input);
+    queuedController.abort();
+    await assert.rejects(queuedPromise, /research_process_cancelled/);
+    await assert.rejects(readFile(queued.marker), { code: 'ENOENT' });
+    for (const pid of ids) assert.doesNotThrow(() => process.kill(pid, 0));
+    activeController.abort(); await activePromise; await gone(ids);
+    receipts.push({ scenario: 'queued-cancel', launched: false, activePeerPreserved: true });
+  } finally { activeController.abort(); await activePromise; }
 });

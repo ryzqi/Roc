@@ -2,7 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ResearchExportSources } from '../../../shared/schemas/research-exports';
 import { createResearchDirectory, readResearchFile } from './research-files';
-import type { ResearchToolchain } from './toolchain';
+import type { ResearchProcessScope, ResearchToolchain } from './toolchain';
 
 /**
  * 导出附带的**研究过程报告**：用 Typst 排版，不碰 LaTeX 主链。
@@ -152,6 +152,7 @@ export async function createTypstReport(input: {
   language: 'zh' | 'en';
   style?: TypstCitationStyle;
   signal?: AbortSignal;
+  admission: ResearchProcessScope;
 }): Promise<TypstReport> {
   input.signal?.throwIfAborted();
   const style = input.style ?? defaultTypstCitationStyle(input.language);
@@ -164,7 +165,8 @@ export async function createTypstReport(input: {
   // 样式文件从工具链只读目录复制进本次 job：Typst 的 `--root` 之外读不到任何东西。
   await writeFile(join(directory, styleName), await input.tools.typstStyle(styleName), { flag: 'wx', mode: 0o400 });
   input.signal?.throwIfAborted();
-  const result = await input.tools.compileTypst({ rootPath: directory, sourcePath: 'report.typ', outputPath: 'report.pdf', jobDir: input.jobDir, signal: input.signal });
+  const result = await input.tools.compileTypst({ rootPath: directory, sourcePath: 'report.typ', outputPath: 'report.pdf', jobDir: input.jobDir, signal: input.signal,
+    admission: input.admission });
   if (result.exitCode !== 0) throw new Error(`research_typst_report_failed:${result.stderr.trim().split('\n')[0] ?? ''}`);
   const pdf = await readResearchFile(directory, 'report.pdf', 32 * 1024 * 1024);
   if (!pdf.subarray(0, 5).equals(Buffer.from('%PDF-'))) throw new Error('research_typst_report_invalid');

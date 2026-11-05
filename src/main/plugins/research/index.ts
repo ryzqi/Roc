@@ -316,7 +316,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       if (researchRepository.documents.switchDerivationGeneration(researchDerivationGenerationVersion)) {
         context.logger.info('research_derivation_generation_switched', { generationVersion: researchDerivationGenerationVersion });
       }
-      documents = new ResearchDocumentService(researchRepository, toolchain, options.libraryRoot ?? null, researchIndexer.parseBudget);
+      documents = new ResearchDocumentService(researchRepository, toolchain, options.libraryRoot ?? null);
       registerZoteroCapabilities(context, zotero, literatureImports, pickZoteroAttachment, documents);
       registerResearchDocumentCapabilities(context, researchRepository.documents, documents);
       const reviewFullTexts=new ResearchReviewFullTextRepository(db,researchRepository,reviewCorpora,reviewScreeningFreeze,documents,()=>new Date().toISOString());

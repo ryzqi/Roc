@@ -15,6 +15,7 @@ import { lockedToolVersions, toolVersionsMatch } from './toolchain-versions';
 import { runResearchProcess, ResearchProcessError, type ResearchProcessResult } from './process-runner';
 import { ResearchModelStore, type ModelPreferences, type ResearchModelFiles, type ResearchModelsStatus } from './model-store';
 import { modelPackManifest } from './model-catalog';
+import type { ResearchProcessAdmissionRequest } from '../../services/deep-agent/tool-resource-coordinator';
 
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 const manifestSchema = z.object({
@@ -30,7 +31,8 @@ const manifestSchema = z.object({
 }).strict();
 
 type Manifest = z.infer<typeof manifestSchema>;
-type WorkerInput = { projectRoot: string; sourcePath: string; outputDir: string; jobDir: string; signal?: AbortSignal };
+export type ResearchProcessScope = Pick<ResearchProcessAdmissionRequest, 'projectId' | 'priority'>;
+type WorkerInput = { projectRoot: string; sourcePath: string; outputDir: string; jobDir: string; signal?: AbortSignal; admission: ResearchProcessScope };
 type FigureWorkerInput = WorkerInput & Pick<ResearchFigureRenderJob, 'inputPaths' | 'label' | 'timeoutMs' | 'figure'>;
 export type ResearchTypeScriptRuntime = {
   root: string; executable: string; runnerPath: string; runnerHash: string; nodeVersion: string; platform: string; architecture: string;
@@ -192,7 +194,7 @@ export class ResearchToolchain {
    * `argument 'file' does not exist`，`--no-exit` 必须给（有 error 级告警时 Vale 退出码非零，
    * 那不是失败）。另外 Vale 对读不到的文件**静默返回空对象**，所以文件由本方法写入并核对。
    */
-  async lintProse(input: { jobDir: string; units: readonly { path: string; content: string }[]; signal?: AbortSignal }): Promise<unknown> {
+  async lintProse(input: { jobDir: string; units: readonly { path: string; content: string }[]; signal?: AbortSignal; admission: ResearchProcessScope }): Promise<unknown> {
     const { root } = await this.resolve();
     if (input.units.length === 0) throw new ResearchProcessError('research_prose_no_units');
     const proseDir = await createResearchDirectory(input.jobDir, 'prose');
@@ -214,7 +216,8 @@ export class ResearchToolchain {
       writablePaths: [input.jobDir],
       environment: await this.proseEnvironment(root, input.jobDir),
       timeoutMs: 120_000, signal: input.signal, allowGpuAcceleration: false, networkAccess: 'none', allowPosixSpawn: false,
-      resourceLimits: { mode: 'monitored', cpuTimeMs: 480_000, maxResidentBytes: 2 * 1024 ** 3 }
+      resourceLimits: { mode: 'monitored', cpuTimeMs: 480_000, maxResidentBytes: 2 * 1024 ** 3 },
+      admission: { ...input.admission, resourceClass: 'utility' }
     });
     if (result.exitCode !== 0) throw new ResearchProcessError('research_prose_lint_failed', result.stdout, result.stderr);
     const parsed = parseJson(result.stdout);
@@ -235,7 +238,7 @@ export class ResearchToolchain {
       TMPDIR: temporary, XDG_CACHE_HOME: cache, XDG_CONFIG_HOME: join(home, '.config'), XDG_DATA_HOME: join(home, '.local/share') };
   }
 
-  async compile(input: { rootPath: string; entryPath: string; outputDir: string; jobDir: string; signal?: AbortSignal }): Promise<ResearchProcessResult> {
+  async compile(input: { rootPath: string; entryPath: string; outputDir: string; jobDir: string; signal?: AbortSignal; admission: ResearchProcessScope }): Promise<ResearchProcessResult> {
     const { root } = await this.resolve();
     const environment = await this.baseEnvironment(root, input.jobDir, true);
     // `--keep-intermediates` 是为了拿到 `.bbl`：arXiv 不运行 BibTeX，随包不带 `.bbl` 的提交
@@ -246,6 +249,7 @@ export class ResearchToolchain {
         '--outdir', input.outputDir, input.entryPath],
       cwd: input.rootPath, readablePaths: [root, input.rootPath], writablePaths: [input.jobDir], environment,
       resourceLimits: { mode: 'monitored', cpuTimeMs: 720_000, maxResidentBytes: 2 * 1024 ** 3 },
+      admission: { ...input.admission, resourceClass: 'utility' },
       timeoutMs: 180_000, signal: input.signal, allowGpuAcceleration: false, networkAccess: 'none', allowPosixSpawn: false });
   }
 
@@ -257,7 +261,7 @@ export class ResearchToolchain {
    * 所以显式给 `--font-path`（系统字体目录），并把它加入 `readablePaths`。
    * 这样同一台机器上生成的报告不会因为用户装了字型而变样（与 Vale 的 `--no-global` 同一个理由）。
    */
-  async compileTypst(input: { rootPath: string; sourcePath: string; outputPath: string; jobDir: string; signal?: AbortSignal }): Promise<ResearchProcessResult> {
+  async compileTypst(input: { rootPath: string; sourcePath: string; outputPath: string; jobDir: string; signal?: AbortSignal; admission: ResearchProcessScope }): Promise<ResearchProcessResult> {
     const { root } = await this.resolve();
     // 只加真实存在的目录：沙箱配置会对每个路径做 realpath，不存在就整次失败。
     const fontPaths = ['/System/Library/Fonts', '/System/Library/Fonts/Supplemental'].filter((path) => existsSync(path));
@@ -274,6 +278,7 @@ export class ResearchToolchain {
       environment: { PATH: `${join(root, 'bin')}:/usr/bin:/bin:/usr/sbin:/sbin`, LANG: 'en_US.UTF-8',
         HOME: home, TMPDIR: temporary, XDG_CACHE_HOME: cache },
       resourceLimits: { mode: 'monitored', cpuTimeMs: 480_000, maxResidentBytes: 2 * 1024 ** 3 },
+      admission: { ...input.admission, resourceClass: 'utility' },
       timeoutMs: 120_000, signal: input.signal, allowGpuAcceleration: false, networkAccess: 'none', allowPosixSpawn: false });
   }
 
@@ -371,6 +376,7 @@ export class ResearchToolchain {
       environment: { ELECTRON_RUN_AS_NODE: '1', PATH: '/usr/bin:/bin:/usr/sbin:/sbin' },
       timeoutMs,
       resourceLimits: { mode: 'monitored', cpuTimeMs: timeoutMs * 4, maxResidentBytes: 4 * 1024 ** 3 },
+      admission: { ...input.admission, resourceClass: operation.operation === 'parse_document' ? 'parse' : operation.operation === 'render_figure' ? 'compute' : 'utility' },
       terminationGraceMs,
       signal: input.signal,
       input: JSON.stringify(request),

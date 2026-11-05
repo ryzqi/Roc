@@ -51,13 +51,9 @@ export class ResearchExperimentService {
       const workspace = await researchWorkspace(this.repository.getProject(projectId).workspacePath);
       const storage = await experimentStorage(this.rootPath);
       const job = await mkdtemp(join(storage, '.environment-'));
-      try { return (await this.environments.inspect(workspace, runtime, job, signal)).snapshot; }
+      try { return (await this.environments.inspect(workspace, runtime, job, signal, { projectId, priority: 'user' })).snapshot; }
       finally { await rm(job, { recursive: true, force: true }); }
     });
-  }
-
-  inspectWorkspace(workspace: string, runtime: ResearchExperimentStartRuntime, scratch: string, signal: AbortSignal): Promise<PreparedExperimentEnvironment> {
-    return this.environments.inspect(workspace, runtime, scratch, signal);
   }
 
   async verifyRun(run: ResearchExperimentExecution, signal: AbortSignal): Promise<string> {
@@ -213,7 +209,7 @@ export class ResearchExperimentService {
       const out = await createResearchDirectory(root, 'output');
       const scratch = await createResearchDirectory(root, 'scratch');
       await createResearchDirectory(root, 'log');
-      prepared = await this.environments.inspect(workspace, request.runtime, scratch, signal);
+      prepared = await this.environments.inspect(workspace, request.runtime, scratch, signal, { projectId: request.projectId, priority: 'user' });
       if (request.expectedEnvironmentHash !== undefined && prepared.snapshot.hash !== request.expectedEnvironmentHash) throw new Error('research_experiment_environment_changed');
       const snapshot = await snapshotExperimentInputs(workspace, input, request, prepared.snapshot, signal);
       files = snapshot.files;
@@ -222,7 +218,7 @@ export class ResearchExperimentService {
       output = await this.executeProcess({ request, prepared, input, output: out, scratch, signal });
       if (output.exitCode !== 0) throw new Error('research_experiment_process_failed');
       await this.verifyProject(initial, signal);
-      const current = await this.environments.inspect(workspace, request.runtime, scratch, signal);
+      const current = await this.environments.inspect(workspace, request.runtime, scratch, signal, { projectId: request.projectId, priority: 'user' });
       if (current.snapshot.hash !== prepared.snapshot.hash) throw new Error('research_experiment_environment_changed');
     } catch (error) {
       failure = error;
@@ -322,6 +318,7 @@ export class ResearchExperimentService {
         writeLimits,
         timeoutMs: request.timeoutMs,
         resourceLimits: { mode: 'monitored', cpuTimeMs: request.timeoutMs * 4, maxResidentBytes: 2 * 1024 ** 3 },
+        admission: { projectId: request.projectId, priority: 'user', resourceClass: 'compute' },
         signal,
         allowGpuAcceleration: false,
         allowPosixSpawn: false,
@@ -340,6 +337,7 @@ export class ResearchExperimentService {
       writablePaths: [output, scratch], environment,
       writeLimits,
       resourceLimits: { mode: 'monitored', cpuTimeMs: request.timeoutMs * 4, maxResidentBytes: 2 * 1024 ** 3 },
+      admission: { projectId: request.projectId, priority: 'user', resourceClass: 'compute' },
       timeoutMs: request.timeoutMs, signal, allowGpuAcceleration: false, allowPosixSpawn: false, networkAccess: request.network === 'enabled' ? 'full' : 'none' };
     return request.engine === 'r' ? await runRExperimentProcess(processRequest, this.run) : await this.run(processRequest);
   }

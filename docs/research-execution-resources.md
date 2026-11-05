@@ -14,4 +14,20 @@
 
 同一仓库目录的 `pnpm test:unit` 为 1133/1133；`node scripts/run-research-p0.mjs` 为 13/13，覆盖实际 Electron 原生 worker、实验、重启与沙箱链；`pnpm harness:eval` 为 94/94；`node scripts/smoke-electron.mjs` 为 13/13，零 renderer 错误。最终 `pnpm build`（含 typecheck）、`pnpm check:ipc`、`pnpm check:renderer-chunks` 通过，eager JS 为 1132907 字节、6 个文件。日志为 `.artifacts/research-optimization/xsafe-a1-*.log`。验证后仅整理实验服务输出的类型与已有字段，不改变已验证的资源 runner；最终构建包含该整理。
 
-这一增量提供监测、超限终止和清理；X-SAFE 的全局/项目计算准入、前台优先、公平队列及资源事件持久化仍待后续增量。CPU/内存硬隔离后端尚未提供，不能发布要求这些能力的任务。
+CPU/内存硬隔离后端尚未提供，不能发布要求这些能力的任务。
+
+## 统一计算准入
+
+现有 `ToolResourceCoordinator` 同时承载科研进程的计数准入；普通工具原有的资源读写锁继续使用原合同。所有实际科研进程共享主进程中的一个计算池：全局最多 2 个、同一项目最多 1 个、解析最多 1 个、已明确允许的 GPU 进程最多 1 个。进程的项目、用户/后台优先级及计算类别由主进程调用方明确声明，不从存储路径或模型文本推断。实验、项目索引、导入、图稿、模板和导出使用实际项目 ID；共享文献解析及文献库导出明确属于全局操作。
+
+队列按进入顺序选择可执行的请求，项目满额的请求不会阻止其他项目使用空闲槽。最早的可执行后台请求可以让出一次机会给后来的前台请求，之后在资源可用时必须先执行，持续前台请求不能使它饥饿。待执行队列最多 256 项，超出时拒绝。取消排队请求会删除该请求并拒绝其调用，启动代码的次数为零，活动同项目进程继续执行。
+
+`parse-budget.ts` 及其独立解析队列已删除。文献显式解析声明 `user`，项目文件解析声明 `background`，由相同计算池执行解析上限和公平规则。环境探针、执行和后置环境核验分别取得/释放槽，不嵌套占有计算槽。每次返回的 `admission.waitMs` 和 `holdMs` 来自真实排队、准入与最终进程清理的时间；它们与采样 CPU 时间是不同指标。
+
+槽只在进程组清理检查结束后释放。无法确认进程组消失时，协调器拒绝全部后续计算并终止排队请求，错误为 `research_process_cleanup_unresolved`；诊断读取仍可进行。计算池隔离状态不会由重试或普通槽释放自动清除。
+
+新增协调器/既有工具锁/采样联合检查 15/15，受影响文献导入、索引和 worker 合同检查 87/87；真实资源进程检查扩展为 8/8。真实子进程测试保持两个活动槽，证明前台获准一次后后台先于后来的前台获准；另一检查证明取消同项目排队请求不会产生进程，也不会停止活动同项目进程。
+
+统一准入增量为 `Verified passing`。在上述仓库目录执行 `pnpm test:unit`，最终 1139/1139；`node --test tests/unit/research-process-admission.test.mjs tests/unit/tool-resource-coordinator.test.mjs tests/unit/research-process-resources.test.mjs tests/unit/run-telemetry-trace.test.mjs` 为 28/28；最终构建/typecheck、Harness 94/94、启动 13/13 零 renderer 错误、IPC 与分块检查通过，eager JS 保持 1132907 字节、6 个文件。
+
+`node scripts/run-research-p0.mjs` 初轮 12/13，唯一失败为测试夹具直接编译 hostile PDF 时未声明准入范围；补上实际项目身份后，`node scripts/run-research-p0.mjs --test-name-pattern='hostile PDF text'` 1/1 通过，保留其余 12 项结果。初轮全量 1136/1139 的三个诊断失败由计算类别进入旧工具锁计数造成；计算观察采用独立类型后，实际 trace 联合 28 项和最终 1139 项通过，严格诊断 schema 没有放宽，未采集的计算计数没有伪装成零。日志为 `.artifacts/research-optimization/xsafe-a2-*.log`，实际计算准入回执保存为 `xsafe-a2/native-resources.json`。资源事件持久化及其余 X-SAFE 边界审计仍未完成。

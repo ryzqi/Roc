@@ -37,7 +37,8 @@ test('actual pinned OCR processes raster-only text table and formula PDF pages w
     const jobDir=join(root,'job'),outputDir=join(jobDir,'output');
     await mkdir(jobDir,{recursive:true});
     parsed=await tools.parseDocument({projectRoot:root,sourcePath:source.sourcePath,outputDir,jobDir,
-      options:{tier:'complete',device:'cpu',pageRange:'1-3'},signal:AbortSignal.timeout(300000)});
+      options:{tier:'complete',device:'cpu',pageRange:'1-3'},signal:AbortSignal.timeout(300000),
+      admission:{projectId:null,priority:'user'}});
     await writeFile(join(root,'actual-parser-result.json'),JSON.stringify(parsed,null,2));
     const {collectDocumentContent}=await importTypeScriptModule('src/main/plugins/research/document-files.ts',{
       platform:'node',external:['zod'],tempDir:'.runtime/tmp'});

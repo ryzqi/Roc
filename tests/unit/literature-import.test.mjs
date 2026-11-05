@@ -170,8 +170,16 @@ function setup(options = {}) {
       pages: [{position: {kind: 'offset', value: 0}, rankOffset: 0, url: 'https://api.crossref.org/works?query=fixture',
         returnedCount: 1, cache: {state: 'miss'}, coverage: {state: 'unknown', apiHitCount: null, validatedPages: 1, nextPage: null}}] }
   ], status: 'complete', truncated: false, warnings: [] }) };
-  const make = () => new api.LiteratureImportService(db, repo.library, search, { prepareRecord: prepare,
-    prepareDoi: async (doi, signal) => prepare(record(doi.split('/')[1], doi), signal) }, async (event) => changes.push(structuredClone(event)), () => time);
+  const make = () => new api.LiteratureImportService(db, repo.library, search, {
+    prepareRecord: async (metadata, projectId, signal) => {
+      assert.equal(projectId, project.id);
+      return prepare(metadata, signal);
+    },
+    prepareDoi: async (doi, projectId, signal) => {
+      assert.equal(projectId, project.id);
+      return prepare(record(doi.split('/')[1], doi), signal);
+    }
+  }, async (event) => changes.push(structuredClone(event)), () => time);
   const service = make();
   const scope = { owner: 'thread:a', projectId: project.id, runId: 'run_a' };
   return { db, repo, service, project, scope, changes, make, setTime: (next) => { time = next; },

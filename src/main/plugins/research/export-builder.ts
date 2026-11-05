@@ -74,7 +74,8 @@ export async function buildExportFiles(input: { record: ResearchExportExecution;
   const bibliography = join(scratch, 'bibliography.json');
   await writeFile(bibliography, JSON.stringify(sources.bibliography), { flag: 'wx', mode: 0o400 });
   const references = await tools.writeBibliography({ projectRoot: repository.exports.root(record.projectId, record.id), sourcePath: bibliography,
-    outputDir: join(scratch, 'bibliography-result'), jobDir: scratch, format: 'bibtex', signal });
+    outputDir: join(scratch, 'bibliography-result'), jobDir: scratch, format: 'bibtex', signal,
+    admission: { projectId: record.projectId, priority: 'user' } });
   await writer.write(join('source', entryDirectory, 'roc-references.bib'), references.content);
   await writer.write('references.bib', references.content);
   for (const run of sources.experiments) {
@@ -94,7 +95,7 @@ export async function buildExportFiles(input: { record: ResearchExportExecution;
   const sourceRoot = await createResearchDirectory(writer.root, 'source');
   const result = await compileLatex({ rootPath: sourceRoot, entryPath, outputDir: join(scratch, 'compiled'), jobDir: scratch, signal,
     runner: async (request) => {
-      const result = await tools.compile(request);
+      const result = await tools.compile({ ...request, admission: { projectId: record.projectId, priority: 'user' } });
       await writer.write('logs/compile-stdout.txt', result.stdout);
       await writer.write('logs/compile-stderr.txt', result.stderr);
       if (/^warning:\s+errors were issued by BibTeX,\s+but were ignored\b/mu.test(result.stderr)) throw new Error('research_export_bibliography_failed');
@@ -129,10 +130,11 @@ export async function buildExportFiles(input: { record: ResearchExportExecution;
     bbl: bblNameOrNull
   }, null, 2)}\n`);
   const preview = await tools.renderPdf({ projectRoot: repository.exports.root(record.projectId, record.id), sourcePath: join(writer.root, 'paper.pdf'),
-    outputDir: join(scratch, 'preview'), jobDir: scratch, page: 1, scale: 1, signal });
+    outputDir: join(scratch, 'preview'), jobDir: scratch, page: 1, scale: 1, signal,
+    admission: { projectId: record.projectId, priority: 'user' } });
   if (preview.sourceHash !== result.pdfHash) throw new Error('research_export_snapshot_changed');
   const report = await createTypstReport({ tools, jobDir: scratch, sources, bibliography: references.content,
-    language: repository.getProject(record.projectId).language, signal });
+    language: repository.getProject(record.projectId).language, signal, admission: { projectId: record.projectId, priority: 'user' } });
   await writer.write(report.filename, report.pdf);
   await writer.write('report.typ', report.source);
   await writer.write('README.txt', `Roc 科研交付文件\n\nPDF：paper.pdf\n编译入口：source/${entryPath}\n参考文献：references.bib\n` +

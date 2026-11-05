@@ -16,7 +16,6 @@ import { indexFileSignature, indexLocatedText, indexText, readIndexFile, scanCha
 import { maximumArtifactBytes } from './document-files';
 import { pruneResearchArtifacts } from './artifact-gc';
 import type { ResearchArtifactGcReport } from './artifact-gc';
-import { ResearchParseBudget } from './parse-budget';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchPath, researchRelativePath, researchWorkspace } from './research-files';
 
 type WatchHandle = { close(): void; on(event: 'error', listener: (error: Error) => void): WatchHandle };
@@ -49,10 +48,6 @@ export class ResearchIndexService {
   private readonly tasks = new Set<Promise<void>>();
   private active: ActiveJob | null = null;
   private draining: Promise<void> | null = null;
-  private readonly budget = new ResearchParseBudget(1);
-
-  /** 共享解析预算（提案 §6）：文献解析与项目索引共享同一个全局并发上限。 */
-  get parseBudget(): ResearchParseBudget { return this.budget; }
 
   constructor(private readonly repository: ResearchRepository, private readonly tools: Pick<ResearchToolchain, 'parseDocument' | 'identity' | 'defaultParseOptions'>,
     private readonly embeddings: ResearchEmbeddingService, private readonly rootPath: string | null,
@@ -317,13 +312,9 @@ export class ResearchIndexService {
       } else {
         const jobs = await createResearchDirectory(storage, 'jobs');
         work = await mkdtemp(join(jobs, `${job.id}-`));
-        // 后台索引只拿 background 优先级：用户显式解析一到，就等它先走（提案 §6）。
-        const slot = await this.budget.acquire('background', signal);
-        let parsed: z.infer<typeof researchParsedDocumentSchema>;
-        try {
-          parsed = await this.tools.parseDocument({ projectRoot: storage, sourcePath: source.path, outputDir: join(work, 'output'), jobDir: work, signal,
-            options: this.tools.defaultParseOptions(job.input.kind === 'html' ? 'text/html' : 'application/pdf') });
-        } finally { this.budget.release(slot); }
+        const parsed = await this.tools.parseDocument({ projectRoot: storage, sourcePath: source.path, outputDir: join(work, 'output'), jobDir: work, signal,
+          admission: { projectId: job.projectId, priority: 'background' },
+          options: this.tools.defaultParseOptions(job.input.kind === 'html' ? 'text/html' : 'application/pdf') });
         if (parsed.sourceHash !== source.sourceHash) throw new Error('research_index_source_changed');
         const chunks = parsed.blocks.flatMap((block) => indexLocatedText(block.text, block.locator));
         payload = { content: chunks.map((chunk) => chunk.content).join('\n\n'), chunks, parserVersion: parsed.parserVersion, sourceHash: source.sourceHash, parserKey: job.input.parserKey,

@@ -234,6 +234,7 @@ export class ResearchFigureService {
         label: request.label,
         timeoutMs: request.timeoutMs,
         figure: request.figure,
+        admission: { projectId: request.projectId, priority: 'user' },
         signal
       });
       output = { exitCode: 0, stdout: JSON.stringify(rendered), stderr: '' };

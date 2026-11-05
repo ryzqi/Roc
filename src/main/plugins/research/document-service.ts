@@ -13,7 +13,6 @@ import type {
 import type {ResearchRelationReviewer} from '../../../shared/schemas/research-evidence-relations';
 import { collectDocumentContent, documentMediaTypes, documentStorageRoot, maximumDocumentBytes, maximumArtifactBytes } from './document-files';
 import type { ResearchDocument } from './document-repository';
-import type { ResearchParseBudget } from './parse-budget';
 import type { ResearchRepository } from './repository';
 import type { ResearchToolchain } from './toolchain';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchPath, researchRelativePath, researchWorkspace } from './research-files';
@@ -27,8 +26,7 @@ export class ResearchDocumentService {
   private readonly parses = new Map<string, ParseTask>();
   private closed = false;
 
-  constructor(private readonly repository: ResearchRepository, private readonly tools: DocumentTools, private readonly rootPath: string | null,
-    private readonly budget: ResearchParseBudget | null = null) {}
+  constructor(private readonly repository: ResearchRepository, private readonly tools: DocumentTools, private readonly rootPath: string | null) {}
 
   async import(request: z.infer<typeof researchDocumentImportRequestSchema>): Promise<ResearchDocument> {
     this.requireOpen();
@@ -69,8 +67,8 @@ export class ResearchDocumentService {
   }
 
   /**
-   * 批量重解析（提案 §8.5）。串行执行：共享解析预算并发为 1，并行只会把同一份内存竞态
-   * 推到更晚失败。单个文档失败不影响其余文档，失败项连同错误码一起回给调用方。
+   * 批量重解析串行提交，共享计算协调器执行全局解析准入。
+   * 单个文档失败不影响其余文档，失败项连同错误码一起回给调用方。
    */
   async parseMany(input: { documentIds: string[] | null; tier: ResearchParseTier | null }): Promise<{ documents: ResearchDocument[]; failed: Array<{ documentId: string; error: string }> }> {
     this.requireOpen();
@@ -248,7 +246,8 @@ export class ResearchDocumentService {
         const job = await createResearchDirectory(directory, 'metadata');
         const json = join(job, 'source.json');
         await writeFile(json, JSON.stringify([{ metadata, citationKey: request.citationKey }]), { mode: 0o600, flag: 'wx' });
-        const entries = await this.tools.normalizeBibliography({ projectRoot: root, sourcePath: json, outputDir: join(job, 'output'), jobDir: job, signal });
+        const entries = await this.tools.normalizeBibliography({ projectRoot: root, sourcePath: json, outputDir: join(job, 'output'), jobDir: job, signal,
+          admission: { projectId: request.projectId, priority: 'user' } });
         if (entries.length !== 1) throw new Error('research_bibliography_response_count_invalid');
         entry = { metadata: { ...metadata, title: entries[0].title, authors: entries[0].authors }, bibliography: entries[0] };
       }
@@ -277,14 +276,9 @@ export class ResearchDocumentService {
       const output = join(job, 'output');
       const sourcePath = await researchPath(root, this.repository.documents.sourcePath(documentId));
       const options = this.tools.defaultParseOptions(document.mediaType);
-      // 显式用户解析优先于后台索引（提案 §6）：共享预算的排队顺序由这里声明的优先级决定。
-      const budget = this.budget;
-      const slot = budget === null ? null : await budget.acquire('user', signal);
-      let result: Awaited<ReturnType<DocumentTools['parseDocument']>>;
-      try {
-        result = await this.tools.parseDocument({ projectRoot: root, sourcePath, outputDir: output, jobDir: job, signal,
-          options: tier === null ? options : { ...options, tier } });
-      } finally { if (slot !== null) budget?.release(slot); }
+      const result = await this.tools.parseDocument({ projectRoot: root, sourcePath, outputDir: output, jobDir: job, signal,
+        admission: { projectId: null, priority: 'user' },
+        options: tier === null ? options : { ...options, tier } });
       this.requireActive(signal);
       const {data, coordinates} = await collectDocumentContent(root, output, result);
       await this.sourceBytes(root, document);

@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { lstat, opendir, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { terminateProcessTreeWithRetry } from '../../services/process-tree';
+import { ToolResourceCoordinator, type ResearchProcessAdmissionRequest } from '../../services/deep-agent/tool-resource-coordinator';
 import { assertResearchProcessResourceLimits, ResearchProcessResourceMonitor,
   type ResearchProcessResourceLimits, type ResearchProcessResourceUsage } from './process-resources';
 
@@ -14,6 +15,7 @@ export type ResearchProcessRequest = {
   environment: NodeJS.ProcessEnv;
   timeoutMs: number;
   resourceLimits: ResearchProcessResourceLimits;
+  admission: Omit<ResearchProcessAdmissionRequest, 'gpu'>;
   terminationGraceMs?: number;
   allowGpuAcceleration: boolean;
   networkAccess: 'none' | 'loopback' | 'full';
@@ -25,7 +27,8 @@ export type ResearchProcessRequest = {
   writeLimits?: readonly ResearchProcessWriteLimit[];
 };
 
-export type ResearchProcessResult = { exitCode: number; stdout: string; stderr: string; resourceUsage: ResearchProcessResourceUsage };
+export type ResearchProcessAdmission = { waitMs: number; holdMs: number };
+export type ResearchProcessResult = { exitCode: number; stdout: string; stderr: string; resourceUsage: ResearchProcessResourceUsage; admission: ResearchProcessAdmission };
 export type ResearchProcessWriteLimit = {
   path: string;
   maxFileBytes: number;
@@ -35,6 +38,7 @@ export type ResearchProcessWriteLimit = {
 };
 
 export class ResearchProcessError extends Error {
+  admission: ResearchProcessAdmission | null = null;
   constructor(readonly code: string, readonly stdout = '', readonly stderr = '', readonly resourceUsage: ResearchProcessResourceUsage | null = null) {
     super(code);
     this.name = 'ResearchProcessError';
@@ -117,9 +121,25 @@ export async function researchSandboxProfile(request: Pick<ResearchProcessReques
   ].join('\n');
 }
 
+const processCoordinator = new ToolResourceCoordinator();
+
 export async function runResearchProcess(request: ResearchProcessRequest): Promise<ResearchProcessResult> {
-  if (process.platform !== 'darwin') throw new Error('research_runtime_macos_required');
   assertResearchProcessResourceLimits(request.resourceLimits);
+  const lease = await processCoordinator.acquireResearchProcess({ ...request.admission, gpu: request.allowGpuAcceleration }, request.signal);
+  try {
+    const result = await runAdmittedResearchProcess(request);
+    const observation = lease.release();
+    return { ...result, admission: { waitMs: lease.waitMs, holdMs: observation.holdMs } };
+  } catch (error) {
+    if (error instanceof ResearchProcessError && error.code === 'research_process_kill_failed') processCoordinator.quarantineResearchProcesses();
+    const observation = lease.release();
+    if (error instanceof ResearchProcessError) error.admission = { waitMs: lease.waitMs, holdMs: observation.holdMs };
+    throw error;
+  }
+}
+
+async function runAdmittedResearchProcess(request: ResearchProcessRequest): Promise<Omit<ResearchProcessResult, 'admission'>> {
+  if (process.platform !== 'darwin') throw new Error('research_runtime_macos_required');
   if (!Number.isFinite(request.timeoutMs) || request.timeoutMs <= 0) throw new Error('research_process_timeout_required');
   const terminationGraceMs = request.terminationGraceMs ?? 1000;
   if (!Number.isSafeInteger(terminationGraceMs) || terminationGraceMs < 0) throw new Error('research_process_termination_grace_invalid');
@@ -229,8 +249,6 @@ export async function runResearchProcess(request: ResearchProcessRequest): Promi
         if (writeMonitor !== undefined) clearTimeout(writeMonitor);
         if (forcedKill !== undefined) clearTimeout(forcedKill);
         request.signal?.removeEventListener('abort', abort);
-        try { await terminateProcessTreeWithRetry(child, 100, 10); }
-        catch { stopped = 'research_process_kill_failed'; }
         if (resourceTask !== undefined) await resourceTask;
         if (writeMonitorTask !== undefined) {
           try { await writeMonitorTask; }
@@ -240,6 +258,8 @@ export async function runResearchProcess(request: ResearchProcessRequest): Promi
           try { await assertProcessWriteLimits(request.writeLimits); }
           catch { stopped = 'research_process_write_limit'; }
         }
+        try { await terminateProcessTreeWithRetry(child, 100, 10); }
+        catch { stopped = 'research_process_kill_failed'; }
         settled = true;
         const output = { stdout: Buffer.concat(stdout).toString('utf8'), stderr: Buffer.concat(stderr).toString('utf8') };
         const resourceUsage = resourceMonitor.usage();

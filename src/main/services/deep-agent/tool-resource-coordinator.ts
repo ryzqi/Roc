@@ -38,6 +38,40 @@ export type ToolAdmissionObservation = Readonly<{
 
 export type ToolAdmissionObserver = (observation: ToolAdmissionObservation) => void;
 
+export type ResearchProcessAdmissionRequest = Readonly<{
+  projectId: string | null;
+  priority: 'user' | 'background';
+  resourceClass: 'parse' | 'compute' | 'utility';
+  gpu: boolean;
+}>;
+
+type ResearchProcessAdmissionResourceKind = 'research' | 'research_cpu' | 'research_gpu' | 'research_parse';
+type ResearchProcessAdmissionObservation = Readonly<{
+  status: 'released' | 'cancelled';
+  waitMs: number;
+  holdMs: number | null;
+  resourceKinds: readonly ResearchProcessAdmissionResourceKind[];
+  conflictKinds: readonly ResearchProcessAdmissionResourceKind[];
+}>;
+type ResearchProcessAdmissionObserver = (observation: ResearchProcessAdmissionObservation) => void;
+
+export type ResearchProcessAdmissionLease = Readonly<{
+  waitMs: number;
+  release: () => ResearchProcessAdmissionObservation & { status: 'released'; holdMs: number };
+}>;
+
+type ProcessWaiter = {
+  request: ResearchProcessAdmissionRequest;
+  enqueuedAt: number;
+  yielded: boolean;
+  conflictKinds: Set<ResearchProcessAdmissionResourceKind>;
+  signal: AbortSignal | undefined;
+  observer: ResearchProcessAdmissionObserver | undefined;
+  abort: () => void;
+  resolve: (lease: ResearchProcessAdmissionLease) => void;
+  reject: (error: Error) => void;
+};
+
 export type ToolAdmissionResourceRequest = Readonly<{
   claims: readonly ToolAdmissionResourceClaim[];
   verifyWorkspaceIdentity: () => Promise<void>;
@@ -94,6 +128,99 @@ const BACKGROUND_TASK_TOOLS = new Set([
 export class ToolResourceCoordinator {
   private readonly active = new Set<ActiveRequest>();
   private readonly waiting: WaitingRequest[] = [];
+  private readonly processActive = new Set<ProcessWaiter>();
+  private readonly processWaiting: ProcessWaiter[] = [];
+  private processCleanupUnresolved = false;
+
+  get researchProcesses(): Readonly<{ active: number; queued: number; cleanupUnresolved: boolean }> {
+    return { active: this.processActive.size, queued: this.processWaiting.length, cleanupUnresolved: this.processCleanupUnresolved };
+  }
+
+  acquireResearchProcess(request: ResearchProcessAdmissionRequest, signal?: AbortSignal, observer?: ResearchProcessAdmissionObserver): Promise<ResearchProcessAdmissionLease> {
+    if ((request.projectId !== null && (typeof request.projectId !== 'string' || request.projectId.trim().length === 0)) ||
+        !['user', 'background'].includes(request.priority) || !['parse', 'compute', 'utility'].includes(request.resourceClass) || typeof request.gpu !== 'boolean') {
+      return Promise.reject(new Error('research_process_admission_invalid'));
+    }
+    if (this.processCleanupUnresolved) return Promise.reject(new Error('research_process_cleanup_unresolved'));
+    if (signal?.aborted === true) return Promise.reject(new Error('research_process_cancelled'));
+    if (this.processWaiting.length >= 256) return Promise.reject(new Error('research_process_admission_queue_limit'));
+    return new Promise((resolvePromise, rejectPromise) => {
+      const waiter: ProcessWaiter = {
+        request: { ...request }, enqueuedAt: performance.now(), yielded: false, conflictKinds: new Set(), signal, observer,
+        resolve: resolvePromise, reject: rejectPromise,
+        abort: () => {
+          const index = this.processWaiting.indexOf(waiter);
+          if (index < 0) return;
+          this.processWaiting.splice(index, 1);
+          signal?.removeEventListener('abort', waiter.abort);
+          observe(observer, { status: 'cancelled', waitMs: elapsedMs(waiter.enqueuedAt), holdMs: null,
+            resourceKinds: processResourceKinds(waiter.request), conflictKinds: sortedKinds(waiter.conflictKinds) });
+          rejectPromise(new Error('research_process_cancelled'));
+          this.drainResearchProcesses();
+        }
+      };
+      signal?.addEventListener('abort', waiter.abort, { once: true });
+      this.processWaiting.push(waiter);
+      this.drainResearchProcesses();
+    });
+  }
+
+  /** An uncleaned process must not be followed by more computation in this host. */
+  quarantineResearchProcesses(): void {
+    this.processCleanupUnresolved = true;
+    for (const waiter of this.processWaiting.splice(0)) {
+      waiter.signal?.removeEventListener('abort', waiter.abort);
+      observe(waiter.observer, { status: 'cancelled', waitMs: elapsedMs(waiter.enqueuedAt), holdMs: null,
+        resourceKinds: processResourceKinds(waiter.request), conflictKinds: sortedKinds(waiter.conflictKinds) });
+      waiter.reject(new Error('research_process_cleanup_unresolved'));
+    }
+  }
+
+  private processConflicts(request: ResearchProcessAdmissionRequest): Set<ResearchProcessAdmissionResourceKind> {
+    const conflicts = new Set<ResearchProcessAdmissionResourceKind>();
+    if (this.processActive.size >= 2) conflicts.add('research_cpu');
+    for (const active of this.processActive) {
+      if (active.request.projectId === request.projectId) conflicts.add('research');
+      if (request.resourceClass === 'parse' && active.request.resourceClass === 'parse') conflicts.add('research_parse');
+      if (request.gpu && active.request.gpu) conflicts.add('research_gpu');
+    }
+    return conflicts;
+  }
+
+  private drainResearchProcesses(): void {
+    if (this.processCleanupUnresolved) return;
+    while (true) {
+      const eligible = this.processWaiting.filter(waiter => {
+        const conflicts = this.processConflicts(waiter.request);
+        addKinds(waiter.conflictKinds, conflicts);
+        return conflicts.size === 0;
+      });
+      const first = eligible[0];
+      if (first === undefined) return;
+      const foreground = first.request.priority === 'background' && !first.yielded
+        ? eligible.find(waiter => waiter.request.priority === 'user')
+        : undefined;
+      if (foreground !== undefined) first.yielded = true;
+      const waiter = foreground ?? first;
+      this.processWaiting.splice(this.processWaiting.indexOf(waiter), 1);
+      waiter.signal?.removeEventListener('abort', waiter.abort);
+      const acquiredAt = performance.now();
+      this.processActive.add(waiter);
+      let released: (ResearchProcessAdmissionObservation & { status: 'released'; holdMs: number }) | null = null;
+      waiter.resolve({
+        waitMs: elapsedMs(waiter.enqueuedAt, acquiredAt),
+        release: () => {
+          if (released !== null) return released;
+          this.processActive.delete(waiter);
+          released = { status: 'released', waitMs: elapsedMs(waiter.enqueuedAt, acquiredAt), holdMs: elapsedMs(acquiredAt),
+            resourceKinds: processResourceKinds(waiter.request), conflictKinds: sortedKinds(waiter.conflictKinds) };
+          observe(waiter.observer, released);
+          this.drainResearchProcesses();
+          return released;
+        }
+      });
+    }
+  }
 
   acquire(
     claims: readonly ToolAdmissionResourceClaim[],
@@ -194,6 +321,11 @@ export class ToolResourceCoordinator {
       });
     }
   }
+}
+
+function processResourceKinds(request: ResearchProcessAdmissionRequest): ResearchProcessAdmissionResourceKind[] {
+  return ['research', 'research_cpu', ...(request.resourceClass === 'parse' ? ['research_parse' as const] : []),
+    ...(request.gpu ? ['research_gpu' as const] : [])];
 }
 
 export async function resolveToolAdmissionResources(
@@ -355,11 +487,11 @@ function kindsForClaims(claims: readonly ToolAdmissionResourceClaim[]): ToolAdmi
   return sortedKinds(new Set(claims.map(claim => claim.kind)));
 }
 
-function sortedKinds(kinds: Iterable<ToolAdmissionResourceKind>): ToolAdmissionResourceKind[] {
+function sortedKinds<T extends string>(kinds: Iterable<T>): T[] {
   return [...new Set(kinds)].sort();
 }
 
-function addKinds(target: Set<ToolAdmissionResourceKind>, kinds: Iterable<ToolAdmissionResourceKind>): void {
+function addKinds<T extends string>(target: Set<T>, kinds: Iterable<T>): void {
   for (const kind of kinds) target.add(kind);
 }
 
@@ -371,7 +503,7 @@ function elapsedMs(start: number, end = performance.now()): number {
   return Math.max(0, Math.round(end - start));
 }
 
-function observe(observer: ToolAdmissionObserver | undefined, observation: ToolAdmissionObservation): void {
+function observe<T>(observer: ((observation: T) => void) | undefined, observation: T): void {
   try {
     observer?.(observation);
   } catch {

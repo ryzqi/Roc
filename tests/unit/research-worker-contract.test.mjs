@@ -16,7 +16,8 @@ test('missing production worker refuses metadata processing instead of executing
     await writeFile(join(root, 'input.json'), '[]');
     const tools = new api.ResearchToolchain(null);
     await assert.rejects(tools.normalizeBibliography({
-      projectRoot: root, sourcePath: join(root, 'input.json'), outputDir: join(root, 'output'), jobDir: root
+      projectRoot: root, sourcePath: join(root, 'input.json'), outputDir: join(root, 'output'), jobDir: root,
+      admission: { projectId: null, priority: 'user' }
     }), /research_worker_unavailable/u);
   } finally {
     await rm(temporary, {recursive: true, force: true});

@@ -8,6 +8,7 @@ import { experimentDirectoryEntryLimit, experimentFileCountLimit, experimentFile
 import { rProcessBridgeHash, runRExperimentProcess } from './experiment-native-process';
 import { ResearchProcessError, type ResearchProcessRequest, type ResearchProcessResult } from './process-runner';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchPath, researchRelativePath } from './research-files';
+import type { ResearchProcessScope } from './toolchain';
 
 type ProcessRun = (input: ResearchProcessRequest) => Promise<ResearchProcessResult>;
 type NativeEnvironmentInspectionInput = {
@@ -17,6 +18,7 @@ type NativeEnvironmentInspectionInput = {
   tools: NativeTools;
   run: ProcessRun;
   signal: AbortSignal;
+  admission: ResearchProcessScope;
 };
 const reportSchema = z.object({
   version: z.string().min(1), platform: z.string().min(1), architecture: z.string().min(1), prefix: z.string().min(1), basePrefix: z.string().min(1),
@@ -25,7 +27,7 @@ const reportSchema = z.object({
   controls: z.array(z.object({ path: z.string().min(1), sha256: z.string().regex(/^[a-f0-9]{64}$/u) }).strict()).max(1000)
 }).strict();
 
-export async function inspectNativeExperimentEnvironment({ workspace, runtime, jobDir, tools, run, signal }: NativeEnvironmentInspectionInput): Promise<PreparedExperimentEnvironment> {
+export async function inspectNativeExperimentEnvironment({ workspace, runtime, jobDir, tools, run, signal, admission }: NativeEnvironmentInspectionInput): Promise<PreparedExperimentEnvironment> {
   const root = await realpath(runtime.rootPath);
   const executable = await researchPath(root, runtime.kind === 'renv' ? 'bin/exec/R' : 'bin/julia');
   const beforeExecutable = researchContentHash(await readResearchFile(root, relative(root, executable), 64 * 1024 * 1024));
@@ -64,6 +66,7 @@ export async function inspectNativeExperimentEnvironment({ workspace, runtime, j
       writeLimits: [{ path: jobDir, maxFileBytes: experimentFileLimit, maxTotalBytes: experimentOutputTotalLimit,
         maxFiles: experimentFileCountLimit, maxEntries: experimentDirectoryEntryLimit }],
       resourceLimits: { mode: 'monitored', cpuTimeMs: 240_000, maxResidentBytes: 2 * 1024 ** 3 },
+      admission: { ...admission, resourceClass: 'utility' },
       timeoutMs: 60000, signal, allowGpuAcceleration: false, networkAccess: 'none', allowPosixSpawn: false };
     const result = runtime.kind === 'renv' ? await runRExperimentProcess(request, run) : await run(request);
     if (result.exitCode !== 0) throw new ResearchProcessError(nativeError(result.stderr), result.stdout, result.stderr);

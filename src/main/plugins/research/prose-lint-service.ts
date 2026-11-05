@@ -49,7 +49,7 @@ export class ResearchProseLintService {
       const valeVersion = status.versions?.vale;
       if (status.available !== true || valeVersion === undefined) throw new Error('research_prose_lint_unavailable');
       const toolchainHash = await this.tools.identity();
-      const raw = await this.tools.lintProse({ jobDir: directory, units: projection.units, signal });
+      const raw = await this.tools.lintProse({ jobDir: directory, units: projection.units, signal, admission: { projectId: request.projectId, priority: 'user' } });
       this.requireActive(signal);
       const { findings, truncated, droppedUnits } = projectProseAlerts(raw, projection);
       return { projectId: request.projectId, artifactId: request.artifactId, artifactTitle: artifact.title,
