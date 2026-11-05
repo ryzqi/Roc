@@ -64,7 +64,7 @@ export class ResearchExperimentService {
       const workspace = await researchWorkspace(this.repository.getProject(projectId).workspacePath);
       const storage = await experimentStorage(this.rootPath);
       const job = await mkdtemp(join(storage, '.environment-'));
-      try { return (await this.environments.inspect(workspace, runtime, job, signal, { projectId, priority: 'user' })).snapshot; }
+      try { return (await this.environments.inspect(workspace, runtime, job, signal, { projectId, priority: 'user' }, () => {})).snapshot; }
       finally { await rm(job, { recursive: true, force: true }); }
     });
   }
@@ -211,12 +211,13 @@ export class ResearchExperimentService {
     let failure: unknown;
     let prepared: PreparedExperimentEnvironment | null = null;
     let resources: ResearchExperimentResourceReport | null = null;
+    const probes: ResearchExperimentResourceReport['probes'] = [];
     try {
       const parsedRequest = researchExperimentStartSchema.safeParse(initial.request);
       if (!parsedRequest.success) throw new ResearchProcessError('research_experiment_legacy_read_only');
       const request = parsedRequest.data;
       resources = {
-        schemaVersion: 1, runId: initial.id, projectId: initial.projectId, engine: request.engine,
+        schemaVersion: 2, runId: initial.id, projectId: initial.projectId, engine: request.engine, probes,
         inputHash: null, environmentHash: null,
         backend: { id: 'macos-seatbelt', contractVersion: 1, kernelRelease: release(), architecture: process.arch,
           cpuHardLimit: false, memoryHardLimit: false },
@@ -229,7 +230,8 @@ export class ResearchExperimentService {
       const out = await createResearchDirectory(root, 'output');
       const scratch = await createResearchDirectory(root, 'scratch');
       await createResearchDirectory(root, 'log');
-      prepared = await this.environments.inspect(workspace, request.runtime, scratch, signal, { projectId: request.projectId, priority: 'user' });
+      prepared = await this.environments.inspect(workspace, request.runtime, scratch, signal, { projectId: request.projectId, priority: 'user' },
+        receipt => probes.push({ ...receipt, phase: 'preparation' }));
       if (request.expectedEnvironmentHash !== undefined && prepared.snapshot.hash !== request.expectedEnvironmentHash) throw new Error('research_experiment_environment_changed');
       const snapshot = await snapshotExperimentInputs(workspace, input, request, prepared.snapshot, signal);
       files = snapshot.files;
@@ -257,7 +259,8 @@ export class ResearchExperimentService {
       }
       if (output.exitCode !== 0) throw new Error('research_experiment_process_failed');
       await this.verifyProject(initial, signal);
-      const current = await this.environments.inspect(workspace, request.runtime, scratch, signal, { projectId: request.projectId, priority: 'user' });
+      const current = await this.environments.inspect(workspace, request.runtime, scratch, signal, { projectId: request.projectId, priority: 'user' },
+        receipt => probes.push({ ...receipt, phase: 'verification' }));
       if (current.snapshot.hash !== prepared.snapshot.hash) throw new Error('research_experiment_environment_changed');
     } catch (error) {
       failure = error;
@@ -418,6 +421,10 @@ export class ResearchExperimentService {
       || report.inputHash !== run.inputHash || report.environmentHash !== run.environment?.hash
       || report.outcome !== 'returned' || report.exitCode !== 0
       || JSON.stringify(report.policy) !== JSON.stringify(computationPolicy(researchExperimentStartSchema.parse(run.request)))) {
+      throw new Error('research_experiment_resource_report_changed');
+    }
+    const expected = run.request.engine === 'typescript' ? 0 : run.request.engine === 'r' ? 2 : 4;
+    if (report.probes.length !== expected || report.probes.some(probe => probe.outcome !== 'returned' || probe.exitCode !== 0)) {
       throw new Error('research_experiment_resource_report_changed');
     }
     if (run.request.engine === 'r' || run.request.engine === 'julia') {

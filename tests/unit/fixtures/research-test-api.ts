@@ -42,6 +42,7 @@ export { registerResearchProjectBudgetCapabilities } from '../../../src/main/plu
 export { ResearchExperimentService } from '../../../src/main/plugins/research/experiment-service';
 export { ResearchExperimentEnvironmentService } from '../../../src/main/plugins/research/experiment-environment';
 export { inspectNativeExperimentEnvironment } from '../../../src/main/plugins/research/experiment-native-environment';
+export { runEnvironmentProbe } from '../../../src/main/plugins/research/experiment-probe-resources';
 export { discoverJuliaEnvironmentControls, parseJuliaRuntimeVersion } from '../../../src/main/plugins/research/experiment-julia-controls';
 export { captureNativeCode } from '../../../src/main/plugins/research/experiment-native-code';
 export { ResearchExportFiles } from '../../../src/main/plugins/research/export-files';

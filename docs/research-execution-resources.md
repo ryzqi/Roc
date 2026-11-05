@@ -142,3 +142,13 @@ JuliaProject、版本化 Manifest、显式 manifest、AppManifest、workspace、
 本增量在上述范围内为 `Verified passing`。在 `/Users/Apple_501/Desktop/Roc/Roc` 执行 `pnpm test:research-native-code`，最终 5/5，包括实际 C 动态库计算结果、成功/退出码 7 两次服务运行、回执保留、不可变发布、跨项目拒绝，以及导出 writer 的相同字节/哈希和篡改拒绝；`pnpm test:research-environment-boundaries` 8/8；相关原生代码、Julia 控制、实验资源、进程资源/准入/离线政策单测 31/31。构建/typecheck、标准生产 P0 1/1、Harness 94/94、启动 13/13 零 renderer 错误、IPC/分块检查通过，eager JS 1132907 字节、6 个文件。
 
 最初新增服务场景失败，是 C 夹具在计算阶段读取仅用于探针的 `ROC_R_LIBRARY`；保留日志后改用实际 `R_LIBS`，没有放宽产品环境或断言。新增退出码场景第一次在 1s 请求预算内超时，未改断言的复验在 257ms 返回 7；具体超时原因未确定。此退出码测试使用显式 5s 启动预算，退出码、回执和失败发布断言保持，独立的产品超时测试不变。日志和回执为 `.artifacts/research-optimization/xsafe-a7d1-*.log`、`xsafe-a7d1/native-code.json`；原失败与 1s 复验回执另存。实际 R/Julia 科学运行、完整原生导出流程和环境探针资源回执持久化仍未完成。
+
+## 环境探针资源回执
+
+实验 `log/resources.json` 使用合同 2；合同 1 的资源报告不再被当前发布校验接受。`probes` 按实际顺序保存 preparation 与 verification，以及 Julia 的 runtime_version 与 environment 请求。每条记录包含真实 runner 请求的 SHA-256、命令、执行限额、完整可写目录限额、返回/拒绝状态、退出码、错误、采样观测、准入等待和持有时间。R 桥接库和独立临时目录先加入请求，再捕获合同；没有将探针消耗混入计算观测，也不保存原始环境变量。
+
+准备失败保留已执行探针，计算状态为 not_dispatched，计算 usage/admission 为 null。计算成功后复核失败保留原计算退出码 0 与失败探针退出码，整个实验仍失败，不能发布。快速结束、队列取消和 runner 拒绝保留实际未知观测，不补零。发布要求完整的原生准备/复核探针序列且全部返回 0。独立环境预览没有实验身份，回执仅在预览过程内观测；未宣称它具有持久化实验 provenance。
+
+本增量为 `Verified passing`，工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。`node --test tests/unit/research-environment-probe-resources.test.mjs tests/unit/research-experiment-resources.test.mjs tests/unit/research-native-code.test.mjs tests/unit/research-process-resources.test.mjs tests/unit/research-process-admission.test.mjs tests/unit/research-julia-controls.test.mjs tests/unit/research-compute-policy.test.mjs` 34/34；`pnpm test:research-native-code` 5/5，含真实 C 原生适配器准备/复核失败与成功回执；`pnpm test:research-environment-boundaries` 8/8，含 Julia 两种探针；`node scripts/run-research-p0.mjs` 13/13；`pnpm build`（含 typecheck）、`pnpm harness:eval` 94/94、`pnpm check:ipc`、`pnpm check:renderer-chunks` 通过，eager JS 1132907 字节、6 个文件；`node scripts/smoke-electron.mjs` 13/13、零 renderer 错误。
+
+初次原生测试 2/5：新增探针记录改变共享测试账本的末项，三个旧测试读到了没有 stdout 的探针。按确切场景选择原始 stdout 后，原值、哈希和漂移断言全部通过；未修改产品以适配测试。日志与回执保留在 `.artifacts/research-optimization/xsafe-a7d2-*.log`、`xsafe-a7d2/native-code.json`。实际 R/Julia 科学运行及完整原生科学导出仍未验证。

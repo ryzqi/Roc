@@ -77,6 +77,7 @@ async function fixture(attack = null) {
     tools: { root: toolsRoot, hash: 'a'.repeat(64), environment: { PATH: '/usr/bin:/bin',
       ROC_FIXTURE_RUNTIME: runtimeRoot, ROC_FIXTURE_CONTROLS: JSON.stringify(controls), ROC_FIXTURE_METADATA: JSON.stringify(metadata) } },
     signal: new AbortController().signal, admission: { projectId: 'julia-environment-boundary', priority: 'user' },
+    onProbe: receipt => receipts.push({ scenario: attack ?? 'declared-controls', probe: receipt }),
     run: async request => {
       const result = await api.runResearchProcess(request);
       calls.push({ args: request.args, readablePaths: request.readablePaths, output: result.stdout });

@@ -73,6 +73,7 @@ async function inspect(attack) {
     workspace, runtime: { kind: 'renv', rootPath: runtimeRoot, libraryPath: 'library' }, jobDir,
     tools: { root: toolsRoot, hash: 'a'.repeat(64), environment: { PATH: '/usr/bin:/bin' } },
     signal: new AbortController().signal, admission: { projectId: 'native-environment-boundary', priority: 'user' },
+    onProbe: receipt => receipts.push({ scenario: attack ? 'forged-project-metadata' : 'declared-lock-only', probe: receipt }),
     run: async request => {
       result = await api.runResearchProcess(attack ? { ...request, environment: { ...request.environment, ROC_METADATA_ATTACK: '1' } } : request);
       receipts.push({ scenario: attack ? 'forged-project-metadata' : 'declared-lock-only', output: result.stdout,

@@ -61,6 +61,8 @@ test('experiment resource receipt pins returned measurements to input/environmen
     assert.equal(run.status, 'completed', run.error);
     assert.equal(report.runId, run.id); assert.equal(report.projectId, f.project.id);
     assert.equal(report.inputHash, run.inputHash); assert.equal(report.environmentHash, run.environment.hash);
+    assert.equal(report.schemaVersion, 2); assert.deepEqual(report.probes, []);
+    assert.equal(api.researchExperimentResourceReportSchema.safeParse({ ...report, schemaVersion: 1 }).success, false);
     assert.deepEqual(report.usage, measured); assert.deepEqual(report.admission, admission);
     assert.deepEqual(report.policy.resourceLimits, actualRequest.resourceLimits);
     assert.equal(report.backend.cpuHardLimit, false); assert.equal(report.backend.memoryHardLimit, false);

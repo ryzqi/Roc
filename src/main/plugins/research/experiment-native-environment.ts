@@ -12,6 +12,8 @@ import type { ResearchProcessScope } from './toolchain';
 import { discoverJuliaEnvironmentControls, parseJuliaRuntimeVersion, type JuliaEnvironmentControls } from './experiment-julia-controls';
 import { captureNativeCode } from './experiment-native-code';
 import type { NativeCodeReceipt } from './experiment-native-code-schema';
+import type { ResearchEnvironmentProbeResource } from '../../../shared/schemas/research-process-resources';
+import { runEnvironmentProbe } from './experiment-probe-resources';
 
 type ProcessRun = (input: ResearchProcessRequest) => Promise<ResearchProcessResult>;
 type NativeEnvironmentInspectionInput = {
@@ -22,6 +24,7 @@ type NativeEnvironmentInspectionInput = {
   run: ProcessRun;
   signal: AbortSignal;
   admission: ResearchProcessScope;
+  onProbe: (receipt: ResearchEnvironmentProbeResource) => void;
 };
 const reportSchema = z.object({
   version: z.string().min(1), platform: z.string().min(1), architecture: z.string().min(1), prefix: z.string().min(1), basePrefix: z.string().min(1),
@@ -30,7 +33,7 @@ const reportSchema = z.object({
   controls: z.array(z.object({ path: z.string().min(1), sha256: z.string().regex(/^[a-f0-9]{64}$/u) }).strict()).max(1000)
 }).strict();
 
-export async function inspectNativeExperimentEnvironment({ workspace, runtime, jobDir, tools, run, signal, admission }: NativeEnvironmentInspectionInput): Promise<PreparedExperimentEnvironment> {
+export async function inspectNativeExperimentEnvironment({ workspace, runtime, jobDir, tools, run, signal, admission, onProbe }: NativeEnvironmentInspectionInput): Promise<PreparedExperimentEnvironment> {
   const root = await realpath(runtime.rootPath);
   const executable = await researchPath(root, runtime.kind === 'renv' ? 'bin/exec/R' : 'bin/julia');
   const beforeExecutable = researchContentHash(await readResearchFile(root, relative(root, executable), 64 * 1024 * 1024));
@@ -70,12 +73,13 @@ export async function inspectNativeExperimentEnvironment({ workspace, runtime, j
     let juliaControls: JuliaEnvironmentControls | null = null;
     let juliaVersion: string | null = null;
     if (runtime.kind === 'julia') {
-      const versionResult = await run({ command: executable, args: [...juliaExperimentFlags, '--version'], cwd: jobDir,
+      const versionResult = await runEnvironmentProbe('runtime_version', { command: executable, args: [...juliaExperimentFlags, '--version'], cwd: jobDir,
         readablePaths, writablePaths: [jobDir], additionalExecutables: [executable], environment,
         writeLimits: [{ path: jobDir, maxFileBytes: experimentFileLimit, maxTotalBytes: experimentOutputTotalLimit,
           maxFiles: experimentFileCountLimit, maxEntries: experimentDirectoryEntryLimit }],
         resourceLimits: { mode: 'monitored', cpuTimeMs: 30_000, maxResidentBytes: 2 * 1024 ** 3 },
-        admission: { ...admission, resourceClass: 'utility' }, timeoutMs: 10000, signal, allowGpuAcceleration: false, networkAccess: 'none' });
+        admission: { ...admission, resourceClass: 'utility' }, timeoutMs: 10000, maxOutputBytes: 16 * 1024 * 1024,
+        signal, allowGpuAcceleration: false, networkAccess: 'none' }, run, onProbe);
       if (versionResult.exitCode !== 0) throw new ResearchProcessError('research_experiment_runtime_version_probe_failed', versionResult.stdout, versionResult.stderr);
       juliaVersion = parseJuliaRuntimeVersion(versionResult.stdout);
       juliaControls = await discoverJuliaEnvironmentControls(workspace, juliaVersion, signal);
@@ -93,8 +97,9 @@ export async function inspectNativeExperimentEnvironment({ workspace, runtime, j
         maxFiles: experimentFileCountLimit, maxEntries: experimentDirectoryEntryLimit }],
       resourceLimits: { mode: 'monitored', cpuTimeMs: 240_000, maxResidentBytes: 2 * 1024 ** 3 },
       admission: { ...admission, resourceClass: 'utility' },
-      timeoutMs: 60000, signal, allowGpuAcceleration: false, networkAccess: 'none' };
-    const result = runtime.kind === 'renv' ? await runRExperimentProcess(request, run) : await run(request);
+      timeoutMs: 60000, maxOutputBytes: 16 * 1024 * 1024, signal, allowGpuAcceleration: false, networkAccess: 'none' };
+    const observeRun: ProcessRun = actual => runEnvironmentProbe('environment', actual, run, onProbe);
+    const result = runtime.kind === 'renv' ? await runRExperimentProcess(request, observeRun) : await observeRun(request);
     if (result.exitCode !== 0) throw new ResearchProcessError(nativeError(result.stderr), result.stdout, result.stderr);
     const bytes = await readResearchFile(probe, runtime.kind === 'renv' ? 'environment.csv' : 'environment.json', 4 * 1024 * 1024);
     let report;
