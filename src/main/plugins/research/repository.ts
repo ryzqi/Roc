@@ -50,6 +50,7 @@ import { ResearchFigureRunRepository } from './figure-run-repository';
 import { ResearchExportRepository } from './export-repository';
 import { ResearchIdeaRepository } from './idea-repository';
 import {ResearchIdeaPlanRepository} from './idea-plan-repository';
+import {ResearchIdeaOutcomeRepository} from './idea-outcome-repository';
 import { ResearchKnowledgeRepository, type KnowledgeSourceWrite } from './knowledge-repository';
 import type { ResearchTaskRepository } from './research-task-repository';
 import {researchArtifactInspectionBodySchema, researchArtifactInspectResultSchema,
@@ -94,6 +95,7 @@ export class ResearchRepository {
   readonly exports: ResearchExportRepository;
   readonly ideas: ResearchIdeaRepository;
   readonly ideaPlans: ResearchIdeaPlanRepository;
+  readonly ideaOutcomes: ResearchIdeaOutcomeRepository;
   readonly knowledge: ResearchKnowledgeRepository;
   private knowledgeWriter: ((input: KnowledgeSourceWrite, sourceMetadata?: Record<string, unknown>) => Promise<ResearchKnowledgeDocument>) | null = null;
   private readonly pendingKnowledgeWrites: Array<{ input: KnowledgeSourceWrite; sourceMetadata: Record<string, unknown> }> = [];
@@ -130,6 +132,7 @@ export class ResearchRepository {
     this.exports = new ResearchExportRepository(db, this, now);
     this.ideas = new ResearchIdeaRepository(db, this, now);
     this.ideaPlans = new ResearchIdeaPlanRepository(db, this, now);
+    this.ideaOutcomes = new ResearchIdeaOutcomeRepository(db, this, now);
     this.knowledge = new ResearchKnowledgeRepository(db, (id) => { this.getProject(id); }, now);
   }
 

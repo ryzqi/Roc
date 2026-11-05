@@ -6,6 +6,7 @@ import { mkdtemp, mkdir, realpath, writeFile, readFile, symlink, rm, chmod, stat
 import { dirname, join } from 'node:path';
 import Database from 'better-sqlite3';
 import { loadResearchTestApi, createResearchFixture, figureRequest } from '../unit/fixtures/research-test-kit.mjs';
+import {ideaCanvasContentFixture, ideaPlanBodyFixture} from '../unit/fixtures/research-idea-plan.mjs';
 
 const python = JSON.parse(execFileSync('python3', ['-I', '-S', '-c',
   'import sys,os,json;print(json.dumps({"executable":os.path.realpath(sys.executable),"version":sys.version.split()[0]}))'], { encoding: 'utf8' }));
@@ -46,6 +47,121 @@ with open(os.path.join(roc.output_dir, "metrics.json"), "w") as output:
     json.dump(result, output)
 print("ACTUAL_METRIC_RESULT", flush=True)
 `;
+
+test('actual frozen method assessment retains negative result provenance, human revisions and exact disk recovery without computation', async () => {
+  const f = await fixture(metricSource, {scenario: 'frozen-idea-outcome'});
+  let reopened;
+  try {
+    f.db.prepare('UPDATE research_projects SET current_stage=? WHERE id=?').run('ideation', f.project.id);
+    f.db.prepare("UPDATE research_stage_states SET status='ready' WHERE project_id=? AND stage=?").run(f.project.id, 'ideation');
+    const artifact = f.repository.createArtifact({projectId: f.project.id, stage: 'ideation', kind: 'idea_canvas',
+      title: 'Frozen synthetic method', path: null});
+    const canvas = f.repository.ideas.save({...ideaCanvasContentFixture(), artifactId: artifact.id, expectedVersion: null});
+    const human = (capability, action, windowId = 72) => api.withResearchHumanContext({capability, projectId: f.project.id, windowId}, action);
+    const body = ideaPlanBodyFixture();
+    body.metrics[0].definition = 'Mean of all scaled observations';
+    body.metrics[0].expectedOutcome = 'A positive mean';
+    const saved = human('research.ideaPlans.save', () => f.repository.ideaPlans.save({
+      projectId: f.project.id, artifactId: artifact.id, requestId: 'method',
+      canvas: {version: canvas.version, contentHash: canvas.contentHash}, parent: null, revisionReason: null, body}));
+    const frozen = human('research.ideaPlans.freeze', () => f.repository.ideaPlans.freeze({
+      projectId: f.project.id, artifactId: artifact.id, versionId: saved.version.id, expectedHash: saved.versionHash,
+      requestId: 'method-freeze', reviewNote: 'Synthetic engineering plan, no scientific preregistration claim'}));
+    f.db.prepare('UPDATE research_projects SET current_stage=? WHERE id=?').run('experiment', f.project.id);
+    await writeFile(join(f.workspace, 'data.txt'), '-3 -2 -1\n');
+    const run = await f.execute(), output = run.files.find(file => file.path === 'metrics.json');
+    const results = new api.ResearchExperimentResultService(f.repository, f.service);
+    const result = await human('research.experimentResults.review', () => results.review({
+      projectId: f.project.id, requestId: 'result', runId: run.id, expectedInputHash: run.inputHash,
+      resultPath: output.path, expectedResultHash: output.sha256,
+      definitions: [{id: 'mean', label: 'Mean', definition: body.metrics[0].definition, unit: 'ms', direction: 'lower'}],
+      method: {name: 'Arithmetic mean', rationale: 'All observations', assumptions: 'Synthetic data', limitations: 'No inference'}
+    }));
+    const evidence = await human('research.experimentResults.captureEvidence', () => results.captureEvidence({
+      projectId: f.project.id, resultId: result.snapshot.id, expectedHash: result.snapshotHash, metricId: 'mean'}));
+    const outcomes = new api.ResearchIdeaOutcomeService(f.repository, results);
+    const request = {projectId: f.project.id, artifactId: artifact.id, requestId: 'assessment',
+      plan: {versionId: frozen.version.id, versionHash: frozen.versionHash, freezeHash: frozen.freezeHash},
+      result: {resultId: result.snapshot.id, expectedHash: result.snapshotHash},
+      metrics: [{kind: 'measured', plannedMetricId: 'mean', evidenceId: evidence.id}],
+      verdict: 'contradicts', reviewNote: 'The observed -4 ms contradicts the preserved positive expectation.',
+      parent: null, revisionReason: null};
+    const save = value => human('research.ideaOutcomes.save', () => outcomes.save(value));
+    const count = () => f.db.prepare('SELECT total_changes()').pluck().get();
+    await assert.rejects(outcomes.save(request), /research_human_required/u);
+    await assert.rejects(save({...request, plan: {...request.plan, freezeHash: '0'.repeat(64)}}), /research_idea_outcome_frozen_plan_required/u);
+    const first = await save(request), changes = count();
+    assert.deepEqual(await save(request), first); assert.equal(count(), changes);
+    assert.equal(first.snapshot.actor.id, 'window:72');
+    assert.equal(first.snapshot.material.result.snapshot.result.metrics[0].value, -4);
+    assert.equal(first.snapshot.material.plan.version.request.body.metrics[0].expectedOutcome, 'A positive mean');
+    assert.deepEqual(first.snapshot.material.executionTime, {startedAt: run.startedAt, endedAt: run.endedAt});
+    assert.deepEqual(first.snapshot.material.evidence, [evidence]);
+    assert.throws(() => human('research.ideaOutcomes.save', () => f.repository.ideaOutcomes.save(
+      {...request, requestId: 'forged-mapping', metrics: [{kind: 'measured', plannedMetricId: 'unknown', evidenceId: evidence.id}]},
+      first.snapshot.material)), /research_idea_outcome_snapshot_invalid/u);
+    assert.throws(() => human('research.ideaOutcomes.save', () => f.repository.ideaOutcomes.save(
+      {...request, requestId: 'forged-time'}, {...first.snapshot.material, executionTime: {
+        ...first.snapshot.material.executionTime, endedAt: '2026-11-04T00:00:00.000Z'
+      }})), /research_idea_outcome_material_changed/u);
+    assert.throws(() => f.repository.ideaOutcomes.history({projectId: f.project.id, artifactId: artifact.id,
+      versionId: 'absent', offset: 0, limit: 1}), /research_idea_plan_not_found/u);
+    await assert.rejects(save({...request, verdict: 'supports'}), /research_idea_outcome_request_conflict/u);
+    await assert.rejects(human('research.ideaOutcomes.save', () => outcomes.save(request), 73), /research_idea_outcome_request_conflict/u);
+    await assert.rejects(save({...request, requestId: 'missing-parent'}), /research_idea_outcome_version_conflict/u);
+    const second = await save({...request, requestId: 'revision', verdict: 'inconclusive',
+      parent: {outcomeId: first.snapshot.id, outcomeHash: first.snapshotHash}, revisionReason: 'Recognize absent control group',
+      reviewNote: 'Observed mean is retained, but no causal inference is supported.'});
+    assert.equal(second.snapshot.version, 2);
+    const getRequest = {projectId: f.project.id, artifactId: artifact.id, outcomeId: first.snapshot.id, expectedHash: first.snapshotHash};
+    assert.deepEqual(await outcomes.get(getRequest), first);
+    const historyRequest = {projectId: f.project.id, artifactId: artifact.id, versionId: frozen.version.id, offset: 0, limit: 1};
+    assert.deepEqual(f.repository.ideaOutcomes.history(historyRequest), {verification: 'stored_receipt', items: [second], total: 2});
+    assert.deepEqual(f.repository.ideaOutcomes.history({...historyRequest, offset: 1}).items, [first]);
+    const handlers = new Map();
+    api.registerResearchIdeaOutcomeCapabilities({pluginId: 'fixture', capabilities: {
+      register(_id, descriptor, handler) {handlers.set(descriptor.name, handler);}
+    }}, f.repository.ideaOutcomes, outcomes);
+    const bridge = api.createPluginCapabilityAdapter({invokeCapability: (name, value) => handlers.get(name)(value)});
+    const wire = await bridge.invoke('research.saveIdeaOutcome', [request], 72);
+    assert.equal(wire.ok, true); assert.deepEqual(wire.data, first);
+    assert.equal((await bridge.invoke('research.saveIdeaOutcome', [request])).ok, false);
+    const backup = join(f.path, 'outcome-history.sqlite'); await f.db.backup(backup);
+    const disk = new Database(backup); disk.pragma('foreign_keys=ON');
+    try {
+      api.applyResearchDatabaseSchema(disk);
+      const repository = new api.ResearchRepository(disk, f.tasks), dispatches = f.observed.length;
+      reopened = new api.ResearchExperimentService(repository, {inspect: async () => assert.fail('no environment probe')},
+        f.path, {error: () => assert.fail('no replay persistence error')}, async () => assert.fail('no computation'));
+      const recovered = new api.ResearchIdeaOutcomeService(repository, new api.ResearchExperimentResultService(repository, reopened));
+      assert.deepEqual(await recovered.get(getRequest), first);
+      assert.equal(f.observed.length, dispatches);
+      const damaged = structuredClone(first.snapshot);
+      damaged.material.evidence[0].excerpt = '{}';
+      const damagedJson = JSON.stringify(damaged), damagedHash = createHash('sha256').update(damagedJson).digest('hex');
+      disk.prepare('UPDATE research_idea_outcomes SET snapshot_json=?,snapshot_hash=? WHERE id=?')
+        .run(damagedJson, damagedHash, first.snapshot.id);
+      await assert.rejects(recovered.get({...getRequest, expectedHash: damagedHash}));
+      disk.prepare('UPDATE research_idea_outcomes SET snapshot_json=?,snapshot_hash=? WHERE id=?')
+        .run(JSON.stringify(first.snapshot), first.snapshotHash, first.snapshot.id);
+      disk.prepare('UPDATE research_idea_outcomes SET created_at=? WHERE id=?').run('damaged', first.snapshot.id);
+      await assert.rejects(recovered.get(getRequest), /research_idea_outcome_snapshot_invalid/u);
+    } finally {await reopened?.shutdown(); reopened = null; disk.close();}
+    f.db.prepare("UPDATE research_projects SET status='archived' WHERE id=?").run(f.project.id);
+    assert.deepEqual(await outcomes.get(getRequest), first);
+    await assert.rejects(save(request), /research_project_archived/u);
+    f.db.prepare("UPDATE research_projects SET status='active' WHERE id=?").run(f.project.id);
+    f.repository.evidence.invalidateEvidence(evidence.id, f.project.id);
+    const before = count();
+    await assert.rejects(outcomes.get(getRequest), /research_evidence_reference_superseded/u);
+    await assert.rejects(save(request), /research_evidence_reference_superseded/u);
+    assert.equal(count(), before);
+    assert.deepEqual(f.repository.ideaOutcomes.history({...historyRequest, offset: 1}).items, [first]);
+    assert.deepEqual(f.repository.ideaPlans.get({projectId: f.project.id, artifactId: artifact.id,
+      versionId: frozen.version.id, expectedHash: frozen.versionHash}), frozen);
+    receipts.push({scenario: 'frozen-idea-outcome', first, second});
+  } finally {await reopened?.shutdown(); await f.cleanup();}
+});
 
 test('actual metric review freezes measured values, full method and source identity; comparisons expose changed data and parameters',async()=>{
   const f=await fixture(metricSource);
@@ -98,7 +214,7 @@ test('actual metric review freezes measured values, full method and source ident
     let reopened;
     try {
       api.applyResearchDatabaseSchema(disk);
-      assert.equal(disk.prepare('SELECT current_version FROM schema_metadata').pluck().get(),45);
+      assert.equal(disk.prepare('SELECT current_version FROM schema_metadata').pluck().get(),46);
       const repository=new api.ResearchRepository(disk,f.tasks),before=f.observed.length;
       reopened=new api.ResearchExperimentService(repository,{
         inspect:async()=>assert.fail('result history must not inspect an execution environment')

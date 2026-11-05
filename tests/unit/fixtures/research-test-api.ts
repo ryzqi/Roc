@@ -140,3 +140,7 @@ export {researchReviewReportBodySchema} from '../../../src/shared/schemas/resear
 export * from '../../../src/shared/schemas/research-idea-plans';
 export {registerResearchIdeaPlanCapabilities} from '../../../src/main/plugins/research/idea-plan-capabilities';
 export {ResearchIdeaPlanRepository} from '../../../src/main/plugins/research/idea-plan-repository';
+export * from '../../../src/shared/schemas/research-idea-outcomes';
+export {ResearchIdeaOutcomeRepository} from '../../../src/main/plugins/research/idea-outcome-repository';
+export {ResearchIdeaOutcomeService} from '../../../src/main/plugins/research/idea-outcome-service';
+export {registerResearchIdeaOutcomeCapabilities} from '../../../src/main/plugins/research/idea-outcome-capabilities';

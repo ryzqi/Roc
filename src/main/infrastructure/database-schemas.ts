@@ -2318,6 +2318,25 @@ CREATE TABLE research_idea_plan_freezes (
 `
 });
 
+researchMigrations.push({
+  version: 46, name: 'human_frozen_idea_outcomes',
+  sql: `
+CREATE TABLE research_idea_outcomes (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  artifact_id TEXT NOT NULL REFERENCES research_idea_canvases(artifact_id) ON DELETE CASCADE,
+  plan_version_id TEXT NOT NULL REFERENCES research_idea_plan_freezes(version_id),
+  version INTEGER NOT NULL CHECK(version > 0),
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(plan_version_id, version),
+  UNIQUE(project_id, request_id)
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

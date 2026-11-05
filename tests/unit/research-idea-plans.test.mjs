@@ -189,7 +189,7 @@ test('disk restart reads exact frozen plans without any writes, and DB44 upgrade
       }
       const original = old.prepare('SELECT * FROM research_idea_canvases').get(), originalRevision = old.prepare('SELECT * FROM research_idea_canvas_revisions').get();
       api.applyResearchDatabaseSchema(old);
-      assert.equal(old.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 45);
+      assert.equal(old.prepare('SELECT current_version FROM schema_metadata').pluck().get(), api.researchMigrations.at(-1).version);
       assert.deepEqual(old.prepare('SELECT * FROM research_idea_canvases').get(), original);
       assert.deepEqual(old.prepare('SELECT * FROM research_idea_canvas_revisions').get(), originalRevision);
       assert.equal(old.prepare('SELECT count(*) FROM research_idea_plan_versions').pluck().get(), 0);

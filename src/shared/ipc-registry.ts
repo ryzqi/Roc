@@ -1,4 +1,8 @@
 import {
+  researchIdeaOutcomeSaveSchema, researchIdeaOutcomeGetSchema, researchIdeaOutcomeHistorySchema,
+  researchIdeaOutcomeReceiptSchema, researchIdeaOutcomeHistoryResultSchema
+} from './schemas/research-idea-outcomes';
+import {
   researchIdeaPlanSaveSchema, researchIdeaPlanGetSchema, researchIdeaPlanHistorySchema,
   researchIdeaPlanFreezeRequestSchema, researchIdeaPlanInspectionSchema, researchIdeaPlanHistoryResultSchema
 } from './schemas/research-idea-plans';
@@ -638,6 +642,9 @@ export const ipcRegistry = {
     request({ key: 'researchPythonEnvironmentSelect', channel: 'roc:research:python-environment-select', domain: 'research', method: 'selectPythonEnvironment', kind: 'plugin', capabilityName: 'research.pythonEnvironments.select', inputTransform: first, contract: methodContract(oneArg(researchPythonEnvironmentSelectSchema), researchPythonEnvironmentSelectionSchema.nullable()) }),
     request({ key: 'researchPythonEnvironmentGet', channel: 'roc:research:python-environment-get', domain: 'research', method: 'getPythonEnvironmentSelection', kind: 'plugin', capabilityName: 'research.pythonEnvironments.get', inputTransform: first, contract: methodContract(oneArg(researchPythonEnvironmentGetSchema), researchPythonEnvironmentSelectionSchema) }),
     request({ key: 'researchPythonEnvironmentList', channel: 'roc:research:python-environment-list', domain: 'research', method: 'listPythonEnvironmentSelections', kind: 'plugin', capabilityName: 'research.pythonEnvironments.list', inputTransform: first, contract: methodContract(oneArg(researchPythonEnvironmentListSchema), researchPythonEnvironmentSelectionSchema.array()) }),
+    request({ key: 'researchIdeaOutcomeSave', channel: 'roc:research:idea-outcome-save', domain: 'research', method: 'saveIdeaOutcome', kind: 'plugin', capabilityName: 'research.ideaOutcomes.save', inputTransform: first, contract: methodContract(oneArg(researchIdeaOutcomeSaveSchema), researchIdeaOutcomeReceiptSchema) }),
+    request({ key: 'researchIdeaOutcomeGet', channel: 'roc:research:idea-outcome-get', domain: 'research', method: 'getIdeaOutcome', kind: 'plugin', capabilityName: 'research.ideaOutcomes.get', inputTransform: first, contract: methodContract(oneArg(researchIdeaOutcomeGetSchema), researchIdeaOutcomeReceiptSchema) }),
+    request({ key: 'researchIdeaOutcomeHistory', channel: 'roc:research:idea-outcome-history', domain: 'research', method: 'getIdeaOutcomeHistory', kind: 'plugin', capabilityName: 'research.ideaOutcomes.history', inputTransform: first, contract: methodContract(oneArg(researchIdeaOutcomeHistorySchema), researchIdeaOutcomeHistoryResultSchema) }),
     request({ key: 'researchIdeaPlanSave', channel: 'roc:research:idea-plan-save', domain: 'research', method: 'saveIdeaPlan', kind: 'plugin', capabilityName: 'research.ideaPlans.save', inputTransform: first, contract: methodContract(oneArg(researchIdeaPlanSaveSchema), researchIdeaPlanInspectionSchema) }),
     request({ key: 'researchIdeaPlanFreeze', channel: 'roc:research:idea-plan-freeze', domain: 'research', method: 'freezeIdeaPlan', kind: 'plugin', capabilityName: 'research.ideaPlans.freeze', inputTransform: first, contract: methodContract(oneArg(researchIdeaPlanFreezeRequestSchema), researchIdeaPlanInspectionSchema) }),
     request({ key: 'researchIdeaPlanGet', channel: 'roc:research:idea-plan-get', domain: 'research', method: 'getIdeaPlan', kind: 'plugin', capabilityName: 'research.ideaPlans.get', inputTransform: first, contract: methodContract(oneArg(researchIdeaPlanGetSchema), researchIdeaPlanInspectionSchema) }),

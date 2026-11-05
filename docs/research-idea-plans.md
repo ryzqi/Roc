@@ -61,3 +61,37 @@ A1 状态：**Verified passing**，范围为人工合同、追加式存储、冻
 最初 UI 检查两次失败来自审计 fixture：把 DOM body 传给 selector 参数，以及错误要求全高 drawer 的窗口上/下/右边缘外阴影可见。原始失败日志保留；最终断言仍要求零半截裁切，并仅允许精确 drawer 元素的三个窗口边缘 `hidden/gap=0`，同时验证焦点和无横向溢出。精确 matcher 曾因序列化四个 class 而非审计脚本的三个失败，现已对齐。产品 CSS/阴影/动效未修改。
 
 A2 状态：**Verified passing**，范围为现有检查器编辑/冻结/历史与审核绑定。A3 的真实实验结果关联仍待实现；无独立科学、预注册、真实 R/Julia 或付费调用验收声明。
+
+## A3A：冻结方法与真实负结果的人工评估
+
+DB46 增加独立、追加式结果评估时间线。每条评估绑定精确冻结计划 ID、版本/hash、冻结 hash、真实指标结果回执 ID/hash，并保存完整计划、结果、指标 Evidence、运行起止时间和人工说明。它不修改 Canvas、冻结假设、预期结果或测量数据。历史冻结计划可回填结果；每个计划独立追加版本，修订必须指向最新父评估 ID/hash 并填写原因。
+
+每个计划指标须明确关联该结果回执中的一个真实指标 Evidence，或注明缺失原因；至少保留一个实测指标。重复关联、遗漏和跨结果关联被拒绝。定义、单位、方向差异和缺失维度逐项保存，有差异只能选择“不可比”；支持、反驳、无法判断均由人工明确选择，服务不会根据数值自动选结论。
+
+`saveIdeaOutcome` 的身份由主进程 sender 绑定；同请求、内容、身份和实际来源的精确重放零写入。`getIdeaOutcome` 重验真实运行、输入/输出/源码及指标 Evidence；当前来源失效时报错。`getIdeaOutcomeHistory` 明确标记 `stored_receipt`，仅核验历史保存回执，不能被视作当前来源仍有效。存储入口另外校验所有映射、嵌套 hash/项目/冻结身份、实际运行时间和差异，防止绕过 service 构造成功回执。归档项目拒绝写入，允许读取。
+
+观察时序仍是人工声明；保存的运行起止时间来自真实运行记录，但不证明计划在独立系统中预注册。当前工程回归的时钟由 fixture 固定，以便精确比较。
+
+### 验证
+
+在上述仓库根目录执行。日志在 `.artifacts/research-optimization/`。
+
+| 命令 | 实际结果 | 日志 |
+| --- | --- | --- |
+| `pnpm generate:ipc` | 通过 | `xidea-a3a-type.log` |
+| `pnpm build` | 最终通过，含 typecheck | `xidea-a3a-boundary-build.log` |
+| `node --test tests/unit/research-idea-outcomes.test.mjs tests/unit/research-idea-plans.test.mjs tests/unit/research-experiment-results.test.mjs` | 最终 14/14 | `xidea-a3a-boundary-focused.log` |
+| `node --test tests/unit/` | 1213/1213，零失败/跳过；随后新增 IPC 错误回归包含在最终 14/14 聚焦检查中 | `xidea-a3a-unit.log` |
+| `node scripts/run-research-p0.mjs` | 13/13 | `xidea-a3a-p0.log` |
+| `pnpm harness:eval` | 94/94 | `xidea-a3a-harness.log` |
+| `node --test --test-name-pattern='actual frozen method assessment\|actual metric review freezes\|actual result metric evidence' tests/integration/research-python-experiments.test.mjs` | 最终 3/3 | `xidea-a3a-final-python-corrected.log` |
+| `node --test tests/renderer/idea-plans.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/experiment-results.test.mjs` | 38/38 | `xidea-a3a-renderer.log` |
+| `pnpm check:ipc` | 生成文件一致 | `xidea-a3a-boundary-ipc.log` |
+| `pnpm check:renderer-chunks` | eager JS 1,134,042 bytes，6 files | `xidea-a3a-boundary-chunks.log` |
+| `node scripts/smoke-electron.mjs` | 最终 13/13，零 renderer error | `xidea-a3a-boundary-startup.log` |
+
+真实 CPython 回归覆盖负均值 -4、未变的正值预期、人工反驳与后续无法判断修订、精确重放零写入、不同 sender/content 拒绝、直接存储伪造映射/时间拒绝、回执重哈希后的损坏证据拒绝、分页历史、磁盘重启零 probe/compute、归档和失效 Evidence。独立 DB45→46 回归保留原 Canvas/冻结计划所有行字节与外键。
+
+初轮 typecheck 暴露局部 `never` 回调缺少显式函数类型的控制流收窄问题，现已修正。时间漂移测试初轮误用与 fixture 相同的时间，被后续父版本冲突正确拒绝；改为不同时间后验证准确错误。原始失败日志保留。
+
+A3A 状态：**Verified passing**，范围为追加式存储、人工 API、真实来源绑定与现有消费者，所有表列进程退出码为零。renderer 评估 UI、审核 snapshot 的 outcome 聚合和导出绑定属于后续部分；没有扩展为全计划或独立科学验收。

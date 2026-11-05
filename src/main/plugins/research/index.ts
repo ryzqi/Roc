@@ -106,6 +106,8 @@ import { researchPythonEnvironmentCapabilities, registerResearchPythonEnvironmen
 import { researchNotebookCapabilities, registerResearchNotebookCapabilities } from './notebook-capabilities';
 import { ResearchExperimentService } from './experiment-service';
 import {ResearchExperimentResultService} from './experiment-result-service';
+import {ResearchIdeaOutcomeService} from './idea-outcome-service';
+import {registerResearchIdeaOutcomeCapabilities, researchIdeaOutcomeCapabilities} from './idea-outcome-capabilities';
 import {researchExperimentResultCapabilities,registerResearchExperimentResultCapabilities} from './experiment-result-capabilities';
 import { registerResearchExperimentCapabilities, researchExperimentCapabilities } from './experiment-capabilities';
 import { ResearchFigureService } from './figure-service';
@@ -228,7 +230,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchIdeaPlanCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchNotebookCapabilities, ...researchExperimentResultCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
+      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchIdeaPlanCapabilities, ...researchIdeaOutcomeCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchNotebookCapabilities, ...researchExperimentResultCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，
@@ -251,8 +253,10 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       const researchExperiments = new ResearchExperimentService(researchRepository, new ResearchExperimentEnvironmentService(toolchain, researchPythonEnvironments), options.experimentRoot ?? null, context.logger);
       experiments = researchExperiments;
       registerResearchExperimentCapabilities(context, researchRepository.experiments, researchExperiments);
-      registerResearchExperimentResultCapabilities(context,researchRepository.experimentResults,
-        new ResearchExperimentResultService(researchRepository,researchExperiments));
+      const researchResults = new ResearchExperimentResultService(researchRepository, researchExperiments);
+      registerResearchExperimentResultCapabilities(context, researchRepository.experimentResults, researchResults);
+      registerResearchIdeaOutcomeCapabilities(context, researchRepository.ideaOutcomes,
+        new ResearchIdeaOutcomeService(researchRepository, researchResults));
       const researchFigures = new ResearchFigureService(researchRepository, toolchain, options.experimentRoot ?? null, context.logger);
       figures = researchFigures;
       registerResearchFigureCapabilities(context, researchRepository.figures, researchFigures);

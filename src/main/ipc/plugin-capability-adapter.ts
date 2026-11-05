@@ -1,4 +1,5 @@
 import {researchIdeaPlanSaveSchema, researchIdeaPlanFreezeRequestSchema} from '../../shared/schemas/research-idea-plans';
+import {researchIdeaOutcomeSaveSchema} from '../../shared/schemas/research-idea-outcomes';
 import { withLiteratureContext } from '../services/literature-context';
 import { researchPythonEnvironmentSelectSchema } from '../../shared/schemas/research-python-environments';
 import { researchNotebookImportRequestSchema } from '../../shared/schemas/research-notebooks';
@@ -57,6 +58,11 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
       }
       return await wrapIpc(async () => {
         const input = transformInput(target.inputTransform, args);
+        if (target.capabilityName === 'research.ideaOutcomes.save') {
+          const request = researchIdeaOutcomeSaveSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
         if (target.capabilityName === 'research.ideaPlans.save' || target.capabilityName === 'research.ideaPlans.freeze') {
           const request = target.capabilityName === 'research.ideaPlans.save' ? researchIdeaPlanSaveSchema.parse(input) :
             researchIdeaPlanFreezeRequestSchema.parse(input);
