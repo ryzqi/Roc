@@ -122,7 +122,7 @@ export function extensionOf(path: string): string {
  * `files.preview`: the backend hands out a custom-protocol URL from
  * `files.previewPdf` and the renderer must use that directly (no Blob URL — R9).
  */
-export type PreviewKind = 'pdf' | 'image' | 'markdown' | 'latex' | 'code' | 'text' | 'binary';
+export type PreviewKind = 'pdf' | 'notebook' | 'image' | 'markdown' | 'latex' | 'code' | 'text' | 'binary';
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif', 'ico']);
 const CODE_EXTENSIONS = new Set([
@@ -135,6 +135,9 @@ const TEXT_EXTENSIONS = new Set(['txt', 'log', 'csv', 'tsv', 'bib', 'ris', 'mdx'
 
 export function previewKindFor(relativePath: string): PreviewKind {
   const extension = extensionOf(relativePath);
+  if (extension === 'ipynb') {
+    return 'notebook';
+  }
   if (extension === 'pdf') {
     return 'pdf';
   }

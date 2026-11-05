@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { Copy, FileWarning, Loader2, Save, X } from 'lucide-react';
 import type { RocClient } from '../../shared/roc-client';
 import { useAsyncResource } from '../../app/use-async-resource';
@@ -38,6 +38,7 @@ import { previewFile, previewPdf, writeTextFile } from '../../workspace/workspac
 
 export type FilePreviewProps = {
   client: RocClient;
+  projectId: string | null;
   relativePath: string;
   /**
    * Bound workspace, used as part of the resource key.
@@ -64,8 +65,21 @@ export type FilePreviewProps = {
 };
 
 const WRITE_SOURCE = 'renderer:file-preview';
+const NotebookPreview = lazy(() => import('./NotebookPreview'));
 
-export function FilePreview({
+export function FilePreview(props: FilePreviewProps): React.JSX.Element {
+  if (previewKindFor(props.relativePath) === 'notebook') {
+    return (
+      <Suspense fallback={<p role="status" className="p-3 text-muted">读取 Notebook 中…</p>}>
+        <NotebookPreview client={props.client} projectId={props.projectId} workspacePath={props.workspacePath}
+          relativePath={props.relativePath} writable={props.writable} onClose={props.onClose} />
+      </Suspense>
+    );
+  }
+  return <OrdinaryFilePreview {...props} />;
+}
+
+function OrdinaryFilePreview({
   client,
   relativePath,
   workspacePath,

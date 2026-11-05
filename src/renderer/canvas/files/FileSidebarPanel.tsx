@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { FilePlus2, Loader2, Search, X } from 'lucide-react';
 import type { RocClient } from '../../shared/roc-client';
 import { joinRelative, parentRelative, checkRelativePath, pathRejectionMessage } from '../../workspace/paths';
@@ -355,9 +356,9 @@ export function FileSidebarPanel({
       </div>
 
       {/*
-        The preview overlay (`FilePreviewModal`). It lives
-        here — next to the tree, which is where a file is chosen — rather than in the canvas,
-        so the canvas keeps showing whatever view the user was reading.
+        The tree owns preview state. The overlay portals to document.body, like the shell's
+        other overlays, so sidebar scrolling cannot clip its panel or shadow. Opening a file
+        keeps the current canvas view.
 
         ## Why this is not `ModalShell`
 
@@ -370,7 +371,7 @@ export function FileSidebarPanel({
         shell. Escape and the scrim still close it, which is the whole interaction contract of a
         preview.
       */}
-      {previewPath === null ? null : (
+      {previewPath === null ? null : createPortal(
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           data-testid="file-preview-modal"
@@ -397,6 +398,7 @@ export function FileSidebarPanel({
           >
             <FilePreview
               client={client}
+              projectId={projectId}
               relativePath={previewPath}
               workspacePath={workspacePathKey}
               writable={writable}
@@ -404,7 +406,8 @@ export function FileSidebarPanel({
               onClose={() => setPreviewPath(null)}
             />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

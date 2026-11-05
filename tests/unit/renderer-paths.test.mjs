@@ -102,7 +102,7 @@ test('extensionOf ignores dotfiles and lowercases', () => {
   assert.equal(paths.extensionOf('Makefile'), '');
 });
 
-test('previewKindFor routes pdf/image/markdown/latex/code/text/binary', () => {
+test('previewKindFor routes pdf/notebook/image/markdown/latex/code/text/binary', () => {
   const cases = [
     ['a.pdf', 'pdf'],
     ['a.PNG', 'image'],
@@ -123,6 +123,8 @@ test('previewKindFor routes pdf/image/markdown/latex/code/text/binary', () => {
 
 test('binary and pdf previews are not editable', () => {
   assert.equal(paths.isEditablePreviewKind('pdf'), false);
+  assert.equal(paths.previewKindFor('analysis.IPYNB'), 'notebook');
+  assert.equal(paths.isEditablePreviewKind('notebook'), false);
   assert.equal(paths.isEditablePreviewKind('binary'), false);
   assert.equal(paths.isEditablePreviewKind('text'), true);
   assert.equal(paths.isEditablePreviewKind('code'), true);

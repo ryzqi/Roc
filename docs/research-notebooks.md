@@ -21,3 +21,15 @@ A1 验证（2026-11-06，项目根目录）：`node --test tests/unit/research-n
 相同请求和用户的重放返回原记录，源码移动/删除或归档不触发重新导入。新请求要求项目可写；变化的原文件哈希、请求冲突、跨项目读取或回执损坏直接失败。`get` 在返回静态预览前重验原字节和回执身份。`list` 显式分页，每页至多 100 条回执，不传递完整字节或 rich MIME data。旧版本仅通过原始哈希的明确引用读取，不推断“最新”身份。
 
 A2 验证（2026-11-06，项目根目录）：`node --test tests/unit/research-notebook-parser.test.mjs tests/unit/research-notebook-import.test.mjs` 12/12；`pnpm test:unit` 1193/1193；`pnpm typecheck`、`pnpm build`、`pnpm check:ipc` 通过；`node scripts/run-research-p0.mjs` 13/13、`node scripts/harness-eval/run.mjs` 94/94；`node scripts/smoke-electron.mjs` 13/13，零 renderer errors；`pnpm check:renderer-chunks` 1132907 bytes / 6 files。日志 `.artifacts/research-optimization/xnb-a2-*.log`。本部分不包含预览界面或受控 cell 执行。
+
+## 文件预览（A3）
+
+现有文件树打开 `.ipynb` 时按需加载 Notebook 预览。当前文件与导入版本分别读取；选中确切回执后才读取冻结源码。导入按钮绑定正在预览的文件 SHA，显示真实 pending/error；归档或不匹配的项目不可导入。更换项目/工作目录/文件丢弃旧读取状态。导入历史按 20 条分页，不自动把其他版本当作当前文件。
+
+源码、Markdown、输出与附件类型均通过 React 文本节点显示。已有执行计数和输出明确标注为原始未受信记录；不会创建 iframe、执行脚本或加载附件。文件和 cell/source/output/attachment 哈希可展开核对。原文件变化或缺失时仍可明确选择原导入快照。
+
+预览浮层沿用现有控件、焦点和 Escape 行为，挂载到 `document.body`，避免文件侧栏滚动祖先裁切投影。真实 Electron 初轮裁切审计发现底部 28.8px；修复后的明暗主题均 `cut=0, hidden=0`。480px 组件视口下无页面横向溢出，代码局部滚动、来源哈希换行；生产明暗截图和窄窗焦点截图已视觉核对。
+
+A3 验证（2026-11-06，项目根目录）：`pnpm build`（含 typecheck）；`node --test tests/renderer/notebook-preview.test.mjs` 6/6；`node --test tests/unit/renderer-paths.test.mjs` 14/14；`node --test tests/integration/research-notebook-electron.test.mjs` 1/1，真实文件树/键盘/preload/main/磁盘重启，包含普通文本预览与编辑回归，零恶意资源请求/代码执行；`node --test tests/renderer/file-tree-virtualization.test.mjs` 1/1；`pnpm check:ipc`、`pnpm check:renderer-chunks` 通过（1133919 bytes / 6 files）；`node scripts/smoke-electron.mjs` 13/13，零 renderer errors。证据 `.artifacts/research-optimization/xnb-a3-*.log`、`xnb-a3-{ui,electron}/`。
+
+较广的 `ROC_SMOKE_TARGET=dist node scripts/verify-p3-workspace.mjs` 在原有外部文件刷新性能闸门失败：474ms，目标 ≤200ms；后续闸门未运行。本部分未改文件监听或该性能要求，不宣称 P3 全闸门通过。文件树首次 End 键等待超时，原代码及测试不变的单独重跑通过；并发原因未确认。受控 cell 执行仍是下一部分。
