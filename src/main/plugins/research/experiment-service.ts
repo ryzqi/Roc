@@ -3,7 +3,7 @@ import { dirname, extname, join, sep } from 'node:path';
 import { release } from 'node:os';
 import { z } from 'zod';
 import { researchExperimentFileRequestSchema, researchExperimentStartSchema, type ResearchExperimentExecution, type ResearchExperimentFile,
-  type ResearchExperimentStartRuntime, type ResearchExperimentStart } from '../../../shared/schemas/research-experiments';
+  type ResearchExperimentRuntime, type ResearchExperimentStart } from '../../../shared/schemas/research-experiments';
 import type { RocPluginContext } from '../../kernel/types';
 import { ResearchExperimentEnvironmentService, type PreparedExperimentEnvironment } from './experiment-environment';
 import { assertNativeCodeReceipt, nativeCodeReportSchema } from './experiment-native-code-schema';
@@ -60,7 +60,7 @@ export class ResearchExperimentService {
 
   recover(): void { this.repository.experiments.recover(); }
 
-  async inspect(projectId: string, runtime: ResearchExperimentStartRuntime): Promise<PreparedExperimentEnvironment['snapshot']> {
+  async inspect(projectId: string, runtime: ResearchExperimentRuntime): Promise<PreparedExperimentEnvironment['snapshot']> {
     return await this.session.run(async (signal) => {
       const workspace = await researchWorkspace(this.repository.getProject(projectId).workspacePath);
       const storage = await experimentStorage(this.rootPath);

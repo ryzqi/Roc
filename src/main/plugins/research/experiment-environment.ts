@@ -1,5 +1,5 @@
 import { dirname, join } from 'node:path';
-import { researchExperimentEnvironmentSchema, type ResearchExperimentEnvironment, type ResearchExperimentStartRuntime } from '../../../shared/schemas/research-experiments';
+import { researchExperimentEnvironmentSchema, type ResearchExperimentEnvironment, type ResearchExperimentRuntime } from '../../../shared/schemas/research-experiments';
 import { researchContentHash } from './research-files';
 import { runResearchProcess, type ResearchProcessRequest } from './process-runner';
 import { inspectNativeExperimentEnvironment } from './experiment-native-environment';
@@ -15,7 +15,7 @@ export type PreparedExperimentEnvironment = {
   nativeCode: NativeCodeReceipt | null;
 };
 
-export type NativeRuntime = Extract<ResearchExperimentStartRuntime, { kind: 'renv' | 'julia' }>;
+export type NativeRuntime = Extract<ResearchExperimentRuntime, { kind: 'renv' | 'julia' }>;
 export type NativeTools = Awaited<ReturnType<ResearchToolchain['nativeRuntime']>>;
 type ProcessRun = (input: ResearchProcessRequest) => ReturnType<typeof runResearchProcess>;
 
@@ -23,7 +23,7 @@ export class ResearchExperimentEnvironmentService {
   constructor(private readonly tools: Pick<ResearchToolchain, 'nativeRuntime' | 'typescriptRuntime'>,
     private readonly run: ProcessRun = runResearchProcess) {}
 
-  async inspect(root: string, runtime: ResearchExperimentStartRuntime, jobDir: string, signal: AbortSignal, admission: ResearchProcessScope,
+  async inspect(root: string, runtime: ResearchExperimentRuntime, jobDir: string, signal: AbortSignal, admission: ResearchProcessScope,
     onProbe: (receipt: ResearchEnvironmentProbeResource) => void): Promise<PreparedExperimentEnvironment> {
     signal.throwIfAborted();
     if (runtime.kind === 'bundled-node') {

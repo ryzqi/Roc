@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { researchExperimentEnvironmentSchema, researchExperimentFileSchema, researchExperimentIdRequestSchema, researchExperimentListRequestSchema, researchExperimentPathSchema, researchExperimentRuntimeSchema } from './research-experiments';
+import { researchExperimentFileSchema, researchExperimentIdRequestSchema, researchExperimentListRequestSchema, researchExperimentPathSchema } from './research-experiments';
 import { researchFigureOptionsSchema, researchFigureValidationSchema } from './research-plotting';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -27,28 +27,6 @@ function refineFigureStart(value: { sourcePath: string; inputPaths: string[] }, 
   }
 }
 
-const historicalFigureStartFields = {
-  requestId: z.string().min(1).max(128),
-  label: z.string().trim().min(1).max(256),
-  runtime: researchExperimentRuntimeSchema,
-  sourcePath: researchExperimentPathSchema,
-  inputPaths: z.array(researchExperimentPathSchema).max(1000),
-  arguments: z.array(z.string().max(8192).refine((value) => !value.includes('\u0000'))).max(100),
-  parameters: z.record(z.string().min(1).max(256), z.string().max(65536)).refine((value) => Object.keys(value).length <= 1000),
-  expectedEnvironmentHash: digest.optional(),
-  timeoutMs: z.number().int().min(1000).max(3600000),
-  figure: researchFigureOptionsSchema
-} as const;
-
-function refineHistoricalFigureStart(value: { sourcePath: string; inputPaths: string[] }, context: z.RefinementCtx): void {
-  if (!value.sourcePath.toLowerCase().endsWith('.py')) {
-    context.addIssue({ code: 'custom', message: 'research_figure_historical_source_invalid', path: ['sourcePath'] });
-  }
-  if (new Set(value.inputPaths).size !== value.inputPaths.length) {
-    context.addIssue({ code: 'custom', message: 'research_figure_duplicate_input', path: ['inputPaths'] });
-  }
-}
-
 export const researchOwnedFigureStartSchema = z.object(figureStartFields).strict().superRefine(refineFigureStart);
 export const researchFigureStartRequestSchema = researchOwnedFigureStartSchema.safeExtend({
   projectId: z.string().min(1)
@@ -59,12 +37,6 @@ export const researchFigureStartSchema = z.object({
   ...figureStartFields
 }).strict().superRefine(refineFigureStart);
 
-const historicalFigureRunRequestSchema = z.object({
-  projectId: z.string().min(1),
-  ownerRunId: z.string().min(1).nullable().optional(),
-  ...historicalFigureStartFields
-}).strict().superRefine(refineHistoricalFigureStart);
-
 export const researchFigureEnvironmentRequestSchema = z.object({ projectId: z.string().min(1).max(128) }).strict();
 
 export const researchFigureRendererEnvironmentSchema = z.object({
@@ -73,7 +45,7 @@ export const researchFigureRendererEnvironmentSchema = z.object({
   vegaLiteVersion: z.string().min(1),
   renderer: z.literal('@napi-rs/canvas'),
   rendererVersion: z.string().min(1),
-  pipelineVersion: z.string().min(1).default('roc-vega-pipeline/legacy'),
+  pipelineVersion: z.string().min(1),
   nodeVersion: z.string().min(1),
   platform: z.string().min(1),
   arch: z.string().min(1),
@@ -108,12 +80,12 @@ export const researchFigureRenderJobResultSchema = researchFigureRenderResultSch
 export const researchFigureRunSchema = z.object({
   id: z.string().min(1),
   projectId: z.string().min(1),
-  request: z.union([researchFigureStartSchema, historicalFigureRunRequestSchema]),
+  request: researchFigureStartSchema,
   ownerRunId: z.string().min(1).nullable(),
   workspacePath: z.string().min(1),
   workspaceRoot: z.string().min(1),
   status: z.enum(['preparing', 'running', 'completed', 'failed', 'cancelled', 'interrupted']),
-  environment: z.union([researchFigureRendererEnvironmentSchema, researchExperimentEnvironmentSchema]).nullable(),
+  environment: researchFigureRendererEnvironmentSchema.nullable(),
   files: z.array(researchExperimentFileSchema),
   inputHash: digest.nullable(),
   exitCode: z.number().int().nullable(),

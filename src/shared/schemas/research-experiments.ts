@@ -7,13 +7,6 @@ export const researchExperimentPathSchema = z.string().min(1).max(1024).refine((
 const runtimePath = z.string().min(1).max(4096).refine((value) => value.startsWith('/') && !/[\u0000-\u001f]/u.test(value), { message: 'research_absolute_path_required' });
 export const researchExperimentRuntimeSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('bundled-node') }).strict(),
-  z.object({ kind: z.literal('bundled-python') }).strict(),
-  z.object({ kind: z.literal('uv') }).strict(),
-  z.object({ kind: z.literal('renv'), rootPath: runtimePath, libraryPath: researchExperimentPathSchema }).strict(),
-  z.object({ kind: z.literal('julia'), rootPath: runtimePath, depotPath: runtimePath }).strict()
-]);
-export const researchExperimentStartRuntimeSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('bundled-node') }).strict(),
   z.object({ kind: z.literal('renv'), rootPath: runtimePath, libraryPath: researchExperimentPathSchema }).strict(),
   z.object({ kind: z.literal('julia'), rootPath: runtimePath, depotPath: runtimePath }).strict()
 ]);
@@ -21,11 +14,6 @@ const nativeRuntimeSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('renv'), rootPath: runtimePath, libraryPath: researchExperimentPathSchema }).strict(),
   z.object({ kind: z.literal('julia'), rootPath: runtimePath, depotPath: runtimePath }).strict()
 ]);
-const pythonRuntimeSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('bundled-python') }).strict(),
-  z.object({ kind: z.literal('uv') }).strict()
-]);
-const historicalRuntimeSchema = z.union([pythonRuntimeSchema, nativeRuntimeSchema]);
 export const researchExperimentFileSchema = z.object({
   area: z.enum(['input', 'output', 'log']), path: researchExperimentPathSchema,
   sha256: digest, size: z.number().int().nonnegative()
@@ -38,7 +26,7 @@ export const researchExperimentEnvironmentSchema = z.object({
   hash: digest
 }).strict();
 export const researchExperimentEnvironmentRequestSchema = z.object({
-  projectId: z.string().min(1), runtime: researchExperimentStartRuntimeSchema
+  projectId: z.string().min(1), runtime: researchExperimentRuntimeSchema
 }).strict();
 const experimentStartSharedFields = {
   requestId: z.string().min(1).max(128), label: z.string().trim().min(1).max(256),
@@ -69,30 +57,6 @@ export const researchExperimentStartRequestSchema = z.discriminatedUnion('engine
   typescriptStartSchema.safeExtend({ projectId: z.string().min(1) }),
   nativeStartSchema.safeExtend({ projectId: z.string().min(1) })
 ]);
-const historicalExperimentStartFields = {
-  requestId: z.string().min(1).max(128), label: z.string().trim().min(1).max(256),
-  sourcePath: researchExperimentPathSchema, inputPaths: z.array(researchExperimentPathSchema).max(1000),
-  parameters: z.record(z.string().min(1).max(256), z.string().max(65536)).refine((value) => Object.keys(value).length <= 1000),
-  expectedEnvironmentHash: digest.optional(), timeoutMs: z.number().int().min(1000).max(3600000), network: z.enum(['disabled', 'enabled'])
-} as const;
-const historicalExperimentStartSchema = z.object({
-  projectId: z.string().min(1), ownerRunId: z.string().min(1).nullable().optional(), ...historicalExperimentStartFields,
-  engine: z.enum(['python', 'r', 'julia']), runtime: historicalRuntimeSchema,
-  arguments: z.array(z.string().max(8192).refine((value) => !value.includes(String.fromCharCode(0)))).max(100)
-}).strict().superRefine((value, context) => {
-  let extension = '.py';
-  let expectedRuntime: string | null = null;
-  switch (value.engine) {
-    case 'python': break;
-    case 'r': extension = '.r'; expectedRuntime = 'renv'; break;
-    case 'julia': extension = '.jl'; expectedRuntime = 'julia'; break;
-  }
-  if (!value.sourcePath.toLowerCase().endsWith(extension)) context.addIssue({ code: 'custom', message: 'research_experiment_source_type_invalid', path: ['sourcePath'] });
-  if (new Set(value.inputPaths).size !== value.inputPaths.length) context.addIssue({ code: 'custom', message: 'research_experiment_duplicate_input', path: ['inputPaths'] });
-  if (expectedRuntime === null ? !['bundled-python', 'uv'].includes(value.runtime.kind) : value.runtime.kind !== expectedRuntime) {
-    context.addIssue({ code: 'custom', message: 'research_experiment_runtime_mismatch', path: ['runtime'] });
-  }
-});
 const typescriptProjectStartSchema = typescriptStartSchema.extend({
   projectId: z.string().min(1), ownerRunId: z.string().min(1).nullable().optional()
 });
@@ -100,9 +64,8 @@ const nativeProjectStartSchema = nativeStartSchema.extend({
   projectId: z.string().min(1), ownerRunId: z.string().min(1).nullable().optional()
 });
 export const researchExperimentStartSchema = z.discriminatedUnion('engine', [typescriptProjectStartSchema, nativeProjectStartSchema]);
-export const researchExperimentHistoryStartSchema = z.union([researchExperimentStartSchema, historicalExperimentStartSchema]);
 export const researchExperimentExecutionSchema = z.object({
-  id: z.string().min(1), projectId: z.string().min(1), request: researchExperimentHistoryStartSchema, ownerRunId: z.string().min(1).nullable(),
+  id: z.string().min(1), projectId: z.string().min(1), request: researchExperimentStartSchema, ownerRunId: z.string().min(1).nullable(),
   workspacePath: z.string().min(1), workspaceRoot: z.string().min(1), status: z.enum(['preparing', 'running', 'completed', 'failed', 'cancelled', 'interrupted']),
   environment: researchExperimentEnvironmentSchema.nullable(), files: z.array(researchExperimentFileSchema),
   inputHash: digest.nullable(), exitCode: z.number().int().nullable(), error: z.string().nullable(), artifactId: z.string().nullable(),
@@ -127,10 +90,8 @@ export const researchWorkspaceFileSaveRequestSchema = researchWorkspaceFileReque
 }).strict();
 
 export type ResearchExperimentRuntime = z.infer<typeof researchExperimentRuntimeSchema>;
-export type ResearchExperimentStartRuntime = z.infer<typeof researchExperimentStartRuntimeSchema>;
 export type ResearchExperimentEnvironment = z.infer<typeof researchExperimentEnvironmentSchema>;
 export type ResearchExperimentStart = z.infer<typeof researchExperimentStartSchema>;
-export type ResearchExperimentHistoryStart = z.infer<typeof researchExperimentHistoryStartSchema>;
 export type ResearchExperimentExecution = z.infer<typeof researchExperimentExecutionSchema>;
 export type ResearchExperimentFile = z.infer<typeof researchExperimentFileSchema>;
 export type ResearchExperimentFileContent = z.infer<typeof researchExperimentFileContentSchema>;

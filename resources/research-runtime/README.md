@@ -10,7 +10,9 @@
 
 ## 实验与科研工具
 
-科研运行时不分发 Python 或 uv，也不会执行 Python 实验源码。历史 Python 运行记录仍可只读查看，不支持重新运行。数据实验使用 Electron 45 内置的 Node 24.22.0 执行版本化 `.mts` 源码，不额外安装转译器；TypeScript 实验通过 `run(context)` 接口读取快照、处理参数并写入受限输出目录，CSV 输入由锁定的 `csv-parse` 处理，CSV 输出由 `csv-stringify` 流式写入；`d3-dsv` 和 `simple-statistics` 仍作为锁定依赖开放。R 和 Julia 实验保留各自的环境配置与运行链路。科研图稿使用本地 Vega-Lite v6 spec 与快照数据在隔离任务中原生渲染。
+科研运行时不分发 Python 或 uv，也不会执行 Python 实验源码。实验新建与已存执行快照使用同一个当前协议：仅接受离线 TypeScript、R 和 Julia 请求。旧 `bundled-python`、`uv`、联网实验和 Python 图稿快照明确报协议错误，不提供读取或重跑适配；数据库原始记录不被改写或删除。Vega 图稿只接受实际渲染环境，`pipelineVersion` 必须明确提供，不生成历史版本默认值。
+
+数据实验使用 Electron 45 内置的 Node 24.22.0 执行版本化 `.mts` 源码，不额外安装转译器；TypeScript 实验通过 `run(context)` 接口读取快照、处理参数并写入受限输出目录，CSV 输入由锁定的 `csv-parse` 处理，CSV 输出由 `csv-stringify` 流式写入；`d3-dsv` 和 `simple-statistics` 仍作为锁定依赖开放。R 和 Julia 实验保留各自的环境配置与运行链路。科研图稿使用本地 Vega-Lite v6 spec 与快照数据在隔离任务中原生渲染。
 
 Vale 3.24.0 与仓库内 `vale/` 规则集用于文稿检查（合同见 `docs/research-prose.md`）。Typst 0.15.0 只负责导出附带的 `report.pdf`（`src/main/plugins/research/typst-report.ts`），不进入 LaTeX 主链。`csl/` 保存 APA、IEEE、GB/T 7714 引用格式数据；TeX 离线子集由 `tex-bundle-files.txt` 固定。
 
