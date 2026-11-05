@@ -48,7 +48,9 @@ export class ResearchExperimentRepository {
       if (ownerRunId !== null) this.research.runs.requireActive(ownerRunId, request.projectId);
       const run = researchExperimentExecutionSchema.parse({ id, projectId: request.projectId, request, ownerRunId, workspacePath: workspace, workspaceRoot,
         status: 'preparing', environment: null, files: [], inputHash: null, exitCode: null, error: null, artifactId: null, createdAt, startedAt: null, endedAt: null });
-      const command = request.engine === 'typescript' ? ['typescript-v1', request.sourcePath] : [request.sourcePath, ...request.arguments];
+      const command = request.engine === 'typescript' ? ['typescript-v1', request.sourcePath]
+        : request.engine === 'python' ? ['python-v1', request.sourcePath, ...request.arguments]
+        : [request.sourcePath, ...request.arguments];
       this.db.prepare(`INSERT INTO research_experiment_runs
         (id,project_id,label,command,parameters_json,environment_json,status,outputs_json,started_at,ended_at)
         VALUES (?,?,?,?,?,?,'running','[]',?,NULL)`).run(id, run.projectId, request.label, JSON.stringify(command), JSON.stringify(request.parameters), '{}', createdAt);
@@ -118,6 +120,7 @@ export class ResearchExperimentRepository {
       this.save(value);
       const command = run.request.engine === 'typescript'
         ? [environment.executable, '--permission', run.request.sourcePath]
+        : run.request.engine === 'python' ? [environment.executable, 'python-v1', run.request.sourcePath, ...run.request.arguments]
         : [environment.executable, run.request.sourcePath, ...run.request.arguments];
       this.db.prepare('UPDATE research_experiment_runs SET command = ?,environment_json = ? WHERE id = ?').run(
         JSON.stringify(command), JSON.stringify({ kind: environment.runtime.kind, version: environment.version, hash: environment.hash, toolchainHash: environment.toolchainHash }), id);

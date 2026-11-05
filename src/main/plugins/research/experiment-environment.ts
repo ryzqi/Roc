@@ -8,8 +8,7 @@ import type { NativeCodeReceipt } from './experiment-native-code-schema';
 import type { ResearchEnvironmentProbeResource } from '../../../shared/schemas/research-process-resources';
 import type { ResearchPythonEnvironmentService } from './python-environment-service';
 import type { InspectedPythonEnvironment } from './experiment-python-probe';
-import { pythonExperimentFlags } from './experiment-python-probe';
-import { pythonExperimentBootstrapHash } from './experiment-python-process';
+import { pythonExperimentToolchainHash } from './experiment-python-process';
 
 export type PreparedExperimentEnvironment = {
   snapshot: ResearchExperimentEnvironment;
@@ -63,11 +62,7 @@ export class ResearchExperimentEnvironmentService {
       const value = researchExperimentEnvironmentSchema.omit({ hash: true }).parse({
         runtime, executable: controls.selectedExecutable, prefix: report.prefix, basePrefix: report.basePrefix,
         version: report.version, platform: report.platform, architecture: report.architecture,
-        toolchainHash: researchContentHash(JSON.stringify({
-          inspectionContractVersion: codeReceipt.metadataIdentity.inspectionContractVersion,
-          probe: codeReceipt.metadataIdentity.probe, executionContractVersion: 1,
-          bootstrap: pythonExperimentBootstrapHash(), flags: pythonExperimentFlags
-        })),
+        toolchainHash: pythonExperimentToolchainHash(codeReceipt),
         metadataHash, packages: report.distributions, lockFiles: [lockFile]
       });
       const snapshot = researchExperimentEnvironmentSchema.parse({ ...value, hash: researchContentHash(JSON.stringify(value)) });

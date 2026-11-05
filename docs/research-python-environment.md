@@ -1,6 +1,6 @@
 # Python 环境预检与隔离探针
 
-PR08 当前提供环境预检、真实隔离探针、主进程确认的原生环境选择与项目绑定，以及现有实验环境 API 的 Python 预览。项目管理的任务区已提供选择入口；新建 Python 实验、运行及发布尚未启用。
+PR08 当前提供环境预检、真实隔离探针、主进程确认的原生环境选择与项目绑定、Python 环境预览，以及固定版本的 Python 实验运行与冻结发布。项目管理的任务区提供环境选择入口；实验角色的环境读取工具和 Python 专项恢复验收仍待完成。
 
 ## 用户选择与项目绑定
 
@@ -63,7 +63,7 @@ PR08 当前提供环境预检、真实隔离探针、主进程确认的原生环
 
 ## 固定实验启动程序
 
-A4B2 提供内部 Python 运行适配，产品 start 合同仍未启用。适配只接受已核验环境、版本 1 源码、uint32 随机种子、声明参数与参数列表，以及本次只读输入、输出和临时目录。启动旗标固定为 `-I -S -B -X utf8 -c`；调用者不能传解释器旗标。环境 toolchainHash 绑定启动程序 SHA-256、旗标和执行合同版本。
+Python start 的公开、owned 和存储合同一致：`engine: 'python'`、`.py` 源码、必需 `sourceVersion: 1`、uint32 `seed`、`expectedEnvironmentHash`，以及声明的参数、参数列表和输入路径。runtime 只接受 `{ kind: 'python', selectionId, expectedHash }`。适配只接受已核验环境及本次只读输入、输出和临时目录。启动旗标固定为 `-I -S -B -X utf8 -c`；调用者不能传解释器旗标。环境 toolchainHash 绑定启动程序 SHA-256、旗标和执行合同版本。
 
 启动程序先核对真实解释器报告，再将模块路径明确设为三个已核验标准路径及所选包目录。在用户源码和安装包执行前，首行 stdout 输出并 flush 启动报告。主进程严格核对报告、模块路径、绝对源码路径和种子；缺失或改变的报告拒绝结果，并保留真实日志、资源与准入回执。
 
@@ -71,7 +71,24 @@ A4B2 提供内部 Python 运行适配，产品 start 合同仍未启用。适配
 
 实际计算复用统一 runner，仅输出和临时目录可写，不授予网络、GPU 或项目其他文件访问。非零退出、用户异常、超时、日志洪泛及资源拒绝保留原始结果。取消会回收完整进程树。
 
+## 实验审计、复跑与发布
+
+实验 service 冻结源码、声明输入和锁文件，输入身份包含源码版本与种子。计算前保存完整 `log/environment-code.json`，收到实际启动报告后保存 `log/python-startup.json`；`log/resources.json` 保留计算资源及准备、验证各一次真实环境探针。三个审计文件均不进入科学内容索引。
+
+计算完成时重新核对原工作区输入和完整环境。相同 requestId 返回已有终态，不重新计算或探测，但仍核对原始输入；请求内容改变直接冲突。显式新 requestId 创建新运行。缺少版本、种子、选择身份或预览哈希的请求不能创建实验，错误预览身份不能开始计算。
+
+发布逐字校验冻结文件，并离线核验代码清单、原环境身份、runtime、toolchain、启动程序及真实启动报告。报告必须绑定 run、project、input、environment、源码路径、版本、种子和模块路径；重写审计字段后重新计算文件 checksum 仍不能通过身份核验。非成功实验不能发布。已有冻结发布可在原工作区改变后核验，导出复制原始审计文件和哈希。
+
 ## 验证
+
+A4C 服务接入（均从仓库根目录执行）：
+
+- `node --test --test-concurrency=1 tests/integration/research-python-experiments.test.mjs`：最终 6/6，真实 CPython 计算、确定性重复、同请求重放、冲突与跨项目拒绝、输入/安装包漂移、版本和种子身份、预览不匹配、离线发布与导出审计、重新计算 checksum 后的身份篡改拒绝、原始 exit 7、真实超时及 TERM-ignoring 父/子/孙取消回收。
+- `node --test --test-concurrency=1 tests/integration/research-python-selection.test.mjs tests/integration/research-native-code-integrity.test.mjs tests/integration/research-native-environment-boundaries.test.mjs tests/integration/research-julia-environment-boundaries.test.mjs`：24/24。R/Julia 部分使用真实 native C 适配器，不代表真实 R/Julia 科学执行。
+- `node --test tests/unit/research-current-execution-contracts.test.mjs tests/unit/research-python-code-receipt.test.mjs tests/unit/research-experiment-resources.test.mjs tests/unit/research-environment-probe-resources.test.mjs`：14/14。
+- `pnpm build`（含 typecheck）、`node scripts/run-research-p0.mjs`（13/13）、`node scripts/smoke-electron.mjs`（13/13，零 renderer errors）、`pnpm check:ipc`、`pnpm check:renderer-chunks`（1132907 bytes / 6 files）均通过。
+
+初轮真实服务测试 5/6，第一项在环境预览阶段失败，stdout/stderr 为空且无采样，瞬态根因尚未确认。保留实际 probe 回执后原样单独复现进入计算，并发现测试跨项目 fixture 重用了已占用工作区；修正为独立工作区，原断言不变。独立 1/1 及最终全套 6/6 通过。没有增加产品重试或放宽边界。日志为 `.artifacts/research-optimization/pr08-a4c-*.log`，完整实际回执为 `pr08-a4c/python-experiments.json`。本增量未修改 renderer，也未完成 Python 专项 shutdown/restart 验收。
 
 A4B2 固定启动程序（均从仓库根目录执行）：
 
@@ -80,7 +97,7 @@ A4B2 固定启动程序（均从仓库根目录执行）：
 - `node --test tests/unit/research-current-execution-contracts.test.mjs tests/unit/research-python-code-receipt.test.mjs`：8/8。
 - `pnpm build`（含 typecheck）、`node scripts/run-research-p0.mjs`（13/13）、`node scripts/smoke-electron.mjs`（13/13，零 renderer errors）、`pnpm check:ipc`、`pnpm check:renderer-chunks`（1132907 bytes / 6 files）均通过。
 
-初轮实际测试 3/7，四项失败来自测试主机试图重写自身创建的 0400 源码。测试 helper 在主机侧显式改为 0600、重写后恢复 0400；实际 sandbox 和只读断言保持原样。日志保留于 `.artifacts/research-optimization/pr08-a4b2-*.log`。该增量尚未接入实验 service、发布和复跑合同。
+初轮实际测试 3/7，四项失败来自测试主机试图重写自身创建的 0400 源码。测试 helper 在主机侧显式改为 0600、重写后恢复 0400；实际 sandbox 和只读断言保持原样。日志保留于 `.artifacts/research-optimization/pr08-a4b2-*.log`。服务、发布和复跑接入见上面的 A4C 记录。
 
 A4B1 环境预览（下列命令均从仓库根目录执行）：
 
@@ -103,7 +120,7 @@ A4B1 环境预览（下列命令均从仓库根目录执行）：
 
 初轮真实测试 5/8：两个测试错误地要求短进程一定有采样，一个测试假定此发行版的内建 `zlib` 有 `__file__`。改为将完整回执与独立捕获的真实 runner 结果逐项核对，并使用实际 `_dbm` 原生文件；保留全部边界、漂移和失败断言。修正后的 10 项通过，初轮日志保留。
 
-完整运行日志位于 `.artifacts/research-optimization/pr08-a2-*.log`，最终实际回执为 `pr08-a2/python-environment.json`。Python 实验复跑/恢复/发布及完整 PR08 验收尚未完成。
+完整运行日志位于 `.artifacts/research-optimization/pr08-a2-*.log`，最终实际回执为 `pr08-a2/python-environment.json`。后续实验复跑与发布见 A4C；Python 专项恢复及完整 PR08 验收尚未完成。
 
 项目选择增量从同一工作目录验证：
 

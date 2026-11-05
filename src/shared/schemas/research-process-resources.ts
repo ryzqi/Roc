@@ -40,7 +40,7 @@ export const researchEnvironmentProbeResourceSchema = z.object({
 
 export const researchExperimentResourceReportSchema = z.object({
   schemaVersion: z.literal(3),
-  runId: z.string().min(1), projectId: z.string().min(1), engine: z.enum(['typescript', 'r', 'julia']),
+  runId: z.string().min(1), projectId: z.string().min(1), engine: z.enum(['typescript', 'r', 'julia', 'python']),
   inputHash: digest.nullable(), environmentHash: digest.nullable(),
   backend: z.object({
     id: z.literal('macos-seatbelt'), contractVersion: z.literal(2), kernelRelease: z.string().min(1),
@@ -75,7 +75,7 @@ export const researchExperimentResourceReportSchema = z.object({
   if (value.outcome === 'rejected' && (value.inputHash === null || value.environmentHash === null)) {
     context.addIssue({ code: 'custom', message: 'research_experiment_resource_basis_required' });
   }
-  const expected = value.engine === 'typescript' ? [] : value.engine === 'r' ? ['environment'] : ['runtime_version', 'environment'];
+  const expected = value.engine === 'typescript' ? [] : value.engine === 'julia' ? ['runtime_version', 'environment'] : ['environment'];
   const preparation = value.probes.filter(probe => probe.phase === 'preparation');
   const verification = value.probes.filter(probe => probe.phase === 'verification');
   if (JSON.stringify(value.probes.map(probe => probe.phase)) !== JSON.stringify([

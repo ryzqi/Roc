@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { z } from 'zod';
 import type { ResearchExperimentStart } from '../../../shared/schemas/research-experiments';
-import { pythonEnvironmentReportSchema, assertPythonCodeReceipt } from './experiment-python-code-schema';
+import { pythonEnvironmentReportSchema, assertPythonCodeReceipt, type PythonCodeReceipt } from './experiment-python-code-schema';
 import { pythonExperimentFlags, type InspectedPythonEnvironment } from './experiment-python-probe';
 import { experimentRunnerRequestLimit } from './experiment-files';
 import { researchContentHash, researchRelativePath } from './research-files';
@@ -17,6 +17,11 @@ export const pythonExecutionStartupSchema = z.strictObject({
   seed: seedSchema
 });
 export type PythonExecutionStartup = z.infer<typeof pythonExecutionStartupSchema>;
+const digest = z.string().regex(/^[a-f0-9]{64}$/u);
+export const pythonExecutionReportSchema = z.strictObject({
+  schemaVersion: z.literal(1), runId: z.string().min(1), projectId: z.string().min(1),
+  inputHash: digest, environmentHash: digest, bootstrapHash: digest, startup: pythonExecutionStartupSchema
+});
 
 /** The first stdout record is flushed before installed package or user source execution. */
 export const pythonExperimentBootstrap = String.raw`import sys, os, json
@@ -60,6 +65,14 @@ exec(code, module.__dict__)
 
 export function pythonExperimentBootstrapHash(): string {
   return researchContentHash(pythonExperimentBootstrap);
+}
+
+export function pythonExperimentToolchainHash(receipt: PythonCodeReceipt): string {
+  return researchContentHash(JSON.stringify({
+    inspectionContractVersion: receipt.metadataIdentity.inspectionContractVersion,
+    probe: receipt.metadataIdentity.probe, executionContractVersion: 1,
+    bootstrap: pythonExperimentBootstrapHash(), flags: pythonExperimentFlags
+  }));
 }
 
 type PythonSource = Pick<ResearchExperimentStart, 'sourcePath' | 'inputPaths' | 'parameters'> & {

@@ -17,9 +17,12 @@ const typescript = { ...fields, engine: 'typescript', runtime: { kind: 'bundled-
 const native = (engine) => ({ ...fields, engine, arguments: [], sourcePath: engine === 'r' ? 'analysis.r' : 'analysis.jl',
   runtime: engine === 'r' ? { kind: 'renv', rootPath: '/runtime/r', libraryPath: 'renv/library' }
     : { kind: 'julia', rootPath: '/runtime/julia', depotPath: '/runtime/depot' } });
+const python = { ...fields, engine: 'python', sourcePath: 'analysis.py', sourceVersion: 1, seed: 42,
+  arguments: [], expectedEnvironmentHash: 'b'.repeat(64),
+  runtime: { kind: 'python', selectionId: 'python_environment_selected', expectedHash: 'a'.repeat(64) } };
 
 test('current experiment creation and stored execution use identical strict request limits', () => {
-  for (const request of [typescript, native('r'), native('julia')]) {
+  for (const request of [typescript, native('r'), native('julia'), python]) {
     assert.deepEqual(experiments.researchExperimentStartSchema.parse(request), request);
     assert.deepEqual(experiments.researchExperimentExecutionSchema.shape.request.parse(request), request);
     for (const changed of [
@@ -44,7 +47,7 @@ test('current experiment creation and stored execution use identical strict requ
   }
 });
 
-test('Python environment inspection requires an exact path-free selection while Python starts remain disabled', () => {
+test('Python inspection and starts require exact path-free selections, version, seed and preview identity', () => {
   const runtime = { kind: 'python', selectionId: 'python_environment_selected', expectedHash: 'a'.repeat(64) };
   assert.deepEqual(experiments.researchExperimentEnvironmentRequestSchema.parse({ projectId: 'project', runtime }),
     { projectId: 'project', runtime });
@@ -56,10 +59,20 @@ test('Python environment inspection requires an exact path-free selection while 
     { kind: 'python', selectionId: runtime.selectionId },
     { kind: 'python', expectedHash: runtime.expectedHash }
   ]) assert.equal(experiments.researchExperimentRuntimeSchema.safeParse(changed).success, false);
-  const start = { ...fields, engine: 'python', sourcePath: 'analysis.py', runtime, arguments: [] };
-  assert.equal(experiments.researchExperimentStartSchema.safeParse(start).success, false);
-  assert.equal(experiments.researchExperimentStartRequestSchema.safeParse(start).success, false);
-  assert.equal(experiments.researchOwnedExperimentStartSchema.safeParse(start).success, false);
+  const { projectId: _projectId, ...owned } = python;
+  assert.deepEqual(experiments.researchOwnedExperimentStartSchema.parse(owned), owned);
+  assert.deepEqual(experiments.researchExperimentStartRequestSchema.parse(python), python);
+  const { seed: _seed, ...noSeed } = python;
+  const { sourceVersion: _version, ...noVersion } = python;
+  const { expectedEnvironmentHash: _environment, ...noEnvironment } = python;
+  for (const changed of [noSeed, noVersion, noEnvironment, { ...python, seed: -1 }, { ...python, seed: 0x1_0000_0000 },
+    { ...python, seed: 0.5 }, { ...python, sourceVersion: 2 }, { ...python, sourcePath: 'source.mts' },
+    { ...python, arguments: ['\0'] }, { ...python, runtime: { ...runtime, executable: '/usr/bin/python3' } }]) {
+    assert.equal(experiments.researchExperimentStartSchema.safeParse(changed).success, false);
+    assert.equal(experiments.researchExperimentStartRequestSchema.safeParse(changed).success, false);
+    const { projectId: _project, ...request } = changed;
+    assert.equal(experiments.researchOwnedExperimentStartSchema.safeParse(request).success, false);
+  }
 });
 
 test('repository refuses obsolete snapshots without rewriting or deleting retained user records', () => {

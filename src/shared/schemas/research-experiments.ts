@@ -55,10 +55,20 @@ const nativeStartSchema = z.object({
   if (new Set(value.inputPaths).size !== value.inputPaths.length) context.addIssue({ code: 'custom', message: 'research_experiment_duplicate_input', path: ['inputPaths'] });
   if (value.runtime.kind !== runtimeKind) context.addIssue({ code: 'custom', message: 'research_experiment_runtime_mismatch', path: ['runtime'] });
 });
-export const researchOwnedExperimentStartSchema = z.discriminatedUnion('engine', [typescriptStartSchema, nativeStartSchema]);
+const pythonStartSchema = z.strictObject({
+  ...experimentStartSharedFields, engine: z.literal('python'), runtime: researchPythonExperimentRuntimeSchema,
+  sourceVersion: z.literal(1), seed: z.number().int().min(0).max(0xffff_ffff),
+  expectedEnvironmentHash: digest,
+  arguments: z.array(z.string().max(8192).refine(value => !value.includes(String.fromCharCode(0)))).max(100)
+}).superRefine((value, context) => {
+  if (!value.sourcePath.toLowerCase().endsWith('.py')) context.addIssue({ code: 'custom', message: 'research_experiment_source_type_invalid', path: ['sourcePath'] });
+  if (new Set(value.inputPaths).size !== value.inputPaths.length) context.addIssue({ code: 'custom', message: 'research_experiment_duplicate_input', path: ['inputPaths'] });
+});
+export const researchOwnedExperimentStartSchema = z.discriminatedUnion('engine', [typescriptStartSchema, nativeStartSchema, pythonStartSchema]);
 export const researchExperimentStartRequestSchema = z.discriminatedUnion('engine', [
   typescriptStartSchema.safeExtend({ projectId: z.string().min(1) }),
-  nativeStartSchema.safeExtend({ projectId: z.string().min(1) })
+  nativeStartSchema.safeExtend({ projectId: z.string().min(1) }),
+  pythonStartSchema.safeExtend({ projectId: z.string().min(1) })
 ]);
 const typescriptProjectStartSchema = typescriptStartSchema.extend({
   projectId: z.string().min(1), ownerRunId: z.string().min(1).nullable().optional()
@@ -66,7 +76,10 @@ const typescriptProjectStartSchema = typescriptStartSchema.extend({
 const nativeProjectStartSchema = nativeStartSchema.extend({
   projectId: z.string().min(1), ownerRunId: z.string().min(1).nullable().optional()
 });
-export const researchExperimentStartSchema = z.discriminatedUnion('engine', [typescriptProjectStartSchema, nativeProjectStartSchema]);
+const pythonProjectStartSchema = pythonStartSchema.safeExtend({
+  projectId: z.string().min(1), ownerRunId: z.string().min(1).nullable().optional()
+});
+export const researchExperimentStartSchema = z.discriminatedUnion('engine', [typescriptProjectStartSchema, nativeProjectStartSchema, pythonProjectStartSchema]);
 export const researchExperimentExecutionSchema = z.object({
   id: z.string().min(1), projectId: z.string().min(1), request: researchExperimentStartSchema, ownerRunId: z.string().min(1).nullable(),
   workspacePath: z.string().min(1), workspaceRoot: z.string().min(1), status: z.enum(['preparing', 'running', 'completed', 'failed', 'cancelled', 'interrupted']),

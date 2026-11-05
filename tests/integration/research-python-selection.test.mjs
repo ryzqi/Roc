@@ -14,7 +14,7 @@ let api, root;
 const receipts = [];
 before(async () => { api = await loadResearchTestApi(); root = await realpath(await mkdtemp('/private/tmp/roc-python-selection-')); });
 after(async () => {
-  const output = join(process.cwd(), '.artifacts/research-optimization/pr08-a4b1');
+  const output = join(process.cwd(), '.artifacts/research-optimization/pr08-a4c-selection');
   await mkdir(output, { recursive: true });
   await writeFile(join(output, 'python-selection.json'), JSON.stringify({
     python, actualIsolatedPython: true, nativePicker: 'fixture supplied path; no actual user product selection', receipts
@@ -78,7 +78,7 @@ test('main user selection binds actual isolated CPython identity and exact proje
   } finally { await f.cleanup(); }
 });
 
-test('existing environment API rechecks the selected Python and preserves exact identity without enabling computation', async () => {
+test('existing environment API rechecks selected Python identity and refuses incomplete computation contracts', async () => {
   const f = await fixture({ scenario: 'environment-api' });
   const environments = new api.ResearchExperimentEnvironmentService({
     nativeRuntime: async () => assert.fail('Python preview must not resolve native tools'),
@@ -119,7 +119,7 @@ test('existing environment API rechecks the selected Python and preserves exact 
     }], 72);
     assert.equal(pathInjection.ok, false);
     const compute = await adapter.invoke('research.startExperiment', [{
-      projectId: f.project.id, runtime, engine: 'python', requestId: 'not-enabled', label: 'Python',
+      projectId: f.project.id, runtime, engine: 'python', requestId: 'incomplete-contract', label: 'Python',
       sourcePath: 'analysis.py', inputPaths: [], parameters: {}, arguments: [], timeoutMs: 5000, network: 'disabled'
     }], 72);
     assert.equal(compute.ok, false);

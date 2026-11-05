@@ -7,6 +7,9 @@ import { researchExperimentFileRequestSchema, researchExperimentStartSchema, typ
 import type { RocPluginContext } from '../../kernel/types';
 import { ResearchExperimentEnvironmentService, type PreparedExperimentEnvironment } from './experiment-environment';
 import { assertNativeCodeReceipt, nativeCodeReportSchema } from './experiment-native-code-schema';
+import { assertPythonCodeReceipt, pythonCodeReportSchema } from './experiment-python-code-schema';
+import { runPythonExperimentProcess, pythonExecutionReportSchema, pythonExecutionStartupSchema,
+  pythonExperimentBootstrapHash, pythonExperimentToolchainHash, type PythonExecutionStartup } from './experiment-python-process';
 import { collectExperimentFiles, experimentCsvRowLimit, experimentFileLimit, experimentInputTotalLimit, experimentOutputTotalLimit,
   experimentRunnerRequestLimit, experimentFileCountLimit, experimentDirectoryEntryLimit, experimentStorage, snapshotExperimentInputs } from './experiment-files';
 import { juliaExperimentFlags, rExperimentCommand } from './experiment-native-probes';
@@ -84,6 +87,9 @@ export class ResearchExperimentService {
       signal.throwIfAborted();
       if (project.workspacePath === null) throw new Error('research_project_workspace_required');
       const run = this.repository.experiments.create(request, project.workspacePath, workspace, storage);
+      if (request.engine === 'python' && run.status !== 'preparing') {
+        await this.verifyWorkspaceInputs(workspace, run.files, signal);
+      }
       try {
         this.repository.tasks.linkOwned({ kind: 'experiment', executionId: run.id, projectId: run.projectId,
           ownerRunId: run.ownerRunId, goal: request.label, snapshot: run.request });
@@ -214,9 +220,7 @@ export class ResearchExperimentService {
     let resources: ResearchExperimentResourceReport | null = null;
     const probes: ResearchExperimentResourceReport['probes'] = [];
     try {
-      const parsedRequest = researchExperimentStartSchema.safeParse(initial.request);
-      if (!parsedRequest.success) throw new ResearchProcessError('research_experiment_legacy_read_only');
-      const request = parsedRequest.data;
+      const request = researchExperimentStartSchema.parse(initial.request);
       resources = {
         schemaVersion: 3, runId: initial.id, projectId: initial.projectId, engine: request.engine, probes,
         inputHash: null, environmentHash: null,
@@ -243,12 +247,23 @@ export class ResearchExperimentService {
         if (Buffer.byteLength(report) > experimentFileLimit) throw new Error('research_experiment_native_code_report_limit');
         await writeFile(join(root, 'log/environment-code.json'), report, { flag: 'wx', mode: 0o400 });
       }
+      if (request.engine === 'python') {
+        if (prepared.python === null) throw new ResearchProcessError('research_experiment_runtime_mismatch');
+        const python = assertPythonCodeReceipt(prepared.python.codeReceipt, prepared.snapshot.metadataHash);
+        const report = JSON.stringify(pythonCodeReportSchema.parse({ schemaVersion: 1, runId: initial.id, projectId: initial.projectId,
+          inputHash: snapshot.hash, environmentHash: prepared.snapshot.hash, python }));
+        if (Buffer.byteLength(report) > experimentFileLimit) throw new Error('research_experiment_python_code_report_limit');
+        await writeFile(join(root, 'log/environment-code.json'), report, { flag: 'wx', mode: 0o400 });
+      }
       await this.verifyProject(initial, signal);
       this.repository.experiments.start(initial.projectId, initial.id, prepared.snapshot, files, snapshot.hash);
       resources.inputHash = snapshot.hash;
       resources.environmentHash = prepared.snapshot.hash;
+      let startup: PythonExecutionStartup | null = null;
       try {
-        const result = await this.executeProcess({ request, prepared, input, output: out, scratch, signal });
+        const executed = await this.executeProcess({ request, prepared, input, output: out, scratch, signal });
+        const { result } = executed;
+        startup = executed.startup;
         output = result;
         resources = { ...resources, outcome: 'returned', exitCode: result.exitCode, error: null,
           usage: result.resourceUsage, admission: result.admission };
@@ -258,8 +273,15 @@ export class ResearchExperimentService {
           admission: error instanceof ResearchProcessError ? error.admission : null };
         throw error;
       }
+      if (request.engine === 'python') {
+        const report = JSON.stringify(pythonExecutionReportSchema.parse({ schemaVersion: 1,
+          runId: initial.id, projectId: initial.projectId, inputHash: snapshot.hash,
+          environmentHash: prepared.snapshot.hash, bootstrapHash: pythonExperimentBootstrapHash(), startup }));
+        await writeFile(join(root, 'log/python-startup.json'), report, { flag: 'wx', mode: 0o400 });
+      }
       if (output.exitCode !== 0) throw new Error('research_experiment_process_failed');
       await this.verifyProject(initial, signal);
+      if (request.engine === 'python') await this.verifyWorkspaceInputs(workspace, snapshot.files, signal);
       const current = await this.environments.inspect(workspace, request.runtime, scratch, signal, { projectId: request.projectId, priority: 'user' },
         receipt => probes.push({ ...receipt, phase: 'verification' }));
       if (current.snapshot.hash !== prepared.snapshot.hash) throw new Error('research_experiment_environment_changed');
@@ -338,7 +360,16 @@ export class ResearchExperimentService {
     }
   }
 
-  private async executeProcess({ request, prepared, input, output, scratch, signal }: ExecuteProcessInput): Promise<ResearchProcessResult> {
+  private async verifyWorkspaceInputs(workspace: string, files: readonly ResearchExperimentFile[], signal: AbortSignal): Promise<void> {
+    for (const file of files.filter(file => file.area === 'input')) {
+      signal.throwIfAborted();
+      const bytes = await readResearchFile(workspace, file.path, experimentFileLimit);
+      if (bytes.length !== file.size || researchContentHash(bytes) !== file.sha256) throw new Error('research_experiment_input_changed');
+    }
+  }
+
+  private async executeProcess({ request, prepared, input, output, scratch, signal }: ExecuteProcessInput
+  ): Promise<{ result: ResearchProcessResult; startup: PythonExecutionStartup | null }> {
     const { fileLimits, ...policy } = computationPolicy(request);
     const writeLimits = [output, scratch].map((path) => ({ path, ...fileLimits }));
     if (request.engine === 'typescript') {
@@ -368,7 +399,13 @@ export class ResearchExperimentService {
         admission: { projectId: request.projectId, priority: 'user', resourceClass: 'compute' },
         signal
       };
-      return await this.run(processRequest);
+      return { result: await this.run(processRequest), startup: null };
+    }
+    if (request.engine === 'python') {
+      if (prepared.python === null) throw new ResearchProcessError('research_experiment_runtime_mismatch');
+      return runPythonExperimentProcess({ source: request, python: prepared.python, inputDir: input, outputDir: output,
+        scratchDir: scratch, policy: { ...policy, writeLimits },
+        admission: { projectId: request.projectId, priority: 'user', resourceClass: 'compute' }, signal }, this.run);
     }
     const executable = prepared.snapshot.executable;
     const environment = { ...prepared.environment, PATH: `${dirname(executable)}:${prepared.environment.PATH}`, ROC_INPUT_DIR: input, ROC_OUTPUT_DIR: output,
@@ -383,13 +420,13 @@ export class ResearchExperimentService {
       ...policy,
       admission: { projectId: request.projectId, priority: 'user', resourceClass: 'compute' },
       signal };
-    return request.engine === 'r' ? await runRExperimentProcess(processRequest, this.run) : await this.run(processRequest);
+    return { result: request.engine === 'r' ? await runRExperimentProcess(processRequest, this.run) : await this.run(processRequest), startup: null };
   }
 
   private async indexDocuments(run: ResearchExperimentExecution, files: ResearchExperimentFile[]) {
     const documents = [];
     for (const file of files) {
-      if (file.area === 'log' && ['resources.json', 'environment-code.json'].includes(file.path)) continue;
+      if (file.area === 'log' && ['resources.json', 'environment-code.json', 'python-startup.json'].includes(file.path)) continue;
       if (file.area === 'input' || file.size === 0) continue;
       if (file.size > 4 * 1024 * 1024 || file.area !== 'log' && !['.txt', '.md', '.csv', '.json', '.tsv'].includes(extname(file.path).toLowerCase())) continue;
       const bytes = await readResearchFile(this.repository.experiments.root(run.projectId, run.id), `${file.area}/${file.path}`, experimentFileLimit);
@@ -424,7 +461,7 @@ export class ResearchExperimentService {
       || JSON.stringify(report.policy) !== JSON.stringify(computationPolicy(researchExperimentStartSchema.parse(run.request)))) {
       throw new Error('research_experiment_resource_report_changed');
     }
-    const expected = run.request.engine === 'typescript' ? 0 : run.request.engine === 'r' ? 2 : 4;
+    const expected = run.request.engine === 'typescript' ? 0 : run.request.engine === 'julia' ? 4 : 2;
     if (report.probes.length !== expected || report.probes.some(probe => probe.outcome !== 'returned' || probe.exitCode !== 0)) {
       throw new Error('research_experiment_resource_report_changed');
     }
@@ -434,6 +471,32 @@ export class ResearchExperimentService {
       if (run.environment === null || code.runId !== run.id || code.projectId !== run.projectId
         || code.inputHash !== run.inputHash || code.environmentHash !== run.environment.hash) throw new Error('research_experiment_native_code_report_changed');
       assertNativeCodeReceipt(code.native, run.environment.metadataHash);
+    }
+    if (run.request.engine === 'python') {
+      if (run.environment === null) throw new Error('research_experiment_python_code_report_changed');
+      const { bytes } = await this.source({ projectId: run.projectId, runId: run.id, area: 'log', path: 'environment-code.json' });
+      const code = pythonCodeReportSchema.parse(JSON.parse(bytes.toString('utf8')) as unknown);
+      if (code.runId !== run.id || code.projectId !== run.projectId || code.inputHash !== run.inputHash
+        || code.environmentHash !== run.environment.hash) throw new Error('research_experiment_python_code_report_changed');
+      const receipt = assertPythonCodeReceipt(code.python, run.environment.metadataHash);
+      if (run.environment.hash !== run.request.expectedEnvironmentHash
+        || run.environment.toolchainHash !== pythonExperimentToolchainHash(receipt)
+        || JSON.stringify(run.environment.runtime) !== JSON.stringify(run.request.runtime)) {
+        throw new Error('research_experiment_python_code_report_changed');
+      }
+      const startupFile = await this.source({ projectId: run.projectId, runId: run.id, area: 'log', path: 'python-startup.json' });
+      const execution = pythonExecutionReportSchema.parse(JSON.parse(startupFile.bytes.toString('utf8')) as unknown);
+      const { distributions: _distributions, ...report } = receipt.metadataIdentity.report;
+      const expectedStartup = pythonExecutionStartupSchema.parse({
+        sourceVersion: run.request.sourceVersion, report, seed: run.request.seed,
+        modulePaths: [...receipt.metadataIdentity.controls.modulePaths, receipt.metadataIdentity.controls.packagePath],
+        sourcePath: join(this.repository.experiments.root(run.projectId, run.id), 'input', run.request.sourcePath)
+      });
+      if (execution.runId !== run.id || execution.projectId !== run.projectId || execution.inputHash !== run.inputHash
+        || execution.environmentHash !== run.environment.hash || execution.bootstrapHash !== pythonExperimentBootstrapHash()
+        || JSON.stringify(execution.startup) !== JSON.stringify(expectedStartup)) {
+        throw new Error('research_experiment_python_startup_report_changed');
+      }
     }
   }
 }
