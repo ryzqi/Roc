@@ -146,3 +146,6 @@ export * from '../../../src/shared/schemas/research-idea-outcomes';
 export {ResearchIdeaOutcomeRepository} from '../../../src/main/plugins/research/idea-outcome-repository';
 export {ResearchIdeaOutcomeService} from '../../../src/main/plugins/research/idea-outcome-service';
 export {registerResearchIdeaOutcomeCapabilities} from '../../../src/main/plugins/research/idea-outcome-capabilities';
+export * from '../../../src/shared/schemas/research-citation-coverage';
+export {ResearchCitationCoverageService} from '../../../src/main/plugins/research/citation-coverage-service';
+export {registerResearchCitationCoverageCapability} from '../../../src/main/plugins/research/citation-coverage-capability';

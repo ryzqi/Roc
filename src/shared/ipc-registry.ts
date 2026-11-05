@@ -7,6 +7,7 @@ import {
   researchIdeaPlanFreezeRequestSchema, researchIdeaPlanInspectionSchema, researchIdeaPlanHistoryResultSchema
 } from './schemas/research-idea-plans';
 import { z } from 'zod';
+import {researchCitationCoverageRequestSchema, researchCitationCoverageInspectionSchema} from './schemas/research-citation-coverage';
 import {researchReviewReportGetSchema,researchReviewReportInspectionSchema} from './schemas/research-review-report';
 import {researchReviewStudiesSaveSchema,researchReviewStudiesGetSchema,researchReviewStudiesInspectionSchema} from './schemas/research-review-studies';
 import {
@@ -628,6 +629,7 @@ export const ipcRegistry = {
     request({ key: 'researchClaimsHistory', channel: 'roc:research:claims-history', domain: 'research', method: 'getClaimHistory', kind: 'plugin', capabilityName: 'research.claims.history', inputTransform: first, contract: methodContract(oneArg(researchClaimHistoryRequestSchema), researchClaimSchema.array()) }),
     request({ key: 'researchManuscriptSave', channel: 'roc:research:manuscript-save', domain: 'research', method: 'saveManuscript', kind: 'plugin', capabilityName: 'research.manuscript.save', inputTransform: first, contract: methodContract(oneArg(researchManuscriptSaveRequestSchema), researchManuscriptSchema) }),
     request({ key: 'researchManuscriptGet', channel: 'roc:research:manuscript-get', domain: 'research', method: 'getManuscript', kind: 'plugin', capabilityName: 'research.manuscript.get', inputTransform: first, contract: methodContract(oneArg(researchManuscriptGetRequestSchema), researchManuscriptSchema.nullable()) }),
+    request({key: 'researchCitationCoverage', channel: 'roc:research:citation-coverage', domain: 'research', method: 'inspectCitationCoverage', kind: 'plugin', capabilityName: 'research.manuscript.citationCoverage', inputTransform: first, contract: methodContract(oneArg(researchCitationCoverageRequestSchema), researchCitationCoverageInspectionSchema)}),
     request({ key: 'researchManuscriptExportBundle', channel: 'roc:research:manuscript-export-bundle', domain: 'research', method: 'getExportBundle', kind: 'plugin', capabilityName: 'research.manuscript.exportBundle', inputTransform: first, contract: methodContract(oneArg(researchExportBundleRequestSchema), researchExportBundleSchema) }),
     request({key:'researchExperimentResultReview',channel:'roc:research:experiment-result-review',domain:'research',method:'reviewExperimentResult',kind:'plugin',capabilityName:'research.experimentResults.review',inputTransform:first,contract:methodContract(oneArg(researchExperimentResultReviewSchema),researchExperimentResultReceiptSchema)}),
     request({key:'researchExperimentResultGet',channel:'roc:research:experiment-result-get',domain:'research',method:'getExperimentResult',kind:'plugin',capabilityName:'research.experimentResults.get',inputTransform:first,contract:methodContract(oneArg(researchExperimentResultGetSchema),researchExperimentResultReceiptSchema)}),

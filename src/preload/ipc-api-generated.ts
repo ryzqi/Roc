@@ -234,6 +234,7 @@ export const rocApi: RocPreloadApi = {
     getClaimHistory: (...args) => ipcRenderer.invoke(ipcChannels.researchClaimsHistory, ...args),
     saveManuscript: (...args) => ipcRenderer.invoke(ipcChannels.researchManuscriptSave, ...args),
     getManuscript: (...args) => ipcRenderer.invoke(ipcChannels.researchManuscriptGet, ...args),
+    inspectCitationCoverage: (...args) => ipcRenderer.invoke(ipcChannels.researchCitationCoverage, ...args),
     getExportBundle: (...args) => ipcRenderer.invoke(ipcChannels.researchManuscriptExportBundle, ...args),
     reviewExperimentResult: (...args) => ipcRenderer.invoke(ipcChannels.researchExperimentResultReview, ...args),
     getExperimentResult: (...args) => ipcRenderer.invoke(ipcChannels.researchExperimentResultGet, ...args),
