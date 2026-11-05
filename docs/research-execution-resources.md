@@ -36,7 +36,7 @@ CPU/内存硬隔离后端尚未提供，不能发布要求这些能力的任务�
 
 新建实验请求只接受明确的 `network: 'disabled'`，实际角色 SDK 与主进程能力在调用执行服务前拒绝联网请求。执行服务固定使用 `networkAccess: 'none'`，下载不属于实验计算权限。普通文献和项目索引解析默认使用 CPU；主进程明确选择 CoreML 后才允许 GPU，并受统一 GPU 并发上限约束。
 
-移除未使用的 `allowPosixSpawn` 选项。全部科研进程固定拒绝 Darwin 的 `setpgid`、`setsid` 和 `posix_spawn` 系统调用。旧选项允许原子 `POSIX_SPAWN_SETPGROUP` 成功创建另一进程组，尽管单独的组/会话切换已被拒绝；真实复现保存在 `xsafe-a3-spawn-escape-repro.log`，探针等待子进程退出。修复后的实际子进程组、会话切换与原子 spawn 均被拒绝。已有 R 原生桥继续在这一限制下通过生产运行检查。
+移除未使用的 `allowPosixSpawn` 选项。全部科研进程固定拒绝 Darwin 的 `setpgid`、`setsid` 和 `posix_spawn` 系统调用。旧选项允许原子 `POSIX_SPAWN_SETPGROUP` 成功创建另一进程组，尽管单独的组/会话切换已被拒绝；真实复现保存在 `xsafe-a3-spawn-escape-repro.log`，探针等待子进程退出。修复后的实际子进程组、会话切换与原子 spawn 均被拒绝。本次生产链路执行 TypeScript；实际 R/Julia 环境运行复验尚未完成，不能由 C 探针或 TypeScript 结果代替。
 
 真实 DNS 对照能解析 `example.com`，相同二进制在计算沙箱返回 `errno=EPERM`；无需增加未经证实的 Mach 服务规则。Metal 对照可取得实际设备和命令队列，默认 GPU 权限下两者不可取得，明确允许后两者可取得。回执保存设备名称、内核版本、架构和实际准入时间；它证明本机 Metal 权限边界，不代表所有加速服务或其他平台均已验证。
 
@@ -52,3 +52,17 @@ CPU/内存硬隔离后端尚未提供，不能发布要求这些能力的任务�
 - `pnpm build`（含 typecheck）、`pnpm check:ipc`、`pnpm check:renderer-chunks`：通过，eager JS 保持 1132907 字节、6 个文件。
 
 日志为 `.artifacts/research-optimization/xsafe-a3-*.log`，真实边界回执为 `xsafe-a3/native-resources.json`。本增量未增加 CPU/内存硬隔离能力；资源事实持久化、原生环境和输出上限的其余审计继续按计划执行。
+
+## 实验资源回执
+
+新执行保存版本 1 的 `log/resources.json`，沿用实验文件快照和工件 manifest 的 SHA-256 校验。回执明确关联实际运行、项目、引擎、输入快照和环境摘要，保存计算超时、采样 CPU/RSS 阈值、文件数量/大小/总量/目录项及 stdout/stderr 合计上限。后端身份记录 macOS Seatbelt 合同版本、实际内核版本和架构，CPU/内存硬限制始终为 `false`。
+
+`returned` 保存 runner 的实际退出码、资源采样和准入时间；`rejected` 保存原始失败代码及 runner 已取得的观测；环境准备失败记录 `not_dispatched`，计算派发与采样均为空。零次采样只接受 CPU/RSS 同时为 `null`，不能转成零。进程返回零之后发生环境漂移等失败时，回执仍保留已返回的进程事实，实验终态另行说明后续失败。环境探针的观测不会冒充计算观测。
+
+主进程以只写一次、只读权限保存回执。发布及发布后复验同时检查回执字节摘要、运行/项目/输入/环境身份、计算策略和成功退出；缺少回执不能通过这些发布检查。已发布 manifest 保留回执文件摘要，修改回执会使原工件复验失败。资源文件可通过现有实验文件读取接口核查，保持项目归属检查；它不进入科研知识索引，不生成科学主张或 Evidence。
+
+回执保存计算结束时实际取得的事实。进程或应用崩溃导致未写入最终回执时，原运行保留中断状态与缺失观测，重启不会制造采样或自动重跑。原生环境探针和其他 worker 的资源持久化仍是后续工作。
+
+本增量为 `Verified passing`。在上述仓库目录执行 `node --test tests/unit/research-experiment-resources.test.mjs tests/unit/research-process-resources.test.mjs tests/unit/research-compute-policy.test.mjs`，最终 9/9；`pnpm test:unit`，1145/1145；`pnpm build`（含 typecheck）、`pnpm check:ipc`、`pnpm check:renderer-chunks` 通过，eager JS 1132907 字节、6 个文件；Harness 94/94、启动 13/13，零 renderer 错误。初轮专项 8/9 的失败是新跨项目夹具复用工作区，随后以不符合 `createProject` 输入的 `null` 再次失败；改为实际独立工作区后严格归属检查通过。
+
+`node scripts/run-research-p0.mjs` 为 13/13，并在生产实验服务之外捕获原始 runner 结果/错误，与持久化回执逐项比对。随后仅增加真实超时检查，`node scripts/run-research-p0.mjs --test-name-pattern='standard offline task parses PDF evidence'` 为 1/1；原 TypeScript 计算/出版/交付流程及新超时均通过。超时回执保留 10 次采样、150ms 已观测 CPU、89571328 字节峰值 RSS、2013ms 准入占用及 `research_process_timeout`，失败运行没有发布工件。回执保存在 `.artifacts/research-optimization/p0-production/research_task_79d6d06f-4ca9-4930-bf87-c1c56ff6e42d/report.json`，验证日志为 `xsafe-a4-*.log`。除新增专项断言外，产品代码自通过构建后未改动。

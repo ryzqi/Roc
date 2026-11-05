@@ -1,5 +1,6 @@
 import { lstat, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, sep } from 'node:path';
+import { release } from 'node:os';
 import { z } from 'zod';
 import { researchExperimentFileRequestSchema, researchExperimentStartSchema, type ResearchExperimentExecution, type ResearchExperimentFile,
   type ResearchExperimentStartRuntime, type ResearchExperimentStart } from '../../../shared/schemas/research-experiments';
@@ -15,6 +16,7 @@ import { writeFrozenManifest } from './research-frozen-manifest';
 import { ResearchBackgroundJobs, ResearchJobSession } from './research-job-session';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchRelativePath, researchWorkspace } from './research-files';
 import type { ResearchRepository } from './repository';
+import { researchExperimentResourceReportSchema, type ResearchExperimentResourceReport } from '../../../shared/schemas/research-process-resources';
 
 type FileRequest = z.infer<typeof researchExperimentFileRequestSchema>;
 type ExecuteProcessInput = {
@@ -32,6 +34,16 @@ function cancelledExecutionStatus(sessionClosed: boolean): 'interrupted' | 'canc
 
 function cancelledExecutionError(sessionClosed: boolean): string {
   return sessionClosed ? 'research_experiment_interrupted' : 'research_experiment_cancelled';
+}
+
+function computationPolicy(request: ResearchExperimentStart): ResearchExperimentResourceReport['policy'] {
+  return {
+    timeoutMs: request.timeoutMs, maxOutputBytes: 16 * 1024 * 1024,
+    fileLimits: { maxFileBytes: experimentFileLimit, maxTotalBytes: experimentOutputTotalLimit,
+      maxFiles: experimentFileCountLimit, maxEntries: experimentDirectoryEntryLimit },
+    resourceLimits: { mode: 'monitored', cpuTimeMs: request.timeoutMs * 4, maxResidentBytes: 2 * 1024 ** 3 },
+    allowGpuAcceleration: false, networkAccess: 'none'
+  };
 }
 
 export class ResearchExperimentService {
@@ -141,6 +153,7 @@ export class ResearchExperimentService {
       const run = this.repository.experiments.get(projectId, runId);
       if (run.status !== 'completed') throw new Error('research_experiment_completed_required');
       for (const file of run.files) { signal.throwIfAborted(); await this.source({ projectId, runId, area: file.area, path: file.path }); }
+      await this.verifyResources(run);
       const { artifactId: _artifactId, ...manifest } = run;
       await writeFrozenManifest({
         root: this.repository.experiments.root(projectId, runId),
@@ -168,6 +181,7 @@ export class ResearchExperimentService {
         signal.throwIfAborted();
         await this.source({projectId, runId: run.id, area: file.area, path: file.path});
       }
+      await this.verifyResources(run);
       signal.throwIfAborted();
       return run;
     });
@@ -199,10 +213,19 @@ export class ResearchExperimentService {
     let output: Pick<ResearchProcessResult, 'exitCode' | 'stdout' | 'stderr'> = { exitCode: 1, stdout: '', stderr: '' };
     let failure: unknown;
     let prepared: PreparedExperimentEnvironment | null = null;
+    let resources: ResearchExperimentResourceReport | null = null;
     try {
       const parsedRequest = researchExperimentStartSchema.safeParse(initial.request);
       if (!parsedRequest.success) throw new ResearchProcessError('research_experiment_legacy_read_only');
       const request = parsedRequest.data;
+      resources = {
+        schemaVersion: 1, runId: initial.id, projectId: initial.projectId, engine: request.engine,
+        inputHash: null, environmentHash: null,
+        backend: { id: 'macos-seatbelt', contractVersion: 1, kernelRelease: release(), architecture: process.arch,
+          cpuHardLimit: false, memoryHardLimit: false },
+        policy: computationPolicy(request), outcome: 'not_dispatched', exitCode: null,
+        error: 'research_experiment_not_dispatched', usage: null, admission: null, recordedAt: new Date().toISOString()
+      };
       const workspace = await this.verifyProject(initial, signal);
       await mkdir(root, { mode: 0o700 });
       const input = await createResearchDirectory(root, 'input');
@@ -215,7 +238,19 @@ export class ResearchExperimentService {
       files = snapshot.files;
       await this.verifyProject(initial, signal);
       this.repository.experiments.start(initial.projectId, initial.id, prepared.snapshot, files, snapshot.hash);
-      output = await this.executeProcess({ request, prepared, input, output: out, scratch, signal });
+      resources.inputHash = snapshot.hash;
+      resources.environmentHash = prepared.snapshot.hash;
+      try {
+        const result = await this.executeProcess({ request, prepared, input, output: out, scratch, signal });
+        output = result;
+        resources = { ...resources, outcome: 'returned', exitCode: result.exitCode, error: null,
+          usage: result.resourceUsage, admission: result.admission };
+      } catch (error) {
+        resources = { ...resources, outcome: 'rejected', error: errorCode(error),
+          usage: error instanceof ResearchProcessError ? error.resourceUsage : null,
+          admission: error instanceof ResearchProcessError ? error.admission : null };
+        throw error;
+      }
       if (output.exitCode !== 0) throw new Error('research_experiment_process_failed');
       await this.verifyProject(initial, signal);
       const current = await this.environments.inspect(workspace, request.runtime, scratch, signal, { projectId: request.projectId, priority: 'user' });
@@ -248,6 +283,12 @@ export class ResearchExperimentService {
     }
     try {
       await createResearchDirectory(root, 'log');
+      if (resources !== null) {
+        if (resources.outcome === 'not_dispatched') resources.error = errorCode(failure);
+        resources.recordedAt = new Date().toISOString();
+        await writeFile(join(root, 'log/resources.json'), JSON.stringify(researchExperimentResourceReportSchema.parse(resources), null, 2),
+          { flag: 'wx', mode: 0o400 });
+      }
       await writeFile(join(root, 'log/stdout.txt'), output.stdout, { flag: 'wx', mode: 0o400 });
       await writeFile(join(root, 'log/stderr.txt'), output.stderr, { flag: 'wx', mode: 0o400 });
       files.push(...await collectExperimentFiles(join(root, 'log'), 'log'));
@@ -290,8 +331,8 @@ export class ResearchExperimentService {
   }
 
   private async executeProcess({ request, prepared, input, output, scratch, signal }: ExecuteProcessInput): Promise<ResearchProcessResult> {
-    const writeLimits = [output, scratch].map((path) => ({ path, maxFileBytes: experimentFileLimit, maxTotalBytes: experimentOutputTotalLimit,
-      maxFiles: experimentFileCountLimit, maxEntries: experimentDirectoryEntryLimit }));
+    const { fileLimits, ...policy } = computationPolicy(request);
+    const writeLimits = [output, scratch].map((path) => ({ path, ...fileLimits }));
     if (request.engine === 'typescript') {
       const runtime = prepared.typescriptRuntime;
       if (runtime === null) throw new ResearchProcessError('research_experiment_runtime_mismatch');
@@ -314,14 +355,10 @@ export class ResearchExperimentService {
         writablePaths: [output, scratch],
         environment: { ...prepared.environment, ELECTRON_RUN_AS_NODE: '1' },
         input: runnerInput,
-        maxOutputBytes: 16 * 1024 * 1024,
         writeLimits,
-        timeoutMs: request.timeoutMs,
-        resourceLimits: { mode: 'monitored', cpuTimeMs: request.timeoutMs * 4, maxResidentBytes: 2 * 1024 ** 3 },
+        ...policy,
         admission: { projectId: request.projectId, priority: 'user', resourceClass: 'compute' },
-        signal,
-        allowGpuAcceleration: false,
-        networkAccess: 'none'
+        signal
       };
       return await this.run(processRequest);
     }
@@ -335,15 +372,16 @@ export class ResearchExperimentService {
       additionalExecutables: [executable], cwd: input, readablePaths: [...prepared.readablePaths, input],
       writablePaths: [output, scratch], environment,
       writeLimits,
-      resourceLimits: { mode: 'monitored', cpuTimeMs: request.timeoutMs * 4, maxResidentBytes: 2 * 1024 ** 3 },
+      ...policy,
       admission: { projectId: request.projectId, priority: 'user', resourceClass: 'compute' },
-      timeoutMs: request.timeoutMs, signal, allowGpuAcceleration: false, networkAccess: 'none' };
+      signal };
     return request.engine === 'r' ? await runRExperimentProcess(processRequest, this.run) : await this.run(processRequest);
   }
 
   private async indexDocuments(run: ResearchExperimentExecution, files: ResearchExperimentFile[]) {
     const documents = [];
     for (const file of files) {
+      if (file.area === 'log' && file.path === 'resources.json') continue;
       if (file.area === 'input' || file.size === 0) continue;
       if (file.size > 4 * 1024 * 1024 || file.area !== 'log' && !['.txt', '.md', '.csv', '.json', '.tsv'].includes(extname(file.path).toLowerCase())) continue;
       const bytes = await readResearchFile(this.repository.experiments.root(run.projectId, run.id), `${file.area}/${file.path}`, experimentFileLimit);
@@ -367,6 +405,17 @@ export class ResearchExperimentService {
     this.repository.experiments.requireActive(run.projectId, run.id);
     if (root !== run.workspaceRoot) throw new Error('research_experiment_workspace_changed');
     return root;
+  }
+
+  private async verifyResources(run: ResearchExperimentExecution): Promise<void> {
+    const { bytes } = await this.source({ projectId: run.projectId, runId: run.id, area: 'log', path: 'resources.json' });
+    const report = researchExperimentResourceReportSchema.parse(JSON.parse(bytes.toString('utf8')) as unknown);
+    if (report.runId !== run.id || report.projectId !== run.projectId || report.engine !== run.request.engine
+      || report.inputHash !== run.inputHash || report.environmentHash !== run.environment?.hash
+      || report.outcome !== 'returned' || report.exitCode !== 0
+      || JSON.stringify(report.policy) !== JSON.stringify(computationPolicy(researchExperimentStartSchema.parse(run.request)))) {
+      throw new Error('research_experiment_resource_report_changed');
+    }
   }
 }
 

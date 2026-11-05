@@ -1,17 +1,11 @@
 import { execFile } from 'node:child_process';
+import type { ResearchProcessResourceUsage } from '../../../shared/schemas/research-process-resources';
+export type { ResearchProcessResourceUsage } from '../../../shared/schemas/research-process-resources';
 
 export type ResearchProcessResourceLimits = {
   mode: 'monitored' | 'hard';
   cpuTimeMs: number;
   maxResidentBytes: number;
-};
-
-export type ResearchProcessResourceUsage = {
-  mode: 'monitored';
-  sampleIntervalMs: 100;
-  samples: number;
-  observedCpuTimeMs: number | null;
-  peakResidentBytes: number | null;
 };
 
 type ProcessSample = { identity: string; cpuTimeMs: number; residentBytes: number };
