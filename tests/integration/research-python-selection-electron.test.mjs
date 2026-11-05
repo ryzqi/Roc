@@ -6,11 +6,11 @@ import { dirname, join, resolve } from 'node:path';
 import { _electron as electron } from '@playwright/test';
 import { waitForAppReady } from '../smoke/lib/assertions.mjs';
 
-test('production Electron preload binds the true window to native selection, preserves venv alias, and reads the persisted receipt after restart',
+test('production management UI selects a real Python environment through preload and preserves its receipt after restart',
   { timeout: 120000 }, async () => {
     const root = await realpath(await mkdtemp('/private/tmp/roc-python-electron-'));
     const workspace = join(root, 'workspace'), dataRoot = join(root, 'data'), venv = join(root, 'venv');
-    const output = resolve('.artifacts/research-optimization/pr08-a3-electron');
+    const output = resolve('.artifacts/research-optimization/pr08-a3b-electron');
     const python = JSON.parse(execFileSync('python3', ['-I', '-S', '-c',
       'import sys,os,json;print(json.dumps({"executable":os.path.realpath(sys.executable),"version":sys.version.split()[0]}))'], { encoding: 'utf8' }));
     assert.match(python.version, /^3\.14\.\d+$/u);
@@ -34,10 +34,21 @@ test('production Electron preload binds the true window to native selection, pre
     try {
       const page = await launch();
       const project = await page.evaluate(async workspacePath => {
+        const workspace = await window.roc.workspace.select({ path: workspacePath });
+        if (!workspace.ok) throw new Error(JSON.stringify(workspace.error));
         const result = await window.roc.research.createProject({ title: 'Python selection E2E', description: 'Synthetic environment selection', workspacePath });
         if (!result.ok) throw new Error(JSON.stringify(result.error));
         return result.data;
       }, workspace);
+      const projectUrl = new URL(page.url());
+      projectUrl.searchParams.set('project', project.id);
+      await page.goto(projectUrl.href);
+      await page.getByTestId('workspace-layout').waitFor();
+      await page.getByTestId('titlebar-management').click();
+      await page.getByTestId('mgmt-tab-tasks').click();
+      const selectionButton = page.getByTestId('mgmt-python-environment-select');
+      await selectionButton.waitFor();
+      await page.waitForFunction(() => !document.querySelector('[data-testid="mgmt-python-environment-select"]').disabled);
       const windowId = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.id);
       await app.evaluate(({ dialog }, executable) => {
         globalThis.pythonPanelCalls = [];
@@ -46,12 +57,22 @@ test('production Electron preload binds the true window to native selection, pre
           return { canceled: false, filePaths: [executable] };
         };
       }, executable);
-      const request = { projectId: project.id, requestId: 'native-selection-e2e' };
-      const selected = await page.evaluate(async request => {
-        const result = await window.roc.research.selectPythonEnvironment(request);
+      await selectionButton.focus();
+      await page.keyboard.press('Enter');
+      await page.getByText('环境选择已记录。', { exact: true }).waitFor({ timeout: 60000 });
+      const selected = await page.evaluate(async projectId => {
+        const result = await window.roc.research.listPythonEnvironmentSelections({ projectId });
         if (!result.ok) throw new Error(JSON.stringify(result.error));
-        return result.data;
-      }, request);
+        return result.data.at(-1);
+      }, project.id);
+      const request = selected.snapshot.request;
+      await page.getByTestId('mgmt-python-environment-history').locator('summary').click();
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
+        await selectionButton.hover();
+        await page.screenshot({ path: join(output, `${theme}.png`) });
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      }
       assert.equal(selected.snapshot.selectedExecutable, executable);
       assert.equal(selected.snapshot.prefix, venv);
       assert.equal(selected.snapshot.executable, python.executable);
@@ -66,8 +87,10 @@ test('production Electron preload binds the true window to native selection, pre
       assert.equal(replay.ok, true); assert.deepEqual(replay.data, selected);
       assert.equal((await app.evaluate(() => globalThis.pythonPanelCalls)).length, 1);
       await app.evaluate(({ dialog }) => { dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] }); });
-      const cancelled = await page.evaluate(async request => window.roc.research.selectPythonEnvironment(request), { ...request, requestId: 'cancel-panel-e2e' });
-      assert.equal(cancelled.ok, true); assert.equal(cancelled.data, null);
+      await selectionButton.click();
+      await page.getByText('已取消选择。', { exact: true }).waitFor();
+      const cancelled = await page.evaluate(async projectId => window.roc.research.listPythonEnvironmentSelections({ projectId }), project.id);
+      assert.equal(cancelled.ok, true); assert.deepEqual(cancelled.data, [selected]);
       await app.close(); app = undefined;
       const reopened = await launch();
       const result = await reopened.evaluate(async input => window.roc.research.getPythonEnvironmentSelection(input), {
@@ -76,7 +99,8 @@ test('production Electron preload binds the true window to native selection, pre
       assert.equal(result.ok, true); assert.deepEqual(result.data, selected);
       assert.deepEqual(errors, []);
       await writeFile(join(output, 'receipt.json'), JSON.stringify({
-        actualElectron: true, actualPythonProbe: true, nativePanelStubbed: true, windowId, calls, selected, cancelled, reopened: result
+        actualElectron: true, actualPythonProbe: true, actualManagementUi: true, nativePanelStubbed: true,
+        windowId, calls, selected, cancelled, reopened: result
       }, null, 2));
     } finally {
       if (app !== undefined) await app.close();

@@ -1,6 +1,6 @@
 # Python 环境预检与隔离探针
 
-PR08 当前提供环境预检、真实隔离探针，以及主进程确认的原生环境选择与项目绑定。新建 Python 实验尚未启用；选择入口的页面接入、运行及发布仍需后续实现。
+PR08 当前提供环境预检、真实隔离探针，以及主进程确认的原生环境选择与项目绑定。项目管理的任务区已提供选择入口；新建 Python 实验、运行及发布尚未启用。
 
 ## 用户选择与项目绑定
 
@@ -71,7 +71,7 @@ PR08 当前提供环境预检、真实隔离探针，以及主进程确认的原
 
 初轮真实测试 5/8：两个测试错误地要求短进程一定有采样，一个测试假定此发行版的内建 `zlib` 有 `__file__`。改为将完整回执与独立捕获的真实 runner 结果逐项核对，并使用实际 `_dbm` 原生文件；保留全部边界、漂移和失败断言。修正后的 10 项通过，初轮日志保留。
 
-完整运行日志位于 `.artifacts/research-optimization/pr08-a2-*.log`，最终实际回执为 `pr08-a2/python-environment.json`。用户选择、Python 实验复跑/恢复/发布及完整 PR08 验收尚未完成。
+完整运行日志位于 `.artifacts/research-optimization/pr08-a2-*.log`，最终实际回执为 `pr08-a2/python-environment.json`。Python 实验复跑/恢复/发布及完整 PR08 验收尚未完成。
 
 项目选择增量从同一工作目录验证：
 
@@ -82,6 +82,16 @@ PR08 当前提供环境预检、真实隔离探针，以及主进程确认的原
 项目选择增量的最终全量检查：`pnpm test:unit` 1172/1172，无跳过，357103 ms；`node scripts/run-research-p0.mjs` 13/13；`pnpm check:ipc` 与 `pnpm check:renderer-chunks` 通过，入口 1132907 bytes / 6 files；`node scripts/smoke-electron.mjs` 13/13，零 renderer errors。
 
 选择日志为 `.artifacts/research-optimization/pr08-a3-*.log`，实际回执位于 `pr08-a3/python-selection.json` 与 `pr08-a3-electron/receipt.json`。此段仍未启用 Python 实验。
+
+管理入口增量从同一工作目录验证：
+
+- `node --test tests/renderer/python-environment.test.mjs`：6/6，键盘选择、真实 pending、取消、失败、主进程历史重读、项目切换、只读和读取失败状态。最终浅色/深色 480 × 680 窗口的长路径、焦点、hover、展开和动效落点检查通过；裁切回执均为 `cut=0, hidden=0`。
+- `node --test tests/integration/research-python-selection-electron.test.mjs`：1/1，真实生产管理入口经 Enter、preload、真实窗口 actor、原生面板接口和实际 CPython 探针保存回执，取消保持原历史，重启精确读取。仅 OS 面板返回值被替换。
+- `pnpm build`、`pnpm check:ipc`、`pnpm check:renderer-chunks`：通过，入口 1132907 bytes / 6 files。
+- `node scripts/smoke-electron.mjs`：13/13，零 renderer errors。
+- `pnpm test:renderer`：310/312，无跳过，416575 ms；会话 prepend 的可见锚点从 -9px 移至 15px，质量评价保存等待超过 10 秒。使用 `node --test --test-name-pattern='rendered transcript keeps' tests/renderer/lifecycles.test.mjs` 和 `node --test --test-name-pattern='explicit domain and overall' tests/renderer/review-quality-assessment.test.mjs` 原样分别复现，两项均通过。未改这两项代码或断言；并发全量失败根因仍未确认，不能声称全量 renderer 通过。
+
+日志位于 `.artifacts/research-optimization/pr08-a3b-*.log`；最终界面截图和裁切回执位于 `pr08-a3b-ui/`，生产管理入口回执和双主题截图位于 `pr08-a3b-electron/`。
 
 ## 官方资料
 
