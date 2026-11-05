@@ -14,6 +14,7 @@ const ProductionView = lazy(async () => ({default: (await import('./ArtifactProd
 const Relations = lazy(async () => ({default: (await import('./ArtifactRelations')).ArtifactRelations}));
 const IdeaPlans = lazy(async () => ({default: (await import('./IdeaPlans')).IdeaPlans}));
 const IdeaOutcomes = lazy(async () => ({default: (await import('./IdeaOutcomes')).IdeaOutcomes}));
+const CitationCoverage = lazy(async () => ({default: (await import('./ArtifactCitationCoverage')).ArtifactCitationCoverage}));
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 
 export function StageArtifactInspector({client, request, writable, onClose, onOpenTask, onReviewContext, readingLocations}: {
@@ -31,6 +32,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
   const [planDirty, setPlanDirty] = useState(false);
   const [outcomePending, setOutcomePending] = useState(false);
   const [outcomeDirty, setOutcomeDirty] = useState(false);
+  const [coverageOpen, setCoverageOpen] = useState(false);
   const planLocked = planPending || planDirty || outcomePending || outcomeDirty;
   const savedLocation = readingLocations.get(JSON.stringify([request.projectId, request.artifactId]));
   const [productionChoice,setProductionChoice] = useState<{version: string; open: boolean} | null>(null);
@@ -110,6 +112,15 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
         <Suspense fallback={<p role="status">正在加载工件正文…</p>}>
           <StageContent snapshot={snapshot} />
         </Suspense>
+        {snapshot.artifact.kind !== 'manuscript' ? null : <section className="border-t-[0.5px] border-line pt-2">
+          <button type="button" className={button} aria-expanded={coverageOpen} disabled={planLocked}
+            data-testid="artifact-citation-coverage-toggle" data-reading-key="citation-coverage-toggle"
+            onClick={() => setCoverageOpen(open => !open)}>{coverageOpen ? '收起引用检查' : '检查正文引用'}</button>
+          {!coverageOpen ? null : <Suspense fallback={<p role="status">正在加载引用检查…</p>}>
+            <CitationCoverage key={`${snapshot.artifact.id}:${snapshot.version}`} client={client}
+              projectId={request.projectId} artifactId={request.artifactId} artifactVersion={snapshot.version}/>
+          </Suspense>}
+        </section>}
         {snapshot.ideaCanvas === null ? null : <Suspense fallback={<p role="status">正在加载方法计划…</p>}>
           <IdeaPlans key={`${snapshot.artifact.id}:${snapshot.ideaCanvas.contentHash}:${snapshot.ideaPlan?.versionHash ?? 'new'}:${snapshot.ideaPlan?.freezeHash ?? 'draft'}`}
             client={client} canvas={snapshot.ideaCanvas} current={snapshot.ideaPlan}
