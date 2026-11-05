@@ -1,18 +1,19 @@
 import assert from 'node:assert/strict';
-import {copyFile, mkdir, mkdtemp, readFile, realpath, rm} from 'node:fs/promises';
+import {copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {setTimeout as wait} from 'node:timers/promises';
 import {createResearchFixture, figureRequest} from './research-test-kit.mjs';
 
 /** Actual local renderer, persisted publication and waiting human gate; no model or network. */
-export async function createPublishedFigureFixture(api) {
+export async function createPublishedFigureFixture(api, {figureSource} = {}) {
   const temporary=await mkdtemp(join(tmpdir(),'roc-production-review-'));
   const root=await realpath(temporary),workspace=join(root,'workspace');
   await mkdir(workspace);
   for(const name of ['figure.vl.json','measurements.csv']) {
     await copyFile(join('tests/fixtures/research-workflow',name),join(workspace,name));
   }
+  if (figureSource !== undefined) await writeFile(join(workspace, 'figure.vl.json'), JSON.stringify(figureSource));
   const f=createResearchFixture(api,'figure',workspace);
   const figureService=new api.ResearchFigureService(f.repository,{
     renderFigure: request=>api.renderResearchFigure({operation:'render_figure',projectRoot:request.projectRoot,

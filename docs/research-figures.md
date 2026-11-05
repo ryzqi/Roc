@@ -107,4 +107,25 @@ DB49 保存不可变版本，包括冻结运行、图稿、trace 引用、选中
 
 本部分交付主进程合同和 IPC；同壳映射界面及审批/导出消费者后续接入。核对的是实际 datum 和完整编码，不推断科学含义或最终像素位置。
 
-A4C2A 定向状态为 `Verified passing`。仓库根目录执行 `node --test tests/unit/research-figure-consistency.test.mjs tests/unit/research-consistency.test.mjs tests/unit/research-artifact-inspector.test.mjs tests/unit/research-gate-review.test.mjs tests/unit/research-export-body-gate.test.mjs`：31/31；`node --test --test-name-pattern='actual result metric evidence' tests/integration/research-python-experiments.test.mjs`：1/1，含真实负值绘制、磁盘历史和来源变化拒绝。`pnpm build`（含 typecheck）、P0 13/13、生产文件 renderer 9/9、启动 13/13 零 renderer error、IPC 当前及 chunks 1,134,192 bytes / 6 文件通过。日志位于 `.artifacts/research-optimization/xwrite-a4c2a-*.log`。完整 unit/Harness 补充检查仍运行，尚不声明通过。最初单测的工作区、待审批主张编辑及 Zod 错误断言夹具问题已修正，拒绝合同保持不变。
+A4C2A 定向状态为 `Verified passing`。仓库根目录执行 `node --test tests/unit/research-figure-consistency.test.mjs tests/unit/research-consistency.test.mjs tests/unit/research-artifact-inspector.test.mjs tests/unit/research-gate-review.test.mjs tests/unit/research-export-body-gate.test.mjs`：31/31；`node --test --test-name-pattern='actual result metric evidence' tests/integration/research-python-experiments.test.mjs`：1/1，含真实负值绘制、磁盘历史和来源变化拒绝。`pnpm build`（含 typecheck）、P0 13/13、生产文件 renderer 9/9、启动 13/13 零 renderer error、IPC 当前及 chunks 1,134,192 bytes / 6 文件通过。日志位于 `.artifacts/research-optimization/xwrite-a4c2a-*.log`。补充完整 unit 1244/1244、Harness 94/94 已收集通过。最初单测的工作区、待审批主张编辑及 Zod 错误断言夹具问题已修正，拒绝合同保持不变。
+
+
+## 图稿数据映射界面（X-WRITE A4C2B）
+
+同一工件抽屉提供按需加载的「检查图稿绘制数据」，保留独立的说明文字数值检查。场景标记、完整编码、实际数值字段和场景路径可浏览；每页 20 项，摘要和分页分别绑定图稿/工件版本。分页不会清空累计映射，正在编辑的待加入字段会锁住翻页与标记切换。仅直接数值字段可选，常量和不支持的编码分别显示。
+
+人工明确选择场景项、通道、主张、真实指标 Evidence 和展示单位，再填写转换、舍入、容差及审核理由。空数值输入拒绝加入，不自动转成零。加入、替换、移除和放弃均是本地草稿动作；保存绑定最新父回执和整个工件版本。保存中或有草稿时锁住抽屉关闭、Escape、刷新、阶段审核以及其他审核编辑。完全相同的丢失回执重试返回原版本且零重复写入。成功后刷新整个工件，旧审批上下文失效。
+
+保存回执可独立分页、展开全部原文；当前冻结文件变化时隐藏此前成功的报告并拒绝保存，历史仍明确标注未按当前来源复核。只读、已批准、归档状态可浏览，不能保存。迟到的摘要、场景页、指标和保存回复不会进入另一项目。
+
+范围状态 `Verified passing`，工作目录 `/Users/Apple_501/Desktop/Roc/Roc`：
+
+| 命令 | 结果 | 日志 |
+| --- | --- | --- |
+| `pnpm build` | 通过，包含 typecheck | `xwrite-a4c2b-build-final.log` |
+| `node --test tests/renderer/figure-consistency.test.mjs tests/renderer/scientific-consistency.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/artifact-inspector.test.mjs` | 47/47；新图稿 6 项，既有正文和生产/抽屉回归全部通过 | `xwrite-a4c2b-renderer-final.log` |
+| `node --test tests/unit/research-figure-consistency.test.mjs tests/unit/research-production-review.test.mjs` | 13/13 | `xwrite-a4c2b-focused.log` |
+| `node scripts/smoke-electron.mjs` | 13/13，零 renderer error | `xwrite-a4c2b-startup.log` |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` | 合同当前；1,134,228 bytes / 6 eager 文件 | `xwrite-a4c2b-ipc.log` / `xwrite-a4c2b-chunks.log` |
+
+日志和真实 Electron 45/macOS arm64 的 650px 明暗主题截图在 `.artifacts/research-optimization/`，减弱动效、默认/悬停/编码展开/最终状态均满足 `cut=0`，仅三个精确的抽屉物理边缘阴影被隐藏，无横向溢出。指标使用明确合成的已存结果，场景确实由 Vega 渲染；实际 CPython 来源检验由 A4C2A 的集成测试覆盖。此部分不声明最终像素位置或科学含义已经批准；审批与导出消费者由 A4C2C 接入。

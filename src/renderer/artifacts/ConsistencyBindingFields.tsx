@@ -8,13 +8,11 @@ import type {RocClient} from '../shared/roc-client';
 import {useAsyncResource} from '../app/use-async-resource';
 import {formInputClass, formSecondaryButtonClass} from '../shared/form-ui';
 import {consistencySurfaces} from './ConsistencyReceipt';
+import {ConsistencyRuleFields, emptyConsistencyRuleFields, type ConsistencyRuleFieldsValue} from './ConsistencyRuleFields';
 
 const inputClass = `${formInputClass} border-[0.5px]`;
-type Fields = {location: string; evidence: string; surface: string; unit: string; conversion: string;
-  scale: string; offset: string; conversionReason: string; rounding: string; places: string;
-  absolute: string; relative: string; toleranceReason: string};
-const empty: Fields = {location: '', evidence: '', surface: '', unit: '', conversion: '', scale: '', offset: '',
-  conversionReason: '', rounding: '', places: '', absolute: '', relative: '', toleranceReason: ''};
+type Fields = ConsistencyRuleFieldsValue & {location: string; evidence: string; surface: string};
+const empty: Fields = {...emptyConsistencyRuleFields, location: '', evidence: '', surface: ''};
 
 export function ConsistencyBindingFields({client, snapshot, report, disabled, onChange, onAdd, onDiscard}: {
   client: RocClient; snapshot: ResearchArtifactInspectResult['snapshot']; report: ResearchConsistencyInspection['report']; disabled: boolean;
@@ -47,11 +45,6 @@ export function ConsistencyBindingFields({client, snapshot, report, disabled, on
         {Object.entries(options).map(([value, text]) => <option key={value} value={value}>{text}</option>)}
       </select>
     </label>;
-  const text = (name: keyof Fields, label: string, numeric = false): React.JSX.Element =>
-    <label className="flex min-w-0 flex-col gap-1 text-muted">{label}
-      <input aria-label={label} type={numeric ? 'number' : 'text'} step={numeric ? 'any' : undefined} maxLength={numeric ? undefined : 4000}
-        className={inputClass} value={fields[name]} onChange={event => change(name, event.target.value)}/>
-    </label>;
   return <section className="flex min-w-0 flex-col gap-3" data-testid="artifact-consistency-fields">
     <h3 className="font-medium">添加或替换数值映射</h3>
     <fieldset disabled={disabled} className="flex min-w-0 flex-col gap-3">
@@ -73,15 +66,7 @@ export function ConsistencyBindingFields({client, snapshot, report, disabled, on
         <p className="break-all">结果 {metricSource.receipt.snapshot.id}，SHA-256 {metricSource.receipt.snapshotHash}</p>
       </section>}
       {select('surface', '展示位置', consistencySurfaces)}
-      {text('unit', '展示单位')}
-      {select('conversion', '单位转换', {identity: '单位相同', affine: '显式比例与偏移'})}
-      {fields.conversion !== 'affine' ? null : <>
-        {text('scale', '转换比例', true)}{text('offset', '转换偏移', true)}{text('conversionReason', '转换理由')}
-      </>}
-      {select('rounding', '舍入规则', {none: '不舍入', decimal_places: '十进制位数，半数远离零'})}
-      {fields.rounding !== 'decimal_places' ? null : text('places', '小数位数', true)}
-      <div className="grid min-w-0 grid-cols-2 gap-3">{text('absolute', '绝对容差', true)}{text('relative', '相对容差', true)}</div>
-      {text('toleranceReason', '容差理由')}
+      <ConsistencyRuleFields fields={fields} onChange={change}/>
       <div className="flex flex-wrap gap-2">
         <button type="button" className={formSecondaryButtonClass} data-testid="artifact-consistency-add" onClick={() => {
           if (location === undefined || claim === undefined || claimDigest.status !== 'ready' || claimDigest.data === null ||

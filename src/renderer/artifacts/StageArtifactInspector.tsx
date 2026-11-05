@@ -16,6 +16,7 @@ const IdeaPlans = lazy(async () => ({default: (await import('./IdeaPlans')).Idea
 const IdeaOutcomes = lazy(async () => ({default: (await import('./IdeaOutcomes')).IdeaOutcomes}));
 const CitationCoverage = lazy(async () => ({default: (await import('./ArtifactCitationCoverage')).ArtifactCitationCoverage}));
 const Consistency = lazy(async () => ({default: (await import('./ArtifactConsistency')).ArtifactConsistency}));
+const FigureConsistency = lazy(async () => ({default: (await import('./ArtifactFigureConsistency')).ArtifactFigureConsistency}));
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 
 export function StageArtifactInspector({client, request, writable, onClose, onOpenTask, onReviewContext, readingLocations}: {
@@ -37,9 +38,12 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
   const [citationPending, setCitationPending] = useState(false), [citationDirty, setCitationDirty] = useState(false);
   const [consistencyOpen, setConsistencyOpen] = useState(false);
   const [consistencyPending, setConsistencyPending] = useState(false), [consistencyDirty, setConsistencyDirty] = useState(false);
+  const [figureConsistencyOpen, setFigureConsistencyOpen] = useState(false);
+  const [figurePending, setFigurePending] = useState(false), [figureDirty, setFigureDirty] = useState(false);
   const otherLocked = planPending || planDirty || outcomePending || outcomeDirty || citationPending || citationDirty;
   const consistencyLocked = consistencyPending || consistencyDirty;
-  const planLocked = otherLocked || consistencyLocked;
+  const figureLocked = figurePending || figureDirty;
+  const planLocked = otherLocked || consistencyLocked || figureLocked;
   const savedLocation = readingLocations.get(JSON.stringify([request.projectId, request.artifactId]));
   const [productionChoice,setProductionChoice] = useState<{version: string; open: boolean} | null>(null);
   const productionOpen = snapshot !== undefined && (productionChoice?.version === snapshot.version ?
@@ -88,6 +92,8 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
         citationDirty ? <p role="status">引用审核含未保存修改，保存或放弃后可关闭工件。</p> : null}
       {consistencyPending ? <p role="status">正在保存数值审核，请等待回执。</p> :
         consistencyDirty ? <p role="status">数值审核含未保存修改，保存或放弃后可关闭工件。</p> : null}
+      {figurePending ? <p role="status">正在保存图稿数据审核，请等待回执。</p> :
+        figureDirty ? <p role="status">图稿数据审核含未保存修改，保存或放弃后可关闭工件。</p> : null}
       {read.error === null ? null : <p role="alert" className="break-words text-[var(--st-warn)]">{read.error}</p>}
       {result?.status === 'stale' ? <p role="alert" className="text-[var(--st-warn)]">
         工件或来源已变更。当前内容需要重新核对。
@@ -129,7 +135,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
           {!coverageOpen ? null : <Suspense fallback={<p role="status">正在加载引用检查…</p>}>
             <CitationCoverage key={`${snapshot.artifact.id}:${snapshot.version}`} client={client}
               projectId={request.projectId} artifactId={request.artifactId} artifactVersion={snapshot.version}
-              writable={writable && !consistencyLocked && result?.status === 'current' && snapshot.projectStatus !== 'archived' &&
+              writable={writable && !consistencyLocked && !figureLocked && result?.status === 'current' && snapshot.projectStatus !== 'archived' &&
                 snapshot.artifact.status === 'draft' && snapshot.currentStage === snapshot.artifact.stage &&
                 snapshot.stage.artifactIds.includes(snapshot.artifact.id) &&
                 ['ready', 'running', 'paused', 'blocked', 'failed', 'waiting_approval'].includes(snapshot.stage.status)}
@@ -143,13 +149,29 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
             {consistencyOpen ? '收起数值检查' : '检查科研数值'}
           </button>
           {!consistencyOpen ? null : <Suspense fallback={<p role="status">正在加载数值检查…</p>}>
-            <Consistency key={`${snapshot.artifact.id}:${snapshot.version}`} client={client} snapshot={snapshot} locked={otherLocked}
+            <Consistency key={`${snapshot.artifact.id}:${snapshot.version}`} client={client} snapshot={snapshot} locked={otherLocked || figureLocked}
               writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived' &&
                 snapshot.artifact.status === 'draft' && snapshot.currentStage === snapshot.artifact.stage &&
                 snapshot.stage.artifactIds.includes(snapshot.artifact.id) &&
                 ['ready', 'running', 'paused', 'blocked', 'failed', 'waiting_approval'].includes(snapshot.stage.status)}
               onDirty={setConsistencyDirty} onPending={setConsistencyPending}
               onSaved={() => {setConsistencyPending(false); setConsistencyDirty(false); baseline.current = null; reading.save(); read.reload();}}/>
+          </Suspense>}
+        </section>}
+        {snapshot.artifact.kind !== 'figure' ? null : <section className="border-t-[0.5px] border-line pt-2">
+          <button type="button" className={button} aria-expanded={figureConsistencyOpen} disabled={planLocked}
+            data-testid="artifact-figure-consistency-toggle" onClick={() => setFigureConsistencyOpen(value => !value)}>
+            {figureConsistencyOpen ? '收起绘制数据检查' : '检查图稿绘制数据'}
+          </button>
+          {!figureConsistencyOpen ? null : <Suspense fallback={<p role="status">正在加载绘制数据检查…</p>}>
+            <FigureConsistency key={`${snapshot.artifact.id}:${snapshot.version}`} client={client} snapshot={snapshot}
+              locked={otherLocked || consistencyLocked}
+              writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived' &&
+                snapshot.artifact.status === 'draft' && snapshot.currentStage === snapshot.artifact.stage &&
+                snapshot.stage.artifactIds.includes(snapshot.artifact.id) &&
+                ['ready', 'running', 'paused', 'blocked', 'failed', 'waiting_approval'].includes(snapshot.stage.status)}
+              onDirty={setFigureDirty} onPending={setFigurePending}
+              onSaved={() => {setFigurePending(false); setFigureDirty(false); baseline.current = null; reading.save(); read.reload();}}/>
           </Suspense>}
         </section>}
         {snapshot.ideaCanvas === null ? null : <Suspense fallback={<p role="status">正在加载方法计划…</p>}>
