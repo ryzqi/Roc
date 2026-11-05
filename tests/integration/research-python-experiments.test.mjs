@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, realpath, writeFile, readFile, symlink, rm, chmod, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import Database from 'better-sqlite3';
 import { loadResearchTestApi, createResearchFixture } from '../unit/fixtures/research-test-kit.mjs';
 
 const python = JSON.parse(execFileSync('python3', ['-I', '-S', '-c',
@@ -13,7 +14,7 @@ let api, root;
 const receipts = [];
 before(async () => { api = await loadResearchTestApi(); root = await realpath(await mkdtemp('/private/tmp/roc-python-experiments-')); });
 after(async () => {
-  const output = join(process.cwd(), '.artifacts/research-optimization/pr08-a4d');
+  const output = join(process.cwd(), '.artifacts/research-optimization/pr08-a4e');
   await mkdir(output, { recursive: true });
   await writeFile(join(output, 'python-experiments.json'), JSON.stringify({
     python, actualIsolatedPython: true, nativePicker: 'fixture response; no user product selection', receipts
@@ -310,4 +311,146 @@ test('actual experiment role consumes selected Python preview and owns start, te
     assert.equal(f.observed.filter(entry => entry.kind === 'compute').length, 2);
     receipts.push({ scenario: 'owned-role-tools-result', listed, preview, polled, published, actualComputations: 2 });
   } finally { await f.cleanup(); }
+});
+
+const treeSource = `import os, signal, time, json
+import roc_experiment as roc
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+parent = os.getpid()
+child = os.fork()
+if child == 0:
+    grandchild = os.fork()
+    if grandchild == 0:
+        print("RECOVERY_TREE_STARTED", flush=True)
+        with open(os.path.join(roc.output_dir, "pids.json"), "w") as file:
+            json.dump([parent, os.getppid(), os.getpid()], file)
+    while True:
+        time.sleep(0.01)
+while True:
+    time.sleep(0.01)
+`;
+
+async function waitForTree(repository, projectId, runId) {
+  const path = join(repository.experiments.root(projectId, runId), 'output/pids.json');
+  const deadline = Date.now() + 10000;
+  while (Date.now() < deadline) {
+    try {
+      const pids = JSON.parse(await readFile(path, 'utf8'));
+      assert.equal(pids.length, 3);
+      for (const pid of pids) process.kill(pid, 0);
+      return pids;
+    } catch (error) {
+      if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error;
+    }
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  assert.fail('Actual Python recovery process tree did not start');
+}
+
+test('actual Python shutdown interrupts computation, persists rejected resources and removes the full process tree', async () => {
+  const f = await fixture(treeSource, { scenario: 'shutdown' });
+  try {
+    const active = await f.service.start({ ...f.request, timeoutMs: 15000 });
+    const pids = await waitForTree(f.repository, f.project.id, active.id);
+    await f.service.shutdown();
+    const interrupted = await f.wait(active.id);
+    assert.equal(interrupted.status, 'interrupted');
+    assert.equal(interrupted.error, 'research_experiment_interrupted');
+    assert.equal(interrupted.exitCode, 1);
+    assert.equal(await f.read(interrupted, 'input', 'analysis.py'), treeSource);
+    assert.match(await f.read(interrupted, 'log', 'stdout.txt'), /RECOVERY_TREE_STARTED/u);
+    const resources = JSON.parse(await f.read(interrupted, 'log', 'resources.json'));
+    const actual = f.observed.find(entry => entry.kind === 'compute').error;
+    assert.equal(resources.outcome, 'rejected');
+    assert.equal(resources.error, 'research_process_cancelled');
+    assert.deepEqual(resources.usage, actual.resourceUsage);
+    assert.deepEqual(resources.admission, actual.admission);
+    for (const pid of pids) assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
+    assert.deepEqual(f.failures, []);
+    receipts.push({ scenario: 'shutdown-tree', pids, allAbsent: true, interrupted });
+  } finally { await f.cleanup(); }
+});
+
+test('Python disk recovery retains selected environments and historical audits, never reruns old requests and requires a new owner', async () => {
+  const f = await fixture(source, { scenario: 'disk-recovery' });
+  let restartedDb, restartedAgentDb, restartedService, restartedPython;
+  try {
+    const completed = await f.execute();
+    assert.equal(completed.status, 'completed', completed.error);
+    const published = await f.service.publish(f.project.id, completed.id);
+    const selectionRequest = { projectId: f.project.id, selectionId: f.runtime.selectionId, expectedHash: f.runtime.expectedHash };
+    const selection = f.repository.pythonEnvironments.get(selectionRequest);
+    const historicalResources = await f.read(completed, 'log', 'resources.json');
+    const historicalStartup = await f.read(completed, 'log', 'python-startup.json');
+    await writeFile(join(f.workspace, 'analysis.py'), treeSource);
+    const interruptedRequest = { ...f.request, requestId: 'running-at-restart', timeoutMs: 15000 };
+    const active = await f.service.start(interruptedRequest);
+    const pids = await waitForTree(f.repository, f.project.id, active.id);
+    const durable = f.repository.experiments.get(f.project.id, active.id);
+    assert.equal(durable.status, 'running');
+    const researchPath = join(f.path, 'running-research.db'), agentPath = join(f.path, 'running-agent.db');
+    // Capture crash-time durable state, then clean up the real processes.
+    // This is disk recovery, not a new host SIGKILL acceptance test.
+    await f.db.backup(researchPath); await f.agentDb.backup(agentPath);
+    await f.service.shutdown(); await f.pythonService.shutdown();
+    for (const pid of pids) assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
+    restartedDb = new Database(researchPath); restartedAgentDb = new Database(agentPath);
+    const tasks = new api.ResearchTaskRepository(restartedAgentDb);
+    const repository = new api.ResearchRepository(restartedDb, tasks);
+    let dispatches = 0;
+    const actualRun = async request => { dispatches++; return api.runResearchProcess(request); };
+    restartedPython = new api.ResearchPythonEnvironmentService(repository,
+      async () => assert.fail('Recovery must never open the native picker'), actualRun);
+    const environments = new api.ResearchExperimentEnvironmentService({
+      nativeRuntime: async () => assert.fail('Recovery must not resolve native tools'),
+      typescriptRuntime: async () => assert.fail('Recovery must not resolve TypeScript')
+    }, restartedPython);
+    restartedService = new api.ResearchExperimentService(repository, environments, f.path,
+      { error: (...args) => assert.fail(JSON.stringify(args)) }, actualRun);
+    repository.runs.recoverInterrupted(); restartedService.recover();
+    const recovered = repository.experiments.get(f.project.id, active.id);
+    assert.equal(recovered.status, 'interrupted');
+    assert.equal(recovered.error, 'research_experiment_interrupted');
+    assert.equal(recovered.exitCode, null);
+    assert.deepEqual(recovered.files, durable.files);
+    assert.equal(repository.runs.get(f.run.id, f.project.id).status, 'interrupted');
+    assert.equal(tasks.get(f.run.taskId, f.project.id).status, 'interrupted');
+    assert.deepEqual(repository.pythonEnvironments.get(selectionRequest), selection);
+    assert.deepEqual(await restartedService.verifyPublication(f.project.id, published.artifactId), published);
+    for (const [path, content] of [['resources.json', historicalResources], ['python-startup.json', historicalStartup]]) {
+      assert.equal((await restartedService.read({ projectId: f.project.id, runId: completed.id, area: 'log', path })).content, content);
+    }
+    assert.equal((await restartedService.read({ projectId: f.project.id, runId: recovered.id,
+      area: 'input', path: 'analysis.py' })).content, treeSource);
+    assert.equal(recovered.files.some(file => file.path === 'resources.json'), false);
+    assert.deepEqual(await restartedService.start(interruptedRequest), recovered);
+    assert.equal(dispatches, 0);
+    await assert.rejects(restartedService.publish(f.project.id, recovered.id), /research_experiment_completed_required/u);
+    await assert.rejects(restartedService.start({ ...interruptedRequest, requestId: 'old-owner-new-request' }),
+      /research_run_not_current/u);
+    assert.equal(dispatches, 0);
+    await writeFile(join(f.workspace, 'analysis.py'), source);
+    assert.deepEqual(await restartedService.start(f.request), published);
+    assert.equal(dispatches, 0);
+    const { ownerRunId: _owner, ...direct } = f.request;
+    const fresh = await restartedService.start({ ...direct, requestId: 'explicit-new-request' });
+    const deadline = Date.now() + 20000;
+    let finished;
+    while (Date.now() < deadline) {
+      finished = repository.experiments.get(f.project.id, fresh.id);
+      if (!['preparing', 'running'].includes(finished.status)) break;
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    assert.equal(finished.status, 'completed', finished.error);
+    assert.notEqual(finished.id, recovered.id);
+    assert.notEqual(tasks.requireExecution('experiment', fresh.id, f.project.id).taskId, f.run.taskId);
+    assert.equal(dispatches, 3); // preparation probe, compute, verification probe
+    assert.equal(tasks.get(f.run.taskId, f.project.id).status, 'interrupted');
+    receipts.push({ scenario: 'disk-recovery', simulation: 'live DB snapshots; original processes shut down',
+      pids, allAbsent: true, recovered, historical: published, fresh: finished, dispatches });
+  } finally {
+    await restartedService?.shutdown(); await restartedPython?.shutdown();
+    restartedDb?.close(); restartedAgentDb?.close();
+    await f.cleanup();
+  }
 });

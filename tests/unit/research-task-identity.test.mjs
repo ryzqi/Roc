@@ -176,6 +176,35 @@ test('owned executions and three review roles retain stage parentage, deny reass
   } finally { f.close(); }
 });
 
+test('terminal tasks allow identical owned association replay while denying new links and identity changes', () => {
+  for (const state of ['interrupted', 'cancelled']) {
+    const f = fixture();
+    try {
+      const inputs = ['experiment', 'figure', 'export'].map(kind => ({
+        kind, executionId: `${state}-${kind}`, projectId: f.project.id, ownerRunId: f.run.id,
+        goal: kind, snapshot: { sourceVersion: 1 }
+      }));
+      const linked = inputs.map(input => f.tasks.linkOwned(input));
+      if (state === 'cancelled') f.tasks.cancel(f.run.taskId, f.project.id);
+      else f.repository.runs.recoverInterrupted();
+      const task = f.tasks.get(f.run.taskId, f.project.id);
+      assert.equal(task.status, state);
+      const rows = f.tasks.executions(f.run.taskId, f.project.id);
+      for (const [index, input] of inputs.entries()) {
+        assert.deepEqual(f.tasks.linkOwned(input), linked[index]);
+        assert.throws(() => f.tasks.linkOwned({ ...input, snapshot: { sourceVersion: 2 } }),
+          /research_task_execution_conflict/u);
+        assert.throws(() => f.tasks.linkOwned({ ...input, ownerRunId: null }),
+          /research_task_execution_conflict/u);
+        assert.throws(() => f.tasks.linkOwned({ ...input, executionId: `${input.executionId}-new` }),
+          /research_task_not_active/u);
+      }
+      assert.deepEqual(f.tasks.get(task.id, f.project.id), task);
+      assert.deepEqual(f.tasks.executions(task.id, f.project.id), rows);
+    } finally { f.close(); }
+  }
+});
+
 test('cross-database association failure blocks model execution; startup repairs only authoritative links', async () => {
   const f = fixture();
   const r = runtime(f);

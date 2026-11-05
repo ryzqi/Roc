@@ -1,6 +1,28 @@
 # Python 环境预检与隔离探针
 
-PR08 当前提供环境预检、真实隔离探针、主进程确认的原生环境选择与项目绑定、Python 环境预览，以及固定版本的 Python 实验运行与冻结发布。项目管理的任务区提供环境选择入口；实验角色可读取选择与预览后运行，Python 专项恢复验收仍待完成。
+PR08 当前提供环境预检、真实隔离探针、主进程确认的原生环境选择与项目绑定、Python 环境预览，以及固定版本的 Python 实验运行与冻结发布。项目管理的任务区提供环境选择入口；实验角色可读取选择与预览后运行。关闭和磁盘恢复的专项行为见下文。
+
+## 关闭、恢复与请求重放
+
+关闭实验服务会取消在途计算并等待进程树清理，保存 `interrupted`。真实 runner 的拒绝资源、stdout 和冻结输入仍保留；运行记录沿用进程拒绝时的终态标记 `exitCode: 1`，资源报告的 `exitCode: null` 表示没有收到真实正常退出码，不能将记录标记当作解释器退出码。
+
+启动恢复只将磁盘中 `preparing/running` 的记录转为 `interrupted`，保留原 owner、环境、输入身份和已登记文件；阶段和任务同样中断，不重新探针、计算或打开原生面板。崩溃前未持久化的最终资源报告保持缺失。旧成功运行的审计和已发布清单仍可离线校验。
+
+同一请求只读返回原终态，仍检查请求、项目、owner、原始工作区输入和已有任务关联的完整身份。已有任务关联可以在任务中断或取消后按原身份重放；新关联必须属于 active 任务，身份变更和重新分配均拒绝。新运行必须使用新的 `requestId` 和有效的执行身份；恢复的旧 owner 不会因此激活。中断运行不能发布。
+
+专项测试先启动真实 CPython 的 TERM-ignoring 父、子、孙进程，确认实际 PID 后测试关闭与清理；磁盘恢复测试在运行时备份 research/agent 两库，关闭原真实进程，再从备份重开并恢复。这模拟崩溃时的持久状态；真实 host SIGKILL 的清理证据属于 X-SAFE 的独立专项。
+
+## PR08 本地验收范围
+
+| 合同 | 实际检查 |
+| --- | --- |
+| 环境与启动身份 | 所选 CPython 3.14.7、标准 venv、lock/安装包一致；真实启动钩子控制、解释器/包字节漂移和固定 bootstrap 核验 |
+| 冻结与复现 | 只读代码/数据/参数/种子；确定性结果哈希；输入漂移和同请求身份冲突拒绝 |
+| 进程和资源边界 | 实际文件/网络拒绝、退出/异常、CPU/RSS/文件/日志限额、超时和取消；完整进程树回收 |
+| 来源与发布 | 实际输出、环境代码/启动/资源审计冻结；篡改拒绝；跨项目/foreign owner 拒绝；失败和中断不发布 |
+| 关闭与磁盘恢复 | 实际计算 shutdown、运行中双库快照重开、阶段/任务/实验中断、零自动 dispatch、成功历史离线校验、新请求新任务 |
+
+这些结果只覆盖已声明的 macOS arm64/CPython 3.14 合同，不代表任意 Notebook/Jupyter 语义、其他 Python 布局或科学正确性。CPU、内存和磁盘使用为已测的监督/监控限额，不能描述成 Seatbelt 硬配额。当前 schema 的历史记录保留读取与审计；不迁移或解释已删除的旧执行合同。
 
 ## 用户选择与项目绑定
 
@@ -85,6 +107,14 @@ Python start 的公开、owned 和存储合同一致：`engine: 'python'`、`.py
 
 ## 验证
 
+A4E 关闭、恢复与 PR08 本地矩阵（均从仓库根目录执行）：
+
+- `node --test --test-concurrency=1 tests/integration/research-python-experiments.test.mjs`：9/9，覆盖原服务与角色链路以及新增真实关闭、运行中双库磁盘恢复、零自动 dispatch、历史审计、旧 owner 拒绝和新请求计算。回执为 `.artifacts/research-optimization/pr08-a4e/python-experiments.json`，A4C/A4D 原回执保留。
+- `pnpm test:unit`：1181/1181，无跳过，355367 ms；新增 experiment/figure/export 关联在 cancelled/interrupted 任务下的同身份读取，以及新关联、身份变更和重新分配拒绝。
+- `pnpm build`（含 typecheck）、`node scripts/run-research-p0.mjs`（13/13）、`pnpm harness:eval`（94/94）、`node scripts/smoke-electron.mjs`（13/13，零 renderer errors）、`pnpm check:ipc`、`pnpm check:renderer-chunks`（1132907 bytes / 6 files）均通过。
+
+初次恢复回归在旧请求重放处真实复现 `research_task_not_active`。将任务的 active 检查移到已有关联的完整身份核验之后，保留父关联、项目和冲突检查；无任务激活或额外 dispatch。最终专项及完整 Python 链均通过。夹具最初误将 runtime 的 `kind` 传给严格的选择 get 请求，并将当前阶段拒绝预期写成 `research_run_not_active`；修正为显式选择字段和实际 `research_run_not_current`。所有原始失败和最终日志保留于 `pr08-a4e-*.log`。本部分无 renderer 改动，不重述先前并发 renderer 全套为通过。
+
 A4D 实验角色接入（均从仓库根目录执行）：
 
 - `node --test tests/unit/research-experiment-environment-tools.test.mjs tests/unit/research-compute-policy.test.mjs tests/unit/research-figure-owned.test.mjs`：14/14，分页、无选择、阶段隔离、输入验证、错误与取消、迟到成功预览拒绝，以及既有计算和图稿 ownership。
@@ -130,7 +160,7 @@ A4B1 环境预览（下列命令均从仓库根目录执行）：
 
 初轮真实测试 5/8：两个测试错误地要求短进程一定有采样，一个测试假定此发行版的内建 `zlib` 有 `__file__`。改为将完整回执与独立捕获的真实 runner 结果逐项核对，并使用实际 `_dbm` 原生文件；保留全部边界、漂移和失败断言。修正后的 10 项通过，初轮日志保留。
 
-完整运行日志位于 `.artifacts/research-optimization/pr08-a2-*.log`，最终实际回执为 `pr08-a2/python-environment.json`。后续实验复跑与发布见 A4C；Python 专项恢复及完整 PR08 验收尚未完成。
+完整运行日志位于 `.artifacts/research-optimization/pr08-a2-*.log`，最终实际回执为 `pr08-a2/python-environment.json`。后续实验复跑与发布见 A4C，关闭和磁盘恢复见 A4E。
 
 项目选择增量从同一工作目录验证：
 

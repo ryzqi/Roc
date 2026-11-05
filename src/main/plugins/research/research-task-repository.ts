@@ -283,7 +283,6 @@ export class ResearchTaskRepository {
 
   private link(input: ExecutionInput): ResearchTaskExecution {
     const task = this.get(input.taskId, input.projectId);
-    if (task.status !== 'active') throw new Error('research_task_not_active');
     if (input.parentKind !== null && input.parentExecutionId !== null) {
       const parent = this.requireExecution(input.parentKind, input.parentExecutionId, input.projectId);
       if (parent.taskId !== input.taskId) throw new Error('research_task_parent_mismatch');
@@ -294,6 +293,7 @@ export class ResearchTaskRepository {
       if (JSON.stringify(identity) !== JSON.stringify(input)) throw new Error('research_task_execution_conflict');
       return existing;
     }
+    if (task.status !== 'active') throw new Error('research_task_not_active');
     const execution = researchTaskExecutionSchema.parse({ schemaVersion: 1, ...input, createdAt: this.now() });
     this.db.prepare('INSERT INTO research_task_executions (kind, execution_id, task_id, project_id, snapshot_json, created_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(execution.kind, execution.executionId, execution.taskId, execution.projectId, JSON.stringify(execution), execution.createdAt);
