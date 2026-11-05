@@ -200,7 +200,7 @@ export class ResearchExperimentService {
   private async execute(initial: ResearchExperimentExecution, signal: AbortSignal): Promise<void> {
     const root = this.repository.experiments.root(initial.projectId, initial.id);
     let files: ResearchExperimentFile[] = [];
-    let output: ResearchProcessResult = { exitCode: 1, stdout: '', stderr: '' };
+    let output: Pick<ResearchProcessResult, 'exitCode' | 'stdout' | 'stderr'> = { exitCode: 1, stdout: '', stderr: '' };
     let failure: unknown;
     let prepared: PreparedExperimentEnvironment | null = null;
     try {
@@ -321,6 +321,7 @@ export class ResearchExperimentService {
         maxOutputBytes: 16 * 1024 * 1024,
         writeLimits,
         timeoutMs: request.timeoutMs,
+        resourceLimits: { mode: 'monitored', cpuTimeMs: request.timeoutMs * 4, maxResidentBytes: 2 * 1024 ** 3 },
         signal,
         allowGpuAcceleration: false,
         allowPosixSpawn: false,
@@ -338,6 +339,7 @@ export class ResearchExperimentService {
       additionalExecutables: [executable], cwd: input, readablePaths: [...prepared.readablePaths, input],
       writablePaths: [output, scratch], environment,
       writeLimits,
+      resourceLimits: { mode: 'monitored', cpuTimeMs: request.timeoutMs * 4, maxResidentBytes: 2 * 1024 ** 3 },
       timeoutMs: request.timeoutMs, signal, allowGpuAcceleration: false, allowPosixSpawn: false, networkAccess: request.network === 'enabled' ? 'full' : 'none' };
     return request.engine === 'r' ? await runRExperimentProcess(processRequest, this.run) : await this.run(processRequest);
   }

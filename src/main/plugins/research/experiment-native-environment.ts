@@ -63,6 +63,7 @@ export async function inspectNativeExperimentEnvironment({ workspace, runtime, j
       additionalExecutables: [executable], environment: { ...environment, ROC_PROJECT_ROOT: workspace, ROC_R_LIBRARY: prefix, ROC_JULIA_DEPOT: prefix, ROC_ENVIRONMENT_REPORT: reportPath },
       writeLimits: [{ path: jobDir, maxFileBytes: experimentFileLimit, maxTotalBytes: experimentOutputTotalLimit,
         maxFiles: experimentFileCountLimit, maxEntries: experimentDirectoryEntryLimit }],
+      resourceLimits: { mode: 'monitored', cpuTimeMs: 240_000, maxResidentBytes: 2 * 1024 ** 3 },
       timeoutMs: 60000, signal, allowGpuAcceleration: false, networkAccess: 'none', allowPosixSpawn: false };
     const result = runtime.kind === 'renv' ? await runRExperimentProcess(request, run) : await run(request);
     if (result.exitCode !== 0) throw new ResearchProcessError(nativeError(result.stderr), result.stdout, result.stderr);

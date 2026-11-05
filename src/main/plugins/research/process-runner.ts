@@ -1,6 +1,9 @@
 import { spawn } from 'node:child_process';
 import { lstat, opendir, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
+import { terminateProcessTreeWithRetry } from '../../services/process-tree';
+import { assertResearchProcessResourceLimits, ResearchProcessResourceMonitor,
+  type ResearchProcessResourceLimits, type ResearchProcessResourceUsage } from './process-resources';
 
 export type ResearchProcessRequest = {
   command: string;
@@ -10,6 +13,7 @@ export type ResearchProcessRequest = {
   writablePaths: readonly string[];
   environment: NodeJS.ProcessEnv;
   timeoutMs: number;
+  resourceLimits: ResearchProcessResourceLimits;
   terminationGraceMs?: number;
   allowGpuAcceleration: boolean;
   networkAccess: 'none' | 'loopback' | 'full';
@@ -21,7 +25,7 @@ export type ResearchProcessRequest = {
   writeLimits?: readonly ResearchProcessWriteLimit[];
 };
 
-export type ResearchProcessResult = { exitCode: number; stdout: string; stderr: string };
+export type ResearchProcessResult = { exitCode: number; stdout: string; stderr: string; resourceUsage: ResearchProcessResourceUsage };
 export type ResearchProcessWriteLimit = {
   path: string;
   maxFileBytes: number;
@@ -31,7 +35,7 @@ export type ResearchProcessWriteLimit = {
 };
 
 export class ResearchProcessError extends Error {
-  constructor(readonly code: string, readonly stdout = '', readonly stderr = '') {
+  constructor(readonly code: string, readonly stdout = '', readonly stderr = '', readonly resourceUsage: ResearchProcessResourceUsage | null = null) {
     super(code);
     this.name = 'ResearchProcessError';
   }
@@ -115,6 +119,7 @@ export async function researchSandboxProfile(request: Pick<ResearchProcessReques
 
 export async function runResearchProcess(request: ResearchProcessRequest): Promise<ResearchProcessResult> {
   if (process.platform !== 'darwin') throw new Error('research_runtime_macos_required');
+  assertResearchProcessResourceLimits(request.resourceLimits);
   if (!Number.isFinite(request.timeoutMs) || request.timeoutMs <= 0) throw new Error('research_process_timeout_required');
   const terminationGraceMs = request.terminationGraceMs ?? 1000;
   if (!Number.isSafeInteger(terminationGraceMs) || terminationGraceMs < 0) throw new Error('research_process_termination_grace_invalid');
@@ -144,19 +149,25 @@ export async function runResearchProcess(request: ResearchProcessRequest): Promi
     let settled = false;
     let settling = false;
     let childError: Error | undefined;
+    const resourceMonitor = new ResearchProcessResourceMonitor();
+    let resourceTimer: ReturnType<typeof setTimeout> | undefined;
+    let resourceTask: Promise<void> | undefined;
     const kill = (signal: NodeJS.Signals): void => {
       if (child.pid === undefined) return;
       try {
         process.kill(-child.pid, signal);
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') stopped = 'research_process_kill_failed';
+        const code = (error as NodeJS.ErrnoException).code;
+        // Darwin can return EPERM while the signalled group dissolves. The
+        // awaited final cleanup proves absence or reports a real kill failure.
+        if (code !== 'ESRCH' && code !== 'EPERM') stopped = 'research_process_kill_failed';
       }
     };
     const stop = (code: string): void => {
       if (stopped !== null || settled || settling) return;
       stopped = code;
       kill('SIGTERM');
-      const graceMs = code === 'research_process_write_limit'
+      const graceMs = code === 'research_process_write_limit' || code === 'research_process_cpu_limit' || code === 'research_process_memory_limit' || code === 'research_process_resource_monitor_failed'
         ? 100
         : code === 'research_process_cancelled' || code === 'research_process_timeout'
           ? terminationGraceMs
@@ -179,6 +190,23 @@ export async function runResearchProcess(request: ResearchProcessRequest): Promi
       }
     };
     if (request.writeLimits !== undefined) writeMonitorTask = monitorWrites();
+    const monitorResources = async (): Promise<void> => {
+      if (settled || settling || stopped !== null || child.pid === undefined) return;
+      try {
+        await resourceMonitor.sample(child.pid);
+        if (settled || settling || child.exitCode !== null || child.signalCode !== null) return;
+        const usage = resourceMonitor.usage();
+        if (usage.observedCpuTimeMs !== null && usage.observedCpuTimeMs > request.resourceLimits.cpuTimeMs) stop('research_process_cpu_limit');
+        else if (usage.peakResidentBytes !== null && usage.peakResidentBytes > request.resourceLimits.maxResidentBytes) stop('research_process_memory_limit');
+      } catch {
+        if (!settled && !settling && child.exitCode === null && child.signalCode === null) stop('research_process_resource_monitor_failed');
+      }
+      if (!settled && !settling && stopped === null) {
+        resourceTimer = setTimeout(() => { resourceTask = monitorResources(); }, 100);
+        resourceTimer.unref();
+      }
+    };
+    resourceTask = monitorResources();
     const timeout = setTimeout(() => stop('research_process_timeout'), request.timeoutMs);
     timeout.unref();
     const abort = (): void => stop('research_process_cancelled');
@@ -196,11 +224,14 @@ export async function runResearchProcess(request: ResearchProcessRequest): Promi
       if (settled || settling) return;
       settling = true;
       const finalize = async (): Promise<void> => {
-        kill('SIGKILL');
         clearTimeout(timeout);
+        if (resourceTimer !== undefined) clearTimeout(resourceTimer);
         if (writeMonitor !== undefined) clearTimeout(writeMonitor);
         if (forcedKill !== undefined) clearTimeout(forcedKill);
         request.signal?.removeEventListener('abort', abort);
+        try { await terminateProcessTreeWithRetry(child, 100, 10); }
+        catch { stopped = 'research_process_kill_failed'; }
+        if (resourceTask !== undefined) await resourceTask;
         if (writeMonitorTask !== undefined) {
           try { await writeMonitorTask; }
           catch { stopped = 'research_process_write_limit'; }
@@ -211,9 +242,10 @@ export async function runResearchProcess(request: ResearchProcessRequest): Promi
         }
         settled = true;
         const output = { stdout: Buffer.concat(stdout).toString('utf8'), stderr: Buffer.concat(stderr).toString('utf8') };
-        if (stopped !== null) reject(new ResearchProcessError(stopped, output.stdout, output.stderr));
-        else if (error !== undefined) reject(new ResearchProcessError('research_process_spawn_failed', output.stdout, output.stderr));
-        else resolve({ exitCode: code ?? 1, ...output });
+        const resourceUsage = resourceMonitor.usage();
+        if (stopped !== null) reject(new ResearchProcessError(stopped, output.stdout, output.stderr, resourceUsage));
+        else if (error !== undefined) reject(new ResearchProcessError('research_process_spawn_failed', output.stdout, output.stderr, resourceUsage));
+        else resolve({ exitCode: code ?? 1, ...output, resourceUsage });
       };
       void finalize().catch(() => {
         settled = true;
@@ -221,6 +253,9 @@ export async function runResearchProcess(request: ResearchProcessRequest): Promi
       });
     };
     child.on('error', (error) => { childError = error; });
+    // Descendants can retain inherited stdio after the leader exits. Clean the group
+    // immediately; waiting for close first would leave that computation running.
+    child.on('exit', () => kill('SIGKILL'));
     child.on('close', (code) => finish(code, childError));
     child.stdin.on('error', (error: NodeJS.ErrnoException) => {
       if (error.code !== 'EPIPE') stop('research_process_input_failed');

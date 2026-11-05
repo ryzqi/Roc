@@ -213,7 +213,8 @@ export class ResearchToolchain {
       readablePaths: [root, proseDir],
       writablePaths: [input.jobDir],
       environment: await this.proseEnvironment(root, input.jobDir),
-      timeoutMs: 120_000, signal: input.signal, allowGpuAcceleration: false, networkAccess: 'none', allowPosixSpawn: false
+      timeoutMs: 120_000, signal: input.signal, allowGpuAcceleration: false, networkAccess: 'none', allowPosixSpawn: false,
+      resourceLimits: { mode: 'monitored', cpuTimeMs: 480_000, maxResidentBytes: 2 * 1024 ** 3 }
     });
     if (result.exitCode !== 0) throw new ResearchProcessError('research_prose_lint_failed', result.stdout, result.stderr);
     const parsed = parseJson(result.stdout);
@@ -244,6 +245,7 @@ export class ResearchToolchain {
       args: ['--bundle', join(root, 'tex/bundle.zip'), '--only-cached', '--untrusted', '--keep-logs', '--keep-intermediates',
         '--outdir', input.outputDir, input.entryPath],
       cwd: input.rootPath, readablePaths: [root, input.rootPath], writablePaths: [input.jobDir], environment,
+      resourceLimits: { mode: 'monitored', cpuTimeMs: 720_000, maxResidentBytes: 2 * 1024 ** 3 },
       timeoutMs: 180_000, signal: input.signal, allowGpuAcceleration: false, networkAccess: 'none', allowPosixSpawn: false });
   }
 
@@ -271,6 +273,7 @@ export class ResearchToolchain {
       writablePaths: [input.jobDir],
       environment: { PATH: `${join(root, 'bin')}:/usr/bin:/bin:/usr/sbin:/sbin`, LANG: 'en_US.UTF-8',
         HOME: home, TMPDIR: temporary, XDG_CACHE_HOME: cache },
+      resourceLimits: { mode: 'monitored', cpuTimeMs: 480_000, maxResidentBytes: 2 * 1024 ** 3 },
       timeoutMs: 120_000, signal: input.signal, allowGpuAcceleration: false, networkAccess: 'none', allowPosixSpawn: false });
   }
 
@@ -367,6 +370,7 @@ export class ResearchToolchain {
       writablePaths: [input.jobDir],
       environment: { ELECTRON_RUN_AS_NODE: '1', PATH: '/usr/bin:/bin:/usr/sbin:/sbin' },
       timeoutMs,
+      resourceLimits: { mode: 'monitored', cpuTimeMs: timeoutMs * 4, maxResidentBytes: 4 * 1024 ** 3 },
       terminationGraceMs,
       signal: input.signal,
       input: JSON.stringify(request),
