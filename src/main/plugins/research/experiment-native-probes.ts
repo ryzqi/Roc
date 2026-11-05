@@ -53,8 +53,8 @@ metadata = String[]
 for (uuid, information) in Pkg.dependencies(environment)
     entry = environment.manifest[uuid]
     entry.path === nothing || !isabspath(entry.path) || error("research_experiment_absolute_dependency_path")
-    project = joinpath(information.source, "Project.toml")
-    isfile(project) || error("research_experiment_package_metadata_missing")
+    project = Base.locate_project_file(information.source)
+    project isa String || error("research_experiment_package_metadata_missing")
     data = TOML.parsefile(project)
     version = get(data, "version", nothing)
     if version !== nothing && information.version !== nothing

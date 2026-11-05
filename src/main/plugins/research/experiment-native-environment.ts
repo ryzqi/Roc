@@ -9,6 +9,7 @@ import { rProcessBridgeHash, runRExperimentProcess } from './experiment-native-p
 import { ResearchProcessError, type ResearchProcessRequest, type ResearchProcessResult } from './process-runner';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchPath, researchRelativePath } from './research-files';
 import type { ResearchProcessScope } from './toolchain';
+import { discoverJuliaEnvironmentControls, parseJuliaRuntimeVersion, type JuliaEnvironmentControls } from './experiment-julia-controls';
 
 type ProcessRun = (input: ResearchProcessRequest) => Promise<ResearchProcessResult>;
 type NativeEnvironmentInspectionInput = {
@@ -57,13 +58,27 @@ export async function inspectNativeExperimentEnvironment({ workspace, runtime, j
   }
   const probe = await mkdtemp(join(jobDir, `${runtime.kind}-probe-`));
   try {
-    const projectReadPaths = runtime.kind === 'renv' ? lockFiles.map(file => join(workspace, file.path)) : [workspace];
-    const metadataRoots = runtime.kind === 'renv' ? readablePaths : [...readablePaths, workspace];
+    let juliaControls: JuliaEnvironmentControls | null = null;
+    let juliaVersion: string | null = null;
+    if (runtime.kind === 'julia') {
+      const versionResult = await run({ command: executable, args: [...juliaExperimentFlags, '--version'], cwd: jobDir,
+        readablePaths, writablePaths: [jobDir], additionalExecutables: [executable], environment,
+        writeLimits: [{ path: jobDir, maxFileBytes: experimentFileLimit, maxTotalBytes: experimentOutputTotalLimit,
+          maxFiles: experimentFileCountLimit, maxEntries: experimentDirectoryEntryLimit }],
+        resourceLimits: { mode: 'monitored', cpuTimeMs: 30_000, maxResidentBytes: 2 * 1024 ** 3 },
+        admission: { ...admission, resourceClass: 'utility' }, timeoutMs: 10000, signal, allowGpuAcceleration: false, networkAccess: 'none' });
+      if (versionResult.exitCode !== 0) throw new ResearchProcessError('research_experiment_runtime_version_probe_failed', versionResult.stdout, versionResult.stderr);
+      juliaVersion = parseJuliaRuntimeVersion(versionResult.stdout);
+      juliaControls = await discoverJuliaEnvironmentControls(workspace, juliaVersion, signal);
+      lockFiles.push(...juliaControls.lockFiles);
+    }
+    const projectReadPaths = lockFiles.map(file => join(workspace, file.path));
+    const localMetadataPaths = juliaControls?.metadataFiles.map(file => join(workspace, file.path)) ?? [];
     const reportPath = join(probe, runtime.kind === 'renv' ? 'environment.csv' : 'environment.json');
     const command = runtime.kind === 'renv'
       ? rExperimentCommand(root, executable, ['--vanilla', '--slave', '-e', rEnvironmentProbe])
       : { command: executable, args: [...juliaExperimentFlags, `--project=${workspace}`, '-e', juliaEnvironmentProbe] };
-    const request: ResearchProcessRequest = { ...command, cwd: workspace, readablePaths: [...readablePaths, ...projectReadPaths], writablePaths: [jobDir],
+    const request: ResearchProcessRequest = { ...command, cwd: workspace, readablePaths: [...readablePaths, ...projectReadPaths, ...localMetadataPaths], writablePaths: [jobDir],
       additionalExecutables: [executable], environment: { ...environment, ROC_PROJECT_ROOT: workspace, ROC_R_LIBRARY: prefix, ROC_JULIA_DEPOT: prefix, ROC_ENVIRONMENT_REPORT: reportPath },
       writeLimits: [{ path: jobDir, maxFileBytes: experimentFileLimit, maxTotalBytes: experimentOutputTotalLimit,
         maxFiles: experimentFileCountLimit, maxEntries: experimentDirectoryEntryLimit }],
@@ -79,27 +94,27 @@ export async function inspectNativeExperimentEnvironment({ workspace, runtime, j
       throw new ResearchProcessError('research_experiment_environment_report_invalid', bytes.toString('utf8'));
     }
     if (await realpath(report.prefix) !== prefix || await realpath(report.basePrefix) !== root) throw new Error('research_experiment_runtime_changed');
-    if (runtime.kind === 'julia') {
-      for (const file of report.controls) {
-        const path = researchRelativePath(relative(workspace, file.path));
-        const bytes = await readResearchFile(workspace, path, 16 * 1024 * 1024);
-        if (researchContentHash(bytes) !== file.sha256) throw new Error('research_experiment_environment_changed');
-        lockFiles.push({ path, size: bytes.length, sha256: file.sha256 });
-      }
+    if (juliaControls !== null) {
+      const actualControls = report.controls.map(file => ({ path: file.path, sha256: file.sha256 })).sort((left, right) => left.path.localeCompare(right.path));
+      const expectedControls = lockFiles.map(file => ({ path: join(workspace, file.path), sha256: file.sha256 })).sort((left, right) => left.path.localeCompare(right.path));
+      if (report.version !== juliaVersion || JSON.stringify(actualControls) !== JSON.stringify(expectedControls)) throw new Error('research_experiment_environment_changed');
     }
     const metadata = [];
     let metadataBytes = 0;
     for (const path of report.metadataPaths) {
       signal.throwIfAborted();
       const actual = await realpath(path);
-      const scope = metadataRoots.find((directory) => descendant(directory, actual));
+      const localFile = juliaControls?.metadataFiles.find(file => join(workspace, file.path) === actual);
+      const scope = localFile === undefined ? readablePaths.find((directory) => descendant(directory, actual)) : workspace;
       if (scope === undefined) throw new Error('research_experiment_metadata_outside_scope');
       const content = await readResearchFile(scope, researchRelativePath(relative(scope, actual)), 16 * 1024 * 1024);
+      if (localFile !== undefined && researchContentHash(content) !== localFile.sha256) throw new Error('research_experiment_environment_changed');
       metadataBytes += content.length;
       if (metadataBytes > 64 * 1024 * 1024) throw new Error('research_experiment_metadata_limit');
       metadata.push({ path: actual, sha256: researchContentHash(content) });
     }
     for (const file of lockFiles) if (researchContentHash(await readResearchFile(workspace, file.path, 16 * 1024 * 1024)) !== file.sha256) throw new Error('research_experiment_environment_changed');
+    for (const file of juliaControls?.metadataFiles ?? []) if (researchContentHash(await readResearchFile(workspace, file.path, 16 * 1024 * 1024)) !== file.sha256) throw new Error('research_experiment_environment_changed');
     if (researchContentHash(await readResearchFile(root, relative(root, executable), 64 * 1024 * 1024)) !== beforeExecutable) throw new Error('research_experiment_runtime_changed');
     signal.throwIfAborted();
     const packages = report.packages.map((entry) => ({ name: entry.name, version: entry.versions.length === 0 ? null : entry.versions[0] }))
@@ -107,7 +122,7 @@ export async function inspectNativeExperimentEnvironment({ workspace, runtime, j
     metadata.sort((left, right) => left.path.localeCompare(right.path));
     lockFiles.sort((left, right) => left.path.localeCompare(right.path));
     const value = { runtime, executable, prefix, basePrefix: root, version: report.version, platform: report.platform, architecture: report.architecture,
-      toolchainHash: tools.hash, metadataHash: researchContentHash(JSON.stringify({ inspectionContractVersion: 2, executable: beforeExecutable, metadata,
+      toolchainHash: tools.hash, metadataHash: researchContentHash(JSON.stringify({ inspectionContractVersion: 3, executable: beforeExecutable, metadata,
         bridge: runtime.kind === 'renv' ? rProcessBridgeHash() : null })), packages, lockFiles };
     const snapshot = researchExperimentEnvironmentSchema.parse({ ...value, hash: researchContentHash(JSON.stringify(value)) });
     return { snapshot, readablePaths: [...new Set(readablePaths)], environment, typescriptRuntime: null };

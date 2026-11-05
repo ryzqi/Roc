@@ -102,3 +102,17 @@ R 环境探针的项目读取范围缩小为实际取得摘要的 `renv.lock` �
 本机没有 R/Julia 环境。专项用编译的 C 二进制通过真实 R 启动适配、原生桥和 Seatbelt 执行，独立验证权限合同；它不会把 C 输出当成实际 R 包解析或科学复现验收。正向探针核对两份声明控制文件可读、合法库链接的缓存 `DESCRIPTION` 可读，项目私有文件返回 `EPERM`。恶意探针另在报告里指定私有文件，主进程以 `research_experiment_metadata_outside_scope` 拒绝。修复前 0/2：私有文件实际可读，伪造元数据报告也被接受；修复后 2/2。
 
 本增量在上述范围内为 `Verified passing`。在上述仓库目录执行 `pnpm test:research-environment-boundaries`，2/2；相关政策/资源/准入单测联合 16/16；构建/typecheck、IPC、分块检查通过，eager JS 1132907 字节、6 个文件；标准生产 P0 1/1、Harness 94/94、启动 13/13 零 renderer 错误。回执为 `.artifacts/research-optimization/xsafe-a7a/native-environment.json`，明确记录 `actualRRuntimeTested: false` 和 `actualJuliaRuntimeTested: false`；日志为 `xsafe-a7a-*.log`。实际 R 验收、Julia 控制文件范围、原生代码完整性和其余资源持久化仍待完成。
+
+## Julia 环境探针的项目数据范围
+
+主进程先在无项目读取权限的沙箱中执行所选解释器的 `--version`，使用同一计算准入、资源监测、输出上限和离线/CPU 策略。随后用固定版本 `smol-toml` 解析声明的项目控制文件，选择实际解释器主/次版本对应的 Manifest，发现嵌套 workspace 和本地相对路径依赖。控制文件最多 1000 个，控制文件和本地元数据合计最多 10000 个，单文件 16MiB、总计 64MiB。重复成员去重，循环声明拒绝；缺失、格式错误、版本不匹配、越出项目或符号链接均失败。
+
+JuliaProject、版本化 Manifest、显式 manifest、AppManifest、workspace、preferences 和 artifacts 名称依据 [Julia 文件选择实现](https://github.com/JuliaLang/julia/blob/master/base/loading.jl)及 [Pkg EnvCache 实现](https://github.com/JuliaLang/Pkg.jl/blob/master/src/Types.jl)。这些是当前原生格式。探针只获得选中的控制文件和本地包项目元数据文件的逐文件读取权限，项目根和本地包目录不作为读取授权。运行时和选中的 depot 代码目录继续沿用声明的授权范围。
+
+主进程在派发探针前冻结文件 SHA-256。报告必须精确返回完整控制路径/哈希集合和已核实的运行时版本；额外、遗漏、重复或变更均拒绝，不能通过报告扩大读取权限。本地包元数据只允许预先发现的精确文件，并在探针结束后重新核对字节。环境检查合同升级为 3。
+
+真实 macOS Seatbelt 回归使用编译的 C 可执行文件走 Julia 版本/环境适配入口，验证未声明项目文件、本地包私有文件和未选中的 Manifest 均不可读，合法控制文件与本地元数据可读；验证伪造、缺项、重复、错误哈希，以及实际派发后的控制/元数据漂移。回执位于 `.artifacts/research-optimization/xsafe-a7b/native-environment.json`，明确记录实际 R/Julia 解释器均未测试。该回执不证明 Julia Pkg 在具体安装上的可用性，也不证明整个运行时或包代码的完整性。
+
+本增量在上述范围内为 `Verified passing`。在 `/Users/Apple_501/Desktop/Roc/Roc` 执行 `pnpm test:research-environment-boundaries`，最终 8/8（Julia 6、R 2）；`node --test tests/unit/research-julia-controls.test.mjs tests/unit/research-experiment-resources.test.mjs tests/unit/research-process-resources.test.mjs tests/unit/research-process-admission.test.mjs tests/unit/research-compute-policy.test.mjs`，24/24；`pnpm build`（含 typecheck）通过。`node scripts/run-research-p0.mjs --test-name-pattern='standard offline task'` 1/1、`pnpm harness:eval` 94/94、`node scripts/smoke-electron.mjs` 13/13 零 renderer 错误，IPC/分块检查通过，eager JS 1132907 字节、6 个文件。
+
+最初 Julia 四项红测均失败，原因是没有独立版本探针，且主进程接受未声明、遗漏的控制文件和私有包元数据。修复后初轮 6/6、相关 23/23 通过；最终补上重复成员去重，24 项、8 项原生与构建复验通过。标准 P0/Harness/启动覆盖去重调整前的同一依赖及运行时入口，其结果保留；最终专项直接覆盖调整后的遍历。日志为 `.artifacts/research-optimization/xsafe-a7b-*.log`。原生代码完整性、其余资源持久化与实际解释器验收继续执行。
