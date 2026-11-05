@@ -321,8 +321,7 @@ export class ResearchExperimentService {
         admission: { projectId: request.projectId, priority: 'user', resourceClass: 'compute' },
         signal,
         allowGpuAcceleration: false,
-        allowPosixSpawn: false,
-        networkAccess: request.network === 'enabled' ? 'full' : 'none'
+        networkAccess: 'none'
       };
       return await this.run(processRequest);
     }
@@ -338,7 +337,7 @@ export class ResearchExperimentService {
       writeLimits,
       resourceLimits: { mode: 'monitored', cpuTimeMs: request.timeoutMs * 4, maxResidentBytes: 2 * 1024 ** 3 },
       admission: { projectId: request.projectId, priority: 'user', resourceClass: 'compute' },
-      timeoutMs: request.timeoutMs, signal, allowGpuAcceleration: false, allowPosixSpawn: false, networkAccess: request.network === 'enabled' ? 'full' : 'none' };
+      timeoutMs: request.timeoutMs, signal, allowGpuAcceleration: false, networkAccess: 'none' };
     return request.engine === 'r' ? await runRExperimentProcess(processRequest, this.run) : await this.run(processRequest);
   }
 

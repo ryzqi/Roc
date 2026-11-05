@@ -20,7 +20,7 @@ export { withResearchDispatchReference } from '../../../src/main/services/resear
 export {withReviewSearchDispatch, reviewSearchDispatchContext, reviewSearchDispatchRequestHash} from '../../../src/main/services/research-review-dispatch-context';
 export {withReviewSearchOwner} from '../../../src/main/services/research-review-owner-context';
 export { registerResearchRunCapabilities } from '../../../src/main/plugins/research/run-capabilities';
-export { registerResearchExperimentCapabilities } from '../../../src/main/plugins/research/experiment-capabilities';
+export { registerResearchExperimentCapabilities, researchExperimentCapabilities } from '../../../src/main/plugins/research/experiment-capabilities';
 export { registerResearchFigureCapabilities } from '../../../src/main/plugins/research/figure-capabilities';
 export { registerResearchExportCapabilities } from '../../../src/main/plugins/research/export-capabilities';
 export { agentMigrations, researchMigrations } from '../../../src/main/infrastructure/database-schemas';

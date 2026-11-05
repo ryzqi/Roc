@@ -45,7 +45,7 @@ const experimentStartSharedFields = {
   sourcePath: researchExperimentPathSchema, inputPaths: z.array(researchExperimentPathSchema).max(500),
   parameters: z.record(z.string().min(1).max(256), z.string().max(65536))
     .refine((value) => Object.keys(value).length <= 1000 && new TextEncoder().encode(JSON.stringify(value)).byteLength <= 1024 * 1024),
-  expectedEnvironmentHash: digest.optional(), timeoutMs: z.number().int().min(1000).max(3600000), network: z.enum(['disabled', 'enabled'])
+  expectedEnvironmentHash: digest.optional(), timeoutMs: z.number().int().min(1000).max(3600000), network: z.literal('disabled')
 } as const;
 const typescriptStartSchema = z.object({
   ...experimentStartSharedFields, engine: z.literal('typescript'), runtime: z.object({ kind: z.literal('bundled-node') }).strict(),

@@ -67,7 +67,7 @@ export async function inspectNativeExperimentEnvironment({ workspace, runtime, j
         maxFiles: experimentFileCountLimit, maxEntries: experimentDirectoryEntryLimit }],
       resourceLimits: { mode: 'monitored', cpuTimeMs: 240_000, maxResidentBytes: 2 * 1024 ** 3 },
       admission: { ...admission, resourceClass: 'utility' },
-      timeoutMs: 60000, signal, allowGpuAcceleration: false, networkAccess: 'none', allowPosixSpawn: false };
+      timeoutMs: 60000, signal, allowGpuAcceleration: false, networkAccess: 'none' };
     const result = runtime.kind === 'renv' ? await runRExperimentProcess(request, run) : await run(request);
     if (result.exitCode !== 0) throw new ResearchProcessError(nativeError(result.stderr), result.stdout, result.stderr);
     const bytes = await readResearchFile(probe, runtime.kind === 'renv' ? 'environment.csv' : 'environment.json', 4 * 1024 * 1024);

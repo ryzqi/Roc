@@ -31,3 +31,24 @@ CPU/内存硬隔离后端尚未提供，不能发布要求这些能力的任务�
 统一准入增量为 `Verified passing`。在上述仓库目录执行 `pnpm test:unit`，最终 1139/1139；`node --test tests/unit/research-process-admission.test.mjs tests/unit/tool-resource-coordinator.test.mjs tests/unit/research-process-resources.test.mjs tests/unit/run-telemetry-trace.test.mjs` 为 28/28；最终构建/typecheck、Harness 94/94、启动 13/13 零 renderer 错误、IPC 与分块检查通过，eager JS 保持 1132907 字节、6 个文件。
 
 `node scripts/run-research-p0.mjs` 初轮 12/13，唯一失败为测试夹具直接编译 hostile PDF 时未声明准入范围；补上实际项目身份后，`node scripts/run-research-p0.mjs --test-name-pattern='hostile PDF text'` 1/1 通过，保留其余 12 项结果。初轮全量 1136/1139 的三个诊断失败由计算类别进入旧工具锁计数造成；计算观察采用独立类型后，实际 trace 联合 28 项和最终 1139 项通过，严格诊断 schema 没有放宽，未采集的计算计数没有伪装成零。日志为 `.artifacts/research-optimization/xsafe-a2-*.log`，实际计算准入回执保存为 `xsafe-a2/native-resources.json`。资源事件持久化及其余 X-SAFE 边界审计仍未完成。
+
+## 计算权限与原生边界
+
+新建实验请求只接受明确的 `network: 'disabled'`，实际角色 SDK 与主进程能力在调用执行服务前拒绝联网请求。执行服务固定使用 `networkAccess: 'none'`，下载不属于实验计算权限。普通文献和项目索引解析默认使用 CPU；主进程明确选择 CoreML 后才允许 GPU，并受统一 GPU 并发上限约束。
+
+移除未使用的 `allowPosixSpawn` 选项。全部科研进程固定拒绝 Darwin 的 `setpgid`、`setsid` 和 `posix_spawn` 系统调用。旧选项允许原子 `POSIX_SPAWN_SETPGROUP` 成功创建另一进程组，尽管单独的组/会话切换已被拒绝；真实复现保存在 `xsafe-a3-spawn-escape-repro.log`，探针等待子进程退出。修复后的实际子进程组、会话切换与原子 spawn 均被拒绝。已有 R 原生桥继续在这一限制下通过生产运行检查。
+
+真实 DNS 对照能解析 `example.com`，相同二进制在计算沙箱返回 `errno=EPERM`；无需增加未经证实的 Mach 服务规则。Metal 对照可取得实际设备和命令队列，默认 GPU 权限下两者不可取得，明确允许后两者可取得。回执保存设备名称、内核版本、架构和实际准入时间；它证明本机 Metal 权限边界，不代表所有加速服务或其他平台均已验证。
+
+原生检查还验证声明输入可读但不可写、声明输出可写、未声明数据与路径穿越读取/写入被拒绝。输出符号链接无法读取未声明数据，且输出监控返回失败。凭证检查只在测试父进程暂设随机合成值，对照记录存在标志；最小子进程环境不含该值，测试恢复父进程原环境。日志和回执不包含凭证内容。
+
+本增量为 `Verified passing`。在 `/Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc` 执行：
+
+- `node --test tests/unit/research-compute-policy.test.mjs`：修复前 0/3，修复后 3/3。
+- `pnpm test:research-resources`：13/13，包含 DNS、文件、凭证、原子 spawn 和实际 Metal 探针。
+- `pnpm test:unit`：1142/1142。
+- `node scripts/run-research-p0.mjs`：13/13。
+- `pnpm harness:eval`：94/94；`node scripts/smoke-electron.mjs`：13/13，零 renderer 错误。
+- `pnpm build`（含 typecheck）、`pnpm check:ipc`、`pnpm check:renderer-chunks`：通过，eager JS 保持 1132907 字节、6 个文件。
+
+日志为 `.artifacts/research-optimization/xsafe-a3-*.log`，真实边界回执为 `xsafe-a3/native-resources.json`。本增量未增加 CPU/内存硬隔离能力；资源事实持久化、原生环境和输出上限的其余审计继续按计划执行。

@@ -5,11 +5,13 @@ import { before, after, test } from 'node:test';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createServer } from 'node:net';
+import { release } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 
 const exec = promisify(execFile);
 const { runResearchProcess } = await importTypeScriptModule('src/main/plugins/research/process-runner.ts', { platform: 'node' });
-let root, executable;
+let root, executable, metalExecutable;
 const receipts = [];
 
 before(async () => {
@@ -22,13 +24,54 @@ before(async () => {
 #include <sys/wait.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <netdb.h>
+#include <fcntl.h>
+#include <spawn.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+extern char **environ;
 int main(int argc, char **argv) {
-  if (argc != 3) return 2;
+  if (argc < 3) return 2;
+  if (strcmp(argv[1], "dns") == 0) {
+    struct addrinfo *address = NULL;
+    int result = getaddrinfo("example.com", NULL, NULL, &address);
+    printf("dnsCode=%d errno=%d\\n", result, errno);
+    if (address != NULL) freeaddrinfo(address);
+    return 0;
+  }
+  if (strcmp(argv[1], "credentials") == 0) { printf("credentialPresent=%d\\n", getenv("OPENAI_API_KEY") != NULL); return 0; }
+  if (strcmp(argv[1], "files") == 0 && argc == 5) {
+    int input = open(argv[2], O_RDONLY); int readable = input >= 0; if (input >= 0) close(input);
+    int modified = open(argv[2], O_WRONLY); int inputDenied = modified < 0 && errno == EPERM; if (modified >= 0) close(modified);
+    int secret = open(argv[3], O_RDONLY); int secretDenied = secret < 0 && errno == EPERM; if (secret >= 0) close(secret);
+    int traversal = open(argv[3], O_WRONLY); int traversalDenied = traversal < 0 && errno == EPERM; if (traversal >= 0) close(traversal);
+    int output = open(argv[4], O_WRONLY | O_CREAT, 0600); int writable = output >= 0; if (output >= 0) close(output);
+    printf("inputRead=%d inputWriteDenied=%d secretReadDenied=%d traversalWriteDenied=%d outputWrite=%d\\n",
+      readable, inputDenied, secretDenied, traversalDenied, writable); return 0;
+  }
+  if (strcmp(argv[1], "link") == 0 && argc == 4) {
+    int linked = symlink(argv[2], argv[3]) == 0;
+    int input = open(argv[3], O_RDONLY); int denied = input < 0 && errno == EPERM; if (input >= 0) close(input);
+    printf("linkCreated=%d linkReadDenied=%d\\n", linked, denied); return 0;
+  }
+  if (strcmp(argv[1], "pgchild") == 0) { printf("changedGroup=%d\\n", getpgrp() != atoi(argv[2])); return 0; }
+  if (strcmp(argv[1], "escape") == 0) {
+    pid_t child = fork(); if (child < 0) return 7;
+    if (child == 0) {
+      int group = setpgid(0, getpgrp()); int groupDenied = group < 0 && errno == EPERM;
+      int session = setsid(); int sessionDenied = session < 0 && errno == EPERM;
+      printf("setpgidDenied=%d setsidDenied=%d\\n", groupDenied, sessionDenied); fflush(stdout); _exit(0);
+    }
+    waitpid(child, NULL, 0);
+    posix_spawnattr_t attr; posix_spawnattr_init(&attr);
+    posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETPGROUP); posix_spawnattr_setpgroup(&attr, 0);
+    char group[32]; snprintf(group, sizeof(group), "%d", getpgrp()); char *args[] = {argv[0], "pgchild", group, NULL};
+    int result = posix_spawn(&child, argv[0], NULL, &attr, args, environ);
+    printf("spawnDenied=%d\\n", result == EPERM); posix_spawnattr_destroy(&attr); if (result == 0) waitpid(child, NULL, 0); return 0;
+  }
   if (strcmp(argv[1], "network") == 0) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) return 3;
@@ -60,9 +103,22 @@ int main(int argc, char **argv) {
 }
 `);
   await exec('/usr/bin/clang', ['-O0', source, '-o', executable], { timeout: 30000, maxBuffer: 1024 * 1024 });
+  const metalSource = join(root, 'metal.m');
+  metalExecutable = join(root, 'metal');
+  await writeFile(metalSource, `
+#import <Foundation/Foundation.h>
+#import <Metal/Metal.h>
+#include <stdio.h>
+int main(void) { @autoreleasepool {
+  id<MTLDevice> device = MTLCreateSystemDefaultDevice(); id<MTLCommandQueue> queue = [device newCommandQueue];
+  printf("deviceFound=%d queueFound=%d deviceName=%s\\n", device != nil, queue != nil, device == nil ? "none" : [[device name] UTF8String]);
+} return 0; }
+`);
+  await exec('/usr/bin/clang', ['-fobjc-arc', metalSource, '-framework', 'Foundation', '-framework', 'Metal', '-o', metalExecutable],
+    { timeout: 30000, maxBuffer: 1024 * 1024 });
 });
 after(async () => {
-  const directory = join(process.cwd(), '.artifacts/research-optimization/xsafe-a1');
+  const directory = join(process.cwd(), '.artifacts/research-optimization/xsafe-a3');
   await mkdir(directory, { recursive: true });
   await writeFile(join(directory, 'native-resources.json'), JSON.stringify({
     backend: 'macos-seatbelt', cpuHardLimit: false, memoryHardLimit: false,
@@ -81,7 +137,7 @@ async function request(mode, overrides = {}) {
       writablePaths: [output], environment: { PATH: '/usr/bin:/bin' }, timeoutMs: 10000,
       resourceLimits: { mode: 'monitored', cpuTimeMs: 5000, maxResidentBytes: 128 * 1024 * 1024 },
       admission: { projectId: 'native-resource-test', priority: 'user', resourceClass: 'compute' },
-      allowGpuAcceleration: false, networkAccess: 'none', allowPosixSpawn: false, ...overrides
+      allowGpuAcceleration: false, networkAccess: 'none', ...overrides
     }
   };
 }
@@ -230,4 +286,77 @@ test('cancelling a queued same-project process launches no code and does not can
     activeController.abort(); await activePromise; await gone(ids);
     receipts.push({ scenario: 'queued-cancel', launched: false, activePeerPreserved: true });
   } finally { activeController.abort(); await activePromise; }
+});
+
+test('real DNS resolution and application credentials are unavailable to the compute process', async () => {
+  const control = await exec(executable, ['dns', 'unused'], { timeout: 10000, maxBuffer: 1024 * 1024 });
+  assert.match(control.stdout, /dnsCode=0 /);
+  const dns = await request('dns');
+  const denied = await runResearchProcess(dns.input);
+  assert.match(denied.stdout, /dnsCode=[1-9]\d* errno=1/);
+  const previousKey = process.env.OPENAI_API_KEY;
+  try {
+    process.env.OPENAI_API_KEY = `fixture-${randomUUID()}`;
+    const credentialControl = await exec(executable, ['credentials', 'unused'], { timeout: 10000, maxBuffer: 1024 * 1024 });
+    assert.match(credentialControl.stdout, /credentialPresent=1/);
+    const credentials = await request('credentials');
+    const isolated = await runResearchProcess(credentials.input);
+    assert.match(isolated.stdout, /credentialPresent=0/);
+    receipts.push({ scenario: 'dns-and-credentials', dnsControl: control.stdout, dnsDenied: denied.stdout, credentials: isolated.stdout });
+  } finally {
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
+});
+
+test('real file boundaries allow declared reads and outputs while denying input mutation and undeclared traversal', async () => {
+  const source = join(root, 'declared-input'), secret = join(root, 'synthetic-private-secret');
+  await writeFile(source, 'controlled input'); await writeFile(secret, 'controlled private fixture');
+  const f = await request('files');
+  const output = join(f.input.cwd, 'created');
+  const result = await runResearchProcess({ ...f.input,
+    args: ['files', source, join(f.input.cwd, '..', 'synthetic-private-secret'), output],
+    readablePaths: [...f.input.readablePaths, source]
+  });
+  assert.equal(result.stdout.trim(), 'inputRead=1 inputWriteDenied=1 secretReadDenied=1 traversalWriteDenied=1 outputWrite=1');
+  assert.equal(await readFile(source, 'utf8'), 'controlled input');
+  assert.equal(await readFile(secret, 'utf8'), 'controlled private fixture');
+  assert.equal((await readFile(output)).length, 0);
+  receipts.push({ scenario: 'file-boundaries', output: result.stdout });
+});
+
+test('an output symlink cannot read undeclared data and fails the real monitored output contract', async () => {
+  const secret = join(root, 'link-private-secret'); await writeFile(secret, 'controlled protected fixture');
+  const f = await request('link');
+  let failure;
+  await runResearchProcess({ ...f.input, args: ['link', secret, join(f.input.cwd, 'escape')],
+    writeLimits: [{ path: f.input.cwd, maxFileBytes: 1024, maxTotalBytes: 4096, maxFiles: 20, maxEntries: 20 }]
+  }).catch(error => { failure = error; });
+  assert.equal(failure?.code, 'research_process_write_limit');
+  assert.match(failure.stdout, /linkCreated=1 linkReadDenied=1/);
+  assert.equal(await readFile(secret, 'utf8'), 'controlled protected fixture');
+  receipts.push({ scenario: 'output-symlink', code: failure.code, output: failure.stdout });
+});
+
+test('real child session/group changes and atomic posix_spawn group escape are denied', async () => {
+  const control = await exec(executable, ['escape', 'unused'], { timeout: 10000, maxBuffer: 1024 * 1024 });
+  assert.match(control.stdout, /setpgidDenied=0 setsidDenied=0/); assert.match(control.stdout, /changedGroup=1/);
+  const f = await request('escape');
+  const result = await runResearchProcess(f.input);
+  assert.match(result.stdout, /setpgidDenied=1 setsidDenied=1/);
+  assert.match(result.stdout, /spawnDenied=1/); assert.doesNotMatch(result.stdout, /changedGroup=1/);
+  receipts.push({ scenario: 'group-escape-denied', output: result.stdout });
+});
+
+test('actual Metal device and command queue access require the explicit GPU policy', async () => {
+  const control = await exec(metalExecutable, [], { timeout: 10000, maxBuffer: 1024 * 1024 });
+  assert.match(control.stdout, /deviceFound=1 queueFound=1/);
+  const f = await request('unused', { command: metalExecutable, args: [],
+    readablePaths: [metalExecutable, '/usr/lib', '/System/Library'] });
+  const denied = await runResearchProcess(f.input);
+  assert.match(denied.stdout, /deviceFound=0 queueFound=0 deviceName=none/);
+  const allowed = await runResearchProcess({ ...f.input, allowGpuAcceleration: true });
+  assert.match(allowed.stdout, /deviceFound=1 queueFound=1 deviceName=.+/);
+  receipts.push({ scenario: 'explicit-gpu', platform: process.platform, architecture: process.arch, kernelRelease: release(),
+    denied: denied.stdout, allowed: allowed.stdout, admission: allowed.admission });
 });

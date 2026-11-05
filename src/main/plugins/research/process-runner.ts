@@ -19,7 +19,6 @@ export type ResearchProcessRequest = {
   terminationGraceMs?: number;
   allowGpuAcceleration: boolean;
   networkAccess: 'none' | 'loopback' | 'full';
-  allowPosixSpawn: boolean;
   additionalExecutables?: readonly string[];
   signal?: AbortSignal;
   input?: string;
@@ -81,10 +80,9 @@ async function assertProcessWriteLimits(limits: readonly ResearchProcessWriteLim
   }
 }
 
-export async function researchSandboxProfile(request: Pick<ResearchProcessRequest, 'command' | 'readablePaths' | 'writablePaths' | 'allowGpuAcceleration' | 'networkAccess' | 'allowPosixSpawn' | 'additionalExecutables'>): Promise<string> {
+export async function researchSandboxProfile(request: Pick<ResearchProcessRequest, 'command' | 'readablePaths' | 'writablePaths' | 'allowGpuAcceleration' | 'networkAccess' | 'additionalExecutables'>): Promise<string> {
   if (typeof request.allowGpuAcceleration !== 'boolean') throw new Error('research_process_acceleration_policy_required');
   if (!['none', 'loopback', 'full'].includes(request.networkAccess)) throw new Error('research_process_network_policy_required');
-  if (typeof request.allowPosixSpawn !== 'boolean') throw new Error('research_process_spawn_policy_required');
   const filter = async (path: string): Promise<string> => {
     if (!isAbsolute(path)) throw new Error('research_process_absolute_path_required');
     const resolved = await realpath(path);
@@ -106,7 +104,7 @@ export async function researchSandboxProfile(request: Pick<ResearchProcessReques
     '(version 1)', '(deny default)', '(import "system.sb")',
     '(allow mach-bootstrap)', '(allow syscall*)', '(allow process-fork)',
     // Darwin SDK: setpgid=82、setsid=147、posix_spawn=244；阻止运行代码脱离受控进程组。
-    `(deny syscall-unix (syscall-number 82 147${request.allowPosixSpawn ? '' : ' 244'}))`,
+    '(deny syscall-unix (syscall-number 82 147 244))',
     `(allow process-exec ${executable.join(' ')})`, '(allow signal (target self) (target children))',
     '(allow mach-lookup)', '(allow sysctl-read)', '(allow file-read-metadata)',
     `(allow file-read* ${[...readable, ...writable].join(' ')})`,

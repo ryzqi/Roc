@@ -140,9 +140,9 @@ export class ResearchToolchain {
     }
   }
 
-  /** Freeze the user-selected model tier; actual inference device is recorded by the parser. */
+  /** Ordinary parsing uses CPU; explicit main-process device choices retain their actual parser fingerprint. */
   defaultParseOptions(_mediaType: string): ResearchParseOptions {
-    return researchParseOptionsSchema.parse({ tier: this.models.selectedPack, device: 'coreml', pageRange: '' });
+    return researchParseOptionsSchema.parse({ tier: this.models.selectedPack, device: 'cpu', pageRange: '' });
   }
 
   async renderFigure(input: FigureWorkerInput): Promise<z.infer<typeof researchFigureRenderJobResultSchema>> {
@@ -215,7 +215,7 @@ export class ResearchToolchain {
       readablePaths: [root, proseDir],
       writablePaths: [input.jobDir],
       environment: await this.proseEnvironment(root, input.jobDir),
-      timeoutMs: 120_000, signal: input.signal, allowGpuAcceleration: false, networkAccess: 'none', allowPosixSpawn: false,
+      timeoutMs: 120_000, signal: input.signal, allowGpuAcceleration: false, networkAccess: 'none',
       resourceLimits: { mode: 'monitored', cpuTimeMs: 480_000, maxResidentBytes: 2 * 1024 ** 3 },
       admission: { ...input.admission, resourceClass: 'utility' }
     });
@@ -250,7 +250,7 @@ export class ResearchToolchain {
       cwd: input.rootPath, readablePaths: [root, input.rootPath], writablePaths: [input.jobDir], environment,
       resourceLimits: { mode: 'monitored', cpuTimeMs: 720_000, maxResidentBytes: 2 * 1024 ** 3 },
       admission: { ...input.admission, resourceClass: 'utility' },
-      timeoutMs: 180_000, signal: input.signal, allowGpuAcceleration: false, networkAccess: 'none', allowPosixSpawn: false });
+      timeoutMs: 180_000, signal: input.signal, allowGpuAcceleration: false, networkAccess: 'none' });
   }
 
   /**
@@ -279,7 +279,7 @@ export class ResearchToolchain {
         HOME: home, TMPDIR: temporary, XDG_CACHE_HOME: cache },
       resourceLimits: { mode: 'monitored', cpuTimeMs: 480_000, maxResidentBytes: 2 * 1024 ** 3 },
       admission: { ...input.admission, resourceClass: 'utility' },
-      timeoutMs: 120_000, signal: input.signal, allowGpuAcceleration: false, networkAccess: 'none', allowPosixSpawn: false });
+      timeoutMs: 120_000, signal: input.signal, allowGpuAcceleration: false, networkAccess: 'none' });
   }
 
   /**
@@ -381,8 +381,7 @@ export class ResearchToolchain {
       signal: input.signal,
       input: JSON.stringify(request),
       allowGpuAcceleration: parseOptions?.device === 'coreml' && modelPaths.length > 0,
-      networkAccess: 'none',
-      allowPosixSpawn: false
+      networkAccess: 'none'
     });
     const envelope = z.discriminatedUnion('ok', [
       z.object({ ok: z.literal(true), result: schema }).strict(),
