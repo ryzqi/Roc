@@ -79,6 +79,12 @@ test('actual CPython venv probe verifies exact lock, ignores site hooks and neve
   assert.deepEqual(first.report.distributions, f.lock.distributions);
   assert.equal(first.metadataHash, second.metadataHash);
   assert.equal(first.code.hash, second.code.hash);
+  assert.deepEqual(api.assertPythonCodeReceipt(first.codeReceipt, first.metadataHash), first.codeReceipt);
+  assert.deepEqual(first.codeReceipt.code, first.code);
+  assert.deepEqual(first.codeReceipt.metadataIdentity.controls, first.controls);
+  assert.deepEqual(first.codeReceipt.metadataIdentity.report, first.report);
+  assert.deepEqual(first.codeReceipt, second.codeReceipt);
+  receipts.push({ scenario: 'actual-python-code-receipt', metadataHash: first.metadataHash, receipt: first.codeReceipt });
   assert.ok(first.code.entries.some(entry => entry.path.endsWith('fixture_pkg/__init__.py')));
   assert.ok(first.code.entries.some(entry => entry.path === 'python3' && entry.type === 'symlink'));
   const observed = receipts.find(item => item.scenario === 'unchanged-first' && item.probe).probe;

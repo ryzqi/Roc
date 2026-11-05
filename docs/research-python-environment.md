@@ -49,6 +49,8 @@ PR08 当前提供环境预检、真实隔离探针，以及主进程确认的原
 
 两个扫描无法证明其间从未发生短暂修改。声明运行库中的可执行代码本身仍来自用户选择的环境；元数据报告不证明科研结论正确。
 
+探针同时返回完整 Python 代码回执，使用统一的锁文件、控制和报告定义。回执包含实际代码清单及原始环境身份对象；离线验证核对清单哈希、元数据哈希、声明代码根、真实解释器文件哈希和实际启动路径。回执不复用 R/Julia 的身份格式。改写文件清单后重新计算清单哈希仍不能保留原环境身份；重新计算元数据哈希也不能掩盖解释器和启动路径之间的不一致。
+
 ## 进程边界与观测
 
 实际调用复用 `runResearchProcess` 的项目准入、独立监督程序、Seatbelt、进程组回收和资源监控。只提供固定的 `PATH`、`LANG`、本次 `TMPDIR`；读取范围为代码根及 venv 控制文件，写入范围仅为本次探针目录。GPU 不授予，网络为 `none`。
@@ -92,6 +94,14 @@ PR08 当前提供环境预检、真实隔离探针，以及主进程确认的原
 - `pnpm test:renderer`：310/312，无跳过，416575 ms；会话 prepend 的可见锚点从 -9px 移至 15px，质量评价保存等待超过 10 秒。使用 `node --test --test-name-pattern='rendered transcript keeps' tests/renderer/lifecycles.test.mjs` 和 `node --test --test-name-pattern='explicit domain and overall' tests/renderer/review-quality-assessment.test.mjs` 原样分别复现，两项均通过。未改这两项代码或断言；并发全量失败根因仍未确认，不能声称全量 renderer 通过。
 
 日志位于 `.artifacts/research-optimization/pr08-a3b-*.log`；最终界面截图和裁切回执位于 `pr08-a3b-ui/`，生产管理入口回执和双主题截图位于 `pr08-a3b-electron/`。
+
+完整 Python 代码回执增量从同一工作目录验证：
+
+- `node --test tests/unit/research-python-code-receipt.test.mjs tests/unit/research-python-controls.test.mjs tests/unit/research-native-code.test.mjs`：15/15；覆盖完整清单、原始身份、重新计算清单哈希、解释器文件/启动路径不一致、启动 site 和重复安装包拒绝。
+- `node --test --test-concurrency=1 tests/integration/research-python-environment.test.mjs tests/integration/research-python-selection.test.mjs tests/integration/research-python-selection-electron.test.mjs`：20/20，无跳过；实际重复探针返回同一完整代码回执，现有选择及生产入口正常。
+- `pnpm build`、`pnpm check:ipc`、`pnpm check:renderer-chunks`：通过；`node scripts/run-research-p0.mjs` 13/13；`node scripts/smoke-electron.mjs` 13/13，零 renderer errors。
+
+初轮并行实际测试 18/19：损坏元数据用例返回底层监督程序的真实 125，stdout/stderr 均为空，未达到预期元数据错误断言。未改断言；独立原样复现 1/1 和最终串行 20/20 均通过，瞬态根因未确认。原始回执保留为 `.artifacts/research-optimization/pr08-a4a-native-initial-receipt.json`；其他日志为 `pr08-a4a-*.log`。此增量仍未启用 Python 实验。
 
 ## 官方资料
 

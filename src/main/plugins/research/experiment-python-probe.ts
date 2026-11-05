@@ -1,44 +1,19 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { z } from 'zod';
+import type { z } from 'zod';
 import type { ResearchExperimentEnvironment } from '../../../shared/schemas/research-experiments';
 import type { ResearchEnvironmentProbeResource } from '../../../shared/schemas/research-process-resources';
 import { captureNativeCode } from './experiment-native-code';
 import type { NativeCodeSnapshot } from './experiment-native-code-schema';
-import { discoverPythonEnvironmentControls, type PythonEnvironmentControls } from './experiment-python-controls';
+import { discoverPythonEnvironmentControls } from './experiment-python-controls';
+import {
+  assertPythonCodeReceipt, pythonEnvironmentLockSchema, pythonEnvironmentReportSchema,
+  type PythonCodeReceipt, type PythonEnvironmentControls
+} from './experiment-python-code-schema';
 import { runEnvironmentProbe } from './experiment-probe-resources';
 import { ResearchProcessError, type ResearchProcessRequest, type ResearchProcessResult } from './process-runner';
 import { readResearchFile, researchContentHash } from './research-files';
 import type { ResearchProcessScope } from './toolchain';
-
-const distribution = z.strictObject({
-  name: z.string().max(256).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u),
-  version: z.string().min(1).max(256).regex(/^[0-9][A-Za-z0-9.!+_-]*$/u)
-});
-const distributions = z.array(distribution).max(10000).superRefine((items, context) => {
-  if (new Set(items.map(item => item.name)).size !== items.length) {
-    context.addIssue({ code: 'custom', message: 'research_python_distribution_duplicate' });
-  }
-});
-export const pythonEnvironmentLockSchema = z.strictObject({
-  schemaVersion: z.literal(1),
-  python: z.strictObject({
-    implementation: z.literal('cpython'), version: z.string().regex(/^3\.14\.\d+$/u),
-    platform: z.literal('darwin'), architecture: z.literal('arm64')
-  }),
-  distributions
-});
-const path = z.string().min(1).max(4096);
-const reportSchema = z.strictObject({
-  implementation: z.literal('cpython'), version: z.string().regex(/^3\.14\.\d+$/u),
-  platform: z.literal('darwin'), architecture: z.literal('arm64'),
-  executable: path, prefix: path, basePrefix: path, modulePaths: z.array(path).length(3),
-  flags: z.strictObject({
-    isolated: z.literal(1), ignoreEnvironment: z.literal(1), noSite: z.literal(1),
-    noUserSite: z.literal(1), safePath: z.literal(true), dontWriteBytecode: z.literal(1), utf8Mode: z.literal(1)
-  }),
-  siteLoaded: z.literal(false), distributions
-});
 
 export const pythonExperimentFlags = ['-I', '-S', '-B', '-X', 'utf8'] as const;
 /** Inspect explicit installed metadata without adding site-packages to sys.path or importing entry points. */
@@ -83,8 +58,9 @@ type PythonEnvironmentInspectionInput = {
 export type InspectedPythonEnvironment = {
   controls: PythonEnvironmentControls;
   lockFile: ResearchExperimentEnvironment['lockFiles'][number];
-  report: z.infer<typeof reportSchema>;
+  report: z.infer<typeof pythonEnvironmentReportSchema>;
   code: NativeCodeSnapshot;
+  codeReceipt: PythonCodeReceipt;
   metadataHash: string;
 };
 
@@ -95,7 +71,9 @@ export async function inspectPythonExperimentEnvironment({
   const controls = await discoverPythonEnvironmentControls(selectedExecutable, signal);
   const lockBytes = await readResearchFile(workspace, 'roc-python.lock.json', 4 * 1024 ** 2);
   const lock = pythonEnvironmentLockSchema.parse(JSON.parse(lockBytes.toString('utf8')));
-  const lockFile = { path: 'roc-python.lock.json', size: lockBytes.length, sha256: researchContentHash(lockBytes) };
+  const lockFile: PythonCodeReceipt['metadataIdentity']['lockFile'] = {
+    path: 'roc-python.lock.json', size: lockBytes.length, sha256: researchContentHash(lockBytes)
+  };
   const code = await captureNativeCode(controls.codeRoots, signal);
   const probe = await mkdtemp(join(jobDir, 'python-probe-'));
   try {
@@ -115,8 +93,8 @@ export async function inspectPythonExperimentEnvironment({
       throw error;
     };
     if (result.exitCode !== 0) fail('research_python_environment_probe_failed');
-    let report: z.infer<typeof reportSchema>;
-    try { report = reportSchema.parse(JSON.parse(result.stdout)); }
+    let report: z.infer<typeof pythonEnvironmentReportSchema>;
+    try { report = pythonEnvironmentReportSchema.parse(JSON.parse(result.stdout)); }
     catch { return fail('research_python_environment_report_invalid'); }
     if (report.executable !== controls.selectedExecutable || report.prefix !== controls.prefix || report.basePrefix !== controls.basePrefix
       || JSON.stringify(report.modulePaths) !== JSON.stringify(controls.modulePaths)) fail('research_python_startup_paths_changed');
@@ -131,10 +109,12 @@ export async function inspectPythonExperimentEnvironment({
     }
     if ((await captureNativeCode(controls.codeRoots, signal)).hash !== code.hash) fail('research_python_native_code_changed');
     signal.throwIfAborted();
-    const metadataHash = researchContentHash(JSON.stringify({
+    const metadataIdentity: PythonCodeReceipt['metadataIdentity'] = {
       inspectionContractVersion: 1, controls, lockFile, code: code.hash, report, probe: researchContentHash(pythonEnvironmentProbe)
-    }));
-    return { controls, lockFile, report, code, metadataHash };
+    };
+    const metadataHash = researchContentHash(JSON.stringify(metadataIdentity));
+    const codeReceipt = assertPythonCodeReceipt({ code, metadataIdentity }, metadataHash);
+    return { controls, lockFile, report, code, codeReceipt, metadataHash };
   } finally {
     await rm(probe, { recursive: true, force: true });
   }

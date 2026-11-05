@@ -1,19 +1,7 @@
 import { lstat, opendir, realpath } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import { readResearchFile, researchContentHash, researchPath } from './research-files';
-
-export type PythonEnvironmentControls = {
-  contractVersion: 1;
-  selectedExecutable: string;
-  executable: string;
-  executableHash: string;
-  prefix: string;
-  basePrefix: string;
-  modulePaths: string[];
-  packagePath: string;
-  codeRoots: string[];
-  controls: Array<{ path: string; sha256: string }>;
-};
+import type { PythonEnvironmentControls } from './experiment-python-code-schema';
 
 /**
  * Preflight an explicitly selected standalone CPython 3.14 or its standard venv.
