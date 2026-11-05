@@ -30,6 +30,12 @@ Research DB50 仅新增 `research_response_matrices`；旧迁移账本、用户�
 
 A5A 交付主进程合同、存储、读取、人工 IPC 和生成 preload。现有论文/LaTeX/语义支持闸门保持原有合同。后续独立部分接入现有工件抽屉中的惰性编辑，以及审批与导出消费者；当前存储 API 不宣称这些后续部分已经完成。
 
+A5B 已在现有论文工件抽屉提供“检查审稿回复”惰性入口。打开前零矩阵请求；人工编辑完整矩阵，单条意见表单保留桌面信息密度。已保存原始意见/审稿人只读，处理状态、回复、精确修改位置和证据显式编辑。可选择完整段落或 UTF-16 字符范围，保留选区空白。待关联位置不能被整份保存静默丢弃。新意见只有保存前可移除，旧意见需要保留并记录处理结果。
+
+未保存和请求中状态锁住关闭/Escape、父工件刷新/重核对/审核、其他编辑和来源决定。回执丢失时保持相同 requestId/内容，精确重试零重复写入；修改内容才换 requestId。修改稿变化后的旧“已处理”标记为历史判断。当前核验失败隐藏旧成功数据，独立分页历史仍能读取完整保存回执。不同项目/快照的表单和迟到响应隔离。归档、已批准、非当前阶段和客户端只读状态不发保存请求。
+
+A5C 的工件 head、审批/任务验收及导出消费者仍待独立实施。
+
 ## 验证
 
 以下命令在 `/Users/Apple_501/Desktop/Roc/Roc` 执行，最终 A5A 源码检查均 exit 0：
@@ -42,3 +48,12 @@ A5A 交付主进程合同、存储、读取、人工 IPC 和生成 preload。现
 前一验证快照的 `node scripts/run-research-p0.mjs` 13/13，以及 `node --test tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/citation-coverage.test.mjs tests/renderer/scientific-consistency.test.mjs` 51/51。该快照后只修改精确选区合同、明确来源错误及相应 unit 检查，最终重新构建并启动验证。
 
 日志保留于 `.artifacts/research-optimization/xwrite-a5a-final-*.log`，前一快照保留于 `xwrite-a5a-{p0,renderer,startup,ipc,chunks}.log`。C2C 消费者修正后的补充完整 unit 为 1249/1249；它不代表最终 A5A 的完整 suite 已运行。当前尚未验证矩阵编辑 UI、审批/导出消费者或独立科学验收。
+
+A5B 最终命令均在相同工作目录 exit 0：
+
+- `node --test tests/renderer/response-matrix.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/citation-coverage.test.mjs tests/renderer/scientific-consistency.test.mjs`：59/59，包括 8 个真实 Electron 矩阵场景。
+- `pnpm build`：TypeScript 与全应用构建通过。
+- `node scripts/smoke-electron.mjs`：13/13，无 renderer error。
+- `pnpm check:ipc` 一致；`pnpm check:renderer-chunks`：eager JS 1,134,228 bytes / 6 files，矩阵模块留在惰性图中。
+
+650px 明暗主题、减弱动效、展开、hover、长正文/选区和保存状态共 4 份审计均 cut 0；hidden 3 精确对应原有整高抽屉在窗口 top/right/bottom 物理边界的投影，无水平溢出。实际截图已查看，字符范围控件、证据、回复、修订理由、保存/放弃和焦点可见，保留于 `.artifacts/research-optimization/response-matrix-ui/`。初次 5/7 的两处 fixture 失败分别为论文不存在生产文件按钮、来源变化先由工件版本拒绝；修正测试消费者后最终 8/8，未放宽产品校验。日志为 `xwrite-a5b-{renderer,build,startup,ipc,chunks}.log`。

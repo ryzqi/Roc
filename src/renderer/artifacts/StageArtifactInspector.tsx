@@ -17,6 +17,7 @@ const IdeaOutcomes = lazy(async () => ({default: (await import('./IdeaOutcomes')
 const CitationCoverage = lazy(async () => ({default: (await import('./ArtifactCitationCoverage')).ArtifactCitationCoverage}));
 const Consistency = lazy(async () => ({default: (await import('./ArtifactConsistency')).ArtifactConsistency}));
 const FigureConsistency = lazy(async () => ({default: (await import('./ArtifactFigureConsistency')).ArtifactFigureConsistency}));
+const ResponseMatrix = lazy(async () => ({default: (await import('./ArtifactResponseMatrix')).ArtifactResponseMatrix}));
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 
 export function StageArtifactInspector({client, request, writable, onClose, onOpenTask, onReviewContext, readingLocations}: {
@@ -40,10 +41,13 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
   const [consistencyPending, setConsistencyPending] = useState(false), [consistencyDirty, setConsistencyDirty] = useState(false);
   const [figureConsistencyOpen, setFigureConsistencyOpen] = useState(false);
   const [figurePending, setFigurePending] = useState(false), [figureDirty, setFigureDirty] = useState(false);
+  const [responseOpen, setResponseOpen] = useState(false);
+  const [responsePending, setResponsePending] = useState(false), [responseDirty, setResponseDirty] = useState(false);
   const otherLocked = planPending || planDirty || outcomePending || outcomeDirty || citationPending || citationDirty;
   const consistencyLocked = consistencyPending || consistencyDirty;
   const figureLocked = figurePending || figureDirty;
-  const planLocked = otherLocked || consistencyLocked || figureLocked;
+  const responseLocked = responsePending || responseDirty;
+  const planLocked = otherLocked || consistencyLocked || figureLocked || responseLocked;
   const savedLocation = readingLocations.get(JSON.stringify([request.projectId, request.artifactId]));
   const [productionChoice,setProductionChoice] = useState<{version: string; open: boolean} | null>(null);
   const productionOpen = snapshot !== undefined && (productionChoice?.version === snapshot.version ?
@@ -80,7 +84,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
           onClick={() => setReviewNonce(value => value + 1)}>读取本阶段全部审核工件</button> : null}
         {snapshot?.production===null||snapshot===undefined||snapshot.projectStatus==='archived'||snapshot.artifact.status==='superseded' ? null :
           snapshot.artifact.status==='approved'||snapshot.availableActions.includes('review_gate') ? <button type="button"
-            className={button} data-testid="artifact-inspector-production" aria-expanded={productionOpen}
+            className={button} disabled={planLocked} data-testid="artifact-inspector-production" aria-expanded={productionOpen}
             data-reading-key="production-toggle" onClick={()=>setProductionChoice({version:snapshot.version,open:!productionOpen})}>{productionOpen?'收起生产文件':'查看生产文件'}</button> : null}
       </div>
       {read.status === 'loading' ? <p role="status">正在读取工件…</p> : null}
@@ -94,6 +98,8 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
         consistencyDirty ? <p role="status">数值审核含未保存修改，保存或放弃后可关闭工件。</p> : null}
       {figurePending ? <p role="status">正在保存图稿数据审核，请等待回执。</p> :
         figureDirty ? <p role="status">图稿数据审核含未保存修改，保存或放弃后可关闭工件。</p> : null}
+      {responsePending ? <p role="status">正在保存审稿矩阵，请等待回执。</p> :
+        responseDirty ? <p role="status">审稿矩阵含未保存修改，保存或放弃后可关闭工件。</p> : null}
       {read.error === null ? null : <p role="alert" className="break-words text-[var(--st-warn)]">{read.error}</p>}
       {result?.status === 'stale' ? <p role="alert" className="text-[var(--st-warn)]">
         工件或来源已变更。当前内容需要重新核对。
@@ -135,7 +141,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
           {!coverageOpen ? null : <Suspense fallback={<p role="status">正在加载引用检查…</p>}>
             <CitationCoverage key={`${snapshot.artifact.id}:${snapshot.version}`} client={client}
               projectId={request.projectId} artifactId={request.artifactId} artifactVersion={snapshot.version}
-              writable={writable && !consistencyLocked && !figureLocked && result?.status === 'current' && snapshot.projectStatus !== 'archived' &&
+              writable={writable && !consistencyLocked && !figureLocked && !responseLocked && result?.status === 'current' && snapshot.projectStatus !== 'archived' &&
                 snapshot.artifact.status === 'draft' && snapshot.currentStage === snapshot.artifact.stage &&
                 snapshot.stage.artifactIds.includes(snapshot.artifact.id) &&
                 ['ready', 'running', 'paused', 'blocked', 'failed', 'waiting_approval'].includes(snapshot.stage.status)}
@@ -149,7 +155,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
             {consistencyOpen ? '收起数值检查' : '检查科研数值'}
           </button>
           {!consistencyOpen ? null : <Suspense fallback={<p role="status">正在加载数值检查…</p>}>
-            <Consistency key={`${snapshot.artifact.id}:${snapshot.version}`} client={client} snapshot={snapshot} locked={otherLocked || figureLocked}
+            <Consistency key={`${snapshot.artifact.id}:${snapshot.version}`} client={client} snapshot={snapshot} locked={otherLocked || figureLocked || responseLocked}
               writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived' &&
                 snapshot.artifact.status === 'draft' && snapshot.currentStage === snapshot.artifact.stage &&
                 snapshot.stage.artifactIds.includes(snapshot.artifact.id) &&
@@ -165,13 +171,29 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
           </button>
           {!figureConsistencyOpen ? null : <Suspense fallback={<p role="status">正在加载绘制数据检查…</p>}>
             <FigureConsistency key={`${snapshot.artifact.id}:${snapshot.version}`} client={client} snapshot={snapshot}
-              locked={otherLocked || consistencyLocked}
+              locked={otherLocked || consistencyLocked || responseLocked}
               writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived' &&
                 snapshot.artifact.status === 'draft' && snapshot.currentStage === snapshot.artifact.stage &&
                 snapshot.stage.artifactIds.includes(snapshot.artifact.id) &&
                 ['ready', 'running', 'paused', 'blocked', 'failed', 'waiting_approval'].includes(snapshot.stage.status)}
               onDirty={setFigureDirty} onPending={setFigurePending}
               onSaved={() => {setFigurePending(false); setFigureDirty(false); baseline.current = null; reading.save(); read.reload();}}/>
+          </Suspense>}
+        </section>}
+        {snapshot.artifact.kind !== 'manuscript' ? null : <section className="border-t-[0.5px] border-line pt-2">
+          <button type="button" className={button} aria-expanded={responseOpen} disabled={planLocked}
+            data-testid="artifact-response-toggle" onClick={() => setResponseOpen(value => !value)}>
+            {responseOpen ? '收起审稿回复' : '检查审稿回复'}
+          </button>
+          {!responseOpen ? null : <Suspense fallback={<p role="status">正在加载审稿矩阵…</p>}>
+            <ResponseMatrix key={`${snapshot.artifact.id}:${snapshot.version}`} client={client} snapshot={snapshot}
+              locked={otherLocked || consistencyLocked || figureLocked}
+              writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived' &&
+                snapshot.artifact.status === 'draft' && snapshot.currentStage === snapshot.artifact.stage &&
+                snapshot.stage.artifactIds.includes(snapshot.artifact.id) &&
+                ['ready', 'running', 'paused', 'blocked', 'failed', 'waiting_approval'].includes(snapshot.stage.status)}
+              onDirty={setResponseDirty} onPending={setResponsePending}
+              onSaved={() => {setResponsePending(false); setResponseDirty(false); baseline.current = null; reading.save(); read.reload();}}/>
           </Suspense>}
         </section>}
         {snapshot.ideaCanvas === null ? null : <Suspense fallback={<p role="status">正在加载方法计划…</p>}>
@@ -190,7 +212,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
             onSaved={() => {setOutcomePending(false); setOutcomeDirty(false); baseline.current = null; reading.save(); read.reload();}}/>
         </Suspense>}
         {!productionOpen||snapshot.production===null ? null : <Suspense fallback={<p role="status">正在加载生产视图…</p>}>
-          <ProductionView key={snapshot.version} client={client} writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived'} request={{projectId:request.projectId,
+          <ProductionView key={snapshot.version} client={client} writable={writable && !planLocked && result?.status === 'current' && snapshot.projectStatus !== 'archived'} request={{projectId:request.projectId,
             artifactId:request.artifactId,expectedVersion:snapshot.version}}
             initialLocation={reading.location?.productionFile ?? null} onLocationChange={reading.setProductionFile}/>
         </Suspense>}
