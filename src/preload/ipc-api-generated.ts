@@ -328,6 +328,7 @@ export const rocApi: RocPreloadApi = {
     publishFigure: (...args) => ipcRenderer.invoke(ipcChannels.researchFigurePublish, ...args),
     getFigure: (...args) => ipcRenderer.invoke(ipcChannels.researchFigureGet, ...args),
     listFigures: (...args) => ipcRenderer.invoke(ipcChannels.researchFigureList, ...args),
+    getExportInputs: (...args) => ipcRenderer.invoke(ipcChannels.researchExportInputs, ...args),
     prepareExport: (...args) => ipcRenderer.invoke(ipcChannels.researchExportPrepare, ...args),
     getExport: (...args) => ipcRenderer.invoke(ipcChannels.researchExportGet, ...args),
     listExports: (...args) => ipcRenderer.invoke(ipcChannels.researchExportList, ...args),

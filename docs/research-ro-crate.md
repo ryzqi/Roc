@@ -65,3 +65,19 @@ node --test tests/unit/research-ro-crate.test.mjs \
 parser 改变输入 JSON（包括丢弃保留属性）时直接拒绝。独立校验拒绝错误投影摘要、未声明的私有值、旧版 raw receipt 和缺少必填字段的数据。公开字符串的私有值识别由 crate 输入和投影模块共用。
 
 A2A 是独立模块及回归，尚未接入实际导出。实际 ZIP 的 sources、科学审核、figure manifest、日志和资源交付将在 A2B/A2C 统一切换；此处不声明既有 ZIP 已满足公开隐私要求。
+
+## A2B：原始资源与再分发审查合同
+
+`research.export.inputs` / `research.getExportInputs` 只读 API 复用当前项目、已接受稿件、图稿审批、实验快照和科学审核校验。返回当前完整来源的 `sourceHash`、原文件相对路径、大小、SHA-256、用途及必须随包交付的原因；不会建立导出或修改审批。输入只含项目、稿件、图稿和模板选择，不需要伪造作者、许可或完整 prepare 请求。
+
+每个实验和图稿的原始 input/output、导入模板文件均需独立选择；日志由下一阶段作为公开投影处理，不列入原件再分发选择。合同拒绝漏选、重复、外来资源、改变的大小或摘要、过期来源、未声明参考文献许可。程序文件必须显式登记为软件并提供公开 HTTPS URL 和版本，选中图稿的渲染文件必须登记为图稿。选中图稿及导入模板必须明确允许随包交付，否则拒绝该导出选择。受限数据、代码等保留 `metadata_only` 及获取说明，不推断许可。
+
+`validateExportPublication` 是可单独验证的审查边界；A2B 尚未将审查合同放入 prepare 或改变 ZIP 字节。完整 prepare 与 ZIP 统一切换属于 A2C。
+
+验证命令在仓库根目录运行，日志位于 `.artifacts/research-optimization/pr10-a2b-*`：
+
+- `pnpm typecheck` 和 `pnpm build`。
+- `node --test tests/unit/research-export-publication.test.mjs tests/unit/research-ro-crate.test.mjs tests/unit/research-export-public-projection.test.mjs tests/unit/research-export-body-gate.test.mjs tests/unit/research-semantic-publication.test.mjs tests/unit/research-journal-compliance.test.mjs`：44/44。
+- `node scripts/run-research-p0.mjs`：在真实原生数据、图稿、稿件、审核和工具链导出路径读取候选。
+- `node scripts/smoke-electron.mjs`：13/13，无 renderer error。
+- `pnpm check:ipc`、`pnpm check:renderer-chunks`。

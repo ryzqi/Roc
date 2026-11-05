@@ -1,12 +1,14 @@
 import { z } from 'zod';
 import { researchExportDeliverySchema, researchExportExecutionSchema, researchExportFileContentSchema, researchExportIdRequestSchema,
   researchExportListRequestSchema, researchExportPrepareRequestSchema, researchExportPublishRequestSchema, researchExportReadRequestSchema,
-  researchExportSourceRequestSchema, researchExportWriteRequestSchema } from '../../../shared/schemas/research-exports';
+  researchExportSourceRequestSchema, researchExportWriteRequestSchema, researchExportInputsRequestSchema } from '../../../shared/schemas/research-exports';
+import {researchExportInputsSchema} from '../../../shared/schemas/research-export-publication';
 import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
 import type { ResearchExportRepository } from './export-repository';
 import type { ResearchExportService } from './export-service';
 
 const capabilities = {
+  inputs: descriptor('research.export.inputs', researchExportInputsRequestSchema, researchExportInputsSchema),
   prepare: descriptor('research.export.prepare', researchExportPrepareRequestSchema, researchExportExecutionSchema),
   get: descriptor('research.export.get', researchExportIdRequestSchema, researchExportExecutionSchema),
   list: descriptor('research.export.list', researchExportListRequestSchema, researchExportExecutionSchema.array()),
@@ -23,6 +25,7 @@ export function registerResearchExportCapabilities(context: RocPluginContext, re
     context.capabilities.register(context.pluginId, capability, async (input) => await run(capability.inputSchema.parse(input)));
   }
   register(capabilities.prepare, (input) => service.prepare(input));
+  register(capabilities.inputs, (input) => service.inputs(input));
   register(capabilities.get, (input) => repository.get(input.projectId, input.exportId));
   register(capabilities.list, (input) => repository.list(input.projectId, input.limit));
   register(capabilities.cancel, (input) => service.cancel(input.projectId, input.exportId));

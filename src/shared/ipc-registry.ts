@@ -295,8 +295,9 @@ import { researchFigureEnvironmentRequestSchema, researchFigureRendererEnvironme
   researchFigureListRequestSchema, researchFigurePublicationSchema, researchFigurePublishRequestSchema,
   researchFigureRunSchema, researchFigureStartRequestSchema } from './schemas/research-figures';
 import { researchExportDeliverySchema, researchExportExecutionSchema, researchExportFileContentSchema, researchExportIdRequestSchema,
-  researchExportListRequestSchema, researchExportPrepareRequestSchema, researchExportPublishRequestSchema, researchExportReadRequestSchema,
+  researchExportListRequestSchema, researchExportPrepareRequestSchema, researchExportPublishRequestSchema, researchExportReadRequestSchema, researchExportInputsRequestSchema,
   researchExportWriteRequestSchema } from './schemas/research-exports';
+import {researchExportInputsSchema} from './schemas/research-export-publication';
 import { researchProductionInputContentSchema, researchProductionInputReadSchema, researchProductionInputRequestSchema,
   researchProductionInputSchema } from './schemas/research-production-inputs';
 import {
@@ -733,6 +734,7 @@ export const ipcRegistry = {
     request({ key: 'researchFigurePublish', channel: 'roc:research:figure-publish', domain: 'research', method: 'publishFigure', kind: 'plugin', capabilityName: 'research.figure.publish', inputTransform: first, contract: methodContract(oneArg(researchFigurePublishRequestSchema), researchFigurePublicationSchema) }),
     request({ key: 'researchFigureGet', channel: 'roc:research:figure-get', domain: 'research', method: 'getFigure', kind: 'plugin', capabilityName: 'research.figure.get', inputTransform: first, contract: methodContract(oneArg(researchFigureIdRequestSchema), researchFigurePublicationSchema) }),
     request({ key: 'researchFigureList', channel: 'roc:research:figure-list', domain: 'research', method: 'listFigures', kind: 'plugin', capabilityName: 'research.figure.list', inputTransform: first, contract: methodContract(oneArg(researchFigureListRequestSchema), researchFigurePublicationSchema.array()) }),
+    request({ key: 'researchExportInputs', channel: 'roc:research:export-inputs', domain: 'research', method: 'getExportInputs', kind: 'plugin', capabilityName: 'research.export.inputs', inputTransform: first, contract: methodContract(oneArg(researchExportInputsRequestSchema), researchExportInputsSchema) }),
     request({ key: 'researchExportPrepare', channel: 'roc:research:export-prepare', domain: 'research', method: 'prepareExport', kind: 'plugin', capabilityName: 'research.export.prepare', inputTransform: first, contract: methodContract(oneArg(researchExportPrepareRequestSchema), researchExportExecutionSchema) }),
     request({ key: 'researchExportGet', channel: 'roc:research:export-get', domain: 'research', method: 'getExport', kind: 'plugin', capabilityName: 'research.export.get', inputTransform: first, contract: methodContract(oneArg(researchExportIdRequestSchema), researchExportExecutionSchema) }),
     request({ key: 'researchExportList', channel: 'roc:research:export-list', domain: 'research', method: 'listExports', kind: 'plugin', capabilityName: 'research.export.list', inputTransform: first, contract: methodContract(oneArg(researchExportListRequestSchema), researchExportExecutionSchema.array()) }),

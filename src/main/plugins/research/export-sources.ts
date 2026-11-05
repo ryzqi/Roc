@@ -1,5 +1,7 @@
 import type { z } from 'zod';
-import { researchExportSourcesSchema, type ResearchExportPrepare, type ResearchExportSources } from '../../../shared/schemas/research-exports';
+import { researchExportSourcesSchema, type ResearchExportInputsRequest, type ResearchExportSources } from '../../../shared/schemas/research-exports';
+import type {ResearchExportInputs} from '../../../shared/schemas/research-export-publication';
+import {collectExportInputs} from './export-publication';
 import { researchBibliographyEntrySchema } from '../../../shared/schemas/research-library';
 import type { ResearchExperimentService } from './experiment-service';
 import type { ResearchFigureService } from './figure-service';
@@ -19,7 +21,11 @@ export class ResearchExportSourceService {
   constructor(private readonly repository: ResearchRepository, private readonly figures: ResearchFigureService,
     private readonly experiments: ResearchExperimentService, private readonly templates: Pick<ResearchTemplateService, 'files'>) {}
 
-  async capture(request: ResearchExportPrepare, signal: AbortSignal): Promise<ResearchExportSources> {
+  async inputs(request: ResearchExportInputsRequest, signal: AbortSignal): Promise<ResearchExportInputs> {
+    return collectExportInputs(this.repository, await this.capture(request, signal));
+  }
+
+  async capture(request: ResearchExportInputsRequest, signal: AbortSignal): Promise<ResearchExportSources> {
     signal.throwIfAborted();
     let template: ResearchExportSources['template'] = null;
     if (request.template.kind === 'imported') {
@@ -43,11 +49,11 @@ export class ResearchExportSourceService {
     return sources;
   }
 
-  assertCurrent(request: ResearchExportPrepare, sources: ResearchExportSources): void {
+  assertCurrent(request: ResearchExportInputsRequest, sources: ResearchExportSources): void {
     if (exportSourceHash(this.collect(request, sources.template)) !== exportSourceHash(sources)) throw new Error('research_export_sources_changed');
   }
 
-  private collect(request: ResearchExportPrepare, template: ResearchExportSources['template']): ResearchExportSources {
+  private collect(request: ResearchExportInputsRequest, template: ResearchExportSources['template']): ResearchExportSources {
     const project = this.repository.getProject(request.projectId);
     if (project.status === 'archived') throw new Error('research_project_archived');
     const review = this.repository.reviews.requireForStage(project.id, 'export');

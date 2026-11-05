@@ -14,6 +14,8 @@ import { createResearchDirectory, readResearchFile, researchContentHash, researc
 import type { ResearchRepository } from './repository';
 import {assertCurrentExportScientificReview, captureExportScientificReview, exportScientificReviewPath, serializeExportScientificReview} from './export-scientific-review';
 import {RocDomainError} from '../../services/errors';
+import type {ResearchExportInputsRequest} from '../../../shared/schemas/research-exports';
+import type {ResearchExportInputs} from '../../../shared/schemas/research-export-publication';
 
 export class ResearchExportService {
   private readonly session = new ResearchJobSession('research_export_closed');
@@ -21,11 +23,15 @@ export class ResearchExportService {
     this.logger.error('Research export could not persist its final state.', { exportId, error: exportError(error) });
   });
 
-  constructor(private readonly repository: ResearchRepository, private readonly sources: Pick<ResearchExportSourceService, 'capture' | 'assertCurrent'>,
+  constructor(private readonly repository: ResearchRepository, private readonly sources: Pick<ResearchExportSourceService, 'capture' | 'assertCurrent' | 'inputs'>,
     private readonly tools: ExportToolchain, private readonly rootPath: string | null, private readonly logger: RocPluginContext['logger'],
     private readonly archive: typeof createExportArchive = createExportArchive) {}
 
   recover(): void { this.repository.exports.recover(); }
+
+  async inputs(request: ResearchExportInputsRequest): Promise<ResearchExportInputs> {
+    return this.session.run(signal => this.sources.inputs(request, signal));
+  }
 
   async prepare(input: ResearchExportPrepare): Promise<ResearchExportExecution> {
     const request = researchExportPrepareSchema.parse(input);

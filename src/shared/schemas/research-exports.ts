@@ -7,17 +7,22 @@ import { researchBibliographyEntrySchema, researchCitationKeySchema } from './re
 import { researchReviewCycleSchema, researchStageRunSchema } from './research-runs';
 import {researchExperimentResultReceiptSchema} from './research-experiment-results';
 import {researchIdeaOutcomeReceiptSchema} from './research-idea-outcomes';
+import {researchExportFileSchema} from './research-export-file';
+export {researchExportFileSchema, type ResearchExportFile} from './research-export-file';
 
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
-export const researchExportFileSchema = z.object({ path: researchExperimentPathSchema, sha256: digest, size: z.number().int().nonnegative() }).strict();
 export const researchExportTemplateSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('default'), language: z.enum(['zh', 'en']) }).strict(),
   z.object({ kind: z.literal('imported'), templateId: id, expectedRevision: z.number().int().positive(), expectedSourceDigest: digest }).strict()
 ]);
-const researchExportPrepareFields = {
-  requestId: id.max(128), title: z.string().trim().min(1).max(256), manuscriptArtifactId: id,
+export const researchExportInputsRequestSchema = z.strictObject({
+  projectId: id, manuscriptArtifactId: id,
   figureIds: z.array(id).max(100).refine((ids) => new Set(ids).size === ids.length), template: researchExportTemplateSchema
+});
+const researchExportPrepareFields = {
+  requestId: id.max(128), title: z.string().trim().min(1).max(256),
+  ...researchExportInputsRequestSchema.omit({projectId: true}).shape
 } as const;
 export const researchOwnedExportPrepareSchema = z.object(researchExportPrepareFields).strict();
 export const researchExportPrepareRequestSchema = researchOwnedExportPrepareSchema.extend({ projectId: id });
@@ -59,5 +64,5 @@ export const researchExportDeliverySchema = z.object({ exportId: id, projectId: 
 export type ResearchExportPrepare = z.infer<typeof researchExportPrepareSchema>;
 export type ResearchExportSources = z.infer<typeof researchExportSourcesSchema>;
 export type ResearchExportExecution = z.infer<typeof researchExportExecutionSchema>;
-export type ResearchExportFile = z.infer<typeof researchExportFileSchema>;
+export type ResearchExportInputsRequest = z.infer<typeof researchExportInputsRequestSchema>;
 export type ResearchExportDelivery = z.infer<typeof researchExportDeliverySchema>;

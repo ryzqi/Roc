@@ -639,6 +639,12 @@ ${source.replace('  const rows =', `
             produced.figure = await tool('publish_figure').invoke({runId: started.runId, replacesFigureId: null});
             if (fault === 'published_stage_failure') throw new Error('research_fixture_after_publication');
           } else if (input.run.stage === 'export') {
+            const candidates = await exports.inputs({projectId: f.project.id, manuscriptArtifactId: produced.manuscriptId,
+              figureIds: [produced.figure.figureId], template: {kind: 'default', language: 'en'}});
+            assert.match(candidates.sourceHash, /^[a-f0-9]{64}$/u);
+            assert.ok(candidates.resources.some(resource => resource.role === 'program'));
+            assert.ok(candidates.resources.some(resource => resource.role === 'figure' && resource.mandatory));
+            assert.ok(candidates.resources.every(resource => resource.source.area !== 'log'));
             const started = await tool('prepare_export').invoke({requestId: 'fixed-export',
               title: 'Synthetic reproducibility fixture', manuscriptArtifactId: produced.manuscriptId,
               figureIds: [produced.figure.figureId], template: {kind: 'default', language: 'en'}});

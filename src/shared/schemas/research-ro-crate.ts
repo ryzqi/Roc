@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {researchExportFileSchema} from './research-exports';
+import {researchExportFileSchema} from './research-export-file';
 import {researchExperimentPathSchema} from './research-experiments';
 import {researchPrivateValueReason} from './research-public-projection';
 
