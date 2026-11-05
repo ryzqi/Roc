@@ -61,7 +61,26 @@ PR08 当前提供环境预检、真实隔离探针、主进程确认的原生环
 
 成功、非零退出、取消和 runner 拒绝都经现有环境探针回执记录。报告解析、身份和锁匹配失败保留已有真实进程回执；非零退出和无效报告保留原始 stdout/stderr、usage/admission。独立探针仍没有实验身份或持久化实验 provenance。
 
+## 固定实验启动程序
+
+A4B2 提供内部 Python 运行适配，产品 start 合同仍未启用。适配只接受已核验环境、版本 1 源码、uint32 随机种子、声明参数与参数列表，以及本次只读输入、输出和临时目录。启动旗标固定为 `-I -S -B -X utf8 -c`；调用者不能传解释器旗标。环境 toolchainHash 绑定启动程序 SHA-256、旗标和执行合同版本。
+
+启动程序先核对真实解释器报告，再将模块路径明确设为三个已核验标准路径及所选包目录。在用户源码和安装包执行前，首行 stdout 输出并 flush 启动报告。主进程严格核对报告、模块路径、绝对源码路径和种子；缺失或改变的报告拒绝结果，并保留真实日志、资源与准入回执。
+
+源码以原始字节编译，保留编码声明，使用真实 `__main__` 模块字典运行。`sys.argv` 包含快照源码路径和声明参数。`roc_experiment` 模块提供 source_version、input_dir、input_paths、output_dir、scratch_dir、只读 parameters 和 seed。种子只初始化 Python `random`，不声称其他库或哈希随机性已固定。
+
+实际计算复用统一 runner，仅输出和临时目录可写，不授予网络、GPU 或项目其他文件访问。非零退出、用户异常、超时、日志洪泛及资源拒绝保留原始结果。取消会回收完整进程树。
+
 ## 验证
+
+A4B2 固定启动程序（均从仓库根目录执行）：
+
+- `node --test tests/integration/research-python-process.test.mjs`：最终 8/8，实际 CPython 包导入、源码编码、重复输出哈希、文件/网络边界、退出与异常、CPU/RSS/输出限额、超时、日志洪泛、TERM-ignoring 父/子/孙回收，以及首行报告和 dispatch 前校验。回执为 `.artifacts/research-optimization/pr08-a4b2/python-process.json`。
+- `node --test --test-concurrency=1 tests/integration/research-python-selection.test.mjs`：11/11，包含启动程序身份变化后的项目预览消费者。
+- `node --test tests/unit/research-current-execution-contracts.test.mjs tests/unit/research-python-code-receipt.test.mjs`：8/8。
+- `pnpm build`（含 typecheck）、`node scripts/run-research-p0.mjs`（13/13）、`node scripts/smoke-electron.mjs`（13/13，零 renderer errors）、`pnpm check:ipc`、`pnpm check:renderer-chunks`（1132907 bytes / 6 files）均通过。
+
+初轮实际测试 3/7，四项失败来自测试主机试图重写自身创建的 0400 源码。测试 helper 在主机侧显式改为 0600、重写后恢复 0400；实际 sandbox 和只读断言保持原样。日志保留于 `.artifacts/research-optimization/pr08-a4b2-*.log`。该增量尚未接入实验 service、发布和复跑合同。
 
 A4B1 环境预览（下列命令均从仓库根目录执行）：
 

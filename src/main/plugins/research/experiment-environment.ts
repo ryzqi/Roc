@@ -8,6 +8,8 @@ import type { NativeCodeReceipt } from './experiment-native-code-schema';
 import type { ResearchEnvironmentProbeResource } from '../../../shared/schemas/research-process-resources';
 import type { ResearchPythonEnvironmentService } from './python-environment-service';
 import type { InspectedPythonEnvironment } from './experiment-python-probe';
+import { pythonExperimentFlags } from './experiment-python-probe';
+import { pythonExperimentBootstrapHash } from './experiment-python-process';
 
 export type PreparedExperimentEnvironment = {
   snapshot: ResearchExperimentEnvironment;
@@ -63,7 +65,8 @@ export class ResearchExperimentEnvironmentService {
         version: report.version, platform: report.platform, architecture: report.architecture,
         toolchainHash: researchContentHash(JSON.stringify({
           inspectionContractVersion: codeReceipt.metadataIdentity.inspectionContractVersion,
-          probe: codeReceipt.metadataIdentity.probe
+          probe: codeReceipt.metadataIdentity.probe, executionContractVersion: 1,
+          bootstrap: pythonExperimentBootstrapHash(), flags: pythonExperimentFlags
         })),
         metadataHash, packages: report.distributions, lockFiles: [lockFile]
       });

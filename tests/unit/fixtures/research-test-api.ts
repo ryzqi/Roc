@@ -43,6 +43,7 @@ export { ResearchExperimentService } from '../../../src/main/plugins/research/ex
 export { ResearchExperimentEnvironmentService } from '../../../src/main/plugins/research/experiment-environment';
 export { inspectNativeExperimentEnvironment } from '../../../src/main/plugins/research/experiment-native-environment';
 export { inspectPythonExperimentEnvironment, pythonEnvironmentProbe, pythonExperimentFlags } from '../../../src/main/plugins/research/experiment-python-probe';
+export { runPythonExperimentProcess, pythonExperimentBootstrap, pythonExperimentBootstrapHash, pythonExecutionStartupSchema } from '../../../src/main/plugins/research/experiment-python-process';
 export {
   assertPythonCodeReceipt, pythonCodeReceiptSchema, pythonCodeReportSchema,
   pythonEnvironmentControlsSchema, pythonEnvironmentLockSchema
