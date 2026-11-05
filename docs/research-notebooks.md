@@ -1,6 +1,6 @@
-# Notebook 静态导入合同
+# Notebook 导入与执行合同
 
-X-NB A1 定义解析与预览合同，项目导入、界面和执行接入随后完成。`parseResearchNotebook` 只读取字节，不启动 Python、Jupyter 或 shell，也不运行源码、Markdown、HTML、JavaScript、SVG 或附件。
+`parseResearchNotebook` 只读取字节，不启动 Python、Jupyter 或 shell，也不运行源码、Markdown、HTML、JavaScript、SVG 或附件。
 
 只支持 nbformat 4.5，要求唯一的 1–64 字符 cell ID（字母、数字、`-`、`_`）。旧版本和未实现的未来版本拒绝，不转换或补造 ID。结构、元数据、stream/display/execute-result/error 和 MIME 数据规则来自 [nbformat 官方格式说明](https://nbformat.readthedocs.io/en/latest/format_description.html) 和 [4.5 JSON Schema](https://github.com/jupyter/nbformat/blob/main/nbformat/v4/nbformat.v4.5.schema.json)，2026-11-06 核对。产品固定 minor=5；官方 schema 的未来 minor 容纳能力不代表产品支持。
 
@@ -33,3 +33,13 @@ A2 验证（2026-11-06，项目根目录）：`node --test tests/unit/research-n
 A3 验证（2026-11-06，项目根目录）：`pnpm build`（含 typecheck）；`node --test tests/renderer/notebook-preview.test.mjs` 6/6；`node --test tests/unit/renderer-paths.test.mjs` 14/14；`node --test tests/integration/research-notebook-electron.test.mjs` 1/1，真实文件树/键盘/preload/main/磁盘重启，包含普通文本预览与编辑回归，零恶意资源请求/代码执行；`node --test tests/renderer/file-tree-virtualization.test.mjs` 1/1；`pnpm check:ipc`、`pnpm check:renderer-chunks` 通过（1133919 bytes / 6 files）；`node scripts/smoke-electron.mjs` 13/13，零 renderer errors。证据 `.artifacts/research-optimization/xnb-a3-*.log`、`xnb-a3-{ui,electron}/`。
 
 较广的 `ROC_SMOKE_TARGET=dist node scripts/verify-p3-workspace.mjs` 在原有外部文件刷新性能闸门失败：474ms，目标 ≤200ms；后续闸门未运行。本部分未改文件监听或该性能要求，不宣称 P3 全闸门通过。文件树首次 End 键等待超时，原代码及测试不变的单独重跑通过；并发原因未确认。受控 cell 执行仍是下一部分。
+
+## 受控 Python cell 子集（A4A）
+
+`notebookPythonSource` 只为明确声明 Python 的冻结 nbformat 4.5 生成执行源码。kernelspec 若提供，必须是 python3/Python；拒绝 raw cell 和无 code 的 Notebook。Markdown 不执行，已有输出不进入运行结果。代码按原 cell 顺序在共享的独立 `__main__` 命名空间执行，完整源码不使用截断预览。每个文件名包含原 Notebook SHA 和 cell ID，错误保留原 cell 行号。
+
+固定 subsetVersion=1：真实选中解释器先对全部 cell 做 AST 校验及 exec-mode 编译，全部成功后才执行第一 cell；不实现交互式表达式 display、跨 cell future 状态、IPython magics、shell cell、top-level await 或 Jupyter 扩展，拒绝这些语义。注释、字符串中的 `%`/`!`、Unicode 和模运算不改写。导入限定为 roc_experiment、math、statistics、csv、json、pathlib、random、hashlib、datetime、decimal、fractions、itertools、functools、collections、typing、numpy、scipy、pandas、matplotlib；拒绝相对导入、动态执行入口和 dunder 属性反射。该 AST 合同不是安全沙箱，实际环境、文件/网络隔离和资源治理仍必须由 PR08 执行链提供。
+
+生成内容绑定完整原字节和大小、不可变导入回执、cell ID/顺序/cellHash/sourceHash、executorHash 和最终 sourceHash。采用 ASCII base64 封装 JSON，未受信源码不参与生成脚本的引号语法。运行时负结果保留此前实际 stdout，并在失败 cell 停止。A4A 本身不注册启动接口、不写用户工作目录，也不执行产品请求。
+
+A4A 验证（2026-11-06，项目根目录）：`node --test tests/unit/research-notebook-python-source.test.mjs tests/unit/research-notebook-parser.test.mjs tests/unit/research-notebook-import.test.mjs` 18/18，含本机 CPython 3.14 的实际执行；`pnpm typecheck` 和 `pnpm build` exit 0。完整源码超过 8000 字符、共享定义、先全编译、原 cell 行号、不支持语义零提前执行、负结果与哈希篡改均有断言。初轮测试因临时目录无法解析 external Zod 在加载阶段失败；测试打包依赖后通过，产品合同未变。日志 `.artifacts/research-optimization/xnb-a4a-{focused,type,build}.log`。
