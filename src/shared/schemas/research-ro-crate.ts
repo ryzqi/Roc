@@ -1,6 +1,7 @@
 import {z} from 'zod';
 import {researchExportFileSchema} from './research-exports';
 import {researchExperimentPathSchema} from './research-experiments';
+import {researchPrivateValueReason} from './research-public-projection';
 
 export const researchCrateVersion = '1.2' as const;
 export const researchCrateProfile = 'roc-research-1' as const;
@@ -10,7 +11,7 @@ export const researchCrateProfilePath = 'ro-crate-profile.html' as const;
 
 // Public fields are a separate contract. Reject private values instead of silently rewriting them.
 export const researchPublicTextSchema = z.string().trim().min(1).max(16000).refine(value =>
-  !/(?:file:\/\/|\/(?:Users|Volumes|home|private|tmp)\/|(?:^|[\s"'(])[A-Za-z]:[\\/]|(?:api[_-]?key|access[_-]?token|password|secret)\s*[:=])/iu.test(value),
+  researchPrivateValueReason(value) === null,
 {message: 'research_export_private_metadata'});
 export const researchPublicUrlSchema = z.string().max(2000).refine(value => {
   try {

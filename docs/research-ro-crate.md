@@ -50,3 +50,18 @@ node --test tests/unit/research-ro-crate.test.mjs \
 报告、fixture 路径与日志保存在 `.artifacts/research-optimization/pr10-a1-*`；不代表独立科学验收。
 
 规范依据：[1.2 结构](https://www.researchobject.org/ro-crate/specification/1.2/structure.html)、[root 合同](https://www.researchobject.org/ro-crate/specification/1.2/root-data-entity.html)、[profile 合同](https://www.researchobject.org/ro-crate/specification/1.2/profiles.html)、[软件源码](https://www.researchobject.org/ro-crate/specification/1.2/workflows.html)、[validator 离线模式](https://rocrate-validator.readthedocs.io/en/stable/5_offline_mode/)。
+
+## A2A 公开投影边界
+
+`projectResearchPublicValue` 接收 JSON，生成严格的 `public_projection`：
+
+- `originalSha256` 是原始 JSON 的 canonical serialization 摘要。
+- `projectionSha256` 是公开 `value` 的 canonical serialization 摘要。
+- `omittedFields` 使用 JSON Pointer 和原因记录被删去的 native 字段、凭证、私有 URL 或字段名。
+- 原始对象保持不变；普通科学指标、单位、seed、unknown cost、版本和完整历史保持原值。含私有值的任意文本变为明确登记的缺失值，而不是伪造原文。
+
+公开投影只证明其自身 JSON 完整性，不能凭原始哈希独立验证私有回执。对原始文件投影时还需要另存实际文件的字节哈希和大小；canonical JSON 哈希不能冒充磁盘字节哈希。只改变私有字段也会改变完整投影封存值，因此后续审批不能仅比较 `projectionSha256`。
+
+parser 改变输入 JSON（包括丢弃保留属性）时直接拒绝。独立校验拒绝错误投影摘要、未声明的私有值、旧版 raw receipt 和缺少必填字段的数据。公开字符串的私有值识别由 crate 输入和投影模块共用。
+
+A2A 是独立模块及回归，尚未接入实际导出。实际 ZIP 的 sources、科学审核、figure manifest、日志和资源交付将在 A2B/A2C 统一切换；此处不声明既有 ZIP 已满足公开隐私要求。
