@@ -1,3 +1,4 @@
+import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after,before,test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -249,11 +250,10 @@ test('actual independent review after byte await and valid new assessment during
 });
 
 test('DB38 upgrade preserves all existing framework/extraction columns and real disk reopen retains reviewed quality without requests',async()=>{
-  const oldApi={...api,applyResearchDatabaseSchema(db,now) {
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(value=>value.version<=38),now});
-  }};
+  const oldApi=createReviewMigrationSeedApi(api,38);
   const f=await scene({},oldApi);let db,reviews,service;
   try {
+    oldApi.finishSeed(f.db);
     const old=f.db.prepare('SELECT * FROM research_review_quality_plans').all(),columns=Object.keys(old[0]);
     const extraction=f.db.prepare('SELECT * FROM research_review_extractions').all(),evidence=f.db.prepare('SELECT * FROM research_evidence').all();
     api.applyResearchDatabaseSchema(f.db);
@@ -262,7 +262,7 @@ test('DB38 upgrade preserves all existing framework/extraction columns and real 
     assert.deepEqual(f.db.prepare('SELECT * FROM research_review_extractions').all(),extraction);assert.deepEqual(f.db.prepare('SELECT * FROM research_evidence').all(),evidence);
     assert.equal(count(f),0);const saved=await f.assessments.save(f.assess(),actor),path=join(f.root,'quality-assessment-reopen.sqlite');await f.db.backup(path);
     db=new Database(path);db.pragma('foreign_keys = ON');const repository=new api.ResearchRepository(db,f.tasks,()=>f.time);
-    reviews=new api.ResearchReviewSearchService(db,repository,{search:async()=>{throw new Error('readonly_must_not_request');}},error=>f.errors.push(error),()=>f.time);
+    reviews=new api.ResearchReviewSearchService(db,repository,{search:async()=>{throw new Error('readonly_must_not_request');}},error=>f.errors.push(error),()=>{},()=>f.time);
     const corpora=new api.ResearchReviewCorpusRepository(db,repository,reviews,()=>f.time),dedup=new api.ResearchReviewDeduplicationRepository(db,repository,corpora,()=>f.time);
     const roster=new api.ResearchReviewScreeningRepository(db,repository,corpora,dedup,()=>f.time),titleVotes=new api.ResearchReviewScreeningDecisions(db,repository,corpora,dedup,roster,()=>f.time);
     const titleArbitration=new api.ResearchReviewScreeningArbitration(db,repository,titleVotes,()=>f.time),titles=new api.ResearchReviewScreeningFreeze(db,repository,titleArbitration,()=>f.time);

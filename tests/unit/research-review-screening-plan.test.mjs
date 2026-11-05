@@ -1,3 +1,4 @@
+import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -159,17 +160,17 @@ test('generated plan API binds the main caller; declared names never grant tools
 });
 
 test('disk reopen and DB30 upgrade retain exact raw corpus/dedup history without invented reviewer assignments',async()=>{
-  const oldApi={...api,applyResearchDatabaseSchema(db,now) {
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(value=>value.version<=30),now});
-  }};
+  const oldApi=createReviewMigrationSeedApi(api,30);
   const f=await scene({},oldApi),directory=await mkdtemp(join(tmpdir(),'roc-screening-plan-reopen-'));
   let db,reviews;
   try {
+    oldApi.finishSeed(f.db);
     const tables=['research_review_protocol_versions','research_review_searches','research_review_deduplication_freezes','research_review_duplicate_decisions'];
+    const columns=tables.map(table=>f.db.pragma(`table_info(${table})`).map(column=>column.name).join(','));
     const before=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all());
     const original=f.db.prepare('SELECT * FROM research_review_corpora').all(),migrations=f.db.prepare('SELECT * FROM schema_migrations').all();
     api.applyResearchDatabaseSchema(f.db);
-    tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT * FROM ${table}`).all(),before[index]));
+    tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT ${columns[index]} FROM ${table}`).all(),before[index]));
     assert.deepEqual(f.db.prepare(`SELECT ${Object.keys(original[0]).join(',')} FROM research_review_corpora`).all(),original);
     assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE version<=30').all(),migrations);
     assert.equal(f.db.prepare('SELECT screening_plan_hash FROM research_review_corpora').pluck().get(),null);
@@ -177,7 +178,7 @@ test('disk reopen and DB30 upgrade retain exact raw corpus/dedup history without
     assert.throws(()=>f.screening.getPlan(f.get),/research_review_screening_plan_not_found/);
     const plan=f.screening.createPlan(f.input,actor),path=join(directory,'research.sqlite');await f.db.backup(path);
     db=new Database(path);db.pragma('foreign_keys = ON');const repository=new api.ResearchRepository(db,f.tasks,()=>f.time);
-    reviews=new api.ResearchReviewSearchService(db,repository,{search:async()=>{throw new Error('readonly_must_not_request');}},error=>f.errors.push(error),()=>f.time);
+    reviews=new api.ResearchReviewSearchService(db,repository,{search:async()=>{throw new Error('readonly_must_not_request');}},error=>f.errors.push(error),()=>{},()=>f.time);
     const corpora=new api.ResearchReviewCorpusRepository(db,repository,reviews,()=>f.time);
     const dedup=new api.ResearchReviewDeduplicationRepository(db,repository,corpora,()=>f.time);
     const screening=new api.ResearchReviewScreeningRepository(db,repository,corpora,dedup,()=>f.time),changes=db.prepare('SELECT total_changes()').pluck().get();

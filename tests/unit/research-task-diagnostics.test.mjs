@@ -27,7 +27,7 @@ test('task diagnostics aggregate authoritative calls once and preserve unknown s
     reserve(child.id, 'unknown', 100, 70);
     ledger.settle(child.id, 'unknown', null, 'unknown');
     reserve(f.run.id, 'pending', 50, 50);
-    const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, ledger);
+    const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, ledger, null);
     const summary = diagnostics.get({ projectId: f.project.id, taskId: f.run.taskId });
     assert.deepEqual(summary.budget.tokens, { limit: 1000, settled: 80, unknown: 100, reserved: 50, remaining: 770 });
     assert.equal(summary.budget.calls.models.total, 3);
@@ -63,7 +63,7 @@ test('chat task diagnostics enforce thread and project scope before returning ta
     f.agentDb.prepare(`INSERT INTO research_task_executions
       (kind,execution_id,task_id,project_id,snapshot_json,created_at) VALUES ('chat','chat',?,?,?,?)`)
       .run(f.run.taskId, f.project.id, JSON.stringify(execution), timestamp);
-    const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb));
+    const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb), null);
     const request = { projectId: f.project.id, threadId: 'thread', runId: 'chat' };
     const summary = diagnostics.forChat(request);
     assert.equal(summary.task.id, f.run.taskId);
@@ -96,7 +96,7 @@ test('pausing approval and restoring it keeps the completed execution and origin
     await gate.complete({ projectId: f.project.id, expectedStage: 'planning', action: 'complete' });
     runtime.synchronizeTaskState(f.run.taskId, f.project.id);
     await controller.pause({ taskId: f.run.taskId, projectId: f.project.id });
-    const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb));
+    const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb), null);
     assert.equal(diagnostics.get({ taskId: f.run.taskId, projectId: f.project.id }).canRestoreApproval, true);
     const restored = controller.restoreApproval({ taskId: f.run.taskId, projectId: f.project.id });
     assert.equal(restored.status, 'waiting_approval');

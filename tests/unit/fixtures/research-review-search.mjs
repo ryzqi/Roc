@@ -20,13 +20,14 @@ export function reviewSearchPayloadFixture(page,count=4) {
   })};
 }
 export function createReviewSearchFixture(api,{maxPages=2,fetch,queries,screening,protocolBody}={}) {
-  const f=createResearchFixture(api,'reading');f.errors=[];f.calls=[];f.time='2026-11-04T00:00:00.000Z';
+  const f=createResearchFixture(api,'reading');f.errors=[];f.calls=[];f.events=[];f.time='2026-11-04T00:00:00.000Z';
   f.search=new api.LiteratureSearchService(async(url,init)=>{
     f.calls.push({url,init});
     return fetch===undefined?Response.json(reviewSearchPayloadFixture(Number(new URL(url).searchParams.get('page')))):fetch(url,init);
   },reviewProviderGovernorFixture(api));
   f.imports=new api.LiteratureImportService(f.db,f.repository.library,f.search,reviewBibliographyPreparationFixture,async()=>{throw new Error('unexpected_library_mutation');},()=>f.time);
-  f.reviews=new api.ResearchReviewSearchService(f.db,f.repository,f.imports,error=>f.errors.push(error),()=>f.time);
+  f.reviews=new api.ResearchReviewSearchService(f.db,f.repository,f.imports,error=>f.errors.push(error),
+    (taskId,projectId)=>f.events.push({taskId,projectId}),()=>f.time);
   const body=protocolBody===undefined?reviewProtocolBodyFixture():structuredClone(protocolBody);
   body.databases[0].pageSize=2;body.databases[0].maxPages=maxPages;if(queries!==undefined)body.databases[0].queries=queries;
   if(screening!==undefined)body.screening=screening;

@@ -6,8 +6,11 @@ import {
 } from '../../../shared/schemas/research-tasks';
 import type { ResearchStageRun } from '../../../shared/types';
 import type { ConsumedResearchDispatchGrant } from '../../services/deep-agent/execution-grant-broker';
-import { assertResearchDispatchGrant } from '../../services/deep-agent/execution-grant-broker';
+import { assertResearchDispatchGrant, assertReviewSearchDispatchGrant,
+  type ConsumedReviewSearchDispatchGrant } from '../../services/deep-agent/execution-grant-broker';
 import { researchDispatchRequestHash } from '../../services/research-dispatch-context';
+import {reviewSearchDispatchRequestHash} from '../../services/research-review-dispatch-context';
+import type {ResearchReviewSearchSnapshot, ResearchReviewSearchOwnership} from '../../../shared/schemas/research-review-search';
 import { runBudgetSchema, runExecutionSnapshotSchema } from '../../../shared/schemas/agent';
 import { createRunBudget } from '../agent/run-execution-snapshot';
 import type { RunLimits } from '../../services/deep-agent/run-budget-ledger';
@@ -198,6 +201,61 @@ export class ResearchTaskRepository {
         parentKind: parent === null ? null : 'stage', parentExecutionId: input.ownerRunId,
         associationSource: parent === null ? 'direct' : 'owned', manifestHash: digest(input.snapshot) });
     }).immediate();
+  }
+
+  linkReviewSearch(snapshot: ResearchReviewSearchSnapshot, dispatch: ConsumedReviewSearchDispatchGrant): ResearchTaskExecution {
+    assertReviewSearchDispatchGrant(dispatch);
+    const {projectId} = snapshot.request;
+    if (dispatch.projectId !== projectId || snapshot.actor.kind !== 'agent' || snapshot.actor.id !== dispatch.runId ||
+        dispatch.requestHash !== reviewSearchDispatchRequestHash(snapshot.request)) throw new Error('research_dispatch_request_mismatch');
+    return this.db.transaction(() => {
+      const chat = this.findExecution('chat', dispatch.runId, projectId);
+      const task = chat === null ? this.createTask(projectId, snapshot.parameters.query, dispatch.runId) : this.get(chat.taskId, projectId);
+      this.link({taskId: task.id, projectId, kind: 'chat', executionId: dispatch.runId, parentKind: null,
+        parentExecutionId: null, associationSource: 'direct', manifestHash: dispatch.manifestHash});
+      return this.link({taskId: task.id, projectId, kind: 'review_search', executionId: snapshot.id,
+        parentKind: 'chat', parentExecutionId: dispatch.runId, associationSource: 'chat_dispatch',
+        manifestHash: digest({snapshot, parentManifestHash: dispatch.manifestHash})});
+    }).immediate();
+  }
+
+  assertReviewSearchActive(owner: ResearchReviewSearchOwnership, executionId: string, expectedExecutionHash: string): void {
+    const execution = this.requireExecution('review_search', executionId, owner.projectId);
+    const parent = this.requireExecution('chat', owner.runId, owner.projectId);
+    if (execution.taskId !== parent.taskId || execution.parentKind !== 'chat' || execution.parentExecutionId !== owner.runId ||
+        parent.manifestHash !== owner.manifestHash || execution.manifestHash !== expectedExecutionHash) throw new Error('research_review_owner_mismatch');
+    if (this.get(execution.taskId, owner.projectId).status !== 'active') throw new Error('research_task_not_active');
+    const run = this.requireReviewSearchParent(owner);
+    const budget = this.db.prepare(`SELECT b.limits_json,COALESCE(b.stop_reason,p.stop_reason) stop_reason
+      FROM research_task_budgets b LEFT JOIN research_project_budget_states p ON p.project_id=? WHERE b.task_id=?`)
+      .get(owner.projectId, execution.taskId) as {limits_json: string; stop_reason: string | null} | undefined;
+    if (budget === undefined) throw new Error('research_task_budget_missing');
+    const reason = budget.stop_reason ?? run.budget_stop_reason;
+    if (reason !== null) throw new Error(reason);
+    if (Date.parse(runBudgetSchema.parse(JSON.parse(budget.limits_json)).deadlineAt) <= Date.parse(this.now())) {
+      throw new Error('run_deadline_exhausted');
+    }
+  }
+
+  assertReviewSearchParent(owner: Pick<ResearchReviewSearchOwnership, 'runId' | 'threadId' | 'projectId' | 'manifestHash'>): void {
+    this.requireReviewSearchParent(owner);
+  }
+
+  private requireReviewSearchParent(owner: Pick<ResearchReviewSearchOwnership, 'runId' | 'threadId' | 'projectId' | 'manifestHash'>) {
+    const run = this.db.prepare(`SELECT r.status,r.thread_id,r.snapshot_json,r.snapshot_version,r.budget_stop_reason,t.research_project_id
+      FROM agent_runs r JOIN agent_threads t ON t.id=r.thread_id WHERE r.id=?`)
+      .get(owner.runId) as {status: string; thread_id: string; snapshot_json: string; snapshot_version: number;
+        budget_stop_reason: string | null; research_project_id: string | null} | undefined;
+    if (run === undefined || run.status !== 'running' || run.thread_id !== owner.threadId) throw new Error('research_dispatch_parent_not_active');
+    if (this.db.prepare('SELECT 1 FROM agent_execution_run_fences WHERE run_id=?').get(owner.runId) !== undefined) {
+      throw new Error('research_dispatch_parent_revoked');
+    }
+    const snapshot = runExecutionSnapshotSchema.parse(JSON.parse(run.snapshot_json));
+    const {manifestHash, ...manifest} = snapshot.capabilityManifest;
+    if (run.snapshot_version !== 9 || run.research_project_id !== owner.projectId ||
+        snapshot.runId !== owner.runId || snapshot.threadId !== owner.threadId || snapshot.researchProjectId !== owner.projectId ||
+        manifestHash !== owner.manifestHash || digest(manifest) !== owner.manifestHash) throw new Error('research_dispatch_parent_binding_invalid');
+    return run;
   }
 
   private createTask(projectId: string, goal: string, rootAgentRunId: string | null): ResearchTask {

@@ -6,10 +6,15 @@ import {
   researchReviewSearchStartSchema, researchReviewSearchSnapshotSchema, researchReviewSearchReceiptSchema,
   researchReviewSearchInspectionSchema, researchReviewSearchGetSchema, researchReviewSearchListSchema,
   researchReviewSearchPoolRequestSchema, researchReviewSearchCancelSchema, researchReviewSearchCancelReceiptSchema,
+  researchReviewSearchOwnershipSchema,
   type ResearchReviewSearchStart, type ResearchReviewSearchInspection, type ResearchReviewSearchSnapshot,
-  type ResearchReviewSearchReceipt, type ResearchReviewSearchCancel, type ResearchReviewSearchPoolResult
+  type ResearchReviewSearchReceipt, type ResearchReviewSearchCancel, type ResearchReviewSearchPoolResult,
+  type ResearchReviewSearchOwnership, type ResearchReviewOwnedSearchInspection
 } from '../../../shared/schemas/research-review-search';
-import {researchRelationReviewerSchema, type ResearchRelationReviewer} from '../../../shared/schemas/research-evidence-relations';
+import {researchRelationReviewerSchema, type ResearchRelationReviewer, type ResearchRelationActor} from '../../../shared/schemas/research-evidence-relations';
+import {assertReviewSearchDispatchGrant, assertReviewSearchOwner,
+  type ConsumedReviewSearchDispatchGrant, type ConsumedReviewSearchOwner} from '../../services/deep-agent/execution-grant-broker';
+import {reviewSearchDispatchRequestHash} from '../../services/research-review-dispatch-context';
 import {withLiteratureContext} from '../../services/literature-context';
 import type {ResearchRepository} from './repository';
 import type {LiteratureImportService} from './literature-import-service';
@@ -18,7 +23,8 @@ type SearchRow = {
   id: string; project_id: string; protocol_version_id: string; database_index: number; query_index: number;
   retry_of: string | null; request_id: string; snapshot_json: string; snapshot_hash: string;
   status: ResearchReviewSearchInspection['status']; revision: number;
-  receipt_json: string | null; receipt_hash: string | null; cancellation_hash: string | null; updated_at: string
+  receipt_json: string | null; receipt_hash: string | null; cancellation_hash: string | null;
+  owner_hash: string | null; updated_at: string
 };
 type LedgerRow = {
   id: string; owner: string; project_id: string; run_id: string; request_json: string; status: string
@@ -32,11 +38,28 @@ export class ResearchReviewSearchService {
   private closed = false;
   constructor(private readonly db: Database, private readonly repository: ResearchRepository,
     private readonly imports: Pick<LiteratureImportService, 'search'>, private readonly reportFailure: (error: unknown) => void,
+    private readonly onTaskChanged: (taskId: string, projectId: string) => void,
     private readonly now: () => string = () => new Date().toISOString()) {}
 
   start(input: ResearchReviewSearchStart, createdBy: ResearchRelationReviewer): ResearchReviewSearchInspection {
+    return this.startQuery(input, researchRelationReviewerSchema.parse(createdBy), null);
+  }
+
+  startOwned(input: ResearchReviewSearchStart, grant: ConsumedReviewSearchDispatchGrant, signal: AbortSignal): ResearchReviewOwnedSearchInspection {
+    assertReviewSearchDispatchGrant(grant);
+    signal.throwIfAborted();
+    const request = researchReviewSearchStartSchema.parse(input);
+    if (grant.projectId !== request.projectId || grant.requestHash !== reviewSearchDispatchRequestHash(request)) {
+      throw new Error('research_dispatch_request_mismatch');
+    }
+    const search = this.startQuery(request, {kind: 'agent', id: grant.runId}, {grant, signal});
+    return {search, association: this.repository.tasks.requireExecution('review_search', search.snapshot.id, request.projectId)};
+  }
+
+  private startQuery(input: ResearchReviewSearchStart, actor: ResearchRelationActor,
+    dispatch: {grant: ConsumedReviewSearchDispatchGrant; signal: AbortSignal} | null): ResearchReviewSearchInspection {
     if (this.closed) throw new Error('research_review_search_closed');
-    const request = researchReviewSearchStartSchema.parse(input), actor = researchRelationReviewerSchema.parse(createdBy);
+    const request = researchReviewSearchStartSchema.parse(input);
     const requestHash = hash(JSON.stringify(request));
     let created = false;
     const row = this.db.transaction(() => {
@@ -45,7 +68,13 @@ export class ResearchReviewSearchService {
         .get(request.projectId, request.requestId) as SearchRow | undefined;
       if (replay !== undefined) {
         const snapshot = this.readSnapshot(replay);
-        if (snapshot.requestHash !== requestHash || snapshot.actor.id !== actor.id) throw new Error('research_review_request_conflict');
+        if (snapshot.requestHash !== requestHash || snapshot.actor.id !== actor.id || snapshot.actor.kind !== actor.kind) {
+          throw new Error('research_review_request_conflict');
+        }
+        const owner = this.readOwnership(replay, snapshot);
+        if (dispatch === null ? owner !== null : owner === null || !this.sameOwner(owner, dispatch.grant)) {
+          throw new Error('research_review_owner_mismatch');
+        }
         return replay;
       }
       const protocol = this.repository.systematicReviews.requireFrozen(request.projectId, request.versionId, request.expectedFreezeHash);
@@ -75,16 +104,65 @@ export class ResearchReviewSearchService {
         (id,project_id,protocol_version_id,database_index,query_index,retry_of,request_id,snapshot_json,snapshot_hash,status,revision,updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,'running',1,?)`).run(snapshot.id, request.projectId, request.versionId, request.databaseIndex,
           request.queryIndex, request.retryOf, request.requestId, snapshotJson, hash(snapshotJson), snapshot.startedAt);
+      if (dispatch !== null) {
+        const owner = JSON.stringify(researchReviewSearchOwnershipSchema.parse(dispatch.grant)), ownerHash = hash(owner);
+        this.db.prepare('INSERT INTO research_review_search_owners(review_search_id,snapshot_json,snapshot_hash) VALUES (?,?,?)')
+          .run(snapshot.id, owner, ownerHash);
+        this.db.prepare('UPDATE research_review_searches SET owner_hash=? WHERE id=?').run(ownerHash, snapshot.id);
+      }
       created = true;
       return this.row(request.projectId, snapshot.id);
     })();
     if (created) {
+      if (dispatch !== null) {
+        try {
+          dispatch.signal.throwIfAborted();
+          const snapshot = this.readSnapshot(row);
+          this.repository.tasks.linkReviewSearch(snapshot, dispatch.grant);
+          this.repository.tasks.assertReviewSearchActive(dispatch.grant, row.id,
+            hash(JSON.stringify({snapshot, parentManifestHash: dispatch.grant.manifestHash})));
+        } catch (error) {
+          this.finish(row, dispatch.signal.aborted ? 'cancelled' : 'failed',
+            error instanceof Error ? error.message.split(':')[0] : 'research_review_task_link_failed');
+          throw error;
+        }
+      }
       const controller = new AbortController();
+      const cancelParent = () => controller.abort(new Error('research_review_search_cancelled'));
+      const parent = dispatch?.signal;
+      const deadline = dispatch === null ? null : setTimeout(() => controller.abort(new Error('run_deadline_exhausted')),
+        Math.max(0, Date.parse(this.repository.tasks.budgetForExecution('chat', dispatch.grant.runId, request.projectId).deadlineAt) - Date.now()));
+      parent?.addEventListener('abort', cancelParent, {once: true});
+      if (parent?.aborted) cancelParent();
       const promise = Promise.resolve().then(() => this.execute(row, controller)).catch(error => this.reportFailure(error))
-        .finally(() => this.jobs.delete(row.id));
+        .finally(() => {
+          parent?.removeEventListener('abort', cancelParent);
+          if (deadline !== null) clearTimeout(deadline);
+          this.jobs.delete(row.id);
+        });
       this.jobs.set(row.id, {projectId: request.projectId, controller, promise});
+      this.notifyTask(row);
     }
     return this.get({projectId: request.projectId, reviewSearchId: row.id});
+  }
+
+  getOwned(input: {projectId: string; reviewSearchId: string}, owner: ConsumedReviewSearchOwner): ResearchReviewOwnedSearchInspection {
+    assertReviewSearchOwner(owner);
+    this.repository.tasks.assertReviewSearchParent(owner);
+    const request = researchReviewSearchGetSchema.parse(input);
+    const row = this.row(request.projectId, request.reviewSearchId), snapshot = this.readSnapshot(row);
+    const stored = this.readOwnership(row, snapshot);
+    if (owner.projectId !== request.projectId || stored === null || !this.sameOwner(stored, owner)) {
+      throw new Error('research_review_owner_mismatch');
+    }
+    const association = this.repository.tasks.requireExecution('review_search', row.id, request.projectId);
+    const parent = this.repository.tasks.requireExecution('chat', owner.runId, request.projectId);
+    if (association.parentKind !== 'chat' || association.parentExecutionId !== owner.runId ||
+        parent.taskId !== association.taskId || parent.manifestHash !== owner.manifestHash ||
+        association.manifestHash !== hash(JSON.stringify({snapshot, parentManifestHash: owner.manifestHash}))) {
+      throw new Error('research_review_owner_mismatch');
+    }
+    return {search: this.get(request), association};
   }
 
   get(input: {projectId: string; reviewSearchId: string}): ResearchReviewSearchInspection {
@@ -119,7 +197,18 @@ export class ResearchReviewSearchService {
   }
 
   cancel(input: ResearchReviewSearchCancel, cancelledBy: ResearchRelationReviewer): ResearchReviewSearchInspection {
-    const request = researchReviewSearchCancelSchema.parse(input), actor = researchRelationReviewerSchema.parse(cancelledBy);
+    return this.cancelQuery(input, researchRelationReviewerSchema.parse(cancelledBy));
+  }
+
+  cancelOwned(input: ResearchReviewSearchCancel, owner: ConsumedReviewSearchOwner): ResearchReviewOwnedSearchInspection {
+    assertReviewSearchOwner(owner, 'research_review_cancel_query');
+    this.getOwned({projectId: input.projectId, reviewSearchId: input.reviewSearchId}, owner);
+    this.cancelQuery(input, {kind: 'agent', id: owner.runId});
+    return this.getOwned({projectId: input.projectId, reviewSearchId: input.reviewSearchId}, owner);
+  }
+
+  private cancelQuery(input: ResearchReviewSearchCancel, actor: ResearchRelationActor): ResearchReviewSearchInspection {
+    const request = researchReviewSearchCancelSchema.parse(input);
     const requestHash = hash(JSON.stringify(request));
     const replay = this.db.prepare('SELECT * FROM research_review_search_cancellations WHERE project_id=? AND request_id=?')
       .get(request.projectId, request.requestId) as {review_search_id: string; snapshot_json: string; snapshot_hash: string} | undefined;
@@ -128,7 +217,8 @@ export class ResearchReviewSearchService {
       if (hash(replay.snapshot_json) !== replay.snapshot_hash || JSON.stringify(receipt) !== replay.snapshot_json) {
         throw new Error('research_review_search_snapshot_invalid');
       }
-      if (receipt.requestHash !== requestHash || receipt.actor.id !== actor.id || receipt.request.reviewSearchId !== replay.review_search_id) {
+      if (receipt.requestHash !== requestHash || receipt.actor.id !== actor.id || receipt.actor.kind !== actor.kind ||
+          receipt.request.reviewSearchId !== replay.review_search_id) {
         throw new Error('research_review_request_conflict');
       }
       return this.get({projectId: request.projectId, reviewSearchId: replay.review_search_id});
@@ -148,7 +238,18 @@ export class ResearchReviewSearchService {
       if (update.changes !== 1) throw new Error('research_review_search_not_active');
     })();
     job.controller.abort(new Error('research_review_search_cancelled'));
+    this.notifyTask(this.row(request.projectId, request.reviewSearchId));
     return this.get({projectId: request.projectId, reviewSearchId: request.reviewSearchId});
+  }
+
+  async cancelTaskQuery(projectId: string, reviewSearchId: string): Promise<void> {
+    const row = this.row(projectId, reviewSearchId);
+    if (this.readOwnership(row, this.readSnapshot(row)) === null) throw new Error('research_review_owner_mismatch');
+    this.get({projectId, reviewSearchId});
+    const job = this.jobs.get(reviewSearchId);
+    if (job === undefined) return;
+    job.controller.abort(new Error('research_review_search_cancelled'));
+    await job.promise;
   }
 
   recover(): void {
@@ -177,8 +278,13 @@ export class ResearchReviewSearchService {
       await withLiteratureContext({owner: `systematic-review:${snapshot.id}`, projectId: row.project_id,
         runId: row.id, signal: controller.signal, assertActive: () => this.assertActive(snapshot, controller)},
       () => this.imports.search(snapshot.parameters));
-      this.assertActive(snapshot, controller);
     } catch (error) {failure = error;}
+    // The current task/parent boundary owns the terminal reason even if the
+    // transport's audit wrapper reports an earlier request-boundary failure.
+    if (!controller.signal.aborted) {
+      try {this.assertActive(snapshot, controller);}
+      catch (error) {failure = error;}
+    }
     const current = this.row(row.project_id, row.id);
     if (controller.signal.aborted) {
       const reason = controller.signal.reason instanceof Error ? controller.signal.reason.message.split(':')[0] : 'research_review_search_cancelled';
@@ -200,6 +306,9 @@ export class ResearchReviewSearchService {
     this.requireWritable(snapshot.request.projectId);
     const protocol = this.repository.systematicReviews.requireFrozen(snapshot.request.projectId, snapshot.request.versionId, snapshot.request.expectedFreezeHash);
     if (protocol.versionHash !== snapshot.protocolVersionHash) throw new Error('research_review_version_conflict');
+    const owner = this.readOwnership(this.row(snapshot.request.projectId, snapshot.id), snapshot);
+    if (owner !== null) this.repository.tasks.assertReviewSearchActive(owner, snapshot.id,
+      hash(JSON.stringify({snapshot, parentManifestHash: owner.manifestHash})));
   }
 
   private finish(row: SearchRow, status: ResearchReviewSearchReceipt['status'], errorCode: string | null): void {
@@ -212,6 +321,14 @@ export class ResearchReviewSearchService {
       SET status=?,revision=revision+1,receipt_json=?,receipt_hash=?,updated_at=? WHERE id=? AND status IN ('running','cancelling')`)
       .run(status, json, hash(json), receipt.endedAt, row.id);
     if (result.changes !== 1) throw new Error('research_review_search_not_active');
+    this.notifyTask(this.row(row.project_id, row.id));
+  }
+
+  private notifyTask(row: SearchRow): void {
+    const owner = this.readOwnership(row, this.readSnapshot(row));
+    if (owner === null) return;
+    const association = this.repository.tasks.findExecution('review_search', row.id, row.project_id);
+    if (association !== null) this.onTaskChanged(association.taskId, row.project_id);
   }
 
   private inspect(row: SearchRow): ResearchReviewSearchInspection {
@@ -256,6 +373,7 @@ export class ResearchReviewSearchService {
         snapshot.id !== row.id || request.projectId !== row.project_id || request.versionId !== row.protocol_version_id ||
         request.requestId !== row.request_id || request.databaseIndex !== row.database_index || request.queryIndex !== row.query_index ||
         request.retryOf !== row.retry_of || snapshot.requestHash !== hash(JSON.stringify(request))) throw new Error('research_review_search_snapshot_invalid');
+    this.readOwnership(row, snapshot);
     const protocol = this.repository.systematicReviews.get({projectId: row.project_id, versionId: row.protocol_version_id});
     if (protocol.versionHash !== snapshot.protocolVersionHash || protocol.freezeHash !== request.expectedFreezeHash) {
       throw new Error('research_review_search_snapshot_invalid');
@@ -267,6 +385,23 @@ export class ResearchReviewSearchService {
       ...(years.from === null ? {} : {yearFrom: years.from}), ...(years.to === null ? {} : {yearTo: years.to}), projectId: row.project_id});
     if (JSON.stringify(parameters) !== JSON.stringify(snapshot.parameters)) throw new Error('research_review_search_snapshot_invalid');
     return snapshot;
+  }
+
+  private sameOwner(stored: ResearchReviewSearchOwnership, owner: Pick<ConsumedReviewSearchOwner, 'runId' | 'threadId' | 'projectId' | 'manifestHash'>): boolean {
+    return stored.runId === owner.runId && stored.threadId === owner.threadId && stored.projectId === owner.projectId &&
+      stored.manifestHash === owner.manifestHash;
+  }
+
+  private readOwnership(row: SearchRow, snapshot: ResearchReviewSearchSnapshot): ResearchReviewSearchOwnership | null {
+    const stored = this.db.prepare('SELECT snapshot_json,snapshot_hash FROM research_review_search_owners WHERE review_search_id=?')
+      .get(row.id) as {snapshot_json: string; snapshot_hash: string} | undefined;
+    if (stored === undefined && row.owner_hash === null && snapshot.actor.kind === 'user') return null;
+    if (stored === undefined || row.owner_hash === null || snapshot.actor.kind !== 'agent') throw new Error('research_review_owner_invalid');
+    const owner = researchReviewSearchOwnershipSchema.parse(JSON.parse(stored.snapshot_json));
+    if (hash(stored.snapshot_json) !== stored.snapshot_hash || stored.snapshot_hash !== row.owner_hash ||
+        JSON.stringify(owner) !== stored.snapshot_json || owner.projectId !== row.project_id || owner.runId !== snapshot.actor.id ||
+        owner.requestHash !== reviewSearchDispatchRequestHash(snapshot.request)) throw new Error('research_review_owner_invalid');
+    return owner;
   }
 
   private row(projectId: string, id: string): SearchRow {

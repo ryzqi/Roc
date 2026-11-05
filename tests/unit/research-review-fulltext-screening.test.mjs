@@ -252,7 +252,7 @@ test('DB35 existing title/source rows stay exact and SQLite reopening preserves 
     tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT * FROM ${table}`).all(),previous[index]));
     const phase=f.fullScreening.getPhase(f.fullPhase),path=join(directory,'research.sqlite');await f.db.backup(path);
     db=new Database(path);db.pragma('foreign_keys = ON');const repository=new api.ResearchRepository(db,f.tasks,()=>f.time);
-    reviews=new api.ResearchReviewSearchService(db,repository,{search:async()=>{throw new Error('readonly_must_not_request');}},error=>f.errors.push(error),()=>f.time);
+    reviews=new api.ResearchReviewSearchService(db,repository,{search:async()=>{throw new Error('readonly_must_not_request');}},error=>f.errors.push(error),()=>{},()=>f.time);
     const corpora=new api.ResearchReviewCorpusRepository(db,repository,reviews,()=>f.time),dedup=new api.ResearchReviewDeduplicationRepository(db,repository,corpora,()=>f.time);
     const plans=new api.ResearchReviewScreeningRepository(db,repository,corpora,dedup,()=>f.time),decisions=new api.ResearchReviewScreeningDecisions(db,repository,corpora,dedup,plans,()=>f.time);
     const arbitration=new api.ResearchReviewScreeningArbitration(db,repository,decisions,()=>f.time),titles=new api.ResearchReviewScreeningFreeze(db,repository,arbitration,()=>f.time);

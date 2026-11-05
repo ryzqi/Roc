@@ -200,7 +200,7 @@ test('SQLite reopening keeps fulltext adjudication and reviewer/source histories
     const result=await f.fullArbitration.save(f.resolve(),actor),phase=f.fullArbitration.getPhase(f.fullPhase);
     const path=join(f.root,'reopened-review.sqlite');await f.db.backup(path);
     db=new Database(path);db.pragma('foreign_keys = ON');const repository=new api.ResearchRepository(db,f.tasks,()=>f.time);
-    reviews=new api.ResearchReviewSearchService(db,repository,{search:async()=>{throw new Error('readonly_must_not_request');}},error=>f.errors.push(error),()=>f.time);
+    reviews=new api.ResearchReviewSearchService(db,repository,{search:async()=>{throw new Error('readonly_must_not_request');}},error=>f.errors.push(error),()=>{},()=>f.time);
     const corpora=new api.ResearchReviewCorpusRepository(db,repository,reviews,()=>f.time),dedup=new api.ResearchReviewDeduplicationRepository(db,repository,corpora,()=>f.time);
     const plans=new api.ResearchReviewScreeningRepository(db,repository,corpora,dedup,()=>f.time),titlesVotes=new api.ResearchReviewScreeningDecisions(db,repository,corpora,dedup,plans,()=>f.time);
     const titlesArbitration=new api.ResearchReviewScreeningArbitration(db,repository,titlesVotes,()=>f.time),titles=new api.ResearchReviewScreeningFreeze(db,repository,titlesArbitration,()=>f.time);

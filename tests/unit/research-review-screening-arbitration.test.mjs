@@ -1,3 +1,4 @@
+import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -199,14 +200,13 @@ test('historical protocol and archive preserve exact adjudications with explicit
 });
 
 test('DB32 upgrade and SQLite reopen retain exact reviewer/proposal history without invented arbitration or new requests',async()=>{
-  const oldApi={...api,applyResearchDatabaseSchema(db,now) {
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(value=>value.version<=32),now});
-  }};
+  const oldApi=createReviewMigrationSeedApi(api,32);
   const f=await scene({},oldApi),directory=await mkdtemp(join(tmpdir(),'roc-screening-arbitration-reopen-'));
   let db,reviews;
   try {
     seedPreFreezeReviewerDecision(api,f,f.decision(0,reviewerA.id,'a'),actor);
     seedPreFreezeReviewerDecision(api,f,f.decision(0,reviewerB.id,'b',exclude),actor);
+    oldApi.finishSeed(f.db);
     const tables=['research_review_screening_plans','research_review_screening_decisions','research_review_screening_suggestions',
       'research_review_corpora','research_review_deduplication_freezes','research_review_protocol_versions','research_review_searches'];
     const columns=tables.map(table=>f.db.pragma(`table_info(${table})`).map(column=>column.name).join(','));
@@ -217,7 +217,7 @@ test('DB32 upgrade and SQLite reopen retain exact reviewer/proposal history with
     assert.equal(f.db.prepare('SELECT count(*) FROM research_review_screening_arbitrations').pluck().get(),0);
     f.arbitration.save(f.inputForArbitration(),actor);const phase=f.arbitration.getPhase(f.phase),path=join(directory,'research.sqlite');await f.db.backup(path);
     db=new Database(path);db.pragma('foreign_keys = ON');const repository=new api.ResearchRepository(db,f.tasks,()=>f.time);
-    reviews=new api.ResearchReviewSearchService(db,repository,{search:async()=>{throw new Error('readonly_must_not_request');}},error=>f.errors.push(error),()=>f.time);
+    reviews=new api.ResearchReviewSearchService(db,repository,{search:async()=>{throw new Error('readonly_must_not_request');}},error=>f.errors.push(error),()=>{},()=>f.time);
     const corpora=new api.ResearchReviewCorpusRepository(db,repository,reviews,()=>f.time);
     const dedup=new api.ResearchReviewDeduplicationRepository(db,repository,corpora,()=>f.time);
     const plans=new api.ResearchReviewScreeningRepository(db,repository,corpora,dedup,()=>f.time);

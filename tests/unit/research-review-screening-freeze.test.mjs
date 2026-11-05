@@ -1,3 +1,4 @@
+import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -201,13 +202,12 @@ test('generated freeze API binds actual sender and exact displayed authority has
 });
 
 test('DB33 upgrade preserves canonical pre-freeze votes/arbitration and disk reopen retains the resulting freeze without new requests',async()=>{
-  const oldApi={...api,applyResearchDatabaseSchema(db,now) {
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(value=>value.version<=33),now});
-  }};
+  const oldApi=createReviewMigrationSeedApi(api,33);
   const f=await scene({},oldApi),directory=await mkdtemp(join(tmpdir(),'roc-title-freeze-reopen-'));
   let db,reviews;
   try {
     f.finish({seed:true});
+    oldApi.finishSeed(f.db);
     const tables=['research_review_screening_plans','research_review_screening_decisions','research_review_screening_arbitrations',
       'research_review_screening_suggestions','research_review_corpora','research_review_deduplication_freezes','research_review_protocol_versions'];
     const columns=tables.map(table=>f.db.pragma(`table_info(${table})`).map(column=>column.name).join(','));
@@ -220,7 +220,7 @@ test('DB33 upgrade preserves canonical pre-freeze votes/arbitration and disk reo
     const frozen=f.freezing.freeze(f.freezeInput(),actor),path=join(directory,'research.sqlite');await f.db.backup(path);await f.reviews.releaseProject(f.project.id);
     assert.deepEqual(f.freezing.getPhase(f.phase),frozen);
     db=new Database(path);db.pragma('foreign_keys = ON');const repository=new api.ResearchRepository(db,f.tasks,()=>f.time);
-    reviews=new api.ResearchReviewSearchService(db,repository,{search:async()=>{throw new Error('readonly_must_not_request');}},error=>f.errors.push(error),()=>f.time);
+    reviews=new api.ResearchReviewSearchService(db,repository,{search:async()=>{throw new Error('readonly_must_not_request');}},error=>f.errors.push(error),()=>{},()=>f.time);
     const corpora=new api.ResearchReviewCorpusRepository(db,repository,reviews,()=>f.time),dedup=new api.ResearchReviewDeduplicationRepository(db,repository,corpora,()=>f.time);
     const plans=new api.ResearchReviewScreeningRepository(db,repository,corpora,dedup,()=>f.time);
     const decisions=new api.ResearchReviewScreeningDecisions(db,repository,corpora,dedup,plans,()=>f.time),arbitration=new api.ResearchReviewScreeningArbitration(db,repository,decisions,()=>f.time);

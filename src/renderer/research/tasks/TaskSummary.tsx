@@ -41,7 +41,7 @@ export function TaskBudget({ budget }: { budget: RunBudgetStatus }): React.JSX.E
 export function TaskSummary({ data, details = false }: {
   data: ResearchTaskDiagnostics; details?: boolean;
 }): React.JSX.Element {
-  const completed = data.executions.filter(execution => execution.status === 'completed').length;
+  const completed = data.executions.filter(execution => execution.status === 'completed' || execution.status === 'complete').length;
   return (
     <div className="grid min-w-0 gap-1">
       <div className="flex flex-wrap items-baseline justify-between gap-2">

@@ -1,3 +1,4 @@
+import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -270,7 +271,7 @@ test('real SQLite reopen and query shutdown retain reviewed decisions/freeze wit
     await f.reviews.releaseProject(f.project.id);assert.deepEqual(f.dedup.get(f.get),frozen);
     const path=join(directory,'research.sqlite');await f.db.backup(path);
     db=new Database(path);db.pragma('foreign_keys = ON');const repository=new api.ResearchRepository(db,f.tasks,()=>f.time);
-    reviews=new api.ResearchReviewSearchService(db,repository,{search:async()=>{throw new Error('readonly_must_not_request');}},error=>f.errors.push(error),()=>f.time);
+    reviews=new api.ResearchReviewSearchService(db,repository,{search:async()=>{throw new Error('readonly_must_not_request');}},error=>f.errors.push(error),()=>{},()=>f.time);
     const corpora=new api.ResearchReviewCorpusRepository(db,repository,reviews,()=>f.time);
     const dedup=new api.ResearchReviewDeduplicationRepository(db,repository,corpora,()=>f.time),before=db.prepare('SELECT total_changes()').pluck().get();
     assert.deepEqual(dedup.get(f.get),frozen);
@@ -280,20 +281,20 @@ test('real SQLite reopen and query shutdown retain reviewed decisions/freeze wit
 });
 
 test('DB29 upgrade preserves exact corpus and protocol/search records without fabricated duplicate reviews',async()=>{
-  const oldApi={...api,applyResearchDatabaseSchema(db,now) {
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(value=>value.version<=29),now});
-  }};
+  const oldApi=createReviewMigrationSeedApi(api,29);
   const f=await scene({},oldApi);
   try {
+    oldApi.finishSeed(f.db);
     const original=f.db.prepare('SELECT * FROM research_review_corpora').all();
     const tables=['research_review_protocol_versions','research_review_protocol_freezes','research_review_searches',
       'research_literature_search_pools','research_literature_request_receipts'];
+    const columns=tables.map(table=>f.db.pragma(`table_info(${table})`).map(column=>column.name).join(','));
     const before=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all()),migrations=f.db.prepare('SELECT * FROM schema_migrations').all();
     api.applyResearchDatabaseSchema(f.db);
     assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),api.researchMigrations.at(-1).version);
     assert.deepEqual(f.db.prepare(`SELECT ${Object.keys(original[0]).join(',')} FROM research_review_corpora`).all(),original);
     assert.deepEqual(f.db.prepare('SELECT dedup_freeze_hash,screening_plan_hash FROM research_review_corpora').all(),original.map(()=>({dedup_freeze_hash:null,screening_plan_hash:null})));
-    tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT * FROM ${table}`).all(),before[index]));
+    tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT ${columns[index]} FROM ${table}`).all(),before[index]));
     assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE version<=29').all(),migrations);
     assert.equal(f.db.prepare('SELECT count(*) FROM research_review_duplicate_decisions').pluck().get(),0);
     assert.equal(f.db.prepare('SELECT count(*) FROM research_review_deduplication_freezes').pluck().get(),0);

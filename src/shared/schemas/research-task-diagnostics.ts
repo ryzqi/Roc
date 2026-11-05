@@ -8,7 +8,7 @@ const id = z.string().min(1).max(256);
 export const researchTaskForChatRequestSchema = z.object({ projectId: id, threadId: id, runId: id }).strict();
 export const researchTaskExecutionDiagnosticsSchema = z.object({
   association: researchTaskExecutionSchema,
-  status: z.enum([...taskStatusSchema.options, 'queued', 'preparing', 'ready']),
+  status: z.enum([...taskStatusSchema.options, 'queued', 'preparing', 'ready', 'complete', 'partial', 'cancelling']),
   stage: researchStageSchema.nullable(),
   providerId: id.nullable(),
   modelId: id.nullable(),

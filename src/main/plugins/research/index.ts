@@ -72,7 +72,8 @@ import { ResearchDocumentService } from './document-service';
 import { registerResearchDocumentCapabilities, researchDocumentCapabilities } from './document-capabilities';
 import {registerResearchSystematicReviewCapabilities, researchSystematicReviewCapabilities} from './systematic-review-capabilities';
 import {ResearchReviewSearchService} from './review-search-service';
-import {registerResearchReviewSearchCapabilities, researchReviewSearchCapabilities} from './review-search-capabilities';
+import {registerResearchReviewSearchCapabilities, researchReviewSearchCapabilities,
+  registerResearchOwnedReviewSearchCapabilities, researchOwnedReviewSearchCapabilities} from './review-search-capabilities';
 import {ResearchReviewCorpusRepository} from './review-corpus-repository';
 import {registerResearchReviewCorpusCapabilities, researchReviewCorpusCapabilities} from './review-corpus-capabilities';
 import {ResearchReviewDeduplicationRepository} from './review-deduplication-repository';
@@ -220,7 +221,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
+      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，
@@ -294,10 +295,12 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       });
       literatureImports.recover();
       const reviewSearches = new ResearchReviewSearchService(db, researchRepository, literatureImports,
-        error => context.logger.error('Systematic review search persistence failed.', {error: error instanceof Error ? error.message : String(error)}));
+        error => context.logger.error('Systematic review search persistence failed.', {error: error instanceof Error ? error.message : String(error)}),
+        (taskId, projectId) => notifyResearchTaskChanged(context, taskId, projectId));
       reviewSearch = reviewSearches;
       reviewSearches.recover();
       registerResearchReviewSearchCapabilities(context, reviewSearches);
+      registerResearchOwnedReviewSearchCapabilities(context, reviewSearches, options.executionGrantBroker);
       const reviewCorpora = new ResearchReviewCorpusRepository(db, researchRepository, reviewSearches, () => new Date().toISOString());
       registerResearchReviewCorpusCapabilities(context, reviewCorpora);
       const reviewDeduplication = new ResearchReviewDeduplicationRepository(db, researchRepository, reviewCorpora, () => new Date().toISOString());
@@ -347,11 +350,12 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
             case 'experiment': return await researchExperiments.cancel(projectId, executionId);
             case 'figure': return await researchFigures.cancel(projectId, executionId);
             case 'export': return await researchExports.cancel(projectId, executionId);
+            case 'review_search': return await reviewSearches.cancelTaskQuery(projectId, executionId);
           }
         }
       });
       registerResearchTaskCapabilities(context, options.tasks, taskController,
-        new ResearchTaskDiagnosticsService(researchRepository, options.budgetLedger));
+        new ResearchTaskDiagnosticsService(researchRepository, options.budgetLedger, reviewSearches));
       registerResearchProjectBudgetCapabilities(context, researchRepository);
       registerResearchRunCapabilities(context, researchRepository.runs, runtime, researchRepository.reviews, options.executionGrantBroker);
       registerResearchArtifactInspectorCapability(context, researchRepository);

@@ -395,3 +395,32 @@ test('light and dark task layouts remain readable in narrow assistant and scroll
   writeFileSync(join(artifacts, 'clip-audit.json'), JSON.stringify(receipts, null, 2));
   for (const receipt of receipts) assert.equal(receipt.cut, 0);
 });
+
+test('review queries show truthful task execution status and only complete coverage counts as finished', async () => {
+  await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setSize(720, 680));
+  for (const [status, label, completed] of [
+    ['complete', '检索完成', 2], ['partial', '检索覆盖不完整', 1], ['cancelling', '正在取消', 1]
+  ]) {
+    await page.evaluate(status => {
+      reset();
+      const data = makeData();
+      data.executions[2] = {
+        ...data.executions[2], association: {
+          ...data.executions[2].association, kind: 'review_search', executionId: 'actual-query-id',
+          parentKind: 'chat', parentExecutionId: 'chat-a', associationSource: 'chat_dispatch'
+        }, status, stage: null, artifactIds: [],
+        endedAt: status === 'cancelling' ? null : '2026-11-03T00:00:01.000Z'
+      };
+      response = {ok: true, data};
+      mountDrawer();
+    }, status);
+    const execution = page.getByText('actual-query-id', {exact: true}).locator('..');
+    await execution.getByText('综述查询', {exact: true}).waitFor();
+    assert.ok((await execution.innerText()).includes(label));
+    assert.ok((await page.getByTestId('task-progress').innerText()).includes(`${completed}/3`));
+    assert.equal(await execution.getByRole('list', {name: '工件'}).count(), 0);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  }
+  await page.getByText('actual-query-id', {exact: true}).scrollIntoViewIfNeeded();
+  await page.screenshot({path: join(artifacts, 'review-query-cancelling.png')});
+});

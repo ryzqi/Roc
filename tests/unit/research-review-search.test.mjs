@@ -157,7 +157,7 @@ test('disk restart preserves dispatched ledger as interrupted and does not autom
     const repository=new api.ResearchRepository(db,f.tasks,()=>f.time);
     let newRequests=0;search=new api.LiteratureSearchService(async()=>{newRequests++;throw new Error('restart_must_not_dispatch');},governor());
     imports=new api.LiteratureImportService(db,repository.library,search,prepare,async()=>{},()=>f.time);imports.recover();
-    review=new api.ResearchReviewSearchService(db,repository,imports,error=>f.errors.push(error),()=>f.time);review.recover();
+    review=new api.ResearchReviewSearchService(db,repository,imports,error=>f.errors.push(error),()=>{},()=>f.time);review.recover();
     const interrupted=review.get({projectId:f.project.id,reviewSearchId:run.snapshot.id});
     assert.equal(interrupted.status,'interrupted');assert.equal(interrupted.coverageComplete,false);assert.ok(interrupted.receipt.executionId);
     assert.equal(db.prepare('SELECT status FROM research_literature_search_executions WHERE id=?').pluck().get(interrupted.receipt.executionId),'interrupted');

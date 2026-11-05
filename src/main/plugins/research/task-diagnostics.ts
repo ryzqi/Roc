@@ -4,9 +4,11 @@ import {
 import type { ResearchTaskExecution } from '../../../shared/schemas/research-tasks';
 import type { ResearchRepository } from './repository';
 import type { RunBudgetLedger } from '../../services/deep-agent/run-budget-ledger';
+import type {ResearchReviewSearchService} from './review-search-service';
 
 export class ResearchTaskDiagnosticsService {
-  constructor(private readonly repository: ResearchRepository, private readonly ledger: RunBudgetLedger) {}
+  constructor(private readonly repository: ResearchRepository, private readonly ledger: RunBudgetLedger,
+    private readonly reviewSearches: Pick<ResearchReviewSearchService, 'get'> | null) {}
 
   forChat(request: { projectId: string; threadId: string; runId: string }): ResearchTaskDiagnostics | null {
     const task = this.repository.tasks.taskForChatScope(request);
@@ -45,6 +47,13 @@ export class ResearchTaskDiagnosticsService {
       const run = this.repository.runs.get(id, projectId);
       return { association, status: run.status, stage: run.stage, providerId: run.providerId, modelId: run.modelId,
         error: run.error, artifactIds: run.outputArtifactIds, startedAt: run.startedAt, endedAt: run.endedAt };
+    }
+    if (association.kind === 'review_search') {
+      if (this.reviewSearches === null) throw new Error('research_review_search_service_required');
+      const run = this.reviewSearches.get({projectId, reviewSearchId: id});
+      return {association, status: run.status, stage: null, providerId: null, modelId: null,
+        error: run.receipt?.errorCode ?? null, artifactIds: [], startedAt: run.snapshot.startedAt,
+        endedAt: run.receipt?.endedAt ?? null};
     }
     const run = association.kind === 'experiment' ? this.repository.experiments.get(projectId, id)
       : association.kind === 'figure' ? this.repository.figureRuns.get(projectId, id) : this.repository.exports.get(projectId, id);

@@ -12,9 +12,11 @@ export { ResearchFigureService } from '../../../src/main/plugins/research/figure
 export { renderResearchFigure } from '../../../src/main/plugins/research/figure-renderer';
 export { ResearchTaskRepository } from '../../../src/main/plugins/research/research-task-repository';
 export { ResearchStageRuntime } from '../../../src/main/plugins/research/stage-runtime';
-export { ExecutionGrantBroker, openExecutionGrantBroker, assertResearchDispatchGrant, assertReviewSearchDispatchGrant } from '../../../src/main/services/deep-agent/execution-grant-broker';
+export { ExecutionGrantBroker, openExecutionGrantBroker, assertResearchDispatchGrant, assertReviewSearchDispatchGrant,
+  assertReviewSearchOwner } from '../../../src/main/services/deep-agent/execution-grant-broker';
 export { withResearchDispatchReference } from '../../../src/main/services/research-dispatch-context';
 export {withReviewSearchDispatch, reviewSearchDispatchContext, reviewSearchDispatchRequestHash} from '../../../src/main/services/research-review-dispatch-context';
+export {withReviewSearchOwner} from '../../../src/main/services/research-review-owner-context';
 export { registerResearchRunCapabilities } from '../../../src/main/plugins/research/run-capabilities';
 export { registerResearchExperimentCapabilities } from '../../../src/main/plugins/research/experiment-capabilities';
 export { registerResearchFigureCapabilities } from '../../../src/main/plugins/research/figure-capabilities';
@@ -54,6 +56,7 @@ export {registerResearchLibraryCapabilities, researchLibraryCapabilities} from '
 export {registerResearchSystematicReviewCapabilities, researchSystematicReviewCapabilities} from '../../../src/main/plugins/research/systematic-review-capabilities';
 export {ResearchReviewSearchService} from '../../../src/main/plugins/research/review-search-service';
 export {registerResearchReviewSearchCapabilities, researchReviewSearchCapabilities} from '../../../src/main/plugins/research/review-search-capabilities';
+export {registerResearchOwnedReviewSearchCapabilities, researchOwnedReviewSearchCapabilities} from '../../../src/main/plugins/research/review-search-capabilities';
 export {ResearchReviewCorpusRepository} from '../../../src/main/plugins/research/review-corpus-repository';
 export {registerResearchReviewCorpusCapabilities, researchReviewCorpusCapabilities} from '../../../src/main/plugins/research/review-corpus-capabilities';
 export {LiteratureProviderGovernor} from '../../../src/main/plugins/research/literature-provider-governor';

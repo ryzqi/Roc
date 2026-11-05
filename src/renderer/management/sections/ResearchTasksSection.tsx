@@ -11,13 +11,14 @@ import { formatBeijingDateTime } from '../../shared/format';
 import type { RocClient } from '../../shared/roc-client';
 
 const executionLabels = {
-  chat: '主助手', stage: '科研阶段', experiment: '实验', figure: '图稿', export: '导出'
+  chat: '主助手', stage: '科研阶段', experiment: '实验', figure: '图稿', export: '导出', review_search: '综述查询'
 };
 const executionStatusLabels: Record<ResearchTaskExecutionDiagnostics['status'], string> = {
   queued: '排队中', preparing: '准备中', ready: '就绪', running: '运行中', recovering: '恢复中',
   waiting_user: '等待用户', dispatch_pending: '等待调度', waiting_next_turn: '等待下一轮',
   completed: '已完成', failed: '失败', cancelled: '已取消', interrupted: '运行中断',
-  pending_confirmation: '等待确认', paused: '已暂停', draft: '草稿', archived: '已归档'
+  pending_confirmation: '等待确认', paused: '已暂停', draft: '草稿', archived: '已归档',
+  complete: '检索完成', partial: '检索覆盖不完整', cancelling: '正在取消'
 };
 const eventLabels: Record<ResearchTaskEvent['eventType'], string> = {
   task_created: '创建任务', task_status: '任务状态', execution_linked: '关联执行', call_linked: '关联调用',

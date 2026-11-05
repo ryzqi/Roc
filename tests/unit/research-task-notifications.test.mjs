@@ -44,7 +44,7 @@ test('failed task cleanup invalidates its persisted failure and foreign requests
       cancelChat: async () => {}, cancelJob: async () => {}
     });
     api.registerResearchTaskCapabilities(context, f.tasks, controller,
-      new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb)));
+      new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb), null));
     const request = { taskId: f.run.taskId, projectId: f.project.id };
     await assert.rejects(handlers.get('research.task.cancel')({ ...request, projectId: 'foreign' }), /research_task_project_mismatch/);
     assert.deepEqual(updates, []);

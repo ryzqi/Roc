@@ -28,6 +28,15 @@ export function assertReviewSearchDispatchGrant(value: ConsumedReviewSearchDispa
   if (!reviewSearchDispatchTokens.has(value)) throw new Error('research_review_dispatch_grant_untrusted');
 }
 type ResearchDispatchTool = 'research_run_stage' | 'research_review_execute_query';
+export type ConsumedReviewSearchOwner = Readonly<{
+  runId: string; threadId: string; projectId: string; manifestHash: string;
+  toolName: 'research_review_get_query' | 'research_review_cancel_query';
+}>;
+const reviewSearchOwnerTokens = new WeakSet<object>();
+export function assertReviewSearchOwner(value: ConsumedReviewSearchOwner, toolName?: ConsumedReviewSearchOwner['toolName']): void {
+  if (!reviewSearchOwnerTokens.has(value)) throw new Error('research_review_owner_untrusted');
+  if (toolName !== undefined && value.toolName !== toolName) throw new Error('research_review_owner_tool_mismatch');
+}
 
 export type ExecutionGrantProfile = 'isolated_read' | 'isolated_write' | 'trusted_host';
 export type ExecutionGrantBinding = {
@@ -125,6 +134,17 @@ export class ExecutionGrantBroker {
     return token;
   }
 
+  authorizeReviewSearchOwner(input: {
+    runId: string; threadId: string; projectId: string; manifest: RunCapabilityManifestV1;
+    toolName: 'research_review_get_query' | 'research_review_cancel_query'
+  }): ConsumedReviewSearchOwner {
+    this.assertResearchRun(input.runId, input.threadId, input.projectId, input.manifest.manifestHash, input.toolName);
+    const token = Object.freeze({runId: input.runId, threadId: input.threadId, projectId: input.projectId,
+      manifestHash: input.manifest.manifestHash, toolName: input.toolName});
+    reviewSearchOwnerTokens.add(token);
+    return token;
+  }
+
   private consumeResearchToolDispatch(reference: string, projectId: string, requestHash: string,
     toolName: ResearchDispatchTool): ConsumedResearchDispatchGrant {
     const result = this.db.transaction(() => {
@@ -151,7 +171,7 @@ export class ExecutionGrantBroker {
   }
 
   private assertResearchRun(runId: string, threadId: string, projectId: string, manifestHash: string,
-    toolName: ResearchDispatchTool): void {
+    toolName: ResearchDispatchTool | 'research_review_get_query' | 'research_review_cancel_query'): void {
     const run = this.db.prepare(`SELECT r.status,r.snapshot_json,r.snapshot_version,t.research_project_id
       FROM agent_runs r JOIN agent_threads t ON t.id = r.thread_id
       WHERE r.id = ? AND r.thread_id = ?`).get(runId, threadId) as {

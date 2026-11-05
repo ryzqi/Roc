@@ -1,3 +1,4 @@
+import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after,before,test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -193,12 +194,11 @@ test('generated fulltext source API binds actual main sender through asynchronou
 });
 
 test('DB34 upgrade preserves fixed title authority and actual documents; disk reopen keeps fulltext links without another request or source import',async()=>{
-  const oldApi={...api,applyResearchDatabaseSchema(db,now) {
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(value=>value.version<=34),now});
-  }};
+  const oldApi=createReviewMigrationSeedApi(api,34);
   const f=await scene({},oldApi),directory=await mkdtemp(join(tmpdir(),'roc-fulltext-reopen-'));
   let db,reviews,service;
   try {
+    oldApi.finishSeed(f.db);
     const tables=['research_documents','research_document_parses','research_library','research_review_screening_plans',
       'research_review_screening_decisions','research_review_screening_freezes','research_review_corpora','research_review_protocol_versions'];
     const before=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all()),migrations=f.db.prepare('SELECT * FROM schema_migrations').all();
@@ -211,7 +211,7 @@ test('DB34 upgrade preserves fixed title authority and actual documents; disk re
     assert.equal(f.db.prepare('SELECT count(*) FROM research_review_fulltext_bindings').pluck().get(),0);
     const binding=await f.fulltexts.save(f.retrieved(),actor),path=join(directory,'research.sqlite');await f.db.backup(path);
     db=new Database(path);db.pragma('foreign_keys = ON');const repository=new api.ResearchRepository(db,f.tasks,()=>f.time);
-    reviews=new api.ResearchReviewSearchService(db,repository,{search:async()=>{throw new Error('readonly_must_not_request');}},error=>f.errors.push(error),()=>f.time);
+    reviews=new api.ResearchReviewSearchService(db,repository,{search:async()=>{throw new Error('readonly_must_not_request');}},error=>f.errors.push(error),()=>{},()=>f.time);
     const corpora=new api.ResearchReviewCorpusRepository(db,repository,reviews,()=>f.time),dedup=new api.ResearchReviewDeduplicationRepository(db,repository,corpora,()=>f.time);
     const plans=new api.ResearchReviewScreeningRepository(db,repository,corpora,dedup,()=>f.time),decisions=new api.ResearchReviewScreeningDecisions(db,repository,corpora,dedup,plans,()=>f.time);
     const arbitration=new api.ResearchReviewScreeningArbitration(db,repository,decisions,()=>f.time),freezing=new api.ResearchReviewScreeningFreeze(db,repository,arbitration,()=>f.time);

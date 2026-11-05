@@ -203,7 +203,7 @@ test('actual agent cancellation capability propagates through a trusted chat ass
       new api.ResearchTaskController(f.tasks, {
         stages, cancelChat: async runId => await capabilities.invoke('agent.run.cancel', { runId }),
         cancelJob: async () => { throw new Error('no_job_expected'); }
-      }), new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb)));
+      }), new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb), null));
     const result = await capabilities.invoke('agent.run.cancel', { runId: 'parent-chat' });
     assert.equal(result.cancelled, false);
     assert.equal(f.tasks.get(f.run.taskId, f.project.id).status, 'cancelled');
@@ -221,7 +221,7 @@ test('task IPC and capability requests reject trusted parent fields and cross-pr
       register(_plugin, descriptor, handler) { handlers.set(descriptor.name, handler); }
     } }, f.tasks, new api.ResearchTaskController(f.tasks, {
       stages: { cancelTask: async () => {} }, cancelChat: async () => {}, cancelJob: async () => {}
-    }), new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb)));
+    }), new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb), null));
     const request = { taskId: f.run.taskId, projectId: f.project.id };
     assert.deepEqual(api.parseIpcRequestArgs('roc:research:task-cancel', [request]), [request]);
     assert.throws(() => api.parseIpcRequestArgs('roc:research:task-cancel', [{ ...request, parentRunId: 'forged' }]));

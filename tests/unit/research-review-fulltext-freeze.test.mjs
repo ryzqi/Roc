@@ -1,3 +1,4 @@
+import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after,before,test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -197,9 +198,7 @@ test('historical protocol, archive and actual main sender preserve exact freeze 
 });
 
 test('DB35 upgrade preserves canonical pre-freeze source/title rows with a null full marker and no fabricated final decision',async()=>{
-  const oldApi={...api,applyResearchDatabaseSchema(db,now) {
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(value=>value.version<=35),now});
-  }};
+  const oldApi=createReviewMigrationSeedApi(api,35);
   const f=await createReviewFullTextFixture(api,{},oldApi);
   try {
     const request=f.retrieved(),source={
@@ -216,6 +215,7 @@ test('DB35 upgrade preserves canonical pre-freeze source/title rows with a null 
     f.db.prepare(`INSERT INTO research_review_fulltext_bindings
       (id,project_id,corpus_id,hit_id,version,parent_id,document_id,request_id,snapshot_json,snapshot_hash,created_at)
       VALUES (?,?,?,?,1,NULL,?,?,?,?,?)`).run(snapshot.id,request.projectId,request.corpusId,request.hitId,source.documentId,request.requestId,json,hash(json),f.time);
+    oldApi.finishSeed(f.db);
     const tables=['research_review_screening_plans','research_review_screening_freezes','research_review_fulltext_bindings','research_documents'];
     const original=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all()),columns=Object.keys(original[0][0]);
     api.applyResearchDatabaseSchema(f.db);
@@ -231,7 +231,7 @@ test('actual SQLite reopen and failed zero-hit corpus keep whole-fulltext freeze
   try {
     const result=await f.fullFreezing.freeze(f.freezeInput(),actor),path=join(f.root,'fulltext-freeze-reopen.sqlite');await f.db.backup(path);
     db=new Database(path);db.pragma('foreign_keys = ON');const repository=new api.ResearchRepository(db,f.tasks,()=>f.time);
-    reviews=new api.ResearchReviewSearchService(db,repository,{search:async()=>{throw new Error('readonly_must_not_request');}},error=>f.errors.push(error),()=>f.time);
+    reviews=new api.ResearchReviewSearchService(db,repository,{search:async()=>{throw new Error('readonly_must_not_request');}},error=>f.errors.push(error),()=>{},()=>f.time);
     const corpora=new api.ResearchReviewCorpusRepository(db,repository,reviews,()=>f.time),dedup=new api.ResearchReviewDeduplicationRepository(db,repository,corpora,()=>f.time);
     const plans=new api.ResearchReviewScreeningRepository(db,repository,corpora,dedup,()=>f.time),titleVotes=new api.ResearchReviewScreeningDecisions(db,repository,corpora,dedup,plans,()=>f.time);
     const titleArbitration=new api.ResearchReviewScreeningArbitration(db,repository,titleVotes,()=>f.time),titles=new api.ResearchReviewScreeningFreeze(db,repository,titleArbitration,()=>f.time);

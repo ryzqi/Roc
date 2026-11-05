@@ -1,3 +1,4 @@
+import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after,before,test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -206,11 +207,10 @@ test('generated extraction API binds real main reviewer through file awaits and 
 });
 
 test('DB36 upgrade and actual SQLite reopen preserve frozen review/source/Evidence without fabricated extraction or new retrieval',async()=>{
-  const oldApi={...api,applyResearchDatabaseSchema(db,now) {
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(value=>value.version<=36),now});
-  }};
+  const oldApi=createReviewMigrationSeedApi(api,36);
   const f=await createReviewExtractionFixture(oldApi);let db,reviews,service;
   try {
+    oldApi.finishSeed(f.db);
     const tables=['research_review_screening_freezes','research_review_screening_plans','research_review_fulltext_bindings',
       'research_evidence','research_evidence_source_locators','research_documents'];
     const columns=tables.map(table=>f.db.prepare(`PRAGMA table_info(${table})`).all().map(column=>column.name));
@@ -222,7 +222,7 @@ test('DB36 upgrade and actual SQLite reopen preserve frozen review/source/Eviden
     assert.equal(count(f),0);
     const result=await f.extractions.save(f.extract(),actor),path=join(f.root,'extraction-reopen.sqlite');await f.db.backup(path);
     db=new Database(path);db.pragma('foreign_keys = ON');const repository=new api.ResearchRepository(db,f.tasks,()=>f.time);
-    reviews=new api.ResearchReviewSearchService(db,repository,{search:async()=>{throw new Error('readonly_must_not_request');}},error=>f.errors.push(error),()=>f.time);
+    reviews=new api.ResearchReviewSearchService(db,repository,{search:async()=>{throw new Error('readonly_must_not_request');}},error=>f.errors.push(error),()=>{},()=>f.time);
     const corpora=new api.ResearchReviewCorpusRepository(db,repository,reviews,()=>f.time),dedup=new api.ResearchReviewDeduplicationRepository(db,repository,corpora,()=>f.time);
     const plans=new api.ResearchReviewScreeningRepository(db,repository,corpora,dedup,()=>f.time),titleVotes=new api.ResearchReviewScreeningDecisions(db,repository,corpora,dedup,plans,()=>f.time);
     const titleArbitration=new api.ResearchReviewScreeningArbitration(db,repository,titleVotes,()=>f.time),titles=new api.ResearchReviewScreeningFreeze(db,repository,titleArbitration,()=>f.time);

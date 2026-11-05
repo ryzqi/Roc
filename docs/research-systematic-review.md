@@ -375,3 +375,11 @@ DB40 在现有筛选计划上保存独立 `study_group_head_hash` 和不可变�
 助手拥有的冻结查询执行仍继续实施。人工终局审核使用原 main/window 边界；本地确定性工程验收不表示真实模型筛选质量或正式 PRISMA 模板适用性已验证。
 
 主进程 `ExecutionGrantBroker` 为冻结查询提供独立的调度凭证。凭证绑定实际运行中的父 Run、线程、项目、冻结 Manifest、查询请求和重试来源；当前快照必须明确允许 `research_review_execute_query` 在 main 范围执行。严格请求 schema 拒绝模型附加的父身份。查询请求使用独立域的摘要，Agent DB16 在凭证表保存明确的工具域；迁移将此前真实阶段凭证标为 `research_run_stage`，保留状态、摘要、到期时间及原迁移回执。阶段与查询凭证不能串用，已消费凭证不能再次消费或复制为有效对象；过期、撤销、重启、父运行终结和绑定变化均拒绝消费。查询调用上下文传递实际父取消信号，并隔离并发操作。凭证本身不创建任务或执行记录；查询工具、任务关联和生命周期接入仍继续实施。
+
+内部 `research.reviewSearch.startOwned/getOwned/cancelOwned` 使用上述可信凭证和主进程拥有者上下文。Research DB41 为查询保存独立拥有者回执与哈希标记；拥有者不能从 actor 文本推断，丢失或改变回执明确失败。旧人工查询保留原始快照、哈希和真实用户身份，迁移不补造聊天父运行或任务。读取和取消分别要求 Manifest 的 main 工具权限，读取凭证不能取消查询；复制凭证、同项目其他聊天和父运行撤销均拒绝。人工开始/取消及终局审核仍使用现有窗口边界，内部拥有查询能力没有新增 renderer IPC。
+
+查询先持久化请求与拥有者，再在 Agent DB17 关联 `review_search` 执行，成功后才调度网络请求。首个查询创建或复用真实聊天根任务，将此前模型调用归入原任务预算；同一父 Run 的查询重试及后续阶段不重置预算，不改变科研评审 `parentRunId` 的含义。任务关联失败保留准确失败查询和原因，不发 Provider 请求；相同请求不会补挂成新任务，后续尝试必须明确引用原查询及其快照哈希。跨库步骤之间重启后，未完成查询保留为中断记录，系统不自动再次检索。
+
+每次 Provider 请求前核对拥有者、查询执行快照、父 Manifest/线程/项目、任务状态、停止原因和连续截止时间。父取消和截止时间直接中断真实请求，迟到结果不能成为完成回执；任务暂停/取消等待本任务查询清理，不停止同项目其他任务。开始、取消意图和持久化终态失效通知驱动现有任务界面刷新。查询诊断保留真实 `complete/partial/cancelling` 等状态、开始结束时间和错误，阶段字段为空，外部费用仍为未知；只有完整检索计入执行完成。Agent DB17 迁移保留历史事件序列和调用回执，不补造旧查询事件。模型工具装配继续实施，以上内部能力尚不能作为助手自主调用入口。
+
+2026-11-05 本地拥有查询验收为 `Verified passing`：在 `/Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc` 执行 `pnpm test:unit`，1121/1121 通过，包含 14 项拥有查询及实际旧库迁移回归；`pnpm build`（含类型检查）、`pnpm harness:eval` 94/94、`node scripts/run-research-p0.mjs` 13/13、`node scripts/smoke-electron.mjs` 13/13、`pnpm check:ipc` 和 `pnpm check:renderer-chunks` 通过。任务界面 `node --test tests/renderer/research-tasks.test.mjs` 11/11；补充准确查询截图定位的单项复跑 1/1。前次全量测试的 12 项旧库夹具失败保留在日志，最终测试仍核对原始 schema、快照和迁移回执；产品未增加旧 schema 回退。日志位于 `.artifacts/research-optimization/pr09-a7d3b-*.log`，该验收不覆盖真实模型质量、外部账号或收费调用。
