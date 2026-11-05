@@ -41,7 +41,7 @@ export class ResearchManuscriptRepository {
     const latex = renderManuscriptLatex(request.sections, claims, this.evidence.evidenceForClaims(claims, artifact.projectId));
     const record: ResearchManuscript = {
       ...request, projectId: artifact.projectId, latex,
-      contentHash: hash(latex), claimsHash: hashClaims(claims), updatedAt: this.now()
+      contentHash: hash(latex), claimsHash: manuscriptClaimsHash(claims), updatedAt: this.now()
     };
     this.db.transaction(() => {
       this.db.prepare(
@@ -109,7 +109,7 @@ export class ResearchManuscriptRepository {
     const manuscript = this.getManuscript(artifact.id);
     if (manuscript === null) throw new Error('research_manuscript_required');
     const claims = this.resolveManuscriptClaims(artifact, manuscript.sections);
-    if (manuscript.projectId !== artifact.projectId || manuscript.claimsHash !== hashClaims(claims) ||
+    if (manuscript.projectId !== artifact.projectId || manuscript.claimsHash !== manuscriptClaimsHash(claims) ||
         manuscript.contentHash !== hash(manuscript.latex) ||
         manuscript.latex !== renderManuscriptLatex(manuscript.sections, claims, this.evidence.evidenceForClaims(claims, artifact.projectId))) {
       throw new Error('research_manuscript_stale');
@@ -140,6 +140,6 @@ function hash(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
-function hashClaims(claims: ResearchClaim[]): string {
+export function manuscriptClaimsHash(claims: ResearchClaim[]): string {
   return hash(JSON.stringify(claims.map(({ id, version, content, status, evidenceIds }) => ({ id, version, content, status, evidenceIds }))));
 }

@@ -3,6 +3,7 @@ import {researchIdeaOutcomeSaveSchema} from '../../shared/schemas/research-idea-
 import {researchCitationReviewSaveSchema} from '../../shared/schemas/research-citation-reviews';
 import {researchConsistencySaveSchema} from '../../shared/schemas/research-consistency';
 import {researchFigureConsistencySaveSchema} from '../../shared/schemas/research-figure-consistency';
+import {researchResponseMatrixSaveSchema} from '../../shared/schemas/research-response-matrix';
 import { withLiteratureContext } from '../services/literature-context';
 import { researchPythonEnvironmentSelectSchema } from '../../shared/schemas/research-python-environments';
 import { researchNotebookImportRequestSchema } from '../../shared/schemas/research-notebooks';
@@ -61,6 +62,11 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
       }
       return await wrapIpc(async () => {
         const input = transformInput(target.inputTransform, args);
+        if (target.capabilityName === 'research.responseMatrix.save') {
+          const request = researchResponseMatrixSaveSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
         if (target.capabilityName === 'research.figureConsistency.save') {
           const request = researchFigureConsistencySaveSchema.parse(input);
           return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},

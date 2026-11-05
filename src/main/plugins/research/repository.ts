@@ -53,6 +53,7 @@ import {ResearchIdeaPlanRepository} from './idea-plan-repository';
 import {ResearchIdeaOutcomeRepository} from './idea-outcome-repository';
 import {ResearchCitationReviewRepository} from './citation-review-repository';
 import {ResearchConsistencyRepository} from './consistency-repository';
+import {ResearchResponseMatrixRepository} from './response-matrix-repository';
 import {ResearchFigureConsistencyRepository} from './figure-consistency-repository';
 import { ResearchKnowledgeRepository, type KnowledgeSourceWrite } from './knowledge-repository';
 import type { ResearchTaskRepository } from './research-task-repository';
@@ -100,6 +101,7 @@ export class ResearchRepository {
   readonly ideaPlans: ResearchIdeaPlanRepository;
   readonly ideaOutcomes: ResearchIdeaOutcomeRepository;
   readonly citationReviews: ResearchCitationReviewRepository;
+  readonly responseMatrix: ResearchResponseMatrixRepository;
   readonly consistency: ResearchConsistencyRepository;
   readonly figureConsistency: ResearchFigureConsistencyRepository;
   readonly knowledge: ResearchKnowledgeRepository;
@@ -140,6 +142,7 @@ export class ResearchRepository {
     this.ideaPlans = new ResearchIdeaPlanRepository(db, this, now);
     this.ideaOutcomes = new ResearchIdeaOutcomeRepository(db, this, now);
     this.citationReviews = new ResearchCitationReviewRepository(db, this, now);
+    this.responseMatrix = new ResearchResponseMatrixRepository(db, this, now);
     this.consistency = new ResearchConsistencyRepository(db, this, now);
     this.figureConsistency = new ResearchFigureConsistencyRepository(db, this, now);
     this.knowledge = new ResearchKnowledgeRepository(db, (id) => { this.getProject(id); }, now);

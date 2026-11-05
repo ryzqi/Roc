@@ -162,3 +162,6 @@ export * from '../../../src/shared/schemas/research-consistency';
 export {calculateConsistency, consistencyNumericLocations} from '../../../src/main/plugins/research/consistency-calculation';
 export {ResearchConsistencyService} from '../../../src/main/plugins/research/consistency-service';
 export {registerResearchConsistencyCapabilities} from '../../../src/main/plugins/research/consistency-capabilities';
+
+export {registerResearchResponseMatrixCapabilities, researchResponseMatrixCapabilities} from '../../../src/main/plugins/research/response-matrix-capabilities';
+export {researchResponseMatrixSaveSchema, researchResponseMatrixReceiptSchema} from '../../../src/shared/schemas/research-response-matrix';
