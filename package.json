@@ -25,6 +25,7 @@
     "test:unit": "node --test tests/unit/",
     "test:renderer": "node --test tests/renderer/",
     "test:research-p0": "pnpm build && node scripts/run-research-p0.mjs",
+    "test:review-workflow": "node --test tests/integration/research-review-workflow.test.mjs",
     "generate:ipc": "node scripts/generate-ipc-schema.mjs",
     "check:ipc": "node scripts/generate-ipc-schema.mjs --check",
     "check:renderer-chunks": "node scripts/check-renderer-chunks.mjs",

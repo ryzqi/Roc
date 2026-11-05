@@ -391,3 +391,11 @@ DB40 在现有筛选计划上保存独立 `study_group_head_hash` 和不可变�
 查询工具和项目只读查询都返回 `query` 类型的准确回执链接，携带真实查询 ID 与不可变 snapshotHash。原有只读抽屉先读取该查询并校验快照，再读取其冻结协议核对版本与冻结哈希；不通过最近查询列表猜测目标。正在检索时记录数和覆盖保持待终态，重读同一链接可以显示后来保存的真实终态；查询式、范围和来源身份仍受原快照约束。终态没有原始池时显示明确缺失，有原始池时复用现有只读分页，保留重复记录、缺失年份、缺失摘要和原始元数据。查询、协议、语料、报告使用同一检查器，链接不会获得取消、检索、协议编辑或人工决定权限。
 
 准确查询链接验收为 `Verified passing`：同一物理仓库目录执行 `node --test tests/unit/research-review-query-tools.test.mjs tests/unit/research-review-tools.test.mjs`，25/25 通过；新增查询桌面检查 5/5，最终 `node --test --test-concurrency=1 tests/renderer/review-receipt-links.test.mjs tests/renderer/review-search-inspector.test.mjs` 22/22 通过。构建、Harness 94/94、启动 smoke 13/13、IPC 和分块检查通过，eager JS 仍为 1132907 字节。浅色完整查询与 650px 深色归档部分查询截图已核对，默认、悬停、回执展开及归档裁切审计均 `cut=0`。日志为 `.artifacts/research-optimization/pr09-a7d3d-*.log`，截图为 `.artifacts/research-optimization/pr09-a7d2b-ui/query-*.png`。范围为本地只读查询链；没有运行新的真实模型或外部写入。
+
+## 完整工作流集成验证
+
+`pnpm test:review-workflow` 通过实际 Harness 装配的 SDK 工具执行两个冻结查询，再通过生成的人工窗口 API 完成语料捕获、去重冻结、双人标题与全文决定、明确全文缺失、原 PDF 绑定、Evidence 抽取、冻结质量框架、人工评价和研究归组。查询关联同一真实聊天任务；人工记录保留 `window:901` 来源。测试使用实际解析的 `tests/fixtures/research-workflow/source.pdf`，不复制文献库。只读助手读取报告不会新增数据库写入或网络请求。
+
+固定报告计数为 8 条记录、0 条去重、8 条标题筛选、1 条标题排除、7 份寻求全文、6 份未取回、1 份全文评估、0 份全文排除、1 份纳入报告及 1 项声明研究。重解析后报告正文和哈希保持不变，当前来源状态变为过期。集成测试先通过人工 API 新建独立逻辑协议并冻结；已完成查询不能用空重试来源重新执行，产品约束保持有效。
+
+本部分 `Verified passing`：在 `/Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc` 执行 `pnpm test:review-workflow`，1/1 通过；最终日志为 `.artifacts/research-optimization/pr09-closure-e2e-final.log`，完整任务、查询、原文定位、报告和过期状态回执为 `.artifacts/research-optimization/pr09-closure/owned-query-to-review.json`。本提交仅新增集成检查及脚本入口，产品构建和桌面检查沿用前述 `4d4b11d` 的结果。本地最小工程工作流完成；受控人工声明与 Provider fixture 不证明科学检索或模型筛选质量，正式 PRISMA 模板适用性、独立科学验收和真实模型试验仍未运行。
