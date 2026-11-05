@@ -5,6 +5,8 @@ import {researchClaimSchema} from './research-evidence';
 import {researchProductionInputSchema} from './research-production-inputs';
 import {researchInspectedEvidenceSchema} from './research-evidence-source';
 import {researchEvidenceRelationSchema} from './research-evidence-relations';
+import {researchIdeaCanvasSchema} from './research-ideas';
+import {researchIdeaPlanInspectionSchema} from './research-idea-plans';
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 export const researchArtifactInspectRequestSchema = z.object({
@@ -25,6 +27,7 @@ export const researchArtifactInspectionBodySchema = z.object({
   content: researchArtifactContentSchema.nullable(), origin: researchArtifactOriginSchema.nullable(),
   claims: researchClaimSchema.array(), evidence: researchInspectedEvidenceSchema.array(),
   relations: researchEvidenceRelationSchema.array(),
+  ideaCanvas: researchIdeaCanvasSchema.nullable(), ideaPlan: researchIdeaPlanInspectionSchema.nullable(),
   production: researchProductionInputSchema.shape.source.nullable(),
   provenance: researchProvenanceSchema.array(), availableActions: z.enum(['return_to_task', 'review_gate']).array().max(2)
 }).strict();

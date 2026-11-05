@@ -12,6 +12,7 @@ import {ArtifactEvidenceSource} from './ArtifactEvidenceSource';
 const StageContent = lazy(async () => ({default: (await import('./ArtifactStageContent')).ArtifactStageContent}));
 const ProductionView = lazy(async () => ({default: (await import('./ArtifactProductionView')).ArtifactProductionView}));
 const Relations = lazy(async () => ({default: (await import('./ArtifactRelations')).ArtifactRelations}));
+const IdeaPlans = lazy(async () => ({default: (await import('./IdeaPlans')).IdeaPlans}));
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 
 export function StageArtifactInspector({client, request, writable, onClose, onOpenTask, onReviewContext, readingLocations}: {
@@ -25,12 +26,15 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
   const snapshot = result?.snapshot;
   const [reviewNonce, setReviewNonce] = useState(0);
   const [relationSaved, setRelationSaved] = useState(false);
+  const [planPending, setPlanPending] = useState(false);
+  const [planDirty, setPlanDirty] = useState(false);
+  const planLocked = planPending || planDirty;
   const savedLocation = readingLocations.get(JSON.stringify([request.projectId, request.artifactId]));
   const [productionChoice,setProductionChoice] = useState<{version: string; open: boolean} | null>(null);
   const productionOpen = snapshot !== undefined && (productionChoice?.version === snapshot.version ?
     productionChoice.open : savedLocation !== undefined && savedLocation.version === snapshot.version && savedLocation.productionOpen);
   const reading = useArtifactReadingLocation(request, snapshot?.version, readingLocations, productionOpen);
-  const close = (): void => {reading.save(); onClose();};
+  const close = (): void => {if (planLocked) return; reading.save(); onClose();};
   const review = useAsyncResource(reviewNonce > 0 ? `gate:${JSON.stringify(request)}:${reviewNonce}` : null,
     () => {
       if (snapshot === undefined) throw new Error('research_artifact_snapshot_required');
@@ -44,20 +48,20 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
   }, [result]);
   const statuses = {draft: '草稿', approved: '已批准', superseded: '已被替代'};
   return <ModalShell open kind="drawer" title={snapshot?.artifact.title ?? '科研工件'} onClose={close} bodyRef={reading.bodyRef}
-    widthClassName="w-[560px]" testId="artifact-inspector">
+    widthClassName="w-[560px]" testId="artifact-inspector" beforeClose={() => !planLocked}>
     <div className="flex flex-col gap-3 text-[var(--font-body-size)]">
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className={button} disabled={read.status === 'loading'}
+        <button type="button" className={button} disabled={read.status === 'loading' || planLocked}
           data-testid="artifact-inspector-refresh" data-reading-key="refresh" onClick={()=>{reading.save(); read.reload();}}>刷新工件</button>
-        {result?.status !== 'stale' ? null : <button type="button" className={button}
+        {result?.status !== 'stale' ? null : <button type="button" className={button} disabled={planLocked}
           data-testid="artifact-inspector-recapture" onClick={() => {baseline.current = result.snapshot.version; read.reload();}}>
           按当前版本重新核对
         </button>}
         {snapshot?.origin === null || snapshot?.origin === undefined || snapshot.origin.taskId === null ||
           !snapshot.availableActions.includes('return_to_task') ? null : <button type="button" className={button}
-          data-testid="artifact-inspector-task" onClick={() => {reading.save(); onOpenTask(snapshot.origin!.taskId!);}}>查看关联任务</button>}
+          disabled={planLocked} data-testid="artifact-inspector-task" onClick={() => {reading.save(); onOpenTask(snapshot.origin!.taskId!);}}>查看关联任务</button>}
         {snapshot?.availableActions.includes('review_gate') ? <button type="button" className={button}
-          disabled={review.status === 'loading'} data-testid="artifact-inspector-review"
+          disabled={review.status === 'loading' || planLocked} data-testid="artifact-inspector-review"
           onClick={() => setReviewNonce(value => value + 1)}>读取本阶段全部审核工件</button> : null}
         {snapshot?.production===null||snapshot===undefined||snapshot.projectStatus==='archived'||snapshot.artifact.status==='superseded' ? null :
           snapshot.artifact.status==='approved'||snapshot.availableActions.includes('review_gate') ? <button type="button"
@@ -65,6 +69,8 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
             data-reading-key="production-toggle" onClick={()=>setProductionChoice({version:snapshot.version,open:!productionOpen})}>{productionOpen?'收起生产文件':'查看生产文件'}</button> : null}
       </div>
       {read.status === 'loading' ? <p role="status">正在读取工件…</p> : null}
+      {planPending ? <p role="status">正在保存方法计划，请等待回执。</p> :
+        planDirty ? <p role="status">方法计划含未保存修改，保存或放弃后可关闭工件。</p> : null}
       {read.error === null ? null : <p role="alert" className="break-words text-[var(--st-warn)]">{read.error}</p>}
       {result?.status === 'stale' ? <p role="alert" className="text-[var(--st-warn)]">
         工件或来源已变更。当前内容需要重新核对。
@@ -83,7 +89,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
         {matchesDisplayedSnapshot ? null : <p role="alert" className="text-[var(--st-warn)]">
           审核版本与当前显示的工件快照不同。请刷新工件，核对新内容后再返回助手。
         </p>}
-        <button type="button" disabled={!matchesDisplayedSnapshot || read.status !== 'ready' || review.status !== 'ready'}
+        <button type="button" disabled={!matchesDisplayedSnapshot || read.status !== 'ready' || review.status !== 'ready' || planLocked}
           className={`${button} self-start disabled:cursor-not-allowed disabled:opacity-50`} data-testid="artifact-inspector-return-review" onClick={() => {
           onReviewContext(review.data!);
           close();
@@ -99,6 +105,13 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
         <Suspense fallback={<p role="status">正在加载工件正文…</p>}>
           <StageContent snapshot={snapshot} />
         </Suspense>
+        {snapshot.ideaCanvas === null ? null : <Suspense fallback={<p role="status">正在加载方法计划…</p>}>
+          <IdeaPlans key={`${snapshot.artifact.id}:${snapshot.ideaCanvas.contentHash}:${snapshot.ideaPlan?.versionHash ?? 'new'}:${snapshot.ideaPlan?.freezeHash ?? 'draft'}`}
+            client={client} canvas={snapshot.ideaCanvas} current={snapshot.ideaPlan}
+            writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived' && snapshot.artifact.status !== 'superseded'}
+            onPending={setPlanPending} onDirty={setPlanDirty}
+            onSaved={() => {setPlanPending(false); setPlanDirty(false); baseline.current = null; reading.save(); read.reload();}}/>
+        </Suspense>}
         {!productionOpen||snapshot.production===null ? null : <Suspense fallback={<p role="status">正在加载生产视图…</p>}>
           <ProductionView key={snapshot.version} client={client} writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived'} request={{projectId:request.projectId,
             artifactId:request.artifactId,expectedVersion:snapshot.version}}
