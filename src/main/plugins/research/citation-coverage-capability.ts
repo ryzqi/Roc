@@ -4,7 +4,7 @@ import type {RocPluginContext} from '../../kernel/types';
 import type {ResearchCitationCoverageService} from './citation-coverage-service';
 
 export const researchCitationCoverageCapability = {
-  name: 'research.manuscript.citationCoverage', version: '1.0.0',
+  name: 'research.manuscript.citationCoverage', version: '2.0.0',
   inputSchema: researchCitationCoverageRequestSchema, outputSchema: researchCitationCoverageInspectionSchema
 };
 

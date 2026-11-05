@@ -70,7 +70,7 @@ test('current draft coverage maps exact manuscript paragraphs, citations and sou
     const before = f.changes(), first = f.inspect(), bytes = JSON.stringify(first);
     assert.equal(first.status, 'current');
     assert.equal(first.reportHash, hash(JSON.stringify(first.report)));
-    assert.deepEqual(first.report.counts, {paragraphs: 1, citations: 2, humanReviewedCitations: 0, qualifiedCitations: 0, paragraphsWithIssues: 1});
+    assert.deepEqual(first.report.counts, {paragraphs: 1, citations: 2, humanReviewedCitations: 0, qualifiedCitations: 0, paragraphsWithIssues: 1, directCitations: 0, indirectCitations: 0, unsupportedCitations: 0, unreviewedDirectnessCitations: 2});
     const paragraph = first.report.paragraphs[0];
     assert.deepEqual([paragraph.sectionIndex, paragraph.sectionTitle, paragraph.paragraphIndex], [0, 'Results', 0]);
     assert.deepEqual(paragraph.claim, f.claim);

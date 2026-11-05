@@ -51,6 +51,7 @@ import { ResearchExportRepository } from './export-repository';
 import { ResearchIdeaRepository } from './idea-repository';
 import {ResearchIdeaPlanRepository} from './idea-plan-repository';
 import {ResearchIdeaOutcomeRepository} from './idea-outcome-repository';
+import {ResearchCitationReviewRepository} from './citation-review-repository';
 import { ResearchKnowledgeRepository, type KnowledgeSourceWrite } from './knowledge-repository';
 import type { ResearchTaskRepository } from './research-task-repository';
 import {researchArtifactInspectionBodySchema, researchArtifactInspectResultSchema,
@@ -96,6 +97,7 @@ export class ResearchRepository {
   readonly ideas: ResearchIdeaRepository;
   readonly ideaPlans: ResearchIdeaPlanRepository;
   readonly ideaOutcomes: ResearchIdeaOutcomeRepository;
+  readonly citationReviews: ResearchCitationReviewRepository;
   readonly knowledge: ResearchKnowledgeRepository;
   private knowledgeWriter: ((input: KnowledgeSourceWrite, sourceMetadata?: Record<string, unknown>) => Promise<ResearchKnowledgeDocument>) | null = null;
   private readonly pendingKnowledgeWrites: Array<{ input: KnowledgeSourceWrite; sourceMetadata: Record<string, unknown> }> = [];
@@ -133,6 +135,7 @@ export class ResearchRepository {
     this.ideas = new ResearchIdeaRepository(db, this, now);
     this.ideaPlans = new ResearchIdeaPlanRepository(db, this, now);
     this.ideaOutcomes = new ResearchIdeaOutcomeRepository(db, this, now);
+    this.citationReviews = new ResearchCitationReviewRepository(db, this, now);
     this.knowledge = new ResearchKnowledgeRepository(db, (id) => { this.getProject(id); }, now);
   }
 
@@ -322,6 +325,11 @@ export class ResearchRepository {
       const content = this.runs.getArtifactContent(project.id, artifact.id);
       const claims = this.evidence.listClaims({projectId: project.id, artifactId: artifact.id});
       const relations = this.evidence.relations.forArtifact(artifact.id, project.id);
+      const citationReviews = this.citationReviews.forArtifact(project.id, artifact.id).map(({snapshot, snapshotHash}) => ({
+        reviewId: snapshot.id, reviewHash: snapshotHash, claimId: snapshot.request.claimId,
+        evidenceId: snapshot.request.evidenceId, version: snapshot.version,
+        directness: snapshot.request.directness, recordedAt: snapshot.recordedAt
+      }));
       const ideaCanvas = artifact.kind === 'idea_canvas' ? this.ideas.get(artifact.id) : null;
       const ideaPlan = ideaCanvas === null ? null : this.ideaPlans.history({
         projectId: project.id, artifactId: artifact.id, offset: 0, limit: 1
@@ -363,7 +371,7 @@ export class ResearchRepository {
       const body = researchArtifactInspectionBodySchema.parse({
         artifact, projectStatus: project.status, currentStage: project.currentStage,
         stage, content, origin, claims, evidence, relations,
-        production, ideaCanvas, ideaPlan, ideaOutcomes, provenance: rows.map(toProvenance), availableActions
+        production, ideaCanvas, ideaPlan, ideaOutcomes, citationReviews, provenance: rows.map(toProvenance), availableActions
       });
       const version = createHash('sha256').update(JSON.stringify(body)).digest('hex');
       return researchArtifactInspectResultSchema.parse({

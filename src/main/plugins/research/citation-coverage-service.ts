@@ -36,6 +36,7 @@ export class ResearchCitationCoverageService {
     });
     const bySource = new Map(sources.map(source => [source.source.evidence.id, source]));
     const byClaim = new Map(bundle.claims.map(claim => [claim.id, claim]));
+    const directnessReviews = this.repository.citationReviews.forArtifact(request.projectId, request.artifactId);
     const paragraphs: ResearchCitationCoverageBody['paragraphs'] = bundle.manuscript.sections.flatMap((section, sectionIndex) =>
       section.claimIds.map((claimId, paragraphIndex) => {
         const claim = byClaim.get(claimId);
@@ -64,19 +65,32 @@ export class ResearchCitationCoverageService {
             supporting.some(relation => relation.kind === 'supports') ? 'confirmed' :
             supporting.length > 0 ? 'qualified' : 'unreviewed';
           if (supportReview === 'unreviewed') issues.push({kind: 'unreviewed_support', subjectId: evidenceId});
+          const receipt = directnessReviews.find(review =>
+            review.snapshot.request.claimId === claim.id && review.snapshot.request.evidenceId === evidenceId);
+          const directnessReview = receipt === undefined ? null : {receipt,
+            current: receipt.snapshot.material.claimHash === relationClaimHash(claim) &&
+              receipt.snapshot.material.sourceDigest === relationSourceDigest(source.source)};
+          if (directnessReview === null) issues.push({kind: 'unreviewed_directness', subjectId: evidenceId});
+          else if (!directnessReview.current) issues.push({kind: 'changed_directness', subjectId: directnessReview.receipt.snapshot.id});
+          else if (directnessReview.receipt.snapshot.request.directness === 'indirect') issues.push({kind: 'indirect_citation', subjectId: evidenceId});
+          else if (directnessReview.receipt.snapshot.request.directness === 'unsupported') issues.push({kind: 'unsupported_citation', subjectId: evidenceId});
           return {evidenceId, manuscriptCitationKey: source.manuscriptCitationKey, supportReview,
-            supportRelationIds: supporting.map(relation => relation.id)};
+            supportRelationIds: supporting.map(relation => relation.id), directnessReview};
         });
         return {sectionIndex, sectionTitle: section.title, paragraphIndex, claim, relations, citations, issues};
       }));
     const citations = paragraphs.flatMap(paragraph => paragraph.citations);
     const report = researchCitationCoverageBodySchema.parse({
-      schemaVersion: 1, projectId: request.projectId, artifactId: request.artifactId,
+      schemaVersion: 2, projectId: request.projectId, artifactId: request.artifactId,
       artifactVersion: snapshot.version, manuscript: bundle.manuscript, sources, paragraphs,
       counts: {paragraphs: paragraphs.length, citations: citations.length,
         humanReviewedCitations: citations.filter(citation => citation.supportReview !== 'unreviewed').length,
         qualifiedCitations: citations.filter(citation => citation.supportReview === 'qualified').length,
-        paragraphsWithIssues: paragraphs.filter(paragraph => paragraph.issues.length > 0).length}
+        paragraphsWithIssues: paragraphs.filter(paragraph => paragraph.issues.length > 0).length,
+        directCitations: citations.filter(c => c.directnessReview?.current && c.directnessReview.receipt.snapshot.request.directness === 'direct').length,
+        indirectCitations: citations.filter(c => c.directnessReview?.current && c.directnessReview.receipt.snapshot.request.directness === 'indirect').length,
+        unsupportedCitations: citations.filter(c => c.directnessReview?.current && c.directnessReview.receipt.snapshot.request.directness === 'unsupported').length,
+        unreviewedDirectnessCitations: citations.filter(c => !c.directnessReview?.current).length}
     });
     const reportHash = researchContentHash(JSON.stringify(report));
     return researchCitationCoverageInspectionSchema.parse({

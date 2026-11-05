@@ -11,7 +11,9 @@ const locationLabels = {locator: '来源定位', page: '页码定位', region: '
 const issueLabels = {
   unreviewed_support: '引用尚无当前人工支持确认', confirmed_contradiction: '存在当前人工反对关系',
   changed_relation: '关系绑定的版本已变化', figure_claim_in_body: '图稿主张被用作正文',
-  archived_bibliography: '文献已归档'
+  archived_bibliography: '文献已归档', unreviewed_directness: '引用直接性尚未人工审核',
+  changed_directness: '直接性审核绑定的主张或来源已变化', indirect_citation: '人工标记为间接引用',
+  unsupported_citation: '人工标记为不支持该主张'
 };
 
 export function ArtifactCitationCoverage({client, projectId, artifactId, artifactVersion}: {

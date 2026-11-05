@@ -10,7 +10,7 @@
 
 报告 hash 包含完整正文、工件快照版本、来源、关系和书目 revision，读取时间不参与 hash。来源或正文失效明确拒绝检查；可以检查仍有效的已批准工件和归档项目，但不会批准、运行模型或写数据库。旧报告对象保持原字节，重读得到新报告。
 
-科学直接性的显式人工声明、跨正文/表格/图稿指标映射、审稿回复矩阵和期刊规则尚未实现。
+跨正文/表格/图稿指标映射、审稿回复矩阵和期刊规则尚未实现。
 
 ## X-WRITE A2：同壳引用检查器
 
@@ -19,6 +19,18 @@
 重新检查保留报告 hash 基线，因此单独修改书目 revision 也会显示 `stale`。用户可明确按当前报告版本重新核对；工件快照变化则要求先刷新工件。等待和失败时隐藏旧成功报告，项目及工件版本隔离迟到回复。这些操作零数据库写入，不产生科学审批。
 
 650px 两主题下长段落、原文及 hash 在抽屉内换行；筛选标签不收缩，保持单行及可用选框宽度。
+
+## X-WRITE A3A：人工引用直接性
+
+`research.saveCitationReview` 要求明确填写 `direct`、`indirect` 或 `unsupported` 及理由，绑定当前报告 hash、正文主张和 Evidence。`parent` 首次显式传 `null`，后续必须传最新审核 ID 和 hash。人工身份仅来自主进程验证的窗口，不允许通过输入提供。
+
+DB47 为每个主张与证据对追加不可变版本，保存完整请求、人工身份、时间、正文 hash、工件版本、主张与来源原文及 digest。相同请求和人工身份重放时核对当前主张/来源后返回原回执，不重复写入。已批准、失效、非当前工件或归档项目不能新增审核；旧报告、错父版本和重复请求内容冲突明确拒绝。
+
+覆盖报告使用 schema 2，所有引用都包含显式 nullable `directnessReview`，同时记录直接、间接、不支持和未审核计数。主张或来源变化后，旧判断标为过期；直接性判断不授予语义支持或正文批准。最新审核回执头进入整工件快照和版本 hash，另一个窗口修改直接性会使旧阶段审批上下文失效。
+
+`research.getCitationReviewHistory` 分页返回完整历史回执，明确 `verification: stored_receipt`。来源失效后仍可阅读已保存的历史原文；这不声明来源当前有效。历史读取核对原字节、hash、数据库索引字段、主张/来源 digest 和父版本锚点，损坏时拒绝。
+
+A3B 的人工编辑及历史界面在下一部分实现。没有旧 schema 解析或兼容别名。
 
 ## 验证记录
 
@@ -54,3 +66,21 @@
 最初夹具在原生 disclosure 内容可见前读取文本，以及错误调用匿名审计函数，已修正并保留实际键盘/原文断言。审计 `cut=0`；3 个 `hidden` 是既有抽屉在物理窗口 top/right/bottom 边缘完全隐藏的阴影，精确断言元素、方向、类型、gap=0 和原因。截图及审计在 `citation-coverage-ui/`，最终两主题截图已实际查看；标签孤字换行已修复并增加布局回归。
 
 验证使用真实 Electron renderer、SQLite 仓库及 IPC 适配器，场景包含合成来源，不构成独立科学准确率验证。A2 没有修改主进程或共享合同；A1 完整 unit、P0 和 Harness 的补充结果见上表。
+
+### A3A 检查
+
+| 命令 | 结果 | 日志 |
+| --- | --- | --- |
+| `node --test tests/unit/research-citation-reviews.test.mjs tests/unit/research-citation-coverage.test.mjs tests/unit/research-artifact-inspector.test.mjs tests/unit/research-idea-inspection.test.mjs tests/unit/research-export-body-gate.test.mjs tests/unit/research-semantic-publication.test.mjs tests/unit/research-gate-review.test.mjs` | 最终快照合同上 39/39 通过，含新增审核 7 项 | `xwrite-a3a-head-final-focused.log` |
+| `pnpm build` | 最终源码通过，含 typecheck | `xwrite-a3a-head-build.log` |
+| `node --test tests/renderer/citation-coverage.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs` | 40/40 通过 | `xwrite-a3a-head-renderer.log` |
+| `node scripts/run-research-p0.mjs` | 13/13 通过，含实际实验重启 | `xwrite-a3a-head-p0.log` |
+| `node scripts/smoke-electron.mjs` | 13/13 通过，零 renderer error | `xwrite-a3a-head-startup.log` |
+| `pnpm check:ipc` | 生成合同当前 | `xwrite-a3a-head-ipc.log` |
+| `pnpm check:renderer-chunks` | 1,134,084 bytes，6 eager 文件 | `xwrite-a3a-head-chunks.log` |
+| `pnpm test:unit` | 快照回执头修改前 1226/1226 通过；最终合同另由上表 39 项和实际消费者验证 | `xwrite-a3a-unit.log` |
+| `pnpm harness:eval` | 快照回执头修改前 94/94 通过 | `xwrite-a3a-harness.log` |
+
+首次审核测试错误读取 Evidence 包装层的 sourceVersion、使用错误数据库名；已按现有合同修正。产品历史读取原来要求当前有效来源，现改为校验存储来源身份，允许明确标注的历史回执。新闸门夹具最初处于 running 状态，已使用真实工作流转换进入 waiting_approval。原 P0 12/13 的实际实验启动超时保留在 `xwrite-a3a-p0.log`；最终串行 P0 13/13，通过时未改变等待条件或超时阈值。
+
+A3A 范围状态：`Verified passing`。最终完整 unit/Harness 补充检查已启动，收集后登记；这里不将未完成的补充检查报为通过。历史校验、来源版本、跨项目和窗口身份拒绝均有回归；验证不构成科学直接性准确率证明。
