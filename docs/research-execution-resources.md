@@ -94,3 +94,11 @@ stdout/stderr 共用真实字节计数并最多保留指定总量。日志超限
 删除无调用方的 `full`、`loopback` 网络模式及其 Seatbelt 允许规则。科研计算 runner 的类型与运行时均只接受 `networkAccess: 'none'`，其他值在解析任何文件范围或启动代码前拒绝。模型/依赖下载走独立准备操作，不复用计算进程网络授权。移除没有调用方的 `ResearchExperimentService.runProcess` 转发方法。
 
 本增量为 `Verified passing`。有效 `/usr/bin/true` 命令的网络合同红测 0/1，修复后相关单测联合 16/16。`pnpm test:research-resources` 为 21/21，新增两种过时模式均在产生文件前拒绝，并保留实际 DNS/TCP 拒绝、GPU、资源和清理矩阵。`pnpm build`（含 typecheck）、IPC、分块检查通过；标准生产 P0 专项 1/1（包括计算、文献、出版、交付与真实超时）、Harness 94/94、启动 13/13 零 renderer 错误。所有生产者原本都使用 `none`，未重复 A5 已通过的 1145 项全量检查；本次新增拒绝合同由专项直接验证。回执为 `.artifacts/research-optimization/xsafe-a6/native-resources.json`，日志为 `xsafe-a6-*.log`。原生环境数据/代码审计及其余持久化继续执行。
+
+## R 环境探针的数据边界
+
+R 环境探针的项目读取范围缩小为实际取得摘要的 `renv.lock` 和可选 `renv/settings.json`。实际解释器根、声明库和已核验名称的包缓存根仍可读取，项目其他文件不因环境检查获得读取权限。主进程只接受这些实际运行时/库根内的包元数据路径，探针不能指示主进程读取其他项目文件。原生环境摘要加入检查合同版本 2，新的预期环境摘要必须来自当前检查。
+
+本机没有 R/Julia 环境。专项用编译的 C 二进制通过真实 R 启动适配、原生桥和 Seatbelt 执行，独立验证权限合同；它不会把 C 输出当成实际 R 包解析或科学复现验收。正向探针核对两份声明控制文件可读、合法库链接的缓存 `DESCRIPTION` 可读，项目私有文件返回 `EPERM`。恶意探针另在报告里指定私有文件，主进程以 `research_experiment_metadata_outside_scope` 拒绝。修复前 0/2：私有文件实际可读，伪造元数据报告也被接受；修复后 2/2。
+
+本增量在上述范围内为 `Verified passing`。在上述仓库目录执行 `pnpm test:research-environment-boundaries`，2/2；相关政策/资源/准入单测联合 16/16；构建/typecheck、IPC、分块检查通过，eager JS 1132907 字节、6 个文件；标准生产 P0 1/1、Harness 94/94、启动 13/13 零 renderer 错误。回执为 `.artifacts/research-optimization/xsafe-a7a/native-environment.json`，明确记录 `actualRRuntimeTested: false` 和 `actualJuliaRuntimeTested: false`；日志为 `xsafe-a7a-*.log`。实际 R 验收、Julia 控制文件范围、原生代码完整性和其余资源持久化仍待完成。

@@ -57,11 +57,13 @@ export async function inspectNativeExperimentEnvironment({ workspace, runtime, j
   }
   const probe = await mkdtemp(join(jobDir, `${runtime.kind}-probe-`));
   try {
+    const projectReadPaths = runtime.kind === 'renv' ? lockFiles.map(file => join(workspace, file.path)) : [workspace];
+    const metadataRoots = runtime.kind === 'renv' ? readablePaths : [...readablePaths, workspace];
     const reportPath = join(probe, runtime.kind === 'renv' ? 'environment.csv' : 'environment.json');
     const command = runtime.kind === 'renv'
       ? rExperimentCommand(root, executable, ['--vanilla', '--slave', '-e', rEnvironmentProbe])
       : { command: executable, args: [...juliaExperimentFlags, `--project=${workspace}`, '-e', juliaEnvironmentProbe] };
-    const request: ResearchProcessRequest = { ...command, cwd: workspace, readablePaths: [...readablePaths, workspace], writablePaths: [jobDir],
+    const request: ResearchProcessRequest = { ...command, cwd: workspace, readablePaths: [...readablePaths, ...projectReadPaths], writablePaths: [jobDir],
       additionalExecutables: [executable], environment: { ...environment, ROC_PROJECT_ROOT: workspace, ROC_R_LIBRARY: prefix, ROC_JULIA_DEPOT: prefix, ROC_ENVIRONMENT_REPORT: reportPath },
       writeLimits: [{ path: jobDir, maxFileBytes: experimentFileLimit, maxTotalBytes: experimentOutputTotalLimit,
         maxFiles: experimentFileCountLimit, maxEntries: experimentDirectoryEntryLimit }],
@@ -90,7 +92,7 @@ export async function inspectNativeExperimentEnvironment({ workspace, runtime, j
     for (const path of report.metadataPaths) {
       signal.throwIfAborted();
       const actual = await realpath(path);
-      const scope = [...readablePaths, workspace].find((directory) => descendant(directory, actual));
+      const scope = metadataRoots.find((directory) => descendant(directory, actual));
       if (scope === undefined) throw new Error('research_experiment_metadata_outside_scope');
       const content = await readResearchFile(scope, researchRelativePath(relative(scope, actual)), 16 * 1024 * 1024);
       metadataBytes += content.length;
@@ -105,7 +107,8 @@ export async function inspectNativeExperimentEnvironment({ workspace, runtime, j
     metadata.sort((left, right) => left.path.localeCompare(right.path));
     lockFiles.sort((left, right) => left.path.localeCompare(right.path));
     const value = { runtime, executable, prefix, basePrefix: root, version: report.version, platform: report.platform, architecture: report.architecture,
-      toolchainHash: tools.hash, metadataHash: researchContentHash(JSON.stringify({ executable: beforeExecutable, metadata, bridge: runtime.kind === 'renv' ? rProcessBridgeHash() : null })), packages, lockFiles };
+      toolchainHash: tools.hash, metadataHash: researchContentHash(JSON.stringify({ inspectionContractVersion: 2, executable: beforeExecutable, metadata,
+        bridge: runtime.kind === 'renv' ? rProcessBridgeHash() : null })), packages, lockFiles };
     const snapshot = researchExperimentEnvironmentSchema.parse({ ...value, hash: researchContentHash(JSON.stringify(value)) });
     return { snapshot, readablePaths: [...new Set(readablePaths)], environment, typescriptRuntime: null };
   } finally { await rm(probe, { recursive: true, force: true }); }

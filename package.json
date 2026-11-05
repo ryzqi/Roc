@@ -27,6 +27,7 @@
     "test:research-p0": "pnpm build && node scripts/run-research-p0.mjs",
     "test:review-workflow": "node --test tests/integration/research-review-workflow.test.mjs",
     "test:research-resources": "node --test tests/integration/research-process-resources.test.mjs",
+    "test:research-environment-boundaries": "node --test tests/integration/research-native-environment-boundaries.test.mjs",
     "generate:ipc": "node scripts/generate-ipc-schema.mjs",
     "check:ipc": "node scripts/generate-ipc-schema.mjs --check",
     "check:renderer-chunks": "node scripts/check-renderer-chunks.mjs",
