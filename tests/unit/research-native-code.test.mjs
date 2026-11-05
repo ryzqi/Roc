@@ -4,6 +4,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, realpath, mkdir, writeFile, symlink, unlink, stat, utimes, chmod, open, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { loadResearchTestApi } from './fixtures/research-test-kit.mjs';
 
 let api, root;
@@ -11,7 +12,7 @@ const exec = promisify(execFile);
 before(async () => { api = await loadResearchTestApi(); root = await realpath(await mkdtemp('/private/tmp/roc-native-code-unit-')); });
 after(async () => { await rm(root, { recursive: true, force: true }); api.dispose(); });
 async function directory() { return mkdtemp(join(root, 'code-')); }
-function identity(paths, signal = new AbortController().signal) { return api.nativeCodeIdentity(paths, signal); }
+async function identity(paths, signal = new AbortController().signal) { return (await api.captureNativeCode(paths, signal)).hash; }
 
 test('native code identity is deterministic across ordering, duplicate roots and file reads', async () => {
   const one = await directory(), two = await directory();
@@ -71,4 +72,22 @@ test('native code capture refuses oversized files and special entries before any
 test('cancelled native code capture returns the real abort reason', async () => {
   const controller = new AbortController(); controller.abort(new Error('controlled_native_hash_abort'));
   await assert.rejects(identity([await directory()], controller.signal), /controlled_native_hash_abort/);
+});
+
+test('native code receipt cryptographically connects complete inventory to original environment metadata identity', async () => {
+  const path = await directory(); await writeFile(join(path, 'native.dylib'), 'original code');
+  const code = await api.captureNativeCode([path], new AbortController().signal);
+  const metadataIdentity = { inspectionContractVersion: 4, executable: 'a'.repeat(64), code: code.hash, metadata: [], bridge: null };
+  const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+  const original = { code, metadataIdentity }, metadataHash = hash(metadataIdentity);
+  assert.deepEqual(api.assertNativeCodeReceipt(original, metadataHash), original);
+  const changed = structuredClone(original);
+  changed.code.entries.find(entry => entry.type === 'file').sha256 = 'b'.repeat(64);
+  assert.throws(() => api.assertNativeCodeReceipt(changed, metadataHash), /native_code_report_changed/);
+  const { hash: _hash, ...body } = changed.code;
+  changed.code.hash = hash(body);
+  changed.metadataIdentity.code = changed.code.hash;
+  assert.throws(() => api.assertNativeCodeReceipt(changed, metadataHash), /native_code_report_changed/);
+  assert.throws(() => api.assertNativeCodeReceipt(original, 'b'.repeat(64)), /native_code_report_changed/);
+  assert.equal(api.nativeCodeReceiptSchema.safeParse({ ...original, oldInventory: true }).success, false);
 });

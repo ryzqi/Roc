@@ -132,3 +132,13 @@ JuliaProject、版本化 Manifest、显式 manifest、AppManifest、workspace、
 本增量在上述范围内为 `Verified passing`。在 `/Users/Apple_501/Desktop/Roc/Roc` 执行 `pnpm test:research-native-code` 4/4，`pnpm test:research-environment-boundaries` 8/8；`node --test tests/unit/research-native-code.test.mjs tests/unit/research-julia-controls.test.mjs tests/unit/research-experiment-resources.test.mjs tests/unit/research-process-resources.test.mjs tests/unit/research-process-admission.test.mjs tests/unit/research-compute-policy.test.mjs` 30/30；最终 `pnpm build`（含 typecheck）、IPC/分块检查通过，eager JS 1132907 字节、6 个文件。标准生产 P0 专项 1/1、Harness 94/94、启动 13/13 零 renderer 错误。
 
 最终相同探针在隔离的 `e128447` 源码上为 1/4：实际库函数值变化、原包元数据不变，却未改变环境身份；检查期间代码漂移也未被拒绝。有效红测日志与回执为 `xsafe-a7c-native-red-valid.log`、`xsafe-a7c/native-code-red-valid.json`。更早的同名库比较和符号调整未建立独立包加载，保留日志但不作为正确性证据。最终四项保持原值/哈希断言，日志为 `.artifacts/research-optimization/xsafe-a7c-*.log`。隔离源码副本和探针临时目录已清理。
+
+## 不可变的逐文件代码回执
+
+原生实验在计算前保存版本 1 的 `log/environment-code.json`，包含实际运行、项目、输入快照、环境哈希，以及完整代码清单和环境 metadata hash 的原始校验材料。代码清单仍使用合同 1；环境检查仍使用合同 4。仅返回哈希的旧函数已移除，捕获直接返回清单及其哈希。Node 环境明确不产生原生代码回执。
+
+回执使用现有日志文件与实验 manifest 的 SHA-256 校验，最大 64MiB。创建时只写一次、权限 0400；非零退出的原生计算保留原始回执。发布验证同时核对文件字节、运行/项目/输入/环境身份、清单摘要和原始环境 metadata hash；为伪造清单重算其自身摘要不能改变原始环境身份。回执不进入科学证据索引。现有导出按原文件字节和哈希复制到 `provenance/experiments/<runId>/log/environment-code.json`。
+
+本增量在上述范围内为 `Verified passing`。在 `/Users/Apple_501/Desktop/Roc/Roc` 执行 `pnpm test:research-native-code`，最终 5/5，包括实际 C 动态库计算结果、成功/退出码 7 两次服务运行、回执保留、不可变发布、跨项目拒绝，以及导出 writer 的相同字节/哈希和篡改拒绝；`pnpm test:research-environment-boundaries` 8/8；相关原生代码、Julia 控制、实验资源、进程资源/准入/离线政策单测 31/31。构建/typecheck、标准生产 P0 1/1、Harness 94/94、启动 13/13 零 renderer 错误、IPC/分块检查通过，eager JS 1132907 字节、6 个文件。
+
+最初新增服务场景失败，是 C 夹具在计算阶段读取仅用于探针的 `ROC_R_LIBRARY`；保留日志后改用实际 `R_LIBS`，没有放宽产品环境或断言。新增退出码场景第一次在 1s 请求预算内超时，未改断言的复验在 257ms 返回 7；具体超时原因未确定。此退出码测试使用显式 5s 启动预算，退出码、回执和失败发布断言保持，独立的产品超时测试不变。日志和回执为 `.artifacts/research-optimization/xsafe-a7d1-*.log`、`xsafe-a7d1/native-code.json`；原失败与 1s 复验回执另存。实际 R/Julia 科学运行、完整原生导出流程和环境探针资源回执持久化仍未完成。

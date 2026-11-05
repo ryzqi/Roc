@@ -6,6 +6,7 @@ import { researchExperimentFileRequestSchema, researchExperimentStartSchema, typ
   type ResearchExperimentStartRuntime, type ResearchExperimentStart } from '../../../shared/schemas/research-experiments';
 import type { RocPluginContext } from '../../kernel/types';
 import { ResearchExperimentEnvironmentService, type PreparedExperimentEnvironment } from './experiment-environment';
+import { assertNativeCodeReceipt, nativeCodeReportSchema } from './experiment-native-code-schema';
 import { collectExperimentFiles, experimentCsvRowLimit, experimentFileLimit, experimentInputTotalLimit, experimentOutputTotalLimit,
   experimentRunnerRequestLimit, experimentFileCountLimit, experimentDirectoryEntryLimit, experimentStorage, snapshotExperimentInputs } from './experiment-files';
 import { juliaExperimentFlags, rExperimentCommand } from './experiment-native-probes';
@@ -232,6 +233,13 @@ export class ResearchExperimentService {
       if (request.expectedEnvironmentHash !== undefined && prepared.snapshot.hash !== request.expectedEnvironmentHash) throw new Error('research_experiment_environment_changed');
       const snapshot = await snapshotExperimentInputs(workspace, input, request, prepared.snapshot, signal);
       files = snapshot.files;
+      if (request.engine === 'r' || request.engine === 'julia') {
+        const native = assertNativeCodeReceipt(prepared.nativeCode, prepared.snapshot.metadataHash);
+        const report = JSON.stringify(nativeCodeReportSchema.parse({ schemaVersion: 1, runId: initial.id, projectId: initial.projectId,
+          inputHash: snapshot.hash, environmentHash: prepared.snapshot.hash, native }));
+        if (Buffer.byteLength(report) > experimentFileLimit) throw new Error('research_experiment_native_code_report_limit');
+        await writeFile(join(root, 'log/environment-code.json'), report, { flag: 'wx', mode: 0o400 });
+      }
       await this.verifyProject(initial, signal);
       this.repository.experiments.start(initial.projectId, initial.id, prepared.snapshot, files, snapshot.hash);
       resources.inputHash = snapshot.hash;
@@ -377,7 +385,7 @@ export class ResearchExperimentService {
   private async indexDocuments(run: ResearchExperimentExecution, files: ResearchExperimentFile[]) {
     const documents = [];
     for (const file of files) {
-      if (file.area === 'log' && file.path === 'resources.json') continue;
+      if (file.area === 'log' && ['resources.json', 'environment-code.json'].includes(file.path)) continue;
       if (file.area === 'input' || file.size === 0) continue;
       if (file.size > 4 * 1024 * 1024 || file.area !== 'log' && !['.txt', '.md', '.csv', '.json', '.tsv'].includes(extname(file.path).toLowerCase())) continue;
       const bytes = await readResearchFile(this.repository.experiments.root(run.projectId, run.id), `${file.area}/${file.path}`, experimentFileLimit);
@@ -411,6 +419,13 @@ export class ResearchExperimentService {
       || report.outcome !== 'returned' || report.exitCode !== 0
       || JSON.stringify(report.policy) !== JSON.stringify(computationPolicy(researchExperimentStartSchema.parse(run.request)))) {
       throw new Error('research_experiment_resource_report_changed');
+    }
+    if (run.request.engine === 'r' || run.request.engine === 'julia') {
+      const { bytes } = await this.source({ projectId: run.projectId, runId: run.id, area: 'log', path: 'environment-code.json' });
+      const code = nativeCodeReportSchema.parse(JSON.parse(bytes.toString('utf8')) as unknown);
+      if (run.environment === null || code.runId !== run.id || code.projectId !== run.projectId
+        || code.inputHash !== run.inputHash || code.environmentHash !== run.environment.hash) throw new Error('research_experiment_native_code_report_changed');
+      assertNativeCodeReceipt(code.native, run.environment.metadataHash);
     }
   }
 }

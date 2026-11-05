@@ -10,7 +10,8 @@ import { ResearchProcessError, type ResearchProcessRequest, type ResearchProcess
 import { createResearchDirectory, readResearchFile, researchContentHash, researchPath, researchRelativePath } from './research-files';
 import type { ResearchProcessScope } from './toolchain';
 import { discoverJuliaEnvironmentControls, parseJuliaRuntimeVersion, type JuliaEnvironmentControls } from './experiment-julia-controls';
-import { nativeCodeIdentity } from './experiment-native-code';
+import { captureNativeCode } from './experiment-native-code';
+import type { NativeCodeReceipt } from './experiment-native-code-schema';
 
 type ProcessRun = (input: ResearchProcessRequest) => Promise<ResearchProcessResult>;
 type NativeEnvironmentInspectionInput = {
@@ -65,7 +66,7 @@ export async function inspectNativeExperimentEnvironment({ workspace, runtime, j
   }
   const probe = await mkdtemp(join(jobDir, `${runtime.kind}-probe-`));
   try {
-    const beforeCode = await nativeCodeIdentity(codeRoots, signal);
+    const beforeCode = await captureNativeCode(codeRoots, signal);
     let juliaControls: JuliaEnvironmentControls | null = null;
     let juliaVersion: string | null = null;
     if (runtime.kind === 'julia') {
@@ -124,17 +125,19 @@ export async function inspectNativeExperimentEnvironment({ workspace, runtime, j
     for (const file of lockFiles) if (researchContentHash(await readResearchFile(workspace, file.path, 16 * 1024 * 1024)) !== file.sha256) throw new Error('research_experiment_environment_changed');
     for (const file of juliaControls?.metadataFiles ?? []) if (researchContentHash(await readResearchFile(workspace, file.path, 16 * 1024 * 1024)) !== file.sha256) throw new Error('research_experiment_environment_changed');
     if (researchContentHash(await readResearchFile(root, relative(root, executable), 64 * 1024 * 1024)) !== beforeExecutable) throw new Error('research_experiment_runtime_changed');
-    if (await nativeCodeIdentity(codeRoots, signal) !== beforeCode) throw new Error('research_experiment_native_code_changed');
+    if ((await captureNativeCode(codeRoots, signal)).hash !== beforeCode.hash) throw new Error('research_experiment_native_code_changed');
     signal.throwIfAborted();
     const packages = report.packages.map((entry) => ({ name: entry.name, version: entry.versions.length === 0 ? null : entry.versions[0] }))
       .sort((left, right) => left.name.localeCompare(right.name) || String(left.version).localeCompare(String(right.version)));
     metadata.sort((left, right) => left.path.localeCompare(right.path));
     lockFiles.sort((left, right) => left.path.localeCompare(right.path));
+    const metadataIdentity: NativeCodeReceipt['metadataIdentity'] = { inspectionContractVersion: 4, executable: beforeExecutable, code: beforeCode.hash, metadata,
+      bridge: runtime.kind === 'renv' ? rProcessBridgeHash() : null };
     const value = { runtime, executable, prefix, basePrefix: root, version: report.version, platform: report.platform, architecture: report.architecture,
-      toolchainHash: tools.hash, metadataHash: researchContentHash(JSON.stringify({ inspectionContractVersion: 4, executable: beforeExecutable, code: beforeCode, metadata,
-        bridge: runtime.kind === 'renv' ? rProcessBridgeHash() : null })), packages, lockFiles };
+      toolchainHash: tools.hash, metadataHash: researchContentHash(JSON.stringify(metadataIdentity)), packages, lockFiles };
     const snapshot = researchExperimentEnvironmentSchema.parse({ ...value, hash: researchContentHash(JSON.stringify(value)) });
-    return { snapshot, readablePaths: [...new Set(readablePaths)], environment, typescriptRuntime: null };
+    return { snapshot, readablePaths: [...new Set(readablePaths)], environment, typescriptRuntime: null,
+      nativeCode: { code: beforeCode, metadataIdentity } };
   } finally { await rm(probe, { recursive: true, force: true }); }
 }
 

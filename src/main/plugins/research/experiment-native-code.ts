@@ -3,20 +3,16 @@ import { createHash } from 'node:crypto';
 import { lstat, open, opendir, readlink, realpath } from 'node:fs/promises';
 import { isAbsolute, join, relative } from 'node:path';
 import { researchContentHash } from './research-files';
-
-export const nativeCodeLimits = { maxFileBytes: 512 * 1024 ** 2, maxTotalBytes: 4 * 1024 ** 3, maxEntries: 100000, maxMetadataBytes: 64 * 1024 ** 2 } as const;
-type Entry = { root: string; path: string; mode: number } & (
-  { type: 'directory' } | { type: 'symlink'; target: string; resolved: string } | { type: 'file'; size: number; sha256: string }
-);
+import { nativeCodeLimits, nativeCodeSnapshotSchema, type NativeCodeEntry, type NativeCodeSnapshot } from './experiment-native-code-schema';
 
 /** Hash bytes and link topology of every declared native code tree; never trust mtimes as identity. */
-export async function nativeCodeIdentity(paths: readonly string[], signal: AbortSignal): Promise<string> {
+export async function captureNativeCode(paths: readonly string[], signal: AbortSignal): Promise<NativeCodeSnapshot> {
   signal.throwIfAborted();
   const roots = [...new Set(await Promise.all(paths.map(path => realpath(path))))].sort();
-  const entries: Entry[] = [];
+  const entries: NativeCodeEntry[] = [];
   let totalBytes = 0;
   let metadataBytes = 0;
-  const add = (entry: Entry): void => {
+  const add = (entry: NativeCodeEntry): void => {
     metadataBytes += Buffer.byteLength(JSON.stringify(entry));
     if (entries.length >= nativeCodeLimits.maxEntries || metadataBytes > nativeCodeLimits.maxMetadataBytes) throw new Error('research_experiment_native_code_limit');
     entries.push(entry);
@@ -58,7 +54,8 @@ export async function nativeCodeIdentity(paths: readonly string[], signal: Abort
     if (!roots.some(other => other !== root && within(other, root))) await visit(root, root);
   }
   entries.sort((left, right) => left.root < right.root ? -1 : left.root > right.root ? 1 : left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
-  return researchContentHash(JSON.stringify({ contractVersion: 1, limits: nativeCodeLimits, roots, entries }));
+  const body = { contractVersion: 1, limits: nativeCodeLimits, roots, entries };
+  return nativeCodeSnapshotSchema.parse({ ...body, hash: researchContentHash(JSON.stringify(body)) });
 }
 
 function within(root: string, path: string): boolean {

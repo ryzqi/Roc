@@ -4,12 +4,14 @@ import { researchContentHash } from './research-files';
 import { runResearchProcess, type ResearchProcessRequest } from './process-runner';
 import { inspectNativeExperimentEnvironment } from './experiment-native-environment';
 import type { ResearchProcessScope, ResearchToolchain, ResearchTypeScriptRuntime } from './toolchain';
+import type { NativeCodeReceipt } from './experiment-native-code-schema';
 
 export type PreparedExperimentEnvironment = {
   snapshot: ResearchExperimentEnvironment;
   readablePaths: string[];
   environment: NodeJS.ProcessEnv;
   typescriptRuntime: ResearchTypeScriptRuntime | null;
+  nativeCode: NativeCodeReceipt | null;
 };
 
 export type NativeRuntime = Extract<ResearchExperimentStartRuntime, { kind: 'renv' | 'julia' }>;
@@ -42,7 +44,7 @@ export class ResearchExperimentEnvironmentService {
       signal.throwIfAborted();
       // Electron's macOS executable loads its bundled dylibs before Node's permission checks.
       const frameworks = join(dirname(dirname(tools.executable)), 'Frameworks');
-      return { snapshot, readablePaths: [tools.runnerPath, frameworks, ...tools.packageRoots], environment: tools.environment, typescriptRuntime: tools };
+      return { snapshot, readablePaths: [tools.runnerPath, frameworks, ...tools.packageRoots], environment: tools.environment, typescriptRuntime: tools, nativeCode: null };
     }
     const tools = await this.tools.nativeRuntime(jobDir);
     return inspectNativeExperimentEnvironment({ workspace: root, runtime, jobDir, tools, run: this.run, signal, admission });

@@ -22,7 +22,7 @@ async function fixture(processRun, inspectionError = null) {
     snapshot: { runtime: { kind: 'bundled-node' }, executable: '/usr/bin/true', prefix: '/usr/bin', basePrefix: '/usr/bin',
       version: 'unit-fixture', platform: 'darwin', architecture: 'arm64', toolchainHash: hash, metadataHash: hash,
       packages: [], lockFiles: [], hash },
-    readablePaths: [], environment: { PATH: '/usr/bin:/bin' },
+    readablePaths: [], environment: { PATH: '/usr/bin:/bin' }, nativeCode: null,
     typescriptRuntime: { executable: '/usr/bin/true', runnerPath: '/fixture-runner.mts', packageRoots: [], packageEntries: {} }
   };
   const environments = { async inspect() { if (inspectionError !== null) throw inspectionError; return prepared; } };
