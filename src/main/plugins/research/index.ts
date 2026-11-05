@@ -243,7 +243,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       const researchPythonEnvironments = new ResearchPythonEnvironmentService(researchRepository);
       pythonEnvironments = researchPythonEnvironments;
       registerResearchPythonEnvironmentCapabilities(context, researchRepository.pythonEnvironments, researchPythonEnvironments);
-      const researchExperiments = new ResearchExperimentService(researchRepository, new ResearchExperimentEnvironmentService(toolchain), options.experimentRoot ?? null, context.logger);
+      const researchExperiments = new ResearchExperimentService(researchRepository, new ResearchExperimentEnvironmentService(toolchain, researchPythonEnvironments), options.experimentRoot ?? null, context.logger);
       experiments = researchExperiments;
       registerResearchExperimentCapabilities(context, researchRepository.experiments, researchExperiments);
       const researchFigures = new ResearchFigureService(researchRepository, toolchain, options.experimentRoot ?? null, context.logger);

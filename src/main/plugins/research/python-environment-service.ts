@@ -13,6 +13,7 @@ import { pickPythonEnvironment, type PythonEnvironmentPicker } from './python-en
 import { runResearchProcess, type ResearchProcessRequest, type ResearchProcessResult } from './process-runner';
 import { researchContentHash } from './research-files';
 import type { ResearchRepository } from './repository';
+import type { ResearchProcessScope } from './toolchain';
 
 type ProcessRun = (request: ResearchProcessRequest) => Promise<ResearchProcessResult>;
 type Job = { projectId: string; controller: AbortController; done: Promise<unknown> };
@@ -44,14 +45,15 @@ export class ResearchPythonEnvironmentService {
 
   /** A selection is usable only after reinspection matches its original complete environment identity. */
   async resolve(input: ResearchPythonEnvironmentGet, jobDir: string, signal: AbortSignal,
-    onProbe: (receipt: ResearchEnvironmentProbeResource) => void): Promise<InspectedPythonEnvironment> {
+    admission: ResearchProcessScope, onProbe: (receipt: ResearchEnvironmentProbeResource) => void): Promise<InspectedPythonEnvironment> {
+    if (admission.projectId !== input.projectId) throw new Error('research_python_selection_admission_mismatch');
     this.requireWritable(input.projectId);
     const selection = this.repository.pythonEnvironments.get(input).snapshot;
     const workspace = this.requireWorkspace(input.projectId);
     if (await realpath(workspace) !== selection.workspacePath) throw new Error('research_python_selection_workspace_changed');
     const inspected = await inspectPythonExperimentEnvironment({
       workspace: selection.workspacePath, selectedExecutable: selection.selectedExecutable, jobDir, run: this.run, signal,
-      admission: { projectId: input.projectId, priority: 'user' }, onProbe
+      admission, onProbe
     });
     this.requireWritable(input.projectId);
     if (this.repository.getProject(input.projectId).workspacePath !== workspace

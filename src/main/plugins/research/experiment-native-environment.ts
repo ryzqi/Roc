@@ -141,7 +141,7 @@ export async function inspectNativeExperimentEnvironment({ workspace, runtime, j
     const value = { runtime, executable, prefix, basePrefix: root, version: report.version, platform: report.platform, architecture: report.architecture,
       toolchainHash: tools.hash, metadataHash: researchContentHash(JSON.stringify(metadataIdentity)), packages, lockFiles };
     const snapshot = researchExperimentEnvironmentSchema.parse({ ...value, hash: researchContentHash(JSON.stringify(value)) });
-    return { snapshot, readablePaths: [...new Set(readablePaths)], environment, typescriptRuntime: null,
+    return { snapshot, readablePaths: [...new Set(readablePaths)], environment, typescriptRuntime: null, python: null,
       nativeCode: { code: beforeCode, metadataIdentity } };
   } finally { await rm(probe, { recursive: true, force: true }); }
 }

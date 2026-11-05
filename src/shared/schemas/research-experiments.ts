@@ -1,14 +1,17 @@
 import { z } from 'zod';
+import { researchPythonEnvironmentGetSchema } from './research-python-environments';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const researchExperimentPathSchema = z.string().min(1).max(1024).refine((value) =>
   !value.startsWith('/') && !/[\\\u0000-\u001f]/u.test(value) && value.split('/').every((part) => part !== '' && part !== '.' && part !== '..'),
 { message: 'research_relative_path_invalid' });
 const runtimePath = z.string().min(1).max(4096).refine((value) => value.startsWith('/') && !/[\u0000-\u001f]/u.test(value), { message: 'research_absolute_path_required' });
+export const researchPythonExperimentRuntimeSchema = researchPythonEnvironmentGetSchema.omit({ projectId: true }).extend({ kind: z.literal('python') });
 export const researchExperimentRuntimeSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('bundled-node') }).strict(),
   z.object({ kind: z.literal('renv'), rootPath: runtimePath, libraryPath: researchExperimentPathSchema }).strict(),
-  z.object({ kind: z.literal('julia'), rootPath: runtimePath, depotPath: runtimePath }).strict()
+  z.object({ kind: z.literal('julia'), rootPath: runtimePath, depotPath: runtimePath }).strict(),
+  researchPythonExperimentRuntimeSchema
 ]);
 const nativeRuntimeSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('renv'), rootPath: runtimePath, libraryPath: researchExperimentPathSchema }).strict(),

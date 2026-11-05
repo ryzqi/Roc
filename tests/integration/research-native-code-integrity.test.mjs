@@ -133,7 +133,7 @@ test('actual native experiment persists complete code receipt, excludes it from 
   const environments = new api.ResearchExperimentEnvironmentService({
     nativeRuntime: async () => ({ root: native.toolsRoot, hash: 'a'.repeat(64), environment: { PATH: '/usr/bin:/bin' } }),
     typescriptRuntime: async () => assert.fail('native fixture must not select TypeScript')
-  });
+  }, { resolve: async () => assert.fail('native fixture must not resolve Python') });
   const service = new api.ResearchExperimentService(f.repository, environments, native.directory, { error: (...args) => failures.push(args) });
   try {
     const request = {
@@ -233,7 +233,7 @@ test('actual native experiment persists complete code receipt, excludes it from 
           } };
         },
         typescriptRuntime: async () => assert.fail('native fixture must not select TypeScript')
-      });
+      }, { resolve: async () => assert.fail('native fixture must not resolve Python') });
       const failingService = new api.ResearchExperimentService(f.repository, failingEnvironment, native.directory,
         { error: (...args) => failures.push(args) });
       try {

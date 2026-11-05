@@ -44,6 +44,24 @@ test('current experiment creation and stored execution use identical strict requ
   }
 });
 
+test('Python environment inspection requires an exact path-free selection while Python starts remain disabled', () => {
+  const runtime = { kind: 'python', selectionId: 'python_environment_selected', expectedHash: 'a'.repeat(64) };
+  assert.deepEqual(experiments.researchExperimentEnvironmentRequestSchema.parse({ projectId: 'project', runtime }),
+    { projectId: 'project', runtime });
+  for (const changed of [
+    { ...runtime, selectedExecutable: '/usr/bin/python3' },
+    { ...runtime, rootPath: '/runtime' },
+    { ...runtime, actor: { kind: 'user', id: 'window:1' } },
+    { ...runtime, expectedHash: 'wrong' },
+    { kind: 'python', selectionId: runtime.selectionId },
+    { kind: 'python', expectedHash: runtime.expectedHash }
+  ]) assert.equal(experiments.researchExperimentRuntimeSchema.safeParse(changed).success, false);
+  const start = { ...fields, engine: 'python', sourcePath: 'analysis.py', runtime, arguments: [] };
+  assert.equal(experiments.researchExperimentStartSchema.safeParse(start).success, false);
+  assert.equal(experiments.researchExperimentStartRequestSchema.safeParse(start).success, false);
+  assert.equal(experiments.researchOwnedExperimentStartSchema.safeParse(start).success, false);
+});
+
 test('repository refuses obsolete snapshots without rewriting or deleting retained user records', () => {
   const f = createResearchFixture(api, 'experiment');
   try {

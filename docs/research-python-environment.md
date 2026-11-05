@@ -1,6 +1,6 @@
 # Python 环境预检与隔离探针
 
-PR08 当前提供环境预检、真实隔离探针，以及主进程确认的原生环境选择与项目绑定。项目管理的任务区已提供选择入口；新建 Python 实验、运行及发布尚未启用。
+PR08 当前提供环境预检、真实隔离探针、主进程确认的原生环境选择与项目绑定，以及现有实验环境 API 的 Python 预览。项目管理的任务区已提供选择入口；新建 Python 实验、运行及发布尚未启用。
 
 ## 用户选择与项目绑定
 
@@ -9,6 +9,8 @@ PR08 当前提供环境预检、真实隔离探针，以及主进程确认的原
 数据库迁移 42 新增项目环境回执，不改写旧实验。每次成功选择保留独立 ID、原始请求、真实窗口 actor、工作目录、所选路径与真实解释器、版本、平台、完整环境身份、代码清单哈希及锁文件身份。同请求只读重放；另一个窗口不能重放原选择，新选择使用新请求。读取必须提供项目、选择 ID 和原始回执哈希。存储损坏、缺失回执、跨项目和错误哈希均失败。
 
 主进程的环境解析会重跑真实探针，并核对原始工作目录和完整环境身份。历史回执的读取不意味着当前环境仍可用；版本、包代码、控制或锁文件变化需要新的显式选择。归档、项目释放和关闭应用会取消未完成的选择，等待探针清理后再释放服务。
+
+`inspectExperimentEnvironment({ projectId, runtime: { kind: 'python', selectionId, expectedHash } })` 复用原实验环境 API。`expectedHash` 是选择回执的 `snapshotHash`；它不接受解释器路径或 actor。预览从项目绑定的回执重新解析环境，返回实际所选解释器路径、前缀、版本、完整安装包集合、锁文件和环境哈希。全部嵌套身份先按当前 schema 解析再计算哈希，返回值可独立复算。Python 分支不请求 R/Julia 或 TypeScript 工具链，不安装环境，也不创建实验记录。准入必须带相同项目；后台检查保留实际后台优先级。
 
 ## 当前环境合同
 
@@ -60,6 +62,15 @@ PR08 当前提供环境预检、真实隔离探针，以及主进程确认的原
 成功、非零退出、取消和 runner 拒绝都经现有环境探针回执记录。报告解析、身份和锁匹配失败保留已有真实进程回执；非零退出和无效报告保留原始 stdout/stderr、usage/admission。独立探针仍没有实验身份或持久化实验 provenance。
 
 ## 验证
+
+A4B1 环境预览（下列命令均从仓库根目录执行）：
+
+- `node --test tests/unit/research-current-execution-contracts.test.mjs tests/unit/research-python-code-receipt.test.mjs`：8/8。
+- `node --test --test-concurrency=1 tests/integration/research-python-selection.test.mjs`：最终 11/11，实际 CPython 与 Seatbelt；保留最终预览和进程回执于 `.artifacts/research-optimization/pr08-a4b1/python-selection.json`。
+- R/Julia 受影响消费者：`research-native-code-integrity.test.mjs`、`research-native-environment-boundaries.test.mjs`、`research-julia-environment-boundaries.test.mjs`，在初次联合运行中 13/13。该联合运行总体 23/24，唯一失败为新 Python 预览独立哈希断言；修复完整嵌套身份的序列化顺序后，Python 全套 11/11。没有修改原断言或 R/Julia 实现行为。
+- 最终 `pnpm build`（含 typecheck）、`node scripts/run-research-p0.mjs`（13/13）、`node scripts/smoke-electron.mjs`（13/13，零 renderer errors）、`pnpm check:ipc`、`pnpm check:renderer-chunks`（1132907 bytes / 6 files）均通过。
+
+初次单元测试发现重复 fixture export，删除新增的重复导出后通过。初次后台测试误把调度优先级当作计时回执字段，改为核对真实 runner 请求的原始准入与返回的计时回执。原始失败和修复后日志保留于 `.artifacts/research-optimization/pr08-a4b1-*.log`。本段没有修改 renderer，也未重跑此前 310/312 的完整 renderer 测试，不声称该套件全部通过。
 
 工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。实际环境为已安装的 CPython 3.14.7，不代表用户已选定该环境用于产品执行。
 

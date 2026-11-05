@@ -267,7 +267,8 @@ export async function run(context) {
   const persistenceErrors = [];
   const logger = {error: (...args) => persistenceErrors.push(args), warn: (...args) => persistenceErrors.push(args)};
   const description = await runtimeDescription();
-  const environments = new api.ResearchExperimentEnvironmentService({typescriptRuntime: async () => description});
+  const environments = new api.ResearchExperimentEnvironmentService({typescriptRuntime: async () => description},
+    {resolve: async () => assert.fail('TypeScript production fixture must not resolve Python')});
   const processReceipts = [];
   const experiments = new api.ResearchExperimentService(f.repository, environments, root, logger, async request => {
     try {
