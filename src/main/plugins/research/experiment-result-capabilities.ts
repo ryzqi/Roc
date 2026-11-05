@@ -2,6 +2,9 @@ import type {z} from 'zod';
 import {researchExperimentResultReviewSchema,researchExperimentResultGetSchema,researchExperimentResultListSchema,
   researchExperimentResultReceiptSchema,researchExperimentResultListResultSchema,
   researchExperimentCompareSchema,researchExperimentComparisonSchema} from '../../../shared/schemas/research-experiment-results';
+import {researchExperimentResultEvidenceCaptureSchema,researchExperimentResultEvidenceGetSchema,
+  researchExperimentResultEvidenceTraceSchema} from '../../../shared/schemas/research-experiment-results';
+import {researchEvidenceSchema} from '../../../shared/schemas/research-evidence';
 import type {CapabilityDescriptor,RocPluginContext} from '../../kernel/types';
 import type {ResearchExperimentResultService} from './experiment-result-service';
 import type {ResearchExperimentResultRepository} from './experiment-result-repository';
@@ -12,7 +15,9 @@ const capabilities={
   review:descriptor('research.experimentResults.review',researchExperimentResultReviewSchema,researchExperimentResultReceiptSchema),
   get:descriptor('research.experimentResults.get',researchExperimentResultGetSchema,researchExperimentResultReceiptSchema),
   list:descriptor('research.experimentResults.list',researchExperimentResultListSchema,researchExperimentResultListResultSchema),
-  compare:descriptor('research.experimentResults.compare',researchExperimentCompareSchema,researchExperimentComparisonSchema)
+  compare:descriptor('research.experimentResults.compare',researchExperimentCompareSchema,researchExperimentComparisonSchema),
+  captureEvidence:descriptor('research.experimentResults.captureEvidence',researchExperimentResultEvidenceCaptureSchema,researchEvidenceSchema),
+  evidence:descriptor('research.experimentResults.evidence',researchExperimentResultEvidenceGetSchema,researchExperimentResultEvidenceTraceSchema.nullable())
 };
 export const researchExperimentResultCapabilities=Object.values(capabilities);
 export function registerResearchExperimentResultCapabilities(context:RocPluginContext,repository:ResearchExperimentResultRepository,
@@ -25,8 +30,16 @@ export function registerResearchExperimentResultCapabilities(context:RocPluginCo
   register(capabilities.get,request=>service.get(request));
   register(capabilities.list,request=>repository.list(request));
   register(capabilities.compare,request=>service.compare(request));
+  register(capabilities.captureEvidence,request=>service.captureEvidence(request));
+  register(capabilities.evidence,request=>service.evidence(request));
 }
 const resultErrors:Record<string,{message:string;category:RocErrorCategory}>={
+  research_result_metric_not_found:{category:'not_found',message:'选中的指标不在实际结果回执中。'},
+  research_result_evidence_changed:{category:'degraded',message:'指标证据与固定的结果回执不一致。'},
+  research_evidence_not_found:{category:'not_found',message:'指标证据不存在。'},
+  research_evidence_project_mismatch:{category:'permission',message:'指标证据不属于当前项目。'},
+  research_evidence_reference_superseded:{category:'conflict',message:'指标证据引用已失效，需要重新审核来源。'},
+  research_evidence_integrity_invalid:{category:'degraded',message:'保存的指标证据片段校验失败。'},
   research_result_request_conflict:{category:'conflict',message:'同一指标审核请求的内容或审核窗口已变化。'},
   research_result_input_changed:{category:'conflict',message:'实验输入或环境与选中的运行版本不一致。'},
   research_result_output_changed:{category:'conflict',message:'指标输出与选中的结果版本不一致。'},

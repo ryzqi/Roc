@@ -5,6 +5,7 @@ import { researchExperimentExecutionSchema, researchExperimentPathSchema } from 
 import { researchFigurePublicationSchema } from './research-figures';
 import { researchBibliographyEntrySchema, researchCitationKeySchema } from './research-library';
 import { researchReviewCycleSchema, researchStageRunSchema } from './research-runs';
+import {researchExperimentResultReceiptSchema} from './research-experiment-results';
 
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -29,6 +30,7 @@ export const researchExportSourcesSchema = z.object({
   bibliography: z.array(researchBibliographyEntrySchema), libraryRevisions: z.array(z.object({ id, revision: z.number().int().positive() }).strict()),
   citationKeys: z.record(id, researchCitationKeySchema),
   provenance: z.array(researchProvenanceSchema), modelRuns: z.array(researchStageRunSchema), experiments: z.array(researchExperimentExecutionSchema),
+  experimentResults:z.array(researchExperimentResultReceiptSchema),
   evidenceMetadata: z.record(id, z.record(z.string(), z.json()).nullable()), review: researchReviewCycleSchema,
   template: z.object({ id, revision: z.number().int().positive(), entryPath: researchExperimentPathSchema,
     sourceDigest: digest, files: z.array(researchExportFileSchema) }).strict().nullable()

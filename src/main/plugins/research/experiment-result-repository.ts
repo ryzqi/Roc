@@ -4,6 +4,8 @@ import {researchExperimentResultReceiptSchema,researchExperimentResultSnapshotSc
   type ResearchExperimentResultReceipt,type ResearchExperimentResultGet,type ResearchExperimentResultList} from '../../../shared/schemas/research-experiment-results';
 import {researchContentHash} from './research-files';
 import type {ResearchRepository} from './repository';
+import type {ResearchEvidence} from '../../../shared/types';
+import {experimentMetricSource,assertExperimentMetricEvidence} from './experiment-result-evidence';
 
 type Row={id:string;project_id:string;run_id:string;request_id:string;snapshot_json:string;snapshot_hash:string;created_at:string};
 export class ResearchExperimentResultRepository {
@@ -33,6 +35,30 @@ export class ResearchExperimentResultRepository {
     const result=this.read(row);
     if(result.snapshotHash!==request.expectedHash)throw new Error('research_result_hash_mismatch');
     return result;
+  }
+  captureMetric(receipt:ResearchExperimentResultReceipt,metricId:string):ResearchEvidence {
+    const projectId=receipt.snapshot.request.projectId;
+    return this.db.transaction(()=>{
+      const current=this.get({projectId,resultId:receipt.snapshot.id,expectedHash:receipt.snapshotHash});
+      if(this.repository.getProject(projectId).status==='archived')throw new Error('research_project_archived');
+      const source=experimentMetricSource(current,metricId);
+      const row=this.db.prepare('SELECT id FROM research_evidence WHERE project_id=? AND document_id=?').get(projectId,source.id) as {id:string}|undefined;
+      if(row!==undefined) {
+        const evidence=this.repository.evidence.getEvidence(row.id,projectId);
+        const metadata=this.repository.evidence.sourceMetadata(projectId,row.id);
+        if(metadata===null)throw new Error('research_result_evidence_changed');
+        assertExperimentMetricEvidence(evidence,metadata,current);
+        return evidence;
+      }
+      // This immutable source is created once. A collision cannot overwrite registered knowledge.
+      if(this.db.prepare('SELECT id FROM research_knowledge_documents WHERE id=?').get(source.id)!==undefined) {
+        throw new Error('research_result_evidence_changed');
+      }
+      this.repository.knowledge.upsertFromSource({id:source.id,projectId,sourceType:'experiment',
+        sourceId:current.snapshot.execution.runId,title:source.title,content:source.content,
+        chunks:[{content:source.content,locator:source.locator}],embeddingPolicy:'none'},source.metadata);
+      return this.repository.evidence.capture({projectId,chunkId:`${source.id}:chunk:0`});
+    })();
   }
   list(value:ResearchExperimentResultList):{items:ResearchExperimentResultReceipt[];total:number} {
     const request=researchExperimentResultListSchema.parse(value);

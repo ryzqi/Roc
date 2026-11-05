@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, realpath, writeFile, readFile, symlink, rm, chmod, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import Database from 'better-sqlite3';
-import { loadResearchTestApi, createResearchFixture } from '../unit/fixtures/research-test-kit.mjs';
+import { loadResearchTestApi, createResearchFixture, figureRequest } from '../unit/fixtures/research-test-kit.mjs';
 
 const python = JSON.parse(execFileSync('python3', ['-I', '-S', '-c',
   'import sys,os,json;print(json.dumps({"executable":os.path.realpath(sys.executable),"version":sys.version.split()[0]}))'], { encoding: 'utf8' }));
@@ -146,6 +146,177 @@ test('metric review requires actual complete output and human authority; source 
     assert.deepEqual(await human(()=>service.review(request)),saved);
     assert.equal(f.repository.experimentResults.list({projectId:f.project.id,runId:run.id,offset:0,limit:100}).total,1);
   }finally{await f.cleanup();}
+});
+
+test('actual result metric evidence traces claims, figures and Idea history to an immutable negative output across restart',async()=>{
+  const f=await fixture(metricSource,{scenario:'metric-evidence'});
+  let reopened,figureService,figure;
+  try {
+    await writeFile(join(f.workspace,'data.txt'),'-3 -2 -1\n');
+    const run=await f.execute(),output=run.files.find(file=>file.path==='metrics.json');
+    assert.equal(run.status,'completed',run.error);
+    const service=new api.ResearchExperimentResultService(f.repository,f.service);
+    const receipt=await api.withResearchHumanContext({capability:'research.experimentResults.review',projectId:f.project.id,windowId:72},
+      ()=>service.review({projectId:f.project.id,requestId:'metric-evidence',runId:run.id,expectedInputHash:run.inputHash,
+        resultPath:output.path,expectedResultHash:output.sha256,definitions:[{id:'mean',label:'Mean',definition:'Mean of all scaled observations',unit:'ms',direction:'lower'}],
+        method:{name:'Mean',rationale:'All observations',assumptions:'Independent synthetic observations',limitations:'No inference'}}));
+    const request={projectId:f.project.id,resultId:receipt.snapshot.id,expectedHash:receipt.snapshotHash,metricId:'mean'};
+    const capture=value=>api.withResearchHumanContext({capability:'research.experimentResults.captureEvidence',projectId:f.project.id,windowId:72},
+      ()=>service.captureEvidence(value));
+    await assert.rejects(service.captureEvidence(request),/research_human_required/u);
+    await assert.rejects(capture({...request,metricId:'absent'}),/research_result_metric_not_found/u);
+    await assert.rejects(capture({...request,expectedHash:'0'.repeat(64)}),/research_result_hash_mismatch/u);
+    const before=f.db.prepare('SELECT count(*) FROM research_knowledge_documents').pluck().get();
+    f.db.exec(`CREATE TRIGGER fixture_evidence_failure BEFORE INSERT ON research_evidence BEGIN SELECT RAISE(ABORT,'fixture_capture_failure'); END`);
+    await assert.rejects(capture(request),/fixture_capture_failure/u);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_knowledge_documents').pluck().get(),before);
+    f.db.exec('DROP TRIGGER fixture_evidence_failure');
+    const evidence=await capture(request),document=f.db.prepare('SELECT * FROM research_knowledge_documents WHERE id=?').get(evidence.documentId);
+    assert.deepEqual(await capture(request),evidence);
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_knowledge_documents WHERE id=?').get(evidence.documentId),document);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_knowledge_embeddings WHERE chunk_id=?').pluck().get(evidence.chunkId),0);
+    const excerpt=JSON.parse(evidence.excerpt);
+    assert.equal(excerpt.metric.value,-4);assert.equal(excerpt.metric.sampleSize,3);
+    assert.equal(excerpt.source.pointer,'/metrics/0');assert.equal(excerpt.source.sha256,output.sha256);
+    assert.equal(excerpt.source.resultHash,receipt.snapshotHash);
+    assert.deepEqual(await service.evidence({projectId:f.project.id,evidenceId:evidence.id}),{receipt,metricId:'mean'});
+    assert.deepEqual(f.service.evidenceSource(f.project.id,evidence.id),{projectId:f.project.id,runId:run.id,area:'output',path:'metrics.json'});
+    const file=await f.service.source(f.service.evidenceSource(f.project.id,evidence.id));
+    assert.equal(JSON.parse(file.bytes).metrics[0].value,-4);
+    const otherWorkspace=join(f.path,'other-workspace');await mkdir(otherWorkspace);
+    const other=f.repository.createProject({title:'Other project',description:'Isolation',workspacePath:otherWorkspace});
+    await assert.rejects(service.evidence({projectId:other.id,evidenceId:evidence.id}),/research_evidence_project_mismatch/u);
+    const originalStage=f.repository.getProject(f.project.id).currentStage;
+    const artifacts=[];
+    for(const [stage,kind,subjectType] of [['reading','reading_notes','claim'],['figure','figure','figure'],['writing','manuscript','paragraph']]) {
+      f.db.prepare('UPDATE research_projects SET current_stage=? WHERE id=?').run(stage,f.project.id);
+      f.db.prepare("UPDATE research_stage_states SET status='ready' WHERE project_id=? AND stage=?").run(f.project.id,stage);
+      let artifact;
+      if(kind==='figure') {
+        await writeFile(join(f.workspace,'figure.vl.json'),JSON.stringify({
+          data:{values:[{metric:'mean',value:excerpt.metric.value}]},mark:'bar',
+          encoding:{x:{field:'metric',type:'nominal'},y:{field:'value',type:'quantitative',title:excerpt.metric.unit}}
+        }));
+        figureService=new api.ResearchFigureService(f.repository,{renderFigure:request=>api.renderResearchFigure({
+          operation:'render_figure',projectRoot:request.projectRoot,sourcePath:request.sourcePath,
+          outputDir:request.outputDir,inputPaths:request.inputPaths,label:request.label,
+          timeoutMs:request.timeoutMs,figure:request.figure
+        },request.signal)},f.path,{error:()=>assert.fail('no figure persistence errors')});
+        const started=await figureService.start(figureRequest(f.project.id,null,{inputPaths:[],timeoutMs:10000}));
+        const deadline=Date.now()+20000;
+        let completed;
+        do {
+          completed=figureService.getRun(f.project.id,started.id);
+          if(!['preparing','running'].includes(completed.status))break;
+          assert.ok(Date.now()<deadline,'actual metric figure timed out');
+          await new Promise(done=>setTimeout(done,20));
+        }while(true);
+        assert.equal(completed.status,'completed',completed.error);
+        figure=await figureService.publish(f.project.id,started.id,null);
+        assert.equal((await figureService.verify(f.project.id,figure.id)).id,figure.id);
+        artifact=f.repository.getArtifact(figure.artifactId);
+      } else {
+        artifact=f.repository.createArtifact({projectId:f.project.id,stage,kind,title:`Metric ${kind}`,path:null});
+      }
+      const claim=f.repository.evidence.createClaim({projectId:f.project.id,artifactId:artifact.id,subjectType,
+        content:'The measured mean is -4 ms.',status:'hypothesis',evidenceIds:[evidence.id]});
+      const revised=f.repository.evidence.updateClaim({id:claim.id,expectedVersion:claim.version,
+        content:'The negative mean remains -4 ms.',status:subjectType==='claim'?'hypothesis':'supported',evidenceIds:[evidence.id]});
+      assert.deepEqual(f.repository.evidence.claimHistory(claim.id).map(value=>value.evidenceIds),[[evidence.id],[evidence.id]]);
+      assert.equal(revised.status,subjectType==='claim'?'hypothesis':'supported');
+      const inspected=f.repository.inspectArtifact({projectId:f.project.id,artifactId:artifact.id,expectedVersion:null});
+      assert.deepEqual(inspected.snapshot.evidence.map(source=>source.evidence.id),[evidence.id]);
+      artifacts.push(artifact);
+      if(subjectType!=='claim') {
+        const source=f.repository.evidence.inspectEvidence(evidence.id,f.project.id),sourceDigest=api.relationSourceDigest(source);
+        const relation=f.repository.evidence.relations.propose({projectId:f.project.id,claimId:revised.id,expectedClaimVersion:revised.version,
+          evidenceId:evidence.id,expectedSourceDigest:sourceDigest,kind:'supports',condition:null,supersedesRelationId:null},
+          {kind:'user',id:'window:72'});
+        f.repository.evidence.relations.review({projectId:f.project.id,relationId:relation.id,expectedVersion:relation.version,
+          expectedClaimVersion:revised.version,expectedSourceDigest:sourceDigest,decision:'confirm',note:'Synthetic human acceptance of exact measured value'},
+          {kind:'user',id:'window:72'});
+      }
+      if(subjectType==='paragraph') {
+        f.repository.manuscripts.saveManuscript({artifactId:artifact.id,sections:[{title:'Results',claimIds:[revised.id]}]});
+        f.db.prepare("UPDATE research_artifacts SET status='approved' WHERE id=?").run(artifact.id);
+        f.db.prepare("UPDATE research_projects SET current_stage='export' WHERE id=?").run(f.project.id);
+        f.db.prepare(`INSERT INTO research_review_cycles
+          (project_id,origin_artifact_id,manuscript_artifact_id,revision_round,status,report_artifact_ids_json,updated_at)
+          VALUES (?,?,?,0,'accepted','[]',?)`).run(f.project.id,artifact.id,artifact.id,'2026-11-03T00:00:00.000Z');
+        f.db.prepare("UPDATE research_artifacts SET status='approved' WHERE id=?").run(figure.artifactId);
+        const exports=new api.ResearchExportSourceService(f.repository,figureService,f.service,
+          {files:async()=>assert.fail('default template')});
+        const exportRequest={projectId:f.project.id,requestId:'metric-export',title:'Metric sources',manuscriptArtifactId:artifact.id,
+          figureIds:[figure.id],template:{kind:'default',language:'en'}};
+        const sources=await exports.capture(exportRequest,new AbortController().signal);
+        assert.deepEqual(sources.experimentResults,[receipt]);
+        assert.deepEqual(sources.evidence,[evidence]);
+        assert.equal(sources.experiments[0].id,run.id);
+        assert.equal(sources.figures[0].id,figure.id);
+        const metadata=f.repository.evidence.sourceMetadata(f.project.id,evidence.id);
+        f.db.prepare('UPDATE research_evidence_source_metadata SET metadata_json=? WHERE evidence_id=?')
+          .run(JSON.stringify({...metadata,pointer:'/metrics/1'}),evidence.id);
+        await assert.rejects(service.evidence({projectId:f.project.id,evidenceId:evidence.id}),/research_result_evidence_changed/u);
+        assert.throws(()=>exports.assertCurrent(exportRequest,sources),/research_result_evidence_changed/u);
+        f.db.prepare('UPDATE research_evidence_source_metadata SET metadata_json=? WHERE evidence_id=?').run(JSON.stringify(metadata),evidence.id);
+        exports.assertCurrent(exportRequest,sources);
+      }
+    }
+    f.db.prepare("UPDATE research_projects SET current_stage='ideation' WHERE id=?").run(f.project.id);
+    f.db.prepare("UPDATE research_stage_states SET status='ready' WHERE project_id=? AND stage='ideation'").run(f.project.id);
+    const idea=f.repository.createArtifact({projectId:f.project.id,stage:'ideation',kind:'idea_canvas',title:'Negative result hypothesis',path:null});
+    const fields={problem:'Measure latency',hypothesis:'Positive mean is expected',novelty:'Pending verification',
+      supportingEvidence:'',counterevidence:'Observed -4 ms',experiment:'Actual measured run',risks:'Synthetic only'};
+    const canvas=f.repository.ideas.save({artifactId:idea.id,expectedVersion:null,...fields,priority:'medium',rationale:'Inspect negative observation',
+      fields:Object.entries(fields).map(([key,content])=>({key,content,status:'hypothesis',evidenceIds:key==='counterevidence'?[evidence.id]:[]}))});
+    const revised=f.repository.ideas.save({artifactId:idea.id,expectedVersion:canvas.version,
+      ...fields,priority:canvas.priority,rationale:'Retain original hypothesis',
+      fields:canvas.fields});
+    assert.equal(revised.hypothesis,fields.hypothesis);
+    assert.deepEqual(f.repository.ideas.history(idea.id).map(value=>value.fields.find(field=>field.key==='counterevidence').evidenceIds),
+      [[evidence.id],[evidence.id]]);
+    assert.deepEqual(f.repository.inspectArtifact({projectId:f.project.id,artifactId:idea.id,expectedVersion:null}).snapshot.evidence.map(value=>value.evidence.id),[evidence.id]);
+    const nextReceipt=await api.withResearchHumanContext({capability:'research.experimentResults.review',projectId:f.project.id,windowId:72},
+      ()=>service.review({...receipt.snapshot.request,requestId:'metric-evidence-new',
+        method:{...receipt.snapshot.request.method,limitations:'Post-observation revision, synthetic only'}}));
+    const nextRequest={...request,resultId:nextReceipt.snapshot.id,expectedHash:nextReceipt.snapshotHash};
+    const nextEvidence=await capture(nextRequest);
+    assert.notEqual(nextEvidence.id,evidence.id);
+    assert.equal(f.repository.evidence.inspectEvidence(evidence.id,f.project.id).evidence.excerpt,evidence.excerpt);
+    assert.deepEqual(f.repository.ideas.history(idea.id).map(value=>value.fields.find(field=>field.key==='counterevidence').evidenceIds),
+      [[evidence.id],[evidence.id]]);
+    f.repository.evidence.invalidateEvidence(nextEvidence.id,f.project.id);
+    await assert.rejects(service.evidence({projectId:f.project.id,evidenceId:nextEvidence.id}),/research_evidence_reference_superseded/u);
+    await assert.rejects(capture(nextRequest),/research_evidence_reference_superseded/u);
+    f.db.prepare('UPDATE research_projects SET current_stage=? WHERE id=?').run(originalStage,f.project.id);
+    const handlers=new Map();
+    api.registerResearchExperimentResultCapabilities({pluginId:'fixture',capabilities:{register(_id,descriptor,handler){handlers.set(descriptor.name,handler);}}},
+      f.repository.experimentResults,service);
+    const bridge=api.createPluginCapabilityAdapter({invokeCapability:(name,input)=>handlers.get(name)(input)});
+    assert.deepEqual((await bridge.invoke('research.captureExperimentResultEvidence',[request],72)).data,evidence);
+    assert.equal((await bridge.invoke('research.captureExperimentResultEvidence',[request])).ok,false);
+    const databasePath=join(f.path,'metric-evidence.sqlite');await f.db.backup(databasePath);
+    const disk=new Database(databasePath);
+    try {
+      disk.pragma('foreign_keys=ON');api.applyResearchDatabaseSchema(disk);
+      const repository=new api.ResearchRepository(disk,f.tasks);
+      reopened=new api.ResearchExperimentService(repository,{inspect:async()=>assert.fail('no recovery probes')},f.path,
+        {error:()=>assert.fail('no recovery error')},async()=>assert.fail('no recovery execution'));
+      const history=new api.ResearchExperimentResultService(repository,reopened),dispatches=f.observed.length;
+      assert.deepEqual(await history.evidence({projectId:f.project.id,evidenceId:evidence.id}),{receipt,metricId:'mean'});
+      assert.equal(f.observed.length,dispatches);
+    }finally{await reopened?.shutdown();disk.close();}
+    f.db.prepare("UPDATE research_projects SET status='archived' WHERE id=?").run(f.project.id);
+    await assert.rejects(capture(request),/research_project_archived/u);
+    assert.deepEqual(await service.evidence({projectId:f.project.id,evidenceId:evidence.id}),{receipt,metricId:'mean'});
+    f.db.prepare("UPDATE research_projects SET status='active' WHERE id=?").run(f.project.id);
+    const outputPath=join(f.repository.experiments.root(f.project.id,run.id),'output',output.path);
+    await chmod(outputPath,0o600);await writeFile(outputPath,'{"changed":true}');
+    await assert.rejects(service.evidence({projectId:f.project.id,evidenceId:evidence.id}),/research_experiment_snapshot_changed/u);
+    assert.equal(f.repository.evidence.inspectEvidence(evidence.id,f.project.id).evidence.excerpt,evidence.excerpt);
+    await assert.rejects(capture(request),/research_experiment_snapshot_changed/u);
+    receipts.push({scenario:'metric-evidence',receipt,evidence,artifacts,idea});
+  }finally{await figureService?.shutdown();await f.cleanup();}
 });
 
 async function fixture(code = source, options = {}) {

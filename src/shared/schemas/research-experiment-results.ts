@@ -34,6 +34,13 @@ export const researchExperimentResultReviewSchema=z.strictObject({
 }).refine(value=>new Set(value.definitions.map(metric=>metric.id)).size===value.definitions.length,
   {message:'research_result_duplicate_definition'});
 export const researchExperimentResultGetSchema=z.strictObject({projectId:id,resultId:id,expectedHash:digest});
+export const researchExperimentResultEvidenceCaptureSchema=researchExperimentResultGetSchema.extend({metricId:id});
+export const researchExperimentResultEvidenceGetSchema=z.strictObject({projectId:id,evidenceId:id});
+export const researchExperimentResultEvidenceMetadataSchema=z.strictObject({
+  type:z.literal('experiment-result'),resultId:id,resultHash:digest,metricId:id,runId:id,
+  area:z.literal('output'),path:researchExperimentPathSchema,sha256:digest,
+  pointer:z.string().regex(/^\/metrics\/\d+$/u)
+});
 export const researchExperimentResultListSchema=z.strictObject({projectId:id,runId:id,offset:z.number().int().nonnegative(),
   limit:z.number().int().min(1).max(100)});
 export const researchExperimentResultSnapshotSchema=z.strictObject({
@@ -49,6 +56,7 @@ export const researchExperimentResultSnapshotSchema=z.strictObject({
 export const researchExperimentResultReceiptSchema=z.strictObject({
   snapshot:researchExperimentResultSnapshotSchema,snapshotHash:digest
 });
+export const researchExperimentResultEvidenceTraceSchema=z.strictObject({receipt:researchExperimentResultReceiptSchema,metricId:id});
 export const researchExperimentResultListResultSchema=z.strictObject({items:researchExperimentResultReceiptSchema.array(),total:z.number().int().nonnegative()});
 export const researchExperimentCompareSchema=z.strictObject({
   projectId:id,left:researchExperimentResultGetSchema.omit({projectId:true}),right:researchExperimentResultGetSchema.omit({projectId:true})
@@ -60,6 +68,10 @@ export const researchExperimentComparisonSchema=z.strictObject({
 export type ResearchExperimentResultReview=z.infer<typeof researchExperimentResultReviewSchema>;
 export type ResearchExperimentResultReceipt=z.infer<typeof researchExperimentResultReceiptSchema>;
 export type ResearchExperimentResultGet=z.infer<typeof researchExperimentResultGetSchema>;
+export type ResearchExperimentResultEvidenceCapture=z.infer<typeof researchExperimentResultEvidenceCaptureSchema>;
+export type ResearchExperimentResultEvidenceGet=z.infer<typeof researchExperimentResultEvidenceGetSchema>;
+export type ResearchExperimentResultEvidenceMetadata=z.infer<typeof researchExperimentResultEvidenceMetadataSchema>;
+export type ResearchExperimentResultEvidenceTrace=z.infer<typeof researchExperimentResultEvidenceTraceSchema>;
 export type ResearchExperimentResultList=z.infer<typeof researchExperimentResultListSchema>;
 export type ResearchExperimentCompare=z.infer<typeof researchExperimentCompareSchema>;
 export type ResearchExperimentComparison=z.infer<typeof researchExperimentComparisonSchema>;

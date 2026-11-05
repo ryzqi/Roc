@@ -1,7 +1,7 @@
 import { withLiteratureContext } from '../services/literature-context';
 import { researchPythonEnvironmentSelectSchema } from '../../shared/schemas/research-python-environments';
 import { researchNotebookImportRequestSchema } from '../../shared/schemas/research-notebooks';
-import { researchExperimentResultReviewSchema } from '../../shared/schemas/research-experiment-results';
+import { researchExperimentResultReviewSchema,researchExperimentResultEvidenceCaptureSchema } from '../../shared/schemas/research-experiment-results';
 import {withResearchHumanContext} from '../services/research-human-context';
 import {researchSourceMigrationCaptureSchema, researchSourceMigrationRejectSchema} from '../../shared/schemas/research-source-migrations';
 import {researchSourceReplacementRequestSchema} from '../../shared/schemas/research-source-replacements';
@@ -58,6 +58,11 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
         const input = transformInput(target.inputTransform, args);
         if(target.capabilityName==='research.experimentResults.review') {
           const request=researchExperimentResultReviewSchema.parse(input);
+          return withResearchHumanContext({capability:target.capabilityName,projectId:request.projectId,windowId},
+            ()=>invoker.invokeCapability(target.capabilityName,request));
+        }
+        if(target.capabilityName==='research.experimentResults.captureEvidence') {
+          const request=researchExperimentResultEvidenceCaptureSchema.parse(input);
           return withResearchHumanContext({capability:target.capabilityName,projectId:request.projectId,windowId},
             ()=>invoker.invokeCapability(target.capabilityName,request));
         }

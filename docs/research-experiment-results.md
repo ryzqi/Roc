@@ -76,3 +76,29 @@ DB44 仅新增结果账本及索引，不转换旧实验/Notebook，也不修改
 浅色和深色 650px 比较截图均已目视检查，`cut:0`、`hidden:0`，无窗口横向溢出；长哈希可换行，完整回执可展开并局部滚动。证据保存在 `.artifacts/research-optimization/xexp-a2-*.log` 和 `xexp-a2-ui/`。
 
 状态：`Verified passing`，限本部分人工审核与比较界面、错误体验和上述回归。Result→Evidence/图稿/主张/假设仍待后续部分。
+
+## A3 固定指标证据
+
+在实验检查器选定已审核回执后，明确选择其中的指标并保存为既有 Evidence。请求必须包含 project、result ID、回执 SHA-256 和 metric ID；主进程核验真实用户、完整运行和实际输出。每个指标来源固定原始输出的 `/metrics/<index>`、文件 SHA、指标值及统计量、人工指标定义和统计方法。来源元数据使用 `experiment-result`；原始 `experiment-run` 仍表示未关联指标审核回执的原始输出证据。
+
+指标来源以确定 ID 登记到既有 knowledge，单 chunk、零 embedding，与 Evidence 捕获处于同一事务。重复捕获返回同一证据，不重写来源；不同审核回执产生不同来源，不覆盖旧主张、Idea 字段或历史。失效引用、跨项目、错误 hash、未知指标、已归档项目和来源漂移拒绝。事务失败不留下孤立 knowledge。
+
+现有主张、图稿和 Idea 字段继续引用 Evidence ID。检查器聚合 Idea 字段的证据；来源折叠块按需复核确切指标回执，再由明确操作读取真实指标输出。切换来源后旧响应不会恢复原内容。导出 sources 必须包含 `experimentResults`，固定所引用回执并核验 Evidence 元数据、主张审核、实验文件和图稿实际渲染记录。
+
+## A3 验证记录
+
+2026-11-06，工作目录 `/Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc`，基线 `8c98315`：
+
+- `pnpm generate:ipc`、`pnpm typecheck`、`pnpm build` 通过。
+- `node --test tests/unit/research-experiment-results.test.mjs tests/unit/research-export-body-gate.test.mjs` 10/10，exit 0。
+- `node --test --test-name-pattern='actual result metric evidence' tests/integration/research-python-experiments.test.mjs` 初版在虚构图稿缺少渲染记录处失败；改为实际 Vega 渲染、发布、人工确认支持关系后 1/1 通过。覆盖实际 CPython 负结果、事务回滚、重复捕获不修改 knowledge、零 embedding、跨项目、主张历史、真实图稿、正文导出、Idea 证据、重启零计算、归档和实际文件漂移。
+- `node --test --test-name-pattern='keyboard metric capture' tests/renderer/experiment-results.test.mjs` 初版稳定超时；现场显示零来源请求、焦点仍在 summary，第二次 Enter 关闭了尚未展开的原生 details。等待原生内容可见并断言按钮获得焦点后 1/1 通过，保留准确可见文案、实际输出和请求断言。
+- 650px 浅色和深色来源截图已目视检查，`cut:0`、`hidden:0`。完整 hash、负值、指标定义、统计方法和真实输出可读取，键盘焦点可见。
+- 最终扩展实际 trace 1/1，exit 0：新审核回执生成独立证据，原证据及 Idea 历史保留，失效证据拒绝读取和再次捕获。
+- `node --test tests/unit/` 1203/1203，exit 0；`node --test tests/renderer/experiment-results.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/artifact-inspector.test.mjs` 43/43，exit 0。
+- `node scripts/run-research-p0.mjs` 13/13、`node scripts/smoke-electron.mjs` 13/13，exit 0，零 renderer error；`pnpm harness:eval` 94/94，exit 0。
+- `pnpm check:ipc`、`pnpm check:renderer-chunks` 通过，eager JS 1,134,003 bytes / 6 files。
+
+日志 `.artifacts/research-optimization/xexp-a3-*.log`；失败 DOM/焦点/请求及截图、通过截图和审计回执在 `xexp-a3-ui/`。测试使用真实 CPython、Electron renderer 和 capability adapter；原生文件选择与 preload 由 fixture 桥接，未声称完整 OS picker/preload 全链覆盖。
+
+状态：`Verified passing`，限本部分固定指标证据、实际消费者追溯、导出 sources 和上述回归。可检验假设与方法冻结属于下一部分。

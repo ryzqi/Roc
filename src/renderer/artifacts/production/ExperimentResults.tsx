@@ -8,6 +8,7 @@ import {formSecondaryButtonClass} from '../../shared/form-ui';
 import {ExperimentResultReview} from './ExperimentResultReview';
 import {ExperimentResultReceipt} from './ExperimentResultReceipt';
 import {ExperimentResultComparison} from './ExperimentResultComparison';
+import {ExperimentMetricEvidence} from './ExperimentMetricEvidence';
 
 const button=`${formSecondaryButtonClass} border-[0.5px]`,pageSize=20;
 export function ExperimentResults({client,run,request,writable}: {
@@ -63,6 +64,7 @@ export function ExperimentResults({client,run,request,writable}: {
     {read.status!=='ready'||read.data===null?null:<>
       <p role="status">已复核实际运行、输出与审核回执。</p>
       <ExperimentResultReceipt receipt={read.data}/>
+      <ExperimentMetricEvidence key={`evidence:${read.data.snapshot.id}:${read.data.snapshotHash}`} client={client} receipt={read.data} writable={writable}/>
       <ExperimentResultComparison key={`${read.data.snapshot.id}:${read.data.snapshotHash}`} client={client} left={read.data}/>
     </>}
   </section>;

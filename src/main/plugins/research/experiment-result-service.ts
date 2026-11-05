@@ -7,6 +7,11 @@ import {requireResearchHuman} from '../../services/research-human-context';
 import {researchContentHash} from './research-files';
 import type {ResearchRepository} from './repository';
 import type {ResearchExperimentService} from './experiment-service';
+import {researchExperimentResultEvidenceCaptureSchema,researchExperimentResultEvidenceGetSchema,
+  researchExperimentResultEvidenceMetadataSchema,type ResearchExperimentResultEvidenceCapture,
+  type ResearchExperimentResultEvidenceGet,type ResearchExperimentResultEvidenceTrace} from '../../../shared/schemas/research-experiment-results';
+import type {ResearchEvidence} from '../../../shared/types';
+import {assertExperimentMetricEvidence} from './experiment-result-evidence';
 
 const sorted=<T>(values:T[],key:(value:T)=>string):T[]=>[...values].sort((a,b)=>key(a).localeCompare(key(b)));
 const canonicalParameters=(parameters:Record<string,string>):string=>JSON.stringify(Object.entries(parameters).sort(([a],[b])=>a.localeCompare(b)));
@@ -78,6 +83,23 @@ export class ResearchExperimentResultService {
     if(a.execution.seed!==b.execution.seed)differences.push('seed');
     if(JSON.stringify(a.request.method)!==JSON.stringify(b.request.method))differences.push('method');
     return {left,right,comparable:differences.length===0,differences};
+  }
+  async captureEvidence(value:ResearchExperimentResultEvidenceCapture):Promise<ResearchEvidence> {
+    const {metricId,...request}=researchExperimentResultEvidenceCaptureSchema.parse(value);
+    requireResearchHuman('research.experimentResults.captureEvidence',request.projectId);
+    this.requireWritable(request.projectId);
+    const receipt=await this.get(request);
+    return this.repository.experimentResults.captureMetric(receipt,metricId);
+  }
+  async evidence(value:ResearchExperimentResultEvidenceGet):Promise<ResearchExperimentResultEvidenceTrace|null> {
+    const request=researchExperimentResultEvidenceGetSchema.parse(value);
+    const evidence=this.repository.evidence.getEvidence(request.evidenceId,request.projectId);
+    const metadata=this.repository.evidence.sourceMetadata(request.projectId,request.evidenceId);
+    if(metadata?.type!=='experiment-result')return null;
+    const source=researchExperimentResultEvidenceMetadataSchema.parse(metadata);
+    const receipt=await this.get({projectId:request.projectId,resultId:source.resultId,expectedHash:source.resultHash});
+    assertExperimentMetricEvidence(evidence,metadata,receipt);
+    return {receipt,metricId:source.metricId};
   }
   private requireWritable(projectId:string):void {
     if(this.repository.getProject(projectId).status==='archived')throw new Error('research_project_archived');

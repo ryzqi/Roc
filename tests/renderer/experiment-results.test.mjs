@@ -16,7 +16,10 @@ const routes={
   reviewExperimentResult:['roc:research:experiment-result-review','research.reviewExperimentResult'],
   getExperimentResult:['roc:research:experiment-result-get','research.getExperimentResult'],
   listExperimentResults:['roc:research:experiment-result-list','research.listExperimentResults'],
-  compareExperimentResults:['roc:research:experiment-result-compare','research.compareExperimentResults']
+  compareExperimentResults:['roc:research:experiment-result-compare','research.compareExperimentResults'],
+  captureExperimentResultEvidence:['roc:research:experiment-result-evidence-capture','research.captureExperimentResultEvidence'],
+  getExperimentResultEvidence:['roc:research:experiment-result-evidence-get','research.getExperimentResultEvidence'],
+  readExperimentFile:['roc:research:experiment-read','research.readExperimentFile']
 };
 const source=`import json, os, statistics
 import roc_experiment as roc
@@ -80,16 +83,21 @@ before(async()=>{
   const handlers=new Map(),context={pluginId:'fixture',capabilities:{register(_id,descriptor,handler){handlers.set(descriptor.name,handler);}}};
   api.registerResearchProductionInputCapabilities(context,inputs);
   api.registerResearchExperimentResultCapabilities(context,f.repository.experimentResults,results);
+  api.registerResearchExperimentCapabilities(context,f.repository.experiments,service);
   bridge=api.createPluginCapabilityAdapter({invokeCapability:(name,input)=>handlers.get(name)(input)});
   await buildViteRenderer({directory,script:`
     import React from 'react';import {createRoot} from 'react-dom/client';import {flushSync} from 'react-dom';
     import {ArtifactProductionView} from './src/renderer/artifacts/ArtifactProductionView';
+    import {ArtifactEvidenceSource} from './src/renderer/artifacts/ArtifactEvidenceSource';
     const client={api:{research:Object.fromEntries(${JSON.stringify(Object.keys(routes))}.map(method=>[method,input=>window.callMain(method,input)]))}};
     const element=createRoot(document.getElementById('root'));let generation=0;
     window.mount=(request,writable=true)=>flushSync(()=>element.render(<main className="p-4">
       <ArtifactProductionView key={++generation} client={client} request={request} writable={writable} initialLocation={null} onLocationChange={()=>{}}/>
     </main>));
     window.clear=()=>flushSync(()=>element.render(null));
+    window.mountEvidence=source=>flushSync(()=>element.render(<main className="p-4">
+      <ArtifactEvidenceSource key={++generation} client={client} source={source} canDecide={false} onChanged={()=>{}}/>
+    </main>));
   `,style:'body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}main{max-width:560px}'});
   await writeFile(join(directory,'main.cjs'),`const {app,BrowserWindow}=require('electron');
     app.setPath('userData',${JSON.stringify(join(root,'userData'))});
@@ -279,4 +287,86 @@ test('paged history loads exact later receipts and a late comparison cannot rest
   held.finish();
   assert.equal(await page.getByTestId('artifact-experiment-comparison-result').count(),0);
   assert.equal(await page.getByTestId('artifact-experiment-compare').isDisabled(),true);
+});
+
+test('keyboard metric capture survives reply loss and opens the exact result and actual output from an existing evidence consumer',async()=>{
+  const receipt=await review(first,'trace-ui');
+  await scene();await openResult(receipt);
+  assert.equal(calls.filter(value=>value.method==='captureExperimentResultEvidence').length,0);
+  const capture=page.getByTestId('artifact-experiment-metric-evidence-save');
+  assert.equal(await capture.isDisabled(),true);
+  await page.getByLabel('证据指标',{exact:true}).selectOption('mean');
+  const before=f.repository.evidence.list(f.project.id).length;
+  active.loseReply='captureExperimentResultEvidence';
+  await capture.focus();await page.keyboard.press('Enter');
+  await page.getByRole('alert').filter({hasText:'测试连接中断'}).waitFor();
+  assert.equal(f.repository.evidence.list(f.project.id).length,before+1);
+  active.defer='captureExperimentResultEvidence';const held=active;
+  await capture.click();
+  await page.waitForFunction(()=>document.querySelector('[data-testid="artifact-experiment-metric-evidence"] fieldset').disabled);
+  while(typeof held.finish!=='function')await new Promise(done=>setTimeout(done,10));
+  held.finish();
+  await page.getByText('指标证据已保存。',{exact:true}).waitFor();
+  const evidence=f.repository.evidence.list(f.project.id)[0],source=f.repository.evidence.inspectEvidence(evidence.id,f.project.id);
+  assert.equal(f.repository.evidence.list(f.project.id).length,before+1);
+  assert.equal(JSON.parse(evidence.excerpt).source.resultId,receipt.snapshot.id);
+  assert.match(await page.getByTestId('artifact-experiment-metric-evidence-saved').innerText(),new RegExp(evidence.id));
+  const requests=calls.filter(value=>value.method==='captureExperimentResultEvidence').map(value=>value.input);
+  assert.deepEqual(requests[0],requests[1]);
+  active={};calls.length=0;
+  await page.evaluate(source=>mountEvidence(source),source);
+  assert.equal(calls.length,0);
+  await page.locator('details > summary').focus();await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>getComputedStyle(document.querySelector('details'),'::details-content').contentVisibility==='visible');
+  await page.getByTestId(`artifact-experiment-evidence-toggle-${evidence.id}`).waitFor({state:'visible'});
+  await page.getByTestId(`artifact-experiment-evidence-toggle-${evidence.id}`).focus();
+  assert.equal(await page.getByTestId(`artifact-experiment-evidence-toggle-${evidence.id}`).evaluate(element=>element===document.activeElement),true);
+  await page.keyboard.press('Enter');
+  try {
+    await page.getByText('已复核指标 mean 的固定结果来源。',{exact:true}).waitFor();
+  } catch(error) {
+    const output=resolve('.artifacts/research-optimization/xexp-a3-ui');
+    await mkdir(output,{recursive:true});
+    await writeFile(join(output,'failure.json'),JSON.stringify({calls,errors,dom:await page.evaluate(()=>({
+      html:document.querySelector('main').innerHTML,text:document.querySelector('main').innerText,
+      focused:document.activeElement.outerHTML,details:[...document.querySelectorAll('details')].map(element=>({
+        open:element.open,style:getComputedStyle(element,'::details-content').contentVisibility
+      }))
+    }))},null,2));
+    await page.screenshot({path:join(output,'failure.png'),fullPage:true});
+    throw error;
+  }
+  assert.match(await page.getByTestId('artifact-experiment-result-receipt').innerText(),new RegExp(receipt.snapshotHash));
+  await page.getByTestId('artifact-experiment-evidence-output-toggle').focus();await page.keyboard.press('Enter');
+  const actual=page.getByTestId('artifact-experiment-evidence-output');
+  await actual.waitFor();
+  assert.equal(JSON.parse(await actual.innerText()).metrics[0].value,-2);
+  assert.deepEqual(calls.map(value=>value.method),['getExperimentResultEvidence','readExperimentFile']);
+  const auditSource=await readFile(resolve('.agents/skills/desktop-agent-ui/scripts/clip-audit.js'),'utf8');
+  const outputDirectory=resolve('.artifacts/research-optimization/xexp-a3-ui');await mkdir(outputDirectory,{recursive:true});
+  const receipts=[];
+  for(const theme of ['light','dark']) {
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    await page.setViewportSize({width:650,height:900});
+    const audit=await page.evaluate(`(${auditSource})({root:'main',viewport:false})`);
+    assert.equal(audit.cut,0);assert.equal(audit.hidden,0);
+    await page.screenshot({path:join(outputDirectory,`${theme}-source.png`),fullPage:true});
+    receipts.push({theme,audit});
+  }
+  await writeFile(join(outputDirectory,'receipt.json'),JSON.stringify({evidence,receipt,receipts},null,2));
+});
+
+test('archived metric capture is disabled and a late evidence read cannot restore a cleared source',async()=>{
+  const receipt=await review(repeat,'trace-late');
+  await scene(repeat,false);await openResult(receipt);
+  assert.equal(await page.getByLabel('证据指标',{exact:true}).isDisabled(),true);
+  const evidence=await api.withResearchHumanContext({capability:'research.experimentResults.captureEvidence',projectId:f.project.id,windowId},
+    ()=>results.captureEvidence({projectId:f.project.id,resultId:receipt.snapshot.id,expectedHash:receipt.snapshotHash,metricId:'mean'}));
+  active={defer:'getExperimentResultEvidence'};const held=active;
+  await page.evaluate(source=>mountEvidence(source),f.repository.evidence.inspectEvidence(evidence.id,f.project.id));
+  await page.locator('details > summary').click();
+  await page.getByTestId(`artifact-experiment-evidence-toggle-${evidence.id}`).click();
+  while(typeof held.finish!=='function')await new Promise(done=>setTimeout(done,10));
+  await page.evaluate(()=>clear());held.finish();
+  assert.equal(await page.getByTestId('artifact-experiment-result-receipt').count(),0);
 });

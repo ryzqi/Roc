@@ -9,6 +9,8 @@ import { checkManuscriptBody } from './manuscript-integrity';
 import { researchContentHash } from './research-files';
 import type { ResearchRepository } from './repository';
 import type { ResearchTemplateService } from './template-service';
+import {researchExperimentResultEvidenceMetadataSchema,type ResearchExperimentResultReceipt} from '../../../shared/schemas/research-experiment-results';
+import {assertExperimentMetricEvidence} from './experiment-result-evidence';
 
 export class ResearchExportSourceService {
   constructor(private readonly repository: ResearchRepository, private readonly figures: ResearchFigureService,
@@ -58,6 +60,16 @@ export class ResearchExportSourceService {
     }
     const evidenceIds = [...new Set(claims.flatMap((claim) => claim.evidenceIds))];
     const evidence = evidenceIds.map((id) => this.repository.evidence.getEvidence(id, project.id));
+    const evidenceMetadata=Object.fromEntries(evidenceIds.map(id=>[id,this.repository.evidence.sourceMetadata(project.id,id)]));
+    const resultReceipts=new Map<string,ResearchExperimentResultReceipt>();
+    for(const source of evidence) {
+      const metadata=evidenceMetadata[source.id];
+      if(metadata?.type!=='experiment-result')continue;
+      const reference=researchExperimentResultEvidenceMetadataSchema.parse(metadata);
+      const receipt=this.repository.experimentResults.get({projectId:project.id,resultId:reference.resultId,expectedHash:reference.resultHash});
+      assertExperimentMetricEvidence(source,metadata,receipt);
+      resultReceipts.set(receipt.snapshot.id,receipt);
+    }
     // 正文的结构性检查放在所有副作用之前：闸门必须在准备开始前就挡住，
     // 而不是等图稿校验、实验快照都跑完再失败。
     // 注意这里只可能报出一类问题（figure 主张进了正文）：主张受支持与证据可解析由
@@ -118,7 +130,7 @@ export class ResearchExportSourceService {
     return researchExportSourcesSchema.parse({ project: { id: project.id, title: project.title, description: project.description, workspacePath: project.workspacePath },
       manuscriptArtifact: this.repository.getArtifact(request.manuscriptArtifactId), manuscript: bundle.manuscript, claims, evidence, figures,
       bibliography: entries, citationKeys, libraryRevisions: [...libraryRevisions].map(([id, revision]) => ({ id, revision })), provenance, modelRuns, experiments, review, template,
-      evidenceMetadata: Object.fromEntries(evidenceIds.map((id) => [id, this.repository.evidence.sourceMetadata(project.id, id)])) });
+      evidenceMetadata,experimentResults:[...resultReceipts.values()] });
   }
 }
 

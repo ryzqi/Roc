@@ -6,6 +6,7 @@ import {formSecondaryButtonClass} from '../shared/form-ui';
 const SourceMigrations = lazy(async () => ({default: (await import('./ArtifactSourceMigrations')).ArtifactSourceMigrations}));
 const SourceReplacements = lazy(async () => ({default: (await import('./ArtifactSourceReplacements')).ArtifactSourceReplacements}));
 const DocumentSource = lazy(async () => ({default: (await import('./ArtifactDocumentSource')).ArtifactDocumentSource}));
+const ExperimentSource = lazy(async () => ({default:(await import('./ArtifactExperimentEvidence')).ArtifactExperimentEvidence}));
 
 export function ArtifactEvidenceSource({client, source, canDecide, onChanged}: {
   client: RocClient; source: ResearchInspectedEvidence; canDecide: boolean; onChanged: () => void
@@ -13,6 +14,7 @@ export function ArtifactEvidenceSource({client, source, canDecide, onChanged}: {
   const [showMigrations, setShowMigrations] = useState(false);
   const [showReplacements, setShowReplacements] = useState(false);
   const [showDocument, setShowDocument] = useState(false);
+  const [showExperiment,setShowExperiment]=useState(false);
   const evidence = source.evidence;
   return <details data-reading-key={`evidence:${evidence.id}`} className="border-b-[0.5px] border-line py-2 [&::details-content]:overflow-clip!">
     <summary data-reading-key={`evidence-summary:${evidence.id}`} className="cursor-pointer break-words text-ink">{evidence.title}
@@ -23,6 +25,15 @@ export function ArtifactEvidenceSource({client, source, canDecide, onChanged}: {
     {source.invalidatedAt === null ? null : <p className="text-muted">失效时间 {source.invalidatedAt}</p>}
     <p className="break-all text-muted">来源版本 {evidence.sourceVersion}</p>
     <p className="break-all font-mono text-[var(--font-meta-size)] text-muted">SHA-256 {evidence.contentHash}</p>
+    {evidence.sourceType!=='experiment'?null:<>
+      <button type="button" className={`${formSecondaryButtonClass} mt-2 border-[0.5px]`} aria-expanded={showExperiment}
+        data-testid={`artifact-experiment-evidence-toggle-${evidence.id}`} onClick={()=>setShowExperiment(value=>!value)}>
+        {showExperiment?'收起实验结果来源':'查看实验结果来源'}
+      </button>
+      {!showExperiment?null:<Suspense fallback={<p role="status">加载实验结果来源…</p>}>
+        <ExperimentSource key={`${evidence.id}:${evidence.sourceVersion}`} client={client} evidence={evidence}/>
+      </Suspense>}
+    </>}
     {source.sourceLocator === null ? null : <>
       <button type="button" className={`${formSecondaryButtonClass} mt-2 border-[0.5px]`}
         aria-expanded={showDocument} data-testid={`artifact-document-source-toggle-${evidence.id}`}

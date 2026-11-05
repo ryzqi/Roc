@@ -23,6 +23,8 @@ import { createResearchDirectory, readResearchFile, researchContentHash, researc
 import type { ResearchRepository } from './repository';
 import { researchExperimentResourceReportSchema, type ResearchExperimentResourceReport } from '../../../shared/schemas/research-process-resources';
 import { notebookPythonSource } from './notebook-python-source';
+import {researchExperimentResultEvidenceMetadataSchema} from '../../../shared/schemas/research-experiment-results';
+import {assertExperimentMetricEvidence} from './experiment-result-evidence';
 
 type FileRequest = z.infer<typeof researchExperimentFileRequestSchema>;
 type ExecuteProcessInput = {
@@ -201,6 +203,12 @@ export class ResearchExperimentService {
 
   evidenceSource(projectId: string, evidenceId: string): FileRequest | null {
     const metadata = this.repository.evidence.sourceMetadata(projectId, evidenceId);
+    if(metadata?.type==='experiment-result') {
+      const source=researchExperimentResultEvidenceMetadataSchema.parse(metadata);
+      const receipt=this.repository.experimentResults.get({projectId,resultId:source.resultId,expectedHash:source.resultHash});
+      assertExperimentMetricEvidence(this.repository.evidence.getEvidence(evidenceId,projectId),metadata,receipt);
+      return {projectId,runId:source.runId,area:source.area,path:source.path};
+    }
     if (metadata?.type !== 'experiment-run') return null;
     const value = z.object({ type: z.literal('experiment-run'), runId: z.string(), area: researchExperimentFileRequestSchema.shape.area,
       path: researchExperimentFileRequestSchema.shape.path, sha256: z.string() }).strict().parse(metadata);

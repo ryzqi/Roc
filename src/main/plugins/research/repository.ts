@@ -316,7 +316,8 @@ export class ResearchRepository {
       const content = this.runs.getArtifactContent(project.id, artifact.id);
       const claims = this.evidence.listClaims({projectId: project.id, artifactId: artifact.id});
       const relations = this.evidence.relations.forArtifact(artifact.id, project.id);
-      const evidence = [...new Set([...claims.flatMap(claim => claim.evidenceIds), ...relations.map(relation => relation.evidenceId)])]
+      const ideaEvidenceIds=artifact.kind==='idea_canvas'?this.ideas.get(artifact.id)?.fields.flatMap(field=>field.evidenceIds)??[]:[];
+      const evidence = [...new Set([...claims.flatMap(claim => claim.evidenceIds), ...relations.map(relation => relation.evidenceId),...ideaEvidenceIds])]
         .map(id => this.evidence.inspectEvidence(id, project.id));
       const rows = this.db.prepare(`SELECT id, project_id, artifact_id, subject_type, subject_id,
         source_type, source_id, locator, excerpt, created_at FROM research_provenance

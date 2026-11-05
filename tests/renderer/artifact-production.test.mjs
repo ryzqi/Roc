@@ -190,7 +190,7 @@ function syntheticSource(kind,{long=false}={}) {
     const sources={project:{id:projectId,title:'Synthetic export',description:'Renderer-only fixture',workspacePath:null},
       manuscriptArtifact:{...artifact,id:manuscriptId,kind:'manuscript',stage:'writing',status:'approved'},
       manuscript:{artifactId:manuscriptId,projectId,sections:[],latex:content,contentHash:hash(content),claimsHash:hash('[]'),updatedAt:now},
-      claims:[],evidence:[],figures:[],bibliography:[],libraryRevisions:[],citationKeys:{},provenance:[],modelRuns:[],experiments:[],
+      claims:[],evidence:[],figures:[],bibliography:[],libraryRevisions:[],citationKeys:{},provenance:[],modelRuns:[],experiments:[],experimentResults:[],
       evidenceMetadata:{},review:{projectId,originArtifactId:manuscriptId,manuscriptArtifactId:manuscriptId,revisionRound:0,
         status:'accepted',reportArtifactIds:['synthetic-report'],updatedAt:now},template:null};
     const pdf={path:'paper.pdf',sha256:hash('synthetic-pdf'),size:13},archive={path:'export.zip',sha256:hash('synthetic-zip'),size:13};

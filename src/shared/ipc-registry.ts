@@ -247,7 +247,9 @@ import { researchNotebookFileRequestSchema, researchNotebookImportRequestSchema,
   researchNotebookListResultSchema } from './schemas/research-notebooks';
 import {researchExperimentResultReviewSchema,researchExperimentResultGetSchema,researchExperimentResultListSchema,
   researchExperimentResultReceiptSchema,researchExperimentResultListResultSchema,
-  researchExperimentCompareSchema,researchExperimentComparisonSchema} from './schemas/research-experiment-results';
+  researchExperimentCompareSchema,researchExperimentComparisonSchema,
+  researchExperimentResultEvidenceCaptureSchema,researchExperimentResultEvidenceGetSchema,
+  researchExperimentResultEvidenceTraceSchema} from './schemas/research-experiment-results';
 import { researchPythonEnvironmentSelectSchema, researchPythonEnvironmentGetSchema, researchPythonEnvironmentListSchema,
   researchPythonEnvironmentSelectionSchema } from './schemas/research-python-environments';
 import {
@@ -623,6 +625,8 @@ export const ipcRegistry = {
     request({key:'researchExperimentResultGet',channel:'roc:research:experiment-result-get',domain:'research',method:'getExperimentResult',kind:'plugin',capabilityName:'research.experimentResults.get',inputTransform:first,contract:methodContract(oneArg(researchExperimentResultGetSchema),researchExperimentResultReceiptSchema)}),
     request({key:'researchExperimentResultList',channel:'roc:research:experiment-result-list',domain:'research',method:'listExperimentResults',kind:'plugin',capabilityName:'research.experimentResults.list',inputTransform:first,contract:methodContract(oneArg(researchExperimentResultListSchema),researchExperimentResultListResultSchema)}),
     request({key:'researchExperimentResultCompare',channel:'roc:research:experiment-result-compare',domain:'research',method:'compareExperimentResults',kind:'plugin',capabilityName:'research.experimentResults.compare',inputTransform:first,contract:methodContract(oneArg(researchExperimentCompareSchema),researchExperimentComparisonSchema)}),
+    request({key:'researchExperimentResultEvidenceCapture',channel:'roc:research:experiment-result-evidence-capture',domain:'research',method:'captureExperimentResultEvidence',kind:'plugin',capabilityName:'research.experimentResults.captureEvidence',inputTransform:first,contract:methodContract(oneArg(researchExperimentResultEvidenceCaptureSchema),researchEvidenceSchema)}),
+    request({key:'researchExperimentResultEvidenceGet',channel:'roc:research:experiment-result-evidence-get',domain:'research',method:'getExperimentResultEvidence',kind:'plugin',capabilityName:'research.experimentResults.evidence',inputTransform:first,contract:methodContract(oneArg(researchExperimentResultEvidenceGetSchema),researchExperimentResultEvidenceTraceSchema.nullable())}),
     request({ key: 'researchNotebookPreview', channel: 'roc:research:notebook-preview', domain: 'research', method: 'previewNotebook', kind: 'plugin', capabilityName: 'research.notebooks.preview', inputTransform: first, contract: methodContract(oneArg(researchNotebookFileRequestSchema), researchNotebookPreviewSchema) }),
     request({ key: 'researchNotebookImport', channel: 'roc:research:notebook-import', domain: 'research', method: 'importNotebook', kind: 'plugin', capabilityName: 'research.notebooks.import', inputTransform: first, contract: methodContract(oneArg(researchNotebookImportRequestSchema), researchNotebookImportedSchema) }),
     request({ key: 'researchNotebookGet', channel: 'roc:research:notebook-get', domain: 'research', method: 'getNotebook', kind: 'plugin', capabilityName: 'research.notebooks.get', inputTransform: first, contract: methodContract(oneArg(researchNotebookGetRequestSchema), researchNotebookImportedSchema) }),
