@@ -33,7 +33,8 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
   const [outcomePending, setOutcomePending] = useState(false);
   const [outcomeDirty, setOutcomeDirty] = useState(false);
   const [coverageOpen, setCoverageOpen] = useState(false);
-  const planLocked = planPending || planDirty || outcomePending || outcomeDirty;
+  const [citationPending, setCitationPending] = useState(false), [citationDirty, setCitationDirty] = useState(false);
+  const planLocked = planPending || planDirty || outcomePending || outcomeDirty || citationPending || citationDirty;
   const savedLocation = readingLocations.get(JSON.stringify([request.projectId, request.artifactId]));
   const [productionChoice,setProductionChoice] = useState<{version: string; open: boolean} | null>(null);
   const productionOpen = snapshot !== undefined && (productionChoice?.version === snapshot.version ?
@@ -78,6 +79,8 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
         planDirty ? <p role="status">方法计划含未保存修改，保存或放弃后可关闭工件。</p> : null}
       {outcomePending ? <p role="status">正在关联指标证据并保存评估，请等待回执。</p> :
         outcomeDirty ? <p role="status">结果评估含未保存修改，保存或放弃后可关闭工件。</p> : null}
+      {citationPending ? <p role="status">正在保存引用直接性，请等待回执。</p> :
+        citationDirty ? <p role="status">引用审核含未保存修改，保存或放弃后可关闭工件。</p> : null}
       {read.error === null ? null : <p role="alert" className="break-words text-[var(--st-warn)]">{read.error}</p>}
       {result?.status === 'stale' ? <p role="alert" className="text-[var(--st-warn)]">
         工件或来源已变更。当前内容需要重新核对。
@@ -118,7 +121,13 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
             onClick={() => setCoverageOpen(open => !open)}>{coverageOpen ? '收起引用检查' : '检查正文引用'}</button>
           {!coverageOpen ? null : <Suspense fallback={<p role="status">正在加载引用检查…</p>}>
             <CitationCoverage key={`${snapshot.artifact.id}:${snapshot.version}`} client={client}
-              projectId={request.projectId} artifactId={request.artifactId} artifactVersion={snapshot.version}/>
+              projectId={request.projectId} artifactId={request.artifactId} artifactVersion={snapshot.version}
+              writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived' &&
+                snapshot.artifact.status === 'draft' && snapshot.currentStage === snapshot.artifact.stage &&
+                snapshot.stage.artifactIds.includes(snapshot.artifact.id) &&
+                ['ready', 'running', 'paused', 'blocked', 'failed', 'waiting_approval'].includes(snapshot.stage.status)}
+              onPending={setCitationPending} onDirty={setCitationDirty}
+              onSaved={() => {setCitationPending(false); setCitationDirty(false); baseline.current = null; reading.save(); read.reload();}}/>
           </Suspense>}
         </section>}
         {snapshot.ideaCanvas === null ? null : <Suspense fallback={<p role="status">正在加载方法计划…</p>}>

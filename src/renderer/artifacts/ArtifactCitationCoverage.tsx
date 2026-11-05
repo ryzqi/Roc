@@ -4,6 +4,8 @@ import type {RocClient} from '../shared/roc-client';
 import {useAsyncResource} from '../app/use-async-resource';
 import {formInputClass, formSecondaryButtonClass} from '../shared/form-ui';
 import {ArtifactEvidenceSource} from './ArtifactEvidenceSource';
+import {CitationReviewEditor} from './CitationReviewEditor';
+import {directnessLabels} from './CitationReviewReceipt';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 const supportLabels = {unreviewed: '尚未确认支持', confirmed: '人工确认支持', qualified: '人工确认条件支持'};
@@ -16,11 +18,15 @@ const issueLabels = {
   unsupported_citation: '人工标记为不支持该主张'
 };
 
-export function ArtifactCitationCoverage({client, projectId, artifactId, artifactVersion}: {
-  client: RocClient; projectId: string; artifactId: string; artifactVersion: string
+export function ArtifactCitationCoverage({client, projectId, artifactId, artifactVersion, writable, onDirty, onPending, onSaved}: {
+  client: RocClient; projectId: string; artifactId: string; artifactVersion: string; writable: boolean;
+  onDirty: (value: boolean) => void; onPending: (value: boolean) => void; onSaved: () => void
 }): React.JSX.Element {
   const baseline = useRef<string | null>(null);
   const [filter, setFilter] = useState('all');
+  const [selection, setSelection] = useState<{claimId: string; evidenceId: string} | null>(null);
+  const [dirty, setDirty] = useState(false), [pending, setPending] = useState(false);
+  const locked = dirty || pending;
   const read = useAsyncResource(`citation-coverage:${projectId}:${artifactId}:${artifactVersion}`,
     () => client.api.research.inspectCitationCoverage({projectId, artifactId, expectedHash: baseline.current}),
     {label: '检查正文引用'});
@@ -32,11 +38,12 @@ export function ArtifactCitationCoverage({client, projectId, artifactId, artifac
   const report = result?.report;
   const paragraphs = report?.paragraphs.filter(paragraph => filter === 'all' ||
     (filter === 'issues' && paragraph.issues.length > 0) ||
-    (filter === 'unreviewed' && paragraph.citations.some(citation => citation.supportReview === 'unreviewed')));
+    (filter === 'unreviewed' && paragraph.citations.some(citation => citation.supportReview === 'unreviewed')) ||
+    (filter === 'directness' && paragraph.citations.some(citation => !citation.directnessReview?.current)));
   return <section aria-label="正文引用覆盖" data-testid="artifact-citation-coverage" className="mt-2 flex min-w-0 flex-col gap-3">
     <div className="flex flex-wrap items-center gap-2">
       <h2 className="font-medium">正文引用覆盖</h2>
-      <button type="button" className={button} disabled={read.status === 'loading'} data-testid="artifact-citation-coverage-refresh"
+      <button type="button" className={button} disabled={locked || read.status === 'loading'} data-testid="artifact-citation-coverage-refresh"
         onClick={read.reload}>重新检查引用</button>
     </div>
     {read.status === 'loading' ? <p role="status">正在读取当前正文与引用来源…</p> : null}
@@ -46,29 +53,40 @@ export function ArtifactCitationCoverage({client, projectId, artifactId, artifac
     </p> : null}
     {result?.status !== 'stale' ? null : <div className="flex flex-col items-start gap-2">
       <p role="alert" className="text-[var(--st-warn)]">正文、来源、人工关系或书目已变化。以下是当前报告，请重新核对。</p>
-      <button type="button" className={button} disabled={!matchesArtifact} data-testid="artifact-citation-coverage-recapture"
+      <button type="button" className={button} disabled={locked || !matchesArtifact} data-testid="artifact-citation-coverage-recapture"
         onClick={() => {baseline.current = result.reportHash; read.reload();}}>按当前版本核对引用</button>
     </div>}
     {report === undefined || result === null ? null : <>
-      <p className="text-muted">人工关系确认支持性；原文位置只表示定位精度。</p>
+      <p className="text-muted">直接性与支持性分别由人工审核；原文位置只表示定位精度。</p>
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-muted tabular-nums">
         <dt>段落</dt><dd>{report.counts.paragraphs}</dd>
         <dt>引用</dt><dd>{report.counts.citations}</dd>
         <dt>人工已审核引用</dt><dd>{report.counts.humanReviewedCitations}</dd>
         <dt>条件支持引用</dt><dd>{report.counts.qualifiedCitations}</dd>
         <dt>存在问题的段落</dt><dd>{report.counts.paragraphsWithIssues}</dd>
+        <dt>直接引用</dt><dd>{report.counts.directCitations}</dd>
+        <dt>间接引用</dt><dd>{report.counts.indirectCitations}</dd>
+        <dt>不支持引用</dt><dd>{report.counts.unsupportedCitations}</dd>
+        <dt>直接性待审核</dt><dd>{report.counts.unreviewedDirectnessCitations}</dd>
         <dt>报告版本</dt><dd className="break-all font-mono text-[var(--font-meta-size)]" data-testid="artifact-citation-coverage-hash">{result.reportHash}</dd>
         <dt>读取时间</dt><dd className="break-words">{result.readAt}</dd>
       </dl>
       <label className="flex items-center gap-2 text-muted">
         <span className="shrink-0 whitespace-nowrap">查看段落</span>
-        <select className={`${formInputClass} min-w-0 flex-1 border-[0.5px]`} value={filter} aria-label="引用覆盖段落筛选"
+        <select className={`${formInputClass} min-w-0 flex-1 border-[0.5px]`} value={filter} disabled={locked} aria-label="引用覆盖段落筛选"
           onChange={event => setFilter(event.target.value)} data-testid="artifact-citation-coverage-filter">
           <option value="all">全部段落</option><option value="issues">存在问题</option><option value="unreviewed">尚未确认支持</option>
+          <option value="directness">直接性待审核</option>
         </select>
       </label>
       {paragraphs?.length === 0 ? <p className="text-muted">没有符合条件的段落。</p> :
-        paragraphs?.map(paragraph => <CoverageParagraph key={`${paragraph.sectionIndex}:${paragraph.paragraphIndex}`} paragraph={paragraph}/>)}
+        paragraphs?.map(paragraph => <CoverageParagraph key={`${paragraph.sectionIndex}:${paragraph.paragraphIndex}`} paragraph={paragraph}
+          locked={locked} onSelect={evidenceId => setSelection({claimId: paragraph.claim.id, evidenceId})}/>)}
+      {selection === null ? null : <CitationReviewEditor key={`${result.reportHash}:${selection.claimId}:${selection.evidenceId}`}
+        client={client} report={report} reportHash={result.reportHash} {...selection}
+        writable={writable && matchesArtifact && result.status === 'current'}
+        onDirty={value => {setDirty(value); onDirty(value);}} onPending={value => {setPending(value); onPending(value);}}
+        onSaved={onSaved}/>}
       <section aria-label="引用原文与书目版本" className="flex min-w-0 flex-col gap-2 border-t-[0.5px] border-line pt-2">
         <h3 className="font-medium">引用原文与书目版本</h3>
         {report.sources.map(source => <div key={source.source.evidence.id} className="min-w-0">
@@ -88,7 +106,9 @@ export function ArtifactCitationCoverage({client, projectId, artifactId, artifac
   </section>;
 }
 
-function CoverageParagraph({paragraph}: {paragraph: ResearchCitationCoverageBody['paragraphs'][number]}): React.JSX.Element {
+function CoverageParagraph({paragraph, locked, onSelect}: {
+  paragraph: ResearchCitationCoverageBody['paragraphs'][number]; locked: boolean; onSelect: (evidenceId: string) => void
+}): React.JSX.Element {
   return <details className="min-w-0 border-t-[0.5px] border-line py-2 [&::details-content]:overflow-clip!"
     data-testid={`artifact-citation-paragraph-${paragraph.sectionIndex}-${paragraph.paragraphIndex}`}>
     <summary className="cursor-pointer break-words">{paragraph.sectionTitle}，第 {paragraph.paragraphIndex + 1} 段：{paragraph.claim.content}</summary>
@@ -99,6 +119,10 @@ function CoverageParagraph({paragraph}: {paragraph: ResearchCitationCoverageBody
       </p>)}
       {paragraph.citations.map(citation => <div key={citation.evidenceId} className="flex min-w-0 flex-col gap-1">
         <p className="break-all">引用 {citation.manuscriptCitationKey}，{supportLabels[citation.supportReview]}</p>
+        <p className="break-words text-muted">{citation.directnessReview === null ? '直接性尚未审核' :
+          `${directnessLabels[citation.directnessReview.receipt.snapshot.request.directness]}${citation.directnessReview.current ? '' : '，判断已过期'}`}</p>
+        <button type="button" className={`${button} self-start`} disabled={locked}
+          data-testid="artifact-citation-review-open" onClick={() => onSelect(citation.evidenceId)}>查看与审核引用直接性</button>
         {paragraph.relations.filter(relation => relation.evidenceId === citation.evidenceId).map(relation =>
           <p key={relation.id} className="break-words text-muted">
             {relation.kind}，{relation.status}，{relation.reviewer?.id ?? '尚未人工审核'}

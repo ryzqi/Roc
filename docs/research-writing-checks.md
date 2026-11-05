@@ -30,7 +30,7 @@ DB47 为每个主张与证据对追加不可变版本，保存完整请求、人
 
 `research.getCitationReviewHistory` 分页返回完整历史回执，明确 `verification: stored_receipt`。来源失效后仍可阅读已保存的历史原文；这不声明来源当前有效。历史读取核对原字节、hash、数据库索引字段、主张/来源 digest 和父版本锚点，损坏时拒绝。
 
-A3B 的人工编辑及历史界面在下一部分实现。没有旧 schema 解析或兼容别名。
+没有旧 schema 解析或兼容别名。
 
 ## 验证记录
 
@@ -83,4 +83,26 @@ A3B 的人工编辑及历史界面在下一部分实现。没有旧 schema 解�
 
 首次审核测试错误读取 Evidence 包装层的 sourceVersion、使用错误数据库名；已按现有合同修正。产品历史读取原来要求当前有效来源，现改为校验存储来源身份，允许明确标注的历史回执。新闸门夹具最初处于 running 状态，已使用真实工作流转换进入 waiting_approval。原 P0 12/13 的实际实验启动超时保留在 `xwrite-a3a-p0.log`；最终串行 P0 13/13，通过时未改变等待条件或超时阈值。
 
-A3A 范围状态：`Verified passing`。最终完整 unit/Harness 补充检查已启动，收集后登记；这里不将未完成的补充检查报为通过。历史校验、来源版本、跨项目和窗口身份拒绝均有回归；验证不构成科学直接性准确率证明。
+A3A 范围状态：`Verified passing`。最终完整补充检查 `pnpm test:unit` 1227/1227、`pnpm harness:eval` 94/94 通过，日志 `xwrite-a3a-head-unit.log`、`xwrite-a3a-head-harness.log`。历史校验、来源版本、跨项目和窗口身份拒绝均有回归；验证不构成科学直接性准确率证明。
+
+
+## X-WRITE A3B：人工编辑与历史界面
+
+现有正文工件的引用检查内，每条引用可打开一个人工直接性编辑器。判断初始为空，理由必填；直接、间接、不支持和待审核计数独立于语义支持。显示当前/过期判断、完整理由、审核人、时间、hash 和原始 JSON 回执。历史按需读取，每页 10 项，明确只校验保存回执；等待或失败时隐藏旧页。
+
+未保存或保存中锁定筛选、来源重查、引用选择及父抽屉的关闭、Escape、背景关闭、工件刷新和整阶段审核。请求 ID 在输入改变时更新；回复丢失后相同内容重试保留 ID，主进程返回原回执且零重复写入。保存成功刷新整个工件，旧审批上下文失效。项目切换隔离迟到回复。已批准、归档或非当前可写阶段只读。
+
+### A3B 最终检查
+
+工作目录同上。状态：`Verified passing`，覆盖本地工程及实际 Electron renderer，不声明独立样本的科学直接性准确率。
+
+| 命令 | 结果 | 日志 |
+| --- | --- | --- |
+| `pnpm build` | 通过，含 typecheck；之后仅新增测试截图/同步断言 | `xwrite-a3b-build.log` |
+| `node --test tests/renderer/citation-coverage.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs` | 44/44 通过，新增 4 项直接性场景 | `xwrite-a3b-final-renderer.log` |
+| `node --test --test-name-pattern='long citation source' tests/renderer/citation-coverage.test.mjs` | 补充控件截图，1/1 通过 | `xwrite-a3b-controls-renderer.log` |
+| `node scripts/smoke-electron.mjs` | 13/13 通过，零 renderer error | `xwrite-a3b-startup.log` |
+| `pnpm check:ipc` | 生成合同当前 | `xwrite-a3b-ipc.log` |
+| `pnpm check:renderer-chunks` | 1,134,152 bytes，6 eager 文件 | `xwrite-a3b-chunks.log` |
+
+最初 renderer 9/10 中，既有支持筛选测试读取父刷新前的旧 DOM。原样单跑通过，随后将同步条件明确为新报告 hash 与旧 hash 不同，保留空列表和 hash 断言；最终全套通过。没有修改产品来掩盖错误。两主题 650px 的理由框/按钮截图实际查看，宽度、焦点及内部滚动正常。裁切审计 `cut=0`，仅 3 个既有抽屉物理边缘 `hidden`，精确断言保留；证据在 `citation-coverage-ui/`。
