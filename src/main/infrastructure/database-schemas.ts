@@ -2290,6 +2290,34 @@ CREATE INDEX research_experiment_results_run ON research_experiment_results(proj
 `
 });
 
+researchMigrations.push({
+  version: 45, name: 'human_idea_method_plan_timeline',
+  sql: `
+CREATE TABLE research_idea_plan_versions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  artifact_id TEXT NOT NULL REFERENCES research_idea_canvases(artifact_id) ON DELETE CASCADE,
+  version INTEGER NOT NULL CHECK(version > 0),
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  freeze_hash TEXT,
+  created_at TEXT NOT NULL,
+  UNIQUE(artifact_id, version),
+  UNIQUE(project_id, request_id)
+);
+CREATE TABLE research_idea_plan_freezes (
+  version_id TEXT PRIMARY KEY REFERENCES research_idea_plan_versions(id) ON DELETE CASCADE,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id, request_id)
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

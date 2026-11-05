@@ -76,7 +76,7 @@ test('DB43 upgrade adds the empty result ledger and preserves exact existing not
     db.prepare(`INSERT INTO research_notebooks (id,project_id,request_id,snapshot_json,snapshot_hash,source_bytes,created_at)
       VALUES ('notebook',?,'import','{}','original-hash',?,'original-time')`).run(project.id,bytes);
     const before=db.prepare('SELECT * FROM research_projects').get(),notebook=db.prepare('SELECT * FROM research_notebooks').get();
-    api.applyResearchDatabaseSchema(db);
+    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(migration=>migration.version<=44)});
     assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),44);
     assert.deepEqual(db.prepare('SELECT * FROM research_projects').get(),before);
     assert.deepEqual(db.prepare('SELECT * FROM research_notebooks').get(),notebook);

@@ -136,3 +136,7 @@ export {researchReviewStudiesSaveSchema,researchReviewStudiesSnapshotSchema} fro
 export {ResearchReviewReportService} from '../../../src/main/plugins/research/review-report-service';
 export {researchReviewReportCapability,registerResearchReviewReportCapability} from '../../../src/main/plugins/research/review-report-capability';
 export {researchReviewReportBodySchema} from '../../../src/shared/schemas/research-review-report';
+
+export * from '../../../src/shared/schemas/research-idea-plans';
+export {registerResearchIdeaPlanCapabilities} from '../../../src/main/plugins/research/idea-plan-capabilities';
+export {ResearchIdeaPlanRepository} from '../../../src/main/plugins/research/idea-plan-repository';

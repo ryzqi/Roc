@@ -98,7 +98,7 @@ test('actual metric review freezes measured values, full method and source ident
     let reopened;
     try {
       api.applyResearchDatabaseSchema(disk);
-      assert.equal(disk.prepare('SELECT current_version FROM schema_metadata').pluck().get(),44);
+      assert.equal(disk.prepare('SELECT current_version FROM schema_metadata').pluck().get(),45);
       const repository=new api.ResearchRepository(disk,f.tasks),before=f.observed.length;
       reopened=new api.ResearchExperimentService(repository,{
         inspect:async()=>assert.fail('result history must not inspect an execution environment')

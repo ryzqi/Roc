@@ -124,6 +124,7 @@ import {
 import { registerResearchEvidenceCapabilities, researchEvidenceCapabilities } from './evidence-capabilities';
 import { registerResearchManuscriptCapabilities, researchManuscriptCapabilities } from './manuscript-capabilities';
 import { registerResearchIdeaCapabilities, researchIdeaCapabilities } from './idea-capabilities';
+import {registerResearchIdeaPlanCapabilities, researchIdeaPlanCapabilities} from './idea-plan-capabilities';
 import { registerResearchRunCapabilities, researchRunCapabilities } from './run-capabilities';
 import {registerResearchArtifactInspectorCapability, researchArtifactInspectorCapability, researchGateReviewCapability} from './artifact-inspector-capability';
 import type { ResearchRoleExecutor } from './role-executor';
@@ -227,7 +228,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchNotebookCapabilities, ...researchExperimentResultCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
+      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchIdeaPlanCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchNotebookCapabilities, ...researchExperimentResultCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，
@@ -374,6 +375,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       registerResearchEvidenceCapabilities(context, researchRepository.evidence);
       registerResearchManuscriptCapabilities(context, researchRepository.manuscripts);
       registerResearchIdeaCapabilities(context, researchRepository.ideas);
+      registerResearchIdeaPlanCapabilities(context, researchRepository.ideaPlans);
       context.capabilities.register(pluginId, lifecycleCapabilities.createArtifact, async (input) =>
         researchRepository.createArtifact(researchArtifactCreateRequestSchema.parse(input)));
       context.capabilities.register(pluginId, lifecycleCapabilities.getArtifact, async (input) =>
