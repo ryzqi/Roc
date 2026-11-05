@@ -11,17 +11,20 @@ const ExperimentSourceView=lazy(async()=>({default:(await import('./production/E
 const FigureSourceView=lazy(async()=>({default:(await import('./production/FigureSourceView')).FigureSourceView}));
 const ExportSourceView=lazy(async()=>({default:(await import('./production/ExportSourceView')).ExportSourceView}));
 
-function SourceView({input}: {input: ResearchProductionInput}): React.JSX.Element {
+function SourceView({input,client,request,writable}: {
+  input: ResearchProductionInput;client: RocClient;request: ResearchArtifactInspectRequest;writable: boolean
+}): React.JSX.Element {
   switch(input.source.kind) {
-    case 'experiment': return <ExperimentSourceView source={input.source}/>;
+    case 'experiment': return <ExperimentSourceView key={`${input.source.execution.id}:${request.expectedVersion}`}
+      source={input.source} client={client} request={request} writable={writable}/>;
     case 'figure': return <FigureSourceView source={input.source}/>;
     case 'export': return <ExportSourceView source={input.source}/>;
   }
 }
 
-export function ArtifactProductionView({client,request,initialLocation,onLocationChange}: {
+export function ArtifactProductionView({client,request,writable,initialLocation,onLocationChange}: {
   client: RocClient;request: ResearchArtifactInspectRequest;initialLocation: ProductionFileLocation | null;
-  onLocationChange: (location: ProductionFileLocation) => void
+  writable: boolean;onLocationChange: (location: ProductionFileLocation) => void
 }): React.JSX.Element {
   const production=useAsyncResource(`production:review:${JSON.stringify(request)}`,()=>{
     if(request.expectedVersion===null) throw new Error('research_production_review_version_required');
@@ -36,7 +39,7 @@ export function ArtifactProductionView({client,request,initialLocation,onLocatio
     </div>}
     {input===null?null:<>
       <p className="text-muted">已校验保存的文件版本。工件{input.artifact.status==='approved'?'已批准':'仍等待人工决定'}。</p>
-      <Suspense fallback={<p role="status">正在加载生产来源…</p>}><SourceView input={input}/></Suspense>
+      <Suspense fallback={<p role="status">正在加载生产来源…</p>}><SourceView input={input} client={client} request={request} writable={writable}/></Suspense>
       <ProductionFiles client={client} input={input} request={request} initialLocation={initialLocation} onLocationChange={onLocationChange}/>
     </>}
   </section>;

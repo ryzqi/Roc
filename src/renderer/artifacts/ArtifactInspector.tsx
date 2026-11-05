@@ -13,7 +13,7 @@ export function ArtifactInspector({client, selection, writable, readingLocations
   onClose: () => void; onOpenTask: (taskId: string) => void
 }): React.JSX.Element {
   return selection.kind === 'stage' ?
-    <StageArtifactInspector client={client} request={selection.request} onReviewContext={selection.onReviewContext}
+    <StageArtifactInspector client={client} request={selection.request} writable={writable} onReviewContext={selection.onReviewContext}
       readingLocations={readingLocations} onClose={onClose} onOpenTask={onOpenTask} /> :
     <Suspense fallback={<p role="status">正在加载综述核查…</p>}>
       <ReviewInspector client={client} request={selection.request} writable={writable} drafts={reviewDrafts} onClose={onClose} />

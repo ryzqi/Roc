@@ -84,3 +84,34 @@ test('DB43 upgrade adds the empty result ledger and preserves exact existing not
     assert.deepEqual(db.pragma('foreign_key_check'),[]);
   }finally{db.close();}
 });
+
+test('result capabilities preserve explicit contract and source failures over IPC while unknown failures remain internal',async()=>{
+  const handlers=new Map();
+  let failure=new Error('research_result_output_changed');
+  const action=()=>{throw failure;};
+  api.registerResearchExperimentResultCapabilities({
+    pluginId:'fixture',capabilities:{register(_id,descriptor,handler){handlers.set(descriptor.name,handler);}}
+  },{list:action},{review:action,get:action,compare:async()=>action()});
+  const bridge=api.createPluginCapabilityAdapter({invokeCapability:(name,input)=>handlers.get(name)(input)});
+  const request={projectId:'project',resultId:'result',expectedHash:'a'.repeat(64)};
+  for(const [error,code,category] of [
+    [new Error('research_result_output_changed'),'research_result_output_changed','conflict'],
+    [new Error('research_experiment_snapshot_changed'),'research_experiment_snapshot_changed','degraded'],
+    [new Error('research_human_required'),'research_human_required','permission'],
+    [new Error('research_result_not_found'),'research_result_not_found','not_found'],
+    [new Error('research_result_definition_mismatch'),'research_result_definition_mismatch','validation'],
+    [new SyntaxError('invalid JSON'),'research_result_contract_invalid','validation'],
+    [Object.assign(new Error('missing'),{code:'ENOENT'}),'research_result_file_missing','not_found'],
+    [Object.assign(new Error('denied'),{code:'EPERM'}),'research_result_file_denied','permission'],
+    [new Error('unexpected implementation defect'),'internal_error','internal']
+  ]) {
+    failure=error;
+    const response=await bridge.invoke('research.getExperimentResult',[request],72);
+    assert.equal(response.ok,false);
+    assert.equal(response.error.code,code);
+    assert.equal(response.error.category,category);
+    assert.equal(response.error.retryable,false);
+  }
+  await assert.rejects(()=>handlers.get('research.experimentResults.get')({projectId:'project'}),
+    {code:'research_result_contract_invalid',category:'validation'});
+});

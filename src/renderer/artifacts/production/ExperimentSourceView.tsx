@@ -1,7 +1,13 @@
 import {researchExperimentSourcePath} from '../../../shared/schemas/research-experiments';
 import type {ResearchProductionInput} from '../../../shared/schemas/research-production-inputs';
+import type {ResearchArtifactInspectRequest} from '../../../shared/schemas/research-artifact-inspector';
+import type {RocClient} from '../../shared/roc-client';
+import {ExperimentResults} from './ExperimentResults';
 
-export function ExperimentSourceView({source}: {source: Extract<ResearchProductionInput['source'],{kind:'experiment'}>}): React.JSX.Element {
+export function ExperimentSourceView({source,client,request,writable}: {
+  source: Extract<ResearchProductionInput['source'],{kind:'experiment'}>;client: RocClient;
+  request: ResearchArtifactInspectRequest;writable: boolean
+}): React.JSX.Element {
   const run=source.execution;
   return <section className="flex flex-col gap-2" data-testid="artifact-production-experiment">
     <h2 className="font-medium">实验执行来源</h2>
@@ -17,5 +23,6 @@ export function ExperimentSourceView({source}: {source: Extract<ResearchProducti
     <details data-reading-key="experiment-request" className="text-muted"><summary data-reading-key="experiment-request-summary" className="cursor-pointer">保存的运行参数</summary>
       <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(run.request,null,2)}</pre>
     </details>
+    <ExperimentResults client={client} run={run} request={request} writable={writable}/>
   </section>;
 }

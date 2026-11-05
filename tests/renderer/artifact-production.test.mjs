@@ -39,7 +39,7 @@ before(async()=>{
       return <main className="p-4"><button data-testid="artifact-reopen" onClick={()=>setOpen(true)}>重新打开工件</button>
         {!open?null:inspector?<ArtifactInspector client={client} selection={{kind:'stage',request,onReviewContext:()=>{}}} writable={true}
           readingLocations={readingLocations} reviewDrafts={reviewDrafts} onClose={()=>setOpen(false)} onOpenTask={()=>{}}/>:
-          <ArtifactProductionView client={client} request={request} initialLocation={null} onLocationChange={()=>{}}/>}
+          <ArtifactProductionView client={client} request={request} writable={true} initialLocation={null} onLocationChange={()=>{}}/>}
       </main>;
     }
     let generation=0;

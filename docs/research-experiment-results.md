@@ -52,3 +52,27 @@ DB44 仅新增结果账本及索引，不转换旧实验/Notebook，也不修改
 - `node scripts/smoke-electron.mjs` 13/13，exit 0，零 renderer error。
 
 状态：`Verified passing`，限本部分指标来源、人工审核和比较 API。证据 `.artifacts/research-optimization/xexp-a1-*.log`。界面及 Result→Evidence/图稿/主张/假设消费者仍待后续实施。
+
+## A2 生产检查器
+
+在现有实验工件的生产视图内审核与比较，不新增导航或 shell。默认只读取选中的生产快照；打开审核表单仍不读取指标文件，明确选择保存的输出后才按工件版本、文件路径和 SHA-256 读取。指标数值、单位、样本量和输出统计量只读，名称、定义、方向和统计方法必须由用户填写。
+
+提交期间禁用表单。同一完整内容重试复用原 requestId，回执丢失后重试不重复审核。只读、非当前快照或归档项目不能新增审核。历史列表每页 20 份，选择确切 ID/hash 后重新核验实际运行和文件。比较须明确选择对照运行及其回执，显示双方指标、方法和来源版本，以及七类差异；不会选择赢家或推断显著性。
+
+文件和执行漂移、错误指标合同、跨项目、缺失或损坏回执由主进程返回明确错误代码和文案。未知实现错误仍通过统一 IPC 内部错误边界报告，不在 renderer 伪造来源状态。切换输出、回执、对照或运行时清空旧结果，晚响应不会恢复已清除的选择。
+
+## A2 验证
+
+2026-11-06，工作目录 `/Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc`，基线 `9985c50a`：
+
+- `node --test tests/renderer/experiment-results.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/artifact-inspector.test.mjs` 41/41，exit 0。新增 7 项使用实际 CPython 3.14.7 输出、Electron renderer 和主进程 capability adapter；环境选择回调使用固定测试路径，renderer 通过 fixture 桥接实际 adapter，未覆盖 OS 原生面板与真实 preload。
+- 新界面覆盖键盘提交、负值、样本量与误差、不可用区间/效应量、重复与参数变化比较、真实源码漂移和明确错误代码、非法输出、只读状态、分页、晚读取/比较响应、已写入但丢失回执后的同请求重试与 pending 禁用。
+- `node --test tests/unit/research-experiment-results.test.mjs` 4/4，exit 0，覆盖指标合同、全部比较维度、迁移及明确 IPC 错误边界。
+- `pnpm build` 通过，包含 typecheck。
+- `node scripts/smoke-electron.mjs` 13/13，exit 0，零 renderer error；`pnpm check:ipc`、`pnpm check:renderer-chunks` 通过。
+
+首轮新 UI 2/5：方向 select 的准确可访问名称缺失、匿名 clip-audit 调用方式错误、来源漂移被普通 Error 映射为内部错误。修复标签、测试脚本调用和主进程 domain error 翻译后，保留原实际断言全部通过，没有放宽为通用错误或减少样本。
+
+浅色和深色 650px 比较截图均已目视检查，`cut:0`、`hidden:0`，无窗口横向溢出；长哈希可换行，完整回执可展开并局部滚动。证据保存在 `.artifacts/research-optimization/xexp-a2-*.log` 和 `xexp-a2-ui/`。
+
+状态：`Verified passing`，限本部分人工审核与比较界面、错误体验和上述回归。Result→Evidence/图稿/主张/假设仍待后续部分。

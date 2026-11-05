@@ -14,9 +14,9 @@ const ProductionView = lazy(async () => ({default: (await import('./ArtifactProd
 const Relations = lazy(async () => ({default: (await import('./ArtifactRelations')).ArtifactRelations}));
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 
-export function StageArtifactInspector({client, request, onClose, onOpenTask, onReviewContext, readingLocations}: {
+export function StageArtifactInspector({client, request, writable, onClose, onOpenTask, onReviewContext, readingLocations}: {
   client: RocClient; request: ResearchArtifactInspectRequest; onClose: () => void; onOpenTask: (taskId: string) => void;
-  onReviewContext: (context: ResearchGateReviewContext) => void; readingLocations: ArtifactReadingLocations
+  writable: boolean; onReviewContext: (context: ResearchGateReviewContext) => void; readingLocations: ArtifactReadingLocations
 }): React.JSX.Element {
   const baseline = useRef(request.expectedVersion);
   const read = useAsyncResource(`artifact:inspect:${JSON.stringify(request)}`,
@@ -100,7 +100,7 @@ export function StageArtifactInspector({client, request, onClose, onOpenTask, on
           <StageContent snapshot={snapshot} />
         </Suspense>
         {!productionOpen||snapshot.production===null ? null : <Suspense fallback={<p role="status">正在加载生产视图…</p>}>
-          <ProductionView key={snapshot.version} client={client} request={{projectId:request.projectId,
+          <ProductionView key={snapshot.version} client={client} writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived'} request={{projectId:request.projectId,
             artifactId:request.artifactId,expectedVersion:snapshot.version}}
             initialLocation={reading.location?.productionFile ?? null} onLocationChange={reading.setProductionFile}/>
         </Suspense>}
