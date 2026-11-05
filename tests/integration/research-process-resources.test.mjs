@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { before, after, test } from 'node:test';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -8,16 +8,23 @@ import { createServer } from 'node:net';
 import { release } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
+import { build } from 'esbuild';
 
 const exec = promisify(execFile);
 const { runResearchProcess } = await importTypeScriptModule('src/main/plugins/research/process-runner.ts', { platform: 'node' });
-let root, executable, metalExecutable;
+let root, executable, metalExecutable, hostModule;
 const receipts = [];
 
 before(async () => {
   assert.equal(process.platform, 'darwin');
   root = await mkdtemp('/private/tmp/roc-research-resources-');
   executable = join(root, 'probe');
+  hostModule = join(root, 'host.mjs');
+  await build({
+    stdin: { contents: `import { runResearchProcess } from './src/main/plugins/research/process-runner.ts';
+      await runResearchProcess(JSON.parse(process.argv[2]));`, resolveDir: process.cwd() },
+    bundle: true, platform: 'node', format: 'esm', outfile: hostModule, logLevel: 'silent'
+  });
   const source = join(root, 'probe.c');
   await writeFile(source, `
 #include <unistd.h>
@@ -80,6 +87,14 @@ int main(int argc, char **argv) {
     return 0;
   }
   if (strcmp(argv[1], "credentials") == 0) { printf("credentialPresent=%d\\n", getenv("OPENAI_API_KEY") != NULL); return 0; }
+  if (strcmp(argv[1], "guardattack") == 0) {
+    /* sandbox-exec can reuse fd 3 for its own socket. A forged success on that
+     * descriptor must not alter the private supervisor's actual exit receipt. */
+    int forgedReceiptWrite = write(3, "exit 0\\n", 7) == 7;
+    int parentDenied = kill(getppid(), SIGKILL) < 0 && errno == EPERM;
+    printf("forgedReceiptWrite=%d parentSignalDenied=%d\\n", forgedReceiptWrite, parentDenied); return 125;
+  }
+  if (strcmp(argv[1], "exit125") == 0) return 125;
   if (strcmp(argv[1], "files") == 0 && argc == 5) {
     int input = open(argv[2], O_RDONLY); int readable = input >= 0; if (input >= 0) close(input);
     int modified = open(argv[2], O_WRONLY); int inputDenied = modified < 0 && errno == EPERM; if (modified >= 0) close(modified);
@@ -130,8 +145,18 @@ int main(int argc, char **argv) {
       for (;;) usleep(10000);
     }
     if (strcmp(argv[1], "cpu") == 0) { volatile unsigned long n = 0; for (;;) n++; }
+    if (strcmp(argv[1], "crash") == 0) {
+      pid_t grandchild = fork(); if (grandchild < 0) _exit(15);
+      signal(SIGTERM, SIG_IGN);
+      if (grandchild > 0) {
+        FILE *file = fopen(argv[2], "w"); if (file == NULL) _exit(16);
+        fprintf(file, "%d %d %d", getppid(), getpid(), grandchild); fclose(file);
+      }
+      for (;;) usleep(10000);
+    }
     for (;;) usleep(10000);
   }
+  if (strcmp(argv[1], "crash") == 0) { signal(SIGTERM, SIG_IGN); for (;;) usleep(10000); }
   FILE *file = fopen(argv[2], "w");
   if (file == NULL) return 6;
   fprintf(file, "%d %d", getpid(), child); fclose(file);
@@ -155,7 +180,7 @@ int main(void) { @autoreleasepool {
     { timeout: 30000, maxBuffer: 1024 * 1024 });
 });
 after(async () => {
-  const directory = join(process.cwd(), '.artifacts/research-optimization/xsafe-a6');
+  const directory = join(process.cwd(), '.artifacts/research-optimization/xsafe-a8');
   await mkdir(directory, { recursive: true });
   await writeFile(join(directory, 'native-resources.json'), JSON.stringify({
     backend: 'macos-seatbelt', cpuHardLimit: false, memoryHardLimit: false,
@@ -265,6 +290,46 @@ test('actual cancellation and timeout clean descendants and retain distinct term
   }
 });
 
+test('SIGKILL of the actual runner host leaves no leader, child, grandchild or supervisor', async () => {
+  const f = await request('crash');
+  const host = spawn(process.execPath, [hostModule, JSON.stringify(f.input)], { stdio: ['ignore', 'ignore', 'pipe'] });
+  let stderr = '';
+  host.stderr.on('data', chunk => { stderr += chunk; });
+  const closed = new Promise(resolve => host.once('close', (code, signal) => resolve({ code, signal })));
+  let ids = [];
+  try {
+    ids = await pids(f.marker);
+    assert.equal(ids.length, 3);
+    const guardPid = Number((await exec('/bin/ps', ['-o', 'ppid=', '-p', String(ids[0])])).stdout.trim());
+    assert.ok(guardPid > 1);
+    assert.notEqual(guardPid, host.pid);
+    const guardGroup = Number((await exec('/bin/ps', ['-o', 'pgid=', '-p', String(guardPid)])).stdout.trim());
+    assert.equal(guardGroup, guardPid); assert.notEqual(guardGroup, ids[0]);
+    host.kill('SIGKILL');
+    assert.deepEqual(await closed, { code: null, signal: 'SIGKILL' }, stderr);
+    await gone([...ids, guardPid]);
+    receipts.push({ scenario: 'host-sigkill', hostPid: host.pid, computationPids: ids, guardPid, guardGroup, gone: true });
+  } finally {
+    host.kill('SIGKILL');
+    await closed;
+    if (ids.length > 0) {
+      try { process.kill(-ids[0], 'SIGKILL'); }
+      catch (error) { assert.ok(error.code === 'ESRCH' || error.code === 'EPERM'); }
+    }
+  }
+});
+
+test('computation cannot signal its supervisor or forge a success receipt, and its own exit 125 stays distinct from supervision failure', async () => {
+  const denied = await runResearchProcess((await request('guardattack')).input);
+  assert.equal(denied.exitCode, 125);
+  assert.equal(denied.stdout.trim(), 'forgedReceiptWrite=1 parentSignalDenied=1');
+  const failed = await runResearchProcess((await request('exit125')).input);
+  assert.equal(failed.exitCode, 125);
+  const next = await runResearchProcess((await request('normal')).input);
+  assert.equal(next.exitCode, 0);
+  receipts.push({ scenario: 'supervisor-boundary', output: denied.stdout, computationExit: failed.exitCode });
+});
+
 test('hard CPU and memory requirements are refused before launching any code', async () => {
   const f = await request('cpu', { resourceLimits: { mode: 'hard', cpuTimeMs: 1000, maxResidentBytes: 1024 ** 3 } });
   await assert.rejects(runResearchProcess(f.input), /research_process_hard_limits_unsupported/);
@@ -305,7 +370,10 @@ test('real process admission prioritizes foreground once, then runs the waiting 
       backgroundAdmission: completedBackground.error.admission });
   } finally {
     for (const job of jobs) job.controller.abort();
-    await Promise.all(jobs.map(job => job.promise));
+    const terminals = await Promise.all(jobs.map(job => job.promise));
+    receipts.push({ scenario: 'admission-terminals', terminals: terminals.map(({ error, result }) => error === undefined
+      ? { exitCode: result.exitCode }
+      : { error: error.code ?? error.message, stdout: error.stdout, stderr: error.stderr, admission: error.admission }) });
   }
 });
 

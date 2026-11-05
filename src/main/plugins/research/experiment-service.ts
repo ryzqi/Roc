@@ -13,6 +13,7 @@ import { juliaExperimentFlags, rExperimentCommand } from './experiment-native-pr
 import { runRExperimentProcess } from './experiment-native-process';
 import { indexText } from './index-files';
 import { ResearchProcessError, runResearchProcess, type ResearchProcessRequest, type ResearchProcessResult } from './process-runner';
+import { researchProcessGuardHash } from './process-guard';
 import { writeFrozenManifest } from './research-frozen-manifest';
 import { ResearchBackgroundJobs, ResearchJobSession } from './research-job-session';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchRelativePath, researchWorkspace } from './research-files';
@@ -217,10 +218,10 @@ export class ResearchExperimentService {
       if (!parsedRequest.success) throw new ResearchProcessError('research_experiment_legacy_read_only');
       const request = parsedRequest.data;
       resources = {
-        schemaVersion: 2, runId: initial.id, projectId: initial.projectId, engine: request.engine, probes,
+        schemaVersion: 3, runId: initial.id, projectId: initial.projectId, engine: request.engine, probes,
         inputHash: null, environmentHash: null,
-        backend: { id: 'macos-seatbelt', contractVersion: 1, kernelRelease: release(), architecture: process.arch,
-          cpuHardLimit: false, memoryHardLimit: false },
+        backend: { id: 'macos-seatbelt', contractVersion: 2, kernelRelease: release(), architecture: process.arch,
+          cpuHardLimit: false, memoryHardLimit: false, hostCrashCleanup: true, processGuardHash: researchProcessGuardHash() },
         policy: computationPolicy(request), outcome: 'not_dispatched', exitCode: null,
         error: 'research_experiment_not_dispatched', usage: null, admission: null, recordedAt: new Date().toISOString()
       };

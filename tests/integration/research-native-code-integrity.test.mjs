@@ -162,7 +162,7 @@ test('actual native experiment persists complete code receipt, excludes it from 
     const resources = api.researchExperimentResourceReportSchema.parse(JSON.parse((await service.read({
       projectId: f.project.id, runId: run.id, area: 'log', path: 'resources.json'
     })).content));
-    assert.equal(resources.schemaVersion, 2);
+    assert.equal(resources.schemaVersion, 3);
     assert.deepEqual(resources.probes.map(probe => [probe.phase, probe.kind, probe.outcome, probe.exitCode]),
       [['preparation', 'environment', 'returned', 0], ['verification', 'environment', 'returned', 0]]);
     for (const probe of resources.probes) {

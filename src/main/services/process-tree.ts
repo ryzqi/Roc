@@ -1,7 +1,7 @@
 import type { ChildProcess } from 'node:child_process';
 
 // 调用方以 detached: true 创建独立进程组，取消时一并清理 Shell 派生的子进程。
-export async function terminateProcessTreeWithRetry(child: ChildProcess, attempts = 8, retryDelayMs = 10): Promise<void> {
+export async function terminateProcessTreeWithRetry(child: Pick<ChildProcess, 'pid'>, attempts = 8, retryDelayMs = 10): Promise<void> {
   const pid = child.pid;
   if (pid === undefined) return;
   let lastError: unknown;

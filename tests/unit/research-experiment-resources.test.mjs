@@ -3,6 +3,7 @@ import { before, after, test } from 'node:test';
 import { mkdtemp, realpath, mkdir, writeFile, readFile, rm, chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 import { loadResearchTestApi, createResearchFixture } from './fixtures/research-test-kit.mjs';
+import guard from '../../resources/research-runtime/process-guard.lock.json' with { type: 'json' };
 
 let api;
 before(async () => { api = await loadResearchTestApi(); });
@@ -61,11 +62,13 @@ test('experiment resource receipt pins returned measurements to input/environmen
     assert.equal(run.status, 'completed', run.error);
     assert.equal(report.runId, run.id); assert.equal(report.projectId, f.project.id);
     assert.equal(report.inputHash, run.inputHash); assert.equal(report.environmentHash, run.environment.hash);
-    assert.equal(report.schemaVersion, 2); assert.deepEqual(report.probes, []);
-    assert.equal(api.researchExperimentResourceReportSchema.safeParse({ ...report, schemaVersion: 1 }).success, false);
+    assert.equal(report.schemaVersion, 3); assert.deepEqual(report.probes, []);
+    for (const schemaVersion of [1, 2]) assert.equal(api.researchExperimentResourceReportSchema.safeParse({ ...report, schemaVersion }).success, false);
     assert.deepEqual(report.usage, measured); assert.deepEqual(report.admission, admission);
     assert.deepEqual(report.policy.resourceLimits, actualRequest.resourceLimits);
     assert.equal(report.backend.cpuHardLimit, false); assert.equal(report.backend.memoryHardLimit, false);
+    assert.equal(report.backend.contractVersion, 2); assert.equal(report.backend.hostCrashCleanup, true);
+    assert.equal(report.backend.processGuardHash, guard.sha256);
     assert.equal(f.db.prepare("SELECT count(*) FROM research_knowledge_documents WHERE source_id=? AND id LIKE '%resources.json'")
       .pluck().get(run.id), 0);
     const published = await f.service.publish(f.project.id, run.id);

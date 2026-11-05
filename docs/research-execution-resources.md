@@ -145,10 +145,30 @@ JuliaProject、版本化 Manifest、显式 manifest、AppManifest、workspace、
 
 ## 环境探针资源回执
 
-实验 `log/resources.json` 使用合同 2；合同 1 的资源报告不再被当前发布校验接受。`probes` 按实际顺序保存 preparation 与 verification，以及 Julia 的 runtime_version 与 environment 请求。每条记录包含真实 runner 请求的 SHA-256、命令、执行限额、完整可写目录限额、返回/拒绝状态、退出码、错误、采样观测、准入等待和持有时间。R 桥接库和独立临时目录先加入请求，再捕获合同；没有将探针消耗混入计算观测，也不保存原始环境变量。
+此增量引入 `log/resources.json` 合同 2，当前合同见下方宿主崩溃清理部分。`probes` 按实际顺序保存 preparation 与 verification，以及 Julia 的 runtime_version 与 environment 请求。每条记录包含真实 runner 请求的 SHA-256、命令、执行限额、完整可写目录限额、返回/拒绝状态、退出码、错误、采样观测、准入等待和持有时间。R 桥接库和独立临时目录先加入请求，再捕获合同；没有将探针消耗混入计算观测，也不保存原始环境变量。
 
 准备失败保留已执行探针，计算状态为 not_dispatched，计算 usage/admission 为 null。计算成功后复核失败保留原计算退出码 0 与失败探针退出码，整个实验仍失败，不能发布。快速结束、队列取消和 runner 拒绝保留实际未知观测，不补零。发布要求完整的原生准备/复核探针序列且全部返回 0。独立环境预览没有实验身份，回执仅在预览过程内观测；未宣称它具有持久化实验 provenance。
 
 本增量为 `Verified passing`，工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。`node --test tests/unit/research-environment-probe-resources.test.mjs tests/unit/research-experiment-resources.test.mjs tests/unit/research-native-code.test.mjs tests/unit/research-process-resources.test.mjs tests/unit/research-process-admission.test.mjs tests/unit/research-julia-controls.test.mjs tests/unit/research-compute-policy.test.mjs` 34/34；`pnpm test:research-native-code` 5/5，含真实 C 原生适配器准备/复核失败与成功回执；`pnpm test:research-environment-boundaries` 8/8，含 Julia 两种探针；`node scripts/run-research-p0.mjs` 13/13；`pnpm build`（含 typecheck）、`pnpm harness:eval` 94/94、`pnpm check:ipc`、`pnpm check:renderer-chunks` 通过，eager JS 1132907 字节、6 个文件；`node scripts/smoke-electron.mjs` 13/13、零 renderer 错误。
 
 初次原生测试 2/5：新增探针记录改变共享测试账本的末项，三个旧测试读到了没有 stdout 的探针。按确切场景选择原始 stdout 后，原值、哈希和漂移断言全部通过；未修改产品以适配测试。日志与回执保留在 `.artifacts/research-optimization/xsafe-a7d2-*.log`、`xsafe-a7d2/native-code.json`。实际 R/Julia 科学运行及完整原生科学导出仍未验证。
+
+## 宿主崩溃清理
+
+计算由独立的 arm64 原生监督程序启动。监督程序先注册实际宿主 PID 的内核 `EVFILT_PROC / NOTE_EXIT` 事件，再为计算建立单独进程组并释放启动门。监督程序位于计算的 Seatbelt 和进程组之外；宿主被 `SIGKILL` 后仍能终止计算组。计算首进程正常退出时也立即清理其后代，不等待继承 stdout 的子进程自行结束。监督程序核验计算组消失，再通过私有管道返回原始计算退出码；自己的启动、监督和清理失败不能成为计算成功。
+
+JS 继续负责取消、超时、采样和输出限额，并在归还准入槽前核验计算组和监督组消失。监督失败或无法清理会隔离该宿主后续计算。采样对象始终是计算组；监督程序的消耗不冒充计算消耗。原生程序在独立临时目录展开，完成原生启动握手后删除文件，正常调用结束时再次回收该任务目录。源码与签名二进制由 `node scripts/research/build-process-guard.mjs` 生成锁文件；测试核对源码、二进制 SHA-256 与 arm64 Mach-O 类型。
+
+当前资源报告为 schemaVersion 3、backend contractVersion 2，保存 `hostCrashCleanup: true` 与实际监督二进制的 `processGuardHash`。当前校验拒绝资源报告合同 1/2；没有兼容分支。应用崩溃后未写入的最终观测仍然缺失，恢复不会自动重跑。既有 P0 重启测试采用运行中数据库快照与正常停机，只证明恢复语义；新增独立宿主 `SIGKILL` 测试才证明实际崩溃清理。
+
+真实 C 夹具生成忽略 `SIGTERM` 的首进程、子进程和孙进程，杀死实际 runner 宿主后核验三个计算 PID 及监督 PID 全部消失。计算向 fd 3 写入伪造成功且实际返回 125，结果必须仍为 125；向监督父进程发送信号被拒绝。`sandbox-exec` 可以将已关闭的 fd 3 重用于自己的 socket，不能仅凭描述符编号宣称继承了监督状态管道。
+
+本部分为 `Verified passing`，工作目录 `/Users/Apple_501/Desktop/Roc/Roc`：
+
+- `node --test tests/unit/research-process-guard.test.mjs tests/unit/research-experiment-resources.test.mjs tests/unit/research-process-resources.test.mjs tests/unit/research-process-admission.test.mjs tests/unit/research-environment-probe-resources.test.mjs`：16/16。
+- `pnpm test:research-resources`：23/23，含实际崩溃、后代清理、真实资源压力、并发准入与监督边界。
+- `pnpm test:research-native-code`：5/5；`pnpm test:research-environment-boundaries`：8/8，均为原生 C 适配器检查。
+- `pnpm build`（含 typecheck）、`node scripts/run-research-p0.mjs`：13/13；`pnpm harness:eval`：94/94。
+- `pnpm check:ipc`、`pnpm check:renderer-chunks`：通过，eager JS 1132907 字节、6 个文件；`node scripts/smoke-electron.mjs`：13/13，零 renderer 错误。
+
+有效红测实际留下计算 PID，测试随后清理其任务进程组。首轮删除签名程序过早，握手前原生初始化失败；调整为握手后删除。扩展全套曾出现一次并发启动失败并触发隔离，其根因尚未确定；保留原日志，增加实际监督退出码/信号与准入终态回执。相同并发场景八次独立复验和最终完整 23 项通过，没有吞掉失败或放宽准入。日志为 `.artifacts/research-optimization/xsafe-a8-*.log`，最终回执为 `xsafe-a8/native-resources.json`。实际 Python、R/Julia 科学运行和其余路线图尚未完成。

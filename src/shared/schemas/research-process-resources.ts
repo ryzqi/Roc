@@ -39,12 +39,13 @@ export const researchEnvironmentProbeResourceSchema = z.object({
 });
 
 export const researchExperimentResourceReportSchema = z.object({
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(3),
   runId: z.string().min(1), projectId: z.string().min(1), engine: z.enum(['typescript', 'r', 'julia']),
   inputHash: digest.nullable(), environmentHash: digest.nullable(),
   backend: z.object({
-    id: z.literal('macos-seatbelt'), contractVersion: z.literal(1), kernelRelease: z.string().min(1),
-    architecture: z.string().min(1), cpuHardLimit: z.literal(false), memoryHardLimit: z.literal(false)
+    id: z.literal('macos-seatbelt'), contractVersion: z.literal(2), kernelRelease: z.string().min(1),
+    architecture: z.string().min(1), cpuHardLimit: z.literal(false), memoryHardLimit: z.literal(false),
+    hostCrashCleanup: z.literal(true), processGuardHash: digest
   }).strict(),
   policy: z.object({
     timeoutMs: z.number().int().positive(), maxOutputBytes: z.number().int().positive(),
