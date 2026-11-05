@@ -7,13 +7,17 @@
 项目进入 export 阶段且审稿周期为 accepted 后，调用 `prepareExport`：
 
 ```typescript
+const selection = {projectId, manuscriptArtifactId, figureIds, template: {kind: 'default', language: 'zh'} as const};
+const candidates = await research.getExportInputs(selection);
+// 人工填写作者、许可、公开元数据，逐项选择原件交付或仅元数据；sourceHash 必须来自 candidates。
 await research.prepareExport({
   projectId,
   requestId,
   title: '研究报告',
   manuscriptArtifactId,
   figureIds,
-  template: { kind: 'default', language: 'zh' }
+  template: selection.template,
+  publicationReview
 });
 ```
 
@@ -74,9 +78,9 @@ await research.prepareExport({
 > `\ref` / `\label` 一致性**不在这里查**：Roc 只给图稿生成 `\label`，正文不生成 `\ref`，
 > 今天没有可失败的情形。等同跟交叉引用落到渲染器里时再把它加到这里。
 
-准备过程冻结批准正文及其主张/证据、批准图稿、引用的文献元数据、模型与实验运行、原始代码/数据和来源定位。文献引用键取自文献库；BibTeX crossref 父条目递归纳入快照及版本检查，并排在引用它的条目之后。父键优先匹配当前项目，未匹配时只接受全局唯一的有效条目。缺失、歧义、循环、版本变化或引用键冲突都会失败；文件与实验来源生成保留实际标题和定位的 misc 条目。正文和图稿的证据 ID 与 BibTeX 引用键之间的映射保存在追溯数据中。
+准备过程冻结批准正文及其主张/证据、批准图稿、引用的文献元数据、模型与实验运行、原始代码/数据和来源定位。文献引用键取自文献库；BibTeX crossref 父条目递归纳入快照及版本检查，并排在引用它的条目之后。父键优先匹配当前项目，未匹配时只接受全局唯一的有效条目。缺失、歧义、循环、版本变化或引用键冲突都会失败；文件与实验来源生成保留实际标题、sourceType/sourceId 的 misc 条目；不将私有 locator 写入 BibTeX。正文和图稿的证据 ID 与 BibTeX 引用键之间的映射保存在追溯数据中。
 
-每张图稿的 `provenance/figures/<figureId>/` 保存 hash 与已批准图稿一致的 `figure-manifest.json`、全部冻结输入、输出和日志，包含实际 post-transform 场景数据的 `output/figure-data.json`。复制时逐文件核对大小和 SHA-256；回执或输入变化不能生成成功交付。图像三格式继续写入 LaTeX 的 `figures/` 目录。
+每张图稿的 `provenance/figures/<figureId>/` 保存 `figure-manifest.public.json` 及运行日志公开投影，保留原文件 byte identity 与独立的 JSON projection identity。原始输入/输出按逐资源审查复制或仅登记元数据；图像三格式必须交付并继续写入 LaTeX 的 `figures/` 目录。复制逐文件核对大小和 SHA-256，拒绝识别到的私有文本；受限原件不会进入清单。
 
 原批准正文的 LaTeX 保持原样存档。交付源文件采用同一段落内容与版本，合入批准图稿及统一的 BibTeX 引用。编译使用固定 Tectonic、本地 TeX bundle 和受限进程；Tectonic 报告忽略了 BibTeX 错误时，即使退出码为 0 也拒绝交付。生成 PDF 后由 PDFium 打开并渲染验证。归档由主进程 TypeScript 读取清单登记且哈希一致的普通文件，拒绝链接、越界和已有归档。
 
@@ -93,13 +97,14 @@ ZIP 包含：
 - `report.typ`：报告的 Typst 源，用户手上有 Typst 就能改。
 - `source/`：可重新编译的模板、正文、BibTeX、编译产出的 `.bbl` 与 PNG/SVG/PDF 图稿。
 - `references.bib`：参考文献交换文件。
-- `provenance/`：原批准正文、主张/证据、模型/实验运行、代码/数据和模板占位文件。
-- `logs/`：编译输出、诊断、`arxiv-preflight.json`。
-- `manifest.json`：文件大小/哈希、工具链版本/摘要、来源版本和归档器摘要。
+- `provenance/`：原批准正文、公开来源与科研审核投影、获准交付的代码/数据和模板原件。
+- `logs/`：编译输出/诊断的 `.public.json` 投影、`arxiv-preflight.json`。
+- `manifest.json`：严格版本 3，公开请求投影、文件大小/哈希、工具链版本/摘要、来源版本和归档器摘要。
+- `ro-crate-metadata.json` 与 `ro-crate-profile.html`：固定 1.2/roc-research-1，作者、许可、资源交付、实际运行与人工审批关系。
 
-`provenance/sources.json` 必须包含 `ideaOutcomes`，保存正文及所选图稿实际引用结果的当前人工评估。没有评估时为空数组。关联使用精确项目、结果回执 ID/hash 和冻结方法身份；每个冻结方法只纳入最新评估，另一个结果的评估不会因属于同一项目而进入导出。
+`provenance/sources.json` 为 `public_projection`，其 `value` 必须包含 `ideaOutcomes`，保存正文及所选图稿实际引用结果的当前人工评估。没有评估时为空数组。关联使用精确项目、结果回执 ID/hash 和冻结方法身份；每个冻结方法只纳入最新评估，另一个结果的评估不会因属于同一项目而进入导出。
 
-`provenance/scientific-review.json` 使用 schema 5，包含完整评估回执及每个方法的全部 `stored_receipt` 历史，按每页 100 条读取。原冻结假设、预期结果、真实测量、人工结论和修订原因同时保留；历史标记只表示保存回执的完整性。schema 1、2、3、4 和缺少必填字段的数据被拒绝。
+`provenance/scientific-review.json` 使用 `public_projection` envelope，内部 `value.schemaVersion` 为 5，包含评估回执及每个方法的完整历史，按每页 100 条读取。内层改写后的历史标为 `private_source_receipt`，省略声明保留在外层；原私有 serializer 仍保留严格 schema5 和 stored_receipt 语义。原冻结假设、预期结果、真实测量、人工结论和修订原因同时保留；历史标记只表示保存回执的完整性。schema 1、2、3、4 和缺少必填字段的数据被拒绝。
 
 捕获和后续审核重验当前评估 head、冻结方法、真实结果/运行时间、指标 Evidence 及计划引用的证据。来源或人工评估变化会使原导出及审核失效，必须重新准备并审核；校验不会修改原来源快照或保存的审核文件。详细验收见 [Idea 方法与结果评估](research-idea-plans.md)。
 
@@ -113,7 +118,7 @@ schema 5 必须包含 `citationReviews`、`consistencyReviews`、`figureConsiste
 
 准备完成、发布到审核闸门、审批和交付前均核对当前来源与固定审核快照。生成期间新增审核也使旧快照失效；正常图稿 `rendered → approved` 状态变化不使已有映射失效。历史导出读取仍核对保存文件和 ZIP 字节，来源失效不妨碍读取已保存包。
 
-图稿审核使用明确的 `redacted_receipt` 投影：只移除 `snapshot.material.run.workspacePath` 与 `workspaceRoot`，列出 `omittedFields`，分别保存 `originalSnapshotHash` 与 `redactedSnapshotHash`。后者可由导出 snapshot JSON 的 SHA-256 核对；前者是原私有回执的来源标识。脱敏投影不声称能够重建或验证依赖本机路径的原完整图稿 manifest。全包其余既有私有路径的整改由 PR10 处理，本部分不声明全包已满足公开发布隐私要求。
+图稿审核使用明确的 `redacted_receipt` 投影：只移除 `snapshot.material.run.workspacePath` 与 `workspaceRoot`，列出 `omittedFields`，分别保存 `originalSnapshotHash` 与 `redactedSnapshotHash`。后者可由导出 snapshot JSON 的 SHA-256 核对；前者是原私有回执的来源标识。脱敏投影不声称能够重建或验证依赖本机路径的原完整图稿 manifest。实际导出再包裹通用公开投影，改写 verification claim 并记录私有字段省略；原文件的 byte hash 不冒充公开 JSON hash。公开元数据与原件内容检查见 [RO-Crate 合同](research-ro-crate.md)。
 
 ## arXiv 预检
 

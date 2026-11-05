@@ -333,6 +333,7 @@ test('schema5 seals carry full dated journal receipts and metadata-only suppleme
     const sources = {project: f.project, manuscriptArtifact: f.repository.getArtifact(f.artifactId),
       figures: [], claims: [claim], evidence: [f.source], experimentResults: [], ideaOutcomes: []};
     const review = api.captureExportScientificReview(f.repository, sources), bytes = api.serializeExportScientificReview(review);
+    const publicBytes = api.serializePublicExportScientificReview(review);
     assert.equal(review.schemaVersion, 5);
     assert.deepEqual(review.journalCompliance, [{artifactId: f.artifactId, current: first,
       history: {verification: 'stored_receipt', items: [first], total: 1}, supplementDelivery: 'metadata_only'}]);
@@ -342,7 +343,7 @@ test('schema5 seals carry full dated journal receipts and metadata-only suppleme
     assert.equal(api.researchExportScientificReviewSchema.safeParse({...review, journalCompliance: [{
       ...review.journalCompliance[0], supplementDelivery: 'bundled'}]}).success, false);
     const record = {sources, sourceHash: review.sourceHash, files: [{path: api.exportScientificReviewPath,
-      size: Buffer.byteLength(bytes), sha256: createHash('sha256').update(bytes).digest('hex')}]};
+      size: Buffer.byteLength(publicBytes), sha256: createHash('sha256').update(publicBytes).digest('hex')}]};
     api.assertCurrentExportScientificReview(f.repository, record);
     const revised = structuredClone(selected); revised.profile.version = 'new-date';
     await f.save(await f.request(revised, {requestId: 'journal-2', parent: {reviewId: first.snapshot.id, reviewHash: first.snapshotHash}}));

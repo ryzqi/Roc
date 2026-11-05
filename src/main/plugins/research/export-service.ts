@@ -12,10 +12,16 @@ import { ResearchProcessError } from './process-runner';
 import { ResearchBackgroundJobs, ResearchJobSession } from './research-job-session';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchWorkspace } from './research-files';
 import type { ResearchRepository } from './repository';
-import {assertCurrentExportScientificReview, captureExportScientificReview, exportScientificReviewPath, serializeExportScientificReview} from './export-scientific-review';
+import {assertCurrentExportScientificReview, captureExportScientificReview, exportScientificReviewPath, serializePublicExportScientificReview} from './export-scientific-review';
 import {RocDomainError} from '../../services/errors';
 import type {ResearchExportInputsRequest} from '../../../shared/schemas/research-exports';
 import type {ResearchExportInputs} from '../../../shared/schemas/research-export-publication';
+import {collectExportInputs, validateExportPublication} from './export-publication';
+import {projectResearchPublicValue, serializeResearchPublicProjection} from './export-public-projection';
+import {buildExportCrate} from './export-crate';
+import {researchCrateMetadataPath, researchCrateProfilePath} from '../../../shared/schemas/research-ro-crate';
+import {researchCrateProfileHtml, serializeResearchCrate} from './export-ro-crate';
+import {researchExportManifestSchema, verifyExportPublicBundle} from './export-public-bundle';
 
 export class ResearchExportService {
   private readonly session = new ResearchJobSession('research_export_closed');
@@ -36,7 +42,12 @@ export class ResearchExportService {
   async prepare(input: ResearchExportPrepare): Promise<ResearchExportExecution> {
     const request = researchExportPrepareSchema.parse(input);
     return await this.session.run(async (signal) => {
+      const existing = this.repository.exports.findRequest(request);
+      if (existing !== null) return existing;
       const storage = await exportStorage(this.rootPath);
+      this.requireActive(signal);
+      const sources = await this.sources.capture(request, signal);
+      validateExportPublication(request.publicationReview, collectExportInputs(this.repository, sources));
       this.requireActive(signal);
       const record = this.repository.exports.create(request, storage);
       try {
@@ -175,14 +186,20 @@ export class ResearchExportService {
       writer = new ResearchExportFiles(await createResearchDirectory(root, 'bundle'));
       scratch = await createResearchDirectory(root, 'scratch');
       sources = await this.sources.capture(record.request, signal);
+      validateExportPublication(record.request.publicationReview, collectExportInputs(this.repository, sources));
       sourceHash = exportSourceHash(sources);
-      await writer.write(exportScientificReviewPath, serializeExportScientificReview(captureExportScientificReview(this.repository, sources)));
+      await writer.write(exportScientificReviewPath, serializePublicExportScientificReview(captureExportScientificReview(this.repository, sources)));
       toolchainHash = await this.tools.identity();
       const toolchain = await this.tools.status();
       if (!toolchain.available || toolchain.versions === null) throw new Error('research_export_toolchain_unavailable');
       await buildExportFiles({ record, sources, writer, repository: this.repository, tools: this.tools, scratch, signal });
-      await writer.write('manifest.json', JSON.stringify({ version: 2, exportId: record.id, request: record.request, sourceHash, toolchainHash,
-        toolchainVersions: toolchain.versions, archiveBuilder: archiveBuilderProvenance, files: writer.list() }, null, 2));
+      await writer.write(researchCrateProfilePath, researchCrateProfileHtml);
+      await writer.write(researchCrateMetadataPath, serializeResearchCrate(buildExportCrate(this.repository, record, sources, writer.list())));
+      await writer.write('manifest.json', `${JSON.stringify(researchExportManifestSchema.parse({
+        version: 3, exportId: record.id, request: projectResearchPublicValue(record.request), sourceHash, toolchainHash,
+        toolchainVersions: toolchain.versions, archiveBuilder: archiveBuilderProvenance, files: writer.list()
+      }))}\n`);
+      await verifyExportPublicBundle(writer.root, {...record, sources, sourceHash, toolchainHash, files: writer.list()}, signal);
       archive = await this.archive({ root, bundle: writer, scratch, tools: this.tools, signal });
       const current = await this.sources.capture(record.request, signal);
       if (exportSourceHash(current) !== sourceHash || await this.tools.identity() !== toolchainHash) throw new Error('research_export_sources_changed');
@@ -191,7 +208,8 @@ export class ResearchExportService {
       this.repository.exports.finish(record.projectId, record.id, { status: 'ready', sources, sourceHash, toolchainHash, files: writer.list(), archive, error: null });
     } catch (error) {
       if (writer !== null) {
-        const diagnostics = error instanceof ResearchProcessError ? `${error.code}\n${error.stdout}\n${error.stderr}` : exportError(error);
+        const diagnostics = serializeResearchPublicProjection(error instanceof ResearchProcessError ?
+          {code: error.code, stdout: error.stdout, stderr: error.stderr} : {code: exportError(error)});
         try { await writer.write('logs/export-error.txt', diagnostics); }
         catch (failure) { this.logger.warn('Research export diagnostic file could not be saved.', { exportId: record.id, error: exportError(failure) }); }
       }
@@ -205,6 +223,7 @@ export class ResearchExportService {
     if (record.status !== 'ready' || record.sources === null || record.sourceHash === null || record.archive === null) throw new Error('research_export_ready_required');
     this.repository.exports.requireCurrent(record.request);
     const current = await this.sources.capture(record.request, signal);
+    validateExportPublication(record.request.publicationReview, collectExportInputs(this.repository, current));
     if (exportSourceHash(current) !== record.sourceHash || exportSourceHash(record.sources) !== record.sourceHash) throw new Error('research_export_sources_changed');
     assertCurrentExportScientificReview(this.repository, record);
     await this.verifyContent(record, signal);
@@ -214,6 +233,7 @@ export class ResearchExportService {
     if (record.status !== 'ready' || record.sources === null || record.sourceHash === null || record.archive === null) throw new Error('research_export_ready_required');
     if (exportSourceHash(record.sources) !== record.sourceHash) throw new Error('research_export_sources_changed');
     for (const file of record.files) { this.requireActive(signal); await this.file(record, file.path); }
+    await verifyExportPublicBundle(join(this.repository.exports.root(record.projectId, record.id), 'bundle'), record, signal);
     await hashExportArchive(this.repository.exports.root(record.projectId, record.id), record.archive, signal);
     this.requireActive(signal);
   }

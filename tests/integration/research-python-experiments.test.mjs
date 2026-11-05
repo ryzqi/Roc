@@ -569,8 +569,9 @@ test('actual result metric evidence traces claims, figures and Idea history to a
         assert.deepEqual(f.repository.ideaOutcomes.forResult(f.project.id,'unreferenced-result'),[]);
         const review=api.captureExportScientificReview(f.repository,sources);
         const reviewBytes=api.serializeExportScientificReview(review);
+        const publicBytes=api.serializePublicExportScientificReview(review);
         const seal={sources,sourceHash:review.sourceHash,files:[{path:api.exportScientificReviewPath,
-          sha256:createHash('sha256').update(reviewBytes).digest('hex'),size:Buffer.byteLength(reviewBytes)}]};
+          sha256:createHash('sha256').update(publicBytes).digest('hex'),size:Buffer.byteLength(publicBytes)}]};
         assert.equal(review.schemaVersion,5);
         assert.equal(api.researchExportScientificReviewSchema.safeParse({...review,schemaVersion:1}).success,false);
         assert.equal(api.researchExportScientificReviewSchema.safeParse({...review,schemaVersion:2}).success,false);
@@ -621,7 +622,7 @@ test('actual result metric evidence traces claims, figures and Idea history to a
         assert.deepEqual(currentReview.ideaOutcomeHistory[0].history.items.map(item=>item.snapshot.version),
           Array.from({length:102},(_,index)=>102-index));
         assert.deepEqual(currentReview.ideaOutcomeHistory[0].history.items.at(-1),assessment);
-        const currentBytes=api.serializeExportScientificReview(currentReview);
+        const currentBytes=api.serializePublicExportScientificReview(currentReview);
         const currentSeal={sources:updated,sourceHash:currentReview.sourceHash,files:[{path:api.exportScientificReviewPath,
           sha256:createHash('sha256').update(currentBytes).digest('hex'),size:Buffer.byteLength(currentBytes)}]};
         api.assertCurrentExportScientificReview(f.repository,currentSeal);

@@ -27,6 +27,12 @@ export function projectResearchPublicValue(input: unknown): ResearchPublicProjec
     if (value === null || typeof value !== 'object') return value;
     const result: [string, Json][] = [];
     for (const [key, entry] of Object.entries(value)) {
+      if (key === 'verification' && typeof entry === 'string' &&
+        ['stored_receipt', 'redacted_receipt', 'redacted_receipts'].includes(entry)) {
+        omittedFields.push({pointer: `${pointer}/verification`, reason: 'verification_claim'});
+        result.push([key, 'private_source_receipt']);
+        continue;
+      }
       const keyReason = researchPrivateValueReason(key);
       const safeKey = keyReason === null ? key.replace(/~/gu, '~0').replace(/\//gu, '~1') :
         `omitted-key-${researchContentHash(key)}`;

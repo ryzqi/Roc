@@ -9,6 +9,7 @@ import electronPath from 'electron';
 import {_electron} from '@playwright/test';
 import {loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
 import {createPublishedFigureFixture} from '../unit/fixtures/research-production-test-kit.mjs';
+import {syntheticExportPublicationReview} from '../fixtures/research-export-publication.mjs';
 
 let api,directory,app,page,active,windowId;
 const fixtures=[],errors=[],calls=[];
@@ -196,7 +197,8 @@ function syntheticSource(kind,{long=false}={}) {
     const pdf={path:'paper.pdf',sha256:hash('synthetic-pdf'),size:13},archive={path:'export.zip',sha256:hash('synthetic-zip'),size:13};
     files=[selected,{...pdf,area:'bundle'},{...archive,area:'bundle'}];
     source={kind,execution:{id:'synthetic-export',projectId,request:{projectId,requestId:'synthetic-request',title:'Synthetic export',
-      manuscriptArtifactId:manuscriptId,figureIds:[],template:{kind:'default',language:'zh'}},ownerRunId:null,status:'ready',
+      manuscriptArtifactId:manuscriptId,figureIds:[],template:{kind:'default',language:'zh'},
+      publicationReview:syntheticExportPublicationReview({sourceHash:hash(JSON.stringify(sources)),resources:[],references:[]})},ownerRunId:null,status:'ready',
       sources,sourceHash:hash(JSON.stringify(sources)),toolchainHash:hash('synthetic-toolchain'),files:files.map(({area,...file})=>file),
       archive,artifactId,approval:'draft',replacesExportId:null,error:null,createdAt:now,endedAt:now}};
   }

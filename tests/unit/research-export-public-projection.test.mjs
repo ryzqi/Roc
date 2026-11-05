@@ -23,7 +23,7 @@ test('public projection retains scientific values, source identities and histori
   assert.equal(publicReceipt.originalSha256, hash(source));
   assert.equal(publicReceipt.projectionSha256, hash(publicReceipt.value));
   assert.notEqual(publicReceipt.originalSha256, publicReceipt.projectionSha256);
-  assert.deepEqual(publicReceipt.value.receipt, source.receipt);
+  assert.deepEqual(publicReceipt.value.receipt, {...source.receipt, verification: 'private_source_receipt'});
   assert.deepEqual(publicReceipt.value.history, source.history);
   assert.equal(publicReceipt.value.seed, 42);
   assert.deepEqual(publicReceipt.value.cost, source.cost);
@@ -32,7 +32,8 @@ test('public projection retains scientific values, source identities and histori
   assert.equal(publicReceipt.value.experiment.environment.executable, undefined);
   assert.deepEqual(publicReceipt.omittedFields.map(field => field.pointer),
     ['/project/workspacePath', '/experiment/workspaceRoot', '/experiment/environment/executable',
-      '/experiment/environment/prefix', '/experiment/environment/basePrefix']);
+      '/experiment/environment/prefix', '/experiment/environment/basePrefix', '/receipt/verification']);
+  assert.deepEqual(publicReceipt.omittedFields.at(-1), {pointer: '/receipt/verification', reason: 'verification_claim'});
   assert.deepEqual(api.validateResearchPublicProjection(publicReceipt), publicReceipt);
   assert.equal(api.serializeResearchPublicProjection(source), `${JSON.stringify(publicReceipt)}\n`);
 });

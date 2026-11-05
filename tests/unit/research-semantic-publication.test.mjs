@@ -220,7 +220,8 @@ test('export review seal captures exact source, conditions and user history, and
     assert.deepEqual(snapshot.figureConsistencyReviews, []);
     assert.deepEqual(snapshot.responseMatrices, []);
     assert.deepEqual(snapshot.journalCompliance, []);
-    const bytes = api.serializeExportScientificReview(snapshot);
+    const privateBytes = api.serializeExportScientificReview(snapshot);
+    const bytes = api.serializePublicExportScientificReview(snapshot);
     const file = {path: api.exportScientificReviewPath, size: Buffer.byteLength(bytes),
       sha256: createHash('sha256').update(bytes).digest('hex')};
     const record = {sources, sourceHash: snapshot.sourceHash, files: [file]};
@@ -250,6 +251,6 @@ test('export review seal captures exact source, conditions and user history, and
     assert.equal(f.changes(), changed);
     assert.equal(snapshot.relations.some(relation => relation.id === independent.id), false);
     assert.equal(f.claim.evidenceIds.includes(independentSource.id), false);
-    assert.equal(api.serializeExportScientificReview(snapshot), bytes);
+    assert.equal(api.serializeExportScientificReview(snapshot), privateBytes);
   } finally {f.close();}
 });

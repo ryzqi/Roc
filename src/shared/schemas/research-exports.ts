@@ -8,6 +8,7 @@ import { researchReviewCycleSchema, researchStageRunSchema } from './research-ru
 import {researchExperimentResultReceiptSchema} from './research-experiment-results';
 import {researchIdeaOutcomeReceiptSchema} from './research-idea-outcomes';
 import {researchExportFileSchema} from './research-export-file';
+import {researchExportPublicationReviewSchema} from './research-export-publication';
 export {researchExportFileSchema, type ResearchExportFile} from './research-export-file';
 
 const id = z.string().min(1);
@@ -22,7 +23,8 @@ export const researchExportInputsRequestSchema = z.strictObject({
 });
 const researchExportPrepareFields = {
   requestId: id.max(128), title: z.string().trim().min(1).max(256),
-  ...researchExportInputsRequestSchema.omit({projectId: true}).shape
+  ...researchExportInputsRequestSchema.omit({projectId: true}).shape,
+  publicationReview: researchExportPublicationReviewSchema
 } as const;
 export const researchOwnedExportPrepareSchema = z.object(researchExportPrepareFields).strict();
 export const researchExportPrepareRequestSchema = researchOwnedExportPrepareSchema.extend({ projectId: id });

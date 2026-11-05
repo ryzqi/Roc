@@ -1,6 +1,6 @@
 # 科研 RO-Crate 合同
 
-PR10 A1 固定 RO-Crate **1.2** 和 Roc profile **roc-research-1**。这是明确的稳定目标；不声称为最新规范。A1 提供公开元数据、图生成及离线校验模块，尚未接入 `prepareExport`、实际 ZIP 或导出 UI。既有导出包的公开隐私整改、资源再分发选择和 LaTeX 重编译属于后续 A2/A3。
+PR10 A1 固定 RO-Crate **1.2** 和 Roc profile **roc-research-1**。这是明确的稳定目标；不声称为最新规范。公开元数据、图生成及离线校验已接入 `prepareExport` 和实际 ZIP。prepare 必须提交逐资源出版审查；既有 shell 内的人工作者、许可与交付方式编辑属于 A3。
 
 ## 输入与实体
 
@@ -64,7 +64,7 @@ node --test tests/unit/research-ro-crate.test.mjs \
 
 parser 改变输入 JSON（包括丢弃保留属性）时直接拒绝。独立校验拒绝错误投影摘要、未声明的私有值、旧版 raw receipt 和缺少必填字段的数据。公开字符串的私有值识别由 crate 输入和投影模块共用。
 
-A2A 是独立模块及回归，尚未接入实际导出。实际 ZIP 的 sources、科学审核、figure manifest、日志和资源交付将在 A2B/A2C 统一切换；此处不声明既有 ZIP 已满足公开隐私要求。
+A2A 的独立模块与回归在 A2C 接入实际 ZIP 的 sources、科学审核、figure manifest 和日志。
 
 ## A2B：原始资源与再分发审查合同
 
@@ -72,7 +72,7 @@ A2A 是独立模块及回归，尚未接入实际导出。实际 ZIP 的 sources
 
 每个实验和图稿的原始 input/output、导入模板文件均需独立选择；日志由下一阶段作为公开投影处理，不列入原件再分发选择。合同拒绝漏选、重复、外来资源、改变的大小或摘要、过期来源、未声明参考文献许可。程序文件必须显式登记为软件并提供公开 HTTPS URL 和版本，选中图稿的渲染文件必须登记为图稿。选中图稿及导入模板必须明确允许随包交付，否则拒绝该导出选择。受限数据、代码等保留 `metadata_only` 及获取说明，不推断许可。
 
-`validateExportPublication` 是可单独验证的审查边界；A2B 尚未将审查合同放入 prepare 或改变 ZIP 字节。完整 prepare 与 ZIP 统一切换属于 A2C。
+`validateExportPublication` 在 A2C 接入 prepare、实际 ZIP 和发布/交付重验边界。
 
 验证命令在仓库根目录运行，日志位于 `.artifacts/research-optimization/pr10-a2b-*`：
 
@@ -81,3 +81,47 @@ A2A 是独立模块及回归，尚未接入实际导出。实际 ZIP 的 sources
 - `node scripts/run-research-p0.mjs`：在真实原生数据、图稿、稿件、审核和工具链导出路径读取候选。
 - `node scripts/smoke-electron.mjs`：13/13，无 renderer error。
 - `pnpm check:ipc`、`pnpm check:renderer-chunks`。
+
+## A2C 实际 ZIP 与公开封存
+
+manifest 采用严格版本 3；旧 manifest 和缺少 publicationReview 的 prepare 请求拒绝。来源 capture、execute、publish 和 write 均验证审查 sourceHash、资源身份、交付方式及许可元数据。完全相同请求重放返回已保存记录，不重新执行或新增事件；归档项目拒绝操作。
+
+明确 bundled 的原件保持原字节、大小和哈希，识别到的私有文本拒绝交付。metadata_only 不复制原件，crate 仅保留许可及获取说明。图稿渲染文件与导入模板必须 bundled；不可达模板文件放在 provenance/template，留在编译树之外。
+
+运行日志和图稿 manifest 使用 public_file_projection：originalFile 保存原磁盘字节的 path/sha256/size，内层 projection 分别保存原 JSON canonical 摘要、公开值摘要及 omission。来源、编译日志和科研审核使用 public_projection。改写后的 stored_receipt/redacted_receipt 标记改为 private_source_receipt，并登记 verification_claim；不宣称可由公开包重建私有回执。
+
+生成顺序为 payload、固定 profile、真实 RO-Crate、manifest3、公开包校验、ZIP。crate 从实际资源清单和已批准工件派生，使用真实环境、参数、seed、内容与工件版本。manifest 封存 crate 字节；crate 不封存自身或 manifest 哈希。准备完成、历史 inspect 及交付时校验全部文件、公开投影、引用闭包与真实 ZIP 摘要；发布和交付额外重验当前科学审批。
+
+
+A2C 验证在仓库根目录运行，日志与独立报告保存于 `.artifacts/research-optimization/pr10-a2c-*`：
+
+```bash
+pnpm build
+node scripts/run-research-p0.mjs
+node --test tests/renderer/artifact-production.test.mjs
+node scripts/smoke-electron.mjs
+pnpm check:ipc
+pnpm check:renderer-chunks
+node --test tests/unit/research-export-public-files.test.mjs \
+  tests/unit/research-export-public-projection.test.mjs tests/unit/research-ro-crate.test.mjs
+node --test \
+  --test-name-pattern='actual result metric evidence|scientific consistency binds actual' \
+  tests/integration/research-python-experiments.test.mjs
+```
+
+结果：真实 P0 13/13、生产抽屉 9/9、原生启动 13/13（无 renderer error）、公开文件/投影/crate 16/16、实际 CPython 2/2；构建包含类型检查，IPC 生成文件一致，eager renderer 为 1,134,432 字节（6 文件）。
+
+独立 validator 检查真实 P0 生成 ZIP 的解包目录，固定 RO-Crate 1.2：
+
+```bash
+/tmp/roc-pr10-validator-0131/bin/rocrate-validator validate \
+  --offline --cache-path /tmp/roc-pr10-validator-cache \
+  --profile-identifier ro-crate-1.2 --no-auto-profile \
+  --output-format json \
+  --output-file .artifacts/research-optimization/pr10-a2c-validator-report.json \
+  --no-paging /private/var/folders/p8/s1717bsd4cz80g353254g8vc0000gn/T/roc-pr10-a2c-actual-nsm17s97
+```
+
+30/30 required requirements，63 checks 通过，0 失败；另 3 项为离线可达性或不适用，未使用自定义 skip 或降低严重级别。实际 ZIP 与解包路径另存于 `pr10-a2c-actual-crate-path.txt`。上述均为合成科研材料的本地工程验收。
+
+补充必需检查：`pnpm test:unit` 1297/1297（358142ms）、`pnpm harness:eval` 94/94；终态均 exit 0，日志 `pr10-a2c-unit.log`、`pr10-a2c-harness.log`。A2C 本地工程状态：Verified passing。

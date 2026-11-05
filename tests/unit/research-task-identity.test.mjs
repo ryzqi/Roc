@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import Database from 'better-sqlite3';
 import { createResearchFixture, figureRequest, loadResearchTestApi } from './fixtures/research-test-kit.mjs';
+import {syntheticExportPublicationReview} from '../fixtures/research-export-publication.mjs';
 
 let api;
 let directory;
@@ -290,7 +291,8 @@ test('public stage and production contracts reject model or renderer supplied pa
     ['research.experiment.start', { projectId, ownerRunId, requestId: '1', label: 'Experiment', sourcePath: 'experiment.mts',
       inputPaths: [], parameters: {}, timeoutMs: 1000, network: 'disabled', engine: 'typescript', runtime: { kind: 'bundled-node' }, sourceVersion: 1 }],
     ['research.export.prepare', { projectId, ownerRunId, requestId: '1', title: 'Export', manuscriptArtifactId: 'manuscript',
-      figureIds: [], template: { kind: 'default', language: 'en' } }]
+      figureIds: [], template: { kind: 'default', language: 'en' },
+      publicationReview: syntheticExportPublicationReview({sourceHash: '0'.repeat(64), resources: [], references: []}) }]
   ];
   const channels = [
     'roc:research:stage-run-start',

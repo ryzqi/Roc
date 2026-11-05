@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { ResearchExportSources } from '../../../shared/schemas/research-exports';
 import { createResearchDirectory, readResearchFile } from './research-files';
 import type { ResearchProcessScope, ResearchToolchain } from './toolchain';
+import {researchPrivateValueReason} from '../../../shared/schemas/research-public-projection';
 
 /**
  * 导出附带的**研究过程报告**：用 Typst 排版，不碰 LaTeX 主链。
@@ -27,10 +28,7 @@ import type { ResearchProcessScope, ResearchToolchain } from './toolchain';
  * 毫秒，没有 TeX bundle、没有 BibTeX 往返。实测数据与取舍见
  * `docs/adr/0025-typst-report-engine.md`。
  *
- * ## 失败不许拖垮导出
- *
- * 报告是**附加物**：`export-builder.ts` 在 `try/catch` 里调用本模块，失败只写
- * `logs/typst-report-error.txt`。一份能编译的论文不该因为报告排版失败而导不出来。
+ * 报告失败会使当前导出失败；未生成完整交付包不能进入批准状态。
  */
 
 export type TypstCitationStyle = 'apa' | 'ieee' | 'gb-t-7714';
@@ -59,6 +57,7 @@ export function escapeTypst(value: string): string {
 
 /** 表格单元格里的多行文本：Typst 表格不接受裸换行，先折成空格。 */
 function cell(value: string): string {
+  if (researchPrivateValueReason(value) !== null) return '[omitted from public projection]';
   return escapeTypst(value.replace(/\s+/gu, ' ').trim());
 }
 

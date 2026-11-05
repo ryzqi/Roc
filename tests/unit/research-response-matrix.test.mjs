@@ -377,13 +377,14 @@ test('schema5 export seal captures response-only evidence and changes after inde
     const sources = {project: f.project, manuscriptArtifact: f.repository.getArtifact(f.artifactId),
       figures: [], claims: [f.claim], evidence: [f.source], experimentResults: [], ideaOutcomes: []};
     const review = api.captureExportScientificReview(f.repository, sources), bytes = api.serializeExportScientificReview(review);
+    const publicBytes = api.serializePublicExportScientificReview(review);
     assert.equal(review.schemaVersion, 5);
     assert.deepEqual(review.responseMatrices[0].current, first);
     assert.deepEqual(review.evidence.map(source => source.evidence.id), [f.source.id, independent.id]);
     assert.equal(api.researchExportScientificReviewSchema.safeParse({...review, schemaVersion: 3}).success, false);
     assert.equal(api.researchExportScientificReviewSchema.safeParse({...review, responseMatrices: undefined}).success, false);
     const record = {sources, sourceHash: review.sourceHash, files: [{path: api.exportScientificReviewPath,
-      size: Buffer.byteLength(bytes), sha256: createHash('sha256').update(bytes).digest('hex')}]};
+      size: Buffer.byteLength(publicBytes), sha256: createHash('sha256').update(publicBytes).digest('hex')}]};
     const before = f.changes();
     api.assertCurrentExportScientificReview(f.repository, record);
     assert.equal(f.changes(), before);

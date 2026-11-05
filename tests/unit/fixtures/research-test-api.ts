@@ -69,6 +69,7 @@ export { ResearchWorkspaceFileService } from '../../../src/main/plugins/research
 export { ResearchToolchain } from '../../../src/main/plugins/research/toolchain';
 export { ResearchTemplateService } from '../../../src/main/plugins/research/template-service';
 export { ResearchExportSourceService } from '../../../src/main/plugins/research/export-sources';
+export {serializePublicExportScientificReview} from '../../../src/main/plugins/research/export-scientific-review';
 export { ResearchExportService } from '../../../src/main/plugins/research/export-service';
 export { LiteratureSearchService } from '../../../src/main/plugins/research/literature-service';
 export { LiteratureImportService } from '../../../src/main/plugins/research/literature-import-service';

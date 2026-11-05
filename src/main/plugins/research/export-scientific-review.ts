@@ -7,6 +7,7 @@ import {researchContentHash} from './research-files';
 import type {ResearchRepository} from './repository';
 import {captureExportIdeaOutcomes, captureExportIdeaOutcomeHistory} from './export-idea-outcomes';
 import {captureExportArtifactReviews} from './export-artifact-reviews';
+import {serializeResearchPublicProjection} from './export-public-projection';
 
 export const exportScientificReviewPath = 'provenance/scientific-review.json';
 
@@ -56,6 +57,10 @@ export function serializeExportScientificReview(review: ResearchExportScientific
   return `${JSON.stringify(researchExportScientificReviewSchema.parse(review))}\n`;
 }
 
+export function serializePublicExportScientificReview(review: ResearchExportScientificReview): string {
+  return serializeResearchPublicProjection(researchExportScientificReviewSchema.parse(review));
+}
+
 /** Current publication requires a seal; historical reads verify only the saved files and archive. */
 export function assertCurrentExportScientificReview(repository: ResearchRepository, record: ResearchExportExecution): void {
   if (record.sources === null) throw new Error('research_export_sources_required');
@@ -65,7 +70,7 @@ export function assertCurrentExportScientificReview(repository: ResearchReposito
     throw new RocDomainError({code: 'research_export_semantic_snapshot_required', category: 'conflict', retryable: false,
       message: '当前导出缺少固定的科学关系审核快照。请核查来源并重新生成导出。'});
   }
-  const bytes = serializeExportScientificReview(captureExportScientificReview(repository, record.sources));
+  const bytes = serializePublicExportScientificReview(captureExportScientificReview(repository, record.sources));
   if (file.sha256 !== researchContentHash(bytes) || file.size !== Buffer.byteLength(bytes)) {
     throw new RocDomainError({code: 'research_export_semantic_snapshot_changed', category: 'conflict', retryable: false,
       message: '导出的科学关系审核快照已变化。请重新核查关系、生成导出并审核当前版本。'});

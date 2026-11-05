@@ -116,7 +116,7 @@ export class ResearchExportSourceService {
       } else {
         citationKeys[source.id] = source.id;
         bibliography.set(source.id, researchBibliographyEntrySchema.parse({ citationKey: source.id, entryType: 'misc',
-          fields: { title: escapeLatex(source.title), note: escapeLatex(`${source.sourceType}: ${source.sourceId}; ${source.locator}`) },
+          fields: { title: escapeLatex(source.title), note: escapeLatex(`${source.sourceType}: ${source.sourceId}`) },
           preambles: [], csl: null, title: source.title, authors: [], doi: null, publishedYear: null, abstract: null, url: null }));
       }
     }

@@ -51,7 +51,8 @@ export const researchExportResourceCandidateSchema = z.strictObject({
 export const researchExportInputsSchema = z.strictObject({
   sourceHash: z.string().regex(/^[a-f0-9]{64}$/u),
   resources: z.array(researchExportResourceCandidateSchema).max(10000),
-  references: z.array(z.strictObject({id, name: researchPublicTextSchema, url: researchPublicUrlSchema.nullable()})).max(5000)
+  // Private source metadata is editable in the review; only the submitted public metadata is constrained.
+  references: z.array(z.strictObject({id, name: z.string().min(1).max(8192), url: z.string().max(8192).nullable()})).max(5000)
 });
 
 export type ResearchExportResourceSource = z.infer<typeof researchExportResourceSourceSchema>;

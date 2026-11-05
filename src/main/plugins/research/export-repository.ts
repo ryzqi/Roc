@@ -12,19 +12,24 @@ type Row = { snapshot_json: string; root_path: string };
 export class ResearchExportRepository {
   constructor(private readonly db: Database, private readonly research: ResearchRepository, private readonly now: () => string) {}
 
+  findRequest(request: ResearchExportPrepare): ResearchExportExecution | null {
+    const project = this.research.getProject(request.projectId);
+    if (project.status === 'archived') throw new Error('research_project_archived');
+    const existing = this.db.prepare('SELECT id FROM research_export_executions WHERE project_id = ? AND request_id = ?')
+      .get(project.id, request.requestId) as {id: string} | undefined;
+    if (existing === undefined) return null;
+    const record = this.get(project.id, existing.id);
+    if (JSON.stringify(record.request) !== JSON.stringify(request) || record.ownerRunId !== (request.ownerRunId ?? null)) {
+      throw new Error('research_export_request_conflict');
+    }
+    return record;
+  }
+
   create(request: ResearchExportPrepare, storage: string): ResearchExportExecution {
     return this.db.transaction(() => {
+      const existing = this.findRequest(request);
+      if (existing !== null) return existing;
       const project = this.research.getProject(request.projectId);
-      if (project.status === 'archived') throw new Error('research_project_archived');
-      const existing = this.db.prepare('SELECT id FROM research_export_executions WHERE project_id = ? AND request_id = ?')
-        .get(project.id, request.requestId) as { id: string } | undefined;
-      if (existing !== undefined) {
-        const record = this.get(project.id, existing.id);
-        if (JSON.stringify(record.request) !== JSON.stringify(request) || record.ownerRunId !== (request.ownerRunId ?? null)) {
-          throw new Error('research_export_request_conflict');
-        }
-        return record;
-      }
       this.requireCurrent(request);
       const ownerRunId = request.ownerRunId ?? null;
       if (ownerRunId !== null) this.research.runs.requireActive(ownerRunId, project.id);
@@ -73,7 +78,8 @@ export class ResearchExportRepository {
       if (next.status === 'ready') {
         this.requireCurrent(record.request);
         if (next.sources === null || next.sourceHash === null || next.toolchainHash === null || next.archive === null || next.error !== null
-          || !next.files.some((file) => file.path === 'paper.pdf') || !next.files.some((file) => file.path === 'manifest.json')) throw new Error('research_export_result_invalid');
+          || !next.files.some((file) => file.path === 'paper.pdf') || !next.files.some((file) => file.path === 'manifest.json')
+          || !next.files.some((file) => file.path === 'ro-crate-metadata.json') || !next.files.some((file) => file.path === 'ro-crate-profile.html')) throw new Error('research_export_result_invalid');
       }
       const value = { ...record, ...next, endedAt: this.now() };
       if (value.status === 'ready') assertCurrentExportScientificReview(this.research, value);
