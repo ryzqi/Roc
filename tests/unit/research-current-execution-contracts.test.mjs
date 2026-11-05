@@ -17,7 +17,8 @@ const typescript = { ...fields, engine: 'typescript', runtime: { kind: 'bundled-
 const native = (engine) => ({ ...fields, engine, arguments: [], sourcePath: engine === 'r' ? 'analysis.r' : 'analysis.jl',
   runtime: engine === 'r' ? { kind: 'renv', rootPath: '/runtime/r', libraryPath: 'renv/library' }
     : { kind: 'julia', rootPath: '/runtime/julia', depotPath: '/runtime/depot' } });
-const python = { ...fields, engine: 'python', sourcePath: 'analysis.py', sourceVersion: 1, seed: 42,
+const { sourcePath: _typescriptPath, ...pythonFields } = fields;
+const python = { ...pythonFields, engine: 'python', source: { kind: 'file', path: 'analysis.py' }, sourceVersion: 1, seed: 42,
   arguments: [], expectedEnvironmentHash: 'b'.repeat(64),
   runtime: { kind: 'python', selectionId: 'python_environment_selected', expectedHash: 'a'.repeat(64) } };
 
@@ -62,11 +63,19 @@ test('Python inspection and starts require exact path-free selections, version, 
   const { projectId: _projectId, ...owned } = python;
   assert.deepEqual(experiments.researchOwnedExperimentStartSchema.parse(owned), owned);
   assert.deepEqual(experiments.researchExperimentStartRequestSchema.parse(python), python);
+  const notebook = { ...python, source: { kind: 'notebook', notebookId: 'imported-1', expectedHash: 'c'.repeat(64), subsetVersion: 1 } };
+  assert.deepEqual(experiments.researchExperimentStartSchema.parse(notebook), notebook);
+  const { projectId: _notebookProject, ...ownedNotebook } = notebook;
+  assert.deepEqual(experiments.researchOwnedExperimentStartSchema.parse(ownedNotebook), ownedNotebook);
+  for (const source of [
+    { ...notebook.source, projectId: 'injected' }, { ...notebook.source, expectedHash: 'wrong' },
+    { ...notebook.source, subsetVersion: 2 }, { kind: 'notebook', notebookId: 'imported-1' }
+  ]) assert.equal(experiments.researchExperimentStartSchema.safeParse({ ...notebook, source }).success, false);
   const { seed: _seed, ...noSeed } = python;
   const { sourceVersion: _version, ...noVersion } = python;
   const { expectedEnvironmentHash: _environment, ...noEnvironment } = python;
   for (const changed of [noSeed, noVersion, noEnvironment, { ...python, seed: -1 }, { ...python, seed: 0x1_0000_0000 },
-    { ...python, seed: 0.5 }, { ...python, sourceVersion: 2 }, { ...python, sourcePath: 'source.mts' },
+    { ...python, seed: 0.5 }, { ...python, sourceVersion: 2 }, { ...python, source: { kind: 'file', path: 'source.mts' } }, { ...python, sourcePath: 'analysis.py' },
     { ...python, arguments: ['\0'] }, { ...python, runtime: { ...runtime, executable: '/usr/bin/python3' } }]) {
     assert.equal(experiments.researchExperimentStartSchema.safeParse(changed).success, false);
     assert.equal(experiments.researchExperimentStartRequestSchema.safeParse(changed).success, false);

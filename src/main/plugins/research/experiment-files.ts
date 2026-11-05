@@ -1,6 +1,7 @@
 import { lstat, mkdir, readdir, realpath, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
-import type { ResearchExperimentEnvironment, ResearchExperimentFile, ResearchExperimentStart } from '../../../shared/schemas/research-experiments';
+import { notebookExperimentPaths, researchPythonSourcePath,
+  type ResearchExperimentEnvironment, type ResearchExperimentFile, type ResearchExperimentStart } from '../../../shared/schemas/research-experiments';
 import type { ResearchFigureRendererEnvironment, ResearchFigureStart } from '../../../shared/schemas/research-figures';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchRelativePath } from './research-files';
 
@@ -23,39 +24,37 @@ export async function experimentStorage(path: string | null): Promise<string> {
 }
 
 export async function snapshotExperimentInputs(workspace: string, target: string, request: SnapshotRequest,
-  environment: SnapshotEnvironment, signal: AbortSignal, generatedInputs: Record<string, string> = {}): Promise<{ files: ResearchExperimentFile[]; hash: string }> {
+  environment: SnapshotEnvironment, signal: AbortSignal, generatedInputs: Record<string, Buffer>): Promise<{ files: ResearchExperimentFile[]; hash: string }> {
   const lockFiles = 'lockFiles' in environment ? environment.lockFiles : [];
-  const paths = [...new Set([request.sourcePath, ...request.inputPaths, ...lockFiles.map((file) => file.path)])]
+  const notebook = request.engine === 'python' && request.source.kind === 'notebook';
+  const sourcePath = request.engine === 'python' ? researchPythonSourcePath(request.source) : request.sourcePath;
+  const generatedPaths = Object.keys(generatedInputs);
+  const requiredGenerated = notebook ? Object.values(notebookExperimentPaths) : [];
+  if (generatedPaths.length !== requiredGenerated.length || requiredGenerated.some(path => !generatedPaths.includes(path))) {
+    throw new Error('research_experiment_generated_source_required');
+  }
+  const workspacePaths = [...new Set([...(notebook ? [] : [sourcePath]), ...request.inputPaths, ...lockFiles.map((file) => file.path)])];
+  if (workspacePaths.some(path => generatedPaths.includes(path))) throw new Error('research_experiment_reserved_input');
+  const paths = [...workspacePaths, ...generatedPaths]
     .sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
-  if (Object.keys(generatedInputs).some((path) => paths.includes(path))) throw new Error('research_experiment_reserved_input');
   const files: ResearchExperimentFile[] = [];
   let total = 0;
   for (const path of paths) {
     signal.throwIfAborted();
-    const bytes = await readResearchFile(workspace, path, experimentFileLimit);
-    total += bytes.length;
-    if (total > experimentInputTotalLimit) throw new Error('research_experiment_input_limit');
-    const parent = dirname(path);
-    if (parent !== '.') await createResearchDirectory(target, parent);
-    await writeFile(join(target, path), bytes, { flag: 'wx', mode: 0o400 });
-    files.push({ area: 'input', path, size: bytes.length, sha256: researchContentHash(bytes) });
-  }
-  for (const file of files) {
-    signal.throwIfAborted();
-    if (researchContentHash(await readResearchFile(workspace, file.path, experimentFileLimit)) !== file.sha256) throw new Error('research_experiment_input_changed');
-    const lock = lockFiles.find((entry) => entry.path === file.path);
-    if (lock !== undefined && lock.sha256 !== file.sha256) throw new Error('research_experiment_environment_changed');
-  }
-  for (const [path, content] of Object.entries(generatedInputs).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)) {
-    signal.throwIfAborted();
-    researchRelativePath(path);
-    const bytes = Buffer.from(content, 'utf8');
+    const bytes = generatedPaths.includes(path) ? generatedInputs[path]! : await readResearchFile(workspace, path, experimentFileLimit);
     total += bytes.length;
     if (bytes.length > experimentFileLimit || total > experimentInputTotalLimit) throw new Error('research_experiment_input_limit');
     const parent = dirname(path);
     if (parent !== '.') await createResearchDirectory(target, parent);
     await writeFile(join(target, path), bytes, { flag: 'wx', mode: 0o400 });
     files.push({ area: 'input', path, size: bytes.length, sha256: researchContentHash(bytes) });
+  }
+  for (const file of files) {
+    if (generatedPaths.includes(file.path)) continue;
+    signal.throwIfAborted();
+    if (researchContentHash(await readResearchFile(workspace, file.path, experimentFileLimit)) !== file.sha256) throw new Error('research_experiment_input_changed');
+    const lock = lockFiles.find((entry) => entry.path === file.path);
+    if (lock !== undefined && lock.sha256 !== file.sha256) throw new Error('research_experiment_environment_changed');
   }
   const identity = (() => {
     switch (request.engine) {
@@ -69,7 +68,7 @@ export async function snapshotExperimentInputs(workspace: string, target: string
   })();
   const argumentsList = 'arguments' in request ? request.arguments : [];
   const parameters = 'parameters' in request ? Object.entries(request.parameters).sort(([left], [right]) => left.localeCompare(right)) : [];
-  return { files, hash: researchContentHash(JSON.stringify({ ...identity, source: request.sourcePath, files,
+  return { files, hash: researchContentHash(JSON.stringify({ ...identity, source: request.engine === 'python' ? request.source : sourcePath, files,
     arguments: argumentsList, parameters, environment: environment.hash })) };
 }
 

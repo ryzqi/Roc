@@ -43,3 +43,20 @@ A3 验证（2026-11-06，项目根目录）：`pnpm build`（含 typecheck）；
 生成内容绑定完整原字节和大小、不可变导入回执、cell ID/顺序/cellHash/sourceHash、executorHash 和最终 sourceHash。采用 ASCII base64 封装 JSON，未受信源码不参与生成脚本的引号语法。运行时负结果保留此前实际 stdout，并在失败 cell 停止。A4A 本身不注册启动接口、不写用户工作目录，也不执行产品请求。
 
 A4A 验证（2026-11-06，项目根目录）：`node --test tests/unit/research-notebook-python-source.test.mjs tests/unit/research-notebook-parser.test.mjs tests/unit/research-notebook-import.test.mjs` 18/18，含本机 CPython 3.14 的实际执行；`pnpm typecheck` 和 `pnpm build` exit 0。完整源码超过 8000 字符、共享定义、先全编译、原 cell 行号、不支持语义零提前执行、负结果与哈希篡改均有断言。初轮测试因临时目录无法解析 external Zod 在加载阶段失败；测试打包依赖后通过，产品合同未变。日志 `.artifacts/research-optimization/xnb-a4a-{focused,type,build}.log`。
+
+## 冻结 Notebook 的真实执行（A4B）
+
+Python 启动合同要求显式 `source`：脚本为 `{kind:'file',path:'analysis.py'}`，Notebook 为 `{kind:'notebook',notebookId,expectedHash,subsetVersion:1}`。`expectedHash` 是用户导入回执的 `snapshotHash`；项目由当前调用绑定。旧 Python `sourcePath` 字段、未知子集版本、其他项目和不完整身份直接拒绝。
+
+Notebook 使用 PR08 用户选定的 CPython 环境、预览哈希、固定启动参数、随机种子、Seatbelt、资源限额、取消及进程树清理。冻结输入仅有 `roc-notebook/original.ipynb` 原字节、`roc-notebook/receipt.json` 完整回执和 `roc-notebook/run.py` 子集源码，均为 0400，只写实验存储。原工作目录 Notebook 修改、移动或删除不改变已经引用的导入版本。声明输入和环境锁文件不能占用这些路径；其他输入仍核验当前工作目录字节。
+
+`inputHash` 绑定显式来源、全部冻结文件、参数、seed 和实际环境。重放与发布重新读取研究库原字节和回执并生成三份输入核对，篡改脚本后即使重算磁盘/数据库文件哈希也不能通过。成功计算生成实验工件后仍需人工审核；失败、timeout、cancel 和中断保留实际日志与资源回执。生产检查器显示确切 Notebook ID 和保存请求，不把已有 Notebook 输出当作实际结果。
+
+A4B 验证（2026-11-06，项目根目录）：
+
+- `node --test --test-name-pattern='Notebook' tests/integration/research-python-experiments.test.mjs` 5/5；新增 owned 重放/发布断言后，`node --test --test-name-pattern='actual Notebook execution freezes' tests/integration/research-python-experiments.test.mjs` 1/1。
+- `node --test --test-concurrency=1 --test-name-pattern='^(?!.*Notebook)' tests/integration/research-python-experiments.test.mjs tests/integration/research-python-process.test.mjs tests/integration/research-python-selection.test.mjs` 实际执行了 33 项，32 项通过；唯一失败为已有迁移测试仍期待 DB42，Notebook 导入已采用 DB43。修正明确版本后，`node --test --test-name-pattern='DB41 upgrade' tests/integration/research-python-selection.test.mjs` 1/1；不宣称原命令 exit 0。
+- `pnpm test:unit` 1199/1199；`node --test tests/renderer/artifact-production.test.mjs` 9/9；`pnpm typecheck`、`pnpm build`、`pnpm check:ipc` 通过。
+- `node scripts/run-research-p0.mjs` 13/13；`node scripts/harness-eval/run.mjs` 94/94；`node scripts/smoke-electron.mjs` 13/13，零 renderer errors；`pnpm check:renderer-chunks` 1133982 bytes / 6 files。
+
+真实用例覆盖超过 8000 字符的 cell、全部先编译、原 cell 行号、负结果、冻结 0400 输入、越界写入 PermissionError、超时/取消、错误引用零 compute、host rehash 拒绝和磁盘重启零 dispatch。参数测试初轮在 `details.open=true`、完整 pre 存在但原生 `::details-content` 尚未显示时读取 innerText；保留键盘与可见内容断言，等待实际显示和原生动画结束后通过，未改产品动效。证据 `.artifacts/research-optimization/xnb-a4b-*.log`。本部分完成 Notebook 执行；指标比较与假设关联属于后续 X-EXP。

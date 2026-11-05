@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { z } from 'zod';
-import type { ResearchExperimentStart } from '../../../shared/schemas/research-experiments';
+import { researchPythonSourcePath, type ResearchExperimentStart } from '../../../shared/schemas/research-experiments';
 import { pythonEnvironmentReportSchema, assertPythonCodeReceipt, type PythonCodeReceipt } from './experiment-python-code-schema';
 import { pythonExperimentFlags, type InspectedPythonEnvironment } from './experiment-python-probe';
 import { experimentRunnerRequestLimit } from './experiment-files';
@@ -75,9 +75,8 @@ export function pythonExperimentToolchainHash(receipt: PythonCodeReceipt): strin
   }));
 }
 
-type PythonSource = Pick<ResearchExperimentStart, 'sourcePath' | 'inputPaths' | 'parameters'> & {
-  sourceVersion: 1; seed: number; arguments: string[];
-};
+type PythonSource = Pick<Extract<ResearchExperimentStart, { engine: 'python' }>,
+  'source' | 'sourceVersion' | 'seed' | 'arguments' | 'inputPaths' | 'parameters'>;
 type PythonExperimentProcessInput = {
   source: PythonSource; python: InspectedPythonEnvironment;
   inputDir: string; outputDir: string; scratchDir: string;
@@ -95,7 +94,7 @@ export async function runPythonExperimentProcess(input: PythonExperimentProcessI
   const { controls } = receipt.metadataIdentity;
   const wire = {
     sourceVersion: z.literal(1).parse(source.sourceVersion),
-    sourcePath: researchRelativePath(source.sourcePath),
+    sourcePath: researchRelativePath(researchPythonSourcePath(source.source)),
     inputPaths: source.inputPaths.map(path => researchRelativePath(path)),
     parameters: source.parameters, arguments: source.arguments, seed: seedSchema.parse(source.seed),
     inputDir: absolutePath.parse(inputDir), outputDir: absolutePath.parse(outputDir), scratchDir: absolutePath.parse(scratchDir),

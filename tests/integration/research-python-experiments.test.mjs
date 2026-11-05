@@ -77,7 +77,7 @@ async function fixture(code = source, options = {}) {
   const runtime = { kind: 'python', selectionId: selected.snapshot.id, expectedHash: selected.snapshotHash };
   const preview = await service.inspect(f.project.id, runtime);
   const request = { projectId: f.project.id, ownerRunId: f.run.id, requestId: 'python-first', label: 'Python fixed result',
-    engine: 'python', sourceVersion: 1, sourcePath: 'analysis.py', inputPaths: ['data.txt'], parameters: { scale: '2' },
+    engine: 'python', sourceVersion: 1, source: { kind: 'file', path: 'analysis.py' }, inputPaths: ['data.txt'], parameters: { scale: '2' },
     seed: 73, arguments: [], runtime, expectedEnvironmentHash: preview.hash, timeoutMs: 5000, network: 'disabled' };
   const read = async (run, area, path) => (await service.read({ projectId: f.project.id, runId: run.id, area, path })).content;
   const wait = async id => {
@@ -453,4 +453,197 @@ test('Python disk recovery retains selected environments and historical audits, 
     restartedDb?.close(); restartedAgentDb?.close();
     await f.cleanup();
   }
+});
+
+const notebookResultCells = [
+  'import json\nfrom pathlib import Path\nimport roc_experiment as roc\nvalue = int(Path(roc.input_dir, "data.txt").read_text())\n',
+  '# Complete original cell source, longer than the preview\n' + '# original line\n'.repeat(700) +
+    'def measurement():\n    return value * int(roc.parameters["scale"]) + 42\n',
+  'Path(roc.output_dir, "result.json").write_text(json.dumps({"value": measurement(), "seed": roc.seed}, sort_keys=True))\nprint("ACTUAL_NOTEBOOK_RESULT")\n'
+];
+
+async function importNotebook(f, cells = notebookResultCells, requestId = 'notebook-import') {
+  const notebook = { nbformat: 4, nbformat_minor: 5, metadata: { language_info: { name: 'python' } },
+    cells: cells.map((source, index) => ({ id: `original-${index}`, cell_type: 'code', metadata: { trusted: true },
+      source, execution_count: 900 + index, outputs: [{ output_type: 'display_data',
+        data: { 'text/plain': 'OLD_UNTRUSTED_RESULT', 'text/html': '<script>throw "MALICIOUS_OUTPUT"</script>' }, metadata: {} }] })) };
+  const bytes = Buffer.from(JSON.stringify(notebook, null, 2) + '\n');
+  await writeFile(join(f.workspace, 'analysis.ipynb'), bytes);
+  const imported = await api.withResearchHumanContext({ capability: 'research.notebooks.import', projectId: f.project.id, windowId: 72 },
+    () => f.repository.notebooks.import({ projectId: f.project.id, path: 'analysis.ipynb', requestId,
+      expectedSha256: createHash('sha256').update(bytes).digest('hex') }));
+  return { bytes, imported, source: { kind: 'notebook', notebookId: imported.receipt.snapshot.id,
+    expectedHash: imported.receipt.snapshotHash, subsetVersion: 1 } };
+}
+
+test('actual Notebook execution freezes full original cells and receipts, keeps versions after source deletion, and publishes through PR08', async () => {
+  const f = await fixture();
+  try {
+    const nb = await importNotebook(f);
+    const request = { ...f.request, source: nb.source, requestId: 'notebook-first' };
+    const first = await f.execute(request);
+    assert.equal(first.status, 'completed', first.error);
+    assert.deepEqual(JSON.parse(await f.read(first, 'output', 'result.json')), { value: 48, seed: 73 });
+    assert.match(await f.read(first, 'log', 'stdout.txt'), /ACTUAL_NOTEBOOK_RESULT/u);
+    assert.doesNotMatch(await f.read(first, 'log', 'stdout.txt'), /OLD_UNTRUSTED_RESULT|MALICIOUS_OUTPUT/u);
+    assert.equal(await f.read(first, 'input', 'roc-notebook/original.ipynb'), nb.bytes.toString('utf8'));
+    assert.deepEqual(JSON.parse(await f.read(first, 'input', 'roc-notebook/receipt.json')), nb.imported.receipt);
+    const generated = await f.read(first, 'input', 'roc-notebook/run.py');
+    const encoded = generated.match(/^_nb_encoded = "([^"]+)"/u)[1];
+    const payload = JSON.parse(Buffer.from(encoded, 'base64'));
+    assert.equal(payload.receiptHash, nb.source.expectedHash);
+    assert.equal(payload.sha256, createHash('sha256').update(nb.bytes).digest('hex'));
+    assert.deepEqual(payload.cells.map(cell => [cell.id, cell.index]), [['original-0', 0], ['original-1', 1], ['original-2', 2]]);
+    assert.equal(payload.cells[1].source, notebookResultCells[1]); assert.ok(payload.cells[1].source.length > 8000);
+    assert.equal(payload.cells[1].cellHash, nb.imported.preview.cells[1].cellHash);
+    const startup = JSON.parse(await f.read(first, 'log', 'python-startup.json'));
+    assert.equal(startup.startup.sourcePath, join(f.repository.experiments.root(f.project.id, first.id), 'input/roc-notebook/run.py'));
+    const resources = JSON.parse(await f.read(first, 'log', 'resources.json'));
+    assert.equal(resources.outcome, 'returned'); assert.equal(resources.exitCode, 0);
+    assert.deepEqual(resources.usage, f.observed.find(entry => entry.kind === 'compute').result.resourceUsage);
+    for (const file of first.files.filter(file => file.area === 'input')) {
+      assert.equal((await stat(join(f.repository.experiments.root(f.project.id, first.id), 'input', file.path))).mode & 0o777, 0o400);
+    }
+    await assert.rejects(readFile(join(f.workspace, 'roc-notebook/run.py')), { code: 'ENOENT' });
+    await writeFile(join(f.workspace, 'analysis.ipynb'), 'CHANGED ORIGINAL');
+    const second = await f.execute({ ...request, requestId: 'notebook-repeat' });
+    assert.equal(second.status, 'completed', second.error); assert.equal(second.inputHash, first.inputHash);
+    await rm(join(f.workspace, 'analysis.ipynb'));
+    const count = f.observed.length;
+    assert.deepEqual(await f.service.start(request), first); assert.equal(f.observed.length, count);
+    const registry = new api.CapabilityRegistry();
+    for (const descriptor of api.researchExperimentCapabilities) registry.declare('research', descriptor);
+    api.registerResearchExperimentCapabilities({ pluginId: 'research', capabilities: registry }, f.repository.experiments, f.service);
+    const tools = Object.fromEntries(api.createResearchRoleTools({ run: f.run, context: f.repository.runs.getContext(f.run.id),
+      repository: f.repository, capabilities: registry, effects: new api.ResearchProductionEffectService(f.repository, undefined, f.service),
+      signal: new AbortController().signal }).map(tool => [tool.name, tool]));
+    const { projectId: _project, ownerRunId: _owner, ...owned } = request;
+    assert.equal((await tools.start_experiment.invoke(owned)).experimentId, first.id);
+    assert.equal(f.observed.length, count);
+    const publishedResult = await tools.publish_experiment.invoke({ experimentId: first.id });
+    const published = f.repository.experiments.get(f.project.id, first.id);
+    assert.equal(publishedResult.artifactId, published.artifactId);
+    await f.service.verifyPublication(f.project.id, published.artifactId);
+    assert.deepEqual(f.failures, []);
+    receipts.push({ scenario: 'notebook-complete', original: nb.imported.receipt, payload, first, second, published });
+  } finally { await f.cleanup(); }
+});
+
+test('actual Notebook compiles every cell before side effects and retains failing cell provenance and negative outputs', async () => {
+  const f = await fixture();
+  try {
+    for (const [index, bad] of ['valid = 1\nbroken =\n', '%time print(1)\n', 'from __future__ import annotations\n'].entries()) {
+      const nb = await importNotebook(f, ['from pathlib import Path\nimport roc_experiment as roc\nPath(roc.output_dir, "EARLY_EXECUTED").write_text("unsafe")\n', bad],
+        `compile-${index}`);
+      const run = await f.execute({ source: nb.source, requestId: `compile-${index}` });
+      assert.equal(run.status, 'failed'); assert.equal(run.error, 'research_experiment_process_failed');
+      assert.equal(run.files.some(file => file.area === 'output'), false);
+      const error = await f.read(run, 'log', 'stderr.txt');
+      assert.match(error, /SyntaxError/u); assert.ok(error.includes(`roc-notebook:${nb.imported.preview.sha256}/original-1`));
+      if (index === 0) assert.match(error, /line 2/u);
+      const resources = JSON.parse(await f.read(run, 'log', 'resources.json'));
+      assert.equal(resources.outcome, 'returned'); assert.notEqual(resources.exitCode, 0);
+      const before = f.observed.length;
+      assert.deepEqual(await f.service.start({ ...f.request, source: nb.source, requestId: `compile-${index}` }), run);
+      assert.equal(f.observed.length, before);
+      await assert.rejects(f.service.publish(f.project.id, run.id), /research_experiment_completed_required/u);
+    }
+    const nb = await importNotebook(f, ['print("EARLIER_ACTUAL_OUTPUT")\n', 'raise ValueError("negative outcome")\n',
+      'print("LATER_EXECUTED")\n'], 'negative');
+    const run = await f.execute({ source: nb.source, requestId: 'negative' });
+    assert.equal(run.status, 'failed');
+    assert.match(await f.read(run, 'log', 'stdout.txt'), /EARLIER_ACTUAL_OUTPUT/u);
+    assert.doesNotMatch(await f.read(run, 'log', 'stdout.txt'), /LATER_EXECUTED/u);
+    assert.match(await f.read(run, 'log', 'stderr.txt'), /ValueError: negative outcome/u);
+  } finally { await f.cleanup(); }
+});
+
+test('actual Notebook uses selected Python filesystem isolation and records timeout and cancellation resources', async () => {
+  const f = await fixture();
+  try {
+    const outside = join(f.path, 'OUTSIDE_NOTEBOOK_WRITTEN');
+    const denied = await importNotebook(f, [`from pathlib import Path\nPath(${JSON.stringify(outside)}).write_text("unsafe")\n`], 'boundary');
+    const refusal = await f.execute({ source: denied.source, requestId: 'boundary' });
+    assert.equal(refusal.status, 'failed'); assert.match(await f.read(refusal, 'log', 'stderr.txt'), /PermissionError/u);
+    await assert.rejects(readFile(outside), { code: 'ENOENT' });
+    const busy = await importNotebook(f, ['from pathlib import Path\nimport roc_experiment as roc\nPath(roc.output_dir, "STARTED").write_text("actual")\nwhile True:\n    pass\n'], 'busy');
+    const timeout = await f.execute({ source: busy.source, requestId: 'notebook-timeout', timeoutMs: 1000 });
+    assert.equal(timeout.status, 'failed'); assert.equal(timeout.error, 'research_process_timeout');
+    assert.equal(JSON.parse(await f.read(timeout, 'log', 'resources.json')).outcome, 'rejected');
+    const active = await f.service.start({ ...f.request, source: busy.source, requestId: 'notebook-cancel', timeoutMs: 15000 });
+    const started = join(f.repository.experiments.root(f.project.id, active.id), 'output/STARTED');
+    const deadline = Date.now() + 10000;
+    while (true) {
+      try { assert.equal(await readFile(started, 'utf8'), 'actual'); break; }
+      catch (error) { if (error.code !== 'ENOENT') throw error; }
+      assert.ok(Date.now() < deadline, 'Notebook cell did not start');
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    const cancelled = await f.service.cancel(f.project.id, active.id);
+    assert.equal(cancelled.status, 'cancelled');
+    const resource = JSON.parse(await f.read(cancelled, 'log', 'resources.json'));
+    assert.equal(resource.outcome, 'rejected'); assert.equal(resource.error, 'research_process_cancelled');
+  } finally { await f.cleanup(); }
+});
+
+test('Notebook reference ownership, exact import hash and reserved inputs reject without computation', async () => {
+  const f = await fixture();
+  try {
+    const nb = await importNotebook(f), before = f.observed.filter(entry => entry.kind === 'compute').length;
+    const foreign = f.repository.createProject({ title: 'Foreign Notebook', description: '', workspacePath: await mkdtemp(join(f.path, 'foreign-notebook-')) });
+    const foreignBytes = Buffer.from(JSON.stringify({ nbformat: 4, nbformat_minor: 5, metadata: { language_info: { name: 'python' } },
+      cells: [{ id: 'foreign', cell_type: 'code', metadata: {}, source: 'print(1)', execution_count: null, outputs: [] }] }));
+    await writeFile(join(foreign.workspacePath, 'foreign.ipynb'), foreignBytes);
+    const imported = await api.withResearchHumanContext({ capability: 'research.notebooks.import', projectId: foreign.id, windowId: 72 },
+      () => f.repository.notebooks.import({ projectId: foreign.id, path: 'foreign.ipynb', requestId: 'foreign',
+        expectedSha256: createHash('sha256').update(foreignBytes).digest('hex') }));
+    for (const [index, source] of [
+      { ...nb.source, expectedHash: 'f'.repeat(64) },
+      { ...nb.source, notebookId: imported.receipt.snapshot.id, expectedHash: imported.receipt.snapshotHash }
+    ].entries()) {
+      const run = await f.execute({ source, requestId: `refusal-${index}` });
+      assert.equal(run.status, 'failed');
+      assert.equal(run.error, index === 0 ? 'research_notebook_hash_mismatch' : 'research_notebook_project_mismatch');
+      assert.equal(JSON.parse(await f.read(run, 'log', 'resources.json')).outcome, 'not_dispatched');
+    }
+    await assert.rejects(f.service.start({ ...f.request, source: nb.source, inputPaths: ['roc-notebook/run.py'] }));
+    await assert.rejects(f.service.start({ ...f.request, source: { ...nb.source, subsetVersion: 2 } }));
+    await assert.rejects(f.service.start({ ...f.request, sourcePath: 'analysis.py' }));
+    assert.equal(f.observed.filter(entry => entry.kind === 'compute').length, before);
+  } finally { await f.cleanup(); }
+});
+
+test('host rehashed Notebook scripts cannot break provenance and disk reopen preserves frozen versions without dispatch', async () => {
+  const f = await fixture();
+  let reopened, agent, service;
+  try {
+    const nb = await importNotebook(f), request = { ...f.request, source: nb.source, requestId: 'notebook-durable' };
+    const run = await f.execute(request); assert.equal(run.status, 'completed', run.error);
+    const path = join(f.repository.experiments.root(f.project.id, run.id), 'input/roc-notebook/run.py');
+    const original = await readFile(path), row = f.db.prepare('SELECT snapshot_json FROM research_experiment_executions WHERE run_id=?').pluck().get(run.id);
+    const changed = Buffer.from('print("UNRELATED SCRIPT")\n'), snapshot = JSON.parse(row);
+    const file = snapshot.files.find(file => file.area === 'input' && file.path === 'roc-notebook/run.py');
+    file.sha256 = createHash('sha256').update(changed).digest('hex'); file.size = changed.length;
+    await chmod(path, 0o600); await writeFile(path, changed); await chmod(path, 0o400);
+    f.db.prepare('UPDATE research_experiment_executions SET snapshot_json=? WHERE run_id=?').run(JSON.stringify(snapshot), run.id);
+    await assert.rejects(f.service.publish(f.project.id, run.id), /research_experiment_notebook_source_changed/u);
+    await assert.rejects(f.service.start(request), /research_experiment_notebook_source_changed/u);
+    await chmod(path, 0o600); await writeFile(path, original); await chmod(path, 0o400);
+    f.db.prepare('UPDATE research_experiment_executions SET snapshot_json=? WHERE run_id=?').run(row, run.id);
+    const published = await f.service.publish(f.project.id, run.id);
+    const dbPath = join(f.path, 'notebook-research.db'), agentPath = join(f.path, 'notebook-agent.db');
+    await f.db.backup(dbPath); await f.agentDb.backup(agentPath);
+    await rm(join(f.workspace, 'analysis.ipynb')); await f.service.shutdown();
+    reopened = new Database(dbPath); agent = new Database(agentPath);
+    const repository = new api.ResearchRepository(reopened, new api.ResearchTaskRepository(agent));
+    let dispatches = 0;
+    service = new api.ResearchExperimentService(repository, { inspect: async () => { dispatches++; assert.fail('Historical Notebook must not inspect'); } },
+      f.path, { error: (...args) => assert.fail(JSON.stringify(args)) }, async () => { dispatches++; assert.fail('Historical Notebook must not execute'); });
+    service.recover();
+    assert.deepEqual(await service.start(request), published);
+    assert.deepEqual(await service.verifyPublication(f.project.id, published.artifactId), published);
+    assert.equal(dispatches, 0);
+    assert.equal((await service.read({ projectId: f.project.id, runId: run.id, area: 'input', path: 'roc-notebook/original.ipynb' })).content,
+      nb.bytes.toString('utf8'));
+  } finally { await service?.shutdown(); reopened?.close(); agent?.close(); await f.cleanup(); }
 });

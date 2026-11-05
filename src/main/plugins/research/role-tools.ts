@@ -173,7 +173,7 @@ export function createResearchRoleTools(input: {
     start_experiment: () => tool(async (request) => {
       const started = await effects().startExperiment(input.run.id, input.run.projectId, request);
       return after(summarizeExperiment(started));
-    }, { name: 'start_experiment', description: '启动当前项目的脚本实验。Python 先读取用户选择并预览环境，明确 .py 源码、sourceVersion:1、uint32 seed、arguments 和 expectedEnvironmentHash。项目和运行身份由服务绑定；相同 requestId 返回已有终态，显式新 requestId 才新运行。',
+    }, { name: 'start_experiment', description: '启动当前项目的脚本实验。Python 先读取用户选择并预览环境，明确 source:{kind:"file",path} 或冻结 Notebook 的 source:{kind:"notebook",notebookId,expectedHash,subsetVersion:1}、sourceVersion:1、uint32 seed、arguments 和 expectedEnvironmentHash。项目和运行身份由服务绑定；相同 requestId 返回已有终态，显式新 requestId 才新运行。',
       schema: researchOwnedExperimentStartSchema }),
     start_figure: () => tool(async (request) => {
       const started = await effects().startFigure(input.run.id, input.run.projectId, request);

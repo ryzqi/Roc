@@ -220,6 +220,33 @@ test('typed experiment source displays exact runtime absence, parameters and lon
   assert.equal(await text.evaluate(element=>element.scrollWidth>element.clientWidth),false);
 });
 
+test('typed frozen Notebook source displays the explicit import identity and saved request',async()=>{
+  const f=syntheticSource('experiment'),request=f.input.source.execution.request;
+  const {sourcePath:_path,...fields}=request;
+  f.input.source.execution.request={...fields,engine:'python',source:{kind:'notebook',notebookId:'frozen-notebook-identity',
+    expectedHash:'a'.repeat(64),subsetVersion:1},seed:73,arguments:[],expectedEnvironmentHash:'b'.repeat(64),
+    runtime:{kind:'python',selectionId:'selected-python',expectedHash:'c'.repeat(64)}};
+  api.researchProductionInputSchema.parse(f.input);
+  active=f;calls.length=0;
+  await page.evaluate(request=>mount(request,false),f.request);
+  await page.getByTestId('artifact-production-experiment').waitFor();
+  assert.match(await page.getByTestId('artifact-production-experiment').innerText(),/Notebook frozen-notebook-identity/u);
+  if(!await page.locator('[data-reading-key="experiment-request"]').evaluate(element=>element.open)){
+    await page.locator('[data-reading-key="experiment-request-summary"]').focus();
+    await page.keyboard.press('Enter');
+  }
+  await page.waitForFunction(()=>document.querySelector('[data-reading-key="experiment-request"]')?.open);
+  await page.waitForFunction(()=>{
+    const details=document.querySelector('[data-reading-key="experiment-request"]');
+    const content=getComputedStyle(details,'::details-content');
+    return content.contentVisibility==='visible'&&parseFloat(content.blockSize)>0;
+  });
+  await page.locator('[data-reading-key="experiment-request"]').evaluate(async details=>{
+    await Promise.all(details.getAnimations({subtree:true}).map(animation=>animation.finished));
+  });
+  assert.match(await page.locator('[data-reading-key="experiment-request"]').innerText(),/"subsetVersion": 1/u);
+});
+
 test('typed export source displays captured package identity, reads exact source and keeps unsupported PDF/ZIP actions disabled',async()=>{
   const f=await syntheticScene('export');
   assert.match(await page.getByTestId('artifact-production-export').innerText(),/1 份审稿报告/u);

@@ -345,7 +345,7 @@ test('DB41 upgrade and disk reopen preserve existing project bytes and exact imm
     disk.prepare(`INSERT INTO research_projects (${keys.join(',')}) VALUES (${keys.map(() => '?').join(',')})`).run(...Object.values(row));
     api.applyResearchDatabaseSchema(disk);
     assert.deepEqual(disk.prepare('SELECT * FROM research_projects').get(), row);
-    assert.equal(disk.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 42);
+    assert.equal(disk.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 43);
     const reopenedRepository = new api.ResearchRepository(disk, f.tasks);
     assert.deepEqual(reopenedRepository.pythonEnvironments.save(selected.snapshot), selected);
     disk.close();

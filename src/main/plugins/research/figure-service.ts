@@ -219,7 +219,7 @@ export class ResearchFigureService {
       const scratch = await createResearchDirectory(root, 'scratch');
       await createResearchDirectory(root, 'log');
       const rendererEnvironment = getResearchFigureRendererEnvironment();
-      const snapshot = await snapshotExperimentInputs(workspace, input, request, rendererEnvironment, signal);
+      const snapshot = await snapshotExperimentInputs(workspace, input, request, rendererEnvironment, signal, {});
       files = snapshot.files;
       await this.verifyRun(initial, signal);
       this.repository.figureRuns.start(initial.projectId, initial.id, rendererEnvironment, files, snapshot.hash);

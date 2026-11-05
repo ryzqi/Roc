@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { researchPythonEnvironmentGetSchema } from './research-python-environments';
+import { researchNotebookGetRequestSchema } from './research-notebooks';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const researchExperimentPathSchema = z.string().min(1).max(1024).refine((value) =>
@@ -33,20 +34,20 @@ export const researchExperimentEnvironmentRequestSchema = z.object({
 }).strict();
 const experimentStartSharedFields = {
   requestId: z.string().min(1).max(128), label: z.string().trim().min(1).max(256),
-  sourcePath: researchExperimentPathSchema, inputPaths: z.array(researchExperimentPathSchema).max(500),
+  inputPaths: z.array(researchExperimentPathSchema).max(500),
   parameters: z.record(z.string().min(1).max(256), z.string().max(65536))
     .refine((value) => Object.keys(value).length <= 1000 && new TextEncoder().encode(JSON.stringify(value)).byteLength <= 1024 * 1024),
   expectedEnvironmentHash: digest.optional(), timeoutMs: z.number().int().min(1000).max(3600000), network: z.literal('disabled')
 } as const;
 const typescriptStartSchema = z.object({
-  ...experimentStartSharedFields, engine: z.literal('typescript'), runtime: z.object({ kind: z.literal('bundled-node') }).strict(),
+  ...experimentStartSharedFields, sourcePath: researchExperimentPathSchema, engine: z.literal('typescript'), runtime: z.object({ kind: z.literal('bundled-node') }).strict(),
   sourceVersion: z.literal(1)
 }).strict().superRefine((value, context) => {
   if (!value.sourcePath.toLowerCase().endsWith('.mts')) context.addIssue({ code: 'custom', message: 'research_experiment_source_type_invalid', path: ['sourcePath'] });
   if (new Set(value.inputPaths).size !== value.inputPaths.length) context.addIssue({ code: 'custom', message: 'research_experiment_duplicate_input', path: ['inputPaths'] });
 });
 const nativeStartSchema = z.object({
-  ...experimentStartSharedFields, engine: z.enum(['r', 'julia']), runtime: nativeRuntimeSchema,
+  ...experimentStartSharedFields, sourcePath: researchExperimentPathSchema, engine: z.enum(['r', 'julia']), runtime: nativeRuntimeSchema,
   arguments: z.array(z.string().max(8192).refine((value) => !value.includes(String.fromCharCode(0)))).max(100)
 }).strict().superRefine((value, context) => {
   const extension = value.engine === 'r' ? '.r' : '.jl';
@@ -55,14 +56,29 @@ const nativeStartSchema = z.object({
   if (new Set(value.inputPaths).size !== value.inputPaths.length) context.addIssue({ code: 'custom', message: 'research_experiment_duplicate_input', path: ['inputPaths'] });
   if (value.runtime.kind !== runtimeKind) context.addIssue({ code: 'custom', message: 'research_experiment_runtime_mismatch', path: ['runtime'] });
 });
+export const notebookExperimentPaths = {
+  source: 'roc-notebook/run.py', original: 'roc-notebook/original.ipynb', receipt: 'roc-notebook/receipt.json'
+} as const;
+export const researchPythonExperimentSourceSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('file'), path: researchExperimentPathSchema.refine(path => path.toLowerCase().endsWith('.py'),
+    { message: 'research_experiment_source_type_invalid' }) }),
+  researchNotebookGetRequestSchema.omit({ projectId: true }).extend({ kind: z.literal('notebook'), subsetVersion: z.literal(1) })
+]);
+export type ResearchPythonExperimentSource = z.infer<typeof researchPythonExperimentSourceSchema>;
+export function researchPythonSourcePath(source: ResearchPythonExperimentSource): string {
+  return source.kind === 'file' ? source.path : notebookExperimentPaths.source;
+}
 const pythonStartSchema = z.strictObject({
   ...experimentStartSharedFields, engine: z.literal('python'), runtime: researchPythonExperimentRuntimeSchema,
+  source: researchPythonExperimentSourceSchema,
   sourceVersion: z.literal(1), seed: z.number().int().min(0).max(0xffff_ffff),
   expectedEnvironmentHash: digest,
   arguments: z.array(z.string().max(8192).refine(value => !value.includes(String.fromCharCode(0)))).max(100)
 }).superRefine((value, context) => {
-  if (!value.sourcePath.toLowerCase().endsWith('.py')) context.addIssue({ code: 'custom', message: 'research_experiment_source_type_invalid', path: ['sourcePath'] });
   if (new Set(value.inputPaths).size !== value.inputPaths.length) context.addIssue({ code: 'custom', message: 'research_experiment_duplicate_input', path: ['inputPaths'] });
+  if (value.source.kind === 'notebook' && value.inputPaths.some(path => path.startsWith('roc-notebook/'))) {
+    context.addIssue({ code: 'custom', message: 'research_experiment_reserved_input', path: ['inputPaths'] });
+  }
 });
 export const researchOwnedExperimentStartSchema = z.discriminatedUnion('engine', [typescriptStartSchema, nativeStartSchema, pythonStartSchema]);
 export const researchExperimentStartRequestSchema = z.discriminatedUnion('engine', [
@@ -108,6 +124,9 @@ export const researchWorkspaceFileSaveRequestSchema = researchWorkspaceFileReque
 export type ResearchExperimentRuntime = z.infer<typeof researchExperimentRuntimeSchema>;
 export type ResearchExperimentEnvironment = z.infer<typeof researchExperimentEnvironmentSchema>;
 export type ResearchExperimentStart = z.infer<typeof researchExperimentStartSchema>;
+export function researchExperimentSourcePath(request: ResearchExperimentStart): string {
+  return request.engine === 'python' ? researchPythonSourcePath(request.source) : request.sourcePath;
+}
 export type ResearchExperimentExecution = z.infer<typeof researchExperimentExecutionSchema>;
 export type ResearchExperimentFile = z.infer<typeof researchExperimentFileSchema>;
 export type ResearchExperimentFileContent = z.infer<typeof researchExperimentFileContentSchema>;

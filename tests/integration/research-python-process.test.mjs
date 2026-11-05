@@ -45,7 +45,7 @@ async function fixture(code) {
   await writeFile(join(inputDir, 'data.txt'), '3\n', { mode: 0o400 });
   await writeFile(join(workspace, 'private.txt'), 'synthetic private workspace value');
   const request = {
-    source: { sourceVersion: 1, sourcePath: 'analysis.py', inputPaths: ['data.txt'], parameters: { scale: '2' }, seed: 73, arguments: ['declared-arg'] },
+    source: { sourceVersion: 1, source: { kind: 'file', path: 'analysis.py' }, inputPaths: ['data.txt'], parameters: { scale: '2' }, seed: 73, arguments: ['declared-arg'] },
     python: inspected, inputDir, outputDir, scratchDir,
     policy: {
       timeoutMs: 5000, maxOutputBytes: 1024 * 1024,

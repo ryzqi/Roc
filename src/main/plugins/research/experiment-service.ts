@@ -2,7 +2,7 @@ import { lstat, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, sep } from 'node:path';
 import { release } from 'node:os';
 import { z } from 'zod';
-import { researchExperimentFileRequestSchema, researchExperimentStartSchema, type ResearchExperimentExecution, type ResearchExperimentFile,
+import { notebookExperimentPaths, researchPythonSourcePath, researchExperimentFileRequestSchema, researchExperimentStartSchema, type ResearchExperimentExecution, type ResearchExperimentFile,
   type ResearchExperimentRuntime, type ResearchExperimentStart } from '../../../shared/schemas/research-experiments';
 import type { RocPluginContext } from '../../kernel/types';
 import { ResearchExperimentEnvironmentService, type PreparedExperimentEnvironment } from './experiment-environment';
@@ -22,6 +22,7 @@ import { ResearchBackgroundJobs, ResearchJobSession } from './research-job-sessi
 import { createResearchDirectory, readResearchFile, researchContentHash, researchRelativePath, researchWorkspace } from './research-files';
 import type { ResearchRepository } from './repository';
 import { researchExperimentResourceReportSchema, type ResearchExperimentResourceReport } from '../../../shared/schemas/research-process-resources';
+import { notebookPythonSource } from './notebook-python-source';
 
 type FileRequest = z.infer<typeof researchExperimentFileRequestSchema>;
 type ExecuteProcessInput = {
@@ -88,7 +89,8 @@ export class ResearchExperimentService {
       if (project.workspacePath === null) throw new Error('research_project_workspace_required');
       const run = this.repository.experiments.create(request, project.workspacePath, workspace, storage);
       if (request.engine === 'python' && run.status !== 'preparing') {
-        await this.verifyWorkspaceInputs(workspace, run.files, signal);
+        await this.verifyWorkspaceInputs(workspace, run, signal);
+        if (run.inputHash !== null) await this.verifyNotebookInputs(run);
       }
       try {
         this.repository.tasks.linkOwned({ kind: 'experiment', executionId: run.id, projectId: run.projectId,
@@ -238,7 +240,7 @@ export class ResearchExperimentService {
       prepared = await this.environments.inspect(workspace, request.runtime, scratch, signal, { projectId: request.projectId, priority: 'user' },
         receipt => probes.push({ ...receipt, phase: 'preparation' }));
       if (request.expectedEnvironmentHash !== undefined && prepared.snapshot.hash !== request.expectedEnvironmentHash) throw new Error('research_experiment_environment_changed');
-      const snapshot = await snapshotExperimentInputs(workspace, input, request, prepared.snapshot, signal);
+      const snapshot = await snapshotExperimentInputs(workspace, input, request, prepared.snapshot, signal, this.notebookInputs(request));
       files = snapshot.files;
       if (request.engine === 'r' || request.engine === 'julia') {
         const native = assertNativeCodeReceipt(prepared.nativeCode, prepared.snapshot.metadataHash);
@@ -281,7 +283,7 @@ export class ResearchExperimentService {
       }
       if (output.exitCode !== 0) throw new Error('research_experiment_process_failed');
       await this.verifyProject(initial, signal);
-      if (request.engine === 'python') await this.verifyWorkspaceInputs(workspace, snapshot.files, signal);
+      if (request.engine === 'python') await this.verifyWorkspaceInputs(workspace, { ...initial, files: snapshot.files }, signal);
       const current = await this.environments.inspect(workspace, request.runtime, scratch, signal, { projectId: request.projectId, priority: 'user' },
         receipt => probes.push({ ...receipt, phase: 'verification' }));
       if (current.snapshot.hash !== prepared.snapshot.hash) throw new Error('research_experiment_environment_changed');
@@ -360,8 +362,31 @@ export class ResearchExperimentService {
     }
   }
 
-  private async verifyWorkspaceInputs(workspace: string, files: readonly ResearchExperimentFile[], signal: AbortSignal): Promise<void> {
-    for (const file of files.filter(file => file.area === 'input')) {
+  private notebookInputs(request: ResearchExperimentStart): Record<string, Buffer> {
+    if (request.engine !== 'python' || request.source.kind !== 'notebook') return {};
+    const original = this.repository.notebooks.source({ projectId: request.projectId,
+      notebookId: request.source.notebookId, expectedHash: request.source.expectedHash });
+    const generated = notebookPythonSource(original.bytes, original.receipt);
+    return {
+      [notebookExperimentPaths.source]: Buffer.from(generated.source, 'utf8'),
+      [notebookExperimentPaths.original]: original.bytes,
+      [notebookExperimentPaths.receipt]: Buffer.from(JSON.stringify(original.receipt), 'utf8')
+    };
+  }
+
+  private async verifyNotebookInputs(run: ResearchExperimentExecution): Promise<void> {
+    for (const [path, expected] of Object.entries(this.notebookInputs(run.request))) {
+      const { bytes } = await this.source({ projectId: run.projectId, runId: run.id, area: 'input', path });
+      if (bytes.length !== expected.length || researchContentHash(bytes) !== researchContentHash(expected)) {
+        throw new Error('research_experiment_notebook_source_changed');
+      }
+    }
+  }
+
+  private async verifyWorkspaceInputs(workspace: string, run: ResearchExperimentExecution, signal: AbortSignal): Promise<void> {
+    const generated: readonly string[] = run.request.engine === 'python' && run.request.source.kind === 'notebook'
+      ? Object.values(notebookExperimentPaths) : [];
+    for (const file of run.files.filter(file => file.area === 'input' && !generated.includes(file.path))) {
       signal.throwIfAborted();
       const bytes = await readResearchFile(workspace, file.path, experimentFileLimit);
       if (bytes.length !== file.size || researchContentHash(bytes) !== file.sha256) throw new Error('research_experiment_input_changed');
@@ -490,13 +515,14 @@ export class ResearchExperimentService {
       const expectedStartup = pythonExecutionStartupSchema.parse({
         sourceVersion: run.request.sourceVersion, report, seed: run.request.seed,
         modulePaths: [...receipt.metadataIdentity.controls.modulePaths, receipt.metadataIdentity.controls.packagePath],
-        sourcePath: join(this.repository.experiments.root(run.projectId, run.id), 'input', run.request.sourcePath)
+        sourcePath: join(this.repository.experiments.root(run.projectId, run.id), 'input', researchPythonSourcePath(run.request.source))
       });
       if (execution.runId !== run.id || execution.projectId !== run.projectId || execution.inputHash !== run.inputHash
         || execution.environmentHash !== run.environment.hash || execution.bootstrapHash !== pythonExperimentBootstrapHash()
         || JSON.stringify(execution.startup) !== JSON.stringify(expectedStartup)) {
         throw new Error('research_experiment_python_startup_report_changed');
       }
+      await this.verifyNotebookInputs(run);
     }
   }
 }
