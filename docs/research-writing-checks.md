@@ -119,7 +119,7 @@ DB48 按工件追加不可变人工审核版本，保存完整主张、Evidence�
 
 `research.getConsistencyHistory` 分页读取 `stored_receipt`，独立核对保存原文/hash、材料计算、数据库字段和父版本锚点。当前来源失效后仍可阅读原始历史，历史不会冒充当前来源检查。
 
-A4A 仅实现主张数值位置合同和主进程能力。图稿 caption 的文字核对不能证明实际绘制数据一致；实际图稿数据映射和同壳编辑器将在后续部分实现。
+A4A 实现主张数值位置合同和主进程能力，A4B 提供下述同壳编辑器。图稿 caption 的文字核对不能证明实际绘制数据一致；实际图稿数据映射将在后续部分实现。
 
 ### A4A 检查
 
@@ -142,3 +142,30 @@ A4A 仅实现主张数值位置合同和主进程能力。图稿 caption 的文�
 首次数值位置夹具索引错误，已修正为实际完整 token。失效来源夹具最初错误假设 `knowledge.upsert` 会使原 Evidence 失效；改用现有显式失效 API，并保留 `superseded` 和 `source_changed` 断言。来源检查补足 Evidence 当前状态及保存原文的严格核对。`xwrite-a4a-focused.log` 和 `xwrite-a4a-final-focused.log` 保留早期失败；真实 Python 测试与失败的 focused 曾在换行复合命令中执行，后者的通过不以整个命令 exit 0 推断，最终另跑严格串行检查。
 
 A4A 本地工程范围：`Verified passing`。当前检查不证明独立科学样本的准确率。
+
+## X-WRITE A4B：同壳数值映射与历史
+
+正文和图稿工件抽屉提供“检查科研数值”，展开后才加载模块并请求报告。每个未映射数值独立显示，已映射位置显示实际值、期望值、差异及允许差异；主张变化明确标记。报告版本与抽屉快照不一致时只显示刷新提示，历史仍可独立读取。等待或来源失败时隐藏上次成功报告。
+
+用户明确选择完整数值位置、该主张的真实指标 Evidence、展示位置和单位，再填写转换、舍入及容差规则和理由。主张 hash 使用合同 schema 的完整 JSON；指标来自 `getExperimentResultEvidence` 的确切结果回执。选择项、转换数值和科学判断没有默认推定。添加或替换一个位置、移除映射均只修改本地草稿。
+
+保存整份审核需要人工理由、当前工件版本及最新父回执。待加入映射必须先加入或清空。内容不变的连接中断重试复用完整请求 ID，不重复写入；父版本或来源冲突保留原草稿和错误，用户可明确放弃后刷新。脏草稿和保存过程锁定抽屉关闭、Escape、遮罩关闭、刷新及阶段审批；只读、批准和归档范围禁用保存。跨项目迟到的报告、指标和保存回执不能刷新新工件。
+
+历史每页 10 版，完整 JSON 回执包含原主张、指标来源、单位规则和人工身份。历史明确标注当前来源未复核，不代替当前报告。650px 两主题下实际比例、偏移、舍入和容差控件可读；长 ID 换行，保存区保留焦点和原生纵向滚动。
+
+### A4B 检查
+
+工作目录同上，全部最终命令退出码为 0。
+
+| 命令 | 结果 | 日志 |
+| --- | --- | --- |
+| `pnpm build` | 通过，含 typecheck | `xwrite-a4b-build.log` |
+| `node --test tests/renderer/scientific-consistency.test.mjs tests/renderer/citation-coverage.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/idea-outcomes.test.mjs tests/renderer/idea-plans.test.mjs` | 62/62 通过，其中新增数值界面 7 项 | `xwrite-a4b-renderer-final2.log` |
+| `node --test --test-name-pattern='long explicit conversion' tests/renderer/scientific-consistency.test.mjs` | 补充候选映射零请求检查及实际转换控件截图后 1/1 通过 | `xwrite-a4b-controls.log` |
+| `node scripts/smoke-electron.mjs` | 13/13 通过，零 renderer error | `xwrite-a4b-startup.log` |
+| `pnpm check:ipc` | 生成合同当前 | `xwrite-a4b-ipc.log` |
+| `pnpm check:renderer-chunks` | 1,134,192 bytes，6 eager 文件 | `xwrite-a4b-chunks.log` |
+
+真实 Electron 测试穿过 IPC 参数解析、主进程适配器、SQLite 仓库及一致性服务；UI 夹具指标为合成已保存材料，实际 CPython 和输出字节变更验证由 A4A 独立覆盖。测试保留精确浮点值 `-0.0023450000000000003`，没有增加 epsilon。原生加载帧断言等待旧报告实际消失，主进程测试钩子进入挂起状态不表示 renderer 已渲染。
+
+两主题 `consistency-ui/*-fields-650.png`、`*-save-650.png` 已查看；审计均 `cut=0`，仅既有全高抽屉 top/right/bottom 的物理边界隐藏投影，精确断言保留。A4B 范围：`Verified passing`；实际图稿数据核对、审稿回复和期刊检查仍未完成。
