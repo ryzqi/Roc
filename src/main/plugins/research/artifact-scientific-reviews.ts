@@ -15,7 +15,9 @@ export function currentArtifactScientificReviews(repository: ResearchRepository,
   if (consistency !== null) repository.consistency.assertReceiptCurrent(consistency);
   const figure = artifact.kind === 'figure' ? repository.figureConsistency.latest(projectId, artifactId) : null;
   if (figure !== null) repository.figureConsistency.assertReceiptCurrent(figure);
-  return {citations, consistency, figure};
+  const response = artifact.kind === 'manuscript' ? repository.responseMatrix.latest(projectId, artifactId) : null;
+  if (response !== null) repository.responseMatrix.assertReceiptCurrent(response);
+  return {citations, consistency, figure, response};
 }
 
 export class ResearchArtifactScientificReviewService {
@@ -38,9 +40,17 @@ export class ResearchArtifactScientificReviewService {
           throw new Error('research_consistency_source_changed');
         }
       }
+      for (const source of reviews.response?.snapshot.material.evidence ?? []) {
+        const result = await this.results.evidence({projectId, evidenceId: source.evidence.id});
+        if (this.repository.evidence.sourceMetadata(projectId, source.evidence.id)?.type === 'experiment-result' && result === null) {
+          throw new Error('research_response_source_changed');
+        }
+      }
     }
     for (const saved of before) {
       if (saved.reviews.figure !== null) await this.figures.verify(projectId, saved.reviews.figure.snapshot.material.figure.id);
+    }
+    for (const saved of before) {
       currentArtifactScientificReviews(this.repository, projectId, saved.artifactId);
       if (this.repository.inspectArtifact({projectId, artifactId: saved.artifactId, expectedVersion: null}).snapshot.version !== saved.version) {
         throw new Error('research_artifact_review_changed');

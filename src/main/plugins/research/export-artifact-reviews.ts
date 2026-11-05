@@ -29,10 +29,11 @@ function completeHistory<T>(read: (offset: number) => {items: T[]; total: number
 }
 
 export function captureExportArtifactReviews(repository: ResearchRepository, projectId: string, artifactIds: readonly string[]):
-  Pick<ResearchExportScientificReview, 'citationReviews' | 'consistencyReviews' | 'figureConsistencyReviews'> {
+  Pick<ResearchExportScientificReview, 'citationReviews' | 'consistencyReviews' | 'figureConsistencyReviews' | 'responseMatrices'> {
   const citationReviews: ResearchExportScientificReview['citationReviews'] = [];
   const consistencyReviews: ResearchExportScientificReview['consistencyReviews'] = [];
   const figureConsistencyReviews: ResearchExportScientificReview['figureConsistencyReviews'] = [];
+  const responseMatrices: ResearchExportScientificReview['responseMatrices'] = [];
   for (const artifactId of artifactIds) {
     const current = currentArtifactScientificReviews(repository, projectId, artifactId);
     const citationHeads = repository.citationReviews.forArtifact(projectId, artifactId);
@@ -54,6 +55,10 @@ export function captureExportArtifactReviews(repository: ResearchRepository, pro
       figureConsistencyReviews.push({artifactId, current: redactExportFigureReview(current.figure),
         history: {verification: 'redacted_receipts', items: history.items.map(redactExportFigureReview), total: history.total}});
     }
+    if (current.response !== null) responseMatrices.push({
+      artifactId, current: current.response,
+      history: completeHistory(offset => repository.responseMatrix.history({projectId, artifactId, offset, limit: 100}))
+    });
   }
-  return {citationReviews, consistencyReviews, figureConsistencyReviews};
+  return {citationReviews, consistencyReviews, figureConsistencyReviews, responseMatrices};
 }

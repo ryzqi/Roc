@@ -5,7 +5,7 @@ import {mkdtempSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import Database from 'better-sqlite3';
-import {createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {captureResearchArtifactVersions, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => {api = await loadResearchTestApi();});
@@ -240,4 +240,157 @@ test('DB49 to50 preserves exact prior migration ledger without inventing respons
     assert.equal(db.prepare('SELECT count(*) FROM research_response_matrices').pluck().get(), 0);
     assert.deepEqual(db.pragma('foreign_key_check'), []);
   } finally {db.close();}
+});
+
+test('matrix head and independently selected evidence bind the whole artifact version without altering claims', () => {
+  const f = scene();
+  try {
+    const inspect = expectedVersion => f.repository.inspectArtifact({projectId: f.project.id, artifactId: f.artifactId, expectedVersion});
+    const initial = inspect(null).snapshot;
+    assert.equal(initial.responseMatrix, null);
+    f.repository.knowledge.upsertFromSource({id: 'response-independent', projectId: f.project.id, sourceType: 'file',
+      sourceId: 'independent.md', title: 'Independent synthetic source', content: 'Additional reviewed observation.',
+      chunks: [{content: 'Additional reviewed observation.', locator: 'block:0'}], embeddingPolicy: 'none'});
+    const independent = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'response-independent:chunk:0'});
+    const first = f.save(f.request({rows: [f.row({evidenceIds: [independent.id]})]}));
+    const current = inspect(initial.version);
+    assert.equal(current.status, 'stale');
+    assert.deepEqual(current.snapshot.responseMatrix, {reviewId: first.snapshot.id, reviewHash: first.snapshotHash,
+      version: 1, recordedAt: first.snapshot.recordedAt});
+    assert.deepEqual(current.snapshot.evidence.map(source => source.evidence.id), [f.source.id, independent.id]);
+    assert.deepEqual(current.snapshot.claims, initial.claims);
+    const before = f.changes();
+    assert.deepEqual(api.currentArtifactScientificReviews(f.repository, f.project.id, f.artifactId).response, first);
+    assert.equal(f.changes(), before);
+    f.repository.evidence.invalidateChunksOf(independent.documentId);
+    assert.equal(inspect(current.snapshot.version).status, 'stale');
+    assert.throws(() => api.currentArtifactScientificReviews(f.repository, f.project.id, f.artifactId), /research_response_source_changed/u);
+    assert.throws(() => api.captureExportArtifactReviews(f.repository, f.project.id, [f.artifactId]), /research_response_source_changed/u);
+    assert.deepEqual(f.history().items, [first]);
+  } finally {f.close();}
+});
+
+test('human gate requires the shared verifier for response-only reviews and revokes earlier artifact approvals', async () => {
+  const f = scene();
+  try {
+    const missing = api.createResearchHumanGate({repository: f.repository});
+    const initial = f.save();
+    const before = f.changes();
+    await assert.rejects(missing.complete({projectId: f.project.id, expectedStage: 'writing', action: 'complete'}),
+      /research_scientific_review_verify_unavailable/u);
+    assert.equal(f.changes(), before);
+    const scientificReviews = new api.ResearchArtifactScientificReviewService(f.repository,
+      {evidence: async () => assert.fail('no selected response Evidence')},
+      {verify: async () => assert.fail('manuscript has no plotted review')});
+    const gate = api.createResearchHumanGate({repository: f.repository, scientificReviews});
+    await gate.complete({projectId: f.project.id, expectedStage: 'writing', action: 'complete'});
+    const prior = captureResearchArtifactVersions(f.repository, f.project.id);
+    f.save(f.request({requestId: 'new-human-reply', parent: {reviewId: initial.snapshot.id, reviewHash: initial.snapshotHash},
+      rows: [f.row({status: 'declined', response: 'Explicitly retain the signed negative result.'})]}));
+    const changes = f.changes();
+    await assert.rejects(gate.approve({projectId: f.project.id, expectedStage: 'writing', action: 'approve',
+      expectedArtifactVersions: prior}), /research_artifact_review_changed/u);
+    assert.equal(f.changes(), changes);
+    const relation = f.repository.evidence.relations.list({projectId: f.project.id, claimId: f.claim.id})[0];
+    f.repository.evidence.relations.review({projectId: f.project.id, relationId: relation.id, expectedVersion: relation.version,
+      expectedClaimVersion: f.claim.version, expectedSourceDigest: relation.sourceDigest, decision: 'confirm',
+      note: 'Explicit synthetic support review'}, {kind: 'user', id: 'window:52'});
+    await gate.approve({projectId: f.project.id, expectedStage: 'writing', action: 'approve',
+      expectedArtifactVersions: captureResearchArtifactVersions(f.repository, f.project.id)});
+    assert.equal(f.repository.getArtifact(f.artifactId).status, 'approved');
+    assert.equal(f.history().items[0].snapshot.request.rows[0].status, 'declined');
+  } finally {f.close();}
+});
+
+test('shared currentness refuses a changed manuscript while preserving the original addressed history', () => {
+  const f = scene();
+  try {
+    const first = f.save(f.request({rows: [f.row({status: 'addressed', response: 'Verified exact text.', locations: [f.location()]})]}));
+    f.claim = f.repository.evidence.updateClaim({id: f.claim.id, expectedVersion: f.claim.version,
+      content: 'The revised negative result differs.', status: 'supported', evidenceIds: [f.source.id]});
+    assert.throws(() => api.currentArtifactScientificReviews(f.repository, f.project.id, f.artifactId), /research_manuscript_stale/u);
+    f.repository.manuscripts.saveManuscript({artifactId: f.artifactId, sections: [{title: 'Results', claimIds: [f.claim.id]}]});
+    assert.throws(() => api.captureExportArtifactReviews(f.repository, f.project.id, [f.artifactId]), /research_response_source_changed/u);
+    assert.deepEqual(f.history().items, [first]);
+  } finally {f.close();}
+});
+
+test('async response evidence verification refuses newer matrix, source and project changes before acceptance', async () => {
+  for (const mutation of ['matrix', 'source', 'project']) {
+    const f = scene();
+    try {
+      const first = f.save(f.request({rows: [f.row({evidenceIds: [f.source.id]})]}));
+      let called = 0;
+      const verifier = new api.ResearchArtifactScientificReviewService(f.repository, {evidence: async request => {
+        assert.deepEqual(request, {projectId: f.project.id, evidenceId: f.source.id});
+        called++;
+        if (mutation === 'matrix') f.save(f.request({requestId: 'during-await',
+          parent: {reviewId: first.snapshot.id, reviewHash: first.snapshotHash}, rows: [f.row({evidenceIds: [f.source.id], response: 'New human context.'})]}));
+        if (mutation === 'source') f.repository.evidence.invalidateChunksOf(f.source.documentId);
+        if (mutation === 'project') f.db.prepare("UPDATE research_projects SET status='archived' WHERE id=?").run(f.project.id);
+        return null; // Ordinary file Evidence has no executed metric trace.
+      }}, {verify: async () => assert.fail('no plotted review')});
+      await assert.rejects(verifier.verifyArtifacts(f.project.id, [f.artifactId]),
+        mutation === 'source' ? /research_evidence_reference_superseded/u : /research_artifact_review_changed/u);
+      assert.equal(called, 1);
+      assert.deepEqual(f.history().items.at(-1), first);
+    } finally {f.close();}
+  }
+});
+
+test('response export carries all 102 stored revisions and refuses incomplete intermediate pages', () => {
+  const f = scene();
+  try {
+    const first = f.save();
+    let latest = first;
+    for (let version = 2; version <= 102; version++) latest = f.save(f.request({
+      requestId: `response-history-${version}`, parent: {reviewId: latest.snapshot.id, reviewHash: latest.snapshotHash},
+      rows: [f.row({response: `Explicit human investigation ${version}`})]
+    }));
+    const before = f.changes(), exported = api.captureExportArtifactReviews(f.repository, f.project.id, [f.artifactId]);
+    assert.deepEqual(exported.responseMatrices[0].current, latest);
+    assert.equal(exported.responseMatrices[0].history.verification, 'stored_receipt');
+    assert.deepEqual(exported.responseMatrices[0].history.items.map(item => item.snapshot.version),
+      Array.from({length: 102}, (_, index) => 102 - index));
+    assert.deepEqual(exported.responseMatrices[0].history.items.at(-1), first);
+    assert.equal(exported.responseMatrices[0].current.snapshot.request.rows[0].status, 'open');
+    assert.equal(f.changes(), before);
+    const history = f.repository.responseMatrix.history.bind(f.repository.responseMatrix);
+    f.repository.responseMatrix.history = request => request.offset === 0 ? history(request) :
+      {verification: 'stored_receipt', items: [], total: 102};
+    assert.throws(() => api.captureExportArtifactReviews(f.repository, f.project.id, [f.artifactId]), /research_export_review_history_changed/u);
+  } finally {f.close();}
+});
+
+test('schema4 export seal captures response-only evidence and changes after independent human response revisions', () => {
+  const f = scene();
+  try {
+    const relation = f.repository.evidence.relations.list({projectId: f.project.id, claimId: f.claim.id})[0];
+    f.repository.evidence.relations.review({projectId: f.project.id, relationId: relation.id, expectedVersion: relation.version,
+      expectedClaimVersion: f.claim.version, expectedSourceDigest: relation.sourceDigest, decision: 'confirm',
+      note: 'Explicit synthetic support review'}, {kind: 'user', id: 'window:52'});
+    f.repository.knowledge.upsertFromSource({id: 'export-response-source', projectId: f.project.id, sourceType: 'file',
+      sourceId: 'response-source.md', title: 'Additional response source', content: 'Additional exact observation.',
+      chunks: [{content: 'Additional exact observation.', locator: 'block:0'}], embeddingPolicy: 'none'});
+    const independent = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'export-response-source:chunk:0'});
+    const first = f.save(f.request({rows: [f.row({evidenceIds: [independent.id]})]}));
+    const sources = {project: f.project, manuscriptArtifact: f.repository.getArtifact(f.artifactId),
+      figures: [], claims: [f.claim], evidence: [f.source], experimentResults: [], ideaOutcomes: []};
+    const review = api.captureExportScientificReview(f.repository, sources), bytes = api.serializeExportScientificReview(review);
+    assert.equal(review.schemaVersion, 4);
+    assert.deepEqual(review.responseMatrices[0].current, first);
+    assert.deepEqual(review.evidence.map(source => source.evidence.id), [f.source.id, independent.id]);
+    assert.equal(api.researchExportScientificReviewSchema.safeParse({...review, schemaVersion: 3}).success, false);
+    assert.equal(api.researchExportScientificReviewSchema.safeParse({...review, responseMatrices: undefined}).success, false);
+    const record = {sources, sourceHash: review.sourceHash, files: [{path: api.exportScientificReviewPath,
+      size: Buffer.byteLength(bytes), sha256: createHash('sha256').update(bytes).digest('hex')}]};
+    const before = f.changes();
+    api.assertCurrentExportScientificReview(f.repository, record);
+    assert.equal(f.changes(), before);
+    f.save(f.request({requestId: 'seal-revision', parent: {reviewId: first.snapshot.id, reviewHash: first.snapshotHash},
+      rows: [f.row({evidenceIds: [independent.id], response: 'New explicit investigation.'})]}));
+    assert.throws(() => api.assertCurrentExportScientificReview(f.repository, record),
+      error => error.code === 'research_export_semantic_snapshot_changed');
+    assert.equal(api.serializeExportScientificReview(review), bytes);
+  } finally {f.close();}
 });

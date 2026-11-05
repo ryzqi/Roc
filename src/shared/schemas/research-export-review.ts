@@ -5,6 +5,7 @@ import {researchIdeaOutcomeReceiptSchema, researchIdeaOutcomeHistoryResultSchema
 import {researchCitationReviewReceiptSchema, researchCitationReviewHistoryResultSchema} from './research-citation-reviews';
 import {researchConsistencyReceiptSchema, researchConsistencyHistoryResultSchema} from './research-consistency';
 import {researchFigureConsistencyReceiptSchema} from './research-figure-consistency';
+import {researchResponseMatrixReceiptSchema, researchResponseMatrixHistoryResultSchema} from './research-response-matrix';
 
 const id = z.string().trim().min(1).max(300);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -23,7 +24,7 @@ export const researchExportFigureReviewSchema = z.strictObject({
 });
 
 export const researchExportScientificReviewSchema = z.object({
-  schemaVersion: z.literal(3),
+  schemaVersion: z.literal(4),
   projectId: id,
   sourceHash: digest,
   claims: z.array(z.object({claimId: id, version: z.number().int().positive(), hash: digest}).strict()),
@@ -43,6 +44,9 @@ export const researchExportScientificReviewSchema = z.object({
     artifactId: id, current: researchExportFigureReviewSchema,
     history: z.strictObject({verification: z.literal('redacted_receipts'),
       items: z.array(researchExportFigureReviewSchema), total: z.number().int().nonnegative()})
+  })),
+  responseMatrices: z.array(z.strictObject({
+    artifactId: id, current: researchResponseMatrixReceiptSchema, history: researchResponseMatrixHistoryResultSchema
   }))
 }).strict();
 

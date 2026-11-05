@@ -53,7 +53,7 @@ export class ResearchExportSourceService {
     const review = this.repository.reviews.requireForStage(project.id, 'export');
     if (review === null || review.manuscriptArtifactId !== request.manuscriptArtifactId) throw new Error('research_export_manuscript_changed');
     const bundle = this.repository.manuscripts.exportBundle({ projectId: project.id, artifactId: request.manuscriptArtifactId });
-    currentArtifactScientificReviews(this.repository, project.id, request.manuscriptArtifactId);
+    const manuscriptReviews = currentArtifactScientificReviews(this.repository, project.id, request.manuscriptArtifactId);
     const figures = [];
     const claims = [...bundle.claims];
     for (const id of request.figureIds) {
@@ -66,7 +66,8 @@ export class ResearchExportSourceService {
       figures.push(figure);
       claims.push(...this.repository.evidence.listClaims({ projectId: project.id, artifactId: artifact.id }));
     }
-    const evidenceIds = [...new Set(claims.flatMap((claim) => claim.evidenceIds))];
+    const evidenceIds = [...new Set([...claims.flatMap((claim) => claim.evidenceIds),
+      ...(manuscriptReviews.response?.snapshot.request.rows.flatMap(row => row.evidenceIds) ?? [])])];
     const evidence = evidenceIds.map((id) => this.repository.evidence.getEvidence(id, project.id));
     const evidenceMetadata=Object.fromEntries(evidenceIds.map(id=>[id,this.repository.evidence.sourceMetadata(project.id,id)]));
     const resultReceipts=new Map<string,ResearchExperimentResultReceipt>();

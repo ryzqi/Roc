@@ -19,8 +19,11 @@ export function captureExportScientificReview(repository: ResearchRepository, so
       message: '导出的人工结果评估已变化。请重新生成导出并审核当前版本。'});
   }
   for (const claim of sources.claims) repository.evidence.assertReviewedSupport(claim);
+  const reviews = captureExportArtifactReviews(repository, projectId,
+    [sources.manuscriptArtifact.id, ...sources.figures.map(figure => figure.artifactId)]);
   const relations = sources.claims.flatMap(claim => repository.evidence.relations.list({projectId, claimId: claim.id}));
   const evidenceIds = [...new Set([...sources.evidence.map(source => source.id), ...relations.map(relation => relation.evidenceId),
+    ...reviews.responseMatrices.flatMap(matrix => matrix.current.snapshot.request.rows.flatMap(row => row.evidenceIds)),
     ...ideaOutcomes.flatMap(outcome => {
       const plan = outcome.snapshot.material.plan.version.request.body;
       return [...outcome.snapshot.material.evidence.map(evidence => evidence.id),
@@ -29,15 +32,14 @@ export function captureExportScientificReview(repository: ResearchRepository, so
         ...(plan.sampleSize.kind === 'calculated' ? plan.sampleSize.evidenceIds : [])];
     })])];
   return researchExportScientificReviewSchema.parse({
-    schemaVersion: 3, projectId, sourceHash: exportSourceHash(sources),
+    schemaVersion: 4, projectId, sourceHash: exportSourceHash(sources),
     claims: sources.claims.map(claim => ({claimId: claim.id, version: claim.version, hash: relationClaimHash(claim)})),
     evidence: evidenceIds.map(evidenceId => repository.evidence.inspectEvidence(evidenceId, projectId)),
     relations,
     history: relations.map(relation => ({relationId: relation.id, revisions: repository.evidence.relations.history(relation.id, projectId)})),
     ideaOutcomes, ideaOutcomeHistory: ideaOutcomes.map(outcome => ({planVersionId: outcome.snapshot.request.plan.versionId,
       history: captureExportIdeaOutcomeHistory(repository, outcome)})),
-    ...captureExportArtifactReviews(repository, projectId,
-      [sources.manuscriptArtifact.id, ...sources.figures.map(figure => figure.artifactId)])
+    ...reviews
   });
 }
 

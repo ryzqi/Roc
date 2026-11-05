@@ -28,13 +28,17 @@ Research DB50 仅新增 `research_response_matrices`；旧迁移账本、用户�
 
 ## 实施边界
 
-A5A 交付主进程合同、存储、读取、人工 IPC 和生成 preload。现有论文/LaTeX/语义支持闸门保持原有合同。后续独立部分接入现有工件抽屉中的惰性编辑，以及审批与导出消费者；当前存储 API 不宣称这些后续部分已经完成。
+A5A 交付主进程合同、存储、读取、人工 IPC 和生成 preload。A5B 接入现有工件抽屉中的惰性编辑；A5C 接入审批与导出消费者。论文/LaTeX/语义支持审核继续决定主张是否可发布。
 
 A5B 已在现有论文工件抽屉提供“检查审稿回复”惰性入口。打开前零矩阵请求；人工编辑完整矩阵，单条意见表单保留桌面信息密度。已保存原始意见/审稿人只读，处理状态、回复、精确修改位置和证据显式编辑。可选择完整段落或 UTF-16 字符范围，保留选区空白。待关联位置不能被整份保存静默丢弃。新意见只有保存前可移除，旧意见需要保留并记录处理结果。
 
 未保存和请求中状态锁住关闭/Escape、父工件刷新/重核对/审核、其他编辑和来源决定。回执丢失时保持相同 requestId/内容，精确重试零重复写入；修改内容才换 requestId。修改稿变化后的旧“已处理”标记为历史判断。当前核验失败隐藏旧成功数据，独立分页历史仍能读取完整保存回执。不同项目/快照的表单和迟到响应隔离。归档、已批准、非当前阶段和客户端只读状态不发保存请求。
 
-A5C 的工件 head、审批/任务验收及导出消费者仍待独立实施。
+A5C 在工件快照中提供必填、可为 null 的 `responseMatrix` head（ID/hash/version/时间），所选独立 Evidence 也进入快照，因此追加矩阵、修改稿件或来源变化都会撤销旧工件审批版本。共享科学核验覆盖阶段完成、人工审批、任务验收与导出；存在矩阵时必须提供核验服务。该服务读取所选实验指标的真实结果、输入代码和执行回执，普通来源不推断实验指标。所有异步读取结束后，整个工件集合再同步核对来源和版本。
+
+导出科学快照使用 schema 4，必填 `responseMatrices` 固定最新回执及全部分页 `stored_receipt` 历史，矩阵独立 Evidence 进入来源闭包和导出源 hash。保存新人工回复即撤销旧科学导出 seal；过期稿件或来源不能通过当前审批/导出，保存历史仍独立可读。schema 3 及缺少必填字段的数据直接拒绝，没有迁移回退。
+
+当前矩阵的 `open`、`declined` 及未建立矩阵不会自动批准或拒绝论文。存在 `open` 项时核验其真实状态并保留在导出中；科学支持、审稿处理状态与接受论文的人工决定分别表达。
 
 ## 验证
 
@@ -47,7 +51,7 @@ A5C 的工件 head、审批/任务验收及导出消费者仍待独立实施。
 
 前一验证快照的 `node scripts/run-research-p0.mjs` 13/13，以及 `node --test tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/citation-coverage.test.mjs tests/renderer/scientific-consistency.test.mjs` 51/51。该快照后只修改精确选区合同、明确来源错误及相应 unit 检查，最终重新构建并启动验证。
 
-日志保留于 `.artifacts/research-optimization/xwrite-a5a-final-*.log`，前一快照保留于 `xwrite-a5a-{p0,renderer,startup,ipc,chunks}.log`。C2C 消费者修正后的补充完整 unit 为 1249/1249；它不代表最终 A5A 的完整 suite 已运行。当前尚未验证矩阵编辑 UI、审批/导出消费者或独立科学验收。
+日志保留于 `.artifacts/research-optimization/xwrite-a5a-final-*.log`，前一快照保留于 `xwrite-a5a-{p0,renderer,startup,ipc,chunks}.log`。C2C 消费者修正后的补充完整 unit 为 1249/1249；它不代表最终 A5A 的完整 suite 已运行。后续 UI 与审批/导出验证分别记录在各交付部分；独立科学验收尚未运行。
 
 A5B 最终命令均在相同工作目录 exit 0：
 
@@ -57,3 +61,13 @@ A5B 最终命令均在相同工作目录 exit 0：
 - `pnpm check:ipc` 一致；`pnpm check:renderer-chunks`：eager JS 1,134,228 bytes / 6 files，矩阵模块留在惰性图中。
 
 650px 明暗主题、减弱动效、展开、hover、长正文/选区和保存状态共 4 份审计均 cut 0；hidden 3 精确对应原有整高抽屉在窗口 top/right/bottom 物理边界的投影，无水平溢出。实际截图已查看，字符范围控件、证据、回复、修订理由、保存/放弃和焦点可见，保留于 `.artifacts/research-optimization/response-matrix-ui/`。初次 5/7 的两处 fixture 失败分别为论文不存在生产文件按钮、来源变化先由工件版本拒绝；修正测试消费者后最终 8/8，未放宽产品校验。日志为 `xwrite-a5b-{renderer,build,startup,ipc,chunks}.log`。
+
+A5C 最终命令在同一工作目录均 exit 0：
+
+- `node --test tests/unit/research-response-matrix.test.mjs tests/unit/research-figure-consistency.test.mjs tests/unit/research-semantic-publication.test.mjs tests/unit/research-consistency.test.mjs tests/unit/research-citation-reviews.test.mjs`：52/52，覆盖独立 Evidence、response-only 核验、稿件/来源/项目在 await 期间变化、多工件异步窗口、102 条完整历史和严格 schema 4/seal。
+- `pnpm build`：TypeScript 与构建通过。
+- `node --test --test-name-pattern='actual result metric evidence' tests/integration/research-python-experiments.test.mjs`：1/1，真实 CPython 指标、写作 complete/approve 和含 open 意见的导出通过。
+- `node scripts/run-research-p0.mjs`：13/13；上述 A5B 五个 renderer 文件：59/59；`node scripts/smoke-electron.mjs`：13/13，无 renderer error。
+- `pnpm check:ipc` 一致；`pnpm check:renderer-chunks`：eager JS 1,134,272 bytes / 6 files。
+
+补充 `node --test tests/unit/` 为 1264/1264；该进程早于最终多工件异步修正及新增回归，最终产品由 52 项专项验证覆盖，不能称为最终源码全单元验收。日志保留于 `.artifacts/research-optimization/xwrite-a5c-{verified-focused,verified-build,final-python,final-p0,final-renderer,final-startup,final-ipc,final-chunks,unit}.log`。初次合成 fixture 的 unsupported 主张、写作实际进入 review 及自动创建 review cycle 均按真实合同修正，未放宽产品检查。独立科学审稿验收仍未运行。

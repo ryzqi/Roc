@@ -44,6 +44,9 @@ export const researchResponseMatrixReceiptSchema = z.strictObject({
   }),
   snapshotHash: hash
 });
+export const researchResponseMatrixHeadSchema = z.strictObject({
+  reviewId: id, reviewHash: hash, version: z.number().int().positive(), recordedAt: z.string().datetime()
+});
 export const researchResponseMatrixInspectSchema = z.strictObject({
   projectId: id, artifactId: id, expectedHash: hash.nullable()
 });

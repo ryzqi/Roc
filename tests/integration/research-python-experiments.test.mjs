@@ -324,7 +324,7 @@ test('metric review requires actual complete output and human authority; source 
 
 test('actual result metric evidence traces claims, figures and Idea history to an immutable negative output across restart',async()=>{
   const f=await fixture(metricSource,{scenario:'metric-evidence'});
-  let reopened,figureService,figure,figureConsistencyReview,bodyConsistencyReview,citationReview;
+  let reopened,figureService,figure,figureConsistencyReview,bodyConsistencyReview,citationReview,responseReview;
   try {
     await writeFile(join(f.workspace,'data.txt'),'-3 -2 -1\n');
     const run=await f.execute(),output=run.files.find(file=>file.path==='metrics.json');
@@ -466,11 +466,30 @@ test('actual result metric evidence traces claims, figures and Idea history to a
           projectId:f.project.id,artifactId:artifact.id,claimId:revised.id,evidenceId:evidence.id,requestId:'actual-python-directness',
           expectedReportHash:coverage.reportHash,parent:null,directness:'direct',
           rationale:'Exact executed measurement directly supplies the stated body value'}));
-        f.db.prepare("UPDATE research_artifacts SET status='approved' WHERE id=?").run(artifact.id);
+        responseReview=humanReview('research.responseMatrix.save',()=>f.repository.responseMatrix.save({
+          projectId:f.project.id,artifactId:artifact.id,requestId:'actual-python-response',
+          expectedArtifactVersion:f.repository.inspectArtifact({projectId:f.project.id,artifactId:artifact.id,expectedVersion:null}).snapshot.version,
+          parent:null,rationale:'Human response retains the actual negative measurement and its exact source.',
+          rows:[{commentId:'reviewer-1-negative',reviewer:'Reviewer 1',comment:'Report the signed executed measurement.',
+            status:'addressed',response:'The results paragraph now reports the actual -4 ms mean.',
+            locations:[{claimId:revised.id,claimHash:api.relationClaimHash(revised),start:0,
+              end:revised.content.length,text:revised.content}],evidenceIds:[evidence.id]},
+            {commentId:'reviewer-2-control',reviewer:'Reviewer 2',comment:'Investigate the missing control group.',
+              status:'open',response:'',locations:[],evidenceIds:[]}]}));
+        const scientificReviews=new api.ResearchArtifactScientificReviewService(f.repository,service,figureService);
+        const gate=api.createResearchHumanGate({repository:f.repository,scientificReviews});
+        f.repository.transitionWorkflow({projectId:f.project.id,expectedStage:'writing',action:'start'});
+        await gate.complete({projectId:f.project.id,expectedStage:'writing',action:'complete'});
+        await gate.approve({projectId:f.project.id,expectedStage:'writing',action:'approve',
+          expectedArtifactVersions:[{artifactId:artifact.id,version:f.repository.inspectArtifact({
+            projectId:f.project.id,artifactId:artifact.id,expectedVersion:null}).snapshot.version}]});
+        assert.equal(f.repository.getArtifact(artifact.id).status,'approved');
+        assert.equal(f.repository.getProject(f.project.id).currentStage,'review');
+        assert.deepEqual(api.currentArtifactScientificReviews(f.repository,f.project.id,artifact.id).response,responseReview);
+        assert.equal(f.repository.reviews.get(f.project.id).status,'reviewing');
+        assert.equal(f.db.prepare("UPDATE research_review_cycles SET status='accepted' WHERE project_id=? AND manuscript_artifact_id=?")
+          .run(f.project.id,artifact.id).changes,1); // Separate synthetic accepted-review fixture.
         f.db.prepare("UPDATE research_projects SET current_stage='export' WHERE id=?").run(f.project.id);
-        f.db.prepare(`INSERT INTO research_review_cycles
-          (project_id,origin_artifact_id,manuscript_artifact_id,revision_round,status,report_artifact_ids_json,updated_at)
-          VALUES (?,?,?,0,'accepted','[]',?)`).run(f.project.id,artifact.id,artifact.id,'2026-11-03T00:00:00.000Z');
         const exports=new api.ResearchExportSourceService(f.repository,figureService,f.service,
           {files:async()=>assert.fail('default template')});
         const exportRequest={projectId:f.project.id,requestId:'metric-export',title:'Metric sources',manuscriptArtifactId:artifact.id,
@@ -511,15 +530,18 @@ test('actual result metric evidence traces claims, figures and Idea history to a
         const reviewBytes=api.serializeExportScientificReview(review);
         const seal={sources,sourceHash:review.sourceHash,files:[{path:api.exportScientificReviewPath,
           sha256:createHash('sha256').update(reviewBytes).digest('hex'),size:Buffer.byteLength(reviewBytes)}]};
-        assert.equal(review.schemaVersion,3);
+        assert.equal(review.schemaVersion,4);
         assert.equal(api.researchExportScientificReviewSchema.safeParse({...review,schemaVersion:1}).success,false);
         assert.equal(api.researchExportScientificReviewSchema.safeParse({...review,schemaVersion:2}).success,false);
-        for(const field of ['citationReviews','consistencyReviews','figureConsistencyReviews']) {
+        for(const field of ['citationReviews','consistencyReviews','figureConsistencyReviews','responseMatrices']) {
           assert.equal(api.researchExportScientificReviewSchema.safeParse({...review,[field]:undefined}).success,false);
         }
         assert.deepEqual(review.citationReviews[0].current,[citationReview]);
         assert.deepEqual(review.consistencyReviews[0].current,bodyConsistencyReview);
         assert.deepEqual(review.consistencyReviews[0].history.items,[bodyConsistencyReview]);
+        assert.deepEqual(review.responseMatrices[0].current,responseReview);
+        assert.deepEqual(review.responseMatrices[0].history.items,[responseReview]);
+        assert.equal(review.responseMatrices[0].current.snapshot.request.rows[1].status,'open');
         const exportedFigureReview=review.figureConsistencyReviews[0];
         assert.equal(exportedFigureReview.current.originalSnapshotHash,figureConsistencyReview.snapshotHash);
         assert.equal(exportedFigureReview.current.redactedSnapshotHash,

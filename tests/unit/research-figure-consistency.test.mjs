@@ -288,3 +288,35 @@ test('gate refuses missing byte verifier and changed receipt during result await
     assert.deepEqual(f.history().items, [next, first]);
   } finally {await f.dispose();}
 });
+
+test('a later figure await cannot invalidate an earlier response manuscript after its final check', async () => {
+  const f = await scene();
+  try {
+    await f.save();
+    f.db.prepare("UPDATE research_projects SET current_stage='writing' WHERE id=?").run(f.project.id);
+    f.db.prepare("UPDATE research_stage_states SET status='ready' WHERE project_id=? AND stage='writing'").run(f.project.id);
+    const manuscript = f.repository.createArtifact({projectId: f.project.id, stage: 'writing', kind: 'manuscript',
+      title: 'Earlier response manuscript', path: null});
+    const claim = f.repository.evidence.createClaim({projectId: f.project.id, artifactId: manuscript.id,
+      subjectType: 'paragraph', content: 'The synthetic result is 2 ms.', status: 'supported', evidenceIds: [f.evidence.id]});
+    f.repository.manuscripts.saveManuscript({artifactId: manuscript.id, sections: [{title: 'Discussion', claimIds: [claim.id]}]});
+    const response = api.withResearchHumanContext({capability: 'research.responseMatrix.save', projectId: f.project.id, windowId: 90},
+      () => f.repository.responseMatrix.save({projectId: f.project.id, artifactId: manuscript.id, requestId: 'earlier-manuscript-response',
+        expectedArtifactVersion: f.repository.inspectArtifact({projectId: f.project.id, artifactId: manuscript.id, expectedVersion: null}).snapshot.version,
+        parent: null, rationale: 'Explicit human transcription', rows: [{commentId: 'r1', reviewer: 'Reviewer 1',
+          comment: 'Investigate the hypothesis.', status: 'open', response: '', locations: [], evidenceIds: []}]}));
+    f.db.prepare("UPDATE research_projects SET current_stage='figure' WHERE id=?").run(f.project.id);
+    let figureReads = 0;
+    const verifier = new api.ResearchArtifactScientificReviewService(f.repository,
+      {evidence: async () => ({receipt: f.result, metricId: 'mean'})}, {verify: async (projectId, figureId) => {
+        const result = await f.figureService.verify(projectId, figureId);
+        if (++figureReads === 2) f.db.prepare('UPDATE research_artifacts SET title=? WHERE id=?')
+          .run('Changed during the later figure read', manuscript.id);
+        return result;
+      }});
+    await assert.rejects(verifier.verifyArtifacts(f.project.id, [manuscript.id, f.artifactId]), /research_artifact_review_changed/u);
+    assert.equal(figureReads, 2);
+    assert.deepEqual(f.repository.responseMatrix.history({projectId: f.project.id, artifactId: manuscript.id,
+      offset: 0, limit: 10}).items, [response]);
+  } finally {await f.dispose();}
+});

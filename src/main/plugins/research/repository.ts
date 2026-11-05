@@ -349,6 +349,11 @@ export class ResearchRepository {
         evidenceId: snapshot.request.evidenceId, version: snapshot.version,
         directness: snapshot.request.directness, recordedAt: snapshot.recordedAt
       }));
+      const response = artifact.kind === 'manuscript' ? this.responseMatrix.latest(project.id, artifact.id) : null;
+      const responseMatrix = response === null ? null : {
+        reviewId: response.snapshot.id, reviewHash: response.snapshotHash,
+        version: response.snapshot.version, recordedAt: response.snapshot.recordedAt
+      };
       const ideaCanvas = artifact.kind === 'idea_canvas' ? this.ideas.get(artifact.id) : null;
       const ideaPlan = ideaCanvas === null ? null : this.ideaPlans.history({
         projectId: project.id, artifactId: artifact.id, offset: 0, limit: 1
@@ -366,7 +371,8 @@ export class ResearchRepository {
         ...(planBody?.novelty.comparisons.map(item => item.evidenceId) ?? []),
         ...(planBody?.observation.kind === 'after_data' ? planBody.observation.evidenceIds : []),
         ...(planBody?.sampleSize.kind === 'calculated' ? planBody.sampleSize.evidenceIds : [])];
-      const evidence = [...new Set([...claims.flatMap(claim => claim.evidenceIds), ...relations.map(relation => relation.evidenceId), ...ideaEvidenceIds])]
+      const evidence = [...new Set([...claims.flatMap(claim => claim.evidenceIds), ...relations.map(relation => relation.evidenceId),
+        ...ideaEvidenceIds, ...(response?.snapshot.request.rows.flatMap(row => row.evidenceIds) ?? [])])]
         .map(id => this.evidence.inspectEvidence(id, project.id));
       const rows = this.db.prepare(`SELECT id, project_id, artifact_id, subject_type, subject_id,
         source_type, source_id, locator, excerpt, created_at FROM research_provenance
@@ -390,7 +396,8 @@ export class ResearchRepository {
       const body = researchArtifactInspectionBodySchema.parse({
         artifact, projectStatus: project.status, currentStage: project.currentStage,
         stage, content, origin, claims, evidence, relations,
-        production, ideaCanvas, ideaPlan, ideaOutcomes, citationReviews, consistencyReviews, provenance: rows.map(toProvenance), availableActions
+        production, ideaCanvas, ideaPlan, ideaOutcomes, citationReviews, consistencyReviews, responseMatrix,
+        provenance: rows.map(toProvenance), availableActions
       });
       const version = createHash('sha256').update(JSON.stringify(body)).digest('hex');
       return researchArtifactInspectResultSchema.parse({

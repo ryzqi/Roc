@@ -39,7 +39,7 @@ export function createResearchHumanGate(input: {
       artifactId, version: input.repository.inspectArtifact({projectId: request.projectId, artifactId, expectedVersion: null}).snapshot.version
     }));
     const reviews = current.artifactIds.map(artifactId => currentArtifactScientificReviews(input.repository, request.projectId, artifactId));
-    if (reviews.some(review => review.citations.length > 0 || review.consistency !== null || review.figure !== null)) {
+    if (reviews.some(review => review.citations.length > 0 || review.consistency !== null || review.figure !== null || review.response !== null)) {
       if (input.scientificReviews === undefined) throw new Error('research_scientific_review_verify_unavailable');
       await input.scientificReviews.verifyArtifacts(request.projectId, current.artifactIds);
     }
