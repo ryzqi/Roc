@@ -12,8 +12,9 @@ export { ResearchFigureService } from '../../../src/main/plugins/research/figure
 export { renderResearchFigure } from '../../../src/main/plugins/research/figure-renderer';
 export { ResearchTaskRepository } from '../../../src/main/plugins/research/research-task-repository';
 export { ResearchStageRuntime } from '../../../src/main/plugins/research/stage-runtime';
-export { ExecutionGrantBroker, openExecutionGrantBroker } from '../../../src/main/services/deep-agent/execution-grant-broker';
+export { ExecutionGrantBroker, openExecutionGrantBroker, assertResearchDispatchGrant, assertReviewSearchDispatchGrant } from '../../../src/main/services/deep-agent/execution-grant-broker';
 export { withResearchDispatchReference } from '../../../src/main/services/research-dispatch-context';
+export {withReviewSearchDispatch, reviewSearchDispatchContext, reviewSearchDispatchRequestHash} from '../../../src/main/services/research-review-dispatch-context';
 export { registerResearchRunCapabilities } from '../../../src/main/plugins/research/run-capabilities';
 export { registerResearchExperimentCapabilities } from '../../../src/main/plugins/research/experiment-capabilities';
 export { registerResearchFigureCapabilities } from '../../../src/main/plugins/research/figure-capabilities';

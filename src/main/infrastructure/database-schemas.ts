@@ -738,6 +738,15 @@ BEGIN SELECT RAISE(ABORT,'research_project_budget_revision_conflict'); END;
 `
 });
 
+agentMigrations.push({
+  version: 16,
+  name: 'research_dispatch_tool_domains',
+  sql: `
+ALTER TABLE agent_research_dispatch_grants ADD COLUMN tool_name TEXT NOT NULL DEFAULT 'research_run_stage'
+  CHECK(tool_name IN ('research_run_stage','research_review_execute_query'));
+`
+});
+
 export const memoryMigrations: RocDatabaseMigration[] = [
   {
     version: 1,

@@ -8,6 +8,8 @@ import { runExecutionSnapshotAnySchema } from '../../../shared/schemas/agent';
 import { evaluateShellPolicy } from './shell-policy';
 import type { ResearchStageRunStartRequest } from '../../../shared/types';
 import { researchDispatchRequestHash } from '../research-dispatch-context';
+import { researchReviewSearchStartSchema, type ResearchReviewSearchStart } from '../../../shared/schemas/research-review-search';
+import { reviewSearchDispatchRequestHash } from '../research-review-dispatch-context';
 
 export type ConsumedResearchDispatchGrant = Readonly<{
   grantId: string; runId: string; threadId: string; projectId: string;
@@ -17,6 +19,15 @@ const researchDispatchTokens = new WeakSet<object>();
 export function assertResearchDispatchGrant(value: ConsumedResearchDispatchGrant): void {
   if (!researchDispatchTokens.has(value)) throw new Error('research_dispatch_grant_untrusted');
 }
+export type ConsumedReviewSearchDispatchGrant = Readonly<{
+  grantId: string; runId: string; threadId: string; projectId: string;
+  requestHash: string; manifestHash: string;
+}>;
+const reviewSearchDispatchTokens = new WeakSet<object>();
+export function assertReviewSearchDispatchGrant(value: ConsumedReviewSearchDispatchGrant): void {
+  if (!reviewSearchDispatchTokens.has(value)) throw new Error('research_review_dispatch_grant_untrusted');
+}
+type ResearchDispatchTool = 'research_run_stage' | 'research_review_execute_query';
 
 export type ExecutionGrantProfile = 'isolated_read' | 'isolated_write' | 'trusted_host';
 export type ExecutionGrantBinding = {
@@ -72,47 +83,75 @@ export class ExecutionGrantBroker {
   ) {}
 
   issueResearchDispatch(input: { runId: string; threadId: string; manifest: RunCapabilityManifestV1; request: ResearchStageRunStartRequest }): string {
+    return this.issueResearchToolDispatch({...input, projectId: input.request.projectId,
+      requestHash: researchDispatchRequestHash(input.request), toolName: 'research_run_stage'});
+  }
+
+  issueReviewSearchDispatch(input: { runId: string; threadId: string; manifest: RunCapabilityManifestV1; request: ResearchReviewSearchStart }): string {
+    const request = researchReviewSearchStartSchema.parse(input.request);
+    return this.issueResearchToolDispatch({...input, projectId: request.projectId,
+      requestHash: reviewSearchDispatchRequestHash(request), toolName: 'research_review_execute_query'});
+  }
+
+  private issueResearchToolDispatch(input: {
+    runId: string; threadId: string; manifest: RunCapabilityManifestV1;
+    projectId: string; requestHash: string; toolName: ResearchDispatchTool
+  }): string {
     return this.db.transaction(() => {
-      this.assertResearchRun(input.runId, input.threadId, input.request.projectId, input.manifest.manifestHash);
-      const tool = input.manifest.tools.find((entry) => entry.modelVisibleName === 'research_run_stage');
+      this.assertResearchRun(input.runId, input.threadId, input.projectId, input.manifest.manifestHash, input.toolName);
+      const tool = input.manifest.tools.find((entry) => entry.modelVisibleName === input.toolName);
       if (tool === undefined || !tool.executionScopes.includes('main')) throw new Error('research_dispatch_capability_denied');
       const id = randomUUID();
       const now = this.now();
       this.db.prepare(`INSERT INTO agent_research_dispatch_grants
-        (id,run_id,thread_id,project_id,request_hash,manifest_hash,state,created_at,expires_at)
-        VALUES (?,?,?,?,?,?,'issued',?,?)`).run(id, input.runId, input.threadId, input.request.projectId,
-          researchDispatchRequestHash(input.request), input.manifest.manifestHash,
+        (id,run_id,thread_id,project_id,request_hash,manifest_hash,tool_name,state,created_at,expires_at)
+        VALUES (?,?,?,?,?,?,?,'issued',?,?)`).run(id, input.runId, input.threadId, input.projectId,
+          input.requestHash, input.manifest.manifestHash, input.toolName,
           now.toISOString(), new Date(now.getTime() + grantLifetimeMs).toISOString());
       return id;
     }).immediate();
   }
 
   consumeResearchDispatch(reference: string, request: ResearchStageRunStartRequest): ConsumedResearchDispatchGrant {
+    const token = this.consumeResearchToolDispatch(reference, request.projectId, researchDispatchRequestHash(request), 'research_run_stage');
+    researchDispatchTokens.add(token);
+    return token;
+  }
+
+  consumeReviewSearchDispatch(reference: string, input: ResearchReviewSearchStart): ConsumedReviewSearchDispatchGrant {
+    const request = researchReviewSearchStartSchema.parse(input);
+    const token = this.consumeResearchToolDispatch(reference, request.projectId, reviewSearchDispatchRequestHash(request), 'research_review_execute_query');
+    reviewSearchDispatchTokens.add(token);
+    return token;
+  }
+
+  private consumeResearchToolDispatch(reference: string, projectId: string, requestHash: string,
+    toolName: ResearchDispatchTool): ConsumedResearchDispatchGrant {
     const result = this.db.transaction(() => {
       const row = this.db.prepare('SELECT * FROM agent_research_dispatch_grants WHERE id = ?').get(reference) as {
         id: string; run_id: string; thread_id: string; project_id: string; request_hash: string;
-        manifest_hash: string; state: string; expires_at: string;
+        manifest_hash: string; tool_name: string; state: string; expires_at: string;
       } | undefined;
       if (row === undefined || row.state !== 'issued') throw new Error('research_dispatch_grant_unavailable');
       if (Date.parse(row.expires_at) <= this.now().getTime()) {
         this.db.prepare("UPDATE agent_research_dispatch_grants SET state = 'expired' WHERE id = ?").run(reference);
         return null;
       }
-      if (row.project_id !== request.projectId || row.request_hash !== researchDispatchRequestHash(request)) {
+      if (row.project_id !== projectId || row.request_hash !== requestHash || row.tool_name !== toolName) {
         throw new Error('research_dispatch_request_mismatch');
       }
-      this.assertResearchRun(row.run_id, row.thread_id, row.project_id, row.manifest_hash);
+      this.assertResearchRun(row.run_id, row.thread_id, row.project_id, row.manifest_hash, toolName);
       this.db.prepare("UPDATE agent_research_dispatch_grants SET state = 'consumed' WHERE id = ?").run(reference);
       const token = Object.freeze({ grantId: row.id, runId: row.run_id, threadId: row.thread_id,
         projectId: row.project_id, requestHash: row.request_hash, manifestHash: row.manifest_hash });
-      researchDispatchTokens.add(token);
       return token;
     }).immediate();
     if (result === null) throw new Error('research_dispatch_grant_expired');
     return result;
   }
 
-  private assertResearchRun(runId: string, threadId: string, projectId: string, manifestHash: string): void {
+  private assertResearchRun(runId: string, threadId: string, projectId: string, manifestHash: string,
+    toolName: ResearchDispatchTool): void {
     const run = this.db.prepare(`SELECT r.status,r.snapshot_json,r.snapshot_version,t.research_project_id
       FROM agent_runs r JOIN agent_threads t ON t.id = r.thread_id
       WHERE r.id = ? AND r.thread_id = ?`).get(runId, threadId) as {
@@ -130,7 +169,7 @@ export class ExecutionGrantBroker {
       || storedHash !== manifestHash || hash(JSON.stringify(content)) !== manifestHash) {
       throw new Error('research_dispatch_parent_binding_invalid');
     }
-    if (!snapshot.capabilityManifest.tools.some((entry) => entry.modelVisibleName === 'research_run_stage' && entry.executionScopes.includes('main'))) {
+    if (!snapshot.capabilityManifest.tools.some((entry) => entry.modelVisibleName === toolName && entry.executionScopes.includes('main'))) {
       throw new Error('research_dispatch_capability_denied');
     }
   }
