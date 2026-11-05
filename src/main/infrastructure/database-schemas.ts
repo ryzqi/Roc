@@ -2242,6 +2242,21 @@ CREATE TABLE research_review_search_owners (
 `
 });
 
+researchMigrations.push({
+  version: 42, name: 'project_python_environment_selections',
+  sql: `
+CREATE TABLE research_python_environment_selections (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id, request_id)
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

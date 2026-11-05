@@ -1,6 +1,14 @@
 # Python 环境预检与隔离探针
 
-PR08 当前完成范围是环境预检和真实隔离探针。它们不构成用户选择环境的授权，也没有启用新建 Python 实验。可信原生选择、项目绑定、运行及发布仍需后续接入。
+PR08 当前提供环境预检、真实隔离探针，以及主进程确认的原生环境选择与项目绑定。新建 Python 实验尚未启用；选择入口的页面接入、运行及发布仍需后续实现。
+
+## 用户选择与项目绑定
+
+`selectPythonEnvironment({ projectId, requestId })` 只接受项目与请求身份。解释器路径由主进程的原生单文件面板返回，调用身份由真实 IPC sender 绑定；模型参数不能提供路径或用户 actor。面板使用 `noResolveAliases` 保留 venv 的解释器链接，随后执行下述预检和隔离探针。取消返回 `null`，失败不会保存成功回执，也不会安装或修复环境。
+
+数据库迁移 42 新增项目环境回执，不改写旧实验。每次成功选择保留独立 ID、原始请求、真实窗口 actor、工作目录、所选路径与真实解释器、版本、平台、完整环境身份、代码清单哈希及锁文件身份。同请求只读重放；另一个窗口不能重放原选择，新选择使用新请求。读取必须提供项目、选择 ID 和原始回执哈希。存储损坏、缺失回执、跨项目和错误哈希均失败。
+
+主进程的环境解析会重跑真实探针，并核对原始工作目录和完整环境身份。历史回执的读取不意味着当前环境仍可用；版本、包代码、控制或锁文件变化需要新的显式选择。归档、项目释放和关闭应用会取消未完成的选择，等待探针清理后再释放服务。
 
 ## 当前环境合同
 
@@ -64,6 +72,16 @@ PR08 当前完成范围是环境预检和真实隔离探针。它们不构成用
 初轮真实测试 5/8：两个测试错误地要求短进程一定有采样，一个测试假定此发行版的内建 `zlib` 有 `__file__`。改为将完整回执与独立捕获的真实 runner 结果逐项核对，并使用实际 `_dbm` 原生文件；保留全部边界、漂移和失败断言。修正后的 10 项通过，初轮日志保留。
 
 完整运行日志位于 `.artifacts/research-optimization/pr08-a2-*.log`，最终实际回执为 `pr08-a2/python-environment.json`。用户选择、Python 实验复跑/恢复/发布及完整 PR08 验收尚未完成。
+
+项目选择增量从同一工作目录验证：
+
+- `node --test tests/integration/research-python-selection.test.mjs`：9/9，真实 Python 探针、精确身份、无授权/跨项目拒绝、原生选择取消、环境变化、探针期间项目变化、真实解释器就绪后取消、损坏存储、DB41 升级及磁盘重开。
+- `node --test tests/integration/research-python-selection-electron.test.mjs`：1/1，生产 Electron 的真实 preload、主窗口 actor、面板父窗口与链接选项、实际 CPython 核验、同请求只读重放、取消和重启读取。OS 面板返回值由测试替换，不代表用户已经在产品里选择环境。
+- `pnpm build`：类型检查与构建通过。
+
+项目选择增量的最终全量检查：`pnpm test:unit` 1172/1172，无跳过，357103 ms；`node scripts/run-research-p0.mjs` 13/13；`pnpm check:ipc` 与 `pnpm check:renderer-chunks` 通过，入口 1132907 bytes / 6 files；`node scripts/smoke-electron.mjs` 13/13，零 renderer errors。
+
+选择日志为 `.artifacts/research-optimization/pr08-a3-*.log`，实际回执位于 `pr08-a3/python-selection.json` 与 `pr08-a3-electron/receipt.json`。此段仍未启用 Python 实验。
 
 ## 官方资料
 

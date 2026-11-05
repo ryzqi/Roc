@@ -42,6 +42,7 @@ import {ResearchDocumentAnnotationRepository} from './document-annotation-reposi
 import {ResearchSystematicReviewRepository} from './systematic-review-repository';
 import { ResearchIndexRepository } from './index-repository';
 import { ResearchExperimentRepository } from './experiment-repository';
+import { ResearchPythonEnvironmentRepository } from './python-environment-repository';
 import { ResearchFigureRepository } from './figure-repository';
 import { ResearchFigureRunRepository } from './figure-run-repository';
 import { ResearchExportRepository } from './export-repository';
@@ -82,6 +83,7 @@ export class ResearchRepository {
   readonly systematicReviews: ResearchSystematicReviewRepository;
   readonly indexing: ResearchIndexRepository;
   readonly experiments: ResearchExperimentRepository;
+  readonly pythonEnvironments: ResearchPythonEnvironmentRepository;
   readonly figures: ResearchFigureRepository;
   readonly figureRuns: ResearchFigureRunRepository;
   readonly exports: ResearchExportRepository;
@@ -114,6 +116,7 @@ export class ResearchRepository {
     this.systematicReviews = new ResearchSystematicReviewRepository(db, this, now);
     this.indexing = new ResearchIndexRepository(db, this, now);
     this.experiments = new ResearchExperimentRepository(db, this, now);
+    this.pythonEnvironments = new ResearchPythonEnvironmentRepository(db, this);
     this.figureRuns = new ResearchFigureRunRepository(db, this, now);
     this.figures = new ResearchFigureRepository(db, this, now);
     this.exports = new ResearchExportRepository(db, this, now);

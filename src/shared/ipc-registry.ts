@@ -242,6 +242,8 @@ import {
   researchModelsRemoveRequestSchema
 } from './schemas/research-production';
 import { researchProseLintReportSchema, researchProseLintRequestSchema } from './schemas/research-prose';
+import { researchPythonEnvironmentSelectSchema, researchPythonEnvironmentGetSchema, researchPythonEnvironmentListSchema,
+  researchPythonEnvironmentSelectionSchema } from './schemas/research-python-environments';
 import {
   researchLibraryArchiveRequestSchema, researchLibraryCitationKeyRequestSchema, researchLibraryDoiImportRequestSchema,
   researchLibraryExportRequestSchema, researchLibraryExportSchema, researchLibraryFileImportRequestSchema,
@@ -611,6 +613,9 @@ export const ipcRegistry = {
     request({ key: 'researchManuscriptSave', channel: 'roc:research:manuscript-save', domain: 'research', method: 'saveManuscript', kind: 'plugin', capabilityName: 'research.manuscript.save', inputTransform: first, contract: methodContract(oneArg(researchManuscriptSaveRequestSchema), researchManuscriptSchema) }),
     request({ key: 'researchManuscriptGet', channel: 'roc:research:manuscript-get', domain: 'research', method: 'getManuscript', kind: 'plugin', capabilityName: 'research.manuscript.get', inputTransform: first, contract: methodContract(oneArg(researchManuscriptGetRequestSchema), researchManuscriptSchema.nullable()) }),
     request({ key: 'researchManuscriptExportBundle', channel: 'roc:research:manuscript-export-bundle', domain: 'research', method: 'getExportBundle', kind: 'plugin', capabilityName: 'research.manuscript.exportBundle', inputTransform: first, contract: methodContract(oneArg(researchExportBundleRequestSchema), researchExportBundleSchema) }),
+    request({ key: 'researchPythonEnvironmentSelect', channel: 'roc:research:python-environment-select', domain: 'research', method: 'selectPythonEnvironment', kind: 'plugin', capabilityName: 'research.pythonEnvironments.select', inputTransform: first, contract: methodContract(oneArg(researchPythonEnvironmentSelectSchema), researchPythonEnvironmentSelectionSchema.nullable()) }),
+    request({ key: 'researchPythonEnvironmentGet', channel: 'roc:research:python-environment-get', domain: 'research', method: 'getPythonEnvironmentSelection', kind: 'plugin', capabilityName: 'research.pythonEnvironments.get', inputTransform: first, contract: methodContract(oneArg(researchPythonEnvironmentGetSchema), researchPythonEnvironmentSelectionSchema) }),
+    request({ key: 'researchPythonEnvironmentList', channel: 'roc:research:python-environment-list', domain: 'research', method: 'listPythonEnvironmentSelections', kind: 'plugin', capabilityName: 'research.pythonEnvironments.list', inputTransform: first, contract: methodContract(oneArg(researchPythonEnvironmentListSchema), researchPythonEnvironmentSelectionSchema.array()) }),
     request({ key: 'researchIdeasSave', channel: 'roc:research:ideas-save', domain: 'research', method: 'saveIdeaCanvas', kind: 'plugin', capabilityName: 'research.ideas.save', inputTransform: first, contract: methodContract(oneArg(researchIdeaCanvasSaveRequestSchema), researchIdeaCanvasSchema) }),
     request({ key: 'researchIdeasGet', channel: 'roc:research:ideas-get', domain: 'research', method: 'getIdeaCanvas', kind: 'plugin', capabilityName: 'research.ideas.get', inputTransform: first, contract: methodContract(oneArg(researchIdeaCanvasGetRequestSchema), researchIdeaCanvasSchema.nullable()) }),
     request({ key: 'researchIdeasHistory', channel: 'roc:research:ideas-history', domain: 'research', method: 'getIdeaCanvasHistory', kind: 'plugin', capabilityName: 'research.ideas.history', inputTransform: first, contract: methodContract(oneArg(researchIdeaCanvasHistoryRequestSchema), researchIdeaCanvasSchema.array()) }),

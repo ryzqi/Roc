@@ -101,6 +101,8 @@ import {registerResearchReviewScreeningCapabilities, researchReviewScreeningCapa
 import { ResearchIndexService, type ResearchIndexWatch } from './index-service';
 import { registerResearchIndexCapabilities, researchIndexCapabilities } from './index-capabilities';
 import { ResearchExperimentEnvironmentService } from './experiment-environment';
+import { ResearchPythonEnvironmentService } from './python-environment-service';
+import { researchPythonEnvironmentCapabilities, registerResearchPythonEnvironmentCapabilities } from './python-environment-capabilities';
 import { ResearchExperimentService } from './experiment-service';
 import { registerResearchExperimentCapabilities, researchExperimentCapabilities } from './experiment-capabilities';
 import { ResearchFigureService } from './figure-service';
@@ -202,6 +204,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
   let embeddings: ResearchEmbeddingService | null = null;
   let indexer: ResearchIndexService | null = null;
   let experiments: ResearchExperimentService | null = null;
+  let pythonEnvironments: ResearchPythonEnvironmentService | null = null;
   let figures: ResearchFigureService | null = null;
   let exports: ResearchExportService | null = null;
   let productionInputs: ResearchProductionInputService | null = null;
@@ -221,7 +224,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
+      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，
@@ -237,6 +240,9 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       const researchIndexer = new ResearchIndexService(researchRepository, toolchain, researchEmbeddings, options.indexRoot ?? null, context.logger, options.indexWatch);
       indexer = researchIndexer;
       registerResearchIndexCapabilities(context, researchRepository.indexing, researchIndexer);
+      const researchPythonEnvironments = new ResearchPythonEnvironmentService(researchRepository);
+      pythonEnvironments = researchPythonEnvironments;
+      registerResearchPythonEnvironmentCapabilities(context, researchRepository.pythonEnvironments, researchPythonEnvironments);
       const researchExperiments = new ResearchExperimentService(researchRepository, new ResearchExperimentEnvironmentService(toolchain), options.experimentRoot ?? null, context.logger);
       experiments = researchExperiments;
       registerResearchExperimentCapabilities(context, researchRepository.experiments, researchExperiments);
@@ -387,12 +393,16 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
         researchExperiments.projectChanged(project.id);
         researchFigures.projectChanged(project.id);
         researchExports.projectChanged(project.id);
-        if (project.status === 'archived') await reviewSearches.releaseProject(project.id);
+        if (project.status === 'archived') {
+          await reviewSearches.releaseProject(project.id);
+          await researchPythonEnvironments.releaseProject(project.id);
+        }
         return project;
       });
       context.capabilities.register(pluginId, workbenchCapabilities.deleteProject, async (input) => {
         const request = researchProjectIdRequestSchema.parse(input);
         await reviewSearches.releaseProject(request.id);
+        await researchPythonEnvironments.releaseProject(request.id);
         const result = researchRepository.deleteProject(request.id);
         researchIndexer.releaseProject(request.id);
         researchExperiments.releaseProject(request.id);
@@ -481,13 +491,14 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
     },
     shutdown: async () => {
       try {
-        await shutdownResearchPlugin({ literature: literatureService, zotero, literatureImports, productionInputs, exports, figures, experiments, indexer, embeddings, stageRuntime, reviewSearch, templates, documents, library, prose });
+        await shutdownResearchPlugin({ literature: literatureService, zotero, literatureImports, productionInputs, exports, figures, experiments, pythonEnvironments, indexer, embeddings, stageRuntime, reviewSearch, templates, documents, library, prose });
       } finally {
         reviewSearch = null;
         productionInputs = null;
         exports = null;
         figures = null;
         experiments = null;
+        pythonEnvironments = null;
         indexer = null;
         embeddings = null;
         documents = null;

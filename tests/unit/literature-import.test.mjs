@@ -569,7 +569,7 @@ test('plugin shutdown interrupts the actual parent stage before closing search a
     const current = runtime.retry({projectId: f.project.id, runId: f.run.id, requestId: 'shutdown-parent'});
     await started;
     await api.shutdownResearchPlugin({stageRuntime: runtime, reviewSearch: null, literature: search, zotero: null, literatureImports: null,
-      productionInputs: null, exports: null, figures: null, experiments: null, indexer: null,
+      productionInputs: null, exports: null, figures: null, experiments: null, pythonEnvironments: null, indexer: null,
       embeddings: null, templates: null, documents: null, library: null, prose: null});
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(roleFinished, true);

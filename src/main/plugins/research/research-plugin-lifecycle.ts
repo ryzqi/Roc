@@ -29,6 +29,7 @@ export async function shutdownResearchPlugin(services: {
   exports: ShutdownService;
   figures: ShutdownService;
   experiments: ShutdownService;
+  pythonEnvironments: ShutdownService;
   indexer: ShutdownService;
   embeddings: ShutdownService;
   stageRuntime: ShutdownService;
@@ -49,6 +50,7 @@ export async function shutdownResearchPlugin(services: {
     services.exports,
     services.figures,
     services.experiments,
+    services.pythonEnvironments,
     services.indexer,
     services.embeddings,
     services.templates,

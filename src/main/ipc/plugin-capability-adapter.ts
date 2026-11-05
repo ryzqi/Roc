@@ -1,4 +1,5 @@
 import { withLiteratureContext } from '../services/literature-context';
+import { researchPythonEnvironmentSelectSchema } from '../../shared/schemas/research-python-environments';
 import {withResearchHumanContext} from '../services/research-human-context';
 import {researchSourceMigrationCaptureSchema, researchSourceMigrationRejectSchema} from '../../shared/schemas/research-source-migrations';
 import {researchSourceReplacementRequestSchema} from '../../shared/schemas/research-source-replacements';
@@ -53,6 +54,11 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
       }
       return await wrapIpc(async () => {
         const input = transformInput(target.inputTransform, args);
+        if (target.capabilityName === 'research.pythonEnvironments.select') {
+          const request = researchPythonEnvironmentSelectSchema.parse(input);
+          return withResearchHumanContext({ capability: target.capabilityName, projectId: request.projectId, windowId },
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
         if(target.capabilityName==='research.reviewStudies.save') {
           const request=researchReviewStudiesSaveSchema.parse(input);
           return withResearchHumanContext({capability:target.capabilityName,projectId:request.projectId,windowId},
