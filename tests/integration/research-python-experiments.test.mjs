@@ -324,7 +324,7 @@ test('metric review requires actual complete output and human authority; source 
 
 test('actual result metric evidence traces claims, figures and Idea history to an immutable negative output across restart',async()=>{
   const f=await fixture(metricSource,{scenario:'metric-evidence'});
-  let reopened,figureService,figure,figureConsistencyReview;
+  let reopened,figureService,figure,figureConsistencyReview,bodyConsistencyReview,citationReview;
   try {
     await writeFile(join(f.workspace,'data.txt'),'-3 -2 -1\n');
     const run=await f.execute(),output=run.files.find(file=>file.path==='metrics.json');
@@ -436,14 +436,41 @@ test('actual result metric evidence traces claims, figures and Idea history to a
           expectedClaimVersion:revised.version,expectedSourceDigest:sourceDigest,decision:'confirm',note:'Synthetic human acceptance of exact measured value'},
           {kind:'user',id:'window:72'});
       }
+      if(subjectType==='figure') {
+        const scientificReviews=new api.ResearchArtifactScientificReviewService(f.repository,service,figureService);
+        const gate=api.createResearchHumanGate({repository:f.repository,production:figureService,scientificReviews});
+        f.repository.transitionWorkflow({projectId:f.project.id,expectedStage:'figure',action:'start'});
+        await gate.complete({projectId:f.project.id,expectedStage:'figure',action:'complete'});
+        await gate.approve({projectId:f.project.id,expectedStage:'figure',action:'approve',
+          expectedArtifactVersions:[{artifactId:artifact.id,version:f.repository.inspectArtifact({
+            projectId:f.project.id,artifactId:artifact.id,expectedVersion:null}).snapshot.version}]});
+        assert.equal(f.repository.figures.get(f.project.id,figure.id).status,'approved');
+        assert.deepEqual(api.currentArtifactScientificReviews(f.repository,f.project.id,artifact.id).figure,figureConsistencyReview);
+      }
       if(subjectType==='paragraph') {
         f.repository.manuscripts.saveManuscript({artifactId:artifact.id,sections:[{title:'Results',claimIds:[revised.id]}]});
+        const humanReview=(capability,action)=>api.withResearchHumanContext({capability,projectId:f.project.id,windowId:72},action);
+        const numeric=new api.ResearchConsistencyService(f.repository,service);
+        bodyConsistencyReview=await humanReview('research.consistency.save',()=>numeric.save({
+          projectId:f.project.id,artifactId:artifact.id,requestId:'actual-python-body-mapping',
+          expectedArtifactVersion:f.repository.inspectArtifact({projectId:f.project.id,artifactId:artifact.id,expectedVersion:null}).snapshot.version,
+          parent:null,rationale:'Explicit body value linked to executed CPython output',
+          bindings:[{claimId:revised.id,expectedClaimHash:api.relationClaimHash(revised),surface:'body',
+            start:revised.content.indexOf('-4'),end:revised.content.indexOf('-4')+2,unit:'ms',evidenceId:evidence.id,
+            resultId:receipt.snapshot.id,resultHash:receipt.snapshotHash,metricId:'mean',
+            rule:{conversion:{kind:'identity'},rounding:{kind:'none'},
+              tolerance:{absolute:0,relative:0,rationale:'Exact deterministic fixture value'}}}]}));
+        const coverage=new api.ResearchCitationCoverageService(f.repository).inspect({
+          projectId:f.project.id,artifactId:artifact.id,expectedHash:null});
+        citationReview=humanReview('research.citationReviews.save',()=>f.repository.citationReviews.save({
+          projectId:f.project.id,artifactId:artifact.id,claimId:revised.id,evidenceId:evidence.id,requestId:'actual-python-directness',
+          expectedReportHash:coverage.reportHash,parent:null,directness:'direct',
+          rationale:'Exact executed measurement directly supplies the stated body value'}));
         f.db.prepare("UPDATE research_artifacts SET status='approved' WHERE id=?").run(artifact.id);
         f.db.prepare("UPDATE research_projects SET current_stage='export' WHERE id=?").run(f.project.id);
         f.db.prepare(`INSERT INTO research_review_cycles
           (project_id,origin_artifact_id,manuscript_artifact_id,revision_round,status,report_artifact_ids_json,updated_at)
           VALUES (?,?,?,0,'accepted','[]',?)`).run(f.project.id,artifact.id,artifact.id,'2026-11-03T00:00:00.000Z');
-        f.db.prepare("UPDATE research_artifacts SET status='approved' WHERE id=?").run(figure.artifactId);
         const exports=new api.ResearchExportSourceService(f.repository,figureService,f.service,
           {files:async()=>assert.fail('default template')});
         const exportRequest={projectId:f.project.id,requestId:'metric-export',title:'Metric sources',manuscriptArtifactId:artifact.id,
@@ -484,8 +511,23 @@ test('actual result metric evidence traces claims, figures and Idea history to a
         const reviewBytes=api.serializeExportScientificReview(review);
         const seal={sources,sourceHash:review.sourceHash,files:[{path:api.exportScientificReviewPath,
           sha256:createHash('sha256').update(reviewBytes).digest('hex'),size:Buffer.byteLength(reviewBytes)}]};
-        assert.equal(review.schemaVersion,2);
+        assert.equal(review.schemaVersion,3);
         assert.equal(api.researchExportScientificReviewSchema.safeParse({...review,schemaVersion:1}).success,false);
+        assert.equal(api.researchExportScientificReviewSchema.safeParse({...review,schemaVersion:2}).success,false);
+        for(const field of ['citationReviews','consistencyReviews','figureConsistencyReviews']) {
+          assert.equal(api.researchExportScientificReviewSchema.safeParse({...review,[field]:undefined}).success,false);
+        }
+        assert.deepEqual(review.citationReviews[0].current,[citationReview]);
+        assert.deepEqual(review.consistencyReviews[0].current,bodyConsistencyReview);
+        assert.deepEqual(review.consistencyReviews[0].history.items,[bodyConsistencyReview]);
+        const exportedFigureReview=review.figureConsistencyReviews[0];
+        assert.equal(exportedFigureReview.current.originalSnapshotHash,figureConsistencyReview.snapshotHash);
+        assert.equal(exportedFigureReview.current.redactedSnapshotHash,
+          createHash('sha256').update(JSON.stringify(exportedFigureReview.current.snapshot)).digest('hex'));
+        assert.equal(exportedFigureReview.current.snapshot.material.run.workspacePath,undefined);
+        assert.equal(exportedFigureReview.current.snapshot.material.run.workspaceRoot,undefined);
+        assert.deepEqual(exportedFigureReview.history.items,[exportedFigureReview.current]);
+        assert.equal(exportedFigureReview.current.snapshot.material.mappings[0].calculation.observed,-4);
         assert.equal(api.researchExportScientificReviewSchema.safeParse({...review,ideaOutcomeHistory:undefined}).success,false);
         assert.deepEqual(review.ideaOutcomes,[assessment]);
         assert.equal(review.ideaOutcomeHistory[0].history.verification,'stored_receipt');

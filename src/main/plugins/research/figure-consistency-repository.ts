@@ -29,6 +29,34 @@ export class ResearchFigureConsistencyRepository {
       .get(artifactId) as Row | undefined;
     return row === undefined ? null : this.read(row);
   }
+  assertReceiptCurrent(receipt: ResearchFigureConsistencyReceipt): void {
+    const {request, material} = receipt.snapshot;
+    this.scope(request.projectId, request.artifactId);
+    const figure = this.research.figures.forArtifact(this.research.getArtifact(request.artifactId));
+    const {status: _currentStatus, ...currentFigure} = figure;
+    const {status: _savedStatus, ...savedFigure} = material.figure;
+    const run = this.research.figureRuns.get(request.projectId, figure.runId);
+    assertFigureRun(run, figure.validation);
+    if (JSON.stringify(currentFigure) !== JSON.stringify(savedFigure) ||
+      JSON.stringify(run) !== JSON.stringify(material.run) ||
+      researchContentHash(figureManifest(run, figure.validation)) !== request.figure.manifestHash) {
+      throw new Error('research_figure_consistency_source_changed');
+    }
+    for (const entry of material.mappings) {
+      const claim = this.research.evidence.getClaim(entry.claim.id);
+      if (JSON.stringify(claim) !== JSON.stringify(entry.claim)) throw new Error('research_consistency_claim_changed');
+      const source = this.research.evidence.inspectEvidence(entry.evidence.id, request.projectId);
+      if (source.referenceStatus !== 'recorded' || JSON.stringify(source.evidence) !== JSON.stringify(entry.evidence)) {
+        throw new Error('research_consistency_source_changed');
+      }
+      const metadata = this.research.evidence.sourceMetadata(request.projectId, entry.evidence.id);
+      if (metadata === null) throw new Error('research_consistency_metric_invalid');
+      assertExperimentMetricEvidence(entry.evidence, metadata, entry.result);
+      const result = this.research.experimentResults.get({projectId: request.projectId,
+        resultId: entry.result.snapshot.id, expectedHash: entry.result.snapshotHash});
+      if (JSON.stringify(result) !== JSON.stringify(entry.result)) throw new Error('research_consistency_source_changed');
+    }
+  }
   history(input: ResearchFigureConsistencyHistory): {verification: 'stored_receipt'; items: ResearchFigureConsistencyReceipt[]; total: number} {
     const request = researchFigureConsistencyHistorySchema.parse(input);
     this.scope(request.projectId, request.artifactId);

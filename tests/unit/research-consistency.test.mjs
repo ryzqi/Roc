@@ -134,6 +134,11 @@ test('changed claims are stale while original history survives source invalidati
     const inspected = await f.inspect();
     assert.equal(inspected.report.locations[0].current, false);
     assert.equal(inspected.report.counts.changed, 1);
+    f.repository.manuscripts.saveManuscript({artifactId: f.artifactId, sections: [{title: 'Results', claimIds: [f.claim.id]}]});
+    assert.throws(() => f.repository.transitionWorkflow({projectId: f.project.id, expectedStage: 'writing', action: 'complete'}),
+      /research_consistency_claim_changed/u);
+    assert.throws(() => api.captureExportArtifactReviews(f.repository, f.project.id, [f.artifactId]),
+      /research_consistency_claim_changed/u);
     f.repository.evidence.invalidateChunksOf(f.evidence.documentId);
     assert.deepEqual(f.history().items, [saved]);
     assert.equal(f.repository.evidence.inspectEvidence(f.evidence.id, f.project.id).referenceStatus, 'superseded');
@@ -142,6 +147,39 @@ test('changed claims are stale while original history survives source invalidati
     f.db.prepare('UPDATE research_consistency_reviews SET snapshot_json=?,snapshot_hash=? WHERE id=?')
       .run(JSON.stringify(damaged), hash(damaged), saved.snapshot.id);
     assert.throws(() => f.history(), /research_consistency_snapshot_invalid/u);
+  } finally {f.close();}
+});
+
+test('complete numeric history freezes independently of unrelated citation reviews and catches byte verifier conflicts', async () => {
+  const f = scene();
+  try {
+    const first = await f.save();
+    let latest = first;
+    for (let version = 2; version <= 102; version++) {
+      latest = api.withResearchHumanContext({capability: 'research.consistency.save', projectId: f.project.id, windowId: 90},
+        () => f.repository.consistency.save(f.request({requestId: `full-history-${version}`,
+          parent: {reviewId: latest.snapshot.id, reviewHash: latest.snapshotHash}}), first.snapshot.material));
+    }
+    const coverage = new api.ResearchCitationCoverageService(f.repository).inspect({
+      projectId: f.project.id, artifactId: f.artifactId, expectedHash: null});
+    const citation = api.withResearchHumanContext({capability: 'research.citationReviews.save', projectId: f.project.id, windowId: 90},
+      () => f.repository.citationReviews.save({projectId: f.project.id, artifactId: f.artifactId, claimId: f.claim.id,
+        evidenceId: f.evidence.id, expectedReportHash: coverage.reportHash, requestId: 'separate-directness', parent: null,
+        directness: 'indirect', rationale: 'Separate synthetic inference assessment'}));
+    const exported = api.captureExportArtifactReviews(f.repository, f.project.id, [f.artifactId]);
+    assert.deepEqual(exported.consistencyReviews[0].current, latest);
+    assert.deepEqual(exported.consistencyReviews[0].history.items.map(item => item.snapshot.version),
+      Array.from({length: 102}, (_, i) => 102 - i));
+    assert.deepEqual(exported.citationReviews[0].current, [citation]);
+    const verifier = new api.ResearchArtifactScientificReviewService(f.repository,
+      {evidence: async () => ({receipt: {...f.result, snapshotHash: '0'.repeat(64)}, metricId: 'mean'})},
+      {verify: async () => assert.fail('manuscript has no figure review')});
+    await assert.rejects(verifier.verifyArtifacts(f.project.id, [f.artifactId]), /research_consistency_source_changed/u);
+    const original = f.repository.consistency.history.bind(f.repository.consistency);
+    f.repository.consistency.history = request => request.offset === 0 ? original(request) :
+      {verification: 'stored_receipt', items: [], total: 102};
+    assert.throws(() => api.captureExportArtifactReviews(f.repository, f.project.id, [f.artifactId]),
+      /research_export_review_history_changed/u);
   } finally {f.close();}
 });
 test('actual IPC sender binding and exact source conflict classification remain explicit', async () => {

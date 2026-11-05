@@ -3,6 +3,7 @@ import type { ResearchRepository } from './repository';
 import { getResearchStageRoleProfile } from './role-profiles';
 import { requireSearchPlanContent } from './search-strategy';
 import {assertCurrentExportScientificReview} from './export-scientific-review';
+import {currentArtifactScientificReviews} from './artifact-scientific-reviews';
 
 export function assertResearchStageArtifacts(
   repository: ResearchRepository,
@@ -18,6 +19,7 @@ export function assertResearchStageArtifacts(
       throw new Error('research_stage_artifact_invalid');
     }
     repository.evidence.assertPublishable(artifact);
+    currentArtifactScientificReviews(repository, projectId, artifact.id);
     if (artifact.kind === 'search_strategy') requireSearchPlanContent(repository, artifact);
     if (artifact.kind === 'manuscript') repository.manuscripts.assertPublishable(artifact);
     if (artifact.kind === 'idea_canvas') repository.ideas.assertPublishable(artifact);

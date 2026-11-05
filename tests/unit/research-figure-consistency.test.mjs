@@ -148,7 +148,8 @@ test('claim drift is visible while stored history survives invalidated evidence 
     f.openRevision();
     f.claim = f.repository.evidence.updateClaim({id: f.claim.id, expectedVersion: f.claim.version,
       content: 'Revised scientific meaning requires new mapping.', status: 'supported', evidenceIds: [f.evidence.id]});
-    f.repository.transitionWorkflow({projectId: f.project.id, expectedStage: 'figure', action: 'complete'});
+    assert.throws(() => f.repository.transitionWorkflow({projectId: f.project.id, expectedStage: 'figure', action: 'complete'}),
+      /research_consistency_claim_changed/u);
     const changed = await f.inspect(); assert.equal(changed.report.counts.changed, 1);
     assert.equal(changed.report.locations[0].current, false);
     f.repository.evidence.invalidateChunksOf(f.evidence.documentId);
@@ -199,7 +200,6 @@ test('inspection refuses a whole-artifact change during the asynchronous result 
       f.openRevision();
       f.claim = f.repository.evidence.updateClaim({id: f.claim.id, expectedVersion: f.claim.version,
         content: 'Changed during result read.', status: 'supported', evidenceIds: [f.evidence.id]});
-      f.repository.transitionWorkflow({projectId: f.project.id, expectedStage: 'figure', action: 'complete'});
       return {receipt: f.result, metricId: 'mean'};
     }});
     await assert.rejects(f.inspect(), /research_consistency_artifact_changed/u);
@@ -223,5 +223,68 @@ test('public IPC binds window actor and classifies explicit field/unit conflicts
     const history = await bridge.invoke('research.getFigureConsistencyHistory', [{
       projectId: f.project.id, artifactId: f.artifactId, offset: 0, limit: 1}]);
     assert.deepEqual(history.data.items, [saved.data]);
+  } finally {await f.dispose();}
+});
+
+test('export freezes 102 complete plotted revisions with explicit redaction and retained inconsistent findings', async () => {
+  const f = await scene();
+  try {
+    const first = await f.save();
+    const second = await f.save(f.request({requestId: 'history-2',
+      parent: {reviewId: first.snapshot.id, reviewHash: first.snapshotHash}, bindings: [f.binding(f.mark.items[1])]}));
+    let latest = second;
+    for (let version = 3; version <= 102; version++) {
+      latest = api.withResearchHumanContext({capability: 'research.figureConsistency.save', projectId: f.project.id, windowId: 90},
+        () => f.repository.figureConsistency.save(f.request({requestId: `history-${version}`,
+          parent: {reviewId: latest.snapshot.id, reviewHash: latest.snapshotHash},
+          bindings: [f.binding(f.mark.items[1])]}), second.snapshot.material, f.trace));
+    }
+    const before = f.changes();
+    const review = api.captureExportArtifactReviews(f.repository, f.project.id, [f.artifactId]);
+    assert.equal(f.changes(), before);
+    const exported = review.figureConsistencyReviews[0];
+    assert.equal(exported.history.total, 102);
+    assert.deepEqual(exported.history.items.map(item => item.snapshot.version), Array.from({length: 102}, (_, i) => 102 - i));
+    assert.equal(exported.current.snapshot.material.mappings[0].calculation.consistent, false);
+    assert.equal(exported.current.originalSnapshotHash, latest.snapshotHash);
+    assert.equal(exported.current.redactedSnapshotHash, hash(exported.current.snapshot));
+    assert.equal(exported.current.verification, 'redacted_receipt');
+    assert.equal(Object.hasOwn(exported.current.snapshot.material.run, 'workspacePath'), false);
+    assert.equal(Object.hasOwn(exported.current.snapshot.material.run, 'workspaceRoot'), false);
+    assert.equal(api.researchExportFigureReviewSchema.safeParse({
+      ...exported.current, snapshot: {...exported.current.snapshot, material: latest.snapshot.material}
+    }).success, false);
+    const originalBytes = JSON.stringify(first);
+    f.db.prepare("UPDATE research_artifacts SET status='approved' WHERE id=?").run(f.artifactId);
+    assert.deepEqual(api.captureExportArtifactReviews(f.repository, f.project.id, [f.artifactId]), review);
+    assert.equal(JSON.stringify(f.history(101, 1).items[0]), originalBytes);
+    await writeFile(f.tracePath, 'changed current bytes');
+    assert.deepEqual(f.history(101, 1).items, [first]);
+    const verifier = new api.ResearchArtifactScientificReviewService(f.repository,
+      {evidence: async () => ({receipt: f.result, metricId: 'mean'})}, f.figureService);
+    await assert.rejects(verifier.verifyArtifacts(f.project.id, [f.artifactId]), /research_figure_snapshot_changed/u);
+  } finally {await f.dispose();}
+});
+
+test('gate refuses missing byte verifier and changed receipt during result await before approval', async () => {
+  const f = await scene();
+  try {
+    const first = await f.save();
+    const request = {projectId: f.project.id, expectedStage: 'figure', action: 'approve',
+      expectedArtifactVersions: [{artifactId: f.artifactId, version: f.request().expectedArtifactVersion}]};
+    await assert.rejects(api.createResearchHumanGate({repository: f.repository, production: f.figureService}).approve(request),
+      /research_scientific_review_verify_unavailable/u);
+    let next;
+    const scientificReviews = new api.ResearchArtifactScientificReviewService(f.repository, {evidence: async () => {
+      next = api.withResearchHumanContext({capability: 'research.figureConsistency.save', projectId: f.project.id, windowId: 90},
+        () => f.repository.figureConsistency.save(f.request({requestId: 'during-await',
+          parent: {reviewId: first.snapshot.id, reviewHash: first.snapshotHash}}), first.snapshot.material, f.trace));
+      return {receipt: f.result, metricId: 'mean'};
+    }}, f.figureService);
+    await assert.rejects(api.createResearchHumanGate({repository: f.repository, production: f.figureService, scientificReviews}).approve(request),
+      /research_artifact_review_changed/u);
+    assert.equal(f.repository.getArtifact(f.artifactId).status, 'draft');
+    assert.equal(f.repository.getWorkflow(f.project.id).stages.find(stage => stage.stage === 'figure').gateApproved, false);
+    assert.deepEqual(f.history().items, [next, first]);
   } finally {await f.dispose();}
 });

@@ -129,3 +129,12 @@ A4C2A 定向状态为 `Verified passing`。仓库根目录执行 `node --test te
 | `pnpm check:ipc` / `pnpm check:renderer-chunks` | 合同当前；1,134,228 bytes / 6 eager 文件 | `xwrite-a4c2b-ipc.log` / `xwrite-a4c2b-chunks.log` |
 
 日志和真实 Electron 45/macOS arm64 的 650px 明暗主题截图在 `.artifacts/research-optimization/`，减弱动效、默认/悬停/编码展开/最终状态均满足 `cut=0`，仅三个精确的抽屉物理边缘阴影被隐藏，无横向溢出。指标使用明确合成的已存结果，场景确实由 Vega 渲染；实际 CPython 来源检验由 A4C2A 的集成测试覆盖。此部分不声明最终像素位置或科学含义已经批准；审批与导出消费者由 A4C2C 接入。
+
+
+## A4C2C：审批与导出消费者
+
+complete/approve、任务验收和导出会核对已有数值/直接性审核的当前主张、Evidence、指标结果版本及图稿 run/manifest。人工闸门和导出来源捕获还检查实际冻结结果和图稿字节；异步检查期间新增审核或改变工件集合/版本会拒绝旧请求。拒绝审批仍允许修正。没有映射不代表科学批准，也不强制把每条基线通道映射为科学指标；保存的不一致数值和间接/不支持引用声明保持真实结论。
+
+图稿正常从 rendered 变为 approved 时，已有数值审核仍可使用；任何内容、运行、主张或来源变化必须重新核查。导出 schema 3 包含最新审核和全部分页历史。图稿回执明确脱敏两个本机 workspace 字段，同时保留原回执来源哈希和可独立核对的脱敏 snapshot 哈希；细节见 [导出审核快照](research-exports.md#citation--scientific-consistency-审核快照)。旧导出文件读取继续核对保存字节和 ZIP，不要求当前来源恢复成功。
+
+本部分在仓库根目录验证：最终 `pnpm build`（含 typecheck）、44 项 main 定向测试、实际 CPython 指标→负柱 datum→人工图稿审批→正文/引用审核→导出快照集成 1/1、原生 P0 13/13、相关 renderer 57/57、启动 smoke 13/13（零 renderer error）、IPC current、eager JS 1,134,228 bytes / 6 files。定向历史用明确合成已存结果验证 102 条图稿、102 条正文、52 条引用的完整分页，不宣称这些 fixture 实际执行科学计算。日志以 `.artifacts/research-optimization/xwrite-a4c2c-` 为前缀。

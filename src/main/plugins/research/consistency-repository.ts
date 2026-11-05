@@ -31,6 +31,10 @@ export class ResearchConsistencyRepository {
       .get(artifactId) as Row | undefined;
     return row === undefined ? null : this.read(row);
   }
+  assertReceiptCurrent(receipt: ResearchConsistencyReceipt): void {
+    this.scope(receipt.snapshot.request.projectId, receipt.snapshot.request.artifactId);
+    this.assertCurrent(receipt.snapshot.request, receipt.snapshot.material);
+  }
   history(input: ResearchConsistencyHistory): {verification: 'stored_receipt'; items: ResearchConsistencyReceipt[]; total: number} {
     const request = researchConsistencyHistorySchema.parse(input);
     this.scope(request.projectId, request.artifactId);

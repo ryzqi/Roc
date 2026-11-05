@@ -12,6 +12,8 @@ import type { ResearchTemplateService } from './template-service';
 import {researchExperimentResultEvidenceMetadataSchema,type ResearchExperimentResultReceipt} from '../../../shared/schemas/research-experiment-results';
 import {assertExperimentMetricEvidence} from './experiment-result-evidence';
 import {captureExportIdeaOutcomes} from './export-idea-outcomes';
+import {currentArtifactScientificReviews, ResearchArtifactScientificReviewService} from './artifact-scientific-reviews';
+import {ResearchExperimentResultService} from './experiment-result-service';
 
 export class ResearchExportSourceService {
   constructor(private readonly repository: ResearchRepository, private readonly figures: ResearchFigureService,
@@ -28,6 +30,9 @@ export class ResearchExportSourceService {
         files: files.map(({ path, size, sha256 }) => ({ path, size, sha256 })) };
     }
     const sources = this.collect(request, template);
+    await new ResearchArtifactScientificReviewService(this.repository,
+      new ResearchExperimentResultService(this.repository, this.experiments), this.figures)
+      .verifyArtifacts(request.projectId, [request.manuscriptArtifactId, ...sources.figures.map(figure => figure.artifactId)]);
     for (const figure of sources.figures) { signal.throwIfAborted(); await this.figures.verify(request.projectId, figure.id); }
     for (const run of sources.experiments) {
       signal.throwIfAborted();
@@ -48,6 +53,7 @@ export class ResearchExportSourceService {
     const review = this.repository.reviews.requireForStage(project.id, 'export');
     if (review === null || review.manuscriptArtifactId !== request.manuscriptArtifactId) throw new Error('research_export_manuscript_changed');
     const bundle = this.repository.manuscripts.exportBundle({ projectId: project.id, artifactId: request.manuscriptArtifactId });
+    currentArtifactScientificReviews(this.repository, project.id, request.manuscriptArtifactId);
     const figures = [];
     const claims = [...bundle.claims];
     for (const id of request.figureIds) {
@@ -56,6 +62,7 @@ export class ResearchExportSourceService {
       const artifact = this.repository.getArtifact(figure.artifactId);
       this.repository.evidence.assertPublishable(artifact);
       this.repository.evidence.assertReviewedSupportForArtifact(artifact);
+      currentArtifactScientificReviews(this.repository, project.id, artifact.id);
       figures.push(figure);
       claims.push(...this.repository.evidence.listClaims({ projectId: project.id, artifactId: artifact.id }));
     }

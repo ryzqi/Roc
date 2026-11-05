@@ -99,9 +99,17 @@ ZIP 包含：
 
 `provenance/sources.json` 必须包含 `ideaOutcomes`，保存正文及所选图稿实际引用结果的当前人工评估。没有评估时为空数组。关联使用精确项目、结果回执 ID/hash 和冻结方法身份；每个冻结方法只纳入最新评估，另一个结果的评估不会因属于同一项目而进入导出。
 
-`provenance/scientific-review.json` 使用 schema 2，包含完整评估回执及每个方法的全部 `stored_receipt` 历史，按每页 100 条读取。原冻结假设、预期结果、真实测量、人工结论和修订原因同时保留；历史标记只表示保存回执的完整性。schema 1 和缺少必填字段的数据被拒绝。
+`provenance/scientific-review.json` 使用 schema 3，包含完整评估回执及每个方法的全部 `stored_receipt` 历史，按每页 100 条读取。原冻结假设、预期结果、真实测量、人工结论和修订原因同时保留；历史标记只表示保存回执的完整性。schema 1、2 和缺少必填字段的数据被拒绝。
 
 捕获和后续审核重验当前评估 head、冻结方法、真实结果/运行时间、指标 Evidence 及计划引用的证据。来源或人工评估变化会使原导出及审核失效，必须重新准备并审核；校验不会修改原来源快照或保存的审核文件。详细验收见 [Idea 方法与结果评估](research-idea-plans.md)。
+
+### Citation / Scientific Consistency 审核快照
+
+schema 3 必须包含 `citationReviews`、`consistencyReviews` 和 `figureConsistencyReviews`。对正文与所选图稿固定最新人工审核、完整分页历史、确切主张/Evidence/实验结果版本及转换、舍入、容差规则。引用历史按每页 50 条读取；正文与图稿数值历史按每页 100 条读取，不能只导出第一页。没有审核的类别为空数组；移除的引用配对仍留在历史中，当前配对不含它。间接/不支持的引用声明和不一致数值照实保留，不能自动变成语义支持或科学批准。
+
+准备完成、发布到审核闸门、审批和交付前均核对当前来源与固定审核快照。生成期间新增审核也使旧快照失效；正常图稿 `rendered → approved` 状态变化不使已有映射失效。历史导出读取仍核对保存文件和 ZIP 字节，来源失效不妨碍读取已保存包。
+
+图稿审核使用明确的 `redacted_receipt` 投影：只移除 `snapshot.material.run.workspacePath` 与 `workspaceRoot`，列出 `omittedFields`，分别保存 `originalSnapshotHash` 与 `redactedSnapshotHash`。后者可由导出 snapshot JSON 的 SHA-256 核对；前者是原私有回执的来源标识。脱敏投影不声称能够重建或验证依赖本机路径的原完整图稿 manifest。全包其余既有私有路径的整改由 PR10 处理，本部分不声明全包已满足公开发布隐私要求。
 
 ## arXiv 预检
 

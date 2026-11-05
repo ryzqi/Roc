@@ -160,6 +160,8 @@ test('claim revision marks prior directness stale and source invalidation preser
     assert.equal(coverage.report.counts.unreviewedDirectnessCitations, 1);
     assert.ok(coverage.report.paragraphs[0].issues.some(i => i.kind === 'changed_directness'));
     assert.throws(() => f.save(request), /research_citation_review_source_changed/u);
+    assert.throws(() => api.captureExportArtifactReviews(f.repository, f.project.id, [f.artifactId]),
+      /research_citation_review_source_changed/u);
     const second = f.save(f.request({requestId: 'revised', parent: {reviewId: first.snapshot.id, reviewHash: first.snapshotHash},
       directness: 'indirect', rationale: 'This revised wording requires an inference beyond the measured value.'}));
     f.repository.evidence.invalidateChunksOf(f.source.documentId);
@@ -167,6 +169,50 @@ test('claim revision marks prior directness stale and source invalidation preser
     assert.deepEqual(f.history().items, [second, first]);
     assert.equal(f.history().verification, 'stored_receipt');
     assert.equal(f.history().items[0].snapshot.material.source.referenceStatus, 'recorded');
+  } finally {f.close();}
+});
+
+test('export retains all 52 directness revisions without declaring semantic support or promoting verdicts', async () => {
+  const f = scene();
+  try {
+    const first = f.save(f.request());
+    let latest = first;
+    for (let version = 2; version <= 52; version++) {
+      latest = f.save(f.request({requestId: `directness-history-${version}`,
+        parent: {reviewId: latest.snapshot.id, reviewHash: latest.snapshotHash}, directness: 'unsupported',
+        rationale: `Explicit synthetic revision ${version}`}));
+    }
+    const before = f.changes();
+    const exported = api.captureExportArtifactReviews(f.repository, f.project.id, [f.artifactId]);
+    assert.equal(f.changes(), before);
+    assert.deepEqual(exported.citationReviews[0].current, [latest]);
+    assert.equal(exported.citationReviews[0].history[0].history.total, 52);
+    assert.deepEqual(exported.citationReviews[0].history[0].history.items.map(item => item.snapshot.version),
+      Array.from({length: 52}, (_, i) => 52 - i));
+    assert.equal(exported.citationReviews[0].current[0].snapshot.request.directness, 'unsupported');
+    assert.equal(f.coverage().report.counts.humanReviewedCitations, 0);
+    const scientificReviews = new api.ResearchArtifactScientificReviewService(f.repository,
+      {evidence: async () => assert.fail('citation declaration has no numeric byte mapping')},
+      {verify: async () => assert.fail('manuscript has no plotted mapping')});
+    await scientificReviews.verifyArtifacts(f.project.id, [f.artifactId]);
+  } finally {f.close();}
+});
+
+test('removed citation pairs remain historical without blocking a manuscript that no longer uses them', () => {
+  const f = scene();
+  try {
+    const first = f.save(f.request());
+    f.repository.knowledge.upsertFromSource({id: 'replacement-source', projectId: f.project.id, sourceType: 'file',
+      sourceId: 'replacement.md', title: 'Replacement synthetic source', content: 'Replacement measurement.',
+      chunks: [{content: 'Replacement measurement.', locator: 'block:1'}], embeddingPolicy: 'none'});
+    const replacement = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'replacement-source:chunk:0'});
+    f.claim = f.repository.evidence.updateClaim({id: f.claim.id, expectedVersion: f.claim.version,
+      content: 'Replacement measurement.', status: 'supported', evidenceIds: [replacement.id]});
+    f.repository.manuscripts.saveManuscript({artifactId: f.artifactId, sections: [{title: 'Results', claimIds: [f.claim.id]}]});
+    const exported = api.captureExportArtifactReviews(f.repository, f.project.id, [f.artifactId]);
+    assert.deepEqual(exported.citationReviews[0].current, []);
+    assert.deepEqual(exported.citationReviews[0].history[0].history.items, [first]);
+    assert.deepEqual(api.currentArtifactScientificReviews(f.repository, f.project.id, f.artifactId).citations, []);
   } finally {f.close();}
 });
 

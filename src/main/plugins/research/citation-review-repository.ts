@@ -90,6 +90,17 @@ export class ResearchCitationReviewRepository {
     return rows.map(row => this.inspect(row));
   }
 
+  assertReceiptCurrent(receipt: ResearchCitationReviewReceipt): void {
+    const {request, material} = receipt.snapshot;
+    this.requireScope(request);
+    const bundle = this.research.manuscripts.inspectBundle(request);
+    if (!bundle.claims.some(claim => claim.id === request.claimId) ||
+      relationClaimHash(this.research.evidence.getClaim(request.claimId)) !== material.claimHash ||
+      relationSourceDigest(this.research.evidence.inspectEvidence(request.evidenceId, request.projectId)) !== material.sourceDigest) {
+      throw new Error('research_citation_review_source_changed');
+    }
+  }
+
   private requireScope(request: {projectId: string; artifactId: string; claimId: string; evidenceId: string}): void {
     this.research.getProject(request.projectId);
     const artifact = this.research.getArtifact(request.artifactId), claim = this.research.evidence.getClaim(request.claimId);

@@ -1,6 +1,7 @@
 import type { ResearchWorkflowSnapshot, ResearchWorkflowTransitionRequest } from '../../../shared/types';
 import type { ResearchRepository } from './repository';
 import { requireSearchPlanContent, searchPlanApprovalHash } from './search-strategy';
+import {currentArtifactScientificReviews, type ResearchArtifactScientificReviewService} from './artifact-scientific-reviews';
 
 export type ResearchProductionVerifier = {
   verifyStage(projectId: string): Promise<void>;
@@ -15,6 +16,7 @@ export type ResearchHumanGate = {
 export function createResearchHumanGate(input: {
   repository: ResearchRepository;
   production?: ResearchProductionVerifier;
+  scientificReviews?: Pick<ResearchArtifactScientificReviewService, 'verifyArtifacts'>;
 }): ResearchHumanGate {
   async function submit(request: ResearchWorkflowTransitionRequest, action: 'complete' | 'approve' | 'reject', signal?: AbortSignal): Promise<ResearchWorkflowSnapshot> {
     signal?.throwIfAborted();
@@ -33,6 +35,14 @@ export function createResearchHumanGate(input: {
       }
     }
     if (request.action === 'approve') input.repository.assertArtifactReview(request);
+    const versions = current.artifactIds.map(artifactId => ({
+      artifactId, version: input.repository.inspectArtifact({projectId: request.projectId, artifactId, expectedVersion: null}).snapshot.version
+    }));
+    const reviews = current.artifactIds.map(artifactId => currentArtifactScientificReviews(input.repository, request.projectId, artifactId));
+    if (reviews.some(review => review.citations.length > 0 || review.consistency !== null || review.figure !== null)) {
+      if (input.scientificReviews === undefined) throw new Error('research_scientific_review_verify_unavailable');
+      await input.scientificReviews.verifyArtifacts(request.projectId, current.artifactIds);
+    }
     if (current.stage === 'figure' || current.stage === 'export') {
       if (input.production === undefined) throw new Error(current.stage === 'figure' ? 'research_figure_verify_unavailable' : 'research_export_verify_unavailable');
       const signature = current.stage === 'figure'
@@ -45,6 +55,16 @@ export function createResearchHumanGate(input: {
       if (signature !== next) throw new Error(current.stage === 'figure' ? 'research_figure_review_changed' : 'research_export_review_changed');
     }
     signal?.throwIfAborted();
+    const finalWorkflow = input.repository.getWorkflow(request.projectId);
+    const finalStage = finalWorkflow.stages.find(stage => stage.stage === current.stage);
+    if (finalWorkflow.currentStage !== current.stage || finalStage?.status !== current.status ||
+      JSON.stringify(finalStage.artifactIds) !== JSON.stringify(current.artifactIds)) {
+      throw new Error('research_artifact_review_set_changed');
+    }
+    for (const version of versions) {
+      if (input.repository.inspectArtifact({projectId: request.projectId, artifactId: version.artifactId,
+        expectedVersion: version.version}).status !== 'current') throw new Error('research_artifact_review_changed');
+    }
     return input.repository.transitionWorkflow(request);
   }
 

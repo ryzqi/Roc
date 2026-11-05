@@ -181,6 +181,7 @@ export class ResearchExportService {
       const current = await this.sources.capture(record.request, signal);
       if (exportSourceHash(current) !== sourceHash || await this.tools.identity() !== toolchainHash) throw new Error('research_export_sources_changed');
       this.requireActive(signal); this.sources.assertCurrent(record.request, sources);
+      assertCurrentExportScientificReview(this.repository, {...record, sources, sourceHash, files: writer.list()});
       this.repository.exports.finish(record.projectId, record.id, { status: 'ready', sources, sourceHash, toolchainHash, files: writer.list(), archive, error: null });
     } catch (error) {
       if (writer !== null) {

@@ -104,6 +104,9 @@ export {relationSourceDigest, relationClaimHash} from '../../../src/main/plugins
 export {captureExportScientificReview, assertCurrentExportScientificReview, serializeExportScientificReview, exportScientificReviewPath} from '../../../src/main/plugins/research/export-scientific-review';
 export {researchExportSourcesSchema} from '../../../src/shared/schemas/research-exports';
 export {researchExportScientificReviewSchema} from '../../../src/shared/schemas/research-export-review';
+export {ResearchArtifactScientificReviewService, currentArtifactScientificReviews} from '../../../src/main/plugins/research/artifact-scientific-reviews';
+export {captureExportArtifactReviews, redactExportFigureReview} from '../../../src/main/plugins/research/export-artifact-reviews';
+export {researchExportFigureReviewSchema} from '../../../src/shared/schemas/research-export-review';
 export {researchEvidenceRelationProposalSchema, researchEvidenceRelationReviewSchema} from '../../../src/shared/schemas/research-evidence-relations';
 
 export {ResearchReviewDeduplicationRepository} from '../../../src/main/plugins/research/review-deduplication-repository';

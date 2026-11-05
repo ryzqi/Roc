@@ -139,6 +139,7 @@ import {registerResearchArtifactInspectorCapability, researchArtifactInspectorCa
 import type { ResearchRoleExecutor } from './role-executor';
 import { ResearchStageRuntime } from './stage-runtime';
 import { createResearchHumanGate } from './human-gate';
+import {ResearchArtifactScientificReviewService} from './artifact-scientific-reviews';
 import { applyResearchWorkflowTransition, shutdownResearchPlugin } from './research-plugin-lifecycle';
 import { createResearchProductionJob } from './research-production-job';
 import { researchContentHash } from './research-files';
@@ -367,7 +368,8 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       const effects = new ResearchProductionEffectService(researchRepository,
         new ResearchWorkspaceFileService(db, researchRepository, () => new Date().toISOString(), notifyWorkspacePathStructureChanged),
         researchExperiments, researchFigures, researchTemplates, researchExports);
-      const humanGate = createResearchHumanGate({ repository: researchRepository, production: productionJob });
+      const scientificReviews = new ResearchArtifactScientificReviewService(researchRepository, researchResults, researchFigures);
+      const humanGate = createResearchHumanGate({ repository: researchRepository, production: productionJob, scientificReviews });
       const runtime = new ResearchStageRuntime(researchRepository, context.capabilities, options.roleExecutor, humanGate, effects,
         (taskId, projectId) => notifyResearchTaskChanged(context, taskId, projectId));
       stageRuntime = runtime;
@@ -442,6 +444,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
         const refs = [...proof.refs];
         const stage = researchRepository.getWorkflow(request.projectId).stages.find((item) => item.stage === request.stage);
         if (stage === undefined) throw new Error('research_stage_not_found');
+        await scientificReviews.verifyArtifacts(request.projectId, stage.artifactIds);
         if (request.stage === 'experiment') {
           for (const id of stage.artifactIds) {
             const artifact = researchRepository.getArtifact(id);
