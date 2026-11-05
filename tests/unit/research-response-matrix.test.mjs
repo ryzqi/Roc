@@ -234,7 +234,7 @@ test('DB49 to50 preserves exact prior migration ledger without inventing respons
     api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(m => m.version <= 49),
       now: () => '2026-11-01T00:00:00.000Z'});
     const prior = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    api.applyResearchDatabaseSchema(db);
+    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(m => m.version <= 50)});
     assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=49 ORDER BY version').all(), prior);
     assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 50);
     assert.equal(db.prepare('SELECT count(*) FROM research_response_matrices').pluck().get(), 0);

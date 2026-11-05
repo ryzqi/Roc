@@ -165,3 +165,7 @@ export {registerResearchConsistencyCapabilities} from '../../../src/main/plugins
 
 export {registerResearchResponseMatrixCapabilities, researchResponseMatrixCapabilities} from '../../../src/main/plugins/research/response-matrix-capabilities';
 export {researchResponseMatrixSaveSchema, researchResponseMatrixReceiptSchema} from '../../../src/shared/schemas/research-response-matrix';
+
+export {ResearchJournalComplianceService} from '../../../src/main/plugins/research/journal-compliance-service';
+export {registerResearchJournalComplianceCapabilities} from '../../../src/main/plugins/research/journal-compliance-capabilities';
+export {researchJournalSaveSchema, researchJournalReceiptSchema} from '../../../src/shared/schemas/research-journal-compliance';

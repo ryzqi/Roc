@@ -2415,6 +2415,25 @@ CREATE INDEX research_response_matrices_artifact ON research_response_matrices(a
 `
 });
 
+researchMigrations.push({
+  version: 51, name: 'human_journal_compliance_timeline',
+  sql: `
+CREATE TABLE research_journal_compliance (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  artifact_id TEXT NOT NULL REFERENCES research_artifacts(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL CHECK(version > 0),
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(artifact_id,version),
+  UNIQUE(project_id,request_id)
+);
+CREATE INDEX research_journal_compliance_artifact ON research_journal_compliance(artifact_id);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,
