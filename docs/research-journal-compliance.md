@@ -25,7 +25,11 @@ Research DB51 新增 `research_journal_compliance`，完整规则、来源、自
 
 ## 实施范围
 
-A6A 提供主进程 schema、确定性检查、真实来源服务、不可变时间线和人工 IPC。现有工件抽屉的惰性界面由 A6B 接入；审批与导出消费者由 A6C 接入。投稿检查和论文接受决定分别表达。
+A6A 提供主进程 schema、确定性检查、真实来源服务、不可变时间线和人工 IPC；A6B 接入现有工件抽屉的惰性界面；A6C 接入审批、任务验收与导出。投稿检查和论文接受决定分别表达。
+
+工件检查快照必须包含可空的 `journalCompliance` 最新回执头。规则日期、版本或人工判断修订会改变整个工件版本，旧版本审批失效。人工闸门和阶段任务验收复用科学来源服务：即使仅有投稿检查，也重新核对真实图稿、补充文件和正文中的实验结果 Evidence；所有异步读取完成后再同步核对整个工件集合。任务证明的工件引用使用相同检查快照哈希，并在生产验证结束后再次核对。
+
+导出科学封存采用严格 schema 5，必填 `journalCompliance` 数组保存最新回执和全部分页 `stored_receipt` 历史。所检查图稿必须全部在实际导出选择内，并与导出源的 manifest/hash/validation 一致，否则准备和封存均拒绝。现有构建器复制这些图稿的真实文件；补充材料的 `supplementDelivery` 固定为 `metadata_only`，只封存相对路径、大小和哈希，不打包其文件，也不表示投稿材料已齐备。补充文件字节变化会使当前来源验证失败。旧科学 schema 直接拒绝。
 
 ## 验证
 
@@ -61,3 +65,19 @@ A6B `Verified passing`，命令均在仓库根目录执行：
 - macOS 本机 Electron，650px light/dark 长规则、字段/按钮焦点及 hover、减弱动效：四个完整裁切审计 cut=0；hidden 精确为抽屉在视口 top/right/bottom 的三个物理边缘，无横向溢出。截图位于 `.artifacts/research-optimization/journal-compliance-ui/`，已人工查看明暗主题。未验证 Windows。
 
 首轮 fixture 使用猜测的 journal-compliance IPC 名称，已按 registry journal-* 合同修正；第二轮两项展开断言未等待原生可见状态，补充实际可见等待后通过。未放宽产品检查。最终日志 `.artifacts/research-optimization/xwrite-a6b-{build,renderer,startup,ipc,chunks}.log`。
+
+## A6C 消费者验证
+
+所有命令在 `/Users/Apple_501/Desktop/Roc/Roc` 执行，日志在 `.artifacts/research-optimization/xwrite-a6c-*.log`。
+
+- `pnpm build`：类型与生产构建通过。
+- `node --test tests/unit/research-journal-compliance.test.mjs tests/unit/research-response-matrix.test.mjs tests/unit/research-consistency.test.mjs tests/unit/research-figure-consistency.test.mjs tests/unit/research-citation-reviews.test.mjs tests/unit/research-semantic-publication.test.mjs tests/unit/research-export-body-gate.test.mjs`：70/70。包含 journal-only 闸门、检查快照/任务证明版本、异步期间规则/项目/来源/真实补充字节变化、多工件最终同步检查、102 条完整历史和拒绝空中间页、严格 schema 5 与 seal 修订。
+- `node --test --test-name-pattern='scientific consistency binds actual|actual result metric evidence traces' tests/integration/research-python-experiments.test.mjs`：真实 CPython 两项通过。验证仅投稿检查时的实际实验 Evidence、缺失执行来源拒绝、真实图稿/补充字节、实际写作人工批准、遗漏所检查图稿的导出拒绝、补充材料变动拒绝和 SQLite 重启保留回执。
+- `node scripts/run-research-p0.mjs`：13/13，含真实编译与交付。
+- `node --test tests/renderer/journal-compliance.test.mjs tests/renderer/response-matrix.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs`：49/49。
+- `node scripts/smoke-electron.mjs`：13/13，零 renderer error。
+- `pnpm harness:eval`：94/94。
+- `pnpm test:unit`：完整单元测试 1277/1277，352,934 ms，退出码 0。
+- `pnpm check:ipc`：一致；`pnpm check:renderer-chunks`：1,134,432 bytes / 6 eager JS files。
+
+这是本机工程验证，未进行真实期刊规则的独立科学验收、Windows 验证或公开投稿/发布。

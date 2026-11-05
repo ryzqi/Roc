@@ -75,6 +75,24 @@ test('scientific consistency binds actual CPython result evidence to abstract bo
       status: 'supported', evidenceIds: [evidence.id]})}));
     f.repository.manuscripts.saveManuscript({artifactId: artifact.id,
       sections: claims.map(({surface, claim}) => ({title: surface, claimIds: [claim.id]}))});
+    const journals = new api.ResearchJournalComplianceService(f.repository, {verify: async () => assert.fail('no selected figures')});
+    const journalSelection = {profile: {journal: 'Synthetic engineering journal', articleType: 'Synthetic article',
+      submissionStage: 'initial', version: 'fixture-1', revisionDate: '2026-11-06', dateAuthority: 'human_transcription',
+      retrievedAt: '2026-11-06T00:00:00.000Z', rules: [{id: 'sections', label: 'Sections',
+        sourceUrl: 'https://example.org/synthetic-journal', excerpt: 'Synthetic fixture, no official journal claim',
+        authority: 'required', kind: 'sections', titles: ['abstract', 'body', 'table']}]},
+      figureIds: [], supplementPaths: [], manualReviews: []};
+    const journalPreview = await journals.inspect({projectId: f.project.id, artifactId: artifact.id, selection: journalSelection, expectedHash: null});
+    const journal = await human('research.journalCompliance.save', () => journals.save({
+      projectId: f.project.id, artifactId: artifact.id, selection: journalSelection, requestId: 'actual-journal-only',
+      expectedArtifactVersion: journalPreview.report.artifactVersion, expectedMaterialHash: journalPreview.report.materialHash,
+      parent: null, rationale: 'Human selected dated structure rules over the actual metric source'}));
+    const journalVerifier = new api.ResearchArtifactScientificReviewService(f.repository, results,
+      {verify: async () => assert.fail('no selected figures')});
+    await journalVerifier.verifyArtifacts(f.project.id, [artifact.id]);
+    assert.equal(api.currentArtifactScientificReviews(f.repository, f.project.id, artifact.id).consistency, null);
+    await assert.rejects(new api.ResearchArtifactScientificReviewService(f.repository, {evidence: async () => null},
+      {verify: async () => assert.fail('no selected figures')}).verifyArtifacts(f.project.id, [artifact.id]), /research_journal_source_changed/u);
     const service = new api.ResearchConsistencyService(f.repository, results);
     const request = {projectId: f.project.id, artifactId: artifact.id, requestId: 'actual-locations', parent: null,
       expectedArtifactVersion: f.repository.inspectArtifact({projectId: f.project.id, artifactId: artifact.id, expectedVersion: null}).snapshot.version,
@@ -100,6 +118,8 @@ test('scientific consistency binds actual CPython result evidence to abstract bo
     assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(), before);
     await writeFile(join(f.repository.experiments.root(f.project.id, run.id), 'output', 'metrics.json'), '{"changed":true}\n');
     await assert.rejects(service.inspect({projectId: f.project.id, artifactId: artifact.id, expectedHash: null}), /research_experiment_snapshot_changed/u);
+    await assert.rejects(journalVerifier.verifyArtifacts(f.project.id, [artifact.id]), /research_experiment_snapshot_changed/u);
+    assert.deepEqual(f.repository.journalCompliance.history({projectId: f.project.id, artifactId: artifact.id, offset: 0, limit: 10}).items, [journal]);
     assert.deepEqual(f.repository.consistency.history({projectId: f.project.id, artifactId: artifact.id, offset: 0, limit: 10}).items, [saved]);
     receipts.push({scenario: 'actual-scientific-consistency', runId: run.id, saved, report: inspected.report,
       alteredOutputRejected: true});
@@ -324,7 +344,7 @@ test('metric review requires actual complete output and human authority; source 
 
 test('actual result metric evidence traces claims, figures and Idea history to an immutable negative output across restart',async()=>{
   const f=await fixture(metricSource,{scenario:'metric-evidence'});
-  let reopened,figureService,figure,figureConsistencyReview,bodyConsistencyReview,citationReview,responseReview;
+  let reopened,figureService,figure,figureConsistencyReview,bodyConsistencyReview,citationReview,responseReview,journalReview;
   try {
     await writeFile(join(f.workspace,'data.txt'),'-3 -2 -1\n');
     const run=await f.execute(),output=run.files.find(file=>file.path==='metrics.json');
@@ -476,6 +496,22 @@ test('actual result metric evidence traces claims, figures and Idea history to a
               end:revised.content.length,text:revised.content}],evidenceIds:[evidence.id]},
             {commentId:'reviewer-2-control',reviewer:'Reviewer 2',comment:'Investigate the missing control group.',
               status:'open',response:'',locations:[],evidenceIds:[]}]}));
+        const journals=new api.ResearchJournalComplianceService(f.repository,figureService);
+        await writeFile(join(f.workspace,'journal-supplement.txt'),'Actual signed metric: -4 ms');
+        const journalSelection={profile:{journal:'Synthetic integration journal',articleType:'Synthetic article',submissionStage:'initial',
+          version:'fixture-1',revisionDate:'2026-11-06',dateAuthority:'human_transcription',retrievedAt:'2026-11-06T00:00:00.000Z',
+          rules:[{id:'figures',label:'PNG files',sourceUrl:'https://example.org/synthetic-journal',
+            excerpt:'Synthetic engineering rule; no official requirement',authority:'required',kind:'figure_files',format:'png',
+            maximumBytes:64*1024*1024,minimumDpi:72,maximumWidthPoints:null,maximumHeightPoints:null},
+            {id:'supplement',label:'Supplement',sourceUrl:'https://example.org/synthetic-journal',
+              excerpt:'Synthetic supplementary file rule',authority:'required',kind:'supplements',paths:['journal-supplement.txt']}]},
+          figureIds:[figure.id],supplementPaths:['journal-supplement.txt'],manualReviews:[]};
+        const preview=await journals.inspect({projectId:f.project.id,artifactId:artifact.id,selection:journalSelection,expectedHash:null});
+        journalReview=await humanReview('research.journalCompliance.save',()=>journals.save({
+          projectId:f.project.id,artifactId:artifact.id,requestId:'actual-python-journal',selection:journalSelection,
+          expectedArtifactVersion:preview.report.artifactVersion,expectedMaterialHash:preview.report.materialHash,
+          parent:null,rationale:'Dated synthetic rules with actual figure and supplement bytes'}));
+        assert.deepEqual(journalReview.snapshot.checks.map(check=>check.status),['pass','pass']);
         const scientificReviews=new api.ResearchArtifactScientificReviewService(f.repository,service,figureService);
         const gate=api.createResearchHumanGate({repository:f.repository,scientificReviews});
         f.repository.transitionWorkflow({projectId:f.project.id,expectedStage:'writing',action:'start'});
@@ -496,6 +532,11 @@ test('actual result metric evidence traces claims, figures and Idea history to a
           figureIds:[figure.id],template:{kind:'default',language:'en'}};
         const noAssessment=await exports.capture(exportRequest,new AbortController().signal);
         assert.deepEqual(noAssessment.ideaOutcomes,[]);
+        await assert.rejects(exports.capture({...exportRequest,figureIds:[]},new AbortController().signal),/research_export_journal_figure_missing/u);
+        assert.throws(()=>api.captureExportScientificReview(f.repository,{...noAssessment,figures:[]}),/research_export_journal_figure_missing/u);
+        await writeFile(join(f.workspace,'journal-supplement.txt'),'Changed supplementary bytes');
+        await assert.rejects(exports.capture(exportRequest,new AbortController().signal),/research_journal_source_changed/u);
+        await writeFile(join(f.workspace,'journal-supplement.txt'),'Actual signed metric: -4 ms');
         f.db.prepare("UPDATE research_projects SET current_stage='ideation' WHERE id=?").run(f.project.id);
         f.db.prepare("UPDATE research_stage_states SET status='ready' WHERE project_id=? AND stage='ideation'").run(f.project.id);
         const methodArtifact=f.repository.createArtifact({projectId:f.project.id,stage:'ideation',kind:'idea_canvas',
@@ -530,10 +571,10 @@ test('actual result metric evidence traces claims, figures and Idea history to a
         const reviewBytes=api.serializeExportScientificReview(review);
         const seal={sources,sourceHash:review.sourceHash,files:[{path:api.exportScientificReviewPath,
           sha256:createHash('sha256').update(reviewBytes).digest('hex'),size:Buffer.byteLength(reviewBytes)}]};
-        assert.equal(review.schemaVersion,4);
+        assert.equal(review.schemaVersion,5);
         assert.equal(api.researchExportScientificReviewSchema.safeParse({...review,schemaVersion:1}).success,false);
         assert.equal(api.researchExportScientificReviewSchema.safeParse({...review,schemaVersion:2}).success,false);
-        for(const field of ['citationReviews','consistencyReviews','figureConsistencyReviews','responseMatrices']) {
+        for(const field of ['citationReviews','consistencyReviews','figureConsistencyReviews','responseMatrices','journalCompliance']) {
           assert.equal(api.researchExportScientificReviewSchema.safeParse({...review,[field]:undefined}).success,false);
         }
         assert.deepEqual(review.citationReviews[0].current,[citationReview]);
@@ -541,6 +582,9 @@ test('actual result metric evidence traces claims, figures and Idea history to a
         assert.deepEqual(review.consistencyReviews[0].history.items,[bodyConsistencyReview]);
         assert.deepEqual(review.responseMatrices[0].current,responseReview);
         assert.deepEqual(review.responseMatrices[0].history.items,[responseReview]);
+        assert.deepEqual(review.journalCompliance[0].current,journalReview);
+        assert.deepEqual(review.journalCompliance[0].history.items,[journalReview]);
+        assert.equal(review.journalCompliance[0].supplementDelivery,'metadata_only');
         assert.equal(review.responseMatrices[0].current.snapshot.request.rows[1].status,'open');
         const exportedFigureReview=review.figureConsistencyReviews[0];
         assert.equal(exportedFigureReview.current.originalSnapshotHash,figureConsistencyReview.snapshotHash);
@@ -645,6 +689,9 @@ test('actual result metric evidence traces claims, figures and Idea history to a
       assert.deepEqual(await history.evidence({projectId:f.project.id,evidenceId:evidence.id}),{receipt,metricId:'mean'});
       assert.deepEqual(repository.figureConsistency.history({projectId:f.project.id,artifactId:figure.artifactId,
         offset:0,limit:10}).items,[figureConsistencyReview]);
+      const journalArtifactId=journalReview.snapshot.request.artifactId;
+      assert.deepEqual(repository.journalCompliance.history({projectId:f.project.id,artifactId:journalArtifactId,
+        offset:0,limit:10}).items,[journalReview]);
       assert.equal(f.observed.length,dispatches);
     }finally{await reopened?.shutdown();disk.close();}
     f.db.prepare("UPDATE research_projects SET status='archived' WHERE id=?").run(f.project.id);

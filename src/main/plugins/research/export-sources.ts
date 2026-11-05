@@ -54,6 +54,9 @@ export class ResearchExportSourceService {
     if (review === null || review.manuscriptArtifactId !== request.manuscriptArtifactId) throw new Error('research_export_manuscript_changed');
     const bundle = this.repository.manuscripts.exportBundle({ projectId: project.id, artifactId: request.manuscriptArtifactId });
     const manuscriptReviews = currentArtifactScientificReviews(this.repository, project.id, request.manuscriptArtifactId);
+    if (manuscriptReviews.journal?.snapshot.request.selection.figureIds.some(id => !request.figureIds.includes(id))) {
+      throw new Error('research_export_journal_figure_missing');
+    }
     const figures = [];
     const claims = [...bundle.claims];
     for (const id of request.figureIds) {

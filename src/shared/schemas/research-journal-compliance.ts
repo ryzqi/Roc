@@ -67,6 +67,9 @@ export const researchJournalReceiptSchema = z.strictObject({
     checks: researchJournalCheckSchema.array()
   }), snapshotHash: hash
 });
+export const researchJournalHeadSchema = z.strictObject({
+  reviewId: id, reviewHash: hash, version: z.number().int().positive(), recordedAt: z.string().datetime()
+});
 export const researchJournalInspectSchema = z.strictObject({
   projectId: id, artifactId: id, selection: researchJournalSelectionSchema.nullable(), expectedHash: hash.nullable()
 });

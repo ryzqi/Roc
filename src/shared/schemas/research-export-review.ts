@@ -6,6 +6,7 @@ import {researchCitationReviewReceiptSchema, researchCitationReviewHistoryResult
 import {researchConsistencyReceiptSchema, researchConsistencyHistoryResultSchema} from './research-consistency';
 import {researchFigureConsistencyReceiptSchema} from './research-figure-consistency';
 import {researchResponseMatrixReceiptSchema, researchResponseMatrixHistoryResultSchema} from './research-response-matrix';
+import {researchJournalReceiptSchema, researchJournalHistoryResultSchema} from './research-journal-compliance';
 
 const id = z.string().trim().min(1).max(300);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -24,7 +25,7 @@ export const researchExportFigureReviewSchema = z.strictObject({
 });
 
 export const researchExportScientificReviewSchema = z.object({
-  schemaVersion: z.literal(4),
+  schemaVersion: z.literal(5),
   projectId: id,
   sourceHash: digest,
   claims: z.array(z.object({claimId: id, version: z.number().int().positive(), hash: digest}).strict()),
@@ -47,6 +48,10 @@ export const researchExportScientificReviewSchema = z.object({
   })),
   responseMatrices: z.array(z.strictObject({
     artifactId: id, current: researchResponseMatrixReceiptSchema, history: researchResponseMatrixHistoryResultSchema
+  })),
+  journalCompliance: z.array(z.strictObject({
+    artifactId: id, current: researchJournalReceiptSchema, history: researchJournalHistoryResultSchema,
+    supplementDelivery: z.literal('metadata_only')
   }))
 }).strict();
 

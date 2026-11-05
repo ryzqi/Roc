@@ -214,11 +214,12 @@ test('export review seal captures exact source, conditions and user history, and
       figures: [], claims: bundle.claims, evidence: bundle.evidence, experimentResults: [], ideaOutcomes: []};
     const before = f.changes();
     const snapshot = api.captureExportScientificReview(f.repository, sources);
-    assert.equal(snapshot.schemaVersion, 4);
+    assert.equal(snapshot.schemaVersion, 5);
     assert.deepEqual(snapshot.citationReviews, []);
     assert.deepEqual(snapshot.consistencyReviews, []);
     assert.deepEqual(snapshot.figureConsistencyReviews, []);
     assert.deepEqual(snapshot.responseMatrices, []);
+    assert.deepEqual(snapshot.journalCompliance, []);
     const bytes = api.serializeExportScientificReview(snapshot);
     const file = {path: api.exportScientificReviewPath, size: Buffer.byteLength(bytes),
       sha256: createHash('sha256').update(bytes).digest('hex')};

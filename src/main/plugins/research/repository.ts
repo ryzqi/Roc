@@ -357,6 +357,11 @@ export class ResearchRepository {
         reviewId: response.snapshot.id, reviewHash: response.snapshotHash,
         version: response.snapshot.version, recordedAt: response.snapshot.recordedAt
       };
+      const journal = artifact.kind === 'manuscript' ? this.journalCompliance.latest(project.id, artifact.id) : null;
+      const journalCompliance = journal === null ? null : {
+        reviewId: journal.snapshot.id, reviewHash: journal.snapshotHash,
+        version: journal.snapshot.version, recordedAt: journal.snapshot.recordedAt
+      };
       const ideaCanvas = artifact.kind === 'idea_canvas' ? this.ideas.get(artifact.id) : null;
       const ideaPlan = ideaCanvas === null ? null : this.ideaPlans.history({
         projectId: project.id, artifactId: artifact.id, offset: 0, limit: 1
@@ -399,7 +404,7 @@ export class ResearchRepository {
       const body = researchArtifactInspectionBodySchema.parse({
         artifact, projectStatus: project.status, currentStage: project.currentStage,
         stage, content, origin, claims, evidence, relations,
-        production, ideaCanvas, ideaPlan, ideaOutcomes, citationReviews, consistencyReviews, responseMatrix,
+        production, ideaCanvas, ideaPlan, ideaOutcomes, citationReviews, consistencyReviews, responseMatrix, journalCompliance,
         provenance: rows.map(toProvenance), availableActions
       });
       const version = createHash('sha256').update(JSON.stringify(body)).digest('hex');
@@ -696,14 +701,9 @@ export class ResearchRepository {
     if (state.artifactIds.length === 0) throw new Error('research_stage_artifact_required');
     assertResearchStageArtifacts(this, projectId, state, ['draft', 'approved']);
     const refs = state.artifactIds.map((artifactId) => {
-      const artifact = this.getArtifact(artifactId);
-      const content = this.db.prepare(`SELECT output_json FROM research_artifact_contents
-        WHERE project_id = ? AND artifact_id = ? ORDER BY created_at DESC LIMIT 1`)
-        .get(projectId, artifactId) as { output_json: string } | undefined;
-      const material = JSON.stringify({ artifact, output: content?.output_json ?? null });
       return {
         path: `research-artifact:${artifactId}`,
-        sha256: createHash('sha256').update(material).digest('hex')
+        sha256: this.inspectArtifact({projectId, artifactId, expectedVersion: null}).snapshot.version
       };
     });
     return { passed: true, detail: `Existing research stage checks passed for ${refs.length} artifact(s).`, refs };

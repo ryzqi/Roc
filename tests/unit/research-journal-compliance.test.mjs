@@ -5,7 +5,7 @@ import {mkdtemp, writeFile, rm, symlink, mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import Database from 'better-sqlite3';
-import {createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {createResearchFixture, loadResearchTestApi, captureResearchArtifactVersions} from './fixtures/research-test-kit.mjs';
 import {createPublishedFigureFixture} from './fixtures/research-production-test-kit.mjs';
 
 let api;
@@ -193,6 +193,18 @@ test('complete paged rule revision history verifies replay checks and detects da
     assert.equal(f.history().total, 102);
     assert.equal(f.history().items.length, 100);
     assert.deepEqual(f.history(100).items.map(item => item.snapshot.version), [2, 1]);
+    const exported = api.captureExportArtifactReviews(f.repository, f.project.id, [f.artifactId]).journalCompliance[0];
+    assert.deepEqual(exported.current, latest);
+    assert.equal(exported.supplementDelivery, 'metadata_only');
+    assert.equal(exported.history.verification, 'stored_receipt');
+    assert.deepEqual(exported.history.items.map(item => item.snapshot.version),
+      Array.from({length: 102}, (_, index) => 102 - index));
+    const history = f.repository.journalCompliance.history.bind(f.repository.journalCompliance);
+    f.repository.journalCompliance.history = request => request.offset === 0 ? history(request) :
+      {verification: 'stored_receipt', items: [], total: 102};
+    assert.throws(() => api.captureExportArtifactReviews(f.repository, f.project.id, [f.artifactId]),
+      /research_export_review_history_changed/u);
+    f.repository.journalCompliance.history = history;
     const damaged = structuredClone(latest.snapshot);
     damaged.checks[0].status = 'pass';
     f.db.prepare('UPDATE research_journal_compliance SET snapshot_json=?,snapshot_hash=? WHERE id=?')
@@ -202,6 +214,141 @@ test('complete paged rule revision history verifies replay checks and detects da
       .run(JSON.stringify(latest.snapshot), latest.snapshotHash, latest.snapshot.id);
     f.db.prepare("UPDATE research_journal_compliance SET snapshot_hash=? WHERE version=101").run('0'.repeat(64));
     assert.throws(() => f.repository.journalCompliance.latest(f.project.id, f.artifactId), /research_journal_snapshot_invalid/u);
+  } finally {await f.dispose();}
+});
+
+test('journal-only human checks bind inspector and task proofs, require real verification and revoke earlier approval versions', async () => {
+  const f = await scene();
+  try {
+    const inspect = expectedVersion => f.repository.inspectArtifact({projectId: f.project.id, artifactId: f.artifactId, expectedVersion});
+    const initial = inspect(null).snapshot;
+    assert.equal(initial.journalCompliance, null);
+    const first = await f.save(await f.request());
+    const current = inspect(initial.version);
+    assert.equal(current.status, 'stale');
+    assert.deepEqual(current.snapshot.journalCompliance, {reviewId: first.snapshot.id, reviewHash: first.snapshotHash,
+      version: 1, recordedAt: first.snapshot.recordedAt});
+    assert.deepEqual(current.snapshot.claims, initial.claims);
+    const before = f.changes();
+    assert.deepEqual(api.currentArtifactScientificReviews(f.repository, f.project.id, f.artifactId).journal, first);
+    const missing = api.createResearchHumanGate({repository: f.repository});
+    await assert.rejects(missing.complete({projectId: f.project.id, expectedStage: 'writing', action: 'complete'}),
+      /research_scientific_review_verify_unavailable/u);
+    assert.equal(f.changes(), before);
+    let reads = 0;
+    const scientificReviews = new api.ResearchArtifactScientificReviewService(f.repository, {
+      evidence: async request => {assert.equal(request.evidenceId, f.source.id); reads++; return null;}
+    }, {verify: async () => assert.fail('no selected figures')});
+    const gate = api.createResearchHumanGate({repository: f.repository, scientificReviews});
+    await gate.complete({projectId: f.project.id, expectedStage: 'writing', action: 'complete'});
+    assert.equal(reads, 1);
+    const prior = captureResearchArtifactVersions(f.repository, f.project.id);
+    const proof = f.repository.verifyStageForTaskAcceptance(f.project.id, 'writing');
+    assert.deepEqual(proof.refs, [{path: `research-artifact:${f.artifactId}`, sha256: prior[0].version}]);
+    const revised = selection(); revised.profile.version = 'test-2';
+    await f.save(await f.request(revised, {requestId: 'journal-2', parent: {reviewId: first.snapshot.id, reviewHash: first.snapshotHash}}));
+    assert.notDeepEqual(f.repository.verifyStageForTaskAcceptance(f.project.id, 'writing').refs, proof.refs);
+    const changes = f.changes();
+    await assert.rejects(gate.approve({projectId: f.project.id, expectedStage: 'writing', action: 'approve',
+      expectedArtifactVersions: prior}), /research_artifact_review_changed/u);
+    assert.equal(f.changes(), changes);
+    const claim = initial.claims[0];
+    const relation = f.repository.evidence.relations.list({projectId: f.project.id, claimId: claim.id})[0];
+    f.repository.evidence.relations.review({projectId: f.project.id, relationId: relation.id, expectedVersion: relation.version,
+      expectedClaimVersion: claim.version, expectedSourceDigest: relation.sourceDigest, decision: 'confirm',
+      note: 'Human reviewed synthetic source support'}, {kind: 'user', id: 'window:77'});
+    await gate.approve({projectId: f.project.id, expectedStage: 'writing', action: 'approve',
+      expectedArtifactVersions: captureResearchArtifactVersions(f.repository, f.project.id)});
+    assert.equal(f.repository.getArtifact(f.artifactId).status, 'approved');
+    assert.deepEqual(f.history().items.at(-1), first);
+  } finally {await f.dispose();}
+});
+
+test('shared journal verification rejects source, project, rule and supplement changes across awaits', async () => {
+  for (const mutation of ['source', 'project', 'rules', 'supplement']) {
+    const f = await scene();
+    try {
+      await writeFile(join(f.root, 'supplement.txt'), 'Initial supplementary bytes');
+      const selected = selection(); selected.supplementPaths = ['supplement.txt'];
+      const first = await f.save(await f.request(selected));
+      const scientificReviews = new api.ResearchArtifactScientificReviewService(f.repository, {
+        evidence: async () => {
+          if (mutation === 'source') f.repository.evidence.invalidateChunksOf(f.source.documentId);
+          if (mutation === 'project') f.db.prepare("UPDATE research_projects SET status='archived' WHERE id=?").run(f.project.id);
+          if (mutation === 'supplement') await writeFile(join(f.root, 'supplement.txt'), 'Changed supplementary bytes');
+          if (mutation === 'rules') {
+            const revised = structuredClone(selected); revised.profile.version = 'changed-during-await';
+            await f.save(await f.request(revised, {requestId: 'during-await',
+              parent: {reviewId: first.snapshot.id, reviewHash: first.snapshotHash}}));
+          }
+          return null;
+        }
+      }, {verify: async () => assert.fail('no selected figures')});
+      await assert.rejects(scientificReviews.verifyArtifacts(f.project.id, [f.artifactId]),
+        /research_evidence_reference_superseded|research_manuscript_stale|research_journal_source_changed|research_artifact_review_changed/u);
+      assert.deepEqual(f.history().items.at(-1), first);
+    } finally {await f.dispose();}
+  }
+});
+
+test('the final synchronous review pass catches a first manuscript changed while the second is verified', async () => {
+  const f = await scene();
+  try {
+    const first = await f.save(await f.request());
+    const second = f.repository.createArtifact({projectId: f.project.id, stage: 'writing', kind: 'manuscript',
+      title: 'Second manuscript', path: null});
+    const claim = f.repository.evidence.createClaim({projectId: f.project.id, artifactId: second.id, subjectType: 'paragraph',
+      content: 'Another synthetic observation', status: 'supported', evidenceIds: [f.source.id]});
+    f.repository.manuscripts.saveManuscript({artifactId: second.id, sections: [{title: 'Results', claimIds: [claim.id]}]});
+    const preview = await f.service.inspect({projectId: f.project.id, artifactId: second.id, selection: selection(), expectedHash: null});
+    await f.save({projectId: f.project.id, artifactId: second.id, selection: selection(), requestId: 'second',
+      expectedArtifactVersion: preview.report.artifactVersion, expectedMaterialHash: preview.report.materialHash,
+      parent: null, rationale: 'Second synthetic rules'});
+    let reads = 0;
+    const scientificReviews = new api.ResearchArtifactScientificReviewService(f.repository, {evidence: async () => {
+      if (++reads === 2) {
+        const revised = selection(); revised.profile.version = 'first-changed';
+        await f.save(await f.request(revised, {requestId: 'changed-first',
+          parent: {reviewId: first.snapshot.id, reviewHash: first.snapshotHash}}));
+      }
+      return null;
+    }}, {verify: async () => assert.fail('no selected figures')});
+    await assert.rejects(scientificReviews.verifyArtifacts(f.project.id, [f.artifactId, second.id]),
+      /research_artifact_review_changed/u);
+    assert.equal(reads, 2);
+  } finally {await f.dispose();}
+});
+
+test('schema5 seals carry full dated journal receipts and metadata-only supplements and refuse revisions or missing arrays', async () => {
+  const f = await scene();
+  try {
+    const claim = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: f.artifactId})[0];
+    const relation = f.repository.evidence.relations.list({projectId: f.project.id, claimId: claim.id})[0];
+    f.repository.evidence.relations.review({projectId: f.project.id, relationId: relation.id, expectedVersion: relation.version,
+      expectedClaimVersion: claim.version, expectedSourceDigest: relation.sourceDigest, decision: 'confirm',
+      note: 'Synthetic human support review'}, {kind: 'user', id: 'window:77'});
+    await writeFile(join(f.root, 'supplement.txt'), 'Supplement bytes are checked, not delivered');
+    const selected = selection(); selected.supplementPaths = ['supplement.txt'];
+    const first = await f.save(await f.request(selected));
+    const sources = {project: f.project, manuscriptArtifact: f.repository.getArtifact(f.artifactId),
+      figures: [], claims: [claim], evidence: [f.source], experimentResults: [], ideaOutcomes: []};
+    const review = api.captureExportScientificReview(f.repository, sources), bytes = api.serializeExportScientificReview(review);
+    assert.equal(review.schemaVersion, 5);
+    assert.deepEqual(review.journalCompliance, [{artifactId: f.artifactId, current: first,
+      history: {verification: 'stored_receipt', items: [first], total: 1}, supplementDelivery: 'metadata_only'}]);
+    assert.equal(bytes.includes(f.root), false);
+    assert.equal(api.researchExportScientificReviewSchema.safeParse({...review, schemaVersion: 4}).success, false);
+    assert.equal(api.researchExportScientificReviewSchema.safeParse({...review, journalCompliance: undefined}).success, false);
+    assert.equal(api.researchExportScientificReviewSchema.safeParse({...review, journalCompliance: [{
+      ...review.journalCompliance[0], supplementDelivery: 'bundled'}]}).success, false);
+    const record = {sources, sourceHash: review.sourceHash, files: [{path: api.exportScientificReviewPath,
+      size: Buffer.byteLength(bytes), sha256: createHash('sha256').update(bytes).digest('hex')}]};
+    api.assertCurrentExportScientificReview(f.repository, record);
+    const revised = structuredClone(selected); revised.profile.version = 'new-date';
+    await f.save(await f.request(revised, {requestId: 'journal-2', parent: {reviewId: first.snapshot.id, reviewHash: first.snapshotHash}}));
+    assert.throws(() => api.assertCurrentExportScientificReview(f.repository, record),
+      error => error.code === 'research_export_semantic_snapshot_changed');
+    assert.equal(api.serializeExportScientificReview(review), bytes);
   } finally {await f.dispose();}
 });
 

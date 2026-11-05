@@ -29,11 +29,12 @@ function completeHistory<T>(read: (offset: number) => {items: T[]; total: number
 }
 
 export function captureExportArtifactReviews(repository: ResearchRepository, projectId: string, artifactIds: readonly string[]):
-  Pick<ResearchExportScientificReview, 'citationReviews' | 'consistencyReviews' | 'figureConsistencyReviews' | 'responseMatrices'> {
+  Pick<ResearchExportScientificReview, 'citationReviews' | 'consistencyReviews' | 'figureConsistencyReviews' | 'responseMatrices' | 'journalCompliance'> {
   const citationReviews: ResearchExportScientificReview['citationReviews'] = [];
   const consistencyReviews: ResearchExportScientificReview['consistencyReviews'] = [];
   const figureConsistencyReviews: ResearchExportScientificReview['figureConsistencyReviews'] = [];
   const responseMatrices: ResearchExportScientificReview['responseMatrices'] = [];
+  const journalCompliance: ResearchExportScientificReview['journalCompliance'] = [];
   for (const artifactId of artifactIds) {
     const current = currentArtifactScientificReviews(repository, projectId, artifactId);
     const citationHeads = repository.citationReviews.forArtifact(projectId, artifactId);
@@ -59,6 +60,10 @@ export function captureExportArtifactReviews(repository: ResearchRepository, pro
       artifactId, current: current.response,
       history: completeHistory(offset => repository.responseMatrix.history({projectId, artifactId, offset, limit: 100}))
     });
+    if (current.journal !== null) journalCompliance.push({
+      artifactId, current: current.journal, supplementDelivery: 'metadata_only',
+      history: completeHistory(offset => repository.journalCompliance.history({projectId, artifactId, offset, limit: 100}))
+    });
   }
-  return {citationReviews, consistencyReviews, figureConsistencyReviews, responseMatrices};
+  return {citationReviews, consistencyReviews, figureConsistencyReviews, responseMatrices, journalCompliance};
 }

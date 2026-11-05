@@ -481,6 +481,8 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
             if (record.archive !== null) refs.push({ path: `research-export:${record.id}/${record.archive.path}`, sha256: record.archive.sha256 });
           }
         }
+        const currentProof = researchRepository.verifyStageForTaskAcceptance(request.projectId, request.stage);
+        if (JSON.stringify(currentProof) !== JSON.stringify(proof)) throw new Error('research_artifact_review_changed');
         const uniqueRefs = [...new Map(refs.map((ref) => [ref.path, ref])).values()];
         return { ...proof, detail: `${proof.detail} Full ${request.stage} verifier passed.`, refs: uniqueRefs };
       });

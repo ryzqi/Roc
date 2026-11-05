@@ -21,6 +21,15 @@ export function captureExportScientificReview(repository: ResearchRepository, so
   for (const claim of sources.claims) repository.evidence.assertReviewedSupport(claim);
   const reviews = captureExportArtifactReviews(repository, projectId,
     [sources.manuscriptArtifact.id, ...sources.figures.map(figure => figure.artifactId)]);
+  for (const journal of reviews.journalCompliance) {
+    for (const checked of journal.current.snapshot.material.figures) {
+      const delivered = sources.figures.find(figure => figure.id === checked.id);
+      if (delivered === undefined || delivered.manifestHash !== checked.manifestHash ||
+        JSON.stringify(delivered.validation) !== JSON.stringify(checked.validation)) {
+        throw new Error('research_export_journal_figure_missing');
+      }
+    }
+  }
   const relations = sources.claims.flatMap(claim => repository.evidence.relations.list({projectId, claimId: claim.id}));
   const evidenceIds = [...new Set([...sources.evidence.map(source => source.id), ...relations.map(relation => relation.evidenceId),
     ...reviews.responseMatrices.flatMap(matrix => matrix.current.snapshot.request.rows.flatMap(row => row.evidenceIds)),
@@ -32,7 +41,7 @@ export function captureExportScientificReview(repository: ResearchRepository, so
         ...(plan.sampleSize.kind === 'calculated' ? plan.sampleSize.evidenceIds : [])];
     })])];
   return researchExportScientificReviewSchema.parse({
-    schemaVersion: 4, projectId, sourceHash: exportSourceHash(sources),
+    schemaVersion: 5, projectId, sourceHash: exportSourceHash(sources),
     claims: sources.claims.map(claim => ({claimId: claim.id, version: claim.version, hash: relationClaimHash(claim)})),
     evidence: evidenceIds.map(evidenceId => repository.evidence.inspectEvidence(evidenceId, projectId)),
     relations,

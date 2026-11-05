@@ -1,6 +1,7 @@
 import type {ResearchRepository} from './repository';
 import type {ResearchExperimentResultService} from './experiment-result-service';
 import type {ResearchFigureService} from './figure-service';
+import {ResearchJournalComplianceService} from './journal-compliance-service';
 
 /** Validate existing human mappings; absence and scientific findings remain human decisions. */
 export function currentArtifactScientificReviews(repository: ResearchRepository, projectId: string, artifactId: string) {
@@ -17,7 +18,9 @@ export function currentArtifactScientificReviews(repository: ResearchRepository,
   if (figure !== null) repository.figureConsistency.assertReceiptCurrent(figure);
   const response = artifact.kind === 'manuscript' ? repository.responseMatrix.latest(projectId, artifactId) : null;
   if (response !== null) repository.responseMatrix.assertReceiptCurrent(response);
-  return {citations, consistency, figure, response};
+  const journal = artifact.kind === 'manuscript' ? repository.journalCompliance.latest(projectId, artifactId) : null;
+  if (journal !== null) repository.journalCompliance.assertReceiptFactsCurrent(journal);
+  return {citations, consistency, figure, response, journal};
 }
 
 export class ResearchArtifactScientificReviewService {
@@ -26,6 +29,7 @@ export class ResearchArtifactScientificReviewService {
     private readonly figures: Pick<ResearchFigureService, 'verify'>) {}
 
   async verifyArtifacts(projectId: string, artifactIds: readonly string[]): Promise<void> {
+    const journals = new ResearchJournalComplianceService(this.repository, this.figures);
     const before = artifactIds.map(artifactId => ({
       artifactId,
       version: this.repository.inspectArtifact({projectId, artifactId, expectedVersion: null}).snapshot.version,
@@ -46,9 +50,19 @@ export class ResearchArtifactScientificReviewService {
           throw new Error('research_response_source_changed');
         }
       }
+      if (reviews.journal !== null) {
+        await journals.verify(reviews.journal);
+        for (const {source} of reviews.journal.snapshot.material.sources) {
+          const result = await this.results.evidence({projectId, evidenceId: source.evidence.id});
+          if (this.repository.evidence.sourceMetadata(projectId, source.evidence.id)?.type === 'experiment-result' && result === null) {
+            throw new Error('research_journal_source_changed');
+          }
+        }
+      }
     }
     for (const saved of before) {
       if (saved.reviews.figure !== null) await this.figures.verify(projectId, saved.reviews.figure.snapshot.material.figure.id);
+      if (saved.reviews.journal !== null) await journals.verify(saved.reviews.journal);
     }
     for (const saved of before) {
       currentArtifactScientificReviews(this.repository, projectId, saved.artifactId);

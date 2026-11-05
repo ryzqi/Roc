@@ -362,7 +362,7 @@ test('response export carries all 102 stored revisions and refuses incomplete in
   } finally {f.close();}
 });
 
-test('schema4 export seal captures response-only evidence and changes after independent human response revisions', () => {
+test('schema5 export seal captures response-only evidence and changes after independent human response revisions', () => {
   const f = scene();
   try {
     const relation = f.repository.evidence.relations.list({projectId: f.project.id, claimId: f.claim.id})[0];
@@ -377,7 +377,7 @@ test('schema4 export seal captures response-only evidence and changes after inde
     const sources = {project: f.project, manuscriptArtifact: f.repository.getArtifact(f.artifactId),
       figures: [], claims: [f.claim], evidence: [f.source], experimentResults: [], ideaOutcomes: []};
     const review = api.captureExportScientificReview(f.repository, sources), bytes = api.serializeExportScientificReview(review);
-    assert.equal(review.schemaVersion, 4);
+    assert.equal(review.schemaVersion, 5);
     assert.deepEqual(review.responseMatrices[0].current, first);
     assert.deepEqual(review.evidence.map(source => source.evidence.id), [f.source.id, independent.id]);
     assert.equal(api.researchExportScientificReviewSchema.safeParse({...review, schemaVersion: 3}).success, false);
