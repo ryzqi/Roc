@@ -5,7 +5,7 @@ import { dirname, extname, isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import toolsLock from '../../../../resources/research-runtime/tools.lock.json';
-import { researchParseOptionsSchema, researchParsedDocumentSchema, researchParserIdentityPayload, researchRenderedPdfSchema, researchToolchainStatusSchema,
+import { researchDocumentLimits, researchParseOptionsSchema, researchParsedDocumentSchema, researchParserIdentityPayload, researchRenderedPdfSchema, researchToolchainStatusSchema,
   type ResearchParseOptions } from '../../../shared/schemas/research-production';
 import { researchBibliographyEntrySchema, type researchBibliographyFormatSchema } from '../../../shared/schemas/research-library';
 import type { ResearchModelPack } from '../../../shared/schemas/research-production';
@@ -16,6 +16,13 @@ import { runResearchProcess, ResearchProcessError, type ResearchProcessResult } 
 import { ResearchModelStore, type ModelPreferences, type ResearchModelFiles, type ResearchModelsStatus } from './model-store';
 import { modelPackManifest } from './model-catalog';
 import type { ResearchProcessAdmissionRequest } from '../../services/deep-agent/tool-resource-coordinator';
+import { experimentFileLimit } from './experiment-files';
+
+const utilityOutputLimits = { maxFileBytes: experimentFileLimit, maxTotalBytes: researchDocumentLimits.maxTotalAssetBytes,
+  maxFiles: 10_000, maxEntries: 20_000 };
+const workerOutputLimits = { maxFileBytes: researchDocumentLimits.maxArtifactBytes,
+  maxTotalBytes: researchDocumentLimits.maxTotalAssetBytes + 3 * researchDocumentLimits.maxArtifactBytes,
+  maxFiles: researchDocumentLimits.maxAssets + 1000, maxEntries: 2 * (researchDocumentLimits.maxAssets + 1000) };
 
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 const manifestSchema = z.object({
@@ -215,6 +222,7 @@ export class ResearchToolchain {
       readablePaths: [root, proseDir],
       writablePaths: [input.jobDir],
       environment: await this.proseEnvironment(root, input.jobDir),
+      writeLimits: [{ path: input.jobDir, ...utilityOutputLimits }],
       timeoutMs: 120_000, signal: input.signal, allowGpuAcceleration: false, networkAccess: 'none',
       resourceLimits: { mode: 'monitored', cpuTimeMs: 480_000, maxResidentBytes: 2 * 1024 ** 3 },
       admission: { ...input.admission, resourceClass: 'utility' }
@@ -247,7 +255,8 @@ export class ResearchToolchain {
     return await runResearchProcess({ command: join(root, 'bin/tectonic'),
       args: ['--bundle', join(root, 'tex/bundle.zip'), '--only-cached', '--untrusted', '--keep-logs', '--keep-intermediates',
         '--outdir', input.outputDir, input.entryPath],
-      cwd: input.rootPath, readablePaths: [root, input.rootPath], writablePaths: [input.jobDir], environment,
+      cwd: input.rootPath, readablePaths: [root, input.rootPath], writablePaths: [input.jobDir],
+      writeLimits: [{ path: input.jobDir, ...utilityOutputLimits }], environment,
       resourceLimits: { mode: 'monitored', cpuTimeMs: 720_000, maxResidentBytes: 2 * 1024 ** 3 },
       admission: { ...input.admission, resourceClass: 'utility' },
       timeoutMs: 180_000, signal: input.signal, allowGpuAcceleration: false, networkAccess: 'none' });
@@ -277,6 +286,7 @@ export class ResearchToolchain {
       writablePaths: [input.jobDir],
       environment: { PATH: `${join(root, 'bin')}:/usr/bin:/bin:/usr/sbin:/sbin`, LANG: 'en_US.UTF-8',
         HOME: home, TMPDIR: temporary, XDG_CACHE_HOME: cache },
+      writeLimits: [{ path: input.jobDir, ...utilityOutputLimits }],
       resourceLimits: { mode: 'monitored', cpuTimeMs: 480_000, maxResidentBytes: 2 * 1024 ** 3 },
       admission: { ...input.admission, resourceClass: 'utility' },
       timeoutMs: 120_000, signal: input.signal, allowGpuAcceleration: false, networkAccess: 'none' });
@@ -374,6 +384,7 @@ export class ResearchToolchain {
       readablePaths,
       writablePaths: [input.jobDir],
       environment: { ELECTRON_RUN_AS_NODE: '1', PATH: '/usr/bin:/bin:/usr/sbin:/sbin' },
+      writeLimits: [{ path: input.jobDir, ...workerOutputLimits }],
       timeoutMs,
       resourceLimits: { mode: 'monitored', cpuTimeMs: timeoutMs * 4, maxResidentBytes: 4 * 1024 ** 3 },
       admission: { ...input.admission, resourceClass: operation.operation === 'parse_document' ? 'parse' : operation.operation === 'render_figure' ? 'compute' : 'utility' },

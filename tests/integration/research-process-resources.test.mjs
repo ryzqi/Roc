@@ -27,6 +27,7 @@ before(async () => {
 #include <netdb.h>
 #include <fcntl.h>
 #include <spawn.h>
+#include <sys/stat.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,6 +36,42 @@ before(async () => {
 extern char **environ;
 int main(int argc, char **argv) {
   if (argc < 3) return 2;
+  if (strcmp(argv[1], "fileflood") == 0 || strcmp(argv[1], "totalflood") == 0 || strcmp(argv[1], "manyfiles") == 0 ||
+      strcmp(argv[1], "manyentries") == 0 || strcmp(argv[1], "hardlink") == 0 || strcmp(argv[1], "logflood") == 0) {
+    printf("group=%d\\n", getpgrp()); fflush(stdout);
+  }
+  if (strcmp(argv[1], "fileflood") == 0) {
+    int fd = open(argv[2], O_WRONLY | O_CREAT, 0600); if (fd < 0) return 8;
+    char data[4096]; memset(data, 'x', sizeof(data));
+    for (int index = 0; index < 32; index++) if (write(fd, data, sizeof(data)) != sizeof(data)) return 9;
+    close(fd); printf("writtenBytes=131072\\n"); return 0;
+  }
+  if (strcmp(argv[1], "manyfiles") == 0 || strcmp(argv[1], "manyentries") == 0) {
+    for (int index = 0; index < 16; index++) {
+      char path[4096]; snprintf(path, sizeof(path), "%s-%d", argv[2], index);
+      if (strcmp(argv[1], "manyentries") == 0) { if (mkdir(path, 0700) != 0) return 10; }
+      else { int fd = open(path, O_WRONLY | O_CREAT, 0600); if (fd < 0) return 11; close(fd); }
+    }
+    printf("createdEntries=16\\n"); return 0;
+  }
+  if (strcmp(argv[1], "totalflood") == 0) {
+    for (int index = 0; index < 8; index++) {
+      char path[4096], data[8192]; memset(data, 'x', sizeof(data)); snprintf(path, sizeof(path), "%s-%d", argv[2], index);
+      int fd = open(path, O_WRONLY | O_CREAT, 0600); if (fd < 0) return 13;
+      if (write(fd, data, sizeof(data)) != sizeof(data)) return 14; close(fd);
+    }
+    printf("writtenBytes=65536\\n"); return 0;
+  }
+  if (strcmp(argv[1], "hardlink") == 0) {
+    int fd = open(argv[2], O_WRONLY | O_CREAT, 0600); if (fd < 0) return 12; close(fd);
+    char path[4096]; snprintf(path, sizeof(path), "%s-link", argv[2]);
+    printf("hardlinkCreated=%d\\n", link(argv[2], path) == 0); return 0;
+  }
+  if (strcmp(argv[1], "logflood") == 0) {
+    signal(SIGTERM, SIG_IGN);
+    for (int index = 0; index < 262144; index++) putchar('x');
+    fflush(stdout); sleep(10); return 0;
+  }
   if (strcmp(argv[1], "dns") == 0) {
     struct addrinfo *address = NULL;
     int result = getaddrinfo("example.com", NULL, NULL, &address);
@@ -118,7 +155,7 @@ int main(void) { @autoreleasepool {
     { timeout: 30000, maxBuffer: 1024 * 1024 });
 });
 after(async () => {
-  const directory = join(process.cwd(), '.artifacts/research-optimization/xsafe-a3');
+  const directory = join(process.cwd(), '.artifacts/research-optimization/xsafe-a5');
   await mkdir(directory, { recursive: true });
   await writeFile(join(directory, 'native-resources.json'), JSON.stringify({
     backend: 'macos-seatbelt', cpuHardLimit: false, memoryHardLimit: false,
@@ -135,6 +172,7 @@ async function request(mode, overrides = {}) {
     input: {
       command: executable, args: [mode, marker], cwd: output, readablePaths: [executable, '/usr/lib', '/System/Library'],
       writablePaths: [output], environment: { PATH: '/usr/bin:/bin' }, timeoutMs: 10000,
+      writeLimits: [{ path: output, maxFileBytes: 1024 * 1024, maxTotalBytes: 4 * 1024 * 1024, maxFiles: 100, maxEntries: 200 }],
       resourceLimits: { mode: 'monitored', cpuTimeMs: 5000, maxResidentBytes: 128 * 1024 * 1024 },
       admission: { projectId: 'native-resource-test', priority: 'user', resourceClass: 'compute' },
       allowGpuAcceleration: false, networkAccess: 'none', ...overrides
@@ -359,4 +397,54 @@ test('actual Metal device and command queue access require the explicit GPU poli
   assert.match(allowed.stdout, /deviceFound=1 queueFound=1 deviceName=.+/);
   receipts.push({ scenario: 'explicit-gpu', platform: process.platform, architecture: process.arch, kernelRelease: release(),
     denied: denied.stdout, allowed: allowed.stdout, admission: allowed.admission });
+});
+
+test('missing or incomplete write limits refuse execution before any file is created', async () => {
+  const missing = await request('fileflood');
+  await assert.rejects(runResearchProcess({ ...missing.input, writeLimits: undefined }), /research_process_write_limits_required/);
+  await assert.rejects(readFile(missing.marker), { code: 'ENOENT' });
+  const uncovered = await request('fileflood');
+  await assert.rejects(runResearchProcess({ ...uncovered.input, writeLimits: [] }), /research_process_write_limit_invalid/);
+  await assert.rejects(readFile(uncovered.marker), { code: 'ENOENT' });
+  const partial = await request('fileflood'), secondOutput = await mkdtemp(join(root, 'uncovered-'));
+  const secondMarker = join(secondOutput, 'pids');
+  await assert.rejects(runResearchProcess({ ...partial.input, args: ['fileflood', secondMarker],
+    writablePaths: [...partial.input.writablePaths, secondOutput] }), /research_process_write_limit_invalid/);
+  await assert.rejects(readFile(secondMarker), { code: 'ENOENT' });
+  receipts.push({ scenario: 'required-write-path-coverage', launched: false });
+});
+
+for (const [mode, limits, output] of [
+  ['fileflood', { maxFileBytes: 16384 }, 'writtenBytes=131072'],
+  ['totalflood', { maxFileBytes: 16384, maxTotalBytes: 16384 }, 'writtenBytes=65536'],
+  ['manyfiles', { maxFiles: 8 }, 'createdEntries=16'],
+  ['manyentries', { maxEntries: 8 }, 'createdEntries=16'],
+  ['hardlink', {}, 'hardlinkCreated=1']
+]) {
+  test(`real ${mode} violates the monitored output contract and is rejected after confirmed process cleanup`, async () => {
+    const f = await request(mode), configured = { ...f.input.writeLimits[0], ...limits };
+    let failure;
+    await runResearchProcess({ ...f.input, writeLimits: [configured] }).catch(error => { failure = error; });
+    assert.equal(failure?.code, 'research_process_write_limit');
+    assert.match(failure.stdout, new RegExp(output));
+    assert.ok(failure.admission.holdMs > 0);
+    const group = /^group=(\d+)\n/u.exec(failure.stdout);
+    assert.ok(group); assert.throws(() => process.kill(-Number(group[1]), 0), { code: 'ESRCH' });
+    receipts.push({ scenario: mode, code: failure.code, output: failure.stdout,
+      configured, resources: failure.resourceUsage, admission: failure.admission });
+  });
+}
+
+test('real log flooding preserves at most the declared combined byte cap and terminates computation', async () => {
+  const f = await request('logflood');
+  let failure;
+  await runResearchProcess({ ...f.input, maxOutputBytes: 4096 }).catch(error => { failure = error; });
+  assert.equal(failure?.code, 'research_process_output_limit');
+  assert.equal(Buffer.byteLength(failure.stdout) + Buffer.byteLength(failure.stderr), 4096);
+  assert.ok(failure.admission.holdMs > 0);
+  assert.ok(failure.admission.holdMs < 750, `log flood cleanup exceeded the resource-stop grace: ${failure.admission.holdMs}ms`);
+  const group = /^group=(\d+)\n/u.exec(failure.stdout);
+  assert.ok(group); assert.throws(() => process.kill(-Number(group[1]), 0), { code: 'ESRCH' });
+  receipts.push({ scenario: 'logflood', code: failure.code, capturedBytes: 4096,
+    resources: failure.resourceUsage, admission: failure.admission });
 });

@@ -23,7 +23,7 @@ export type ResearchProcessRequest = {
   signal?: AbortSignal;
   input?: string;
   maxOutputBytes?: number;
-  writeLimits?: readonly ResearchProcessWriteLimit[];
+  writeLimits: readonly ResearchProcessWriteLimit[];
 };
 
 export type ResearchProcessAdmission = { waitMs: number; holdMs: number };
@@ -144,15 +144,17 @@ async function runAdmittedResearchProcess(request: ResearchProcessRequest): Prom
   const limit = request.maxOutputBytes ?? 16 * 1024 * 1024;
   if (!Number.isSafeInteger(limit) || limit < 1) throw new Error('research_process_output_limit_invalid');
   if (request.signal?.aborted) throw new ResearchProcessError('research_process_cancelled');
-  for (const limit of request.writeLimits ?? []) {
+  if (!Array.isArray(request.writeLimits)) throw new ResearchProcessError('research_process_write_limits_required');
+  if (request.writeLimits.length !== request.writablePaths.length || new Set(request.writeLimits.map(limit => limit.path)).size !== request.writeLimits.length) {
+    throw new ResearchProcessError('research_process_write_limit_invalid');
+  }
+  for (const limit of request.writeLimits) {
     if (!request.writablePaths.includes(limit.path) || ![limit.maxFileBytes, limit.maxTotalBytes, limit.maxFiles, limit.maxEntries].every((value) => Number.isSafeInteger(value) && value > 0)) {
       throw new ResearchProcessError('research_process_write_limit_invalid');
     }
   }
-  if (request.writeLimits !== undefined) {
-    try { await assertProcessWriteLimits(request.writeLimits); }
-    catch { throw new ResearchProcessError('research_process_write_limit'); }
-  }
+  try { await assertProcessWriteLimits(request.writeLimits); }
+  catch { throw new ResearchProcessError('research_process_write_limit'); }
   const profile = await researchSandboxProfile(request);
   if (request.signal?.aborted) throw new ResearchProcessError('research_process_cancelled');
   return new Promise((resolve, reject) => {
@@ -185,7 +187,7 @@ async function runAdmittedResearchProcess(request: ResearchProcessRequest): Prom
       if (stopped !== null || settled || settling) return;
       stopped = code;
       kill('SIGTERM');
-      const graceMs = code === 'research_process_write_limit' || code === 'research_process_cpu_limit' || code === 'research_process_memory_limit' || code === 'research_process_resource_monitor_failed'
+      const graceMs = code === 'research_process_write_limit' || code === 'research_process_cpu_limit' || code === 'research_process_memory_limit' || code === 'research_process_resource_monitor_failed' || code === 'research_process_output_limit'
         ? 100
         : code === 'research_process_cancelled' || code === 'research_process_timeout'
           ? terminationGraceMs
@@ -194,9 +196,9 @@ async function runAdmittedResearchProcess(request: ResearchProcessRequest): Prom
       forcedKill.unref();
     };
     let writeMonitor: ReturnType<typeof setTimeout> | undefined;
-    let writeMonitorTask: Promise<void> | undefined;
+    let writeMonitorTask: Promise<void>;
     const monitorWrites = async (): Promise<void> => {
-      if (settled || settling || stopped !== null || request.writeLimits === undefined) return;
+      if (settled || settling || stopped !== null) return;
       try {
         await assertProcessWriteLimits(request.writeLimits);
       } catch {
@@ -207,7 +209,7 @@ async function runAdmittedResearchProcess(request: ResearchProcessRequest): Prom
         writeMonitor.unref();
       }
     };
-    if (request.writeLimits !== undefined) writeMonitorTask = monitorWrites();
+    writeMonitorTask = monitorWrites();
     const monitorResources = async (): Promise<void> => {
       if (settled || settling || stopped !== null || child.pid === undefined) return;
       try {
@@ -248,14 +250,10 @@ async function runAdmittedResearchProcess(request: ResearchProcessRequest): Prom
         if (forcedKill !== undefined) clearTimeout(forcedKill);
         request.signal?.removeEventListener('abort', abort);
         if (resourceTask !== undefined) await resourceTask;
-        if (writeMonitorTask !== undefined) {
-          try { await writeMonitorTask; }
-          catch { stopped = 'research_process_write_limit'; }
-        }
-        if (request.writeLimits !== undefined) {
-          try { await assertProcessWriteLimits(request.writeLimits); }
-          catch { stopped = 'research_process_write_limit'; }
-        }
+        try { await writeMonitorTask; }
+        catch { stopped = 'research_process_write_limit'; }
+        try { await assertProcessWriteLimits(request.writeLimits); }
+        catch { stopped = 'research_process_write_limit'; }
         try { await terminateProcessTreeWithRetry(child, 100, 10); }
         catch { stopped = 'research_process_kill_failed'; }
         settled = true;

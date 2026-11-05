@@ -51,7 +51,7 @@ CPU/内存硬隔离后端尚未提供，不能发布要求这些能力的任务�
 - `pnpm harness:eval`：94/94；`node scripts/smoke-electron.mjs`：13/13，零 renderer 错误。
 - `pnpm build`（含 typecheck）、`pnpm check:ipc`、`pnpm check:renderer-chunks`：通过，eager JS 保持 1132907 字节、6 个文件。
 
-日志为 `.artifacts/research-optimization/xsafe-a3-*.log`，真实边界回执为 `xsafe-a3/native-resources.json`。本增量未增加 CPU/内存硬隔离能力；资源事实持久化、原生环境和输出上限的其余审计继续按计划执行。
+日志为 `.artifacts/research-optimization/xsafe-a3-*.log`。A5 新增红测曾覆盖 `xsafe-a3/native-resources.json`，该文件不再代表原 13 项验证；完整边界回执以 `xsafe-a5/native-resources-final.json` 为准，其最终 20 项复验包含全部原 13 项边界场景，原 A3 验证日志保留。本增量未增加 CPU/内存硬隔离能力；原生环境的其余审计继续按计划执行。
 
 ## 实验资源回执
 
@@ -66,3 +66,25 @@ CPU/内存硬隔离后端尚未提供，不能发布要求这些能力的任务�
 本增量为 `Verified passing`。在上述仓库目录执行 `node --test tests/unit/research-experiment-resources.test.mjs tests/unit/research-process-resources.test.mjs tests/unit/research-compute-policy.test.mjs`，最终 9/9；`pnpm test:unit`，1145/1145；`pnpm build`（含 typecheck）、`pnpm check:ipc`、`pnpm check:renderer-chunks` 通过，eager JS 1132907 字节、6 个文件；Harness 94/94、启动 13/13，零 renderer 错误。初轮专项 8/9 的失败是新跨项目夹具复用工作区，随后以不符合 `createProject` 输入的 `null` 再次失败；改为实际独立工作区后严格归属检查通过。
 
 `node scripts/run-research-p0.mjs` 为 13/13，并在生产实验服务之外捕获原始 runner 结果/错误，与持久化回执逐项比对。随后仅增加真实超时检查，`node scripts/run-research-p0.mjs --test-name-pattern='standard offline task parses PDF evidence'` 为 1/1；原 TypeScript 计算/出版/交付流程及新超时均通过。超时回执保留 10 次采样、150ms 已观测 CPU、89571328 字节峰值 RSS、2013ms 准入占用及 `research_process_timeout`，失败运行没有发布工件。回执保存在 `.artifacts/research-optimization/p0-production/research_task_79d6d06f-4ca9-4930-bf87-c1c56ff6e42d/report.json`，验证日志为 `xsafe-a4-*.log`。除新增专项断言外，产品代码自通过构建后未改动。
+
+## 全部可写目录的限额
+
+`writeLimits` 为科研进程的必填合同；每个可写目录必须恰有一条限额。遗漏、重复或多余目录均在启动代码前拒绝。R 临时桥显式加入其临时目录和限额，runner 不再提供可选监控路径。
+
+| 生产者 | 单文件 | 每个可写目录总量 | 文件数 | 目录项数 |
+| --- | ---: | ---: | ---: | ---: |
+| 实验输出、scratch、R 桥临时目录、原生环境探针 | 64 MiB | 128 MiB | 1000 | 2000 |
+| Vale、Tectonic、Typst 作业目录 | 64 MiB | 512 MiB | 10000 | 20000 |
+| 共享 worker 作业目录 | 128 MiB | 896 MiB | 6000 | 12000 |
+
+共享 worker 的总量覆盖现有 512 MiB 文献资产及三份 128 MiB 工件上限，文件数为现有 5000 资产上限加 1000 个作业/缓存文件。解析、图稿、模板和文献格式 worker 均受这些目录限额约束。具体输出仍需通过各领域原有校验，目录限额不能替代科学工件合同。
+
+磁盘目录仍以 100ms 间隔监控，代码退出后再检查最终目录；这属于监测和终止，不是磁盘硬配额。短时写入可以越过阈值后才被发现，不能宣称任意恶意写入均被内核预先截断。归档写入继续使用既有逐块字节上限：单文件 64 MiB、总量 512 MiB、归档 600 MiB、成员 10000。
+
+stdout/stderr 共用真实字节计数并最多保留指定总量。日志超限与 CPU/RSS、目录超限统一使用 100ms TERM/KILL 宽限，避免忽略 TERM 的日志洪泛进程继续占用普通 1 秒宽限。取消及普通超时保留调用方声明的原宽限。
+
+真实有限 C 探针验证单文件、跨文件总量、文件数、空目录项数、硬链接、符号链接和日志洪泛；每个新输出探针均核对实际进程组已消失。探针最大文件写入为 128 KiB，日志尝试 256 KiB，只有任务专属临时目录参与，测试结束清理。忽略 TERM 的日志探针保留上限 4096 字节，修复前实际占用 1978ms，修复后 149ms；其已观察 CPU 为零是一次真实采样，区别于未采样的 `null`。
+
+本增量为 `Verified passing`。在上述仓库目录执行 `pnpm test:research-resources`，最终 20/20；随后只补充非空但缺少一个可写目录的检查，`node --test --test-name-pattern='missing or incomplete write limits' tests/integration/research-process-resources.test.mjs`，1/1，零文件创建。`node --test tests/unit/research-experiment-resources.test.mjs tests/unit/research-process-admission.test.mjs tests/unit/research-process-resources.test.mjs tests/unit/research-compute-policy.test.mjs`，15/15；`pnpm test:unit`，1145/1145；生产 P0 13/13、Harness 94/94、启动 13/13 零 renderer 错误，IPC/分块检查通过。
+
+初轮全量单测、生产 P0、启动与 IPC/Harness 覆盖完整写入合同；启动这些检查后只修复日志终止宽限，最终 `pnpm build`（含 typecheck）和实际 20 项原生检查覆盖该修复，不改变已通过的写入合同或其他消费者。eager JS 为 1132907 字节、6 个文件。完整回执复制保留在 `.artifacts/research-optimization/xsafe-a5/native-resources-final.json`；后续专项可写入最新 `native-resources.json`，不得覆盖完整回执。红测、原生复验和全部检查日志为 `xsafe-a5-*.log`。X-SAFE 的原生环境数据/代码完整性与其余资源持久化仍未完成。
