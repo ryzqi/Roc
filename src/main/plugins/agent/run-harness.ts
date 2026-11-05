@@ -36,6 +36,7 @@ import { createAskUserTool } from '../../services/deep-agent/ask-user-tool';
 import { toWorkspaceRelativePath } from '../../services/deep-agent/filesystem-tool-contract';
 import { createRocCommandTool } from '../../services/deep-agent/command-tool';
 import { createResearchTools } from './research-tools';
+import {dispatchReviewQuery} from './review-query-tools';
 import { withResearchDispatchReference } from '../../services/research-dispatch-context';
 import { assertMcpToolContractMatches, readMcpToolContractMetadata } from '../mcp/mcp-tool-contract';
 import { assembleContextHarness } from '../../services/deep-agent/context/context-assembler';
@@ -483,7 +484,7 @@ async function createExecutorTools(input: {
  * 科研工具只在快照里绑了研究项目、且清单确实声明了它时才装配。
  * 按清单过滤而不是按项目 id 直接信任，保证运行时工具集与冻结的清单一致。
  */
-function createManifestAuthorizedResearchTools(input: {
+export function createManifestAuthorizedResearchTools(input: {
   executionGrantBroker?: ExecutionGrantBroker;
   threadId: string;
   runId: string;
@@ -495,13 +496,22 @@ function createManifestAuthorizedResearchTools(input: {
   if (input.researchProjectId === null) {
     return [];
   }
+  const projectId = input.researchProjectId;
   const manifestToolNames = new Set(input.capabilityManifest.tools.map((tool) => tool.modelVisibleName));
   return createResearchTools({
     capabilities: input.capabilities,
-    projectId: input.researchProjectId,
+    projectId,
     threadId: input.threadId,
     runId: input.runId,
     signal: input.abortSignal,
+    dispatchReviewQuery: async query => {
+      if (input.executionGrantBroker === undefined) throw new Error('research_dispatch_broker_required');
+      return await dispatchReviewQuery({
+        query, projectId, runId: input.runId, threadId: input.threadId,
+        manifest: input.capabilityManifest, broker: input.executionGrantBroker,
+        capabilities: input.capabilities, signal: input.abortSignal
+      });
+    },
     dispatchStage: async (request) => {
       input.abortSignal.throwIfAborted();
       if (input.executionGrantBroker === undefined) throw new Error('research_dispatch_broker_required');

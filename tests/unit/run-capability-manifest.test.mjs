@@ -100,7 +100,10 @@ test('project review reads share the frozen manifest and proposals use safe exac
   assert.deepEqual(tools.map(tool => [tool.modelVisibleName, tool.idempotencyStrategy, tool.reconcileStrategy, tool.executionScopes]), [
     ['research_review_read', 'none', 'none', ['main', 'subagent']],
     ['research_review_suggest_title', 'tool_call', 'retry_safe', ['main']],
-    ['research_review_suggest_fulltext', 'tool_call', 'retry_safe', ['main']]
+    ['research_review_suggest_fulltext', 'tool_call', 'retry_safe', ['main']],
+    ['research_review_execute_query', 'tool_call', 'retry_safe', ['main']],
+    ['research_review_get_query', 'none', 'none', ['main']],
+    ['research_review_cancel_query', 'tool_call', 'retry_safe', ['main']]
   ]);
   assert.equal(api.isRunCapabilityManifestIntegrityValid(compiled.manifest), true);
   const unbound = api.compileRunCapabilityManifest(input());

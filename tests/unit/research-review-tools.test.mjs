@@ -35,7 +35,7 @@ function connect(f, signal = new AbortController().signal) {
   if (f.reports) register([api.researchReviewReportCapability], () => api.registerResearchReviewReportCapability(context, f.reports));
   const tools = api.createResearchTools({
     capabilities: registry, projectId: f.project.id, signal,
-    dispatchStage: async () => assert.fail('review tools cannot dispatch a research stage')
+    dispatchReviewQuery: async () => assert.fail('unexpected owned query dispatch'), dispatchStage: async () => assert.fail('review tools cannot dispatch a research stage')
   });
   return {
     registry, tools, read: tools.find(value => value.name === 'research_review_read'),
@@ -71,7 +71,7 @@ function reports(f) {
   return f;
 }
 
-test('review tools and frozen manifest share the same descriptors and only proposals have effects', async () => {
+test('review tools and frozen manifest share exact read, proposal and owned-query descriptors', async () => {
   const f = await titleScene();
   try {
     const {tools} = connect(f);
@@ -80,7 +80,10 @@ test('review tools and frozen manifest share the same descriptors and only propo
     assert.deepEqual(descriptors.map(value => [value.name, value.effectClass, value.executionScopes]), [
       ['research_review_read', 'none', ['main', 'subagent']],
       ['research_review_suggest_title', 'external_call', ['main']],
-      ['research_review_suggest_fulltext', 'external_call', ['main']]
+      ['research_review_suggest_fulltext', 'external_call', ['main']],
+      ['research_review_execute_query', 'external_call', ['main']],
+      ['research_review_get_query', 'none', ['main']],
+      ['research_review_cancel_query', 'external_call', ['main']]
     ]);
     for (const name of ['research_review_suggest_title', 'research_review_suggest_fulltext']) {
       const shape = tools.find(value => value.name === name).schema.shape;
@@ -270,7 +273,7 @@ test('aborted tools send no write and cancellation while reading does not acknow
     assert.equal(f.changes(), before);
     const delayed = new AbortController();
     const tools = api.createResearchTools({
-      projectId: f.project.id, signal: delayed.signal, dispatchStage: async () => assert.fail('no dispatch'),
+      projectId: f.project.id, signal: delayed.signal, dispatchReviewQuery: async () => assert.fail('unexpected owned query dispatch'), dispatchStage: async () => assert.fail('no dispatch'),
       capabilities: {invoke: async (name, request) => {
         assert.equal(name, 'research.reviewProtocol.get'); assert.equal(request.projectId, f.project.id);
         delayed.abort(new Error('cancel-during-read')); return f.protocol;
@@ -286,7 +289,7 @@ test('cancellation after a real proposal commit preserves the receipt and exact 
   try {
     const {registry, title} = connect(f), controller = new AbortController(), key = 'lost-proposal-response';
     const interrupted = api.createResearchTools({
-      projectId: f.project.id, signal: controller.signal, dispatchStage: async () => assert.fail('no dispatch'),
+      projectId: f.project.id, signal: controller.signal, dispatchReviewQuery: async () => assert.fail('unexpected owned query dispatch'), dispatchStage: async () => assert.fail('no dispatch'),
       capabilities: {invoke: async (name, request) => {
         const result = await registry.invoke(name, request);
         controller.abort(new Error('cancel-after-persist')); return result;
@@ -364,7 +367,7 @@ test('cancellation after real preview stops the bound-content read before return
   try {
     const binding = await f.bind(), {registry} = connect(f), controller = new AbortController(), calls = [], before = f.changes();
     const read = api.createResearchTools({
-      projectId: f.project.id, signal: controller.signal, dispatchStage: async () => assert.fail('no dispatch'),
+      projectId: f.project.id, signal: controller.signal, dispatchReviewQuery: async () => assert.fail('unexpected owned query dispatch'), dispatchStage: async () => assert.fail('no dispatch'),
       capabilities: {invoke: async (name, request) => {
         calls.push(name); const result = await registry.invoke(name, request);
         if (name === 'research.document.preview') controller.abort(new Error('cancel-after-source-preview'));

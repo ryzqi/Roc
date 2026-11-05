@@ -90,7 +90,7 @@ async function fixture(report = false) {
   }
   f.bridge = api.createPluginCapabilityAdapter({invokeCapability: (name, input) => registry.invoke(name, input)});
   f.read = api.createResearchTools({capabilities: registry, projectId: f.project.id, signal: new AbortController().signal,
-    dispatchStage: async () => assert.fail('no stage dispatch')}).find(tool => tool.name === 'research_review_read');
+    dispatchReviewQuery:async()=>assert.fail('unexpected owned query dispatch'),dispatchStage: async () => assert.fail('no stage dispatch')}).find(tool => tool.name === 'research_review_read');
   f.projectOutput = api.createToolOutputProjector({artifactStore: new api.ContextArtifactStore(f.agentDb),
     runId: 'exact-links-run', threadId: 'exact-links-thread', workspaceHash: 'exact-links-workspace'});
   fixtures.push(f); return f;

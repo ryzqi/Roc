@@ -8,6 +8,7 @@ import { z } from 'zod';
 
 import { createLiteratureTools } from './literature-tools';
 import {createReviewTools, REVIEW_TOOL_DESCRIPTORS} from './review-tools';
+import {createReviewQueryTools, REVIEW_QUERY_TOOL_DESCRIPTORS, type DispatchReviewQuery} from './review-query-tools';
 import { researchStageSchema } from '../../../shared/schemas/research';
 import type { ResearchProseLintReport } from '../../../shared/schemas/research-prose';
 import type {
@@ -39,6 +40,7 @@ const readScopes: ResearchToolDescriptor['executionScopes'] = ['main', 'subagent
 /** 工具名与权限的唯一来源：manifest 和工具装配都读这张表，避免两处漂移。 */
 export const RESEARCH_TOOL_DESCRIPTORS: readonly ResearchToolDescriptor[] = [
   ...REVIEW_TOOL_DESCRIPTORS,
+  ...REVIEW_QUERY_TOOL_DESCRIPTORS,
   { name: 'research_overview', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
   { name: 'research_list_artifacts', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
   { name: 'research_read_artifact', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
@@ -67,6 +69,7 @@ export function createResearchTools(input: {
   runId?: string;
   signal: AbortSignal;
   dispatchStage: (request: import('../../../shared/types').ResearchStageRunStartRequest) => Promise<ResearchStageRun>;
+  dispatchReviewQuery: DispatchReviewQuery;
 }): StructuredToolInterface[] {
   const projectId = input.projectId;
   const invoke = async <TOutput>(name: string, request: unknown): Promise<TOutput> => {
@@ -190,6 +193,7 @@ export function createResearchTools(input: {
 
   return [
     ...createReviewTools(input),
+    ...createReviewQueryTools(input),
     tool(async () => summarizeOverview(
       await invoke<ResearchProject>('research.projects.get', { id: projectId }),
       await workflow(),

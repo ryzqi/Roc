@@ -169,7 +169,7 @@ test('real interrupt replay refuses original versions and needs explicit whole-s
           .run(JSON.stringify([f.artifactId]),f.project.id);
       }
       const tools=api.createResearchTools({projectId:f.project.id,signal:new AbortController().signal,
-        dispatchStage:async()=>assert.fail('gate cannot dispatch a model'),capabilities:{invoke:async(name,input)=>{
+        dispatchReviewQuery: async () => assert.fail('unexpected owned query dispatch'), dispatchStage:async()=>assert.fail('gate cannot dispatch a model'),capabilities:{invoke:async(name,input)=>{
           if(name==='research.workflow.get') return f.repository.getWorkflow(f.project.id);
           if(name==='research.workflow.gateReview') return f.repository.readGateReviewContext(input);
           if(name==='research.workflow.transition') return f.repository.transitionWorkflow(input);

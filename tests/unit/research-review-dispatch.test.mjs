@@ -14,18 +14,14 @@ function fixture() {
   const f = createResearchFixture(api, 'discovery');
   const runId = 'review-owner-run', threadId = 'review-owner-thread';
   const timestamp = '2026-11-05T00:00:00.000Z';
-  // The test main process freezes a manifest for the future query tool. No model
+  // The test main process freezes the actual project tool manifest. No model
   // arguments provide this manifest, parent run or project association.
-  const compiled = api.compileRunCapabilityManifest({
+  const manifest = api.compileRunCapabilityManifest({
     deleteFileApprovalMode: 'fully_automatic', mcpApprovalMode: 'fully_automatic', mcpServers: [],
     mode: 'chat', requestedCapabilities: {mcpServers: [], skills: []}, selfConfigAvailable: false,
     shellAllowedCommands: undefined, trustedHostAvailable: false, skills: [], workflowHint: null,
     researchProjectId: f.project.id
   }).manifest;
-  const {manifestHash, ...content} = compiled;
-  const source = content.tools.find(tool => tool.modelVisibleName === 'research_run_stage');
-  content.tools.push({...source, canonicalIdentity: `builtin:${toolName}`, modelVisibleName: toolName});
-  const manifest = {...content, manifestHash: hash(content)};
   const snapshot = api.createRunExecutionSnapshot({
     runId, threadId, inputMessageId: 'review-owner-message', snapshot: {
       schemaVersion: 9, submissionHash: 'a'.repeat(64),

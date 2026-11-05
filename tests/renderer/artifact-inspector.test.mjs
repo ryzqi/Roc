@@ -174,7 +174,7 @@ async function scene({long=false,managed=false,experiment=false}={}) {
   f.empty=empty;f.snapshot=snapshot;
   const gate=api.createResearchHumanGate({repository:f.repository});
   const tools=api.createResearchTools({projectId:f.project.id,signal:new AbortController().signal,
-    dispatchStage:async()=>assert.fail('UI gate cannot dispatch a model'),capabilities:{invoke:async(name,input)=>{
+    dispatchReviewQuery:async()=>assert.fail('unexpected owned query dispatch'),dispatchStage:async()=>assert.fail('UI gate cannot dispatch a model'),capabilities:{invoke:async(name,input)=>{
       if(name==='research.workflow.get')return f.repository.getWorkflow(f.project.id);
       if(name==='research.workflow.gateReview')return f.repository.readGateReviewContext(input);
       if(name==='research.workflow.transition')return input.action==='approve'?gate.approve(input):gate.reject(input);

@@ -2,6 +2,8 @@ export { ResearchRepository } from '../../../src/main/plugins/research/repositor
 export { ResearchProductionEffectService } from '../../../src/main/plugins/research/production-effects';
 export { createResearchRoleTools } from '../../../src/main/plugins/research/role-tools';
 export { createResearchTools } from '../../../src/main/plugins/agent/research-tools';
+export {dispatchReviewQuery} from '../../../src/main/plugins/agent/review-query-tools';
+export {createManifestAuthorizedResearchTools} from '../../../src/main/plugins/agent/run-harness';
 export {RESEARCH_TOOL_DESCRIPTORS} from '../../../src/main/plugins/agent/research-tools';
 export {createToolOutputProjector} from '../../../src/main/services/deep-agent/tool-output-projection';
 export {ContextArtifactStore} from '../../../src/main/services/deep-agent/context/context-artifact-store';

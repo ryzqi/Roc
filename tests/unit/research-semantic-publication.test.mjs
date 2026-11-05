@@ -170,7 +170,7 @@ test('real gate graph preserves semantic refusal as a new interrupt and accepts 
         contradiction = f.review(f.propose('contradicts'));
       }
       const tools = api.createResearchTools({projectId: f.project.id, signal: new AbortController().signal,
-        dispatchStage: async () => assert.fail('human gate cannot dispatch a model'),
+        dispatchReviewQuery: async () => assert.fail('unexpected owned query dispatch'), dispatchStage: async () => assert.fail('human gate cannot dispatch a model'),
         capabilities: {invoke: async (name, input) => {
           if (name === 'research.workflow.get') return f.repository.getWorkflow(f.project.id);
           if (name === 'research.workflow.gateReview') return f.repository.readGateReviewContext(input);

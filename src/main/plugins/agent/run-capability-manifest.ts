@@ -313,7 +313,8 @@ function createResearchManifestTools(input: {
     idempotencyStrategy: descriptor.effectClass === 'none' ? ('none' as const) : ('tool_call' as const),
     reconcileStrategy: [
       'research_add_literature', 'research_cancel_literature_import',
-      'research_review_suggest_title', 'research_review_suggest_fulltext'
+      'research_review_suggest_title', 'research_review_suggest_fulltext',
+      'research_review_execute_query', 'research_review_cancel_query'
     ].includes(descriptor.name)
       ? 'retry_safe' : resolveReconcileStrategy(descriptor.effectClass),
     resourceScope: descriptor.scope

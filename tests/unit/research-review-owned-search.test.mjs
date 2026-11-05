@@ -16,18 +16,12 @@ const hash = value => createHash('sha256').update(JSON.stringify(value)).digest(
 
 function chat(f, id = 'owned-query-parent', overrides = {}) {
   const runId = id, threadId = `${id}-thread`, timestamp = new Date().toISOString();
-  const compiled = api.compileRunCapabilityManifest({
+  const manifest = api.compileRunCapabilityManifest({
     deleteFileApprovalMode: 'fully_automatic', mcpApprovalMode: 'fully_automatic', mcpServers: [],
     mode: 'chat', requestedCapabilities: {mcpServers: [], skills: []}, selfConfigAvailable: false,
     shellAllowedCommands: undefined, trustedHostAvailable: false, skills: [], workflowHint: null,
     researchProjectId: f.project.id
   }).manifest;
-  const {manifestHash, ...content} = compiled;
-  const source = content.tools.find(tool => tool.modelVisibleName === 'research_run_stage');
-  for (const name of ['research_review_execute_query', 'research_review_get_query', 'research_review_cancel_query']) {
-    content.tools.push({...source, modelVisibleName: name, canonicalIdentity: `builtin:${name}`});
-  }
-  const manifest = {...content, manifestHash: hash(content)};
   const budget = {...api.createRunBudget({contextBudgetTokens: null, startedAt: timestamp}), ...overrides};
   const snapshot = api.createRunExecutionSnapshot({runId, threadId, inputMessageId: `${id}-message`, snapshot: {
     schemaVersion: 9, submissionHash: 'a'.repeat(64),

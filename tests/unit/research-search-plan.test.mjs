@@ -175,7 +175,7 @@ test('actual gate interrupt carries the visible plan and requires its original h
       const gate = api.createResearchHumanGate({repository: f.repository});
       await gate.complete({projectId: f.project.id, expectedStage: 'discovery', action: 'complete'});
       const tools = api.createResearchTools({projectId: f.project.id, signal: new AbortController().signal,
-        dispatchStage: async () => assert.fail('gate cannot dispatch a model'),
+        dispatchReviewQuery: async () => assert.fail('unexpected owned query dispatch'), dispatchStage: async () => assert.fail('gate cannot dispatch a model'),
         capabilities: {invoke: async (name, request) => {
           if (name === 'research.workflow.get') return f.repository.getWorkflow(f.project.id);
           if (name === 'research.artifacts.list') return f.repository.listArtifacts(f.project.id);
