@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { copyFile, mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
@@ -68,7 +68,17 @@ test('real figure rendering is polled with runId and published into a persisted 
     const completed = await tools.find((entry) => entry.name === 'get_figure').invoke({ runId: started.runId });
     assert.equal(completed.status, 'completed', completed.error);
     assert.equal(completed.error, null);
-    assert.equal(completed.fileCount, 8);
+    assert.equal(completed.fileCount, 9);
+    const retained = repository.figureRuns.get(project.id, started.runId);
+    const traceFile = retained.files.find(file => file.area === 'output' && file.path === 'figure-data.json');
+    assert.ok(traceFile);
+    const trace = JSON.parse((await service.readRunFile({projectId: project.id, runId: started.runId,
+      area: 'output', path: traceFile.path})).bytes.toString('utf8'));
+    assert.equal(trace.sourceHash, retained.files.find(file => file.area === 'input' && file.path === 'figure.vl.json').sha256);
+    assert.equal(trace.rendererHash, retained.environment.hash);
+    assert.equal(trace.marks.length, 1);
+    assert.equal(trace.marks[0].directFields.y, 'mean_end');
+    assert.deepEqual(trace.marks[0].items.map(item => item.numericFields.mean_end), [2, 4]);
     const published = await tools.find((entry) => entry.name === 'publish_figure').invoke({
       runId: started.runId, replacesFigureId: null
     });
@@ -82,6 +92,69 @@ test('real figure rendering is polled with runId and published into a persisted 
   } finally { await fixture.dispose(); }
 });
 
+test('post-transform scene data retains negative aggregates and formula values with explicit encoding limits', async () => {
+  const f = await setup(realRenderer());
+  try {
+    const spec = {data: {values: [{group: 'A', value: -2}, {group: 'A', value: -4}, {group: 'B', value: 99}]},
+      transform: [{filter: "datum.group === 'A'"}, {aggregate: [{op: 'mean', field: 'value', as: 'mean'}], groupby: ['group']},
+        {calculate: 'datum.mean * 0.001', as: 'seconds'}],
+      mark: 'bar', encoding: {x: {field: 'group', type: 'nominal'}, y: {field: 'seconds', type: 'quantitative'},
+        color: {condition: {test: 'datum.mean < 0', value: 'red'}, value: 'blue'}}};
+    await writeFile(join(f.project.workspacePath, 'figure.vl.json'), JSON.stringify(spec));
+    const traces = [];
+    for (const requestId of ['transformed-a', 'transformed-b']) {
+      const started = await f.service.start(figureRequest(f.project.id, f.run.id, {requestId, timeoutMs: 10_000}));
+      await waitFor(() => !['preparing', 'running'].includes(f.repository.figureRuns.get(f.project.id, started.id).status));
+      const completed = f.repository.figureRuns.get(f.project.id, started.id);
+      assert.equal(completed.status, 'completed', completed.error);
+      const traceFile = completed.files.find(file => file.area === 'output' && file.path === 'figure-data.json');
+      const bytes = (await f.service.readRunFile({projectId: f.project.id, runId: started.id,
+        area: 'output', path: traceFile.path})).bytes;
+      traces.push(JSON.parse(bytes));
+      assert.equal(traces.at(-1).marks.length, 1);
+      const mark = traces.at(-1).marks[0];
+      assert.equal(mark.directFields.y, 'seconds_end');
+      assert.ok(!Object.values(mark.directFields).includes('mean'), 'unused numeric fields cannot become directly encoded values');
+      assert.ok(mark.unsupportedChannels.includes('fill'), 'conditional encoding is retained as unsupported for automatic mapping');
+      assert.match(mark.encoding, /datum\.mean < 0/u);
+      assert.equal(mark.items.length, 1, 'filtered data cannot survive in emitted marks');
+      assert.equal(mark.items[0].numericFields.mean, -3);
+      assert.equal(mark.items[0].numericFields.seconds, -0.003);
+      assert.equal(mark.items[0].numericFields.seconds_end, -0.003);
+      assert.equal(mark.items[0].numericFields.value, undefined);
+      const publication = await f.service.publish(f.project.id, started.id, null);
+      assert.equal((await f.service.verify(f.project.id, publication.id)).id, publication.id);
+      if (requestId === 'transformed-b') {
+        const root = f.repository.figureRuns.root(f.project.id, started.id);
+        const path = join(root, 'output', 'figure-data.json');
+        const original = await readFile(path);
+        await writeFile(path, '{}');
+        await assert.rejects(f.service.verify(f.project.id, publication.id), /research_figure_snapshot_changed/u);
+        await writeFile(path, original);
+        assert.equal((await f.service.verify(f.project.id, publication.id)).id, publication.id);
+      }
+    }
+    assert.deepEqual(traces[0], traces[1], 'scene trace bytes have no run ID or wall-clock variability');
+  } finally {await f.dispose();}
+});
+
+test('changed trace between renderer return and validation prevents completion and publication', async () => {
+  const renderer = realRenderer();
+  const f = await setup({async renderFigure(request) {
+    const result = await renderer.renderFigure(request);
+    await writeFile(join(request.outputDir, result.dataTrace.path), '{}');
+    return result;
+  }});
+  try {
+    const started = await f.service.start(figureRequest(f.project.id, f.run.id, {timeoutMs: 10_000}));
+    await waitFor(() => !['preparing', 'running'].includes(f.repository.figureRuns.get(f.project.id, started.id).status));
+    const completed = f.repository.figureRuns.get(f.project.id, started.id);
+    assert.equal(completed.status, 'failed');
+    assert.equal(completed.error, 'research_figure_data_trace_changed');
+    await assert.rejects(f.service.publish(f.project.id, started.id, null), /research_figure_completed_required/u);
+    assert.equal(f.repository.figures.list(f.project.id, 10).length, 0);
+  } finally {await f.dispose();}
+});
 test('association persistence failure prevents renderer dispatch and records failed figure', async () => {
   let renders = 0;
   const fixture = await setup({ renderFigure() { renders += 1; throw new Error('must_not_render'); } });

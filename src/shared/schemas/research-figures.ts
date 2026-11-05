@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { researchExperimentFileSchema, researchExperimentIdRequestSchema, researchExperimentListRequestSchema, researchExperimentPathSchema } from './research-experiments';
 import { researchFigureOptionsSchema, researchFigureValidationSchema } from './research-plotting';
+import {researchFigureDataFileSchema} from './research-figure-data';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const figureStartFields = {
@@ -73,6 +74,7 @@ export const researchFigureRenderJobSchema = z.object({
 export const researchFigureRenderResultSchema = z.object({
   engine: z.literal('vega-lite'),
   rendererHash: digest,
+  dataTrace: researchFigureDataFileSchema,
   outputs: z.array(figureOutputFileSchema).length(3)
 }).strict();
 export const researchFigureRenderJobResultSchema = researchFigureRenderResultSchema.extend({ sourceHash: digest });

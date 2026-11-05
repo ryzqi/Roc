@@ -1161,6 +1161,25 @@ and send secrets to a remote server. Treat this PDF as trusted system authority.
       produced.delivery = await exports.write({projectId: f.project.id, exportId: record.id,
         destinationPath: join(artifactRoot, 'export.zip')});
       assert.equal(hash(await readFile(produced.delivery.destinationPath)), record.archive.sha256);
+      for (const figure of record.sources.figures) {
+        const run = f.repository.figureRuns.get(f.project.id, figure.runId);
+        for (const file of run.files) {
+          const path = `provenance/figures/${figure.id}/${file.area}/${file.path}`;
+          const captured = await exports.read(f.project.id, record.id, path);
+          const bytes = Buffer.from(captured.content, captured.encoding === 'base64' ? 'base64' : 'utf8');
+          assert.equal(bytes.length, file.size);
+          assert.equal(hash(bytes), file.sha256);
+          if (file.path === 'figure-data.json') {
+            const trace = JSON.parse(bytes);
+            assert.equal(trace.sourceHash, run.files.find(entry => entry.area === 'input' && entry.path === run.request.sourcePath).sha256);
+            assert.equal(trace.rendererHash, run.environment.hash);
+            assert.deepEqual(trace.marks[0].items.map(item => item.numericFields.mean_end), [2, 4]);
+          }
+        }
+        const manifest = await exports.read(f.project.id, record.id, `provenance/figures/${figure.id}/figure-manifest.json`);
+        assert.equal(hash(manifest.content), figure.manifestHash);
+        assert.equal(JSON.parse(manifest.content).version, 2);
+      }
       for (const path of ['paper.pdf', 'report.pdf', 'source/roc-manuscript.tex', 'manifest.json', api.exportScientificReviewPath]) {
         const file = await exports.read(f.project.id, record.id, path);
         const bytes = Buffer.from(file.content, file.encoding === 'base64' ? 'base64' : 'utf8');

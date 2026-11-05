@@ -15,6 +15,7 @@ import { getResearchFigureRendererEnvironment } from './figure-renderer-environm
 import type { ResearchToolchain } from './toolchain';
 import type { ResearchRepository } from './repository';
 import type { RocPluginContext } from '../../kernel/types';
+import {researchFigureDataPath} from '../../../shared/schemas/research-figure-data';
 
 type FileRequest = z.infer<typeof researchExperimentFileRequestSchema>;
 type FigureRenderer = Pick<ResearchToolchain, 'renderFigure'>;
@@ -243,10 +244,14 @@ export class ResearchFigureService {
       if (rendered.rendererHash !== rendererEnvironment.hash || getResearchFigureRendererEnvironment().hash !== rendererEnvironment.hash) {
         throw new Error('research_figure_renderer_changed');
       }
+      const traceBytes = await readResearchFile(renderOutput, researchFigureDataPath, experimentFileLimit);
+      if (traceBytes.length !== rendered.dataTrace.size || researchContentHash(traceBytes) !== rendered.dataTrace.sha256) {
+        throw new Error('research_figure_data_trace_changed');
+      }
       await this.verifyRun(initial, signal);
       await rename(renderOutput, out);
       outputCreated = true;
-      await finishFigureOutput(out, request.figure, rendererEnvironment.hash, signal);
+      await finishFigureOutput(out, request.figure, rendererEnvironment.hash, rendered.sourceHash, signal);
     } catch (error) {
       failure = error;
       if (error instanceof ResearchProcessError) output = { exitCode: 1, stdout: output.stdout + error.stdout, stderr: output.stderr + error.stderr };

@@ -10,6 +10,7 @@ import { compileLatex } from './latex-service';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchWorkspace } from './research-files';
 import { requireTemplateRoot } from './template-files';
 import type { ResearchRepository } from './repository';
+import { assertFigureRun, figureManifest, figureManifestPath } from './figure-repository';
 
 export async function buildExportFiles(input: { record: ResearchExportExecution; sources: ResearchExportSources; writer: ResearchExportFiles;
   repository: ResearchRepository; tools: ExportToolchain; scratch: string; signal: AbortSignal }): Promise<void> {
@@ -86,9 +87,23 @@ export async function buildExportFiles(input: { record: ResearchExportExecution;
     }
   }
   for (const figure of sources.figures) {
+    const run = repository.figureRuns.get(record.projectId, figure.runId);
+    assertFigureRun(run, figure.validation);
+    if (researchContentHash(figureManifest(run, figure.validation)) !== figure.manifestHash) {
+      throw new Error('research_export_snapshot_changed');
+    }
+    const root = repository.figureRuns.root(record.projectId, run.id);
+    const manifest = await readResearchFile(root, figureManifestPath, exportFileLimit);
+    if (researchContentHash(manifest) !== figure.manifestHash) throw new Error('research_export_snapshot_changed');
+    await writer.write(`provenance/figures/${figure.id}/${figureManifestPath}`, manifest);
+    for (const file of run.files) {
+      signal.throwIfAborted();
+      await writer.copy(root, { ...file, path: `${file.area}/${file.path}` },
+        `provenance/figures/${figure.id}/${file.area}/${file.path}`);
+    }
     for (const file of figure.validation.files) {
       signal.throwIfAborted();
-      await writer.copy(repository.figureRuns.root(record.projectId, figure.runId), { ...file, path: `output/${file.path}` },
+      await writer.copy(root, { ...file, path: `output/${file.path}` },
         join('source', entryDirectory, `figures/${figure.id}.${file.path.split('.').at(-1)}`));
     }
   }

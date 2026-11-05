@@ -5,6 +5,7 @@ import { inspectFigureOutput } from './figure-validation';
 import { experimentFileLimit } from './experiment-files';
 import { ResearchProcessError } from './process-runner';
 import { readResearchFile, researchContentHash } from './research-files';
+import {researchFigureDataPath, researchFigureDataTraceSchema} from '../../../shared/schemas/research-figure-data';
 
 export const figureValidationPath = 'figure-validation.json';
 
@@ -41,7 +42,11 @@ export async function finishFigureOutput(
   output: string,
   options: ResearchFigureOptions,
   rendererHash: string,
+  sourceHash: string,
   signal: AbortSignal
 ): Promise<void> {
+  const trace = researchFigureDataTraceSchema.parse(JSON.parse(
+    (await readResearchFile(output, researchFigureDataPath, experimentFileLimit)).toString('utf8')));
+  if (trace.sourceHash !== sourceHash || trace.rendererHash !== rendererHash) throw new Error('research_figure_data_trace_changed');
   await validateFigureOutput(output, options, rendererHash, signal);
 }

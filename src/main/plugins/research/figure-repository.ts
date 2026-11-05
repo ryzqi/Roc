@@ -6,6 +6,7 @@ import { researchFigureValidationSchema, type ResearchFigureValidation } from '.
 import type { ResearchArtifact, ResearchFigure, ResearchFigureRecordRequest } from '../../../shared/types';
 import { researchContentHash } from './research-files';
 import type { ResearchRepository } from './repository';
+import {researchFigureDataPath} from '../../../shared/schemas/research-figure-data';
 
 type Row = { snapshot_json: string };
 export const figureManifestPath = 'figure-manifest.json';
@@ -133,6 +134,9 @@ export function assertFigureRun(run: ResearchFigureRun, input: ResearchFigureVal
   }
   if (JSON.stringify(run.request.figure) !== JSON.stringify(validation.options)) throw new Error('research_figure_options_changed');
   if (run.environment.hash !== validation.rendererHash) throw new Error('research_figure_renderer_changed');
+  if (!run.files.some(file => file.area === 'output' && file.path === researchFigureDataPath && file.size > 0)) {
+    throw new Error('research_figure_data_trace_required');
+  }
   for (const expected of validation.files) {
     if (!run.files.some((file) => file.area === 'output' && file.path === expected.path && file.sha256 === expected.sha256 && file.size === expected.size)) {
       throw new Error('research_figure_output_changed');
@@ -142,5 +146,5 @@ export function assertFigureRun(run: ResearchFigureRun, input: ResearchFigureVal
 
 export function figureManifest(run: ResearchFigureRun, validation: ResearchFigureValidation): string {
   const { artifactId: _artifactId, ...execution } = run;
-  return JSON.stringify({ version: 1, execution, validation }, null, 2);
+  return JSON.stringify({ version: 2, execution, validation }, null, 2);
 }

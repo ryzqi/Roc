@@ -9,6 +9,9 @@ import { researchFigureRenderJobSchema, researchFigureRenderResultSchema, type R
 import { runResearchJob } from './research-job';
 import { ResearchProcessError } from './process-runner';
 import { getResearchFigureRendererEnvironment } from './figure-renderer-environment';
+import {collectFigureDataTrace} from './figure-data-trace';
+import {researchFigureDataPath, type ResearchFigureDataTrace} from '../../../shared/schemas/research-figure-data';
+import type {ResearchFigureRenderResult} from '../../../shared/schemas/research-figures';
 
 type VegaRandomApi = { random: () => number; setRandom: (next: () => number) => void };
 const vegaRandomApi = vega as typeof vega & VegaRandomApi;
@@ -226,19 +229,20 @@ function svgDimensions(svg: string): { width: number; height: number } {
   return { width, height };
 }
 
-async function writeOutput(paths: FigureJobPaths, name: string, bytes: Buffer, budget: RenderBudget): Promise<{ path: 'figure.png' | 'figure.svg' | 'figure.pdf'; size: number; sha256: string }> {
+async function writeOutput<P extends 'figure.png' | 'figure.svg' | 'figure.pdf' | typeof researchFigureDataPath>(
+  paths: FigureJobPaths, name: P, bytes: Buffer, budget: RenderBudget): Promise<{path: P; size: number; sha256: string}> {
   if (bytes.byteLength === 0 || bytes.byteLength > MAX_FIGURE_OUTPUT_BYTES) return fail('research_figure_output_too_large');
   budget.outputBytes += bytes.byteLength;
   if (budget.outputBytes > MAX_FIGURE_TOTAL_OUTPUT_BYTES) return fail('research_figure_outputs_total_too_large');
   await writeFile(resolve(paths.output, name), bytes, { flag: 'wx', mode: 0o600 });
   return {
-    path: name as 'figure.png' | 'figure.svg' | 'figure.pdf',
+    path: name,
     size: bytes.byteLength,
     sha256: createHash('sha256').update(bytes).digest('hex'),
   };
 }
 
-export async function renderResearchFigure(input: ResearchFigureRenderJob, signal?: AbortSignal): Promise<{ engine: 'vega-lite'; rendererHash: string; outputs: Array<{ path: 'figure.png' | 'figure.svg' | 'figure.pdf'; size: number; sha256: string }>; sourceHash: string }> {
+export async function renderResearchFigure(input: ResearchFigureRenderJob, signal?: AbortSignal): Promise<ResearchFigureRenderResult> {
   const request = researchFigureRenderJobSchema.parse(input);
   return withSeededVegaRandom(request.figure.seed, () => runResearchJob({
     projectRoot: request.projectRoot,
@@ -268,11 +272,16 @@ export async function renderResearchFigure(input: ResearchFigureRenderJob, signa
     const spec = { ...inlineSpec, width: baseWidth, height: baseHeight,
       autosize: { type: 'fit', contains: 'padding' } } as TopLevelSpec;
     let svg: string;
-    const view = new View(parse(compile(spec).spec), { renderer: 'none', loader: loader() });
+    let trace: ResearchFigureDataTrace;
+    const environment = getResearchFigureRendererEnvironment();
+    const compiled = compile(spec).spec;
+    const view = new View(parse(compiled), { renderer: 'none', loader: loader() });
     try {
       await view.runAsync();
       svg = await view.toSVG(request.figure.dpi / 72);
-    } catch {
+      trace = collectFigureDataTrace(compiled, view.scenegraph(), createHash('sha256').update(specBytes).digest('hex'), environment.hash);
+    } catch (error) {
+      if (error instanceof ResearchProcessError) throw error;
       return fail('research_figure_render_failed');
     } finally {
       view.finalize();
@@ -303,7 +312,7 @@ export async function renderResearchFigure(input: ResearchFigureRenderJob, signa
       await writeOutput(paths, 'figure.svg', svgBytes, budget),
       await writeOutput(paths, 'figure.pdf', pdfBytes, budget),
     ];
-    const environment = getResearchFigureRendererEnvironment();
-    return researchFigureRenderResultSchema.parse({ engine: 'vega-lite', rendererHash: environment.hash, outputs });
+    const dataTrace = await writeOutput(paths, researchFigureDataPath, Buffer.from(JSON.stringify(trace)), budget);
+    return researchFigureRenderResultSchema.parse({ engine: 'vega-lite', rendererHash: environment.hash, outputs, dataTrace });
   }));
 }

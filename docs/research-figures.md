@@ -43,11 +43,15 @@
 
 `inspectFigureEnvironment` 返回 Vega、Vega-Lite、Canvas 和 Node 环境及其 hash。可以将 `hash` 传给 `startFigure.expectedEnvironmentHash`，在已检查环境变化时拒绝启动。UI 不必传 hash；主进程使用当前环境并将其记录在运行快照中。
 
-`startFigure` 返回可轮询的运行记录。使用 `getFigureRun` 查看状态，使用 `cancelFigure` 取消。每次重绘使用新的 `requestId`；修改 spec、数据、参数或选项都会产生独立运行。成功运行生成 `figure.png`、`figure.svg`、单页 `figure.pdf` 和 `figure-validation.json`。PDF 使用现有 `@napi-rs/canvas` PDF 后端，页面尺寸和输出 DPI 来自 `figure` 选项。主进程独立校验三种格式的尺寸、页数及 SHA-256；验证失败时运行标记为失败，并保留已收集的日志和产物供诊断。
+`startFigure` 返回可轮询的运行记录。使用 `getFigureRun` 查看状态，使用 `cancelFigure` 取消。每次重绘使用新的 `requestId`；修改 spec、数据、参数或选项都会产生独立运行。成功运行生成 `figure.png`、`figure.svg`、单页 `figure.pdf`、`figure-data.json` 和 `figure-validation.json`。PDF 使用现有 `@napi-rs/canvas` PDF 后端，页面尺寸和输出 DPI 来自 `figure` 选项。主进程独立校验三种格式的尺寸、页数及 SHA-256；验证失败时运行标记为失败，并保留已收集的日志和产物供诊断。
 
 阶段角色使用 `start_figure → get_figure → publish_figure`，三个工具统一采用真实图稿运行 `runId`。`get_figure` 只读取当前项目、当前有效阶段所拥有的图稿，返回状态、错误、文件数和 `artifactId`，不返回二进制。`failed`、`cancelled`、`interrupted` 是终态，不能继续轮询或发布。`get_experiment` 只查询脚本实验；图稿工具不接受 `experimentId` 别名。
 
-渲染 pipeline `/2` 在作业入口将 spec 相对路径解析到冻结项目目录，并使用 Vega-Lite `autosize: { type: "fit", contains: "padding" }`，按指定物理尺寸容纳坐标轴和留白。SVG/PDF 保持英寸换算后的 point 尺寸，PNG 使用 `Math.trunc(inches * dpi)` 像素尺寸。单图和 layered 图适用 fit；复杂组合或显式 step 不能满足固定尺寸时，输出校验失败，不改变请求尺寸或放宽验证。发布与运行的 `artifactId` 在同一数据库事务中关联。
+渲染 pipeline `/3` 在作业入口将 spec 相对路径解析到冻结项目目录，并使用 Vega-Lite `autosize: { type: "fit", contains: "padding" }`，按指定物理尺寸容纳坐标轴和留白。SVG/PDF 保持英寸换算后的 point 尺寸，PNG 使用 `Math.trunc(inches * dpi)` 像素尺寸。单图和 layered 图适用 fit；复杂组合或显式 step 不能满足固定尺寸时，输出校验失败，不改变请求尺寸或放宽验证。发布与运行的 `artifactId` 在同一数据库事务中关联。
+
+`figure-data.json` 保存实际 Vega scenegraph 的 post-transform datum、场景路径、完整编译编码、直接字段编码及常量/暂不支持的编码通道，绑定源 spec、渲染环境和编译 spec 的 SHA-256。filter、aggregate、formula 和 stack 之后的数据来自实际绘制项；默认柱图的 y 字段可能是 stack 生成的 `mean_end`，而非输入的 `mean`。条件、表达式及嵌套字段编码保留完整原文并标为 unsupported；不推断科学含义或自动关联实验指标。回执最多 1000 个 mark，场景遍历最多 100,000 项；超限拒绝，不截断。
+
+主进程核对 renderer 返回的回执字节/hash，再核对回执来源及环境。回执是运行输出及 version 2 图稿清单的必需文件，任何字节变化会阻止验证、审批或导出。导出保留 `provenance/figures/<figureId>/` 下完整图稿清单、输入、输出及日志；三种图片同时位于 LaTeX 图稿目录。
 
 运行快照固化工具清单。包含旧图稿查询合同的快照不原地扩权；执行或重试会报 `research_run_tool_contract_changed`，须使用新 `requestId` 新建阶段运行。历史记录保留用于审计。
 
@@ -74,3 +78,21 @@ roc-preview://research/figures/{encodedProjectId}/{encodedFigureId}/{png|svg|pdf
 ```
 
 图稿与实验来源在工作区原文件变化后仍可读取。批准的图稿可进入[科研最终导出](research-exports.md)。图稿域没有单独界面（[ADR 0024](adr/0024-stage-surface-removed.md)）：对话代理调度图稿阶段，阶段角色通过内部 `research.figure.startOwned` / `getOwned` / `publishOwned` 映射调用生产工具。Owned 映射不增加公开 IPC 能力；深链到 `?view=figures` 会明确失败。审核与替换仍经过人工审批闸门 `research_approve_gate`。
+
+## 实际场景回执验证（X-WRITE A4C1）
+
+范围状态：`Verified passing`。工作目录 `/Users/Apple_501/Desktop/Roc/Roc`，日志位于 `.artifacts/research-optimization/`。
+
+| 命令 | 结果 | 日志 |
+| --- | --- | --- |
+| `node --test tests/unit/research-figure-integration.test.mjs tests/unit/research-figure-owned.test.mjs tests/unit/research-production-review.test.mjs tests/unit/research-export-body-gate.test.mjs` | 24/24，通过实际 filter/aggregate/formula/stack、条件编码、确定性回执和两阶段篡改拒绝 | `xwrite-a4c1-focused-final.log` |
+| `pnpm build` | 通过，包含 typecheck | `xwrite-a4c1-build.log` |
+| `node scripts/run-research-p0.mjs` | 13/13，实际渲染/编译/导出逐文件哈希通过 | `xwrite-a4c1-p0.log` |
+| `pnpm harness:eval` | 94/94 | `xwrite-a4c1-harness.log` |
+| `node --test tests/renderer/artifact-production.test.mjs` | 9/9 | `xwrite-a4c1-renderer.log` |
+| `node scripts/smoke-electron.mjs` | 13/13，零 renderer error | `xwrite-a4c1-startup.log` |
+| `pnpm check:ipc` / `pnpm check:renderer-chunks` | 当前合同；1,134,192 bytes / 6 eager 文件 | `xwrite-a4c1-ipc.log` / `xwrite-a4c1-chunks.log` |
+
+补充完整 unit 在断言修正及导出消费者修改前启动，结果 1235/1236；唯一失败是测试预期 experiment 文件错误，而实际为 `research_figure_snapshot_changed`。保留失败日志 `xwrite-a4c1-unit.log`，修正精确错误断言后上表最终 24 项通过，未宣称完整 unit 重跑通过。前两轮图稿测试还错误预期 y 编码原字段；实际渲染证明 stack-end 字段才是正确回执。没有放宽数值、来源或错误合同。
+
+此部分记录实际绘制数据及冻结字节。实验指标/Evidence 的人工映射、规则审核和消费者由 A4C2 接入，C1 不声明已完成图稿科学一致性，也不代替科学审核。
