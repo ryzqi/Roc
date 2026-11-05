@@ -52,6 +52,7 @@ import { ResearchIdeaRepository } from './idea-repository';
 import {ResearchIdeaPlanRepository} from './idea-plan-repository';
 import {ResearchIdeaOutcomeRepository} from './idea-outcome-repository';
 import {ResearchCitationReviewRepository} from './citation-review-repository';
+import {ResearchConsistencyRepository} from './consistency-repository';
 import { ResearchKnowledgeRepository, type KnowledgeSourceWrite } from './knowledge-repository';
 import type { ResearchTaskRepository } from './research-task-repository';
 import {researchArtifactInspectionBodySchema, researchArtifactInspectResultSchema,
@@ -98,6 +99,7 @@ export class ResearchRepository {
   readonly ideaPlans: ResearchIdeaPlanRepository;
   readonly ideaOutcomes: ResearchIdeaOutcomeRepository;
   readonly citationReviews: ResearchCitationReviewRepository;
+  readonly consistency: ResearchConsistencyRepository;
   readonly knowledge: ResearchKnowledgeRepository;
   private knowledgeWriter: ((input: KnowledgeSourceWrite, sourceMetadata?: Record<string, unknown>) => Promise<ResearchKnowledgeDocument>) | null = null;
   private readonly pendingKnowledgeWrites: Array<{ input: KnowledgeSourceWrite; sourceMetadata: Record<string, unknown> }> = [];
@@ -136,6 +138,7 @@ export class ResearchRepository {
     this.ideaPlans = new ResearchIdeaPlanRepository(db, this, now);
     this.ideaOutcomes = new ResearchIdeaOutcomeRepository(db, this, now);
     this.citationReviews = new ResearchCitationReviewRepository(db, this, now);
+    this.consistency = new ResearchConsistencyRepository(db, this, now);
     this.knowledge = new ResearchKnowledgeRepository(db, (id) => { this.getProject(id); }, now);
   }
 
@@ -325,6 +328,11 @@ export class ResearchRepository {
       const content = this.runs.getArtifactContent(project.id, artifact.id);
       const claims = this.evidence.listClaims({projectId: project.id, artifactId: artifact.id});
       const relations = this.evidence.relations.forArtifact(artifact.id, project.id);
+      const consistency = this.consistency.latest(project.id, artifact.id);
+      const consistencyReviews = consistency === null ? [] : [{
+        reviewId: consistency.snapshot.id, reviewHash: consistency.snapshotHash,
+        version: consistency.snapshot.version, recordedAt: consistency.snapshot.recordedAt
+      }];
       const citationReviews = this.citationReviews.forArtifact(project.id, artifact.id).map(({snapshot, snapshotHash}) => ({
         reviewId: snapshot.id, reviewHash: snapshotHash, claimId: snapshot.request.claimId,
         evidenceId: snapshot.request.evidenceId, version: snapshot.version,
@@ -371,7 +379,7 @@ export class ResearchRepository {
       const body = researchArtifactInspectionBodySchema.parse({
         artifact, projectStatus: project.status, currentStage: project.currentStage,
         stage, content, origin, claims, evidence, relations,
-        production, ideaCanvas, ideaPlan, ideaOutcomes, citationReviews, provenance: rows.map(toProvenance), availableActions
+        production, ideaCanvas, ideaPlan, ideaOutcomes, citationReviews, consistencyReviews, provenance: rows.map(toProvenance), availableActions
       });
       const version = createHash('sha256').update(JSON.stringify(body)).digest('hex');
       return researchArtifactInspectResultSchema.parse({

@@ -152,3 +152,7 @@ export {registerResearchCitationCoverageCapability} from '../../../src/main/plug
 export * from '../../../src/shared/schemas/research-citation-reviews';
 export {ResearchCitationReviewRepository} from '../../../src/main/plugins/research/citation-review-repository';
 export {registerResearchCitationReviewCapabilities} from '../../../src/main/plugins/research/citation-review-capabilities';
+export * from '../../../src/shared/schemas/research-consistency';
+export {calculateConsistency, consistencyNumericLocations} from '../../../src/main/plugins/research/consistency-calculation';
+export {ResearchConsistencyService} from '../../../src/main/plugins/research/consistency-service';
+export {registerResearchConsistencyCapabilities} from '../../../src/main/plugins/research/consistency-capabilities';

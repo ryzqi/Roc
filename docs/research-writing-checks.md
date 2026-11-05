@@ -10,7 +10,7 @@
 
 报告 hash 包含完整正文、工件快照版本、来源、关系和书目 revision，读取时间不参与 hash。来源或正文失效明确拒绝检查；可以检查仍有效的已批准工件和归档项目，但不会批准、运行模型或写数据库。旧报告对象保持原字节，重读得到新报告。
 
-跨正文/表格/图稿指标映射、审稿回复矩阵和期刊规则尚未实现。
+数值映射按下文 A4A 合同实现；图稿实际绘制数据、审稿回复矩阵和期刊规则仍待后续部分。
 
 ## X-WRITE A2：同壳引用检查器
 
@@ -106,3 +106,39 @@ A3A 范围状态：`Verified passing`。最终完整补充检查 `pnpm test:unit
 | `pnpm check:renderer-chunks` | 1,134,152 bytes，6 eager 文件 | `xwrite-a3b-chunks.log` |
 
 最初 renderer 9/10 中，既有支持筛选测试读取父刷新前的旧 DOM。原样单跑通过，随后将同步条件明确为新报告 hash 与旧 hash 不同，保留空列表和 hash 断言；最终全套通过。没有修改产品来掩盖错误。两主题 650px 的理由框/按钮截图实际查看，宽度、焦点及内部滚动正常。裁切审计 `cut=0`，仅 3 个既有抽屉物理边缘 `hidden`，精确断言保留；证据在 `citation-coverage-ui/`。
+
+## X-WRITE A4A：来源指标与主张数值位置
+
+`research.saveConsistencyReview` 将摘要、正文、表格或图稿 caption 中的完整数值字符位置绑定到真实实验结果指标及其 Evidence。每条映射显式包含主张 hash、位置、展示单位、指标 ID、结果 ID/hash、来源证据，以及转换、舍入和容差规则。位置使用 JS 字符索引，必须覆盖整个十进制数值 token（含符号和指数）。正文主张必须属于当前保存的正文。
+
+单位一致时显式选择 identity；转换使用带原/目标单位、scale、offset 和理由的 affine 规则。舍入可选择不舍入或 0–12 位十进制、half-away-from-zero；十进制舍入由有理数计算，负数半数同样远离零。允许差异为 `max(absolute, relative * abs(expected))`，无隐藏 epsilon。转换、差异和容差超出有限范围时明确拒绝。不一致值照实保存 observed/expected/difference，不强行改成一致。
+
+DB48 按工件追加不可变人工审核版本，保存完整主张、Evidence、结果回执和计算。首次 parent 为显式 null；后续要求最新 ID/hash。窗口身份来自主进程，同内容重试复核当前来源后零重复写入。错项目、错主张、错指标、失效来源、旧工件版本、旧 parent、已批准工件和归档项目明确拒绝。当前保存边界也独立校验材料及正文归属。
+
+`research.inspectConsistency` 按当前来源重新核对最新映射，主张变化将旧位置标为 changed；来源字节或 Evidence 失效拒绝检查。报告保留每个未映射数值位置，映射一个值不会隐藏同主张的其他数值。读取 hash 可识别报告变化，异步来源核对后再检查工件版本。审核回执头进入整个工件快照 hash，保存数值审核使旧阶段审批上下文失效；数值一致不授予科学批准。
+
+`research.getConsistencyHistory` 分页读取 `stored_receipt`，独立核对保存原文/hash、材料计算、数据库字段和父版本锚点。当前来源失效后仍可阅读原始历史，历史不会冒充当前来源检查。
+
+A4A 仅实现主张数值位置合同和主进程能力。图稿 caption 的文字核对不能证明实际绘制数据一致；实际图稿数据映射和同壳编辑器将在后续部分实现。
+
+### A4A 检查
+
+工作目录同上，日志位于 `.artifacts/research-optimization/`。
+
+| 命令 | 结果 | 日志 |
+| --- | --- | --- |
+| `node --test tests/unit/research-consistency.test.mjs tests/unit/research-citation-reviews.test.mjs tests/unit/research-artifact-inspector.test.mjs tests/unit/research-gate-review.test.mjs` | 23/23 通过 | `xwrite-a4a-final2-focused.log` |
+| `node --test tests/unit/research-consistency.test.mjs` | 补充直接保存边界回归后 7/7 通过 | `xwrite-a4a-storage-focused.log` |
+| `node --test --test-name-pattern='scientific consistency' tests/integration/research-python-experiments.test.mjs` | 真实 CPython 1/1 通过；摘要/正文/表格 2 一致、1 不一致，改结果字节明确拒绝，历史保留 | `xwrite-a4a-python.log` |
+| `pnpm build` | 最终源码通过，含 typecheck | `xwrite-a4a-final-build.log` |
+| `node --test tests/renderer/citation-coverage.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs` | 44/44 通过 | `xwrite-a4a-renderer.log` |
+| `node scripts/run-research-p0.mjs` | 13/13 通过 | `xwrite-a4a-p0.log` |
+| `node scripts/smoke-electron.mjs` | 13/13 通过，零 renderer error | `xwrite-a4a-startup.log` |
+| `pnpm check:ipc` | 生成合同当前 | `xwrite-a4a-ipc.log` |
+| `pnpm check:renderer-chunks` | 1,134,152 bytes，6 eager 文件 | `xwrite-a4a-chunks.log` |
+| `pnpm harness:eval` | 94/94 通过 | `xwrite-a4a-harness.log` |
+| `pnpm test:unit` | 1233/1233 通过；随后新增的直接保存边界由上表 7 项补充检查覆盖，主进程源码未再修改 | `xwrite-a4a-unit.log` |
+
+首次数值位置夹具索引错误，已修正为实际完整 token。失效来源夹具最初错误假设 `knowledge.upsert` 会使原 Evidence 失效；改用现有显式失效 API，并保留 `superseded` 和 `source_changed` 断言。来源检查补足 Evidence 当前状态及保存原文的严格核对。`xwrite-a4a-focused.log` 和 `xwrite-a4a-final-focused.log` 保留早期失败；真实 Python 测试与失败的 focused 曾在换行复合命令中执行，后者的通过不以整个命令 exit 0 推断，最终另跑严格串行检查。
+
+A4A 本地工程范围：`Verified passing`。当前检查不证明独立科学样本的准确率。

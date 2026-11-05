@@ -48,6 +48,64 @@ with open(os.path.join(roc.output_dir, "metrics.json"), "w") as output:
 print("ACTUAL_METRIC_RESULT", flush=True)
 `;
 
+test('scientific consistency binds actual CPython result evidence to abstract body and table locations and refuses changed output', async () => {
+  const f = await fixture(metricSource, {scenario: 'actual-scientific-consistency'});
+  try {
+    await writeFile(join(f.workspace, 'data.txt'), '-3 -2 -1\n');
+    const run = await f.execute(), output = run.files.find(file => file.path === 'metrics.json');
+    assert.equal(run.status, 'completed');
+    const results = new api.ResearchExperimentResultService(f.repository, f.service);
+    const human = (capability, action) => api.withResearchHumanContext({capability, projectId: f.project.id, windowId: 72}, action);
+    const receipt = await human('research.experimentResults.review', () => results.review({
+      projectId: f.project.id, requestId: 'consistency-result', runId: run.id, expectedInputHash: run.inputHash,
+      resultPath: output.path, expectedResultHash: output.sha256,
+      definitions: [{id: 'mean', label: 'Mean', definition: 'Arithmetic mean of scaled observations', unit: 'ms', direction: 'lower'}],
+      method: {name: 'Arithmetic mean', rationale: 'All observations', assumptions: 'Synthetic sample', limitations: 'No inference'}
+    }));
+    const evidence = await human('research.experimentResults.captureEvidence', () => results.captureEvidence({
+      projectId: f.project.id, resultId: receipt.snapshot.id, expectedHash: receipt.snapshotHash, metricId: 'mean'}));
+    f.db.prepare("UPDATE research_projects SET current_stage='writing' WHERE id=?").run(f.project.id);
+    f.db.prepare("UPDATE research_stage_states SET status='ready' WHERE project_id=? AND stage='writing'").run(f.project.id);
+    const artifact = f.repository.createArtifact({projectId: f.project.id, stage: 'writing', kind: 'manuscript',
+      title: 'Actual measured report', path: null});
+    const claims = [
+      ['abstract', 'Mean -0.004 s.'], ['body', 'Measured mean -4 ms.'], ['table', '| Mean | -5 | ms |']
+    ].map(([surface, content]) => ({surface, claim: f.repository.evidence.createClaim({
+      projectId: f.project.id, artifactId: artifact.id, subjectType: 'paragraph', content,
+      status: 'supported', evidenceIds: [evidence.id]})}));
+    f.repository.manuscripts.saveManuscript({artifactId: artifact.id,
+      sections: claims.map(({surface, claim}) => ({title: surface, claimIds: [claim.id]}))});
+    const service = new api.ResearchConsistencyService(f.repository, results);
+    const request = {projectId: f.project.id, artifactId: artifact.id, requestId: 'actual-locations', parent: null,
+      expectedArtifactVersion: f.repository.inspectArtifact({projectId: f.project.id, artifactId: artifact.id, expectedVersion: null}).snapshot.version,
+      rationale: 'Actual output and explicit locations; retain deliberately inconsistent table',
+      bindings: claims.map(({surface, claim}) => {
+        const token = api.consistencyNumericLocations(claim.content)[0];
+        return {claimId: claim.id, expectedClaimHash: api.relationClaimHash(claim), surface, start: token.start, end: token.end,
+          unit: surface === 'abstract' ? 's' : 'ms', evidenceId: evidence.id, resultId: receipt.snapshot.id,
+          resultHash: receipt.snapshotHash, metricId: 'mean', rule: {
+            conversion: surface === 'abstract' ? {kind: 'affine', fromUnit: 'ms', toUnit: 's', scale: 0.001, offset: 0,
+              rationale: 'Milliseconds to seconds'} : {kind: 'identity'}, rounding: {kind: 'none'},
+            tolerance: {absolute: 0, relative: 0, rationale: 'Exact recorded values'}}};
+      })};
+    const saved = await human('research.consistency.save', () => service.save(request));
+    const inspected = await service.inspect({projectId: f.project.id, artifactId: artifact.id, expectedHash: null});
+    assert.deepEqual(inspected.report.counts, {mapped: 3, consistent: 2, inconsistent: 1, changed: 0, unmappedClaims: 0, unmappedValues: 0});
+    assert.equal(saved.snapshot.material[0].result.snapshot.execution.runId, run.id);
+    assert.equal(saved.snapshot.material[0].calculation.expectedValue, -0.004);
+    assert.equal(saved.snapshot.material[2].calculation.observed, -5);
+    assert.equal(saved.snapshot.material[2].calculation.expectedValue, -4);
+    const before = f.db.prepare('SELECT total_changes()').pluck().get();
+    assert.deepEqual(await human('research.consistency.save', () => service.save(request)), saved);
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(), before);
+    await writeFile(join(f.repository.experiments.root(f.project.id, run.id), 'output', 'metrics.json'), '{"changed":true}\n');
+    await assert.rejects(service.inspect({projectId: f.project.id, artifactId: artifact.id, expectedHash: null}), /research_experiment_snapshot_changed/u);
+    assert.deepEqual(f.repository.consistency.history({projectId: f.project.id, artifactId: artifact.id, offset: 0, limit: 10}).items, [saved]);
+    receipts.push({scenario: 'actual-scientific-consistency', runId: run.id, saved, report: inspected.report,
+      alteredOutputRejected: true});
+  } finally {await f.cleanup();}
+});
+
 test('actual frozen method assessment retains negative result provenance, human revisions and exact disk recovery without computation', async () => {
   const f = await fixture(metricSource, {scenario: 'frozen-idea-outcome'});
   let reopened;
