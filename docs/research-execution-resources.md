@@ -88,3 +88,9 @@ stdout/stderr 共用真实字节计数并最多保留指定总量。日志超限
 本增量为 `Verified passing`。在上述仓库目录执行 `pnpm test:research-resources`，最终 20/20；随后只补充非空但缺少一个可写目录的检查，`node --test --test-name-pattern='missing or incomplete write limits' tests/integration/research-process-resources.test.mjs`，1/1，零文件创建。`node --test tests/unit/research-experiment-resources.test.mjs tests/unit/research-process-admission.test.mjs tests/unit/research-process-resources.test.mjs tests/unit/research-compute-policy.test.mjs`，15/15；`pnpm test:unit`，1145/1145；生产 P0 13/13、Harness 94/94、启动 13/13 零 renderer 错误，IPC/分块检查通过。
 
 初轮全量单测、生产 P0、启动与 IPC/Harness 覆盖完整写入合同；启动这些检查后只修复日志终止宽限，最终 `pnpm build`（含 typecheck）和实际 20 项原生检查覆盖该修复，不改变已通过的写入合同或其他消费者。eager JS 为 1132907 字节、6 个文件。完整回执复制保留在 `.artifacts/research-optimization/xsafe-a5/native-resources-final.json`；后续专项可写入最新 `native-resources.json`，不得覆盖完整回执。红测、原生复验和全部检查日志为 `xsafe-a5-*.log`。X-SAFE 的原生环境数据/代码完整性与其余资源持久化仍未完成。
+
+## 离线 runner 合同
+
+删除无调用方的 `full`、`loopback` 网络模式及其 Seatbelt 允许规则。科研计算 runner 的类型与运行时均只接受 `networkAccess: 'none'`，其他值在解析任何文件范围或启动代码前拒绝。模型/依赖下载走独立准备操作，不复用计算进程网络授权。移除没有调用方的 `ResearchExperimentService.runProcess` 转发方法。
+
+本增量为 `Verified passing`。有效 `/usr/bin/true` 命令的网络合同红测 0/1，修复后相关单测联合 16/16。`pnpm test:research-resources` 为 21/21，新增两种过时模式均在产生文件前拒绝，并保留实际 DNS/TCP 拒绝、GPU、资源和清理矩阵。`pnpm build`（含 typecheck）、IPC、分块检查通过；标准生产 P0 专项 1/1（包括计算、文献、出版、交付与真实超时）、Harness 94/94、启动 13/13 零 renderer 错误。所有生产者原本都使用 `none`，未重复 A5 已通过的 1145 项全量检查；本次新增拒绝合同由专项直接验证。回执为 `.artifacts/research-optimization/xsafe-a6/native-resources.json`，日志为 `xsafe-a6-*.log`。原生环境数据/代码审计及其余持久化继续执行。

@@ -41,7 +41,7 @@ export { ProjectBudgetLedger } from '../../../src/main/services/deep-agent/proje
 export { registerResearchProjectBudgetCapabilities } from '../../../src/main/plugins/research/project-budget-capabilities';
 export { ResearchExperimentService } from '../../../src/main/plugins/research/experiment-service';
 export { ResearchExperimentEnvironmentService } from '../../../src/main/plugins/research/experiment-environment';
-export { runResearchProcess, ResearchProcessError } from '../../../src/main/plugins/research/process-runner';
+export { runResearchProcess, researchSandboxProfile, ResearchProcessError } from '../../../src/main/plugins/research/process-runner';
 export { researchExperimentResourceReportSchema, researchProcessResourceUsageSchema } from '../../../src/shared/schemas/research-process-resources';
 export { ResearchWorkspaceFileService } from '../../../src/main/plugins/research/workspace-files';
 export { ResearchToolchain } from '../../../src/main/plugins/research/toolchain';

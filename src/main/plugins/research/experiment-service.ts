@@ -98,10 +98,6 @@ export class ResearchExperimentService {
     });
   }
 
-  runProcess(request: ResearchProcessRequest): Promise<ResearchProcessResult> {
-    return this.run(request);
-  }
-
   abort(id: string): void { this.executions.abort(id); }
 
   async cancel(projectId: string, id: string): Promise<ResearchExperimentExecution> {

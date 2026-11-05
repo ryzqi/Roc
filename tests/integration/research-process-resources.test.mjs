@@ -155,7 +155,7 @@ int main(void) { @autoreleasepool {
     { timeout: 30000, maxBuffer: 1024 * 1024 });
 });
 after(async () => {
-  const directory = join(process.cwd(), '.artifacts/research-optimization/xsafe-a5');
+  const directory = join(process.cwd(), '.artifacts/research-optimization/xsafe-a6');
   await mkdir(directory, { recursive: true });
   await writeFile(join(directory, 'native-resources.json'), JSON.stringify({
     backend: 'macos-seatbelt', cpuHardLimit: false, memoryHardLimit: false,
@@ -447,4 +447,13 @@ test('real log flooding preserves at most the declared combined byte cap and ter
   assert.ok(group); assert.throws(() => process.kill(-Number(group[1]), 0), { code: 'ESRCH' });
   receipts.push({ scenario: 'logflood', code: failure.code, capturedBytes: 4096,
     resources: failure.resourceUsage, admission: failure.admission });
+});
+
+test('obsolete network grants are rejected before spawning a native computation', async () => {
+  for (const networkAccess of ['full', 'loopback']) {
+    const f = await request('fileflood');
+    await assert.rejects(runResearchProcess({ ...f.input, networkAccess }), /research_process_network_policy_required/);
+    await assert.rejects(readFile(f.marker), { code: 'ENOENT' });
+  }
+  receipts.push({ scenario: 'obsolete-network-grants', launched: false });
 });

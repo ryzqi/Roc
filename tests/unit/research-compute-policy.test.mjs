@@ -19,6 +19,19 @@ test('ordinary document and index parsing default to CPU without an implicit GPU
   }
 });
 
+test('the computation sandbox refuses unused network grants before resolving any executable or file scope', async () => {
+  for (const networkAccess of ['full', 'loopback']) {
+    await assert.rejects(api.researchSandboxProfile({
+      command: '/usr/bin/true', readablePaths: ['/usr/bin/true'], writablePaths: [],
+      allowGpuAcceleration: false, networkAccess
+    }), /research_process_network_policy_required/);
+    await assert.rejects(api.researchSandboxProfile({
+      command: '/does-not-exist', readablePaths: [], writablePaths: [],
+      allowGpuAcceleration: false, networkAccess
+    }), /research_process_network_policy_required/);
+  }
+});
+
 test('actual role SDK refuses a model networking request before invoking effects or creating an execution', async () => {
   const f = createResearchFixture(api, 'experiment');
   let starts = 0;

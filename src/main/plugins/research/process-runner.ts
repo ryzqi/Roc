@@ -18,7 +18,7 @@ export type ResearchProcessRequest = {
   admission: Omit<ResearchProcessAdmissionRequest, 'gpu'>;
   terminationGraceMs?: number;
   allowGpuAcceleration: boolean;
-  networkAccess: 'none' | 'loopback' | 'full';
+  networkAccess: 'none';
   additionalExecutables?: readonly string[];
   signal?: AbortSignal;
   input?: string;
@@ -82,7 +82,7 @@ async function assertProcessWriteLimits(limits: readonly ResearchProcessWriteLim
 
 export async function researchSandboxProfile(request: Pick<ResearchProcessRequest, 'command' | 'readablePaths' | 'writablePaths' | 'allowGpuAcceleration' | 'networkAccess' | 'additionalExecutables'>): Promise<string> {
   if (typeof request.allowGpuAcceleration !== 'boolean') throw new Error('research_process_acceleration_policy_required');
-  if (!['none', 'loopback', 'full'].includes(request.networkAccess)) throw new Error('research_process_network_policy_required');
+  if (request.networkAccess !== 'none') throw new Error('research_process_network_policy_required');
   const filter = async (path: string): Promise<string> => {
     if (!isAbsolute(path)) throw new Error('research_process_absolute_path_required');
     const resolved = await realpath(path);
@@ -92,14 +92,6 @@ export async function researchSandboxProfile(request: Pick<ResearchProcessReques
   const readable = await Promise.all([...request.readablePaths, request.command].map(filter));
   const writable = await Promise.all(request.writablePaths.map(filter));
   const executable = await Promise.all([request.command, ...(request.additionalExecutables ?? [])].map(filter));
-  const networkRules: string[] = [];
-  switch (request.networkAccess) {
-    case 'none': break;
-    case 'full': networkRules.push('(allow network*)'); break;
-    case 'loopback': networkRules.push('(allow network-outbound (remote ip "localhost:*"))',
-      '(allow network-inbound (local ip "localhost:*"))', '(allow network-bind (local ip "localhost:*"))'); break;
-    default: throw new Error('research_process_network_policy_required');
-  }
   return [
     '(version 1)', '(deny default)', '(import "system.sb")',
     '(allow mach-bootstrap)', '(allow syscall*)', '(allow process-fork)',
@@ -112,7 +104,6 @@ export async function researchSandboxProfile(request: Pick<ResearchProcessReques
     ...(writable.length === 0 ? [] : [`(allow file-write* ${writable.join(' ')})`]),
     '(deny file-write-create (subpath "/cores"))',
     '(allow ipc-posix-shm)', '(allow ipc-posix-sem)',
-    ...networkRules,
     // Jobs using the ORT CoreML provider need the Apple GPU/CoreML services. This permission is
     // opt-in per job; CPU inference and ordinary experiment jobs do not receive it.
     ...(request.allowGpuAcceleration ? ['(allow iokit-open-user-client (iokit-user-client-class "IOSurfaceRootUserClient" "AGXDeviceUserClient" "IOGPUDeviceUserClient"))'] : [])
