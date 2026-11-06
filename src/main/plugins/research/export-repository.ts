@@ -7,7 +7,7 @@ import type { ResearchArtifact } from '../../../shared/types';
 import { researchContentHash } from './research-files';
 import type { ResearchRepository } from './repository';
 
-type Row = { snapshot_json: string; root_path: string };
+type Row = { id: string; project_id: string; request_id: string; artifact_id: string | null; status: string; snapshot_json: string; root_path: string };
 
 export class ResearchExportRepository {
   constructor(private readonly db: Database, private readonly research: ResearchRepository, private readonly now: () => string) {}
@@ -46,8 +46,12 @@ export class ResearchExportRepository {
 
   get(projectId: string, id: string): ResearchExportExecution {
     const row = this.row(id);
+    if (row.project_id !== projectId) throw new Error('research_export_project_mismatch');
     const record = researchExportExecutionSchema.parse(JSON.parse(row.snapshot_json));
-    if (record.projectId !== projectId) throw new Error('research_export_project_mismatch');
+    if (record.id !== row.id || record.projectId !== row.project_id || record.request.projectId !== projectId ||
+      record.request.requestId !== row.request_id || record.artifactId !== row.artifact_id || record.status !== row.status) {
+      throw new Error('research_export_identity_mismatch');
+    }
     return { ...record, approval: record.artifactId === null ? 'unpublished' : this.research.getArtifact(record.artifactId).status };
   }
 
@@ -158,7 +162,7 @@ export class ResearchExportRepository {
   }
 
   private row(id: string): Row {
-    const row = this.db.prepare('SELECT snapshot_json,root_path FROM research_export_executions WHERE id = ?').get(id) as Row | undefined;
+    const row = this.db.prepare('SELECT * FROM research_export_executions WHERE id = ?').get(id) as Row | undefined;
     if (row === undefined) throw new Error('research_export_not_found');
     return row;
   }

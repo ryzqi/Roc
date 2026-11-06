@@ -210,3 +210,8 @@ export {ResearchMonitorService} from '../../../src/main/plugins/research/monitor
 export {readMonitorUpdates, monitorUpdateEndpoint, searchMonitorMaterial} from '../../../src/main/plugins/research/monitor-provider-adapter';
 export {registerResearchMonitorCapabilities, researchMonitorCapabilities} from '../../../src/main/plugins/research/monitor-capabilities';
 export {bibliographyFromRecord} from '../../../src/main/plugins/research/literature-service';
+
+export * from '../../../src/shared/schemas/research-zenodo';
+export {ZenodoPreparationService, sealZenodo} from '../../../src/main/plugins/research/zenodo-preparation';
+export {hashZenodoFile} from '../../../src/main/plugins/research/zenodo-file';
+export {registerResearchZenodoCapabilities, researchZenodoCapabilities} from '../../../src/main/plugins/research/zenodo-capabilities';

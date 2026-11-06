@@ -22,6 +22,8 @@ import {buildExportCrate} from './export-crate';
 import {researchCrateMetadataPath, researchCrateProfilePath} from '../../../shared/schemas/research-ro-crate';
 import {researchCrateProfileHtml, serializeResearchCrate} from './export-ro-crate';
 import {researchExportManifestSchema, verifyExportPublicBundle} from './export-public-bundle';
+import {zenodoInputsRequestSchema, zenodoInputsSchema, type ZenodoInputs, type ZenodoInputsRequest} from '../../../shared/schemas/research-zenodo';
+import {hashZenodoFile} from './zenodo-file';
 
 export class ResearchExportService {
   private readonly session = new ResearchJobSession('research_export_closed');
@@ -124,6 +126,34 @@ export class ResearchExportService {
       const record = this.repository.exports.get(projectId, id);
       await this.verifyContent(record, signal);
       return record;
+    });
+  }
+
+  async publicationInputs(input: ZenodoInputsRequest): Promise<ZenodoInputs> {
+    const request = zenodoInputsRequestSchema.parse(input);
+    return this.session.run(async signal => {
+      const record = this.requireApproved(request.projectId, request.exportId);
+      await this.verify(record, signal);
+      if (record.sources === null || record.sourceHash === null || record.artifactId === null) throw new Error('research_export_sources_required');
+      const root = this.repository.exports.root(record.projectId, record.id);
+      const files = [];
+      for (const selection of request.files) {
+        const file = selection.area === 'archive' ? record.archive :
+          record.files.find(value => value.path === selection.path);
+        if (file === null || file === undefined || file.path !== selection.path) throw new Error('research_zenodo_file_not_found');
+        const md5 = await hashZenodoFile(selection.area === 'archive' ? root : join(root, 'bundle'), file.path, file, signal);
+        files.push({...selection, sha256: file.sha256, size: file.size, md5});
+      }
+      if (files.reduce((sum, file) => sum + file.size, 0) > 512 * 1024 * 1024) throw new Error('research_zenodo_upload_limit');
+      this.requireActive(signal);
+      this.sources.assertCurrent(record.request, record.sources);
+      assertCurrentExportScientificReview(this.repository, record);
+      const exportHash = researchContentHash(JSON.stringify(record));
+      if (researchContentHash(JSON.stringify(this.requireApproved(record.projectId, record.id))) !== exportHash) throw new Error('research_zenodo_inputs_changed');
+      const value = zenodoInputsSchema.omit({contentHash: true}).parse({
+        projectId: record.projectId, exportId: record.id, artifactId: record.artifactId,
+        exportHash, sourceHash: record.sourceHash, files});
+      return {...value, contentHash: researchContentHash(JSON.stringify(value))};
     });
   }
 

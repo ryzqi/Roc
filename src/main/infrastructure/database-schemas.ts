@@ -2589,6 +2589,20 @@ CREATE TABLE research_monitor_alerts (
 `
 });
 
+researchMigrations.push({
+  version: 59, name: 'reviewed_zenodo_preparations',
+  sql: `
+CREATE TABLE research_zenodo_preparations (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id,request_id)
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

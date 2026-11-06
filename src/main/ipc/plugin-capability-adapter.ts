@@ -1,3 +1,4 @@
+import {zenodoPrepareSchema} from '../../shared/schemas/research-zenodo';
 import {monitorSaveSchema, monitorControlSchema, monitorCheckRequestSchema, monitorCancelSchema, monitorAcknowledgeSchema} from '../../shared/schemas/research-monitors';
 import {researchIdeaPlanSaveSchema, researchIdeaPlanFreezeRequestSchema} from '../../shared/schemas/research-idea-plans';
 import {researchIdeaOutcomeSaveSchema} from '../../shared/schemas/research-idea-outcomes';
@@ -66,6 +67,11 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
       }
       return await wrapIpc(async () => {
         const input = transformInput(target.inputTransform, args);
+        if (target.capabilityName === 'research.zenodo.prepare') {
+          const request = zenodoPrepareSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
         if (target.capabilityName === 'research.monitors.save') {
           const request = monitorSaveSchema.parse(input);
           return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
