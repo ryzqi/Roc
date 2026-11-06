@@ -5,6 +5,7 @@ import { useAsyncResource } from '../../app/use-async-resource';
 import { STAGE_LABELS } from '../../project/project-store';
 import { TaskSummary, researchTaskStatusLabels } from '../../research/tasks/TaskSummary';
 import { TaskControls } from '../../research/tasks/TaskControls';
+import {TaskFactsPanel} from '../../research/tasks/TaskFactsPanel';
 import { useTaskDiagnostics } from '../../research/tasks/use-task-diagnostics';
 import { FormSection, formSecondaryButtonClass, formSelectClass } from '../../shared/form-ui';
 import { formatBeijingDateTime } from '../../shared/format';
@@ -99,6 +100,7 @@ function TaskDetail({ client, projectId, taskId }: {
             </FormSection>
           </>
         )}
+      <TaskFactsPanel client={client} projectId={projectId} taskId={taskId} />
       <FormSection title="持久事件" testId="mgmt-task-events">
         {events.status === 'error' ? <p role="alert" className="break-words text-[var(--st-bad)]">{events.error}</p> : (
           <>

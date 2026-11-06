@@ -226,3 +226,8 @@ export {applyCoreDatabaseSchema} from '../../../src/main/infrastructure/database
 export {researchZenodoPublicationCapabilities, registerResearchZenodoPublicationCapabilities} from '../../../src/main/plugins/research/zenodo-publication-capabilities';
 
 export {ResearchStorageUsageService, researchStorageCapability, registerResearchStorageCapability} from '../../../src/main/plugins/research/storage-usage';
+
+export {ResearchTaskFactsService} from '../../../src/main/plugins/research/task-facts';
+export {taskFactsHash} from '../../../src/main/plugins/research/task-facts-store';
+export {createResearchTaskContextMiddleware} from '../../../src/main/services/deep-agent/research-task-context-middleware';
+export {taskFactCapabilities, registerTaskFactCapabilities} from '../../../src/main/plugins/research/task-fact-capabilities';

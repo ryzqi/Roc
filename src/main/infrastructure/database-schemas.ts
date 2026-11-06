@@ -801,6 +801,18 @@ END;
 `
 });
 
+agentMigrations.push({
+  version: 18, name: 'research_task_fact_revisions', sql: `
+CREATE TABLE research_task_facts (
+  task_id TEXT NOT NULL REFERENCES research_tasks(id) ON DELETE CASCADE,
+  revision INTEGER NOT NULL CHECK(revision > 0), snapshot_json TEXT NOT NULL,
+  PRIMARY KEY(task_id,revision)
+);
+CREATE TRIGGER research_task_facts_immutable BEFORE UPDATE ON research_task_facts
+BEGIN SELECT RAISE(ABORT,'research_task_facts_immutable'); END;
+`
+});
+
 export const memoryMigrations: RocDatabaseMigration[] = [
   {
     version: 1,

@@ -193,6 +193,7 @@ test('actual stage createAgent accounts provider attempt and refuses the next ca
     const executor = api.createResearchRoleExecutor(factory, f.ledger);
     const prepared = await executor.prepare({ kind: 'app_default' }, f.budget);
     const execute = () => prepared.execute({ run: f.run, context: f.repository.runs.getContext(f.run.id),
+      taskContext: {task: f.tasks.get(f.run.taskId, f.project.id), facts: new api.ResearchTaskFactsService(f.repository).get({taskId: f.run.taskId, projectId: f.project.id})},
       tools: [], signal: new AbortController().signal });
     await assert.rejects(execute(), /fixture_provider_failure/);
     assert.equal(requests, 1);
@@ -243,7 +244,8 @@ test('actual stage createAgent settles successful usage without requiring a chat
     }, f.ledger);
     const prepared = await executor.prepare({ kind: 'app_default' }, f.budget);
     const result = await prepared.execute({
-      run: f.run, context: f.repository.runs.getContext(f.run.id), tools: [], signal: new AbortController().signal
+      run: f.run, context: f.repository.runs.getContext(f.run.id), tools: [], signal: new AbortController().signal,
+      taskContext: {task: f.tasks.get(f.run.taskId, f.project.id), facts: new api.ResearchTaskFactsService(f.repository).get({taskId: f.run.taskId, projectId: f.project.id})}
     });
     assert.deepEqual(result.output, output);
     const call = f.agentDb.prepare("SELECT * FROM agent_budget_calls WHERE kind = 'model'").get();

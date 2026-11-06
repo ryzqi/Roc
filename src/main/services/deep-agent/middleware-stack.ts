@@ -44,6 +44,8 @@ import { createToolProtocolMiddleware } from './tool-protocol';
 
 import { createPreparedToolEffectMiddleware, createFinalToolGuardMiddleware, createToolAdmissionMiddleware } from './prepared-tool-effect';
 import type { ToolAdmissionObserver } from './tool-resource-coordinator';
+import {createResearchTaskContextMiddleware} from './research-task-context-middleware';
+import type {ResearchTaskContext} from '../../../shared/schemas/research-task-facts';
 
 const NETWORK_SENSITIVE_TOOLS = ['web_read', 'web_search'] as const;
 
@@ -92,6 +94,7 @@ export type MiddlewareStackContext = {
   observeToolAdmission?: ToolAdmissionObserver;
   toolEffectStore: AgentToolEffectStore | undefined;
   taskContract: TaskContract;
+  loadResearchTaskContext?: () => Promise<ResearchTaskContext | null>;
 };
 
 type MiddlewareStackEntry = {
@@ -117,6 +120,9 @@ const ALL_MODES: readonly RunExecutionMode[] = ['plan', 'run', 'task'];
  * 那个相对位置由 createDeepAgent 拥有，不在这里表达。
  */
 const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
+  {name: 'RocResearchTaskContextMiddleware', scopes: ALL_SCOPES, modes: ALL_MODES,
+    create: context => context.loadResearchTaskContext === undefined ? null
+      : createResearchTaskContextMiddleware(context.loadResearchTaskContext)},
   { name: 'RocPreparedToolEffectMiddleware', scopes: ALL_SCOPES, modes: ALL_MODES, create: () => createPreparedToolEffectMiddleware() },
   {
     name: 'RocRunCorrectionMiddleware',

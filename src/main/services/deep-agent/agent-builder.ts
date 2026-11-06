@@ -43,6 +43,7 @@ import type { RunBudgetLedger } from './run-budget-ledger';
 import type { RunBudgetObserver } from './run-budget-observer';
 import type { ToolAdmissionObserver } from './tool-resource-coordinator';
 import { DEEP_AGENT_BUILT_IN_TOOLS, type RuntimeSubagent } from './types';
+import type {ResearchTaskContext} from '../../../shared/schemas/research-task-facts';
 
 export type DeepAgentBuildInput = {
   snapshot: RunExecutionSnapshot;
@@ -61,6 +62,7 @@ export type DeepAgentBuildInput = {
   toolEffectStore?: AgentToolEffectStore;
   observeToolAdmission?: ToolAdmissionObserver;
   contextCompaction: ContextCompactionWiring;
+  loadResearchTaskContext?: () => Promise<ResearchTaskContext | null>;
 };
 
 const DEEP_AGENT_RESERVED_TOOL_NAMES = new Set<string>([
@@ -218,7 +220,8 @@ function createMiddlewareStackContext(
     policy,
     observeToolAdmission: input.observeToolAdmission,
     toolEffectStore: input.toolEffectStore,
-    taskContract: input.snapshot.taskContract
+    taskContract: input.snapshot.taskContract,
+    loadResearchTaskContext: input.loadResearchTaskContext
   };
 }
 

@@ -76,6 +76,23 @@ before(async () => {
           onProjectBudgetUpdated: listener => { budgetListeners.add(listener); return () => budgetListeners.delete(listener); },
           getTaskForChat: request => record('chat', request, window.response),
           getTaskDiagnostics: request => record('diagnostics', request, window.response),
+          getTaskFacts: request => record('facts', request, window.factsResponse),
+          saveTaskFacts: request => {
+            calls.push({method: 'facts-save', request});
+            if (window.factSaveDeferred) return window.factSaveDeferred.promise;
+            if (window.factSaveError) return Promise.resolve({ok: false, error: {message: window.factSaveError}});
+            const snapshot = {contractVersion: 1, taskId: request.taskId, projectId: request.projectId,
+              revision: request.expectedRevision + 1, entries: request.entries, createdAt: '2026-11-06T00:00:00.000Z',
+              savedBy: {kind: 'user', id: 'window:71'}, snapshotHash: 'a'.repeat(64)};
+            window.factHistory.unshift(snapshot);
+            window.factsResponse = {ok: true, data: {snapshot, freshness: request.entries.flatMap(entry =>
+              entry.sources.map((source, sourceIndex) => ({entryId: entry.id, sourceIndex, state: 'current', reason: null}))),
+              authority: 'research_data_only'}};
+            return Promise.resolve({ok: true, data: snapshot});
+          },
+          getTaskFactsHistory: request => record('facts-history', request, {ok: true, data: {
+            snapshots: window.factHistory, nextRevision: null, hasMore: false
+          }}),
           onTaskUpdated: listener => { listeners.add(listener); return () => listeners.delete(listener); },
           getTaskEvents: request => {
             const events = window.eventRows.filter(event => event.sequence > request.afterSequence);
@@ -119,6 +136,8 @@ before(async () => {
           budgetActionResponse = {ok: true, data: makeProjectBudget()};
           response = {ok: true, data: makeData()};
           actionResponse = {ok: true, data: makeData().task};
+          factSaveError = null; factSaveDeferred = null; factHistory = [];
+          factsResponse = {ok: true, data: {snapshot: null, freshness: [], authority: 'research_data_only'}};
           listResponse = {ok: true, data: {tasks: [makeData().task], nextTaskId: 'task-a', hasMore: false}};
           eventRows = Array.from({length: 51}, (_, index) => ({
             sequence: index + 1, taskId: 'task-a', eventType: 'call_settled', executionKind: 'stage',
@@ -423,4 +442,64 @@ test('review queries show truthful task execution status and only complete cover
   }
   await page.getByText('actual-query-id', {exact: true}).scrollIntoViewIfNeeded();
   await page.screenshot({path: join(artifacts, 'review-query-cancelling.png')});
+});
+
+test('facts panel saves user corrections with fixed revision, retains history and exposes source expiry', async () => {
+  await page.evaluate(() => {reset(); mountDrawer();});
+  await page.getByTestId('mgmt-task-fact-content').waitFor();
+  await page.getByTestId('mgmt-task-fact-kind').selectOption('correction');
+  await page.getByTestId('mgmt-task-fact-content').fill('评估阈值纠正为 5，保留负面结果。');
+  await page.getByTestId('mgmt-task-fact-save').focus();
+  await page.keyboard.press('Enter');
+  await page.getByTestId('mgmt-task-fact').waitFor();
+  const saved = await page.evaluate(() => calls.find(row => row.method === 'facts-save').request);
+  assert.equal(saved.expectedRevision, 0);
+  assert.deepEqual(Object.keys(saved).sort(), ['entries', 'expectedRevision', 'projectId', 'taskId']);
+  assert.equal(saved.entries[0].kind, 'correction');
+  assert.equal(saved.entries[0].sources[0].kind, 'user');
+  assert.equal(await page.getByTestId('mgmt-task-fact-content').inputValue(), '');
+  await page.getByRole('button', {name: '标记已替代', exact: true}).click();
+  await page.getByText('已替代', {exact: true}).waitFor();
+  await page.getByRole('button', {name: '修订历史', exact: true}).click();
+  await page.getByTestId('mgmt-task-facts-history').getByText(/版本 2/).waitFor();
+  assert.equal(await page.getByTestId('mgmt-task-facts-history').locator('details').count(), 2);
+  await page.evaluate(() => {
+    const entry = factsResponse.data.snapshot.entries[0];
+    entry.sources = [{kind: 'artifact', artifactId: 'source-artifact', version: 'b'.repeat(64)}];
+    factsResponse.data.freshness = [{entryId: entry.id, sourceIndex: 0, state: 'expired', reason: 'artifact_version_changed'}];
+    emit();
+  });
+  await page.getByText('出处已失效：工件版本已改变', {exact: true}).waitFor();
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(theme => {document.documentElement.dataset.theme = theme;}, theme);
+    await page.getByTestId('mgmt-task-facts').scrollIntoViewIfNeeded();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.screenshot({path: join(artifacts, `facts-${theme}.png`)});
+  }
+});
+
+test('facts conflict keeps draft; pending save and late reads cannot cross task/project scopes', async () => {
+  await page.evaluate(() => {reset(); factSaveError = 'research_task_facts_revision_conflict'; mountDrawer();});
+  await page.getByTestId('mgmt-task-fact-content').fill('保留这个纠正草稿');
+  await page.getByTestId('mgmt-task-fact-save').click();
+  await page.getByRole('alert').filter({hasText: 'research_task_facts_revision_conflict'}).waitFor();
+  assert.equal(await page.getByTestId('mgmt-task-fact-content').inputValue(), '保留这个纠正草稿');
+  await page.evaluate(() => {factSaveError = null; factSaveDeferred = deferred();});
+  await page.getByTestId('mgmt-task-fact-save').click();
+  await page.getByRole('button', {name: '保存中…', exact: true}).waitFor();
+  assert.equal(await page.getByTestId('mgmt-task-fact-content').isDisabled(), true);
+  await page.evaluate(() => {response = {ok: true, data: makeData('project-b', 'task-b')}; mountDrawer('task-b', 'project-b');});
+  await page.getByTestId('mgmt-task-fact-content').waitFor();
+  assert.equal(await page.getByTestId('mgmt-task-fact-content').inputValue(), '');
+  await page.evaluate(() => factSaveDeferred.resolve({ok: true, data: {revision: 1}}));
+  const late = await page.evaluate(() => calls.filter(row => row.method === 'facts').map(row => row.request));
+  assert.equal(late.at(-1).projectId, 'project-b');
+  await page.evaluate(() => {
+    reset(); window.oldFactsRead = deferred(); factsResponse = oldFactsRead.promise; mountDrawer();
+    factsResponse = {ok: true, data: {snapshot: null, freshness: [], authority: 'research_data_only'}};
+    response = {ok: true, data: makeData('project-b', 'task-b')}; mountDrawer('task-b', 'project-b');
+    oldFactsRead.resolve({ok: true, data: {snapshot: {revision: 99, entries: [{id: 'old', kind: 'constraint', state: 'active', content: 'OLD PRIVATE FACT', sources: []}]}, freshness: []}});
+  });
+  await page.getByText('尚无任务事实。', {exact: true}).waitFor();
+  assert.equal(await page.getByText('OLD PRIVATE FACT', {exact: true}).count(), 0);
 });

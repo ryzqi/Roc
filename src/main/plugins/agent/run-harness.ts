@@ -23,6 +23,7 @@ import type {
 import type { RocCapabilityRegistry } from '../../kernel/types';
 import type { WorkspacePathStructureChangeNotifier } from '../../services/workspace-path-structure-event';
 import { buildDeepAgent } from '../../services/deep-agent/agent-builder';
+import type {ResearchTaskContext} from '../../../shared/schemas/research-task-facts';
 import { createRunSubagents } from '../../services/deep-agent/subagents';
 import { PreviewStore } from '../../services/forge-guardrails';
 import { defaultSettings } from '../../services/config/defaults';
@@ -242,6 +243,9 @@ export async function buildRunHarness(
     }
   );
   const { agent, revision } = buildDeepAgent({
+    loadResearchTaskContext: request.snapshot.researchProjectId === null || request.snapshot.researchProjectId === undefined
+      ? undefined : () => services.capabilities.invoke<{projectId: string; threadId: string; runId: string}, ResearchTaskContext | null>(
+        'research.task.facts.forChat', {projectId: request.snapshot.researchProjectId!, threadId: request.run.threadId, runId: request.run.id}),
     budgetLedger: services.budgetLedger,
     budgetObserver,
     snapshot: request.snapshot,
