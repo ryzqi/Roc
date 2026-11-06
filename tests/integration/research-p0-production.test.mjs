@@ -22,6 +22,69 @@ before(async () => {
 after(() => api.dispose());
 const hash = value => createHash('sha256').update(value).digest('hex');
 
+test('public OpenReview Note and Edit observations retain native SQLite identity, paging and exact replay', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'roc-openreview-native-')));
+  const f = createResearchFixture(api, 'reading', root);
+  const repository = new api.OpenReviewRepository(f.db, f.repository), registry = new api.CapabilityRegistry();
+  const query = {kind: 'forum', target: 'Paper1', after: null, limit: 50};
+  const request = {projectId: f.project.id, requestId: 'native-openreview', query};
+  const notes = Array.from({length: 50}, (_, index) => ({
+    id: `Reply${String(index).padStart(2, '0')}`, forum: 'Paper1', replyto: 'Paper1',
+    invitations: ['Synthetic.org/2026/-/Comment'], readers: ['everyone'], signatures: ['~Synthetic1'],
+    tcdate: 1, tmdate: 2, content: {comment: {value: `Synthetic public comment ${index}`}}
+  }));
+  let calls = 0;
+  const transport = new api.LiteratureSearchService(async (url, init) => {
+    calls++; assert.equal(init.method, 'GET'); assert.equal(init.redirect, 'error');
+    assert.equal(new Headers(init.headers).has('authorization'), false);
+    if (url.includes('/notes/edits')) return Response.json({edits: [{
+      id: 'Edit1', invitation: 'Synthetic.org/2026/-/Revision', readers: ['everyone'],
+      signatures: ['~Synthetic1'], note: {id: 'Paper1', content: {title: {value: 'Synthetic revised title'}}}
+    }]});
+    assert.equal(url, api.openReviewEndpoint(query)); return Response.json({notes, count: 50});
+  });
+  const service = new api.OpenReviewService(repository, transport);
+  for (const descriptor of api.researchOpenReviewCapabilities) registry.declare('native-fixture', descriptor);
+  api.registerResearchOpenReviewCapabilities({pluginId: 'native-fixture', capabilities: registry}, service, repository);
+  let restored;
+  try {
+    const workflow = f.repository.getWorkflow(f.project.id);
+    const saved = await registry.invoke('research.openreview.capture',
+      api.parseIpcRequestArgs('roc:research:openreview-capture', [request])[0]);
+    assert.equal(saved.status, 'ok'); assert.equal(saved.entryCount, 50); assert.equal(saved.nextAfter, 'Reply49');
+    const read = {projectId: f.project.id, observationId: saved.id, offset: 0, limit: 20};
+    const first = await registry.invoke('research.openreview.read', read);
+    const last = await registry.invoke('research.openreview.read', {...read, offset: 40});
+    assert.equal(first.entries.length, 20); assert.equal(first.nextOffset, 20);
+    assert.equal(last.entries.length, 10); assert.equal(last.nextOffset, null);
+    assert.equal(last.entries[9].note.content.comment.value, 'Synthetic public comment 49');
+    assert.deepEqual(await registry.invoke('research.openreview.capture', request), saved);
+    const changed = await registry.invoke('research.openreview.capture', {...request, requestId: 'native-edit',
+      query: {kind: 'edits', target: 'Paper1', after: null, limit: 1}});
+    assert.equal(repository.read({...read, observationId: changed.id}).entries[0].kind, 'edit');
+    assert.equal(calls, 2); assert.deepEqual(f.repository.getWorkflow(f.project.id), workflow);
+    const evidence = join(process.cwd(), '.artifacts/research-optimization/openreview-a5a-native');
+    await mkdir(evidence, {recursive: true});
+    const databasePath = join(evidence, 'research.sqlite');
+    await f.db.backup(databasePath);
+    restored = new Database(databasePath); restored.pragma('foreign_keys=ON');
+    const reopened = new api.OpenReviewRepository(restored, new api.ResearchRepository(restored, f.tasks));
+    assert.deepEqual(reopened.findRequest(request), saved); assert.deepEqual(reopened.read(read), first);
+    assert.equal(reopened.history({projectId: f.project.id, offset: 0, limit: 1}).nextOffset, 1);
+    const other = f.repository.createProject({title: 'Other', description: 'Native scope', workspacePath: join(root, 'foreign')});
+    assert.throws(() => repository.get(other.id, saved.id), /research_openreview_not_found/);
+    assert.throws(() => api.parseIpcRequestArgs('roc:research:openreview-capture', [{...request, token: 'secret'}]));
+    await writeFile(join(evidence, 'receipt.json'), JSON.stringify({
+      node: process.versions.node, electron: process.versions.electron,
+      fixture: 'synthetic public API v2; no live provider or scientific review',
+      saved, changed, first, last, calls
+    }, null, 2) + '\n');
+  } finally {
+    await service.shutdown(); await transport.shutdown(); restored?.close(); f.close();
+    await rm(root, {recursive: true, force: true});
+  }
+});
+
 test('reviewed HF downloads deliver verified files with native sender identity, SQLite durability and no implicit execution', async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'roc-hf-download-native-')));
   const f = createResearchFixture(api, 'reading', root);

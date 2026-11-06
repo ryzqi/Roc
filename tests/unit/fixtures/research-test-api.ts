@@ -195,3 +195,9 @@ export {HuggingFaceDownloader, huggingFaceResolveUrl, requireHuggingFaceDownload
 export {createLiteratureProviderGovernor} from '../../../src/main/plugins/research/literature-provider-governor';
 export {registerResearchHuggingFaceDownloadCapabilities, researchHuggingFaceDownloadCapabilities} from '../../../src/main/plugins/research/huggingface-download-capabilities';
 export {registerResearchHuggingFaceCapabilities, researchHuggingFaceCapabilities} from '../../../src/main/plugins/research/huggingface-capabilities';
+
+export * from '../../../src/shared/schemas/research-openreview';
+export {openReviewEndpoint, readOpenReviewPage} from '../../../src/main/plugins/research/openreview-adapter';
+export {OpenReviewRepository} from '../../../src/main/plugins/research/openreview-repository';
+export {OpenReviewService} from '../../../src/main/plugins/research/openreview-service';
+export {registerResearchOpenReviewCapabilities, researchOpenReviewCapabilities} from '../../../src/main/plugins/research/openreview-capabilities';

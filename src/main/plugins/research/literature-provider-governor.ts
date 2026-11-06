@@ -5,7 +5,7 @@ import type { LiteratureSearchResult } from '../../../shared/schemas/literature-
 export const researchProviderHosts = {
   openalex: 'api.openalex.org', crossref: 'api.crossref.org',
   semantic_scholar: 'api.semanticscholar.org', arxiv: 'export.arxiv.org',
-  pubmed: 'www.ebi.ac.uk', europe_pmc: 'www.ebi.ac.uk', datacite: 'api.datacite.org', huggingface: 'huggingface.co'
+  pubmed: 'www.ebi.ac.uk', europe_pmc: 'www.ebi.ac.uk', datacite: 'api.datacite.org', huggingface: 'huggingface.co', openreview: 'api2.openreview.net'
 } as const;
 export type ResearchMetadataProvider = keyof typeof researchProviderHosts;
 
