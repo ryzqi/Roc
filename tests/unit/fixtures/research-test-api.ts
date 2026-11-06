@@ -224,3 +224,5 @@ export {uploadZenodoFile} from '../../../src/main/plugins/research/zenodo-upload
 export {SecretManager} from '../../../src/main/infrastructure/secret-manager';
 export {applyCoreDatabaseSchema} from '../../../src/main/infrastructure/database-schemas';
 export {researchZenodoPublicationCapabilities, registerResearchZenodoPublicationCapabilities} from '../../../src/main/plugins/research/zenodo-publication-capabilities';
+
+export {ResearchStorageUsageService, researchStorageCapability, registerResearchStorageCapability} from '../../../src/main/plugins/research/storage-usage';

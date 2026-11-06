@@ -133,6 +133,7 @@ export const rocApi: RocPreloadApi = {
     getStageRun: (...args) => ipcRenderer.invoke(ipcChannels.researchWorkflowGetRun, ...args),
     listStageRuns: (...args) => ipcRenderer.invoke(ipcChannels.researchWorkflowListRuns, ...args),
     cancelStageRun: (...args) => ipcRenderer.invoke(ipcChannels.researchWorkflowCancelRun, ...args),
+    getStorageUsage: (...args) => ipcRenderer.invoke(ipcChannels.researchStorageUsage, ...args),
     getTask: (...args) => ipcRenderer.invoke(ipcChannels.researchTaskGet, ...args),
     getTaskExecutions: (...args) => ipcRenderer.invoke(ipcChannels.researchTaskExecutions, ...args),
     cancelTask: (...args) => ipcRenderer.invoke(ipcChannels.researchTaskCancel, ...args),

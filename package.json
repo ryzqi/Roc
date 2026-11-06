@@ -23,6 +23,7 @@
     "research:local-retrieval-eval": "node scripts/evaluate-local-retrieval.mjs",
     "research:retrieval-bench": "node scripts/benchmark-research-retrieval.mjs",
     "research:network-bench": "node scripts/benchmark-research-network.mjs",
+    "research:storage-bench": "node scripts/benchmark-research-storage.mjs",
     "research:admission-bench": "node scripts/benchmark-research-admission.mjs",
     "research:graph-bench": "node scripts/benchmark-research-graph.mjs",
     "harness:resource-bench": "node scripts/harness-eval/resource-admission-bench.mjs",
