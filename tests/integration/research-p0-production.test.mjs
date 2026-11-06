@@ -22,6 +22,75 @@ before(async () => {
 after(() => api.dispose());
 const hash = value => createHash('sha256').update(value).digest('hex');
 
+test('literature monitors schedule governed reads with native sender, stable alerts and reopened SQLite receipts', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'roc-monitor-native-')));
+  const f = createResearchFixture(api, 'reading', root), registry = new api.CapabilityRegistry();
+  const repository = new api.ResearchMonitorRepository(f.db, f.repository), calls = [], errors = [];
+  const transport = new api.LiteratureSearchService(async (url, init) => {
+    calls.push({url, method: init.method});
+    assert.equal(init.method, 'GET'); assert.equal(init.redirect, 'error');
+    assert.equal(new Headers(init.headers).has('authorization'), false);
+    return Response.json({message: {'total-results': 1, items: [{DOI: '10.1234/native-monitor',
+      title: ['Synthetic native monitor'], author: [{family: 'Synthetic'}]}]}});
+  });
+  const imports = new api.LiteratureImportService(f.db, f.repository.library, transport, {
+    prepareRecord() {throw new Error('unexpected_import');}, prepareDoi() {throw new Error('unexpected_import');}
+  }, () => {throw new Error('unexpected_import');});
+  const service = new api.ResearchMonitorService(repository, imports, transport, error => errors.push(error));
+  for (const descriptor of api.researchMonitorCapabilities) registry.declare('native-fixture', descriptor);
+  api.registerResearchMonitorCapabilities({pluginId: 'native-fixture', capabilities: registry}, service, repository);
+  const adapter = api.createPluginCapabilityAdapter({invokeCapability: (name, input) => registry.invoke(name, input)});
+  let restored;
+  try {
+    const request = {projectId: f.project.id, requestId: 'native-monitor', monitorId: null, expectedRevision: 0,
+      title: 'Native monitor', cadence: 'daily', query: {kind: 'search',
+        search: {query: 'Synthetic native monitor', sources: ['crossref'], limit: 10, maxPages: 1}}};
+    await assert.rejects(registry.invoke('research.monitors.save', request), /human_required/);
+    assert.equal((await adapter.invoke('research.saveMonitor', [request], 0)).ok, false);
+    const saved = await adapter.invoke('research.saveMonitor', [request], 9);
+    assert.equal(saved.ok, true); assert.equal(saved.data.actor.id, 'window:9');
+    const due = api.sealMonitor({...saved.data, nextCheckAt: new Date(Date.now() - 1000).toISOString()});
+    f.db.prepare('UPDATE research_monitors SET snapshot_json=? WHERE id=?').run(JSON.stringify(due), due.id);
+    service.start();
+    const read = {projectId: f.project.id, monitorId: due.id, offset: 0, limit: 20};
+    const deadline = Date.now() + 10000;
+    let history;
+    do {
+      await wait(10);
+      history = repository.history(read, 'checks');
+    } while (Date.now() < deadline && history.records[0]?.status !== 'complete');
+    assert.equal(history.records[0].status, 'complete');
+    assert.equal(history.records[0].trigger, 'scheduled');
+    assert.equal(history.records[0].alertCount, 0); assert.equal(calls.length, 1);
+    assert.equal(repository.checkpoint(due, 'crossref').baseline, true);
+    assert.ok(Date.parse(repository.get(f.project.id, due.id).nextCheckAt) > Date.now());
+    await registry.invoke('research.monitors.handlePowerResume', {});
+    await wait(20); assert.equal(calls.length, 1);
+    const manual = await adapter.invoke('research.checkMonitor', [{
+      projectId: f.project.id, monitorId: due.id, requestId: 'native-manual', expectedRevision: due.revision
+    }], 9);
+    assert.equal(manual.ok, true); assert.equal(manual.data.status, 'complete'); assert.equal(calls.length, 1);
+    assert.equal(manual.data.sources[0].search.sources[0].pages[0].cache.state, 'hit');
+    assert.equal(repository.history(read, 'alerts').total, 0); assert.deepEqual(errors, []);
+    const evidence = join(process.cwd(), '.artifacts/research-optimization/monitor-a6a-native');
+    await mkdir(evidence, {recursive: true});
+    const databasePath = join(evidence, 'research.sqlite'); await f.db.backup(databasePath);
+    restored = new Database(databasePath);
+    const reopened = new api.ResearchMonitorRepository(restored, new api.ResearchRepository(restored, f.tasks));
+    assert.deepEqual(reopened.history(read, 'checks'), repository.history(read, 'checks'));
+    assert.deepEqual(reopened.checkpoint(due, 'crossref'), repository.checkpoint(due, 'crossref'));
+    assert.throws(() => api.parseIpcRequestArgs('roc:research:monitor-save', [{...request, actor: 'fake'}]));
+    await writeFile(join(evidence, 'receipt.json'), JSON.stringify({
+      node: process.versions.node, electron: process.versions.electron,
+      fixture: 'synthetic governed provider; no live provider, model, import or approval',
+      monitor: repository.get(f.project.id, due.id), checks: repository.history(read, 'checks'), calls
+    }, null, 2) + '\n');
+  } finally {
+    await service.shutdown(); await imports.shutdown(); await transport.shutdown();
+    restored?.close(); f.close(); await rm(root, {recursive: true, force: true});
+  }
+});
+
 test('public OpenReview Note and Edit observations retain native SQLite identity, paging and exact replay', async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'roc-openreview-native-')));
   const f = createResearchFixture(api, 'reading', root);

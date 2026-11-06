@@ -1,3 +1,6 @@
+import {ResearchMonitorRepository} from './monitor-repository';
+import {ResearchMonitorService} from './monitor-service';
+import {registerResearchMonitorCapabilities, researchMonitorCapabilities} from './monitor-capabilities';
 import { randomUUID } from 'node:crypto';
 import type { ExecutionGrantBroker } from '../../services/deep-agent/execution-grant-broker';
 import type { ResearchTaskRepository } from './research-task-repository';
@@ -240,6 +243,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
   let scholarly: ScholarlyRelationsService | null = null;
   let resources: ResearchResourceService | null = null;
   let openreview: OpenReviewService | null = null;
+  let monitors: ResearchMonitorService | null = null;
   let huggingface: HuggingFaceService | null = null;
   let huggingfaceDownloads: HuggingFaceDownloadService | null = null;
   let documents: ResearchDocumentService | null = null;
@@ -267,7 +271,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchIdeaPlanCapabilities, ...researchIdeaOutcomeCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchScholarlyCapabilities, ...researchResourceCapabilities, ...researchOpenReviewCapabilities, ...researchHuggingFaceCapabilities, ...researchHuggingFaceDownloadCapabilities, ...researchResourceAssociationCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchNotebookCapabilities, ...researchExperimentResultCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities, researchCitationCoverageCapability, ...researchCitationReviewCapabilities, ...researchConsistencyCapabilities, ...researchFigureConsistencyCapabilities, ...researchResponseMatrixCapabilities, ...researchJournalComplianceCapabilities]
+      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchIdeaPlanCapabilities, ...researchIdeaOutcomeCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchScholarlyCapabilities, ...researchResourceCapabilities, ...researchOpenReviewCapabilities, ...researchMonitorCapabilities, ...researchHuggingFaceCapabilities, ...researchHuggingFaceDownloadCapabilities, ...researchResourceAssociationCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchNotebookCapabilities, ...researchExperimentResultCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities, researchCitationCoverageCapability, ...researchCitationReviewCapabilities, ...researchConsistencyCapabilities, ...researchFigureConsistencyCapabilities, ...researchResponseMatrixCapabilities, ...researchJournalComplianceCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，
@@ -374,6 +378,11 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
         await publishLibraryChange(items, 'import', result.operationId);
       });
       literatureImports.recover();
+      const monitorRepository = new ResearchMonitorRepository(db, researchRepository);
+      monitors = new ResearchMonitorService(monitorRepository, literatureImports, literatureService,
+        error => context.logger.error('Literature monitor scheduler failed.', {error: error instanceof Error ? error.message : String(error)}));
+      registerResearchMonitorCapabilities(context, monitors, monitorRepository);
+      monitors.start();
       const reviewSearches = new ResearchReviewSearchService(db, researchRepository, literatureImports,
         error => context.logger.error('Systematic review search persistence failed.', {error: error instanceof Error ? error.message : String(error)}),
         (taskId, projectId) => notifyResearchTaskChanged(context, taskId, projectId));
@@ -571,11 +580,12 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
     },
     shutdown: async () => {
       try {
-        await shutdownResearchPlugin({ literature: literatureService, scholarly, resources, openreview, huggingface, huggingfaceDownloads, zotero, literatureImports, productionInputs, exports, figures, experiments, pythonEnvironments, indexer, embeddings, stageRuntime, reviewSearch, templates, documents, library, prose });
+        await shutdownResearchPlugin({ literature: literatureService, monitors, scholarly, resources, openreview, huggingface, huggingfaceDownloads, zotero, literatureImports, productionInputs, exports, figures, experiments, pythonEnvironments, indexer, embeddings, stageRuntime, reviewSearch, templates, documents, library, prose });
       } finally {
         reviewSearch = null;
         resources = null;
         openreview = null;
+        monitors = null;
         productionInputs = null;
         exports = null;
         figures = null;

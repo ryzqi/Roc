@@ -1,3 +1,4 @@
+import {monitorSaveSchema, monitorControlSchema, monitorCheckRequestSchema, monitorCancelSchema, monitorAcknowledgeSchema} from '../../shared/schemas/research-monitors';
 import {researchIdeaPlanSaveSchema, researchIdeaPlanFreezeRequestSchema} from '../../shared/schemas/research-idea-plans';
 import {researchIdeaOutcomeSaveSchema} from '../../shared/schemas/research-idea-outcomes';
 import {researchCitationReviewSaveSchema} from '../../shared/schemas/research-citation-reviews';
@@ -65,6 +66,31 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
       }
       return await wrapIpc(async () => {
         const input = transformInput(target.inputTransform, args);
+        if (target.capabilityName === 'research.monitors.save') {
+          const request = monitorSaveSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
+        if (target.capabilityName === 'research.monitors.control') {
+          const request = monitorControlSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
+        if (target.capabilityName === 'research.monitors.check') {
+          const request = monitorCheckRequestSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
+        if (target.capabilityName === 'research.monitors.cancel') {
+          const request = monitorCancelSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
+        if (target.capabilityName === 'research.monitors.acknowledge') {
+          const request = monitorAcknowledgeSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
         if (target.capabilityName === 'research.huggingfaceDownloads.start') {
           const request = hfDownloadStartSchema.parse(input);
           return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},

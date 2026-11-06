@@ -203,3 +203,10 @@ export {OpenReviewService} from '../../../src/main/plugins/research/openreview-s
 export {BackgroundDeadlines} from '../../../src/main/services/background-deadlines';
 export {TaskScheduler} from '../../../src/main/plugins/task/scheduler';
 export {registerResearchOpenReviewCapabilities, researchOpenReviewCapabilities} from '../../../src/main/plugins/research/openreview-capabilities';
+
+export * from '../../../src/shared/schemas/research-monitors';
+export {ResearchMonitorRepository, sealMonitor} from '../../../src/main/plugins/research/monitor-repository';
+export {ResearchMonitorService} from '../../../src/main/plugins/research/monitor-service';
+export {readMonitorUpdates, monitorUpdateEndpoint, searchMonitorMaterial} from '../../../src/main/plugins/research/monitor-provider-adapter';
+export {registerResearchMonitorCapabilities, researchMonitorCapabilities} from '../../../src/main/plugins/research/monitor-capabilities';
+export {bibliographyFromRecord} from '../../../src/main/plugins/research/literature-service';

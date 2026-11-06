@@ -430,7 +430,10 @@ async function createWindow(): Promise<void> {
       if (currentKernel === null) {
         return;
       }
-      void currentKernel.invokeCapability<{}, { handled: true }>('task.scheduler.handlePowerResume', {})
+      void Promise.all([
+        currentKernel.invokeCapability<{}, { handled: true }>('task.scheduler.handlePowerResume', {}),
+        currentKernel.invokeCapability<{}, { handled: true }>('research.monitors.handlePowerResume', {})
+      ])
         .then(() => {
           hostService.refreshTray();
           broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, null);

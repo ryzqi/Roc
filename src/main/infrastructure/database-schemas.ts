@@ -2536,6 +2536,59 @@ CREATE TABLE research_openreview_observations (
 `
 });
 
+researchMigrations.push({
+  version: 58, name: 'versioned_literature_monitors',
+  sql: `
+CREATE TABLE research_monitors (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  revision INTEGER NOT NULL, query_version INTEGER NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json))
+);
+CREATE TABLE research_monitor_versions (
+  monitor_id TEXT NOT NULL REFERENCES research_monitors(id) ON DELETE CASCADE,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL, snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  PRIMARY KEY(monitor_id,version)
+);
+CREATE TABLE research_monitor_requests (
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  monitor_id TEXT NOT NULL REFERENCES research_monitors(id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL, request_json TEXT NOT NULL CHECK(json_valid(request_json)),
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)), PRIMARY KEY(project_id,request_id)
+);
+CREATE TABLE research_monitor_checks (
+  id TEXT PRIMARY KEY,
+  monitor_id TEXT NOT NULL REFERENCES research_monitors(id) ON DELETE CASCADE,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  query_version INTEGER NOT NULL, control_revision INTEGER NOT NULL,
+  check_key TEXT NOT NULL, status TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)), UNIQUE(monitor_id,check_key)
+);
+CREATE UNIQUE INDEX research_monitor_one_running ON research_monitor_checks(monitor_id) WHERE status='running';
+CREATE TABLE research_monitor_checkpoints (
+  monitor_id TEXT NOT NULL REFERENCES research_monitors(id) ON DELETE CASCADE,
+  query_version INTEGER NOT NULL, source TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)), PRIMARY KEY(monitor_id,query_version,source)
+);
+CREATE TABLE research_monitor_seen (
+  monitor_id TEXT NOT NULL REFERENCES research_monitors(id) ON DELETE CASCADE,
+  query_version INTEGER NOT NULL, source TEXT NOT NULL, identity TEXT NOT NULL,
+  first_check_id TEXT NOT NULL REFERENCES research_monitor_checks(id),
+  PRIMARY KEY(monitor_id,query_version,source,identity)
+);
+CREATE TABLE research_monitor_alerts (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  monitor_id TEXT NOT NULL REFERENCES research_monitors(id) ON DELETE CASCADE,
+  check_id TEXT NOT NULL REFERENCES research_monitor_checks(id),
+  query_version INTEGER NOT NULL, source TEXT NOT NULL, identity TEXT NOT NULL, kind TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  ack_json TEXT CHECK(ack_json IS NULL OR json_valid(ack_json)), UNIQUE(monitor_id,identity,kind)
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,
