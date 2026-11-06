@@ -207,3 +207,55 @@ build 的 plugin timings 提示是现有构建性能信息，exit 0；本轮未�
 用户已授权完成后提交；提交仅包含本阶段代码、测试和 plan 文档。
 准备脚本要求应用源码干净且已提交，提交后将实测实际 commit/bundle/依赖身份与隔离编译图，
 证据仅写忽略的工件目录，不改变已提交源码。
+
+## 2026-11-06：S01 科学验收推进
+
+用户“完成S01 科学验收”授权继续本阶段；开始 SHA
+`b4acaee6acd52bfff0a7c2c642759b2fecbdfd59`，工作区干净。
+沿用 `plan/` 和原接受标准；先修复真实应用输出链路中的非 agent 故障，
+保留失败分母与原始输出。未获得具体 provider/model/费用上限，不访问现有凭证或付费。
+
+发现：仓库可定位的数据只有 fixture 和空模板，未发现 independent manifest、
+人工审核记录或模型费用授权；文档连接工具返回无 connected sessions。
+这仅覆盖仓库和当前连接，不能推断用户其他私有目录无材料。
+科学双审及 A/B 盲审须独立人类完成，不用实施模型替代。
+
+真实隔离 worker 修复前复现内部 context JSON 与助手答案拼接。
+在生产 `deep-agent-stream-adapter.ts` 按 message-start 原始角色控制可见输出，
+修复后终态恰为 `{"ok":true}`，不在 evaluator 裁剪答案。
+新增主/子代理角色边界、完成前首 token、usage 与非法角色回归；
+保留合法 JSON 的错误事实仍失败、48 个 fixture trial 固定分母和隔离约束。
+
+## 2026-11-06：S01 科学准备核查与运行修复收尾
+
+范围状态：`Verified passing（本地运行修复）`；S01 科学为
+`Blocked, not run` / `insufficient`，总体仍 `in_progress`。
+RH-05.1/2/5 未完成；没有运行真实 provider、人工双审或 A/B 盲审。
+完整科学验收还依赖 S02/S03/S06/S07 的真实 effect、跨会话与故障环境。
+
+以下检查 cwd 均为 `/Users/Apple_501/Desktop/Roc/Roc`，运行时 HEAD 均为
+`b4acaee6acd52bfff0a7c2c642759b2fecbdfd59`；被检查的是本次待提交差异。
+每项 exact command、起止时间、SHA、exit 和日志 hash 见
+[scientific-readiness.json](evaluation/scientific-readiness.json)。
+原始日志目录为 `.artifacts/research-harness/S01/scientific-readiness-2026-11-06/`。
+
+| 命令 | 结果 |
+| --- | --- |
+| `node --test tests/unit/deep-agent-stream-role.test.mjs tests/unit/quality-application-adapter.test.mjs tests/unit/quality-evaluation.test.mjs tests/unit/quality-runner.test.mjs tests/unit/quality-dataset.test.mjs` | exit 0；34 pass，0 fail/skip/cancelled |
+| `pnpm test:unit` | exit 0；1486 pass，0 fail/skip/cancelled |
+| `pnpm typecheck` | exit 0 |
+| `pnpm harness:eval` | exit 0；94/94 |
+| `pnpm harness:quality:check` | exit 0；16 fixture，independent 0/200，model/external calls 0 |
+| `pnpm build` | exit 0 |
+| `node .artifacts/research-harness/S01/check-deliverables.mjs` | exit 0；36 本地 Markdown 链接、JSON、16 fixture 内容与归属、模板及后续阶段状态、旧 API 零引用、diff check |
+
+完整读取真实隔离应用的 14 条轨迹，核对 assistant_block、
+run_completed.assistantMessage 和 result.output 一致，进程组清理完成。
+这只是 fixture transport 的运行证据，不计为科学模型试验。
+修复前失败与两次测试构造错误分开分类并保留日志；旧工程证据不改写。
+
+继续实验需要受控独立数据包及预注册/双审/仲裁记录、两个真实 commit、
+固定模型/价格/timeout/请求和硬费用上限及授权、独立盲审协调人安排。
+具体清单见 [科学验收准备核查](evaluation/scientific-readiness.md)。
+本次提交范围限定为已验证的运行修复、回归与准备核查材料；
+提交后仅在忽略的工件目录重建 worker、核对 commit/bundle/lock 身份。

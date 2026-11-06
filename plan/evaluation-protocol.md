@@ -83,8 +83,11 @@ worker 走真实 `AgentPluginRuntime → createAgentDeepAgentExecutor → buildR
 当前 adapter 配置没有连接 MCP、Skill 或外部 workspace，保留应用默认 backend；
 不把结构化输出中声称的 receipt/effect 当成真实操作证明。
 八族真实 effect、跨会话恢复和长任务专项仍需 S02/S03/S06/S07 的环境及观察器。
-本轮发现应用终态文本会包含 context contract 前缀，造成 JSON 失败；
-保留原输出和轨迹，不裁剪成成功答案，科学运行前需修复该产品行为。
+初次工程运行发现应用终态包含 context contract 前缀，造成 JSON 失败。
+后续准备核查已在生产 stream adapter 按 message-start 原始角色修复，
+真实 worker 回归确认终态仅含助手答案；evaluator 仍保留原输出、不裁剪。
+详见 [科学验收准备核查](evaluation/scientific-readiness.md)。
+该修复不替代真实数据、人工审核或八族环境验收。
 
 host transcript/stderr/cleanup 位于 trial workspace 之外，agent 无法读写。
 每 trial 保存真实 DB、完整有界事件/请求轨迹和进程组清理证据。

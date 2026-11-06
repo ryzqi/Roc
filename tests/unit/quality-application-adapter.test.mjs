@@ -67,10 +67,10 @@ test('application Harness runs in isolated process with real budget, checkpoint 
     arm: 'baseline', trialId: 'application-fixture:0:baseline', repeatIndex: 0, maximumCostMicrousd: 20,
     signal: new AbortController().signal, recordRequest: async event => events.push(event)
   });
-  // Measure the application's terminal response exactly. Its current stream collector
-  // includes the context contract preamble; the evaluator must retain and reject it.
-  assert.ok(result.output.endsWith('{"ok":true}'));
-  assert.throws(() => JSON.parse(result.output), SyntaxError);
+  // Retain the application's output unchanged: input/context messages must never
+  // become assistant text, and the adapter must not trim them to repair JSON.
+  assert.equal(result.output, '{"ok":true}');
+  assert.deepEqual(JSON.parse(result.output), { ok: true });
   assert.equal(result.costMicrousd, 1);
   assert.equal(requests, 1);
   assert.equal(events.length, 1);
@@ -93,7 +93,7 @@ function protocol(id) {
   });
 }
 
-test('application requests use the durable runner journal before dispatch and retain actual invalid output', async () => {
+test('application requests use the durable runner journal before dispatch and reject incorrect facts', async () => {
   const journalRoot = join(root, 'journal-normal');
   const locked = protocol('application-journal-fixture');
   let called = 0;
@@ -111,7 +111,9 @@ test('application requests use the durable runner journal before dispatch and re
   assert.equal(called, 1);
   assert.equal(saved.result.dispatches, 1);
   assert.equal(saved.result.trials.length, 48);
-  assert.ok(saved.result.validations.some(row => row.validation?.failures.includes('output_not_json')));
+  const failures = saved.result.validations.flatMap(row => row.validation?.failures ?? []);
+  assert.equal(failures.includes('output_not_json'), false);
+  assert.ok(failures.length > 0); // Valid JSON is still wrong for the frozen task.
   assert.equal(saved.result.statistics.evidenceStatus, 'insufficient');
 });
 

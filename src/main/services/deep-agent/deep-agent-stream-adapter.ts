@@ -74,6 +74,7 @@ export type DeepAgentDomainRun = {
 
 type DeepAgentsV3Message = {
   usageKey: string;
+  assistantRole: Promise<boolean>;
   text: AsyncIterable<string>;
   reasoning: AsyncIterable<string>;
   trailingReasoning: Promise<string | null>;
@@ -185,6 +186,9 @@ async function* translateMessages(
 ): AsyncGenerator<DeepAgentDomainEvent> {
   let reasoningObserved = false;
   for await (const message of messages) {
+    if (!await message.assistantRole) {
+      continue;
+    }
     let messageReasoningObserved = false;
     const streams: AsyncIterable<DeepAgentDomainEvent>[] = [
       translateUsage(message.usageKey, message.usage),
@@ -486,14 +490,37 @@ function adaptMessage(message: unknown, usageKey: string): DeepAgentsV3Message {
       requireRecord(value, 'deep_agents_v3_message_output_invalid')
     )
   );
+  const assistantRole = readStreamedAssistantRole(
+    requireAsyncIterable(rawMessage, 'deep_agents_v3_message_events_async_iterable_missing')
+  );
+  observePromiseRejection(assistantRole);
 
   return {
     usageKey,
+    assistantRole,
     text: adaptStringStream(text, 'deep_agents_v3_message_text_value_invalid'),
     reasoning: adaptStringStream(reasoning, 'deep_agents_v3_message_reasoning_value_invalid'),
     trailingReasoning,
     usage: mapAsyncIterable(usage, (value) => adaptUsage(value)),
   };
+}
+
+async function readStreamedAssistantRole(events: AsyncIterable<unknown>): Promise<boolean> {
+  for await (const event of events) {
+    const start = requireRecord(event, 'deep_agents_v3_message_start_invalid');
+    if (readField(start, 'event') !== 'message-start') {
+      throw contractError('deep_agents_v3_message_start_missing');
+    }
+    // Installed LangGraph 1.5.2 emits role only for non-AI messages.
+    // Core's assembled output is always AIMessage, so inspect the start
+    // before publishing text rather than waiting for that lossy output.
+    const role = readField(start, 'role');
+    if (role === undefined || role === 'ai' || role === 'assistant') return true;
+    if (role === 'human' || role === 'user' || role === 'system'
+      || role === 'developer' || role === 'tool' || role === 'function') return false;
+    throw contractError('deep_agents_v3_message_role_invalid');
+  }
+  throw contractError('deep_agents_v3_message_start_missing');
 }
 
 function adaptToolCalls(calls: AsyncIterable<unknown>): AsyncIterable<DeepAgentsV3ToolCall> {

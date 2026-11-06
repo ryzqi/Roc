@@ -146,3 +146,18 @@
   adapter 重新核验 bundle 与 lockfile，并要求两臂依赖 lock hash 相同。
 - annotation hash/身份/时间能检查记录一致性，不能证明审核者确实独立或语义来源不重复。
   这些事实必须由负责人的人工审核保证。当前真实独立样本、双审、L2 及盲审均未运行。
+
+### S01 科学运行故障诊断（2026-11-06）
+
+真实 worker 回归在修复前 1 秒内稳定复现 context JSON + 模型 JSON 拼接。
+缩小到已安装 Core ChatModelStream 与生产 stream adapter 后，同样把 human/system
+消息发布为 assistant delta。根因：LangGraph 1.5.2 的 messages transformer 只排除
+tool，其他输入仍进入消息流；Core 1.2.20 的 assembled output 无条件生成 AIMessage，
+原 adapter 未读取 message-start 的原始 role。
+依赖声明与本地 dist 实现一致，无需修改或升级依赖。
+
+修复在生产 adapter 读取开头 role（该版本 AI message-start 无 role），输入不发布；
+保留真正 assistant 的实时 text/reasoning/usage 和原样 evaluator 输出。
+配套验证覆盖真实应用、主/子代理、完成前首 token 与非法 role。
+初始缩小测试直接 for-await Core thenable，触发 namespace 错误；按已安装 LangGraph
+公开 non-thenable handle 合同修正。subagent 补显式 cause 字段，失败日志全部保留。

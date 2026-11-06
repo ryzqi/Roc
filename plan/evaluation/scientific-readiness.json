@@ -1,0 +1,364 @@
+{
+  "schemaVersion": 1,
+  "recordType": "scientific_readiness_audit",
+  "recordedAt": "2026-11-06T11:53:38.017Z",
+  "scope": "S01 scientific acceptance prerequisites",
+  "scientificStatus": "insufficient",
+  "scopeStatus": "Blocked, not run",
+  "phaseStatus": "in_progress",
+  "localRepairStatus": "Verified passing",
+  "headBeforeCommit": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+  "physicalCwd": "/Users/Apple_501/Desktop/Roc/Roc",
+  "logicalCwd": "/Users/Apple_501/Desktop/Roc/Roc",
+  "runtime": {
+    "node": "v26.13.0",
+    "pnpm": "12.5.1"
+  },
+  "discovery": {
+    "repositoryOnly": true,
+    "otherPrivateDirectories": "not_inspected",
+    "ambientProviderCredentials": "not_accessed",
+    "documentSessions": 0,
+    "documentDiscoveryTool": "codex_document_control.list_document_sessions",
+    "observedPackages": [
+      "tests/fixtures/quality-evaluation/manifest.json",
+      "plan/evaluation/dataset-manifest.template.json"
+    ],
+    "repositoryScanExclusions": [
+      ".git",
+      "node_modules",
+      "dist",
+      "dist-main",
+      ".artifacts",
+      "vendor"
+    ],
+    "independentPackage": "not_found_in_inspected_scope",
+    "humanReviews": "not_found_in_inspected_scope",
+    "scopedModelAndCostAuthorization": "not_provided"
+  },
+  "datasetAudit": {
+    "id": "roc-quality-contract-fixture",
+    "version": "1",
+    "datasetHash": "55824c7269dd5c56db35b04e995b1f5b6660885f6e501edb34386c5054201e63",
+    "evidence": "fixture",
+    "tasks": 16,
+    "byFamily": {
+      "literature-verification": {
+        "tasks": 0,
+        "target": 30,
+        "clusters": 0
+      },
+      "multi-paper-evidence": {
+        "tasks": 0,
+        "target": 30,
+        "clusters": 0
+      },
+      "long-memory": {
+        "tasks": 0,
+        "target": 25,
+        "clusters": 0
+      },
+      "file-report": {
+        "tasks": 0,
+        "target": 30,
+        "clusters": 0
+      },
+      "experiment-script": {
+        "tasks": 0,
+        "target": 25,
+        "clusters": 0
+      },
+      "mcp-recovery": {
+        "tasks": 0,
+        "target": 20,
+        "clusters": 0
+      },
+      "permission-injection": {
+        "tasks": 0,
+        "target": 20,
+        "clusters": 0
+      },
+      "cancel-crash": {
+        "tasks": 0,
+        "target": 20,
+        "clusters": 0
+      }
+    },
+    "splits": [
+      "fixture"
+    ],
+    "fullDatasetReady": false,
+    "scientificStatus": "insufficient",
+    "executionMode": "offline-audit",
+    "modelCalls": 0,
+    "externalCalls": 0
+  },
+  "independentHoldoutCount": 0,
+  "requiredHoldoutCount": 200,
+  "completedHumanReviews": 0,
+  "liveProviderTrials": 0,
+  "registeredScientificProtocol": null,
+  "providerInvoiceRef": null,
+  "humanBlindReviewStatus": "not_run",
+  "specializedExperimentsStatus": "not_run",
+  "gates": [
+    {
+      "id": "RH-05.1",
+      "status": "missing_input",
+      "required": "200 independent holdout items with preregistered connected clusters/splits, rights/locators/hashes and additional train/dev"
+    },
+    {
+      "id": "RH-05.2",
+      "status": "missing_input",
+      "required": "two independent human reviews and third-person arbitration with preserved original annotations"
+    },
+    {
+      "id": "application-output-boundary",
+      "status": "verified_local",
+      "evidence": "focused",
+      "limitation": "no-cost fixture transport; contract arm identities"
+    },
+    {
+      "id": "operational-environments",
+      "status": "not_ready",
+      "required": "actual effects, cross-session memory and fault observers across eight families",
+      "dependencies": [
+        "S02",
+        "S03",
+        "S06",
+        "S07"
+      ]
+    },
+    {
+      "id": "registered-two-arm-model-run",
+      "status": "missing_input",
+      "required": "real distinct commits with identical lockfile, provider/model/pricing, request/timeout and enforceable per-request/trial/total caps plus scoped authorization"
+    },
+    {
+      "id": "RH-05.5",
+      "status": "not_run",
+      "required": "three paired repeats, fixed-denominator statistics, independent human blind review and specialized experiment index"
+    }
+  ],
+  "repair": {
+    "cause": "Original role is present in message-start; installed Core assembles even human/system streams as AIMessage. Production adapter previously published all text streams.",
+    "change": "Gate visible text by the original stream role, before emitting any assistant delta.",
+    "retainedLimits": [
+      "no trimming in evaluator",
+      "incorrect JSON facts still fail",
+      "fixture evidence never counts as science",
+      "no measured provider streaming latency"
+    ]
+  },
+  "verification": {
+    "unit": {
+      "pass": 1486,
+      "fail": 0,
+      "skipped": 0,
+      "cancelled": 0
+    },
+    "focused": {
+      "pass": 34,
+      "fail": 0
+    },
+    "harness": {
+      "pass": 94,
+      "total": 94
+    },
+    "checks": [
+      {
+        "command": "node --test --test-name-pattern application Harness runs tests/unit/quality-application-adapter.test.mjs",
+        "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+        "startedAt": "2026-11-06T11:42:21.151Z",
+        "startSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "exitCode": 1,
+        "endedAt": "2026-11-06T11:42:22.629Z",
+        "endSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "logPath": ".artifacts/research-harness/S01/scientific-readiness-2026-11-06/prefix-repro.log",
+        "logSha256": "509600242f603187870218cab156c3d1902c3e5e891127de626be9fd37f658cd",
+        "purpose": "retained_pre_fix_failure"
+      },
+      {
+        "command": "node --test tests/unit/deep-agent-stream-role.test.mjs",
+        "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+        "startedAt": "2026-11-06T11:44:11.320Z",
+        "startSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "exitCode": 1,
+        "endedAt": "2026-11-06T11:44:16.797Z",
+        "endSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "logPath": ".artifacts/research-harness/S01/scientific-readiness-2026-11-06/role-repro.log",
+        "logSha256": "d386b255b732e6cdc19dbd3dc7098b4907c942e00fe39c7d892b11851fe212dc",
+        "purpose": "retained_test_construction_error"
+      },
+      {
+        "command": "node --test tests/unit/deep-agent-stream-role.test.mjs",
+        "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+        "startedAt": "2026-11-06T11:44:40.525Z",
+        "startSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "exitCode": 1,
+        "endedAt": "2026-11-06T11:44:40.802Z",
+        "endSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "logPath": ".artifacts/research-harness/S01/scientific-readiness-2026-11-06/role-repro-corrected.log",
+        "logSha256": "ac5299c28944c870ef287647e9d4b9d19a13972030bef646b78eb8e51a733211",
+        "purpose": "retained_test_construction_error"
+      },
+      {
+        "command": "node --test tests/unit/deep-agent-stream-role.test.mjs",
+        "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+        "startedAt": "2026-11-06T11:44:56.292Z",
+        "startSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "exitCode": 1,
+        "endedAt": "2026-11-06T11:44:56.568Z",
+        "endSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "logPath": ".artifacts/research-harness/S01/scientific-readiness-2026-11-06/role-repro-final.log",
+        "logSha256": "03fa513665e178868b38595354fcbc861c7a7564b22fa8ec6812a511c37fdde7",
+        "purpose": "retained_pre_fix_failure"
+      },
+      {
+        "command": "node --test tests/unit/deep-agent-stream-role.test.mjs tests/unit/quality-application-adapter.test.mjs tests/unit/quality-evaluation.test.mjs tests/unit/quality-runner.test.mjs tests/unit/quality-dataset.test.mjs",
+        "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+        "startedAt": "2026-11-06T11:45:32.945Z",
+        "startSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "exitCode": 0,
+        "endedAt": "2026-11-06T11:45:38.074Z",
+        "endSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "logPath": ".artifacts/research-harness/S01/scientific-readiness-2026-11-06/focused.log",
+        "logSha256": "1c530df6cb1d423971b94055534ee14213f6f94db84fb44fd04dcc4bf020ed04",
+        "purpose": "local_engineering_verification"
+      },
+      {
+        "command": "pnpm typecheck",
+        "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+        "startedAt": "2026-11-06T11:45:32.947Z",
+        "startSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "exitCode": 0,
+        "endedAt": "2026-11-06T11:45:42.864Z",
+        "endSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "logPath": ".artifacts/research-harness/S01/scientific-readiness-2026-11-06/typecheck.log",
+        "logSha256": "70685b4df7789c854b9e1ceab7d78a6d0f9a0831c11eb0010b7b5fdbe0e50c39",
+        "purpose": "local_engineering_verification"
+      },
+      {
+        "command": "pnpm harness:quality:check",
+        "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+        "startedAt": "2026-11-06T11:46:16.157Z",
+        "startSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "exitCode": 0,
+        "endedAt": "2026-11-06T11:46:16.603Z",
+        "endSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "logPath": ".artifacts/research-harness/S01/scientific-readiness-2026-11-06/quality.log",
+        "logSha256": "e75affa8975e61f75f443da7593b89112452f653df207edb5dff471c483d4e28",
+        "purpose": "fixture_data_audit"
+      },
+      {
+        "command": "pnpm harness:eval",
+        "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+        "startedAt": "2026-11-06T11:46:16.157Z",
+        "startSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "exitCode": 0,
+        "endedAt": "2026-11-06T11:46:35.590Z",
+        "endSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "logPath": ".artifacts/research-harness/S01/scientific-readiness-2026-11-06/harness.log",
+        "logSha256": "2d6b291d229b3b93aa683c418f7cea63bff47af6a5297b28df799dfa6058a3a0",
+        "purpose": "local_engineering_verification"
+      },
+      {
+        "command": "pnpm build",
+        "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+        "startedAt": "2026-11-06T11:46:16.157Z",
+        "startSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "exitCode": 0,
+        "endedAt": "2026-11-06T11:46:43.294Z",
+        "endSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "logPath": ".artifacts/research-harness/S01/scientific-readiness-2026-11-06/build.log",
+        "logSha256": "08089b45b9fc2f4899ef6fd098566def7c6a23a0041ff5f8ff21e5fb4becf8f8",
+        "purpose": "local_engineering_verification"
+      },
+      {
+        "command": "pnpm test:unit",
+        "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+        "startedAt": "2026-11-06T11:46:16.159Z",
+        "startSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "exitCode": 0,
+        "endedAt": "2026-11-06T11:52:12.630Z",
+        "endSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "logPath": ".artifacts/research-harness/S01/scientific-readiness-2026-11-06/unit.log",
+        "logSha256": "18dc964b090bd1895a933e0161eced53ad698e91fe9c4bb1007cf8679cccb35a",
+        "purpose": "local_engineering_verification"
+      },
+      {
+        "command": "node .artifacts/research-harness/S01/check-deliverables.mjs",
+        "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+        "startedAt": "2026-11-06T11:53:16.167Z",
+        "startSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "exitCode": 0,
+        "endedAt": "2026-11-06T11:53:16.461Z",
+        "endSha": "b4acaee6acd52bfff0a7c2c642759b2fecbdfd59",
+        "logPath": ".artifacts/research-harness/S01/scientific-readiness-2026-11-06/deliverables.log",
+        "logSha256": "06b15ca9bd0846530bc4edbdb3f097de9b33c015b5fba9cbc18e736e7e197fbc",
+        "purpose": "local_engineering_verification"
+      }
+    ]
+  },
+  "realApplicationTrace": {
+    "path": ".artifacts/research-harness/S01/adapter-2fvYna/7931961d90c64033bd31628e6e5ab402bff6cfb73d6062758171d5004d1b2cb5/transcript.jsonl",
+    "sha256": "7cb2302826300b8b84bd37cb34502c97636f77889191d3b03e29ae1d385c22eb",
+    "rowCount": 14,
+    "inspected": true,
+    "evidence": "fixture-only",
+    "terminalOutput": "{\"ok\":true}",
+    "cleanup": {
+      "path": ".artifacts/research-harness/S01/adapter-2fvYna/7931961d90c64033bd31628e6e5ab402bff6cfb73d6062758171d5004d1b2cb5/cleanup.json",
+      "sha256": "f834cb6120654a37d6e952139a039278c24569c58798abf92973402515bfb9e2",
+      "processGroupGone": true
+    }
+  },
+  "sourceSnapshots": [
+    {
+      "path": "src/main/services/deep-agent/deep-agent-stream-adapter.ts",
+      "sha256": "8413acd939299d35182b687d1408373e61e080ef10146318489896c282070eac"
+    },
+    {
+      "path": "tests/unit/deep-agent-stream-role.test.mjs",
+      "sha256": "74f0f1a4de9d0bd5d29db2fc4ba62464821155faed29de549a1c65ad217d0009"
+    },
+    {
+      "path": "tests/unit/quality-application-adapter.test.mjs",
+      "sha256": "124170a16e6a0ed640b66041f8eddd0c457a269ccc049a5a267b28d41fe68e4b"
+    },
+    {
+      "path": "scripts/harness-eval/quality-evaluation/Task.md",
+      "sha256": "06bb604b9daf1046c4fc05231446896b96ebcdc65acfd24f8d98b9dc13727596"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "sha256": "2a372e5d32051bf94d313a5df880fd2edafb2670439f00a56855614216d2f998"
+    },
+    {
+      "path": "plan/evaluation-protocol.md",
+      "sha256": "e1bb74445f06d9e9643a7479134746d0a38c093db832af3d90926596af5ca0fb"
+    },
+    {
+      "path": "plan/findings.md",
+      "sha256": "81c7c4e10bdd82e145c9249189a52174ad9781b398fefbf0c8271f164b924266"
+    },
+    {
+      "path": "plan/phase-01-evaluation.md",
+      "sha256": "de971ccbb7a734c848e31e3875bedb13e3f665c1c9f62d9a5e127c448e0d3f0d"
+    },
+    {
+      "path": "plan/progress.md",
+      "sha256": "2cc09757521e0413d7412205890f2173f213f97f54f9f3cf390a8f4022be94e5"
+    },
+    {
+      "path": "plan/task_plan.md",
+      "sha256": "001e1e0eaf6249874932416031350da52cbb0b3e3a335c6541482d998238b92b"
+    },
+    {
+      "path": "plan/evaluation/scientific-readiness.md",
+      "sha256": "faaa5efd62081f483e8919089c2adb2310c67d1bb22fa269251105ee74a6a97c"
+    }
+  ],
+  "remainingInputsRef": "plan/evaluation/scientific-readiness.md",
+  "releaseStatus": "not_authorized"
+}

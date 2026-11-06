@@ -110,7 +110,17 @@ S03/S05 可使用工程协议；S04 语义 pilot 需最小独立 claim 集。
   [engineering-verification.json](evaluation/engineering-verification.json)；
   原始证据在 `.artifacts/research-harness/S01/2026-11-06T11-24-16.346Z/`。
 
-限制：真实终态会带 context 前缀而失败 JSON 校验，本轮保留失败且未改生产输出。
+首次工程提交的限制：真实终态带 context 前缀而失败 JSON 校验，当时保留失败且未改生产输出。
 空 MCP/Skill/外部 workspace 配置不能验真实 effect 或跨会话恢复；
 实际 provider 强制、200 独立样本和人类科学双审/盲审未运行。
 S02～S09 未启动。本轮仅提交已验证的 S01 工程合同。
+
+## 科学验收准备核查（2026-11-06）
+
+已复现并修复生产 stream adapter 的消息角色丢失问题：在 message-start 检查原始角色，
+human/system context 不再混入助手答案，evaluator 不裁剪输出。
+真实隔离运行、主/子代理、实时首 token、usage 与错误事实回归通过。
+当前可用 independent 样本仍为 0/200，人工双审、受控模型配对试验和盲审均未运行。
+科学范围为 `Blocked, not run` / `insufficient`，RH-05.1/2/5 和总体 in_progress 不变。
+所需输入及环境缺口见 [准备核查](evaluation/scientific-readiness.md)；
+本次检查日志与内容 hash 见 [机器记录](evaluation/scientific-readiness.json)。
