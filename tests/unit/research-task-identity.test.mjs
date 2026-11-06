@@ -30,7 +30,7 @@ function fixture() {
   const snapshot = api.createRunExecutionSnapshot({
     runId, threadId, inputMessageId: 'message',
     snapshot: {
-      schemaVersion: 9, submissionHash: 'f'.repeat(64),
+      schemaVersion: 10, submissionHash: 'f'.repeat(64),
       taskContract: { contractVersion: 1, objective: 'Research fixture', constraints: [], kind: 'reply',
         criteria: [{ id: 'response', description: 'Return findings', check: { kind: 'response' } }] },
       runOrigin: 'chat', model: { providerId: 'fixture', modelId: 'fixture-model' }, mode: 'run',
@@ -45,7 +45,7 @@ function fixture() {
   agentDb.prepare(`INSERT INTO agent_runs
     (id,thread_id,run_number,user_input,status,started_at,enabled_capabilities_json,
       workspace_path,run_origin,snapshot_json,snapshot_version)
-    VALUES (?,?,1,'Research','running',?,'{}',?,'chat',?,9)`)
+    VALUES (?,?,1,'Research','running',?,'{}',?,'chat',?,10)`)
     .run(runId, threadId, timestamp, directory, JSON.stringify(snapshot));
   let now = new Date(timestamp);
   const broker = new api.ExecutionGrantBroker(agentDb, () => now);
@@ -65,9 +65,54 @@ function runtime(f) {
       throw new Error('research_fixture_model_failure');
     }
   };
-  return { service: new api.ResearchStageRuntime(f.repository, {}, executor, { complete: async () => {} }),
+  return { service: new api.ResearchStageRuntime(f.repository, {}, executor, { complete: async () => {} }, {cancelOwned: async () => {}}),
     attempts: () => attempts };
 }
+
+test('reopened execution and task identities reject mismatched indexed columns', async () => {
+  const f = fixture();
+  const path = join(directory, 'identity-corruption.db');
+  try {
+    await f.agentDb.backup(path);
+    const db = new Database(path);
+    try {
+      const tasks = new api.ResearchTaskRepository(db);
+      const id = f.run.taskId;
+      const execution = tasks.requireExecution('stage', f.run.id, f.project.id);
+      db.prepare("UPDATE research_task_executions SET snapshot_json = json_set(snapshot_json, '$.taskId', 'different-task') WHERE kind = 'stage' AND execution_id = ?").run(f.run.id);
+      assert.throws(() => tasks.requireExecution('stage', f.run.id, f.project.id), /research_task_execution_identity_corrupt/);
+      assert.throws(() => tasks.executions(id, f.project.id), /research_task_execution_identity_corrupt/);
+      db.prepare("UPDATE research_task_executions SET snapshot_json = ? WHERE kind = 'stage' AND execution_id = ?")
+        .run(JSON.stringify(execution), f.run.id);
+      db.prepare("UPDATE research_tasks SET status = 'paused' WHERE id = ?").run(id);
+      assert.throws(() => tasks.get(id, f.project.id), /research_task_identity_corrupt/);
+      assert.throws(() => tasks.list({ projectId: f.project.id, afterTaskId: null, limit: 100 }), /research_task_identity_corrupt/);
+    } finally { db.close(); }
+  } finally { f.close(); }
+});
+
+test('reopened stage associations reject corrupt rows and conflicting agent links', async () => {
+  const f = fixture();
+  const researchPath = join(directory, 'research-association.db');
+  const agentPath = join(directory, 'agent-association.db');
+  try {
+    await f.db.backup(researchPath);
+    await f.agentDb.backup(agentPath);
+    const researchDb = new Database(researchPath);
+    const agentDb = new Database(agentPath);
+    try {
+      const tasks = new api.ResearchTaskRepository(agentDb);
+      const repository = new api.ResearchRepository(researchDb, tasks, () => '2026-11-03T00:00:00.000Z');
+      repository.runs.reconcileTaskLinks();
+      researchDb.prepare("UPDATE research_stage_runs SET status = 'failed' WHERE id = ?").run(f.run.id);
+      assert.throws(() => repository.runs.get(f.run.id, f.project.id), /research_stage_run_identity_corrupt/);
+      assert.throws(() => repository.runs.reconcileTaskLinks(), /research_stage_run_identity_corrupt/);
+      researchDb.prepare("UPDATE research_stage_runs SET status = ?, task_id = 'other-task', snapshot_json = json_set(snapshot_json, '$.taskId', 'other-task') WHERE id = ?")
+        .run(f.run.status, f.run.id);
+      assert.throws(() => repository.runs.reconcileTaskLinks(), /research_task_execution_conflict/);
+    } finally { researchDb.close(); agentDb.close(); }
+  } finally { f.close(); }
+});
 
 test('chat dispatch binds trusted parent while direct start, retry and replay preserve their own task roots', async () => {
   const f = fixture();
@@ -91,14 +136,34 @@ test('chat dispatch binds trusted parent while direct start, retry and replay pr
     assert.equal(retry.retryOfRunId, dispatched.id);
     assert.equal(f.tasks.requireExecution('stage', retry.id, f.project.id).associationSource, 'retry');
     await r.service.waitForIdle();
-    const direct = r.service.start({ ...f.request, requestId: 'direct-1' });
+    const direct = f.repository.runs.begin({ ...f.request, requestId: 'direct-1' });
     assert.notEqual(direct.taskId, dispatched.taskId);
     assert.equal(f.tasks.get(direct.taskId, f.project.id).rootAgentRunId, null);
     assert.equal(f.tasks.requireExecution('stage', direct.id, f.project.id).parentKind, null);
     await r.service.waitForIdle();
-    assert.equal(r.attempts(), 3);
+    assert.equal(r.attempts(), 2);
     assert.equal(f.db.prepare('SELECT task_id FROM research_stage_runs WHERE id = ?').pluck().get(direct.id), direct.taskId);
   } finally { await r.service.shutdown(); f.close(); }
+});
+
+test('archiving a queued project prevents replay dispatch and model preparation', async () => {
+  const f = fixture();
+  let preparations = 0;
+  const service = new api.ResearchStageRuntime(f.repository, {}, {
+    async prepare() { preparations += 1; throw new Error('model_must_not_prepare'); }
+  }, { complete: async () => {} }, {cancelOwned: async () => {}});
+  try {
+    f.repository.runs.terminate(f.run.id, f.project.id, 'cancelled', 'fixture');
+    const request = { ...f.request, requestId: 'archive-before-dispatch' };
+    const run = service.start(request, f.broker.consumeResearchDispatch(f.issue({request}),request));
+    const replayGrant = f.broker.consumeResearchDispatch(f.issue({request}),request);
+    f.db.prepare("UPDATE research_projects SET status = 'archived' WHERE id = ?").run(f.project.id);
+    assert.throws(() => service.start(request,replayGrant), /research_run_not_current/);
+    await service.waitForIdle();
+    assert.equal(preparations, 0);
+    assert.equal(f.repository.runs.get(run.id, f.project.id).status, 'failed');
+    assert.equal(f.repository.getProject(f.project.id).status, 'archived');
+  } finally { await service.shutdown(); f.close(); }
 });
 
 test('dispatch rejects unknown, copied, reused, changed and cross-project credentials before scheduling', async () => {
@@ -173,6 +238,7 @@ test('owned executions and three review roles retain stage parentage, deny reass
     assert.equal(direct.parentKind, null);
     assert.notEqual(direct.taskId, f.run.taskId);
     assert.throws(() => f.tasks.linkStage({ ...f.run, id: 'orphan', parentRunId: 'missing' }, null), /research_task_execution_unlinked/);
+    assert.throws(() => f.tasks.linkStage({ ...f.run, id: 'orphan-retry', parentRunId: null, retryOfRunId: 'missing' }, null), /research_task_execution_unlinked/);
     assert.equal(f.tasks.executions(f.run.taskId, f.project.id).length, 7);
   } finally { f.close(); }
 });
@@ -186,7 +252,7 @@ test('terminal tasks allow identical owned association replay while denying new 
         goal: kind, snapshot: { sourceVersion: 1 }
       }));
       const linked = inputs.map(input => f.tasks.linkOwned(input));
-      if (state === 'cancelled') f.tasks.cancel(f.run.taskId, f.project.id);
+      if (state === 'cancelled') f.tasks.setStatus(f.run.taskId, f.project.id, 'cancelled', 'fixture', ['active']);
       else f.repository.runs.recoverInterrupted();
       const task = f.tasks.get(f.run.taskId, f.project.id);
       assert.equal(task.status, state);
@@ -213,19 +279,37 @@ test('cross-database association failure blocks model execution; startup repairs
     f.repository.runs.terminate(f.run.id, f.project.id, 'cancelled', 'fixture');
     f.agentDb.exec(`CREATE TRIGGER reject_stage_link BEFORE INSERT ON research_task_executions
       WHEN NEW.kind = 'stage' BEGIN SELECT RAISE(ABORT, 'fixture_link_failed'); END`);
-    assert.throws(() => r.service.start(f.request), /fixture_link_failed/);
+    assert.throws(() => r.service.start(f.request, f.broker.consumeResearchDispatch(f.issue(),f.request)), /fixture_link_failed/);
     assert.equal(r.attempts(), 0);
-    assert.equal(f.repository.runs.list({ projectId: f.project.id, limit: 20 })[0].status, 'failed');
+    assert.equal(f.repository.runs.list({ projectId: f.project.id, limit: 20 })[0].status, 'cancelled');
     assert.equal(f.agentDb.prepare('SELECT COUNT(*) FROM research_tasks').pluck().get(), 1);
     f.agentDb.exec('DROP TRIGGER reject_stage_link');
-    const queued = f.repository.runs.begin({ ...f.request, requestId: 'interrupted-link' });
-    const execution = f.tasks.linkStage(queued, null);
-    assert.equal(f.repository.runs.get(queued.id, f.project.id).taskId, null);
+    // Fail after the durable Agent intent but before the Research row commits.
+    f.db.exec("CREATE TRIGGER fail_stage BEFORE INSERT ON research_stage_runs BEGIN SELECT RAISE(ABORT,'fixture_crash'); END");
+    assert.throws(()=>f.repository.runs.begin({...f.request,requestId:'orphan-intent'}), /fixture_crash/);
+    f.db.exec('DROP TRIGGER fail_stage');
+    const orphan = f.agentDb.prepare("SELECT execution_id,task_id FROM research_task_executions WHERE json_extract(snapshot_json,'$.associationState')='pending'").get();
+    const agentPath=join(directory,'intent-agent.db');const researchPath=join(directory,'intent-research.db');
+    await f.agentDb.backup(agentPath);await f.db.backup(researchPath);
+    const agentDb=new Database(agentPath);const researchDb=new Database(researchPath);
+    try {
+      const tasks=new api.ResearchTaskRepository(agentDb);
+      const repo=new api.ResearchRepository(researchDb,tasks,()=> '2026-11-03T00:00:00.000Z');
+      repo.runs.reconcileTaskLinks();
+      assert.equal(tasks.requireExecution('stage',orphan.execution_id,f.project.id).associationState,'failed');
+      assert.equal(tasks.get(orphan.task_id,f.project.id).statusReason,'research_execution_intent_uncommitted');
+      assert.equal(repo.runs.list({projectId:f.project.id,limit:20}).length,1);
+    } finally {agentDb.close();researchDb.close();}
+    // Fail after Research commit but before confirmation; startup confirms the same intent.
+    const confirm=f.tasks.confirmExecution;
+    f.tasks.confirmExecution=()=>{throw new Error('fixture_confirm_crash');};
+    assert.throws(()=>f.repository.runs.begin({...f.request,requestId:'interrupted-link'}), /fixture_confirm_crash/);
+    f.tasks.confirmExecution=confirm;
     f.repository.runs.reconcileTaskLinks();
-    assert.equal(f.repository.runs.get(queued.id, f.project.id).taskId, execution.taskId);
+    const queued=f.repository.runs.list({projectId:f.project.id,limit:20}).find(run=>run.requestId==='interrupted-link');
+    assert.equal(f.tasks.requireExecution('stage',queued.id,f.project.id).associationState,'confirmed');
     f.repository.runs.recoverInterrupted();
-    assert.equal(f.repository.runs.get(queued.id, f.project.id).status, 'interrupted');
-    assert.equal(f.repository.runs.list({ projectId: f.project.id, limit: 20 }).find((run) => run.requestId === f.request.requestId).taskId, null);
+    assert.equal(f.repository.runs.get(queued.id,f.project.id).status,'interrupted');
   } finally { await r.service.shutdown(); f.close(); }
 });
 
@@ -243,7 +327,7 @@ test('migration preserves old stage snapshots as explicitly unlinked without inv
     old.prepare(`INSERT INTO research_stage_runs
       (id,project_id,stage,request_id,parent_run_id,status,snapshot_json,context_json)
       VALUES (?,?,'discovery','old',NULL,'completed',?,'{}')`).run('old-run', f.project.id, JSON.stringify(snapshot));
-    api.applyDatabaseMigrations(old, { dbName: 'research', migrations: api.researchMigrations });
+    api.applyDatabaseMigrations(old, { dbName: 'research', migrations: api.researchMigrations, allowOffline: true });
     const saved = old.prepare('SELECT task_id, snapshot_json FROM research_stage_runs WHERE id = ?').get('old-run');
     assert.equal(saved.task_id, null);
     assert.equal(JSON.parse(saved.snapshot_json).taskId, null);
@@ -267,9 +351,7 @@ test('capability dispatch consumes only its own asynchronous main-process contex
     });
     assert.equal(f.tasks.requireExecution('stage', linked.id, f.project.id).parentKind, 'chat');
     await r.service.waitForIdle();
-    const direct = await start({ ...f.request, requestId: 'outside-context' });
-    assert.equal(f.tasks.requireExecution('stage', direct.id, f.project.id).parentKind, null);
-    await r.service.waitForIdle();
+    await assert.rejects(start({ ...f.request, requestId: 'outside-context' }), /research_dispatch_grant_required/);
   } finally { await r.service.shutdown(); f.close(); }
 });
 

@@ -23,10 +23,10 @@ after(() => {
   if (directory !== undefined) rmSync(directory, { recursive: true, force: true });
 });
 
-function createFixture({ taskSource = null, runOrigin = 'chat', schemaVersion = 9 } = {}) {
+function createFixture({ taskSource = null, runOrigin = 'chat', schemaVersion = 10 } = {}) {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
-  api.applyDatabaseMigrations(db, { dbName: 'agent', migrations: api.agentMigrations });
+  api.applyDatabaseMigrations(db, { dbName: 'agent', migrations: api.agentMigrations, allowOffline: true });
   const workspacePath = join(directory, `workspace-${Math.random().toString(16).slice(2)}`);
   mkdirSync(workspacePath);
   const createdAt = new Date().toISOString();
@@ -49,12 +49,12 @@ function createFixture({ taskSource = null, runOrigin = 'chat', schemaVersion = 
     workflowHint: null,
     researchProjectId: null
   }).manifest;
-  const snapshotV9 = api.createRunExecutionSnapshot({
+  const currentSnapshot = api.createRunExecutionSnapshot({
     runId,
     threadId,
     inputMessageId: 'message-1',
     snapshot: {
-      schemaVersion: 9,
+      schemaVersion: 10,
       submissionHash: 'f'.repeat(64),
       taskContract: {
         contractVersion: 1,
@@ -75,9 +75,9 @@ function createFixture({ taskSource = null, runOrigin = 'chat', schemaVersion = 
       budget: api.createRunBudget({ contextBudgetTokens: null })
     }
   });
-  let snapshot = snapshotV9;
-  if (schemaVersion === 7 || schemaVersion === 8) {
-    const legacyBudget = { ...snapshotV9.budget };
+  let snapshot = currentSnapshot;
+  if (schemaVersion === 7 || schemaVersion === 8 || schemaVersion === 9) {
+    const legacyBudget = { ...currentSnapshot.budget };
     const maxCostUsd = legacyBudget.maxCostMicrousd === null ? null : legacyBudget.maxCostMicrousd / 1_000_000;
     delete legacyBudget.policyVersion;
     delete legacyBudget.maxOutputTokens;
@@ -85,7 +85,9 @@ function createFixture({ taskSource = null, runOrigin = 'chat', schemaVersion = 
     delete legacyBudget.maxCostMicrousd;
     delete legacyBudget.pricingCatalogVersion;
     legacyBudget.maxCostUsd = maxCostUsd;
-    const legacySnapshot = { ...snapshotV9, schemaVersion, budget: legacyBudget };
+    const legacySnapshot = { ...currentSnapshot, schemaVersion, budget: schemaVersion === 9 ? currentSnapshot.budget : legacyBudget };
+    delete legacySnapshot.frozenInputs;
+    delete legacySnapshot.nodeBinding;
     if (schemaVersion === 7) delete legacySnapshot.workspaceIdentity;
     snapshot = legacySnapshot;
   }
@@ -121,24 +123,27 @@ function binding(fixture, overrides = {}) {
   };
 }
 
-test('new v9 snapshots pin workspace device and inode while legacy snapshots require safe migration before grants', () => {
+test('v10 pins workspace and frozen inputs; all historical versions reject grants without online conversion', () => {
   const fixture = createFixture();
   const identity = fixture.snapshot.workspaceIdentity;
   const stat = statSync(realpathSync(fixture.workspacePath));
-  assert.equal(fixture.snapshot.schemaVersion, 9);
+  assert.equal(fixture.snapshot.schemaVersion, 10);
   assert.equal(identity.path, realpathSync(fixture.workspacePath));
   assert.equal(identity.dev, String(stat.dev));
   assert.equal(identity.ino, String(stat.ino));
 
-  const legacyV8 = createFixture({ schemaVersion: 8 });
-  const migratedV8 = api.migrateLegacyRunExecutionSnapshot(legacyV8.snapshot, legacyV8.createdAt);
-  assert.equal(migratedV8.schemaVersion, 9);
-  assert.deepEqual(migratedV8.workspaceIdentity, legacyV8.snapshot.workspaceIdentity);
-
-  const legacyV7 = createFixture({ schemaVersion: 7 });
-  assert.equal(legacyV7.snapshot.schemaVersion, 7);
-  assert.throws(() => api.migrateLegacyRunExecutionSnapshot(legacyV7.snapshot, legacyV7.createdAt), /run_execution_snapshot_legacy_workspace_identity_missing/u);
-  assert.throws(() => legacyV7.broker.issue(binding(legacyV7)), /execution_grant_workspace_identity_missing/u);
+  assert.equal(fixture.snapshot.frozenInputs.manifestHash, fixture.manifest.manifestHash);
+  for (const schemaVersion of [7, 8, 9]) {
+    const historical = createFixture({ schemaVersion });
+    const before = historical.db.prepare('SELECT snapshot_json FROM agent_runs').pluck().get();
+    assert.throws(() => historical.broker.issue(binding(historical)), /execution_grant_run_snapshot_invalid/u);
+    assert.equal(historical.db.prepare('SELECT snapshot_json FROM agent_runs').pluck().get(), before);
+    historical.db.close();
+  }
+  const changed = structuredClone(fixture.snapshot);
+  changed.budget.maxTotalTokens += 1;
+  assert.throws(() => api.parseRunExecutionSnapshot(changed), /run_execution_snapshot_inputs_invalid/u);
+  fixture.db.close();
 });
 
 test('isolated grant is bound to the exact tool call and can be consumed only once', () => {
@@ -268,7 +273,7 @@ test('run binding must match persisted workspace identity and capability manifes
   }).manifest;
   snapshot.capabilityManifest = otherManifest;
   fixture.db.prepare('UPDATE agent_runs SET snapshot_json = ? WHERE id = ?').run(JSON.stringify(snapshot), fixture.runId);
-  assert.throws(() => fixture.broker.issue(request), /execution_grant_run_manifest_mismatch/u);
+  assert.throws(() => fixture.broker.issue(request), /execution_grant_run_snapshot_invalid/u);
   fixture.db.close();
 });
 

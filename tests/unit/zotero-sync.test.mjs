@@ -1,3 +1,4 @@
+import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import assert from 'node:assert/strict';
 import {before, after, test} from 'node:test';
 import {mkdtempSync, rmSync, symlinkSync} from 'node:fs';
@@ -136,7 +137,7 @@ test('pause survives actual database reopen with pending source and original off
     const dbPath=join(directory,'restart-'+crypto.randomUUID()+'.sqlite');
     await f.db.backup(dbPath);
     diskDb=new Database(dbPath);
-    api.applyResearchDatabaseSchema(diskDb,()=>at);
+    applyOfflineResearchSchema(api, diskDb,()=>at);
     const repository=new api.ResearchRepository(diskDb,f.tasks,()=>at);
     f.setService(f.createService(diskDb,repository));
     assert.deepEqual(f.read(paused),paused);

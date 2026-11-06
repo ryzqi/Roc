@@ -1,3 +1,4 @@
+import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp, rm} from 'node:fs/promises';
@@ -272,7 +273,7 @@ test('DB27 upgrade preserves frozen protocol bytes and migration receipts withou
     const versions=f.db.prepare('SELECT * FROM research_review_protocol_versions').all();
     const receipts=f.db.prepare('SELECT * FROM research_review_protocol_freezes').all();
     const migrations=f.db.prepare('SELECT * FROM schema_migrations').all();
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),api.researchMigrations.at(-1).version);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_review_protocol_versions').all(),versions);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_review_protocol_freezes').all(),receipts);

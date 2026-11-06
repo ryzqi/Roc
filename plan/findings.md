@@ -161,3 +161,19 @@ tool，其他输入仍进入消息流；Core 1.2.20 的 assembled output 无条�
 配套验证覆盖真实应用、主/子代理、完成前首 token 与非法 role。
 初始缩小测试直接 for-await Core thenable，触发 namespace 错误；按已安装 LangGraph
 公开 non-thenable handle 合同修正。subagent 补显式 cause 字段，失败日志全部保留。
+
+## S02 继续核查（2026-11-07）
+
+- 当前代码含 execution v2、snapshot v10、事件 envelope、outbox 与离线转换，原进度过时。
+- 首次恢复专项 59 项通过；不能替代完整单测、构建、smoke 或完整 S02 验收。
+- CodeGraph 返回当前未提交符号（含 reconcileTaskLinks / flushTaskEvents），可辅助导航。
+- 超长批读有截断；后续按文件分段，未据截断输出认定完整核对。
+- Stage 冻结输入同时包含来源内容与人工批准状态；dispatch、完成、retry、恢复审批均复核。
+  诊断会隐藏失效输入的继续/恢复入口，返回明确 recoveryIssues；outbox 未送达数量与失败可见。
+- 冷恢复回归已走真实 Agent runtime/executor/checkpointer：磁盘备份关闭重开后维持 runId、
+  threadId 和冻结 snapshot，旧 reservation 保持 unknown，新调用独立结算。
+- 生产旧 snapshot v7/v8/v9 decoder、读时升级和 effect identity v0 自动升级已删除；
+  新库 agent 20 / research 61。既有库拒绝自动切换，有限离线转换仅接受台账来源版本，
+  历史执行保留 audit 与完整 backup，并阻止恢复。
+- 全量 unit 与 renderer 同时运行出现资源竞争超时，Renderer 首个失败项单独通过；
+  继续按验收矩阵串行复核。首轮全量期间诊断/审批夹具有更新，不能用首轮构建作为最终版本证据。

@@ -15,6 +15,7 @@ import type {
   SequencedChatRunEvent
 } from '../../../shared/types';
 import { parseStoredJson } from '../../infrastructure/stored-json';
+import { createExecutionEvent, parseExecutionEvent } from '../../infrastructure/execution-events';
 
 export const agentRunEventLogMaxEvents = 10_000;
 export const agentRunEventLogMaxBytes = 16 * 1024 * 1024;
@@ -141,9 +142,6 @@ export class AgentRunEventLog {
 
   recordRunEvent(event: ChatRunEvent, createdAt = new Date().toISOString()): SequencedChatRunEvent {
     const validEvent = chatRunEventSchema.parse(event);
-    const eventJson = JSON.stringify(validEvent);
-    const eventBytes = byteLength(eventJson);
-    if (eventBytes > this.maxEventBytes) throw new Error('agent_run_event_payload_too_large');
 
     return this.db.transaction(() => {
       let cursor = this.getCursor.get(validEvent.runId) as CursorRow | undefined;
@@ -155,6 +153,16 @@ export class AgentRunEventLog {
       } else {
         sequence = cursor.next_sequence;
       }
+      const scope = this.db.prepare(`SELECT t.research_project_id projectId,e.task_id taskId
+        FROM agent_runs r JOIN agent_threads t ON t.id=r.thread_id
+        LEFT JOIN research_task_executions e ON e.kind='chat' AND e.execution_id=r.id WHERE r.id=?`)
+        .get(validEvent.runId) as {projectId: string | null; taskId: string | null} | undefined;
+      const eventJson = JSON.stringify(createExecutionEvent({streamId: 'chat:' + validEvent.runId,
+        projectId: scope?.projectId ?? null, taskId: scope?.taskId ?? null, runId: validEvent.runId,
+        sequence, eventType: validEvent.type, actor: {kind: 'main', id: 'agent-runtime'},
+        correlationId: validEvent.runId, causationId: null, payload: validEvent, createdAt}));
+      const eventBytes = byteLength(eventJson);
+      if (eventBytes > this.maxEventBytes) throw new Error('agent_run_event_payload_too_large');
       this.insertEvent.run(validEvent.runId, sequence, eventJson, createdAt, eventBytes);
       cursor = {
         ...cursor,
@@ -185,7 +193,7 @@ export class AgentRunEventLog {
     const afterSequence = Math.max(0, Math.floor(input.afterSequence));
     const limit = boundedPageLimit(input.limit, 1_000);
     const snapshotRow = this.getSnapshot.get(input.runId) as SnapshotRow | undefined;
-    const snapshot = snapshotRow === undefined ? null : parseStoredJson(snapshotRow.snapshot_json, chatRunEventsSnapshotSchema, 'agent_run_event_snapshot_corrupt');
+    const snapshot = snapshotRow === undefined ? null : parseSnapshotRow(snapshotRow, input.runId);
     const firstAvailableSequence = this.firstAvailableSequence(input.runId);
     const needsSnapshot = snapshot !== null
       ? afterSequence < snapshot.throughSequence
@@ -194,7 +202,7 @@ export class AgentRunEventLog {
     if (needsSnapshot) {
       const recoverySnapshot = snapshot ?? this.createIncompleteSnapshot(input.runId, (firstAvailableSequence ?? 1) - 1);
       const events = this.listAvailableRows(input.runId, recoverySnapshot.throughSequence, limit).map(rowToSequencedEvent);
-      this.assertContiguous(events, recoverySnapshot.throughSequence);
+      this.assertContiguous(input.runId, events, recoverySnapshot.throughSequence, limit);
       return chatRunEventsReplayPageSchema.parse({
         kind: 'replay_gap',
         runId: input.runId,
@@ -207,12 +215,12 @@ export class AgentRunEventLog {
 
     const events = this.listAvailableRows(input.runId, afterSequence, limit).map(rowToSequencedEvent);
     const baseSequence = Math.max(afterSequence, snapshot?.throughSequence ?? 0);
-    this.assertContiguous(events, baseSequence);
+    this.assertContiguous(input.runId, events, baseSequence, limit);
     return chatRunEventsReplayPageSchema.parse({ kind: 'events', runId: input.runId, events });
   }
 
   restoreRunEvent(input: { runId: string; sequence: number; eventJson: string; createdAt: string }): void {
-    const event = parseStoredJson(input.eventJson, chatRunEventSchema, 'agent_run_event_corrupt');
+    const event = readEnvelopeEvent(input.eventJson, input.runId, input.sequence, input.createdAt);
     if (event.runId !== input.runId) throw new Error('agent_run_event_run_id_mismatch');
     const eventBytes = byteLength(input.eventJson);
     if (eventBytes > this.maxEventBytes) throw new Error('agent_run_event_payload_too_large');
@@ -314,11 +322,15 @@ export class AgentRunEventLog {
     });
   }
 
-  private assertContiguous(events: readonly SequencedChatRunEvent[], afterSequence: number): void {
+  private assertContiguous(runId: string, events: readonly SequencedChatRunEvent[], afterSequence: number, limit: number): void {
     let expectedSequence = afterSequence + 1;
     for (const event of events) {
       if (event.sequence !== expectedSequence) throw new Error('agent_run_event_sequence_gap_without_snapshot');
       expectedSequence += 1;
+    }
+    const cursor = this.getCursor.get(runId) as CursorRow | undefined;
+    if (events.length < limit && cursor !== undefined && expectedSequence < cursor.next_sequence) {
+      throw new Error('agent_run_event_sequence_gap_without_snapshot');
     }
   }
 
@@ -354,7 +366,7 @@ export class AgentRunEventLog {
     const storedSnapshotRow = this.getSnapshot.get(runId) as SnapshotRow | undefined;
     let snapshot = storedSnapshotRow === undefined
       ? null
-      : parseStoredJson(storedSnapshotRow.snapshot_json, chatRunEventsSnapshotSchema, 'agent_run_event_snapshot_corrupt');
+      : parseSnapshotRow(storedSnapshotRow, runId);
     let state: ChatRunStateSnapshot = snapshot?.state ?? createEmptyChatRunState();
     let throughSequence = snapshot?.throughSequence ?? 0;
     if (snapshot === null) state = { ...state, runId };
@@ -365,7 +377,7 @@ export class AgentRunEventLog {
         state = { ...createEmptyChatRunState(), runId, status: 'recovering', historyComplete: false };
         throughSequence = row.sequence - 1;
       }
-      const event = parseStoredJson(row.event_json, chatRunEventSchema, 'agent_run_event_corrupt');
+      const event = readEnvelopeEvent(row.event_json, row.run_id, row.sequence, row.created_at);
       if (event.runId !== runId) throw new Error('agent_run_event_run_id_mismatch');
       state = applyChatRunEvent(state, event);
       throughSequence = row.sequence;
@@ -393,6 +405,15 @@ export class AgentRunEventLog {
       runId
     );
   }
+}
+
+function parseSnapshotRow(row: SnapshotRow, runId: string): ChatRunEventsSnapshot {
+  const snapshot = parseStoredJson(row.snapshot_json, chatRunEventsSnapshotSchema, 'agent_run_event_snapshot_corrupt');
+  if (row.run_id !== runId || snapshot.runId !== runId || snapshot.throughSequence !== row.through_sequence ||
+      byteLength(row.snapshot_json) !== row.snapshot_bytes) {
+    throw new Error('agent_run_event_snapshot_corrupt');
+  }
+  return snapshot;
 }
 
 function createBoundedSnapshot(
@@ -449,7 +470,7 @@ function makeSnapshot(runId: string, throughSequence: number, state: ChatRunStat
 }
 
 function rowToSequencedEvent(row: EventRow): SequencedChatRunEvent {
-  const event = parseStoredJson(row.event_json, chatRunEventSchema, 'agent_run_event_corrupt');
+  const event = readEnvelopeEvent(row.event_json, row.run_id, row.sequence, row.created_at);
   if (event.runId !== row.run_id) throw new Error('agent_run_event_run_id_mismatch');
   return {
     runId: row.run_id,
@@ -457,6 +478,14 @@ function rowToSequencedEvent(row: EventRow): SequencedChatRunEvent {
     event,
     createdAt: row.created_at
   };
+}
+
+function readEnvelopeEvent(raw: string, runId: string, sequence: number, createdAt: string): ChatRunEvent {
+  const envelope = parseExecutionEvent(raw);
+  const event = chatRunEventSchema.parse(envelope.payload);
+  if (envelope.streamId !== 'chat:' + runId || envelope.sequence !== sequence || envelope.createdAt !== createdAt ||
+      envelope.correlationId !== runId || envelope.eventType !== event.type) throw new Error('agent_run_event_envelope_mismatch');
+  return event;
 }
 
 function byteLength(value: string): number {

@@ -4,7 +4,7 @@ import { isAbsolute, relative, resolve } from 'node:path';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 import type { RunCapabilityManifestV1 } from '../../../shared/types';
 import { taskSourceFromRunSnapshot } from '../../../shared/agent-task-source';
-import { runExecutionSnapshotAnySchema } from '../../../shared/schemas/agent';
+import { parseRunExecutionSnapshot } from '../../plugins/agent/run-execution-snapshot';
 import { evaluateShellPolicy } from './shell-policy';
 import type { ResearchStageRunStartRequest } from '../../../shared/types';
 import { researchDispatchRequestHash } from '../research-dispatch-context';
@@ -182,9 +182,11 @@ export class ExecutionGrantBroker {
       throw new Error('research_dispatch_parent_revoked');
     }
     if (run.snapshot_json === null) throw new Error('research_dispatch_snapshot_missing');
-    const snapshot = runExecutionSnapshotAnySchema.parse(JSON.parse(run.snapshot_json));
+    let snapshot: ReturnType<typeof parseRunExecutionSnapshot>;
+    try { snapshot = parseRunExecutionSnapshot(JSON.parse(run.snapshot_json)); }
+    catch (error) { throw new Error('research_dispatch_snapshot_invalid', { cause: error }); }
     const { manifestHash: storedHash, ...content } = snapshot.capabilityManifest;
-    if (snapshot.schemaVersion !== 9 || run.snapshot_version !== 9 || snapshot.runId !== runId || snapshot.threadId !== threadId
+    if (snapshot.schemaVersion !== 10 || run.snapshot_version !== 10 || snapshot.runId !== runId || snapshot.threadId !== threadId
       || snapshot.researchProjectId !== projectId || run.research_project_id !== projectId
       || storedHash !== manifestHash || hash(JSON.stringify(content)) !== manifestHash) {
       throw new Error('research_dispatch_parent_binding_invalid');
@@ -448,13 +450,13 @@ export class ExecutionGrantBroker {
     const fence = this.db.prepare('SELECT 1 FROM agent_execution_run_fences WHERE run_id = ?').get(binding.runId);
     if (fence !== undefined) throw new Error('execution_grant_run_revoked');
     if (run.workspace_path === null || run.snapshot_json === null) throw new Error('execution_grant_run_snapshot_missing');
-    let snapshot: ReturnType<typeof runExecutionSnapshotAnySchema.parse>;
+    let snapshot: ReturnType<typeof parseRunExecutionSnapshot>;
     try {
-      snapshot = runExecutionSnapshotAnySchema.parse(JSON.parse(run.snapshot_json) as unknown);
+      snapshot = parseRunExecutionSnapshot(JSON.parse(run.snapshot_json) as unknown);
     } catch (error) {
       throw new Error('execution_grant_run_snapshot_invalid', { cause: error });
     }
-    if ((snapshot.schemaVersion !== 8 && snapshot.schemaVersion !== 9) || run.snapshot_version !== snapshot.schemaVersion) {
+    if (run.snapshot_version !== snapshot.schemaVersion) {
       throw new Error('execution_grant_workspace_identity_missing');
     }
     const workspaceIdentity = snapshot.workspaceIdentity;

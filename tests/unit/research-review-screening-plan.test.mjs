@@ -1,3 +1,4 @@
+import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
@@ -169,7 +170,7 @@ test('disk reopen and DB30 upgrade retain exact raw corpus/dedup history without
     const columns=tables.map(table=>f.db.pragma(`table_info(${table})`).map(column=>column.name).join(','));
     const before=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all());
     const original=f.db.prepare('SELECT * FROM research_review_corpora').all(),migrations=f.db.prepare('SELECT * FROM schema_migrations').all();
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT ${columns[index]} FROM ${table}`).all(),before[index]));
     assert.deepEqual(f.db.prepare(`SELECT ${Object.keys(original[0]).join(',')} FROM research_review_corpora`).all(),original);
     assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE version<=30').all(),migrations);

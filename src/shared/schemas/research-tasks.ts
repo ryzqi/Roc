@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { executionEventEnvelopeSchema } from './execution-events';
+import { executionNodeBindingSchema, executionOriginSchema, frozenExecutionInputsSchema } from './execution';
 
 const id = z.string().trim().min(1).max(256);
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -24,7 +26,11 @@ export const researchTaskSchema = z.object({
   updatedAt: z.iso.datetime()
 }).strict();
 export const researchTaskExecutionSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
+  nodeBinding: executionNodeBindingSchema,
+  origin: executionOriginSchema,
+  frozenInputs: frozenExecutionInputsSchema.nullable(),
+  associationState: z.enum(['pending', 'confirmed', 'historical', 'failed']),
   taskId: id,
   projectId: id,
   kind: researchExecutionKindSchema,
@@ -47,16 +53,18 @@ export const researchTaskListPageSchema = z.object({
   tasks: z.array(researchTaskSchema), nextTaskId: id.nullable(), hasMore: z.boolean()
 }).strict();
 
-export const researchTaskEventSchema = z.object({
-  sequence: z.number().int().positive(),
+export const researchTaskEventSchema = executionEventEnvelopeSchema.extend({
+  eventType: z.enum(['task_created', 'task_status', 'execution_linked', 'call_linked', 'call_reserved', 'call_settled', 'call_unknown',
+    'plan_approved', 'source_invalidated', 'claim_reviewed', 'quality_gate', 'effect_committed', 'node_claimed', 'lease_expired']),
+  payload: z.object({
   taskId: id,
-  eventType: z.enum(['task_created', 'task_status', 'execution_linked', 'call_linked', 'call_reserved', 'call_settled', 'call_unknown']),
   executionKind: researchExecutionKindSchema.nullable(),
   executionId: id.nullable(),
   callId: id.nullable(),
   state: z.string().nullable(),
   reason: z.string().nullable(),
-  createdAt: z.iso.datetime()
+  detail: z.record(z.string(), z.unknown()).optional()
+  }).strict()
 }).strict();
 export const researchTaskEventsRequestSchema = researchTaskRequestSchema.extend({
   afterSequence: z.number().int().nonnegative(),
@@ -65,7 +73,8 @@ export const researchTaskEventsRequestSchema = researchTaskRequestSchema.extend(
 export const researchTaskEventsPageSchema = z.object({
   events: z.array(researchTaskEventSchema),
   nextSequence: z.number().int().nonnegative(),
-  hasMore: z.boolean()
+  hasMore: z.boolean(),
+  gap: z.object({afterSequence: z.number().int().nonnegative(), firstAvailableSequence: z.number().int().positive()}).strict().nullable()
 }).strict();
 export type ResearchTaskEvent = z.infer<typeof researchTaskEventSchema>;
 export const researchTaskUpdatedSchema = researchTaskRequestSchema;

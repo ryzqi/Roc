@@ -12,7 +12,7 @@ test('stage invalidation follows trusted linkage and the final persisted task st
   const updates = [];
   const runtime = new api.ResearchStageRuntime(f.repository, {}, {
     async prepare() { throw new Error('research_fixture_model_failure'); }
-  }, { complete: async () => {} }, undefined, (taskId, projectId) => {
+  }, { complete: async () => {} }, {cancelOwned: async () => {}}, (taskId, projectId) => {
     updates.push({ taskId, projectId, status: f.tasks.get(taskId, projectId).status });
   });
   try {
@@ -24,8 +24,8 @@ test('stage invalidation follows trusted linkage and the final persisted task st
       { taskId: run.taskId, projectId: f.project.id, status: 'failed' }
     ]);
     const events = f.tasks.events({ taskId: run.taskId, projectId: f.project.id, afterSequence: 0, limit: 200 }).events;
-    assert.ok(events.some(event => event.eventType === 'execution_linked' && event.executionId === run.id));
-    assert.equal(events.at(-1).state, 'failed');
+    assert.ok(events.some(event => event.eventType === 'execution_linked' && event.payload.executionId === run.id));
+    assert.equal(events.at(-1).payload.state, 'failed');
   } finally { await runtime.shutdown(); f.close(); }
 });
 

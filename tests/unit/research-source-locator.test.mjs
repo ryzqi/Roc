@@ -1,3 +1,4 @@
+import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -256,7 +257,7 @@ test('DB21 to26 retains captured sources and claims without inventing migration 
     const sourcesBefore=db.prepare('SELECT * FROM research_evidence').all();
     const claimsBefore=db.prepare('SELECT * FROM research_claims').all();
     const locationsBefore=db.prepare('SELECT * FROM research_evidence_source_locators').all();
-    api.applyResearchDatabaseSchema(db,()=>timestamp);
+    applyOfflineResearchSchema(api, db,()=>timestamp);
     assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),api.researchMigrations.at(-1).version);
     assert.deepEqual(db.prepare('SELECT * FROM research_evidence').all(),sourcesBefore);
     assert.deepEqual(db.prepare('SELECT * FROM research_claims').all(),claimsBefore);
@@ -264,7 +265,7 @@ test('DB21 to26 retains captured sources and claims without inventing migration 
     assert.deepEqual(repository.evidence.sourceMigrations.list({projectId:project.id,evidenceId:evidence.id}),[]);
     assert.equal(db.prepare('SELECT count(*) FROM research_source_migration_decisions').pluck().get(),0);
     const before=db.prepare('SELECT total_changes()').pluck().get();
-    api.applyResearchDatabaseSchema(db,()=>timestamp);
+    applyOfflineResearchSchema(api, db,()=>timestamp);
     assert.equal(db.prepare('SELECT total_changes()').pluck().get(),before);
   }finally{db.close();agentDb.close();}
 });
@@ -290,7 +291,7 @@ test('DB22 to26 preserves pending proposal snapshots and prior scientific record
       'research_evidence_relations','research_evidence_relation_revisions','research_source_migration_proposals'];
     const original=tables.map(table=>db.prepare(`SELECT * FROM ${table}`).all());
     assert.equal(original.at(-1).length,1);
-    api.applyResearchDatabaseSchema(db,()=>timestamp);
+    applyOfflineResearchSchema(api, db,()=>timestamp);
     assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),api.researchMigrations.at(-1).version);
     for (const [index,table] of tables.entries()) assert.deepEqual(db.prepare(`SELECT * FROM ${table}`).all(),original[index]);
     assert.equal(db.prepare('SELECT count(*) FROM research_source_migration_decisions').pluck().get(),0);
@@ -298,7 +299,7 @@ test('DB22 to26 preserves pending proposal snapshots and prior scientific record
     const [inspection]=repository.evidence.sourceMigrations.list({projectId:project.id,evidenceId:evidence.id});
     assert.equal(inspection.decision,null);
     assert.equal(inspection.proposalHash,original.at(-1)[0].snapshot_hash);
-    api.applyResearchDatabaseSchema(db,()=>timestamp);
+    applyOfflineResearchSchema(api, db,()=>timestamp);
     assert.equal(db.prepare('SELECT total_changes()').pluck().get(),before);
   }finally{db.close();agentDb.close();}
 });
@@ -329,13 +330,13 @@ test('DB23 to26 preserves actual captured migration decisions and creates no inf
       'research_evidence_relations','research_evidence_relation_revisions','research_source_migration_proposals','research_source_migration_decisions'];
     const original=tables.map(table=>db.prepare(`SELECT * FROM ${table}`).all());
     assert.equal(original.at(-1).length,1);
-    api.applyResearchDatabaseSchema(db,()=>timestamp);
+    applyOfflineResearchSchema(api, db,()=>timestamp);
     assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),api.researchMigrations.at(-1).version);
     for (const [index,table] of tables.entries()) assert.deepEqual(db.prepare(`SELECT * FROM ${table}`).all(),original[index]);
     assert.equal(db.prepare('SELECT count(*) FROM research_source_replacements').pluck().get(),0);
     const before=db.prepare('SELECT total_changes()').pluck().get();
     assert.deepEqual(repository.evidence.sourceReplacements.list({projectId:project.id,evidenceId:evidence.id}),[]);
-    api.applyResearchDatabaseSchema(db,()=>timestamp);
+    applyOfflineResearchSchema(api, db,()=>timestamp);
     assert.equal(db.prepare('SELECT total_changes()').pluck().get(),before);
   }finally{db.close();agentDb.close();}
 });

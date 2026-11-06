@@ -37,7 +37,6 @@ import { AgentInterruptProjection, assertPendingInterrupts } from './interrupt-p
 import { mapTaskRun, type TaskRunRow } from './task-run-mapper';
 import {
   createRunExecutionSnapshot,
-  migrateLegacyRunExecutionSnapshot,
   parseRunExecutionSnapshot,
   type RunExecutionSnapshotSeed
 } from './run-execution-snapshot';
@@ -428,7 +427,7 @@ export class AgentSessionRepository {
     if (row === undefined) {
       throw new Error('task_run_not_found');
     }
-    if (row.snapshot_version !== 7 && row.snapshot_version !== 8 && row.snapshot_version !== 9) {
+    if (row.snapshot_version !== 10) {
       this.quarantineRunSnapshot(row, 'run_execution_snapshot_unsupported_version');
       throw new Error('run_execution_snapshot_unsupported_version');
     }
@@ -448,25 +447,17 @@ export class AgentSessionRepository {
       if (snapshotVersion !== row.snapshot_version) {
         throw new Error('run_execution_snapshot_version_mismatch');
       }
-      const snapshot = row.snapshot_version === 9
-        ? parseRunExecutionSnapshot(storedSnapshot)
-        : migrateLegacyRunExecutionSnapshot(storedSnapshot, row.started_at);
+      const snapshot = parseRunExecutionSnapshot(storedSnapshot);
       if (snapshot.runId !== row.id || snapshot.threadId !== row.thread_id) {
         throw new Error('run_execution_snapshot_identity_mismatch');
-      }
-      if (row.snapshot_version !== 9) {
-        const updated = this.db.prepare(
-          'UPDATE agent_runs SET snapshot_json = ?, snapshot_version = 9 WHERE id = ? AND snapshot_version = ?'
-        ).run(JSON.stringify(snapshot), row.id, row.snapshot_version);
-        if (updated.changes !== 1) return this.getRunExecutionSnapshot(runId);
       }
       return snapshot;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '';
       const code = [
         'run_execution_snapshot_identity_mismatch',
-        'run_execution_snapshot_legacy_workspace_identity_missing',
-        'run_execution_snapshot_legacy_context_budget_missing'
+        'run_execution_snapshot_version_mismatch',
+        'run_execution_snapshot_inputs_invalid'
       ].includes(errorMessage)
         ? errorMessage
         : 'run_execution_snapshot_corrupt';

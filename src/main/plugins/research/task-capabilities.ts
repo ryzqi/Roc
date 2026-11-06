@@ -64,7 +64,7 @@ export function registerResearchTaskCapabilities(
   context.capabilities.register(context.pluginId, capabilities.forChat, async input =>
     diagnostics.forChat(researchTaskForChatRequestSchema.parse(input)));
   context.capabilities.register(context.pluginId, capabilities.events, async input =>
-    tasks.events(researchTaskEventsRequestSchema.parse(input)));
+    diagnostics.events(researchTaskEventsRequestSchema.parse(input)));
 
   function action<TInput extends { taskId: string; projectId: string }, TOutput>(
     capability: CapabilityDescriptor<TInput, TOutput>, run: (request: TInput) => TOutput | Promise<TOutput>

@@ -194,7 +194,7 @@ type ExecuteRunInput = {
 
 export type AgentPluginRuntimeOptions = {
   repository: AgentSessionRepository;
-  executionGrantBroker?: ExecutionGrantBroker;
+  executionGrantBroker: ExecutionGrantBroker;
   eventBus: RocEventBus;
   modelFactory: AgentModelFactoryAdapter;
   deepAgentExecutor?: AgentDeepAgentExecutor;
@@ -249,6 +249,7 @@ export class AgentPluginRuntime {
   private readonly pluginId: string;
 
   constructor(private readonly options: AgentPluginRuntimeOptions) {
+    if (options.executionGrantBroker === undefined) throw new Error('execution_grant_broker_required');
     this.pluginId = options.pluginId === undefined ? '@roc/plugin-agent' : options.pluginId;
     this.activeRunLifecycle = new AgentActiveRunLifecycle((error, runId) => {
       this.reportNotificationFailure('agent_pending_run_rejected', error, {
@@ -613,6 +614,7 @@ export class AgentPluginRuntime {
     const snapshot = this.options.repository.getRunExecutionSnapshot(run.id);
     this.options.repository.taskContracts.assertMatchesSnapshot(run.id, snapshot.taskContract);
     this.options.repository.taskContracts.assertHandoffCanResume(run.id, request.threadId, request.interruptId);
+    await this.validateResumeProject(snapshot);
     const modelHandle = await this.options.modelFactory.createModelHandleByProviderAndModel({
       providerId: snapshot.model.providerId,
       modelId: snapshot.model.modelId,
@@ -738,6 +740,7 @@ export class AgentPluginRuntime {
     if (!this.options.repository.hasCheckpoint(run.id)) throw new Error('task_handoff_checkpoint_missing');
     const snapshot = this.options.repository.getRunExecutionSnapshot(run.id);
     this.options.repository.taskContracts.assertMatchesSnapshot(run.id, snapshot.taskContract);
+    await this.validateResumeProject(snapshot);
     const previousReport = this.options.repository.taskContracts.readReport(run.id);
     const refreshedReport = await this.options.repository.taskContracts.refreshReport(run.id, this.createTaskVerificationContext({
       response: null,
@@ -1286,7 +1289,7 @@ export class AgentPluginRuntime {
 
   private revokeExecutionGrantsBestEffort(runId: string): void {
     try {
-      this.options.executionGrantBroker?.revokeRun(runId);
+      this.options.executionGrantBroker.revokeRun(runId);
     } catch (error) {
       this.reportNotificationFailure('agent_execution_grant_revoke_failed', error, {
         runId,
@@ -1493,6 +1496,12 @@ export class AgentPluginRuntime {
     return this.workspaceFromPath(workspacePath, currentWorkspace);
   }
 
+  private async validateResumeProject(snapshot: RunExecutionSnapshot): Promise<void> {
+    if (snapshot.researchProjectId === null) return;
+    const path = await this.resolveResearchProjectWorkspacePath(snapshot.researchProjectId);
+    if (path !== snapshot.workspace?.path) throw new Error('research_project_workspace_changed');
+  }
+
   private async resolveResearchProjectWorkspacePath(projectId: string): Promise<string> {
     if (this.options.researchProjectProvider === undefined) {
       throw new RocDomainError({
@@ -1608,7 +1617,7 @@ export class AgentPluginRuntime {
   }): Promise<void> {
     const interrupted = this.options.repository.markRunInterrupted({
       interrupts: input.interrupts,
-      revokePendingExecutionGrants: () => this.options.executionGrantBroker?.revokePendingRunGrants(input.runId),
+      revokePendingExecutionGrants: () => this.options.executionGrantBroker.revokePendingRunGrants(input.runId),
       runId: input.runId,
       telemetry: input.telemetry,
       threadId: input.threadId
@@ -1694,7 +1703,7 @@ function createRunExecutionSnapshotSeed(input: {
 }): RunExecutionSnapshotSeed {
   const mode = toRunExecutionMode(input.request.mode);
   return {
-    schemaVersion: 9,
+    schemaVersion: 10,
     submissionHash: hashToolInput(input.request),
     taskContract: createTaskContract(input.request),
     runOrigin: resolveRunOrigin(input.request),

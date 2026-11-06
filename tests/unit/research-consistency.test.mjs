@@ -1,3 +1,4 @@
+import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import assert from 'node:assert/strict';
 import {before, after, test} from 'node:test';
 import {createHash} from 'node:crypto';
@@ -224,7 +225,7 @@ test('DB47 to current schema preserves complete prior migration receipts and ins
     db.pragma('foreign_keys=ON');
     api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(m => m.version <= 47)});
     const prior = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    api.applyResearchDatabaseSchema(db);
+    applyOfflineResearchSchema(api, db);
     assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=47 ORDER BY version').all(), prior);
     assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), api.researchMigrations.at(-1).version);
     assert.equal(db.prepare('SELECT count(*) FROM research_consistency_reviews').pluck().get(), 0);

@@ -102,6 +102,7 @@ test('retry attempt leases fence stale workers and completed operations replay',
   store.markStarted(second.lease);
   assert.throws(() => store.finishSuccess(first.lease, { value: 'stale' }), /agent_tool_effect_lease_lost/u);
   store.finishSuccess(second.lease, { value: 'committed' });
+  assert.deepEqual(store.replayRecordedOperation(input).result, {value:'committed'});
 
   const replay = store.beginOperation(input);
   assert.deepEqual(replay, {
@@ -150,6 +151,48 @@ test('unresolved operations block run and thread deletion until reconciled', () 
   db.close();
 });
 
+test('reconciled replay rejects corrupted receipt and output after reopening SQLite', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'roc-tool-effect-replay-'));
+  const databasePath = join(directory, 'agent.sqlite');
+  const input = operation({ runId: 'run-replay' });
+  let db = createDatabase(agentMigrations, databasePath);
+  let store = new AgentToolEffectStore(db);
+  const started = store.beginOperation(input);
+  store.markStarted(started.lease);
+  store.finishUnknown(started.lease, new Error('unknown'));
+  const state = store.readState(input);
+  store.reconcile({ operation: input, expectedLeaseGeneration: state.leaseGeneration, receipt: {
+    schemaVersion: 1, kind: 'resolution', source: 'operator', outcome: 'applied',
+    operationId: state.operationId, reference: 'case-verified',
+    evidenceHash: hashToolInput({ value: 'verified' }), recordedAt: '2026-10-30T00:00:00.000Z'
+  }, result: { value: 'verified' } });
+  db.close();
+  db = createDatabase(agentMigrations, databasePath);
+  store = new AgentToolEffectStore(db);
+  const changes = db.prepare('SELECT total_changes() AS changes').get().changes;
+  assert.deepEqual(store.replayRecordedOperation(input), {
+    kind: 'recorded', result: { value: 'verified' }, operationId: state.operationId,
+    receiptHash: db.prepare('SELECT receipt_hash FROM agent_tool_effect_results WHERE operation_id=?').pluck().get(state.operationId)
+  });
+  assert.equal(db.prepare('SELECT total_changes() AS changes').get().changes, changes);
+  assert.throws(() => store.replayRecordedOperation(operation({ runId: 'run-replay', args: { changed: true } })), /agent_tool_effect_input_drift/u);
+  assert.deepEqual(store.replayRecordedOperation(operation({ runId: 'missing' })), { kind: 'unavailable', reason: 'not_found' });
+  assert.deepEqual(store.beginOperation(input).result, { value: 'verified' });
+  db.prepare('UPDATE agent_tool_effects SET result_json = ? WHERE run_id = ?').run('{"value":"changed"}', input.runId);
+  assert.throws(() => store.replayRecordedOperation(input), /agent_tool_effect_result_corrupt/u);
+  assert.throws(() => store.beginOperation(input), /agent_tool_effect_result_corrupt/u);
+  db.prepare('UPDATE agent_tool_effects SET result_hash = ? WHERE run_id = ?')
+    .run(hashToolInput({ value: 'changed' }), input.runId);
+  assert.throws(() => store.replayRecordedOperation(input), /agent_tool_effect_result_corrupt/u);
+  assert.throws(() => store.beginOperation(input), /agent_tool_effect_result_corrupt/u);
+  db.prepare('UPDATE agent_tool_effects SET result_json = ?, result_hash = ?, receipt_hash = ? WHERE run_id = ?')
+    .run('{"value":"verified"}', hashToolInput({ value: 'verified' }), '0'.repeat(64), input.runId);
+  assert.throws(() => store.replayRecordedOperation(input), /agent_tool_effect_receipt_corrupt/u);
+  assert.throws(() => store.beginOperation(input), /agent_tool_effect_receipt_corrupt/u);
+  db.close();
+  rmSync(directory, { recursive: true, force: true });
+});
+
 test('SQLite restart marks dispatched operations unknown and fences the old process lease', () => {
   const directory = mkdtempSync(join(tmpdir(), 'roc-tool-effect-restart-'));
   const databasePath = join(directory, 'agent.sqlite');
@@ -177,37 +220,38 @@ test('SQLite restart marks dispatched operations unknown and fences the old proc
   rmSync(directory, { recursive: true, force: true });
 });
 
-test('restore from v8 fences active attempts and preserves reconciliation history', () => {
-  const versionEight = agentMigrations.filter((entry) => entry.version <= 8);
-  const source = createDatabase(versionEight);
+test('restore rejects historical effect schemas without changing the target', () => {
+  const source = createDatabase(agentMigrations.filter(entry => entry.version <= 8));
   const target = createDatabase();
-  insertLegacyEffect(source, { runId: 'run-in-progress', status: 'in_progress' });
-  insertLegacyEffect(source, { runId: 'run-manual', status: 'failed_retryable', reconcileStrategy: 'manual_confirmation' });
-  insertLegacyEffect(source, { runId: 'run-reserved', status: 'reserved' });
-  insertLegacyEffect(source, { runId: 'run-succeeded', status: 'succeeded' });
-  source.prepare(`INSERT INTO agent_tool_effect_reconciliations (
-    run_id, execution_path, checkpoint_id, tool_call_id, input_hash, evidence, outcome, created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
-    'run-succeeded',
-    'main',
-    'checkpoint-1',
-    'call-run-succeeded',
-    'legacy-input-hash',
-    'provider receipt confirmed',
-    'applied',
-    '2026-10-30T00:00:00.000Z'
-  );
+  insertLegacyEffect(source, {runId:'legacy',status:'succeeded'});
+  assert.throws(() => new AgentToolEffectStore(target).restoreFrom(source), /agent_tool_effect_restore_schema_invalid/);
+  assert.equal(target.prepare('SELECT count(*) FROM agent_tool_effects').pluck().get(),0);
+  source.close(); target.close();
+});
 
-  new AgentToolEffectStore(target).restoreFrom(source);
-  const restored = target.prepare('SELECT run_id, status, attempt_id, lease_generation FROM agent_tool_effects ORDER BY run_id').all();
-  assert.deepEqual(restored, [
-    { run_id: 'run-in-progress', status: 'unknown', attempt_id: null, lease_generation: 1 },
-    { run_id: 'run-manual', status: 'unknown', attempt_id: null, lease_generation: 1 },
-    { run_id: 'run-reserved', status: 'failed_retryable', attempt_id: null, lease_generation: 1 },
-    { run_id: 'run-succeeded', status: 'succeeded', attempt_id: null, lease_generation: 1 }
-  ]);
-  assert.equal(target.prepare('SELECT count(*) FROM agent_tool_effect_reconciliations').pluck().get(), 1);
-  assert.equal(target.prepare('SELECT count(*) FROM agent_tool_effect_reconciliations WHERE operation_id IS NULL').pluck().get(), 1);
-  source.close();
-  target.close();
+test('current restore preserves successful receipts and fences unfinished attempts', async () => {
+  const directory = mkdtempSync(join(tmpdir(),'roc-effect-restore-'));
+  const sourcePath = join(directory,'source.db');
+  let source = createDatabase(agentMigrations,sourcePath);
+  const store = new AgentToolEffectStore(source);
+  const done = operation();
+  const active = operation({runId:'active'});
+  const reserved = operation({runId:'reserved'});
+  const doneLease = store.beginOperation(done).lease;
+  store.markStarted(doneLease); store.finishSuccess(doneLease,{value:'persisted'});
+  const activeLease = store.beginOperation(active).lease; store.markStarted(activeLease);
+  const reservedLease = store.beginOperation(reserved).lease;
+  source.close(); source = new Database(sourcePath);
+  const target = createDatabase(); const restored = new AgentToolEffectStore(target);
+  restored.restoreFrom(source);
+  assert.equal(restored.readState(active).status,'unknown');
+  assert.equal(restored.readState(active).leaseGeneration,activeLease.leaseGeneration+1);
+  assert.equal(restored.readState(reserved).status,'failed_retryable');
+  assert.equal(restored.readState(reserved).leaseGeneration,reservedLease.leaseGeneration+1);
+  const changes = target.prepare('SELECT total_changes()').pluck().get();
+  assert.deepEqual(restored.replayRecordedOperation(done).result,{value:'persisted'});
+  assert.equal(target.prepare('SELECT total_changes()').pluck().get(),changes);
+  restored.deleteForRunIds([done.runId]);
+  assert.equal(target.prepare('SELECT count(*) FROM agent_tool_effect_results').pluck().get(),0);
+  source.close(); target.close(); rmSync(directory,{recursive:true,force:true});
 });

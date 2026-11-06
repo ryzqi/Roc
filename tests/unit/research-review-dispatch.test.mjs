@@ -24,7 +24,7 @@ function fixture() {
   }).manifest;
   const snapshot = api.createRunExecutionSnapshot({
     runId, threadId, inputMessageId: 'review-owner-message', snapshot: {
-      schemaVersion: 9, submissionHash: 'a'.repeat(64),
+      schemaVersion: 10, submissionHash: 'a'.repeat(64),
       taskContract: {contractVersion: 1, objective: 'Execute frozen review query', constraints: [], kind: 'reply',
         criteria: [{id: 'query', description: 'Read the query receipt', check: {kind: 'response'}}]},
       runOrigin: 'chat', model: {providerId: 'fixture', modelId: 'fixture'}, mode: 'run', workspace: null,
@@ -37,7 +37,7 @@ function fixture() {
     VALUES (?,'chat','Review','Review','active',?,?,?)`).run(threadId, f.project.id, timestamp, timestamp);
   f.agentDb.prepare(`INSERT INTO agent_runs
     (id,thread_id,run_number,user_input,status,started_at,enabled_capabilities_json,run_origin,snapshot_json,snapshot_version)
-    VALUES (?,?,1,'Review','running',?,'{}','chat',?,9)`).run(runId, threadId, timestamp, JSON.stringify(snapshot));
+    VALUES (?,?,1,'Review','running',?,'{}','chat',?,10)`).run(runId, threadId, timestamp, JSON.stringify(snapshot));
   let now = new Date(timestamp);
   const broker = new api.ExecutionGrantBroker(f.agentDb, () => now);
   const request = {projectId: f.project.id, requestId: 'owned-query-request', versionId: 'frozen-protocol',
@@ -131,7 +131,8 @@ test('valid parent manifests must explicitly grant the review tool in main scope
       content.tools = content.tools.flatMap(tool => tool.modelVisibleName !== toolName ? [tool] :
         condition === 'absent' ? [] : [{...tool, executionScopes: ['subagent']}]);
       const manifest = {...content, manifestHash: hash(content)};
-      const snapshot = {...f.snapshot, capabilityManifest: manifest};
+      const snapshot = api.createRunExecutionSnapshot({runId: f.runId, threadId: f.threadId, inputMessageId: f.snapshot.inputMessageId,
+        snapshot: {...f.snapshot, capabilityManifest: manifest}});
       f.agentDb.prepare('UPDATE agent_runs SET snapshot_json=? WHERE id=?').run(JSON.stringify(snapshot), f.runId);
       assert.throws(() => f.issue({manifest}), /research_dispatch_capability_denied/u);
       assert.equal(f.agentDb.prepare('SELECT count(*) FROM agent_research_dispatch_grants').pluck().get(), 0);
@@ -158,14 +159,14 @@ test('agent migration16 preserves every historical stage credential and ledger r
     }
     const rows = db.prepare('SELECT * FROM agent_research_dispatch_grants ORDER BY id').all();
     const ledger = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    api.applyDatabaseMigrations(db, {dbName: 'agent', migrations: api.agentMigrations});
+    api.applyDatabaseMigrations(db, {dbName: 'agent', migrations: api.agentMigrations, allowOffline: true});
     assert.deepEqual(db.prepare('SELECT * FROM agent_research_dispatch_grants ORDER BY id').all(),
       rows.map(row => ({...row, tool_name: 'research_run_stage'})));
     assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=15 ORDER BY version').all(), ledger);
     assert.throws(() => db.prepare("UPDATE agent_research_dispatch_grants SET tool_name='invented' WHERE id='issued'").run(),
       /CHECK constraint/u);
     assert.deepEqual(db.pragma('foreign_key_check'), []);
-    api.applyDatabaseMigrations(db, {dbName: 'agent', migrations: api.agentMigrations});
+    api.applyDatabaseMigrations(db, {dbName: 'agent', migrations: api.agentMigrations, allowOffline: true});
     assert.equal(db.prepare('SELECT count(*) FROM agent_research_dispatch_grants').pluck().get(), 4);
   } finally {db.close(); f.close();}
 });

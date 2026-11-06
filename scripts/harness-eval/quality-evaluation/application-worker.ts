@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { createConnection } from 'node:net';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
+import { openExecutionGrantBroker } from '../../../src/main/services/deep-agent/execution-grant-broker';
 import { ChatOpenAI } from '@langchain/openai';
 import { applyAgentDatabaseSchema, applyMemoryDatabaseSchema } from '../../../src/main/infrastructure/database-schemas';
 import { CapabilityRegistry } from '../../../src/main/kernel/capability-registry';
@@ -128,8 +129,9 @@ eventBus.subscribe<{ type: string }>(agentChatRunEventType, event => {
 eventBus.subscribe<{ assistantMessage: string }>('agent.run.completed', event => resolveOutput(event.payload.assistantMessage));
 eventBus.subscribe<{ error: string }>('agent.run.failed', event => rejectOutput(new Error(event.payload.error)));
 const runtime = new AgentPluginRuntime({
-  repository, eventBus, runEventLog,
+  repository, eventBus, runEventLog, executionGrantBroker: openExecutionGrantBroker(db),
   deepAgentExecutor: createAgentDeepAgentExecutor({
+    executionGrantBroker: openExecutionGrantBroker(db),
     budgetLedger: new RunBudgetLedger(db), capabilities: new CapabilityRegistry(),
     checkpointer: new RocSqliteCheckpointer(db), contextArtifactStore: new ContextArtifactStore(db),
     paths, sessionHistory: repository, store: new RocSqliteStore(memoryDb), toolEffectStore: new AgentToolEffectStore(db)

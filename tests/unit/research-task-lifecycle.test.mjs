@@ -52,14 +52,37 @@ test('pause waits cleanup and continuation creates a new execution with the same
   } finally { cleanup.resolve(); await runtime.shutdown(); f.close(); }
 });
 
+test('continuation refuses unresolved effects from a linked chat run', () => {
+  const f = createResearchFixture(api, 'discovery');
+  try {
+    const timestamp = '2026-11-03T00:00:00.000Z';
+    const execution = { ...f.tasks.requireExecution('stage', f.run.id, f.project.id), taskId: f.run.taskId, projectId: f.project.id,
+      kind: 'chat', executionId: 'parent-chat', parentKind: null, parentExecutionId: null,
+      associationSource: 'direct', manifestHash: 'a'.repeat(64), createdAt: timestamp };
+    f.agentDb.prepare(`INSERT INTO research_task_executions
+      (kind,execution_id,task_id,project_id,snapshot_json,created_at) VALUES ('chat','parent-chat',?,?,?,?)`)
+      .run(f.run.taskId, f.project.id, JSON.stringify(execution), timestamp);
+    f.agentDb.prepare(`INSERT INTO agent_tool_effects
+      (run_id,thread_id,execution_path,checkpoint_id,tool_call_id,tool_name,input_hash,effect_class,reconcile_strategy,status,created_at,updated_at)
+      VALUES ('parent-chat','thread','root','checkpoint','call','tool','hash','external_call','manual_confirmation','unknown',?,?)`)
+      .run(timestamp, timestamp);
+    f.tasks.setStatus(f.run.taskId, f.project.id, 'interrupted', 'fixture', ['active']);
+    assert.throws(() => f.tasks.continueWith(f.run.taskId, f.project.id, () => {}), /research_task_effect_unresolved/);
+    assert.equal(f.tasks.get(f.run.taskId, f.project.id).status, 'interrupted');
+    f.agentDb.prepare("UPDATE agent_tool_effects SET status='failed_final' WHERE run_id='parent-chat'").run();
+    f.tasks.continueWith(f.run.taskId, f.project.id, () => {});
+    assert.equal(f.tasks.get(f.run.taskId, f.project.id).status, 'active');
+  } finally { f.close(); }
+});
+
 test('cancelled task continuation is explicit and failed continuation rolls back task activation', async () => {
   const f = createResearchFixture(api, 'discovery');
   const runtime = new api.ResearchStageRuntime(f.repository, {}, {
     async prepare() { throw new Error('research_fixture_failure'); }
-  }, { complete: async () => {} });
+  }, { complete: async () => {} }, {cancelOwned: async () => {}});
   try {
     f.repository.runs.terminate(f.run.id, f.project.id, 'cancelled', 'fixture');
-    f.tasks.cancel(f.run.taskId, f.project.id);
+    f.tasks.setStatus(f.run.taskId, f.project.id, 'cancelled', 'fixture', ['active']);
     assert.throws(() => runtime.continueTask({
       taskId: f.run.taskId, projectId: f.project.id, runId: f.run.id, requestId: f.run.requestId
     }), /research_run_request_conflict/);
@@ -82,10 +105,13 @@ test('cancelled task continuation is explicit and failed continuation rolls back
 test('existing stage pause and cancel preserve user intent in the task state', async () => {
   for (const action of ['pause', 'cancel']) {
     const f = createResearchFixture(api, 'discovery');
-    const runtime = new api.ResearchStageRuntime(f.repository, {}, undefined, { complete: async () => {} });
+    const runtime = new api.ResearchStageRuntime(f.repository, {}, {prepare: async () => assert.fail('no model in control fixture')}, { complete: async () => {} }, {cancelOwned: async () => {}});
     try {
-      if (action === 'pause') runtime.transition({ projectId: f.project.id, expectedStage: 'discovery', action });
-      else runtime.cancel({ projectId: f.project.id, runId: f.run.id });
+      runtime.attachTaskController(new api.ResearchTaskController(f.tasks, {
+        stages: runtime, cancelChat: async () => {}, cancelJob: async () => {}
+      }));
+      if (action === 'pause') await runtime.transition({ projectId: f.project.id, expectedStage: 'discovery', action });
+      else await runtime.cancel({ projectId: f.project.id, runId: f.run.id });
       assert.equal(f.tasks.get(f.run.taskId, f.project.id).status, action === 'pause' ? 'paused' : 'cancelled');
     } finally { await runtime.shutdown(); f.close(); }
   }
@@ -101,7 +127,7 @@ test('real human gate leaves task awaiting approval and approval updates it with
       return { output: { title: 'Plan', markdown: 'Plan for manual review', claims: [], sections: [], verdict: 'ready' },
         modelVersion: null };
     } }; }
-  }, gate);
+  }, gate, {cancelOwned: async () => {}});
   try {
     f.repository.runs.terminate(f.run.id, f.project.id, 'failed', 'fixture');
     const current = runtime.retry({ projectId: f.project.id, runId: f.run.id, requestId: 'approval-current' });
@@ -153,7 +179,7 @@ test('startup interrupts active linked tasks, preserves cancellation and never r
   } finally { f.close(); }
   const cancelled = createResearchFixture(api, 'discovery');
   try {
-    cancelled.tasks.cancel(cancelled.run.taskId, cancelled.project.id);
+    cancelled.tasks.setStatus(cancelled.run.taskId, cancelled.project.id, 'cancelled', 'fixture', ['active']);
     cancelled.repository.runs.recoverInterrupted();
     assert.equal(cancelled.tasks.get(cancelled.run.taskId, cancelled.project.id).status, 'cancelled');
     assert.equal(cancelled.repository.runs.get(cancelled.run.id, cancelled.project.id).status, 'cancelled');
@@ -170,7 +196,7 @@ test('v12 task migration preserves identity and status while requiring the new l
       createdAt: '2026-11-03T00:00:00.000Z', updatedAt: '2026-11-03T01:00:00.000Z' };
     db.prepare('INSERT INTO research_tasks (id,project_id,snapshot_json,created_at) VALUES (?,?,?,?)')
       .run(task.id, task.projectId, JSON.stringify(task), task.createdAt);
-    api.applyDatabaseMigrations(db, { dbName: 'agent', migrations: api.agentMigrations });
+    api.applyDatabaseMigrations(db, { dbName: 'agent', migrations: api.agentMigrations, allowOffline: true });
     const migrated = new api.ResearchTaskRepository(db).get(task.id, task.projectId);
     assert.deepEqual(migrated, { ...task, schemaVersion: 2, statusReason: null, deadlineClock: 'continuous' });
     assert.equal(db.prepare('SELECT COUNT(*) FROM research_task_executions').pluck().get(), 0);

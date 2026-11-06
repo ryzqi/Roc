@@ -1,5 +1,76 @@
 # 计划编制与执行记录
 
+## 2026-11-06：S02 启动与取消清理修复
+
+开始 SHA `5313b3d411d583e73e2c8903f99d20f010691084`，工作区干净。
+S02 阶段页原先要求 Task v3，但迁移台账 M02/M10 明确将 Task v3 留给 S06；
+阶段页已与迁移台账对齐，S02 切换 execution v2。未对用户数据执行迁移。
+
+取消或暂停时，清理函数同步抛错曾绕过 `Promise.allSettled`，导致其他清理未被等待、
+`research_task_cleanup_failed` 未持久化；现将同步异常转换为拒绝并等待其他清理。
+专项 `node --test tests/unit/research-task-cancellation.test.mjs`：7 pass；
+`pnpm typecheck`、`git diff --check`：exit 0。该回归重新构造 repository，
+不构成磁盘重启恢复验收。
+
+继续检查事件回放与关联：回放末尾使用持久游标识别缺失事件，完整分页仍可继续；
+物理 SQLite 文件关闭重开后注入缺尾和全缺失的测试通过。重试 stage 缺少真实父
+execution 时显式拒绝，避免误建新根任务；相关 identity/lifecycle 测试通过。
+`node --test tests/unit/run-event-log.test.mjs tests/unit/research-task-cancellation.test.mjs`：12 pass；
+`node --test tests/unit/research-task-identity.test.mjs tests/unit/research-task-lifecycle.test.mjs`：16 pass；
+`pnpm typecheck`、`git diff --check`：exit 0。
+
+归档项目在排队后、模型准备前会重新校验；重复 dispatch 也在关联和排队前拒绝。
+新增收据时 effect 成功回放验证已有收据，对账结果额外验证结果 hash；旧无收据结果
+仍沿用现有路径，尚未完成迁移台账 M05 的严格切换。预算调用将结算记录与账本更新
+放在同一事务，重复相同结算不重复写事件，不一致或记录损坏拒绝；启动时变成 unknown
+且没有收据的旧 reservation 仍不能冒充已结算。收据与结果损坏、结算重复测试均关闭
+并重新打开真实 SQLite 文件；归档/关联/取消专项共 25 项、effect/预算/事件专项共 20 项
+通过，`pnpm typecheck` 通过。LSP 的未捕获 schema 解析告警经核对为预期传播损坏错误，
+标记为误报；未屏蔽异常。回放还核对 snapshot 行与内容的 runId、序号和字节数。
+取消/暂停在等待 cleanup 时持久化 pending 原因，进程退出后继续操作会被拒绝；
+测试使用 SQLite backup 保存等待状态、打开新数据库验证阻断，完成后才恢复普通取消原因。
+Stage cleanup 捕获同步抛错并继续等待其他 effect cleanup；取消与进行中的暂停 cleanup
+会同时等待。重启后重新取消不会抹去未确认状态。取消及生命周期专项共 17 项、关联的
+七组专项共 43 项通过（含上述补充）。
+完整单测首次执行 1488 项，1481 通过、7 项因默认 `python3` 为 3.9.6 而失败；使用
+本机 Python 3.14 重跑 `research-notebook-python-source.test.mjs`，6 项全部通过，尚未
+重跑完整单测。`pnpm check:ipc` 与 `pnpm harness:eval`（94 项）通过。Task 和 execution
+读取核对索引列与快照的身份/项目/状态，损坏时拒绝；在 SQLite 备份重开后注入不一致验证，
+关联四组 29 项测试及 typecheck 通过。
+
+现有数据库遇到标记为 offline-only 的迁移会拒绝自动升级；空库仍可初始化，历史迁移
+checksum 不变。该机制尚未接入 S02 的实际离线转换。Stage 取消及活动 workflow 暂停
+统一委托 TaskController，取消清理时保留持久化 fence；关闭阶段运行时也等待 effect 清理，
+失败时保留不可继续的状态。删除未使用的 repository.cancel 快捷入口。模拟阶段终止抛错、
+关闭清理失败和并发取消/暂停后，四组关联测试 35 项通过，typecheck 通过。
+
+增加 effect store 的只读 recorded replay 入口：核对 operation identity、对账 receipt 及
+result hash，不创建 attempt 或调用外部系统；无收据、无结果绑定或旧 identity 显式返回
+不可回放。以 SQLite 关闭重开、记录不变和篡改输入/结果/receipt 验证。此入口尚未接入
+统一事件合同或 IPC，其他 receipt 类型仍缺结果绑定，不能声称三种 replay 已完成。
+
+Stage run 的读取同时核对项目、状态、任务、阶段、请求和父 run 索引与快照；启动关联
+核对 Agent DB 的 execution，已关联但缺失或冲突时失败，不补造关系。Research 与 Agent
+两库备份重开后注入阶段状态损坏及跨库关联冲突，identity 专项 12 项通过；此检查仍不
+替代跨库 intent 与提交协议。
+
+Task 诊断对清理待完成/失败及归档项目不再显示可继续或恢复审批；实际恢复审批入口也
+拒绝归档项目。Stage 清理在某个阶段快照损坏时仍尝试其他关联执行并报告错误。unknown
+部分用量在 run/task/project 的预算统计中保留观测值与预留值的较大值，防止提前释放额度；
+预算两组专项测试通过；缺少价格预留的 unknown 部分费用会阻止有上限的新增调用，
+已结算 token 但实际费用缺失时仍显示 unknown 并保留估算额度。取消清理按关联逐项
+验证 execution，单条身份损坏不会阻止尝试其他可信关联的清理；该任务仍保留失败 fence。
+最近取消、生命周期和身份三组 33 项测试以及 typecheck 通过。关联 chat 的 effect 处于
+reserved/in_progress/unknown 时，任务继续和恢复审批均被拒绝，诊断隐藏对应入口；
+该检查只覆盖已有可信 chat 关联，尚不构成所有领域 effect 的完整对账。
+完整单测在使用 Python
+3.14 的环境中通过 1501 项；运行期间预算代码仍有后续修改，因此不作为最终版本验收。
+Recorded replay 仅在对账证据 hash 与输出 hash 一致时
+返回记录，不能用互相独立的结果和结果 hash 冒充 receipt 对输出的绑定。
+
+S02 仍在进行：执行合同与消费者整体切换、事件 envelope、跨库对账、三类 replay、
+恢复、冷迁移和故障注入等均未完成；不将此局部修复标为阶段验收通过。
+
 ## 2026-11-06：计划编制
 
 状态：`Verified passing（计划文档）`。计划编制与文档验证完成；业务实施未开始。
@@ -259,3 +330,75 @@ run_completed.assistantMessage 和 result.output 一致，进程组清理完成�
 具体清单见 [科学验收准备核查](evaluation/scientific-readiness.md)。
 本次提交范围限定为已验证的运行修复、回归与准备核查材料；
 提交后仅在忽略的工件目录重建 worker、核对 commit/bundle/lock 身份。
+
+## 2026-11-07：按阶段继续并提交
+
+用户授权继续 S02 剩余任务，完成、验证后提交，再推进后续阶段；授权本地 Git 提交，
+不包含远端推送、发布、付费模型调用或真实用户数据迁移。继续使用唯一 `plan/`。
+开始 SHA `5313b3d411d583e73e2c8903f99d20f010691084`；已有 83 个已修改文件和 9 个新增
+文件属于未完成 S02，保留并核查。resolver 未发现其他计划；memory 查询无相关记录。
+
+恢复后专项：`node --test tests/unit/execution-replay.test.mjs tests/unit/offline-execution-migration.test.mjs tests/unit/research-task-identity.test.mjs tests/unit/research-task-cancellation.test.mjs tests/unit/research-task-events.test.mjs tests/unit/run-event-log.test.mjs tests/unit/tool-effect-store.test.mjs tests/unit/run-budget-ledger.test.mjs tests/unit/research-task-diagnostics.test.mjs`：59 pass；
+`pnpm typecheck`：exit 0。工作目录均为仓库根目录；日志暂存 `/tmp/roc-s02-focused.log`、
+`/tmp/roc-s02-typecheck.log`，阶段验收时归档。
+执行合同、事件、迁移新代码已存在但未记入旧进度；继续核对冻结输入、跨库提交、恢复及消费者。
+
+S02 输入版本补查：批准状态/源内容变化后，stage dispatch、完成和 retry 全部拒绝；
+`node --test tests/unit/research-stage-inputs.test.mjs tests/unit/research-task-lifecycle.test.mjs tests/unit/run-budget-events.test.mjs`：14 pass；
+加 `tests/integration/research-review-workflow.test.mjs` 的组合：15 pass；typecheck exit 0。
+上次全量单测失败为 run-budget-events 夹具缺 agent_runs，已更新生产 schema 初始化，专项通过。
+
+新增 `agent-cold-resume.test.mjs` 通过真实 runtime/executor 在模型请求进行时保存 SQLite，
+关闭原连接后重开备份，沿同 runId/threadId/checkpoint 和冻结输入恢复；旧请求 unknown
+预算不丢，新请求单独结算，重复恢复被拒绝。首轮夹具误以为 shutdown 会 abort 导致超时，
+改为备份后先 cancel 再 shutdown；第二轮补齐生产启动的 ledger.reconcileStartup。
+`node --test tests/unit/agent-cold-resume.test.mjs` exit 0，日志 `/tmp/roc-s02-cold-resume-final.log`。
+以上 cwd 均为仓库根目录，尚未构成本阶段完整验收。
+
+S02 诊断收尾：加入历史不可恢复、未确认 intent、缺 receipt、输入失效与 outbox 投递状态；
+现有管理抽屉读取当前 envelope，脱敏导出保留 gap、pending 和 unknown，不含原文 payload。
+恢复人工审批也验证原 Stage 输入；首次测试夹具没有合法 planning 输出，修正为真实
+`ready` 产物后，`research-stage-inputs/research-task-diagnostics/research-task-lifecycle`
+共 14 项通过；`tests/renderer/research-tasks.test.mjs` 16 项通过，typecheck exit 0。
+专项日志为 `/tmp/roc-s02-diagnostics-final.log`、`/tmp/roc-s02-ui-final.log`、
+`/tmp/roc-s02-diagnostics-types-final.log`；失败夹具日志保留。
+
+首轮全量采集位于 `.artifacts/research-harness/S02/2026-11-06T17-33-29.412Z/`。
+IPC、94 项 harness、build、chunks、13 项 smoke 与 workflow integration 通过；
+unit 为 1514 pass / 3 fail（provider dispatch 等待、下载失败清理及修正前审批夹具），
+renderer 为 416 pass / 34 fail，多项发生并行超时。首个实验结果 Renderer 失败项
+单独复现通过，日志 `/tmp/roc-s02-renderer-repro.log`。
+没有放宽超时或业务检查；改为顺序运行完整 unit 与失败的七份 Renderer 文件。
+最终采集器 `.artifacts/research-harness/S02/capture-final-verification.mjs`
+记录源码 hash、精确命令/cwd/SHA/时间/exit/log hash；运行过程中不再编辑业务源码。
+此处仅记录已观察结果，最终验收仍待采集完成。
+
+
+## 2026-11-07：S02 工程验收通过
+
+范围状态：`Verified passing（S02 工程 L0/L1）`。完成 RH-02.1～02.5、RH-03.1～03.5；
+完整合同、删除边界与迁移限制见 [S02 执行报告](s02-execution-report.md)。
+最终采集器在仓库根目录执行，开始/结束 HEAD 均为
+`5313b3d411d583e73e2c8903f99d20f010691084`，检查未提交差异；源码 hash 无变化。
+精确命令、cwd、版本、时间、退出码与日志 hash 见
+[最终 verification.json](../.artifacts/research-harness/S02/2026-11-06T17-44-18.620Z/verification.json)。
+
+| 命令 | 结果 |
+| --- | --- |
+| `pnpm test:unit` | exit 0；1517 pass，0 fail/skip/cancelled |
+| `node --test --test-concurrency=1 tests/renderer/experiment-results.test.mjs tests/renderer/idea-outcomes.test.mjs tests/renderer/lifecycles.test.mjs tests/renderer/paper-reader.test.mjs tests/renderer/research-tasks.test.mjs tests/renderer/review-quality-assessment.test.mjs tests/renderer/review-quality-plan.test.mjs` | exit 0；114 pass，0 fail/skip/cancelled |
+| `pnpm check:ipc` | exit 0 |
+| `pnpm harness:eval` | exit 0；94/94 |
+| `pnpm build` | exit 0；包含 typecheck |
+| `pnpm check:renderer-chunks` | exit 0 |
+| `node scripts/smoke-electron.mjs` | exit 0；13/13，dist-main-fallback，full=false |
+
+首轮 Renderer 其余文件通过，失败文件逐一顺序复核；未放宽断言或超时。
+首轮 workflow integration 通过；最终 unit 覆盖同版 stage 输入和恢复审批。
+只读 replay CLI exit 0、DB hash 不变；离线迁移仅隔离 fixture，原始备份保留。
+真实 provider、独立人工科学评价、用户数据迁移、远端写入和发布未运行。
+首轮采集器没有 sourceHashes 字段，一次摘要脚本错误读取该字段报 TypeError；
+改为仅核验最终采集器的 hash，结果 changedSources=[]，原验证日志未修改。
+
+提交本阶段代码、测试与计划；S03 随后实施。S01 科学仍缺独立样本/双审/费用授权，
+S09 仍按原计划作为独立条件阶段，不把这些关口标为已完成。

@@ -1,3 +1,4 @@
+import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import assert from 'node:assert/strict';
 import {before, after, test} from 'node:test';
 import {mkdtempSync, rmSync, symlinkSync, writeFileSync, readFileSync, chmodSync, readdirSync, unlinkSync} from 'node:fs';
@@ -240,7 +241,7 @@ test('DB18 to19 preserves explicit grants and receipts validate their hash and s
   try{
     const grant=await selectedGrant(f),before=f.db.prepare('SELECT * FROM research_zotero_attachment_grants').all();
     const ledger=f.db.prepare('SELECT * FROM schema_migrations WHERE db_name=? ORDER BY version').all('plugin:@roc/plugin-research');
-    api.applyResearchDatabaseSchema(f.db,()=> '2026-12-01T00:00:00.000Z');
+    applyOfflineResearchSchema(api, f.db,()=> '2026-12-01T00:00:00.000Z');
     assert.deepEqual(f.db.prepare('SELECT * FROM research_zotero_attachment_grants').all(),before);
     assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE db_name=? AND version<=18 ORDER BY version').all('plugin:@roc/plugin-research'),ledger);
     assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_attachment_imports').pluck().get(),0);

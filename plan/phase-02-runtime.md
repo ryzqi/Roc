@@ -1,7 +1,8 @@
 # S02：统一执行事实、事件、Effect 与恢复
 
 优先级：P0。依赖：S00。来源：WP-01、WP-10 边界、RH-02/RH-03。
-实施状态：pending。建议时间：第 2～5 周。
+实施状态：complete（工程 L0/L1）。建议时间：第 2～5 周。
+验收与边界见 [S02 执行报告](s02-execution-report.md)。
 
 ## 目标与关口
 
@@ -20,31 +21,31 @@
 
 ## 按顺序执行
 
-- [ ] **RH-02.1 执行合同**：目标 ResearchTask schema v3 增加 revision 与合同版本引用，
-  保持根任务、节点和 execution 不同语义。run/stage/job 关联必须有真实来源，
+- [x] **RH-02.1 执行合同**：按迁移台账 M02，S02 保持 Task schema v2，新增 execution v2；
+  Task v3 与 revision 在 S06 按 M10 切换。保持根任务、节点和 execution 不同语义。run/stage/job 关联必须有真实来源，
   输入包含冻结 manifest、Skill、source/artifact/plan 版本。
-- [ ] **RH-02.2 单一控制路径**：重构 `TaskController/StageRuntime/AgentRuntime` 的
+- [x] **RH-02.2 单一控制路径**：重构 `TaskController/StageRuntime/AgentRuntime` 的
   start、pause、cancel、continue、waiting approval、resume。
   必需依赖显式构造；归档/跨项目/版本冲突在真实 dispatch 前拒绝。
-- [ ] **RH-02.3 事件 envelope**：为 Task event 引入当前版本 envelope，补 plan approved、
+- [x] **RH-02.3 事件 envelope**：为 Task event 引入当前版本 envelope，补 plan approved、
   source invalidated、claim reviewed、quality gate、effect committed 的语义；
   node/lease 事件类型由本合同预留并在 S06 实现。
   sequence、event identity、causation、payload hash/ref 统一且有大小/保留期。
-- [ ] **RH-02.4 跨存储一致性**：同 DB 状态与事件在同一事务写入；跨 Research/Agent DB
+- [x] **RH-02.4 跨存储一致性**：同 DB 状态与事件在同一事务写入；跨 Research/Agent DB
   或真实 I/O 用明确可对账提交记录和恢复流程。
   事件发布失败必须可恢复且可见，不能以已完成消息掩盖缺事件。
-- [ ] **RH-02.5 Effect/预算统一**：使用现有 operation/idempotency/lease/receipt；
+- [x] **RH-02.5 Effect/预算统一**：使用现有 operation/idempotency/lease/receipt；
   冻结 operation input，副作用前落 intent，副作用未知先 reconcile。
   同 call 的 root/run/stage 展示只读现有 ledger 聚合，不能重复结算。
-- [ ] **RH-03.1 三种 replay**：分别实现 projection、recorded receipt、live re-execution。
+- [x] **RH-03.1 三种 replay**：分别实现 projection、recorded receipt、live re-execution。
   前两种不调用外部系统；live 按当前授权创建明确新尝试，不伪装旧效果恢复。
-- [ ] **RH-03.2 同版本恢复**：从 checkpoint + Task/Effect receipt 恢复同 runId，
+- [x] **RH-03.2 同版本恢复**：从 checkpoint + Task/Effect receipt 恢复同 runId，
   重新验证审批、输入和项目状态；重复事件/回调不重复追加副作用。
-- [ ] **RH-03.3 诊断与 IPC**：现有任务观察返回关联、gap、缺 receipt、版本失效与真实
+- [x] **RH-03.3 诊断与 IPC**：现有任务观察返回关联、gap、缺 receipt、版本失效与真实
   unknown；脱敏导出保持 2 MiB。同步 registry、preload、generated schema 和消费者。
-- [ ] **RH-03.4 冷迁移**：按 S00 来源/目标版本清单，离线备份、转换、校验。
+- [x] **RH-03.4 冷迁移**：按 S00 来源/目标版本清单，离线备份、转换、校验。
   不兼容活跃 snapshot 不用新权限继续；新启动只读当前 schema，错误版本显式拒绝。
-- [ ] **RH-03.5 故障注入**：覆盖 intent 前/后、effect 后 receipt 前、提交后 event 发布前、
+- [x] **RH-03.5 故障注入**：覆盖 intent 前/后、effect 后 receipt 前、提交后 event 发布前、
   reservation 后崩溃、缺/重/乱序事件、取消 cleanup 失败、人工审批变更和重启。
 
 ## 交付物与切换

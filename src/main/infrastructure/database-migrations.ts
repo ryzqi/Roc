@@ -2,11 +2,14 @@ import { createHash } from 'node:crypto';
 import Database, { type Database as DatabaseConnection } from 'better-sqlite3';
 
 import type { RocLogicalDatabaseName } from './database-pragmas';
+import { registerExecutionEventFunctions } from './execution-events';
 
 export type RocDatabaseMigration = {
   version: number;
   name: string;
   sql: string;
+  /** This migration needs a separately orchestrated, offline data conversion. */
+  offlineOnly?: true;
   /** Table replacement must run with FK enforcement off, then validate before commit. */
   rebuild?: { dataVersion: string; migrate: (db: DatabaseConnection) => void };
   /** dataVersion names a frozen transformation; changes require a new migration. */
@@ -40,10 +43,13 @@ export function applyDatabaseMigrations(
   input: {
     dbName: RocLogicalDatabaseName;
     migrations: readonly RocDatabaseMigration[];
+    /** Only the offline converter may opt in after its preflight and backup. */
+    allowOffline?: boolean;
     now?: () => string;
   }
 ): void {
   const now = input.now === undefined ? () => new Date().toISOString() : input.now;
+  registerExecutionEventFunctions(db);
   ensureLedgerTables(db);
   validateMigrationList(input.migrations);
   const applied = readAppliedMigrations(db, input.dbName);
@@ -61,7 +67,8 @@ export function applyDatabaseMigrations(
   }
   const expectedObjects = getExpectedSchemaObjects(input.migrations);
   if (schemaObjectsMatch(db, expectedObjects)) {
-    if (input.migrations.some(migration => !applied.has(migration.version) && (migration.data !== undefined || migration.rebuild !== undefined))) {
+    if (input.migrations.some(migration => !applied.has(migration.version) &&
+      (migration.data !== undefined || migration.rebuild !== undefined || migration.offlineOnly === true))) {
       throw new Error('database_migration_data_unproven');
     }
     if (!appliedMigrationsMatch(applied, input.migrations)) {
@@ -87,6 +94,9 @@ export function applyDatabaseMigrations(
     throw new Error('database_schema_rebuild_required');
   }
   const pending = input.migrations.filter((migration) => !applied.has(migration.version));
+  if (input.allowOffline !== true && pending.some(migration => migration.offlineOnly === true)) {
+    throw new Error('database_offline_migration_required');
+  }
   const applyPending = db.transaction(() => {
     for (const migration of pending) {
       executeMigration(db, migration);
@@ -321,7 +331,8 @@ function writeMetadata(
 function checksumMigration(migration: RocDatabaseMigration): string {
   const dataVersion = migration.rebuild === undefined ? '' : `\nrebuild:${migration.rebuild.dataVersion}`;
   const transformVersion = migration.data === undefined ? '' : `\ndata:${migration.data.dataVersion}`;
-  return checksumText(`${migration.version}\n${migration.name}\n${migration.sql}${dataVersion}${transformVersion}`);
+  const offline = migration.offlineOnly === true ? '\noffline-only' : '';
+  return checksumText(`${migration.version}\n${migration.name}\n${migration.sql}${dataVersion}${transformVersion}${offline}`);
 }
 
 function checksumText(value: string): string {

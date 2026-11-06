@@ -1,3 +1,4 @@
+import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -60,6 +61,9 @@ test('agent can only propose exact versions; explicit human confirm records iden
     f.relations.assertCurrent(confirmed);
     assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
     assert.throws(()=>f.review(proposed),/research_relation_version_conflict/u);
+    assert.deepEqual(f.repository.runs.flushTaskEvents(),{pending:0,failed:0});
+    const semantic=f.tasks.events({projectId:f.project.id,taskId:f.run.taskId,afterSequence:0,limit:200}).events.filter(event=>event.eventType==='claim_reviewed');
+    assert.equal(semantic.length,1);assert.equal(semantic[0].payload.detail.status,'confirmed');
   }finally{f.close();}
 });
 
@@ -98,6 +102,9 @@ test('artifact inspection includes relation endpoints beyond the old claim evide
     assert.equal(changed.snapshot.evidence[1].referenceStatus,'superseded');
     assert.equal(changed.snapshot.relations[0].status,'invalidated');
     assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),after);
+    assert.deepEqual(f.repository.runs.flushTaskEvents(),{pending:0,failed:0});
+    const semantic=f.tasks.events({projectId:f.project.id,taskId:f.run.taskId,afterSequence:0,limit:200}).events;
+    assert.equal(semantic.filter(event=>event.eventType==='source_invalidated').length,1);
   }finally{f.close();}
 });
 
@@ -239,7 +246,7 @@ test('20 to 21 preserves raw claim state and creates only explicitly unreviewed 
       VALUES ('historical-claim',?,?,'claim','Saved old status','supported','[\"historical-source\"]',3,?,?)`)
       .run(project.id,artifact.id,timestamp,timestamp);
     const claimsBefore=db.prepare('SELECT * FROM research_claims').all();
-    api.applyResearchDatabaseSchema(db,()=>timestamp);
+    applyOfflineResearchSchema(api, db,()=>timestamp);
     assert.deepEqual(db.prepare('SELECT * FROM research_claims').all(),claimsBefore);
     const [historical]=repository.evidence.relations.list({projectId:project.id,claimId:'historical-claim'});
     assert.equal(historical.kind,'historical');assert.equal(historical.status,'historical');assert.equal(historical.claimVersion,3);
@@ -249,7 +256,7 @@ test('20 to 21 preserves raw claim state and creates only explicitly unreviewed 
     assert.throws(()=>repository.evidence.assertReviewedSupport(repository.evidence.getClaim('historical-claim')),
       error=>error.code==='research_relation_review_required');
     assert.equal(db.prepare('SELECT total_changes()').pluck().get(),changes);
-    const before=db.prepare('SELECT total_changes()').pluck().get();api.applyResearchDatabaseSchema(db,()=>timestamp);
+    const before=db.prepare('SELECT total_changes()').pluck().get();applyOfflineResearchSchema(api, db,()=>timestamp);
     assert.equal(db.prepare('SELECT total_changes()').pluck().get(),before);
   }finally{db.close();agentDb.close();}
 });
@@ -267,7 +274,7 @@ test('a dangling historical association aborts the migration and keeps the origi
       VALUES ('dangling-claim',?,?,'claim','Retained original claim','pending','[\"missing-evidence\"]',1,?,?)`)
       .run(project.id,artifact.id,timestamp,timestamp);
     const before=db.prepare('SELECT * FROM research_claims').all();
-    assert.throws(()=>api.applyResearchDatabaseSchema(db,()=>timestamp),/research_relation_historical_endpoint_missing/u);
+    assert.throws(()=>applyOfflineResearchSchema(api, db,()=>timestamp),/research_relation_historical_endpoint_missing/u);
     assert.deepEqual(db.prepare('SELECT * FROM research_claims').all(),before);
     assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),20);
     assert.equal(db.prepare("SELECT name FROM sqlite_master WHERE name='research_evidence_relations'").get(),undefined);

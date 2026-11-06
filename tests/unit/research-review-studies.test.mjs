@@ -1,3 +1,4 @@
+import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after,before,test} from 'node:test';
 import assert from 'node:assert/strict';
@@ -212,7 +213,7 @@ test('DB39 upgrade preserves all original review/source columns and disk reopeni
     oldApi.finishSeed(f.db);
     const tables=['research_review_screening_plans','research_review_screening_freezes','research_review_corpora','research_documents'];
     const original=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all()),columns=Object.keys(original[0][0]);
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_review_screening_plans').all().map(row=>Object.fromEntries(columns.map(key=>[key,row[key]]))),original[0]);
     for(const [index,table] of tables.entries())if(index>0)assert.deepEqual(f.db.prepare(`SELECT * FROM ${table}`).all(),original[index]);
     assert.equal(f.db.prepare('SELECT study_group_head_hash FROM research_review_screening_plans').pluck().get(),null);assert.equal(count(f),0);

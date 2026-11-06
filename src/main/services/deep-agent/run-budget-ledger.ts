@@ -1,4 +1,5 @@
 import type { Database as DatabaseConnection } from 'better-sqlite3';
+import {registerExecutionEventFunctions} from '../../infrastructure/execution-events';
 import type { RunBudgetStatus, RunExecutionSnapshot } from '../../../shared/types';
 import { taskContractSchema } from '../../../shared/schemas/task-acceptance';
 import { parseStoredJson, parseStoredJsonObject } from '../../infrastructure/stored-json';
@@ -51,6 +52,7 @@ type PilotRunDbRow = {
 export class RunBudgetLedger {
   private readonly projects: ProjectBudgetLedger;
   constructor(private readonly db: DatabaseConnection) {
+    registerExecutionEventFunctions(db);
     this.projects = new ProjectBudgetLedger(db);
   }
 
@@ -100,13 +102,13 @@ export class RunBudgetLedger {
       const totals = this.db.prepare(`SELECT
         COALESCE(SUM(CASE WHEN kind = 'model' THEN 1 ELSE 0 END), 0) model_calls,
         COALESCE(SUM(CASE WHEN kind IN ('tool', 'child') THEN 1 ELSE 0 END), 0) tool_calls,
-        COALESCE(SUM(COALESCE(actual_tokens, reserved_tokens)), 0) tokens,
+        COALESCE(SUM(CASE WHEN state = 'unknown' THEN MAX(COALESCE(actual_tokens, 0), reserved_tokens) ELSE COALESCE(actual_tokens, reserved_tokens) END), 0) tokens,
         COALESCE(SUM(CASE WHEN kind = 'model' AND state = 'reserved' THEN 1 ELSE 0 END), 0) active_models,
         COALESCE(SUM(CASE WHEN kind = 'tool' AND state = 'reserved' THEN 1 ELSE 0 END), 0) active_tools,
         COALESCE(SUM(CASE WHEN kind = 'child' THEN 1 ELSE 0 END), 0) child_calls,
         COALESCE(SUM(CASE WHEN kind = 'child' AND state = 'reserved' THEN 1 ELSE 0 END), 0) active_children,
-        COALESCE(SUM(COALESCE(actual_cost_microusd, reserved_cost_microusd)), 0) cost_microusd,
-        COALESCE(SUM(CASE WHEN kind = 'model' AND actual_cost_microusd IS NULL AND reserved_cost_microusd IS NULL THEN 1 ELSE 0 END), 0) unknown_cost_calls
+        COALESCE(SUM(CASE WHEN state = 'unknown' THEN MAX(COALESCE(actual_cost_microusd, 0), COALESCE(reserved_cost_microusd, 0)) ELSE COALESCE(actual_cost_microusd, reserved_cost_microusd) END), 0) cost_microusd,
+        COALESCE(SUM(CASE WHEN kind = 'model' AND reserved_cost_microusd IS NULL AND (state = 'unknown' OR actual_cost_microusd IS NULL) THEN 1 ELSE 0 END), 0) unknown_cost_calls
         FROM agent_budget_calls WHERE run_id = ?`).get(runId) as {
           model_calls: number; tool_calls: number; tokens: number; active_models: number; active_tools: number;
           child_calls: number; active_children: number; cost_microusd: number; unknown_cost_calls: number;
@@ -175,9 +177,9 @@ export class RunBudgetLedger {
       COALESCE(SUM(kind = 'model' AND state = 'reserved'),0) active_models,
       COALESCE(SUM(kind = 'tool' AND state = 'reserved'),0) active_tools,
       COALESCE(SUM(kind = 'child' AND state = 'reserved'),0) active_children,
-      COALESCE(SUM(COALESCE(actual_tokens,reserved_tokens)),0) tokens,
-      COALESCE(SUM(COALESCE(actual_cost_microusd,reserved_cost_microusd)),0) cost,
-      COALESCE(SUM(kind = 'model' AND actual_cost_microusd IS NULL AND reserved_cost_microusd IS NULL),0) unknown_costs
+      COALESCE(SUM(CASE WHEN state = 'unknown' THEN MAX(COALESCE(actual_tokens, 0), reserved_tokens) ELSE COALESCE(actual_tokens, reserved_tokens) END),0) tokens,
+      COALESCE(SUM(CASE WHEN state = 'unknown' THEN MAX(COALESCE(actual_cost_microusd, 0), COALESCE(reserved_cost_microusd, 0)) ELSE COALESCE(actual_cost_microusd,reserved_cost_microusd) END),0) cost,
+      COALESCE(SUM(kind = 'model' AND reserved_cost_microusd IS NULL AND (state = 'unknown' OR actual_cost_microusd IS NULL)),0) unknown_costs
       FROM agent_budget_calls WHERE task_id = ?`).get(taskId) as {
         models: number; tools: number; children: number; active_models: number; active_tools: number;
         active_children: number; tokens: number; cost: number; unknown_costs: number;
@@ -203,19 +205,38 @@ export class RunBudgetLedger {
     if ((tokens !== null && (!Number.isSafeInteger(tokens) || tokens < 0)) ||
       (costMicrousd !== null && (!Number.isSafeInteger(costMicrousd) || costMicrousd < 0)) ||
       (state === 'settled' && tokens === null)) throw new Error('run_budget_settlement_invalid');
-    const existing = this.db.prepare('SELECT envelope_json FROM agent_budget_calls WHERE run_id = ? AND call_id = ?')
-      .get(runId, callId) as { envelope_json: string } | undefined;
-    if (existing === undefined) throw new Error('run_budget_settlement_invalid');
-    const envelope = JSON.stringify({
-      ...parseStoredJsonObject(existing.envelope_json, 'run_budget_envelope_corrupt'),
-      ...(outcomeHash === undefined ? {} : { outcomeHash }),
-      ...outcome
-    });
-    const result = this.db.prepare(`UPDATE agent_budget_calls SET actual_tokens = ?, actual_cost_microusd = ?,
-      pricing_version = COALESCE(?, pricing_version), state = ?, envelope_json = ?
-      WHERE run_id = ? AND call_id = ? AND state = 'reserved'`).run(
-      tokens, costMicrousd, pricingVersion, state, envelope, runId, callId);
-    if (result.changes !== 1) throw new Error('run_budget_settlement_invalid');
+    this.db.transaction(() => {
+      const existing = this.db.prepare(`SELECT envelope_json, state, actual_tokens, actual_cost_microusd, pricing_version
+        FROM agent_budget_calls WHERE run_id = ? AND call_id = ?`)
+        .get(runId, callId) as { envelope_json: string; state: string; actual_tokens: number | null;
+          actual_cost_microusd: number | null; pricing_version: string | null } | undefined;
+      if (existing === undefined) throw new Error('run_budget_settlement_invalid');
+      const receipt = { schemaVersion: 1, runId, callId, tokens, state, outcomeHash: outcomeHash ?? null,
+        outcome, costMicrousd, pricingVersion, effectivePricingVersion: pricingVersion ?? existing.pricing_version };
+      const receiptHash = hashToolInput(receipt);
+      const previous = parseStoredJsonObject(existing.envelope_json, 'run_budget_envelope_corrupt');
+      if (existing.state !== 'reserved') {
+        const recorded = previous.settlementReceipt;
+        if (recorded === undefined || hashToolInput(recorded) !== receiptHash ||
+          previous.settlementReceiptHash !== receiptHash || existing.state !== state ||
+          existing.actual_tokens !== tokens || existing.actual_cost_microusd !== costMicrousd ||
+          existing.pricing_version !== receipt.effectivePricingVersion) {
+          throw new Error('run_budget_settlement_invalid');
+        }
+        return;
+      }
+      if ('settlementReceipt' in previous || 'settlementReceiptHash' in previous ||
+        'settlementReceipt' in outcome || 'settlementReceiptHash' in outcome) {
+        throw new Error('run_budget_settlement_invalid');
+      }
+      const envelope = JSON.stringify({ ...previous, ...(outcomeHash === undefined ? {} : { outcomeHash }),
+        ...outcome, settlementReceipt: receipt, settlementReceiptHash: receiptHash });
+      const result = this.db.prepare(`UPDATE agent_budget_calls SET actual_tokens = ?, actual_cost_microusd = ?,
+        pricing_version = COALESCE(?, pricing_version), state = ?, envelope_json = ?
+        WHERE run_id = ? AND call_id = ? AND state = 'reserved'`).run(
+        tokens, costMicrousd, pricingVersion, state, envelope, runId, callId);
+      if (result.changes !== 1) throw new Error('run_budget_settlement_invalid');
+    }).immediate();
   }
 
   recordModelObservation(runId: string, callId: string, observation: {startedAt: string; durationMs: number; status: 'completed'|'failed'}): void {
@@ -265,9 +286,9 @@ export class RunBudgetLedger {
   private readScopedBudgetStatus(column: 'run_id' | 'task_id', id: string, limits: RunLimits,
     modelPricingKnown: boolean, stopReason: string | null): RunBudgetStatus {
     const totals = this.db.prepare(`SELECT
-      COALESCE(SUM(COALESCE(actual_tokens, reserved_tokens)), 0) total_tokens,
+      COALESCE(SUM(CASE WHEN state = 'unknown' THEN MAX(COALESCE(actual_tokens, 0), reserved_tokens) ELSE COALESCE(actual_tokens, reserved_tokens) END), 0) total_tokens,
       COALESCE(SUM(CASE WHEN state = 'settled' THEN actual_tokens ELSE 0 END), 0) settled_tokens,
-      COALESCE(SUM(CASE WHEN state = 'unknown' THEN reserved_tokens ELSE 0 END), 0) unknown_tokens,
+      COALESCE(SUM(CASE WHEN state = 'unknown' THEN MAX(COALESCE(actual_tokens, 0), reserved_tokens) ELSE 0 END), 0) unknown_tokens,
       COALESCE(SUM(CASE WHEN state = 'reserved' THEN reserved_tokens ELSE 0 END), 0) reserved_tokens,
       COALESCE(SUM(CASE WHEN kind = 'model' THEN 1 ELSE 0 END), 0) model_calls,
       COALESCE(SUM(CASE WHEN kind = 'model' AND state = 'reserved' THEN 1 ELSE 0 END), 0) reserved_models,
@@ -276,8 +297,8 @@ export class RunBudgetLedger {
       COALESCE(SUM(CASE WHEN kind = 'child' THEN 1 ELSE 0 END), 0) child_calls,
       COALESCE(SUM(CASE WHEN kind = 'child' AND state = 'reserved' THEN 1 ELSE 0 END), 0) reserved_children,
       COALESCE(SUM(CASE WHEN state = 'settled' THEN actual_cost_microusd ELSE 0 END), 0) settled_cost,
-      COALESCE(SUM(CASE WHEN state IN ('reserved','unknown') THEN COALESCE(actual_cost_microusd,reserved_cost_microusd,0) ELSE 0 END), 0) reserved_cost,
-      COALESCE(SUM(CASE WHEN kind = 'model' AND (state = 'unknown' OR COALESCE(actual_cost_microusd,reserved_cost_microusd) IS NULL) THEN 1 ELSE 0 END), 0) unknown_cost_calls
+      COALESCE(SUM(CASE WHEN state IN ('reserved','unknown') OR (state = 'settled' AND actual_cost_microusd IS NULL) THEN MAX(COALESCE(actual_cost_microusd, 0), COALESCE(reserved_cost_microusd, 0)) ELSE 0 END), 0) reserved_cost,
+      COALESCE(SUM(CASE WHEN kind = 'model' AND (state = 'unknown' OR (state = 'settled' AND actual_cost_microusd IS NULL) OR (state = 'reserved' AND reserved_cost_microusd IS NULL)) THEN 1 ELSE 0 END), 0) unknown_cost_calls
       FROM agent_budget_calls WHERE ${column} = ?`).get(id) as {
         total_tokens: number; settled_tokens: number; unknown_tokens: number; reserved_tokens: number;
         model_calls: number; reserved_models: number; tool_calls: number; reserved_tools: number;

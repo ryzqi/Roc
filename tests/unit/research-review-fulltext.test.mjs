@@ -1,3 +1,4 @@
+import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after,before,test} from 'node:test';
 import assert from 'node:assert/strict';
@@ -203,7 +204,7 @@ test('DB34 upgrade preserves fixed title authority and actual documents; disk re
       'research_review_screening_decisions','research_review_screening_freezes','research_review_corpora','research_review_protocol_versions'];
     const before=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all()),migrations=f.db.prepare('SELECT * FROM schema_migrations').all();
     const originalColumns=tables.map(table=>f.db.prepare(`PRAGMA table_info(${table})`).all().map(column=>column.name));
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT * FROM ${table}`).all()
       .map(row=>Object.fromEntries(originalColumns[index].map(key=>[key,row[key]]))),before[index]));
     assert.equal(f.db.prepare('SELECT full_freeze_hash FROM research_review_screening_plans').pluck().get(),null);

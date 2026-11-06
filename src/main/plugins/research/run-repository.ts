@@ -21,10 +21,15 @@ import { getResearchSkillInstructions } from './research-skills';
 import { researchReviewRoles } from './review-repository';
 import { requireConfirmedSearchStrategy, searchPlanReviewMarkdown } from './search-strategy';
 import {relationSourceDigest} from './evidence-relation-repository';
+import type {ConsumedResearchDispatchGrant} from '../../services/deep-agent/execution-grant-broker';
+import {assertResearchDispatchGrant} from '../../services/deep-agent/execution-grant-broker';
+import {researchDispatchRequestHash} from '../../services/research-dispatch-context';
+import {executionInputVersionSchema} from '../../../shared/schemas/execution';
 
 const executionContextSchema = z.object({
   project: researchProjectSchema,
   skillInstructions: z.string().min(1),
+  inputVersions: z.array(executionInputVersionSchema),
   reviewReports: z.array(z.object({ role: z.string(), runId: z.string(), artifactId: z.string(), output: researchStageOutputSchema }).strict()),
   inputs: z.array(z.object({
     artifact: researchArtifactSchema,
@@ -35,6 +40,33 @@ const executionContextSchema = z.object({
 }).strict();
 
 export type ResearchExecutionContext = z.infer<typeof executionContextSchema>;
+
+const hashStageValue = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+
+export function freezeStageInputs(run: ResearchStageRun, context: ResearchExecutionContext) {
+  return {
+    schemaVersion: 1 as const,
+    requestHash: researchDispatchRequestHash({projectId: run.projectId, expectedStage: run.stage, instruction: run.instruction, requestId: run.requestId}),
+    manifestHash: hashStageValue({policy: run.policy, skillHash: run.skillHash, toolNames: run.toolNames}),
+    policyHash: hashStageValue(run.policy),
+    versions: [
+      ...run.skillIds.map(id => ({kind: 'skill' as const, id, hash: run.skillHash})),
+      ...context.inputVersions,
+      {kind: 'context' as const, id: run.id, hash: hashStageValue({project: context.project, skillInstructions: context.skillInstructions, inputs: context.inputs})}
+    ]
+  };
+}
+
+type StageRunRow = { id: string; project_id: string; task_id: string | null; status: string;
+  stage: string; request_id: string; parent_run_id: string | null; snapshot_json: string };
+const parseStageRunRow = (row: StageRunRow): ResearchStageRun => {
+  const run = researchStageRunSchema.parse(JSON.parse(row.snapshot_json));
+  if (run.id !== row.id || run.projectId !== row.project_id || run.taskId !== row.task_id || run.status !== row.status ||
+      run.stage !== row.stage || run.requestId !== row.request_id || run.parentRunId !== row.parent_run_id) {
+    throw new Error('research_stage_run_identity_corrupt');
+  }
+  return run;
+};
 
 export class ResearchRunRepository {
   constructor(private readonly db: Database, private readonly research: ResearchRepository, private readonly now: () => string) {}
@@ -65,12 +97,13 @@ export class ResearchRunRepository {
     return policy;
   }
 
-  begin(request: ResearchStageRunStartRequest, retryOf?: ResearchStageRun): ResearchStageRun {
-    return this.db.transaction(() => {
-      const existing = this.db.prepare('SELECT snapshot_json FROM research_stage_runs WHERE project_id = ? AND request_id = ?')
-        .get(request.projectId, request.requestId) as { snapshot_json: string } | undefined;
+  begin(request: ResearchStageRunStartRequest, retryOf?: ResearchStageRun, dispatch: ConsumedResearchDispatchGrant | null = null): ResearchStageRun {
+    if (dispatch !== null) assertResearchDispatchGrant(dispatch);
+    const result = this.db.transaction(() => {
+      const existing = this.db.prepare('SELECT id, project_id, task_id, status, stage, request_id, parent_run_id, snapshot_json FROM research_stage_runs WHERE project_id = ? AND request_id = ?')
+        .get(request.projectId, request.requestId) as StageRunRow | undefined;
       if (existing !== undefined) {
-        const run = researchStageRunSchema.parse(JSON.parse(existing.snapshot_json));
+        const run = parseStageRunRow(existing);
         if (run.parentRunId !== null || run.instruction !== request.instruction || run.stage !== request.expectedStage || run.retryOfRunId !== (retryOf?.id ?? null)) {
           throw new Error('research_run_request_conflict');
         }
@@ -96,14 +129,13 @@ export class ResearchRunRepository {
       const policy = retryOf?.policy ?? this.listPolicies(request.projectId).find((entry) => entry.stage === stage.stage);
       if (policy === undefined) throw new Error('research_stage_policy_missing');
       const context = retryOf === undefined ? this.captureContext(request.projectId, stage.stage) : this.getContext(retryOf.id);
+      if (retryOf !== undefined) this.verifyFrozenInputs(retryOf);
       if (stage.stage === 'retrieval') requireConfirmedSearchStrategy(this.research, context);
-      for (const input of context.inputs) {
-        if (this.research.getArtifact(input.artifact.id).status !== 'approved') throw new Error('research_stage_inputs_stale');
-      }
+      this.verifyCurrentInputs(request.projectId, context);
       const timestamp = this.now();
       const run: ResearchStageRun = {
         id: `research_run_${randomUUID()}`, projectId: request.projectId, stage: stage.stage, requestId: request.requestId,
-        taskId: null,
+        taskId: null, executionSnapshot: null,
         parentRunId: null, retryOfRunId: retryOf?.id ?? null, role: retryOf?.role ?? profile.role, outputKind: retryOf?.outputKind ?? profile.outputKind,
         reviewCycleId: cycle?.originArtifactId ?? null, revisionRound,
         status: 'queued', instruction: request.instruction, skillIds: retryOf?.skillIds ?? [...profile.skillIds],
@@ -119,7 +151,7 @@ export class ResearchRunRepository {
       if (retryOf?.providerId !== null && retryOf?.providerId !== undefined && retryOf.modelId !== null) {
         run.policy = { ...policy, model: { kind: 'model', providerId: retryOf.providerId, modelId: retryOf.modelId } };
       }
-      this.insertRun(run, context);
+      this.insertRun(run, context, dispatch);
       if (run.stage === 'review') {
         this.db.prepare("UPDATE research_review_cycles SET status = 'reviewing', updated_at = ? WHERE project_id = ?").run(timestamp, run.projectId);
       }
@@ -129,6 +161,7 @@ export class ResearchRunRepository {
       this.recordEvent(run, 'role_queued', '阶段角色已排队。');
       return run;
     })();
+    return this.bindTask(result.id, result.projectId);
   }
 
   retry(request: ResearchStageRunRetryRequest): ResearchStageRun {
@@ -143,9 +176,9 @@ export class ResearchRunRepository {
   }
 
   get(id: string, projectId: string): ResearchStageRun {
-    const row = this.db.prepare('SELECT snapshot_json FROM research_stage_runs WHERE id = ? AND project_id = ?').get(id, projectId) as { snapshot_json: string } | undefined;
+    const row = this.db.prepare('SELECT id, project_id, task_id, status, stage, request_id, parent_run_id, snapshot_json FROM research_stage_runs WHERE id = ? AND project_id = ?').get(id, projectId) as StageRunRow | undefined;
     if (row === undefined) throw new Error('research_stage_run_not_found');
-    return researchStageRunSchema.parse(JSON.parse(row.snapshot_json));
+    return parseStageRunRow(row);
   }
 
   bindTask(id: string, projectId: string): ResearchStageRun {
@@ -153,24 +186,52 @@ export class ResearchRunRepository {
     const execution = this.research.tasks.requireExecution('stage', id, projectId);
     if (run.taskId !== null && run.taskId !== execution.taskId) throw new Error('research_task_execution_conflict');
     const linked = { ...run, taskId: execution.taskId };
+    if (run.executionSnapshot === null) throw new Error('research_stage_snapshot_invalid');
+    this.verifyFrozenInputs(run);
     this.saveRun(linked);
+    this.research.tasks.confirmExecution('stage', id, projectId, run.executionSnapshot.frozenInputs);
     return linked;
   }
 
-  reconcileTaskLinks(): void {
-    const rows = this.db.prepare('SELECT id, project_id FROM research_stage_runs WHERE task_id IS NULL')
-      .all() as Array<{ id: string; project_id: string }>;
+  flushTaskEvents(taskId: string | null = null): {pending: number; failed: number} {
+    const rows = this.db.prepare('SELECT * FROM research_execution_outbox WHERE delivered_at IS NULL AND (? IS NULL OR task_id=?) ORDER BY created_at,event_id LIMIT 1000')
+      .all(taskId,taskId) as Array<{event_id: string; task_id: string; project_id: string; event_type: string; payload_json: string; payload_hash: string; created_at: string}>;
     for (const row of rows) {
-      if (this.research.tasks.findExecution('stage', row.id, row.project_id) !== null) {
-        this.bindTask(row.id, row.project_id);
+      try {
+        this.research.tasks.receiveEvent({eventId: row.event_id,taskId: row.task_id,projectId: row.project_id,
+          eventType: row.event_type,payload: JSON.parse(row.payload_json),payloadHash: row.payload_hash,createdAt: row.created_at});
+        this.db.prepare('UPDATE research_execution_outbox SET delivered_at=?,error=NULL WHERE event_id=?').run(this.now(),row.event_id);
+      } catch {
+        this.db.prepare("UPDATE research_execution_outbox SET error='research_event_delivery_failed' WHERE event_id=?").run(row.event_id);
       }
     }
+    return this.db.prepare('SELECT COUNT(*) pending,COALESCE(SUM(error IS NOT NULL),0) failed FROM research_execution_outbox WHERE delivered_at IS NULL AND (? IS NULL OR task_id=?)')
+      .get(taskId,taskId) as {pending: number; failed: number};
+  }
+
+  reconcileTaskLinks(): void {
+    this.research.tasks.reconcileStageIntents((id,projectId) => this.db.prepare('SELECT 1 FROM research_stage_runs WHERE id=? AND project_id=?').get(id,projectId) !== undefined);
+    this.db.transaction(() => {
+      const rows = this.db.prepare('SELECT id, project_id, task_id, status, stage, request_id, parent_run_id, snapshot_json FROM research_stage_runs')
+        .all() as StageRunRow[];
+      for (const row of rows) {
+        const run = parseStageRunRow(row);
+        const execution = this.research.tasks.findExecution('stage', run.id, run.projectId);
+        if (run.taskId === null) {
+          if (execution !== null) this.bindTask(run.id, run.projectId);
+        } else if (execution === null || execution.taskId !== run.taskId) {
+          throw new Error('research_task_execution_conflict');
+        } else if (execution.associationState !== 'historical') {
+          this.bindTask(run.id, run.projectId);
+        }
+      }
+    }).immediate();
   }
 
   list(request: ResearchStageRunsRequest): ResearchStageRun[] {
     this.research.getProject(request.projectId);
-    return this.db.prepare('SELECT snapshot_json FROM research_stage_runs WHERE project_id = ? ORDER BY rowid DESC LIMIT ?')
-      .all(request.projectId, request.limit).map((row) => researchStageRunSchema.parse(JSON.parse((row as { snapshot_json: string }).snapshot_json)));
+    return (this.db.prepare('SELECT id, project_id, task_id, status, stage, request_id, parent_run_id, snapshot_json FROM research_stage_runs WHERE project_id = ? ORDER BY rowid DESC LIMIT ?')
+      .all(request.projectId, request.limit) as StageRunRow[]).map(parseStageRunRow);
   }
 
   getContext(runId: string): ResearchExecutionContext {
@@ -180,7 +241,7 @@ export class ResearchRunRepository {
   }
 
   createReviewChildren(id: string, projectId: string): ResearchStageRun[] {
-    return this.db.transaction(() => {
+    const children = this.db.transaction(() => {
       const parent = this.requireActive(id, projectId);
       if (parent.stage !== 'review' || parent.parentRunId !== null) throw new Error('research_review_parent_required');
       const context = this.getContext(parent.id);
@@ -198,11 +259,13 @@ export class ResearchRunRepository {
           skillHash: createHash('sha256').update(skillInstructions).digest('hex'), outputArtifactIds: [],
           providerId: null, modelId: null, modelVersion: null, error: null, createdAt: this.now(), startedAt: null, endedAt: null
         };
-        this.insertRun(child, { ...context, skillInstructions, inputs, reviewReports: [] });
+        this.insertRun(child, { ...context, skillInstructions, inputs,
+          inputVersions: this.captureInputVersions(projectId, inputs.map(input => input.artifact.id)), reviewReports: [] });
         this.recordEvent(child, 'role_queued', '独立评审角色已排队。');
         return child;
       });
     })();
+    return children.map(child => this.bindTask(child.id, child.projectId));
   }
 
   setReviewReports(id: string, projectId: string, children: ResearchStageRun[]): void {
@@ -344,6 +407,7 @@ export class ResearchRunRepository {
 
   requireActive(id: string, projectId: string): ResearchStageRun {
     const run = this.get(id, projectId);
+    this.assertInputsCurrent(run);
     const workflow = this.research.getWorkflow(projectId);
     const current = workflow.stages.find((stage) => stage.stage === run.stage);
     if (!['queued', 'running'].includes(run.status) || workflow.currentStage !== run.stage || current?.status !== 'running' ||
@@ -353,6 +417,11 @@ export class ResearchRunRepository {
     return run;
   }
 
+  assertInputsCurrent(run: ResearchStageRun): void {
+    this.verifyFrozenInputs(run);
+    this.verifyCurrentInputs(run.projectId, this.getContext(run.id));
+  }
+
   private hasCompletedParent(projectId: string, stage: ResearchStageRun['stage']): boolean {
     return this.db.prepare("SELECT 1 FROM research_stage_runs WHERE project_id = ? AND stage = ? AND parent_run_id IS NULL AND status = 'completed' LIMIT 1")
       .get(projectId, stage) !== undefined;
@@ -360,9 +429,7 @@ export class ResearchRunRepository {
 
   private captureContext(projectId: string, stage: ResearchStageRun['stage']): ResearchExecutionContext {
     const cycle = this.research.reviews.requireForStage(projectId, stage);
-    return {
-      project: this.research.getProject(projectId), skillInstructions: getResearchSkillInstructions(stage), reviewReports: [],
-      inputs: this.research.listArtifacts(projectId).filter((artifact) => artifact.status === 'approved')
+    const inputs = this.research.listArtifacts(projectId).filter((artifact) => artifact.status === 'approved')
         .filter((artifact) => stage !== 'review' || artifact.kind !== 'review_report')
         .filter((artifact) => cycle === null || artifact.kind !== 'manuscript' || artifact.id === cycle.manuscriptArtifactId)
         .filter((artifact) => stage !== 'revision' || artifact.kind !== 'review_report' || cycle?.reportArtifactIds.includes(artifact.id))
@@ -370,8 +437,38 @@ export class ResearchRunRepository {
         artifact, output: this.getArtifactContent(projectId, artifact.id)?.output ?? null,
         manuscript: this.research.manuscripts.getManuscript(artifact.id),
         ideaCanvas: this.research.ideas.get(artifact.id)
-      }))
+      }));
+    return {
+      project: this.research.getProject(projectId), skillInstructions: getResearchSkillInstructions(stage), reviewReports: [],
+      inputs, inputVersions: this.captureInputVersions(projectId, inputs.map(input => input.artifact.id))
     };
+  }
+
+  private captureInputVersions(projectId: string, artifactIds: string[]): ResearchExecutionContext['inputVersions'] {
+    const versions = new Map<string, z.infer<typeof executionInputVersionSchema>>();
+    for (const artifactId of artifactIds) {
+      const {snapshot} = this.research.inspectArtifact({projectId, artifactId, expectedVersion: null});
+      const {artifact, content, origin, claims, evidence, relations, production, ideaCanvas, ideaPlan,
+        ideaOutcomes, citationReviews, consistencyReviews, responseMatrix, journalCompliance, provenance} = snapshot;
+      // UI state (current stage, available actions) changes as this run starts. Only freeze input material.
+      versions.set(`artifact:${artifactId}`, {kind: 'artifact', id: artifactId,
+        hash: hashStageValue({artifact, content, origin, claims, evidence, relations, production, ideaCanvas,
+          ideaPlan, ideaOutcomes, citationReviews, consistencyReviews, responseMatrix, journalCompliance, provenance})});
+      for (const source of evidence) versions.set(`source:${source.evidence.id}`,
+        {kind: 'source', id: source.evidence.id, hash: hashStageValue(source)});
+      if (ideaPlan !== null) versions.set(`plan:${artifactId}`, {kind: 'plan', id: artifactId, hash: hashStageValue(ideaPlan)});
+      if (content?.output.searchPlan !== undefined) versions.set(`plan:${artifactId}`,
+        {kind: 'plan', id: artifactId, hash: hashStageValue(content.output.searchPlan)});
+    }
+    return [...versions.values()];
+  }
+
+  private verifyCurrentInputs(projectId: string, context: ResearchExecutionContext): void {
+    const artifactIds = context.inputs.map(input => input.artifact.id);
+    if (context.project.id !== projectId || artifactIds.some(id => this.research.getArtifact(id).status !== 'approved') ||
+        JSON.stringify(context.inputVersions) !== JSON.stringify(this.captureInputVersions(projectId, artifactIds))) {
+      throw new Error('research_stage_inputs_stale');
+    }
   }
 
   private outputArtifacts(run: ResearchStageRun, output: ResearchStageOutput): ResearchArtifact[] {
@@ -477,7 +574,20 @@ export class ResearchRunRepository {
     }
   }
 
-  private insertRun(run: ResearchStageRun, context: ResearchExecutionContext): void {
+  private verifyFrozenInputs(run: ResearchStageRun): void {
+    if (run.executionSnapshot === null || run.executionSnapshot.nodeBinding.kind !== 'none' ||
+        JSON.stringify(run.executionSnapshot.frozenInputs) !== JSON.stringify(freezeStageInputs(run, this.getContext(run.id)))) {
+      throw new Error('research_stage_snapshot_invalid');
+    }
+  }
+
+  private insertRun(run: ResearchStageRun, context: ResearchExecutionContext, dispatch: ConsumedResearchDispatchGrant | null = null): void {
+    run.executionSnapshot = {schemaVersion: 1, nodeBinding: {kind: 'none'}, frozenInputs: freezeStageInputs(run, context),
+      origin: dispatch === null ? {kind: 'main', action: run.parentRunId !== null ? 'review' : run.retryOfRunId !== null ? 'retry' : 'start', requestId: run.requestId}
+        : {kind: 'conversation', runId: dispatch.runId, grantId: dispatch.grantId, requestHash: dispatch.requestHash}};
+    // This commits independently before the research transaction. A crash leaves a visible pending intent.
+    const intent = this.research.tasks.linkStage(run, dispatch);
+    run.taskId = intent.taskId;
     this.db.prepare('INSERT INTO research_stage_runs (id, project_id, stage, request_id, parent_run_id, task_id, status, snapshot_json, context_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .run(run.id, run.projectId, run.stage, run.requestId, run.parentRunId, run.taskId, run.status, JSON.stringify(run), JSON.stringify(context));
   }

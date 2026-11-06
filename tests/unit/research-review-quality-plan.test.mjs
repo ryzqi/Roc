@@ -1,3 +1,4 @@
+import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after,before,test} from 'node:test';
 import assert from 'node:assert/strict';
@@ -177,7 +178,7 @@ test('DB37 upgrade preserves exact extraction fields/source and null quality mar
   try {
     oldApi.finishSeed(f.db);
     const old=f.db.prepare('SELECT * FROM research_review_extractions').all(),columns=Object.keys(old[0]);
-    const evidence=f.db.prepare('SELECT * FROM research_evidence').all();api.applyResearchDatabaseSchema(f.db);
+    const evidence=f.db.prepare('SELECT * FROM research_evidence').all();applyOfflineResearchSchema(api, f.db);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_review_extractions').all().map(row=>Object.fromEntries(columns.map(key=>[key,row[key]]))),old);
     assert.equal(f.db.prepare('SELECT quality_plan_hash FROM research_review_extractions').pluck().get(),null);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_evidence').all(),evidence);assert.equal(count(f),0);

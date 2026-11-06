@@ -1,3 +1,4 @@
+import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync, rmSync} from 'node:fs';
@@ -250,7 +251,7 @@ test('DB47 is append-only, preserves previous migration receipts and installs ti
     const previous = api.researchMigrations.filter(m => m.version <= 46);
     api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: previous});
     const ledger = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    api.applyResearchDatabaseSchema(db);
+    applyOfflineResearchSchema(api, db);
     assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=46 ORDER BY version').all(), ledger);
     assert.equal(db.prepare("SELECT name FROM schema_migrations WHERE version=47").pluck().get(), 'human_citation_directness_timeline');
     assert.deepEqual(db.pragma('foreign_key_check'), []);

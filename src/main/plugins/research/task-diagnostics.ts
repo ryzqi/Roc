@@ -32,12 +32,37 @@ export class ResearchTaskDiagnosticsService {
     if (current === undefined) throw new Error('research_stage_not_found');
     const waiting = current.status === 'waiting_approval' &&
       this.repository.runs.taskIdsForStage(task.projectId, current.stage).includes(task.id);
+    const cleanupConfirmed = task.statusReason !== 'research_task_cleanup_pending' &&
+      task.statusReason !== 'research_task_cleanup_failed';
+    const recoveryIssues: ResearchTaskDiagnostics['recoveryIssues'] = this.repository.tasks.recoveryIssues(task.id, task.projectId);
+    const recoveryExecution = continuation ?? (waiting ? [...executions].reverse().find(execution =>
+      execution.association.kind === 'stage' && execution.association.associationSource !== 'review' &&
+      execution.stage === current.stage && execution.status === 'completed') : undefined);
+    if (recoveryExecution?.association.associationState === 'confirmed') {
+      try {
+        this.repository.runs.assertInputsCurrent(this.repository.runs.get(recoveryExecution.association.executionId, task.projectId));
+      } catch (error) {
+        if (error instanceof Error && (error.message === 'research_stage_inputs_stale' || error.message === 'research_stage_snapshot_invalid')) {
+          recoveryIssues.push(error.message);
+        } else { throw error; }
+      }
+    }
+    const effectsResolved = recoveryIssues.length === 0 && !this.repository.tasks.hasUnresolvedEffects(task.id, task.projectId);
+    const canContinue = cleanupConfirmed && effectsResolved && ['paused', 'interrupted', 'failed', 'cancelled'].includes(task.status) &&
+      workflow.projectStatus !== 'archived';
     return researchTaskDiagnosticsSchema.parse({
       task, budget: this.ledger.readTaskBudgetStatus(task.id, task.projectId), executions,
-      continuationRunId: continuation?.association.executionId ?? null,
-      canRestoreApproval: task.status === 'paused' && waiting,
-      externalCost: 'unknown'
+      continuationRunId: canContinue ? continuation?.association.executionId ?? null : null,
+      canRestoreApproval: cleanupConfirmed && effectsResolved && task.status === 'paused' && waiting && workflow.projectStatus !== 'archived',
+      recoveryIssues, eventDelivery: this.repository.runs.flushTaskEvents(task.id), externalCost: 'unknown'
     });
+  }
+
+  events(request: {projectId: string; taskId: string; afterSequence: number; limit: number}) {
+    this.repository.tasks.get(request.taskId,request.projectId);
+    const delivery = this.repository.runs.flushTaskEvents(request.taskId);
+    if (delivery.pending !== 0) throw new Error('research_event_delivery_pending');
+    return this.repository.tasks.events(request);
   }
 
   async inspectExecution(input: TaskExecutionDiagnosticsRequest) {
@@ -85,6 +110,10 @@ export class ResearchTaskDiagnosticsService {
 
   private executionState(association: ResearchTaskExecution): Omit<ResearchTaskExecutionDiagnostics, 'artifacts'|'telemetry'> & {artifactIds: string[]} {
     const { executionId: id, projectId } = association;
+    if (association.associationState === 'failed' || association.associationState === 'pending') {
+      return {association,status: 'interrupted',stage: null,providerId: null,modelId: null,
+        error: 'research_execution_intent_uncommitted',artifactIds: [],startedAt: null,endedAt: null};
+    }
     if (association.kind === 'chat') {
       const chat = this.repository.tasks.chatDiagnostics(id);
       return {association, ...chat, status: researchTaskDiagnosticsSchema.shape.executions.element.shape.status.parse(chat.status), stage: null, artifactIds: []};

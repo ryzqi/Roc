@@ -48,7 +48,10 @@ test('run budget snapshots validate and survive durable event replay', async () 
   const { directory, chatSchema, eventLog } = await buildBudgetEventModules();
   const db = new Database(':memory:');
   try {
-    db.exec(`CREATE TABLE agent_run_events(
+    db.exec(`CREATE TABLE agent_runs(id TEXT, thread_id TEXT);
+      CREATE TABLE agent_threads(id TEXT, research_project_id TEXT);
+      CREATE TABLE research_task_executions(kind TEXT, execution_id TEXT, task_id TEXT);
+      CREATE TABLE agent_run_events(
       run_id TEXT NOT NULL, sequence INTEGER NOT NULL, event_json TEXT NOT NULL, created_at TEXT NOT NULL,
       event_bytes INTEGER NOT NULL CHECK(event_bytes >= 0), PRIMARY KEY(run_id, sequence));
       CREATE TABLE agent_run_event_cursors(

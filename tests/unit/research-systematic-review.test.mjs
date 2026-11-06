@@ -1,3 +1,4 @@
+import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp, rm} from 'node:fs/promises';
@@ -178,12 +179,12 @@ test('DB26 upgrade preserves existing projects, stage runs and migration timesta
     const tables=['research_projects','research_stage_states','research_stage_runs','research_document_annotations'];
     const before=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all());
     const migrations=f.db.prepare('SELECT * FROM schema_migrations').all();
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),api.researchMigrations.at(-1).version);
     tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT * FROM ${table}`).all(),before[index]));
     assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE version<=26').all(),migrations);
     assert.equal(f.db.prepare('SELECT count(*) FROM research_review_protocol_versions').pluck().get(),0);
     assert.equal(f.db.prepare('SELECT count(*) FROM research_review_protocol_freezes').pluck().get(),0);
-    const count=changes(f);api.applyResearchDatabaseSchema(f.db);assert.equal(changes(f),count);
+    const count=changes(f);applyOfflineResearchSchema(api, f.db);assert.equal(changes(f),count);
   }finally{f.close();}
 });

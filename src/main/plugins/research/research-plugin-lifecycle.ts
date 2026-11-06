@@ -1,4 +1,4 @@
-import type { ResearchWorkflowTransitionRequest } from '../../../shared/types';
+import type { ResearchWorkflowSnapshot, ResearchWorkflowTransitionRequest } from '../../../shared/types';
 import type { ResearchExportService } from './export-service';
 
 type ShutdownService = { shutdown(): Promise<void> } | null;
@@ -6,17 +6,17 @@ type ShutdownService = { shutdown(): Promise<void> } | null;
 export async function applyResearchWorkflowTransition(input: {
   request: ResearchWorkflowTransitionRequest;
   gate: {
-    complete(request: ResearchWorkflowTransitionRequest): Promise<unknown>;
-    approve(request: ResearchWorkflowTransitionRequest): Promise<unknown>;
-    reject(request: ResearchWorkflowTransitionRequest): Promise<unknown>;
+    complete(request: ResearchWorkflowTransitionRequest): Promise<ResearchWorkflowSnapshot>;
+    approve(request: ResearchWorkflowTransitionRequest): Promise<ResearchWorkflowSnapshot>;
+    reject(request: ResearchWorkflowTransitionRequest): Promise<ResearchWorkflowSnapshot>;
   };
-  runtime: { transition(request: ResearchWorkflowTransitionRequest): unknown };
+  runtime: { transition(request: ResearchWorkflowTransitionRequest): Promise<ResearchWorkflowSnapshot> };
   exports: Pick<ResearchExportService, 'projectChanged'>;
-}): Promise<unknown> {
+}): Promise<ResearchWorkflowSnapshot> {
   const request = input.request;
   const snapshot = request.action === 'complete' || request.action === 'approve' || request.action === 'reject'
     ? await input.gate[request.action](request)
-    : input.runtime.transition(request);
+    : await input.runtime.transition(request);
   input.exports.projectChanged(request.projectId);
   return snapshot;
 }

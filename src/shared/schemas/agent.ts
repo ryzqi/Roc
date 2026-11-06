@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { taskContractSchema } from './task-acceptance';
+import { frozenExecutionInputsSchema, executionNodeBindingSchema, executionOriginSchema } from './execution';
 
 import { mcpServerConfigSchema, mcpToolContractSchema } from './ipc-mcp-skills';
 import { hitlDecisionTypeSchema } from './hitl';
@@ -165,21 +166,6 @@ export const deepAgentConfigPreviewSchema = z
 
 export const runExecutionModeSchema = z.enum(['plan', 'run', 'task']);
 
-const legacyRunBudgetSchema = z
-  .object({
-    contextWindowTokens: z.number().int().positive().nullable(),
-    maxTotalTokens: z.number().int().positive().nullable(),
-    maxCostUsd: z.number().nonnegative().nullable(),
-    maxModelCalls: z.number().int().positive(),
-    maxToolCalls: z.number().int().positive(),
-    maxChildTasks: z.number().int().positive(),
-    maxConcurrentChildTasks: z.number().int().positive(),
-    maxConcurrentModelCalls: z.number().int().positive(),
-    maxConcurrentToolCalls: z.number().int().positive(),
-    deadlineAt: z.string().datetime().nullable()
-  })
-  .strict();
-
 const safeInteger = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 
 export const runBudgetSchema = z
@@ -252,8 +238,7 @@ const runExecutionSnapshotShape = {
   explicitSkillIds: z.array(z.string()),
   inputMessageId: identifierSchema,
   dispatchKey: identifierSchema.nullable(),
-  // 对话绑定研究项目后，科研工具与闸门权限由这个 id 在装配阶段决定。旧快照没有该字段。
-  researchProjectId: identifierSchema.nullable().optional()
+  researchProjectId: identifierSchema.nullable()
 } as const;
 
 export const workspaceFileIdentitySchema = z
@@ -264,47 +249,16 @@ export const workspaceFileIdentitySchema = z
   })
   .strict();
 
-const runExecutionSnapshotV7Schema = z
-  .object({
-    schemaVersion: z.literal(7),
-    ...runExecutionSnapshotShape,
-    budget: legacyRunBudgetSchema,
-    shellAllowedCommands: z.array(identifierSchema).optional()
-  })
-  .strict();
-
-const runExecutionSnapshotV8Schema = z
-  .object({
-    schemaVersion: z.literal(8),
-    ...runExecutionSnapshotShape,
-    workspaceIdentity: workspaceFileIdentitySchema.nullable(),
-    budget: legacyRunBudgetSchema,
-    shellAllowedCommands: z.array(identifierSchema).optional()
-  })
-  .strict();
-
-const runExecutionSnapshotV9Schema = z
-  .object({
-    schemaVersion: z.literal(9),
-    ...runExecutionSnapshotShape,
-    workspaceIdentity: workspaceFileIdentitySchema.nullable(),
-    budget: runBudgetSchema,
-    shellAllowedCommands: z.array(identifierSchema).optional()
-  })
-  .strict();
-
-export const legacyRunExecutionSnapshotSchema = z.discriminatedUnion('schemaVersion', [
-  runExecutionSnapshotV7Schema,
-  runExecutionSnapshotV8Schema
-]);
-
-export const runExecutionSnapshotAnySchema = z.discriminatedUnion('schemaVersion', [
-  runExecutionSnapshotV7Schema,
-  runExecutionSnapshotV8Schema,
-  runExecutionSnapshotV9Schema
-]);
-
-export const runExecutionSnapshotSchema = runExecutionSnapshotV9Schema;
+export const runExecutionSnapshotSchema = z.object({
+  schemaVersion: z.literal(10),
+  ...runExecutionSnapshotShape,
+  nodeBinding: executionNodeBindingSchema,
+  origin: executionOriginSchema,
+  frozenInputs: frozenExecutionInputsSchema,
+  workspaceIdentity: workspaceFileIdentitySchema.nullable(),
+  budget: runBudgetSchema,
+  shellAllowedCommands: z.array(identifierSchema).optional()
+}).strict();
 
 export const defaultModelStateSchema = z
   .object({

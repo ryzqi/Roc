@@ -26,7 +26,7 @@ const capabilities = {
 export const researchRunCapabilities = Object.values(capabilities);
 
 export function registerResearchRunCapabilities(context: RocPluginContext, repository: ResearchRunRepository, runtime: ResearchStageRuntime, reviews: ResearchReviewRepository, grants: ExecutionGrantBroker): void {
-  function register<TInput, TOutput>(capability: CapabilityDescriptor<TInput, TOutput>, run: (request: TInput) => TOutput): void {
+  function register<TInput, TOutput>(capability: CapabilityDescriptor<TInput, TOutput>, run: (request: TInput) => TOutput | Promise<TOutput>): void {
     context.capabilities.register(context.pluginId, capability, async (input) => run(capability.inputSchema.parse(input)));
   }
   register(capabilities.cycle, (request) => reviews.get(request.projectId));
@@ -34,7 +34,8 @@ export function registerResearchRunCapabilities(context: RocPluginContext, repos
   register(capabilities.savePolicy, (request) => repository.savePolicy(request));
   register(capabilities.start, (request) => {
     const reference = researchDispatchReference();
-    return runtime.start(request, reference === undefined ? null : grants.consumeResearchDispatch(reference, request));
+    if (reference === undefined) throw new Error('research_dispatch_grant_required');
+    return runtime.start(request, grants.consumeResearchDispatch(reference, request));
   });
   register(capabilities.get, (request) => repository.get(request.runId, request.projectId));
   register(capabilities.list, (request) => repository.list(request));

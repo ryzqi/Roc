@@ -1,3 +1,4 @@
+import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after,before,test} from 'node:test';
 import assert from 'node:assert/strict';
@@ -256,7 +257,7 @@ test('DB38 upgrade preserves all existing framework/extraction columns and real 
     oldApi.finishSeed(f.db);
     const old=f.db.prepare('SELECT * FROM research_review_quality_plans').all(),columns=Object.keys(old[0]);
     const extraction=f.db.prepare('SELECT * FROM research_review_extractions').all(),evidence=f.db.prepare('SELECT * FROM research_evidence').all();
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_review_quality_plans').all().map(row=>Object.fromEntries(columns.map(key=>[key,row[key]]))),old);
     assert.equal(f.db.prepare('SELECT assessment_head_hash FROM research_review_quality_plans').pluck().get(),null);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_review_extractions').all(),extraction);assert.deepEqual(f.db.prepare('SELECT * FROM research_evidence').all(),evidence);

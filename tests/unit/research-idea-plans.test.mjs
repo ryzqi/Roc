@@ -1,3 +1,4 @@
+import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import assert from 'node:assert/strict';
 import {after, before, test} from 'node:test';
 import {mkdtempSync, rmSync} from 'node:fs';
@@ -172,7 +173,7 @@ test('disk restart reads exact frozen plans without any writes, and DB44 upgrade
   try {
     const first = f.freeze(f.save(f.request)), path = join(root, 'research.sqlite');
     await f.db.backup(path); disk = new Database(path); disk.pragma('foreign_keys=ON');
-    api.applyResearchDatabaseSchema(disk);
+    applyOfflineResearchSchema(api, disk);
     const repository = new api.ResearchRepository(disk, f.tasks);
     const changes = disk.prepare('SELECT total_changes()').pluck().get();
     assert.deepEqual(repository.ideaPlans.get(f.reference(first)), first);
@@ -188,7 +189,7 @@ test('disk restart reads exact frozen plans without any writes, and DB44 upgrade
         }
       }
       const original = old.prepare('SELECT * FROM research_idea_canvases').get(), originalRevision = old.prepare('SELECT * FROM research_idea_canvas_revisions').get();
-      api.applyResearchDatabaseSchema(old);
+      applyOfflineResearchSchema(api, old);
       assert.equal(old.prepare('SELECT current_version FROM schema_metadata').pluck().get(), api.researchMigrations.at(-1).version);
       assert.deepEqual(old.prepare('SELECT * FROM research_idea_canvases').get(), original);
       assert.deepEqual(old.prepare('SELECT * FROM research_idea_canvas_revisions').get(), originalRevision);

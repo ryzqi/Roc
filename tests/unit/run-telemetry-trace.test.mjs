@@ -414,6 +414,7 @@ test('run diagnostics read checks thread identity and omits internal metadata an
   let value = accumulator().snapshot();
   value.model.reportedCostUsd = 1.5;
   const runtime = new AgentPluginRuntime({
+    executionGrantBroker: {revokeRun: () => assert.fail('diagnostics must not revoke grants')},
     repository: {
       getRun: runId => {
         if (runId !== run.id) throw new Error('task_run_not_found');
@@ -497,7 +498,7 @@ test('live telemetry round-trips through SQLite and cannot overwrite terminal or
     const frozen = createRunExecutionSnapshot({
       runId: run.id, threadId: run.threadId, inputMessageId: 'message-1',
       snapshot: {
-        schemaVersion: 9,
+        schemaVersion: 10,
         submissionHash: 'f'.repeat(64),
         taskContract: {
           contractVersion: 1, objective: 'Fixture reply', constraints: [], kind: 'reply',
@@ -508,7 +509,7 @@ test('live telemetry round-trips through SQLite and cannot overwrite terminal or
         researchProjectId: null, budget: createRunBudget({ contextBudgetTokens: null })
       }
     });
-    db.prepare(`UPDATE agent_runs SET snapshot_json = ?, snapshot_version = 9, provider_id = ?, model_id = ?,
+    db.prepare(`UPDATE agent_runs SET snapshot_json = ?, snapshot_version = 10, provider_id = ?, model_id = ?,
       enabled_capabilities_json = ?, run_origin = 'chat' WHERE id = ?`).run(
       JSON.stringify(frozen), frozen.model.providerId, frozen.model.modelId,
       JSON.stringify(manifest.resolvedCapabilities), run.id

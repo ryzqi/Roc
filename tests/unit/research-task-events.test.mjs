@@ -51,7 +51,7 @@ test('task events persist reservation, settlement and startup uncertainty with e
     assert.deepEqual(events.map(event => event.eventType), [
       'task_created', 'execution_linked', 'call_reserved', 'call_settled', 'call_reserved', 'call_unknown'
     ]);
-    const modelEvents = events.filter(event => event.callId !== null);
+    const modelEvents = events.map(event => event.payload).filter(event => event.callId !== null);
     assert.deepEqual(modelEvents.map(event => [event.callId, event.state]), [
       ['one', 'reserved'], ['one', 'settled'], ['two', 'reserved'], ['two', 'unknown']
     ]);
@@ -67,7 +67,9 @@ test('rolled-back activation and denied or repeated calls produce no successful-
     f.tasks.setStatus(f.run.taskId, f.project.id, 'paused', 'research_task_paused', ['active']);
     const pausedEvents = f.tasks.events(requestFor(f)).events;
     assert.throws(() => f.tasks.continueWith(f.run.taskId, f.project.id, () => { throw new Error('fixture_rollback'); }), /fixture_rollback/);
-    assert.deepEqual(f.tasks.events(requestFor(f)).events, pausedEvents);
+    const resumedEvents = f.tasks.events(requestFor(f)).events;
+    assert.deepEqual(resumedEvents.slice(0,pausedEvents.length), pausedEvents);
+    assert.deepEqual(resumedEvents.slice(pausedEvents.length).map(event=>event.payload.state), ['active','paused']);
     assert.equal(f.tasks.get(f.run.taskId, f.project.id).status, 'paused');
     f.tasks.setStatus(f.run.taskId, f.project.id, 'active', null, ['paused']);
     const budget = api.createRunBudget({ contextBudgetTokens: 1000 });
@@ -78,6 +80,7 @@ test('rolled-back activation and denied or repeated calls produce no successful-
     ledger.reserve(f.run.id, budget, reservation);
     ledger.settle(f.run.id, 'one', 20, 'settled');
     const saved = f.tasks.events(requestFor(f)).events;
+    ledger.settle(f.run.id, 'one', 20, 'settled');
     assert.throws(() => ledger.reserve(f.run.id, budget, reservation), /run_budget_call_already_reserved/);
     assert.throws(() => ledger.settle(f.run.id, 'one', 1, 'settled'), /run_budget_settlement_invalid/);
     assert.deepEqual(f.tasks.events(requestFor(f)).events, saved);
@@ -87,7 +90,7 @@ test('rolled-back activation and denied or repeated calls produce no successful-
 test('task event pagination and IPC preserve scope and monotonically ordered sequences', () => {
   const f = createResearchFixture(api, 'discovery');
   try {
-    f.tasks.cancel(f.run.taskId, f.project.id);
+    f.tasks.setStatus(f.run.taskId, f.project.id, 'cancelled', 'fixture', ['active']);
     const request = { ...requestFor(f), limit: 1 };
     const first = f.tasks.events(request);
     assert.equal(first.hasMore, true);
@@ -95,7 +98,7 @@ test('task event pagination and IPC preserve scope and monotonically ordered seq
     assert.ok(second.nextSequence > first.nextSequence);
     const full = f.tasks.events(requestFor(f));
     const empty = f.tasks.events({ ...request, afterSequence: full.nextSequence });
-    assert.deepEqual(empty, { events: [], nextSequence: full.nextSequence, hasMore: false });
+    assert.deepEqual(empty, { events: [], nextSequence: full.nextSequence, hasMore: false, gap: null });
     assert.throws(() => f.tasks.events({ ...request, projectId: 'foreign' }), /research_task_project_mismatch/);
     assert.deepEqual(api.parseIpcRequestArgs('roc:research:task-events', [request]), [request]);
     assert.throws(() => api.parseIpcRequestArgs('roc:research:task-events', [{ ...request, afterSequence: -1 }]));
@@ -113,14 +116,14 @@ test('v13 migration retains tasks without fabricating historical event rows', ()
       createdAt: '2026-11-03T00:00:00.000Z', updatedAt: '2026-11-03T00:00:00.000Z' };
     db.prepare('INSERT INTO research_tasks(id,project_id,status,snapshot_json,created_at) VALUES (?,?,?,?,?)')
       .run(task.id, task.projectId, task.status, JSON.stringify(task), task.createdAt);
-    api.applyDatabaseMigrations(db, { dbName: 'agent', migrations: api.agentMigrations });
+    api.applyDatabaseMigrations(db, { dbName: 'agent', migrations: api.agentMigrations, allowOffline:true });
     const tasks = new api.ResearchTaskRepository(db);
     const request = { taskId: task.id, projectId: task.projectId, afterSequence: 0, limit: 200 };
     assert.deepEqual(tasks.get(task.id, task.projectId), task);
     assert.deepEqual(tasks.events(request).events, []);
-    tasks.cancel(task.id, task.projectId);
+    tasks.setStatus(task.id, task.projectId, 'cancelled', 'fixture', ['active']);
     const event = tasks.events(request).events[0];
     assert.equal(event.eventType, 'task_status');
-    assert.equal(event.state, 'cancelled');
+    assert.equal(event.payload.state, 'cancelled');
   } finally { db.close(); }
 });

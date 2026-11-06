@@ -16,18 +16,26 @@ export class ResearchTaskController {
   constructor(private readonly tasks: ResearchTaskRepository, private readonly services: TaskCancellationServices) {}
 
   cancel(request: { taskId: string; projectId: string }): Promise<ResearchTask> {
-    this.tasks.get(request.taskId, request.projectId);
+    const current = this.tasks.get(request.taskId, request.projectId);
     const pending = this.cancellations.get(request.taskId);
     if (pending !== undefined) return pending;
-    const task = this.tasks.cancel(request.taskId, request.projectId);
-    return this.cleanup(task, 'cancelled');
+    const pausing = this.cancellations.get(`${request.taskId}:paused`);
+    const reason = current.statusReason === 'research_task_cleanup_failed' ||
+      (current.statusReason === 'research_task_cleanup_pending' && pausing === undefined)
+      ? 'research_task_cleanup_failed' : 'research_task_cleanup_pending';
+    const task = this.tasks.setStatus(request.taskId, request.projectId, 'cancelled', reason,
+      ['active', 'waiting_approval', 'paused', 'interrupted', 'failed', 'cancelled']);
+    return this.cleanup(task, 'cancelled', pausing);
   }
 
   pause(request: { taskId: string; projectId: string }): Promise<ResearchTask> {
-    this.tasks.get(request.taskId, request.projectId);
+    const current = this.tasks.get(request.taskId, request.projectId);
     const pending = this.cancellations.get(`${request.taskId}:paused`);
     if (pending !== undefined) return pending;
-    const task = this.tasks.setStatus(request.taskId, request.projectId, 'paused', 'research_task_paused',
+    if (current.statusReason === 'research_task_cleanup_failed' || current.statusReason === 'research_task_cleanup_pending') {
+      throw new Error('research_task_cleanup_unconfirmed');
+    }
+    const task = this.tasks.setStatus(request.taskId, request.projectId, 'paused', 'research_task_cleanup_pending',
       ['active', 'waiting_approval', 'paused']);
     return this.cleanup(task, 'paused');
   }
@@ -41,7 +49,8 @@ export class ResearchTaskController {
   }
 
   restoreApproval(request: { taskId: string; projectId: string }) {
-    if (this.tasks.get(request.taskId, request.projectId).statusReason === 'research_task_cleanup_failed') {
+    const reason = this.tasks.get(request.taskId, request.projectId).statusReason;
+    if (reason === 'research_task_cleanup_failed' || reason === 'research_task_cleanup_pending') {
       throw new Error('research_task_cleanup_unconfirmed');
     }
     if (this.cancellations.has(request.taskId) || this.cancellations.has(`${request.taskId}:paused`)) {
@@ -50,18 +59,26 @@ export class ResearchTaskController {
     return this.services.stages.restoreTaskApproval(request);
   }
 
-  private cleanup(task: ResearchTask, status: 'paused' | 'cancelled'): Promise<ResearchTask> {
+  private cleanup(task: ResearchTask, status: 'paused' | 'cancelled', priorCleanup?: Promise<ResearchTask>): Promise<ResearchTask> {
     const key = status === 'cancelled' ? task.id : `${task.id}:paused`;
-    const executions = this.tasks.executions(task.id, task.projectId);
+    let executionList: { executions: ResearchTaskExecution[]; errors: unknown[] };
+    try { executionList = this.tasks.executionsForCleanup(task.id, task.projectId); }
+    catch (error) { executionList = { executions: [], errors: [error] }; }
+    const { executions, errors: executionErrors } = executionList;
+    const invoke = (operation: () => Promise<unknown>): Promise<unknown> => {
+      try { return Promise.resolve(operation()); } catch (error) { return Promise.reject(error); }
+    };
     const cleanup = Promise.allSettled([
-      status === 'cancelled' ? this.services.stages.cancelTask(task.id, task.projectId)
-        : this.services.stages.pauseTask(task.id, task.projectId),
-      ...executions.map((execution) => {
+      ...executionErrors.map((error) => Promise.reject(error)),
+      ...(priorCleanup === undefined ? [] : [priorCleanup]),
+      invoke(() => status === 'cancelled' ? this.services.stages.cancelTask(task.id, task.projectId)
+        : this.services.stages.pauseTask(task.id, task.projectId)),
+      ...executions.map((execution) => invoke(() => {
         if (execution.kind === 'stage') return Promise.resolve();
         if (execution.kind === 'chat') return this.services.cancelChat(execution.executionId);
         if (execution.parentKind === 'stage') return Promise.resolve();
         return this.services.cancelJob(execution.kind, task.projectId, execution.executionId);
-      })
+      }))
     ]).then((results) => {
       const errors = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
       if (errors.length > 0) {
@@ -69,7 +86,12 @@ export class ResearchTaskController {
         this.tasks.setStatus(task.id, task.projectId, current.status, 'research_task_cleanup_failed', [current.status]);
         throw new AggregateError(errors, 'research_task_cleanup_failed');
       }
-      return this.tasks.get(task.id, task.projectId);
+      const current = this.tasks.get(task.id, task.projectId);
+      if (current.status === status && current.statusReason === 'research_task_cleanup_pending') {
+        return this.tasks.setStatus(task.id, task.projectId, status,
+          status === 'cancelled' ? 'research_task_cancelled' : 'research_task_paused', [status]);
+      }
+      return current;
     }).finally(() => this.cancellations.delete(key));
     this.cancellations.set(key, cleanup);
     return cleanup;

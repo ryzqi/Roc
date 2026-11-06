@@ -1,3 +1,4 @@
+import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import assert from 'node:assert/strict';
 import {after, before, test} from 'node:test';
 import {createHash} from 'node:crypto';
@@ -24,7 +25,7 @@ function chat(f, id = 'owned-query-parent', overrides = {}) {
   }).manifest;
   const budget = {...api.createRunBudget({contextBudgetTokens: null, startedAt: timestamp}), ...overrides};
   const snapshot = api.createRunExecutionSnapshot({runId, threadId, inputMessageId: `${id}-message`, snapshot: {
-    schemaVersion: 9, submissionHash: 'a'.repeat(64),
+    schemaVersion: 10, submissionHash: 'a'.repeat(64),
     taskContract: {contractVersion: 1, objective: 'Execute exact frozen query', constraints: [], kind: 'reply',
       criteria: [{id: 'query', description: 'Read exact receipts', check: {kind: 'response'}}]},
     runOrigin: 'chat', model: {providerId: 'fixture', modelId: 'fixture'}, mode: 'run', workspace: null,
@@ -35,7 +36,7 @@ function chat(f, id = 'owned-query-parent', overrides = {}) {
     VALUES (?,'chat','Review','Review','active',?,?,?)`).run(threadId, f.project.id, timestamp, timestamp);
   f.agentDb.prepare(`INSERT INTO agent_runs
     (id,thread_id,run_number,user_input,status,started_at,enabled_capabilities_json,run_origin,snapshot_json,snapshot_version)
-    VALUES (?,?,1,'Review','running',?,'{}','chat',?,9)`).run(runId, threadId, timestamp, JSON.stringify(snapshot));
+    VALUES (?,?,1,'Review','running',?,'{}','chat',?,10)`).run(runId, threadId, timestamp, JSON.stringify(snapshot));
   const broker = new api.ExecutionGrantBroker(f.agentDb), controller = new AbortController();
   const grant = (request = f.request) => broker.consumeReviewSearchDispatch(
     broker.issueReviewSearchDispatch({runId, threadId, manifest, request}), request);
@@ -76,7 +77,7 @@ test('first owned query creates a trusted chat task before network and backfills
     assert.equal(execution.status, 'complete'); assert.equal(execution.stage, null);
     assert.equal(execution.startedAt, done.snapshot.startedAt); assert.equal(execution.endedAt, done.receipt.endedAt);
     const events = f.tasks.events({taskId: task.id, projectId: f.project.id, afterSequence: 0, limit: 200}).events;
-    assert.ok(events.some(event => event.executionKind === 'review_search' && event.executionId === done.snapshot.id));
+    assert.ok(events.some(event => event.payload.executionKind === 'review_search' && event.payload.executionId === done.snapshot.id));
     assert.equal(events.filter(event => event.eventType === 'call_linked').length, 1);
     assert.deepEqual(f.events, [0, 1].map(() => ({taskId: task.id, projectId: f.project.id})));
     assert.equal(f.errors.length, 0);
@@ -180,7 +181,7 @@ test('owned cancel persists the actual agent request before abort and retries it
   const ready = new Promise(resolve => {entered = resolve;});
   const f = createReviewSearchFixture(api, {fetch: async (_url, options) => {
     signal = options.signal; entered();
-    return new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), {once: true}));
+    return new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), {once: true}));
   }}), c = chat(f);
   try {
     const started = f.reviews.startOwned(f.request, c.grant(), c.controller.signal); await ready;
@@ -203,7 +204,7 @@ test('cancelling one task waits for its own query cleanup and leaves another cha
   const signals = [];
   const f = createReviewSearchFixture(api, {queries: ['first-owned-query', 'second-owned-query'], fetch: async (_url, options) => {
     signals.push(options.signal); if (signals.length === 2) entered();
-    return new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), {once: true}));
+    return new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), {once: true}));
   }}), first = chat(f), second = chat(f, 'second-parent');
   try {
     const request = {...f.request, requestId: 'second-query', queryIndex: 1};
@@ -280,7 +281,7 @@ test('disk restart preserves exact owner and task while interrupting a held quer
   let entered;
   const ready = new Promise(resolve => {entered = resolve;});
   const f = createReviewSearchFixture(api, {fetch: async (_url, options) => {
-    entered(); return new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), {once: true}));
+    entered(); return new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), {once: true}));
   }}), c = chat(f), directory = await mkdtemp(join(tmpdir(), 'roc-owned-review-restart-'));
   let db, agentDb, restarted;
   try {
@@ -312,7 +313,7 @@ test('continuous task deadline cancels a held query even while its chat remains 
   const ready = new Promise(resolve => {entered = resolve;});
   const f = createReviewSearchFixture(api, {fetch: async (_url, options) => {
     signal = options.signal; entered();
-    return new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), {once: true}));
+    return new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), {once: true}));
   }}), c = chat(f, 'deadline-parent', {deadlineAt: new Date(Date.now() + 2000).toISOString()});
   try {
     const started = f.reviews.startOwned(f.request, c.grant(), c.controller.signal); await ready;
@@ -335,13 +336,14 @@ test('Agent DB17 retains historical event identities, cursor sequence and trigge
       VALUES (?,'call_unknown','stage','historical-stage','historical-call','unknown','retained audit',?)`).run(task.id, task.createdAt);
     const before = db.prepare('SELECT * FROM research_task_events ORDER BY sequence').all();
     const ledger = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    api.applyDatabaseMigrations(db, {dbName: 'agent', migrations: api.agentMigrations});
-    assert.deepEqual(db.prepare('SELECT * FROM research_task_events ORDER BY sequence').all(), before);
+    api.applyDatabaseMigrations(db, {dbName: 'agent', migrations: api.agentMigrations, allowOffline: true});
+    const migrated = before.map(row => ({...row, stream_sequence: null, envelope_json: null}));
+    assert.deepEqual(db.prepare('SELECT * FROM research_task_events ORDER BY sequence').all(), migrated);
     assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=16 ORDER BY version').all(), ledger);
     db.prepare(`INSERT INTO research_task_executions(kind,execution_id,task_id,project_id,snapshot_json,created_at)
       VALUES ('review_search','new-query',?,?,?,?)`).run(task.id, task.projectId, '{}', task.createdAt);
     const after = db.prepare('SELECT * FROM research_task_events ORDER BY sequence').all();
-    assert.deepEqual(after.slice(0, before.length), before);
+    assert.deepEqual(after.slice(0, before.length), migrated);
     assert.equal(after.at(-1).execution_kind, 'review_search'); assert.equal(after.at(-1).execution_id, 'new-query');
     assert.equal(after.at(-1).sequence, before.at(-1).sequence + 1);
     assert.deepEqual(db.pragma('foreign_key_check'), []);
@@ -356,7 +358,7 @@ test('Research DB41 preserves exact historical manual query hashes and never inv
     const before = f.db.prepare('SELECT * FROM research_review_searches').all();
     const ledger = f.db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
     const executions = f.agentDb.prepare('SELECT * FROM research_task_executions').all();
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_review_searches').all(), before.map(row => ({...row, owner_hash: null})));
     assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE version<=40 ORDER BY version').all(), ledger);
     assert.equal(f.db.prepare('SELECT count(*) FROM research_review_search_owners').pluck().get(), 0);
@@ -379,10 +381,10 @@ test('exact partial query retries and later stages share the chat task without r
     assert.equal((await awaitReviewSearchFixture(f, repeated.search)).status, 'partial');
     const stageRequest = {projectId: f.project.id, expectedStage: 'reading', instruction: 'Use frozen query results', requestId: 'later-stage'};
     f.repository.runs.terminate(f.run.id, f.project.id, 'cancelled', 'fixture');
-    const stage = f.repository.runs.begin(stageRequest);
     const dispatch = c.broker.consumeResearchDispatch(c.broker.issueResearchDispatch({
       runId: c.runId, threadId: c.threadId, manifest: c.manifest, request: stageRequest
     }), stageRequest);
+    const stage = f.repository.runs.begin(stageRequest, undefined, dispatch);
     const linked = f.tasks.linkStage(stage, dispatch);
     assert.equal(linked.taskId, initial.association.taskId); assert.equal(stage.parentRunId, null);
     assert.equal(linked.parentKind, 'chat'); assert.equal(linked.parentExecutionId, c.runId);

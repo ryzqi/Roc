@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
+import { openExecutionGrantBroker } from '../../src/main/services/deep-agent/execution-grant-broker';
 import { applyMemoryDatabaseSchema } from '../../src/main/infrastructure/database-schemas';
 import {
   ExperienceRecordStore, experienceContentHash, type ExperienceRecordInput
@@ -751,6 +752,7 @@ async function verifyPilotDispatch(directory: string): Promise<Record<string, un
   });
   const repository = new AgentSessionRepository(db, { runEventLog: new AgentRunEventLog(db) });
   const runtime = new AgentPluginRuntime({
+    executionGrantBroker: openExecutionGrantBroker(db),
     repository,
     eventBus,
     modelFactory: {

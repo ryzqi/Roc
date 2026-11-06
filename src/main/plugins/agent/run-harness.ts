@@ -79,7 +79,7 @@ export type RunHarnessServices = {
   sessionHistory: PreCompactionFlushRecorder;
   store: BaseStore;
   toolEffectStore: AgentToolEffectStore;
-  executionGrantBroker?: ExecutionGrantBroker;
+  executionGrantBroker: ExecutionGrantBroker;
 };
 
 export type RunHarnessRequest = {
@@ -431,7 +431,7 @@ function createWorkspaceFromSnapshot(snapshot: RunExecutionSnapshot): Workspace 
  * 缺席的组直接空数组，不影响其余组的相对次序。
  */
 async function createExecutorTools(input: {
-  executionGrantBroker?: ExecutionGrantBroker;
+  executionGrantBroker: ExecutionGrantBroker;
   threadId: string;
   capabilities: RocCapabilityRegistry;
   capabilityManifest: RunCapabilityManifestV1;
@@ -489,7 +489,7 @@ async function createExecutorTools(input: {
  * 按清单过滤而不是按项目 id 直接信任，保证运行时工具集与冻结的清单一致。
  */
 export function createManifestAuthorizedResearchTools(input: {
-  executionGrantBroker?: ExecutionGrantBroker;
+  executionGrantBroker: ExecutionGrantBroker;
   threadId: string;
   runId: string;
   capabilities: RocCapabilityRegistry;
@@ -813,11 +813,12 @@ function createShellExecutionAdapter(input: {
   threadId: string;
   workspacePath: string | null;
   manifest: RunCapabilityManifestV1;
-  executionGrantBroker?: ExecutionGrantBroker;
+  executionGrantBroker: ExecutionGrantBroker;
 }): AgentExecuteAdapter | undefined {
   const broker = input.executionGrantBroker;
   const workspacePath = input.workspacePath;
-  if (broker === undefined || workspacePath === null) return undefined;
+  if (broker === undefined) throw new Error('execution_grant_broker_required');
+  if (workspacePath === null) return undefined;
   return {
     executeAgentCommand: async ({ command, cwd, toolCallId, profile }) => {
       const toolNameByProfile: Record<ExecutionGrantProfile, string> = {

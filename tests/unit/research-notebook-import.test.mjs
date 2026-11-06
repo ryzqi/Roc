@@ -1,3 +1,4 @@
+import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import assert from 'node:assert/strict';
 import { before, after, test } from 'node:test';
 import { createHash } from 'node:crypto';
@@ -118,7 +119,7 @@ test('disk reopen retains original cells and outputs and detects byte, receipt a
     const imported = await f.import(), reference = f.reference(imported), path = join(f.workspace, 'snapshot.sqlite');
     await f.db.backup(path);
     reopened = new Database(path);
-    api.applyResearchDatabaseSchema(reopened);
+    applyOfflineResearchSchema(api, reopened);
     const repository = new api.ResearchRepository(reopened, f.tasks);
     await rm(join(f.workspace, f.request.path));
     assert.deepEqual(repository.notebooks.get(reference), imported);

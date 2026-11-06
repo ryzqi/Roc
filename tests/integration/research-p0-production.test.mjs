@@ -576,7 +576,7 @@ function seedChat(f, budget) {
     researchProjectId: f.project.id
   }).manifest;
   const snapshot = api.createRunExecutionSnapshot({runId: 'chat', threadId: 'thread', inputMessageId: 'message', snapshot: {
-    schemaVersion: 9, submissionHash: 'a'.repeat(64),
+    schemaVersion: 10, submissionHash: 'a'.repeat(64),
     taskContract: {contractVersion: 1, objective: 'Reproduce the synthetic means and publish a figure',
       constraints: [], kind: 'reply', criteria: [{id: 'response', description: 'Synthetic result', check: {kind: 'response'}}]},
     runOrigin: 'chat', model: {providerId: 'p0-fixture', modelId: 'fixture-model'}, mode: 'run',
@@ -587,7 +587,7 @@ function seedChat(f, budget) {
     VALUES ('thread','chat','P0 integration','Synthetic research','active',?,?,?)`).run(f.project.id, timestamp, timestamp);
   f.agentDb.prepare(`INSERT INTO agent_runs(id,thread_id,run_number,user_input,status,started_at,
     enabled_capabilities_json,run_origin,snapshot_json,snapshot_version)
-    VALUES ('chat','thread',1,'Reproduce means and publish a figure','running',?,'{}','chat',?,9)`)
+    VALUES ('chat','thread',1,'Reproduce means and publish a figure','running',?,'{}','chat',?,10)`)
     .run(timestamp, JSON.stringify(snapshot));
   return {manifest, broker: new api.ExecutionGrantBroker(f.agentDb)};
 }

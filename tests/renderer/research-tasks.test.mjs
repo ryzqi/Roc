@@ -31,7 +31,10 @@ before(async () => {
         window.opened = [];
         window.makeData = (projectId = 'project-a', taskId = 'task-a', chatId = 'chat-a') => {
           const association = (kind, executionId, parentKind, parentExecutionId) => ({
-            schemaVersion: 1, taskId, projectId, kind, executionId, parentKind, parentExecutionId,
+            schemaVersion: 2, taskId, projectId, kind, executionId, parentKind, parentExecutionId,
+            nodeBinding: {kind: 'none'}, origin: {kind: 'main', action: 'start', requestId: executionId},
+            frozenInputs: {schemaVersion: 1, requestHash: 'a'.repeat(64), manifestHash: 'a'.repeat(64), policyHash: 'a'.repeat(64), versions: []},
+            associationState: 'confirmed',
             associationSource: 'direct', manifestHash: 'a'.repeat(64), createdAt: '2026-11-03T00:00:00.000Z'
           });
           const execution = (kind, executionId, parentKind, parentExecutionId, status, artifactIds) => ({
@@ -56,7 +59,8 @@ before(async () => {
               execution('stage', 'stage-a', 'chat', chatId, 'running', []),
               execution('figure', 'figure-a', 'stage', 'stage-a', 'completed', ['artifact-figure'])
             ],
-            continuationRunId: null, canRestoreApproval: false, externalCost: 'unknown'
+            continuationRunId: null, canRestoreApproval: false, externalCost: 'unknown',
+            recoveryIssues: [], eventDelivery: {pending: 0, failed: 0}
           };
         };
         window.deferred = () => {
@@ -112,7 +116,7 @@ before(async () => {
             const events = window.eventRows.filter(event => event.sequence > request.afterSequence);
             const slice = events.slice(0, request.limit);
             return record('events', request, {ok: true, data: {
-              events: slice, nextSequence: slice.at(-1)?.sequence ?? request.afterSequence, hasMore: events.length > request.limit
+              events: slice, nextSequence: slice.at(-1)?.sequence ?? request.afterSequence, hasMore: events.length > request.limit, gap: null
             }});
           },
           listTasks: request => record('list', request, window.listResponse),
@@ -163,8 +167,12 @@ before(async () => {
           factsResponse = {ok: true, data: {snapshot: null, freshness: [], authority: 'research_data_only'}};
           listResponse = {ok: true, data: {tasks: [makeData().task], nextTaskId: 'task-a', hasMore: false}};
           eventRows = Array.from({length: 51}, (_, index) => ({
-            sequence: index + 1, taskId: 'task-a', eventType: 'call_settled', executionKind: 'stage',
-            executionId: 'stage-a', callId: 'call-' + (index + 1), state: 'settled', reason: null,
+            schemaVersion: 1, eventId: 'event-' + (index + 1), streamId: 'task:task-a', projectId: 'project-a',
+            taskId: 'task-a', runId: 'stage-a', sequence: index + 1, eventType: 'call_settled',
+            actor: {kind: 'main', id: 'task-ledger'}, correlationId: 'task-a', causationId: null,
+            payloadHash: 'a'.repeat(64), payloadRef: null,
+            payload: {taskId: 'task-a', executionKind: 'stage', executionId: 'stage-a',
+              callId: 'call-' + (index + 1), state: 'settled', reason: null},
             createdAt: '2026-11-03T00:00:01.000Z'
           }));
         };
@@ -316,7 +324,8 @@ test('management renders parent execution tree, artifact IDs and cursor event re
   await page.evaluate(() => mountDrawer());
   assert.equal(await page.evaluate(() => calls.length), previous);
   await page.evaluate(() => {
-    eventRows.push({...eventRows[0], sequence: 52, callId: 'call-52', eventType: 'call_unknown', state: 'unknown'}); emit();
+    eventRows.push({...eventRows[0], eventId: 'event-52', sequence: 52, eventType: 'call_unknown',
+      payload: {...eventRows[0].payload, callId: 'call-52', state: 'unknown'}}); emit();
   });
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="mgmt-task-event"]').length === 52);
   assert.equal(await page.getByText('#52 调用消费未知', {exact: true}).count(), 1);

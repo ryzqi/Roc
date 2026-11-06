@@ -18,7 +18,7 @@ function connect(f, id = 'query-tool-parent', signal = new AbortController().sig
     researchProjectId: f.project.id
   }).manifest;
   const snapshot = api.createRunExecutionSnapshot({runId, threadId, inputMessageId: `${id}-message`, snapshot: {
-    schemaVersion: 9, submissionHash: 'a'.repeat(64),
+    schemaVersion: 10, submissionHash: 'a'.repeat(64),
     taskContract: {contractVersion: 1, objective: 'Execute frozen queries', constraints: [], kind: 'reply',
       criteria: [{id: 'query', description: 'Read real query receipts', check: {kind: 'response'}}]},
     runOrigin: 'chat', model: {providerId: 'fixture', modelId: 'fixture'}, mode: 'run', workspace: null,
@@ -29,7 +29,7 @@ function connect(f, id = 'query-tool-parent', signal = new AbortController().sig
     VALUES (?,'chat','Review','Review','active',?,?,?)`).run(threadId, f.project.id, time, time);
   f.agentDb.prepare(`INSERT INTO agent_runs
     (id,thread_id,run_number,user_input,status,started_at,enabled_capabilities_json,run_origin,snapshot_json,snapshot_version)
-    VALUES (?,?,1,'Review','running',?,'{}','chat',?,9)`).run(runId, threadId, time, JSON.stringify(snapshot));
+    VALUES (?,?,1,'Review','running',?,'{}','chat',?,10)`).run(runId, threadId, time, JSON.stringify(snapshot));
   const broker = new api.ExecutionGrantBroker(f.agentDb), registry = new api.CapabilityRegistry();
   const context = {pluginId: 'research', capabilities: registry};
   for (const descriptor of [...api.researchReviewSearchCapabilities, ...api.researchOwnedReviewSearchCapabilities]) {
@@ -125,7 +125,7 @@ test('held owned query cancel uses actual operation identity, persists once and 
   const ready = new Promise(resolve => {entered = resolve;});
   const f = createReviewSearchFixture(api, {fetch: async (_url, options) => {
     providerSignal = options.signal; entered();
-    return new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), {once: true}));
+    return new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), {once: true}));
   }}), c = connect(f);
   try {
     const start = await call(c.start, selection(f), 'held-query'); await ready;
@@ -168,7 +168,8 @@ test('frozen manifest lacking query authorization never expands when current que
     body.tools = body.tools.filter(tool => !['research_review_execute_query', 'research_review_get_query', 'research_review_cancel_query']
       .includes(tool.modelVisibleName));
     const manifest = {...body, manifestHash: hash(body)};
-    const snapshot = {...c.snapshot, capabilityManifest: manifest};
+    const snapshot = api.createRunExecutionSnapshot({runId: c.runId, threadId: c.threadId, inputMessageId: c.snapshot.inputMessageId,
+      snapshot: {...c.snapshot, capabilityManifest: manifest}});
     f.agentDb.prepare('UPDATE agent_runs SET snapshot_json=? WHERE id=?').run(JSON.stringify(snapshot), c.runId);
     const filtered = api.createManifestAuthorizedResearchTools({
       researchProjectId: f.project.id, runId: c.runId, threadId: c.threadId,
@@ -204,7 +205,7 @@ test('cancellation after persistence aborts in-flight query and exact retry pres
   const ready = new Promise(resolve => {entered = resolve;});
   const f = createReviewSearchFixture(api, {fetch: async (_url, options) => {
     providerSignal = options.signal; entered();
-    return new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), {once: true}));
+    return new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), {once: true}));
   }}), controller = new AbortController();
   const c = connect(f, 'cancel-after-persist', controller.signal, async operation => {
     const result = await operation(); await ready; controller.abort(new Error('lost-after-persist')); return result;

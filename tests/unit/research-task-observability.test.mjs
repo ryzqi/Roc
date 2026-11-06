@@ -33,7 +33,7 @@ function chat(f) {
     VALUES ('thread','chat','Fixture',?,'active',?,?,?)`).run(secret, f.project.id, now, now);
   f.agentDb.prepare(`INSERT INTO agent_runs(id,thread_id,run_number,user_input,status,started_at,ended_at,provider_id,model_id,enabled_capabilities_json,run_origin)
     VALUES ('chat','thread',1,?,'failed',?,?,'provider-private','model-private','{}','chat')`).run(secret, now, now);
-  const association = {schemaVersion: 1, taskId: f.run.taskId, projectId: f.project.id, kind: 'chat', executionId: 'chat',
+  const association = {...f.tasks.requireExecution('stage', f.run.id, f.project.id), taskId: f.run.taskId, projectId: f.project.id, kind: 'chat', executionId: 'chat',
     parentKind: null, parentExecutionId: null, associationSource: 'direct', manifestHash: 'a'.repeat(64), createdAt: now};
   f.agentDb.prepare(`INSERT INTO research_task_executions(kind,execution_id,task_id,project_id,snapshot_json,created_at)
     VALUES ('chat','chat',?,?,?,?)`).run(f.run.taskId, f.project.id, JSON.stringify(association), now);

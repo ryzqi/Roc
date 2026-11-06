@@ -75,6 +75,35 @@ test('appending a migration preserves complete historical ledger rows and their 
   } finally {db.close();}
 });
 
+test('offline-only migration refuses an existing database until an explicit offline conversion', () => {
+  const db = new Database(':memory:');
+  const offline = { ...additiveMigration, offlineOnly: true };
+  const target = [...baseMigrations, offline];
+  try {
+    applyDatabaseMigrations(db, { dbName: 'core', migrations: baseMigrations });
+    db.prepare('INSERT INTO widgets(id,label) VALUES (?,?)').run('retained', 'original');
+    const metadata = readSchemaMetadata(db, 'core');
+    assert.throws(() => applyDatabaseMigrations(db, { dbName: 'core', migrations: target }), /database_offline_migration_required/);
+    assert.deepEqual(columnNames(db, 'widgets'), ['id', 'label']);
+    assert.deepEqual(ledgerVersions(db), [1, 2]);
+    assert.deepEqual(readSchemaMetadata(db, 'core'), metadata);
+    assert.equal(db.prepare('SELECT label FROM widgets WHERE id=?').pluck().get('retained'), 'original');
+    applyDatabaseMigrations(db, { dbName: 'core', migrations: target, allowOffline: true });
+    assert.deepEqual(columnNames(db, 'widgets'), ['id', 'label', 'owner']);
+    applyDatabaseMigrations(db, { dbName: 'core', migrations: target });
+    db.prepare('DELETE FROM schema_migrations WHERE version=3').run();
+    assert.throws(() => applyDatabaseMigrations(db, { dbName: 'core', migrations: target, allowOffline: true }), /database_migration_data_unproven/);
+  } finally { db.close(); }
+});
+
+test('offline-only migrations may initialize a fresh empty database', () => {
+  const db = new Database(':memory:');
+  try {
+    applyDatabaseMigrations(db, { dbName: 'core', migrations: [...baseMigrations, { ...additiveMigration, offlineOnly: true }] });
+    assert.deepEqual(ledgerVersions(db), [1, 2, 3]);
+  } finally { db.close(); }
+});
+
 test('table replacement validates foreign keys before committing schema and data together', () => {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
@@ -253,7 +282,7 @@ test('real agent v6 upgrades through v19 measured calls and grant domains, budge
   const before = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'agent_execution_%'").pluck().all();
   assert.deepEqual(before, []);
 
-  applyDatabaseMigrations(db, { dbName: 'agent', migrations: agentMigrations });
+  applyDatabaseMigrations(db, { dbName: 'agent', migrations: agentMigrations.filter(entry => entry.version <= 19) });
   const after = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'agent_execution_%' ORDER BY name").pluck().all();
   assert.deepEqual(after, ['agent_execution_approvals', 'agent_execution_grants', 'agent_execution_run_fences']);
   assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 19);
@@ -338,7 +367,7 @@ test('real agent v8 effect rows migrate conservatively and preserve reconciliati
     '2026-10-30T00:00:00.000Z'
   );
 
-  applyDatabaseMigrations(db, { dbName: 'agent', migrations: agentMigrations });
+  applyDatabaseMigrations(db, { dbName: 'agent', migrations: agentMigrations.filter(entry => entry.version <= 19) });
   assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 19);
   assert.deepEqual(
     db.prepare('SELECT run_id, status FROM agent_tool_effects ORDER BY run_id').all(),

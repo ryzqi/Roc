@@ -2,6 +2,14 @@ import { z } from 'zod';
 import { researchArtifactKindSchema, researchStageSchema } from './research';
 import { researchIdeaCanvasContentSchema } from './research-ideas';
 import { researchSearchPlanSchema } from './research-search-plan';
+import { executionNodeBindingSchema, executionOriginSchema, frozenExecutionInputsSchema } from './execution';
+
+export const stageExecutionSnapshotSchema = z.object({
+  schemaVersion: z.literal(1),
+  nodeBinding: executionNodeBindingSchema,
+  origin: executionOriginSchema,
+  frozenInputs: frozenExecutionInputsSchema
+}).strict();
 
 const id = z.string().trim().min(1);
 export const researchModelSelectionSchema = z.discriminatedUnion('kind', [
@@ -49,6 +57,7 @@ export const researchStageOutputSchema = z.object({
 
 export const researchStageRunSchema = z.object({
   id,
+  executionSnapshot: stageExecutionSnapshotSchema.nullable(),
   taskId: id.nullable(),
   projectId: id,
   stage: researchStageSchema,

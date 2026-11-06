@@ -1,3 +1,4 @@
+import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {execFileSync} from 'node:child_process';
@@ -155,9 +156,9 @@ function setup(options = {}) {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
   if (options.migrations !== undefined) api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: options.migrations});
-  else api.applyResearchDatabaseSchema(db, () => timestamp);
+  else applyOfflineResearchSchema(api, db, () => timestamp);
   const agentDb = new Database(':memory:');
-  api.applyDatabaseMigrations(agentDb, { dbName: 'agent', migrations: api.agentMigrations });
+  api.applyDatabaseMigrations(agentDb, { dbName: 'agent', migrations: api.agentMigrations, allowOffline: true });
   const repo = new api.ResearchRepository(db, new api.ResearchTaskRepository(agentDb), () => timestamp);
   const project = repo.createProject({ title: 'Import', description: '', workspacePath: `/tmp/roc-${crypto.randomUUID()}` });
   let time = timestamp;
@@ -563,7 +564,7 @@ test('plugin shutdown interrupts the actual parent stage before closing search a
       roleFinished = true;
       return {output: {title: 'Late output', markdown: 'Must not publish', claims: [], sections: [], verdict: 'ready'}, modelVersion: null};
     }}; }
-  }, {complete: async () => { throw new Error('late_gate_must_not_execute'); }});
+  }, {complete: async () => { throw new Error('late_gate_must_not_execute'); }}, {cancelOwned: async () => {}});
   try {
     f.repository.runs.terminate(f.run.id, f.project.id, 'failed', 'fixture');
     const current = runtime.retry({projectId: f.project.id, runId: f.run.id, requestId: 'shutdown-parent'});
@@ -868,7 +869,7 @@ test('research v6 upgrade adds receipt tables without fabricating executions or 
     api.applyDatabaseMigrations(db, {dbName: 'research', migrations: api.researchMigrations.filter(entry => entry.version <= 6)});
     const old = JSON.stringify({schemaVersion: 5, searchId: 'old-search', candidates: []});
     db.prepare(`INSERT INTO research_literature_searches VALUES ('old-search','thread:old',NULL,'{}',?,'2030-01-01')`).run(old);
-    api.applyDatabaseMigrations(db, {dbName: 'research', migrations: api.researchMigrations});
+    api.applyDatabaseMigrations(db, {dbName: 'research', migrations: api.researchMigrations, allowOffline: true});
     assert.equal(db.prepare('SELECT COUNT(*) FROM research_literature_search_executions').pluck().get(), 0);
     assert.equal(db.prepare('SELECT COUNT(*) FROM research_literature_request_receipts').pluck().get(), 0);
     assert.equal(db.prepare('SELECT result_json FROM research_literature_searches').pluck().get(), old);
@@ -1450,7 +1451,7 @@ test('DB8 migrates actual source identities once, keeps namespace provenance and
   ];
   try {
     observations.forEach((metadata, index) => insertHistoricalLibrary(f, `history-${index}`, metadata));
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     const identities = ['arxiv:2601.00001', 'pmid:123', 'europe_pmc:PMC:123'];
     identities.forEach((identity, index) => {
       const saved = f.repo.library.findByIdentity(identity);
@@ -1463,7 +1464,7 @@ test('DB8 migrates actual source identities once, keeps namespace provenance and
     assert.equal(f.db.pragma('foreign_keys', {simple: true}), 1);
     assert.deepEqual(f.db.pragma('foreign_key_check'), []);
     const before = f.db.prepare('SELECT * FROM research_library ORDER BY id').all();
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_library ORDER BY id').all(), before);
     assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), api.researchMigrations.at(-1).version);
   } finally { f.close(); }
@@ -1474,7 +1475,7 @@ test('DB8 preserves colliding historical rows and refuses automatic library reco
   try {
     for (const version of [1, 2]) insertHistoricalLibrary(f, `collision-${version}`,
       {...record(`collision-${version}`, null), source: 'arxiv', externalId: `http://arxiv.org/abs/2601.00001v${version}`});
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 2);
     assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library_projects').pluck().get(), 2);
     assert.throws(() => f.repo.library.findByIdentity('arxiv:2601.00001'), /research_literature_identity_ambiguous/u);
@@ -1490,7 +1491,7 @@ test('DB8 refuses missing historical namespace evidence and restores schema, row
   try {
     insertHistoricalLibrary(f, 'unresolved', {...record('unresolved', null), source: 'europe_pmc', externalId: '123', url: null});
     const rows = f.db.prepare('SELECT * FROM research_library').all();
-    assert.throws(() => api.applyResearchDatabaseSchema(f.db), /research_literature_migration_namespace_missing/u);
+    assert.throws(() => applyOfflineResearchSchema(api, f.db), /research_literature_migration_namespace_missing/u);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), rows);
     assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library_projects').pluck().get(), 1);
     assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 7);
@@ -1611,7 +1612,7 @@ test('DB9 seeds declared aliases from retained raw records without rewriting DB8
     f.db.prepare('UPDATE research_library SET sources_json=? WHERE id=?')
       .run(JSON.stringify([{metadata, bibliography, providerRecord}]), 'seeded');
     const before = f.db.prepare('SELECT * FROM research_library').all();
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     for (const identity of [`doi:${metadata.doi}`, 'pmid:123', 'arxiv:2601.00001']) {
       assert.equal(f.repo.library.findByIdentity(identity).id, 'seeded');
     }
@@ -1620,7 +1621,7 @@ test('DB9 seeds declared aliases from retained raw records without rewriting DB8
     assert.deepEqual(f.db.pragma('foreign_key_check'), []);
     assert.equal(f.db.pragma('foreign_keys', {simple: true}), 1);
     const aliases = f.db.prepare('SELECT * FROM research_library_aliases ORDER BY identity').all();
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_library_aliases ORDER BY identity').all(), aliases);
   } finally { f.close(); }
 });
@@ -1635,7 +1636,7 @@ test('a competing stored DOI cannot promote an unresolved historical alias to a 
     f.db.prepare('UPDATE research_library SET identity_key=? WHERE id=?').run('pmid:123', 'unresolved-history');
     f.db.exec(`UPDATE research_library SET sources_json = (
       SELECT json_group_array(json_set(value,'$.providerRecord',NULL)) FROM json_each(research_library.sources_json))`);
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     const metadata = {...known, doi: '10.1234/new-competing-doi'};
     assert.throws(() => f.repo.library.import([{metadata, bibliography: api.bibliographyFromRecord(metadata, new Set())}], f.project.id),
       /research_literature_identity_ambiguous/u);
@@ -1904,11 +1905,11 @@ test('DB10 upgrades DB9 without inferring historical external identifiers or rew
     const metadata = {...record('historical', null), source: 'openalex'};
     insertHistoricalLibrary(f, 'history-external', metadata);
     const before = f.db.prepare('SELECT * FROM research_library').all();
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), api.researchMigrations.at(-1).version);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
     assert.equal(f.repo.library.getIdentifiers({id: 'history-external'}).total, 0);
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
     assert.deepEqual(f.db.pragma('foreign_key_check'), []);
   } finally { f.close(); }
@@ -2057,11 +2058,11 @@ test('DB11 adds review storage without rewriting DB10 papers or inventing histor
   try {
     insertHistoricalLibrary(f, 'review-history', record('history-review'));
     const before = f.db.prepare('SELECT * FROM research_library').all();
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), api.researchMigrations.at(-1).version);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
     assert.equal(f.repo.library.getReviews({id: 'review-history'}).total, 0);
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
     assert.deepEqual(f.db.pragma('foreign_key_check'), []);
   } finally { f.close(); }
@@ -2132,7 +2133,7 @@ test('DB12 creates no synthetic pool for old search executions and scoped capabi
   try {
     f.db.prepare(`INSERT INTO research_literature_search_executions
       (id,owner,project_id,request_json,status,created_at) VALUES ('old-exec','thread:a',?,'{}','complete',?)`).run(f.project.id, timestamp);
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_literature_search_pools').pluck().get(), 0);
     const {result} = await candidate(f);
     const handlers = new Map();

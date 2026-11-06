@@ -50,6 +50,10 @@ export type ToolEffectStartResult =
   | { kind: 'execute'; lease: ToolEffectLease }
   | { kind: 'replay'; result: JsonValue; operationId: string };
 
+export type RecordedToolReplay =
+  | { kind: 'recorded'; result: JsonValue; operationId: string; receiptHash: string }
+  | { kind: 'unavailable'; reason: 'not_found' | 'not_succeeded' | 'legacy_identity' | 'receipt_missing' | 'result_missing' | 'result_unverified' };
+
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 export type ToolEffectResolutionReceiptV1 = Readonly<{
@@ -138,7 +142,7 @@ export class AgentToolEffectStore {
     const newAttemptId = randomUUID();
 
     return this.db.transaction((): ToolEffectStartResult => {
-      let row = this.findRow(input);
+      const row = this.findRow(input);
       if (row === undefined) {
         this.db.prepare(
           `INSERT INTO agent_tool_effects (
@@ -172,17 +176,13 @@ export class AgentToolEffectStore {
       }
 
       assertOperationMetadata(row, input, identity);
-      if (row.identity_version === 0 && (row.status === 'succeeded' || row.status === 'failed_retryable')) {
-        this.promoteLegacyIdentity(input, identity, row.status);
-        row = this.readRow(input);
-      }
+      if (row.identity_version !== IDENTITY_VERSION) throw new Error('agent_tool_effect_legacy_identity_unverified');
       assertStoredIdentity(row, identity);
 
       if (row.status === 'succeeded') {
-        if (row.result_json === null) {
-          throw new Error('agent_tool_effect_result_missing');
-        }
-        return { kind: 'replay', result: parseJsonValue(row.result_json), operationId: identity.operationId };
+        const recorded = this.replayRecordedOperation(input);
+        if (recorded.kind !== 'recorded') throw new Error(`agent_tool_effect_${recorded.reason}`);
+        return {kind: 'replay', result: recorded.result, operationId: recorded.operationId};
       }
       if (row.status === 'failed_retryable') {
         const nextGeneration = row.lease_generation + 1;
@@ -290,11 +290,8 @@ export class AgentToolEffectStore {
     this.db.transaction(() => {
       const row = this.readRow(input.operation);
       assertOperationMetadata(row, input.operation, identity);
-      if (row.identity_version > 0) {
-        assertStoredIdentity(row, identity);
-      } else if (row.status !== 'unknown') {
-        throw new Error('agent_tool_effect_legacy_identity_unverified');
-      }
+      if (row.identity_version !== IDENTITY_VERSION) throw new Error('agent_tool_effect_legacy_identity_unverified');
+      assertStoredIdentity(row, identity);
       if (row.status !== 'unknown') {
         throw new Error('agent_tool_effect_reconcile_not_unknown');
       }
@@ -339,6 +336,9 @@ export class AgentToolEffectStore {
       if (updated.changes !== 1) {
         throw new Error('agent_tool_effect_reconcile_generation_drift');
       }
+      if (input.receipt.outcome === 'applied' && input.receipt.evidenceHash === resultHash) {
+        this.saveResultReceipt(input.operation, input.result);
+      }
       this.db.prepare(
         `INSERT INTO agent_tool_effect_reconciliations (
            run_id, execution_path, checkpoint_id, tool_call_id, input_hash, evidence, outcome, created_at,
@@ -360,6 +360,30 @@ export class AgentToolEffectStore {
         receiptHash
       );
     }).immediate();
+  }
+
+  /** Read a verified recorded result without reserving an attempt or invoking a tool. */
+  replayRecordedOperation(input: ToolEffectOperationInput): RecordedToolReplay {
+    validateOperationInput(input);
+    const row = this.findRow(input);
+    if (row === undefined) return { kind: 'unavailable', reason: 'not_found' };
+    const identity = createToolEffectIdentity(input);
+    assertOperationMetadata(row, input, identity);
+    if (row.identity_version !== IDENTITY_VERSION) return { kind: 'unavailable', reason: 'legacy_identity' };
+    assertStoredIdentity(row, identity);
+    if (row.status !== 'succeeded') return { kind: 'unavailable', reason: 'not_succeeded' };
+    const saved = this.db.prepare('SELECT receipt_json,receipt_hash FROM agent_tool_effect_results WHERE operation_id = ?')
+      .get(identity.operationId) as {receipt_json: string; receipt_hash: string} | undefined;
+    if (saved === undefined) return {kind: 'unavailable', reason: 'receipt_missing'};
+    const receipt = parseJsonValue(saved.receipt_json);
+    if (!isRecord(receipt) || hashToolInput(receipt) !== saved.receipt_hash || receipt.schemaVersion !== 1 ||
+        receipt.operationId !== identity.operationId || receipt.inputHash !== identity.parameterHash ||
+        receipt.generation !== row.lease_generation || receipt.providerReceiptHash !== row.receipt_hash) throw new Error('agent_tool_effect_receipt_corrupt');
+    if (row.receipt_json !== null) parseStoredReceipt(row.receipt_json, row.receipt_hash);
+    if (row.result_json === null) return {kind: 'unavailable', reason: 'result_missing'};
+    const result = parseJsonValue(row.result_json);
+    if (receipt.resultHash !== hashToolInput(result)) throw new Error('agent_tool_effect_result_corrupt');
+    return {kind: 'recorded', result, operationId: identity.operationId, receiptHash: saved.receipt_hash};
   }
 
   readState(input: ToolEffectKey): ToolEffectState {
@@ -428,7 +452,11 @@ export class AgentToolEffectStore {
     if (effectColumns.size === 0) {
       return;
     }
+    if (!effectColumns.has('identity_version') || !source.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_tool_effect_results'").get()) {
+      throw new Error('agent_tool_effect_restore_schema_invalid');
+    }
     const effectRows = readEffectSourceRows(source);
+    const resultReceipts = source.prepare('SELECT operation_id, receipt_json, receipt_hash FROM agent_tool_effect_results').all() as Array<{operation_id: string; receipt_json: string; receipt_hash: string}>;
     const reconciliationColumns = readSourceTableColumns(source, 'reconciliations');
     const reconciliationRows = reconciliationColumns.size === 0 ? [] : readReconciliationSourceRows(source);
 
@@ -443,8 +471,9 @@ export class AgentToolEffectStore {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       );
       for (const row of effectRows) {
+        if (row.identity_version !== 1) throw new Error('agent_tool_effect_legacy_identity_unverified');
         const status = normalizeRestoredStatus(row.status, row.reconcile_strategy);
-        const leaseGeneration = row.lease_generation + 1;
+        const leaseGeneration = row.status === 'succeeded' ? row.lease_generation : row.lease_generation + 1;
         const attemptId = null;
         const errorJson = status === row.status ? row.error_json : JSON.stringify({ code: 'agent_tool_effect_restored_unresolved' });
         insertEffect.run(
@@ -479,6 +508,13 @@ export class AgentToolEffectStore {
         );
       }
 
+      for (const row of resultReceipts) {
+        if (hashToolInput(parseJsonValue(row.receipt_json)) !== row.receipt_hash) throw new Error('agent_tool_effect_receipt_corrupt');
+        const saved = this.db.prepare('SELECT receipt_hash FROM agent_tool_effect_results WHERE operation_id = ?').get(row.operation_id) as {receipt_hash: string} | undefined;
+        if (saved !== undefined && saved.receipt_hash !== row.receipt_hash) throw new Error('agent_tool_effect_restore_conflict');
+        this.db.prepare('INSERT OR IGNORE INTO agent_tool_effect_results(operation_id,receipt_json,receipt_hash) VALUES(?,?,?)')
+          .run(row.operation_id, row.receipt_json, row.receipt_hash);
+      }
       const insertReconciliation = this.db.prepare(
         `INSERT OR IGNORE INTO agent_tool_effect_reconciliations (
           sequence, run_id, execution_path, checkpoint_id, tool_call_id, input_hash, evidence, outcome, created_at,
@@ -515,6 +551,7 @@ export class AgentToolEffectStore {
       let deleted = 0;
       for (const runId of uniqueRunIds) {
         this.assertNoUnresolvedRun(runId);
+        this.db.prepare('DELETE FROM agent_tool_effect_results WHERE operation_id IN (SELECT operation_id FROM agent_tool_effects WHERE run_id = ?)').run(runId);
         this.db.prepare('DELETE FROM agent_tool_effect_reconciliations WHERE run_id = ?').run(runId);
         deleted += this.db.prepare('DELETE FROM agent_tool_effects WHERE run_id = ?').run(runId).changes;
       }
@@ -526,13 +563,26 @@ export class AgentToolEffectStore {
     requireToolEffectKey(threadId, 'agent_tool_effect_thread_id_missing');
     return this.db.transaction(() => {
       this.assertNoUnresolvedThread(threadId);
+      this.db.prepare('DELETE FROM agent_tool_effect_results WHERE operation_id IN (SELECT operation_id FROM agent_tool_effects WHERE thread_id = ?)').run(threadId);
       this.db.prepare('DELETE FROM agent_tool_effect_reconciliations WHERE run_id IN (SELECT run_id FROM agent_tool_effects WHERE thread_id = ?)').run(threadId);
       return this.db.prepare('DELETE FROM agent_tool_effects WHERE thread_id = ?').run(threadId).changes;
     }).immediate();
   }
 
   finishSuccess(lease: ToolEffectLease, result: unknown): void {
-    this.finish(lease, 'succeeded', stableStringify(result), null);
+    this.db.transaction(() => {
+      this.finish(lease, 'succeeded', stableStringify(result), null);
+      this.saveResultReceipt(lease, result);
+    }).immediate();
+  }
+
+  private saveResultReceipt(key: ToolEffectKey, result: unknown): void {
+    const row = this.readRow(key);
+    if (row.identity_version !== 1 || row.operation_id === null) throw new Error('agent_tool_effect_legacy_identity_unverified');
+    const receipt = {schemaVersion: 1, operationId: row.operation_id, inputHash: row.input_hash,
+      generation: row.lease_generation, resultHash: hashToolInput(result), providerReceiptHash: row.receipt_hash};
+    this.db.prepare('INSERT INTO agent_tool_effect_results(operation_id,receipt_json,receipt_hash) VALUES(?,?,?)')
+      .run(row.operation_id, stableStringify(receipt), hashToolInput(receipt));
   }
 
   finishError(lease: ToolEffectLease, error: unknown, retryable: boolean): void {
@@ -594,32 +644,6 @@ export class AgentToolEffectStore {
     const row = this.db.prepare("SELECT 1 AS found FROM agent_tool_effects WHERE thread_id = ? AND status IN ('reserved','in_progress','unknown') LIMIT 1").get(threadId);
     if (row !== undefined) {
       throw new Error('agent_tool_effect_pending_reconciliation');
-    }
-  }
-
-  private promoteLegacyIdentity(input: ToolEffectOperationInput, identity: ToolEffectIdentityV1, status: string): void {
-    const updated = this.db.prepare(
-      `UPDATE agent_tool_effects
-       SET identity_version = ?, canonical_tool_identity = ?, canonicalization_version = ?, tool_version = ?,
-           operation_id = ?, idempotency_key = ?, updated_at = ?
-       WHERE run_id = ? AND execution_path = ? AND checkpoint_id = ? AND tool_call_id = ?
-         AND identity_version = 0 AND status = ?`
-    ).run(
-      identity.identityVersion,
-      input.canonicalToolIdentity,
-      identity.canonicalizationVersion,
-      input.toolVersion,
-      identity.operationId,
-      identity.idempotencyKey,
-      new Date().toISOString(),
-      input.runId,
-      input.executionPath,
-      input.checkpointId,
-      input.toolCallId,
-      status
-    ) as RunResult;
-    if (updated.changes !== 1) {
-      throw new Error('agent_tool_effect_identity_drift');
     }
   }
 
@@ -937,16 +961,16 @@ function readEffectSourceRows(source: DatabaseConnection): ToolEffectRow[] {
     error_json: readNullableString(row, 'error_json'),
     created_at: readRequiredString(row, 'created_at'),
     updated_at: readRequiredString(row, 'updated_at'),
-    identity_version: readInteger(row, 'identity_version', 0),
+    identity_version: readInteger(row, 'identity_version'),
     canonical_tool_identity: readNullableString(row, 'canonical_tool_identity'),
     canonicalization_version: readNullableString(row, 'canonicalization_version'),
     tool_version: readNullableString(row, 'tool_version'),
     operation_id: readNullableString(row, 'operation_id'),
     idempotency_key: readNullableString(row, 'idempotency_key'),
     attempt_id: readNullableString(row, 'attempt_id'),
-    lease_generation: readInteger(row, 'lease_generation', 0),
-    attempt_count: readInteger(row, 'attempt_count', 0),
-    receipt_sequence: readInteger(row, 'receipt_sequence', 0),
+    lease_generation: readInteger(row, 'lease_generation'),
+    attempt_count: readInteger(row, 'attempt_count'),
+    receipt_sequence: readInteger(row, 'receipt_sequence'),
     receipt_json: readNullableString(row, 'receipt_json'),
     receipt_hash: readNullableString(row, 'receipt_hash'),
     expected_version: readNullableString(row, 'expected_version'),
@@ -962,7 +986,7 @@ function readReconciliationSourceRows(source: DatabaseConnection): Reconciliatio
       throw new Error('agent_tool_effect_restore_outcome_invalid');
     }
     return {
-      sequence: readInteger(row, 'sequence', 0),
+      sequence: readInteger(row, 'sequence'),
       run_id: readRequiredString(row, 'run_id'),
       execution_path: readRequiredString(row, 'execution_path'),
       checkpoint_id: readRequiredString(row, 'checkpoint_id'),
@@ -972,8 +996,8 @@ function readReconciliationSourceRows(source: DatabaseConnection): Reconciliatio
       outcome,
       created_at: readRequiredString(row, 'created_at'),
       operation_id: readNullableString(row, 'operation_id'),
-      identity_version: readInteger(row, 'identity_version', 0),
-      lease_generation: readInteger(row, 'lease_generation', 0),
+      identity_version: readInteger(row, 'identity_version'),
+      lease_generation: readInteger(row, 'lease_generation'),
       receipt_json: readNullableString(row, 'receipt_json'),
       receipt_hash: readNullableString(row, 'receipt_hash')
     };
@@ -1002,7 +1026,7 @@ function readRequiredString(row: Record<string, unknown>, name: string): string 
 
 function readNullableString(row: Record<string, unknown>, name: string): string | null {
   const value = row[name];
-  if (value === null || value === undefined) {
+  if (value === null) {
     return null;
   }
   if (typeof value !== 'string') {
@@ -1011,11 +1035,8 @@ function readNullableString(row: Record<string, unknown>, name: string): string 
   return value;
 }
 
-function readInteger(row: Record<string, unknown>, name: string, fallback: number): number {
+function readInteger(row: Record<string, unknown>, name: string): number {
   const value = row[name];
-  if (value === null || value === undefined) {
-    return fallback;
-  }
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
     throw new Error('agent_tool_effect_restore_row_invalid');
   }

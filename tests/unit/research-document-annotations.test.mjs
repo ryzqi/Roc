@@ -1,3 +1,4 @@
+import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -284,14 +285,14 @@ test('DB25 to26 preserves actual parse/index/coordinate and Evidence snapshots w
     const tables = ['research_documents', 'research_document_parses', 'research_document_parse_coordinates',
       'research_knowledge_documents', 'research_knowledge_chunks', 'research_evidence', 'research_evidence_source_locators'];
     const originals = tables.map(table => f.db.prepare(`SELECT * FROM ${table}`).all());
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), api.researchMigrations.at(-1).version);
     tables.forEach((table, index) => assert.deepEqual(f.db.prepare(`SELECT * FROM ${table}`).all(), originals[index]));
     assert.equal(f.db.prepare('SELECT count(*) FROM research_document_annotations').pluck().get(), 0);
     assert.equal(f.db.prepare('SELECT count(*) FROM research_document_annotation_captures').pluck().get(), 0);
     assert.deepEqual(f.repository.evidence.inspectEvidence(evidence.id, f.project.id), source);
     const before = f.changes();
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     assert.equal(f.changes(), before);
   } finally {await f.cleanup();}
 });

@@ -40,10 +40,10 @@ export class ResearchTaskDiagnosticsExporter {
     const events = this.tasks.events({...request, afterSequence: 0, limit: 100});
     const payload = {schemaVersion: 1, createdAt, projectId: privateId(request.projectId), taskId: privateId(request.taskId),
       status: summary.task.status, budget: {...summary.budget, stopReason: null, pricingCatalogVersion: privateId(summary.budget.pricingCatalogVersion)},
-      externalCost: summary.externalCost, executions,
+      externalCost: summary.externalCost, recoveryIssues: summary.recoveryIssues, eventDelivery: summary.eventDelivery, executions,
       taskEvents: {...events, events: events.events.map(event => ({sequence: event.sequence, eventType: event.eventType,
-        executionKind: event.executionKind, executionId: privateId(event.executionId), callId: privateId(event.callId),
-        createdAt: event.createdAt, reasonPresent: event.reason !== null}))},
+        executionKind: event.payload.executionKind, executionId: privateId(event.payload.executionId), callId: privateId(event.payload.callId),
+        createdAt: event.createdAt, reasonPresent: event.payload.reason !== null}))},
       omissions: ['goals', 'facts', 'actors', 'provider_names', 'model_names', 'prompts', 'tool_arguments', 'tool_results',
         'error_text', 'paths', 'replay_snapshot_state'],
       coverage: 'first_100_calls_and_events_per_execution;first_100_task_events;hasMore_and_gap_are_explicit', externalTrace: 'not_exported'};

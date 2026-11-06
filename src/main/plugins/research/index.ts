@@ -240,7 +240,7 @@ export type ResearchPluginOptions = {
   libraryFetch?: ConstructorParameters<typeof ResearchLibraryService>[3];
   toolchainRoot?: string;
   modelsRoot?: string;
-  roleExecutor?: ResearchRoleExecutor;
+  roleExecutor: ResearchRoleExecutor;
   literatureFetch?: ConstructorParameters<typeof LiteratureSearchService>[0];
   zoteroFetch?: ConstructorParameters<typeof ZoteroAdapter>[0];
   embeddingFetch?: ConstructorParameters<typeof OpenAICompatibleEmbeddingClient>[0];
@@ -320,6 +320,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       registerResearchFigureConsistencyCapabilities(context,
         new ResearchFigureConsistencyService(researchRepository, researchFigures, researchResults), researchRepository.figureConsistency);
       researchRepository.runs.reconcileTaskLinks();
+      researchRepository.runs.flushTaskEvents();
       researchRepository.runs.recoverInterrupted();
       researchRepository.recoverTemplateCompiles();
       const notifyWorkspacePathStructureChanged: WorkspacePathStructureChangeNotifier = (workspacePath, reason) => {
@@ -468,6 +469,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
           }
         }
       });
+      runtime.attachTaskController(taskController);
       registerTaskFactCapabilities(context, new ResearchTaskFactsService(researchRepository));
       const taskDiagnostics = new ResearchTaskDiagnosticsService(researchRepository, options.budgetLedger, reviewSearches, researchExperiments);
       registerResearchTaskCapabilities(context, options.tasks, taskController, taskDiagnostics,
@@ -570,18 +572,6 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       });
       context.capabilities.register(pluginId, workbenchCapabilities.transitionWorkflow, async input => {
         const request = researchWorkflowTransitionRequestSchema.parse(input);
-        if (request.action === 'pause') {
-          const workflow = researchRepository.getWorkflow(request.projectId);
-          if (workflow.currentStage !== request.expectedStage) throw new Error('research_workflow_stage_conflict');
-          const runId = workflow.stages.find(stage => stage.stage === request.expectedStage)?.activeRunId;
-          if (runId !== null && runId !== undefined) {
-            const run = researchRepository.runs.get(runId, request.projectId);
-            if (run.taskId === null) throw new Error('research_task_execution_unlinked');
-            await taskController.pause({ taskId: run.taskId, projectId: request.projectId });
-            notifyResearchTaskChanged(context, run.taskId, request.projectId);
-            return researchRepository.getWorkflow(request.projectId);
-          }
-        }
         const snapshot = await applyResearchWorkflowTransition({ request, gate: humanGate, runtime, exports: researchExports });
         if (['complete', 'approve', 'reject'].includes(request.action)) {
           for (const taskId of researchRepository.runs.taskIdsForStage(request.projectId, request.expectedStage)) {

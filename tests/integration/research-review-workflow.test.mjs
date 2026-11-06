@@ -21,7 +21,7 @@ function mainHarness(f) {
     researchProjectId: f.project.id
   }).manifest;
   const snapshot = api.createRunExecutionSnapshot({runId, threadId, inputMessageId: 'review-workflow-message', snapshot: {
-    schemaVersion: 9, submissionHash: 'a'.repeat(64),
+    schemaVersion: 10, submissionHash: 'a'.repeat(64),
     taskContract: {contractVersion: 1, objective: 'Execute frozen review queries', constraints: [], kind: 'reply',
       criteria: [{id: 'query', description: 'Read exact query receipts', check: {kind: 'response'}}]},
     runOrigin: 'chat', model: {providerId: 'fixture', modelId: 'fixture'}, mode: 'run', workspace: null,
@@ -32,7 +32,7 @@ function mainHarness(f) {
     VALUES (?,'chat','Review workflow','Review workflow','active',?,?,?)`).run(threadId, f.project.id, time, time);
   f.agentDb.prepare(`INSERT INTO agent_runs
     (id,thread_id,run_number,user_input,status,started_at,enabled_capabilities_json,run_origin,snapshot_json,snapshot_version)
-    VALUES (?,?,1,'Review workflow','running',?,'{}','chat',?,9)`).run(runId, threadId, time, JSON.stringify(snapshot));
+    VALUES (?,?,1,'Review workflow','running',?,'{}','chat',?,10)`).run(runId, threadId, time, JSON.stringify(snapshot));
   const registry = new api.CapabilityRegistry(), context = {pluginId: 'research', capabilities: registry};
   const broker = new api.ExecutionGrantBroker(f.agentDb);
   const register = (descriptors, install) => {

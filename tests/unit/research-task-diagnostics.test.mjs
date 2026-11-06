@@ -18,6 +18,7 @@ test('task diagnostics aggregate authoritative calls once and preserve unknown s
       SELECT ?,project_id,stage,?,?,task_id,status,?,context_json FROM research_stage_runs WHERE id = ?`)
       .run(child.id, child.requestId, f.run.id, JSON.stringify(child), f.run.id);
     f.tasks.linkStage(child, null);
+    f.tasks.confirmExecution('stage', child.id, f.project.id, child.executionSnapshot.frozenInputs);
     const ledger = new api.RunBudgetLedger(f.agentDb);
     const reserve = (runId, id, tokens, cost) => ledger.reserve(runId, budget, {
       id, kind: 'model', tokens, inputHash: id, costMicrousd: cost, envelope: { messages: ['private-prompt-marker'] }
@@ -43,6 +44,10 @@ test('task diagnostics aggregate authoritative calls once and preserve unknown s
     f.repository.runs.terminate(f.run.id, f.project.id, 'interrupted', 'fixture');
     f.tasks.setStatus(f.run.taskId, f.project.id, 'interrupted', 'fixture', ['active']);
     assert.equal(diagnostics.get({ projectId: f.project.id, taskId: f.run.taskId }).continuationRunId, f.run.id);
+    for (const reason of ['research_task_cleanup_pending', 'research_task_cleanup_failed']) {
+      f.tasks.setStatus(f.run.taskId, f.project.id, 'interrupted', reason, ['interrupted']);
+      assert.equal(diagnostics.get({ projectId: f.project.id, taskId: f.run.taskId }).continuationRunId, null);
+    }
     assert.throws(() => diagnostics.get({ projectId: 'foreign', taskId: f.run.taskId }), /research_task_project_mismatch/);
   } finally { f.close(); }
 });
@@ -57,7 +62,7 @@ test('chat task diagnostics enforce thread and project scope before returning ta
     f.agentDb.prepare(`INSERT INTO agent_runs
       (id,thread_id,run_number,user_input,status,started_at,ended_at,provider_id,model_id,enabled_capabilities_json,run_origin)
       VALUES ('chat','thread',1,'private-chat-prompt','completed',?,?,'provider','model','{}','chat')`).run(timestamp, timestamp);
-    const execution = { schemaVersion: 1, taskId: f.run.taskId, projectId: f.project.id, kind: 'chat',
+    const execution = { ...f.tasks.requireExecution('stage',f.run.id,f.project.id), schemaVersion: 2, taskId: f.run.taskId, projectId: f.project.id, kind: 'chat',
       executionId: 'chat', parentKind: null, parentExecutionId: null, associationSource: 'direct',
       manifestHash: 'a'.repeat(64), createdAt: timestamp };
     f.agentDb.prepare(`INSERT INTO research_task_executions
@@ -84,7 +89,7 @@ test('chat task diagnostics enforce thread and project scope before returning ta
 test('pausing approval and restoring it keeps the completed execution and original budget', async () => {
   const f = createResearchFixture(api, 'planning');
   const gate = api.createResearchHumanGate({ repository: f.repository });
-  const runtime = new api.ResearchStageRuntime(f.repository, {}, undefined, gate);
+  const runtime = new api.ResearchStageRuntime(f.repository, {}, {prepare: async () => {throw new Error('unexpected_prepare');}}, gate, {cancelOwned: async () => {}});
   const controller = new api.ResearchTaskController(f.tasks, {
     stages: runtime, cancelChat: async () => {}, cancelJob: async () => {}
   });
@@ -98,6 +103,14 @@ test('pausing approval and restoring it keeps the completed execution and origin
     await controller.pause({ taskId: f.run.taskId, projectId: f.project.id });
     const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb), null, {source: async () => {throw new Error('fixture_resource_source_unused');}});
     assert.equal(diagnostics.get({ taskId: f.run.taskId, projectId: f.project.id }).canRestoreApproval, true);
+    f.tasks.setStatus(f.run.taskId, f.project.id, 'paused', 'research_task_cleanup_pending', ['paused']);
+    assert.equal(diagnostics.get({ taskId: f.run.taskId, projectId: f.project.id }).canRestoreApproval, false);
+    f.tasks.setStatus(f.run.taskId, f.project.id, 'paused', 'research_task_paused', ['paused']);
+    const originalStatus = f.repository.getProject(f.project.id).status;
+    f.db.prepare("UPDATE research_projects SET status = 'archived' WHERE id = ?").run(f.project.id);
+    assert.equal(diagnostics.get({ taskId: f.run.taskId, projectId: f.project.id }).canRestoreApproval, false);
+    assert.throws(() => controller.restoreApproval({ taskId: f.run.taskId, projectId: f.project.id }), /research_project_archived/);
+    f.db.prepare('UPDATE research_projects SET status = ? WHERE id = ?').run(originalStatus, f.project.id);
     const restored = controller.restoreApproval({ taskId: f.run.taskId, projectId: f.project.id });
     assert.equal(restored.status, 'waiting_approval');
     assert.equal(f.repository.runs.list({ projectId: f.project.id, limit: 100 }).length, 1);

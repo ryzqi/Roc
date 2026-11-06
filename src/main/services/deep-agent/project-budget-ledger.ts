@@ -90,17 +90,17 @@ export class ProjectBudgetLedger {
 
   private totals(projectId: string): Totals {
     return this.db.prepare(`SELECT
-      COALESCE(SUM(COALESCE(actual_tokens,reserved_tokens)),0) tokens,
+      COALESCE(SUM(CASE WHEN state='unknown' THEN MAX(COALESCE(actual_tokens,0),reserved_tokens) ELSE COALESCE(actual_tokens,reserved_tokens) END),0) tokens,
       COALESCE(SUM(CASE WHEN state='settled' THEN actual_tokens ELSE 0 END),0) settled_tokens,
-      COALESCE(SUM(CASE WHEN state='unknown' THEN reserved_tokens ELSE 0 END),0) unknown_tokens,
+      COALESCE(SUM(CASE WHEN state='unknown' THEN MAX(COALESCE(actual_tokens,0),reserved_tokens) ELSE 0 END),0) unknown_tokens,
       COALESCE(SUM(CASE WHEN state='reserved' THEN reserved_tokens ELSE 0 END),0) reserved_tokens,
       COALESCE(SUM(kind='model'),0) models,
       COALESCE(SUM(kind='model' AND state='reserved'),0) active_models,
-      COALESCE(SUM(COALESCE(actual_cost_microusd,reserved_cost_microusd)),0) cost,
+      COALESCE(SUM(CASE WHEN state='unknown' THEN MAX(COALESCE(actual_cost_microusd,0),COALESCE(reserved_cost_microusd,0)) ELSE COALESCE(actual_cost_microusd,reserved_cost_microusd) END),0) cost,
       COALESCE(SUM(CASE WHEN state='settled' THEN actual_cost_microusd ELSE 0 END),0) settled_cost,
-      COALESCE(SUM(CASE WHEN state IN ('reserved','unknown') THEN COALESCE(actual_cost_microusd,reserved_cost_microusd,0) ELSE 0 END),0) reserved_cost,
-      COALESCE(SUM(kind='model' AND (state='unknown' OR COALESCE(actual_cost_microusd,reserved_cost_microusd) IS NULL)),0) unknown_costs,
-      COALESCE(SUM(kind='model' AND actual_cost_microusd IS NULL AND reserved_cost_microusd IS NULL),0) unpriced_costs
+      COALESCE(SUM(CASE WHEN state IN ('reserved','unknown') OR (state='settled' AND actual_cost_microusd IS NULL) THEN MAX(COALESCE(actual_cost_microusd,0),COALESCE(reserved_cost_microusd,0)) ELSE 0 END),0) reserved_cost,
+      COALESCE(SUM(kind='model' AND (state='unknown' OR (state='settled' AND actual_cost_microusd IS NULL) OR (state='reserved' AND reserved_cost_microusd IS NULL))),0) unknown_costs,
+      COALESCE(SUM(kind='model' AND reserved_cost_microusd IS NULL AND (state='unknown' OR actual_cost_microusd IS NULL)),0) unpriced_costs
       FROM agent_budget_calls WHERE project_id=?`).get(projectId) as Totals;
   }
 }

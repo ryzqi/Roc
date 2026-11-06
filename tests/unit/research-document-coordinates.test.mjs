@@ -1,3 +1,4 @@
+import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -388,7 +389,7 @@ test('DB24 to26 preserves actual parse and user replacement snapshots without fa
     const tables = ['research_documents', 'research_document_parses', 'research_evidence', 'research_evidence_source_locators',
       'research_source_replacements', 'research_evidence_relations', 'research_evidence_relation_revisions'];
     const originals = tables.map(table => f.db.prepare(`SELECT * FROM ${table}`).all());
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), api.researchMigrations.at(-1).version);
     tables.forEach((table, index) => {
       const rows = f.db.prepare(`SELECT * FROM ${table}`).all();
@@ -401,7 +402,7 @@ test('DB24 to26 preserves actual parse and user replacement snapshots without fa
     const before = f.changes();
     assert.equal(f.repository.documents.coordinates(f.document.id, 'historical-coordinate-parse'), null);
     assert.equal(f.repository.documents.coordinates(targetDocument.id, 'historical-coordinate-successor-parse'), null);
-    api.applyResearchDatabaseSchema(f.db);
+    applyOfflineResearchSchema(api, f.db);
     assert.equal(f.changes(), before);
   } finally {await f.cleanup();}
 });

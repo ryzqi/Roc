@@ -25,7 +25,9 @@ const executionStatusLabels: Record<ResearchTaskExecutionDiagnostics['status'], 
 };
 const eventLabels: Record<ResearchTaskEvent['eventType'], string> = {
   task_created: '创建任务', task_status: '任务状态', execution_linked: '关联执行', call_linked: '关联调用',
-  call_reserved: '调用预留', call_settled: '调用结算', call_unknown: '调用消费未知'
+  call_reserved: '调用预留', call_settled: '调用结算', call_unknown: '调用消费未知',
+  plan_approved: '计划已批准', source_invalidated: '来源已失效', claim_reviewed: '论断已审核',
+  quality_gate: '质量检查', effect_committed: '操作已确认', node_claimed: '节点已领取', lease_expired: '租约已过期'
 };
 
 function ExecutionTree({ executions, client }: { executions: ResearchTaskExecutionDiagnostics[]; client: RocClient }): React.JSX.Element {
@@ -99,6 +101,18 @@ function TaskDetail({ client, projectId, taskId }: {
         resource.data === null ? <p role="status" className="text-subtle">读取任务详情中…</p> : (
           <>
             <TaskSummary data={resource.data} details />
+            {resource.data.recoveryIssues.length === 0 ? null : <ul role="status" className="grid gap-1 text-subtle">
+              {resource.data.recoveryIssues.map(issue => <li key={issue}>{({
+                historical_execution_not_resumable: '历史执行仅供查看，请新建任务以重新执行。',
+                research_execution_intent_uncommitted: '执行关联尚未完成，无法继续。',
+                research_stage_inputs_stale: '执行输入或审批已变更，请重新确认后新建任务。',
+                research_stage_snapshot_invalid: '执行快照校验失败，无法继续。',
+                agent_tool_effect_receipt_missing: '操作回执缺失，无法验证执行结果。'
+              })[issue]}</li>)}
+            </ul>}
+            {resource.data.eventDelivery.pending === 0 ? null : <p role="status" className="text-subtle">
+              {resource.data.eventDelivery.pending} 条事件等待同步，其中 {resource.data.eventDelivery.failed} 条投递失败。刷新详情可重试。
+            </p>}
             <TaskControls client={client} data={resource.data} onChanged={refresh} />
             <FormSection title="执行树与工件" testId="mgmt-task-executions">
               <ExecutionTree client={client} executions={resource.data.executions} />
@@ -118,14 +132,15 @@ function TaskDetail({ client, projectId, taskId }: {
                     <span className="text-subtle">{formatBeijingDateTime(event.createdAt)}</span>
                   </div>
                   <p className="break-all font-mono text-subtle text-[var(--font-meta-size)]">
-                    {event.executionId === null ? '' : `执行 ${event.executionKind} / ${event.executionId}`}
-                    {event.callId === null ? '' : ` / 调用 ${event.callId}`}
+                    {event.payload.executionId === null ? '' : `执行 ${event.payload.executionKind} / ${event.payload.executionId}`}
+                    {event.payload.callId === null ? '' : ` / 调用 ${event.payload.callId}`}
                   </p>
-                  {event.state === null && event.reason === null ? null :
-                    <p className="break-words text-subtle">{event.state} {event.reason}</p>}
+                  {event.payload.state === null && event.payload.reason === null ? null :
+                    <p className="break-words text-subtle">{event.payload.state} {event.payload.reason}</p>}
                 </li>
               ))}
             </ol>
+            {events.data?.gap ? <p role="status" className="text-subtle">部分历史事件缺失，当前记录不完整。</p> : null}
             {events.status === 'loading' ? <p role="status" className="text-subtle">读取事件中…</p> : null}
             {events.data?.hasMore ? (
               <button type="button" className={`${formSecondaryButtonClass} justify-self-start`}

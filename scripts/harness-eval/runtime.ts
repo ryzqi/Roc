@@ -93,6 +93,8 @@ export function recoverCrash(directory: string, point: string): Record<string, u
       assert.equal(state.status, 'unknown');
       assert.throws(() => store.beginOperation(effect), /unknown_manual_confirmation/);
       assert.ok(state.operationId);
+      const recoveredResult = { receipt: readFileSync(join(directory, 'remote-receipt.txt'), 'utf8').trim() };
+      assert.deepEqual(recoveredResult, { receipt: 'effect' });
       store.reconcile({
         operation: effect,
         expectedLeaseGeneration: state.leaseGeneration,
@@ -103,10 +105,10 @@ export function recoverCrash(directory: string, point: string): Record<string, u
           outcome: 'applied',
           operationId: state.operationId,
           reference: 'remote-receipt.txt',
-          evidenceHash: hashToolInput('effect\n'),
+          evidenceHash: hashToolInput(recoveredResult),
           recordedAt: new Date().toISOString()
         },
-        result: { receipt: 'effect' }
+        result: recoveredResult
       });
       const replay = store.beginOperation(effect);
       assert.equal(replay.kind, 'replay');

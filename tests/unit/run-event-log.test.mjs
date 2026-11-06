@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,8 +7,20 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import Database from 'better-sqlite3';
 
+function eventEnvelope(event,sequence,createdAt) {
+  const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
+  const streamId=`chat:${event.runId}`;const actor={kind:'main',id:'agent-runtime'};
+  const payloadHash=hash(event);
+  return JSON.stringify({schemaVersion:1,projectId:null,taskId:null,runId:event.runId,streamId,sequence,eventType:event.type,actor,correlationId:event.runId,
+    causationId:null,payloadRef:null,payload:event,payloadHash,createdAt,
+    eventId:hash([streamId,sequence,event.type,actor,event.runId,null,null,null,event.runId,payloadHash,createdAt])});
+}
+
 function createEventLogSchema(db) {
-  db.exec(`CREATE TABLE agent_run_events(
+  db.exec(`CREATE TABLE agent_runs(id TEXT,thread_id TEXT);
+    CREATE TABLE agent_threads(id TEXT,research_project_id TEXT);
+    CREATE TABLE research_task_executions(kind TEXT,execution_id TEXT,task_id TEXT);
+    CREATE TABLE agent_run_events(
     run_id TEXT NOT NULL, sequence INTEGER NOT NULL, event_json TEXT NOT NULL, created_at TEXT NOT NULL,
     event_bytes INTEGER NOT NULL CHECK(event_bytes >= 0), PRIMARY KEY(run_id, sequence));
     CREATE TABLE agent_run_event_cursors(
@@ -52,7 +65,7 @@ test('event log preserves exact retention, rollback recovery, sparse restore and
       cursor = page.at(-1).sequence;
     }
     assert.deepEqual(pages, all);
-    log.restoreRunEvent({ runId: 'sparse', sequence: 20000, eventJson: JSON.stringify({ ...event, runId: 'sparse' }), createdAt: 'now' });
+    log.restoreRunEvent({ runId: 'sparse', sequence: 20000, eventJson: eventEnvelope({...event,runId:'sparse'},20000,'2026-10-30T00:00:00.000Z'), createdAt: '2026-10-30T00:00:00.000Z' });
     assert.equal(log.recordRunEvent({ ...event, runId: 'sparse' }).sequence, 20001);
     assert.equal(log.listRunEvents({ runId: 'sparse', afterSequence: 0 }).length, 2);
     const gapReplay = log.replayRunEvents({ runId: 'sparse', afterSequence: 0, limit: 500 });
@@ -66,6 +79,34 @@ test('event log preserves exact retention, rollback recovery, sparse restore and
   } finally { db.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('replay detects a missing tail after reopening without rejecting a full page', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'roc-event-log-gap-'));
+  const databasePath = join(dir, 'events.db');
+  let db = new Database(databasePath);
+  try {
+    const outfile = join(dir, 'log.mjs');
+    await build({ entryPoints: ['src/main/plugins/agent/run-event-log.ts'], outfile, bundle: true, format: 'esm', platform: 'node' });
+    const { AgentRunEventLog } = await import(outfile);
+    createEventLogSchema(db);
+    const event = { type: 'assistant_block', runId: 'gap', block: { kind: 'text', blockId: 'text', phase: 'delta', text: 'x' } };
+    const log = new AgentRunEventLog(db);
+    for (let i = 0; i < 3; i++) log.recordRunEvent(event);
+    db.prepare('DELETE FROM agent_run_events WHERE run_id = ? AND sequence = ?').run('gap', 3);
+    db.close();
+    db = new Database(databasePath);
+    const reopened = new AgentRunEventLog(db);
+    assert.deepEqual(reopened.replayRunEvents({ runId: 'gap', afterSequence: 0, limit: 2 }).events.map(item => item.sequence), [1, 2]);
+    assert.throws(() => reopened.replayRunEvents({ runId: 'gap', afterSequence: 2 }), /agent_run_event_sequence_gap_without_snapshot/);
+    assert.throws(() => reopened.replayRunEvents({ runId: 'gap', afterSequence: 0 }), /agent_run_event_sequence_gap_without_snapshot/);
+    assert.deepEqual(reopened.replayRunEvents({ runId: 'gap', afterSequence: 3 }).events, []);
+    db.prepare('DELETE FROM agent_run_events WHERE run_id = ?').run('gap');
+    assert.throws(() => reopened.replayRunEvents({ runId: 'gap', afterSequence: 0 }), /agent_run_event_sequence_gap_without_snapshot/);
+  } finally {
+    if (db.open) db.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('event log byte bounds, snapshot compaction and rollback are atomic', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'roc-event-log-bounds-'));
   const db = new Database(':memory:');
@@ -77,10 +118,10 @@ test('event log byte bounds, snapshot compaction and rollback are atomic', async
 
     const log = new AgentRunEventLog(db, {
       maxEvents: 2,
-      maxBytes: 1024,
-      maxEventBytes: 512,
+      maxBytes: 4096,
+      maxEventBytes: 2048,
       maxPendingEvents: 1,
-      maxPendingBytes: 1024,
+      maxPendingBytes: 4096,
       maxSnapshotBytes: 4096
     });
     const started = {
@@ -103,16 +144,16 @@ test('event log byte bounds, snapshot compaction and rollback are atomic', async
     assert.deepEqual(compacted.events.map((item) => item.sequence), [3, 4]);
     const cursor = db.prepare('SELECT retained_count, retained_bytes, pending_count, pending_bytes FROM agent_run_event_cursors WHERE run_id = ?').get('bounded');
     assert.ok(cursor.retained_count <= 2);
-    assert.ok(cursor.retained_bytes <= 1024);
+    assert.ok(cursor.retained_bytes <= 4096);
     assert.equal(cursor.pending_count, 0);
     assert.equal(cursor.pending_bytes, 0);
 
     const byteBoundedLog = new AgentRunEventLog(db, {
       maxEvents: 100,
-      maxBytes: 500,
-      maxEventBytes: 300,
+      maxBytes: 1600,
+      maxEventBytes: 1200,
       maxPendingEvents: 10,
-      maxPendingBytes: 2000,
+      maxPendingBytes: 16000,
       maxSnapshotBytes: 4096
     });
     byteBoundedLog.recordRunEvent({ ...started, runId: 'byte-bounded' });
@@ -123,14 +164,14 @@ test('event log byte bounds, snapshot compaction and rollback are atomic', async
       });
     }
     const byteCursor = db.prepare('SELECT retained_bytes, pending_count, pending_bytes FROM agent_run_event_cursors WHERE run_id = ?').get('byte-bounded');
-    assert.ok(byteCursor.retained_bytes <= 500);
+    assert.ok(byteCursor.retained_bytes <= 1600);
     assert.ok(byteCursor.pending_count > 0);
-    assert.ok(byteCursor.pending_bytes <= 2000);
+    assert.ok(byteCursor.pending_bytes <= 16000);
     const byteReplay = byteBoundedLog.replayRunEvents({ runId: 'byte-bounded', afterSequence: 0, limit: 500 });
     assert.equal(byteReplay.kind, 'events');
     assert.equal(byteReplay.events.length, 9);
 
-    const oversized = new AgentRunEventLog(db, { maxEvents: 2, maxBytes: 1024, maxEventBytes: 128 });
+    const oversized = new AgentRunEventLog(db, { maxEvents: 2, maxBytes: 4096, maxEventBytes: 128 });
     assert.throws(() => oversized.recordRunEvent({
       type: 'assistant_block', runId: 'oversized',
       block: { kind: 'text', blockId: 'large', phase: 'delta', text: 'x'.repeat(512) }
@@ -139,10 +180,10 @@ test('event log byte bounds, snapshot compaction and rollback are atomic', async
 
     const rollbackLog = new AgentRunEventLog(db, {
       maxEvents: 1,
-      maxBytes: 1024,
-      maxEventBytes: 512,
+      maxBytes: 4096,
+      maxEventBytes: 2048,
       maxPendingEvents: 1,
-      maxPendingBytes: 1024,
+      maxPendingBytes: 4096,
       maxSnapshotBytes: 1
     });
     rollbackLog.recordRunEvent({ ...started, runId: 'rollback-snapshot' });
@@ -164,8 +205,8 @@ test('event log reopens a persisted snapshot and replay tail after restart', asy
     const { AgentRunEventLog } = await import(outfile);
     createEventLogSchema(db);
     const options = {
-      maxEvents: 2, maxBytes: 1024, maxEventBytes: 512,
-      maxPendingEvents: 1, maxPendingBytes: 1024, maxSnapshotBytes: 4096
+      maxEvents: 2, maxBytes: 4096, maxEventBytes: 2048,
+      maxPendingEvents: 1, maxPendingBytes: 4096, maxSnapshotBytes: 4096
     };
     const log = new AgentRunEventLog(db, options);
     const started = {
@@ -194,6 +235,10 @@ test('event log reopens a persisted snapshot and replay tail after restart', asy
     assert.equal(afterRestart.snapshot.state.runId, 'restart');
     assert.equal(afterRestart.snapshot.historyComplete, true);
     assert.deepEqual(afterRestart.events.map((event) => event.sequence), [3, 4]);
+    db.prepare('UPDATE agent_run_event_snapshots SET through_sequence = 3 WHERE run_id = ?').run('restart');
+    assert.throws(() => reopenedLog.replayRunEvents({ runId: 'restart', afterSequence: 0 }), /agent_run_event_snapshot_corrupt/);
+    db.prepare('UPDATE agent_run_event_snapshots SET through_sequence = 2, snapshot_bytes = snapshot_bytes + 1 WHERE run_id = ?').run('restart');
+    assert.throws(() => reopenedLog.replayRunEvents({ runId: 'restart', afterSequence: 0 }), /agent_run_event_snapshot_corrupt/);
   } finally {
     if (db.open) db.close();
     rmSync(dir, { recursive: true, force: true });
@@ -223,8 +268,8 @@ test('event and snapshot storage faults fail closed and roll back sequence state
     assert.equal(eventLog.recordRunEvent(event('event-fault')).sequence, 1);
 
     const snapshotLog = new AgentRunEventLog(db, {
-      maxEvents: 1, maxBytes: 1024, maxEventBytes: 512,
-      maxPendingEvents: 1, maxPendingBytes: 1024, maxSnapshotBytes: 4096
+      maxEvents: 1, maxBytes: 4096, maxEventBytes: 2048,
+      maxPendingEvents: 1, maxPendingBytes: 4096, maxSnapshotBytes: 4096
     });
     const textEvent = (text) => ({
       type: 'assistant_block', runId: 'snapshot-fault',

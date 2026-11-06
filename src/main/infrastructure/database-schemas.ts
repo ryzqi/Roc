@@ -827,6 +827,81 @@ CREATE TRIGGER agent_budget_call_observations_immutable BEFORE UPDATE ON agent_b
 BEGIN SELECT RAISE(ABORT,'agent_budget_call_observations_immutable'); END;
 `});
 
+agentMigrations.push({version: 20, name: 'current_execution_contracts', offlineOnly: true, sql: `
+DROP TRIGGER research_task_created_event;
+DROP TRIGGER research_task_status_event;
+DROP TRIGGER research_task_execution_event;
+DROP TRIGGER research_task_call_reserved_event;
+DROP TRIGGER research_task_call_linked_event;
+DROP TRIGGER research_task_call_settled_event;
+CREATE TABLE research_task_events_current (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id TEXT NOT NULL REFERENCES research_tasks(id), event_type TEXT NOT NULL,
+  execution_kind TEXT, execution_id TEXT, call_id TEXT, state TEXT, reason TEXT, created_at TEXT NOT NULL,
+  stream_sequence INTEGER, envelope_json TEXT
+);
+INSERT INTO research_task_events_current(sequence,task_id,event_type,execution_kind,execution_id,call_id,state,reason,created_at)
+SELECT sequence,task_id,event_type,execution_kind,execution_id,call_id,state,reason,created_at FROM research_task_events;
+DROP TABLE research_task_events;
+ALTER TABLE research_task_events_current RENAME TO research_task_events;
+CREATE INDEX research_task_events_task_sequence ON research_task_events(task_id,sequence);
+CREATE INDEX idx_research_task_events_call ON research_task_events(task_id,execution_kind,execution_id,call_id,event_type,created_at) WHERE call_id IS NOT NULL;
+CREATE UNIQUE INDEX research_task_event_stream_sequence ON research_task_events(task_id,stream_sequence);
+CREATE TABLE research_task_event_cursors(task_id TEXT PRIMARY KEY REFERENCES research_tasks(id), next_sequence INTEGER NOT NULL);
+CREATE TRIGGER research_task_event_envelope AFTER INSERT ON research_task_events BEGIN
+  INSERT INTO research_task_event_cursors(task_id,next_sequence) VALUES(NEW.task_id,1) ON CONFLICT DO NOTHING;
+  UPDATE research_task_events SET stream_sequence=(SELECT next_sequence FROM research_task_event_cursors WHERE task_id=NEW.task_id),
+    envelope_json=roc_task_event((SELECT next_sequence FROM research_task_event_cursors WHERE task_id=NEW.task_id),NEW.task_id,(SELECT project_id FROM research_tasks WHERE id=NEW.task_id),NEW.execution_id,NEW.event_type,
+      json_object('taskId',NEW.task_id,'executionKind',NEW.execution_kind,'executionId',NEW.execution_id,'callId',NEW.call_id,'state',NEW.state,'reason',NEW.reason),NEW.created_at)
+    WHERE sequence=NEW.sequence;
+  UPDATE research_task_event_cursors SET next_sequence=next_sequence+1 WHERE task_id=NEW.task_id;
+  DELETE FROM research_task_events WHERE task_id=NEW.task_id AND stream_sequence < (SELECT next_sequence-10000 FROM research_task_event_cursors WHERE task_id=NEW.task_id);
+END;
+CREATE TRIGGER research_task_created_event AFTER INSERT ON research_tasks BEGIN
+  INSERT INTO research_task_events(task_id,event_type,state,reason,created_at)
+  VALUES(NEW.id,'task_created',NEW.status,json_extract(NEW.snapshot_json,'$.statusReason'),NEW.created_at);
+END;
+CREATE TRIGGER research_task_status_event AFTER UPDATE OF status,snapshot_json ON research_tasks
+WHEN NEW.status != OLD.status OR json_extract(NEW.snapshot_json,'$.statusReason') IS NOT json_extract(OLD.snapshot_json,'$.statusReason')
+BEGIN
+  INSERT INTO research_task_events(task_id,event_type,state,reason,created_at)
+  VALUES(NEW.id,'task_status',NEW.status,json_extract(NEW.snapshot_json,'$.statusReason'),json_extract(NEW.snapshot_json,'$.updatedAt'));
+END;
+CREATE TRIGGER research_task_execution_event AFTER INSERT ON research_task_executions BEGIN
+  INSERT INTO research_task_events(task_id,event_type,execution_kind,execution_id,created_at)
+  VALUES(NEW.task_id,'execution_linked',NEW.kind,NEW.execution_id,NEW.created_at);
+END;
+CREATE TRIGGER research_task_call_reserved_event AFTER INSERT ON agent_budget_calls
+WHEN NEW.task_id IS NOT NULL BEGIN
+  INSERT INTO research_task_events(task_id,event_type,execution_kind,execution_id,call_id,state,created_at)
+  VALUES(NEW.task_id,'call_reserved',NEW.execution_kind,NEW.run_id,NEW.call_id,NEW.state,NEW.created_at);
+END;
+CREATE TRIGGER research_task_call_linked_event AFTER UPDATE OF task_id ON agent_budget_calls
+WHEN OLD.task_id IS NULL AND NEW.task_id IS NOT NULL BEGIN
+  INSERT INTO research_task_events(task_id,event_type,execution_kind,execution_id,call_id,state,created_at)
+  VALUES(NEW.task_id,'call_linked',NEW.execution_kind,NEW.run_id,NEW.call_id,NEW.state,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+CREATE TRIGGER research_task_call_settled_event AFTER UPDATE OF state ON agent_budget_calls
+WHEN NEW.task_id IS NOT NULL AND NEW.state != OLD.state BEGIN
+  INSERT INTO research_task_events(task_id,event_type,execution_kind,execution_id,call_id,state,created_at)
+  VALUES(NEW.task_id,CASE WHEN NEW.state = 'unknown' THEN 'call_unknown' ELSE 'call_settled' END,
+    NEW.execution_kind,NEW.run_id,NEW.call_id,NEW.state,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+END;
+CREATE TABLE research_task_event_deliveries (event_id TEXT PRIMARY KEY, payload_hash TEXT NOT NULL);
+CREATE TABLE agent_tool_effect_results (
+  operation_id TEXT PRIMARY KEY, receipt_json TEXT NOT NULL, receipt_hash TEXT NOT NULL
+);
+CREATE TABLE execution_historical_audit (
+  id TEXT PRIMARY KEY, source_table TEXT NOT NULL, source_id TEXT NOT NULL,
+  source_version TEXT NOT NULL, raw_json TEXT NOT NULL, raw_hash TEXT NOT NULL, reason TEXT NOT NULL
+);
+CREATE TRIGGER research_task_effect_committed AFTER INSERT ON agent_tool_effect_results BEGIN
+  INSERT INTO research_task_events(task_id,event_type,execution_kind,execution_id,state,reason,created_at)
+  SELECT e.task_id,'effect_committed',e.kind,e.execution_id,'succeeded',NEW.operation_id,strftime('%Y-%m-%dT%H:%M:%fZ','now')
+  FROM agent_tool_effects f JOIN research_task_executions e ON e.kind='chat' AND e.execution_id=f.run_id WHERE f.operation_id=NEW.operation_id;
+END;
+`});
+
 export const memoryMigrations: RocDatabaseMigration[] = [
   {
     version: 1,
@@ -2654,6 +2729,44 @@ CREATE TABLE research_zenodo_publication_approvals (
 );
 `
 });
+
+researchMigrations.push({version: 61, name: 'stage_execution_contract', offlineOnly: true, sql: `
+CREATE TABLE execution_historical_audit (
+  id TEXT PRIMARY KEY, source_table TEXT NOT NULL, source_id TEXT NOT NULL,
+  source_version TEXT NOT NULL, raw_json TEXT NOT NULL, raw_hash TEXT NOT NULL, reason TEXT NOT NULL
+);
+CREATE TABLE research_execution_outbox (
+  event_id TEXT PRIMARY KEY, task_id TEXT NOT NULL, project_id TEXT NOT NULL,
+  event_type TEXT NOT NULL, payload_json TEXT NOT NULL, payload_hash TEXT NOT NULL, created_at TEXT NOT NULL,
+  delivered_at TEXT, error TEXT
+);
+CREATE TRIGGER research_workflow_semantic_outbox AFTER INSERT ON research_workflow_events
+WHEN NEW.type IN ('approval_granted','approval_requested','approval_rejected') BEGIN
+  INSERT INTO research_execution_outbox(event_id,task_id,project_id,event_type,payload_json,payload_hash,created_at)
+  SELECT NEW.id || ':' || task_id,task_id,NEW.project_id,
+    CASE WHEN NEW.type='approval_granted' AND NEW.stage='planning' THEN 'plan_approved' ELSE 'quality_gate' END,
+    json_object('sourceEventId',NEW.id,'stage',NEW.stage,'decision',NEW.type,'facts',json(NEW.payload_json)),
+    roc_payload_hash(json_object('sourceEventId',NEW.id,'stage',NEW.stage,'decision',NEW.type,'facts',json(NEW.payload_json))),NEW.created_at
+  FROM research_stage_runs WHERE project_id=NEW.project_id AND stage=NEW.stage AND task_id IS NOT NULL GROUP BY task_id;
+END;
+CREATE TRIGGER research_claim_review_outbox AFTER UPDATE OF status ON research_evidence_relations
+WHEN NEW.status IN ('confirmed','rejected') AND NEW.status!=OLD.status BEGIN
+  INSERT INTO research_execution_outbox(event_id,task_id,project_id,event_type,payload_json,payload_hash,created_at)
+  SELECT NEW.id || ':' || NEW.version || ':' || r.task_id,r.task_id,NEW.project_id,'claim_reviewed',
+    NEW.snapshot_json,roc_payload_hash(NEW.snapshot_json),NEW.updated_at
+  FROM research_stage_runs r JOIN research_claims c ON c.id=NEW.claim_id
+  JOIN research_artifacts a ON a.id=c.artifact_id
+  WHERE r.project_id=NEW.project_id AND r.stage=a.stage AND r.task_id IS NOT NULL GROUP BY r.task_id;
+END;
+CREATE TRIGGER research_source_invalidation_outbox AFTER UPDATE OF invalidated_at ON research_evidence
+WHEN NEW.invalidated_at IS NOT NULL AND OLD.invalidated_at IS NULL BEGIN
+  INSERT INTO research_execution_outbox(event_id,task_id,project_id,event_type,payload_json,payload_hash,created_at)
+  SELECT NEW.id || ':' || NEW.invalidated_at || ':' || task_id,task_id,NEW.project_id,'source_invalidated',
+    json_object('evidenceId',NEW.id,'sourceVersion',NEW.source_version,'contentHash',NEW.content_hash),
+    roc_payload_hash(json_object('evidenceId',NEW.id,'sourceVersion',NEW.source_version,'contentHash',NEW.content_hash)),NEW.invalidated_at
+  FROM research_stage_runs WHERE project_id=NEW.project_id AND task_id IS NOT NULL GROUP BY task_id;
+END;
+`});
 
 function applySchema(
   db: DatabaseConnection,

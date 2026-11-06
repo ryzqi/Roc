@@ -1,3 +1,4 @@
+import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import assert from 'node:assert/strict';
 import {before, after, test} from 'node:test';
 import {createHash} from 'node:crypto';
@@ -208,7 +209,7 @@ test('DB12 upgrade preserves historical library data and creates no fictional Zo
         timestamp, timestamp);
     const ledger = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
     const before = db.prepare('SELECT * FROM research_library').all();
-    api.applyResearchDatabaseSchema(db);
+    applyOfflineResearchSchema(api, db);
     assert.equal(db.prepare('SELECT count(*) FROM research_zotero_previews').pluck().get(), 0);
     assert.deepEqual(db.prepare('SELECT * FROM research_library').all(), before);
     assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=12 ORDER BY version').all(), ledger);
@@ -229,7 +230,7 @@ test('DB13 upgrade keeps original data-only previews verbatim and fabricates no 
       VALUES ('old-preview','thread:history',NULL,NULL,?,?,?)`).run(timestamp, body.expiresAt, JSON.stringify(snapshot));
     const oldPreview = db.prepare('SELECT * FROM research_zotero_previews').all();
     const ledger = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    api.applyResearchDatabaseSchema(db);
+    applyOfflineResearchSchema(api, db);
     assert.deepEqual(db.prepare('SELECT * FROM research_zotero_previews').all(), oldPreview);
     assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=13 ORDER BY version').all(), ledger);
     assert.equal(db.prepare('SELECT count(*) FROM research_zotero_objects').pluck().get(), 0);

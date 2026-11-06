@@ -105,7 +105,7 @@ const agentCapabilityDescriptors = [
 
 export type AgentPluginOptions = {
   researchTasks: ResearchTaskRepository;
-  executionGrantBroker?: ExecutionGrantBroker;
+  executionGrantBroker: ExecutionGrantBroker;
   capabilityPreview?: {
     deleteFileApprovalModeProvider: () => ApprovalMode;
     mcpApprovalModeProvider: () => ApprovalMode;
@@ -147,7 +147,7 @@ export function createAgentPlugin(options: AgentPluginOptions): RocPlugin {
       const repository = new AgentSessionRepository(db, { runEventLog });
       repository.reconcileStartupRuns();
       options.researchTasks.reconcileInterruptedChats();
-          const budgetLedger = new RunBudgetLedger(db);
+      const budgetLedger = new RunBudgetLedger(db);
       budgetLedger.reconcileStartup();
       // P6-04: absent paths mean no place to persist the opt-in, so the pilot stays unwired and the
       // capability reports that instead of pretending a gate exists.
@@ -191,6 +191,7 @@ async function loadResearchProjectWorkspace(
 ): Promise<{ workspacePath: string | null } | null> {
   try {
     const project = await context.capabilities.invoke<{ id: string }, ResearchProject>('research.projects.get', { id: projectId });
+    if (project.status === 'archived') throw new Error('research_project_archived');
     return { workspacePath: project.workspacePath };
   } catch (error) {
     if (error instanceof RocDomainError) {
@@ -276,7 +277,7 @@ function resolveDeepAgentExecutor(
   context: RocPluginContext,
   option: AgentPluginOptions['deepAgentExecutor'],
   repository: AgentSessionRepository,
-  executionGrantBroker: ExecutionGrantBroker | undefined
+  executionGrantBroker: ExecutionGrantBroker
 ): AgentDeepAgentExecutor | undefined {
   if (option === undefined) {
     return undefined;

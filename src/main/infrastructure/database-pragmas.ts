@@ -1,4 +1,5 @@
 import type { Database as DatabaseConnection } from 'better-sqlite3';
+import { registerExecutionEventFunctions } from './execution-events';
 
 export type RocLogicalDatabaseName = 'core' | 'agent' | 'memory' | 'task' | `plugin:${string}`;
 
@@ -27,6 +28,7 @@ export function configureRocDatabaseConnection(
     throw new Error('database_busy_timeout_invalid');
   }
 
+  registerExecutionEventFunctions(db);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.pragma(`busy_timeout = ${input.busyTimeoutMs}`);

@@ -98,7 +98,7 @@ test('dispatch attaches already billed chat calls once and shares remaining cap 
     }).manifest;
     const budget = { ...f.budget, maxCostMicrousd: 100 };
     const snapshot = api.createRunExecutionSnapshot({ runId, threadId, inputMessageId: 'message', snapshot: {
-      schemaVersion: 9, submissionHash: 'a'.repeat(64),
+      schemaVersion: 10, submissionHash: 'a'.repeat(64),
       taskContract: { contractVersion: 1, objective: 'Research', constraints: [], kind: 'reply',
         criteria: [{ id: 'response', description: 'Findings', check: { kind: 'response' } }] },
       runOrigin: 'chat', model: { providerId: 'fixture', modelId: 'fixture' }, mode: 'run', workspace: null,
@@ -109,15 +109,15 @@ test('dispatch attaches already billed chat calls once and shares remaining cap 
       VALUES (?,'chat','Research','Research','active',?,?,?)`).run(threadId, f.project.id, createdAt, createdAt);
     f.agentDb.prepare(`INSERT INTO agent_runs
       (id,thread_id,run_number,user_input,status,started_at,enabled_capabilities_json,run_origin,snapshot_json,snapshot_version)
-      VALUES (?,?,1,'Research','running',?,'{}','chat',?,9)`).run(runId, threadId, createdAt, JSON.stringify(snapshot));
+      VALUES (?,?,1,'Research','running',?,'{}','chat',?,10)`).run(runId, threadId, createdAt, JSON.stringify(snapshot));
     f.ledger.reserve(runId, budget, reservation('chat-call', { costMicrousd: 60 }));
     f.ledger.settle(runId, 'chat-call', 50, 'settled', undefined, {}, 40);
     assert.equal(f.agentDb.prepare('SELECT task_id FROM agent_budget_calls').pluck().get(), null);
     f.repository.runs.terminate(f.run.id, f.project.id, 'cancelled', 'fixture');
     const request = { projectId: f.project.id, expectedStage: 'discovery', instruction: 'Research', requestId: 'chat-stage' };
-    const queued = f.repository.runs.begin(request);
     const broker = new api.ExecutionGrantBroker(f.agentDb);
     const grant = broker.consumeResearchDispatch(broker.issueResearchDispatch({ runId, threadId, manifest, request }), request);
+    const queued = f.repository.runs.begin(request, undefined, grant);
     const execution = f.tasks.linkStage(queued, grant);
     assert.equal(f.agentDb.prepare('SELECT task_id FROM agent_budget_calls').pluck().get(), execution.taskId);
     assert.equal(f.tasks.projectBudgets.status(f.project.id).models.total, 1);
@@ -130,7 +130,7 @@ test('dispatch attaches already billed chat calls once and shares remaining cap 
       .pluck().get(execution.taskId), 100);
     const linkedEvents = f.tasks.events({ taskId: execution.taskId, projectId: f.project.id, afterSequence: 0, limit: 200 }).events;
     assert.deepEqual(linkedEvents.filter(event => event.eventType === 'call_linked')
-      .map(event => [event.executionId, event.callId, event.state]), [[runId, 'chat-call', 'settled']]);
+      .map(event => [event.payload.executionId, event.payload.callId, event.payload.state]), [[runId, 'chat-call', 'settled']]);
   } finally { f.close(); }
 });
 
@@ -205,7 +205,7 @@ test('actual stage createAgent accounts provider attempt and refuses the next ca
     assert.equal(f.agentDb.prepare('SELECT COUNT(*) FROM agent_budget_calls').pluck().get(), 1);
     assert.equal(f.agentDb.prepare('SELECT stop_reason FROM research_task_budgets').pluck().get(), 'run_model_call_budget_exhausted');
     f.repository.runs.terminate(f.run.id, f.project.id, 'failed', 'fixture_provider_failure');
-    const runtime = new api.ResearchStageRuntime(f.repository, {}, executor, { complete: async () => {} });
+    const runtime = new api.ResearchStageRuntime(f.repository, {}, executor, { complete: async () => {} }, {cancelOwned: async () => {}});
     const retried = runtime.retry({ projectId: f.project.id, runId: f.run.id, requestId: 'budget-retry' });
     await runtime.waitForIdle();
     assert.equal(f.repository.runs.get(retried.id, f.project.id).error, 'run_model_call_budget_exhausted');

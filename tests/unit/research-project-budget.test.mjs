@@ -54,6 +54,49 @@ test('independent tasks compete for project headroom and duplicate calls cannot 
   } finally { f.close(); }
 });
 
+test('unknown partial usage retains task and project reservation ceilings', () => {
+  const f = setup();
+  try {
+    f.policy({ maxTotalTokens: 180, maxCostMicrousd: 100 });
+    f.ledger.reserve(f.run.id, f.limits, reserve('partial', { costMicrousd: 80 }));
+    f.ledger.settle(f.run.id, 'partial', 20, 'unknown', undefined, {}, 10);
+    const task = f.ledger.readTaskBudgetStatus(f.run.taskId, f.project.id);
+    const project = f.tasks.projectBudgets.status(f.project.id);
+    assert.equal(task.tokens.unknown, 100);
+    assert.equal(task.cost.reservedMicrousd, 80);
+    assert.equal(project.tokens.unknown, 100);
+    assert.equal(project.tokens.remaining, 80);
+    assert.equal(project.cost.reservedMicrousd, 80);
+    assert.throws(() => f.ledger.reserve('independent-stage', f.limits, reserve('next', { costMicrousd: 1 })),
+      /research_project_token_budget_exhausted/);
+  } finally { f.close(); }
+});
+
+test('project cost cap refuses unknown partial usage without a reservation', () => {
+  const f = setup();
+  try {
+    f.policy();
+    f.ledger.reserve(f.run.id, f.limits, reserve('unpriced'));
+    f.ledger.settle(f.run.id, 'unpriced', 20, 'unknown', undefined, {}, 10);
+    f.policy({ maxCostMicrousd: 100 });
+    assert.throws(() => f.ledger.reserve('independent-stage', f.limits, reserve('next', { costMicrousd: 1 })),
+      /research_project_cost_estimate_unavailable/);
+  } finally { f.close(); }
+});
+
+test('project projection keeps settled calls with missing actual cost unknown', () => {
+  const f = setup();
+  try {
+    f.policy({ maxCostMicrousd: 100 });
+    f.ledger.reserve(f.run.id, f.limits, reserve('unpriced-result', { costMicrousd: 80 }));
+    f.ledger.settle(f.run.id, 'unpriced-result', 20, 'settled');
+    const status = f.tasks.projectBudgets.status(f.project.id);
+    assert.equal(status.cost.state, 'unknown');
+    assert.equal(status.cost.settledMicrousd, 0);
+    assert.equal(status.cost.reservedMicrousd, 80);
+  } finally { f.close(); }
+});
+
 test('two SQLite connections enforce project concurrency across different task roots and retain unknown ceilings on restart', async () => {
   const f = setup();
   const directory = await mkdtemp(join(tmpdir(), 'roc-project-budget-'));
@@ -131,7 +174,7 @@ test('frozen root chat scope is charged before research task linkage and missing
       shellAllowedCommands: undefined, trustedHostAvailable: false, skills: [], workflowHint: null, researchProjectId: f.project.id
     }).manifest;
     const snapshot = api.createRunExecutionSnapshot({runId: 'chat', threadId: 'thread', inputMessageId: 'message', snapshot: {
-      schemaVersion: 9, submissionHash: 'a'.repeat(64),
+      schemaVersion: 10, submissionHash: 'a'.repeat(64),
       taskContract: {contractVersion: 1, objective: 'Research', constraints: [], kind: 'reply',
         criteria: [{id: 'response', description: 'Research', check: {kind: 'response'}}]},
       runOrigin: 'chat', model: {providerId: 'fixture', modelId: 'fixture-model'}, mode: 'run', workspace: null,
@@ -141,7 +184,7 @@ test('frozen root chat scope is charged before research task linkage and missing
     f.agentDb.prepare(`INSERT INTO agent_threads(id,kind,title,goal,status,research_project_id,created_at,updated_at)
       VALUES ('thread','chat','Research','Research','active',?,?,?)`).run(f.project.id, timestamp, timestamp);
     f.agentDb.prepare(`INSERT INTO agent_runs(id,thread_id,run_number,user_input,status,started_at,enabled_capabilities_json,run_origin,snapshot_json,snapshot_version)
-      VALUES ('chat','thread',1,'Research','running',?,'{}','chat',?,9)`).run(timestamp, JSON.stringify(snapshot));
+      VALUES ('chat','thread',1,'Research','running',?,'{}','chat',?,10)`).run(timestamp, JSON.stringify(snapshot));
     f.ledger.reserve('chat', f.limits, reserve('root'));
     const call = f.agentDb.prepare("SELECT project_id,task_id FROM agent_budget_calls WHERE call_id='root'").get();
     assert.deepEqual(call, {project_id: f.project.id, task_id: null});
@@ -173,7 +216,7 @@ test('real v14 migration attributes prior calls without guessing a project polic
     db.prepare(`INSERT INTO agent_budget_calls(run_id,call_id,execution_kind,task_id,kind,input_hash,reserved_tokens,state,envelope_json,created_at)
       VALUES ('stage','prior','stage','task','model','hash',100,'unknown','{}',?)`).run(timestamp);
     const eventCount = db.prepare('SELECT COUNT(*) FROM research_task_events').pluck().get();
-    api.applyDatabaseMigrations(db, {dbName: 'agent', migrations: api.agentMigrations});
+    api.applyDatabaseMigrations(db, {dbName: 'agent', migrations: api.agentMigrations, allowOffline: true});
     assert.equal(db.prepare('SELECT project_id FROM agent_budget_calls').pluck().get(), 'project');
     assert.equal(db.prepare('SELECT project_budget_revision FROM agent_budget_calls').pluck().get(), null);
     assert.equal(db.prepare('SELECT COUNT(*) FROM research_task_events').pluck().get(), eventCount);
