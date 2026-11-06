@@ -372,6 +372,7 @@ export const rocApi: RocPreloadApi = {
     getZenodoCredentialStatus: (...args) => ipcRenderer.invoke(ipcChannels.researchZenodoCredentialStatus, ...args),
     startZenodoOperation: (...args) => ipcRenderer.invoke(ipcChannels.researchZenodoStart, ...args),
     getZenodoOperation: (...args) => ipcRenderer.invoke(ipcChannels.researchZenodoGetOperation, ...args),
+    getZenodoOperationForPreparation: (...args) => ipcRenderer.invoke(ipcChannels.researchZenodoOperationForPreparation, ...args),
     getZenodoOperations: (...args) => ipcRenderer.invoke(ipcChannels.researchZenodoListOperations, ...args),
     refreshZenodoOperation: (...args) => ipcRenderer.invoke(ipcChannels.researchZenodoRefresh, ...args),
     resumeZenodoOperation: (...args) => ipcRenderer.invoke(ipcChannels.researchZenodoResume, ...args),

@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {zenodoCredentialSchema, zenodoCredentialStatusSchema, zenodoCredentialReadSchema, zenodoStartSchema, zenodoOperationSchema, zenodoOperationReadSchema, zenodoOperationListSchema, zenodoOperationListResultSchema, zenodoOperationActionSchema, zenodoPublicationApproveSchema, zenodoPublicationApprovalSchema, zenodoPublishSchema} from '../../../shared/schemas/research-zenodo-remote';
+import {zenodoCredentialSchema, zenodoCredentialStatusSchema, zenodoCredentialReadSchema, zenodoStartSchema, zenodoOperationSchema, zenodoOperationReadSchema, zenodoOperationForPreparationSchema, zenodoOperationListSchema, zenodoOperationListResultSchema, zenodoOperationActionSchema, zenodoPublicationApproveSchema, zenodoPublicationApprovalSchema, zenodoPublishSchema} from '../../../shared/schemas/research-zenodo-remote';
 import type {CapabilityDescriptor, RocPluginContext} from '../../kernel/types';
 import type {ZenodoPublicationService} from './zenodo-publication';
 import type {ZenodoOperationRepository} from './zenodo-operation-repository';
@@ -13,6 +13,7 @@ const capabilities = {
   credentialStatus: descriptor('research.zenodo.credentialStatus', zenodoCredentialReadSchema, zenodoCredentialStatusSchema),
   start: descriptor('research.zenodo.start', zenodoStartSchema, zenodoOperationSchema),
   getOperation: descriptor('research.zenodo.getOperation', zenodoOperationReadSchema, zenodoOperationSchema),
+  operationForPreparation: descriptor('research.zenodo.operationForPreparation', zenodoOperationForPreparationSchema, zenodoOperationSchema.nullable()),
   listOperations: descriptor('research.zenodo.listOperations', zenodoOperationListSchema, zenodoOperationListResultSchema),
   refresh: descriptor('research.zenodo.refresh', zenodoOperationReadSchema, zenodoOperationSchema),
   resume: descriptor('research.zenodo.resume', zenodoOperationActionSchema, zenodoOperationSchema),
@@ -31,6 +32,7 @@ export function registerResearchZenodoPublicationCapabilities(context: RocPlugin
   register(capabilities.credentialStatus, input => service.credentialStatus(input));
   register(capabilities.start, input => service.start(input));
   register(capabilities.getOperation, input => service.get(input));
+  register(capabilities.operationForPreparation, input => repository.forPreparation(input.projectId, input.preparationId));
   register(capabilities.listOperations, input => repository.list(input));
   register(capabilities.refresh, input => service.refresh(input));
   register(capabilities.resume, input => service.resume(input));

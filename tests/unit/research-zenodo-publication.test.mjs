@@ -519,3 +519,22 @@ test('history pages and approvals remain scoped after archive and damaged grants
     assert.equal(f.operations.list({projectId: f.project.id, limit: 20, offset: 0}).records[0].approval.id, approval.id);
   } finally {await f.dispose();}
 });
+
+test('preparation lookup reads the exact existing scoped operation without network work or new request identity', async () => {
+  const f = await scene();
+  try {
+    assert.equal(f.operations.forPreparation(f.project.id, f.prepared.id), null);
+    const operation = await f.start(), count = f.provider.calls.length;
+    assert.deepEqual(f.operations.forPreparation(f.project.id, f.prepared.id), operation);
+    const registry = new api.CapabilityRegistry();
+    for (const descriptor of api.researchZenodoPublicationCapabilities) registry.declare('fixture', descriptor);
+    api.registerResearchZenodoPublicationCapabilities({pluginId: 'fixture', capabilities: registry}, f.service, f.operations);
+    const input = {projectId: f.project.id, preparationId: f.prepared.id};
+    assert.deepEqual(await registry.invoke('research.zenodo.operationForPreparation', input), operation);
+    assert.throws(() => f.operations.forPreparation('foreign', f.prepared.id));
+    assert.throws(() => api.parseIpcRequestArgs('roc:research:zenodo-operationForPreparation', [{...input, actor: {kind: 'user', id: 'forged'}}]));
+    f.repository.updateProject({id: f.project.id, status: 'archived'});
+    assert.deepEqual(f.operations.forPreparation(f.project.id, f.prepared.id), operation);
+    assert.equal(f.provider.calls.length, count);
+  } finally {await f.dispose();}
+});

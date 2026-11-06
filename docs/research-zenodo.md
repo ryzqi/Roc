@@ -96,3 +96,27 @@ git diff --check
 ```
 
 Logs are `.artifacts/research-optimization/zenodo-a7b-*`; native evidence includes `p0-production/<task-id>/zenodo-publication.json`, the publication SQLite backup and encrypted secret SQLite backup. Live remote writes and independent scientific acceptance remain **Blocked, not run** for the authorization and credential limits above.
+
+
+## Existing export drawer consumer
+
+A7C adds lazy reviewed Zenodo publishing inside the existing approved export receipt. It does not add a route or shell. The editor requires explicit files, upload names, environment, metadata, authors and three public-sharing declarations. Preview reads actual file hashes before preparation; any edit invalidates the preview. Lost preparation and publication replies retain the exact request. A preparation-scoped readonly operation lookup prevents reopening history from creating a second operation.
+
+Full local and remote metadata, files, ownership, marker, hashes and DOI receipts remain visible before the independent publish approval. Draft and pending states lock inspector closing, export switching and sibling actions. Credentials remain environment scoped and transient masked input; plaintext clears at dispatch and never enters a persisted retry. Archived projects retain history and prohibit write controls. Both histories page independently in groups of twenty. Cancel aborts the current transport and retains uncertain remote state; it does not withdraw a published record.
+
+A7C is **Verified passing** for local engineering: connector unit 22/22, actual Electron/Vite renderer 9/9, existing export/production renderer 16/16, fresh build/typecheck, startup 13/13 with zero renderer errors, IPC current, eager renderer 1,134,468 bytes in six files and whitespace checks. Commands in the repository root:
+
+```sh
+node --test tests/unit/research-zenodo-publication.test.mjs
+node --test tests/renderer/zenodo-publication.test.mjs
+pnpm build
+node --test tests/renderer/export-publication.test.mjs tests/renderer/artifact-production.test.mjs
+node scripts/smoke-electron.mjs
+pnpm check:ipc
+pnpm check:renderer-chunks
+git diff --check
+```
+
+The nine cases cover preview invalidation, exact lost replies, independent approval, local/remote drift, transient credentials, archived controls, real 21-record pagination, lookup retry, late project replies, existing export drawer locks and in-flight PUT cancellation. The fixture uses real main publication/preparation services, repositories, capability registry and generated strict IPC with isolated provider responses and synthetic approved source bytes. Its existing-export UI read fixture supplies controlled export records; the separate A7B native consumer establishes the actual ZIP/PDF and encrypted staging contract. Neither fixture performs remote requests.
+
+Logs are `.artifacts/research-optimization/zenodo-a7c-*`. Light/dark 650px screenshots and eight clip results (`cut=0`, no horizontal overflow) are in `.artifacts/research-optimization/zenodo-ui/`; screenshots were visually inspected. The initial 0/6 run stopped at ambiguous select labels; explicit accessible names fixed the cause. Expanded final tests passed without relaxed assertions or timeouts. Live sandbox/native-safeStorage integration and real public publishing remain **Blocked, not run** pending the previously stated isolated credentials and target authorization.

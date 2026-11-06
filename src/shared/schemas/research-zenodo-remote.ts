@@ -17,6 +17,7 @@ export const zenodoRemoteSnapshotSchema = z.strictObject({id: z.number().int().p
   recordId: z.number().int().positive().nullable(), recordUrl: z.string().max(2048).nullable(), contentHash: hash});
 export const zenodoStartSchema = z.strictObject({projectId: id, preparationId: id, requestId: id, expectedPreparationHash: hash});
 export const zenodoOperationReadSchema = z.strictObject({projectId: id, operationId: id});
+export const zenodoOperationForPreparationSchema = z.strictObject({projectId: id, preparationId: id});
 export const zenodoOperationActionSchema = zenodoOperationReadSchema.extend({expectedRevision: z.number().int().positive()});
 export const zenodoPublicationApproveSchema = zenodoOperationActionSchema.extend({requestId: id, expectedRemoteHash: hash,
   expectedPreparationHash: hash, confirmPublic: z.literal(true)});

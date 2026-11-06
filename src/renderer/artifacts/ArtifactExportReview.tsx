@@ -96,8 +96,9 @@ export function ArtifactExportReview({client, snapshot, writable, locked, onDirt
           onPrepared={value => {setSelection(null); setChosen(value); setHistoryNonce(nonce => nonce === 0 ? 0 : nonce + 1);}}/>}
     </> : null}
     {chosen === null ? null : <>
-      <ExportExecutionReceipt key={chosen.id} client={client} record={chosen} writable={writable && !locked} onPending={reportPending}/>
-      {!writable ? null : <button type="button" className={`${button} self-start`} disabled={controlsLocked} onClick={discard}>审查新的导出选择</button>}
+      <ExportExecutionReceipt key={chosen.id} client={client} record={chosen} writable={writable && !locked}
+        onPending={reportPending} onDirty={reportDirty}/>
+      {!writable ? null : <button type="button" className={`${button} self-start`} disabled={controlsLocked || dirty} onClick={discard}>审查新的导出选择</button>}
     </>}
     <button type="button" className={`${button} self-start`} disabled={controlsLocked || history.status === 'loading' || dirty}
       data-testid="artifact-export-history-load" onClick={() => setHistoryNonce(nonce => nonce + 1)}>读取已保存导出</button>

@@ -18,6 +18,12 @@ export class ZenodoOperationRepository {
   constructor(private readonly db: Database, private readonly research: ResearchRepository,
     private readonly preparations: Pick<ZenodoPreparationService, 'get'>,
     private readonly now = () => new Date().toISOString()) {}
+  forPreparation(projectId: string, preparationId: string): ZenodoOperation | null {
+    this.preparations.get(projectId, preparationId);
+    const row = this.db.prepare('SELECT id FROM research_zenodo_operations WHERE project_id=? AND preparation_id=?')
+      .get(projectId, preparationId) as {id: string} | undefined;
+    return row === undefined ? null : this.get(projectId, row.id);
+  }
   get(projectId: string, id: string): ZenodoOperation {
     this.research.getProject(projectId);
     const row = this.db.prepare('SELECT * FROM research_zenodo_operations WHERE id=?').get(id) as Row | undefined;
