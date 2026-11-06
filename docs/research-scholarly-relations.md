@@ -35,6 +35,14 @@ X-ECO A1 在现有科研插件中提供 `ScholarlyRelationsService`。它读取 
 
 四个声明式 IPC 方法：`captureScholarlyRelations`、`cancelScholarlyRelations`、`getScholarlyHistory`、`getScholarlyRelations`。生成的 preload 和共享类型由 `pnpm generate:ipc` 维护，没有兼容别名。
 
+## 阅读器中的来源检查
+
+X-ECO A2 在现有 `PaperReader` 操作栏添加「学术关系」，打开时才加载面板及读取历史。面板使用阅读器内独立滚动区域，不新增 shell 或路由。历史每页 20 条，关系每页 50 条；选中记录后历史折叠，仍可展开或翻页。
+
+显示保存时的 DOI、文献版本、查询时间及各来源真实状态。来源详情保留字段是否报告、未映射数量、撤稿观察、获取时间、缓存、GET 回执、响应哈希和端点；关系展示方向、类型、原始 Provider 类型、字段及断言方。Semantic Scholar 后续页必须点击另存，沿用原记录的 limit 和新 requestId，超出 offset 9900 时明确禁用。
+
+查询期间禁用新查询、来源选择、历史选择和分页，取消走主进程真实请求。丢失捕获回执可重试完整原请求；已保存的来源失败通过新请求重新查询。收到取消信号的请求不提供原请求重试。只读、归档、未关联或缺 DOI 时禁止新捕获，但可查看保存历史；文献版本改变后明确显示历史观察。项目或文献切换时重建面板状态，迟到读取和捕获回执不进入新范围。
+
 ## 验证记录
 
 工作目录：`/Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc`。验证日志位于 `.artifacts/research-optimization/xeco-a1-*.log`。
@@ -45,4 +53,8 @@ X-ECO A1 在现有科研插件中提供 `ScholarlyRelationsService`。它读取 
 
 `pnpm test:unit` 1313/1313 通过（最后新增的存储身份回归另以 17/17 focused 验证）；`pnpm harness:eval` 94/94、`node scripts/run-research-p0.mjs` 13/13 通过。最终存储校验后 `pnpm build`（包含 typecheck）、`node scripts/smoke-electron.mjs` 13/13 且零 renderer 错误、`pnpm check:ipc`、`pnpm check:renderer-chunks`（1134468 bytes / 6 eager files）及 `git diff --check` 通过。
 
-状态：**Verified passing**（本地工程）。没有真实 API 科学性验收或外部发布。现有 shell 的关系检查界面为下一独立增量。
+A2 最终 `node --test --test-timeout=60000 --test-reporter=tap tests/renderer/scholarly-relations.test.mjs` 8/8 通过；相关串行回归 `node --test --test-concurrency=1 --test-timeout=60000 --test-reporter=tap tests/renderer/scholarly-relations.test.mjs tests/renderer/paper-reader.test.mjs tests/renderer/literature-review.test.mjs tests/renderer/artifact-production.test.mjs` 50/50 通过。测试运行真实 Electron、仓储、服务、governor 和严格 IPC，使用隔离 Provider 响应。
+
+A2 `pnpm build`（包含 typecheck）、`node scripts/smoke-electron.mjs` 13/13 且零 renderer 错误、`pnpm check:ipc`、`pnpm check:renderer-chunks`（1134468 bytes / 6 eager files）通过。650px 浅色/暗色检查无横向溢出，键盘 focus-visible 轮廓可见；八个默认、hover、展开、终态裁切审计均 cut=0、hidden=0。终态测试等待原生 disclosure 的实际高度和透明度，截图确认完整来源详情可读。截图和审计保存于 `.artifacts/research-optimization/xeco-a2/`，日志为 `xeco-a2-*.log`。
+
+状态：**Verified passing**（A1/A2 本地工程）。没有真实 API 科学性验收或外部发布。

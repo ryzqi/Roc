@@ -14,6 +14,7 @@ import {useReaderDocument} from './use-reader-document';
 
 const PaperPdfView = lazy(() => import('./PaperPdfView'));
 const PaperBlockAsset = lazy(() => import('./PaperBlockAsset'));
+const ScholarlyRelationsPanel = lazy(() => import('./ScholarlyRelationsPanel'));
 
 const TIER_OPTIONS: ReadonlyArray<{ value: ResearchParseTier; label: string; title: string }> = [
   { value: 'compact', label: '轻量', title: 'PP-OCRv6 Tiny + 文档布局和表格识别，约 19 MB' },
@@ -112,6 +113,7 @@ export function PaperReader({
   const [comparePdf, setComparePdf] = useState(false);
   const [pdfSelection, setPdfSelection] = useState<{parseId: string; blockId: string; locationIndex: number} | null>(null);
   const [openAsset, setOpenAsset] = useState<string | null>(null);
+  const [relationsOpen, setRelationsOpen] = useState(false);
   /**
    * 解析档位（`document.parse` 的 `tier`）。
    *
@@ -404,6 +406,11 @@ export function PaperReader({
           {selected.archived ? <span className="text-[var(--st-warn)]">已归档</span> : null}
         </p>
         <div className="flex flex-wrap items-center gap-1.5" data-testid="reader-actions">
+          <button type="button" disabled={literature.projectId === null} aria-expanded={relationsOpen}
+            onClick={() => setRelationsOpen(current => !current)} data-testid="reader-scholarly-toggle"
+            className="min-h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
+            学术关系
+          </button>
           <button
             type="button"
             disabled={actionBusy}
@@ -509,6 +516,13 @@ export function PaperReader({
           </p>
         )}
       </header>
+
+      {relationsOpen && literature.projectId !== null ? <div className="max-h-[55%] shrink-0 overflow-y-auto border-b-[0.5px] border-line">
+        <Suspense fallback={<p role="status" className="px-3 py-2 text-muted">载入学术关系</p>}>
+          <ScholarlyRelationsPanel key={`${literature.projectId}:${selected.id}`} client={literature.client}
+            projectId={literature.projectId} item={selected} writable={scope.writable}/>
+        </Suspense>
+      </div> : null}
 
       {documents.length === 0 ? (
         <div className="min-h-0 flex-1">
