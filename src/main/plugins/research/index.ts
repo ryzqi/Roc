@@ -16,6 +16,7 @@ import type { ResearchTaskRepository } from './research-task-repository';
 import { ResearchTaskController } from './task-controller';
 import { researchTaskCapabilities, registerResearchTaskCapabilities } from './task-capabilities';
 import { researchProjectBudgetCapabilities, registerResearchProjectBudgetCapabilities } from './project-budget-capabilities';
+import {ResearchTaskDiagnosticsExporter} from './task-diagnostics-export';
 import { ResearchTaskDiagnosticsService } from './task-diagnostics';
 import type { RunBudgetLedger } from '../../services/deep-agent/run-budget-ledger';
 import { notifyResearchTaskChanged } from './task-notifications';
@@ -230,6 +231,7 @@ export type ResearchPluginOptions = {
   budgetLedger: RunBudgetLedger;
   experimentRoot?: string;
   exportRoot?: string;
+  diagnosticsRoot: string;
   indexRoot?: string;
   indexWatch?: ResearchIndexWatch;
   libraryRoot?: string;
@@ -467,8 +469,9 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
         }
       });
       registerTaskFactCapabilities(context, new ResearchTaskFactsService(researchRepository));
-      registerResearchTaskCapabilities(context, options.tasks, taskController,
-        new ResearchTaskDiagnosticsService(researchRepository, options.budgetLedger, reviewSearches));
+      const taskDiagnostics = new ResearchTaskDiagnosticsService(researchRepository, options.budgetLedger, reviewSearches, researchExperiments);
+      registerResearchTaskCapabilities(context, options.tasks, taskController, taskDiagnostics,
+        new ResearchTaskDiagnosticsExporter(taskDiagnostics, options.tasks, options.diagnosticsRoot));
       registerResearchProjectBudgetCapabilities(context, researchRepository);
       registerResearchRunCapabilities(context, researchRepository.runs, runtime, researchRepository.reviews, options.executionGrantBroker);
       registerResearchArtifactInspectorCapability(context, researchRepository);

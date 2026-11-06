@@ -35,7 +35,7 @@ export { RunBudgetLedger } from '../../../src/main/services/deep-agent/run-budge
 export { RunBudgetObserver } from '../../../src/main/services/deep-agent/run-budget-observer';
 export { createResearchRoleExecutor } from '../../../src/main/plugins/research/role-executor';
 export { ResearchTaskController } from '../../../src/main/plugins/research/task-controller';
-export { registerResearchTaskCapabilities } from '../../../src/main/plugins/research/task-capabilities';
+export { registerResearchTaskCapabilities, researchTaskCapabilities } from '../../../src/main/plugins/research/task-capabilities';
 export { createAgentPlugin } from '../../../src/main/plugins/agent';
 export { createResearchHumanGate } from '../../../src/main/plugins/research/human-gate';
 export { ResearchTaskDiagnosticsService } from '../../../src/main/plugins/research/task-diagnostics';
@@ -231,3 +231,7 @@ export {ResearchTaskFactsService} from '../../../src/main/plugins/research/task-
 export {taskFactsHash} from '../../../src/main/plugins/research/task-facts-store';
 export {createResearchTaskContextMiddleware} from '../../../src/main/services/deep-agent/research-task-context-middleware';
 export {taskFactCapabilities, registerTaskFactCapabilities} from '../../../src/main/plugins/research/task-fact-capabilities';
+
+export {ResearchTaskDiagnosticsExporter} from '../../../src/main/plugins/research/task-diagnostics-export';
+export {AgentRunTelemetryAccumulator} from '../../../src/main/plugins/agent/run-telemetry';
+export {AgentRunEventLog} from '../../../src/main/plugins/agent/run-event-log';

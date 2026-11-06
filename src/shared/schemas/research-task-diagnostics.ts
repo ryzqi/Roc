@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import {taskTelemetrySchema} from './research-task-observability';
 import { runBudgetStatusSchema } from './agent';
 import { researchTaskSchema, researchTaskExecutionSchema } from './research-tasks';
 import { researchStageSchema } from './research';
@@ -13,7 +14,8 @@ export const researchTaskExecutionDiagnosticsSchema = z.object({
   providerId: id.nullable(),
   modelId: id.nullable(),
   error: z.string().nullable(),
-  artifactIds: z.array(id),
+  artifacts: z.strictObject({id, version: z.string().regex(/^[a-f0-9]{64}$/u).nullable(), versionSource: z.literal('current_inspector'), state: z.enum(['present','missing'])}).array(),
+  telemetry: taskTelemetrySchema.nullable(),
   startedAt: z.string().nullable(),
   endedAt: z.string().nullable()
 }).strict();

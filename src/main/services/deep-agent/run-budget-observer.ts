@@ -76,13 +76,15 @@ export class RunBudgetObserver {
 
   async invoke<T>(input: BudgetedModelInvocation<T>): Promise<T> {
     const startedAt = performance.now();
+    const startedAtIso = new Date().toISOString();
+    const callId = randomUUID();
+    let reserved = false;
     let status: ModelInvocationObservation['status'] = 'blocked';
     let actualInputTokens: number | null = null;
     let actualOutputTokens: number | null = null;
     let actualCacheReadTokens: number | null = null;
     let actualCacheCreationTokens: number | null = null;
     try {
-      const callId = randomUUID();
       const messages = redactUnknown(input.messages.map((message) => message.toDict()));
       const reservationCostMicrousd = this.pricing === null
         ? null
@@ -125,6 +127,7 @@ export class RunBudgetObserver {
         throw error;
       }
 
+      reserved = true;
       status = 'failed';
       this.ledger.consumeCorrections(this.runId, input.messages.map((message) => message.id ?? ''));
       this.emitStatus();
@@ -190,10 +193,12 @@ export class RunBudgetObserver {
       if (status === 'completed') status = 'failed';
       throw error;
     } finally {
+      const durationMs = Math.max(0, Math.round(performance.now() - startedAt));
+      if (reserved) this.ledger.recordModelObservation(this.runId, callId, {startedAt: startedAtIso, durationMs, status: status === 'completed' ? 'completed' : 'failed'});
       const observation: ModelInvocationObservation = {
         purpose: input.purpose,
         status,
-        durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+        durationMs,
         estimatedInputTokens: input.estimatedInputTokens ?? null,
         actualInputTokens,
         actualOutputTokens,

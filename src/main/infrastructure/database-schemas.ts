@@ -813,6 +813,20 @@ BEGIN SELECT RAISE(ABORT,'research_task_facts_immutable'); END;
 `
 });
 
+agentMigrations.push({version: 19, name: 'measured_model_call_observations', sql: `
+CREATE INDEX idx_research_task_events_call ON research_task_events(task_id,execution_kind,execution_id,call_id,event_type,created_at)
+WHERE call_id IS NOT NULL;
+CREATE TABLE agent_budget_call_observations (
+  run_id TEXT NOT NULL, call_id TEXT NOT NULL, started_at TEXT NOT NULL,
+  duration_ms INTEGER NOT NULL CHECK(duration_ms >= 0),
+  status TEXT NOT NULL CHECK(status IN ('completed','failed')),
+  PRIMARY KEY(run_id,call_id),
+  FOREIGN KEY(run_id,call_id) REFERENCES agent_budget_calls(run_id,call_id) ON DELETE CASCADE
+);
+CREATE TRIGGER agent_budget_call_observations_immutable BEFORE UPDATE ON agent_budget_call_observations
+BEGIN SELECT RAISE(ABORT,'agent_budget_call_observations_immutable'); END;
+`});
+
 export const memoryMigrations: RocDatabaseMigration[] = [
   {
     version: 1,

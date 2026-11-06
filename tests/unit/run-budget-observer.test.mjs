@@ -53,6 +53,7 @@ function makeLedger(reserveError = null) {
     settle: (...args) => settlements.push(args),
     recordStopReason: (...args) => stopReasons.push(args),
     consumeCorrections: () => undefined,
+    recordModelObservation: () => undefined,
     readBudgetStatus: (_runId, limits, modelPricingKnown) => ({
       tokens: { limit: limits.maxTotalTokens, settled: 0, unknown: 0, reserved: 0, remaining: limits.maxTotalTokens },
       calls: {

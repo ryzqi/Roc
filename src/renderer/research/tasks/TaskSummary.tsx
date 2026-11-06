@@ -60,7 +60,8 @@ export function TaskSummary({ data, details = false }: {
       {details ? (
         <div className="grid gap-1 text-subtle text-[var(--font-meta-size)]">
           <p>截止时间 {formatBeijingDateTime(data.budget.deadlineAt)}（暂停期间继续计时）</p>
-          <p>外部服务费用：未知</p>
+          <p>外部服务费用：未知，尚无费用回执。</p>
+          {data.budget.cost.state === 'unknown' ? <p>部分调用缺少 usage 或可信价格回执，未知消费仍保留预算占用。</p> : null}
           <p className="break-all font-mono">{data.task.id}</p>
         </div>
       ) : null}

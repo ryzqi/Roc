@@ -218,6 +218,13 @@ export class RunBudgetLedger {
     if (result.changes !== 1) throw new Error('run_budget_settlement_invalid');
   }
 
+  recordModelObservation(runId: string, callId: string, observation: {startedAt: string; durationMs: number; status: 'completed'|'failed'}): void {
+    const row = this.db.prepare('SELECT kind FROM agent_budget_calls WHERE run_id=? AND call_id=?').get(runId, callId) as {kind: string}|undefined;
+    if (row?.kind !== 'model') throw new Error('run_model_observation_call_invalid');
+    this.db.prepare('INSERT INTO agent_budget_call_observations (run_id,call_id,started_at,duration_ms,status) VALUES (?,?,?,?,?)')
+      .run(runId, callId, observation.startedAt, observation.durationMs, observation.status);
+  }
+
   recordStopReason(runId: string, reason: string): void {
     this.db.prepare('UPDATE agent_runs SET budget_stop_reason = COALESCE(budget_stop_reason, ?) WHERE id = ?')
       .run(reason.slice(0, 128), runId);

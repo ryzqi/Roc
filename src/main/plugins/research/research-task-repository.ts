@@ -15,6 +15,7 @@ import { runBudgetSchema, runExecutionSnapshotSchema } from '../../../shared/sch
 import { createRunBudget } from '../agent/run-execution-snapshot';
 import type { RunLimits } from '../../services/deep-agent/run-budget-ledger';
 import { ProjectBudgetLedger } from '../../services/deep-agent/project-budget-ledger';
+import {ResearchTaskObservabilityStore} from './task-observability-store';
 import {ResearchTaskFactsStore} from './task-facts-store';
 
 type ExecutionIdentity = Pick<ResearchTaskExecution, 'kind' | 'executionId'>;
@@ -25,9 +26,11 @@ const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(va
 export class ResearchTaskRepository {
   readonly projectBudgets: ProjectBudgetLedger;
   readonly facts: ResearchTaskFactsStore;
+  readonly observability: ResearchTaskObservabilityStore;
   constructor(private readonly db: Database, private readonly now = () => new Date().toISOString()) {
     this.projectBudgets = new ProjectBudgetLedger(db);
     this.facts = new ResearchTaskFactsStore(db);
+    this.observability = new ResearchTaskObservabilityStore(db);
   }
 
   get(id: string, projectId: string): ResearchTask {

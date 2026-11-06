@@ -51,6 +51,13 @@ async function completed(f) {
   return { run, report: api.researchExperimentResourceReportSchema.parse(JSON.parse(content.content)) };
 }
 
+async function observations(f, run, source = f.service) {
+  const association = f.tasks.requireExecution('experiment', run.id, f.project.id);
+  const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb), null, source);
+  return diagnostics.inspectExecution({projectId: f.project.id, taskId: association.taskId, executionKind: 'experiment',
+    executionId: run.id, afterCallSequence: 0, afterEventSequence: 0, limit: 50});
+}
+
 test('experiment resource receipt pins returned measurements to input/environment and frozen publication without indexing metrics as scientific evidence', async () => {
   let actualRequest;
   const f = await fixture(async request => {
@@ -65,6 +72,15 @@ test('experiment resource receipt pins returned measurements to input/environmen
     assert.equal(report.schemaVersion, 3); assert.deepEqual(report.probes, []);
     for (const schemaVersion of [1, 2]) assert.equal(api.researchExperimentResourceReportSchema.safeParse({ ...report, schemaVersion }).success, false);
     assert.deepEqual(report.usage, measured); assert.deepEqual(report.admission, admission);
+    const diagnostics = await observations(f, run);
+    assert.equal(diagnostics.resources.reportSha256, run.files.find(file => file.area === 'log' && file.path === 'resources.json').sha256);
+    assert.deepEqual(diagnostics.resources.usage, measured);
+    assert.deepEqual(diagnostics.resources.admission, admission);
+    assert.equal(JSON.stringify(diagnostics).includes('/usr/bin/true'), false);
+    await assert.rejects(observations(f, run, {source: async request => {
+      const current = await f.service.source(request);
+      return {...current, bytes: Buffer.from(JSON.stringify({...report, projectId: 'foreign'}))};
+    }}), /research_experiment_resource_report_changed/);
     assert.deepEqual(report.policy.resourceLimits, actualRequest.resourceLimits);
     assert.equal(report.backend.cpuHardLimit, false); assert.equal(report.backend.memoryHardLimit, false);
     assert.equal(report.backend.contractVersion, 2); assert.equal(report.backend.hostCrashCleanup, true);
@@ -78,6 +94,7 @@ test('experiment resource receipt pins returned measurements to input/environmen
     const file = join(f.repository.experiments.root(f.project.id, run.id), 'log/resources.json');
     await chmod(file, 0o600); await writeFile(file, JSON.stringify({ ...report, inputHash: 'b'.repeat(64) }));
     await assert.rejects(f.service.verifyPublication(f.project.id, published.artifactId), /research_experiment_snapshot_changed/);
+    await assert.rejects(observations(f, run), /research_experiment_snapshot_changed/);
     const foreignWorkspace = join(f.root, 'foreign-workspace');
     await mkdir(foreignWorkspace);
     const foreign = f.repository.createProject({ title: 'Foreign project', description: '', workspacePath: foreignWorkspace });
@@ -98,6 +115,9 @@ test('runner rejection retains its real resource reason and explicitly unknown o
     assert.equal(report.outcome, 'rejected'); assert.equal(report.error, run.error);
     assert.equal(report.exitCode, null); assert.deepEqual(report.usage, unknownUsage); assert.deepEqual(report.admission, admission);
     assert.equal(report.inputHash, run.inputHash); assert.equal(report.environmentHash, run.environment.hash);
+    const diagnostics = await observations(f, run);
+    assert.equal(diagnostics.resources.outcome, 'rejected');
+    assert.deepEqual(diagnostics.resources.usage, unknownUsage);
     assert.equal((await f.service.read({ projectId: f.project.id, runId: run.id, area: 'log', path: 'stdout.txt' })).content, 'observed stdout');
     await assert.rejects(f.service.publish(f.project.id, run.id), /research_experiment_completed_required/);
     assert.equal(api.researchProcessResourceUsageSchema.safeParse({ ...unknownUsage, observedCpuTimeMs: 0, peakResidentBytes: 0 }).success, false);
@@ -113,5 +133,8 @@ test('preparation failure records no compute dispatch or observations and preser
     assert.equal(report.outcome, 'not_dispatched'); assert.equal(report.error, 'research_experiment_environment_changed');
     assert.equal(report.inputHash, null); assert.equal(report.environmentHash, null);
     assert.equal(report.usage, null); assert.equal(report.admission, null); assert.equal(report.exitCode, null);
+    const diagnostics = await observations(f, run);
+    assert.equal(diagnostics.resources.outcome, 'not_dispatched');
+    assert.equal(diagnostics.resources.usage, null);
   } finally { await f.dispose(); }
 });

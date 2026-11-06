@@ -1,3 +1,4 @@
+import {researchTaskRequestSchema} from '../../shared/schemas/research-tasks';
 import {taskFactsSaveSchema} from '../../shared/schemas/research-task-facts';
 import {zenodoCredentialSchema, zenodoCredentialReadSchema, zenodoStartSchema, zenodoOperationActionSchema, zenodoPublicationApproveSchema, zenodoPublishSchema, zenodoOperationReadSchema} from '../../shared/schemas/research-zenodo-remote';
 import {zenodoPrepareSchema} from '../../shared/schemas/research-zenodo';
@@ -69,6 +70,11 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
       }
       return await wrapIpc(async () => {
         const input = transformInput(target.inputTransform, args);
+        if (target.capabilityName === 'research.task.diagnostics.export') {
+          const request = researchTaskRequestSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
         if (target.capabilityName === 'research.task.facts.save') {
           const request = taskFactsSaveSchema.parse(input);
           return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},

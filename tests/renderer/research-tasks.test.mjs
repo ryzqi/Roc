@@ -38,7 +38,7 @@ before(async () => {
             association: association(kind, executionId, parentKind, parentExecutionId),
             status, stage: kind === 'chat' ? null : kind === 'stage' ? 'discovery' : kind,
             providerId: kind === 'stage' ? 'fixture-provider' : null,
-            modelId: kind === 'stage' ? 'fixture-model' : null, error: null, artifactIds,
+            modelId: kind === 'stage' ? 'fixture-model' : null, error: null, artifacts: artifactIds.map(id => ({id, version: 'a'.repeat(64), versionSource: 'current_inspector', state: 'present'})), telemetry: null,
             startedAt: '2026-11-03T00:00:00.000Z', endedAt: status === 'completed' ? '2026-11-03T00:00:01.000Z' : null
           });
           return {
@@ -76,6 +76,20 @@ before(async () => {
           onProjectBudgetUpdated: listener => { budgetListeners.add(listener); return () => budgetListeners.delete(listener); },
           getTaskForChat: request => record('chat', request, window.response),
           getTaskDiagnostics: request => record('diagnostics', request, window.response),
+          getTaskExecutionDiagnostics: request => {
+            calls.push({method: 'observations', request});
+            if (window.observationResponse !== null) return Promise.resolve(window.observationResponse);
+            const callsPage = window.observationCalls.filter(call => call.sequence > request.afterCallSequence);
+            const eventsPage = window.observationEvents.filter(event => event.sequence > request.afterEventSequence);
+            const selectedCalls = callsPage.slice(0, request.limit), selectedEvents = eventsPage.slice(0, request.limit);
+            return Promise.resolve({ok: true, data: {
+              telemetry: window.observationTelemetry, resources: null,
+              calls: {calls: selectedCalls, nextSequence: selectedCalls.at(-1)?.sequence ?? request.afterCallSequence, hasMore: callsPage.length > request.limit},
+              replay: {events: selectedEvents, nextSequence: selectedEvents.at(-1)?.sequence ?? request.afterEventSequence,
+                hasMore: eventsPage.length > request.limit, gap: request.afterEventSequence === 0 ? {throughSequence: 10, historyComplete: false} : null}
+            }});
+          },
+          exportTaskDiagnostics: request => record('diagnostics-export', request, window.exportResponse),
           getTaskFacts: request => record('facts', request, window.factsResponse),
           saveTaskFacts: request => {
             calls.push({method: 'facts-save', request});
@@ -137,6 +151,15 @@ before(async () => {
           response = {ok: true, data: makeData()};
           actionResponse = {ok: true, data: makeData().task};
           factSaveError = null; factSaveDeferred = null; factHistory = [];
+          observationResponse = null; observationTelemetry = null;
+          exportResponse = {ok: true, data: {path: '/local/diagnostics/task.json', size: 512, sha256: 'c'.repeat(64),
+            createdAt: '2026-11-06T00:00:00.000Z', redacted: true, externalTrace: 'not_exported'}};
+          observationCalls = Array.from({length: 51}, (_, i) => ({sequence: i + 1, runId: 'chat-a', callId: 'measured-call-' + (i + 1),
+            kind: 'model', state: 'unknown', reservedTokens: 100, actualTokens: null, reservedCostMicrousd: 60,
+            actualCostMicrousd: null, pricingVersion: null, createdAt: '2026-11-06T00:00:00.000Z', settledAt: null,
+            invocation: i === 0 ? {startedAt: '2026-11-06T00:00:00.000Z', durationMs: 17, status: 'failed'} : null}));
+          observationEvents = Array.from({length: 51}, (_, i) => ({sequence: i + 11, type: 'assistant_block',
+            toolCallId: 'tool-call-' + (i + 1), status: 'error', failed: true, createdAt: '2026-11-06T00:00:00.000Z'}));
           factsResponse = {ok: true, data: {snapshot: null, freshness: [], authority: 'research_data_only'}};
           listResponse = {ok: true, data: {tasks: [makeData().task], nextTaskId: 'task-a', hasMore: false}};
           eventRows = Array.from({length: 51}, (_, index) => ({
@@ -427,7 +450,7 @@ test('review queries show truthful task execution status and only complete cover
         ...data.executions[2], association: {
           ...data.executions[2].association, kind: 'review_search', executionId: 'actual-query-id',
           parentKind: 'chat', parentExecutionId: 'chat-a', associationSource: 'chat_dispatch'
-        }, status, stage: null, artifactIds: [],
+        }, status, stage: null, artifacts: [],
         endedAt: status === 'cancelling' ? null : '2026-11-03T00:00:01.000Z'
       };
       response = {ok: true, data};
@@ -502,4 +525,112 @@ test('facts conflict keeps draft; pending save and late reads cannot cross task/
   });
   await page.getByText('尚无任务事实。', {exact: true}).waitFor();
   assert.equal(await page.getByText('OLD PRIVATE FACT', {exact: true}).count(), 0);
+});
+
+test('execution drill is lazy and keyboard accessible, pages calls/events independently and refreshes true telemetry', async () => {
+  await page.evaluate(() => {reset(); mountDrawer();});
+  await ready();
+  assert.equal(await page.evaluate(() => calls.filter(row => row.method === 'observations').length), 0);
+  const summary = page.getByText('调用与观测', {exact: true}).first();
+  await summary.focus(); await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.querySelectorAll('[data-testid="mgmt-task-call"]').length === 50);
+  const panel = page.getByTestId('mgmt-task-observations');
+  assert.ok((await panel.innerText()).includes('17 ms / failed'));
+  assert.ok((await panel.innerText()).includes('已结算 未知'));
+  await page.getByTestId('mgmt-task-replay-gap').waitFor();
+  await panel.getByRole('button', {name: '下一页调用', exact: true}).click();
+  await page.waitForFunction(() => document.querySelectorAll('[data-testid="mgmt-task-call"]').length === 1);
+  assert.equal(await panel.getByText('调用 measured-call-51', {exact: true}).count(), 1);
+  assert.equal(await panel.getByRole('list', {name: '事件重放'}).locator('li').count(), 50);
+  await panel.getByRole('button', {name: '下一页事件', exact: true}).click();
+  await page.waitForFunction(() => document.querySelector('[aria-label="事件重放"]').children.length === 1);
+  assert.equal(await page.getByTestId('mgmt-task-call').count(), 1);
+  assert.equal(await page.getByTestId('mgmt-task-replay-gap').count(), 0);
+  await page.evaluate(() => {
+    observationTelemetry = {firstOutputMs: 40, toolCalls: 2, toolErrors: 1,
+      admission: {acquisitions: 1, cancellations: 0, waitMs: 3, holdMs: 5}, trace: {spans: [{
+        spanId: 'span-1', operationId: 'operation-1', parentSpanId: null, checkpointId: null,
+        operation: 'approval_wait', status: 'completed', startOffsetMs: 0, durationMs: 15,
+        estimatedInputTokens: null, actualInputTokens: null, actualOutputTokens: null, estimateApproximate: null
+      }], droppedSpanCount: 0}};
+  });
+  await panel.getByRole('button', {name: '刷新观测', exact: true}).click();
+  await panel.getByText(/首次输出 40 ms/).waitFor();
+  assert.ok((await panel.innerText()).includes('等待审批 / completed / 15 ms'));
+  const last = await page.evaluate(() => calls.filter(row => row.method === 'observations').at(-1).request);
+  assert.equal(last.afterCallSequence, 50); assert.equal(last.afterEventSequence, 60);
+  await summary.click();
+  await page.waitForFunction(() => !document.querySelector('[data-testid="mgmt-task-observations"]'));
+});
+
+test('diagnostic errors, pending exports and late replies stay within the selected task', async () => {
+  await page.evaluate(() => {reset(); observationResponse = {ok: false, error: {message: 'resource_report_changed'}}; mountDrawer();});
+  await page.getByText('调用与观测', {exact: true}).first().click();
+  await page.getByRole('alert').filter({hasText: 'resource_report_changed'}).waitFor();
+  await page.evaluate(() => {observationResponse = null;});
+  await page.getByRole('button', {name: '刷新观测', exact: true}).click();
+  await page.getByTestId('mgmt-task-call').first().waitFor();
+  await page.evaluate(() => {window.oldObservation = deferred(); observationResponse = oldObservation.promise;});
+  await page.getByRole('button', {name: '刷新观测', exact: true}).click();
+  await page.getByText('读取观测中…', {exact: true}).waitFor();
+  await page.evaluate(() => {window.oldExport = deferred(); exportResponse = oldExport.promise;});
+  const exportPanel = page.getByTestId('mgmt-task-diagnostics-export');
+  await exportPanel.getByRole('button', {name: '导出离线诊断', exact: true}).focus();
+  await page.keyboard.press('Enter');
+  await exportPanel.getByRole('button', {name: '导出中…', exact: true}).waitFor();
+  assert.equal(await exportPanel.getByRole('button').isDisabled(), true);
+  assert.equal(await page.evaluate(() => calls.filter(row => row.method === 'diagnostics-export').length), 1);
+  await page.evaluate(() => {
+    response = {ok: true, data: makeData('project-b', 'task-b', 'chat-b')}; observationResponse = null;
+    mountDrawer('task-b', 'project-b');
+    oldObservation.resolve({ok: true, data: {telemetry: null, resources: null, replay: null,
+      calls: {calls: [{sequence: 999, callId: 'OLD PRIVATE CALL'}], hasMore: false, nextSequence: 999}}});
+    oldExport.resolve({ok: true, data: {path: 'OLD PRIVATE EXPORT', size: 1, sha256: 'a'.repeat(64)}});
+    exportResponse = {ok: false, error: {message: 'diagnostics_source_changed'}};
+  });
+  await page.getByText('验证科研任务 task-b', {exact: true}).waitFor();
+  assert.equal(await page.getByText('OLD PRIVATE CALL').count(), 0);
+  assert.equal(await page.getByText('OLD PRIVATE EXPORT').count(), 0);
+  await page.getByTestId('mgmt-task-diagnostics-export').getByRole('button').click();
+  await page.getByRole('alert').filter({hasText: 'diagnostics_source_changed'}).waitFor();
+  await page.evaluate(() => {
+    exportResponse = {ok: true, data: {path: '/local/diagnostics/task-b.json', size: 512,
+      sha256: 'c'.repeat(64), createdAt: '2026-11-06T00:00:00.000Z', redacted: true, externalTrace: 'not_exported'}};
+  });
+  await page.getByTestId('mgmt-task-diagnostics-export').getByRole('button').click();
+  await page.getByText('/local/diagnostics/task-b.json', {exact: true}).waitFor();
+  assert.deepEqual(await page.evaluate(() => calls.filter(row => row.method === 'diagnostics-export').at(-1).request),
+    {projectId: 'project-b', taskId: 'task-b'});
+});
+
+test('expanded diagnostics and export receipts fit light/dark narrow desktop layouts without clipped shadows', async () => {
+  const auditSource = readFileSync(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
+  const receipts = [];
+  for (const theme of ['light', 'dark']) {
+    for (const width of [720, 380]) {
+      await app.evaluate(({BrowserWindow}, width) => BrowserWindow.getAllWindows()[0].setSize(width, 680), width);
+      await page.evaluate(theme => {document.documentElement.dataset.theme = theme; reset(); mountDrawer();}, theme);
+      await ready();
+      const summary = page.getByText('调用与观测', {exact: true}).first();
+      receipts.push({theme, width, state: 'closed', ...await page.evaluate(`(${auditSource})({viewport: true, root: '#root'})`)});
+      await summary.click();
+      const panel = page.getByTestId('mgmt-task-observations');
+      await page.getByTestId('mgmt-task-call').first().waitFor();
+      await panel.getByRole('button', {name: '刷新观测', exact: true}).hover();
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      receipts.push({theme, width, state: 'expanded-hover', ...await page.evaluate(`(${auditSource})({viewport: true, root: '#root'})`)});
+      await panel.getByRole('button', {name: '下一页调用', exact: true}).click();
+      await page.waitForFunction(() => document.querySelectorAll('[data-testid="mgmt-task-call"]').length === 1);
+      await panel.getByRole('button', {name: '下一页事件', exact: true}).click();
+      await page.waitForFunction(() => document.querySelector('[aria-label="事件重放"]').children.length === 1);
+      await panel.scrollIntoViewIfNeeded();
+      await page.screenshot({path: join(artifacts, `observations-${theme}-${width}.png`)});
+      await page.getByTestId('mgmt-task-diagnostics-export').getByRole('button').click();
+      await page.getByText('/local/diagnostics/task.json', {exact: true}).waitFor();
+      receipts.push({theme, width, state: 'exported', ...await page.evaluate(`(${auditSource})({viewport: true, root: '#root'})`)});
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    }
+  }
+  writeFileSync(join(artifacts, 'observations-clip-audit.json'), JSON.stringify(receipts, null, 2));
+  for (const receipt of receipts) assert.equal(receipt.cut, 0);
 });

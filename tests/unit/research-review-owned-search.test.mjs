@@ -71,7 +71,7 @@ test('first owned query creates a trusted chat task before network and backfills
     assert.equal(f.agentDb.prepare('SELECT COUNT(*) FROM research_task_executions').pluck().get(), count);
     assert.equal(f.changes(), changes); assert.equal(f.calls.length, 2);
     assert.deepEqual(f.reviews.getOwned({projectId: f.project.id, reviewSearchId: done.snapshot.id}, c.owner()), {search: done, association});
-    const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, ledger, f.reviews).get({projectId: f.project.id, taskId: task.id});
+    const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, ledger, f.reviews, {source: async () => {throw new Error('fixture_resource_source_unused');}}).get({projectId: f.project.id, taskId: task.id});
     const execution = diagnostics.executions.find(item => item.association.kind === 'review_search');
     assert.equal(execution.status, 'complete'); assert.equal(execution.stage, null);
     assert.equal(execution.startedAt, done.snapshot.startedAt); assert.equal(execution.endedAt, done.receipt.endedAt);

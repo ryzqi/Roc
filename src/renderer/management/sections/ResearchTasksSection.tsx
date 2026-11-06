@@ -5,6 +5,8 @@ import { useAsyncResource } from '../../app/use-async-resource';
 import { STAGE_LABELS } from '../../project/project-store';
 import { TaskSummary, researchTaskStatusLabels } from '../../research/tasks/TaskSummary';
 import { TaskControls } from '../../research/tasks/TaskControls';
+import {TaskExecutionObservations} from '../../research/tasks/TaskExecutionObservations';
+import {TaskDiagnosticsExportButton} from '../../research/tasks/TaskDiagnosticsExportButton';
 import {TaskFactsPanel} from '../../research/tasks/TaskFactsPanel';
 import { useTaskDiagnostics } from '../../research/tasks/use-task-diagnostics';
 import { FormSection, formSecondaryButtonClass, formSelectClass } from '../../shared/form-ui';
@@ -26,7 +28,7 @@ const eventLabels: Record<ResearchTaskEvent['eventType'], string> = {
   call_reserved: '调用预留', call_settled: '调用结算', call_unknown: '调用消费未知'
 };
 
-function ExecutionTree({ executions }: { executions: ResearchTaskExecutionDiagnostics[] }): React.JSX.Element {
+function ExecutionTree({ executions, client }: { executions: ResearchTaskExecutionDiagnostics[]; client: RocClient }): React.JSX.Element {
   const children = new Map<string | null, ResearchTaskExecutionDiagnostics[]>();
   for (const execution of executions) {
     const association = execution.association;
@@ -55,11 +57,14 @@ function ExecutionTree({ executions }: { executions: ResearchTaskExecutionDiagno
                 ` / 耗时 ${new Date(execution.endedAt).getTime() - new Date(execution.startedAt).getTime()} ms`}
             </p>
             {execution.error === null ? null : <p className="break-words text-[var(--st-bad)]">{execution.error}</p>}
-            {execution.artifactIds.length === 0 ? null : (
+            {execution.artifacts.length === 0 ? null : (
               <ul className="grid gap-1 text-subtle" aria-label="工件">
-                {execution.artifactIds.map(id => <li key={id} className="break-all font-mono">工件 {id}</li>)}
+                {execution.artifacts.map(artifact => <li key={artifact.id} className="grid gap-1 break-all font-mono">
+                  <span>工件 {artifact.id}</span><span className="text-subtle">{artifact.state === 'missing' ? '工件已缺失' : `当前版本 ${artifact.version}`} / 执行时版本未知</span>
+                </li>)}
               </ul>
             )}
+            <TaskExecutionObservations client={client} execution={execution} />
             {children.has(key) ? render(key) : null}
           </li>
         );
@@ -96,10 +101,11 @@ function TaskDetail({ client, projectId, taskId }: {
             <TaskSummary data={resource.data} details />
             <TaskControls client={client} data={resource.data} onChanged={refresh} />
             <FormSection title="执行树与工件" testId="mgmt-task-executions">
-              <ExecutionTree executions={resource.data.executions} />
+              <ExecutionTree client={client} executions={resource.data.executions} />
             </FormSection>
           </>
         )}
+      <TaskDiagnosticsExportButton client={client} projectId={projectId} taskId={taskId} />
       <TaskFactsPanel client={client} projectId={projectId} taskId={taskId} />
       <FormSection title="持久事件" testId="mgmt-task-events">
         {events.status === 'error' ? <p role="alert" className="break-words text-[var(--st-bad)]">{events.error}</p> : (
