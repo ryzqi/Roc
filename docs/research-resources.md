@@ -1,6 +1,6 @@
 # 科研资源与 DataCite 元数据观察
 
-X-ECO A3A 在现有科研插件中新增 ResearchResource 元数据观察。数据集和软件 DOI 保存为独立资源，使用已有检索传输、主机治理和缓存；不会导入论文、下载内容或改变科研审批。论文及实验的显式版本关联属于后续 A3B，资源 UI 属于后续独立增量。
+X-ECO A3A 在现有科研插件中新增 ResearchResource 元数据观察。数据集和软件 DOI 保存为独立资源，使用已有检索传输、主机治理和缓存；不会导入论文、下载内容或改变科研审批。A3B 增加论文及实验的显式版本关联，资源 UI 属于后续独立增量。
 
 ## 官方合同
 
@@ -56,4 +56,39 @@ node --test --test-timeout=30000 --test-reporter=tap \
 
 相关 renderer 命令 `node --test --test-concurrency=1 --test-timeout=60000 --test-reporter=tap tests/renderer/scholarly-relations.test.mjs tests/renderer/paper-reader.test.mjs tests/renderer/literature-review.test.mjs tests/renderer/artifact-production.test.mjs`，50/50 通过。`node scripts/smoke-electron.mjs` 13/13 且零 renderer 错误，`pnpm check:ipc`、`pnpm check:renderer-chunks`（1134468 bytes / 6 eager files）和最终 diff 空白检查通过。
 
-状态：**Verified passing**（A3A 本地元数据核心）。A3B 关联与 UI 尚未完成；没有真实科研数据科学性验收。
+状态：**Verified passing**（A3A 本地元数据核心）。A3B 关联合同见下文，资源 UI 属于独立增量；没有真实科研数据科学性验收。
+
+## A3B 显式关联
+
+关联是追加保存的 `user_declared_context` 人工相关性声明。请求绑定成功观察的 resourceId/contentHash，以及主进程提供的目标身份。它不证明下载了哪些字节、实际使用了哪个数据集，也不改变审批。
+
+论文绑定真实项目 membership、未归档状态、revision、DOI（允许显式 null）及 `{id,revision,metadata,bibliography}` 的哈希。实验只接受当前项目已完成的托管 execution，绑定 inputHash、environment.hash 与完整 schema-parsed execution 哈希；必须具有环境、输入哈希、结束时间、零退出码且无 error。手工登记或未完成实验不能作为目标。
+
+目标分页接口返回主进程计算的身份，每页最多 50 条。人工从当前窗口明确保存 rationale；IPC 参数不接受 actor 或 approved，主进程绑定实际 windowId，并核对 capability/project。数据库迁移 54 新建关联账本，不推断既有关系。事务内在插入前后校验项目、资源及目标版本；插入触发器造成的来源变化会回滚。相同 projectId/requestId 精确重放，不同内容拒绝。
+
+历史/read 返回 `{association,currentState}`，状态为 current、target_changed 或 target_unavailable。论文取消项目关联/归档或托管执行不再存在时标明 unavailable；版本变化标明 changed。保存的记录保持原始目标版本、标题、资源哈希、人工身份、时间和关联哈希。资源或账本损坏明确失败，不能转成 unavailable。归档项目允许旧关联读取及精确重放，不能新增。
+
+实验完成后迟到的 finish 不覆盖终态；publish 添加 artifactId 后完整执行哈希会变化，旧关联显示 target_changed，需要用户明确关联新版本。实验 get 还验证物理行的项目、runId、requestId 和 status 与快照一致。
+
+生成式 IPC 方法：`associateResource`、`getResourceAssociation`、`getResourceAssociationHistory`、`getResourceTargets`。
+
+A3B 状态：**Verified passing**（本地显式元数据关联）。工作目录与上文相同；日志为 `.artifacts/research-optimization/xeco-a3b-*.log`。
+
+```bash
+node --test --test-timeout=30000 --test-reporter=tap tests/unit/research-resource-associations.test.mjs tests/unit/research-resources.test.mjs tests/unit/research-experiment-results.test.mjs tests/unit/research-experiment-resources.test.mjs
+node --test --test-timeout=30000 --test-reporter=tap tests/unit/research-resource-associations.test.mjs
+pnpm test:unit
+pnpm harness:eval
+pnpm build
+node scripts/run-research-p0.mjs --test-timeout=180000
+node --test --test-concurrency=1 --test-timeout=60000 --test-reporter=tap tests/renderer/scholarly-relations.test.mjs tests/renderer/paper-reader.test.mjs tests/renderer/experiment-results.test.mjs tests/renderer/artifact-production.test.mjs
+node --test --test-concurrency=1 --test-timeout=180000 --test-reporter=tap tests/renderer/experiment-results.test.mjs
+node scripts/smoke-electron.mjs
+pnpm check:ipc
+pnpm check:renderer-chunks
+git diff --cached --check
+```
+
+相关检查 35/35、最终补充存储检查 16/16、全量单元测试 1342/1342（原先 14 项关联检查；补充 16 项单独通过）、Harness 94/94 和原生 P0 15/15 通过。renderer 初次 47/56 通过，实验结果组 9 项在 60 秒 before-hook 期限内未完成三个真实 CPython 运行的准备，未执行正文；以 180 秒期限单独复跑 9/9 通过，合计 56 项均有通过结果。没有修改产品或削弱断言。构建/类型、启动 13/13 且零 renderer 错误、IPC current、eager 1134468 bytes / 6 files 和暂存 diff 检查通过。
+
+原生新增场景执行真实 TypeScript CSV 分析（A=2、B=4），绑定 input/environment/完整 execution 哈希，保存实际主进程 window 身份，SQLite 备份重开后仍可读取精确关联，并验证 publish 后目标版本变化。回执和数据库保存在 `.artifacts/research-optimization/xeco-a3b-native/`；资源元数据为隔离合成响应，没有真实内容下载或科研质量主张。

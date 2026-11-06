@@ -243,7 +243,7 @@ test('migration53 preserves all historical ledgers and introduces no inferred re
     db.pragma('foreign_keys=ON');
     api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(row => row.version <= 52)});
     const prior = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    api.applyResearchDatabaseSchema(db);
+    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(row => row.version <= 53)});
     assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=52 ORDER BY version').all(), prior);
     assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 53);
     assert.equal(db.prepare('SELECT COUNT(*) FROM research_resource_observations').pluck().get(), 0);

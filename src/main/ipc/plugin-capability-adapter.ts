@@ -4,6 +4,7 @@ import {researchCitationReviewSaveSchema} from '../../shared/schemas/research-ci
 import {researchConsistencySaveSchema} from '../../shared/schemas/research-consistency';
 import {researchFigureConsistencySaveSchema} from '../../shared/schemas/research-figure-consistency';
 import {researchJournalSaveSchema} from '../../shared/schemas/research-journal-compliance';
+import {resourceAssociationSaveSchema} from '../../shared/schemas/research-resource-associations';
 import {researchResponseMatrixSaveSchema} from '../../shared/schemas/research-response-matrix';
 import { withLiteratureContext } from '../services/literature-context';
 import { researchPythonEnvironmentSelectSchema } from '../../shared/schemas/research-python-environments';
@@ -63,6 +64,11 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
       }
       return await wrapIpc(async () => {
         const input = transformInput(target.inputTransform, args);
+        if (target.capabilityName === 'research.resourceAssociations.save') {
+          const request = resourceAssociationSaveSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
         if (target.capabilityName === 'research.journalCompliance.save') {
           const request = researchJournalSaveSchema.parse(input);
           return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},

@@ -82,6 +82,9 @@ export {ResearchResourceRepository, resourceContentHash} from '../../../src/main
 export {readDataCiteMetadata, dataciteEndpoint} from '../../../src/main/plugins/research/datacite-adapter';
 export {registerResearchResourceCapabilities, researchResourceCapabilities} from '../../../src/main/plugins/research/resource-capabilities';
 export * from '../../../src/shared/schemas/research-resources';
+export {ResearchResourceAssociationRepository} from '../../../src/main/plugins/research/resource-association-repository';
+export {registerResearchResourceAssociationCapabilities, researchResourceAssociationCapabilities} from '../../../src/main/plugins/research/resource-association-capabilities';
+export * from '../../../src/shared/schemas/research-resource-associations';
 export { LiteratureImportService } from '../../../src/main/plugins/research/literature-import-service';
 export { ZoteroAdapter } from '../../../src/main/plugins/research/zotero-adapter';
 export { requireConfirmedSearchStrategy, searchPlanApprovalHash } from '../../../src/main/plugins/research/search-strategy';

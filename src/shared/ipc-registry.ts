@@ -3,6 +3,10 @@ import {
   resourceHistorySchema, resourceHistoryResultSchema, resourceReadSchema, resourceReadResultSchema
 } from './schemas/research-resources';
 import {
+  resourceAssociationSaveSchema, resourceAssociationResultSchema, resourceAssociationReadSchema,
+  resourceAssociationHistorySchema, resourceAssociationHistoryResultSchema, resourceTargetsSchema, resourceTargetsResultSchema
+} from './schemas/research-resource-associations';
+import {
   scholarlyCaptureSchema, scholarlyCancelSchema, scholarlyCancelResultSchema, scholarlySnapshotSummarySchema,
   scholarlyHistorySchema, scholarlyHistoryResultSchema, scholarlyReadSchema, scholarlyReadResultSchema
 } from './schemas/research-scholarly-relations';
@@ -781,6 +785,10 @@ export const ipcRegistry = {
     request({key: 'researchResourceCancel', channel: 'roc:research:resource-cancel', domain: 'research', method: 'cancelResourceCapture', kind: 'plugin', capabilityName: 'research.resource.cancel', inputTransform: first, contract: methodContract(oneArg(resourceCancelSchema), resourceCancelResultSchema)}),
     request({key: 'researchResourceHistory', channel: 'roc:research:resource-history', domain: 'research', method: 'getResourceHistory', kind: 'plugin', capabilityName: 'research.resource.history', inputTransform: first, contract: methodContract(oneArg(resourceHistorySchema), resourceHistoryResultSchema)}),
     request({key: 'researchResourceRead', channel: 'roc:research:resource-read', domain: 'research', method: 'getResource', kind: 'plugin', capabilityName: 'research.resource.read', inputTransform: first, contract: methodContract(oneArg(resourceReadSchema), resourceReadResultSchema)}),
+    request({key: 'researchResourceAssociate', channel: 'roc:research:resource-associate', domain: 'research', method: 'associateResource', kind: 'plugin', capabilityName: 'research.resourceAssociations.save', inputTransform: first, contract: methodContract(oneArg(resourceAssociationSaveSchema), resourceAssociationResultSchema)}),
+    request({key: 'researchResourceAssociationRead', channel: 'roc:research:resource-association-read', domain: 'research', method: 'getResourceAssociation', kind: 'plugin', capabilityName: 'research.resourceAssociations.read', inputTransform: first, contract: methodContract(oneArg(resourceAssociationReadSchema), resourceAssociationResultSchema)}),
+    request({key: 'researchResourceAssociationHistory', channel: 'roc:research:resource-association-history', domain: 'research', method: 'getResourceAssociationHistory', kind: 'plugin', capabilityName: 'research.resourceAssociations.history', inputTransform: first, contract: methodContract(oneArg(resourceAssociationHistorySchema), resourceAssociationHistoryResultSchema)}),
+    request({key: 'researchResourceTargets', channel: 'roc:research:resource-targets', domain: 'research', method: 'getResourceTargets', kind: 'plugin', capabilityName: 'research.resourceAssociations.targets', inputTransform: first, contract: methodContract(oneArg(resourceTargetsSchema), resourceTargetsResultSchema)}),
     request({ key: 'researchLibraryImportRecord', channel: 'roc:research:library-import-record', domain: 'research', method: 'importLibraryRecord', kind: 'plugin', capabilityName: 'research.library.importRecord', inputTransform: first, contract: methodContract(oneArg(researchLibraryRecordImportRequestSchema), researchLibraryImportResultSchema) }),
     request({ key: 'researchLibraryImportDoi', channel: 'roc:research:library-import-doi', domain: 'research', method: 'importLibraryDoi', kind: 'plugin', capabilityName: 'research.library.importDoi', inputTransform: first, contract: methodContract(oneArg(researchLibraryDoiImportRequestSchema), researchLibraryImportResultSchema) }),
     request({ key: 'researchLibraryImportFile', channel: 'roc:research:library-import-file', domain: 'research', method: 'importBibliography', kind: 'plugin', capabilityName: 'research.library.importFile', inputTransform: first, contract: methodContract(oneArg(researchLibraryFileImportRequestSchema), researchLibraryImportResultSchema) }),

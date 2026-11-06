@@ -6,7 +6,7 @@ import { researchExperimentSourcePath, researchExperimentExecutionSchema, type R
 import type { ResearchRepository } from './repository';
 import type { ResearchArtifact, ResearchExperimentRun, ResearchExperimentRunRecordRequest } from '../../../shared/types';
 
-type ExecutionRow = { snapshot_json: string; root_path: string };
+type ExecutionRow = { snapshot_json: string; root_path: string; run_id: string; project_id: string; request_id: string; status: string };
 const activeStatuses = new Set<ResearchExperimentExecution['status']>(['preparing', 'running']);
 
 function readExecutionSnapshot(snapshotJson: string): ResearchExperimentExecution {
@@ -62,9 +62,12 @@ export class ResearchExperimentRepository {
   }
 
   get(projectId: string, id: string): ResearchExperimentExecution {
+    this.research.getProject(projectId);
     const row = this.row(id);
     const value = readExecutionSnapshot(row.snapshot_json);
-    if (value.projectId !== projectId) throw new Error('research_experiment_project_mismatch');
+    if (row.project_id !== projectId || value.projectId !== projectId) throw new Error('research_experiment_project_mismatch');
+    if (value.id !== row.run_id || value.request.projectId !== projectId ||
+      value.request.requestId !== row.request_id || value.status !== row.status) throw new Error('research_experiment_snapshot_invalid');
     return value;
   }
 
@@ -196,7 +199,7 @@ export class ResearchExperimentRepository {
   }
 
   private row(id: string): ExecutionRow {
-    const row = this.db.prepare('SELECT snapshot_json,root_path FROM research_experiment_executions WHERE run_id = ?').get(id) as ExecutionRow | undefined;
+    const row = this.db.prepare('SELECT * FROM research_experiment_executions WHERE run_id = ?').get(id) as ExecutionRow | undefined;
     if (row === undefined) throw new Error('research_experiment_not_found');
     return row;
   }

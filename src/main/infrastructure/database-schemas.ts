@@ -2466,6 +2466,25 @@ CREATE INDEX research_resource_doi ON research_resource_observations(project_id,
 `
 });
 
+researchMigrations.push({
+  version: 54, name: 'explicit_research_resource_associations',
+  sql: `
+CREATE TABLE research_resource_associations (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  resource_id TEXT NOT NULL REFERENCES research_resource_observations(id),
+  target_kind TEXT NOT NULL CHECK(target_kind IN ('literature','experiment')),
+  target_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id,request_id)
+);
+CREATE INDEX research_resource_association_resource ON research_resource_associations(project_id,resource_id);
+CREATE INDEX research_resource_association_target ON research_resource_associations(project_id,target_kind,target_id);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

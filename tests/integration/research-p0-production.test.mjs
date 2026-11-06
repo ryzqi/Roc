@@ -319,6 +319,79 @@ function seedChat(f, budget) {
   return {manifest, broker: new api.ExecutionGrantBroker(f.agentDb)};
 }
 
+test('explicit resource association binds a real TypeScript execution and survives native SQLite reopen', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'roc-resource-association-native-')));
+  const workspace = join(root, 'workspace');
+  await mkdir(workspace);
+  for (const name of ['experiment.mts', 'measurements.csv']) {
+    await copyFile(`tests/fixtures/research-workflow/${name}`, join(workspace, name));
+  }
+  const f = createResearchFixture(api, 'experiment', workspace);
+  const errors = [];
+  const description = await runtimeDescription();
+  const environments = new api.ResearchExperimentEnvironmentService({typescriptRuntime: async () => description},
+    {resolve: async () => assert.fail('TypeScript fixture must not resolve Python')});
+  const experiments = new api.ResearchExperimentService(f.repository, environments, root, {error: (...args) => errors.push(args)});
+  const resources = new api.ResearchResourceRepository(f.db, f.repository);
+  const transport = new api.LiteratureSearchService(async () => Response.json({data: {
+    id: '10.1234/native-association', type: 'dois', attributes: {
+      doi: '10.1234/native-association', state: 'findable', types: {resourceTypeGeneral: 'Dataset'},
+      titles: [{title: 'Synthetic metadata for real execution association'}]
+    }
+  }}));
+  const service = new api.ResearchResourceService(resources, transport);
+  const associations = new api.ResearchResourceAssociationRepository(f.db, f.repository, resources);
+  const registry = new api.CapabilityRegistry();
+  for (const descriptor of api.researchResourceAssociationCapabilities) registry.declare('fixture', descriptor);
+  api.registerResearchResourceAssociationCapabilities({pluginId: 'fixture', capabilities: registry}, associations);
+  const bridge = api.createPluginCapabilityAdapter({invokeCapability: (name, input) => registry.invoke(name, input)});
+  let restored;
+  try {
+    const started = await experiments.start({projectId: f.project.id, ownerRunId: null, requestId: 'real-resource-run',
+      label: 'Real native execution', engine: 'typescript', runtime: {kind: 'bundled-node'}, sourceVersion: 1,
+      sourcePath: 'experiment.mts', inputPaths: ['measurements.csv'], parameters: {}, timeoutMs: 15000, network: 'disabled'});
+    await until(() => !['preparing', 'running'].includes(f.repository.experiments.get(f.project.id, started.id).status));
+    const execution = f.repository.experiments.get(f.project.id, started.id);
+    assert.equal(execution.status, 'completed', execution.error);
+    assert.deepEqual(errors, []);
+    const output = await experiments.source({projectId: f.project.id, runId: execution.id, area: 'output', path: 'means.csv'});
+    assert.equal(output.bytes.toString(), 'group,mean\nA,2\nB,4');
+    const resource = await service.capture({projectId: f.project.id, requestId: 'resource', doi: '10.1234/native-association'});
+    const targets = await bridge.invoke('research.getResourceTargets', [{projectId: f.project.id, kind: 'experiment', offset: 0, limit: 1}], 74);
+    assert.equal(targets.ok, true, JSON.stringify(targets));
+    const target = targets.data.records[0].target;
+    assert.equal(target.expectedInputHash, execution.inputHash);
+    assert.equal(target.expectedEnvironmentHash, execution.environment.hash);
+    assert.equal(target.expectedExecutionHash, api.resourceContentHash(execution));
+    const request = {projectId: f.project.id, requestId: 'link', resourceId: resource.id, resourceHash: resource.contentHash,
+      target, rationale: 'Human-declared relevance; this synthetic metadata does not prove which downloaded bytes were used.'};
+    const saved = await bridge.invoke('research.associateResource', [request], 74);
+    assert.equal(saved.ok, true, JSON.stringify(saved));
+    assert.deepEqual(saved.data.association.actor, {kind: 'user', id: 'window:74'});
+    assert.equal(saved.data.currentState, 'current');
+    assert.deepEqual((await bridge.invoke('research.associateResource', [request], 74)).data, saved.data);
+    const evidence = join(process.cwd(), '.artifacts/research-optimization/xeco-a3b-native');
+    await mkdir(evidence, {recursive: true});
+    const databasePath = join(evidence, 'research.sqlite');
+    await f.db.backup(databasePath);
+    restored = new Database(databasePath);
+    restored.pragma('foreign_keys=ON');
+    const reopenedResearch = new api.ResearchRepository(restored, f.tasks);
+    const reopened = new api.ResearchResourceAssociationRepository(restored, reopenedResearch,
+      new api.ResearchResourceRepository(restored, reopenedResearch));
+    assert.deepEqual(reopened.read({projectId: f.project.id, associationId: saved.data.association.id}), saved.data);
+    const published = await experiments.publish(f.project.id, execution.id);
+    assert.notEqual(published.artifactId, null);
+    assert.equal(associations.read({projectId: f.project.id, associationId: saved.data.association.id}).currentState, 'target_changed');
+    await writeFile(join(evidence, 'receipt.json'), JSON.stringify({node: process.versions.node, electron: process.versions.electron,
+      fixture: 'real local TypeScript execution with synthetic metadata; no content download or live DataCite claim',
+      execution, output: output.bytes.toString(), resource, saved: saved.data, published}, null, 2) + '\n');
+  } finally {
+    await experiments.shutdown(); await service.shutdown(); await transport.shutdown();
+    restored?.close(); f.close(); await rm(root, {recursive: true, force: true});
+  }
+});
+
 async function runScenario(stages, fault = null) {
   const reportFailure = fault === 'report_failure';
   const fullWorkflow = stages[0] === 'discovery';
