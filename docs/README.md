@@ -12,12 +12,13 @@
 | [research-exports.md](research-exports.md) | 批准正文与图稿的最终 ZIP |
 | [rtk-integration.md](rtk-integration.md) | bundled RTK 压缩 shell 输出 |
 | [architecture-repair-plan.md](architecture-repair-plan.md) | 架构收敛审计结果与逐项修复计划 |
-| [agent-harness-pr00-baseline.md](agent-harness-pr00-baseline.md) | PR-00 基线、执行边界清单与遗留风险 |
-| [agent-harness-pr01-execution-boundary.md](agent-harness-pr01-execution-boundary.md) | PR-01 agent shell 授权、隔离策略与目标主机验证 |
-| [agent-harness-pr02-budget.md](agent-harness-pr02-budget.md) | PR-02 运行预算、用量结算、费用边界与恢复 |
-| [agent-harness-pr03-tool-effects.md](agent-harness-pr03-tool-effects.md) | PR-03 工具副作用身份、租约、收据与恢复 |
-| [agent-harness-pr04-mcp-gateway.md](agent-harness-pr04-mcp-gateway.md) | PR-04 MCP 工具契约冻结、传输上限与漂移拒绝 |
-| [agent-harness-pr08-diagnostics.md](agent-harness-pr08-diagnostics.md) | PR-08 本地 trace、上下文保留审计、运行诊断与固定长任务回归 |
+| [research-optimization-execution-plan.md](../plan/research-optimization-execution-plan.md) | 科研助手优化的详细执行计划、依赖与验收标准 |
+| [agent-harness-pr00-baseline.md](../plan/agent-harness-pr00-baseline.md) | PR-00 基线、执行边界清单与遗留风险 |
+| [agent-harness-pr01-execution-boundary.md](../plan/agent-harness-pr01-execution-boundary.md) | PR-01 agent shell 授权、隔离策略与目标主机验证 |
+| [agent-harness-pr02-budget.md](../plan/agent-harness-pr02-budget.md) | PR-02 运行预算、用量结算、费用边界与恢复 |
+| [agent-harness-pr03-tool-effects.md](../plan/agent-harness-pr03-tool-effects.md) | PR-03 工具副作用身份、租约、收据与恢复 |
+| [agent-harness-pr04-mcp-gateway.md](../plan/agent-harness-pr04-mcp-gateway.md) | PR-04 MCP 工具契约冻结、传输上限与漂移拒绝 |
+| [agent-harness-pr08-diagnostics.md](../plan/agent-harness-pr08-diagnostics.md) | PR-08 本地 trace、上下文保留审计、运行诊断与固定长任务回归 |
 | [builtin-skills.md](builtin-skills.md) | 内置 Skill 来源、安装、同步与许可边界 |
 
 视觉、版式与动效没有单独的规范文档：真身是 [`src/renderer/styles/tokens.css`](../src/renderer/styles/tokens.css)
