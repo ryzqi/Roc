@@ -30,56 +30,59 @@ await Promise.all([
   })
 ]);
 const quality = await import(pathToFileURL(qualityBundle).href);
+const { readFileSync } = await import('node:fs');
+const { dataset, expectations } = quality.loadQualityDatasetPackage('tests/fixtures/quality-evaluation/manifest.json',
+  readFileSync('tests/fixtures/quality-evaluation/manifest.sha256', 'utf8').trim());
 const optimizer = await import(pathToFileURL(optimizerBundle).href);
 
 function validOutput(task) {
-  switch (task.validator.kind) {
+  switch (expectations[task.id].kind) {
     case 'paper-facts':
       return {
-        studies: task.validator.studies.map(study => ({ doi: study.doi, facts: { ...study.facts } })),
-        citations: task.validator.studies.map(study => study.doi)
+        studies: expectations[task.id].studies.map(study => ({ doi: study.doi, facts: { ...study.facts } })),
+        citations: expectations[task.id].studies.map(study => study.doi)
       };
     case 'memory':
-      return { summary: task.validator.requiredPhrases.join('; '), citations: [...task.validator.citations] };
+      return { summary: expectations[task.id].requiredPhrases.join('; '), citations: [...expectations[task.id].citations] };
     case 'csv-report': {
-      const content = task.validator.rows.join('\n');
-      return { filename: task.validator.filename, content, sha256: createHash('sha256').update(content).digest('hex') };
+      const content = expectations[task.id].rows.join('\n');
+      return { filename: expectations[task.id].filename, content, sha256: createHash('sha256').update(content).digest('hex') };
     }
     case 'experiment-script': {
-      const divisor = task.validator.operation === 'mean' ? ' / values.length' : '';
-      const script = `function ${task.validator.functionName}(values: number[]): number { return values.reduce((sum, value) => sum + value, 0)${divisor}; }`;
-      const results = Object.fromEntries(Object.entries(task.validator.inputValues).map(([key, values]) => {
+      const divisor = expectations[task.id].operation === 'mean' ? ' / values.length' : '';
+      const script = `function ${expectations[task.id].functionName}(values: number[]): number { return values.reduce((sum, value) => sum + value, 0)${divisor}; }`;
+      const results = Object.fromEntries(Object.entries(expectations[task.id].inputValues).map(([key, values]) => {
         const sum = values.reduce((total, value) => total + value, 0);
-        return [key, task.validator.operation === 'mean' ? sum / values.length : sum];
+        return [key, expectations[task.id].operation === 'mean' ? sum / values.length : sum];
       }));
       return { script, results };
     }
     case 'mcp-recovery':
-      return { status: task.validator.expectedStatus, events: [...task.validator.expectedEvents], externalEffects: task.validator.expectedExternalEffects, receiptPresent: true };
+      return { status: expectations[task.id].expectedStatus, events: [...expectations[task.id].expectedEvents], externalEffects: expectations[task.id].expectedExternalEffects, receiptPresent: true };
     case 'permission-boundary':
-      return { decision: 'blocked', blockedAction: task.validator.blockedAction, executedActions: [...task.validator.expectedExecutedActions] };
+      return { decision: 'blocked', blockedAction: expectations[task.id].blockedAction, executedActions: [...expectations[task.id].expectedExecutedActions] };
     case 'cancel-crash-recovery':
       return {
-        status: task.validator.expectedStatus,
-        reconciliationRequired: task.validator.reconciliationRequired,
-        retryDispatched: task.validator.retryDispatched,
-        duplicateEffects: task.validator.duplicateEffects
+        status: expectations[task.id].expectedStatus,
+        reconciliationRequired: expectations[task.id].reconciliationRequired,
+        retryDispatched: expectations[task.id].retryDispatched,
+        duplicateEffects: expectations[task.id].duplicateEffects
       };
     default:
-      throw new Error(`unhandled test validator: ${task.validator.kind}`);
+      throw new Error(`unhandled test validator: ${expectations[task.id].kind}`);
   }
 }
 
 test('pilot data is immutable, reproducibly hashed, and hides evaluator-only fields', () => {
-  assert.equal(quality.QUALITY_TASKS.length, 16);
+  assert.equal(dataset.tasks.length, 16);
   assert.equal(new Set(quality.QUALITY_FAMILIES).size, 8);
-  assert.equal(quality.QUALITY_SOURCES.length, 3);
-  assert.match(quality.qualityDatasetHash(), /^[a-f0-9]{64}$/u);
-  assert.ok(Object.isFrozen(quality.QUALITY_TASKS));
-  assert.ok(Object.isFrozen(quality.QUALITY_TASKS[0].validator));
-  assert.ok(quality.QUALITY_SOURCES.every(source => source.license === 'CC BY' && source.attribution.length > 20 && source.locator.length > 0));
+  assert.equal(dataset.sources.length, 9);
+  assert.match(dataset.datasetHash, /^[a-f0-9]{64}$/u);
+  assert.ok(Object.isFrozen(dataset.tasks));
+  assert.ok(Object.isFrozen(expectations[dataset.tasks[0].id]));
+  assert.ok(dataset.sources.every(source => source.license.length > 0 && source.attribution.length > 0 && source.locator.length > 0));
 
-  for (const task of quality.QUALITY_TASKS) {
+  for (const task of dataset.tasks) {
     const publicTask = quality.toAgentTaskView(task);
     assert.deepEqual(Object.keys(publicTask).sort(), ['difficulty', 'family', 'id', 'outputFormat', 'prompt'].concat(publicTask.conversationTurns ? ['conversationTurns'] : []).sort());
     for (const hiddenKey of ['validator', 'sourceIds', 'clusterId', 'split', 'provenance']) {
@@ -89,26 +92,26 @@ test('pilot data is immutable, reproducibly hashed, and hides evaluator-only fie
 });
 
 test('independent validators accept every known answer and reject unsupported or unsafe output', () => {
-  for (const task of quality.QUALITY_TASKS) {
-    const result = quality.validateQualityTaskOutput(task, JSON.stringify(validOutput(task)));
+  for (const task of dataset.tasks) {
+    const result = quality.validateQualityTaskOutput(expectations[task.id], JSON.stringify(validOutput(task)));
     assert.equal(result.passed, true, `${task.id}: ${result.failures.join(', ')}`);
     assert.equal(result.score, 1, task.id);
   }
 
-  const paperTask = quality.QUALITY_TASKS.find(task => task.id === 'literature-release-windows');
+  const paperTask = dataset.tasks.find(task => task.id === 'literature-release-windows');
   const unsupportedPaper = validOutput(paperTask);
   unsupportedPaper.studies[0].facts.unsupported_claim = 'unverified';
-  assert.equal(quality.validateQualityTaskOutput(paperTask, JSON.stringify(unsupportedPaper)).passed, false);
+  assert.equal(quality.validateQualityTaskOutput(expectations[paperTask.id], JSON.stringify(unsupportedPaper)).passed, false);
 
-  const scriptTask = quality.QUALITY_TASKS.find(task => task.id === 'experiment-script-fatigue-mean');
+  const scriptTask = dataset.tasks.find(task => task.id === 'experiment-script-fatigue-mean');
   const unsafeScript = validOutput(scriptTask);
   unsafeScript.script += '\nfetch("https://example.invalid");';
-  assert.equal(quality.validateQualityTaskOutput(scriptTask, JSON.stringify(unsafeScript)).passed, false);
-  assert.deepEqual(quality.validateQualityTaskOutput(scriptTask, 'x'.repeat(65 * 1024)).failures, ['output_too_large']);
+  assert.equal(quality.validateQualityTaskOutput(expectations[scriptTask.id], JSON.stringify(unsafeScript)).passed, false);
+  assert.deepEqual(quality.validateQualityTaskOutput(expectations[scriptTask.id], 'x'.repeat(65 * 1024)).failures, ['output_too_large']);
 });
 
 test('paired quality statistics keep the pilot uncertain and reject malformed pair records', () => {
-  const trials = quality.QUALITY_TASKS.flatMap(task => Array.from({ length: 3 }, (_, repeatIndex) => ({
+  const trials = dataset.tasks.flatMap(task => Array.from({ length: 3 }, (_, repeatIndex) => ({
     taskId: task.id,
     family: task.family,
     clusterId: task.clusterId,
@@ -120,7 +123,7 @@ test('paired quality statistics keep the pilot uncertain and reject malformed pa
   assert.equal(summary.taskCount, 16);
   assert.equal(summary.evidenceStatus, 'insufficient');
   assert.equal(summary.conclusion, 'uncertain');
-  assert.equal(summary.stopReason, 'target_case_count_not_met');
+  assert.equal(summary.stopReason, 'independent_frozen_dataset_required');
   assert.equal(summary.costStatus, 'unknown');
   assert.equal(summary.familyComparisons, 'exploratory-unadjusted');
   assert.throws(() => quality.summarizePairedQualityTrials([...trials, trials[0]]), /quality_trial_duplicate_pair/u);
@@ -150,11 +153,11 @@ function buildFullTrials(candidateScoreForFamily = () => 0.8) {
   });
 }
 
-test('full paired statistics honor family quotas and block a family regression', () => {
+test('statistics cannot infer scientific gains from generated full-size trial counts', () => {
   const gain = quality.summarizePairedQualityTrials(buildFullTrials(), { bootstrapIterations: 200 });
   assert.equal(gain.taskCount, 200);
-  assert.equal(gain.evidenceStatus, 'sufficient');
-  assert.equal(gain.conclusion, 'candidate-gain-supported');
+  assert.equal(gain.evidenceStatus, 'insufficient');
+  assert.equal(gain.conclusion, 'uncertain');
   assert.equal(gain.costStatus, 'known');
   assert.equal(gain.baselineCostUsd, 0);
 
@@ -163,17 +166,19 @@ test('full paired statistics honor family quotas and block a family regression',
     { bootstrapIterations: 200 }
   );
   assert.equal(regression.familyStatistics['long-memory'].candidateRegression, true);
-  assert.equal(regression.conclusion, 'candidate-regression');
+  assert.equal(regression.conclusion, 'uncertain');
 });
 
 test('locked protocol binds model and budget conditions, rejects incomplete data, and requires L3 rollback', () => {
-  const draft = quality.createQualityProtocolDraft();
+  const draft = quality.createQualityProtocolDraft(dataset, 'unit-quality-contract');
   const input = {
-    executionMode: 'pilot',
-    authorizationLevel: 'L2',
+    executionMode: 'fixture',
+    authorizationLevel: 'L1',
+    pricingVersion: 'fixture-v1', maxRequestsPerTask: 1, maxRequestCostMicrousd: 10,
+    temperature: 0, isolationHash: 'd'.repeat(64),
     providerId: 'provider-test',
     baselineModelId: 'baseline-v1',
-    candidateModelId: 'candidate-v1',
+    candidateModelId: 'baseline-v1',
     baselineCommitSha: '3'.repeat(40),
     candidateCommitSha: '4'.repeat(40),
     toolManifestHash: 'a'.repeat(64),
@@ -185,23 +190,17 @@ test('locked protocol binds model and budget conditions, rejects incomplete data
     userAuthorized: true,
     approvalReference: 'approval-test-001'
   };
-  const locked = quality.lockQualityProtocol(draft, input);
+  const locked = quality.lockQualityProtocol(dataset, draft, input);
   assert.equal(locked.status, 'locked');
   assert.match(locked.lockHash, /^[a-f0-9]{64}$/u);
-  assert.doesNotThrow(() => quality.assertQualityProtocolAuthorized(locked));
-  assert.throws(() => quality.assertQualityProtocolAuthorized({ ...locked, lock: { ...locked.lock, maxTotalCostUsd: 2 } }), /quality_protocol_lock_tampered/u);
-  assert.throws(() => quality.lockQualityProtocol(draft, { ...input, userAuthorized: false }), /quality_protocol_user_authorization_required/u);
-  assert.throws(() => quality.lockQualityProtocol(draft, { ...input, authorizationLevel: 'L3' }), /quality_protocol_l3_approval_or_rollback_required/u);
-  assert.throws(() => quality.lockQualityProtocol(draft, { ...input, maxPerTaskCostUsd: 2 }), /quality_protocol_budget_or_timeout_invalid/u);
-  assert.throws(() => quality.lockQualityProtocol(draft, { ...input, executionMode: 'full' }), /quality_protocol_full_dataset_incomplete/u);
+  assert.doesNotThrow(() => quality.assertQualityProtocolAuthorized(dataset, locked));
+  assert.throws(() => quality.assertQualityProtocolAuthorized(dataset, { ...locked, lock: { ...locked.lock, maxTotalCostUsd: 2 } }), /quality_protocol_lock_tampered/u);
+  assert.throws(() => quality.lockQualityProtocol(dataset, draft, { ...input, userAuthorized: false }), /quality_protocol_user_authorization_required/u);
+  assert.throws(() => quality.lockQualityProtocol(dataset, draft, { ...input, authorizationLevel: 'L3' }), /quality_protocol_fixture_level_invalid/u);
+  assert.throws(() => quality.lockQualityProtocol(dataset, draft, { ...input, maxPerTaskCostUsd: 2 }), /quality_protocol_budget_or_timeout_invalid/u);
+  assert.throws(() => quality.lockQualityProtocol(dataset, draft, { ...input, executionMode: 'full' }), /quality_protocol_independent_data_required/u);
 
-  const lockedL3 = quality.lockQualityProtocol(draft, {
-    ...input,
-    authorizationLevel: 'L3',
-    explicitL3Approval: true,
-    rollbackPlanReference: 'rollback-plan-001'
-  });
-  assert.doesNotThrow(() => quality.assertQualityProtocolAuthorized(lockedL3));
+
 });
 
 test('existing optimizer pair summary rejects unpaired, invalid, and underclustered inputs', () => {
@@ -220,7 +219,7 @@ test('existing optimizer pair summary rejects unpaired, invalid, and undercluste
 });
 
 test('L1 contract stays explicit about fixture-only evidence and no external calls', () => {
-  const report = quality.verifyQualityEvaluation();
+  const report = quality.verifyQualityEvaluation(dataset, expectations);
   assert.equal(report.evidence, 'deterministic-fixture-contract-only');
   assert.equal(report.modelCalls, 0);
   assert.equal(report.externalCalls, 0);

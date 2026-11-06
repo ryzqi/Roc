@@ -1,0 +1,10 @@
+{
+  "kind": "mcp-recovery",
+  "expectedStatus": "completed",
+  "expectedEvents": [
+    "request:timeout-after-dispatch",
+    "receipt:found-for-operation",
+    "result:replayed"
+  ],
+  "expectedExternalEffects": 1
+}

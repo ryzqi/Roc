@@ -1,18 +1,18 @@
-# PR-06 quality-evaluation task contract
+# S01 quality-evaluation task contract
 
 ## Scope and current status
 
-This directory defines a small, deterministic L1 pilot contract for agent task quality. The 16 pilot tasks cover eight families with two tasks per family. Every current task is in the `pilot` split. The dataset is intentionally below the 200-task target and does not contain train/dev/holdout evidence; `lockQualityProtocol(..., { executionMode: 'full' })` must reject it. L1 checks fixture contracts and independent validators only. It makes no real-model quality, transfer, latency, or provider-cost claim.
+Status: Draft scientific task specification; engineering contract implemented. One evaluator accepts explicit frozen fixture, dev pilot and holdout full datasets. The original 16 tasks now live in `tests/fixtures/quality-evaluation/`, with two tasks per family, all in the `fixture` split. They are contract-only and do not count toward independent data. No independent corpus, human blind review or live provider run has been completed.
 
-The planned 200-task distribution is literature verification 30, multi-paper evidence 30, long-memory 25, file/report 30, experiment script 25, MCP recovery 20, permission injection 20, and cancel/crash 20. Expand by reviewed, independent source/task clusters; do not count paraphrases of one source as independent evidence. Record task source, license metadata, difficulty, cluster, split and review status. A small sample is uncertain even if all fixture checks pass.
+The required 200-task holdout distribution is literature verification 30, multi-paper evidence 30, long-memory 25, file/report 30, experiment script 25, MCP recovery 20, permission injection 20, and cancel/crash 20, with at least five independent clusters per family. Train/dev samples are additional. Register connected source clusters and concrete splits before annotation; retain license, attribution, locator, content hash, input hash, two independent reviews and any arbitration. Current independent completion is 0/200. See [evaluation-protocol.md](../../../plan/evaluation-protocol.md) and the [annotation manual](../../../plan/evaluation/annotation-manual.md).
 
-## Agent input boundary
+## Agent input and verifier boundary
 
-For any future L2/L3 run, pass the agent only `AgentTaskView`: task id, family, difficulty, prompt, output format, and any visible prior conversation turns. The agent must not receive validator expectations, source registry IDs, cluster IDs, or split metadata. Reference outputs and validation stay on the evaluator side. Task prompts may contain attributed CC BY evidence excerpts; hidden expected facts remain separate. Output is limited to 64 KiB of JSON per task.
+Pass the agent only `AgentTaskView`: task id, family, difficulty, prompt, output format, and visible prior conversation turns. The agent must not receive validator expectations, source registry IDs, cluster IDs, split metadata or reviewer records. Reference outputs and validation stay on the evaluator side. Task prompts may contain attributed CC BY evidence excerpts; hidden expected facts remain separate. Output is limited to 64 KiB of JSON per task. The worker imports only `agent-task-view.ts`; its build graph excludes evaluator modules and fixtures.
 
-Every task has a completion schema and deterministic validator. Validators check source-bound DOI/facts, exact citations, memory constraints, exact CSV rows and SHA-256, a restricted side-effect-free TypeScript aggregation function, ordered MCP recovery receipts, denied permission actions, and cancellation/crash reconciliation. The TypeScript validator parses an AST; it never executes submitted code. These checks establish contract correctness, not writing quality or general reasoning quality.
+Every fixture task has a completion schema and deterministic validator. Validators check source-bound DOI/facts, exact citations, memory constraints, exact CSV rows and SHA-256, a restricted side-effect-free TypeScript aggregation function, ordered MCP recovery receipts, denied permission actions, and cancellation/crash reconciliation. The TypeScript validator parses an AST; it never executes submitted code. These checks establish structured contract correctness. Agent-authored receipt JSON does not prove an external effect, permission denial or crash recovery; those tasks require real environment observers before scientific evaluation.
 
-## Fixed pilot sources
+## Retained fixture sources
 
 The following short excerpts and fact values are retained with attribution. Europe PMC metadata returned `cc by`; the metadata did not specify a license version, so none is inferred.
 
@@ -20,48 +20,36 @@ The following short excerpts and fact values are retained with attribution. Euro
 - Langaliya A, Dhull KS, Gupta B, Saleem Agwan MA, Gupta S, Macha Y, Makkad RS (2023), “Effect of NaOCl on cyclic fatigue resistance,” DOI [10.6026/973206300191348](https://doi.org/10.6026/973206300191348), PMCID PMC10895534. License metadata: [Europe PMC record](https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID:38415037&format=json); article: [Europe PMC full text](https://europepmc.org/articles/PMC10895534). Locator: abstract results statement. The retained excerpt reports 60 endodontic files after 5.25% NaOCl treatment: TruNatomy 1053.50 ± 134.81, Hero Gold 652.66 ± 58.66, and ProTaper Gold 494.50 ± 47.69 cycles to fracture (mean ± SD).
 - Rajpoot AS, Bagde H, Thumar S, Pattnaik N, Saha N, Patel K, Mehta DN, Panigrahi B (2023), “Chlorhexidine and doxycycline gel versus chip as adjuncts in oral hygiene among Indians,” DOI [10.6026/973206300191342](https://doi.org/10.6026/973206300191342), PMCID PMC10895532. License metadata: [Europe PMC record](https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID:38415043&format=json); article: [Europe PMC full text](https://europepmc.org/articles/PMC10895532). Locator: abstract sample and result statements. The retained excerpt reports 90 adult Indian patients with moderate chronic periodontitis; it reports better pocket-depth and attachment-level changes for the chlorhexidine group than for the doxycycline group, and better periodontal outcomes for gel than chip forms.
 
-The prompts include short attributed excerpts, not article full text. Other pilot tasks use original synthetic conversations, file rows, tool receipts, and permission/crash scenarios; they contain no personal data and make no external writes.
+The prompts include short attributed excerpts, not article full text. Other fixture tasks use original synthetic conversations, file rows, tool receipts, and permission/crash scenarios; they contain no personal data and make no external writes. Original source metadata is retained in `tests/fixtures/quality-evaluation/source-records.json`.
 
 ## Statistical preregistration
 
-Protocol id: `roc-agent-harness-pr06-v2`. Status: Draft; no live trial authorized or run.
-The protocol is bound to the SHA-256 of the frozen sources/tasks. Before provider dispatch,
-lock full baseline/candidate commit SHAs, provider/model identifiers, tool/prompt/environment
-hashes, timeout, finite task/total spend caps, approval reference and repeat count.
-Same-model comparisons require different commits. Do not amend a lock after dispatch.
+Protocol schema version: 3. Status: Draft scientific preregistration; no live trial authorized or run. `createQualityProtocolDraft(dataset, id)` binds the explicit dataset hash. Before provider dispatch, lock different baseline/candidate commit SHAs, the same provider/model, tool/prompt/environment/isolation hashes, temperature, timeout, price version, maximum request count, per-request/trial/total spend caps and approval reference. Statistical defaults cannot be weakened by re-signing a draft. Do not amend a lock after dispatch.
 
-The planned comparison pairs baseline and candidate on each task/repeat with the same models, fixed task data, tools, permissions, budgets, and environment. Default plan: three repeats per task, 2,000 seeded paired-cluster bootstrap resamples, 95% percentile intervals, at least five independent clusters per task family, and a 0.05 non-inferiority margin. The eight family quotas total 200. Family comparisons are exploratory and unadjusted for multiplicity; any family regression blocks an overall gain claim. Report failures by class, pass rate, P95 latency, and known/unknown cost. Null output and failed runs score zero; infrastructure/provider/verifier/operator failures remain separately classified.
+The comparison pairs baseline and candidate on each task/repeat with the same models, fixed task data, tools, permissions, budgets, and environment. Three repeats per task, 2,000 seeded paired-cluster bootstrap resamples, 95% percentile intervals, at least five independent clusters per family, and a 0.05 non-inferiority margin are fixed. Task/repeat order is randomized by the registered seed. Family comparisons are exploratory and unadjusted for multiplicity; any significant family regression blocks an overall gain claim, and every family must satisfy the non-inferiority interval for an overall gain. Report failure classes, pass rate, P95 latency, and known/unknown cost. Null output and failed runs score zero; infrastructure/provider/verifier/operator failures remain separately classified.
 
-Subjective writing quality requires blinded human review and retained disagreements. No judge is configured for this L1 pilot. Underfilled task/family/cluster quotas produce `insufficient` evidence and an `uncertain` conclusion. Fixture-generated scores never count as model evidence.
+Scientific sufficiency requires the complete frozen holdout identity and quotas, live-model evidence and all registered repeats. Subjective writing quality requires separate blinded human review with retained disagreements; the statistics report always starts with `subjectiveReviewStatus=not_run`. Underfilled evidence returns `insufficient` and `uncertain`. Fixtures never count as model evidence.
 
-## Authorization and isolation
+## Application environment and authorization
 
-L1 may run in ordinary CI. It makes zero external calls, uses no live provider credential or user project, and writes generated reports only under `.artifacts/harness-eval/`. L2 must run only with isolated provider credentials, fixed data/tools, a locked protocol and finite per-task/total caps. L3 additionally requires explicit L3 approval, a rollback plan, a named operator, a finite rollout, and stop thresholds. Never place credential values in this dataset, task prompts, reports, or test output. If cost cannot be estimated and hard-capped, keep live evaluation blocked and cost unknown.
+The macOS adapter runs the real `AgentPluginRuntime → createAgentDeepAgentExecutor → buildRunHarness`, with application event log, budget ledger, checkpointer, session history, memory database and effect store. Each trial receives fresh state. `sandbox-exec` denies network, restricts process execution to Node and denies evaluator/corpus paths. Host transcript and cleanup evidence are outside the worker-readable workspace. No ambient credentials or tracing are inherited. Model requests go through stdio to a trusted host transport; request admission is journaled and synced before dispatch, SDK retries are disabled, and all requests share the locked caps. A transport interface alone does not prove a provider's billing enforcement.
 
-## Offline runner and remaining data work
+Current application tests use a no-cost host transport with fixed responses. The adapter has no connected MCP, Skill or external workspace, and prior conversation turns are visible prompt context rather than a cross-session recovery experiment. True operational effects and long-task environments remain work for S02/S03/S06/S07. The current application's terminal response includes a context-contract prefix and fails JSON validation. The adapter preserves this raw failure and complete trajectory; it does not extract a success-shaped answer. Scientific model evaluation requires fixing this application behavior first. Local SDK streaming is bridged from one non-streaming completion and cannot establish provider streaming latency.
 
-`pnpm harness:quality:check` reports the actual pilot counts, source clusters, missing full
-dataset conditions and exact public prompt hash. It makes no model or network calls.
+L1 uses no live credential or user project. CLI reports use `.artifacts/harness-eval/`; S01 tests/evidence use `.artifacts/research-harness/S01/`. L2 requires independent reviewed data, isolated credentials, actual provider/pricing identity, checked permissions, a locked protocol and finite enforced caps. L3 additionally requires explicit L3 approval and a rollback reference. Never place credential values in prompts, reports or test output. No paid L2, external writes or publishing are authorized in this implementation.
 
-`runner.ts` executes each frozen task/arm/repeat once and passes only `AgentTaskView` to a
-trusted adapter. It counterbalances arm order, binds adapter identity to the lock and writes
-events before dispatch. Null output, invalid/unsafe output, adapter failures and withheld calls
-remain in the fixed denominator. Unknown cost retains the complete quoted ceiling.
-No arbitrary output script is executed. An unconfirmed abort or cost-ceiling violation stops
-further dispatch. Event failures propagate.
+## Entry points and remaining data work
 
-`runQualityPilotWithJournal` creates an exclusive journal, syncs each event before dispatch
-and writes a final report. An existing journal blocks rerun, including after process restart;
-reconcile its dispatched calls before creating another explicitly authorized protocol.
+`loadQualityDatasetPackage(manifestPath, canonicalHash)` loads data and evaluator-only expectations explicitly; hidden refs are hash checked and realpath-contained. `pnpm harness:quality:check` explicitly selects the fixture and makes zero model/network calls. Providing a manifest/hash audits that package without dispatch. Underlying APIs have no implicit fixture fallback.
 
-Adapter quotes and request caps are a trusted host contract. No live adapter ships with
-this increment. Runner tests exercise fixtures; they do not prove provider enforcement,
-tool/sandbox isolation, full trajectories or scientific quality.
-The actual application Harness adapter, isolated credentials, attributable prices, explicit
-L2 spending limits and reviewed independent 200-task corpus remain required.
-Do not manufacture source independence by duplicating or paraphrasing the pilot.
+`runQualityEvaluationWithJournal` uses the one runner, exclusive fsynced journal and final report. Existing journals block replay across restarts; reconcile calls before a new explicitly authorized protocol. Failed and withheld arms remain in the denominator. Unknown cost retains the complete quoted ceiling. Unconfirmed abort, request/cost violations, integrity failures or journal errors stop further dispatch.
 
-### Existing pilot inventory
+Prepare each arm from a committed clean checkout using `node scripts/harness-eval/prepare-quality-worker.mjs .artifacts/research-harness/S01/<arm>`. The artifact records actual commit, bundle hash, lockfile hash, dependencies and Node version. Arms require the same dependency lockfile. A baseline without this adapter must first receive the same evaluation contract and then be committed; never attach an old SHA to a new worker bundle.
+
+Reviewed independent data, real effect observers, two-arm model trials, attributable prices and blinded scientific reports remain unrun. Do not manufacture source independence by duplicating or paraphrasing fixtures.
+
+### Retained fixture inventory
+
 
 - Literature verification: `literature-release-windows`, `literature-fatigue-ranking`.
 - Multi-paper evidence: `multi-paper-dental-outcomes`, `multi-paper-release-and-periodontal`.

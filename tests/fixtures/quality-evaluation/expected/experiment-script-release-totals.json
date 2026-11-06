@@ -1,0 +1,23 @@
+{
+  "kind": "experiment-script",
+  "functionName": "sumRelease",
+  "operation": "sum",
+  "inputValues": {
+    "total_protein_ug": [
+      21,
+      10
+    ],
+    "total_fgf2_pg": [
+      121,
+      75
+    ]
+  },
+  "requiredMethods": [
+    "reduce"
+  ],
+  "expectedValues": {
+    "total_protein_ug": 31,
+    "total_fgf2_pg": 196
+  },
+  "tolerance": 0.01
+}

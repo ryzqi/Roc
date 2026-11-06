@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "replace-with-dataset-id",
+  "version": "replace-with-version",
+  "evidence": "independent",
+  "frozenAt": null,
+  "preregistration": {
+    "id": "replace-with-registration-id",
+    "registeredAt": null,
+    "clusterSplits": {}
+  },
+  "sources": [],
+  "tasks": []
+}

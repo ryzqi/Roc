@@ -1,0 +1,21 @@
+{
+  "kind": "paper-facts",
+  "studies": [
+    {
+      "doi": "10.6026/973206300191348",
+      "facts": {
+        "files_n": 60,
+        "trunatomy_mean": 1053.5
+      },
+      "tolerance": 0.01
+    },
+    {
+      "doi": "10.6026/973206300191342",
+      "facts": {
+        "patients_n": 90,
+        "chx_better_ppd_cal_than_dh": true,
+        "gel_better_than_chip": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "status": "draft",
+  "taskId": null,
+  "annotationHash": null,
+  "arbitratorId": null,
+  "independenceDeclaration": null,
+  "arbitratedAt": null,
+  "decisions": [
+    {
+      "claimId": null,
+      "reviewerDecisions": [],
+      "finalLabel": null,
+      "conditions": [],
+      "sourceId": null,
+      "sourceVersionHash": null,
+      "locator": null,
+      "quote": null,
+      "rationale": null
+    }
+  ]
+}

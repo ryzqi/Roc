@@ -1,7 +1,7 @@
 # S00 生产代码删除台账
 
 日期：2026-11-06。基线：`eea2087b5d2d79df3b2fea7764ce48e4975fd764`。
-状态：全部 `pending`；本阶段只固定范围，没有删除生产代码。
+S00 固定范围；S01 已完成 D09 评测合同切换，其余行仍 `pending`。
 替代名称表示责任合同，具体新符号在实施时登记；不能为了完成台账提前建立 alias。
 
 ## 按符号与调用方切换
@@ -16,7 +16,7 @@
 | D06 / S02 | [role-executor.ts](../src/main/plugins/research/role-executor.ts) 与 stage/task 控制中独立的通用执行身份/恢复/终止协议 | 共用通用执行协议；Task Controller 仍协调根任务，stage repository 仍产出领域结果 | `ResearchStageRuntime.prepareRole/executeOutput/continueTask`、`ResearchTaskController`、组合根 | stage 同身份恢复或明确新尝试、cleanup 失败传播、跨库 intent 故障回归；不整文件盲删；pending |
 | D07 / S03 | [research-skills.ts](../src/main/plugins/research/research-skills.ts)：11 个 `?raw` 导入、`skills` 映射、`getResearchSkillInstructions` | 必填 Manifest registry + 受校验内容读取；保留 11 份 Skill 内容并赋版本/hash/许可 | [run-repository.ts](../src/main/plugins/research/run-repository.ts) `captureContext`、role executor、[builtin-skills tests](../tests/unit/builtin-skills.test.mjs) | 11/11 受 registry 管理；无 Manifest 失败；raw stage 映射及旧函数生产引用为零；pending |
 | D08 / S03 | [context-assembler.ts](../src/main/services/deep-agent/context/context-assembler.ts) 的 `allowedToolNames ?? [...]`；role executor 单独拼装硬约束/事实/来源 prompt | 唯一 context assembler、显式 permission intersection、分层冻结来源 | chat harness、stage executor、context/facts/budget tests | 无省略权限默认授权；Writer/Reviewer 隔离、来源失效与摘要不增权回归；pending |
-| D09 / S01 | [quality-evaluation/runner.ts](../scripts/harness-eval/quality-evaluation/runner.ts) 与 data/protocol/audit 的 pilot-only 输入限制 | 同一 runner 接受冻结 split 与隔离 adapter；pilot 留作工程 fixture | quality check CLI、[quality-runner tests](../tests/unit/quality-runner.test.mjs)、[quality-evaluation tests](../tests/unit/quality-evaluation.test.mjs) | 删除生产评价入口对 pilot 的专属锁定；保留 fixture 离线审计；hidden expected 不到 executor；没有新增第二 runner；pending |
+| D09 / S01 | [quality-evaluation/runner.ts](../scripts/harness-eval/quality-evaluation/runner.ts) 与 data/protocol/audit 的 pilot-only 输入限制 | `loadQualityDatasetPackage` + `runQualityEvaluationWithJournal`，同一 runner 接受冻结 split 与隔离 adapter；原 16 项迁入测试 fixture | quality check CLI、run.mjs、context-long-task、quality-runner/evaluation/dataset/application-adapter tests | complete（工程）；删除 data.ts 与 runQualityPilot/qualityPilotAudit，生产旧 API 零引用；30 专项、1481 unit、94 harness、typecheck/build 通过；证据见 evaluation/engineering-verification.json |
 | D10 / S02～S07 | [research-tasks.ts](../src/shared/schemas/research-tasks.ts) 旧 Task event DTO；改动涉及的 [ipc-registry.ts](../src/shared/ipc-registry.ts) 与 [generated preload](../src/preload/ipc-api-generated.ts) 旧 DTO 签名 | 当前 envelope 与 execution/diagnostics 合同，同步生成 IPC | task-capabilities、`getTaskEvents/getTaskDiagnostics/listTasks`、[ResearchTasksSection.tsx](../src/renderer/management/sections/ResearchTasksSection.tsx)、fixtures/tests | `check:ipc`、消费者 typecheck、真实抽屉路径；不新增旧通道 alias；未变化的 IPC 方法不因重构盲删；pending |
 | D11 / S06 | 无 DAG 的 stage 局部 scheduling 分支中被 node scheduler 替代的 dispatch/重试决策 | Task node scheduler + repository 原子 claim；领域 executor 保留执行 | `ResearchStageRuntime.schedule/linkAndSchedule`、review children、Task Controller | 无两份 scheduler；revision/lease/fence/依赖/取消恢复专项；并行无收益时新 scheduler concurrency=1；pending |
 | D12 / S02 | [tool-effect-store.ts](../src/main/services/deep-agent/tool-effect-store.ts) 的 identity v0 正常业务 upgrade/read 分支 | 当前 identity v1 操作合同；旧行离线有限转换或只读审计隔离 | reserve/read/reconcile、[tool-effect-store tests](../tests/unit/tool-effect-store.test.mjs)、checkpoint/effect 恢复 | 未知副作用不自动重做；无法重建身份的历史回执保留、阻止继续；不能删除真实旧 receipt；pending |

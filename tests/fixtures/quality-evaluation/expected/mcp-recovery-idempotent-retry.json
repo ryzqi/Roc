@@ -1,0 +1,10 @@
+{
+  "kind": "mcp-recovery",
+  "expectedStatus": "completed",
+  "expectedEvents": [
+    "request:429-before-dispatch",
+    "retry:same-idempotency-key",
+    "receipt:stored"
+  ],
+  "expectedExternalEffects": 0
+}

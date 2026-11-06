@@ -1,0 +1,39 @@
+{
+  "status": "draft",
+  "taskId": null,
+  "inputHash": null,
+  "sourceVersionHashes": [],
+  "blindPacketId": null,
+  "reviews": [
+    {
+      "reviewerId": null,
+      "independenceDeclaration": null,
+      "reviewedAt": null,
+      "claims": [
+        {
+          "claimId": null,
+          "claim": null,
+          "sourceId": null,
+          "sourceVersionHash": null,
+          "locator": null,
+          "quote": null,
+          "label": null,
+          "allowedLabels": ["supports", "conditional", "contradicts", "irrelevant", "unverifiable"],
+          "conditions": [],
+          "numericMappings": [],
+          "rationale": null
+        }
+      ],
+      "writingScores": null
+    },
+    {
+      "reviewerId": null,
+      "independenceDeclaration": null,
+      "reviewedAt": null,
+      "claims": [],
+      "writingScores": null
+    }
+  ],
+  "disagreements": [],
+  "arbitrationRef": null
+}

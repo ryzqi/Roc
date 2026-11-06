@@ -113,3 +113,36 @@
 - 迁移台账固定业务目标：snapshot v10、execution v2、Stage snapshot/event envelope v1、
   Manifest/verdict/ranking v1，Task 在 S06 由 v2 到 v3；保留有效 facts/预算/人工证据合同。
   SQL migration 编号按真正实现顺序分配，本阶段不虚构已存在的目标数据库。
+
+## S01 实施核对（2026-11-06）
+
+- 当前质量数据、协议、runner、audit 全部直接导入 `QUALITY_TASKS`；Task split 为 `pilot`，
+  full 检查固定拒绝。需切换全部消费者，而非添加第二 runner。
+- 当前有 one-use fsync journal、失败分母、未知费用占用和 paired cluster bootstrap；
+  保留这些合同。旧 arm 顺序只有奇偶交替，改为协议 seed 派生配对随机顺序。
+- 隐藏期望仍与 prompt 共存于源码。将原 16 项移至显式 fixture 文件，期望单独存储。
+- 应用 `buildRunHarness` 装配既有 context、manifest、budget、checkpointer 与 effect；
+  adapter 应调用此入口，不能只重建 createAgent loop。
+- 现有 macOS sandbox 不允许宿主 Node 路径或模型网络。新评测隔离应限 agent worker
+  的文件和进程权限，并通过受控 host transport dispatch，不让 worker 获取 corpus 或凭证。
+
+### S01 实施结果与边界
+
+- 原 16 项已经迁入 `tests/fixtures/quality-evaluation/`，全标 fixture/contract-only。
+  数据、protocol v3、runner、统计及 CLI 全部切换到显式 frozen dataset，旧 pilot API 删除。
+- worker 走真实应用 executor/buildRunHarness；agent 与 memory 必须使用独立 SQLite。
+  同库依次 apply 两种 schema 会触发 `database_schema_rebuild_required`，不能绕过生产 schema。
+- 应用本地 stream 需要 SDK SSE chunk；host 调用为固定上限的非流式 completion，
+  该桥接不能用于声称真实 provider 的流式延迟。console 重定向 stderr 保持协议 stdout 纯净。
+- 真应用 terminal response 把 context contract JSON 前缀拼到模型答案之前。
+  adapter 保留完整原文；回归明确其 `output_not_json`，未更改生产 stream collector。
+  科学运行前须修复该产品行为，不把 adapter 裁剪答案当作修复。
+- 当前 worker 使用空 MCP/Skill manifest、默认 backend 和新 trial 数据库；
+  fixture 操作回执只验证 JSON 合同，不证明真实 effect 或跨 session 恢复。
+  相应环境及观察器仍属 S02/S03/S06/S07。
+- host-only transcript、stderr 与 cleanup 在 worker 可读写树之外；hidden ref 另有
+  realpath containment 和 hash 检查。provider SDK 无真实凭证、无 tracing、retries=0。
+- 两臂 bundle/真实 commit/lockfile/Node/依赖路径进入 environment hash，
+  adapter 重新核验 bundle 与 lockfile，并要求两臂依赖 lock hash 相同。
+- annotation hash/身份/时间能检查记录一致性，不能证明审核者确实独立或语义来源不重复。
+  这些事实必须由负责人的人工审核保证。当前真实独立样本、双审、L2 及盲审均未运行。

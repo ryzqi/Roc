@@ -4,6 +4,9 @@
 本文件的“当前”来自源码与隔离 schema 探测；运行结果见 [baseline.json](baseline.json)。
 “目标/缺口”尚待后续阶段实施，不能当成已通过的行为。
 
+本清单保留 S00 历史基线。S01 已切换评测数据/runner/隔离合同，最新接口与限制见
+[评测协议](evaluation-protocol.md)；下表中的旧 pilot 名称不代表当前生产入口。
+
 ## 1. 存储与组合根
 
 组合根 [main-kernel-bootstrap.ts](../src/main/main-kernel-bootstrap.ts) 将

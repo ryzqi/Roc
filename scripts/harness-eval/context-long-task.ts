@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { AIMessage, HumanMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import type { ContextContractAudit } from '../../src/shared/schemas/run-diagnostics';
@@ -20,7 +20,7 @@ import {
   type ContextControlState
 } from '../../src/main/services/deep-agent/context/context-contract';
 import type { ContextSummary } from '../../src/main/services/deep-agent/context/context-summary';
-import { QUALITY_SOURCES, QUALITY_TASKS, qualityDatasetHash, type QualityTask } from './quality-evaluation/data';
+import { loadQualityDatasetPackage, type QualityTask } from './quality-evaluation/dataset';
 import { validateQualityTaskOutput } from './quality-evaluation/validators';
 import { decodeJson } from '../lib/decode-json';
 
@@ -77,7 +77,7 @@ function assertAuditPreservation(audit: ContextContractAudit): void {
   assert.equal(audit.workspaceVersionPresent, true);
 }
 
-function fixedMessages(task: QualityTask): BaseMessage[] {
+function fixedMessages(task: QualityTask, sources: { id: string; attribution: string; locator: string; excerpt: string }[]): BaseMessage[] {
   const messages: BaseMessage[] = [new HumanMessage({ id: `${task.id}:goal`, content: task.prompt })];
   for (const [index, turn] of (task.conversationTurns ?? []).entries()) {
     messages.push(new HumanMessage({ id: `${task.id}:turn-${index}`, content: turn }));
@@ -87,7 +87,7 @@ function fixedMessages(task: QualityTask): BaseMessage[] {
     })));
   }
   for (const sourceId of task.sourceIds) {
-    const source = QUALITY_SOURCES.find(item => item.id === sourceId);
+    const source = sources.find(item => item.id === sourceId);
     assert.ok(source, 'fixed source snapshot missing');
     const callId = `${task.id}:source-${source.id}`;
     messages.push(new AIMessage({ id: `${callId}:request`, content: '', tool_calls: [
@@ -107,7 +107,11 @@ export async function verifyFixedLongTaskComparisons(
   directory: string,
   recoverableSummaryFailure: boolean
 ): Promise<unknown> {
-  const tasks = QUALITY_TASKS.filter(task => task.family === 'long-memory');
+  const { dataset, expectations } = loadQualityDatasetPackage('tests/fixtures/quality-evaluation/manifest.json',
+    readFileSync('tests/fixtures/quality-evaluation/manifest.sha256', 'utf8').trim());
+  const sources: { id: string; attribution: string; locator: string; excerpt: string }[] =
+    JSON.parse(readFileSync('tests/fixtures/quality-evaluation/source-records.json', 'utf8'));
+  const tasks = dataset.tasks.filter(task => task.family === 'long-memory');
   assert.equal(tasks.length, 2, 'fixed PR-06 pilot long-task set changed');
   const comparisons = [];
   for (const task of tasks) {
@@ -119,13 +123,13 @@ export async function verifyFixedLongTaskComparisons(
       pendingCorrections: [{ id: 'correction-units', content: 'Keep source populations and units separate; no clinical recommendation.' }]
     };
     const workspaceHash = `workspace-${task.id}`;
-    const original = fixedMessages(task);
+    const original = fixedMessages(task, sources);
     const originalConstraints = new Set(collectUserConstraints(original));
     const seeded = pinContextContract(original, original, state, [], workspaceHash);
     const originalTokens = await countMessages(seeded);
     assert.ok(originalTokens > MODEL_INPUT_TOKENS, 'fixed task must overflow before compaction');
     const baselineOutput = completeFromRetainedRequirements(seeded);
-    const baselineValidation = validateQualityTaskOutput(task, baselineOutput);
+    const baselineValidation = validateQualityTaskOutput(expectations[task.id], baselineOutput);
     assert.equal(baselineValidation.passed, true, baselineValidation.failures.join(','));
 
     const events: ContextMaintenanceEvent[] = [];
@@ -181,7 +185,7 @@ export async function verifyFixedLongTaskComparisons(
     auditedEvents.forEach(event => assertAuditPreservation(event.contractAudit!));
 
     const candidateOutput = completeFromRetainedRequirements(compacted);
-    const candidateValidation = validateQualityTaskOutput(task, candidateOutput);
+    const candidateValidation = validateQualityTaskOutput(expectations[task.id], candidateOutput);
     assert.equal(candidateValidation.passed, true, candidateValidation.failures.join(','));
     const citedDois = decodeJson<{ citations: string[] }>(candidateOutput, 'context_long_task_output_invalid').citations;
     const readTool = createContextArtifactReadTool({ artifactStore: artifacts, threadId: 'thread', workspaceHash });
@@ -270,7 +274,7 @@ export async function verifyFixedLongTaskComparisons(
 
   const evidence = {
     schemaVersion: 1,
-    datasetHash: qualityDatasetHash(),
+    datasetHash: dataset.datasetHash,
     evidenceLevel: 'L1-deterministic-contract-only',
     claim: 'Fixed PR-06 pilot long-task contracts; no real-model quality, latency, token savings or cost inference.',
     tokenCountSource: INPUT_COUNT_SOURCE,

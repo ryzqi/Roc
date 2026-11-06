@@ -1,4 +1,4 @@
-import { QUALITY_FAMILIES, type QualityFamily } from './data';
+import { QUALITY_FAMILIES, freezeQualityDataset, auditQualityDataset, type QualityFamily, type FrozenQualityDataset } from './dataset';
 import { QUALITY_TARGETS } from './protocol';
 
 export const QUALITY_FAILURE_CLASSES = ['infra', 'provider', 'policy', 'effect', 'state', 'verifier', 'agent', 'data', 'operator'] as const;
@@ -58,10 +58,13 @@ export type QualityEvaluationStatistics = {
   failureCounts: Record<'baseline' | 'candidate', Partial<Record<QualityFailureClass, number>>>;
   familyStatistics: Record<QualityFamily, FamilyStatistics>;
   familyComparisons: 'exploratory-unadjusted';
+  subjectiveReviewStatus: 'not_run';
   stopReason: string | null;
 };
 
 export type QualityStatisticsOptions = {
+  dataset?: FrozenQualityDataset;
+  evidence?: 'fixture' | 'live-model';
   targetCaseCount?: number;
   repeatsPerTask?: number;
   minimumClustersPerFamily?: number;
@@ -232,11 +235,13 @@ export function summarizePairedQualityTrials(
   const familyStatistics = {} as Record<QualityFamily, FamilyStatistics>;
   let anyFamilyRegression = false;
   let allFamiliesInterpretable = true;
+  let allFamiliesNonInferior = true;
   for (const [familyIndex, family] of QUALITY_FAMILIES.entries()) {
     const familyTasks = new Map([...tasks].filter(([, task]) => task.family === family));
     const familyClusters = aggregateByCluster(familyTasks, family);
     const confidence95 = bootstrapDifference(familyClusters.differences, bootstrapIterations, seed + familyIndex + 1);
     const candidateRegression = confidence95 === null ? null : confidence95.high < -nonInferiorityMargin;
+    if (confidence95 === null || confidence95.low < -nonInferiorityMargin) allFamiliesNonInferior = false;
     if (candidateRegression === true) anyFamilyRegression = true;
     const familyMeetsClusterMinimum = familyClusters.clusterIds.length >= minimumClustersPerFamily;
     const familyMeetsTaskTarget = familyTasks.size >= targetByFamily[family];
@@ -254,11 +259,20 @@ export function summarizePairedQualityTrials(
   }
 
   const confidence95 = bootstrapDifference(clusters.differences, bootstrapIterations, seed);
-  const evidenceStatus = tasks.size >= targetCaseCount && allFamiliesInterpretable ? 'sufficient' : 'insufficient';
+  const dataset = options.dataset === undefined ? undefined : (() => {
+    const { datasetHash, ...manifest } = options.dataset!;
+    return freezeQualityDataset(manifest, datasetHash);
+  })();
+  const holdout = dataset?.tasks.filter(row => row.split === 'holdout');
+  const datasetMatches = options.evidence === 'live-model' && dataset !== undefined && auditQualityDataset(dataset).fullDatasetReady
+    && holdout!.length === tasks.size
+    && [...tasks].every(([id, task]) => holdout!.some(row => row.id === id
+      && row.family === task.family && row.clusterId === task.clusterId));
+  const evidenceStatus = datasetMatches && tasks.size >= targetCaseCount && allFamiliesInterpretable ? 'sufficient' : 'insufficient';
   let conclusion: QualityEvaluationStatistics['conclusion'] = 'uncertain';
   if (evidenceStatus === 'sufficient' && confidence95 !== null) {
     if (anyFamilyRegression || confidence95.high < -nonInferiorityMargin) conclusion = 'candidate-regression';
-    else if (confidence95.low > 0) conclusion = 'candidate-gain-supported';
+    else if (confidence95.low > 0 && allFamiliesNonInferior) conclusion = 'candidate-gain-supported';
   }
   const baselineLatencies = trials.map(trial => trial.baseline.latencyMs);
   const candidateLatencies = trials.map(trial => trial.candidate.latencyMs);
@@ -268,7 +282,7 @@ export function summarizePairedQualityTrials(
   const candidateCostUsd = totalCost(trials, 'candidate');
   let stopReason: string | null = null;
   if (evidenceStatus === 'insufficient') {
-    stopReason = tasks.size < targetCaseCount ? 'target_case_count_not_met' : 'family_task_or_cluster_quota_not_met';
+    stopReason = !datasetMatches ? 'independent_frozen_dataset_required' : tasks.size < targetCaseCount ? 'target_case_count_not_met' : 'family_task_or_cluster_quota_not_met';
   }
 
   return {
@@ -295,6 +309,7 @@ export function summarizePairedQualityTrials(
     failureCounts: { baseline: countFailures(trials, 'baseline'), candidate: countFailures(trials, 'candidate') },
     familyStatistics,
     familyComparisons: 'exploratory-unadjusted',
+    subjectiveReviewStatus: 'not_run',
     stopReason
   };
 }

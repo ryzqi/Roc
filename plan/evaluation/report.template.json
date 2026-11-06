@@ -1,0 +1,25 @@
+{
+  "status": "not_run",
+  "executionMode": null,
+  "protocolLockHash": null,
+  "datasetHash": null,
+  "independentHoldoutCount": 0,
+  "journalRef": null,
+  "machineReportRef": null,
+  "trajectoryRefs": [],
+  "providerInvoiceRef": null,
+  "knownCostUsd": null,
+  "unknownCostCalls": null,
+  "humanBlindReview": {
+    "status": "not_run",
+    "reviewerIds": [],
+    "reviewRefs": [],
+    "disagreementRefs": [],
+    "arbitrationRefs": [],
+    "armMappingHash": null,
+    "unblindedAt": null
+  },
+  "scientificStatus": "insufficient",
+  "externalStatus": "not_run",
+  "releaseStatus": "not_authorized"
+}

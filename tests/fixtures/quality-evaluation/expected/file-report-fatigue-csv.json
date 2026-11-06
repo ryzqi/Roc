@@ -1,0 +1,10 @@
+{
+  "kind": "csv-report",
+  "filename": "fatigue.csv",
+  "rows": [
+    "system,cycles_mean,cycles_sd",
+    "TruNatomy,1053.50,134.81",
+    "Hero Gold,652.66,58.66",
+    "ProTaper Gold,494.50,47.69"
+  ]
+}

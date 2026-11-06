@@ -122,3 +122,88 @@ S00 八项任务完成；下一阶段为 S01 工程合同，S02 可独立进入�
 在上述仓库根目录执行，exit 0：22 份 Markdown、216 个本地链接、31 个现有测试路径、
 17 项能力、49 个符号、四图、七库及全部证据 hash/状态检查通过。
 通过结果与精确文件 hash 留存于 `deliverables-report.json`。
+
+## 2026-11-06：S01 开始执行
+
+用户“plan 开始执行第2个,完成后提交”授权 S01 本地实施、验证和 Git 提交。
+开始 SHA：`424d2b6659a5cb9ffb564f97a9d544a780987da2`；工作区干净。
+沿用 `plan/`，不启动 S02，不访问现有 provider 凭证，不执行付费或远端写入。
+工程范围为显式冻结数据、统一 runner、隐藏期望隔离、应用 adapter、预算与标注材料。
+200 项独立数据和独立双审不能由实施者生成答案替代；科学完成另需数据、审核者和 L2 授权。
+Node v26.13.0、pnpm 12.5.1 已实测。
+
+发现/错误：不存在 `plan/evaluation.md` 与根 `quality-evaluation/`，改用阶段列明的实际目录；
+zsh 对猜测的不存在源码 glob 报 `no matches found`，后续用 scoped rg 定位。
+memory registry 无相关记录。skill resolver 无另一个命名计划，沿用用户指定目录。
+
+## 2026-11-06：S01 实施与收尾验证
+
+已切换显式 dataset/隐藏 expected、protocol v3、单一 runner/统计/CLI/长任务消费者，
+新增真实应用 worker/隔离 adapter、准备脚本、标注手册、数据/双审/仲裁/报告/专项模板。
+删除旧 `data.ts`、pilot runner 及默认生产 fixture 数据入口。
+原三篇文章的许可、归属、locator 保留；16 项全标 fixture，独立数据仍为 0/200。
+
+实施时错误及处置（原失败日志保留，未弱化检查）：
+
+- 类型检查发现旧 data import、nullable rollback、provider 拼写和 preview schema 不匹配；
+  更新消费者并按实际应用 schema 修正，preview 保留 `runnable:false` 及明确原因。
+- sandbox 首轮拒绝 OpenSSL 配置/package scope；将 OPENSSL_CONF 指向 `/dev/null`，
+  trial 写入模块 package.json，复制已冻结 worker、只读依赖 symlink。
+- 手造 executor 初态不足，改走生产 `createAgentDeepAgentExecutor`；补真实 runEventLog；
+  stdout 日志污染改 stderr，memory 使用独立库。未修改生产 schema 或绕过预算 snapshot。
+- 真应用终态 JSON 失败是产品输出问题，保留原文，测试期待 `output_not_json`。
+  首次误期待 `invalid_json` 的断言已改为 validator 实际错误码。
+- Task.md 首次补丁的末段上下文未匹配，工具拒绝且未产生部分编辑；随后按完整段落更新，
+  原来源信息完整保留。
+
+前一轮已确认 `pnpm typecheck` exit 0、四份专项测试 29 pass/0 fail。
+其后 adapter/worker 又有费用分类、依赖一致及 interruption 修正，因此启动最新全量检查。
+当前采集器 `node .artifacts/research-harness/S01/capture-verification.mjs`
+在仓库根目录运行 typecheck、quality audit、全部 unit 与 harness eval；
+保存精确 cwd/SHA/版本/时间/exit/log hash，历史失败日志归档至同目录 earlier-attempts。
+尚未以这些正在运行的检查声称通过；最终结果在下一条记录补齐。
+
+收尾补测两臂不同依赖拒绝、provider 异常分类/未知占用与清理，
+四份专项最新 exit 0，30 pass/0 fail；其新增测试在全量 unit 启动后加入，因此专项单独记录。
+最新 typecheck、quality audit、94/94 harness 已 exit 0，全量 unit 仍在执行。
+按验收矩阵的构建要求补 `pnpm build`；未改生产 renderer/IPC/应用源码。
+一次误读不存在的 `plan/commands.md` 已改按 `rg --files plan` 找到 `acceptance.md`，
+没有依据不存在的文件作验证结论。
+
+## 2026-11-06：S01 工程验收与提交收尾
+
+范围状态：`Verified passing（S01 工程 L0/L1）`。S01 科学仍 `insufficient/not_run`，
+独立样本 0/200；RH-05.1/2/5 保持未完成，S02～S09 保持 pending。
+没有访问用户 provider 凭证、付费调用、远端写入或发布。
+
+精确工作目录：逻辑 `/Users/Apple_501/Desktop/Roc/Roc`，
+物理 `/Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc`。
+开始 SHA `424d2b6659a5cb9ffb564f97a9d544a780987da2`，检查期间 HEAD 未变；
+被验证的是未提交 S01 差异，源码/fixture hash 与日志 hash 见
+[engineering-verification.json](evaluation/engineering-verification.json)。
+日志目录 `.artifacts/research-harness/S01/2026-11-06T11-24-16.346Z/`。
+
+| 精确命令（仓库根目录） | 结果 | 日志 |
+| --- | --- | --- |
+| `pnpm typecheck` | exit 0 | typecheck.log |
+| `pnpm harness:quality:check` | exit 0；16 fixture，独立数 0/200，model/network 0 | quality.log |
+| `pnpm test:unit` | exit 0；1481 pass，0 fail/skip/cancelled；约 376 秒 | unit.log |
+| `pnpm harness:eval` | exit 0；94/94，离线合同 | harness.log |
+| `pnpm build` | exit 0；main/preload/renderer 构建 | build.log |
+| `node --test tests/unit/quality-evaluation.test.mjs tests/unit/quality-runner.test.mjs tests/unit/quality-dataset.test.mjs tests/unit/quality-application-adapter.test.mjs` | exit 0；30 pass/0 fail | focused.log |
+| `node --test tests/unit/quality-dataset.test.mjs` | exit 0；6 pass，补测完整 holdout/缺项/家族回退/非劣区间 | statistics-gates.log |
+| `node .artifacts/research-harness/S01/check-deliverables.mjs` | 首次 regex 将 data 匹配到 dataset，校验器误报；加词边界后 exit 0 | deliverables.log / deliverables-corrected.log |
+
+文档检查核对本地链接、JSON 读回、原 16 项 prompt/期望、原 source-records 与三篇文章
+来源段落逐字保留、模板不可冒充 corpus、旧 API 零引用、后续阶段未启动和 Git 空白。
+收尾写回状态后再执行一次 final 文档检查，结果和 hash 留存。
+build 的 plugin timings 提示是现有构建性能信息，exit 0；本轮未改 renderer。
+
+全量 unit 开始后加入一个 provider 回归，并追加 dataset 统计断言；
+最新专项已分别通过，未为仅测试文件增补重复跑整套耗时 unit。
+所有生产/评测实现均由全量 unit 与真实 worker 回归验证。
+应用终态 context 前缀问题仍明确保留，未裁剪输出或启动 S02。
+
+用户已授权完成后提交；提交仅包含本阶段代码、测试和 plan 文档。
+准备脚本要求应用源码干净且已提交，提交后将实测实际 commit/bundle/依赖身份与隔离编译图，
+证据仅写忽略的工件目录，不改变已提交源码。

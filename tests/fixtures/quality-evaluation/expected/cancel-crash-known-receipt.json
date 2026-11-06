@@ -1,0 +1,7 @@
+{
+  "kind": "cancel-crash-recovery",
+  "expectedStatus": "completed",
+  "reconciliationRequired": false,
+  "retryDispatched": false,
+  "duplicateEffects": 0
+}

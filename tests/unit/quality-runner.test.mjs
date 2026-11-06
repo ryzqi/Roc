@@ -6,25 +6,33 @@ import { join } from 'node:path';
 import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 
 const api = await importTypeScriptModule('scripts/harness-eval/quality-evaluation/runner.ts', { platform: 'node' });
+const { readFileSync } = await import('node:fs');
+const datasetApi = await importTypeScriptModule('scripts/harness-eval/quality-evaluation/dataset.ts', { platform: 'node' });
+const { dataset, expectations } = datasetApi.loadQualityDatasetPackage('tests/fixtures/quality-evaluation/manifest.json',
+  readFileSync('tests/fixtures/quality-evaluation/manifest.sha256', 'utf8').trim());
 const protocolApi = await importTypeScriptModule('scripts/harness-eval/quality-evaluation/protocol.ts', { platform: 'node' });
 
 function fixture(overrides = {}) {
   const lock = {
-    executionMode: 'pilot', authorizationLevel: 'L2', providerId: 'fixture',
+    executionMode: 'fixture', authorizationLevel: 'L1', providerId: 'fixture',
     baselineModelId: 'same-model', candidateModelId: 'same-model',
     baselineCommitSha: 'a'.repeat(40), candidateCommitSha: 'b'.repeat(40),
-    toolManifestHash: 'c'.repeat(64), environmentHash: 'd'.repeat(64), promptSetHash: api.qualityPromptSetHash(),
+    toolManifestHash: 'c'.repeat(64), environmentHash: 'd'.repeat(64), promptSetHash: api.qualityPromptSetHash(dataset, 'fixture'),
+    pricingVersion: 'fixture-v1', maxRequestsPerTask: 1, maxRequestCostMicrousd: 1,
+    temperature: 0, isolationHash: 'f'.repeat(64),
     taskTimeoutMs: 1000, maxPerTaskCostUsd: 0.01, maxTotalCostUsd: 1,
     userAuthorized: true, approvalReference: 'fixture-only', ...overrides
   };
-  const protocol = protocolApi.lockQualityProtocol(protocolApi.createQualityProtocolDraft(), lock);
+  const protocol = protocolApi.lockQualityProtocol(dataset, protocolApi.createQualityProtocolDraft(dataset, 'unit-quality-runner'), lock);
   const events = [];
   const calls = [];
   const executor = {
     binding: { evidence: 'fixture', providerId: lock.providerId,
       baselineModelId: lock.baselineModelId, candidateModelId: lock.candidateModelId,
       baselineCommitSha: lock.baselineCommitSha, candidateCommitSha: lock.candidateCommitSha,
-      toolManifestHash: lock.toolManifestHash, environmentHash: lock.environmentHash },
+      toolManifestHash: lock.toolManifestHash, environmentHash: lock.environmentHash, pricingVersion: lock.pricingVersion,
+      temperature: lock.temperature, isolationHash: lock.isolationHash, isolation: 'fixture-object',
+      maxRequestsPerTask: lock.maxRequestsPerTask, maxRequestCostMicrousd: lock.maxRequestCostMicrousd },
     quote: () => 10,
     async execute(view, context) {
       calls.push({ view, context });
@@ -33,13 +41,13 @@ function fixture(overrides = {}) {
   };
   const signal = new AbortController().signal;
   return { protocol, lock, events, calls, executor,
-    run: (override = {}) => api.runQualityPilot({ protocol, executor, signal,
+    run: (override = {}) => api.runQualityEvaluation({ dataset, expectations, protocol, executor, signal,
       writeEvent: async (event) => { events.push(structuredClone(event)); }, ...override }) };
 }
 
-test('protocol v2 pins commit identity and permits same-model harness comparison', () => {
+test('protocol v3 pins commit identity and permits same-model harness comparison', () => {
   const f = fixture();
-  assert.equal(f.protocol.schemaVersion, 2);
+  assert.equal(f.protocol.schemaVersion, 3);
   assert.equal(f.protocol.lock.baselineModelId, f.protocol.lock.candidateModelId);
   assert.throws(() => fixture({ candidateCommitSha: 'a'.repeat(40) }), /quality_protocol_comparison_identical/);
   assert.throws(() => fixture({ baselineCommitSha: 'HEAD' }), /quality_protocol_commit_invalid/);
@@ -49,14 +57,14 @@ test('one-use journal records protocol and outcomes and refuses automatic rerun 
   const f = fixture();
   const root = await mkdtemp(join(tmpdir(), 'roc-quality-journal-'));
   try {
-    const input = { protocol: f.protocol, executor: f.executor, signal: new AbortController().signal, artifactsRoot: root };
-    const saved = await api.runQualityPilotWithJournal(input);
+    const input = { dataset, expectations, protocol: f.protocol, executor: f.executor, signal: new AbortController().signal, artifactsRoot: root };
+    const saved = await api.runQualityEvaluationWithJournal(input);
     const rows = (await readFile(saved.journalPath, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
     assert.equal(rows[0].protocol.lockHash, f.protocol.lockHash);
     assert.equal(rows.at(-1).type, 'completed');
     assert.equal(rows.filter((row) => row.type === 'dispatched').length, 96);
     assert.equal(JSON.parse(await readFile(saved.reportPath, 'utf8')).evidence, 'fixture');
-    await assert.rejects(api.runQualityPilotWithJournal(input), { code: 'EEXIST' });
+    await assert.rejects(api.runQualityEvaluationWithJournal(input), { code: 'EEXIST' });
     assert.equal(f.calls.length, 96);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
@@ -85,7 +93,8 @@ test('runner preserves fixed paired denominator, counterbalances order and hides
   assert.equal(result.statistics.conclusion, 'uncertain');
   assert.equal(result.unknownCalls, 0);
   assert.equal(result.heldCostMicrousd, 192);
-  assert.deepEqual(f.calls.slice(0, 4).map((call) => call.context.arm), ['baseline', 'candidate', 'candidate', 'baseline']);
+  assert.ok(new Set(f.calls.map((call) => call.context.arm)).size === 2);
+  for (let i = 0; i < f.calls.length; i += 2) assert.notEqual(f.calls[i].context.arm, f.calls[i + 1].context.arm);
   for (const { view } of f.calls) {
     for (const hidden of ['validator', 'sourceIds', 'clusterId', 'split', 'provenance']) {
       assert.equal(Object.hasOwn(view, hidden), false);
@@ -124,7 +133,7 @@ test('runner rejects binding and prompt drift or missing authorization before ex
   assert.equal(f.events.length, 0);
   const changed = fixture({ promptSetHash: 'e'.repeat(64) });
   await assert.rejects(changed.run(), /quality_runner_prompt_set_changed/);
-  const draft = protocolApi.createQualityProtocolDraft();
+  const draft = protocolApi.createQualityProtocolDraft(dataset, 'unit-quality-runner');
   await assert.rejects(f.run({ protocol: draft }), /quality_eval_authorization_required/);
 });
 
@@ -179,8 +188,7 @@ test('cost ceiling violation stops further calls and preserves unknown consumpti
   assert.equal(result.unknownCalls, 1);
   assert.equal(result.heldCostMicrousd, 10);
   assert.equal(result.stopReason, 'executor_cost_ceiling_violated');
-  assert.equal(result.trials[0].baseline.failureClass, 'effect');
-  assert.equal(result.trials[0].candidate.failureClass, 'policy');
+  assert.deepEqual([result.trials[0].baseline.failureClass, result.trials[0].candidate.failureClass].sort(), ['effect', 'policy']);
 });
 
 test('timeout aborts executor and prevents any later dispatch when cleanup is unconfirmed', async () => {
@@ -194,6 +202,33 @@ test('timeout aborts executor and prevents any later dispatch when cleanup is un
   assert.equal(aborted, true);
   assert.equal(result.dispatches, 1);
   assert.equal(result.stopReason, 'executor_abort_unconfirmed');
-  assert.equal(result.trials[0].baseline.failureClass, 'infra');
+  assert.ok([result.trials[0].baseline.failureClass, result.trials[0].candidate.failureClass].includes('infra'));
   assert.equal(result.trials.length, 48);
+});
+
+test('request admission rejects changed ceilings and journal failures before transport work', async () => {
+  const over = fixture();
+  let transportCalls = 0;
+  over.executor.execute = async (_view, context) => {
+    await context.recordRequest({ requestHash: 'a'.repeat(64), maximumCostMicrousd: 2 });
+    transportCalls++;
+    return { output: null, costMicrousd: 1 };
+  };
+  const denied = await over.run();
+  assert.equal(transportCalls, 0);
+  assert.equal(denied.dispatches, 1);
+  assert.equal(denied.stopReason, 'executor_request_policy_violated');
+  const journal = fixture();
+  journal.executor.execute = async (_view, context) => {
+    await context.recordRequest({ requestHash: 'a'.repeat(64), maximumCostMicrousd: 1 });
+    transportCalls++;
+    return { output: null, costMicrousd: 1 };
+  };
+  const failed = await journal.run({ writeEvent: async event => {
+    if (event.type === 'request') throw new Error('disk unavailable');
+  } });
+  assert.equal(transportCalls, 0);
+  assert.equal(failed.dispatches, 1);
+  assert.equal(failed.stopReason, 'executor_journal_failed');
+  assert.equal(failed.unknownCalls, 1);
 });

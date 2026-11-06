@@ -1,6 +1,6 @@
 import { parse } from '@babel/parser';
 import { createHash } from 'node:crypto';
-import type { QualityFact, QualityTask, QualityValidator } from './data';
+import type { QualityFact, QualityValidator } from './dataset';
 
 export type QualityValidationResult = {
   passed: boolean;
@@ -238,7 +238,7 @@ function verifyValidator(output: JsonRecord, validator: QualityValidator, state:
 
 const MAX_OUTPUT_BYTES = 64 * 1024;
 
-export function validateQualityTaskOutput(task: QualityTask, rawOutput: string): QualityValidationResult {
+export function validateQualityTaskOutput(validator: QualityValidator, rawOutput: string): QualityValidationResult {
   const state: CheckState = { checks: 0, failures: [] };
   if (Buffer.byteLength(rawOutput, 'utf8') > MAX_OUTPUT_BYTES) {
     return { passed: false, score: 0, checks: 1, failures: ['output_too_large'] };
@@ -250,7 +250,7 @@ export function validateQualityTaskOutput(task: QualityTask, rawOutput: string):
     return { passed: false, score: 0, checks: 1, failures: ['output_not_json'] };
   }
   if (!isRecord(parsed)) return { passed: false, score: 0, checks: 1, failures: ['output_not_object'] };
-  verifyValidator(parsed, task.validator, state);
+  verifyValidator(parsed, validator, state);
   return {
     passed: state.failures.length === 0,
     score: state.checks === 0 ? 0 : (state.checks - state.failures.length) / state.checks,

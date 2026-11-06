@@ -1,0 +1,19 @@
+{
+  "kind": "paper-facts",
+  "studies": [
+    {
+      "doi": "10.6026/973206300191348",
+      "facts": {
+        "files_n": 60,
+        "naocl_percent": 5.25,
+        "trunatomy_mean": 1053.5,
+        "trunatomy_sd": 134.81,
+        "hero_gold_mean": 652.66,
+        "hero_gold_sd": 58.66,
+        "protaper_gold_mean": 494.5,
+        "protaper_gold_sd": 47.69
+      },
+      "tolerance": 0.01
+    }
+  ]
+}

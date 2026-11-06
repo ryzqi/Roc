@@ -1,0 +1,446 @@
+{
+  "schemaVersion": 1,
+  "scope": "S01 engineering L0/L1",
+  "status": "Verified passing",
+  "scientificStatus": "insufficient",
+  "independentHoldoutCount": 0,
+  "humanReviewStatus": "not_run",
+  "liveProviderStatus": "not_run",
+  "laterStages": "not_started",
+  "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+  "physicalCwd": "/Users/Apple_501/Desktop/Roc/Roc",
+  "node": "v26.13.0",
+  "pnpm": "12.5.1",
+  "implementationStartSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+  "checksStartSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+  "checksEndSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+  "gitStateDuringChecks": "uncommitted S01 implementation; no production source edits",
+  "evidenceDirectory": ".artifacts/research-harness/S01/2026-11-06T11-24-16.346Z",
+  "fixtureHash": "55824c7269dd5c56db35b04e995b1f5b6660885f6e501edb34386c5054201e63",
+  "counts": {
+    "unit": {
+      "pass": 1481,
+      "fail": 0,
+      "skipped": 0,
+      "cancelled": 0
+    },
+    "harness": {
+      "pass": 94,
+      "total": 94
+    },
+    "focused": {
+      "pass": 30,
+      "fail": 0
+    },
+    "statisticsGateFollowup": {
+      "pass": 6,
+      "fail": 0
+    },
+    "fixtureTasks": 16
+  },
+  "checks": [
+    {
+      "command": "pnpm harness:quality:check",
+      "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+      "startedAt": "2026-11-06T11:24:16.374Z",
+      "startSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+      "logPath": ".artifacts/research-harness/S01/2026-11-06T11-24-16.346Z/quality.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-06T11:24:16.707Z",
+      "endSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+      "logSha256": "e75affa8975e61f75f443da7593b89112452f653df207edb5dff471c483d4e28"
+    },
+    {
+      "command": "pnpm typecheck",
+      "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+      "startedAt": "2026-11-06T11:24:16.366Z",
+      "startSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+      "logPath": ".artifacts/research-harness/S01/2026-11-06T11-24-16.346Z/typecheck.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-06T11:24:32.763Z",
+      "endSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+      "logSha256": "70685b4df7789c854b9e1ceab7d78a6d0f9a0831c11eb0010b7b5fdbe0e50c39"
+    },
+    {
+      "command": "pnpm harness:eval",
+      "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+      "startedAt": "2026-11-06T11:24:16.387Z",
+      "startSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+      "logPath": ".artifacts/research-harness/S01/2026-11-06T11-24-16.346Z/harness.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-06T11:24:34.415Z",
+      "endSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+      "logSha256": "017525508b21b5dad836cb6d2cbe257432b716fbbe228c33bce6160a397d43aa"
+    },
+    {
+      "command": "pnpm test:unit",
+      "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+      "startedAt": "2026-11-06T11:24:16.380Z",
+      "startSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+      "logPath": ".artifacts/research-harness/S01/2026-11-06T11-24-16.346Z/unit.log",
+      "exitCode": 0,
+      "endedAt": "2026-11-06T11:30:32.497Z",
+      "endSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+      "logSha256": "ce9230dc3b077562072f0c3b39e6604b03b1d0503737951ef3c8781f33132101"
+    },
+    {
+      "command": "pnpm build",
+      "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+      "startedAt": "2026-11-06T11:27:44.529Z",
+      "startSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+      "exitCode": 0,
+      "endedAt": "2026-11-06T11:28:04.293Z",
+      "endSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+      "logPath": ".artifacts/research-harness/S01/2026-11-06T11-24-16.346Z/build.log",
+      "logSha256": "8bbb9397b55be2980374aec56c131a811f4da436deea6e219017ecb3016ab3d6"
+    },
+    {
+      "command": "node --test tests/unit/quality-evaluation.test.mjs tests/unit/quality-runner.test.mjs tests/unit/quality-dataset.test.mjs tests/unit/quality-application-adapter.test.mjs",
+      "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+      "startedAt": "2026-11-06T11:26:49.581Z",
+      "startSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+      "exitCode": 0,
+      "endedAt": "2026-11-06T11:26:54.805Z",
+      "endSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+      "logPath": ".artifacts/research-harness/S01/2026-11-06T11-24-16.346Z/focused.log",
+      "logSha256": "1b4756bf10d9fbac7f71ed03aa679c279df87baa622ec7c8b6a028ab20f264f7"
+    },
+    {
+      "command": "node --test tests/unit/quality-dataset.test.mjs",
+      "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+      "startedAt": "2026-11-06T11:29:59.107Z",
+      "startSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+      "exitCode": 0,
+      "endedAt": "2026-11-06T11:29:59.545Z",
+      "endSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+      "logPath": ".artifacts/research-harness/S01/2026-11-06T11-24-16.346Z/statistics-gates.log",
+      "logSha256": "dd04255c442c3b4ea161815977ec4c8ef849df0792f39ec845a4d8cc332be010"
+    },
+    {
+      "command": "node .artifacts/research-harness/S01/check-deliverables.mjs",
+      "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+      "startedAt": "2026-11-06T11:29:03.729Z",
+      "startSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+      "exitCode": 0,
+      "endedAt": "2026-11-06T11:29:04.036Z",
+      "endSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+      "logPath": ".artifacts/research-harness/S01/2026-11-06T11-24-16.346Z/deliverables-corrected.log",
+      "logSha256": "00b3bad5279743c2061ac41e9c89960f6b06d1c6c98188997c25b98833ec6062"
+    },
+    {
+      "command": "node .artifacts/research-harness/S01/check-deliverables.mjs",
+      "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+      "startedAt": "2026-11-06T11:31:57.018Z",
+      "startSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+      "exitCode": 0,
+      "endedAt": "2026-11-06T11:31:57.308Z",
+      "endSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+      "logPath": ".artifacts/research-harness/S01/2026-11-06T11-24-16.346Z/deliverables-final.log",
+      "logSha256": "73f7dfb5e33bbb5d894250467c87d0d0b095ec671f4d1d1190f4251f6c78d7fb"
+    }
+  ],
+  "supplementaryTestTiming": "Provider regression and statistical assertions were added after full unit began and passed focused checks.",
+  "earlierAttempts": {
+    "preservedLogs": [
+      {
+        "name": "s01-application-tests-fifth.log",
+        "sha256": "2a6fe618a90076c55e550ea2c0df6cc2030848f269594f2d5250787b81d69b16",
+        "status": "preserved earlier attempt; not a current verification"
+      },
+      {
+        "name": "s01-application-tests-first.log",
+        "sha256": "7ed510181a69208735412abc2aa9667b1a1cc8b55e4cee0b0f08a936e6112441",
+        "status": "preserved earlier attempt; not a current verification"
+      },
+      {
+        "name": "s01-application-tests-fourth.log",
+        "sha256": "4352e060a17e6b3cc631cfbc4fdb6e8be6e7e3682c61ecb67b02b69233d91d58",
+        "status": "preserved earlier attempt; not a current verification"
+      },
+      {
+        "name": "s01-application-tests-second.log",
+        "sha256": "77e982ac5140d4cf943b06b7f6d3fce00a70012e18ad21115242efffae3c18a3",
+        "status": "preserved earlier attempt; not a current verification"
+      },
+      {
+        "name": "s01-application-tests-seventh.log",
+        "sha256": "3d4badceef1f8783062a50eaee8ecb879b54b205652eeb48b7cc5cdad6312cca",
+        "status": "preserved earlier attempt; not a current verification"
+      },
+      {
+        "name": "s01-application-tests-sixth.log",
+        "sha256": "a4dcc8ab36bfa6b4809bc053848b109832ec84d77a0792da873557af0cafd8ef",
+        "status": "preserved earlier attempt; not a current verification"
+      },
+      {
+        "name": "s01-application-tests-third.log",
+        "sha256": "979a3ea646b2278f5401bb97764962d30d4f0f2b017c9b17fe442ac4406bdcac",
+        "status": "preserved earlier attempt; not a current verification"
+      },
+      {
+        "name": "s01-quality-tests-first.log",
+        "sha256": "d43e4851c1e5d4dffb52c7cd9b907508483cfe350d437c8685024789b142486f",
+        "status": "preserved earlier attempt; not a current verification"
+      },
+      {
+        "name": "s01-quality-tests-fourth.log",
+        "sha256": "edf96d799a45180dec25cff387dd72917b512c23afabdf70062ee9063d866778",
+        "status": "preserved earlier attempt; not a current verification"
+      },
+      {
+        "name": "s01-quality-tests-second.log",
+        "sha256": "0dccaafcceae0be3b96ce5a59bc9811e37afd297909a6f3d8ac588cac54466c6",
+        "status": "preserved earlier attempt; not a current verification"
+      },
+      {
+        "name": "s01-quality-tests-third.log",
+        "sha256": "d8e2812ba424f5ed74efea3f1860488a0800ba263226a94c4f04bb53f02291b8",
+        "status": "preserved earlier attempt; not a current verification"
+      },
+      {
+        "name": "s01-typecheck-fifth.log",
+        "sha256": "70685b4df7789c854b9e1ceab7d78a6d0f9a0831c11eb0010b7b5fdbe0e50c39",
+        "status": "preserved earlier attempt; not a current verification"
+      },
+      {
+        "name": "s01-typecheck-first.log",
+        "sha256": "1021729a9f19495e996a769b0f9303337dd59bd5327cc10f856f25f9fe394f60",
+        "status": "preserved earlier attempt; not a current verification"
+      },
+      {
+        "name": "s01-typecheck-fourth.log",
+        "sha256": "70685b4df7789c854b9e1ceab7d78a6d0f9a0831c11eb0010b7b5fdbe0e50c39",
+        "status": "preserved earlier attempt; not a current verification"
+      },
+      {
+        "name": "s01-typecheck-second.log",
+        "sha256": "e49c1e95b3a1cd7785914c97a3c7074f931cccb32eab7aa7730effefa4a4e765",
+        "status": "preserved earlier attempt; not a current verification"
+      },
+      {
+        "name": "s01-typecheck-third.log",
+        "sha256": "b4dfa90596eb331c9a0905b84d841893fdfcc5d62f38a1362325e68b15c497f0",
+        "status": "preserved earlier attempt; not a current verification"
+      }
+    ],
+    "deliverablesRegexFalsePositive": {
+      "command": "node .artifacts/research-harness/S01/check-deliverables.mjs",
+      "cwd": "/Users/Apple_501/Desktop/Roc/Roc",
+      "startedAt": "2026-11-06T11:28:49.509Z",
+      "startSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+      "exitCode": 1,
+      "endedAt": "2026-11-06T11:28:49.823Z",
+      "endSha": "424d2b6659a5cb9ffb564f97a9d544a780987da2",
+      "logPath": ".artifacts/research-harness/S01/2026-11-06T11-24-16.346Z/deliverables.log",
+      "logSha256": "13ec4c34161dc83759341b0f09a44bb299718e7848e910a3c4b3674a7e3c1210"
+    }
+  },
+  "implementationSnapshots": [
+    {
+      "path": "scripts/harness-eval/README.md",
+      "sha256": "8081c17cdb57e9fd053109d6c491967fe9ea223a4bab9b02f1169d50f1432f0a",
+      "state": "present"
+    },
+    {
+      "path": "scripts/harness-eval/context-long-task.ts",
+      "sha256": "ec66605d07adf006afcc35700521d14b52fcc0e3ec3f86a28fd2074a8a274bde",
+      "state": "present"
+    },
+    {
+      "path": "scripts/harness-eval/quality-check.mjs",
+      "sha256": "d5a5bcb9f19e4c59e4b3c184cd39b724f707f90a517bfc8e02f0c270037d21f5",
+      "state": "present"
+    },
+    {
+      "path": "scripts/harness-eval/quality-evaluation/Task.md",
+      "sha256": "72cc285efdc79e9a817fe6a6b473aaaa4449f9c77e20186fdf3647d1e0596fd2",
+      "state": "present"
+    },
+    {
+      "path": "scripts/harness-eval/quality-evaluation/data.ts",
+      "sha256": null,
+      "state": "deleted"
+    },
+    {
+      "path": "scripts/harness-eval/quality-evaluation/index.ts",
+      "sha256": "de51e571c8cf5cd0152de3a41c495e2020b2038f1407ff6a924746e10f27e69d",
+      "state": "present"
+    },
+    {
+      "path": "scripts/harness-eval/quality-evaluation/protocol.ts",
+      "sha256": "cb8b366e69295c37fc6298f07dd02ee9ef8fdc13183dc1501a9fe2e63ac24f02",
+      "state": "present"
+    },
+    {
+      "path": "scripts/harness-eval/quality-evaluation/runner.ts",
+      "sha256": "7607585be35dad9bf80098b24973ecf1054e18af717a9650dda1e00bf0c85add",
+      "state": "present"
+    },
+    {
+      "path": "scripts/harness-eval/quality-evaluation/statistics.ts",
+      "sha256": "1e5b381934faf072e968fb60be76e9a04306bb86da0c73603dd6b95eb4a5a89f",
+      "state": "present"
+    },
+    {
+      "path": "scripts/harness-eval/quality-evaluation/validators.ts",
+      "sha256": "a247546e0c8a47871e5788462e26edd7be5fe30f59cf4203b402b6a301e91018",
+      "state": "present"
+    },
+    {
+      "path": "scripts/harness-eval/run.mjs",
+      "sha256": "b8312ce585aed0a67d47e384c10b1e334d2ca86b94d05df91040cb4699d7bbd8",
+      "state": "present"
+    },
+    {
+      "path": "tests/unit/quality-evaluation.test.mjs",
+      "sha256": "d0c8a4c4b874bfdc6726753557918b608599fe4d27687806726bfb0237667a49",
+      "state": "present"
+    },
+    {
+      "path": "tests/unit/quality-runner.test.mjs",
+      "sha256": "2fba00e6c9a7a33272265554713ba7b002ac56d6a8ceaad2a7ddb76482a741fe",
+      "state": "present"
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "6554ea0726566d8708ecf85ee42bafa63b7c13e43a5eec1e355ce56ad8631e43",
+      "state": "present"
+    },
+    {
+      "path": "scripts/harness-eval/prepare-quality-worker.mjs",
+      "sha256": "f92c90e52150f739a27ff7c91fb560d936cdd34e37784afe640cdc054a864479",
+      "state": "present"
+    },
+    {
+      "path": "scripts/harness-eval/quality-evaluation/agent-task-view.ts",
+      "sha256": "450659d8782dcd907781a319932d24f511dbfaf35c1defaf10b8055d030a236f",
+      "state": "present"
+    },
+    {
+      "path": "scripts/harness-eval/quality-evaluation/application-adapter.ts",
+      "sha256": "367dc6ff37ec382b18a433d04ed63e245c9b31d2b443cec42dd61967f2fd3e49",
+      "state": "present"
+    },
+    {
+      "path": "scripts/harness-eval/quality-evaluation/application-worker.ts",
+      "sha256": "c0a8eb06fdc4b57095eaffa2761a7597d9b952e46c63c84e091e6680a34be8b4",
+      "state": "present"
+    },
+    {
+      "path": "scripts/harness-eval/quality-evaluation/dataset.ts",
+      "sha256": "ca58f30e0237f94e071023cf6cc3abf7d6cb91c7edd6bb8a6a5d2810121d0b08",
+      "state": "present"
+    },
+    {
+      "path": "tests/fixtures/quality-evaluation/expected/cancel-crash-known-receipt.json",
+      "sha256": "f528583ac803978f386e880b2339fdc62fdb8a50ba81d9f14036d9fe84af3125",
+      "state": "present"
+    },
+    {
+      "path": "tests/fixtures/quality-evaluation/expected/cancel-crash-unknown-effect.json",
+      "sha256": "0eb0bcf3ec75aa2ddec6040b6396fb3995030f0038a15656891ccbf299699af2",
+      "state": "present"
+    },
+    {
+      "path": "tests/fixtures/quality-evaluation/expected/experiment-script-fatigue-mean.json",
+      "sha256": "009a38ad77ca4fb2670d345376884a20cf0f2d2188936dd43c7fc11a34531707",
+      "state": "present"
+    },
+    {
+      "path": "tests/fixtures/quality-evaluation/expected/experiment-script-release-totals.json",
+      "sha256": "f99482b075e1d573f6e45aa29cae54aed33a05e1b7a5564902f764f928e29fba",
+      "state": "present"
+    },
+    {
+      "path": "tests/fixtures/quality-evaluation/expected/file-report-fatigue-csv.json",
+      "sha256": "7b2dc4416fbe415137a17fd69c7d26bc205e6a358facbc9eff0ec71311491bdc",
+      "state": "present"
+    },
+    {
+      "path": "tests/fixtures/quality-evaluation/expected/file-report-release-windows.json",
+      "sha256": "782cd9bb9bea6c9ee39c97b7cfffe862740ecc4414665055da0b4c6a2a0897b1",
+      "state": "present"
+    },
+    {
+      "path": "tests/fixtures/quality-evaluation/expected/literature-fatigue-ranking.json",
+      "sha256": "66e7b30c5a7aae2618eec1effedd7e574c1094e49337ae0f82f517ff24badcd5",
+      "state": "present"
+    },
+    {
+      "path": "tests/fixtures/quality-evaluation/expected/literature-release-windows.json",
+      "sha256": "21820eef992bd44f8de84e2769091c27c91f5c8eeecabf302d4aa8e5ba8f8f3a",
+      "state": "present"
+    },
+    {
+      "path": "tests/fixtures/quality-evaluation/expected/long-memory-release-constraints.json",
+      "sha256": "0c05b7607f9478c87a1b8ba255fb633527721cc239fb00ea6dc192e9a14484c9",
+      "state": "present"
+    },
+    {
+      "path": "tests/fixtures/quality-evaluation/expected/long-memory-study-boundaries.json",
+      "sha256": "13a882ce83928c9e3ba3768ef5c17f0fb519922906eaac0ba47cec62681c595b",
+      "state": "present"
+    },
+    {
+      "path": "tests/fixtures/quality-evaluation/expected/mcp-recovery-idempotent-retry.json",
+      "sha256": "3c15bebac71179e14874b175730fcc3b80853fc5484e1f9a3290604e30e067d3",
+      "state": "present"
+    },
+    {
+      "path": "tests/fixtures/quality-evaluation/expected/mcp-recovery-stale-receipt.json",
+      "sha256": "711896e8f9b43557f7dc9517273f9201d47b7985dd1153c61a5f1b0e6ea579e2",
+      "state": "present"
+    },
+    {
+      "path": "tests/fixtures/quality-evaluation/expected/multi-paper-dental-outcomes.json",
+      "sha256": "2152e8c55f7e6daad0303837d7cbf0d86fda6299cf16ea41b55389f4ed1ae1cd",
+      "state": "present"
+    },
+    {
+      "path": "tests/fixtures/quality-evaluation/expected/multi-paper-release-and-periodontal.json",
+      "sha256": "2acebca6af0f814aace26b37a93543384cfbffd8924c81afd267c7753b7238e6",
+      "state": "present"
+    },
+    {
+      "path": "tests/fixtures/quality-evaluation/expected/permission-injection-untrusted-document.json",
+      "sha256": "a4682892b16327d6368415623a36ae59ed1f417c6b39ca68408a535fdbb62be1",
+      "state": "present"
+    },
+    {
+      "path": "tests/fixtures/quality-evaluation/expected/permission-injection-untrusted-tool-output.json",
+      "sha256": "02f0cc6a1011a34364dd547e3c56665070e30a8a71b04b9f765e3abe5904ddd4",
+      "state": "present"
+    },
+    {
+      "path": "tests/fixtures/quality-evaluation/manifest.json",
+      "sha256": "f30b99c563929fd7e809b96f55808ef35aa7d0a5af70c2693c49d5f1e56787bc",
+      "state": "present"
+    },
+    {
+      "path": "tests/fixtures/quality-evaluation/manifest.sha256",
+      "sha256": "240f75338d18e06ad7895277114122187f513ab33c3bbdcd99aea96eed075ce2",
+      "state": "present"
+    },
+    {
+      "path": "tests/fixtures/quality-evaluation/source-records.json",
+      "sha256": "16af706ed149590c4a1ceaf9bf119c3d9c7bef7185bd7210cf3c158749640251",
+      "state": "present"
+    },
+    {
+      "path": "tests/unit/quality-application-adapter.test.mjs",
+      "sha256": "b142bc78049403cb95cf06df10d2e711b1aca3b233c315b6ed17cb126582ef45",
+      "state": "present"
+    },
+    {
+      "path": "tests/unit/quality-dataset.test.mjs",
+      "sha256": "23bd301f7badade9328ccbaed7ec7954055b774861c7ff1e64c3827cfbee2498",
+      "state": "present"
+    }
+  ],
+  "limitations": [
+    "Application terminal output includes a context-contract prefix and is rejected as output_not_json.",
+    "No connected MCP/Skill/external workspace or real eight-family effect/cross-session observers.",
+    "No independent 200-task corpus, human double review, live-model A/B or blind writing review.",
+    "No actual provider invoice or hard billing enforcement, packaged smoke or release verification."
+  ]
+}

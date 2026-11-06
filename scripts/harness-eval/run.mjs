@@ -154,7 +154,13 @@ try {
     const name = 'quality-evaluation-contract';
     const dir = join(directory, name);
     mkdirSync(dir);
-    try { report.results.push({ id: name, passed: true, evidence: runtime.verifyQualityEvaluation() }); }
+    try {
+      const { importTypeScriptModule } = await import('../lib/bundle-ts.mjs');
+      const { loadQualityDatasetPackage } = await importTypeScriptModule('scripts/harness-eval/quality-evaluation/dataset.ts', { platform: 'node' });
+      const data = loadQualityDatasetPackage('tests/fixtures/quality-evaluation/manifest.json',
+        readFileSync('tests/fixtures/quality-evaluation/manifest.sha256', 'utf8').trim());
+      report.results.push({ id: name, passed: true, evidence: runtime.verifyQualityEvaluation(data.dataset, data.expectations) });
+    }
     catch (error) { report.results.push({ id: name, passed: false, failureClass: 'verifier', error: String(error) }); }
   }
   for (const name of ['memory-versions', 'skills-pinning']) {

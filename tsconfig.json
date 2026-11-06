@@ -20,5 +20,5 @@
     "jsx": "react-jsx",
     "types": ["node"]
   },
-  "include": ["src", "resources/research-runtime/typescript-experiment-runner.mts", "electron.vite.config.ts", "tests/smoke/lib/performance-profile-seed.ts", "scripts/builtin-skills/vendor.ts", "scripts/harness-eval/runtime.ts", "scripts/harness-eval/context.ts", "scripts/harness-eval/memory-skills.ts", "scripts/harness-eval/execution.ts", "scripts/harness-eval/extensions.ts", "scripts/harness-eval/p6-experience.ts", "scripts/harness-eval/quality-evaluation/runner.ts"]
+  "include": ["src", "resources/research-runtime/typescript-experiment-runner.mts", "electron.vite.config.ts", "tests/smoke/lib/performance-profile-seed.ts", "scripts/builtin-skills/vendor.ts", "scripts/harness-eval/runtime.ts", "scripts/harness-eval/context.ts", "scripts/harness-eval/memory-skills.ts", "scripts/harness-eval/execution.ts", "scripts/harness-eval/extensions.ts", "scripts/harness-eval/p6-experience.ts", "scripts/harness-eval/quality-evaluation/**/*.ts"]
 }

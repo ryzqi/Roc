@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { mkdir, open, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { QUALITY_TASKS, toAgentTaskView, type AgentTaskView, type QualityTask } from './data';
+import { toAgentTaskView, qualityHash, freezeQualityDataset, qualityValidatorSchema, deepFreeze, type FrozenQualityDataset, type QualityExpectations, type AgentTaskView, type QualityTask } from './dataset';
 import { assertQualityProtocolAuthorized, type QualityEvaluationProtocol } from './protocol';
 import {
   QUALITY_FAILURE_CLASSES, summarizePairedQualityTrials,
@@ -21,6 +21,12 @@ export type QualityExecutorBinding = {
   candidateCommitSha: string;
   toolManifestHash: string;
   environmentHash: string;
+  maxRequestsPerTask: number;
+  maxRequestCostMicrousd: number;
+  pricingVersion: string;
+  temperature: number;
+  isolationHash: string;
+  isolation: 'process-files-tools' | 'fixture-object';
 };
 
 /**
@@ -33,49 +39,45 @@ export type QualityExecutor = {
   quote(view: AgentTaskView, arm: Arm): number | null;
   execute(view: AgentTaskView, context: {
     arm: Arm; trialId: string; repeatIndex: number; maximumCostMicrousd: number; signal: AbortSignal;
+    recordRequest(input: { requestHash: string; maximumCostMicrousd: number }): Promise<void>;
   }): Promise<{ output: string | null; costMicrousd: number | null }>;
 };
 
 export class QualityExecutionFailure extends Error {
-  constructor(readonly failureClass: QualityFailureClass) {
+  constructor(readonly failureClass: QualityFailureClass, readonly stopReason?: string) {
     super(`quality_execution_${failureClass}`);
+    this.name = 'QualityExecutionFailure';
   }
 }
 
 export type QualityRunnerEvent = {
-  type: 'started' | 'dispatched' | 'finished' | 'completed';
+  type: 'started' | 'dispatched' | 'request' | 'finished' | 'completed';
   trialId: string | null;
   heldCostMicrousd: number;
   reservedCostMicrousd: number | null;
   outcome: QualityArmOutcome | null;
+  requestHash?: string;
 };
 
-export function qualityPromptSetHash(): string {
-  return createHash('sha256').update(JSON.stringify(QUALITY_TASKS.map(toAgentTaskView))).digest('hex');
+export function qualityPromptSetHash(dataset: FrozenQualityDataset, mode: 'fixture' | 'pilot' | 'full'): string {
+  return qualityHash(selectedTasks(dataset, mode).map(toAgentTaskView));
 }
 
-export function qualityPilotAudit(): Record<string, unknown> {
-  const byFamily = Object.fromEntries([...new Set(QUALITY_TASKS.map((task) => task.family))].map((family) => {
-    const tasks = QUALITY_TASKS.filter((task) => task.family === family);
-    return [family, { tasks: tasks.length, clusters: new Set(tasks.map((task) => task.clusterId)).size }];
-  }));
-  return {
-    scope: 'frozen-pilot-only', tasks: QUALITY_TASKS.length, byFamily,
-    splits: [...new Set(QUALITY_TASKS.map((task) => task.split))],
-    promptSetHash: qualityPromptSetHash(), fullDatasetReady: false,
-    missing: ['reviewed-independent-200-task-corpus', 'train-dev-holdout-source-separation',
-      'five-independent-clusters-per-family', 'blind-domain-review', 'isolated-live-executor-and-pricing']
-  };
+function selectedTasks(dataset: FrozenQualityDataset, mode: 'fixture' | 'pilot' | 'full') {
+  const split = mode === 'fixture' ? 'fixture' : mode === 'pilot' ? 'dev' : 'holdout';
+  return dataset.tasks.filter(task => task.split === split);
 }
 
 /** Exclusive journal creation makes restart refuse an already dispatched protocol. */
-export async function runQualityPilotWithJournal(input: {
+export async function runQualityEvaluationWithJournal(input: {
+  dataset: FrozenQualityDataset;
+  expectations: QualityExpectations;
   protocol: QualityEvaluationProtocol;
   executor: QualityExecutor;
   signal: AbortSignal;
   artifactsRoot: string;
 }) {
-  assertQualityProtocolAuthorized(input.protocol);
+  assertQualityProtocolAuthorized(input.dataset, input.protocol);
   const directory = join(input.artifactsRoot, 'quality');
   await mkdir(directory, { recursive: true });
   const journalPath = join(directory, `${input.protocol.lockHash}.jsonl`);
@@ -83,8 +85,8 @@ export async function runQualityPilotWithJournal(input: {
   try {
     await journal.appendFile(`${JSON.stringify({ protocol: input.protocol, binding: input.executor.binding })}\n`);
     await journal.sync();
-    const result = await runQualityPilot({
-      protocol: input.protocol, executor: input.executor, signal: input.signal,
+    const result = await runQualityEvaluation({
+      dataset: input.dataset, expectations: input.expectations, protocol: input.protocol, executor: input.executor, signal: input.signal,
       async writeEvent(event) {
         await journal.appendFile(`${JSON.stringify(event)}\n`);
         await journal.sync();
@@ -109,26 +111,37 @@ function failure(failureClass: QualityFailureClass, latencyMs: number, costUsd: 
 }
 
 /**
- * Runs the frozen paired pilot sequentially. Event writes are awaited before dispatch;
+ * Runs the selected frozen split sequentially. Event writes are awaited before dispatch;
  * callers must retain a one-use durable journal and never automatically replay a dispatched trial.
  */
-export async function runQualityPilot(input: {
+export async function runQualityEvaluation(input: {
+  dataset: FrozenQualityDataset;
+  expectations: QualityExpectations;
   protocol: QualityEvaluationProtocol;
   executor: QualityExecutor;
   signal: AbortSignal;
   writeEvent(event: QualityRunnerEvent): Promise<void>;
 }) {
-  assertQualityProtocolAuthorized(input.protocol);
+  assertQualityProtocolAuthorized(input.dataset, input.protocol);
+  const { datasetHash, ...manifest } = input.dataset;
+  const dataset = freezeQualityDataset(manifest, datasetHash);
+  const expectations = deepFreeze(structuredClone(input.expectations));
+  for (const task of dataset.tasks) {
+    const validator = qualityValidatorSchema.parse(expectations[task.id]);
+    if (qualityHash(validator) !== task.expectedHash) throw new Error('quality_runner_expected_changed');
+  }
   const protocol = structuredClone(input.protocol);
   const { executor, signal, writeEvent } = input;
   const lock = protocol.lock;
   Object.freeze(lock);
   Object.freeze(protocol);
   Object.freeze(executor.binding);
-  if (lock.executionMode !== 'pilot') throw new Error('quality_runner_pilot_required');
-  if (lock.promptSetHash !== qualityPromptSetHash()) throw new Error('quality_runner_prompt_set_changed');
+  if (lock.executionMode !== 'fixture' && (executor.binding.evidence !== 'live-model'
+    || executor.binding.isolation !== 'process-files-tools')) throw new Error('quality_runner_live_isolation_required');
+  if (lock.executionMode === 'fixture' && executor.binding.evidence !== 'fixture') throw new Error('quality_runner_fixture_binding_required');
+  if (lock.promptSetHash !== qualityPromptSetHash(dataset, lock.executionMode)) throw new Error('quality_runner_prompt_set_changed');
   for (const key of ['providerId', 'baselineModelId', 'candidateModelId', 'baselineCommitSha',
-    'candidateCommitSha', 'toolManifestHash', 'environmentHash'] as const) {
+    'candidateCommitSha', 'toolManifestHash', 'environmentHash', 'pricingVersion', 'temperature', 'isolationHash', 'maxRequestsPerTask', 'maxRequestCostMicrousd'] as const) {
     if (executor.binding[key] !== lock[key]) throw new Error(`quality_runner_binding_mismatch:${key}`);
   }
   if (!['fixture', 'live-model'].includes(executor.binding.evidence)) throw new Error('quality_runner_evidence_invalid');
@@ -169,13 +182,32 @@ export async function runQualityPilot(input: {
     let output: string | null = null;
     let actualCost: number | null = null;
     let executionFailure: QualityFailureClass | null = null;
+    let requestCount = 0;
+    let requestHeld = 0;
     try {
       if (signal.aborted) abort();
       controller.signal.throwIfAborted();
       const pending = Promise.resolve().then(() => {
         controller.signal.throwIfAborted();
         return executor.execute(view, {
-          arm, trialId, repeatIndex, maximumCostMicrousd: reserved, signal: controller.signal
+          arm, trialId, repeatIndex, maximumCostMicrousd: reserved, signal: controller.signal,
+          async recordRequest(request) {
+            controller.signal.throwIfAborted();
+            if (++requestCount > lock.maxRequestsPerTask || !/^[a-f0-9]{64}$/u.test(request.requestHash)
+              || !Number.isSafeInteger(request.maximumCostMicrousd) || request.maximumCostMicrousd <= 0
+              || request.maximumCostMicrousd > lock.maxRequestCostMicrousd
+              || request.maximumCostMicrousd > reserved - requestHeld) {
+              throw new QualityExecutionFailure('policy', 'executor_request_policy_violated');
+            }
+            requestHeld += request.maximumCostMicrousd;
+            try {
+              await writeEvent({ type: 'request', trialId, heldCostMicrousd: heldCost,
+                reservedCostMicrousd: request.maximumCostMicrousd, outcome: null, requestHash: request.requestHash });
+            } catch {
+              throw new QualityExecutionFailure('infra', 'executor_journal_failed');
+            }
+            controller.signal.throwIfAborted();
+          }
         });
       });
       const result = await new Promise<Awaited<typeof pending>>((resolve, reject) => {
@@ -197,8 +229,15 @@ export async function runQualityPilot(input: {
         stopReason = signal.aborted ? 'cancelled' : 'executor_abort_unconfirmed';
         executionFailure = signal.aborted ? 'operator' : 'infra';
       } else {
-        executionFailure = error instanceof QualityExecutionFailure && QUALITY_FAILURE_CLASSES.includes(error.failureClass)
-          ? error.failureClass : 'infra';
+        // Adapters may be separately bundled host modules; their Error constructor identity
+        // differs while the explicit trusted-host failure contract remains the same.
+        const classified = error as Partial<QualityExecutionFailure> | null;
+        executionFailure = error instanceof Error && error.name === 'QualityExecutionFailure'
+          && classified?.failureClass !== undefined && QUALITY_FAILURE_CLASSES.includes(classified.failureClass)
+          ? classified.failureClass : 'infra';
+        if (error instanceof Error && error.name === 'QualityExecutionFailure' && classified?.stopReason !== undefined) {
+          stopReason = classified.stopReason;
+        }
       }
     } finally {
       clearTimeout(timeout);
@@ -206,7 +245,7 @@ export async function runQualityPilot(input: {
     }
     const latencyMs = performance.now() - started;
     if (actualCost === null) unknownCalls += 1;
-    const validation = executionFailure === null && output !== null ? validateQualityTaskOutput(task, output) : null;
+    const validation = executionFailure === null && output !== null ? validateQualityTaskOutput(expectations[task.id], output) : null;
     validations.push({ trialId, validation });
     const costUsd = actualCost === null ? null : actualCost / 1_000_000;
     const outcome: QualityArmOutcome = executionFailure !== null
@@ -217,21 +256,21 @@ export async function runQualityPilot(input: {
     return outcome;
   }
 
-  for (const task of QUALITY_TASKS) {
+  for (const task of selectedTasks(dataset, lock.executionMode)) {
     for (let repeatIndex = 0; repeatIndex < protocol.repeatsPerTask; repeatIndex += 1) {
       const arms: Record<Arm, QualityArmOutcome> = {} as Record<Arm, QualityArmOutcome>;
       // Counterbalance order without changing the preregistered task/repeat identities.
-      const order: Arm[] = repeatIndex % 2 === 0 ? ['baseline', 'candidate'] : ['candidate', 'baseline'];
+      const order: Arm[] = parseInt(createHash('sha256').update(`${protocol.seed}:${task.id}:${repeatIndex}`).digest('hex').slice(0, 8), 16) % 2 === 0 ? ['baseline', 'candidate'] : ['candidate', 'baseline'];
       for (const arm of order) arms[arm] = await runArm(task, repeatIndex, arm);
       trials.push({ taskId: task.id, family: task.family, clusterId: task.clusterId, repeatIndex, ...arms });
     }
   }
   await writeEvent({ type: 'completed', trialId: null, heldCostMicrousd: heldCost, reservedCostMicrousd: null, outcome: null });
   return {
-    evidence: executor.binding.evidence, lockHash: protocol.lockHash, dispatches, unknownCalls,
+    evidence: executor.binding.evidence, datasetHash: dataset.datasetHash, executionMode: lock.executionMode, lockHash: protocol.lockHash, dispatches, unknownCalls,
     heldCostMicrousd: heldCost, stopReason, trials, validations,
     statistics: summarizePairedQualityTrials(trials, {
-      repeatsPerTask: protocol.repeatsPerTask, bootstrapIterations: protocol.bootstrapIterations, seed: protocol.seed,
+      dataset, evidence: executor.binding.evidence, repeatsPerTask: protocol.repeatsPerTask, bootstrapIterations: protocol.bootstrapIterations, seed: protocol.seed,
       targetCaseCount: protocol.targetCaseCount, minimumClustersPerFamily: protocol.minimumClustersPerFamily,
       nonInferiorityMargin: protocol.nonInferiorityMargin, targetByFamily: protocol.targetByFamily
     })
