@@ -4,7 +4,7 @@ import {mkdtemp, mkdir, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import electronPath from 'electron';
-import {_electron} from '@playwright/test';
+import {_electron, expect} from '@playwright/test';
 import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 import {createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
 
@@ -201,7 +201,7 @@ test('an uncertain capture fixes request identity until exact retry or explicit 
   await page.evaluate(value => window.updateReader(value), state(f, {writable: false}));
   assert.equal(await page.getByRole('button', {name: '重试原资源请求', exact: true}).isEnabled(), false);
   await page.getByRole('button', {name: '开始新资源请求', exact: true}).click();
-  assert.equal(await page.getByTestId('reader-resources-toggle').isEnabled(), true);
+  await expect(page.getByTestId('reader-resources-toggle')).toBeEnabled();
   assert.equal(f.resources.history({projectId: f.project.id, doi: null, offset: 0, limit: 20}).total, 2);
 });
 

@@ -17,6 +17,7 @@ const PaperBlockAsset = lazy(() => import('./PaperBlockAsset'));
 const ScholarlyRelationsPanel = lazy(() => import('./ScholarlyRelationsPanel'));
 const ResearchResourcesPanel = lazy(() => import('./ResearchResourcesPanel'));
 const HuggingFacePanel = lazy(() => import('./HuggingFacePanel'));
+const OpenReviewPanel = lazy(() => import('./OpenReviewPanel'));
 
 const TIER_OPTIONS: ReadonlyArray<{ value: ResearchParseTier; label: string; title: string }> = [
   { value: 'compact', label: '轻量', title: 'PP-OCRv6 Tiny + 文档布局和表格识别，约 19 MB' },
@@ -120,6 +121,8 @@ export function PaperReader({
   const [resourcesLocked, setResourcesLocked] = useState(false);
   const [huggingFaceOpen, setHuggingFaceOpen] = useState(false);
   const [huggingFaceLocked, setHuggingFaceLocked] = useState(false);
+  const [openReviewOpen, setOpenReviewOpen] = useState(false);
+  const [openReviewLocked, setOpenReviewLocked] = useState(false);
   /**
    * 解析档位（`document.parse` 的 `tier`）。
    *
@@ -427,6 +430,11 @@ export function PaperReader({
             className="min-h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
             Hugging Face
           </button>
+          <button type="button" disabled={literature.projectId === null || openReviewLocked} aria-expanded={openReviewOpen}
+            onClick={() => setOpenReviewOpen(current => !current)} data-testid="reader-openreview-toggle"
+            className="min-h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
+            OpenReview
+          </button>
           <button
             type="button"
             disabled={actionBusy}
@@ -533,7 +541,7 @@ export function PaperReader({
         )}
       </header>
 
-      {(relationsOpen || resourcesOpen || huggingFaceOpen) && literature.projectId !== null ? <div className="max-h-[55%] shrink-0 overflow-y-auto border-b-[0.5px] border-line">
+      {(relationsOpen || resourcesOpen || huggingFaceOpen || openReviewOpen) && literature.projectId !== null ? <div className="max-h-[55%] shrink-0 overflow-y-auto border-b-[0.5px] border-line">
         {relationsOpen ? <Suspense fallback={<p role="status" className="px-3 py-2 text-muted">载入学术关系</p>}>
           <ScholarlyRelationsPanel key={`${literature.projectId}:${selected.id}`} client={literature.client}
             projectId={literature.projectId} item={selected} writable={scope.writable}/>
@@ -545,6 +553,10 @@ export function PaperReader({
         {huggingFaceOpen ? <Suspense fallback={<p role="status" className="px-3 py-2 text-muted">载入 Hugging Face</p>}>
           <HuggingFacePanel key={`${literature.projectId}:${selected.id}`} client={literature.client}
             projectId={literature.projectId} writable={scope.writable} onLockChange={setHuggingFaceLocked}/>
+        </Suspense> : null}
+        {openReviewOpen ? <Suspense fallback={<p role="status" className="px-3 py-2 text-muted">载入 OpenReview</p>}>
+          <OpenReviewPanel key={`${literature.projectId}:${selected.id}`} client={literature.client}
+            projectId={literature.projectId} writable={scope.writable} onLockChange={setOpenReviewLocked}/>
         </Suspense> : null}
       </div> : null}
 

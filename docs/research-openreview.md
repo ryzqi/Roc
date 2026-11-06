@@ -56,3 +56,29 @@ Logs: `.artifacts/research-optimization/openreview-a5a-*.log`. Native SQLite bac
 Final acceptance: related unit 164/164 (OpenReview 17/17), full unit 1395/1395, native production 18/18, Harness 94/94, related renderer 65/65, startup 13/13 with zero renderer errors, build/typecheck, current IPC generation, eager renderer 1,134,468 bytes in six files and diff whitespace checks all passed. Each runner returned exit code zero.
 
 Live provider connectivity, private access, independent scientific interpretation and public review acceptance remain **Blocked, not run**. This local implementation does not establish those external outcomes.
+
+## A5B reader controls
+
+Status: **Verified passing** for the local reader UI. `PaperReader` lazily loads the panel on explicit disclosure, with project/item keys resetting transient state and observation keys resetting local entry pages. It shares the existing 55% height scroller with the other source panels. No route or shell was added.
+
+The reader accepts four explicit query kinds and manual target identifiers. History pages contain 20 observations; saved entry pages contain 20 entries. A full 50-entry provider page offers an explicit next-page capture with a new request ID and the saved cursor. Each page remains a separate observation.
+
+Dirty inputs, active captures and uncertain replies lock collapse, history selection and provider continuation. Users can discard edits, cancel an actual capture, or retry the exact original request after a lost reply. Cancel acknowledgement is separate from the capture outcome. Readonly projects retain history and read retries while new queries remain disabled. Late responses from an unmounted project/item panel cannot change its replacement.
+
+Note details show source role, wrapped content, field visibility, venue/domain, signatures, license and source dates. Edit details retain original delta JSON and state that no complete historical Note was reconstructed. Content is mounted only after disclosure. No control accepts public opinions as reviewed scientific facts.
+
+Verification in the same working directory:
+
+```bash
+node --test --test-concurrency=1 --test-timeout=180000 tests/renderer/research-openreview.test.mjs tests/renderer/research-huggingface.test.mjs tests/renderer/research-resources.test.mjs tests/renderer/scholarly-relations.test.mjs tests/renderer/paper-reader.test.mjs tests/renderer/artifact-production.test.mjs
+node --test --test-concurrency=1 --test-timeout=180000 tests/renderer/research-openreview.test.mjs tests/renderer/research-resources.test.mjs
+pnpm build
+node scripts/smoke-electron.mjs
+pnpm check:ipc
+pnpm check:renderer-chunks
+git diff --check
+```
+
+The first UI run passed 7/8; the layout test read a lazy content node before it mounted. Waiting for the visible content exposed CSS serialization precision (575.562px versus DOM 575.5625px). The final full-height assertion allows only 0.001px serialization error. The combined runner passed 72/73, including OpenReview 8/8; its sole failure was an existing resource test's immediate enabled assertion before a React parent effect. That assertion now waits for the same enabled state. The final affected runner passed 18/18, including OpenReview 8/8 and resources 10/10; the other 55 combined cases passed before this test-only correction.
+
+Fresh build/typecheck, startup 13/13 with zero renderer errors, current IPC generation, unchanged eager renderer 1,134,468 bytes/six files and diff checks passed with exit zero. Actual Electron/main-service/strict-IPC fixtures cover queries, local/provider pages, empty/failure states, readonly, lost replies, cancellation and late project responses. Eight clip states in 650px light/dark windows all report cut=0/hidden=0; screenshots confirm keyboard focus, readable source details and retained document space. Logs and screenshots are under `.artifacts/research-optimization/openreview-a5b*`.
