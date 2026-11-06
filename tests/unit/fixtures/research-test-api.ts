@@ -183,3 +183,9 @@ export {researchResponseMatrixSaveSchema, researchResponseMatrixReceiptSchema} f
 export {ResearchJournalComplianceService} from '../../../src/main/plugins/research/journal-compliance-service';
 export {registerResearchJournalComplianceCapabilities} from '../../../src/main/plugins/research/journal-compliance-capabilities';
 export {researchJournalSaveSchema, researchJournalReceiptSchema} from '../../../src/shared/schemas/research-journal-compliance';
+
+export * from '../../../src/shared/schemas/research-huggingface';
+export {huggingFaceEndpoint, readHuggingFaceMetadata} from '../../../src/main/plugins/research/huggingface-adapter';
+export {HuggingFaceRepository} from '../../../src/main/plugins/research/huggingface-repository';
+export {HuggingFaceService} from '../../../src/main/plugins/research/huggingface-service';
+export {registerResearchHuggingFaceCapabilities, researchHuggingFaceCapabilities} from '../../../src/main/plugins/research/huggingface-capabilities';

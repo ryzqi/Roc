@@ -22,6 +22,63 @@ before(async () => {
 after(() => api.dispose());
 const hash = value => createHash('sha256').update(value).digest('hex');
 
+test('Hugging Face revision observations survive native SQLite reopen with exact file identities and bounded IPC', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'roc-hf-native-')));
+  const f = createResearchFixture(api, 'reading', root);
+  const repository = new api.HuggingFaceRepository(f.db, f.repository);
+  const registry = new api.CapabilityRegistry();
+  const identity = {kind: 'dataset', repo: 'synthetic/native', revision: 'a'.repeat(40)};
+  const request = {projectId: f.project.id, requestId: 'native-hf', ...identity};
+  const files = Array.from({length: 101}, (_, index) => ({
+    rfilename: `fixtures/data-${index}.csv`, size: 8, blobId: 'b'.repeat(40),
+    ...(index === 100 ? {lfs: {size: 8, sha256: 'c'.repeat(64), pointerSize: 126}} : {})
+  }));
+  let calls = 0;
+  const transport = new api.LiteratureSearchService(async (url, init) => {
+    calls++;
+    assert.equal(url, api.huggingFaceEndpoint(identity)); assert.equal(init.method, 'GET');
+    assert.equal(init.redirect, 'error'); assert.equal(new Headers(init.headers).has('authorization'), false);
+    return Response.json({id: identity.repo, sha: identity.revision, private: false, gated: false,
+      cardData: {license: 'other', license_name: 'Synthetic observation', license_link: 'LICENSE'}, siblings: files});
+  });
+  const service = new api.HuggingFaceService(repository, transport);
+  for (const descriptor of api.researchHuggingFaceCapabilities) registry.declare('native-fixture', descriptor);
+  api.registerResearchHuggingFaceCapabilities({pluginId: 'native-fixture', capabilities: registry}, service, repository);
+  let restored;
+  try {
+    const workflow = f.repository.getWorkflow(f.project.id);
+    const saved = await registry.invoke('research.huggingface.capture',
+      api.parseIpcRequestArgs('roc:research:huggingface-capture', [request])[0]);
+    assert.equal(saved.status, 'ok'); assert.equal(saved.metadata.revision, identity.revision);
+    assert.equal(saved.fileCount, 101); assert.equal(saved.metadata.disabled, null);
+    const page = {projectId: f.project.id, observationId: saved.id, offset: 0, limit: 100};
+    const first = await registry.invoke('research.huggingface.read', page);
+    const last = await registry.invoke('research.huggingface.read', {...page, offset: first.nextOffset});
+    assert.equal(first.files.length, 100); assert.equal(last.files.length, 1); assert.equal(last.nextOffset, null);
+    assert.deepEqual(last.files[0].lfs, {size: 8, sha256: 'c'.repeat(64), pointerSize: 126});
+    assert.deepEqual(await registry.invoke('research.huggingface.capture', request), saved);
+    assert.equal(calls, 1); assert.deepEqual(f.repository.getWorkflow(f.project.id), workflow);
+    const evidence = join(process.cwd(), '.artifacts/research-optimization/hf-a4a-native');
+    await mkdir(evidence, {recursive: true});
+    const databasePath = join(evidence, 'research.sqlite');
+    await f.db.backup(databasePath);
+    restored = new Database(databasePath); restored.pragma('foreign_keys=ON');
+    const reopened = new api.HuggingFaceRepository(restored, new api.ResearchRepository(restored, f.tasks));
+    assert.deepEqual(reopened.findRequest(request), saved); assert.deepEqual(reopened.read(page), first);
+    assert.throws(() => reopened.get('another-project', saved.id));
+    assert.throws(() => api.parseIpcRequestArgs('roc:research:huggingface-capture', [{...request, approved: true}]));
+    assert.throws(() => api.parseIpcRequestArgs('roc:research:huggingface-read', [{...page, limit: 101}]));
+    await writeFile(join(evidence, 'receipt.json'), JSON.stringify({
+      node: process.versions.node, electron: process.versions.electron,
+      fixture: 'synthetic fixed revision metadata; no live HF call, content download or gated acceptance',
+      saved, first, last, calls
+    }, null, 2) + '\n');
+  } finally {
+    await service.shutdown(); await transport.shutdown(); restored?.close(); f.close();
+    await rm(root, {recursive: true, force: true});
+  }
+});
+
 test('DataCite observations survive native SQLite reopen with exact request, metadata and paged relations', async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'roc-datacite-native-')));
   const f = createResearchFixture(api, 'reading', root);

@@ -25,6 +25,7 @@ export async function shutdownResearchPlugin(services: {
   literature: ShutdownService;
   scholarly: ShutdownService;
   resources: ShutdownService;
+  huggingface: ShutdownService;
   zotero: ShutdownService;
   literatureImports: ShutdownService;
   productionInputs: ShutdownService;
@@ -47,6 +48,7 @@ export async function shutdownResearchPlugin(services: {
     services.reviewSearch,
     services.scholarly,
     services.resources,
+    services.huggingface,
     services.literature,
     services.zotero,
     services.literatureImports,

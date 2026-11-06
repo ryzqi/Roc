@@ -2485,6 +2485,24 @@ CREATE INDEX research_resource_association_target ON research_resource_associati
 `
 });
 
+researchMigrations.push({
+  version: 55, name: 'immutable_huggingface_revision_observations',
+  sql: `
+CREATE TABLE research_hf_observations (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN ('model','dataset')),
+  repo TEXT NOT NULL,
+  revision TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id,request_id)
+);
+CREATE INDEX research_hf_revision ON research_hf_observations(project_id,kind,repo,revision);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,
