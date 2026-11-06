@@ -347,29 +347,31 @@ test('high-quality text-only pages preserve coordinates without rendering page i
   }
 });
 
-test('stored document schema still reads contract 3 outputs with separate JSON paths', () => {
-  const legacy = researchDocumentContentSchema.parse({
-    contractVersion: 3,
+test('stored document schema accepts only the current output contract with separate JSON paths', () => {
+  const content = {
+    contractVersion: 4,
     engine: 'paddleocr.js',
-    engineVersion: 'legacy-test',
+    engineVersion: 'current-test',
     parserVersion: 'roc-research-parser/2',
     parserFingerprint: 'a'.repeat(64),
     modelManifest: '',
-    runtime: { node: 'legacy-test' },
+    runtime: { node: 'current-test' },
     tier: 'compact',
     parseMode: 'native-text',
     device: 'cpu',
     sourceHash: 'b'.repeat(64),
     pageCount: 1,
-    content: 'legacy text',
-    blocks: [{ id: 'block_1', kind: 'paragraph', label: 'Page text', text: 'legacy text', locator: 'page:1',
+    content: 'current text',
+    blocks: [{ id: 'block_1', kind: 'paragraph', label: 'Page text', text: 'current text', locator: 'page:1',
       locations: [{ page: 1, bbox: [0, 0, 10, 10], coordinateOrigin: 'TOPLEFT' }], imageAssetId: null }],
     assets: [{ id: 'asset_0', kind: 'page', page: 1, sha256: 'c'.repeat(64), size: 10 }],
     artifacts: { middleJson: 'artifacts/middle.json', markdown: 'artifacts/document.md', structuredContent: 'artifacts/structured.json' },
     warnings: []
-  });
-  assert.equal(legacy.contractVersion, 3);
-  assert.equal(legacy.artifacts.structuredContent, 'artifacts/structured.json');
+  };
+  const current = researchDocumentContentSchema.parse(content);
+  assert.equal(current.contractVersion, 4);
+  assert.equal(current.artifacts.structuredContent, 'artifacts/structured.json');
+  assert.equal(researchDocumentContentSchema.safeParse({...content, contractVersion: 3}).success, false);
 });
 
 test('unknown or unavailable PDF operators conservatively retain page images', async () => {

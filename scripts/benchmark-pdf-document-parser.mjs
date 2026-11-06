@@ -2,37 +2,22 @@ import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { access, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { tmpdir } from 'node:os';
+import { cpus, totalmem, tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { monitorEventLoopDelay, performance } from 'node:perf_hooks';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { importTypeScriptModule } from './lib/bundle-ts.mjs';
+import {buildPerformancePdf as buildPdf, createPerformancePdf as longPdf, performancePdfPageCount as longPageCount} from './lib/research-pdf-performance-fixture.mjs';
 
 const scriptPath = fileURLToPath(import.meta.url);
 const fixturePath = resolve('tests/smoke/lib/assets/p5-paper.pdf');
-const scenarios = ['native-text', 'native-text-clean', 'scanned', 'mixed'];
-const phase4Optimized = process.env.ROC_PHASE4_OPTIMIZED === '1';
-const sampleCount = Number(process.env.ROC_PDF_BENCHMARK_SAMPLES ?? '1');
-if (!Number.isSafeInteger(sampleCount) || sampleCount < 1 || sampleCount > 100) throw new Error('ROC_PDF_BENCHMARK_SAMPLES must be an integer from 1 to 100');
+const scenarios = ['native-text', 'native-text-clean', 'scanned', 'mixed', 'long-native', 'long-local', 'long-cancel', 'long-page-cache'];
+const sampleCount = 3;
 const workerScenario = process.argv[2] === '--worker' ? process.argv[3] : null;
 
 function pdfStream(stream) {
   return `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`;
-}
-
-function buildPdf(objects) {
-  let pdf = '%PDF-1.4\n';
-  const offsets = [0];
-  for (const [index, object] of objects.entries()) {
-    offsets.push(Buffer.byteLength(pdf));
-    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
-  }
-  const xrefOffset = Buffer.byteLength(pdf);
-  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  for (const offset of offsets.slice(1)) pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
-  return Buffer.from(pdf);
 }
 
 function generatedPdf(scenario) {
@@ -89,7 +74,7 @@ async function benchmarkScenario(scenario) {
     const sourcePath = join(projectRoot, `${scenario}.pdf`);
     const { mkdir } = await import('node:fs/promises');
     await mkdir(projectRoot);
-    const bytes = scenario === 'native-text' ? await readFile(fixturePath) : generatedPdf(scenario);
+    const bytes = scenario.startsWith('long-') ? longPdf() : scenario === 'native-text' ? await readFile(fixturePath) : generatedPdf(scenario);
     await writeFile(sourcePath, bytes);
     const missingModelFiles = {
       detection: join(temporaryRoot, 'missing', 'detection.onnx'),
@@ -110,22 +95,55 @@ async function benchmarkScenario(scenario) {
       })
     ]);
     const stages = [];
+    const controller = new AbortController();
+    let firstExtractedPageMs = null, cancelRequestedAt = null, cancelResponseMs = null;
+    const observe = event => {
+      stages.push({stage: event.stage, page: event.page, durationMs: Number(event.durationMs.toFixed(3))});
+      if (event.stage === 'native-text' && firstExtractedPageMs === null) firstExtractedPageMs = performance.now() - started;
+      if (scenario === 'long-cancel' && event.stage === 'page-layout' && event.page === 5) {
+        cancelRequestedAt = performance.now(); controller.abort();
+      }
+    };
     const loopDelay = monitorEventLoopDelay({ resolution: 10 });
     loopDelay.enable();
     const started = performance.now();
     let parsed = null;
     let errorCode = null;
+    let pageCache = null;
     try {
-      parsed = await parseResearchDocument({
-        projectRoot,
-        sourcePath,
-        outputDir,
-        options: { tier: 'compact', device: 'cpu', pageRange: '1' },
-        modelFiles: scenario === 'native-text' || scenario === 'native-text-clean' ? null : missingModelFiles,
-        modelManifest: modelPackManifest('compact'),
-        onStage: (event) => stages.push({ stage: event.stage, page: event.page, durationMs: Number(event.durationMs.toFixed(3)) })
-      });
+      if (scenario === 'long-page-cache') {
+        const {withResearchPdf, renderResearchPdfPage} = await importTypeScriptModule('src/main/plugins/research/pdf-render.ts', {
+          platform: 'node', external: ['@napi-rs/canvas', 'pdfjs-dist/legacy/build/pdf.mjs'], tempDir: resolve('.runtime/tmp')
+        });
+        const measurements = [];
+        await withResearchPdf(new Uint8Array(bytes), async pdf => {
+          assert.equal(pdf.numPages, longPageCount);
+          let previous = null;
+          for (const [index, pageNumber] of [1, 1, 201, 1].entries()) {
+            const start = performance.now(), page = await pdf.getPage(pageNumber);
+            const acquiredMs = performance.now() - start;
+            if (index === 1) assert.strictEqual(page, previous);
+            const rendered = await renderResearchPdfPage(page, pageNumber, pdf.numPages, join(outputDir, `paint-${index}`), 1, true,
+              undefined, {includeRgbaImage: false});
+            assert.ok(rendered.pngBytes > 0);
+            measurements.push({page: pageNumber, acquiredMs, paintedMs: performance.now() - start, sameProxyAsPrevious: page === previous});
+            previous = page; page.cleanup();
+          }
+        });
+        pageCache = {scope: 'Same PDF.js document, page proxy cache; cleanup after each paint, no bitmap cache', measurements};
+      } else {
+        parsed = await parseResearchDocument({
+          projectRoot,
+          sourcePath,
+          outputDir,
+          options: { tier: 'compact', device: 'cpu', pageRange: scenario === 'long-local' ? '201' : scenario.startsWith('long-') ? '' : '1' },
+          modelFiles: scenario === 'native-text' || scenario === 'native-text-clean' || scenario.startsWith('long-') ? null : missingModelFiles,
+          modelManifest: modelPackManifest('compact'),
+          signal: controller.signal, onStage: observe
+        });
+      }
     } catch (error) {
+      if (cancelRequestedAt !== null) cancelResponseMs = performance.now() - cancelRequestedAt;
       errorCode = typeof error === 'object' && error !== null && 'code' in error ? error.code : String(error);
     }
     const elapsedMs = Number((performance.now() - started).toFixed(3));
@@ -143,30 +161,35 @@ async function benchmarkScenario(scenario) {
       assert.equal(errorCode, null, `${scenario} must parse successfully`);
       assert.equal(parsed?.parseMode, 'native-text', `${scenario} must use the native-text route`);
       assert.ok((outputs['artifacts/middle.json'] ?? 0) > 0, `${scenario} must write middle.json`);
-      if (phase4Optimized) {
-        assert.equal(parsed?.contractVersion, 4, `${scenario} must use the versioned artifact contract`);
-        assert.equal(parsed?.artifacts.middleJson, 'artifacts/middle.json');
-        assert.equal(parsed?.artifacts.structuredContent, 'artifacts/structured.json');
-        assert.ok((outputs['artifacts/structured.json'] ?? 0) > 0, `${scenario} must preserve structured.json`);
-      } else {
-        assert.equal(parsed?.contractVersion, 3, `${scenario} baseline must preserve the legacy contract`);
-        assert.ok((outputs['artifacts/structured.json'] ?? 0) > 0, `${scenario} baseline must write structured.json`);
-      }
+      assert.equal(parsed?.contractVersion, 4, `${scenario} must use the current artifact contract`);
+      assert.equal(parsed?.artifacts.middleJson, 'artifacts/middle.json');
+      assert.equal(parsed?.artifacts.structuredContent, 'artifacts/structured.json');
+      assert.ok((outputs['artifacts/structured.json'] ?? 0) > 0);
       if (scenario === 'native-text-clean') {
-        assert.equal((outputs['pages/page-1.png'] ?? 0) > 0, !phase4Optimized,
-          'the clean text fixture writes page evidence only under the legacy contract');
-        if (phase4Optimized) {
-          assert.ok(stageNames.includes('visual-inspection'));
-          assert.ok(stageNames.includes('page-layout'));
-          for (const stage of ['page-render', 'page-png-encode', 'page-write', 'ocr-raster', 'ocr-inference']) {
-            assert.equal(stageNames.includes(stage), false, `optimized clean text must skip ${stage}`);
-          }
+        assert.equal((outputs['pages/page-1.png'] ?? 0) > 0, false);
+        assert.ok(stageNames.includes('visual-inspection'));
+        assert.ok(stageNames.includes('page-layout'));
+        for (const stage of ['page-render', 'page-png-encode', 'page-write', 'ocr-raster', 'ocr-inference']) {
+          assert.equal(stageNames.includes(stage), false, `clean text must skip ${stage}`);
         }
-      } else if (!phase4Optimized) {
-        assert.ok((outputs['pages/page-1.png'] ?? 0) > 0, 'native-text baseline must preserve the page PNG');
       }
       assert.equal(stageNames.includes('ocr-raster'), false, `${scenario} must not allocate an OCR raster`);
       assert.equal(stageNames.includes('ocr-inference'), false, `${scenario} must not run OCR inference`);
+    } else if (scenario === 'long-page-cache') {
+      assert.equal(errorCode, null); assert.equal(pageCache.measurements.length, 4);
+    } else if (scenario.startsWith('long-')) {
+      if (scenario === 'long-cancel') {
+        assert.equal(errorCode, 'research_process_cancelled'); assert.equal(parsed, null);
+        assert.ok(cancelRequestedAt !== null); assert.equal(Object.keys(outputs).length, 0);
+        assert.equal(stages.some(event => event.page !== null && event.page > 5), false);
+      } else {
+        assert.equal(errorCode, null); assert.equal(parsed.contractVersion, 4);
+        const pages = [...new Set(stages.filter(event => event.stage === 'native-text').map(event => event.page))];
+        assert.deepEqual(pages, scenario === 'long-local' ? [201] : Array.from({length: longPageCount}, (_, index) => index + 1));
+        assert.equal(parsed.parseMode, 'native-text');
+        assert.equal(parsed.assets.filter(asset => asset.kind === 'page').length, 0);
+        assert.ok(outputs['artifacts/structured.json'] > 0);
+      }
     } else {
       assert.equal(errorCode, 'ENOENT', `${scenario} baseline must stop at missing-model validation`);
       assert.equal(parsed, null, `${scenario} baseline must not produce a parsed document`);
@@ -183,6 +206,10 @@ async function benchmarkScenario(scenario) {
     for (const event of stages) stageTotalsMs[event.stage] = Number(((stageTotalsMs[event.stage] ?? 0) + event.durationMs).toFixed(3));
     return {
       scenario,
+      declaredPageCount: scenario.startsWith('long-') ? longPageCount : null,
+      firstExtractedPageMs, firstReadableParseMs: parsed === null ? null : elapsedMs,
+      cancelResponseMs,
+      pageCache,
       inputBytes: bytes.byteLength,
       sourceSha256: createHash('sha256').update(bytes).digest('hex'),
       parseMode: parsed?.parseMode ?? null,
@@ -226,6 +253,8 @@ function summarizeSamples(samples) {
     sampleCount: samples.length,
     percentiles: {
       elapsedMs: metricSummary(samples.map((sample) => sample.elapsedMs)),
+      ...Object.fromEntries(['firstExtractedPageMs', 'firstReadableParseMs', 'cancelResponseMs'].map(key => [key,
+        samples.every(sample => sample[key] !== null) ? metricSummary(samples.map(sample => sample[key])) : null])),
       peakRssKb: metricSummary(samples.map((sample) => sample.peakRssKb)),
       mainThreadBlockingMaxMs: metricSummary(samples.map((sample) => sample.mainThreadBlockingMaxMs)),
       outputBytes: metricSummary(samples.map((sample) => sample.outputBytes)),
@@ -242,7 +271,7 @@ if (workerScenario !== null) {
   if (!scenarios.includes(workerScenario)) throw new Error(`unsupported PDF scenario: ${workerScenario}`);
   console.log(JSON.stringify(await benchmarkScenario(workerScenario)));
 } else {
-  const outputPath = resolve(process.argv[2] ?? '.artifacts/architecture-repair-pdf-baseline.json');
+  const outputPath = resolve(process.argv[2] ?? '.artifacts/research-optimization/pdf-performance.json');
   const results = [];
   for (const scenario of scenarios) {
     const samples = [];
@@ -259,16 +288,22 @@ if (workerScenario !== null) {
     results.push(summarizeSamples(samples));
   }
   const command = [
-    phase4Optimized ? 'ROC_PHASE4_OPTIMIZED=1' : '',
-    sampleCount > 1 ? `ROC_PDF_BENCHMARK_SAMPLES=${sampleCount}` : '',
-    `node scripts/benchmark-pdf-document-parser.mjs ${process.argv[2] ?? '.artifacts/architecture-repair-pdf-baseline.json'}`
+    `node scripts/benchmark-pdf-document-parser.mjs ${process.argv[2] ?? '.artifacts/research-optimization/pdf-performance.json'}`
   ].filter(Boolean).join(' ');
   const artifact = {
     measuredAt: new Date().toISOString(),
     command,
-    comparisonMode: phase4Optimized ? 'phase4-optimized' : 'legacy-baseline',
+    contractVersion: 4,
+    longFixture: {pages: longPageCount, mediaBox: [0, 0, 612, 792], complexity: '10 lines per page, 100 evidence words plus 10 page labels, Helvetica, no images'},
+    measurementMeaning: 'firstExtractedPageMs is native extraction, firstReadableParseMs is published parse completion; page-cache uses production PDF.js/canvas, not renderer time',
     sampleCount,
     workingDirectory: process.cwd(),
+    implementationSha256: createHash('sha256').update(await readFile(scriptPath)).digest('hex'),
+    sourceFileHashes: Object.fromEntries(await Promise.all([
+      'scripts/lib/research-pdf-performance-fixture.mjs', 'src/main/plugins/research/document-parser.ts',
+      'src/main/plugins/research/pdf-render.ts', 'src/shared/schemas/research-production.ts', 'pnpm-lock.yaml'
+    ].map(async path => [path, createHash('sha256').update(await readFile(path)).digest('hex')]))),
+    hardware: {cpu: cpus()[0].model, logicalCpus: cpus().length, memoryBytes: totalmem()},
     nodeVersion: process.version,
     platform: `${process.platform}-${process.arch}`,
     modelPacksPresent: false,

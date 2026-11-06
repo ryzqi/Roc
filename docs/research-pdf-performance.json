@@ -1,0 +1,1557 @@
+{
+  "measuredAt": "2026-11-06T05:35:43.700Z",
+  "command": "node scripts/benchmark-pdf-document-parser.mjs .artifacts/research-optimization/pdf-current-final-performance.json",
+  "contractVersion": 4,
+  "longFixture": {
+    "pages": 400,
+    "mediaBox": [
+      0,
+      0,
+      612,
+      792
+    ],
+    "complexity": "10 lines per page, 100 evidence words plus 10 page labels, Helvetica, no images"
+  },
+  "measurementMeaning": "firstExtractedPageMs is native extraction, firstReadableParseMs is published parse completion; page-cache uses production PDF.js/canvas, not renderer time",
+  "sampleCount": 3,
+  "workingDirectory": "/Users/Apple_501/Desktop/Roc/Roc",
+  "implementationSha256": "7edeaeffd75674e16f1ef571ee883a8e606df9b30524ee6ab4faca9420cd59f5",
+  "sourceFileHashes": {
+    "scripts/lib/research-pdf-performance-fixture.mjs": "d71c60e5026e9d61467861418215d3298a8984b2f64913cfcd9980cfde5e8249",
+    "src/main/plugins/research/document-parser.ts": "d5c9bb558f4e490b213109be5caccc8457af4e2ac7c2991c21aec06be7e9aa17",
+    "src/main/plugins/research/pdf-render.ts": "bcd8e12a5182b0264006004c720dcbb3cf6e85b9e9ac58d171c4c0525f0111d8",
+    "src/shared/schemas/research-production.ts": "a6abb337e8ece10450592cd3a73e900be5694ab7dba47042f83f53275b4b7316",
+    "pnpm-lock.yaml": "556226f6e88b3bbd14013a8483c69c978c26099deba9722e0d763828444f2dcd"
+  },
+  "hardware": {
+    "cpu": "Apple M1 Pro",
+    "logicalCpus": 10,
+    "memoryBytes": 34359738368
+  },
+  "nodeVersion": "v26.13.0",
+  "platform": "darwin-arm64",
+  "modelPacksPresent": false,
+  "fullReportSha256": "4a6916987ebc9bcc6edd4ba7d3a3c04c877ae30f6ed11fe8f774b3f4e1c6487e",
+  "scenarios": [
+    {
+      "scenario": "native-text",
+      "declaredPageCount": null,
+      "firstExtractedPageMs": 65.68700000000001,
+      "firstReadableParseMs": 283.262,
+      "cancelResponseMs": null,
+      "pageCache": null,
+      "inputBytes": 30474,
+      "sourceSha256": "ee02484891e45e98e89d5682f6dc90562302e1fe5ee5a15f9cad9f0b4d18ddd5",
+      "parseMode": "native-text",
+      "contractVersion": 4,
+      "pageAssetCount": 1,
+      "artifactPaths": {
+        "middleJson": "artifacts/middle.json",
+        "markdown": "artifacts/document.md",
+        "structuredContent": "artifacts/structured.json"
+      },
+      "errorCode": null,
+      "elapsedMs": 283.262,
+      "peakRssKb": 168592,
+      "mainThreadBlockingMaxMs": 189.399,
+      "stageTotalsMs": {
+        "native-text": 27.868,
+        "page-render": 181.737,
+        "page-png-encode": 29.802,
+        "page-write": 0.757,
+        "parse-artifact-write": 0.823
+      },
+      "outputBytes": 74027,
+      "sampleCount": 3,
+      "percentiles": {
+        "elapsedMs": {
+          "p50": 290.786,
+          "p95": 291.723
+        },
+        "firstExtractedPageMs": {
+          "p50": 65.687,
+          "p95": 67.381
+        },
+        "firstReadableParseMs": {
+          "p50": 290.786,
+          "p95": 291.723
+        },
+        "cancelResponseMs": null,
+        "peakRssKb": {
+          "p50": 168624,
+          "p95": 169315.2
+        },
+        "mainThreadBlockingMaxMs": {
+          "p50": 189.399,
+          "p95": 198.365
+        },
+        "outputBytes": {
+          "p50": 74027,
+          "p95": 74027
+        },
+        "stageTotalsMs": {
+          "native-text": {
+            "p50": 28.493,
+            "p95": 31.152
+          },
+          "page-render": {
+            "p50": 188,
+            "p95": 189.369
+          },
+          "page-png-encode": {
+            "p50": 29.802,
+            "p95": 30.357
+          },
+          "page-write": {
+            "p50": 0.851,
+            "p95": 0.872
+          },
+          "parse-artifact-write": {
+            "p50": 0.823,
+            "p95": 1.013
+          }
+        }
+      },
+      "samples": [
+        {
+          "scenario": "native-text",
+          "declaredPageCount": null,
+          "firstExtractedPageMs": 65.68700000000001,
+          "firstReadableParseMs": 283.262,
+          "cancelResponseMs": null,
+          "pageCache": null,
+          "inputBytes": 30474,
+          "sourceSha256": "ee02484891e45e98e89d5682f6dc90562302e1fe5ee5a15f9cad9f0b4d18ddd5",
+          "parseMode": "native-text",
+          "contractVersion": 4,
+          "pageAssetCount": 1,
+          "artifactPaths": {
+            "middleJson": "artifacts/middle.json",
+            "markdown": "artifacts/document.md",
+            "structuredContent": "artifacts/structured.json"
+          },
+          "errorCode": null,
+          "elapsedMs": 283.262,
+          "peakRssKb": 168592,
+          "mainThreadBlockingMaxMs": 189.399,
+          "stageTotalsMs": {
+            "native-text": 27.868,
+            "page-render": 181.737,
+            "page-png-encode": 29.802,
+            "page-write": 0.757,
+            "parse-artifact-write": 0.823
+          },
+          "outputBytes": 74027
+        },
+        {
+          "scenario": "native-text",
+          "declaredPageCount": null,
+          "firstExtractedPageMs": 65.541167,
+          "firstReadableParseMs": 291.827,
+          "cancelResponseMs": null,
+          "pageCache": null,
+          "inputBytes": 30474,
+          "sourceSha256": "ee02484891e45e98e89d5682f6dc90562302e1fe5ee5a15f9cad9f0b4d18ddd5",
+          "parseMode": "native-text",
+          "contractVersion": 4,
+          "pageAssetCount": 1,
+          "artifactPaths": {
+            "middleJson": "artifacts/middle.json",
+            "markdown": "artifacts/document.md",
+            "structuredContent": "artifacts/structured.json"
+          },
+          "errorCode": null,
+          "elapsedMs": 291.827,
+          "peakRssKb": 168624,
+          "mainThreadBlockingMaxMs": 199.361,
+          "stageTotalsMs": {
+            "native-text": 28.493,
+            "page-render": 189.521,
+            "page-png-encode": 30.419,
+            "page-write": 0.874,
+            "parse-artifact-write": 1.034
+          },
+          "outputBytes": 74027
+        },
+        {
+          "scenario": "native-text",
+          "declaredPageCount": null,
+          "firstExtractedPageMs": 67.56899999999999,
+          "firstReadableParseMs": 290.786,
+          "cancelResponseMs": null,
+          "pageCache": null,
+          "inputBytes": 30474,
+          "sourceSha256": "ee02484891e45e98e89d5682f6dc90562302e1fe5ee5a15f9cad9f0b4d18ddd5",
+          "parseMode": "native-text",
+          "contractVersion": 4,
+          "pageAssetCount": 1,
+          "artifactPaths": {
+            "middleJson": "artifacts/middle.json",
+            "markdown": "artifacts/document.md",
+            "structuredContent": "artifacts/structured.json"
+          },
+          "errorCode": null,
+          "elapsedMs": 290.786,
+          "peakRssKb": 169392,
+          "mainThreadBlockingMaxMs": 189.268,
+          "stageTotalsMs": {
+            "native-text": 31.447,
+            "page-render": 188,
+            "page-png-encode": 29.02,
+            "page-write": 0.851,
+            "parse-artifact-write": 0.819
+          },
+          "outputBytes": 74027
+        }
+      ]
+    },
+    {
+      "scenario": "native-text-clean",
+      "declaredPageCount": null,
+      "firstExtractedPageMs": 47.304959,
+      "firstReadableParseMs": 57.266,
+      "cancelResponseMs": null,
+      "pageCache": null,
+      "inputBytes": 1801,
+      "sourceSha256": "8489dd1fd21d46abeb783e07670263ea2f13220d1cbe1285e10e429454d72fd5",
+      "parseMode": "native-text",
+      "contractVersion": 4,
+      "pageAssetCount": 0,
+      "artifactPaths": {
+        "middleJson": "artifacts/middle.json",
+        "markdown": "artifacts/document.md",
+        "structuredContent": "artifacts/structured.json"
+      },
+      "errorCode": null,
+      "elapsedMs": 57.266,
+      "peakRssKb": 132480,
+      "mainThreadBlockingMaxMs": 53.215,
+      "stageTotalsMs": {
+        "native-text": 9.138,
+        "visual-inspection": 2.421,
+        "page-layout": 1.041,
+        "parse-artifact-write": 2.588
+      },
+      "outputBytes": 11345,
+      "sampleCount": 3,
+      "percentiles": {
+        "elapsedMs": {
+          "p50": 55.792,
+          "p95": 57.119
+        },
+        "firstExtractedPageMs": {
+          "p50": 47.305,
+          "p95": 47.535
+        },
+        "firstReadableParseMs": {
+          "p50": 55.792,
+          "p95": 57.119
+        },
+        "cancelResponseMs": null,
+        "peakRssKb": {
+          "p50": 132480,
+          "p95": 132508.8
+        },
+        "mainThreadBlockingMaxMs": {
+          "p50": 51.839,
+          "p95": 53.077
+        },
+        "outputBytes": {
+          "p50": 11345,
+          "p95": 11345
+        },
+        "stageTotalsMs": {
+          "native-text": {
+            "p50": 9.138,
+            "p95": 10.94
+          },
+          "visual-inspection": {
+            "p50": 2.421,
+            "p95": 2.448
+          },
+          "page-layout": {
+            "p50": 0.98,
+            "p95": 1.035
+          },
+          "parse-artifact-write": {
+            "p50": 1.007,
+            "p95": 2.43
+          }
+        }
+      },
+      "samples": [
+        {
+          "scenario": "native-text-clean",
+          "declaredPageCount": null,
+          "firstExtractedPageMs": 47.304959,
+          "firstReadableParseMs": 57.266,
+          "cancelResponseMs": null,
+          "pageCache": null,
+          "inputBytes": 1801,
+          "sourceSha256": "8489dd1fd21d46abeb783e07670263ea2f13220d1cbe1285e10e429454d72fd5",
+          "parseMode": "native-text",
+          "contractVersion": 4,
+          "pageAssetCount": 0,
+          "artifactPaths": {
+            "middleJson": "artifacts/middle.json",
+            "markdown": "artifacts/document.md",
+            "structuredContent": "artifacts/structured.json"
+          },
+          "errorCode": null,
+          "elapsedMs": 57.266,
+          "peakRssKb": 132480,
+          "mainThreadBlockingMaxMs": 53.215,
+          "stageTotalsMs": {
+            "native-text": 9.138,
+            "visual-inspection": 2.421,
+            "page-layout": 1.041,
+            "parse-artifact-write": 2.588
+          },
+          "outputBytes": 11345
+        },
+        {
+          "scenario": "native-text-clean",
+          "declaredPageCount": null,
+          "firstExtractedPageMs": 47.28562500000001,
+          "firstReadableParseMs": 55.199,
+          "cancelResponseMs": null,
+          "pageCache": null,
+          "inputBytes": 1801,
+          "sourceSha256": "8489dd1fd21d46abeb783e07670263ea2f13220d1cbe1285e10e429454d72fd5",
+          "parseMode": "native-text",
+          "contractVersion": 4,
+          "pageAssetCount": 0,
+          "artifactPaths": {
+            "middleJson": "artifacts/middle.json",
+            "markdown": "artifacts/document.md",
+            "structuredContent": "artifacts/structured.json"
+          },
+          "errorCode": null,
+          "elapsedMs": 55.199,
+          "peakRssKb": 128240,
+          "mainThreadBlockingMaxMs": 51.479,
+          "stageTotalsMs": {
+            "native-text": 8.81,
+            "visual-inspection": 2.334,
+            "page-layout": 0.963,
+            "parse-artifact-write": 1.007
+          },
+          "outputBytes": 11345
+        },
+        {
+          "scenario": "native-text-clean",
+          "declaredPageCount": null,
+          "firstExtractedPageMs": 47.560125,
+          "firstReadableParseMs": 55.792,
+          "cancelResponseMs": null,
+          "pageCache": null,
+          "inputBytes": 1801,
+          "sourceSha256": "8489dd1fd21d46abeb783e07670263ea2f13220d1cbe1285e10e429454d72fd5",
+          "parseMode": "native-text",
+          "contractVersion": 4,
+          "pageAssetCount": 0,
+          "artifactPaths": {
+            "middleJson": "artifacts/middle.json",
+            "markdown": "artifacts/document.md",
+            "structuredContent": "artifacts/structured.json"
+          },
+          "errorCode": null,
+          "elapsedMs": 55.792,
+          "peakRssKb": 132512,
+          "mainThreadBlockingMaxMs": 51.839,
+          "stageTotalsMs": {
+            "native-text": 11.14,
+            "visual-inspection": 2.451,
+            "page-layout": 0.98,
+            "parse-artifact-write": 0.991
+          },
+          "outputBytes": 11345
+        }
+      ]
+    },
+    {
+      "scenario": "scanned",
+      "declaredPageCount": null,
+      "firstExtractedPageMs": 40.287082999999996,
+      "firstReadableParseMs": null,
+      "cancelResponseMs": null,
+      "pageCache": null,
+      "inputBytes": 677,
+      "sourceSha256": "8d09f389d57d5126e41c07fb71f8eb989ff1d20291895f56cd628d033e149225",
+      "parseMode": null,
+      "contractVersion": null,
+      "pageAssetCount": 0,
+      "artifactPaths": null,
+      "errorCode": "ENOENT",
+      "elapsedMs": 220.149,
+      "peakRssKb": 157872,
+      "mainThreadBlockingMaxMs": 216.662,
+      "stageTotalsMs": {
+        "native-text": 2.381,
+        "page-render": 175.337,
+        "page-png-encode": 0.429,
+        "page-write": 0.729,
+        "ocr-raster": 0.041,
+        "model-validation": 0.064
+      },
+      "outputBytes": 0,
+      "sampleCount": 3,
+      "percentiles": {
+        "elapsedMs": {
+          "p50": 213.491,
+          "p95": 219.483
+        },
+        "firstExtractedPageMs": {
+          "p50": 40.795,
+          "p95": 40.804
+        },
+        "firstReadableParseMs": null,
+        "cancelResponseMs": null,
+        "peakRssKb": {
+          "p50": 156896,
+          "p95": 157774.4
+        },
+        "mainThreadBlockingMaxMs": {
+          "p50": 209.977,
+          "p95": 215.994
+        },
+        "outputBytes": {
+          "p50": 0,
+          "p95": 0
+        },
+        "stageTotalsMs": {
+          "native-text": {
+            "p50": 2.579,
+            "p95": 3.784
+          },
+          "page-render": {
+            "p50": 166.655,
+            "p95": 174.469
+          },
+          "page-png-encode": {
+            "p50": 0.425,
+            "p95": 0.429
+          },
+          "page-write": {
+            "p50": 0.729,
+            "p95": 0.75
+          },
+          "ocr-raster": {
+            "p50": 0.036,
+            "p95": 0.041
+          },
+          "model-validation": {
+            "p50": 0.064,
+            "p95": 0.067
+          }
+        }
+      },
+      "samples": [
+        {
+          "scenario": "scanned",
+          "declaredPageCount": null,
+          "firstExtractedPageMs": 40.287082999999996,
+          "firstReadableParseMs": null,
+          "cancelResponseMs": null,
+          "pageCache": null,
+          "inputBytes": 677,
+          "sourceSha256": "8d09f389d57d5126e41c07fb71f8eb989ff1d20291895f56cd628d033e149225",
+          "parseMode": null,
+          "contractVersion": null,
+          "pageAssetCount": 0,
+          "artifactPaths": null,
+          "errorCode": "ENOENT",
+          "elapsedMs": 220.149,
+          "peakRssKb": 157872,
+          "mainThreadBlockingMaxMs": 216.662,
+          "stageTotalsMs": {
+            "native-text": 2.381,
+            "page-render": 175.337,
+            "page-png-encode": 0.429,
+            "page-write": 0.729,
+            "ocr-raster": 0.041,
+            "model-validation": 0.064
+          },
+          "outputBytes": 0
+        },
+        {
+          "scenario": "scanned",
+          "declaredPageCount": null,
+          "firstExtractedPageMs": 40.804708000000005,
+          "firstReadableParseMs": null,
+          "cancelResponseMs": null,
+          "pageCache": null,
+          "inputBytes": 677,
+          "sourceSha256": "8d09f389d57d5126e41c07fb71f8eb989ff1d20291895f56cd628d033e149225",
+          "parseMode": null,
+          "contractVersion": null,
+          "pageAssetCount": 0,
+          "artifactPaths": null,
+          "errorCode": "ENOENT",
+          "elapsedMs": 213.491,
+          "peakRssKb": 156688,
+          "mainThreadBlockingMaxMs": 209.977,
+          "stageTotalsMs": {
+            "native-text": 2.579,
+            "page-render": 166.655,
+            "page-png-encode": 0.425,
+            "page-write": 0.685,
+            "ocr-raster": 0.033,
+            "model-validation": 0.067
+          },
+          "outputBytes": 0
+        },
+        {
+          "scenario": "scanned",
+          "declaredPageCount": null,
+          "firstExtractedPageMs": 40.79487500000002,
+          "firstReadableParseMs": null,
+          "cancelResponseMs": null,
+          "pageCache": null,
+          "inputBytes": 677,
+          "sourceSha256": "8d09f389d57d5126e41c07fb71f8eb989ff1d20291895f56cd628d033e149225",
+          "parseMode": null,
+          "contractVersion": null,
+          "pageAssetCount": 0,
+          "artifactPaths": null,
+          "errorCode": "ENOENT",
+          "elapsedMs": 208.33,
+          "peakRssKb": 156896,
+          "mainThreadBlockingMaxMs": 204.866,
+          "stageTotalsMs": {
+            "native-text": 3.918,
+            "page-render": 163.136,
+            "page-png-encode": 0.423,
+            "page-write": 0.752,
+            "ocr-raster": 0.036,
+            "model-validation": 0.063
+          },
+          "outputBytes": 0
+        }
+      ]
+    },
+    {
+      "scenario": "mixed",
+      "declaredPageCount": null,
+      "firstExtractedPageMs": 50.31791700000002,
+      "firstReadableParseMs": null,
+      "cancelResponseMs": null,
+      "pageCache": null,
+      "inputBytes": 2049,
+      "sourceSha256": "6e6052dfbf5e8061c48350320c6dc2145942ec99d65e05f0ad58ebad30412c40",
+      "parseMode": null,
+      "contractVersion": null,
+      "pageAssetCount": 0,
+      "artifactPaths": null,
+      "errorCode": "ENOENT",
+      "elapsedMs": 255.393,
+      "peakRssKb": 167760,
+      "mainThreadBlockingMaxMs": 225.575,
+      "stageTotalsMs": {
+        "native-text": 11.357,
+        "visual-inspection": 3.563,
+        "page-render": 168.1,
+        "page-png-encode": 27.988,
+        "page-write": 0.748,
+        "ocr-raster": 0.493,
+        "model-validation": 0.101
+      },
+      "outputBytes": 0,
+      "sampleCount": 3,
+      "percentiles": {
+        "elapsedMs": {
+          "p50": 250.877,
+          "p95": 254.941
+        },
+        "firstExtractedPageMs": {
+          "p50": 50.318,
+          "p95": 51.018
+        },
+        "firstReadableParseMs": null,
+        "cancelResponseMs": null,
+        "peakRssKb": {
+          "p50": 167760,
+          "p95": 170452.8
+        },
+        "mainThreadBlockingMaxMs": {
+          "p50": 221.381,
+          "p95": 225.156
+        },
+        "outputBytes": {
+          "p50": 0,
+          "p95": 0
+        },
+        "stageTotalsMs": {
+          "native-text": {
+            "p50": 11.357,
+            "p95": 12.838
+          },
+          "visual-inspection": {
+            "p50": 3.442,
+            "p95": 3.551
+          },
+          "page-render": {
+            "p50": 163.181,
+            "p95": 167.608
+          },
+          "page-png-encode": {
+            "p50": 27.988,
+            "p95": 28.805
+          },
+          "page-write": {
+            "p50": 0.748,
+            "p95": 0.776
+          },
+          "ocr-raster": {
+            "p50": 0.493,
+            "p95": 0.524
+          },
+          "model-validation": {
+            "p50": 0.098,
+            "p95": 0.101
+          }
+        }
+      },
+      "samples": [
+        {
+          "scenario": "mixed",
+          "declaredPageCount": null,
+          "firstExtractedPageMs": 50.31791700000002,
+          "firstReadableParseMs": null,
+          "cancelResponseMs": null,
+          "pageCache": null,
+          "inputBytes": 2049,
+          "sourceSha256": "6e6052dfbf5e8061c48350320c6dc2145942ec99d65e05f0ad58ebad30412c40",
+          "parseMode": null,
+          "contractVersion": null,
+          "pageAssetCount": 0,
+          "artifactPaths": null,
+          "errorCode": "ENOENT",
+          "elapsedMs": 255.393,
+          "peakRssKb": 167760,
+          "mainThreadBlockingMaxMs": 225.575,
+          "stageTotalsMs": {
+            "native-text": 11.357,
+            "visual-inspection": 3.563,
+            "page-render": 168.1,
+            "page-png-encode": 27.988,
+            "page-write": 0.748,
+            "ocr-raster": 0.493,
+            "model-validation": 0.101
+          },
+          "outputBytes": 0
+        },
+        {
+          "scenario": "mixed",
+          "declaredPageCount": null,
+          "firstExtractedPageMs": 48.19204099999999,
+          "firstReadableParseMs": null,
+          "cancelResponseMs": null,
+          "pageCache": null,
+          "inputBytes": 2049,
+          "sourceSha256": "6e6052dfbf5e8061c48350320c6dc2145942ec99d65e05f0ad58ebad30412c40",
+          "parseMode": null,
+          "contractVersion": null,
+          "pageAssetCount": 0,
+          "artifactPaths": null,
+          "errorCode": "ENOENT",
+          "elapsedMs": 248.634,
+          "peakRssKb": 167552,
+          "mainThreadBlockingMaxMs": 217.711,
+          "stageTotalsMs": {
+            "native-text": 10.584,
+            "visual-inspection": 3.402,
+            "page-render": 162.409,
+            "page-png-encode": 28.896,
+            "page-write": 0.779,
+            "ocr-raster": 0.527,
+            "model-validation": 0.098
+          },
+          "outputBytes": 0
+        },
+        {
+          "scenario": "mixed",
+          "declaredPageCount": null,
+          "firstExtractedPageMs": 51.09616599999998,
+          "firstReadableParseMs": null,
+          "cancelResponseMs": null,
+          "pageCache": null,
+          "inputBytes": 2049,
+          "sourceSha256": "6e6052dfbf5e8061c48350320c6dc2145942ec99d65e05f0ad58ebad30412c40",
+          "parseMode": null,
+          "contractVersion": null,
+          "pageAssetCount": 0,
+          "artifactPaths": null,
+          "errorCode": "ENOENT",
+          "elapsedMs": 250.877,
+          "peakRssKb": 170752,
+          "mainThreadBlockingMaxMs": 221.381,
+          "stageTotalsMs": {
+            "native-text": 13.003,
+            "visual-inspection": 3.442,
+            "page-render": 163.181,
+            "page-png-encode": 27.852,
+            "page-write": 0.723,
+            "ocr-raster": 0.471,
+            "model-validation": 0.089
+          },
+          "outputBytes": 0
+        }
+      ]
+    },
+    {
+      "scenario": "long-native",
+      "declaredPageCount": 400,
+      "firstExtractedPageMs": 51.214833,
+      "firstReadableParseMs": 279.136,
+      "cancelResponseMs": null,
+      "pageCache": null,
+      "inputBytes": 625447,
+      "sourceSha256": "70e40397aa6fc5905ad3017159b2374ed0e47078c64754680a29b295cd01e19c",
+      "parseMode": "native-text",
+      "contractVersion": 4,
+      "pageAssetCount": 0,
+      "artifactPaths": {
+        "middleJson": "artifacts/middle.json",
+        "markdown": "artifacts/document.md",
+        "structuredContent": "artifacts/structured.json"
+      },
+      "errorCode": null,
+      "elapsedMs": 279.136,
+      "peakRssKb": 257040,
+      "mainThreadBlockingMaxMs": 269.484,
+      "stageTotalsMs": {
+        "native-text": 146.359,
+        "visual-inspection": 49.722,
+        "page-layout": 6.078,
+        "parse-artifact-write": 5.504
+      },
+      "outputBytes": 4118974,
+      "sampleCount": 3,
+      "percentiles": {
+        "elapsedMs": {
+          "p50": 279.136,
+          "p95": 290.612
+        },
+        "firstExtractedPageMs": {
+          "p50": 51.215,
+          "p95": 51.568
+        },
+        "firstReadableParseMs": {
+          "p50": 279.136,
+          "p95": 290.612
+        },
+        "cancelResponseMs": null,
+        "peakRssKb": {
+          "p50": 257040,
+          "p95": 258897.6
+        },
+        "mainThreadBlockingMaxMs": {
+          "p50": 269.484,
+          "p95": 280.809
+        },
+        "outputBytes": {
+          "p50": 4118974,
+          "p95": 4118974
+        },
+        "stageTotalsMs": {
+          "native-text": {
+            "p50": 146.359,
+            "p95": 155.611
+          },
+          "visual-inspection": {
+            "p50": 51.067,
+            "p95": 51.901
+          },
+          "page-layout": {
+            "p50": 4.959,
+            "p95": 5.966
+          },
+          "parse-artifact-write": {
+            "p50": 5.495,
+            "p95": 5.503
+          }
+        }
+      },
+      "samples": [
+        {
+          "scenario": "long-native",
+          "declaredPageCount": 400,
+          "firstExtractedPageMs": 51.214833,
+          "firstReadableParseMs": 279.136,
+          "cancelResponseMs": null,
+          "pageCache": null,
+          "inputBytes": 625447,
+          "sourceSha256": "70e40397aa6fc5905ad3017159b2374ed0e47078c64754680a29b295cd01e19c",
+          "parseMode": "native-text",
+          "contractVersion": 4,
+          "pageAssetCount": 0,
+          "artifactPaths": {
+            "middleJson": "artifacts/middle.json",
+            "markdown": "artifacts/document.md",
+            "structuredContent": "artifacts/structured.json"
+          },
+          "errorCode": null,
+          "elapsedMs": 279.136,
+          "peakRssKb": 257040,
+          "mainThreadBlockingMaxMs": 269.484,
+          "stageTotalsMs": {
+            "native-text": 146.359,
+            "visual-inspection": 49.722,
+            "page-layout": 6.078,
+            "parse-artifact-write": 5.504
+          },
+          "outputBytes": 4118974
+        },
+        {
+          "scenario": "long-native",
+          "declaredPageCount": 400,
+          "firstExtractedPageMs": 51.03649999999996,
+          "firstReadableParseMs": 276.062,
+          "cancelResponseMs": null,
+          "pageCache": null,
+          "inputBytes": 625447,
+          "sourceSha256": "70e40397aa6fc5905ad3017159b2374ed0e47078c64754680a29b295cd01e19c",
+          "parseMode": "native-text",
+          "contractVersion": 4,
+          "pageAssetCount": 0,
+          "artifactPaths": {
+            "middleJson": "artifacts/middle.json",
+            "markdown": "artifacts/document.md",
+            "structuredContent": "artifacts/structured.json"
+          },
+          "errorCode": null,
+          "elapsedMs": 276.062,
+          "peakRssKb": 259104,
+          "mainThreadBlockingMaxMs": 267.911,
+          "stageTotalsMs": {
+            "native-text": 145.533,
+            "visual-inspection": 51.067,
+            "page-layout": 4.802,
+            "parse-artifact-write": 5.257
+          },
+          "outputBytes": 4118974
+        },
+        {
+          "scenario": "long-native",
+          "declaredPageCount": 400,
+          "firstExtractedPageMs": 51.607624999999985,
+          "firstReadableParseMs": 291.887,
+          "cancelResponseMs": null,
+          "pageCache": null,
+          "inputBytes": 625447,
+          "sourceSha256": "70e40397aa6fc5905ad3017159b2374ed0e47078c64754680a29b295cd01e19c",
+          "parseMode": "native-text",
+          "contractVersion": 4,
+          "pageAssetCount": 0,
+          "artifactPaths": {
+            "middleJson": "artifacts/middle.json",
+            "markdown": "artifacts/document.md",
+            "structuredContent": "artifacts/structured.json"
+          },
+          "errorCode": null,
+          "elapsedMs": 291.887,
+          "peakRssKb": 255600,
+          "mainThreadBlockingMaxMs": 282.067,
+          "stageTotalsMs": {
+            "native-text": 156.639,
+            "visual-inspection": 51.994,
+            "page-layout": 4.959,
+            "parse-artifact-write": 5.495
+          },
+          "outputBytes": 4118974
+        }
+      ]
+    },
+    {
+      "scenario": "long-local",
+      "declaredPageCount": 400,
+      "firstExtractedPageMs": 53.149584000000004,
+      "firstReadableParseMs": 62.746,
+      "cancelResponseMs": null,
+      "pageCache": null,
+      "inputBytes": 625447,
+      "sourceSha256": "70e40397aa6fc5905ad3017159b2374ed0e47078c64754680a29b295cd01e19c",
+      "parseMode": "native-text",
+      "contractVersion": 4,
+      "pageAssetCount": 0,
+      "artifactPaths": {
+        "middleJson": "artifacts/middle.json",
+        "markdown": "artifacts/document.md",
+        "structuredContent": "artifacts/structured.json"
+      },
+      "errorCode": null,
+      "elapsedMs": 62.746,
+      "peakRssKb": 190080,
+      "mainThreadBlockingMaxMs": 58.72,
+      "stageTotalsMs": {
+        "native-text": 12.109,
+        "visual-inspection": 3.59,
+        "page-layout": 0.99,
+        "parse-artifact-write": 1.098
+      },
+      "outputBytes": 11929,
+      "sampleCount": 3,
+      "percentiles": {
+        "elapsedMs": {
+          "p50": 62.746,
+          "p95": 66.576
+        },
+        "firstExtractedPageMs": {
+          "p50": 53.15,
+          "p95": 57.223
+        },
+        "firstReadableParseMs": {
+          "p50": 62.746,
+          "p95": 66.576
+        },
+        "cancelResponseMs": null,
+        "peakRssKb": {
+          "p50": 190080,
+          "p95": 190238.4
+        },
+        "mainThreadBlockingMaxMs": {
+          "p50": 58.72,
+          "p95": 61.875
+        },
+        "outputBytes": {
+          "p50": 11929,
+          "p95": 11929
+        },
+        "stageTotalsMs": {
+          "native-text": {
+            "p50": 10.592,
+            "p95": 11.957
+          },
+          "visual-inspection": {
+            "p50": 2.976,
+            "p95": 3.529
+          },
+          "page-layout": {
+            "p50": 0.978,
+            "p95": 0.989
+          },
+          "parse-artifact-write": {
+            "p50": 1.098,
+            "p95": 1.194
+          }
+        }
+      },
+      "samples": [
+        {
+          "scenario": "long-local",
+          "declaredPageCount": 400,
+          "firstExtractedPageMs": 53.149584000000004,
+          "firstReadableParseMs": 62.746,
+          "cancelResponseMs": null,
+          "pageCache": null,
+          "inputBytes": 625447,
+          "sourceSha256": "70e40397aa6fc5905ad3017159b2374ed0e47078c64754680a29b295cd01e19c",
+          "parseMode": "native-text",
+          "contractVersion": 4,
+          "pageAssetCount": 0,
+          "artifactPaths": {
+            "middleJson": "artifacts/middle.json",
+            "markdown": "artifacts/document.md",
+            "structuredContent": "artifacts/structured.json"
+          },
+          "errorCode": null,
+          "elapsedMs": 62.746,
+          "peakRssKb": 190080,
+          "mainThreadBlockingMaxMs": 58.72,
+          "stageTotalsMs": {
+            "native-text": 12.109,
+            "visual-inspection": 3.59,
+            "page-layout": 0.99,
+            "parse-artifact-write": 1.098
+          },
+          "outputBytes": 11929
+        },
+        {
+          "scenario": "long-local",
+          "declaredPageCount": 400,
+          "firstExtractedPageMs": 50.910083000000014,
+          "firstReadableParseMs": 59.585,
+          "cancelResponseMs": null,
+          "pageCache": null,
+          "inputBytes": 625447,
+          "sourceSha256": "70e40397aa6fc5905ad3017159b2374ed0e47078c64754680a29b295cd01e19c",
+          "parseMode": "native-text",
+          "contractVersion": 4,
+          "pageAssetCount": 0,
+          "artifactPaths": {
+            "middleJson": "artifacts/middle.json",
+            "markdown": "artifacts/document.md",
+            "structuredContent": "artifacts/structured.json"
+          },
+          "errorCode": null,
+          "elapsedMs": 59.585,
+          "peakRssKb": 190256,
+          "mainThreadBlockingMaxMs": 55.673,
+          "stageTotalsMs": {
+            "native-text": 10.592,
+            "visual-inspection": 2.976,
+            "page-layout": 0.919,
+            "parse-artifact-write": 1.027
+          },
+          "outputBytes": 11929
+        },
+        {
+          "scenario": "long-local",
+          "declaredPageCount": 400,
+          "firstExtractedPageMs": 57.67591700000003,
+          "firstReadableParseMs": 67.002,
+          "cancelResponseMs": null,
+          "pageCache": null,
+          "inputBytes": 625447,
+          "sourceSha256": "70e40397aa6fc5905ad3017159b2374ed0e47078c64754680a29b295cd01e19c",
+          "parseMode": "native-text",
+          "contractVersion": 4,
+          "pageAssetCount": 0,
+          "artifactPaths": {
+            "middleJson": "artifacts/middle.json",
+            "markdown": "artifacts/document.md",
+            "structuredContent": "artifacts/structured.json"
+          },
+          "errorCode": null,
+          "elapsedMs": 67.002,
+          "peakRssKb": 170320,
+          "mainThreadBlockingMaxMs": 62.226,
+          "stageTotalsMs": {
+            "native-text": 8.915,
+            "visual-inspection": 2.734,
+            "page-layout": 0.978,
+            "parse-artifact-write": 1.205
+          },
+          "outputBytes": 11929
+        }
+      ]
+    },
+    {
+      "scenario": "long-cancel",
+      "declaredPageCount": 400,
+      "firstExtractedPageMs": 50.99762500000003,
+      "firstReadableParseMs": null,
+      "cancelResponseMs": 2.440917000000013,
+      "pageCache": null,
+      "inputBytes": 625447,
+      "sourceSha256": "70e40397aa6fc5905ad3017159b2374ed0e47078c64754680a29b295cd01e19c",
+      "parseMode": null,
+      "contractVersion": null,
+      "pageAssetCount": 0,
+      "artifactPaths": null,
+      "errorCode": "research_process_cancelled",
+      "elapsedMs": 65.191,
+      "peakRssKb": 202768,
+      "mainThreadBlockingMaxMs": 63.865,
+      "stageTotalsMs": {
+        "native-text": 15.103,
+        "visual-inspection": 4.199,
+        "page-layout": 1.104
+      },
+      "outputBytes": 0,
+      "sampleCount": 3,
+      "percentiles": {
+        "elapsedMs": {
+          "p50": 66.466,
+          "p95": 72.286
+        },
+        "firstExtractedPageMs": {
+          "p50": 52.997,
+          "p95": 56.018
+        },
+        "firstReadableParseMs": null,
+        "cancelResponseMs": {
+          "p50": 2.441,
+          "p95": 2.566
+        },
+        "peakRssKb": {
+          "p50": 202768,
+          "p95": 203531.2
+        },
+        "mainThreadBlockingMaxMs": {
+          "p50": 65.012,
+          "p95": 71.028
+        },
+        "outputBytes": {
+          "p50": 0,
+          "p95": 0
+        },
+        "stageTotalsMs": {
+          "native-text": {
+            "p50": 15.597,
+            "p95": 18.671
+          },
+          "visual-inspection": {
+            "p50": 4.349,
+            "p95": 4.719
+          },
+          "page-layout": {
+            "p50": 1.165,
+            "p95": 1.241
+          }
+        }
+      },
+      "samples": [
+        {
+          "scenario": "long-cancel",
+          "declaredPageCount": 400,
+          "firstExtractedPageMs": 50.99762500000003,
+          "firstReadableParseMs": null,
+          "cancelResponseMs": 2.440917000000013,
+          "pageCache": null,
+          "inputBytes": 625447,
+          "sourceSha256": "70e40397aa6fc5905ad3017159b2374ed0e47078c64754680a29b295cd01e19c",
+          "parseMode": null,
+          "contractVersion": null,
+          "pageAssetCount": 0,
+          "artifactPaths": null,
+          "errorCode": "research_process_cancelled",
+          "elapsedMs": 65.191,
+          "peakRssKb": 202768,
+          "mainThreadBlockingMaxMs": 63.865,
+          "stageTotalsMs": {
+            "native-text": 15.103,
+            "visual-inspection": 4.199,
+            "page-layout": 1.104
+          },
+          "outputBytes": 0
+        },
+        {
+          "scenario": "long-cancel",
+          "declaredPageCount": 400,
+          "firstExtractedPageMs": 56.353542000000004,
+          "firstReadableParseMs": null,
+          "cancelResponseMs": 2.579417000000035,
+          "pageCache": null,
+          "inputBytes": 625447,
+          "sourceSha256": "70e40397aa6fc5905ad3017159b2374ed0e47078c64754680a29b295cd01e19c",
+          "parseMode": null,
+          "contractVersion": null,
+          "pageAssetCount": 0,
+          "artifactPaths": null,
+          "errorCode": "research_process_cancelled",
+          "elapsedMs": 72.933,
+          "peakRssKb": 203616,
+          "mainThreadBlockingMaxMs": 71.696,
+          "stageTotalsMs": {
+            "native-text": 19.013,
+            "visual-inspection": 4.76,
+            "page-layout": 1.249
+          },
+          "outputBytes": 0
+        },
+        {
+          "scenario": "long-cancel",
+          "declaredPageCount": 400,
+          "firstExtractedPageMs": 52.996792,
+          "firstReadableParseMs": null,
+          "cancelResponseMs": 1.3697500000000105,
+          "pageCache": null,
+          "inputBytes": 625447,
+          "sourceSha256": "70e40397aa6fc5905ad3017159b2374ed0e47078c64754680a29b295cd01e19c",
+          "parseMode": null,
+          "contractVersion": null,
+          "pageAssetCount": 0,
+          "artifactPaths": null,
+          "errorCode": "research_process_cancelled",
+          "elapsedMs": 66.466,
+          "peakRssKb": 196448,
+          "mainThreadBlockingMaxMs": 65.012,
+          "stageTotalsMs": {
+            "native-text": 15.597,
+            "visual-inspection": 4.349,
+            "page-layout": 1.165
+          },
+          "outputBytes": 0
+        }
+      ]
+    },
+    {
+      "scenario": "long-page-cache",
+      "declaredPageCount": 400,
+      "firstExtractedPageMs": null,
+      "firstReadableParseMs": null,
+      "cancelResponseMs": null,
+      "pageCache": {
+        "scope": "Same PDF.js document, page proxy cache; cleanup after each paint, no bitmap cache",
+        "measurements": [
+          {
+            "page": 1,
+            "acquiredMs": 0.30187499999999545,
+            "paintedMs": 202.575291,
+            "sameProxyAsPrevious": false
+          },
+          {
+            "page": 1,
+            "acquiredMs": 0.006458000000009179,
+            "paintedMs": 16.615250000000003,
+            "sameProxyAsPrevious": true
+          },
+          {
+            "page": 201,
+            "acquiredMs": 0.25254099999995105,
+            "paintedMs": 16.013832999999977,
+            "sameProxyAsPrevious": false
+          },
+          {
+            "page": 1,
+            "acquiredMs": 0.0072920000000067375,
+            "paintedMs": 15.45429200000001,
+            "sameProxyAsPrevious": false
+          }
+        ]
+      },
+      "inputBytes": 625447,
+      "sourceSha256": "70e40397aa6fc5905ad3017159b2374ed0e47078c64754680a29b295cd01e19c",
+      "parseMode": null,
+      "contractVersion": null,
+      "pageAssetCount": 0,
+      "artifactPaths": null,
+      "errorCode": null,
+      "elapsedMs": 317.324,
+      "peakRssKb": 230944,
+      "mainThreadBlockingMaxMs": 245.367,
+      "stageTotalsMs": {},
+      "outputBytes": 74854,
+      "sampleCount": 3,
+      "percentiles": {
+        "elapsedMs": {
+          "p50": 317.324,
+          "p95": 323.15
+        },
+        "firstExtractedPageMs": null,
+        "firstReadableParseMs": null,
+        "cancelResponseMs": null,
+        "peakRssKb": {
+          "p50": 229936,
+          "p95": 230843.2
+        },
+        "mainThreadBlockingMaxMs": {
+          "p50": 245.76,
+          "p95": 252.366
+        },
+        "outputBytes": {
+          "p50": 74854,
+          "p95": 74854
+        },
+        "stageTotalsMs": {}
+      },
+      "samples": [
+        {
+          "scenario": "long-page-cache",
+          "declaredPageCount": 400,
+          "firstExtractedPageMs": null,
+          "firstReadableParseMs": null,
+          "cancelResponseMs": null,
+          "pageCache": {
+            "scope": "Same PDF.js document, page proxy cache; cleanup after each paint, no bitmap cache",
+            "measurements": [
+              {
+                "page": 1,
+                "acquiredMs": 0.30187499999999545,
+                "paintedMs": 202.575291,
+                "sameProxyAsPrevious": false
+              },
+              {
+                "page": 1,
+                "acquiredMs": 0.006458000000009179,
+                "paintedMs": 16.615250000000003,
+                "sameProxyAsPrevious": true
+              },
+              {
+                "page": 201,
+                "acquiredMs": 0.25254099999995105,
+                "paintedMs": 16.013832999999977,
+                "sameProxyAsPrevious": false
+              },
+              {
+                "page": 1,
+                "acquiredMs": 0.0072920000000067375,
+                "paintedMs": 15.45429200000001,
+                "sameProxyAsPrevious": false
+              }
+            ]
+          },
+          "inputBytes": 625447,
+          "sourceSha256": "70e40397aa6fc5905ad3017159b2374ed0e47078c64754680a29b295cd01e19c",
+          "parseMode": null,
+          "contractVersion": null,
+          "pageAssetCount": 0,
+          "artifactPaths": null,
+          "errorCode": null,
+          "elapsedMs": 317.324,
+          "peakRssKb": 230944,
+          "mainThreadBlockingMaxMs": 245.367,
+          "stageTotalsMs": {},
+          "outputBytes": 74854
+        },
+        {
+          "scenario": "long-page-cache",
+          "declaredPageCount": 400,
+          "firstExtractedPageMs": null,
+          "firstReadableParseMs": null,
+          "cancelResponseMs": null,
+          "pageCache": {
+            "scope": "Same PDF.js document, page proxy cache; cleanup after each paint, no bitmap cache",
+            "measurements": [
+              {
+                "page": 1,
+                "acquiredMs": 0.3059579999999755,
+                "paintedMs": 208.293458,
+                "sameProxyAsPrevious": false
+              },
+              {
+                "page": 1,
+                "acquiredMs": 0.00637499999999136,
+                "paintedMs": 16.169249999999977,
+                "sameProxyAsPrevious": true
+              },
+              {
+                "page": 201,
+                "acquiredMs": 0.2286669999999731,
+                "paintedMs": 15.890457999999967,
+                "sameProxyAsPrevious": false
+              },
+              {
+                "page": 1,
+                "acquiredMs": 0.005957999999964159,
+                "paintedMs": 14.97691599999996,
+                "sameProxyAsPrevious": false
+              }
+            ]
+          },
+          "inputBytes": 625447,
+          "sourceSha256": "70e40397aa6fc5905ad3017159b2374ed0e47078c64754680a29b295cd01e19c",
+          "parseMode": null,
+          "contractVersion": null,
+          "pageAssetCount": 0,
+          "artifactPaths": null,
+          "errorCode": null,
+          "elapsedMs": 323.797,
+          "peakRssKb": 229936,
+          "mainThreadBlockingMaxMs": 253.1,
+          "stageTotalsMs": {},
+          "outputBytes": 74854
+        },
+        {
+          "scenario": "long-page-cache",
+          "declaredPageCount": 400,
+          "firstExtractedPageMs": null,
+          "firstReadableParseMs": null,
+          "cancelResponseMs": null,
+          "pageCache": {
+            "scope": "Same PDF.js document, page proxy cache; cleanup after each paint, no bitmap cache",
+            "measurements": [
+              {
+                "page": 1,
+                "acquiredMs": 0.30587500000001455,
+                "paintedMs": 203.541333,
+                "sameProxyAsPrevious": false
+              },
+              {
+                "page": 1,
+                "acquiredMs": 0.005084000000010747,
+                "paintedMs": 16.087709000000018,
+                "sameProxyAsPrevious": true
+              },
+              {
+                "page": 201,
+                "acquiredMs": 0.1932080000000269,
+                "paintedMs": 15.389540999999952,
+                "sameProxyAsPrevious": false
+              },
+              {
+                "page": 1,
+                "acquiredMs": 0.005957999999964159,
+                "paintedMs": 14.759415999999987,
+                "sameProxyAsPrevious": false
+              }
+            ]
+          },
+          "inputBytes": 625447,
+          "sourceSha256": "70e40397aa6fc5905ad3017159b2374ed0e47078c64754680a29b295cd01e19c",
+          "parseMode": null,
+          "contractVersion": null,
+          "pageAssetCount": 0,
+          "artifactPaths": null,
+          "errorCode": null,
+          "elapsedMs": 316.201,
+          "peakRssKb": 229392,
+          "mainThreadBlockingMaxMs": 245.76,
+          "stageTotalsMs": {},
+          "outputBytes": 74854
+        }
+      ]
+    }
+  ],
+  "reader": {
+    "sourceSha256": "70e40397aa6fc5905ad3017159b2374ed0e47078c64754680a29b295cd01e19c",
+    "inputBytes": 625447,
+    "pages": 400,
+    "samples": [
+      {
+        "firstPaintMs": 1665.699999988079,
+        "navigation": [
+          {
+            "page": 201,
+            "elapsedMs": 99.0973750000012,
+            "pixels": 735150,
+            "ink": 17540
+          },
+          {
+            "page": 400,
+            "elapsedMs": 81.425874999999,
+            "pixels": 735150,
+            "ink": 17700
+          },
+          {
+            "page": 1,
+            "elapsedMs": 83.5073339999999,
+            "pixels": 735150,
+            "ink": 17350
+          }
+        ],
+        "memory": [
+          {
+            "type": "Browser",
+            "memory": {
+              "workingSetSize": 204544,
+              "peakWorkingSetSize": 205808
+            }
+          },
+          {
+            "type": "GPU",
+            "memory": {
+              "workingSetSize": 126592,
+              "peakWorkingSetSize": 139968
+            }
+          },
+          {
+            "type": "Utility",
+            "memory": {
+              "workingSetSize": 49216,
+              "peakWorkingSetSize": 49264
+            }
+          },
+          {
+            "type": "Tab",
+            "memory": {
+              "workingSetSize": 357536,
+              "peakWorkingSetSize": 357536
+            }
+          }
+        ]
+      },
+      {
+        "firstPaintMs": 1673.4000000059605,
+        "navigation": [
+          {
+            "page": 201,
+            "elapsedMs": 95.75525000000016,
+            "pixels": 735150,
+            "ink": 17540
+          },
+          {
+            "page": 400,
+            "elapsedMs": 81.62249999999949,
+            "pixels": 735150,
+            "ink": 17700
+          },
+          {
+            "page": 1,
+            "elapsedMs": 74.78433399999994,
+            "pixels": 735150,
+            "ink": 17350
+          }
+        ],
+        "memory": [
+          {
+            "type": "Browser",
+            "memory": {
+              "workingSetSize": 207856,
+              "peakWorkingSetSize": 212528
+            }
+          },
+          {
+            "type": "GPU",
+            "memory": {
+              "workingSetSize": 102208,
+              "peakWorkingSetSize": 139968
+            }
+          },
+          {
+            "type": "Utility",
+            "memory": {
+              "workingSetSize": 49216,
+              "peakWorkingSetSize": 49264
+            }
+          },
+          {
+            "type": "Tab",
+            "memory": {
+              "workingSetSize": 407648,
+              "peakWorkingSetSize": 407664
+            }
+          }
+        ]
+      },
+      {
+        "firstPaintMs": 1671.9000000059605,
+        "navigation": [
+          {
+            "page": 201,
+            "elapsedMs": 96.9770410000001,
+            "pixels": 735150,
+            "ink": 17540
+          },
+          {
+            "page": 400,
+            "elapsedMs": 81.98837500000081,
+            "pixels": 735150,
+            "ink": 17700
+          },
+          {
+            "page": 1,
+            "elapsedMs": 84.75616700000137,
+            "pixels": 735150,
+            "ink": 17350
+          }
+        ],
+        "memory": [
+          {
+            "type": "Browser",
+            "memory": {
+              "workingSetSize": 211232,
+              "peakWorkingSetSize": 215728
+            }
+          },
+          {
+            "type": "GPU",
+            "memory": {
+              "workingSetSize": 101952,
+              "peakWorkingSetSize": 139968
+            }
+          },
+          {
+            "type": "Utility",
+            "memory": {
+              "workingSetSize": 49296,
+              "peakWorkingSetSize": 49296
+            }
+          },
+          {
+            "type": "Tab",
+            "memory": {
+              "workingSetSize": 450960,
+              "peakWorkingSetSize": 456784
+            }
+          }
+        ]
+      }
+    ],
+    "meaning": "Browser first visible paint includes explicit keyboard activation, sealed preview/protocol and PDF worker. Navigation includes test-driver wait. Three repeated process samples, OS cache uncontrolled.",
+    "transport": "Actual PaperReader/PaperPdfView, production parser and preview registry, Electron Chromium and native PDF worker",
+    "fullReportSha256": "35e3964f606cf4798754137fcabd7f6eb35703562e477e090dab33c73d995eea"
+  }
+}

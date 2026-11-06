@@ -11,6 +11,7 @@ import {_electron} from '@playwright/test';
 import {createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
 import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
 import {createCanvas, loadImage} from '@napi-rs/canvas';
+import {createPerformancePdf, performancePdfPageCount} from '../../scripts/lib/research-pdf-performance-fixture.mjs';
 
 let api, directory, app, page, active;
 const fixtures = [], calls = [], errors = [];
@@ -182,10 +183,10 @@ function generatedPdf({pageCount = 1, crop = [0,0,612,792], rotation = 0, userUn
   return Buffer.from(text);
 }
 
-async function realPdfScene({pageOnly = false, pdfOptions = null, pageRange = '1'} = {}) {
+async function realPdfScene({pageOnly = false, pdfOptions = null, pageRange = '1', sourceBytes = null} = {}) {
   const f = scene();
   f.root = await realpath(await mkdtemp(join(tmpdir(), 'roc-reader-original-')));
-  const source = pdfOptions === null ? await readFile('tests/fixtures/research-workflow/source.pdf') : generatedPdf(pdfOptions);
+  const source = sourceBytes ?? (pdfOptions === null ? await readFile('tests/fixtures/research-workflow/source.pdf') : generatedPdf(pdfOptions));
   const path = join(f.root, 'source.pdf'); await writeFile(path, source);
   const {parseResearchDocument} = await importTypeScriptModule('src/main/plugins/research/document-parser.ts', {
     platform: 'node', external: ['@napi-rs/canvas', 'onnxruntime-node', 'paddleocr', 'pdfjs-dist/legacy/build/pdf.mjs'], tempDir: '.runtime/tmp'
@@ -496,6 +497,66 @@ test('actual crop rotation and UserUnit project the retained full-page region on
   assert.ok(Math.abs(geometry.canvasWidth/geometry.canvasHeight-670/480)<0.001);
   await writeFile(join(artifacts,'rotated-original-projection.json'),JSON.stringify({frame,geometry},null,2));
   await page.getByTestId('reader-compare-pdf').click();await page.waitForFunction(()=>window.liveWorkers===0);
+});
+
+test('fixed 400-page original measures first paint, page navigation and single-bitmap cleanup', async () => {
+  const bytes = createPerformancePdf();
+  const f = await realPdfScene({sourceBytes: bytes, pageRange: ''});
+  assert.equal(f.collected.data.content.pageCount, performancePdfPageCount);
+  const samples = [];
+  for (let sample = 0; sample < 3; sample++) {
+    await mount(f);
+    await textEquals('Page1');
+    await page.evaluate(() => {
+      window.firstPdfPaintMs = null;
+      const started = performance.now();
+      window.firstPdfPaintObserver = new MutationObserver(() => {
+        const canvas = document.querySelector('[data-testid="reader-pdf-canvas"]');
+        if (canvas?.parentElement.style.visibility === 'visible' && canvas.width > 0 && canvas.height > 0) {
+          window.firstPdfPaintMs = performance.now() - started;
+          window.firstPdfPaintObserver.disconnect();
+        }
+      });
+      window.firstPdfPaintObserver.observe(document.querySelector('[data-testid="paper-reader"]'),
+        {childList: true, subtree: true, attributes: true});
+    });
+    await page.getByTestId('reader-compare-pdf').focus();
+    await page.keyboard.press('Enter');
+    await waitForOriginal();
+    const firstPaintMs = await page.evaluate(() => window.firstPdfPaintMs);
+    assert.ok(firstPaintMs > 0);
+    const navigation = [];
+    for (const pageNumber of [201, 400, 1]) {
+      const started = performance.now();
+      await page.getByRole('spinbutton', {name: 'PDF 页码'}).fill(String(pageNumber));
+      await page.getByRole('button', {name: '前往', exact: true}).click();
+      await waitForOriginal();
+      await page.waitForFunction(pageNumber =>
+        document.querySelector('[data-testid="reader-pdf-canvas"]')?.getAttribute('aria-label') === `原 PDF 第 ${pageNumber} 页`,
+      pageNumber);
+      const bitmap = await page.getByTestId('reader-pdf-canvas').evaluate(canvas => {
+        const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+        let ink = 0;
+        for (let index = 0; index < data.length; index += 4) if (data[index] < 200 && data[index + 3] > 0) ink++;
+        return {pixels: canvas.width * canvas.height, ink};
+      });
+      assert.ok(bitmap.ink > 100);
+      assert.ok(bitmap.pixels <= 4_000_000);
+      assert.equal(await page.locator('canvas').count(), 1);
+      assert.equal(await page.evaluate(() => window.liveWorkers), 1);
+      navigation.push({page: pageNumber, elapsedMs: performance.now() - started, ...bitmap});
+    }
+    const memory = await app.evaluate(({app}) => app.getAppMetrics().map(({type, memory}) => ({type, memory})));
+    await page.getByTestId('reader-compare-pdf').click();
+    await page.waitForFunction(() => window.liveWorkers === 0);
+    assert.equal(await page.locator('canvas').count(), 0);
+    samples.push({firstPaintMs, navigation, memory});
+  }
+  await writeFile(join(artifacts, 'long-pdf-performance.json'), JSON.stringify({
+    sourceSha256: hash(bytes), inputBytes: bytes.length, pages: performancePdfPageCount, samples,
+    meaning: 'Browser first visible paint includes explicit keyboard activation, sealed preview/protocol and PDF worker. Navigation includes test-driver wait. Three repeated process samples, OS cache uncontrolled.',
+    transport: 'Actual PaperReader/PaperPdfView, production parser and preview registry, Electron Chromium and native PDF worker'
+  }, null, 2));
 });
 
 test('32-page original retains one visible bitmap across real page navigation and releases worker and canvases on close',async()=>{

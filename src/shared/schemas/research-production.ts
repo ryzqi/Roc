@@ -108,9 +108,9 @@ export const researchParseOptionsSchema = z.object({
 export type ResearchParseOptions = z.infer<typeof researchParseOptionsSchema>;
 export type ResearchParseTier = (typeof researchParseTiers)[number];
 
-/** Contracts 3 and 4 remain readable; v4 makes native-text page-image availability explicit in `assets`. */
+/** Native-text page-image availability is explicit in `assets`. */
 export const researchParsedDocumentSchema = z.object({
-  contractVersion: z.union([z.literal(3), z.literal(researchParseContractVersion)]),
+  contractVersion: z.literal(researchParseContractVersion),
   engine: z.literal('paddleocr.js'),
   engineVersion: z.string(),
   parserVersion: z.string(),
