@@ -180,9 +180,6 @@ importers:
       '@langchain/langgraph':
         specifier: 1.5.2
         version: 1.5.2(@langchain/core@1.2.20(openai@7.8.0(undici@8.10.0)(zod@4.6.7)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@4.6.7)
-      '@langchain/mcp-adapters':
-        specifier: 2.0.1
-        version: 2.0.1(@langchain/core@1.2.20(openai@7.8.0(undici@8.10.0)(zod@4.6.7)))(@langchain/langgraph@1.5.2(@langchain/core@1.2.20(openai@7.8.0(undici@8.10.0)(zod@4.6.7)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@4.6.7))
       '@langchain/openai':
         specifier: 1.6.3
         version: 1.6.3(@langchain/core@1.2.20(openai@7.8.0(undici@8.10.0)(zod@4.6.7)))(undici@8.10.0)
@@ -623,13 +620,6 @@ packages:
     peerDependencies:
       '@langchain/core': ^1.1.48
       zod: ^3.25.32 || ^4.2.0
-
-  '@langchain/mcp-adapters@2.0.1':
-    resolution: {integrity: sha512-dYijIiyN5JdufWX1I8cGrhKnmtSzl50cKLPuH9196xpsEJBz9TO+Z/ZM9pcHNyKM7+OZJDJvwB+DS7cAVhyheA==}
-    engines: {node: '>=20.10.0'}
-    peerDependencies:
-      '@langchain/core': ^1.2.6
-      '@langchain/langgraph': 1.5.2
 
   '@langchain/openai@1.6.3':
     resolution: {integrity: sha512-vioA4Si8bIAczcsmrfV8C8KZ3QozAz2yiuTZSgR57WsjuDsuF2dzZ4tx/jTEEtyOrFzfKXnSYi32QsNz8Mah9w==}
@@ -3925,14 +3915,6 @@ snapshots:
     transitivePeerDependencies:
       - react
       - react-dom
-
-  '@langchain/mcp-adapters@2.0.1(@langchain/core@1.2.20(openai@7.8.0(undici@8.10.0)(zod@4.6.7)))(@langchain/langgraph@1.5.2(@langchain/core@1.2.20(openai@7.8.0(undici@8.10.0)(zod@4.6.7)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@4.6.7))':
-    dependencies:
-      '@langchain/core': 1.2.20(openai@7.8.0(undici@8.10.0)(zod@4.6.7))
-      '@langchain/langgraph': 1.5.2(@langchain/core@1.2.20(openai@7.8.0(undici@8.10.0)(zod@4.6.7)))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@4.6.7)
-      '@modelcontextprotocol/client': 2.3.1
-      '@modelcontextprotocol/core': 2.3.1
-      zod: 4.6.7
 
   '@langchain/openai@1.6.3(@langchain/core@1.2.20(openai@7.8.0(undici@8.10.0)(zod@4.6.7)))(undici@8.10.0)':
     dependencies:
