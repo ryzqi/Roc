@@ -200,4 +200,6 @@ export * from '../../../src/shared/schemas/research-openreview';
 export {openReviewEndpoint, readOpenReviewPage} from '../../../src/main/plugins/research/openreview-adapter';
 export {OpenReviewRepository} from '../../../src/main/plugins/research/openreview-repository';
 export {OpenReviewService} from '../../../src/main/plugins/research/openreview-service';
+export {BackgroundDeadlines} from '../../../src/main/services/background-deadlines';
+export {TaskScheduler} from '../../../src/main/plugins/task/scheduler';
 export {registerResearchOpenReviewCapabilities, researchOpenReviewCapabilities} from '../../../src/main/plugins/research/openreview-capabilities';

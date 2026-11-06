@@ -3,20 +3,17 @@ import { randomUUID } from 'node:crypto';
 import type { BackgroundTask, ChatStartRunRequest, ChatStartRunResult, SchedulerStatus } from '../../../shared/types';
 import { computeNextRunAt } from './next-run-calculator';
 import type { TaskRepository } from './task-repository';
+import {BackgroundDeadlines} from '../../services/background-deadlines';
 
 type TaskSchedulerOptions = {
   startRun?: (request: ChatStartRunRequest) => Promise<ChatStartRunResult>;
   maxTimeoutDelayMs?: number;
 };
 
-const defaultMaxTimeoutDelayMs = 24 * 24 * 60 * 60 * 1000;
-
 export class TaskScheduler {
   private readonly registeredTasks = new Map<string, BackgroundTask>();
-  private readonly timers = new Map<string, NodeJS.Timeout>();
-  private readonly maxTimeoutDelayMs: number;
+  private readonly deadlines: BackgroundDeadlines;
   private readonly claimOwner = `task-scheduler-${randomUUID()}`;
-  private occurrenceReconcileTimer: NodeJS.Timeout | null = null;
   private running = false;
   private suspended = false;
   private lastError: string | null = null;
@@ -25,7 +22,7 @@ export class TaskScheduler {
     private readonly repository: TaskRepository,
     private readonly options: TaskSchedulerOptions = {}
   ) {
-    this.maxTimeoutDelayMs = options.maxTimeoutDelayMs ?? defaultMaxTimeoutDelayMs;
+    this.deadlines = new BackgroundDeadlines(options.maxTimeoutDelayMs);
   }
 
   start(): void {
@@ -138,12 +135,9 @@ export class TaskScheduler {
     if (!this.running || this.suspended || task.status !== 'running' || task.nextRunAt === null) {
       return;
     }
-    const delay = Math.max(0, new Date(task.nextRunAt).getTime() - Date.now());
-    const timer = setTimeout(() => {
+    this.deadlines.schedule(task.id, task.nextRunAt, () => {
       void this.fire(task.id);
-    }, Math.min(delay, this.maxTimeoutDelayMs));
-    timer.unref();
-    this.timers.set(task.id, timer);
+    });
   }
 
   private async fire(taskId: string): Promise<void> {
@@ -240,30 +234,15 @@ export class TaskScheduler {
   }
 
   private clearTimer(taskId: string): void {
-    const timer = this.timers.get(taskId);
-    if (timer === undefined) {
-      return;
-    }
-    clearTimeout(timer);
-    this.timers.delete(taskId);
+    this.deadlines.remove(taskId);
   }
 
   private clearTimers(): void {
-    for (const timer of this.timers.values()) {
-      clearTimeout(timer);
-    }
-    this.timers.clear();
-    if (this.occurrenceReconcileTimer !== null) {
-      clearTimeout(this.occurrenceReconcileTimer);
-      this.occurrenceReconcileTimer = null;
-    }
+    this.deadlines.clear();
   }
 
   private scheduleOccurrenceReconcile(): void {
-    if (this.occurrenceReconcileTimer !== null) {
-      clearTimeout(this.occurrenceReconcileTimer);
-      this.occurrenceReconcileTimer = null;
-    }
+    this.deadlines.remove('occurrence-reconcile');
     if (!this.running || this.suspended) {
       return;
     }
@@ -271,12 +250,8 @@ export class TaskScheduler {
     if (claimExpiresAt === null) {
       return;
     }
-    const delay = Math.max(0, Date.parse(claimExpiresAt) - Date.now());
-    const timer = setTimeout(() => {
-      this.occurrenceReconcileTimer = null;
+    this.deadlines.schedule('occurrence-reconcile', claimExpiresAt, () => {
       this.reconcile();
-    }, Math.min(delay, this.maxTimeoutDelayMs));
-    timer.unref();
-    this.occurrenceReconcileTimer = timer;
+    });
   }
 }
