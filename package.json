@@ -22,6 +22,7 @@
     "research:retrieval-eval": "node scripts/evaluate-literature-retrieval.mjs",
     "research:local-retrieval-eval": "node scripts/evaluate-local-retrieval.mjs",
     "research:retrieval-bench": "node scripts/benchmark-research-retrieval.mjs",
+    "research:admission-bench": "node scripts/benchmark-research-admission.mjs",
     "research:graph-bench": "node scripts/benchmark-research-graph.mjs",
     "harness:resource-bench": "node scripts/harness-eval/resource-admission-bench.mjs",
     "test": "pnpm test:unit && pnpm test:renderer && node scripts/smoke-electron.mjs",

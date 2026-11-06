@@ -372,7 +372,7 @@ test('real process admission prioritizes foreground once, then runs the waiting 
     for (const job of jobs) job.controller.abort();
     const terminals = await Promise.all(jobs.map(job => job.promise));
     receipts.push({ scenario: 'admission-terminals', terminals: terminals.map(({ error, result }) => error === undefined
-      ? { exitCode: result.exitCode }
+      ? { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr, admission: result.admission }
       : { error: error.code ?? error.message, stdout: error.stdout, stderr: error.stderr, admission: error.admission }) });
   }
 });
