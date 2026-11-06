@@ -92,3 +92,26 @@ git diff --cached --check
 相关检查 35/35、最终补充存储检查 16/16、全量单元测试 1342/1342（原先 14 项关联检查；补充 16 项单独通过）、Harness 94/94 和原生 P0 15/15 通过。renderer 初次 47/56 通过，实验结果组 9 项在 60 秒 before-hook 期限内未完成三个真实 CPython 运行的准备，未执行正文；以 180 秒期限单独复跑 9/9 通过，合计 56 项均有通过结果。没有修改产品或削弱断言。构建/类型、启动 13/13 且零 renderer 错误、IPC current、eager 1134468 bytes / 6 files 和暂存 diff 检查通过。
 
 原生新增场景执行真实 TypeScript CSV 分析（A=2、B=4），绑定 input/environment/完整 execution 哈希，保存实际主进程 window 身份，SQLite 备份重开后仍可读取精确关联，并验证 publish 后目标版本变化。回执和数据库保存在 `.artifacts/research-optimization/xeco-a3b-native/`；资源元数据为隔离合成响应，没有真实内容下载或科研质量主张。
+
+## A3C 阅读器资源面板
+
+阅读器的“科研资源”按钮懒加载项目资源面板；与学术关系共用一个最高 55% 的滚动容器，保留正文空间。查询由人工填写数据集/软件 DOI 后触发，提供实际取消、20 条观察历史分页和不可变观察详情。许可六字段、报告版本、缺失字段、空集合、失败观察及 GET/缓存/哈希回执分别显示；原始关系保持来源方向，折叠展示并按 50 条分页，换页保留展开状态。没有内容下载。
+
+人工关联明确选择主进程提供的论文版本或已完成托管实验身份，填写依据后保存。草稿、进行中的保存和未确认回执锁定资源切换及面板关闭；失败后原样重试同一 requestId，或明确放弃草稿重新读取候选。观察查询的未确认请求也固定 DOI 和 requestId，允许精确重试或显式开始新请求。只读项目可查历史、放弃草稿，不能发起或重试写入。项目/论文/资源键及卸载标记隔离迟到回执。关联历史显示当前版本一致、已变化或不可用以及主进程人工身份。
+
+A3C 状态：**Verified passing**（本地资源观察与人工关联 UI）。工作目录：`/Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc`。
+
+```bash
+node --test --test-concurrency=1 --test-timeout=180000 tests/renderer/research-resources.test.mjs
+pnpm build
+node --test --test-concurrency=1 --test-timeout=180000 tests/renderer/research-resources.test.mjs tests/renderer/scholarly-relations.test.mjs tests/renderer/paper-reader.test.mjs tests/renderer/artifact-production.test.mjs
+node scripts/smoke-electron.mjs
+pnpm check:ipc
+pnpm check:renderer-chunks
+git diff --check
+git diff --cached --check
+```
+
+资源 UI 10/10、最终相关 renderer 57/57、构建含类型检查、真实启动 13/13 且零 renderer 错误、IPC current、eager 1134468 bytes / 6 files 通过。650px 浅色/深色默认、hover、展开、终态八次审计 cut=0、hidden=0；截图已人工检查。日志 `.artifacts/research-optimization/xeco-a3c-*.log`，截图、审计和无障碍快照 `.artifacts/research-optimization/xeco-a3c/`。
+
+初轮测试使用 label 文本查找，受 select 的 option 文本及 React textarea 值影响，改用精确控件角色与可访问名称，未放松名称、版本或禁用断言。折叠关系的分页测试发现 loading 时卸载 disclosure 导致换页关闭，已保持 disclosure 挂载并通过原可见性回归。截图验收显式等待真实 `::details-content` 终态，避免将过渡中间帧作为完整展开证据。此增量只改 UI，没有重跑 A3B 全量 unit/Harness/原生实验；其既有结果见上文。所有元数据与目标夹具均为隔离合成数据，真实 renderer/主进程仓库/能力桥参与验证，不声明真实外网内容下载或独立科研质量。

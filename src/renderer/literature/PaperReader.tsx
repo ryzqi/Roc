@@ -15,6 +15,7 @@ import {useReaderDocument} from './use-reader-document';
 const PaperPdfView = lazy(() => import('./PaperPdfView'));
 const PaperBlockAsset = lazy(() => import('./PaperBlockAsset'));
 const ScholarlyRelationsPanel = lazy(() => import('./ScholarlyRelationsPanel'));
+const ResearchResourcesPanel = lazy(() => import('./ResearchResourcesPanel'));
 
 const TIER_OPTIONS: ReadonlyArray<{ value: ResearchParseTier; label: string; title: string }> = [
   { value: 'compact', label: '轻量', title: 'PP-OCRv6 Tiny + 文档布局和表格识别，约 19 MB' },
@@ -114,6 +115,8 @@ export function PaperReader({
   const [pdfSelection, setPdfSelection] = useState<{parseId: string; blockId: string; locationIndex: number} | null>(null);
   const [openAsset, setOpenAsset] = useState<string | null>(null);
   const [relationsOpen, setRelationsOpen] = useState(false);
+  const [resourcesOpen, setResourcesOpen] = useState(false);
+  const [resourcesLocked, setResourcesLocked] = useState(false);
   /**
    * 解析档位（`document.parse` 的 `tier`）。
    *
@@ -411,6 +414,11 @@ export function PaperReader({
             className="min-h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
             学术关系
           </button>
+          <button type="button" disabled={literature.projectId === null || resourcesLocked} aria-expanded={resourcesOpen}
+            onClick={() => setResourcesOpen(current => !current)} data-testid="reader-resources-toggle"
+            className="min-h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
+            科研资源
+          </button>
           <button
             type="button"
             disabled={actionBusy}
@@ -517,11 +525,15 @@ export function PaperReader({
         )}
       </header>
 
-      {relationsOpen && literature.projectId !== null ? <div className="max-h-[55%] shrink-0 overflow-y-auto border-b-[0.5px] border-line">
-        <Suspense fallback={<p role="status" className="px-3 py-2 text-muted">载入学术关系</p>}>
+      {(relationsOpen || resourcesOpen) && literature.projectId !== null ? <div className="max-h-[55%] shrink-0 overflow-y-auto border-b-[0.5px] border-line">
+        {relationsOpen ? <Suspense fallback={<p role="status" className="px-3 py-2 text-muted">载入学术关系</p>}>
           <ScholarlyRelationsPanel key={`${literature.projectId}:${selected.id}`} client={literature.client}
             projectId={literature.projectId} item={selected} writable={scope.writable}/>
-        </Suspense>
+        </Suspense> : null}
+        {resourcesOpen ? <Suspense fallback={<p role="status" className="px-3 py-2 text-muted">载入科研资源</p>}>
+          <ResearchResourcesPanel key={`${literature.projectId}:${selected.id}`} client={literature.client}
+            projectId={literature.projectId} writable={scope.writable} onLockChange={setResourcesLocked}/>
+        </Suspense> : null}
       </div> : null}
 
       {documents.length === 0 ? (
