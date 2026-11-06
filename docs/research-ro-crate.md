@@ -1,6 +1,6 @@
 # 科研 RO-Crate 合同
 
-PR10 A1 固定 RO-Crate **1.2** 和 Roc profile **roc-research-1**。这是明确的稳定目标；不声称为最新规范。公开元数据、图生成及离线校验已接入 `prepareExport` 和实际 ZIP。prepare 必须提交逐资源出版审查；既有 shell 内的人工作者、许可与交付方式编辑属于 A3。
+PR10 固定 RO-Crate **1.2** 和 Roc profile **roc-research-1**。这是明确的稳定目标；不声称为最新规范。公开元数据、图生成及离线校验已接入 `prepareExport` 和实际 ZIP。prepare 必须提交逐资源出版审查；A3 在既有工件抽屉中提供作者、许可与交付方式编辑。
 
 ## 输入与实体
 
@@ -125,3 +125,31 @@ node --test \
 30/30 required requirements，63 checks 通过，0 失败；另 3 项为离线可达性或不适用，未使用自定义 skip 或降低严重级别。实际 ZIP 与解包路径另存于 `pr10-a2c-actual-crate-path.txt`。上述均为合成科研材料的本地工程验收。
 
 补充必需检查：`pnpm test:unit` 1297/1297（358142ms）、`pnpm harness:eval` 94/94；终态均 exit 0，日志 `pr10-a2c-unit.log`、`pr10-a2c-harness.log`。A2C 本地工程状态：Verified passing。
+
+## A3 人工出版审查
+
+已批准稿件的工件抽屉提供懒加载的“审查公开科研导出”。当前项目处于 export 阶段、工件来源仍有效且客户端可写时，才能读取新出版选择、预览或提交；只读和归档状态仍可查看保存历史。界面读取实际已批准图稿和就绪模板，不推断作者、发布日期或再分发许可。
+
+选择后通过 `getExportInputs` 捕获来源。每个原件明确填写科研对象类型、公开元数据、许可及随包交付或仅元数据决定；必须随包交付的图稿和模板禁用仅元数据。软件须提供 URL 与版本；参考文献只交付元数据，并填写许可和获取说明。
+
+预览使用共享严格 schema，再重新捕获来源核对 sourceHash；来源漂移要求放弃编辑、重新读取和审查。预览及保存回执展示全部解析后的字段、许可说明、获取说明、原件 SHA-256 和交付决定；RO-Crate 版本单独标明。编辑会使预览失效并产生新 requestId。提交回执丢失时，保留原预览及 requestId，重新提交同一请求可查询原记录。
+
+未完成审查和待定操作锁定抽屉关闭、刷新及其他编辑入口。权限变化保留已捕获草稿，并允许明确放弃；取消生成在只读状态禁用，等待后端取消终态期间锁定历史导航。生成状态、错误、取消及历史来自真实保存记录，界面不推断 PDF 成功，也不执行外部公开发布。
+
+验收命令在仓库根目录运行：
+
+```bash
+pnpm build
+node --test --test-reporter=tap \
+  tests/renderer/export-publication.test.mjs tests/renderer/artifact-production.test.mjs \
+  tests/renderer/artifact-inspector.test.mjs tests/renderer/citation-coverage.test.mjs \
+  tests/renderer/scientific-consistency.test.mjs tests/renderer/figure-consistency.test.mjs \
+  tests/renderer/response-matrix.test.mjs tests/renderer/journal-compliance.test.mjs
+node scripts/smoke-electron.mjs
+pnpm check:ipc
+pnpm check:renderer-chunks
+```
+
+专项 7/7、相关 renderer 79/79，通过真实 Electron、实际来源捕获/导出服务/数据库及 IPC parser 验证。专项编译器为明确等待、失败或取消的合成 fixture；真实编译与 ZIP 验收见 A2C。650px 明暗主题的字段和预览无横向溢出，键盘焦点可见；四态 clip audit 均 cut=0，完全隐藏的三项仅为窗口物理边界处已有阴影。日志 `pr10-a3-*.log`，截图及审计位于 `.artifacts/research-optimization/export-publication-ui/`。
+
+A3 最终构建（含类型检查）、原生启动 13/13（无 renderer error）和 IPC 一致性均通过；eager renderer 为 1,134,468 字节（6 文件），导出编辑器仍懒加载。A3 本地工程状态：Verified passing。

@@ -35,6 +35,8 @@ await research.prepareExport({
 
 `prepareExport` 返回 preparing 记录；使用 `getExport({projectId, exportId})` 或 `listExports({projectId, limit})` 查询。`cancelExport` 取消准备并等待结束。关闭和重启将未完成作业标为 interrupted，不自动重复执行；重新准备需新请求。
 
+人工入口位于已批准稿件的工件抽屉“审查公开科研导出”。在当前 export 阶段选择图稿和模板、读取来源，再逐项填写作者、许可及交付决定。预览会重新核对来源；编辑使预览失效，回执丢失可保留原请求重试。保存记录提供真实状态刷新、可写时取消生成及完整公开交付清单。草稿和待定操作锁定抽屉导航；只读状态保留已捕获草稿并允许放弃。此入口生成本地交付包，外部发布需独立审核流程。详细合同和验收见 [科研 RO-Crate](research-ro-crate.md) 的 A3。
+
 ## 来源和输出
 
 导出前有两道完整性检查，分居两个层，因为它们的输入不同：
