@@ -23,6 +23,7 @@ export async function applyResearchWorkflowTransition(input: {
 
 export async function shutdownResearchPlugin(services: {
   literature: ShutdownService;
+  scholarly: ShutdownService;
   zotero: ShutdownService;
   literatureImports: ShutdownService;
   productionInputs: ShutdownService;
@@ -43,6 +44,7 @@ export async function shutdownResearchPlugin(services: {
     // Abort the parent before child cleanup can reject its pending tool calls.
     services.stageRuntime,
     services.reviewSearch,
+    services.scholarly,
     services.literature,
     services.zotero,
     services.literatureImports,

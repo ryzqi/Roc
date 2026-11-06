@@ -2434,6 +2434,22 @@ CREATE INDEX research_journal_compliance_artifact ON research_journal_compliance
 `
 });
 
+researchMigrations.push({
+  version: 52, name: 'immutable_scholarly_relation_snapshots',
+  sql: `
+CREATE TABLE research_scholarly_snapshots (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  item_id TEXT NOT NULL REFERENCES research_library(id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id,request_id)
+);
+CREATE INDEX research_scholarly_item ON research_scholarly_snapshots(project_id,item_id);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

@@ -22,6 +22,14 @@ import type { BibliographyEntry } from './library-repository';
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 type SourceOutcome = LiteratureSearchResult['sources'][number];
+export type LiteratureProviderJsonReceipt = {
+  fetchedAt: string | null; responseHash: string | null; cache: 'hit' | 'miss';
+  requests: SourceOutcome['requests']; governance: SourceOutcome['governance'];
+};
+export type LiteratureProviderJsonResult<T> = LiteratureProviderJsonReceipt & (
+  {status: 'ok'; value: T; errorCode: null; retryAfterMs: null} |
+  {status: 'error'; value: null; errorCode: string; retryAfterMs: number | null}
+);
 type SearchOutcome = {
   records: RankedLiteratureRecord[]; sources: SourceOutcome[]; status: LiteratureSearchResult['status']; truncated: boolean; warnings: string[];
 };
@@ -40,7 +48,7 @@ export class LiteratureSearchService {
   private readonly xmlParser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
   private readonly cache = new LiteratureResponseCache({maxEntries: 32, maxBytes: 8 * 1024 * 1024, ttlMs: 5 * 60_000}, Date.now);
   private readonly lifetime = new AbortController();
-  private readonly active = new Set<Promise<SearchOutcome>>();
+  private readonly active = new Set<Promise<unknown>>();
 
   constructor(private readonly fetchImpl: FetchLike = fetch, private readonly governor: LiteratureProviderGovernor = createLiteratureProviderGovernor()) {}
 
@@ -59,6 +67,62 @@ export class LiteratureSearchService {
     this.lifetime.abort(new Error('literature_service_closed'));
     await Promise.allSettled([...this.active]);
     this.cache.clear();
+  }
+
+  /** Main-only provider reads share search admission, cache, receipts and shutdown. */
+  async readProviderJson<T>(
+    request: {source: SourceOutcome['source']; url: string; projectId: string; timeoutMs: number},
+    validate: (payload: unknown) => T, signal?: AbortSignal
+  ): Promise<LiteratureProviderJsonResult<T>> {
+    this.lifetime.signal.throwIfAborted();
+    const pending = this.executeProviderJson(request, validate, signal);
+    this.active.add(pending);
+    try { return await pending; }
+    finally { this.active.delete(pending); }
+  }
+
+  private async executeProviderJson<T>(
+    request: {source: SourceOutcome['source']; url: string; projectId: string; timeoutMs: number},
+    validate: (payload: unknown) => T, signal: AbortSignal | undefined
+  ): Promise<LiteratureProviderJsonResult<T>> {
+    const host = literatureProviderHosts[request.source];
+    if (new URL(request.url).host !== host) throw new Error('literature_provider_url_invalid');
+    const providerSignal = AbortSignal.any([this.lifetime.signal, ...(signal === undefined ? [] : [signal]),
+      AbortSignal.timeout(request.timeoutMs)]);
+    const context: ProviderContext = {
+      signal: providerSignal, receipts: [], projectId: request.projectId, source: request.source, host, audit: undefined,
+      cacheHit: null, pendingCache: null, fetchedAt: null, release: null, coverage: null,
+      position: {kind: 'offset', value: 0}, rankOffset: 0, url: null, visited: new Set(),
+      identifiers: null, rawIdentifiers: null, reviews: null
+    };
+    const receipt = (): LiteratureProviderJsonReceipt => ({
+      fetchedAt: context.fetchedAt,
+      responseHash: context.cacheHit?.responseHash ?? context.pendingCache?.response.responseHash ??
+        context.receipts.at(-1)?.responseHash ?? null,
+      cache: context.cacheHit === null ? 'miss' : 'hit', requests: context.receipts, governance: this.governor.observe(host)
+    });
+    try {
+      const value = await this.requests.run(context, async () => validate(await this.getJson(request.url)));
+      providerSignal.throwIfAborted();
+      if (context.cacheHit === null) this.governor.success(host);
+      if (context.pendingCache !== null) this.cache.put(context.pendingCache.key, context.pendingCache.response);
+      return {...receipt(), status: 'ok', value, errorCode: null, retryAfterMs: null};
+    } catch (error) {
+      this.lifetime.signal.throwIfAborted();
+      signal?.throwIfAborted();
+      const invalid = error instanceof z.ZodError || error instanceof Error &&
+        (error.message === 'literature_provider_response_invalid' || error.message === 'research_doi_invalid' ||
+          error.message.startsWith('scholarly_provider_'));
+      if (invalid) this.governor.failure(host, null);
+      const errorCode = providerSignal.aborted ? 'literature_provider_timeout' :
+        error instanceof LiteratureProviderAdmissionError ? error.code :
+        error instanceof ProviderError ? `literature_provider_http_${error.status}` :
+        invalid ? 'literature_provider_response_invalid' :
+        error instanceof Error && error.message === 'literature_provider_response_too_large' ? error.message :
+        'literature_provider_transport_error';
+      return {...receipt(), status: 'error', value: null, errorCode,
+        retryAfterMs: error instanceof ProviderError || error instanceof LiteratureProviderAdmissionError ? error.retryAfterMs : null};
+    } finally { context.release?.(); context.release = null; }
   }
 
   private async executeSearch(request: LiteratureSearchInput, signal?: AbortSignal, audit?: LiteratureRequestAudit): Promise<SearchOutcome> {

@@ -406,7 +406,7 @@ test('DB50 to51 preserves original migration ledger and creates no inferred jour
     const prior = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
     api.applyResearchDatabaseSchema(db);
     assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=50 ORDER BY version').all(), prior);
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 51);
+    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 52);
     assert.equal(db.prepare('SELECT count(*) FROM research_journal_compliance').pluck().get(), 0);
     assert.deepEqual(db.pragma('foreign_key_check'), []);
   } finally {db.close();}
