@@ -79,3 +79,24 @@ git diff --check
 Logs: `.artifacts/research-optimization/hf-a4b-*.log`; native database and physical-file hash receipt: `hf-a4b-native/`. All HTTP responses and payloads are synthetic; the native scenario uses actual Electron SQLite and filesystem. Live Hub access, gated acceptance and independent scientific/license assessment remain **Blocked, not run**. Initial checks found the string-only fetch fixture type mismatch, a migration55 test incorrectly tied to latest schema version, and a missing governor export in the new native fixture; each is recorded and corrected before final acceptance.
 
 The first full unit run loaded the old migration55 assertion and failed1376/1377; the corrected final run passed1378/1378. Native setup first exposed a missing governor export and a duplicated foreign workspace path. A subsequent native run competed with the full unit process and timed out in the new download case and three existing scenarios (13/17); the unchanged final native source and assertions passed17/17 when run alone. No timeouts or assertions were weakened. Failing logs remain alongside final acceptance logs.
+
+## A4C reader controls
+
+The existing PaperReader lazily loads three Hugging Face modules under `reader-hf-toggle`. They share the reader's bounded 55% scroller with scholarly/resource disclosures. No route or shell is added. Explicit model/dataset, repository and complete lowercase commit SHA capture metadata; history has 20 records per page, inventory 50 files per page. Unknown access/rights fields remain unreported. Cross-page selections retain exact paths and sizes with the main-service 20-file/256 MiB limits.
+
+Download review requires explicit selected files, total byte limit, timeout and license review. Dirty review locks observation/history switching and panel closure. An uncertain capture/download reply retains the exact request ID and parameters until exact retry or explicit discard, including readonly discard. New writes require current writable scope and matching ready source hash. Cancellation reports main-process signal acceptance; terminal state comes from persisted receipts. Actual running receipts refresh every second and stop on failure, completion or unmount. The last stored receipt remains visible beside read errors. Main actor, transferred/verified bytes, file SHA256, fixed authorization and revision remain inspectable. Project/item/observation keys and Effect cleanup discard late scoped replies.
+
+A4C status: **Verified passing**. Final combined real Electron renderer suite passed65/65; focused HF cases8/8. Build including typecheck, startup13/13 with zero renderer errors, IPC generation check and eager chunk check passed (1134468 bytes, six files). Eight light/dark disclosure audits report cut0/hidden0; 650px screenshots retain keyboard focus, reachable actions and document content. HTTP data is synthetic while main services/repositories, sender74, strict IPC and downloaded physical bytes are exercised. Live Hub, gated access and independent scientific/license acceptance are unrun.
+
+```bash
+pnpm typecheck
+pnpm build
+node --test --test-concurrency=1 --test-timeout=180000 tests/renderer/research-huggingface.test.mjs tests/renderer/research-resources.test.mjs tests/renderer/scholarly-relations.test.mjs tests/renderer/paper-reader.test.mjs tests/renderer/artifact-production.test.mjs
+node --test --test-concurrency=1 --test-timeout=180000 --test-name-pattern='650px' tests/renderer/research-huggingface.test.mjs
+node scripts/smoke-electron.mjs
+pnpm check:ipc
+pnpm check:renderer-chunks
+git diff --check
+```
+
+Working directory is the same physical repository path above. Logs: `hf-a4c-*.log`; screenshots/accessibility snapshots/audits: `hf-a4c/`. Initial fixtures called a nonexistent import API and shadowed a metadata argument; corrected before focused acceptance. Two assertions raced the parent's lock effect; Playwright waits now assert the same unlock condition. The first combined run passed64/65: fully expanded CSS height173.039px compared against DOM173.0390625px. The final predicate compares both at the CSS serialization precision, preserving full-height and opacity checks; the corrected combined run passed65/65. No product geometry or assertion requirement was relaxed.
