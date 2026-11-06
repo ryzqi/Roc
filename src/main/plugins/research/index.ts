@@ -84,6 +84,11 @@ import {registerResearchScholarlyCapabilities, researchScholarlyCapabilities} fr
 import {HuggingFaceRepository} from './huggingface-repository';
 import {HuggingFaceService} from './huggingface-service';
 import {registerResearchHuggingFaceCapabilities, researchHuggingFaceCapabilities} from './huggingface-capabilities';
+import {HuggingFaceDownloadRepository} from './huggingface-download-repository';
+import {HuggingFaceDownloadService} from './huggingface-download-service';
+import {HuggingFaceDownloader} from './huggingface-downloader';
+import {registerResearchHuggingFaceDownloadCapabilities, researchHuggingFaceDownloadCapabilities} from './huggingface-download-capabilities';
+import {createLiteratureProviderGovernor} from './literature-provider-governor';
 import {ResearchResourceRepository} from './resource-repository';
 import {ResearchResourceService} from './resource-service';
 import {registerResearchResourceCapabilities, researchResourceCapabilities} from './resource-capabilities';
@@ -204,6 +209,7 @@ const lifecycleCapabilities = {
 };
 
 export type ResearchPluginOptions = {
+  resourceRoot: string;
   executionGrantBroker: ExecutionGrantBroker;
   tasks: ResearchTaskRepository;
   budgetLedger: RunBudgetLedger;
@@ -231,6 +237,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
   let scholarly: ScholarlyRelationsService | null = null;
   let resources: ResearchResourceService | null = null;
   let huggingface: HuggingFaceService | null = null;
+  let huggingfaceDownloads: HuggingFaceDownloadService | null = null;
   let documents: ResearchDocumentService | null = null;
   let embeddings: ResearchEmbeddingService | null = null;
   let indexer: ResearchIndexService | null = null;
@@ -243,7 +250,8 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
   const toolchain = new ResearchToolchain(options.toolchainRoot ?? null, options.modelsRoot ?? null);
   let literatureImports: LiteratureImportService | null = null;
   let reviewSearch: ResearchReviewSearchService | null = null;
-  const literatureService = new LiteratureSearchService(options.literatureFetch);
+  const providerGovernor = createLiteratureProviderGovernor();
+  const literatureService = new LiteratureSearchService(options.literatureFetch, providerGovernor);
   const zotero = new ZoteroAdapter(options.zoteroFetch);
   const embeddingClient = new OpenAICompatibleEmbeddingClient(options.embeddingFetch);
   return {
@@ -255,7 +263,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchIdeaPlanCapabilities, ...researchIdeaOutcomeCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchScholarlyCapabilities, ...researchResourceCapabilities, ...researchHuggingFaceCapabilities, ...researchResourceAssociationCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchNotebookCapabilities, ...researchExperimentResultCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities, researchCitationCoverageCapability, ...researchCitationReviewCapabilities, ...researchConsistencyCapabilities, ...researchFigureConsistencyCapabilities, ...researchResponseMatrixCapabilities, ...researchJournalComplianceCapabilities]
+      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchIdeaPlanCapabilities, ...researchIdeaOutcomeCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchScholarlyCapabilities, ...researchResourceCapabilities, ...researchHuggingFaceCapabilities, ...researchHuggingFaceDownloadCapabilities, ...researchResourceAssociationCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchNotebookCapabilities, ...researchExperimentResultCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities, researchCitationCoverageCapability, ...researchCitationReviewCapabilities, ...researchConsistencyCapabilities, ...researchFigureConsistencyCapabilities, ...researchResponseMatrixCapabilities, ...researchJournalComplianceCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，
@@ -337,6 +345,10 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       const hfRepository = new HuggingFaceRepository(db, researchRepository);
       huggingface = new HuggingFaceService(hfRepository, literatureService);
       registerResearchHuggingFaceCapabilities(context, huggingface, hfRepository);
+      huggingfaceDownloads = new HuggingFaceDownloadService(new HuggingFaceDownloadRepository(db, hfRepository),
+        hfRepository, new HuggingFaceDownloader(providerGovernor, options.literatureFetch), options.resourceRoot);
+      await huggingfaceDownloads.initialize();
+      registerResearchHuggingFaceDownloadCapabilities(context, huggingfaceDownloads);
       const resourceRepository = new ResearchResourceRepository(db, researchRepository);
       resources = new ResearchResourceService(resourceRepository, literatureService);
       registerResearchResourceCapabilities(context, resources, resourceRepository);
@@ -460,6 +472,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
         const request = researchProjectIdRequestSchema.parse(input);
         await reviewSearches.releaseProject(request.id);
         await researchPythonEnvironments.releaseProject(request.id);
+        await huggingfaceDownloads!.releaseProject(request.id);
         const result = researchRepository.deleteProject(request.id);
         researchIndexer.releaseProject(request.id);
         researchExperiments.releaseProject(request.id);
@@ -551,7 +564,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
     },
     shutdown: async () => {
       try {
-        await shutdownResearchPlugin({ literature: literatureService, scholarly, resources, huggingface, zotero, literatureImports, productionInputs, exports, figures, experiments, pythonEnvironments, indexer, embeddings, stageRuntime, reviewSearch, templates, documents, library, prose });
+        await shutdownResearchPlugin({ literature: literatureService, scholarly, resources, huggingface, huggingfaceDownloads, zotero, literatureImports, productionInputs, exports, figures, experiments, pythonEnvironments, indexer, embeddings, stageRuntime, reviewSearch, templates, documents, library, prose });
       } finally {
         reviewSearch = null;
         resources = null;

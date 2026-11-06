@@ -21,6 +21,10 @@ export function huggingFaceSummary(value: HfObservation): HfSummary {
 export class HuggingFaceRepository {
   constructor(private readonly db: Database, private readonly research: ResearchRepository) {}
 
+  requireReadScope(projectId: string): void {
+    this.research.getProject(projectId);
+  }
+
   requireCaptureScope(projectId: string): void {
     if (this.research.getProject(projectId).status === 'archived') throw new Error('research_project_archived');
   }

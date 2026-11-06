@@ -22,6 +22,89 @@ before(async () => {
 after(() => api.dispose());
 const hash = value => createHash('sha256').update(value).digest('hex');
 
+test('reviewed HF downloads deliver verified files with native sender identity, SQLite durability and no implicit execution', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'roc-hf-download-native-')));
+  const f = createResearchFixture(api, 'reading', root);
+  const observations = new api.HuggingFaceRepository(f.db, f.repository);
+  const identity = {kind: 'model', repo: 'synthetic/native-download', revision: 'a'.repeat(40)};
+  const bytes = [Buffer.from('native git fixture\n'), Buffer.from('native LFS fixture\n')];
+  const siblings = bytes.map((body, index) => ({
+    rfilename: index === 0 ? 'data/Native.csv' : 'data/native.csv', size: body.length,
+    blobId: createHash('sha1').update(`blob ${body.length}\0`).update(body).digest('hex'),
+    ...(index === 1 ? {lfs: {size: body.length, sha256: hash(body), pointerSize: 126}} : {})
+  }));
+  const governor = api.createLiteratureProviderGovernor();
+  const transport = new api.LiteratureSearchService(async () => Response.json({
+    id: identity.repo, sha: identity.revision, private: false, gated: false, disabled: false,
+    cardData: {license: 'other', license_name: 'Synthetic native-only verification fixture'}, siblings
+  }), governor);
+  const metadata = new api.HuggingFaceService(observations, transport);
+  const downloads = new api.HuggingFaceDownloadRepository(f.db, observations);
+  let calls = 0;
+  const downloader = new api.HuggingFaceDownloader(governor, async (url, init) => {
+    assert.equal(init.method, 'GET'); assert.equal(init.redirect, 'manual'); assert.equal(init.credentials, 'omit');
+    assert.equal(new Headers(init.headers).has('authorization'), false);
+    const body = bytes[calls];
+    assert.equal(url, api.huggingFaceResolveUrl(identity, siblings[calls].rfilename));
+    calls++;
+    return new Response(new ReadableStream({start(controller) {
+      controller.enqueue(body.subarray(0, 4)); controller.enqueue(body.subarray(4)); controller.close();
+    }}));
+  });
+  const resourceRoot = join(root, 'resources');
+  const service = new api.HuggingFaceDownloadService(downloads, observations, downloader, resourceRoot);
+  await service.initialize();
+  const registry = new api.CapabilityRegistry();
+  for (const descriptor of api.researchHuggingFaceDownloadCapabilities) registry.declare('native-fixture', descriptor);
+  api.registerResearchHuggingFaceDownloadCapabilities({pluginId: 'native-fixture', capabilities: registry}, service);
+  const adapter = api.createPluginCapabilityAdapter({invokeCapability: (name, input) => registry.invoke(name, input)});
+  let restored;
+  try {
+    const workflow = f.repository.getWorkflow(f.project.id);
+    const observed = await metadata.capture({projectId: f.project.id, requestId: 'native-metadata', ...identity});
+    const request = {projectId: f.project.id, requestId: 'native-reviewed-download', observationId: observed.id,
+      expectedContentHash: observed.contentHash, paths: siblings.map(file => file.rfilename),
+      maxBytes: bytes.reduce((sum, body) => sum + body.length, 0), timeoutMs: 15000,
+      licenseReview: 'Explicit review of synthetic fixture license and selected exact revision files.'};
+    const denied = await adapter.invoke('research.startHuggingFaceDownload', [request]);
+    assert.equal(denied.ok, false); assert.equal(calls, 0);
+    const started = await adapter.invoke('research.startHuggingFaceDownload', [request], 91);
+    assert.equal(started.ok, true); assert.equal(started.data.actor.id, 'window:91');
+    const readRequest = {projectId: f.project.id, downloadId: started.data.id};
+    let result = service.read(readRequest);
+    for (let tries = 0; result.state === 'running' && tries < 200; tries++) {
+      await wait(50); result = service.read(readRequest);
+    }
+    assert.equal(result.state, 'completed'); assert.equal(result.files.length, 2);
+    assert.equal(result.verifiedBytes, request.maxBytes); assert.equal(result.lastRecordedTransferredBytes, request.maxBytes);
+    for (const [index, file] of result.files.entries()) {
+      const body = await readFile(join(resourceRoot, api.huggingFaceDownloadDirectory(f.project.id, result.id), file.storageName));
+      assert.deepEqual(body, bytes[index]); assert.equal(hash(body), file.sha256);
+    }
+    const replay = await adapter.invoke('research.startHuggingFaceDownload', [request], 91);
+    assert.deepEqual(replay.data, result); assert.equal(calls, 2);
+    assert.deepEqual(f.repository.getWorkflow(f.project.id), workflow);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_experiment_runs').pluck().get(), 0);
+    const evidence = join(process.cwd(), '.artifacts/research-optimization/hf-a4b-native');
+    await mkdir(evidence, {recursive: true});
+    await f.db.backup(join(evidence, 'research.sqlite'));
+    restored = new Database(join(evidence, 'research.sqlite')); restored.pragma('foreign_keys=ON');
+    const reopened = new api.HuggingFaceDownloadRepository(restored,
+      new api.HuggingFaceRepository(restored, new api.ResearchRepository(restored, f.tasks)));
+    assert.deepEqual(reopened.get(f.project.id, result.id), result);
+    const foreign = f.repository.createProject({title: 'Foreign', description: 'Synthetic scope', workspacePath: join(root, 'foreign')});
+    assert.throws(() => service.read({projectId: foreign.id, downloadId: result.id}), /not_found/);
+    await writeFile(join(evidence, 'receipt.json'), JSON.stringify({
+      node: process.versions.node, electron: process.versions.electron,
+      fixture: 'Synthetic HTTP streams; native SQLite and filesystem; no live Hub/download, credentials or automatic execution',
+      request, result, calls, verifiedPhysicalFiles: result.files.map(file => ({name: file.storageName, sha256: file.sha256}))
+    }, null, 2) + '\n');
+  } finally {
+    await service.shutdown(); await metadata.shutdown(); await transport.shutdown(); restored?.close(); f.close();
+    await rm(root, {recursive: true, force: true});
+  }
+});
+
 test('Hugging Face revision observations survive native SQLite reopen with exact file identities and bounded IPC', async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'roc-hf-native-')));
   const f = createResearchFixture(api, 'reading', root);

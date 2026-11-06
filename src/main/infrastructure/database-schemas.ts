@@ -2503,6 +2503,24 @@ CREATE INDEX research_hf_revision ON research_hf_observations(project_id,kind,re
 `
 });
 
+researchMigrations.push({
+  version: 56, name: 'reviewed_huggingface_download_receipts',
+  sql: `
+CREATE TABLE research_hf_downloads (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  observation_id TEXT NOT NULL REFERENCES research_hf_observations(id),
+  authorization_json TEXT NOT NULL CHECK(json_valid(authorization_json)),
+  revision INTEGER NOT NULL CHECK(revision > 0),
+  state TEXT NOT NULL CHECK(state IN ('running','completed','failed','cancelled','interrupted')),
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  UNIQUE(project_id,request_id)
+);
+CREATE INDEX research_hf_download_observation ON research_hf_downloads(project_id,observation_id);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,
