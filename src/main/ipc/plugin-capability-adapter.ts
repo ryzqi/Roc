@@ -1,3 +1,4 @@
+import {zenodoCredentialSchema, zenodoCredentialReadSchema, zenodoStartSchema, zenodoOperationActionSchema, zenodoPublicationApproveSchema, zenodoPublishSchema, zenodoOperationReadSchema} from '../../shared/schemas/research-zenodo-remote';
 import {zenodoPrepareSchema} from '../../shared/schemas/research-zenodo';
 import {monitorSaveSchema, monitorControlSchema, monitorCheckRequestSchema, monitorCancelSchema, monitorAcknowledgeSchema} from '../../shared/schemas/research-monitors';
 import {researchIdeaPlanSaveSchema, researchIdeaPlanFreezeRequestSchema} from '../../shared/schemas/research-idea-plans';
@@ -67,6 +68,41 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
       }
       return await wrapIpc(async () => {
         const input = transformInput(target.inputTransform, args);
+        if (target.capabilityName === 'research.zenodo.saveCredential') {
+          const request = zenodoCredentialSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
+        if (target.capabilityName === 'research.zenodo.clearCredential') {
+          const request = zenodoCredentialReadSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
+        if (target.capabilityName === 'research.zenodo.start') {
+          const request = zenodoStartSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
+        if (target.capabilityName === 'research.zenodo.resume') {
+          const request = zenodoOperationActionSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
+        if (target.capabilityName === 'research.zenodo.approvePublication') {
+          const request = zenodoPublicationApproveSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
+        if (target.capabilityName === 'research.zenodo.publish') {
+          const request = zenodoPublishSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
+        if (target.capabilityName === 'research.zenodo.cancel') {
+          const request = zenodoOperationReadSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
         if (target.capabilityName === 'research.zenodo.prepare') {
           const request = zenodoPrepareSchema.parse(input);
           return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},

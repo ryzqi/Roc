@@ -2603,6 +2603,32 @@ CREATE TABLE research_zenodo_preparations (
 `
 });
 
+researchMigrations.push({
+  version: 60, name: 'reviewed_zenodo_remote_operations',
+  sql: `
+CREATE TABLE research_zenodo_operations (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  preparation_id TEXT NOT NULL REFERENCES research_zenodo_preparations(id),
+  request_id TEXT NOT NULL,
+  revision INTEGER NOT NULL CHECK(revision > 0),
+  status TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id,request_id), UNIQUE(project_id,preparation_id)
+);
+CREATE TABLE research_zenodo_publication_approvals (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  operation_id TEXT NOT NULL REFERENCES research_zenodo_operations(id),
+  request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  created_at TEXT NOT NULL,
+  UNIQUE(operation_id,request_id)
+);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

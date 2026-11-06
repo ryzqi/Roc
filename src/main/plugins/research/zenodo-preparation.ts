@@ -15,9 +15,9 @@ export class ZenodoPreparationService {
   constructor(private readonly db: Database, private readonly research: ResearchRepository,
     private readonly exports: Pick<ResearchExportService, 'publicationInputs'>, private readonly now = () => new Date().toISOString()) {}
 
-  async inputs(input: ZenodoInputsRequest): Promise<ZenodoInputs> {
+  async inputs(input: ZenodoInputsRequest, signal?: AbortSignal): Promise<ZenodoInputs> {
     const request = zenodoInputsRequestSchema.parse(input);
-    return zenodoInputsSchema.parse(await this.exports.publicationInputs(request));
+    return zenodoInputsSchema.parse(await this.exports.publicationInputs(request, signal));
   }
 
   async prepare(input: ZenodoPrepare): Promise<ZenodoPrepared> {
@@ -70,11 +70,11 @@ export class ZenodoPreparationService {
       nextOffset: request.offset + rows.length < total ? request.offset + rows.length : null};
   }
 
-  async assertCurrent(receipt: ZenodoPrepared): Promise<void> {
+  async assertCurrent(receipt: ZenodoPrepared, signal?: AbortSignal): Promise<void> {
     const stored = this.get(receipt.projectId, receipt.id);
     if (stored.contentHash !== receipt.contentHash) throw new Error('research_zenodo_receipt_invalid');
     this.writable(receipt.projectId);
-    const current = await this.inputs({projectId: receipt.projectId, exportId: receipt.request.exportId, files: receipt.request.files});
+    const current = await this.inputs({projectId: receipt.projectId, exportId: receipt.request.exportId, files: receipt.request.files}, signal);
     if (current.contentHash !== receipt.inputs.contentHash) throw new Error('research_zenodo_inputs_changed');
   }
 

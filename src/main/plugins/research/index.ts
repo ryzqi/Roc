@@ -1,3 +1,7 @@
+import {ZenodoPublicationService} from './zenodo-publication';
+import {ZenodoOperationRepository} from './zenodo-operation-repository';
+import {ZenodoTransport} from './zenodo-transport';
+import {researchZenodoPublicationCapabilities, registerResearchZenodoPublicationCapabilities} from './zenodo-publication-capabilities';
 import {ZenodoPreparationService} from './zenodo-preparation';
 import {registerResearchZenodoCapabilities, researchZenodoCapabilities} from './zenodo-capabilities';
 import {ResearchMonitorRepository} from './monitor-repository';
@@ -246,6 +250,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
   let resources: ResearchResourceService | null = null;
   let openreview: OpenReviewService | null = null;
   let monitors: ResearchMonitorService | null = null;
+  let zenodo: ZenodoPublicationService | null = null;
   let huggingface: HuggingFaceService | null = null;
   let huggingfaceDownloads: HuggingFaceDownloadService | null = null;
   let documents: ResearchDocumentService | null = null;
@@ -273,7 +278,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchIdeaPlanCapabilities, ...researchIdeaOutcomeCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchScholarlyCapabilities, ...researchResourceCapabilities, ...researchOpenReviewCapabilities, ...researchMonitorCapabilities, ...researchZenodoCapabilities, ...researchHuggingFaceCapabilities, ...researchHuggingFaceDownloadCapabilities, ...researchResourceAssociationCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchNotebookCapabilities, ...researchExperimentResultCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities, researchCitationCoverageCapability, ...researchCitationReviewCapabilities, ...researchConsistencyCapabilities, ...researchFigureConsistencyCapabilities, ...researchResponseMatrixCapabilities, ...researchJournalComplianceCapabilities]
+      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchIdeaPlanCapabilities, ...researchIdeaOutcomeCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchScholarlyCapabilities, ...researchResourceCapabilities, ...researchOpenReviewCapabilities, ...researchMonitorCapabilities, ...researchZenodoCapabilities, ...researchZenodoPublicationCapabilities, ...researchHuggingFaceCapabilities, ...researchHuggingFaceDownloadCapabilities, ...researchResourceAssociationCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchNotebookCapabilities, ...researchExperimentResultCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities, researchCitationCoverageCapability, ...researchCitationReviewCapabilities, ...researchConsistencyCapabilities, ...researchFigureConsistencyCapabilities, ...researchResponseMatrixCapabilities, ...researchJournalComplianceCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，
@@ -329,7 +334,14 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
         new ResearchExportSourceService(researchRepository, researchFigures, researchExperiments, researchTemplates), toolchain, options.exportRoot ?? null, context.logger);
       exports = researchExports;
       registerResearchExportCapabilities(context, researchRepository.exports, researchExports);
-      registerResearchZenodoCapabilities(context, new ZenodoPreparationService(db, researchRepository, researchExports));
+      const zenodoPreparations = new ZenodoPreparationService(db, researchRepository, researchExports);
+      registerResearchZenodoCapabilities(context, zenodoPreparations);
+      const zenodoOperations = new ZenodoOperationRepository(db, researchRepository, zenodoPreparations);
+      const zenodoPublication = new ZenodoPublicationService(researchRepository, zenodoPreparations, zenodoOperations,
+        new ZenodoTransport(context.secrets), context.secrets, researchExports.uploadPublicationFile.bind(researchExports));
+      zenodo = zenodoPublication;
+      zenodoPublication.recover();
+      registerResearchZenodoPublicationCapabilities(context, zenodoPublication, zenodoOperations);
       const productionJob = createResearchProductionJob({
         repository: researchRepository,
         experiments: researchExperiments,
@@ -481,6 +493,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
         researchExperiments.projectChanged(project.id);
         researchFigures.projectChanged(project.id);
         researchExports.projectChanged(project.id);
+        zenodoPublication.projectChanged(project.id);
         if (project.status === 'archived') {
           await reviewSearches.releaseProject(project.id);
           await researchPythonEnvironments.releaseProject(project.id);
@@ -497,6 +510,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
         researchExperiments.releaseProject(request.id);
         researchFigures.releaseProject(request.id);
         researchExports.releaseProject(request.id);
+        zenodoPublication.releaseProject(request.id);
         runtime.releaseProject(request.id);
         return result;
       });
@@ -583,12 +597,13 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
     },
     shutdown: async () => {
       try {
-        await shutdownResearchPlugin({ literature: literatureService, monitors, scholarly, resources, openreview, huggingface, huggingfaceDownloads, zotero, literatureImports, productionInputs, exports, figures, experiments, pythonEnvironments, indexer, embeddings, stageRuntime, reviewSearch, templates, documents, library, prose });
+        await shutdownResearchPlugin({ literature: literatureService, monitors, zenodo, scholarly, resources, openreview, huggingface, huggingfaceDownloads, zotero, literatureImports, productionInputs, exports, figures, experiments, pythonEnvironments, indexer, embeddings, stageRuntime, reviewSearch, templates, documents, library, prose });
       } finally {
         reviewSearch = null;
         resources = null;
         openreview = null;
         monitors = null;
+        zenodo = null;
         productionInputs = null;
         exports = null;
         figures = null;

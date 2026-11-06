@@ -215,3 +215,12 @@ export * from '../../../src/shared/schemas/research-zenodo';
 export {ZenodoPreparationService, sealZenodo} from '../../../src/main/plugins/research/zenodo-preparation';
 export {hashZenodoFile} from '../../../src/main/plugins/research/zenodo-file';
 export {registerResearchZenodoCapabilities, researchZenodoCapabilities} from '../../../src/main/plugins/research/zenodo-capabilities';
+
+export * from '../../../src/shared/schemas/research-zenodo-remote';
+export {ZenodoPublicationService} from '../../../src/main/plugins/research/zenodo-publication';
+export {ZenodoOperationRepository} from '../../../src/main/plugins/research/zenodo-operation-repository';
+export {ZenodoTransport, ZenodoTransportError, readZenodoDeposition, zenodoBucket} from '../../../src/main/plugins/research/zenodo-transport';
+export {uploadZenodoFile} from '../../../src/main/plugins/research/zenodo-upload';
+export {SecretManager} from '../../../src/main/infrastructure/secret-manager';
+export {applyCoreDatabaseSchema} from '../../../src/main/infrastructure/database-schemas';
+export {researchZenodoPublicationCapabilities, registerResearchZenodoPublicationCapabilities} from '../../../src/main/plugins/research/zenodo-publication-capabilities';

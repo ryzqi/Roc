@@ -22,8 +22,9 @@ import {buildExportCrate} from './export-crate';
 import {researchCrateMetadataPath, researchCrateProfilePath} from '../../../shared/schemas/research-ro-crate';
 import {researchCrateProfileHtml, serializeResearchCrate} from './export-ro-crate';
 import {researchExportManifestSchema, verifyExportPublicBundle} from './export-public-bundle';
-import {zenodoInputsRequestSchema, zenodoInputsSchema, type ZenodoInputs, type ZenodoInputsRequest} from '../../../shared/schemas/research-zenodo';
+import {zenodoInputsRequestSchema, zenodoInputsSchema, type ZenodoInputs, type ZenodoInputsRequest, type ZenodoPrepared} from '../../../shared/schemas/research-zenodo';
 import {hashZenodoFile} from './zenodo-file';
+import {uploadZenodoFile} from './zenodo-upload';
 
 export class ResearchExportService {
   private readonly session = new ResearchJobSession('research_export_closed');
@@ -129,9 +130,10 @@ export class ResearchExportService {
     });
   }
 
-  async publicationInputs(input: ZenodoInputsRequest): Promise<ZenodoInputs> {
+  async publicationInputs(input: ZenodoInputsRequest, cancellation?: AbortSignal): Promise<ZenodoInputs> {
     const request = zenodoInputsRequestSchema.parse(input);
-    return this.session.run(async signal => {
+    return this.session.run(async sessionSignal => {
+      const signal = cancellation === undefined ? sessionSignal : AbortSignal.any([sessionSignal, cancellation]);
       const record = this.requireApproved(request.projectId, request.exportId);
       await this.verify(record, signal);
       if (record.sources === null || record.sourceHash === null || record.artifactId === null) throw new Error('research_export_sources_required');
@@ -155,6 +157,20 @@ export class ResearchExportService {
         exportHash, sourceHash: record.sourceHash, files});
       return {...value, contentHash: researchContentHash(JSON.stringify(value))};
     });
+  }
+
+  async uploadPublicationFile(preparation: ZenodoPrepared, name: string, signal: AbortSignal,
+    send: (stream: ReadableStream<Uint8Array>, size: number) => Promise<unknown>): Promise<unknown> {
+    const file = preparation.inputs.files.find(value => value.name === name);
+    if (file === undefined) throw new Error('research_zenodo_file_not_found');
+    const verifyCurrent = async () => {
+      const inputs = await this.publicationInputs({projectId: preparation.projectId,
+        exportId: preparation.request.exportId, files: preparation.request.files}, signal);
+      if (inputs.contentHash !== preparation.inputs.contentHash) throw new Error('research_zenodo_inputs_changed');
+    };
+    await verifyCurrent();
+    const root = this.repository.exports.root(preparation.projectId, preparation.request.exportId);
+    return uploadZenodoFile(file.area === 'archive' ? root : join(root, 'bundle'), file, signal, verifyCurrent, send);
   }
 
   async read(projectId: string, id: string, path: string): Promise<z.infer<typeof researchExportFileContentSchema>> {
