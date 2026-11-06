@@ -1,0 +1,469 @@
+{
+  "status": "Verified passing",
+  "baseline": {
+    "phase": "baseline",
+    "sourceSha256": "1f9d4c6258a3272e597f9b369854357acd249b74338687507de2c7aab3857956",
+    "hardware": {
+      "cpu": "Apple M1 Pro",
+      "memoryBytes": 34359738368,
+      "node": "v26.13.0"
+    },
+    "recipe": "100/300/1000 claims sharing one loaded evidence; 5 same-process samples, no force layout",
+    "rows": [
+      {
+        "claims": 100,
+        "samples": [
+          {
+            "deriveMs": 5.225041999999998,
+            "neighborMs": 0.2210409999999996,
+            "nodes": 101,
+            "links": 5050,
+            "rssBytes": 25120344
+          },
+          {
+            "deriveMs": 4.155084000000002,
+            "neighborMs": 0.1665000000000063,
+            "nodes": 101,
+            "links": 5050,
+            "rssBytes": 29266096
+          },
+          {
+            "deriveMs": 4.205625000000005,
+            "neighborMs": 0.06345799999999713,
+            "nodes": 101,
+            "links": 5050,
+            "rssBytes": 31936880
+          },
+          {
+            "deriveMs": 4.958833000000006,
+            "neighborMs": 0.02804100000000176,
+            "nodes": 101,
+            "links": 5050,
+            "rssBytes": 41096832
+          },
+          {
+            "deriveMs": 4.762459,
+            "neighborMs": 0.02720899999999915,
+            "nodes": 101,
+            "links": 5050,
+            "rssBytes": 45635608
+          }
+        ]
+      },
+      {
+        "claims": 300,
+        "samples": [
+          {
+            "deriveMs": 38.191333,
+            "neighborMs": 0.20324999999999704,
+            "nodes": 301,
+            "links": 45150,
+            "rssBytes": 76720088
+          },
+          {
+            "deriveMs": 30.391750000000002,
+            "neighborMs": 0.18054200000000264,
+            "nodes": 301,
+            "links": 45150,
+            "rssBytes": 90287792
+          },
+          {
+            "deriveMs": 34.44000000000001,
+            "neighborMs": 0.20666700000001015,
+            "nodes": 301,
+            "links": 45150,
+            "rssBytes": 139692104
+          },
+          {
+            "deriveMs": 31.349000000000018,
+            "neighborMs": 0.193916999999999,
+            "nodes": 301,
+            "links": 45150,
+            "rssBytes": 151326088
+          },
+          {
+            "deriveMs": 32.46058399999998,
+            "neighborMs": 0.17941700000000083,
+            "nodes": 301,
+            "links": 45150,
+            "rssBytes": 164041488
+          }
+        ]
+      },
+      {
+        "claims": 1000,
+        "samples": [
+          {
+            "deriveMs": 637.353333,
+            "neighborMs": 2.4543330000000196,
+            "nodes": 1001,
+            "links": 500500,
+            "rssBytes": 281410640
+          },
+          {
+            "deriveMs": 584.870042,
+            "neighborMs": 2.097917000000052,
+            "nodes": 1001,
+            "links": 500500,
+            "rssBytes": 424471032
+          },
+          {
+            "deriveMs": 651.3542090000001,
+            "neighborMs": 2.499500000000353,
+            "nodes": 1001,
+            "links": 500500,
+            "rssBytes": 468487168
+          },
+          {
+            "deriveMs": 591.25025,
+            "neighborMs": 2.4537500000001273,
+            "nodes": 1001,
+            "links": 500500,
+            "rssBytes": 530781656
+          },
+          {
+            "deriveMs": 575.5977499999999,
+            "neighborMs": 2.1187089999998534,
+            "nodes": 1001,
+            "links": 500500,
+            "rssBytes": 672333136
+          }
+        ]
+      }
+    ]
+  },
+  "current": {
+    "contractVersion": 1,
+    "protocol": {
+      "scales": [
+        100,
+        300,
+        1000,
+        10000,
+        50000
+      ],
+      "samples": 5,
+      "pageSize": 50,
+      "recipe": "All claims share one loaded evidence; unloaded source; same-process samples; no force layout.",
+      "targets": {
+        "deriveP95Ms": 2500,
+        "expandedPageP95Ms": 100,
+        "cachedPageP95Ms": 10
+      },
+      "percentile": "Nearest rank over five samples; descriptive engineering measurements, not a statistical guarantee."
+    },
+    "protocolSha256": "6f11cc8cf5ad5ae6c448fc74a04492d03e6fa248e4d40ceddfc6e9222ced820e",
+    "sourceSha256": "e62a2b7d16d23b11792a059beab53a974888ab1e3437c3935fcadba642965c1b",
+    "fixtureSha256": "7d01024c67c8987f70a927eaf6691c95458caaf4ecee527f75409dbf6699c9f4",
+    "hardware": {
+      "cpu": "Apple M1 Pro",
+      "memoryBytes": 34359738368,
+      "node": "v26.13.0",
+      "platform": "darwin",
+      "arch": "arm64"
+    },
+    "rows": [
+      {
+        "claims": 100,
+        "corpusSha256": "fd610fcc972b124ff0500a15ea685791f9b020f3202f3e021245d9e3f0a0485a",
+        "samples": [
+          {
+            "deriveMs": 0.38458299999999923,
+            "expandedPageMs": 0.0782500000000006,
+            "cachedPageMs": 0.006958000000000908,
+            "nodes": 101,
+            "links": 100,
+            "rssBytes": 18057760
+          },
+          {
+            "deriveMs": 0.13812499999999872,
+            "expandedPageMs": 0.03537499999999838,
+            "cachedPageMs": 0.003416999999998893,
+            "nodes": 101,
+            "links": 100,
+            "rssBytes": 18205264
+          },
+          {
+            "deriveMs": 0.12212499999999693,
+            "expandedPageMs": 0.014666000000001844,
+            "cachedPageMs": 0.011333000000000482,
+            "nodes": 101,
+            "links": 100,
+            "rssBytes": 18483840
+          },
+          {
+            "deriveMs": 0.11995900000000148,
+            "expandedPageMs": 0.013916999999999291,
+            "cachedPageMs": 0.001832999999997753,
+            "nodes": 101,
+            "links": 100,
+            "rssBytes": 18729600
+          },
+          {
+            "deriveMs": 0.12708399999999997,
+            "expandedPageMs": 0.012291999999998637,
+            "cachedPageMs": 0.0017500000000012506,
+            "nodes": 101,
+            "links": 100,
+            "rssBytes": 19024560
+          }
+        ],
+        "summary": {
+          "deriveP95Ms": 0.38458299999999923,
+          "expandedPageP95Ms": 0.0782500000000006,
+          "cachedPageP95Ms": 0.011333000000000482,
+          "peakRssBytes": 19024560
+        }
+      },
+      {
+        "claims": 300,
+        "corpusSha256": "02444ea3719fb6111f7d25e65f007f2637d43225e4f71d3009312cdbce09b86c",
+        "samples": [
+          {
+            "deriveMs": 0.5633750000000006,
+            "expandedPageMs": 0.04037500000000094,
+            "cachedPageMs": 0.0022500000000000853,
+            "nodes": 301,
+            "links": 300,
+            "rssBytes": 19860336
+          },
+          {
+            "deriveMs": 0.34724999999999895,
+            "expandedPageMs": 0.0297079999999994,
+            "cachedPageMs": 0.0017500000000012506,
+            "nodes": 301,
+            "links": 300,
+            "rssBytes": 20466640
+          },
+          {
+            "deriveMs": 0.4622089999999943,
+            "expandedPageMs": 0.033667000000001224,
+            "cachedPageMs": 0.002042000000002986,
+            "nodes": 301,
+            "links": 300,
+            "rssBytes": 21154864
+          },
+          {
+            "deriveMs": 0.3074590000000015,
+            "expandedPageMs": 0.029249999999997556,
+            "cachedPageMs": 0.0017500000000012506,
+            "nodes": 301,
+            "links": 300,
+            "rssBytes": 21384240
+          },
+          {
+            "deriveMs": 0.3017500000000055,
+            "expandedPageMs": 0.029792000000000485,
+            "cachedPageMs": 0.0017500000000012506,
+            "nodes": 301,
+            "links": 300,
+            "rssBytes": 22055984
+          }
+        ],
+        "summary": {
+          "deriveP95Ms": 0.5633750000000006,
+          "expandedPageP95Ms": 0.04037500000000094,
+          "cachedPageP95Ms": 0.0022500000000000853,
+          "peakRssBytes": 22055984
+        }
+      },
+      {
+        "claims": 1000,
+        "corpusSha256": "d56e03446ab1d32aa3b23ac46f1f5a8511469374b4697df5a0df9a8065f7e60b",
+        "samples": [
+          {
+            "deriveMs": 1.1920000000000002,
+            "expandedPageMs": 0.08808299999999747,
+            "cachedPageMs": 0.0053339999999977294,
+            "nodes": 1001,
+            "links": 1000,
+            "rssBytes": 22645808
+          },
+          {
+            "deriveMs": 0.8904160000000019,
+            "expandedPageMs": 0.07262500000000216,
+            "cachedPageMs": 0.0012919999999994047,
+            "nodes": 1001,
+            "links": 1000,
+            "rssBytes": 22826032
+          },
+          {
+            "deriveMs": 0.907584,
+            "expandedPageMs": 0.08366700000000549,
+            "cachedPageMs": 0.0010830000000012774,
+            "nodes": 1001,
+            "links": 1000,
+            "rssBytes": 25103768
+          },
+          {
+            "deriveMs": 0.8395420000000016,
+            "expandedPageMs": 0.07600000000000051,
+            "cachedPageMs": 0.0012500000000059686,
+            "nodes": 1001,
+            "links": 1000,
+            "rssBytes": 25316808
+          },
+          {
+            "deriveMs": 0.9150419999999997,
+            "expandedPageMs": 0.2679590000000047,
+            "cachedPageMs": 0.0010830000000012774,
+            "nodes": 1001,
+            "links": 1000,
+            "rssBytes": 27610880
+          }
+        ],
+        "summary": {
+          "deriveP95Ms": 1.1920000000000002,
+          "expandedPageP95Ms": 0.2679590000000047,
+          "cachedPageP95Ms": 0.0053339999999977294,
+          "peakRssBytes": 27610880
+        }
+      },
+      {
+        "claims": 10000,
+        "corpusSha256": "39747575d741e80850577976d9ff4492c4b026679874fc2a7ca38530c36c1a40",
+        "samples": [
+          {
+            "deriveMs": 12.479,
+            "expandedPageMs": 0.8555830000000029,
+            "cachedPageMs": 0.0022499999999965326,
+            "nodes": 10001,
+            "links": 10000,
+            "rssBytes": 49978136
+          },
+          {
+            "deriveMs": 14.555917,
+            "expandedPageMs": 0.9520829999999876,
+            "cachedPageMs": 0.004750000000001364,
+            "nodes": 10001,
+            "links": 10000,
+            "rssBytes": 63202064
+          },
+          {
+            "deriveMs": 10.323458000000002,
+            "expandedPageMs": 0.7717499999999973,
+            "cachedPageMs": 0.003208000000000766,
+            "nodes": 10001,
+            "links": 10000,
+            "rssBytes": 74049640
+          },
+          {
+            "deriveMs": 10.523791000000003,
+            "expandedPageMs": 0.7786250000000052,
+            "cachedPageMs": 0.002500000000011937,
+            "nodes": 10001,
+            "links": 10000,
+            "rssBytes": 103512200
+          },
+          {
+            "deriveMs": 9.558290999999997,
+            "expandedPageMs": 0.7742080000000016,
+            "cachedPageMs": 0.005084000000010747,
+            "nodes": 10001,
+            "links": 10000,
+            "rssBytes": 113655264
+          }
+        ],
+        "summary": {
+          "deriveP95Ms": 14.555917,
+          "expandedPageP95Ms": 0.9520829999999876,
+          "cachedPageP95Ms": 0.005084000000010747,
+          "peakRssBytes": 113655264
+        }
+      },
+      {
+        "claims": 50000,
+        "corpusSha256": "eac0dfc5ef4b612af54ca8c4d7d1664927c074631aa0d144a66eac966cfd1406",
+        "samples": [
+          {
+            "deriveMs": 67.90841700000001,
+            "expandedPageMs": 3.8147089999999935,
+            "cachedPageMs": 0.0063750000000197815,
+            "nodes": 50001,
+            "links": 50000,
+            "rssBytes": 188930176
+          },
+          {
+            "deriveMs": 73.68787499999999,
+            "expandedPageMs": 3.8102079999999887,
+            "cachedPageMs": 0.004833000000019183,
+            "nodes": 50001,
+            "links": 50000,
+            "rssBytes": 196288056
+          },
+          {
+            "deriveMs": 62.765083000000004,
+            "expandedPageMs": 3.660542000000021,
+            "cachedPageMs": 0.0050420000000030996,
+            "nodes": 50001,
+            "links": 50000,
+            "rssBytes": 222061768
+          },
+          {
+            "deriveMs": 79.11879199999998,
+            "expandedPageMs": 3.8554999999999495,
+            "cachedPageMs": 0.007332999999960066,
+            "nodes": 50001,
+            "links": 50000,
+            "rssBytes": 234140256
+          },
+          {
+            "deriveMs": 64.73562499999997,
+            "expandedPageMs": 3.5821249999999623,
+            "cachedPageMs": 0.006292000000030384,
+            "nodes": 50001,
+            "links": 50000,
+            "rssBytes": 251049024
+          }
+        ],
+        "summary": {
+          "deriveP95Ms": 79.11879199999998,
+          "expandedPageP95Ms": 3.8554999999999495,
+          "cachedPageP95Ms": 0.007332999999960066,
+          "peakRssBytes": 251049024
+        }
+      }
+    ]
+  },
+  "renderer": {
+    "claims": 50000,
+    "samples": [
+      {
+        "elapsedMs": 139.5,
+        "nodeButtons": 50,
+        "neighborButtons": 50,
+        "text": "claim:c-0"
+      },
+      {
+        "elapsedMs": 127.7000000178814,
+        "nodeButtons": 50,
+        "neighborButtons": 50,
+        "text": "claim:c-0"
+      },
+      {
+        "elapsedMs": 122.5,
+        "nodeButtons": 50,
+        "neighborButtons": 50,
+        "text": "claim:c-0"
+      }
+    ],
+    "electron": null,
+    "fixture": "research-graph-performance-fixture.mjs",
+    "note": "Two real animation frames after mount; includes derivation and DOM paint, no provider/database IO."
+  },
+  "rawReports": [
+    {
+      "path": ".artifacts/research-optimization/graph-baseline.json",
+      "sha256": "853c1a56a3b74ac0e9d076f949bfe194fefdcda94e71da9cb05d0c5d945f559b"
+    },
+    {
+      "path": ".artifacts/research-optimization/graph-current.json",
+      "sha256": "9fd5ade2317a816056187efcfb78c8334442edbf710dfd8b68567aed6294590b"
+    },
+    {
+      "path": ".artifacts/research-optimization/graph-ui/first-frame.json",
+      "sha256": "382d6014b810ee7f73485d34c62a58c43ff66e7595cb5be5b9f2f34ca88a9318"
+    }
+  ],
+  "limits": "Generated high-degree engineering data. Five same-process native samples and three renderer samples are descriptive. Current store data projects linearly; only the node and selected-neighborhood DOM are paginated. No database paging or force-layout performance claim."
+}

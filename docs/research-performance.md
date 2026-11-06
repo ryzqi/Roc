@@ -71,3 +71,23 @@ Cancellation response P95 is 2.6 ms from abort to parser rejection/cleanup. Firs
 The actual Electron reader uses the exact same long-PDF bytes and production parser/preview registry. Three repeated reader activations first paint at 1665.7 / 1673.4 / 1671.9 ms, including keyboard activation, sealed preview, protocol fetch and the native worker. Navigation to 201/400/1 checks nonempty source pixels, one visible canvas, at most 4 million pixels, one worker and full release on close. Browser first paint is separate from native extraction and parse completion. Raw evidence is `.artifacts/research-optimization/pr07-reader-selection/long-pdf-performance.json`; the compact report includes its hash and samples. OS cache is uncontrolled.
 
 From `/Users/Apple_501/Desktop/Roc/Roc`, syntax check, 24 parser/cache samples, report/hash readback, `node --test tests/unit/architecture-repair-corpus.test.mjs` (14/14), `pnpm build` (including typecheck), and `node --test tests/renderer/paper-reader.test.mjs` (31/31) passed. Reader coverage also checks historical identity, source corruption, cancellation, keyboard interaction, light/dark layouts and clipping. `node scripts/smoke-electron.mjs` (13/13, zero renderer errors), `pnpm check:ipc`, `pnpm check:renderer-chunks` and `git diff --check` passed. Logs use the `pdf-current-` prefix. Status: **Verified passing** for current-contract parsing, this fixed native fixture and covered reader behavior; representative scanned OCR throughput remains unrun.
+
+## Indexed graph neighborhoods and bounded lists (A3)
+
+The renderer now projects actual `cites` and `sourced-from` relations into linear adjacency indexes. It expands shared-evidence claims only for the selected node; it does not materialize the shared-claim clique. Only loaded evidence establishes these relationships. Node and neighborhood lists paginate independently at 50 items, filter changes reset the node page, changing selection resets the neighborhood page, and reduced data clamps both pages. Narrow windows stack the detail region below the list. Neighbor buttons support keyboard selection and the existing assistant callback. The relation count describes recorded citations and sources.
+
+Run `pnpm research:graph-bench` from `/Users/Apple_501/Desktop/Roc/Roc`. It uses production `deriveGraph` and neighbor functions on 100 / 300 / 1,000 / 10,000 / 50,000 claims sharing one loaded evidence, five samples each. Before execution, the harness fixes P95 goals of 2,500 ms derivation, 100 ms expanded-page lookup and 10 ms paging cached selected IDs. All pass. Five samples use nearest rank, so P95 is the maximum; these are descriptive measurements. RSS covers the same-process imports and prior scales, not an isolated per-scale peak.
+
+| Claims | Recorded links | Derive P95 | Expand first page P95 | Page selected IDs P95 | Process peak RSS |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 100 | 100 | 0.38 ms | 0.08 ms | 0.011 ms | 18.1 MiB |
+| 300 | 300 | 0.56 ms | 0.04 ms | 0.002 ms | 21.0 MiB |
+| 1000 | 1000 | 1.19 ms | 0.27 ms | 0.005 ms | 26.3 MiB |
+| 10000 | 10000 | 14.56 ms | 0.95 ms | 0.005 ms | 108.4 MiB |
+| 50000 | 50000 | 79.12 ms | 3.86 ms | 0.007 ms | 239.4 MiB |
+
+The original 1,000-claim fixture generated 500,500 links and took up to about 651 ms. The original 100/300/1,000 samples remain in [research-graph-performance.json](research-graph-performance.json), together with current source/corpus hashes, hardware and raw-report hashes. The recipe and machine match. Raw files are `.artifacts/research-optimization/graph-baseline.json`, `graph-current.json` and their logs.
+
+Real Electron tests mount the production view with the same 50,000-claim recipe three times and record two real animation frames after mount, 50 node buttons, 50 neighbor buttons and selected detail text. First-frame samples are in `graph-ui/first-frame.json`; they include derivation and DOM work, not database/network latency. Light/dark 1,250/1,099/650 px, static/hover/expanded/focus states retain visible controls, no horizontal overflow and clip-audit `cut=0`. Screenshots and audit receipts are under `graph-ui/`. This is bounded rendering of the current store projection; it does not establish database pagination or a force-layout benchmark.
+
+Verification: `node --test tests/unit/renderer-derive.test.mjs` 11/11; `pnpm typecheck`; `pnpm build`; `node --test tests/renderer/knowledge-graph.test.mjs` 6/6. `node scripts/smoke-electron.mjs` 13/13 with zero renderer errors; `pnpm check:ipc`; `pnpm check:renderer-chunks` 1,134,468 eager bytes / six files; syntax and diff checks passed. Status: **Verified passing** for the graph projection, benchmark and tested renderer behavior.

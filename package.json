@@ -21,6 +21,7 @@
     "harness:quality:check": "node scripts/harness-eval/quality-check.mjs",
     "research:retrieval-eval": "node scripts/evaluate-literature-retrieval.mjs",
     "research:retrieval-bench": "node scripts/benchmark-research-retrieval.mjs",
+    "research:graph-bench": "node scripts/benchmark-research-graph.mjs",
     "harness:resource-bench": "node scripts/harness-eval/resource-admission-bench.mjs",
     "test": "pnpm test:unit && pnpm test:renderer && node scripts/smoke-electron.mjs",
     "test:unit": "node --test tests/unit/",

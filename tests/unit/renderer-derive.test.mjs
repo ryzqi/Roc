@@ -212,7 +212,7 @@ test('deriveGraph emits only relation-bearing edges', () => {
   );
   assert.deepEqual(
     projection.links.map((link) => link.kind).sort(),
-    ['cites', 'cites', 'shares-evidence', 'sourced-from']
+    ['cites', 'cites', 'sourced-from']
   );
   assert.deepEqual(projection.kinds, ['paper', 'evidence', 'claim']);
 
@@ -277,8 +277,44 @@ test('graphNeighbors returns only connected nodes', () => {
     libraryItems: [libraryItem('lib-1', 'Paper one', 2017)]
   });
   assert.deepEqual(
-    graph.graphNeighbors(projection, 'evidence:ev-1').map((node) => node.id).sort(),
+    graph.graphNeighbors(projection, { nodeId: 'evidence:ev-1', offset: 0, limit: 50 }).nodes.map((node) => node.id).sort(),
     ['claim:cl-a', 'paper:lib-1']
   );
-  assert.deepEqual(graph.graphNeighbors(projection, 'claim:cl-b'), []);
+  assert.deepEqual(graph.graphNeighbors(projection, { nodeId: 'claim:cl-b', offset: 0, limit: 50 }), { nodes: [], total: 0 });
+});
+
+test('shared-evidence neighbors deduplicate loaded relations and page in projection order', () => {
+  const projection = graph.deriveGraph({
+    claims: [
+      claimRecord({ id: 'a', evidenceIds: ['ev-2', 'ev-1', 'ev-1', 'absent'] }),
+      claimRecord({ id: 'b', evidenceIds: ['ev-1', 'ev-2'] }),
+      claimRecord({ id: 'c', evidenceIds: ['ev-2'] }),
+      claimRecord({ id: 'd', evidenceIds: ['absent'] })
+    ],
+    evidence: [evidenceRecord({ id: 'ev-1' }), evidenceRecord({ id: 'ev-2' })], libraryItems: []
+  });
+  assert.deepEqual(graph.graphNeighborIds(projection, 'claim:a'), ['evidence:ev-1', 'evidence:ev-2', 'claim:b', 'claim:c']);
+  const first = graph.graphNeighbors(projection, { nodeId: 'claim:a', offset: 0, limit: 2 });
+  const second = graph.graphNeighbors(projection, { nodeId: 'claim:a', offset: 2, limit: 2 });
+  assert.equal(first.total, 4); assert.equal(second.total, 4);
+  assert.deepEqual(first.nodes.map(n => n.id), ['evidence:ev-1', 'evidence:ev-2']);
+  assert.deepEqual(second.nodes.map(n => n.id), ['claim:b', 'claim:c']);
+  assert.deepEqual(graph.graphNeighborIds(projection, 'claim:d'), []);
+  assert.equal(projection.links.length, 5, 'duplicate evidence IDs create one actual citation');
+  assert.deepEqual(graph.graphNeighbors(projection, { nodeId: 'claim:a', offset: 4, limit: 2 }), { nodes: [], total: 4 });
+});
+
+test('high-degree projection remains linear and pages every shared neighbor without omissions', () => {
+  const count = 10_000;
+  const projection = graph.deriveGraph({ libraryItems: [], evidence: [evidenceRecord({})],
+    claims: Array.from({ length: count }, (_, i) => claimRecord({ id: `c-${i}` })) });
+  assert.equal(projection.nodes.length, count + 1);
+  assert.equal(projection.links.length, count);
+  const neighbors = graph.graphNeighborIds(projection, 'claim:c-0');
+  assert.equal(neighbors.length, count);
+  assert.equal(neighbors[0], 'evidence:ev-1');
+  assert.equal(neighbors.at(-1), 'claim:c-9999');
+  const tail = graph.graphNeighbors(projection, { nodeId: 'claim:c-0', offset: count - 50, limit: 50 });
+  assert.equal(tail.total, count); assert.equal(tail.nodes.length, 50);
+  assert.deepEqual(tail.nodes.map(n => n.id), neighbors.slice(-50));
 });

@@ -1,25 +1,6 @@
 import type { ResearchClaim, ResearchEvidence, ResearchIndexedFile, ResearchLibraryItem } from '../../shared/types';
 
-/**
- * Derived knowledge-graph projection.
- *
- * Same discipline as `derive-wiki.ts`: pure, real data only, and **no graph when
- * there is no data** (R12 / gate 4). The legacy view seeded a layout with mock
- * nodes, which is the one thing a derived view must never do.
- *
- * Nodes are the three things the backend actually stores — library items,
- * claims, and evidence — plus project-indexed files, which are the only other
- * first-class "thing" with an id in the contract. Edges are only relations the
- * data itself expresses:
- *
- *   - claim → evidence (the claim cites it)
- *   - evidence → library item / indexed file (where the evidence came from)
- *   - claim ↔ claim (shared evidence; the same edge list the wiki backlinks use)
- *
- * Deliberately absent: any "related concepts" edge derived from title similarity.
- * That would be an invented relation, and a graph full of invented edges is worse
- * than an empty graph.
- */
+/** Project only recorded relations. Shared-evidence neighbors are expanded on demand, without a claim clique. */
 
 export type GraphNodeKind = 'paper' | 'claim' | 'evidence' | 'file';
 
@@ -35,7 +16,7 @@ export type GraphLink = {
   id: string;
   source: string;
   target: string;
-  kind: 'cites' | 'sourced-from' | 'shares-evidence';
+  kind: 'cites' | 'sourced-from';
 };
 
 export type KnowledgeGraph = {
@@ -43,10 +24,14 @@ export type KnowledgeGraph = {
   links: GraphLink[];
   /** Node kinds present, so the view can offer only meaningful filters. */
   kinds: GraphNodeKind[];
+  nodeById: Map<string, GraphNode>;
+  nodeOrder: Map<string, number>;
+  adjacent: Map<string, Set<string>>;
+  claimsByEvidence: Map<string, Set<string>>;
+  evidenceByClaim: Map<string, Set<string>>;
 };
 
-/** Above this node count the view degrades to a filtered list (T5.7 / R11). */
-export const GRAPH_LAYOUT_NODE_LIMIT = 300;
+export const GRAPH_PAGE_SIZE = 50;
 
 function paperLabel(item: ResearchLibraryItem): string {
   const title = item.metadata.title.trim();
@@ -62,6 +47,8 @@ export function deriveGraph(input: {
   const nodes: GraphNode[] = [];
   const links: GraphLink[] = [];
   const nodeIds = new Set<string>();
+  const claimsByEvidence = new Map<string, Set<string>>();
+  const evidenceByClaim = new Map<string, Set<string>>();
 
   const addNode = (node: GraphNode): void => {
     if (nodeIds.has(node.id)) {
@@ -77,11 +64,11 @@ export function deriveGraph(input: {
       kind: 'paper',
       label: paperLabel(item),
       detail: [
-        item.metadata.authors.length === 0 ? '作者未知' : item.metadata.authors.slice(0, 2).join(' · '),
+        item.metadata.authors.length === 0 ? '作者未知' : item.metadata.authors.slice(0, 2).join(', '),
         item.metadata.publishedYear === null ? null : String(item.metadata.publishedYear)
       ]
         .filter((part): part is string => part !== null)
-        .join(' · ')
+        .join(' / ')
     });
   }
 
@@ -105,7 +92,7 @@ export function deriveGraph(input: {
     const sourceNodeId =
       record.sourceType === 'literature'
         ? `paper:${record.sourceId}`
-        : (input.indexedFiles ?? []).some((file) => file.id === record.sourceId)
+        : nodeIds.has(`file:${record.sourceId}`)
           ? `file:${record.sourceId}`
           : null;
     if (sourceNodeId !== null && nodeIds.has(sourceNodeId)) {
@@ -135,59 +122,55 @@ export function deriveGraph(input: {
         target: `evidence:${evidenceId}`,
         kind: 'cites'
       });
+      const evidenceNodeId = `evidence:${evidenceId}`;
+      const claimNodeId = `claim:${claim.id}`;
+      addRelation(claimsByEvidence, evidenceNodeId, claimNodeId);
+      addRelation(evidenceByClaim, claimNodeId, evidenceNodeId);
     }
   }
 
-  // claim ↔ claim: shared evidence, deduplicated to one edge per pair.
-  const claimsByEvidence = new Map<string, string[]>();
-  for (const claim of input.claims) {
-    for (const evidenceId of new Set(claim.evidenceIds)) {
-      claimsByEvidence.set(evidenceId, [...(claimsByEvidence.get(evidenceId) ?? []), claim.id]);
-    }
+  const adjacent = new Map<string, Set<string>>();
+  for (const link of links) {
+    addRelation(adjacent, link.source, link.target);
+    addRelation(adjacent, link.target, link.source);
   }
-  const seenPairs = new Set<string>();
-  for (const claimIds of claimsByEvidence.values()) {
-    if (claimIds.length < 2) {
-      continue;
-    }
-    for (const left of claimIds) {
-      for (const right of claimIds) {
-        if (left === right) {
-          continue;
-        }
-        const pair = [left, right].sort().join('\u0000');
-        if (seenPairs.has(pair)) {
-          continue;
-        }
-        seenPairs.add(pair);
-        links.push({
-          id: `shares-evidence:${pair.replace('\u0000', ':')}`,
-          source: `claim:${left}`,
-          target: `claim:${right}`,
-          kind: 'shares-evidence'
-        });
-      }
-    }
-  }
-
-  // Drop links whose endpoints are not both rendered: a layout with a dangling
-  // edge either throws or silently invents a node.
-  const visible = new Set(nodes.map((node) => node.id));
-  const visibleLinks = links.filter((link) => visible.has(link.source) && visible.has(link.target));
   const kinds = [...new Set(nodes.map((node) => node.kind))];
 
-  return { nodes, links: visibleLinks, kinds };
+  return {
+    nodes, links, kinds, adjacent, claimsByEvidence, evidenceByClaim,
+    nodeById: new Map(nodes.map(node => [node.id, node])),
+    nodeOrder: new Map(nodes.map((node, index) => [node.id, index]))
+  };
 }
 
-/** Nodes adjacent to the given one, for the detail panel. */
-export function graphNeighbors(graph: KnowledgeGraph, nodeId: string): GraphNode[] {
-  const neighbours = new Set<string>();
-  for (const link of graph.links) {
-    if (link.source === nodeId) {
-      neighbours.add(link.target);
-    } else if (link.target === nodeId) {
-      neighbours.add(link.source);
+function addRelation(index: Map<string, Set<string>>, source: string, target: string): void {
+  let targets = index.get(source);
+  if (targets === undefined) {
+    targets = new Set<string>();
+    index.set(source, targets);
+  }
+  targets.add(target);
+}
+
+/** Expand only the selected neighborhood, in projection order. */
+export function graphNeighborIds(graph: KnowledgeGraph, nodeId: string): string[] {
+  const neighbours = new Set(graph.adjacent.get(nodeId));
+  for (const evidenceId of graph.evidenceByClaim.get(nodeId) ?? []) {
+    for (const claimId of graph.claimsByEvidence.get(evidenceId)!) {
+      neighbours.add(claimId);
     }
   }
-  return graph.nodes.filter((node) => neighbours.has(node.id));
+  neighbours.delete(nodeId);
+  return [...neighbours].sort((left, right) => graph.nodeOrder.get(left)! - graph.nodeOrder.get(right)!);
+}
+
+export function graphNeighbors(
+  graph: KnowledgeGraph,
+  request: { nodeId: string; offset: number; limit: number }
+): { nodes: GraphNode[]; total: number } {
+  const ids = graphNeighborIds(graph, request.nodeId);
+  return {
+    total: ids.length,
+    nodes: ids.slice(request.offset, request.offset + request.limit).map(id => graph.nodeById.get(id)!)
+  };
 }
