@@ -1,6 +1,7 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
+import {auditReviewInspector} from './fixtures/audit-review-inspector.mjs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {build} from 'esbuild';
@@ -179,17 +180,7 @@ async function save() {await tid('artifact-review-full-arbitration-save').click(
 async function freeze(note='Synthetic human reviewed exact complete fulltext retrieval and adjudicated qualification') {
   await page.getByLabel('全文整轮审核说明',{exact:true}).fill(note);await tid('artifact-review-full-freeze').click();await tid('artifact-review-fulltext-frozen').waitFor();
 }
-async function audit(label) {
-  await page.waitForFunction(() => {
-    const panel = document.querySelector('[data-testid="artifact-inspector-panel"]');
-    return panel && getComputedStyle(panel).opacity === '1' && getComputedStyle(panel).transform === 'none';
-  });
-  const source = readFileSync(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
-  const result = await page.evaluate(`(${source})({root:'body',viewport:true})`);
-  assert.equal(result.cut, 0);
-  writeFileSync(join(artifacts, `${label}-audit.json`), JSON.stringify(result, null, 2));
-  await page.screenshot({path: join(artifacts, `${label}.png`)});
-}
+const audit = label => auditReviewInspector(page, artifacts, label);
 
 
 

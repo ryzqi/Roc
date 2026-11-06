@@ -98,19 +98,17 @@ test('normalizeAppRoute is idempotent', () => {
   }
 });
 
-test('a ?tool= survives next to any view — which is the route half of the Git and 文件 menu items', () => {
-  // This guard started as “view=changes survives with its tool” after the legacy shell dropped the
-  // parameter. The wide change view is gone and so is `routeForNavigate`, but the route the Git and
-  // 文件 menu items mean is still this: a tool names a **drawer**, not a page, so it has to survive
-  // next to whatever canvas view is on screen.
-  for (const tool of ['git', 'files']) {
-    const route = routes.parseAppRoute(
-      new URLSearchParams(`page=research&project=p1&view=literature&tool=${tool}`)
-    );
-    assert.equal(route.view, 'literature', tool);
-    assert.equal(route.tool, tool);
-    assert.equal(toSearch(route).get('tool'), tool);
-    assert.ok(routes.sameAppRoute(route, routes.parseAppRoute(toSearch(route))));
+test('a tool survives next to canvas views because it selects a drawer', () => {
+  for (const view of ['literature', 'latex']) {
+    for (const tool of ['git', 'files']) {
+      const route = routes.parseAppRoute(
+        new URLSearchParams(`page=research&project=p1&view=${view}&tool=${tool}`)
+      );
+      assert.equal(route.view, view, tool);
+      assert.equal(route.tool, tool);
+      assert.equal(toSearch(route).get('tool'), tool);
+      assert.ok(routes.sameAppRoute(route, routes.parseAppRoute(toSearch(route))));
+    }
   }
 });
 
@@ -160,17 +158,6 @@ test('no project means the portal: no view, tool, file or assistant leaks into t
 });
 
 // 注：“无项目时 tool 被清掉”这条断言仍然在守：portal 态的顶栏根本没有 Git/文件抽屉可开。
-
-test('a tool survives on any view, because it selects a drawer', () => {
-  // This is the opposite of the old rule (“tools belong to files/changes/terminal”). Git and files
-  // are drawers now, so `?tool=git` has to survive next to whatever canvas view is on screen — that
-  // is how a drawer behaves (顶栏 Git 抽屉盖在画布上).
-  const withGit = routes.parseAppRoute(new URLSearchParams('page=research&project=p1&view=latex&tool=git'));
-  assert.equal(withGit.view, 'latex');
-  assert.equal(withGit.tool, 'git');
-  assert.equal(toSearch(withGit).get('tool'), 'git');
-  assert.ok(routes.sameAppRoute(withGit, routes.parseAppRoute(toSearch(withGit))));
-});
 
 test('a missing view defaults to latex, the canvas default', () => {
   assert.equal(routes.parseAppRoute(new URLSearchParams('page=research&project=p1')).view, 'latex');

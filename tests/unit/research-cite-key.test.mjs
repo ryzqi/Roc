@@ -37,23 +37,13 @@ test('标题取前三个有效词的前三个字母，跳过虚词', () => {
   assert.equal(citeKeyTitle('Deep Learning'), 'deelea');
 });
 
-test('默认公式：作者 + 年份 + 标题片段，全小写', () => {
+test('同批生成与已有键冲突时依次追加后缀，且大小写不敏感', () => {
+  const input = { authors: ['Smith, John'], publishedYear: 2020, title: 'A Study of Topic' };
   const taken = citationKeySet([]);
-  assert.equal(betterBibtexKey({ authors: ['Smith, John'], publishedYear: 2020, title: 'A Study of Topic' }, taken), 'smith2020stutop');
-});
-
-test('冲突追加消歧后缀，且大小写不敏感', () => {
-  const taken = citationKeySet(['Smith2020Stutop']);
-  assert.equal(betterBibtexKey({ authors: ['Smith, John'], publishedYear: 2020, title: 'A Study of Topic' }, taken), 'smith2020stutopa');
-  assert.equal(betterBibtexKey({ authors: ['Smith, John'], publishedYear: 2020, title: 'A Study of Topic' }, taken), 'smith2020stutopb');
-});
-
-test('同一批里连续生成不会互相踩', () => {
-  const taken = citationKeySet([]);
-  const first = betterBibtexKey({ authors: ['Wang'], publishedYear: 2019, title: 'Same Title' }, taken);
-  const second = betterBibtexKey({ authors: ['Wang'], publishedYear: 2019, title: 'Same Title' }, taken);
-  assert.equal(first, 'wang2019samtit');
-  assert.equal(second, 'wang2019samtita');
+  assert.equal(betterBibtexKey(input, taken), 'smith2020stutop');
+  assert.equal(betterBibtexKey(input, taken), 'smith2020stutopa');
+  assert.equal(betterBibtexKey(input, taken), 'smith2020stutopb');
+  assert.equal(betterBibtexKey(input, citationKeySet(['Smith2020Stutop'])), 'smith2020stutopa');
 });
 
 test('退化输入仍然确定性可用', () => {

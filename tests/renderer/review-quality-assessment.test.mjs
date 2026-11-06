@@ -1,6 +1,7 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
+import {auditReviewInspector} from './fixtures/audit-review-inspector.mjs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {build} from 'esbuild';
@@ -191,17 +192,7 @@ async function fill(f,{kind='judged'}={}) {
   await page.getByLabel('质量评价审核说明',{exact:true}).fill(assessment(f).reviewNote);
 }
 async function save() {await tid('artifact-review-quality-assessment-save').click();await tid('artifact-review-quality-assessment-current').waitFor();}
-async function audit(label) {
-  await page.waitForFunction(() => {
-    const panel = document.querySelector('[data-testid="artifact-inspector-panel"]');
-    return panel && getComputedStyle(panel).opacity === '1' && getComputedStyle(panel).transform === 'none';
-  });
-  const source = readFileSync(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
-  const result = await page.evaluate(`(${source})({root:'body',viewport:true})`);
-  assert.equal(result.cut, 0);
-  writeFileSync(join(artifacts, `${label}-audit.json`), JSON.stringify(result, null, 2));
-  await page.screenshot({path: join(artifacts, `${label}.png`)});
-}
+const audit = label => auditReviewInspector(page, artifacts, label);
 
 test('explicit domain and overall judgements preserve exact frozen choices and extraction Evidence without automatic aggregation',async()=>{
   const f=await fixture();await mount(f);await select();

@@ -1,6 +1,7 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
+import {auditReviewInspector} from './fixtures/audit-review-inspector.mjs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import electronPath from 'electron';
@@ -138,16 +139,7 @@ async function open() {
   await tid('assistant-review-link').focus(); await page.keyboard.press('Enter');
   await tid('artifact-review-readonly').waitFor();
 }
-async function audit(label) {
-  await page.waitForFunction(() => {
-    const panel = document.querySelector('[data-testid="artifact-inspector-panel"]');
-    return panel && getComputedStyle(panel).opacity === '1' && getComputedStyle(panel).transform === 'none';
-  });
-  const source = readFileSync(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
-  const result = await page.evaluate(`(${source})({root:'body',viewport:true})`);
-  assert.equal(result.cut, 0); writeFileSync(join(artifacts, `${label}-audit.json`), JSON.stringify(result, null, 2));
-  await page.screenshot({path: join(artifacts, `${label}.png`)});
-}
+const audit = label => auditReviewInspector(page, artifacts, label);
 
 test('real assistant protocol link opens exact readonly receipt in one drawer and Escape restores its keyboard opener', async () => {
   const f = await fixture(), value = await output(f), before = f.changes(), at = calls.length;
