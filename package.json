@@ -20,6 +20,7 @@
     "harness:eval": "node scripts/harness-eval/run.mjs",
     "harness:quality:check": "node scripts/harness-eval/quality-check.mjs",
     "research:retrieval-eval": "node scripts/evaluate-literature-retrieval.mjs",
+    "research:local-retrieval-eval": "node scripts/evaluate-local-retrieval.mjs",
     "research:retrieval-bench": "node scripts/benchmark-research-retrieval.mjs",
     "research:graph-bench": "node scripts/benchmark-research-graph.mjs",
     "harness:resource-bench": "node scripts/harness-eval/resource-admission-bench.mjs",

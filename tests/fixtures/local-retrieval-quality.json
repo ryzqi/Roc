@@ -1,0 +1,1046 @@
+{
+  "contractVersion": 1,
+  "id": "engineering-local-retrieval-v1",
+  "split": "development",
+  "provenance": {
+    "kind": "engineering_fixture",
+    "producer": "engineering-fixture-author",
+    "reviewers": [
+      "engineering-fixture-author"
+    ],
+    "reviewedAt": "2026-11-06T00:00:00.000Z"
+  },
+  "embedding": {
+    "model": "explicit-axis-fixture",
+    "revision": "1",
+    "producer": "engineering-fixture-author",
+    "dimensions": 3
+  },
+  "documents": [
+    {
+      "id": "zh",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "zh.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document zh",
+      "contentSha256": "437918fb11a59713a8c042996eed46519557a7f3bb9419d0e2900ee41a6a1fd2",
+      "chunks": [
+        {
+          "content": "机器 学习 controlled evidence",
+          "locator": "line:1",
+          "contentSha256": "437918fb11a59713a8c042996eed46519557a7f3bb9419d0e2900ee41a6a1fd2",
+          "embedding": [
+            1,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "en",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "en.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document en",
+      "contentSha256": "5ef33005db5094bb73deaf7d1114b253b2f66ca6eb012436e018d0725b7a4c09",
+      "chunks": [
+        {
+          "content": "reproduce experiments controlled evidence",
+          "locator": "line:1",
+          "contentSha256": "5ef33005db5094bb73deaf7d1114b253b2f66ca6eb012436e018d0725b7a4c09",
+          "embedding": [
+            0,
+            1,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mixed",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "mixed.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document mixed",
+      "contentSha256": "36aca932cc4a23715bbcba76bfc5a553de2864f0d54fe1bcee3b39ca3034ea45",
+      "chunks": [
+        {
+          "content": "transformer 机器 学习 controlled evidence",
+          "locator": "line:1",
+          "contentSha256": "36aca932cc4a23715bbcba76bfc5a553de2864f0d54fe1bcee3b39ca3034ea45",
+          "embedding": [
+            0,
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-0",
+      "projectId": null,
+      "sourceType": "file",
+      "sourceId": "noise-0.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-0",
+      "contentSha256": "219ea02eed9d1e79848b348e66a79a1272d61e0be5fe1defcef7eb5b5b0b04bd",
+      "chunks": [
+        {
+          "content": "unrelated observation 0",
+          "locator": "line:1",
+          "contentSha256": "219ea02eed9d1e79848b348e66a79a1272d61e0be5fe1defcef7eb5b5b0b04bd",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-1",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-1.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-1",
+      "contentSha256": "d53de4f0cc3ea2c638b06edb24a1d58564b58bef0efb397f4090f871e0ee39b5",
+      "chunks": [
+        {
+          "content": "unrelated observation 1",
+          "locator": "line:1",
+          "contentSha256": "d53de4f0cc3ea2c638b06edb24a1d58564b58bef0efb397f4090f871e0ee39b5",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-2",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-2.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-2",
+      "contentSha256": "f0609ebfb1627ed5007c207ecb56b7da20bf6c269f4ef0d4975d97261cd3d8bb",
+      "chunks": [
+        {
+          "content": "unrelated observation 2",
+          "locator": "line:1",
+          "contentSha256": "f0609ebfb1627ed5007c207ecb56b7da20bf6c269f4ef0d4975d97261cd3d8bb",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-3",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-3.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-3",
+      "contentSha256": "bd1a516529f0221dbad398f93452f905683118ffc2685ac5515f144c0aebed9e",
+      "chunks": [
+        {
+          "content": "unrelated observation 3",
+          "locator": "line:1",
+          "contentSha256": "bd1a516529f0221dbad398f93452f905683118ffc2685ac5515f144c0aebed9e",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-4",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-4.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-4",
+      "contentSha256": "ca43a1ae10c9856be67d3c2689bbe00e145e8aeab51387e067a1308bf42e8b4a",
+      "chunks": [
+        {
+          "content": "unrelated observation 4",
+          "locator": "line:1",
+          "contentSha256": "ca43a1ae10c9856be67d3c2689bbe00e145e8aeab51387e067a1308bf42e8b4a",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-5",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-5.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-5",
+      "contentSha256": "4afe0518357498a7a27a5900c08ba5a47438044c0733548beef27bedeb73545e",
+      "chunks": [
+        {
+          "content": "unrelated observation 5",
+          "locator": "line:1",
+          "contentSha256": "4afe0518357498a7a27a5900c08ba5a47438044c0733548beef27bedeb73545e",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-6",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-6.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-6",
+      "contentSha256": "00be883d0d2443128987407242a61b48e720fdba883459968468139e353d3c79",
+      "chunks": [
+        {
+          "content": "unrelated observation 6",
+          "locator": "line:1",
+          "contentSha256": "00be883d0d2443128987407242a61b48e720fdba883459968468139e353d3c79",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-7",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-7.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-7",
+      "contentSha256": "f515bfbd10cbd27f6975158329eade942ea3b6b0553837111f0af77036b36eed",
+      "chunks": [
+        {
+          "content": "unrelated observation 7",
+          "locator": "line:1",
+          "contentSha256": "f515bfbd10cbd27f6975158329eade942ea3b6b0553837111f0af77036b36eed",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-8",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-8.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-8",
+      "contentSha256": "dda677b210fa20fa5c8463cb7cf56071177f920c0f068539059b51f5f90d569e",
+      "chunks": [
+        {
+          "content": "unrelated observation 8",
+          "locator": "line:1",
+          "contentSha256": "dda677b210fa20fa5c8463cb7cf56071177f920c0f068539059b51f5f90d569e",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-9",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-9.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-9",
+      "contentSha256": "eefa3d34c5a6efe95d731dc502a58c0cd99ad79d2b46d9f21b749ec441804334",
+      "chunks": [
+        {
+          "content": "unrelated observation 9",
+          "locator": "line:1",
+          "contentSha256": "eefa3d34c5a6efe95d731dc502a58c0cd99ad79d2b46d9f21b749ec441804334",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-10",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-10.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-10",
+      "contentSha256": "d04554ba40db9702c91e44542f7a3fc8c9955a03dd64018b1e38b46d20ecc400",
+      "chunks": [
+        {
+          "content": "unrelated observation 10",
+          "locator": "line:1",
+          "contentSha256": "d04554ba40db9702c91e44542f7a3fc8c9955a03dd64018b1e38b46d20ecc400",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-11",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-11.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-11",
+      "contentSha256": "a1b81979d94639818bd04d0e28ad161881abe985d6885afccf8b8772ee68b5fb",
+      "chunks": [
+        {
+          "content": "unrelated observation 11",
+          "locator": "line:1",
+          "contentSha256": "a1b81979d94639818bd04d0e28ad161881abe985d6885afccf8b8772ee68b5fb",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-12",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-12.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-12",
+      "contentSha256": "2c685a454d4fa7029fb3f4692d451ee6bdaa2a3ec09bb5637fbd7ee8f93c6e6c",
+      "chunks": [
+        {
+          "content": "unrelated observation 12",
+          "locator": "line:1",
+          "contentSha256": "2c685a454d4fa7029fb3f4692d451ee6bdaa2a3ec09bb5637fbd7ee8f93c6e6c",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-13",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-13.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-13",
+      "contentSha256": "6c38bc53ea110726b47606f04f1a9e911c75cbaf1449caff7eceefc0ab24abfa",
+      "chunks": [
+        {
+          "content": "unrelated observation 13",
+          "locator": "line:1",
+          "contentSha256": "6c38bc53ea110726b47606f04f1a9e911c75cbaf1449caff7eceefc0ab24abfa",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-14",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-14.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-14",
+      "contentSha256": "f0546fa843ada98018bc6d5ae71a515ccaf87af9d88a9039bccc39004dc82554",
+      "chunks": [
+        {
+          "content": "unrelated observation 14",
+          "locator": "line:1",
+          "contentSha256": "f0546fa843ada98018bc6d5ae71a515ccaf87af9d88a9039bccc39004dc82554",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-15",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-15.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-15",
+      "contentSha256": "3813466be96d4e7c5772158d948fe4023b8f5fc0dfa5338c30e8dec187424055",
+      "chunks": [
+        {
+          "content": "unrelated observation 15",
+          "locator": "line:1",
+          "contentSha256": "3813466be96d4e7c5772158d948fe4023b8f5fc0dfa5338c30e8dec187424055",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-16",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-16.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-16",
+      "contentSha256": "32d676582834867ab45cc3c09bfd273a1fda9f04fcdb15d4ac147214668f081a",
+      "chunks": [
+        {
+          "content": "unrelated observation 16",
+          "locator": "line:1",
+          "contentSha256": "32d676582834867ab45cc3c09bfd273a1fda9f04fcdb15d4ac147214668f081a",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-17",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-17.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-17",
+      "contentSha256": "8c5b4478b3ba1372da499109b80eefb6c90193e4de3f70cc5da8bec368127d34",
+      "chunks": [
+        {
+          "content": "unrelated observation 17",
+          "locator": "line:1",
+          "contentSha256": "8c5b4478b3ba1372da499109b80eefb6c90193e4de3f70cc5da8bec368127d34",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-18",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-18.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-18",
+      "contentSha256": "16eb1afed5622bea26d4b052961263f7877216f0b4eb8898c9d051f6a3cfb67e",
+      "chunks": [
+        {
+          "content": "unrelated observation 18",
+          "locator": "line:1",
+          "contentSha256": "16eb1afed5622bea26d4b052961263f7877216f0b4eb8898c9d051f6a3cfb67e",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-19",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-19.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-19",
+      "contentSha256": "e8f0650b986a1e1a1ae066a0958b78634c8e68707bb8f067ea4482f4229bd9f3",
+      "chunks": [
+        {
+          "content": "unrelated observation 19",
+          "locator": "line:1",
+          "contentSha256": "e8f0650b986a1e1a1ae066a0958b78634c8e68707bb8f067ea4482f4229bd9f3",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-20",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-20.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-20",
+      "contentSha256": "44824ef70dfc70f6d778ce4049877e19a76fb1978f544d38a659b41a068a4da6",
+      "chunks": [
+        {
+          "content": "unrelated observation 20",
+          "locator": "line:1",
+          "contentSha256": "44824ef70dfc70f6d778ce4049877e19a76fb1978f544d38a659b41a068a4da6",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-21",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-21.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-21",
+      "contentSha256": "116eeb71c7e46189ad77f3c42242d3abdb778d01fffc70bb03690bf9f9935a08",
+      "chunks": [
+        {
+          "content": "unrelated observation 21",
+          "locator": "line:1",
+          "contentSha256": "116eeb71c7e46189ad77f3c42242d3abdb778d01fffc70bb03690bf9f9935a08",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-22",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "noise-22.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document noise-22",
+      "contentSha256": "e33a60531ccc2352780b7ba342dd4407549483bd29fff79523085184ac29dbb6",
+      "chunks": [
+        {
+          "content": "unrelated observation 22",
+          "locator": "line:1",
+          "contentSha256": "e33a60531ccc2352780b7ba342dd4407549483bd29fff79523085184ac29dbb6",
+          "embedding": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": "foreign",
+      "projectId": "b",
+      "sourceType": "file",
+      "sourceId": "foreign.txt",
+      "sourceVersion": "engineering-v1",
+      "title": "Fixture document foreign",
+      "contentSha256": "92db687ae5badf034874b0313f654fa783ed53f7132ee68bcaeed21ad3fe9b71",
+      "chunks": [
+        {
+          "content": "reproduce experiments 机器 学习",
+          "locator": "line:1",
+          "contentSha256": "92db687ae5badf034874b0313f654fa783ed53f7132ee68bcaeed21ad3fe9b71",
+          "embedding": [
+            1,
+            0,
+            0
+          ]
+        }
+      ]
+    }
+  ],
+  "queries": [
+    {
+      "id": "q-zh",
+      "language": "zh",
+      "projectId": "a",
+      "embedding": [
+        1,
+        0,
+        0
+      ],
+      "strategies": [
+        {
+          "id": "raw",
+          "query": "机器学习"
+        },
+        {
+          "id": "expanded",
+          "query": "机器 学习"
+        }
+      ],
+      "judgments": [
+        {
+          "chunkId": "zh:chunk:0",
+          "grade": 3,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "en:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "mixed:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-0:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-1:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-2:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-3:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-4:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-5:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-6:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-7:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-8:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-9:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-10:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-11:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-12:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-13:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-14:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-15:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-16:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-17:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-18:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-19:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-20:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-21:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-22:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        }
+      ]
+    },
+    {
+      "id": "q-en",
+      "language": "en",
+      "projectId": "a",
+      "embedding": [
+        0,
+        1,
+        0
+      ],
+      "strategies": [
+        {
+          "id": "raw",
+          "query": "reproducibility"
+        },
+        {
+          "id": "expanded",
+          "query": "reproduce experiments"
+        }
+      ],
+      "judgments": [
+        {
+          "chunkId": "zh:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "en:chunk:0",
+          "grade": 3,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "mixed:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-0:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-1:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-2:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-3:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-4:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-5:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-6:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-7:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-8:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-9:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-10:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-11:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-12:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-13:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-14:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-15:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-16:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-17:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-18:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-19:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-20:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-21:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-22:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        }
+      ]
+    },
+    {
+      "id": "q-mixed",
+      "language": "mixed",
+      "projectId": "a",
+      "embedding": [
+        0,
+        0,
+        1
+      ],
+      "strategies": [
+        {
+          "id": "raw",
+          "query": "transformer 机器学习"
+        },
+        {
+          "id": "expanded",
+          "query": "transformer 机器 学习"
+        }
+      ],
+      "judgments": [
+        {
+          "chunkId": "zh:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "en:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "mixed:chunk:0",
+          "grade": 3,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-0:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-1:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-2:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-3:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-4:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-5:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-6:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-7:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-8:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-9:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-10:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-11:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-12:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-13:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-14:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-15:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-16:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-17:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-18:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-19:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-20:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-21:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-22:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        }
+      ]
+    }
+  ]
+}
