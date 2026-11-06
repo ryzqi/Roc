@@ -1,0 +1,1033 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-11-06T05:12:36.303Z",
+  "protocolSha256": "153cdf26056598699803e5c0d121fceba6473043cdf4689f877ba56c06fb55c7",
+  "baselineSha": "892a9cba398247fa424d56d65e71b83097dc0cef",
+  "hardware": {
+    "cpu": "Apple M1 Pro",
+    "logicalCpus": 10,
+    "memoryBytes": 34359738368,
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v26.13.0"
+  },
+  "cacheMeaning": "Connection-cold resets SQLite page cache only. OS/filesystem cache is not flushed. Repeated connection does not guarantee the dataset fits cache.",
+  "vectorMeaning": "Generated 384-dimensional vectors measure exact SQLite cosine scan throughput; they are not a semantic quality evaluation.",
+  "recipe": {
+    "scales": [
+      10000,
+      100000,
+      1000000
+    ],
+    "dimensions": 384,
+    "seed": 19790527,
+    "projectCount": 4,
+    "chunksPerDocument": 100,
+    "sqliteCacheKiB": 65536,
+    "limit": 20,
+    "samples": 20,
+    "queries": [
+      "topic7 evidence",
+      "机器学习 topic7"
+    ],
+    "p95TargetsMs": {
+      "ftsMs": 2500,
+      "vectorMs": 2500,
+      "totalMs": 5000
+    }
+  },
+  "fullReportSha256": "45a30a757e802a6ae6216dfadb18e2c79daee0b1041687227f3decf9e168bd13",
+  "sourceFileHashes": {
+    "scripts/benchmark-research-retrieval.mjs": "d231be1f16cf8029c0bb3fac69bc04e0e141b113a9f9944d0486116bfab13f90",
+    "docs/research-performance-protocol.json": "153cdf26056598699803e5c0d121fceba6473043cdf4689f877ba56c06fb55c7",
+    "pnpm-lock.yaml": "556226f6e88b3bbd14013a8483c69c978c26099deba9722e0d763828444f2dcd",
+    "src/main/plugins/research/knowledge-repository.ts": "24329e723029d55a61b1c710302fb4c9fd16c26e09db4af6cd1ca9b12ef74ab1",
+    "src/main/infrastructure/database-schemas.ts": "3206cec504e24defd910408f9ce9d482229888d4ab180836f58dabe4f3eee65d",
+    "src/main/infrastructure/database-pragmas.ts": "da2d44d55287f58c3822f1332892354e6582cf0e840a8f47ec0b56ee30e00933"
+  },
+  "scales": [
+    {
+      "chunkCount": 10000,
+      "seedMs": 659.356833,
+      "sourceSha256": "c0352afacd071aff3271653b4890dffeeb577fa68846f9c81b8083df3f72a7d6",
+      "databaseBytes": 39145472,
+      "peakRssBytes": 289587200,
+      "sqliteVersion": "3.53.4",
+      "pragmas": {
+        "cacheKiB": 65536,
+        "journalMode": "wal",
+        "synchronous": 1
+      },
+      "rows": [
+        {
+          "projectId": null,
+          "query": "topic7 evidence",
+          "cache": "connection-cold",
+          "keywordCandidates": 10000,
+          "vectorCandidates": 10000,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 12.281083999999964,
+              "p95": 12.893000000000029
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 11.307917000000089,
+              "p95": 11.806500000000028
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.13166599999999562,
+              "p95": 0.17462499999999181
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 23.721542,
+              "p95": 24.91079200000013
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 230264272,
+              "p95": 230444496
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": null,
+          "query": "topic7 evidence",
+          "cache": "repeated-connection",
+          "keywordCandidates": 10000,
+          "vectorCandidates": 10000,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 10.05904099999998,
+              "p95": 10.413041000000021
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 7.613292000000001,
+              "p95": 7.91604099999995
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.1066249999998945,
+              "p95": 0.13970800000015515
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 17.803833000000168,
+              "p95": 18.41379199999983
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 230624720,
+              "p95": 230821328
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": null,
+          "query": "机器学习 topic7",
+          "cache": "connection-cold",
+          "keywordCandidates": 10000,
+          "vectorCandidates": 10000,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 12.178709000000254,
+              "p95": 12.247915999999805
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 11.219500000000153,
+              "p95": 11.57983299999978
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.12195999999994456,
+              "p95": 0.13308299999971496
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 23.519291000000067,
+              "p95": 23.889083000000028
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 231017936,
+              "p95": 232656576
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": null,
+          "query": "机器学习 topic7",
+          "cache": "repeated-connection",
+          "keywordCandidates": 10000,
+          "vectorCandidates": 10000,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 9.964750000000095,
+              "p95": 10.140583000000333
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 7.556542000000263,
+              "p95": 7.654458999999861
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.09220899999991161,
+              "p95": 0.10358300000007148
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 17.624667000000045,
+              "p95": 17.850625000000036
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 232804032,
+              "p95": 232902336
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": "project-0",
+          "query": "topic7 evidence",
+          "cache": "connection-cold",
+          "keywordCandidates": 2500,
+          "vectorCandidates": 2500,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 6.209875000000011,
+              "p95": 6.287457999999788
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 11.036666999999852,
+              "p95": 11.272625000000062
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.109375,
+              "p95": 0.11883399999987887
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 17.38241700000026,
+              "p95": 17.789416000000074
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 233180864,
+              "p95": 233508544
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": "project-0",
+          "query": "topic7 evidence",
+          "cache": "repeated-connection",
+          "keywordCandidates": 2500,
+          "vectorCandidates": 2500,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 3.910374999999931,
+              "p95": 4.048749999999927
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 5.599292000000332,
+              "p95": 6.1637909999999465
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.06333300000005693,
+              "p95": 0.07708400000001348
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 9.56333399999994,
+              "p95": 10.213999999999942
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 233803456,
+              "p95": 234032832
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": "project-0",
+          "query": "机器学习 topic7",
+          "cache": "connection-cold",
+          "keywordCandidates": 2500,
+          "vectorCandidates": 2500,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 6.170916000000034,
+              "p95": 6.264666999999918
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 10.990832999999839,
+              "p95": 11.074375000000146
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.10391699999991033,
+              "p95": 0.11633200000051147
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 17.258291999999983,
+              "p95": 17.400250000000142
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 234475248,
+              "p95": 234770160
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": "project-0",
+          "query": "机器学习 topic7",
+          "cache": "repeated-connection",
+          "keywordCandidates": 2500,
+          "vectorCandidates": 2500,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 3.9693750000001273,
+              "p95": 4.084792000000107
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 5.5985420000001795,
+              "p95": 5.988207999999759
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.06258299999944938,
+              "p95": 0.06941700000061246
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 9.648166999999376,
+              "p95": 10.061166999999841
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 235114248,
+              "p95": 235310856
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "chunkCount": 100000,
+      "seedMs": 6628.652042000001,
+      "sourceSha256": "1127f0b879d1c89d2da5fbe077c8deff1873862750432ece568dc4efb7a37568",
+      "databaseBytes": 376930304,
+      "peakRssBytes": 693010432,
+      "sqliteVersion": "3.53.4",
+      "pragmas": {
+        "cacheKiB": 65536,
+        "journalMode": "wal",
+        "synchronous": 1
+      },
+      "rows": [
+        {
+          "projectId": null,
+          "query": "topic7 evidence",
+          "cache": "connection-cold",
+          "keywordCandidates": 100000,
+          "vectorCandidates": 100000,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 227.78962499999943,
+              "p95": 242.77087500000016
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 113.00104199999987,
+              "p95": 116.28479200000038
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.1383750000004511,
+              "p95": 0.17616699999962293
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 340.9472910000004,
+              "p95": 359.58258299999943
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 533637952,
+              "p95": 533670720
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": null,
+          "query": "topic7 evidence",
+          "cache": "repeated-connection",
+          "keywordCandidates": 100000,
+          "vectorCandidates": 100000,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 229.13345800000025,
+              "p95": 235.18833400000221
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 115.4943749999984,
+              "p95": 117.19666700000016
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.13920800000414602,
+              "p95": 0.16716599999926984
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 344.6124579999996,
+              "p95": 357.0229590000017
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 533850944,
+              "p95": 533949248
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": null,
+          "query": "机器学习 topic7",
+          "cache": "connection-cold",
+          "keywordCandidates": 100000,
+          "vectorCandidates": 100000,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 227.9512500000019,
+              "p95": 229.52341700000034
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 112.78787499999817,
+              "p95": 113.46254200000112
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.12399999999979627,
+              "p95": 0.12783399999534595
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 340.75762499999837,
+              "p95": 342.9146670000009
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 538700608,
+              "p95": 538733376
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": null,
+          "query": "机器学习 topic7",
+          "cache": "repeated-connection",
+          "keywordCandidates": 100000,
+          "vectorCandidates": 100000,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 229.46570899999642,
+              "p95": 239.05470899999636
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 115.47733399999925,
+              "p95": 119.21829199999775
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.14229200000772835,
+              "p95": 0.15962500000023283
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 345.07566699999734,
+              "p95": 358.6466669999936
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 538848064,
+              "p95": 538913600
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": "project-0",
+          "query": "topic7 evidence",
+          "cache": "connection-cold",
+          "keywordCandidates": 25000,
+          "vectorCandidates": 25000,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 65.91025000000081,
+              "p95": 66.63962500000343
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 121.77766699999484,
+              "p95": 124.79491699999926
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.12075099999492522,
+              "p95": 0.1315409999951953
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 187.87075000000186,
+              "p95": 197.49591599999985
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 469216064,
+              "p95": 538995520
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": "project-0",
+          "query": "topic7 evidence",
+          "cache": "repeated-connection",
+          "keywordCandidates": 25000,
+          "vectorCandidates": 25000,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 67.28504199999588,
+              "p95": 67.65950000000157
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 122.20408399999724,
+              "p95": 124.04529100000218
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.11879100000078324,
+              "p95": 0.12929099999018945
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 189.6417500000025,
+              "p95": 191.76545800000167
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 469461824,
+              "p95": 469576512
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": "project-0",
+          "query": "机器学习 topic7",
+          "cache": "connection-cold",
+          "keywordCandidates": 25000,
+          "vectorCandidates": 25000,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 65.72720800000388,
+              "p95": 66.12066700000287
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 121.54762499999924,
+              "p95": 122.42620899999747
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.11504199999035336,
+              "p95": 0.1251680000059423
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 187.36316700000316,
+              "p95": 189.08708399999887
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 469740352,
+              "p95": 469904192
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": "project-0",
+          "query": "机器学习 topic7",
+          "cache": "repeated-connection",
+          "keywordCandidates": 25000,
+          "vectorCandidates": 25000,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 67.22270800000115,
+              "p95": 67.625
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 121.97624999999971,
+              "p95": 122.48712499999965
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.11958299999969313,
+              "p95": 0.150208000006387
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 189.28291699999681,
+              "p95": 190.29345900000044
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 470084416,
+              "p95": 470231872
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "chunkCount": 1000000,
+      "seedMs": 70212.0495,
+      "sourceSha256": "64f576231d052cd632bc20d3b54c09b4f0b90d1cd671ef0a82bb243f8032af52",
+      "databaseBytes": 3759407104,
+      "peakRssBytes": 3924197376,
+      "sqliteVersion": "3.53.4",
+      "pragmas": {
+        "cacheKiB": 65536,
+        "journalMode": "wal",
+        "synchronous": 1
+      },
+      "rows": [
+        {
+          "projectId": null,
+          "query": "topic7 evidence",
+          "cache": "connection-cold",
+          "keywordCandidates": 1000000,
+          "vectorCandidates": 1000000,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 2316.4151249999995,
+              "p95": 2339.284249999997
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 1143.8432080000057,
+              "p95": 1161.3688330000004
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.1552079999964917,
+              "p95": 0.19916699999885168
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 3463.487540999995,
+              "p95": 3492.4198340000003
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 1703223600,
+              "p95": 1703305520
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": null,
+          "query": "topic7 evidence",
+          "cache": "repeated-connection",
+          "keywordCandidates": 1000000,
+          "vectorCandidates": 1000000,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 2323.5065420000174,
+              "p95": 2361.441541999986
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 1151.580042000016,
+              "p95": 1163.9917500000156
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.16054199999780394,
+              "p95": 0.17445900000166148
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 3481.0172079999757,
+              "p95": 3525.433040999982
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 1703469360,
+              "p95": 1703534896
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": null,
+          "query": "机器学习 topic7",
+          "cache": "connection-cold",
+          "keywordCandidates": 1000000,
+          "vectorCandidates": 1000000,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 2334.281958000007,
+              "p95": 2499.1311250000144
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 1149.1115829999908,
+              "p95": 1177.707166999986
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.14804099994944409,
+              "p95": 0.16791699995519593
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 3487.7570839999826,
+              "p95": 3660.8015409999643
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 1751425352,
+              "p95": 1751474504
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": null,
+          "query": "机器学习 topic7",
+          "cache": "repeated-connection",
+          "keywordCandidates": 1000000,
+          "vectorCandidates": 1000000,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 2365.152833,
+              "p95": 2508.7673339999747
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 1165.1295000000391,
+              "p95": 1217.0642499999958
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.1652919999905862,
+              "p95": 0.1809159999829717
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 3530.4440830000094,
+              "p95": 3717.5671659999643
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 1751540040,
+              "p95": 1751589192
+            }
+          },
+          "targetExceeded": [
+            "ftsMs"
+          ],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": "project-0",
+          "query": "topic7 evidence",
+          "cache": "connection-cold",
+          "keywordCandidates": 250000,
+          "vectorCandidates": 250000,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 921.1543340000208,
+              "p95": 1000.0812500000466
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 1303.1465839999728,
+              "p95": 1351.507249999966
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.14620800002012402,
+              "p95": 0.1799170000012964
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 2240.12520900002,
+              "p95": 2337.6632499999832
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 1763713352,
+              "p95": 1763844424
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": "project-0",
+          "query": "topic7 evidence",
+          "cache": "repeated-connection",
+          "keywordCandidates": 250000,
+          "vectorCandidates": 250000,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 905.4153750000405,
+              "p95": 932.1555410000146
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 1260.0748329999624,
+              "p95": 1281.6168339999858
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.15333199995802715,
+              "p95": 0.16554199997335672
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 2165.967457999999,
+              "p95": 2215.445874999976
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 1763942728,
+              "p95": 1764041032
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": "project-0",
+          "query": "机器学习 topic7",
+          "cache": "connection-cold",
+          "keywordCandidates": 250000,
+          "vectorCandidates": 250000,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 893.6358750000363,
+              "p95": 915.1311250000144
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 1258.634791999997,
+              "p95": 1279.9704999999958
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.1302919999579899,
+              "p95": 0.1417500000097789
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 2154.952249999973,
+              "p95": 2193.4397500000196
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 1776132424,
+              "p95": 1776279880
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        },
+        {
+          "projectId": "project-0",
+          "query": "机器学习 topic7",
+          "cache": "repeated-connection",
+          "keywordCandidates": 250000,
+          "vectorCandidates": 250000,
+          "summary": {
+            "ftsMs": {
+              "samples": 20,
+              "p50": 903.8788330000243,
+              "p95": 930.2901249999995
+            },
+            "vectorMs": {
+              "samples": 20,
+              "p50": 1260.6229580000509,
+              "p95": 1268.6781249999767
+            },
+            "fusionAndConfigMs": {
+              "samples": 20,
+              "p50": 0.14883399999234825,
+              "p95": 0.15604200004599988
+            },
+            "totalMs": {
+              "samples": 20,
+              "p50": 2166.868708999944,
+              "p95": 2199.1242920000223
+            },
+            "rssBytes": {
+              "samples": 20,
+              "p50": 1776378184,
+              "p95": 1776427336
+            }
+          },
+          "targetExceeded": [],
+          "fusionCandidateRange": [
+            40,
+            40
+          ]
+        }
+      ]
+    }
+  ]
+}
