@@ -7,7 +7,7 @@ import {
 } from '../../../shared/schemas/research-tasks';
 import type { ResearchStageRun } from '../../../shared/types';
 import type { ConsumedResearchDispatchGrant } from '../../services/deep-agent/execution-grant-broker';
-import { assertResearchDispatchGrant, assertReviewSearchDispatchGrant,
+import { ExecutionGrantBroker, assertResearchDispatchGrant, assertReviewSearchDispatchGrant,
   type ConsumedReviewSearchDispatchGrant } from '../../services/deep-agent/execution-grant-broker';
 import { researchDispatchRequestHash } from '../../services/research-dispatch-context';
 import {reviewSearchDispatchRequestHash} from '../../services/research-review-dispatch-context';
@@ -91,6 +91,10 @@ export class ResearchTaskRepository {
     const execution = this.findExecution(kind, executionId, projectId);
     if (execution === null) throw new Error('research_task_execution_unlinked');
     return execution;
+  }
+
+  authorizeStage(run: ResearchStageRun): void {
+    new ExecutionGrantBroker(this.db).authorizeResearchStage(run);
   }
 
   budgetForExecution(kind: 'chat' | 'stage', executionId: string, projectId: string): RunLimits {

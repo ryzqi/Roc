@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "id": "roc-research-ideation",
+  "version": "1.0.0",
+  "stage": "ideation",
+  "description": "围绕文献证据形成可检验的研究想法。",
+  "entry": {
+    "path": "SKILL.md",
+    "hash": "eade0c056866ee508154ec6360a3bb8bfc58898be93ed7e8a18c560cfacd729f"
+  },
+  "references": [],
+  "license": {
+    "id": "LicenseRef-Roc-Internal",
+    "resource": {
+      "path": "LICENSE.md",
+      "hash": "9c62dabb7abb8f2b52d97742bf8f7bc0320fda9f450dc47bfe2ca4ccb0bb9f05"
+    }
+  },
+  "source": {
+    "kind": "project",
+    "origin": "Roc/resources/research-skills/ideation",
+    "revision": "s03-1.0.0",
+    "hash": "eade0c056866ee508154ec6360a3bb8bfc58898be93ed7e8a18c560cfacd729f"
+  },
+  "inputs": {
+    "schema": "researchStageRunStartRequest/v1",
+    "hash": "7898f7a36053375c323b8817abf2ff30409b58e4d94d669a407e83145c74d310"
+  },
+  "outputs": {
+    "schema": "researchStageOutput/v1",
+    "hash": "f69152a9e196b60d4e29bebcc4314ad8e3e6db79704a2c44a666d4102f3295ff",
+    "artifactKind": "idea_canvas"
+  },
+  "requiredCapabilities": [
+    "research.knowledge.search",
+    "research.evidence.list",
+    "research.evidence.inspect",
+    "research.artifacts.get"
+  ],
+  "forbiddenEffects": [
+    "human_approval",
+    "final_delivery",
+    "permission_change",
+    "host_execution",
+    "workspace_write",
+    "production_execute"
+  ],
+  "qualityGates": [
+    "Source identity and locator are real and current.",
+    "Human approval remains a separate gate.",
+    "Unknown results stay uncertain."
+  ],
+  "evalCases": [
+    {
+      "path": "eval-cases.json",
+      "hash": "082fdcacecb8d10ac012480ec760b4a38718b46065982460929bf4a633e9a168"
+    }
+  ],
+  "runtimeContract": "roc-research-stage/v2"
+}

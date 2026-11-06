@@ -29,7 +29,12 @@ export function createResearchRoleTools(input: {
     input.signal.throwIfAborted();
     const run = input.repository.runs.requireActive(input.run.id, input.run.projectId);
     if (run.status !== 'running') throw new Error('research_run_not_current');
+    if (JSON.stringify(run.toolNames) !== JSON.stringify(input.run.toolNames) || run.skillHash !== input.run.skillHash ||
+        JSON.stringify(input.context) !== JSON.stringify(input.repository.runs.getContext(run.id))) {
+      throw new Error('research_role_tool_binding_invalid');
+    }
   };
+  assertActive();
   const requireInput = (artifactId: string) => {
     assertActive();
     const artifact = input.context.inputs.find((entry) => entry.artifact.id === artifactId);

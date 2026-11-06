@@ -6,7 +6,8 @@ import type { RunCapabilityManifestV1 } from '../../../shared/types';
 import { taskSourceFromRunSnapshot } from '../../../shared/agent-task-source';
 import { parseRunExecutionSnapshot } from '../../plugins/agent/run-execution-snapshot';
 import { evaluateShellPolicy } from './shell-policy';
-import type { ResearchStageRunStartRequest } from '../../../shared/types';
+import type { ResearchStageRun, ResearchStageRunStartRequest } from '../../../shared/types';
+import {researchTaskExecutionSchema, researchTaskSchema} from '../../../shared/schemas/research-tasks';
 import { researchDispatchRequestHash } from '../research-dispatch-context';
 import { researchReviewSearchStartSchema, type ResearchReviewSearchStart } from '../../../shared/schemas/research-review-search';
 import { reviewSearchDispatchRequestHash } from '../research-review-dispatch-context';
@@ -90,6 +91,29 @@ export class ExecutionGrantBroker {
     private readonly db: DatabaseConnection,
     private readonly now: () => Date = () => new Date()
   ) {}
+
+  /** A stage grant comes from the durable task association, never from model context. */
+  authorizeResearchStage(run: ResearchStageRun): Readonly<{runId: string; taskId: string; manifestHash: string; toolNames: readonly string[]}> {
+    const row = this.db.prepare(`SELECT e.snapshot_json execution_json,t.snapshot_json task_json,
+      e.task_id,e.project_id,t.status FROM research_task_executions e
+      JOIN research_tasks t ON t.id=e.task_id WHERE e.kind='stage' AND e.execution_id=?`).get(run.id) as {
+        execution_json: string; task_json: string; task_id: string; project_id: string; status: string;
+      } | undefined;
+    if (row === undefined) throw new Error('research_stage_grant_missing');
+    const execution = researchTaskExecutionSchema.parse(JSON.parse(row.execution_json));
+    const task = researchTaskSchema.parse(JSON.parse(row.task_json));
+    if (execution.executionId !== run.id || execution.kind !== 'stage' || execution.taskId !== run.taskId ||
+        task.id !== run.taskId || row.task_id !== run.taskId || execution.projectId !== run.projectId ||
+        task.projectId !== run.projectId || row.project_id !== run.projectId || task.status !== 'active' || row.status !== 'active' ||
+        execution.associationState !== 'confirmed' || execution.nodeBinding.kind !== 'none' ||
+        execution.frozenInputs === null || run.executionSnapshot === null ||
+        JSON.stringify(execution.frozenInputs) !== JSON.stringify(run.executionSnapshot.frozenInputs)) {
+      throw new Error('research_stage_grant_binding_invalid');
+    }
+    const manifestHash = hash(JSON.stringify({policy: run.policy, skillHash: run.skillHash, toolNames: run.toolNames}));
+    if (manifestHash !== execution.frozenInputs.manifestHash) throw new Error('research_stage_grant_manifest_mismatch');
+    return Object.freeze({runId: run.id, taskId: task.id, manifestHash, toolNames: Object.freeze([...run.toolNames])});
+  }
 
   issueResearchDispatch(input: { runId: string; threadId: string; manifest: RunCapabilityManifestV1; request: ResearchStageRunStartRequest }): string {
     return this.issueResearchToolDispatch({...input, projectId: input.request.projectId,

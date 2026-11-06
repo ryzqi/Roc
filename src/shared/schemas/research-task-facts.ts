@@ -13,10 +13,35 @@ export const taskFactSchema = z.strictObject({
   id, kind: z.enum(['constraint', 'source_version', 'human_decision', 'hypothesis', 'todo', 'counterevidence', 'evaluation_condition', 'correction']),
   content: z.string().trim().min(1).max(2000),
   state: z.enum(['active', 'resolved', 'superseded']),
-  sources: taskFactSourceSchema.array().min(1).max(8)
+  sources: taskFactSourceSchema.array().min(1).max(8),
+  supersedes: id.array().max(10).optional(),
+  contradicts: id.array().max(10).optional()
 });
 const entries = taskFactSchema.array().max(100).refine(rows => new Set(rows.map(row => row.id)).size === rows.length, 'task_fact_ids_unique')
-  .refine(rows => JSON.stringify(rows).length <= 32_000, 'task_facts_context_limit');
+  .refine(rows => JSON.stringify(rows).length <= 32_000, 'task_facts_context_limit')
+  .superRefine((rows, ctx) => {
+    const byId = new Map(rows.map(row => [row.id, row]));
+    for (const row of rows) {
+      const links = [...(row.supersedes ?? []), ...(row.contradicts ?? [])];
+      if (new Set(links).size !== links.length || links.some(target => target === row.id || !byId.has(target))) {
+        ctx.addIssue({code: 'custom', message: 'task_fact_relation_invalid'});
+      }
+      if (row.supersedes?.some(target => byId.get(target)?.state !== 'superseded')) {
+        ctx.addIssue({code: 'custom', message: 'task_fact_superseded_state_required'});
+      }
+    }
+    const visiting = new Set<string>(), visited = new Set<string>();
+    const cyclic = (target: string): boolean => {
+      if (visiting.has(target)) return true;
+      if (visited.has(target)) return false;
+      visiting.add(target);
+      if (byId.get(target)?.supersedes?.some(cyclic)) return true;
+      visiting.delete(target);
+      visited.add(target);
+      return false;
+    };
+    if (rows.some(row => cyclic(row.id))) ctx.addIssue({code: 'custom', message: 'task_fact_supersedes_cycle'});
+  });
 export const taskFactsSaveSchema = researchTaskRequestSchema.extend({expectedRevision: z.number().int().nonnegative(), entries}).strict();
 export const taskFactsSnapshotSchema = researchTaskRequestSchema.extend({
   contractVersion: z.literal(1), revision: z.number().int().positive(), entries, createdAt: z.iso.datetime(),

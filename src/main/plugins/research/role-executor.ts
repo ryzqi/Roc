@@ -8,13 +8,13 @@ import type { ResearchExecutionContext } from './run-repository';
 import type { RunBudgetLedger, RunLimits } from '../../services/deep-agent/run-budget-ledger';
 import { RunBudgetObserver } from '../../services/deep-agent/run-budget-observer';
 import { createRunBudgetMiddleware } from '../../services/deep-agent/run-budget-middleware';
-import type {ResearchTask} from '../../../shared/schemas/research-tasks';
-import type {TaskFactsView} from '../../../shared/schemas/research-task-facts';
+import type {ResearchTaskContext} from '../../../shared/schemas/research-task-facts';
+import {createResearchTaskContextMiddleware} from '../../services/deep-agent/research-task-context-middleware';
 
 export type ResearchRoleExecution = {
   run: ResearchStageRun;
   context: ResearchExecutionContext;
-  taskContext: {task: ResearchTask; facts: TaskFactsView};
+  loadTaskContext: () => ResearchTaskContext;
   tools: StructuredToolInterface[];
   signal: AbortSignal;
   onBudgetStatus?: (status: RunBudgetStatus) => void;
@@ -50,7 +50,8 @@ export function createResearchRoleExecutor(factory: AgentModelFactoryAdapter, le
           const agent = createAgent({
             model,
             tools: input.tools,
-            middleware: [createRunBudgetMiddleware(ledger, input.run.id, limits, observer)],
+            middleware: [createResearchTaskContextMiddleware(input.loadTaskContext),
+              createRunBudgetMiddleware(ledger, input.run.id, limits, observer)],
             systemPrompt: [
               `你是 Roc 科研工作流的 ${input.run.role}，只负责 ${input.run.stage} 阶段。`,
               `当前项目工作语言为 ${input.context.project.language === 'en' ? 'English' : '中文'}。输出、主张和 Idea Canvas 使用该语言。`,
@@ -88,7 +89,6 @@ export function createResearchRoleExecutor(factory: AgentModelFactoryAdapter, le
           const result = await agent.invoke({
             messages: [{ role: 'user', content: JSON.stringify({
               instruction: input.run.instruction, project: input.context.project,
-              taskContext: input.taskContext,
               inputs: input.context.inputs.map((entry) => entry.artifact),
               reviewReports: input.context.reviewReports.map((report) => ({
                 role: report.role, artifactId: report.artifactId, title: report.output.title, verdict: report.output.verdict

@@ -100,17 +100,19 @@ export async function verifyContext(name: string, directory: string, db: Databas
   const countTokens = async (items: readonly BaseMessage[]) => Math.ceil(items.reduce((sum, message) => sum + JSON.stringify(message.content).length, 0) / 4);
   const events: unknown[] = [];
   let summaries = 0;
+  let summaryShouldFail = name === 'context-summary-failure';
+  let flushes = 0;
   const input = { artifactStore: artifacts, readControlState: () => ledger.readContextControlState('run'),
     budgetProfile: { contextWindowTokens: 20000, modelInputTokens: 10000, reservedOutputTokens: 2000,
       systemToolOverheadTokens: 1000, summaryInputTokens: 5000, safetyMarginTokens: 1000 },
     emitEvent: (event: unknown) => events.push(event), mode: 'run' as const, model: { invoke: async () => { throw new Error('unexpected_model'); } } as never,
-    runId: 'run', threadId: 'thread', sessionHistory: { recordPreCompactionFlush: () => {} }, workspaceHash: 'workspace', workspacePath: directory,
+    runId: 'run', threadId: 'thread', sessionHistory: { recordPreCompactionFlush: () => { flushes++; } }, workspaceHash: 'workspace', workspacePath: directory,
     countTokens, tokenCounter: { countMessages: async (items: readonly BaseMessage[]) => ({ tokens: await countTokens(items), estimated: true }),
       countText: async (text: string) => ({ tokens: Math.ceil(text.length / 4), estimated: true }), wasEstimated: () => true },
     toolResultPersistChars: 500,
     summarize: async () => {
       summaries++;
-      if (name === 'context-summary-failure') throw new Error('context_summary_failed');
+      if (summaryShouldFail) throw new Error('context_summary_failed');
       return { goal: 'Lossy summary', facts: [], decisions: [], filesTouched: [], toolEvidence: [], verification: [], openQuestions: [], nextActions: [] };
     }
   };
@@ -124,6 +126,14 @@ export async function verifyContext(name: string, directory: string, db: Databas
     pendingApprovals: [],
     pendingCorrections: []
   }, [], 'workspace');
+  if (summaryShouldFail) {
+    await assert.rejects(runContextCompaction({ ...input, messages: seeded }), /context_summary_failed/u);
+    assert.equal(flushes, 0, 'failed summary cannot flush a success-shaped digest');
+    assert.deepEqual(new Set(collectUserConstraints(seeded)), expected);
+    assert.ok(events.some(event => (event as {type: string}).type === 'context_compaction_failed'));
+    // An explicit caller retry uses the original transcript after the injected fault is removed.
+    summaryShouldFail = false;
+  }
   let compacted = await runContextCompaction({ ...input, messages: seeded });
   writeFileSync(join(directory, 'compaction-events.json'), JSON.stringify(events, null, 2));
   assert.deepEqual(new Set(collectUserConstraints(compacted)), expected);
@@ -149,5 +159,5 @@ export async function verifyContext(name: string, directory: string, db: Databas
   writeFileSync(join(directory, 'compacted.json'), JSON.stringify(compacted, null, 2));
   const fixedLongTasks = await verifyFixedLongTaskComparisons(artifacts, directory, name === 'context-summary-failure');
   return { summaries, constraints: expected.size, acceptanceIds: ['A-01', 'A-02'], checkpoint: checkpoint.id,
-    summaryFailure: name === 'context-summary-failure', fixedLongTasks };
+    summaryFailure: name === 'context-summary-failure' ? 'surfaced-before-explicit-retry' : null, fixedLongTasks };
 }

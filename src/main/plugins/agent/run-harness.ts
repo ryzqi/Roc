@@ -309,6 +309,7 @@ function emitContextMaintenanceEvent(
     ...(event.budgetTokens === undefined ? {} : { budgetTokens: event.budgetTokens }),
     ...(event.estimated === undefined ? {} : { estimated: event.estimated }),
     ...(event.cycleId === undefined ? {} : { cycleId: event.cycleId }),
+    ...(event.record === undefined ? {} : { record: event.record }),
     ...(event.contractAudit === undefined ? {} : { contractAudit: event.contractAudit })
   });
 }

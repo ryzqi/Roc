@@ -17,7 +17,8 @@ import type {
 } from '../../../shared/types';
 import type { ResearchRepository } from './repository';
 import { getResearchStageRoleProfile, researchCapabilityToolNames } from './role-profiles';
-import { getResearchSkillInstructions } from './research-skills';
+import {researchSkills} from './research-skills';
+import {researchSkillPinSchema} from '../../../shared/schemas/research-skills';
 import { researchReviewRoles } from './review-repository';
 import { requireConfirmedSearchStrategy, searchPlanReviewMarkdown } from './search-strategy';
 import {relationSourceDigest} from './evidence-relation-repository';
@@ -29,6 +30,7 @@ import {executionInputVersionSchema} from '../../../shared/schemas/execution';
 const executionContextSchema = z.object({
   project: researchProjectSchema,
   skillInstructions: z.string().min(1),
+  skillPin: researchSkillPinSchema,
   inputVersions: z.array(executionInputVersionSchema),
   reviewReports: z.array(z.object({ role: z.string(), runId: z.string(), artifactId: z.string(), output: researchStageOutputSchema }).strict()),
   inputs: z.array(z.object({
@@ -52,7 +54,7 @@ export function freezeStageInputs(run: ResearchStageRun, context: ResearchExecut
     versions: [
       ...run.skillIds.map(id => ({kind: 'skill' as const, id, hash: run.skillHash})),
       ...context.inputVersions,
-      {kind: 'context' as const, id: run.id, hash: hashStageValue({project: context.project, skillInstructions: context.skillInstructions, inputs: context.inputs})}
+      {kind: 'context' as const, id: run.id, hash: hashStageValue({project: context.project, skillInstructions: context.skillInstructions, skillPin: context.skillPin, inputs: context.inputs})}
     ]
   };
 }
@@ -129,7 +131,7 @@ export class ResearchRunRepository {
       const policy = retryOf?.policy ?? this.listPolicies(request.projectId).find((entry) => entry.stage === stage.stage);
       if (policy === undefined) throw new Error('research_stage_policy_missing');
       const context = retryOf === undefined ? this.captureContext(request.projectId, stage.stage) : this.getContext(retryOf.id);
-      if (retryOf !== undefined) this.verifyFrozenInputs(retryOf);
+      if (retryOf !== undefined) this.assertInputsCurrent(retryOf);
       if (stage.stage === 'retrieval') requireConfirmedSearchStrategy(this.research, context);
       this.verifyCurrentInputs(request.projectId, context);
       const timestamp = this.now();
@@ -139,7 +141,7 @@ export class ResearchRunRepository {
         parentRunId: null, retryOfRunId: retryOf?.id ?? null, role: retryOf?.role ?? profile.role, outputKind: retryOf?.outputKind ?? profile.outputKind,
         reviewCycleId: cycle?.originArtifactId ?? null, revisionRound,
         status: 'queued', instruction: request.instruction, skillIds: retryOf?.skillIds ?? [...profile.skillIds],
-        skillHash: createHash('sha256').update(context.skillInstructions).digest('hex'),
+        skillHash: hashStageValue({pin: context.skillPin, instructions: context.skillInstructions}),
         toolNames: retryOf?.toolNames ?? profile.allowedCapabilities.map((capability) => {
           const name = researchCapabilityToolNames[capability];
           if (name === undefined) throw new Error('research_role_capability_unknown');
@@ -235,8 +237,9 @@ export class ResearchRunRepository {
   }
 
   getContext(runId: string): ResearchExecutionContext {
-    const row = this.db.prepare('SELECT context_json FROM research_stage_runs WHERE id = ?').get(runId) as { context_json: string } | undefined;
+    const row = this.db.prepare('SELECT context_json, snapshot_json FROM research_stage_runs WHERE id = ?').get(runId) as { context_json: string; snapshot_json: string } | undefined;
     if (row === undefined) throw new Error('research_stage_run_not_found');
+    if (researchStageRunSchema.parse(JSON.parse(row.snapshot_json)).executionSnapshot === null) throw new Error('historical_execution_not_resumable');
     return executionContextSchema.parse(JSON.parse(row.context_json));
   }
 
@@ -256,7 +259,7 @@ export class ResearchRunRepository {
           requestId: `${parent.id}:${role}`, role, status: 'queued', instruction: `${parent.instruction}\n${focus}`,
           toolNames: parent.toolNames.filter((name) => name !== 'read_review_report'),
           inputArtifactIds: inputs.map((entry) => entry.artifact.id),
-          skillHash: createHash('sha256').update(skillInstructions).digest('hex'), outputArtifactIds: [],
+          skillHash: hashStageValue({pin: context.skillPin, instructions: skillInstructions}), outputArtifactIds: [],
           providerId: null, modelId: null, modelVersion: null, error: null, createdAt: this.now(), startedAt: null, endedAt: null
         };
         this.insertRun(child, { ...context, skillInstructions, inputs,
@@ -414,12 +417,26 @@ export class ResearchRunRepository {
         current.activeRunId !== (run.parentRunId ?? run.id) || workflow.projectStatus === 'archived') {
       throw new Error('research_run_not_current');
     }
+    this.research.tasks.authorizeStage(run);
+    if (run.parentRunId !== null) {
+      const parent = this.requireActive(run.parentRunId, projectId);
+      if (parent.parentRunId !== null || parent.stage !== run.stage || parent.taskId !== run.taskId ||
+          run.toolNames.some(name => !parent.toolNames.includes(name))) throw new Error('research_stage_child_capability_denied');
+    }
     return run;
   }
 
   assertInputsCurrent(run: ResearchStageRun): void {
     this.verifyFrozenInputs(run);
-    this.verifyCurrentInputs(run.projectId, this.getContext(run.id));
+    const context = this.getContext(run.id);
+    const skill = researchSkills.load(run.stage, context.skillPin);
+    const capabilities = run.toolNames.map(name => {
+      const capability = Object.keys(researchCapabilityToolNames).find(key => researchCapabilityToolNames[key] === name);
+      if (capability === undefined) throw new Error('research_skill_capability_denied');
+      return capability;
+    });
+    researchSkills.assertCapabilities(skill.manifest, capabilities);
+    this.verifyCurrentInputs(run.projectId, context);
   }
 
   private hasCompletedParent(projectId: string, stage: ResearchStageRun['stage']): boolean {
@@ -438,8 +455,9 @@ export class ResearchRunRepository {
         manuscript: this.research.manuscripts.getManuscript(artifact.id),
         ideaCanvas: this.research.ideas.get(artifact.id)
       }));
+    const skill = researchSkills.load(stage);
     return {
-      project: this.research.getProject(projectId), skillInstructions: getResearchSkillInstructions(stage), reviewReports: [],
+      project: this.research.getProject(projectId), skillInstructions: skill.instructions, skillPin: skill.pin, reviewReports: [],
       inputs, inputVersions: this.captureInputVersions(projectId, inputs.map(input => input.artifact.id))
     };
   }
@@ -575,7 +593,9 @@ export class ResearchRunRepository {
   }
 
   private verifyFrozenInputs(run: ResearchStageRun): void {
-    if (run.executionSnapshot === null || run.executionSnapshot.nodeBinding.kind !== 'none' ||
+    const context = this.getContext(run.id);
+    if (run.skillHash !== hashStageValue({pin: context.skillPin, instructions: context.skillInstructions}) ||
+        run.skillIds.length !== 1 || run.skillIds[0] !== context.skillPin.id || context.skillPin.stage !== run.stage ||run.executionSnapshot === null || run.executionSnapshot.nodeBinding.kind !== 'none' ||
         JSON.stringify(run.executionSnapshot.frozenInputs) !== JSON.stringify(freezeStageInputs(run, this.getContext(run.id)))) {
       throw new Error('research_stage_snapshot_invalid');
     }

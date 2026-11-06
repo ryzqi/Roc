@@ -105,7 +105,7 @@ function fixedMessages(task: QualityTask, sources: { id: string; attribution: st
 export async function verifyFixedLongTaskComparisons(
   artifacts: ContextArtifactStore,
   directory: string,
-  recoverableSummaryFailure: boolean
+  injectedSummaryFailure: boolean
 ): Promise<unknown> {
   const { dataset, expectations } = loadQualityDatasetPackage('tests/fixtures/quality-evaluation/manifest.json',
     readFileSync('tests/fixtures/quality-evaluation/manifest.sha256', 'utf8').trim());
@@ -134,6 +134,7 @@ export async function verifyFixedLongTaskComparisons(
 
     const events: ContextMaintenanceEvent[] = [];
     const summaryInputEstimates: (number | null)[] = [];
+    let summaryShouldFail = injectedSummaryFailure;
     const input = {
       artifactStore: artifacts,
       readControlState: () => state,
@@ -163,10 +164,17 @@ export async function verifyFixedLongTaskComparisons(
       toolResultPersistChars: 1000,
       summarize: async (summaryInput: { estimatedInputTokens?: number | null }): Promise<ContextSummary> => {
         summaryInputEstimates.push(summaryInput.estimatedInputTokens ?? null);
-        if (recoverableSummaryFailure) throw new Error('context_summary_failed');
+        if (summaryShouldFail) throw new Error('context_summary_failed');
         return emptySummary();
       }
     };
+    if (summaryShouldFail) {
+      await assert.rejects(runContextCompaction({ ...input, messages: seeded }), /context_summary_failed/u);
+      assert.equal(events.filter(event => event.type === 'context_summary_completed').length, 0);
+      assert.ok(events.some(event => event.type === 'context_compaction_failed'));
+      assert.deepEqual(new Set(collectUserConstraints(seeded)), originalConstraints);
+      summaryShouldFail = false;
+    }
     const compacted = await runContextCompaction({ ...input, messages: seeded });
     const compactedTokens = await countMessages(compacted);
     assert.ok(compactedTokens <= MODEL_INPUT_TOKENS);
@@ -218,7 +226,7 @@ export async function verifyFixedLongTaskComparisons(
       taskId: task.id,
       sourceIds: task.sourceIds,
       taskHash: createHash('sha256').update(JSON.stringify({ prompt: task.prompt, turns: task.conversationTurns })).digest('hex'),
-      fixtureVariant: recoverableSummaryFailure ? 'recoverable-summary-failure' : 'lossy-poisoned-summary',
+      fixtureVariant: injectedSummaryFailure ? 'summary-failure-then-explicit-retry' : 'lossy-poisoned-summary',
       baseline: {
         estimatedInputTokens: originalTokens,
         overflowCount: 1,
@@ -269,7 +277,7 @@ export async function verifyFixedLongTaskComparisons(
       countText: async (text) => ({ tokens: Math.ceil(text.length / 4), estimated: true }), wasEstimated: () => true },
     messages: [new HumanMessage('Protected oversized user requirement. '.repeat(100))],
     summarize: async () => { overflowSummaryCalls++; return emptySummary(); }
-  }), /context_budget_exhausted/u);
+  }), /context_summary_budget_exhausted/u);
   assert.equal(overflowSummaryCalls, 0);
 
   const evidence = {

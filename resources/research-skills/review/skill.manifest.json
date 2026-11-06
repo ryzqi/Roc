@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "id": "roc-peer-review",
+  "version": "1.0.0",
+  "stage": "review",
+  "description": "独立评估论文的方法、证据与表达并给出可执行修订意见。",
+  "entry": {
+    "path": "SKILL.md",
+    "hash": "47ec4b0058b6deff8948459352aa66f7aaa1905db0c756ebab27b19ba9fdce03"
+  },
+  "references": [],
+  "license": {
+    "id": "LicenseRef-Roc-Internal",
+    "resource": {
+      "path": "LICENSE.md",
+      "hash": "9c62dabb7abb8f2b52d97742bf8f7bc0320fda9f450dc47bfe2ca4ccb0bb9f05"
+    }
+  },
+  "source": {
+    "kind": "project",
+    "origin": "Roc/resources/research-skills/review",
+    "revision": "s03-1.0.0",
+    "hash": "47ec4b0058b6deff8948459352aa66f7aaa1905db0c756ebab27b19ba9fdce03"
+  },
+  "inputs": {
+    "schema": "researchStageRunStartRequest/v1",
+    "hash": "7898f7a36053375c323b8817abf2ff30409b58e4d94d669a407e83145c74d310"
+  },
+  "outputs": {
+    "schema": "researchStageOutput/v1",
+    "hash": "f69152a9e196b60d4e29bebcc4314ad8e3e6db79704a2c44a666d4102f3295ff",
+    "artifactKind": "review_report"
+  },
+  "requiredCapabilities": [
+    "research.knowledge.search",
+    "research.evidence.list",
+    "research.evidence.inspect",
+    "research.artifacts.get"
+  ],
+  "forbiddenEffects": [
+    "human_approval",
+    "final_delivery",
+    "permission_change",
+    "host_execution",
+    "evidence_write",
+    "workspace_write",
+    "production_execute"
+  ],
+  "qualityGates": [
+    "Source identity and locator are real and current.",
+    "Human approval remains a separate gate.",
+    "Unknown results stay uncertain."
+  ],
+  "evalCases": [
+    {
+      "path": "eval-cases.json",
+      "hash": "98e06f874fdef5f8787ba8cca03b33fa2e1757af5ed0be69e2750738068c09b9"
+    }
+  ],
+  "runtimeContract": "roc-research-stage/v2"
+}

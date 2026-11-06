@@ -402,3 +402,81 @@ renderer 为 416 pass / 34 fail，多项发生并行超时。首个实验结果 
 
 提交本阶段代码、测试与计划；S03 随后实施。S01 科学仍缺独立样本/双审/费用授权，
 S09 仍按原计划作为独立条件阶段，不把这些关口标为已完成。
+
+## 2026-11-07：S03 开始
+
+S02 提交 `7120421`，39 个更新文档本地链接有效，旧 snapshot 符号零引用；
+最终源码和日志 hash 再核验一致。S03 开始于同一提交，工作区干净。
+沿用 planning-with-files、agent-development、typescript，当前只改项目内合同与资源。
+11 个阶段以现有项目原创内容为基础，保留 Roc 内部使用和权利保留状态；
+未获开源许可选择，不宣称 MIT/Apache 或第三方再许可。
+Manifest 将 pin 资源、输出 schema 与运行合同，变更后旧执行不能静默恢复；
+上下文按权限/来源当前状态重新装配，压缩不能授予权限或补造证据。
+科学 A/B 和长任务真实模型评价仍等待 S01 独立材料/费用授权。
+
+S03 当前增量：Manifest registry、11 阶段资源与 catalog、check:skills 已落地，
+Stage context 固定 skillPin，retry/执行/完成复核版本与权限。
+新增 research-context-assembly；阶段与聊天共用事实装配，逐次模型调用加载当前账本，
+过期/已替代正文不入 prompt，保留来源和 not_verified 原因；supersedes/contradicts
+为有界可选关系，检查缺失目标、状态与环，旧无关系条目仍表示无关系。
+压缩失败不再生成空摘要继续，原始待压缩 transcript 在可恢复时持久化；
+工具待响应调用保持保护，原证据按 thread/workspace/hash 重读；事件新增不含正文的
+trigger/sourceHash/summaryHash/artifactRefs/risks。尚需专项攻击/恢复与完整阶段验收。
+
+cwd 均仓库根：
+- `node --test tests/unit/research-task-facts.test.mjs tests/unit/research-task-budget.test.mjs tests/unit/context-compaction-pipeline.test.mjs`：25 pass，日志 `/tmp/roc-s03-context-1.log`。
+- 加 `tests/unit/context-contract-audit.test.mjs` 同命令：34 pass，日志 `/tmp/roc-s03-context-2.log`。
+- `pnpm typecheck`：exit 0，日志 `/tmp/roc-s03-types-2.log`、`/tmp/roc-s03-types-3.log`。
+恢复时工具 backend 无法读取 notes/history，改按本项目已选 plan 与同会话本地记录核对。
+
+S03 权限与恢复专项补充：工具工厂每次调用核对持久化工具列表、Skill hash 和完整上下文；
+现有 ExecutionGrantBroker 新增 stage 授权，复核同库 Task/execution 的项目、状态、
+确认关联及冻结 manifest。子角色须属于同 Task/stage 且工具为父角色子集；
+context assembler 的 allowedToolNames 改必填并筛选 baseTools，删除默认授权。
+待审批未完成 tool call 与同批已完成响应在确定性裁剪和摘要两段均保留。
+新 Manifest 回归覆盖 11 阶段、缺字段、路径逃逸、未知/非商业许可、hash/schema/版本、
+伪造上下文、工具扩权及读取前拒绝；恢复时原证据不可读明确失败。
+
+cwd 均仓库根：`node --test tests/unit/research-skill-registry.test.mjs tests/unit/context-compaction-pipeline.test.mjs tests/unit/context-contract-audit.test.mjs tests/unit/research-stage-inputs.test.mjs tests/unit/research-task-lifecycle.test.mjs`：52 pass，exit 0，
+日志 `/tmp/roc-s03-security-3.log`；`pnpm typecheck` exit 0，日志 `/tmp/roc-s03-types-5.log`；
+`git diff --check` exit 0。
+初轮测试错误把仅支持 chat 外键的 fence 表用于 stage，修正为真实 execution 关联撤销；
+第二轮把已被确定性删除的全部旧 assistant 文字误当作可摘要片段，调整夹具使两段均实际执行。
+失败日志 `/tmp/roc-s03-skills-1.log`、`/tmp/roc-s03-security-2.log` 保留。
+尚未完成旧无 skillPin 执行的离线转换与阶段全量验收，不提交 S03。
+
+S03 离线转换已补齐：research 62 为 offline-only，缺 skillPin 的新 INSERT 拒绝；
+转换器只接受 agent19/research60 或 agent20/research61 两组来源，校验完整 schema。
+S02 来源保留已有事件、原始 context 和未关联研究 Task 的聊天；研究 Task 与其执行
+标历史不可恢复，关联聊天撤销授权，未结算预算保留 unknown，原库和备份不改。
+冷重开后拒绝 continue/retry，允许新合同任务启动。`getContext` 对历史运行返回明确错误。
+
+cwd 仓库根：`node --test tests/unit/offline-execution-migration.test.mjs`：3 pass，
+日志 `/tmp/roc-s03-migration-3.log`；`pnpm typecheck` exit 0，日志 `/tmp/roc-s03-types-6.log`。
+初两轮失败来自新测试重开连接未注册 SQL 函数，以及误写 schema 函数名称；
+已按生产初始化函数修正夹具，失败日志 `/tmp/roc-s03-migration-1.log`、`-2.log` 保留。
+全量验收正在 `.artifacts/research-harness/S03/2026-11-06T18-39-12.928Z/` 顺序采集，
+包括源码/资源/package hash；采集时不更改业务源文件。
+
+## 2026-11-07：S03 工程验收通过
+
+范围状态：`Verified passing（S03 工程 L0/L1）`；RH-08.1～08.5、RH-09.1、
+RH-12.1～12.4 与 M07 完成。三阶段/长任务真实模型科学评价未运行。
+详见 [S03 执行报告](s03-execution-report.md)。
+
+cwd 均仓库根，HEAD 为 `71204210f35ed3592ad8ca7d2f4f9b5c3e4ad80f`。
+[首轮采集](../.artifacts/research-harness/S03/2026-11-06T18-39-12.928Z/verification.json)
+记录精确命令、起止时间、退出码、源码与日志 hash：unit 1546/1546、IPC、workflow 1/1、
+build、renderer chunks、Electron smoke 13/13 均通过，采集期间源码无变化。
+smoke 为 dist-main-fallback / full=false，未运行完整应用包验收。
+
+首轮 Harness 的 context-compaction/context-summary-failure 夹具仍期待旧摘要恢复行为，
+分别收到 `context_summary_budget_exhausted` 与 `context_summary_failed`。
+只改两份 harness context 脚本，验证失败直接暴露、无成功 digest、原约束不变和显式重试。
+生产源码和 unit 未变；失败原报告及日志保留。
+[补验采集](../.artifacts/research-harness/S03/2026-11-06T18-46-37.350Z/verification.json)
+中 `pnpm harness:eval` 94/94、`pnpm typecheck`、`pnpm check:skills` 全 exit 0，
+源码 hash 无变化。已核对首轮至补验仅这两份脚本发生变化，各日志 hash 匹配。
+
+接下来提交 S03 并实施 S04。S01 独立科学材料、双审与费用授权仍缺失，
+不把工程 fixture 当作科学收益，也不将 S09 的独立立项条件视作已满足。

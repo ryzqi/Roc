@@ -204,7 +204,7 @@ test('deterministic edits restore a removed tool result and leave caller message
   assert.equal(hasEvent(fixture.events, 'context_summary_skipped'), true);
 });
 
-test('recoverable summary failure falls back to persisted artifact locators', async () => {
+test('summary failure stops execution and preserves original evidence for retry', async () => {
   const largeResult = 'search result '.repeat(400);
   const toolCall = new AIMessage({
     id: 'assistant-call',
@@ -234,15 +234,11 @@ test('recoverable summary failure falls back to persisted artifact locators', as
     }
   });
 
-  const compacted = await api.runContextCompaction(fixture.input);
-  const output = compacted.map(message => String(message.content)).join('\n');
+  await assert.rejects(api.runContextCompaction(fixture.input), /context_summary_failed/u);
   assert.equal(fixture.persisted.length, 1);
   assert.equal(fixture.persisted[0].kind, 'tool_result');
   assert.equal(fixture.persisted[0].toolCallId, 'call-large');
   assert.equal(summaryInput.artifactReferences.length, 1);
-  assert.ok(output.includes(fixture.persistedArtifacts[0].artifactId));
-  assert.equal(output.includes(largeResult), false);
-  assert.match(output, /preview:/u);
   const readArtifact = artifactToolApi.createContextArtifactReadTool({
     artifactStore: fixture.artifactStore,
     threadId: 'thread-1',
@@ -405,4 +401,45 @@ test('lossy summary rejects bounded-contract overflow instead of dropping requir
   assert.equal(hasEvent(fixture.events, 'context_summary_completed'), false);
   assert.equal(fixture.flushes.length, 0);
   assert.deepEqual(messages, originalMessages);
+});
+
+test('an old pending approval call and its completed sibling survive both compaction passes and resume', async () => {
+  let tokenCalls = 0;
+  const pending = withIteration(new AIMessage({id: 'pending', content: '', tool_calls: [
+    {id: 'complete', name: 'read_source', args: {}, type: 'tool_call'},
+    {id: 'approval', name: 'write_file', args: {path: 'result.txt'}, type: 'tool_call'}
+  ]}), 0);
+  const sibling = withIteration(new ToolMessage({id: 'sibling', tool_call_id: 'complete', content: 'source receipt'}), 0);
+  const fixture = createFixture({messages: [new HumanMessage('Wait for my approval.'), pending, sibling,
+    ...Array.from({length: 20}, (_, i) => withIteration(new AIMessage(`Unprotected turn ${i}`), i + 1))],
+    controlState: {acceptanceIds: [], acceptanceConditions: [], pendingEffects: [], pendingApprovals: ['approval'], pendingCorrections: []},
+    countTokens: async () => ++tokenCalls <= 3 ? 89 : 90});
+  const compacted = await api.runContextCompaction(fixture.input);
+  assert.ok(compacted.includes(pending));
+  assert.ok(compacted.includes(sibling));
+  assert.ok(compacted.indexOf(sibling) > compacted.indexOf(pending));
+  const resumed = await api.runContextCompaction({...fixture.input, messages: compacted, countTokens: async () => 89});
+  assert.ok(resumed.includes(pending));
+  assert.ok(resumed.includes(sibling));
+  const completed = fixture.events.find(event => event.type === 'context_summary_completed');
+  assert.equal(completed.record.reason, 'context_pressure');
+  assert.match(completed.record.sourceHash, /^[a-f0-9]{64}$/);
+  assert.match(completed.record.summaryHash, /^[a-f0-9]{64}$/);
+  assert.ok(completed.record.artifactRefs.length > 0);
+  assert.deepEqual(completed.record.risks, ['lossy_summary']);
+});
+
+test('resume rereads original evidence and missing content cannot be replaced by a summary', async () => {
+  const fixture = createFixture({messages: [new HumanMessage('Check the original source.'),
+    new AIMessage({content: '', tool_calls: [{id: 'source', name: 'read_source', args: {}, type: 'tool_call'}]}),
+    new ToolMessage({tool_call_id: 'source', content: 'source evidence '.repeat(100)})],
+    toolResultPersistChars: 100, countTokens: async () => 89});
+  const compacted = await api.runContextCompaction(fixture.input);
+  assert.ok(fixture.persistedArtifacts.length > 0);
+  const restoredStore = {...fixture.artifactStore, readArtifact: () => null};
+  await assert.rejects(api.runContextCompaction({...fixture.input, artifactStore: restoredStore,
+    messages: compacted, toolResultPersistChars: 100_000}), /context_evidence_unverifiable/);
+  const failure = fixture.events.find(event => event.type === 'context_compaction_failed');
+  assert.deepEqual(failure.record.risks, ['evidence_unverifiable']);
+  assert.equal(hasEvent(fixture.events, 'context_summary_completed'), false);
 });

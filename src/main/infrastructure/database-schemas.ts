@@ -2768,6 +2768,12 @@ WHEN NEW.invalidated_at IS NOT NULL AND OLD.invalidated_at IS NULL BEGIN
 END;
 `});
 
+researchMigrations.push({version: 62, name: 'required_stage_skill_manifest', offlineOnly: true, sql: `
+CREATE TRIGGER research_stage_skill_pin_required BEFORE INSERT ON research_stage_runs
+WHEN json_type(NEW.context_json,'$.skillPin') IS NOT 'object'
+BEGIN SELECT RAISE(ABORT,'research_stage_skill_pin_required'); END;
+`});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

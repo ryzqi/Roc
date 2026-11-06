@@ -128,12 +128,14 @@ test('real model receives injection, counterevidence and fixed evaluation only a
     })}, new api.RunBudgetLedger(f.agentDb));
     const prepared = await executor.prepare({kind: 'app_default'}, f.tasks.budgetForExecution('stage', f.run.id, f.project.id));
     await prepared.execute({run: f.run, context: f.repository.runs.getContext(f.run.id),
-      taskContext: {task: f.tasks.get(f.scope.taskId, f.scope.projectId), facts: f.service.get(f.scope)},
+      loadTaskContext: () => ({task: f.tasks.get(f.scope.taskId, f.scope.projectId), facts: f.service.get(f.scope)}),
       tools: [], signal: new AbortController().signal});
     assert.ok(captured);
     assert.ok(captured.filter(row => row.type === 'system').every(row => !String(row.content).includes(text)));
-    const input = JSON.parse(captured.find(row => row.type === 'human').content);
-    assert.deepEqual(input.taskContext.facts.snapshot, snapshot);
+    const input = captured.filter(row => row.type === 'human').map(row => JSON.parse(row.content))
+      .find(row => row.researchTaskContext).researchTaskContext;
+    assert.equal(input.ledger.snapshotHash, snapshot.snapshotHash);
+    assert.deepEqual([...input.taskFacts, ...input.constraintsAndDecisions], snapshot.entries);
     assert.equal(f.service.get(f.scope).snapshot.revision, 1);
   } finally {f.close();}
 });
@@ -156,8 +158,8 @@ test('transient chat context rebuild survives empty compacted messages without c
     assert.equal(captured[0].systemMessage, systemMessage);
     assert.equal(captured[1].systemMessage, systemMessage);
     const data = JSON.parse(captured[1].messages[0].content);
-    assert.equal(data.researchTaskContext.facts.snapshot.revision, 2);
-    assert.equal(data.researchTaskContext.facts.snapshot.entries.length, 2);
+    assert.equal(data.researchTaskContext.ledger.revision, 2);
+    assert.equal(data.researchTaskContext.taskFacts.length + data.researchTaskContext.constraintsAndDecisions.length, 2);
   } finally {f.close();}
 });
 
@@ -183,6 +185,55 @@ test('ledger requires authenticated human writes and rejects forged authority, f
     const saved = await adapter.invoke('research.saveTaskFacts', [request], 71);
     assert.equal(saved.ok, true); assert.equal(saved.data.savedBy.id, 'window:71');
     assert.equal((await adapter.invoke('research.getTaskFacts', [f.scope], 71)).data.snapshot.revision, 1);
+  } finally {f.close();}
+});
+
+test('context rechecks sources before each model request and omits stale content without rewriting history', async () => {
+  const f = scene();
+  try {
+    const artifact = f.repository.createArtifact({projectId: f.project.id, stage: 'discovery', kind: 'search_strategy',
+      title: 'Version one', path: null, content: 'source v1'});
+    const version = f.repository.inspectArtifact({projectId: f.project.id, artifactId: artifact.id, expectedVersion: null}).snapshot.version;
+    const snapshot = f.save([fact('source', 'hypothesis', 'STALE CLAIM MUST NOT REENTER THE PROMPT', [{kind: 'artifact', artifactId: artifact.id, version}]),
+      fact('decision', 'correction', 'Human correction stays.')]);
+    const middleware = api.createResearchTaskContextMiddleware(() => ({task: f.tasks.get(f.scope.taskId, f.scope.projectId), facts: f.service.get(f.scope)}));
+    const captured = [];
+    const handler = async request => {captured.push(request.messages); return new AIMessage('done');};
+    await middleware.wrapModelCall({messages: []}, handler);
+    f.repository.updateArtifact({id: artifact.id, title: 'Version two'});
+    await middleware.wrapModelCall({messages: []}, handler);
+    assert.match(JSON.stringify(captured[0]), /STALE CLAIM/);
+    assert.doesNotMatch(JSON.stringify(captured[1]), /STALE CLAIM/);
+    const data = JSON.parse(captured[1][0].content).researchTaskContext;
+    assert.deepEqual(data.unavailableFacts, [{id: 'source', reasons: ['artifact_version_changed'], evidenceStatus: 'not_verified'}]);
+    assert.equal(data.constraintsAndDecisions[0].content, 'Human correction stays.');
+    assert.deepEqual(f.service.get(f.scope).snapshot, snapshot);
+    const incomplete = api.createResearchTaskContextMiddleware(() => ({task: f.tasks.get(f.scope.taskId, f.scope.projectId),
+      facts: {...f.service.get(f.scope), freshness: []}}));
+    await assert.rejects(incomplete.wrapModelCall({messages: []}, handler), /research_task_context_freshness_incomplete/);
+    assert.equal(captured.length, 2);
+  } finally {f.close();}
+});
+
+test('explicit supersedes and contradicts preserve audit history and expose unresolved conflicts', async () => {
+  const f = scene();
+  try {
+    const original = fact('original', 'hypothesis', 'Original proposition.');
+    f.save([original]);
+    const replacement = {...fact('replacement', 'correction', 'Corrected proposition.'), supersedes: ['original']};
+    assert.throws(() => f.save([original, replacement], 1), /task_fact_superseded_state_required/);
+    assert.throws(() => f.save([{...original, contradicts: ['missing']}], 1), /task_fact_relation_invalid/);
+    f.save([{...original, state: 'superseded'}, replacement,
+      {...fact('counter', 'counterevidence', 'Conflicting observation.'), contradicts: ['replacement']}], 1);
+    const middleware = api.createResearchTaskContextMiddleware(() => ({task: f.tasks.get(f.scope.taskId, f.scope.projectId), facts: f.service.get(f.scope)}));
+    let data;
+    await middleware.wrapModelCall({messages: []}, async request => {
+      data = JSON.parse(request.messages[0].content).researchTaskContext;
+      return new AIMessage('done');
+    });
+    assert.doesNotMatch(JSON.stringify(data), /Original proposition/);
+    assert.deepEqual(data.conflicts, [{entryId: 'counter', contradicts: 'replacement', resolution: 'unresolved'}]);
+    assert.equal(f.service.history({...f.scope, beforeRevision: 2, limit: 1}).snapshots[0].entries[0].content, original.content);
   } finally {f.close();}
 });
 
@@ -222,7 +273,7 @@ test('retry reconstructs durable task facts as data while injected approval text
   const gate = api.createResearchHumanGate({repository: f.repository});
   const runtime = new api.ResearchStageRuntime(f.repository, {}, {prepare: async () => ({
     providerId: 'fixture', modelId: 'fixture', execute: async input => {
-      captured = input;
+      captured = {taskContext: input.loadTaskContext()};
       return {modelVersion: null, output: {title: 'Discovery', markdown: 'Research data.', claims: [], sections: [],
         verdict: 'ready', searchPlan: researchSearchPlanFixture(input.run.instruction)}};
     }

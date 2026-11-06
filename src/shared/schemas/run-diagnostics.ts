@@ -3,6 +3,16 @@ import { z } from 'zod';
 const countSchema = z.number().int().nonnegative();
 const nullableCountSchema = countSchema.nullable();
 
+export const contextCompactionRecordSchema = z.object({
+  reason: z.enum(['maintenance', 'context_pressure']),
+  sourceMessageCount: countSchema,
+  sourceHash: z.string().regex(/^[a-f0-9]{64}$/u),
+  summaryHash: z.string().regex(/^[a-f0-9]{64}$/u).nullable(),
+  artifactRefs: z.array(z.object({artifactId: z.string().min(1), sha256: z.string().regex(/^[a-f0-9]{64}$/u)}).strict()).max(32),
+  risks: z.array(z.enum(['lossy_summary', 'evidence_unverifiable', 'compaction_failed'])).max(3)
+}).strict();
+export type ContextCompactionRecord = z.infer<typeof contextCompactionRecordSchema>;
+
 export const runTraceOperationSchema = z.enum([
   'run',
   'agent_model',

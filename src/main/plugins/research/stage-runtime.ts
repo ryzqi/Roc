@@ -300,13 +300,16 @@ export class ResearchStageRuntime {
   private async executeOutput(run: ResearchStageRun, prepared: PreparedResearchRole, signal: AbortSignal): Promise<ResearchStageRun> {
     const context = this.repository.runs.getContext(run.id);
     const tools = createResearchRoleTools({ run, context, repository: this.repository, capabilities: this.capabilities, signal, effects: this.effects });
-    const association = this.repository.tasks.requireExecution('stage', run.id, run.projectId);
-    const taskContext = {
-      task: this.repository.tasks.get(association.taskId, run.projectId),
-      facts: new ResearchTaskFactsService(this.repository).get({taskId: association.taskId, projectId: run.projectId})
+    const loadTaskContext = () => {
+      this.repository.runs.requireActive(run.id, run.projectId);
+      const association = this.repository.tasks.requireExecution('stage', run.id, run.projectId);
+      return {
+        task: this.repository.tasks.get(association.taskId, run.projectId),
+        facts: new ResearchTaskFactsService(this.repository).get({taskId: association.taskId, projectId: run.projectId})
+      };
     };
     const result = await withAbort(prepared.execute({
-      run, context, taskContext, tools, signal, onBudgetStatus: () => this.notify(run)
+      run, context, loadTaskContext, tools, signal, onBudgetStatus: () => this.notify(run)
     }), signal);
     signal.throwIfAborted();
     this.repository.runs.recordModelVersion(run.id, run.projectId, result.modelVersion);

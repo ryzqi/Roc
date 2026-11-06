@@ -2,8 +2,8 @@
 
 编制日期：2026-11-06。
 来源：[`Roc_Research_Agent_Harness_Plan.md`](../Roc_Research_Agent_Harness_Plan.md)。
-当前执行范围：S02 工程验收完成，提交后继续 S03；S01 科学验收仍需独立材料。
-计划编制、S00、S01 工程合同与 S02 已完成；S01 科学数据/双审/L2 未运行，S03～S09 尚未启动。
+当前执行范围：S02 已提交，S03 工程验收通过待提交；下一步 S04。S01 科学验收仍需独立材料。
+计划编制、S00、S01 工程合同与 S02 已完成；S01 科学数据/双审/L2 未运行，S03 工程完成，S04～S09 尚未启动。
 执行原则：允许大范围重构；不做向后兼容；不保留遗留路径；不以防御性兜底掩盖合同错误。
 
 ## 计划编制进度
@@ -24,7 +24,7 @@
 | S00 | P0 | 无 | complete | 固定 SHA 基线、能力/所有权清单、重构与迁移合同 |
 | S01 | P0 | S00 | in_progress | 工程 Verified passing；独立样本 0/200，双审/L2/盲审未运行 |
 | S02 | P0 | S00 | complete | 工程 Verified passing；执行合同、离线迁移、回放、冷恢复与故障验收见 s02-execution-report.md |
-| S03 | P0/P1 | S01 工程合同、S02 | pending | 11 阶段 Manifest 全覆盖、唯一上下文装配与约束恢复 |
+| S03 | P0/P1 | S01 工程合同、S02 | complete（工程） | Verified passing；11 阶段 Manifest、权限交集与上下文恢复，见 s03-execution-report.md；科学评价未运行 |
 | S04 | P0/P1 | S01 最小独立数据、S02、S03 | pending | 确定性核验、语义建议、人工审稿与修订可追溯 |
 | S05 | P1 | S01 协议、S02、S03 | pending | 冻结查询不越权、排序回执、等额预算评价 |
 | S06 | P1 | S02、S03、S05 合同 | pending | 依赖一致、单有效 lease、旧提交拒绝、取消恢复 |

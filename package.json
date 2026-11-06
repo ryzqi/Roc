@@ -15,7 +15,8 @@
   "scripts": {
     "postinstall": "node scripts/prepare-native.mjs",
     "dev": "node scripts/dev-electron.mjs",
-    "build": "pnpm typecheck && electron-vite build",
+    "build": "pnpm check:skills && pnpm typecheck && electron-vite build",
+    "check:skills": "node scripts/check-research-skills.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "harness:eval": "node scripts/harness-eval/run.mjs",
     "harness:quality:check": "node scripts/harness-eval/quality-check.mjs",

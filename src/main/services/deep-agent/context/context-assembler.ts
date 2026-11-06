@@ -31,7 +31,7 @@ export function assembleContextHarness(input: {
   workspacePath: string | null;
   memorySources: string[];
   baseTools: ClientTool[];
-  allowedToolNames?: readonly string[];
+  allowedToolNames: readonly string[];
   searchSessions: SessionSearchAdapter;
   searchMemory: MemorySearchAdapter;
   remember: MemoryRememberAdapter;
@@ -60,11 +60,9 @@ export function assembleContextHarness(input: {
     threadId: input.threadId,
     workspaceHash: workspaceIdentity === null ? null : workspaceIdentity.hash
   });
-  const allowedToolNames = new Set(
-    input.allowedToolNames ?? ['session_search', 'memory_search', 'remember', 'read_context_artifact']
-  );
+  const allowedToolNames = new Set(input.allowedToolNames);
   const manifestAuthorizedTools = [
-    ...input.baseTools,
+    ...input.baseTools.filter(tool => allowedToolNames.has(tool.name)),
     ...(allowedToolNames.has(sessionSearchTool.name) ? [sessionSearchTool] : []),
     ...(allowedToolNames.has(memorySearchTool.name) ? [memorySearchTool] : []),
     ...(allowedToolNames.has(rememberTool.name) ? [rememberTool] : []),

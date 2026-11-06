@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "id": "roc-revision-coach",
+  "version": "1.0.0",
+  "stage": "revision",
+  "description": "按审稿意见修订正文并记录逐项回复与证据变化。",
+  "entry": {
+    "path": "SKILL.md",
+    "hash": "6a6407abb7544ca9e458c07ff598c0e161bd4ba68ab26a7ea33de6b2fa38bda3"
+  },
+  "references": [],
+  "license": {
+    "id": "LicenseRef-Roc-Internal",
+    "resource": {
+      "path": "LICENSE.md",
+      "hash": "9c62dabb7abb8f2b52d97742bf8f7bc0320fda9f450dc47bfe2ca4ccb0bb9f05"
+    }
+  },
+  "source": {
+    "kind": "project",
+    "origin": "Roc/resources/research-skills/revision",
+    "revision": "s03-1.0.0",
+    "hash": "6a6407abb7544ca9e458c07ff598c0e161bd4ba68ab26a7ea33de6b2fa38bda3"
+  },
+  "inputs": {
+    "schema": "researchStageRunStartRequest/v1",
+    "hash": "7898f7a36053375c323b8817abf2ff30409b58e4d94d669a407e83145c74d310"
+  },
+  "outputs": {
+    "schema": "researchStageOutput/v1",
+    "hash": "f69152a9e196b60d4e29bebcc4314ad8e3e6db79704a2c44a666d4102f3295ff",
+    "artifactKind": "manuscript"
+  },
+  "requiredCapabilities": [
+    "research.knowledge.search",
+    "research.evidence.list",
+    "research.evidence.inspect",
+    "research.artifacts.get"
+  ],
+  "forbiddenEffects": [
+    "human_approval",
+    "final_delivery",
+    "permission_change",
+    "host_execution",
+    "workspace_write",
+    "production_execute"
+  ],
+  "qualityGates": [
+    "Source identity and locator are real and current.",
+    "Human approval remains a separate gate.",
+    "Unknown results stay uncertain."
+  ],
+  "evalCases": [
+    {
+      "path": "eval-cases.json",
+      "hash": "b782dbec59ee13a34c1bbb3b96d0c9fd7d996a22af23c33810bd0f08e85324e6"
+    }
+  ],
+  "runtimeContract": "roc-research-stage/v2"
+}

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { AIMessage, RemoveMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { RunnableConfig } from '@langchain/core/runnables';
@@ -6,12 +6,11 @@ import { REMOVE_ALL_MESSAGES } from '@langchain/langgraph';
 import { createMiddleware } from 'langchain';
 import { z } from 'zod';
 
-import { collectContextRequirements, isContextContract, pinContextContractWithAudit, type ContextControlState } from './context-contract';
-import { createEmptyContextContractAudit, type ContextContractAudit } from '../../../../shared/schemas/run-diagnostics';
+import { collectContextRequirements, contextEvidenceLocators, isContextContract, pinContextContractWithAudit, type ContextControlState } from './context-contract';
+import { createEmptyContextContractAudit, type ContextContractAudit, type ContextCompactionRecord } from '../../../../shared/schemas/run-diagnostics';
 import type { RunExecutionSnapshot } from '../../../../shared/types';
 import type { RunBudgetObserver } from '../run-budget-observer';
 
-import { classifyProviderRequestFailure, isRetryableProviderHttpStatus } from '../../provider-request-retry';
 import {
   createForgeTieredCompactionEdits,
   type ForgeTieredCompactionOptions
@@ -67,6 +66,7 @@ export type ContextMaintenanceEvent = {
   estimated?: boolean;
   cycleId?: string;
   contractAudit?: ContextContractAudit;
+  record?: ContextCompactionRecord;
 };
 
 /**
@@ -190,6 +190,9 @@ export async function runContextCompaction(input: RunCompactionInput): Promise<B
 async function runContextCompactionStages(input: RunCompactionInput): Promise<BaseMessage[]> {
   let stage: ContextMaintenanceStage = 'persist';
   let contractAudit = createEmptyContextContractAudit();
+  const record: ContextCompactionRecord = {reason: 'maintenance', sourceMessageCount: input.messages.length,
+    sourceHash: createHash('sha256').update(serializeMessages(input.messages)).digest('hex'),
+    summaryHash: null, artifactRefs: [], risks: []};
   try {
     input.emitEvent(createEvent(input, 'context_compaction_started', stage));
     const persisted = persistLargeToolResults(input);
@@ -212,6 +215,7 @@ async function runContextCompactionStages(input: RunCompactionInput): Promise<Ba
     );
     messages = deterministicContract.messages;
     contractAudit = deterministicContract.audit;
+    record.artifactRefs = verifyOriginalEvidence(input, messages);
     const afterDeterministicChars = measureMessages(messages);
     const deterministicTokens = await input.countTokens(messages);
     input.emitEvent({
@@ -220,7 +224,7 @@ async function runContextCompactionStages(input: RunCompactionInput): Promise<Ba
       inputTokens: deterministicTokens,
       budgetTokens: input.budgetProfile.modelInputTokens,
       estimated: input.countTokensEstimated?.() === true,
-      contractAudit
+      contractAudit, record: structuredClone(record)
     });
     requirePreservedContract(contractAudit);
 
@@ -234,48 +238,19 @@ async function runContextCompactionStages(input: RunCompactionInput): Promise<Ba
     }
 
     stage = 'summary';
+    record.reason = 'context_pressure';
     input.emitEvent(createEvent(input, 'context_summary_started', stage));
+    const summaryMessages = selectMessagesToSummarize(messages);
+    record.sourceMessageCount = summaryMessages.length;
+    record.sourceHash = createHash('sha256').update(serializeMessages(summaryMessages)).digest('hex');
     const preparedSummary = await prepareSummaryInput(
       input,
       artifacts,
-      selectMessagesToSummarize(messages),
+      summaryMessages,
       beforeDeterministicMessages
     );
-    if (preparedSummary.summaryInput === null) {
-      const pinned = pinContextContractWithAudit(
-        compactToArtifactReferenceTail(messages, preparedSummary.artifactLocators),
-        input.messages,
-        input.readControlState(),
-        preparedSummary.artifactLocators,
-        input.workspaceHash
-      );
-      contractAudit = pinned.audit;
-      requirePreservedContract(contractAudit);
-      messages = await enforceHardContextLimit(input, pinned.messages);
-      input.emitEvent({
-        ...createEvent(input, 'context_compaction_failed', 'summary'),
-        contractAudit
-      });
-      return messages;
-    }
-    const summary = await summarizeContextOrSkip(input, preparedSummary.summaryInput);
-    if (summary === null) {
-      const pinned = pinContextContractWithAudit(
-        compactToArtifactReferenceTail(messages, preparedSummary.artifactLocators),
-        input.messages,
-        input.readControlState(),
-        preparedSummary.artifactLocators,
-        input.workspaceHash
-      );
-      contractAudit = pinned.audit;
-      requirePreservedContract(contractAudit);
-      messages = await enforceHardContextLimit(input, pinned.messages);
-      input.emitEvent({
-        ...createEvent(input, 'context_compaction_failed', 'summary'),
-        contractAudit
-      });
-      return messages;
-    }
+    const summary = await summarizeContext(input, preparedSummary.summaryInput);
+    record.summaryHash = createHash('sha256').update(JSON.stringify(summary)).digest('hex');
     const digestMessage = contextSummaryToDigestMessage({
       ...summary,
       toolEvidence: [...new Set([...summary.toolEvidence, ...preparedSummary.artifactLocators])]
@@ -291,6 +266,8 @@ async function runContextCompactionStages(input: RunCompactionInput): Promise<Ba
     contractAudit = pinned.audit;
     requirePreservedContract(contractAudit);
     messages = pinned.messages;
+    record.artifactRefs = verifyOriginalEvidence(input, messages);
+    record.risks.push('lossy_summary');
     input.sessionHistory.recordPreCompactionFlush({
       content: digestMessage.content.toString(),
       threadId: input.threadId,
@@ -303,13 +280,15 @@ async function runContextCompactionStages(input: RunCompactionInput): Promise<Ba
       inputTokens: await input.countTokens(messages),
       budgetTokens: input.budgetProfile.modelInputTokens,
       estimated: input.countTokensEstimated?.() === true,
-      contractAudit
+      contractAudit, record: structuredClone(record)
     });
     return messages;
   } catch (error) {
+    record.risks.push(error instanceof Error && (error.message === 'context_evidence_unverifiable' || error.message.startsWith('context_artifact_'))
+      ? 'evidence_unverifiable' : 'compaction_failed');
     input.emitEvent({
       ...createEvent(input, 'context_compaction_failed', stage),
-      contractAudit
+      contractAudit, record: structuredClone(record)
     });
     throw error;
   }
@@ -318,22 +297,20 @@ async function runContextCompactionStages(input: RunCompactionInput): Promise<Ba
 function requirePreservedContract(audit: ContextContractAudit): void {
   const lost = audit.missingConstraintCount + audit.missingAcceptanceConditionCount +
     audit.missingPendingEffectCount + audit.missingPendingApprovalCount + audit.missingPendingCorrectionCount +
-    audit.missingEvidenceLocatorCount;
+    audit.missingEvidenceLocatorCount + audit.invalidContractCount + audit.invalidEvidenceLocatorCount;
   if (lost > 0) throw new Error('context_contract_required_data_lost');
 }
 
-async function summarizeContextOrSkip(
-  input: RunCompactionInput,
-  summaryInput: ContextSummaryInput
-): Promise<ContextSummary | null> {
-  try {
-    return await summarizeContext(input, summaryInput);
-  } catch (error) {
-    if (isRecoverableSummaryFailure(error)) {
-      return null;
-    }
-    throw error;
-  }
+function verifyOriginalEvidence(input: RunCompactionInput, messages: readonly BaseMessage[]): ContextCompactionRecord['artifactRefs'] {
+  return contextEvidenceLocators(messages).map(locator => {
+    const lines = locator.split('\n');
+    const artifactId = lines[1]!.slice('artifactId: '.length), sha256 = lines[2]!.slice('sha256: '.length);
+    // The store checks thread/workspace ownership, expiry and actual content hash before returning content.
+    const artifact = input.artifactStore.readArtifact({artifactId, expectedSha256: sha256,
+      threadId: input.threadId, workspaceHash: input.workspaceHash});
+    if (artifact === null || formatContextArtifactLocator(artifact) !== locator) throw new Error('context_evidence_unverifiable');
+    return {artifactId, sha256};
+  });
 }
 
 function persistLargeToolResults(
@@ -406,6 +383,13 @@ async function runDeterministicCompaction(
       messages: working,
       countTokens: input.countTokens
     });
+  }
+  // A pending call may precede many turns (for example while waiting for approval).
+  // Tiered history edits cannot discard it before the summary protection runs.
+  for (const message of pendingToolMessages(messages)) {
+    if (working.includes(message)) continue;
+    const next = messages.slice(messages.indexOf(message) + 1).find(candidate => working.includes(candidate));
+    working.splice(next === undefined ? working.length : working.indexOf(next), 0, message);
   }
   return working;
 }
@@ -484,26 +468,23 @@ async function prepareSummaryInput(
   artifacts: readonly PersistedContextArtifact[],
   messagesToSummarize: readonly BaseMessage[],
   allMessages: readonly BaseMessage[]
-): Promise<{ artifactLocators: string[]; summaryInput: ContextSummaryInput | null }> {
+): Promise<{ artifactLocators: string[]; summaryInput: ContextSummaryInput }> {
   const workingMessages = [...messagesToSummarize];
   const references = artifacts.map(formatContextArtifactLocator);
   const artifactLocators = artifacts.map(formatContextArtifactLocator);
+  if (workingMessages.length > 0) {
+    if (input.artifactRecoveryEnabled === false) throw new Error('context_summary_recovery_unavailable');
+    const artifact = input.artifactStore.persistArtifact({
+      content: serializeMessages(workingMessages), kind: 'transcript',
+      runId: input.runId, threadId: input.threadId, workspaceHash: input.workspaceHash
+    });
+    references.push(formatContextArtifactLocator(artifact));
+    artifactLocators.push(formatContextArtifactLocator(artifact));
+  }
   let summaryInput = createSummaryInput(input, references, workingMessages, allMessages);
   const measured = await countSummaryInput(input, summaryInput);
   if (measured.tokens <= input.budgetProfile.summaryInputTokens) {
     return { artifactLocators, summaryInput: addSummaryEstimate(summaryInput, measured) };
-  }
-
-  if (workingMessages.length > 0 && input.artifactRecoveryEnabled !== false) {
-    const artifact = input.artifactStore.persistArtifact({
-      content: serializeMessages(workingMessages),
-      kind: 'transcript',
-      runId: input.runId,
-      threadId: input.threadId,
-      workspaceHash: input.workspaceHash
-    });
-    references.push(formatContextArtifactLocator(artifact));
-    artifactLocators.push(formatContextArtifactLocator(artifact));
   }
 
   while (workingMessages.length > 0) {
@@ -514,7 +495,7 @@ async function prepareSummaryInput(
       return { artifactLocators, summaryInput: addSummaryEstimate(summaryInput, measurement) };
     }
   }
-  return { artifactLocators, summaryInput: null };
+  throw new Error('context_summary_budget_exhausted');
 }
 
 function createSummaryInput(
@@ -560,17 +541,6 @@ function addSummaryEstimate(
     // Structured-output/tool encoding and provider framing are not exact text tokenization.
     estimateApproximate: true
   };
-}
-
-function isRecoverableSummaryFailure(error: unknown): boolean {
-  if (error instanceof Error && (error.message === 'context_summary_failed' || error.message === 'context_summary_invalid')) {
-    return true;
-  }
-  const classification = classifyProviderRequestFailure(error);
-  if (classification.kind === 'http') {
-    return isRetryableProviderHttpStatus(classification.status);
-  }
-  return classification.kind === 'timeout' || classification.kind === 'network' || classification.kind === 'empty_response';
 }
 
 function selectMessagesToSummarize(messages: readonly BaseMessage[]): BaseMessage[] {
@@ -663,25 +633,6 @@ function compactToSummaryTail(messages: readonly BaseMessage[], digestMessage: A
   ];
 }
 
-function compactToArtifactReferenceTail(
-  messages: readonly BaseMessage[],
-  artifactLocators: readonly string[]
-): BaseMessage[] {
-  if (artifactLocators.length === 0) {
-    return [...messages];
-  }
-  return compactToSummaryTail(messages, contextSummaryToDigestMessage({
-    goal: inferGoal(messages),
-    facts: [],
-    decisions: [],
-    filesTouched: [],
-    toolEvidence: [...artifactLocators],
-    verification: [],
-    openQuestions: [],
-    nextActions: []
-  }));
-}
-
 function selectProtectedHead(messages: readonly BaseMessage[]): BaseMessage[] {
   const protectedMessages = selectProtectedPrefix(messages);
   for (const human of messages.filter(message => message.getType() === 'human')) {
@@ -702,6 +653,23 @@ function selectProtectedPrefix(messages: readonly BaseMessage[]): BaseMessage[] 
   }
   for (const contract of messages.filter(isContextContract)) {
     if (!protectedMessages.includes(contract)) protectedMessages.push(contract);
+  }
+  for (const message of pendingToolMessages(messages)) {
+    if (!protectedMessages.includes(message)) protectedMessages.push(message);
+  }
+  return protectedMessages;
+}
+
+function pendingToolMessages(messages: readonly BaseMessage[]): BaseMessage[] {
+  const protectedMessages: BaseMessage[] = [];
+  const completedIds = new Set(messages.filter(ToolMessage.isInstance).map(message => message.tool_call_id));
+  for (const message of messages) {
+    if (!AIMessage.isInstance(message) || !message.tool_calls?.some(call => call.id === undefined || !completedIds.has(call.id))) continue;
+    if (!protectedMessages.includes(message)) protectedMessages.push(message);
+    const ids = new Set(message.tool_calls.map(call => call.id));
+    for (const result of messages.filter(ToolMessage.isInstance)) {
+      if (ids.has(result.tool_call_id) && !protectedMessages.includes(result)) protectedMessages.push(result);
+    }
   }
   return protectedMessages;
 }

@@ -52,6 +52,10 @@ export function isContextContract(message: BaseMessage): boolean {
   return message.getType() === 'human' && message.id === contractId && message.additional_kwargs.roc_context_contract === true;
 }
 
+export function contextEvidenceLocators(messages: readonly BaseMessage[]): string[] {
+  return unique(messages.filter(isContextContract).flatMap(message => readContextContract(message)?.sourceSpans ?? []));
+}
+
 export function collectUserConstraints(messages: readonly BaseMessage[]): string[] {
   const constraints: string[] = [];
   for (const message of messages) {

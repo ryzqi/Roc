@@ -177,3 +177,30 @@ tool，其他输入仍进入消息流；Core 1.2.20 的 assembled output 无条�
   历史执行保留 audit 与完整 backup，并阻止恢复。
 - 全量 unit 与 renderer 同时运行出现资源竞争超时，Renderer 首个失败项单独通过；
   继续按验收矩阵串行复核。首轮全量期间诊断/审批夹具有更新，不能用首轮构建作为最终版本证据。
+
+## S03 权限与历史执行核查（2026-11-07）
+
+- Stage role tools 过去读取调用方的 toolNames/context；现在与持久化 run/context 比对，
+  broker 还校验 agent DB 的已确认关联、Task 状态和冻结输入，授权在检索前发生。
+- `agent_execution_run_fences` 的 FK 仅接受 chat run；stage 撤销依据同一 Task/execution
+  的状态与关联，不把该表误当作通用 stage fence。
+- 确定性 compactor 会先删除旧消息，保护待审批工具必须在该段就生效，不能只保护 summary tail。
+- 当前 research 61 的旧 context_json 缺 skillPin 会使 startup bindTask 严格解析失败。
+  计划通过新的 offlineOnly schema 和现有离线转换器标历史不可恢复；不回填当前 Manifest。
+  原产物、context、事实和审计需保留；不运行真实用户数据迁移。
+
+- S03 实测 research62 离线门成立；S02 旧上下文在审计和原 context_json 中原样保留，
+  不回填当前 skillPin。未关联研究阶段的聊天不受本次 Skill 合同切换影响。
+  `applyResearchDatabaseSchema` 在每次打开连接时注册 outbox 使用的 SQL hash 函数；
+  只在建库时执行 schema、关闭后直接重开不能代替完整连接初始化。
+
+### S03 收尾与 S04 入口核对
+
+- S03 旧 `getResearchSkillInstructions`、raw 阶段映射、默认工具授权及空摘要恢复分支
+  在生产源码中零引用。全量采集期间未改业务源码。
+- S04 真实阶段页为 `phase-04-scientific-review.md`；首次猜测
+  `phase-04-verification-review.md` 不存在，改按目录清单定位。
+- 现有 `ResearchCitationCoverageService` 已绑定 manuscript/claim/source 和人工关系，
+  `ResearchReviewRepository` 只通过明确人工 accept/revise 推进；保留这两个事实拥有者。
+  当前 stage output 只有通用 verdict 和文本，没有结构化 semantic suggestion/finding。
+  S04 在这些所有者上接入独立、可失效的建议及修订关联，不创建第二个 Evidence ledger。
