@@ -11,15 +11,15 @@
 | [research-prose.md](research-prose.md) | 文稿检查（Vale）：投影、规则集与运行边界 |
 | [research-exports.md](research-exports.md) | 批准正文与图稿的最终 ZIP |
 | [rtk-integration.md](rtk-integration.md) | bundled RTK 压缩 shell 输出 |
-| [architecture-repair-plan.md](architecture-repair-plan.md) | 架构收敛审计结果与逐项修复计划 |
-| [research-optimization-execution-plan.md](../plan/research-optimization-execution-plan.md) | 科研助手优化的详细执行计划、依赖与验收标准 |
-| [agent-harness-pr00-baseline.md](../plan/agent-harness-pr00-baseline.md) | PR-00 基线、执行边界清单与遗留风险 |
-| [agent-harness-pr01-execution-boundary.md](../plan/agent-harness-pr01-execution-boundary.md) | PR-01 agent shell 授权、隔离策略与目标主机验证 |
-| [agent-harness-pr02-budget.md](../plan/agent-harness-pr02-budget.md) | PR-02 运行预算、用量结算、费用边界与恢复 |
-| [agent-harness-pr03-tool-effects.md](../plan/agent-harness-pr03-tool-effects.md) | PR-03 工具副作用身份、租约、收据与恢复 |
-| [agent-harness-pr04-mcp-gateway.md](../plan/agent-harness-pr04-mcp-gateway.md) | PR-04 MCP 工具契约冻结、传输上限与漂移拒绝 |
-| [agent-harness-pr08-diagnostics.md](../plan/agent-harness-pr08-diagnostics.md) | PR-08 本地 trace、上下文保留审计、运行诊断与固定长任务回归 |
+| [research-optimization-status.md](research-optimization-status.md) | 实施里程碑、本地验证与尚未完成的验收 |
 | [builtin-skills.md](builtin-skills.md) | 内置 Skill 来源、安装、同步与许可边界 |
+
+其他专题按领域查阅：
+
+- 文献与阅读：[文献融合](research-literature-fusion.md)、[Zotero](research-zotero.md)、[PDF 定位](research-pdf-positioning.md)、[PDF 阅读导航](research-pdf-navigation.md)、[学术关系](research-scholarly-relations.md)、[系统性综述](research-systematic-review.md)、[监控](research-monitors.md)。
+- 研究与执行：[方法计划](research-idea-plans.md)、[实验结果](research-experiment-results.md)、[Notebook](research-notebooks.md)、[执行资源](research-execution-resources.md)、[任务上下文](research-task-context.md)、[任务观测](research-task-observability.md)、[性能](research-performance.md)、[Python 历史合同](research-python-environment.md)。
+- 证据与写作：[证据关系](research-evidence-relations.md)、[工件检查器](research-artifact-inspector.md)、[写作检查](research-writing-checks.md)、[审稿回复](research-response-matrix.md)、[期刊规则](research-journal-compliance.md)、[RO-Crate](research-ro-crate.md)。
+- 科研生态：[资源](research-resources.md)、[Hugging Face](research-huggingface.md)、[OpenReview](research-openreview.md)、[Zenodo](research-zenodo.md)、[OSF 政策](research-osf-policy.md)。
 
 视觉、版式与动效没有单独的规范文档：真身是 [`src/renderer/styles/tokens.css`](../src/renderer/styles/tokens.css)
 与 [`src/renderer/shared/motion.ts`](../src/renderer/shared/motion.ts)，取舍理由见
@@ -56,5 +56,6 @@
 | [0024](adr/0024-stage-surface-removed.md) | 阶段面已删除；七个域登记为「有契约、无界面」 |
 | [0025](adr/0025-typst-report-engine.md) | 导出报告走 Typst；样式是数据 |
 | [0026](adr/0026-async-secret-storage.md) | 密钥存储只有异步一条路；重写必须带守卫 |
+| [0027](adr/0027-retain-roc-context-compaction.md) | 保留 Roc 的上下文压缩管线 |
 
 工具链源与许可证：[resources/research-runtime/README.md](../resources/research-runtime/README.md)。阶段 Skill：[resources/research-skills](../resources/research-skills)。
