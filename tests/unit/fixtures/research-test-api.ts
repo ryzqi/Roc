@@ -77,6 +77,11 @@ export {ScholarlyRelationsRepository} from '../../../src/main/plugins/research/s
 export {readScholarlyMaterial, scholarlyEndpoint} from '../../../src/main/plugins/research/scholarly-provider-adapters';
 export {registerResearchScholarlyCapabilities, researchScholarlyCapabilities} from '../../../src/main/plugins/research/scholarly-relations-capabilities';
 export * from '../../../src/shared/schemas/research-scholarly-relations';
+export {ResearchResourceService} from '../../../src/main/plugins/research/resource-service';
+export {ResearchResourceRepository, resourceContentHash} from '../../../src/main/plugins/research/resource-repository';
+export {readDataCiteMetadata, dataciteEndpoint} from '../../../src/main/plugins/research/datacite-adapter';
+export {registerResearchResourceCapabilities, researchResourceCapabilities} from '../../../src/main/plugins/research/resource-capabilities';
+export * from '../../../src/shared/schemas/research-resources';
 export { LiteratureImportService } from '../../../src/main/plugins/research/literature-import-service';
 export { ZoteroAdapter } from '../../../src/main/plugins/research/zotero-adapter';
 export { requireConfirmedSearchStrategy, searchPlanApprovalHash } from '../../../src/main/plugins/research/search-strategy';

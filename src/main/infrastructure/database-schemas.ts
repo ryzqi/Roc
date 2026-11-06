@@ -2450,6 +2450,22 @@ CREATE INDEX research_scholarly_item ON research_scholarly_snapshots(project_id,
 `
 });
 
+researchMigrations.push({
+  version: 53, name: 'immutable_research_resource_observations',
+  sql: `
+CREATE TABLE research_resource_observations (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  doi TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  created_at TEXT NOT NULL,
+  UNIQUE(project_id,request_id)
+);
+CREATE INDEX research_resource_doi ON research_resource_observations(project_id,doi);
+`
+});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

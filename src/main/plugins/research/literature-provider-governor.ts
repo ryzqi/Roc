@@ -2,11 +2,12 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { ToolResourceCoordinator } from '../../services/deep-agent/tool-resource-coordinator';
 import type { LiteratureSearchResult } from '../../../shared/schemas/literature-import';
 
-export const literatureProviderHosts = {
+export const researchProviderHosts = {
   openalex: 'api.openalex.org', crossref: 'api.crossref.org',
   semantic_scholar: 'api.semanticscholar.org', arxiv: 'export.arxiv.org',
-  pubmed: 'www.ebi.ac.uk', europe_pmc: 'www.ebi.ac.uk'
+  pubmed: 'www.ebi.ac.uk', europe_pmc: 'www.ebi.ac.uk', datacite: 'api.datacite.org'
 } as const;
+export type ResearchMetadataProvider = keyof typeof researchProviderHosts;
 
 export type LiteratureProviderPolicy = {
   minIntervalMs: number; maxRequests: number; windowMs: number;
@@ -130,8 +131,8 @@ export class LiteratureProviderGovernor {
 }
 
 export function createLiteratureProviderGovernor(): LiteratureProviderGovernor {
-  const policies = Object.fromEntries(Object.values(literatureProviderHosts).map(host => [host, {
-    minIntervalMs: host === literatureProviderHosts.arxiv ? 3000 : 1000,
+  const policies = Object.fromEntries(Object.values(researchProviderHosts).map(host => [host, {
+    minIntervalMs: host === researchProviderHosts.arxiv ? 3000 : 1000,
     maxRequests: 300, windowMs: 60 * 60_000, failureThreshold: 3, cooldownMs: 60_000
   }]));
   return new LiteratureProviderGovernor(policies, Date.now, async (ms, signal) => { await delay(ms, undefined, {signal}); });

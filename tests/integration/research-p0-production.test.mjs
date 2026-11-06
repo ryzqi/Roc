@@ -22,6 +22,81 @@ before(async () => {
 after(() => api.dispose());
 const hash = value => createHash('sha256').update(value).digest('hex');
 
+test('DataCite observations survive native SQLite reopen with exact request, metadata and paged relations', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'roc-datacite-native-')));
+  const f = createResearchFixture(api, 'reading', root);
+  const repository = new api.ResearchResourceRepository(f.db, f.repository);
+  const registry = new api.CapabilityRegistry();
+  const doi = '10.1234/native-resource';
+  const request = {projectId: f.project.id, requestId: 'native-resource', doi};
+  let calls = 0;
+  const transport = new api.LiteratureSearchService(async (url, init) => {
+    calls++;
+    assert.equal(init.method, 'GET');
+    assert.equal(init.redirect, 'error');
+    assert.equal(url, `https://api.datacite.org/dois/${encodeURIComponent(doi)}`);
+    return Response.json({data: {id: doi, type: 'dois', attributes: {
+      doi, state: 'findable', types: {resourceTypeGeneral: 'Dataset'},
+      titles: [{title: 'Synthetic native resource'}], version: '3.0',
+      rightsList: [{rights: 'Synthetic license; metadata observation only'}],
+      relatedIdentifiers: Array.from({length: 101}, (_, index) => ({
+        relatedIdentifier: `10.1234/native-paper-${index}`, relatedIdentifierType: 'DOI',
+        relationType: 'IsSupplementTo'
+      }))
+    }}});
+  });
+  const service = new api.ResearchResourceService(repository, transport);
+  for (const descriptor of api.researchResourceCapabilities) registry.declare('native-fixture', descriptor);
+  api.registerResearchResourceCapabilities({pluginId: 'native-fixture', capabilities: registry}, service, repository);
+  let restored;
+  try {
+    const workflow = f.repository.getWorkflow(f.project.id);
+    const args = api.parseIpcRequestArgs('roc:research:resource-capture', [request]);
+    const saved = await registry.invoke('research.resource.capture', args[0]);
+    assert.equal(saved.status, 'ok');
+    assert.equal(saved.metadata.version, '3.0');
+    assert.equal(saved.relatedCount, 101);
+    assert.equal('relatedIdentifiers' in saved.metadata, false);
+    assert.equal(saved.requests.length, 1);
+    assert.match(saved.contentHash, /^[a-f0-9]{64}$/u);
+    assert.match(saved.responseHash, /^[a-f0-9]{64}$/u);
+    assert.deepEqual(await registry.invoke('research.resource.capture', request), saved);
+    const page = {projectId: f.project.id, resourceId: saved.id, offset: 0, limit: 100};
+    const first = await registry.invoke('research.resource.read', page);
+    const last = await registry.invoke('research.resource.read', {...page, offset: first.nextOffset});
+    assert.equal(first.relatedIdentifiers.length, 100);
+    assert.equal(last.relatedIdentifiers.length, 1);
+    assert.equal(last.nextOffset, null);
+    assert.equal(last.relatedIdentifiers[0].relationType, 'IsSupplementTo');
+    assert.equal(calls, 1);
+    assert.deepEqual(f.repository.getWorkflow(f.project.id), workflow);
+    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 0);
+    const evidence = join(process.cwd(), '.artifacts/research-optimization/xeco-a3a-native');
+    await mkdir(evidence, {recursive: true});
+    const databasePath = join(evidence, 'research.sqlite');
+    await f.db.backup(databasePath);
+    restored = new Database(databasePath);
+    restored.pragma('foreign_keys=ON');
+    const restoredResearch = new api.ResearchRepository(restored, f.tasks);
+    const reopened = new api.ResearchResourceRepository(restored, restoredResearch);
+    assert.deepEqual(reopened.findRequest(request), saved);
+    assert.deepEqual(reopened.read(page), first);
+    assert.throws(() => reopened.get('another-project', saved.id));
+    assert.throws(() => api.parseIpcRequestArgs('roc:research:resource-capture', [{...request, approved: true}]));
+    await writeFile(join(evidence, 'receipt.json'), JSON.stringify({
+      node: process.versions.node, electron: process.versions.electron,
+      fixture: 'synthetic public metadata response; no live DataCite call or content download',
+      saved, first, last, calls
+    }, null, 2) + '\n');
+  } finally {
+    await service.shutdown();
+    await transport.shutdown();
+    restored?.close();
+    f.close();
+    await rm(root, {recursive: true, force: true});
+  }
+});
+
 test('Zotero captured CSL imports through the actual native bibliography worker with durable object provenance', async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'roc-zotero-native-')));
   const f = createResearchFixture(api, 'figure', root);

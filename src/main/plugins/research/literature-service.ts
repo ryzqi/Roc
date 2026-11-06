@@ -13,7 +13,8 @@ import {literatureRawIdentifiersSchema, type LiteratureIdentifierObservation, ty
 import { fuseLiterature, literatureSourcePriority, type RankedLiteratureRecord } from './literature-fusion';
 import { arxivSearchPayload, crossrefSearchPayload, europePmcSearchPayload, openAlexSearchPayload, semanticScholarSearchPayload } from './literature-provider-schemas';
 import { LiteratureResponseCache, type CachedLiteratureResponse } from './literature-response-cache';
-import { createLiteratureProviderGovernor, LiteratureProviderAdmissionError, literatureProviderHosts, type LiteratureProviderGovernor } from './literature-provider-governor';
+import { createLiteratureProviderGovernor, LiteratureProviderAdmissionError, researchProviderHosts,
+  type ResearchMetadataProvider, type LiteratureProviderGovernor } from './literature-provider-governor';
 import { LiteratureRequestAuditError } from './literature-search-ledger';
 import { betterBibtexKey } from './cite-key';
 import {unknownLiteratureReview, openAlexReview, crossrefReview, arxivReview} from './literature-provider-review';
@@ -40,7 +41,7 @@ type ProviderContext = {signal: AbortSignal; receipts: LiteratureSearchResult['s
   fetchedAt: string | null; host: string; release: (() => void) | null;
   coverage: LiteratureSearchResult['sources'][number]['coverage'] | null;
   position: LiteraturePagePosition; rankOffset: number; url: string | null; visited: Set<string>;
-  source: LiteratureSearchResult['sources'][number]['source']; audit: LiteratureRequestAudit | undefined;
+  audit: ((phase: 'started' | 'finished', receipt: SourceOutcome['requests'][number]) => void) | undefined;
   identifiers: LiteratureIdentifierObservation[][] | null; rawIdentifiers: Array<LiteratureRawIdentifiers | null> | null;
   reviews: LiteratureReview[] | null};
 
@@ -71,7 +72,7 @@ export class LiteratureSearchService {
 
   /** Main-only provider reads share search admission, cache, receipts and shutdown. */
   async readProviderJson<T>(
-    request: {source: SourceOutcome['source']; url: string; projectId: string; timeoutMs: number},
+    request: {source: ResearchMetadataProvider; url: string; projectId: string; timeoutMs: number},
     validate: (payload: unknown) => T, signal?: AbortSignal
   ): Promise<LiteratureProviderJsonResult<T>> {
     this.lifetime.signal.throwIfAborted();
@@ -82,15 +83,15 @@ export class LiteratureSearchService {
   }
 
   private async executeProviderJson<T>(
-    request: {source: SourceOutcome['source']; url: string; projectId: string; timeoutMs: number},
+    request: {source: ResearchMetadataProvider; url: string; projectId: string; timeoutMs: number},
     validate: (payload: unknown) => T, signal: AbortSignal | undefined
   ): Promise<LiteratureProviderJsonResult<T>> {
-    const host = literatureProviderHosts[request.source];
+    const host = researchProviderHosts[request.source];
     if (new URL(request.url).host !== host) throw new Error('literature_provider_url_invalid');
     const providerSignal = AbortSignal.any([this.lifetime.signal, ...(signal === undefined ? [] : [signal]),
       AbortSignal.timeout(request.timeoutMs)]);
     const context: ProviderContext = {
-      signal: providerSignal, receipts: [], projectId: request.projectId, source: request.source, host, audit: undefined,
+      signal: providerSignal, receipts: [], projectId: request.projectId, host, audit: undefined,
       cacheHit: null, pendingCache: null, fetchedAt: null, release: null, coverage: null,
       position: {kind: 'offset', value: 0}, rankOffset: 0, url: null, visited: new Set(),
       identifiers: null, rawIdentifiers: null, reviews: null
@@ -158,7 +159,7 @@ export class LiteratureSearchService {
   private async executeSource(request: LiteratureSearchInput, source: typeof literatureSourcePriority[number], deadline: AbortSignal,
     signal: AbortSignal | undefined, audit: LiteratureRequestAudit | undefined): Promise<{source: SourceOutcome; records: RankedLiteratureRecord[]}> {
     const providerSignal = AbortSignal.any([deadline, AbortSignal.timeout(15_000)]);
-    const host = literatureProviderHosts[source];
+    const host = researchProviderHosts[source];
     let position = initialPage(source);
     const receipts: ProviderContext['receipts'] = [];
     const visited = new Set<string>();
@@ -170,7 +171,8 @@ export class LiteratureSearchService {
       {state: 'hit', fetchedAt: context.cacheHit.fetchedAt, responseHash: context.cacheHit.responseHash};
     for (let page = 0; page < request.maxPages; page++) {
       const rankOffset = position.kind === 'page' ? (position.value - 1) * request.limit : position.kind === 'offset' ? position.value : records.length;
-      const context: ProviderContext = {signal: providerSignal, receipts, projectId: request.projectId ?? null, source, host, audit,
+      const context: ProviderContext = {signal: providerSignal, receipts, projectId: request.projectId ?? null, host,
+        audit: audit === undefined ? undefined : (phase, receipt) => audit(phase, source, receipt),
         cacheHit: null, pendingCache: null, fetchedAt: null, release: null, coverage: null, position, rankOffset, url: null, visited,
         identifiers: null, rawIdentifiers: null, reviews: null};
       visited.add(JSON.stringify(position));
@@ -383,10 +385,12 @@ export class LiteratureSearchService {
   }
 
   private async readResponse(url: string, accept: string): Promise<string> {
-    const allowed = ['https://api.openalex.org/', 'https://api.crossref.org/', 'https://api.semanticscholar.org/', 'https://export.arxiv.org/', 'https://www.ebi.ac.uk/'];
-    if (!allowed.some((prefix) => url.startsWith(prefix))) throw new Error('literature_provider_url_invalid');
     const context = this.requests.getStore();
     if (context === undefined) throw new Error('literature_provider_context_missing');
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:' || parsed.host !== context.host || !url.startsWith(`https://${context.host}/`)) {
+      throw new Error('literature_provider_url_invalid');
+    }
     context.url = url;
     context.signal.throwIfAborted();
     const key = JSON.stringify([context.projectId, url, accept]);
@@ -454,7 +458,7 @@ export class LiteratureSearchService {
     const receipt: ProviderContext['receipts'][number] = {attempt: context.receipts.length + 1, method: 'GET', url,
       startedAt: new Date().toISOString(), endedAt: null, status: null, retryAfterMs: null, responseHash: null, errorCode: null};
     context.receipts.push(receipt);
-    context.audit?.('started', context.source, receipt);
+    context.audit?.('started', receipt);
     const {signal} = context;
     try {
       const response = await this.fetchImpl(url, {method: 'GET', headers: { accept }, signal, redirect: 'error'});
@@ -495,7 +499,7 @@ export class LiteratureSearchService {
       throw error;
     } finally {
       receipt.endedAt = new Date().toISOString();
-      context.audit?.('finished', context.source, receipt);
+      context.audit?.('finished', receipt);
     }
   }
 }

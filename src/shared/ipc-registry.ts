@@ -1,4 +1,8 @@
 import {
+  resourceCaptureSchema, resourceCancelSchema, resourceCancelResultSchema, resourceSummarySchema,
+  resourceHistorySchema, resourceHistoryResultSchema, resourceReadSchema, resourceReadResultSchema
+} from './schemas/research-resources';
+import {
   scholarlyCaptureSchema, scholarlyCancelSchema, scholarlyCancelResultSchema, scholarlySnapshotSummarySchema,
   scholarlyHistorySchema, scholarlyHistoryResultSchema, scholarlyReadSchema, scholarlyReadResultSchema
 } from './schemas/research-scholarly-relations';
@@ -773,6 +777,10 @@ export const ipcRegistry = {
     request({key: 'researchScholarlyCancel', channel: 'roc:research:scholarly-cancel', domain: 'research', method: 'cancelScholarlyRelations', kind: 'plugin', capabilityName: 'research.scholarly.cancel', inputTransform: first, contract: methodContract(oneArg(scholarlyCancelSchema), scholarlyCancelResultSchema)}),
     request({key: 'researchScholarlyHistory', channel: 'roc:research:scholarly-history', domain: 'research', method: 'getScholarlyHistory', kind: 'plugin', capabilityName: 'research.scholarly.history', inputTransform: first, contract: methodContract(oneArg(scholarlyHistorySchema), scholarlyHistoryResultSchema)}),
     request({key: 'researchScholarlyRead', channel: 'roc:research:scholarly-read', domain: 'research', method: 'getScholarlyRelations', kind: 'plugin', capabilityName: 'research.scholarly.read', inputTransform: first, contract: methodContract(oneArg(scholarlyReadSchema), scholarlyReadResultSchema)}),
+    request({key: 'researchResourceCapture', channel: 'roc:research:resource-capture', domain: 'research', method: 'captureResource', kind: 'plugin', capabilityName: 'research.resource.capture', inputTransform: first, contract: methodContract(oneArg(resourceCaptureSchema), resourceSummarySchema)}),
+    request({key: 'researchResourceCancel', channel: 'roc:research:resource-cancel', domain: 'research', method: 'cancelResourceCapture', kind: 'plugin', capabilityName: 'research.resource.cancel', inputTransform: first, contract: methodContract(oneArg(resourceCancelSchema), resourceCancelResultSchema)}),
+    request({key: 'researchResourceHistory', channel: 'roc:research:resource-history', domain: 'research', method: 'getResourceHistory', kind: 'plugin', capabilityName: 'research.resource.history', inputTransform: first, contract: methodContract(oneArg(resourceHistorySchema), resourceHistoryResultSchema)}),
+    request({key: 'researchResourceRead', channel: 'roc:research:resource-read', domain: 'research', method: 'getResource', kind: 'plugin', capabilityName: 'research.resource.read', inputTransform: first, contract: methodContract(oneArg(resourceReadSchema), resourceReadResultSchema)}),
     request({ key: 'researchLibraryImportRecord', channel: 'roc:research:library-import-record', domain: 'research', method: 'importLibraryRecord', kind: 'plugin', capabilityName: 'research.library.importRecord', inputTransform: first, contract: methodContract(oneArg(researchLibraryRecordImportRequestSchema), researchLibraryImportResultSchema) }),
     request({ key: 'researchLibraryImportDoi', channel: 'roc:research:library-import-doi', domain: 'research', method: 'importLibraryDoi', kind: 'plugin', capabilityName: 'research.library.importDoi', inputTransform: first, contract: methodContract(oneArg(researchLibraryDoiImportRequestSchema), researchLibraryImportResultSchema) }),
     request({ key: 'researchLibraryImportFile', channel: 'roc:research:library-import-file', domain: 'research', method: 'importBibliography', kind: 'plugin', capabilityName: 'research.library.importFile', inputTransform: first, contract: methodContract(oneArg(researchLibraryFileImportRequestSchema), researchLibraryImportResultSchema) }),

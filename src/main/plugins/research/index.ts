@@ -81,6 +81,9 @@ import { registerResearchLibraryCapabilities, researchLibraryCapabilities } from
 import {ScholarlyRelationsRepository} from './scholarly-relations-repository';
 import {ScholarlyRelationsService} from './scholarly-relations-service';
 import {registerResearchScholarlyCapabilities, researchScholarlyCapabilities} from './scholarly-relations-capabilities';
+import {ResearchResourceRepository} from './resource-repository';
+import {ResearchResourceService} from './resource-service';
+import {registerResearchResourceCapabilities, researchResourceCapabilities} from './resource-capabilities';
 import { ResearchDocumentService } from './document-service';
 import { registerResearchDocumentCapabilities, researchDocumentCapabilities } from './document-capabilities';
 import {registerResearchSystematicReviewCapabilities, researchSystematicReviewCapabilities} from './systematic-review-capabilities';
@@ -221,6 +224,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
   let templates: ResearchTemplateService | null = null;
   let library: ResearchLibraryService | null = null;
   let scholarly: ScholarlyRelationsService | null = null;
+  let resources: ResearchResourceService | null = null;
   let documents: ResearchDocumentService | null = null;
   let embeddings: ResearchEmbeddingService | null = null;
   let indexer: ResearchIndexService | null = null;
@@ -245,7 +249,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchIdeaPlanCapabilities, ...researchIdeaOutcomeCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchScholarlyCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchNotebookCapabilities, ...researchExperimentResultCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities, researchCitationCoverageCapability, ...researchCitationReviewCapabilities, ...researchConsistencyCapabilities, ...researchFigureConsistencyCapabilities, ...researchResponseMatrixCapabilities, ...researchJournalComplianceCapabilities]
+      capabilities: [researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchIdeaPlanCapabilities, ...researchIdeaOutcomeCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchScholarlyCapabilities, ...researchResourceCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchNotebookCapabilities, ...researchExperimentResultCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities, researchCitationCoverageCapability, ...researchCitationReviewCapabilities, ...researchConsistencyCapabilities, ...researchFigureConsistencyCapabilities, ...researchResponseMatrixCapabilities, ...researchJournalComplianceCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，
@@ -324,6 +328,9 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       const scholarlyRepository = new ScholarlyRelationsRepository(db, researchRepository);
       scholarly = new ScholarlyRelationsService(scholarlyRepository, literatureService);
       registerResearchScholarlyCapabilities(context, scholarly, scholarlyRepository);
+      const resourceRepository = new ResearchResourceRepository(db, researchRepository);
+      resources = new ResearchResourceService(resourceRepository, literatureService);
+      registerResearchResourceCapabilities(context, resources, resourceRepository);
       const publishLibraryChange = async (items: Array<{ id: string; projectIds: string[] }>, changeKind: 'import' | 'link' | 'archive' | 'citation_key', operationId: string | null = null) => {
         await context.eventBus.publish({ type: 'research.library.changed', source: pluginId, createdAt: new Date().toISOString(),
           payload: { eventId: randomUUID(), operationId, affectedItemIds: items.map((item) => item.id),
@@ -533,9 +540,10 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
     },
     shutdown: async () => {
       try {
-        await shutdownResearchPlugin({ literature: literatureService, scholarly, zotero, literatureImports, productionInputs, exports, figures, experiments, pythonEnvironments, indexer, embeddings, stageRuntime, reviewSearch, templates, documents, library, prose });
+        await shutdownResearchPlugin({ literature: literatureService, scholarly, resources, zotero, literatureImports, productionInputs, exports, figures, experiments, pythonEnvironments, indexer, embeddings, stageRuntime, reviewSearch, templates, documents, library, prose });
       } finally {
         reviewSearch = null;
+        resources = null;
         productionInputs = null;
         exports = null;
         figures = null;
