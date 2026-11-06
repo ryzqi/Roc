@@ -48,4 +48,26 @@ Migration 58 安装监控、查询版本、mutation 请求、检查、检查点�
 
 状态：`Verified passing`，覆盖本地监控核心。最终 focused 14/14、全量单元 1410/1410、原生 19/19、Harness 94/94、相关 renderer 29/29、启动 13/13（零 renderer error）通过；类型、构建、IPC 生成一致性和 eager graph 检查通过，eager JS 1,134,468 bytes（6 files）。
 
-首次 focused 测试发现 strict 来源回执缺 `retryAfterMs`，已补齐合同后通过。最终持久化故障回归验证两个保存失败原因均传播、running 可恢复且精确重放不新读取。原生验收使用真实 Electron SQLite、窗口 sender、到期调度、缓存、备份重开；证据保存在 `.artifacts/research-optimization/monitor-a6a-native/`。尚未进行真实 Provider API 试验、独立科研质量验收或监控界面验收。
+首次 focused 测试发现 strict 来源回执缺 `retryAfterMs`，已补齐合同后通过。最终持久化故障回归验证两个保存失败原因均传播、running 可恢复且精确重放不新读取。原生验收使用真实 Electron SQLite、窗口 sender、到期调度、缓存、备份重开；证据保存在 `.artifacts/research-optimization/monitor-a6a-native/`。尚未进行真实 Provider API 试验、独立科研质量验收。
+
+## 现有文献画布界面
+
+第五个内部 tab「监控」首次访问才懒加载，不增加路由或 shell。监控按项目隔离；查询版本和控制 revision 切换会重建编辑器。草稿、进行中命令和结果不确定时锁定监控选择及 tab 离开；项目变为只读后保留草稿、禁写并允许放弃。
+
+保存、暂停/恢复、检查和已读保留精确失败请求；重试不生成新的 requestId。取消针对主进程返回的真实 running check ID，并分别显示取消信号与终态。当前检查每秒刷新权威回执，最多 120 次，隐藏、读取错误或终态停止；手动刷新可恢复。列表、查询版本、检查和提醒分别分页，每页 20 条。
+
+DOI 目标按真实条目 ID 读取，不从当前过滤列表推断目标缺失。读取未完成或失败时禁止保存/立即检查，显示原始失败和重试；版本变化要求显式重新选择。查询保留已绑定选项，避免过滤列表清空合法绑定。检查详情展开后才渲染大型来源内容，原始 JSON 第二层展开后才序列化。
+
+UI 验证均在仓库根目录执行：
+
+- `pnpm build`（含 typecheck）
+- `node --test tests/renderer/research-monitors.test.mjs`
+- `node --test tests/renderer/literature-review.test.mjs tests/renderer/scholarly-relations.test.mjs tests/renderer/research-resources.test.mjs tests/renderer/research-openreview.test.mjs`
+- `node scripts/smoke-electron.mjs`
+- `pnpm check:ipc`
+- `pnpm check:renderer-chunks`
+- `git diff --check`
+
+状态：`Verified passing`，覆盖本地 UI。最终 10/10 监控、29/29 相关 renderer、13/13 启动（零 renderer error）通过；类型、构建、IPC 和 chunks 通过。eager JS 1,134,468 bytes（6 files）。真实 Electron 窗口连接真实 SQLite 监控服务和 strict IPC parser，Provider 为固定响应。650px 明暗主题 default/hover/disclosure/final 八个裁切检查均 `cut=0, hidden=0`，已人工检查截图。日志为 `.artifacts/research-optimization/monitor-a6b-*-final.log`，截图和 ariaSnapshot 为 `.artifacts/research-optimization/monitor-a6b/`。
+
+首次 UI 测试的两个失败为 Provider 429 错误码断言和 clip 脚本调用错误；按真实合同修正后通过，未弱化产品检查。最终增加过滤列表目标与读取失败恢复回归后重新构建并运行全部 10 条。未进行真实 Provider 或独立科研验收。

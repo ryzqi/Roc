@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { AlertCircle, BookOpen, Database, Layers, Loader2, PanelLeft, Plus, Share2 } from 'lucide-react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { AlertCircle, Bell, BookOpen, Database, Layers, Loader2, PanelLeft, Plus, Share2 } from 'lucide-react';
 import { useWorkspaceScope } from '../app/workspace-scope';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
@@ -15,46 +15,20 @@ import { useLiteratureImportActions } from './use-literature-import-actions';
 import { libraryItemTitle } from './format';
 
 /**
- * The literature hub (P5): 阅读 / RAG / 知识库 / 图谱, plus the library list.
- *
- * The four sub-views are the new frontend's information architecture. They live in
- * one canvas view with an internal tab strip rather than four `?view=` values
- * because they all read *the same selection*: separate views would let a deep link
- * land on 图谱 with no selected paper and no way back.
- *
- * The sub-view itself is **component state**, not a URL parameter. That is a
- * deliberate exception to "navigation state lives in the URL": adding
- * `?literature=` would have meant extending the frozen route contract (and its
- * round-trip tests) for a selector the legacy shell also kept in component state,
- * and none of P5's gates require a deep link into a sub-view. Registered in the
- * phase's deviation table.
- *
- * Where the data comes from, without exception:
- *   - library list + selection + claims/evidence: the shared `useLiteratureStore`
- *     (created in `AppShell`, so the sidebar's 文献 tab sees the same state);
- *   - Wiki / 图谱: `derive-wiki` / `derive-graph` over those real claims + evidence;
- *   - RAG: `research.index.*` + `research.knowledge.search`, never a local retriever.
- *
- * No mock path exists: when the backend has nothing, each sub-view shows its empty
- * state (gate 4).
- *
- * ## The header
- *
- * One recessed tab track on the left (four equal chips, the active one raised) and the
- * 「导入」 action on the right as the screen's single solid primary button. One detail is deliberate:
- *
- *   - the labels are 阅读 / 检索 / 知识库 / 图谱: 知识库 is this product's established word
- *     for the derived concept view (its testids and docs all say `wiki`/知识库);
- * The cross-view `FocusRequest` hand-off (检索 → 阅读, 知识库 → 图谱) is unchanged.
+ * One literature canvas with internal reading, retrieval, knowledge, graph and monitor tabs.
+ * Reading surfaces share the shell library selection. Project monitors load their module and
+ * authoritative receipts on first visit; unsaved or uncertain commands lock tab navigation.
  */
 
 type SubViewId = LiteratureSubView;
+const MonitorsPanel = lazy(() => import('./MonitorsPanel'));
 
 const SUB_VIEWS: Array<{ id: SubViewId; label: string; icon: typeof BookOpen; iconClass: string }> = [
   { id: 'reader', label: '阅读', icon: BookOpen, iconClass: 'text-[var(--icon-literature)]' },
   { id: 'rag', label: '检索', icon: Database, iconClass: 'text-[var(--icon-rag)]' },
   { id: 'wiki', label: '知识库', icon: Layers, iconClass: 'text-[var(--icon-wiki)]' },
-  { id: 'graph', label: '图谱', icon: Share2, iconClass: 'text-[var(--icon-graph)]' }
+  { id: 'graph', label: '图谱', icon: Share2, iconClass: 'text-[var(--icon-graph)]' },
+  { id: 'monitors', label: '监控', icon: Bell, iconClass: 'text-[var(--icon-literature)]' }
 ];
 
 const SUB_TAB_BASE =
@@ -68,9 +42,12 @@ export function LiteratureHubView(): React.JSX.Element {
   const [returnToSearch, setReturnToSearch] = useState(false);
   const [navigationOverride, setNavigationOverride] = useState<boolean | null>(null);
   const [narrow, setNarrow] = useState(false);
+  const [monitorLock, setMonitorLock] = useState(false);
+  const onMonitorLock = useCallback((locked: boolean) => setMonitorLock(locked), []);
   const hubRef = useRef<HTMLDivElement>(null);
   const navigationOpen = navigationOverride ?? !narrow;
   const selectSubView = (id: SubViewId): void => {
+    if (subView === 'monitors' && monitorLock && id !== 'monitors') return;
     setVisited(current => current.has(id) ? current : new Set([...current, id]));
     setSubView(id);
   };
@@ -142,7 +119,7 @@ export function LiteratureHubView(): React.JSX.Element {
             const next = event.key === 'Home' ? 0 : event.key === 'End' ? SUB_VIEWS.length - 1
               : event.key === 'ArrowRight' ? (index + 1) % SUB_VIEWS.length
               : event.key === 'ArrowLeft' ? (index + SUB_VIEWS.length - 1) % SUB_VIEWS.length : null;
-            if (next === null) return;
+            if (next === null || monitorLock) return;
             event.preventDefault();
             const id = SUB_VIEWS[next]!.id;
             selectSubView(id);
@@ -162,12 +139,13 @@ export function LiteratureHubView(): React.JSX.Element {
                 aria-controls="literature-active-panel"
                 aria-selected={selected}
                 tabIndex={selected ? 0 : -1}
+                disabled={monitorLock && entry.id !== 'monitors'}
                 onClick={() => selectSubView(entry.id)}
                 data-testid={`literature-subview-${entry.id}`}
                 className={
                   selected
                     ? `${SUB_TAB_BASE} bg-[var(--surface-card-hover)] font-semibold text-ink shadow-[var(--shadow-card)]`
-                    : `${SUB_TAB_BASE} text-muted hover:text-ink active:bg-[var(--overlay-active)]`
+                    : `${SUB_TAB_BASE} text-muted hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-50`
                 }
               >
                 <Icon size={13} aria-hidden="true" className={entry.iconClass} />
@@ -202,12 +180,12 @@ export function LiteratureHubView(): React.JSX.Element {
 
       <div className="flex min-h-0 flex-1">
         {/* At narrow canvas widths, the selector above replaces this list. */}
-        <aside id="literature-navigation" style={{ display: navigationOpen ? 'flex' : 'none' }} className="literature-library-column min-h-0 w-[min(240px,40cqw)] shrink-0 border-r-[0.5px] border-line" aria-label="文献列表">
+        <aside id="literature-navigation" style={{ display: navigationOpen && subView !== 'monitors' ? 'flex' : 'none' }} className="literature-library-column min-h-0 w-[min(240px,40cqw)] shrink-0 border-r-[0.5px] border-line" aria-label="文献列表">
           <LibraryList onRequestImport={() => openImport('document')} />
         </aside>
 
         <div id="literature-active-panel" role="tabpanel" aria-labelledby={`literature-tab-${subView}`} tabIndex={0} className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid={`literature-panel-${subView}`}>
-          <label style={navigationOpen ? { display: 'none' } : undefined} className="literature-paper-picker hidden shrink-0 items-center gap-2 border-b border-line px-3 py-2">
+          <label style={navigationOpen || subView === 'monitors' ? { display: 'none' } : undefined} className="literature-paper-picker hidden shrink-0 items-center gap-2 border-b border-line px-3 py-2">
             <span className="shrink-0 text-muted text-[var(--font-meta-size)]">当前文献</span>
             <select
               aria-label="选择当前文献"
@@ -308,6 +286,15 @@ export function LiteratureHubView(): React.JSX.Element {
               derivedPanel
             )}
             </div>
+            </div>
+          ) : null}
+          {visited.has('monitors') ? (
+            <div style={{display: subView === 'monitors' ? 'contents' : 'none'}}>
+              <Suspense fallback={<p role="status" className="p-3 text-muted">加载监控界面中</p>}>
+                {scope.projectId === null ? <p className="p-3 text-muted">选择项目后查看文献监控</p> :
+                  <MonitorsPanel key={scope.projectId} client={scope.client} projectId={scope.projectId}
+                    items={store.items} writable={scope.writable} active={subView === 'monitors'} onLockChange={onMonitorLock}/>}
+              </Suspense>
             </div>
           ) : null}
         </div>
