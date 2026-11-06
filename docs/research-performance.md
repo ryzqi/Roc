@@ -28,7 +28,7 @@ SQLite remains the engine. A timing target miss requires investigation of candid
 
 ## Measured retrieval results
 
-Status: **Verified passing** for benchmark execution and integrity; the FTS performance target remains unmet in one group. All 480 timed searches completed. Million-chunk mixed-query / all-projects / repeated-connection FTS P95 was 2508.8 ms, 8.8 ms above the frozen 2500 ms target. Other stage targets and all total-time targets passed. The next increment ranks narrow candidate rows before hydrating selected text, preserving the existing query and ordering.
+Status: **Verified passing** for benchmark execution and integrity; the FTS performance target remains unmet in one group. All 480 timed searches completed. Million-chunk mixed-query / all-projects / repeated-connection FTS P95 was 2508.8 ms, 8.8 ms above the frozen 2500 ms target. Other stage targets and all total-time targets passed. The A1B increment below resolves that miss without changing the query or ordering.
 
 | Chunks | Maximum FTS P95 | Maximum vector P95 | Maximum total P95 | Database | Worker peak RSS |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -37,3 +37,19 @@ Status: **Verified passing** for benchmark execution and integrity; the FTS perf
 | 1000000 | 2508.8 ms | 1351.5 ms | 3717.6 ms | 3585.2 MiB | 3742.4 MiB |
 
 Validation: `node --check scripts/benchmark-research-retrieval.mjs`, complete benchmark execution, report readback / protocol and sample consistency checks, and `git diff --check` all passed. No product code changed, so build and renderer checks are not repeated for this script/document increment.
+
+## Narrow FTS ranking (A1B)
+
+The production keyword search now materializes candidate IDs, document IDs, chunk indices and ranks, sorts and limits those rows, then loads text, titles, sources and locators for the selected hits. This removes large chunk payloads from broad candidate materialization. Body-first ordering, BM25, title deduplication, tie ordering and both chunk/document project boundaries remain intact. There is one current implementation.
+
+Run `pnpm research:retrieval-bench .artifacts/research-optimization/retrieval-narrow-performance.json`. The starting commit is `c0cd1437` with the repository change recorded by the source hashes in [research-retrieval-narrow.json](research-retrieval-narrow.json). The original report remains unchanged. Full samples and logs are `.artifacts/research-optimization/retrieval-narrow-performance.json` and `retrieval-narrow-full.log`.
+
+| Chunks | Maximum FTS P95 | Maximum vector P95 | Maximum total P95 | Worker peak RSS |
+| --- | ---: | ---: | ---: | ---: |
+| 10000 | 10.2 ms | 11.7 ms | 21.9 ms | 262.0 MiB |
+| 100000 | 93.9 ms | 126.9 ms | 211.0 ms | 657.7 MiB |
+| 1000000 | 1108.4 ms | 1361.7 ms | 2312.6 ms | 3728.9 MiB |
+
+All 24 groups / 480 searches meet the frozen FTS, vector and total P95 goals. The million-chunk maximum FTS P95 falls 55.8%, and maximum total P95 falls 37.8%. Hardware, protocol hash, corpus hashes, candidate ranges, database bytes and pragmas match the original baseline; only the repository implementation hash changes. This is a repeat on generated broad-match data, with the cache and semantic-quality limitations stated above.
+
+Verification from `/Users/Apple_501/Desktop/Roc/Roc`: `node --test tests/unit/knowledge-vector-search.test.mjs` passed 2/2, including production-schema keyword ordering/scoping/metadata and exact sqlite-vec ranking. Full benchmark and before/after report consistency checks passed. `pnpm build` (including typecheck), `node scripts/smoke-electron.mjs` (13/13, zero renderer errors), `pnpm check:ipc`, `pnpm check:renderer-chunks` and `git diff --check` passed. Logs use the `retrieval-narrow-` prefix in the same artifact directory. Status: **Verified passing** for this engineering performance change; independent retrieval quality remains unrun.

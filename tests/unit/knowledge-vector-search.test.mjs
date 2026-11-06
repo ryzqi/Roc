@@ -3,9 +3,46 @@ import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
 import Database from 'better-sqlite3';
 import { load } from 'sqlite-vec';
+import { resolve } from 'node:path';
 import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 
 const { ResearchKnowledgeRepository } = await importTypeScriptModule('src/main/plugins/research/knowledge-repository.ts', { platform: 'node' });
+
+test('keyword ranking retains content priority, deduplication, ordered chunks and both project boundaries', async () => {
+  const {applyResearchDatabaseSchema} = await importTypeScriptModule('src/main/infrastructure/database-schemas.ts', {
+    platform: 'node', external: ['better-sqlite3'], tempDir: resolve('.runtime')
+  });
+  const db = new Database(':memory:'), now = () => '2026-11-06T00:00:00.000Z';
+  try {
+    applyResearchDatabaseSchema(db, now);
+    for (const project of ['a', 'b']) db.prepare(`INSERT INTO research_projects
+      (id,title,description,status,current_stage,created_at,updated_at) VALUES (?,?,'','active','reading',?,?)`)
+      .run(project, project, now(), now());
+    const repo = new ResearchKnowledgeRepository(db, () => {}, now);
+    for (const [id, projectId, title, content] of [
+      ['a-body', 'a', 'needle title', 'needle proof'],
+      ['b-title', 'a', 'needle title', 'unrelated proof'],
+      ['c-foreign', 'b', 'other title', 'needle proof'],
+      ['g-global', null, 'other title', 'needle proof'],
+      ['x-parent', 'b', 'other title', 'needle proof']
+    ]) repo.upsertFromSource({id, projectId, title, sourceType: 'file', sourceId: `${id}.md`,
+      content: `${content}\n${content}`, chunks: [0, 1].map(index => ({content, locator: `block:${index}`})), embeddingPolicy: 'none'});
+    // A chunk in scope must not admit a document from another project.
+    db.prepare("UPDATE research_knowledge_chunks SET project_id='a' WHERE document_id='x-parent'").run();
+    const search = (projectId, limit = 20) => repo.searchKnowledge({request: {query: 'needle', projectId, limit}, vector: null});
+    const scoped = search('a');
+    assert.deepEqual(scoped.hits.map(hit => [hit.documentId, hit.locator]), [
+      ['a-body', 'block:0'], ['a-body', 'block:1'], ['g-global', 'block:0'], ['g-global', 'block:1'],
+      ['b-title', 'block:0'], ['b-title', 'block:1']
+    ]);
+    assert.equal(new Set(scoped.hits.map(hit => hit.chunkId)).size, 6);
+    assert.deepEqual(search('a', 2).hits.map(hit => hit.chunkId), scoped.hits.slice(0, 2).map(hit => hit.chunkId));
+    assert.ok(scoped.hits.every(hit => hit.content === (hit.documentId === 'b-title' ? 'unrelated proof' : 'needle proof')));
+    assert.deepEqual(search('missing').hits.map(hit => hit.documentId), ['g-global', 'g-global']);
+    assert.equal(search(null).hits.length, 10);
+    assert.equal(repo.searchKnowledge({request: {query: '  ', projectId: 'a', limit: 20}, vector: null}).hits.length, 0);
+  } finally {db.close();}
+});
 
 // Compare against the original exact search, including real sqlite-vec distances.
 // Text size deliberately resembles extracted chunks rather than tiny fixture strings.

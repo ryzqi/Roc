@@ -241,11 +241,11 @@ export class ResearchKnowledgeRepository {
     if (match.length === 0) return [];
     const titleMatch = `title : (${match})`;
     const args = [match, projectId, projectId, projectId, projectId, titleMatch, projectId, projectId, projectId, projectId, limit];
+    // Sort candidate identities and ranks; load text only for the selected chunks.
     const rows = this.db
       .prepare(
         `WITH content_hits AS MATERIALIZED (
-           SELECT c.id AS chunk_id, c.document_id, d.title, c.content, c.locator,
-                  d.source_type, d.source_id, c.chunk_index,
+           SELECT c.id AS chunk_id, c.document_id, c.chunk_index,
                   bm25(research_knowledge_chunks_fts) AS match_rank,
                   0 AS match_source
            FROM research_knowledge_chunks_fts
@@ -256,8 +256,7 @@ export class ResearchKnowledgeRepository {
              AND (? IS NULL OR (d.project_id = ? OR d.project_id IS NULL))
          ),
          title_hits AS MATERIALIZED (
-           SELECT c.id AS chunk_id, c.document_id, d.title, c.content, c.locator,
-                  d.source_type, d.source_id, c.chunk_index,
+           SELECT c.id AS chunk_id, c.document_id, c.chunk_index,
                   bm25(research_knowledge_documents_fts, 5.0, 0.0) AS match_rank,
                   1 AS match_source
            FROM research_knowledge_documents_fts
@@ -266,19 +265,25 @@ export class ResearchKnowledgeRepository {
            WHERE research_knowledge_documents_fts MATCH ?
              AND (? IS NULL OR (c.project_id = ? OR c.project_id IS NULL))
              AND (? IS NULL OR (d.project_id = ? OR d.project_id IS NULL))
-         )
-         SELECT chunk_id, document_id, title, content, locator, source_type, source_id
-         FROM (
-           SELECT * FROM content_hits
-           UNION ALL
-           SELECT title_hits.*
-           FROM title_hits
-           WHERE NOT EXISTS (
-             SELECT 1 FROM content_hits WHERE content_hits.chunk_id = title_hits.chunk_id
+         ),
+         selected AS MATERIALIZED (
+           SELECT * FROM (
+             SELECT * FROM content_hits
+             UNION ALL
+             SELECT title_hits.*
+             FROM title_hits
+             WHERE NOT EXISTS (
+               SELECT 1 FROM content_hits WHERE content_hits.chunk_id = title_hits.chunk_id
+             )
            )
+           ORDER BY match_source ASC, match_rank ASC, document_id ASC, chunk_index ASC
+           LIMIT ?
          )
-         ORDER BY match_source ASC, match_rank ASC, document_id ASC, chunk_index ASC
-         LIMIT ?`
+         SELECT selected.chunk_id, c.document_id, d.title, c.content, c.locator, d.source_type, d.source_id
+         FROM selected
+         JOIN research_knowledge_chunks c ON c.id = selected.chunk_id
+         JOIN research_knowledge_documents d ON d.id = c.document_id
+         ORDER BY selected.match_source ASC, selected.match_rank ASC, selected.document_id ASC, selected.chunk_index ASC`
       )
       .all(...args) as KnowledgeHitRow[];
     return rows.map((row) => toKnowledgeHit(row));
