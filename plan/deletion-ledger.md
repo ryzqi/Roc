@@ -20,7 +20,7 @@ S03 完成 D07/D08 与空摘要继续路径删除，见 [S03 执行报告](s03-e
 | D08 / S03 | [context-assembler.ts](../src/main/services/deep-agent/context/context-assembler.ts) 的 `allowedToolNames ?? [...]`；role executor 单独拼装硬约束/事实/来源 prompt | 唯一 context assembler、显式 permission intersection、分层冻结来源 | chat harness、stage executor、context/facts/budget tests | 无省略权限默认授权；Writer/Reviewer 隔离、来源失效与摘要不增权回归；complete（S03 工程，见 s03-execution-report.md） |
 | D09 / S01 | [quality-evaluation/runner.ts](../scripts/harness-eval/quality-evaluation/runner.ts) 与 data/protocol/audit 的 pilot-only 输入限制 | `loadQualityDatasetPackage` + `runQualityEvaluationWithJournal`，同一 runner 接受冻结 split 与隔离 adapter；原 16 项迁入测试 fixture | quality check CLI、run.mjs、context-long-task、quality-runner/evaluation/dataset/application-adapter tests | complete（工程）；删除 data.ts 与 runQualityPilot/qualityPilotAudit，生产旧 API 零引用；30 专项、1481 unit、94 harness、typecheck/build 通过；证据见 evaluation/engineering-verification.json |
 | D10 / S02～S07 | [research-tasks.ts](../src/shared/schemas/research-tasks.ts) 旧 Task event DTO；改动涉及的 [ipc-registry.ts](../src/shared/ipc-registry.ts) 与 [generated preload](../src/preload/ipc-api-generated.ts) 旧 DTO 签名 | 当前 envelope 与 execution/diagnostics 合同，同步生成 IPC | task-capabilities、`getTaskEvents/getTaskDiagnostics/listTasks`、[ResearchTasksSection.tsx](../src/renderer/management/sections/ResearchTasksSection.tsx)、fixtures/tests | `check:ipc`、消费者 typecheck、真实抽屉路径；不新增旧通道 alias；未变化的 IPC 方法不因重构盲删；complete（S07 工程）；生成 IPC 一致、94 renderer + 50 Electron 状态通过，见 s07-execution-report.md |
-| D11 / S06 | 无 DAG 的 stage 局部 scheduling 分支中被 node scheduler 替代的 dispatch/重试决策 | Task node scheduler + repository 原子 claim；领域 executor 保留执行 | `ResearchStageRuntime.schedule/linkAndSchedule`、review children、Task Controller | 无两份 scheduler；revision/lease/fence/依赖/取消恢复专项；默认新 scheduler concurrency=1；旧 schedule/executeChild 已删除，单/双槽同一 claim/pump；complete（S06 工程，见 s06-execution-report.md） |
+| D11 / S06 | 无 DAG 的 stage 局部 scheduling 分支中被 node scheduler 替代的 dispatch/重试决策 | Task node scheduler + repository 原子 claim；领域 executor 保留执行 | `ResearchStageRuntime.schedule/linkAndSchedule`、review children、Task Controller | 无两份 scheduler；revision/lease/fence/依赖/取消恢复专项；默认新 scheduler concurrency=1；旧 schedule/executeChild 决策已删除；linkAndSchedule 保留为关联与 DAG 建图入口，单/双槽同一 claim/pump；complete（S06 工程，见 s06-execution-report.md） |
 | D12 / S02 | [tool-effect-store.ts](../src/main/services/deep-agent/tool-effect-store.ts) 的 identity v0 正常业务 upgrade/read 分支 | 当前 identity v1 操作合同；旧行离线有限转换或只读审计隔离 | reserve/read/reconcile、[tool-effect-store tests](../tests/unit/tool-effect-store.test.mjs)、checkpoint/effect 恢复 | 未知副作用不自动重做；无法重建身份的历史回执保留、阻止继续；不能删除真实旧 receipt；complete（S02 工程，见 s02-execution-report.md） |
 
 ## S05 增补
@@ -45,3 +45,16 @@ Roc compactor、人工 Evidence relation、真实审批与 I/O 验证、单 AppS
 逐行登记新符号/路径、切换 SHA、消费者更新、实际删除范围、零引用检查与回归日志。
 旧代码清零不代表历史数据转换通过；后者单列在 [迁移台账](migration-ledger.md)。
 删除行只有替代合同、消费者、数据边界与验证全部成立才改为 `complete`。
+
+## S08 最终生产路径审计
+
+D01～D13 工程切换 complete。S08 的 `legacy-symbols.log`、
+`stage-query-index.log` 均为零命中；命令与目标路径固定在最终机器证据。
+`research-skills.ts` 只构造 Manifest registry，context assembler 的
+`allowedToolNames` 为必填并按交集筛选。stage-runtime 的 `linkAndSchedule`
+仍存在，内部完成 link/bind/graph dependencies 后调用唯一 `pump`；不将有效入口
+误记为已删名称。独立 systematic review 的 queryIndex、离线历史转换和旧版测试
+有明确不同责任，保留。未删除用户研究数据或历史失败证据。
+
+S08 没有新增生产 A/B flag、失败候选算法或临时调试路径。调试/演练脚本仅在
+忽略的 `.artifacts/research-harness/S08/`；正式测试继续验证实际拒绝与恢复行为。

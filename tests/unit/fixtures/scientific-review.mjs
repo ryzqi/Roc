@@ -1,7 +1,7 @@
 import {withResearchTestWorker, createResearchFixture, captureResearchArtifactVersions} from './research-test-kit.mjs';
 
 const plain = {title: 'Review', markdown: 'Controlled engineering fixture.', claims: [], sections: [], verdict: 'uncertain'};
-export function createScientificReviewFixture(api, {contradiction = false} = {}) {
+export function createScientificReviewFixture(api, {contradiction = false, verifierVerdict = 'qualifies'} = {}) {
   const f = createResearchFixture(api, 'writing');
   f.repository.knowledge.upsertFromSource({id: 'scientific-source', projectId: f.project.id, sourceType: 'file',
     sourceId: 'negative.md', title: 'Negative result', content: 'A negative result with uncertainty.',
@@ -56,6 +56,25 @@ export function createScientificReviewFixture(api, {contradiction = false} = {})
     findings: [{id: 'f1', severity: 'major', category: 'method_fit', claimIds: [f.claim.id], references: [f.reference],
       observation: 'State the uncertainty limit.', action: 'Retain uncertainty in Results.', acceptance: 'Exact qualifying text remains.'}],
     noFindingsRationale: null};
+  if (verifierVerdict === 'unrelated' || verifierVerdict === 'unable_to_verify') {
+    const output = f.output;
+    f.output = child => {
+      const value = output(child);
+      if (value.kind !== 'verifier') return value;
+      const suggestion = value.suggestions[0];
+      suggestion.verdict = verifierVerdict;
+      suggestion.rationale = verifierVerdict === 'unrelated'
+        ? 'The examined material does not address this claim.' : 'The required source could not be examined.';
+      suggestion.supporting = []; suggestion.negativeResults = []; suggestion.alternativeExplanations = [];
+      suggestion.conditions = [{criterion: 'direct_source', status: 'missing', rationale: suggestion.rationale, references: []}];
+      suggestion.limitations = [suggestion.rationale];
+      if (verifierVerdict === 'unable_to_verify') {
+        suggestion.coverage.examinedEvidenceIds = [];
+        suggestion.coverage.unexaminedReason = 'Required source inspection was unavailable.';
+      }
+      return value;
+    };
+  }
   f.complete = () => {
     const completed = f.children.map(child => f.worker(child.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {...plain, scientificReview: f.output(child)})));
     f.worker(f.parent.id, workerRunId => f.repository.runs.setReviewReports(workerRunId, f.project.id, completed));

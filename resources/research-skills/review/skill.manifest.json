@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "roc-peer-review",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "stage": "review",
   "description": "独立评估论文的方法、证据与表达并给出可执行修订意见。",
   "entry": {
@@ -27,8 +27,8 @@
     "hash": "7898f7a36053375c323b8817abf2ff30409b58e4d94d669a407e83145c74d310"
   },
   "outputs": {
-    "schema": "researchStageOutput/v3",
-    "hash": "36947e6796ca5f0a44dcc89f5dc3b968d4447de79a1c9ea74b56460385fee13d",
+    "schema": "researchStageOutput/v4",
+    "hash": "632dc56d8e1396241f746ab068906ffc07afb2439fd07bc771466bc31aaf13ec",
     "artifactKind": "review_report"
   },
   "requiredCapabilities": [

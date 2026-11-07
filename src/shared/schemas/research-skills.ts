@@ -20,7 +20,7 @@ export const researchSkillManifestSchema = z.object({
   source: z.object({kind: z.enum(['project', 'third_party']), origin: z.string().min(1).max(500),
     revision: z.string().min(1).max(128), hash}).strict(),
   inputs: z.object({schema: z.literal('researchStageRunStartRequest/v1'), hash}).strict(),
-  outputs: z.object({schema: z.literal('researchStageOutput/v3'), hash, artifactKind: researchArtifactKindSchema}).strict(),
+  outputs: z.object({schema: z.literal('researchStageOutput/v4'), hash, artifactKind: researchArtifactKindSchema}).strict(),
   requiredCapabilities: uniqueCapabilities,
   forbiddenEffects: z.array(z.enum(['human_approval', 'final_delivery', 'permission_change', 'host_execution',
     'evidence_write', 'workspace_write', 'production_execute'])).min(1),

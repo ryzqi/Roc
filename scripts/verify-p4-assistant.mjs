@@ -14,7 +14,7 @@ import { createGateRecorder, finishGate, navigate, prepareArtifactDir } from './
  * 取消后是否回到可提交状态、关面板/切项目后是否恢复、500 条消息时虚拟化是否真的生效。
  * 静态阅读与单测都不覆盖这些（P3 的实测已经证明：类型正确、单测全绿、用户看到的是坏的）。
  *
- * 它**不**替代 P10 的 smoke：这里只覆盖 P4 的闸门，并显式以 `ROC_SMOKE_TARGET=dist` 运行
+ * 它覆盖 P4 闸门，默认 `ROC_SMOKE_TARGET=dist`；发布验收显式指定 `packaged`。
  * （后者很重要：`resolveSmokeTarget` 默认优先用 `release/mac-arm64/Roc.app`，
  * 那可能是过期的打包产物，P3 已经踩过两次）。
  *
@@ -42,7 +42,7 @@ seedSmokeWorkspace(workspaceRoot, remoteRoot);
 seedSmokeSkillSource(skillSourceRoot);
 
 const smokeProvider = await startSmokeProvider({});
-const target = resolveSmokeTarget({ env: { ...process.env, ROC_SMOKE_TARGET: 'dist' } });
+const target = resolveSmokeTarget({ env: { ...process.env, ROC_SMOKE_TARGET: process.env.ROC_SMOKE_TARGET ?? 'dist' } });
 console.log(`P4 验收闸门实测 · target=${target.kind} · renderer=next · provider=${smokeProvider.endpoint}\n`);
 
 let app;
@@ -440,6 +440,11 @@ try {
     fail('0 准备', '创建项目', project.error.message);
   }
   const projectId = project.data.id;
+  const budget = await page.evaluate(projectId => window.roc.research.saveProjectBudget({
+    projectId, expectedRevision: 0,
+    limits: { maxTotalTokens: 10000000, maxModelCalls: 2000, maxConcurrentModelCalls: 3, maxCostMicrousd: null }
+  }), projectId);
+  if (!budget.ok) fail('0 准备', '配置本地夹具项目预算', budget.error.message);
 
   /** Resolves when the given run reaches a terminal state, via the live event stream. */
   await trackFinishedRuns(page);
@@ -705,7 +710,7 @@ try {
   // ---- 闸门 6：500 条消息时虚拟化仍生效 ----------------------------------------
   await navigate(page, `page=research&project=${projectId}&view=latex&assistant=1`);
   await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 20_000 });
-  const seeding = await seedManyRuns(page, { threadId, projectId, workspacePath: workspaceRoot, runs: gate6Runs });
+  const seeding = await seedManyRuns(page, { threadId, projectId, runs: gate6Runs });
   assertCheck(
     '6 虚拟化',
     `会话累积到 ${gate6TargetMessages} 条消息（${seeding.runs} 轮 run）`,
@@ -870,17 +875,16 @@ try {
  * `getActiveRun` per run: polling would add an IPC round trip per iteration to a loop that is
  * already the slowest part of the harness.
  */
-async function seedManyRuns(page, { threadId, projectId, workspacePath, runs }) {
+async function seedManyRuns(page, { threadId, projectId, runs }) {
   const startedAt = Date.now();
   for (let index = 1; index <= runs; index += 1) {
     const started = await page.evaluate(
-      async ({ input, mode, threadId: thread, projectId: project, workspacePath: workspace }) => {
+      async ({ input, mode, threadId: thread, projectId: project }) => {
         const result = await window.roc.chat.startRun({
           input,
           mode,
           threadId: thread,
           researchProjectId: project,
-          workspacePath: workspace,
           enabledCapabilities: { mcpServers: [], skills: [] }
         });
         return result.ok ? { runId: result.data.runId } : { error: result.error.message };
@@ -889,8 +893,7 @@ async function seedManyRuns(page, { threadId, projectId, workspacePath, runs }) 
         input: p4Prompt(`闸门 6 第 ${index} 轮 ROC-P4-MODE:many`),
         mode: 'chat',
         threadId,
-        projectId,
-        workspacePath
+        projectId
       }
     );
     if (started.error !== undefined) {

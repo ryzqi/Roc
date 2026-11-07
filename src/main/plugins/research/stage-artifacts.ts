@@ -2,7 +2,7 @@ import type { ResearchStageState } from '../../../shared/types';
 import type { ResearchRepository } from './repository';
 import { getResearchStageRoleProfile } from './role-profiles';
 import { requireSearchPlanContent } from './search-strategy';
-import {assertCurrentExportScientificReview} from './export-scientific-review';
+import {assertCurrentExportReviews} from './export-validation';
 import {currentArtifactScientificReviews} from './artifact-scientific-reviews';
 
 export function assertResearchStageArtifacts(
@@ -30,7 +30,7 @@ export function assertResearchStageArtifacts(
   if (state.stage === 'export') {
     repository.reviews.requireForStage(projectId, 'export');
     for (const id of state.artifactIds) {
-      assertCurrentExportScientificReview(repository, repository.exports.forArtifact(repository.getArtifact(id)));
+      assertCurrentExportReviews(repository, repository.exports.forArtifact(repository.getArtifact(id)));
     }
   }
 }

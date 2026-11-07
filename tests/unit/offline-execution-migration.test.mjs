@@ -37,7 +37,11 @@ function fixture(fromS02 = false, fromS04 = false, fromS05 = false) {
   const now=()=> new Date().toISOString();
   const tasks=new api.ResearchTaskRepository(agent,now);
   const repository=new api.ResearchRepository(research,tasks,now);
-  const project=repository.createProject({title:'Migration fixture',description:'isolated',workspacePath:join(root,'workspace')});
+  const workspacePath=join(root,'workspace');mkdirSync(workspacePath,{recursive:true});
+  const workspaceSentinel=join(workspacePath,'sentinel.txt');
+  writeFileSync(workspaceSentinel,'ROC_WORKSPACE_SENTINEL_v1\n');
+  const workspaceSentinelHash=digest(readFileSync(workspaceSentinel));
+  const project=repository.createProject({title:'Migration fixture',description:'isolated',workspacePath});
   const run=repository.runs.begin({projectId:project.id,expectedStage:'discovery',instruction:'private input',requestId:'old-request'});
   repository.runs.terminate(run.id,project.id,'interrupted','stopped-for-migration');
   const current=tasks.requireExecution('stage',run.id,project.id);
@@ -76,7 +80,7 @@ function fixture(fromS02 = false, fromS04 = false, fromS05 = false) {
   const eventsBefore=agent.prepare('SELECT * FROM research_task_events').all();
   agent.close();research.close();
   const bytes=Object.fromEntries(definitions.map(([name])=>[name,digest(readFileSync(location(source,name)))]));
-  return {root,source,destination:join(root,'converted'),project,run,budgetBefore,eventsBefore,bytes,
+  return {root,source,destination:join(root,'converted'),project,run,budgetBefore,eventsBefore,bytes,workspacePath,workspaceSentinel,workspaceSentinelHash,
     close:()=>rmSync(root,{recursive:true,force:true})};
 }
 test('offline conversion preserves source and cold backup, fences historical identity and retains unknown budget',async()=>{
@@ -86,6 +90,7 @@ test('offline conversion preserves source and cold backup, fences historical ide
     assert.equal(report.status,'complete');assert.equal(report.databases.length,7);
     for(const [name] of definitions) assert.equal(digest(readFileSync(location(f.source,name))),f.bytes[name]);
     assert.equal(readFileSync(join(f.destination,'current/private-config.json'),'utf8'),'preserved-local-fixture');
+    assert.equal(digest(readFileSync(f.workspaceSentinel)),f.workspaceSentinelHash);
     const backup=new Database(location(join(f.destination,'backup'),'agent'));
     assert.equal(backup.prepare('SELECT current_version FROM schema_metadata').pluck().get(),19);
     assert.deepEqual(backup.prepare('SELECT * FROM agent_budget_calls ORDER BY call_id').all(),f.budgetBefore);
@@ -98,6 +103,10 @@ test('offline conversion preserves source and cold backup, fences historical ide
       assert.deepEqual(calls,f.budgetBefore.map(row=>({...row,state:row.state==='reserved'?'unknown':row.state})));
       const tasks=new api.ResearchTaskRepository(agent);
       const repository=new api.ResearchRepository(research,tasks);
+      // Cold reopen uses the migrated current databases while the user workspace
+      // remains the exact pre-migration byte sequence.
+      assert.equal(repository.getProject(f.project.id).workspacePath,f.workspacePath);
+      assert.equal(digest(readFileSync(repository.getProject(f.project.id).workspacePath + '/sentinel.txt')),f.workspaceSentinelHash);
       repository.runs.reconcileTaskLinks();
       const association=tasks.requireExecution('stage',f.run.id,f.project.id);
       assert.equal(association.schemaVersion,3);assert.equal(association.associationState,'historical');

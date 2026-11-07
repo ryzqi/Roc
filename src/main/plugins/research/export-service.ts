@@ -1,3 +1,5 @@
+import {assertCurrentExportReviews, captureExportValidation} from './export-validation';
+import {exportValidationPath} from '../../../shared/schemas/research-export-validation';
 import { constants, linkSync } from 'node:fs';
 import { copyFile, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
@@ -12,7 +14,7 @@ import { ResearchProcessError } from './process-runner';
 import { ResearchBackgroundJobs, ResearchJobSession } from './research-job-session';
 import { createResearchDirectory, readResearchFile, researchContentHash, researchWorkspace } from './research-files';
 import type { ResearchRepository } from './repository';
-import {assertCurrentExportScientificReview, captureExportScientificReview, exportScientificReviewPath, serializePublicExportScientificReview} from './export-scientific-review';
+import {captureExportScientificReview, exportScientificReviewPath, serializePublicExportScientificReview} from './export-scientific-review';
 import {RocDomainError} from '../../services/errors';
 import type {ResearchExportInputsRequest} from '../../../shared/schemas/research-exports';
 import type {ResearchExportInputs} from '../../../shared/schemas/research-export-publication';
@@ -109,7 +111,7 @@ export class ResearchExportService {
       for (const record of records) {
         if (record.sources === null) throw new Error('research_export_sources_required');
         this.sources.assertCurrent(record.request, record.sources);
-        assertCurrentExportScientificReview(this.repository, record);
+        assertCurrentExportReviews(this.repository, record);
       }
     });
   }
@@ -149,7 +151,7 @@ export class ResearchExportService {
       if (files.reduce((sum, file) => sum + file.size, 0) > 512 * 1024 * 1024) throw new Error('research_zenodo_upload_limit');
       this.requireActive(signal);
       this.sources.assertCurrent(record.request, record.sources);
-      assertCurrentExportScientificReview(this.repository, record);
+      assertCurrentExportReviews(this.repository, record);
       const exportHash = researchContentHash(JSON.stringify(record));
       if (researchContentHash(JSON.stringify(this.requireApproved(record.projectId, record.id))) !== exportHash) throw new Error('research_zenodo_inputs_changed');
       const value = zenodoInputsSchema.omit({contentHash: true}).parse({
@@ -197,7 +199,7 @@ export class ResearchExportService {
         await hashExportArchive(temporary, { ...record.archive, path: 'export.zip' }, signal);
         this.requireActive(signal);
         this.sources.assertCurrent(record.request, record.sources);
-        assertCurrentExportScientificReview(this.repository, record);
+        assertCurrentExportReviews(this.repository, record);
         this.requireApproved(record.projectId, record.id);
         // 最后只执行同一文件系统上的排他链接，已有文件不会被替换；检查与提交之间不让出事件循环。
         try { linkSync(staged, destinationPath); }
@@ -239,10 +241,11 @@ export class ResearchExportService {
       const toolchain = await this.tools.status();
       if (!toolchain.available || toolchain.versions === null) throw new Error('research_export_toolchain_unavailable');
       await buildExportFiles({ record, sources, writer, repository: this.repository, tools: this.tools, scratch, signal });
+      await writer.write(exportValidationPath, serializeResearchPublicProjection(captureExportValidation(this.repository, sources, record.request, writer.list())));
       await writer.write(researchCrateProfilePath, researchCrateProfileHtml);
       await writer.write(researchCrateMetadataPath, serializeResearchCrate(buildExportCrate(this.repository, record, sources, writer.list())));
       await writer.write('manifest.json', `${JSON.stringify(researchExportManifestSchema.parse({
-        version: 3, exportId: record.id, request: projectResearchPublicValue(record.request), sourceHash, toolchainHash,
+        version: 4, exportId: record.id, request: projectResearchPublicValue(record.request), sourceHash, toolchainHash,
         toolchainVersions: toolchain.versions, archiveBuilder: archiveBuilderProvenance, files: writer.list()
       }))}\n`);
       await verifyExportPublicBundle(writer.root, {...record, sources, sourceHash, toolchainHash, files: writer.list()}, signal);
@@ -250,7 +253,7 @@ export class ResearchExportService {
       const current = await this.sources.capture(record.request, signal);
       if (exportSourceHash(current) !== sourceHash || await this.tools.identity() !== toolchainHash) throw new Error('research_export_sources_changed');
       this.requireActive(signal); this.sources.assertCurrent(record.request, sources);
-      assertCurrentExportScientificReview(this.repository, {...record, sources, sourceHash, files: writer.list()});
+      assertCurrentExportReviews(this.repository, {...record, sources, sourceHash, files: writer.list()});
       this.repository.exports.finish(record.projectId, record.id, { status: 'ready', sources, sourceHash, toolchainHash, files: writer.list(), archive, error: null });
     } catch (error) {
       if (writer !== null) {
@@ -271,7 +274,7 @@ export class ResearchExportService {
     const current = await this.sources.capture(record.request, signal);
     validateExportPublication(record.request.publicationReview, collectExportInputs(this.repository, current));
     if (exportSourceHash(current) !== record.sourceHash || exportSourceHash(record.sources) !== record.sourceHash) throw new Error('research_export_sources_changed');
-    assertCurrentExportScientificReview(this.repository, record);
+    assertCurrentExportReviews(this.repository, record);
     await this.verifyContent(record, signal);
   }
 

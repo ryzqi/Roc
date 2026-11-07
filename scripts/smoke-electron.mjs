@@ -61,7 +61,7 @@ const { dataRoot, workspaceRoot, skillSourceRoot, remoteRoot } = await createSmo
 seedSmokeWorkspace(workspaceRoot, remoteRoot);
 seedSmokeSkillSource(skillSourceRoot);
 const smokeProvider = await startSmokeProvider({});
-const target = resolveSmokeTarget({ env: { ...process.env, ROC_SMOKE_TARGET: 'dist' } });
+const target = resolveSmokeTarget({ env: { ...process.env, ROC_SMOKE_TARGET: process.env.ROC_SMOKE_TARGET ?? 'dist' } });
 console.log(`新壳 smoke · target=${target.kind} · provider=${smokeProvider.endpoint} · workspace=${workspaceRoot}\n`);
 
 let app;
@@ -370,7 +370,7 @@ try {
   if (full && failed.length === 0) {
     for (const script of ['scripts/verify-p4-assistant.mjs']) {
       console.log(`\n=== 深度路径：${script}`);
-      const child = spawnSync('node', [script], { stdio: 'inherit', env: { ...process.env, ROC_SMOKE_TARGET: 'dist' } });
+      const child = spawnSync('node', [script], { stdio: 'inherit', env: { ...process.env, ROC_SMOKE_TARGET: process.env.ROC_SMOKE_TARGET ?? 'dist' } });
       if (child.status !== 0) {
         console.error(`${script} 失败（exit ${child.status}）`);
         process.exitCode = 1;

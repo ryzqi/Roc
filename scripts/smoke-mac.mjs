@@ -88,7 +88,7 @@ try {
       dispose?.();
       unwrap(await window.roc.terminal.closeSession({ sessionId: session.id }));
     }
-    const shell = unwrap(await window.roc.shell.execute({ command: 'printf ROC_IPC_SHELL_OK', cwd: workspacePath, source: 'terminal' }));
+    const shell = unwrap(await window.roc.shell.execute({ command: 'printf ROC_IPC_SHELL_OK', cwd: workspacePath }));
     return { preview: preview.content, terminalShell: session.shell, terminal: 'ROC_IPC_PTY_OK', shell };
   }, workspaceRoot);
   assert.equal(workflow.preview, 'ROC_FILE_PREVIEW_OK');

@@ -2,7 +2,9 @@
 
 优先级：P1。依赖：S01～S07 的相应工程/科学验收。
 来源：WP-11、全量验收、RH-18/RH-19。
-实施状态：pending。建议时间：第 15～16 周；外部验收按条件完成。
+实施状态：complete（本地工程）；`Verified passing`。六结论合同、导出闭包、
+迁移/冷恢复和最终包完整助手/PDF/布局验收通过；科学/外部条件未满足。实际证据见
+[执行报告](s08-execution-report.md) 和 [最终分项验收](final-acceptance.md)。
 
 ## 目标与关口
 
@@ -21,38 +23,43 @@
 
 ## 按顺序执行
 
-- [ ] **RH-18.1 闭包核对**：当前 artifact → claim → evidence/source →
+- [x] **RH-18.1 闭包核对**：当前 artifact → claim → evidence/source →
   experiment/data/code → figure/manuscript → export 逐关系验证
   精确文件 bytes、ID/ref、版本、hash、许可、人工审核和语义建议有效性。
-- [ ] **RH-18.2 Validation Manifest**：导出机器清单包含确定性检查、
+- [x] **RH-18.2 Validation Manifest**：导出机器清单包含确定性检查、
   未确认语义主张、实验可复现层级、不可分发依赖、metadata-only 外链、
   source/artifact/gate/Skill versions 与用户决定引用。
-- [ ] **RH-18.3 真 ZIP 回读**：打开实际 archive，验证所有文件和元数据闭包，
+- [x] **RH-18.3 真 ZIP 回读**：打开实际 archive，验证所有文件和元数据闭包，
   防重复/越界 path、错误 hash、失效 locator、未知许可和私有字段泄漏。
   未许可正文/附件不得打包，metadata-only 不伪造为已收录全文。
-- [ ] **RH-18.4 外部动作分开**：本地 prepare/export 完成不调用 Zenodo/其他发布。
+- [x] **RH-18.4 外部动作分开**：本地 prepare/export 完成不调用 Zenodo/其他发布。
   sandbox 集成按具体账号、目标、材料、预算/网络授权后验收；
   正式公开发布独立批准，不复用 stage 或科研质量闸门。
-- [ ] **RH-19.1 全链路案例**：至少一条研究问题 → perspective draft →
+- [x] **RH-19.1 全链路案例**：至少一条研究问题 → perspective draft →
   人工冻结检索 → 有依赖读取/证据综合 → 方法/已有实验 →
   文稿核验 → finding/修订 → 人工接受 → 本地导出的真实工作流。
   加入 provider partial、来源替换、Worker crash、取消/继续、
   过期 approval、反证/负结果和修订失败分支。
-- [ ] **RH-19.2 迁移/冷恢复**：隔离旧版本数据备份 → 离线转换 → 新版本启动 →
+- [x] **RH-19.2 迁移/冷恢复**：隔离旧版本数据备份 → 离线转换 → 新版本启动 →
   task/event/evidence/receipt 检查 → 停机恢复匹配旧版本与备份。
   新产生外部 effect 不因 DB 回滚撤销，必须先对账；用户 workspace sentinel 字节不变。
-- [ ] **RH-19.3 删除收尾**：逐项关闭 deletion ledger，旧接口/alias/decoder、
+- [x] **RH-19.3 删除收尾**：逐项关闭 deletion ledger，旧接口/alias/decoder、
   raw Skill、旧调度/UI、生产 A/B flags、失败候选算法和调试代码零引用。
   不通过删回归测试掩盖行为变化，不批量删历史研究数据。
 - [ ] **RH-19.4 科学/性能报告**：完整 200 样本与专项实验按冻结协议比较，
   报告族回退、置信区间、失败、未知费用、blind human review、
   retrieval/context/DAG 的质量与耗时/费用。没有独立材料不宣称科学收益。
-- [ ] **RH-19.5 Mac package**：实际 arm64 .app 打包并 smoke，
+- [x] **RH-19.5 Mac package**：实际 arm64 .app 打包并 smoke，
   核验 native dependencies/resources、启动、项目门户、助手运行、
   任务观察、PDF protocol、取消恢复、键盘和深浅主题。
-- [ ] **RH-19.6 发布材料**：完成变更说明、迁移/冷恢复手册、已知限制、
+- [x] **RH-19.6 发布材料**：完成变更说明、迁移/冷恢复手册、已知限制、
   数据/模型/Skill/protocol 版本、license、成本/隐私和停止执行办法。
   是否发布作为具体产物与授权的独立决定，不因计划结束自动上传。
+
+RH-18.4 勾选表示本地导出与外部发布已分开，真实外部发布未运行。RH-19.1 使用
+真实生产链路与合成 provider/资料，不是独立科研实证。最终源码 P0 19/19；
+最终包基础 14/14、P4 62/62、原生 smoke、PDF 和 50 布局状态通过，失败及补验记录保留。
+RH-19.4 缺独立数据/双审/live 授权；本地工程完成并提交，不将分项通过合并成总体完成。
 
 ## 交付物
 

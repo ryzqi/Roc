@@ -25,7 +25,7 @@ const references = scientificEvidenceReferenceSchema.array().max(100);
 export const scientificSuggestionSchema = z.strictObject({
   claimId: id, claimVersion: z.number().int().positive(), claimHash: hash,
   claimKind: z.enum(scientificClaimKinds), researchType: z.enum(['review', 'method', 'experiment']),
-  verdict: z.enum(['supports', 'contradicts', 'qualifies', 'insufficient']), rationale: note,
+  verdict: z.enum(['supports', 'qualifies', 'contradicts', 'unrelated', 'insufficient', 'unable_to_verify']), rationale: note,
   supporting: references, counterevidence: references, negativeResults: references,
   alternativeExplanations: z.array(z.strictObject({explanation: note, references})).max(30),
   conditions: z.array(z.strictObject({

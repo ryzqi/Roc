@@ -1,6 +1,7 @@
 # 验收、工作包追踪与证据矩阵
 
-本文件中的命令是后续执行入口，不表示本轮已运行。阶段任务详见对应阶段页。
+本文件定义接受标准与命令入口，不代表每条已运行。S08 的实际结果、分轮补验和
+剩余条件见 [最终分项验收](final-acceptance.md) 与 [S08 执行报告](s08-execution-report.md)。
 全部命令默认从 `/Users/Apple_501/Desktop/Roc/Roc` 执行，物理路径为
 `/Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc`。
 

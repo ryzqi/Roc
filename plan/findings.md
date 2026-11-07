@@ -272,3 +272,69 @@ tool，其他输入仍进入消息流；Core 1.2.20 的 assembled output 无条�
 - S08 需核对现有 schema3 export manifest 和 schema5 scientific-review 对 S04 语义
   finding/方法建议、Skill/gate 版本和复现等级的闭包，不新建第二套导出系统。
 - 本次工具组合输出曾截断；已拆分重新读取 S08、权限矩阵、技能和最终日志。
+
+### S08 导出闭包
+
+- 科学快照 schema5 原来没有 S04 verifier/reviewer；新增独立 validation v1 投影，
+  主 manifest v4 封存它，RO-Crate 继续用同一 writer 文件清单，无自引用 hash。
+- currentness 调用方除 service 外还有 export-repository.finish/publish 和 stage-artifacts；
+  统一组合校验，历史语义单元测试保留其原范围。
+- 两个 Electron smoke 脚本强制 dist，会让 packaged 检查名不副实；允许显式
+  ROC_SMOKE_TARGET，默认仍为 dist。
+
+### S08 恢复补验
+
+- P0 冷重开两例采用 configureRocDatabaseConnection 初始化两个连接后 2/2；
+  实际运行时已注册函数，失败来自夹具绕过生产连接入口。
+- 真实迁移第七轮通过，证据 migration-app-2026-11-07T06-51-04.282Z：
+  agent20/research63 -> agent21/research64；原事件 envelope 字符串逐字节不变，
+  转换阶段追加 historical_execution_not_resumable（并非启动随意新增）；新版启动
+  无额外事件，历史执行不能续跑。1 effect/6 budget 非空且 hash 一致，恢复匹配旧版
+  后事件/Task/证据/回执与停机旧状态一致，用户 sentinel 不变。
+- 演练使用真实旧/新 Electron、本地合成 provider；旧研究阶段故障终态也保留。
+  它证明数据与恢复合同，不是科学成功或真实外部服务互操作。
+- P4 第二项目只验证项目切换/隔离，不发新 run，无需额外预算。
+
+- Packaged PDF 初轮 renderer fetch 失败，截图为查看器加载初期黑底；尚不能说明
+  PDF 正文加载成功。改由 Electron net.fetch 对实际 protocol handler 检查 bytes，
+  同时采集 PDF frame 加载状态与截图，不放宽 CSP。
+
+- PDF 第二轮 protocol net.fetch 返回 200/application/pdf，16547 bytes 与原 SHA256
+  完全一致。已人工查看 pdf.png：真实编译文稿标题、正文、A/B 图表显示正常；
+  Chromium PDF extension/embed 已创建，关闭按钮 Enter 生效。无需改生产 protocol。
+  首轮 renderer 直接 fetch 与实际 iframe 消费不同，保留失败记录。
+
+- 最终候选包 release/s08/mac-arm64/Roc.app 的 mac smoke passed=true，
+  redundantPackages=[]；arm64 --strict 20/20。最终设置截图已目视复核。
+- 当前 dist full smoke：14/14 + 62/62，250播种轮、516消息、窗口116/DOM16；
+  崩溃恢复工具执行一次。它与首包/最终候选包的运行目标分开登记。
+- 最终源码对冻结1524文件有5项变化，集中在依赖分类和测试夹具；导出生产代码
+  未变。锁文件原冻结未包含，最终证据单独补 hash，不能声称旧集已经覆盖它。
+
+- 统一合同要求六种 verdict；原四种 schema 导致 unrelated/unable_to_verify 在
+  runs.complete 写入前被拒绝。不是 schema 之外的来源检查或序列化丢失。
+  补齐枚举和标签，不改变支持条件/反证要求，也不改科学规则版本。
+- 用户已允许本次 Keychain；原首包完整 smoke 实际在崩溃恢复关口失败，后续
+  需对当前源码新包重验。既有最终包/五文件漂移结论已过时，完成后更新证据。
+
+- Skill registry在每次阶段开始验证共享 researchStageOutput JSON schema hash。
+  六结论增量也会影响所有阶段，故11份 manifest版本1.3.0/output v4是必要消费者
+  更新；旧pin不能静默继续，已有报告按既有skill_changed规则失效，需重新核验。
+
+### S08 最终复核（2026-11-07）
+
+上面的“最终候选 release/s08”及“五文件漂移”只描述六结论修复前的中间轮，现已失效。
+最终候选为 release/mac-arm64/Roc.app；sourceHashes/changedSinceFrozen 以当前
+final-verification.json 为准，覆盖六结论 schema/UI、Skill v4/1.3.0及布局审查脚本。
+
+用户逐次允许新签名包的钥匙串请求后，最终 packaged full smoke 14/14 + 62/62通过，
+真实 SIGKILL 后从检查点恢复，continued=1、ls-starts=1。首包崩溃恢复失败原因未确定，
+原日志/报告保留，不将新的通过结果反推为已诊断旧失败。
+最终全量 unit1590、P0 19、harness94、定向unit42与renderer10、build/typecheck/IPC/chunks、
+mac/native/arm64全部通过；PDF protocol与正文/图表、Enter关闭通过。
+
+布局首轮在 dark drawers-edge被display-metrics-changed纠正到1184px。
+隔离probe在原生 minimum仍为380时稳定复现1099→1184，证明测试窗口覆盖与真实
+显示器纠正冲突。改成renderer viewport模拟，原生minimum保持1184×640，且每个
+视口主动发display事件并断言精确renderer宽度及native约束；50状态、cut0/overflow0通过。
+产品窗口源码未变，最后的修改只影响验收脚本和文档，无需重建相同包。

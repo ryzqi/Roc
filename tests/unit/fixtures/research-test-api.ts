@@ -28,6 +28,7 @@ export { registerResearchFigureCapabilities } from '../../../src/main/plugins/re
 export { registerResearchExportCapabilities } from '../../../src/main/plugins/research/export-capabilities';
 export { agentMigrations, researchMigrations } from '../../../src/main/infrastructure/database-schemas';
 export { applyDatabaseMigrations } from '../../../src/main/infrastructure/database-migrations';
+export { configureRocDatabaseConnection } from '../../../src/main/infrastructure/database-pragmas';
 export { compileRunCapabilityManifest, bindMcpToolContracts } from '../../../src/main/plugins/agent/run-capability-manifest';
 export { createRunBudget, createRunExecutionSnapshot } from '../../../src/main/plugins/agent/run-execution-snapshot';
 export { parseIpcRequestArgs } from '../../../src/shared/ipc-registry';
@@ -238,3 +239,7 @@ export {AgentRunTelemetryAccumulator} from '../../../src/main/plugins/agent/run-
 export {AgentRunEventLog} from '../../../src/main/plugins/agent/run-event-log';
 export {scientificReviewHash} from '../../../src/main/plugins/research/verification/scientific-review';
 export {scientificReviewOutputSchema, scientificCriteria} from '../../../src/shared/schemas/research-scientific-review';
+
+export {captureExportValidation, assertCurrentExportValidation, assertCurrentExportReviews} from '../../../src/main/plugins/research/export-validation';
+export {exportValidationPath} from '../../../src/shared/schemas/research-export-validation';
+export {serializeResearchPublicProjection} from '../../../src/main/plugins/research/export-public-projection';

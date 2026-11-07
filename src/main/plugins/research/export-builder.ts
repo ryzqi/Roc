@@ -186,6 +186,7 @@ export async function buildExportFiles(input: { record: ResearchExportExecution;
     `source/${join(entryDirectory, 'figures')} 保留 PNG、SVG、PDF；provenance 保存批准正文、公开来源投影和明确获准交付的原件。\n` +
     'arXiv 提交预检的结论在 logs/arxiv-preflight.json（警告不阻断导出；被剪掉的文件也记在那里）。\n' +
     '复现时使用 manifest.json 记录的固定科研工具链，在 source 目录编译指定入口；保持仅使用本地 TeX bundle。\n' +
+    'provenance/validation.json 记录语义建议、人工审核引用、历史 Skill 固定版本及仅元数据依赖；实验未重新运行，科学复现未验证。\n' +
     '文件字节哈希位于 manifest.json；provenance/sources.json 保存公开投影及独立的原始 JSON 摘要。\n' +
     'ro-crate-metadata.json 声明作者、许可、原件或仅元数据交付、环境、参数及审批绑定；仅元数据资源须按获取说明另行取得。\n');
 }

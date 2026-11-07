@@ -51,7 +51,8 @@ async function capture(page, id) {
   const audit = await auditLayout(page, `${currentTheme}-${id}`);
   audit.clip = await page.evaluate(`(${clipSource})({viewport: true})`);
   audit.theme = currentTheme;
-  audit.minimumOverridden = audit.viewport.width < nativeMinimum[0];
+  audit.viewportEmulated = true;
+  audit.belowNativeMinimum = audit.viewport.width < nativeMinimum[0];
   audits.push(audit);
   assert.deepEqual(audit.viewportOverflow, [], `${id}: viewport overflow`);
   assert.equal(audit.clip.cut, 0, `${id}: clipped shadows`);
@@ -87,9 +88,8 @@ try {
   const page = await app.firstWindow();
   const browserWindow = await app.browserWindow(page);
   nativeMinimum = await browserWindow.evaluate(window => window.getMinimumSize());
-  // Record the actual product minimum. Narrow sizes exercise the built renderer in a
-  // disposable Electron window; they do not establish a supported native minimum.
-  await browserWindow.evaluate(window => window.setMinimumSize(380, 640));
+  // Preserve the product minimum. Emulate renderer viewports below it so native
+  // display corrections cannot race a test-only window minimum override.
   await page.emulateMedia({reducedMotion: 'reduce'});
   page.on('console', (message) => {
     if (message.type() === 'error') {
@@ -130,14 +130,22 @@ try {
   await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
   for (const viewport of VIEWPORTS) {
     await browserWindow.evaluate((window, size) => {
-      window.setBounds({ x: window.getBounds().x, y: window.getBounds().y, width: size.width, height: size.height });
+      const [minWidth, minHeight] = window.getMinimumSize();
+      window.setBounds({ ...window.getBounds(), width: Math.max(size.width, minWidth), height: Math.max(size.height, minHeight) });
     }, viewport);
+    await page.setViewportSize({width: viewport.width, height: viewport.height});
+    // Exercise the real correction handler: it must preserve native constraints
+    // without changing the renderer viewport used for responsive layout checks.
+    await app.evaluate(({screen}) => screen.emit('display-metrics-changed', screen.getPrimaryDisplay(), ['workArea']));
     await page.waitForTimeout(150);
     await page.evaluate(() => {
       window.dispatchEvent(new Event('resize'));
     });
     await page.waitForTimeout(120);
     assert.equal(await page.evaluate(() => innerWidth), viewport.width, 'actual renderer width');
+    assert.deepEqual(await browserWindow.evaluate(window => window.getMinimumSize()), nativeMinimum);
+    assert.ok(await browserWindow.evaluate(window => window.getBounds().width >= window.getMinimumSize()[0]),
+      'native minimum remains enforced');
 
     await navigate(page, 'page=research');
     await page.waitForSelector(`[data-testid="portal-card-${project.id}"]`, { timeout: 15_000 });
@@ -226,5 +234,5 @@ try {
 
 writeLayoutAudit(artifactDir, {passed: failure === null, error: failure, nativeMinimum,
   target: smokeTarget, reducedMotion: 'reduce',
-  narrowScope: 'built renderer in disposable Electron window with overridden native minimum',
+  narrowScope: 'emulated renderer viewport in disposable Electron window; native minimum and display correction remain enforced',
   audits, viewports: VIEWPORTS});

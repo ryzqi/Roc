@@ -69,8 +69,8 @@ after(async () => {
   assert.deepEqual(errors, []);
 });
 
-async function scene({long = false, waiting = false, scientific = false} = {}) {
-  const f = scientific ? createScientificReviewFixture(api) : createResearchFixture(api, 'writing');
+async function scene({long = false, waiting = false, scientific = false, verifierVerdict = 'qualifies'} = {}) {
+  const f = scientific ? createScientificReviewFixture(api, {verifierVerdict}) : createResearchFixture(api, 'writing');
   fixtures.push(f); active = f; calls.length = 0; f.holds = new Map();
   if (scientific) f.complete();
   else {
@@ -367,6 +367,26 @@ test('candidate positions refuse whole save and long controls fit narrow themes 
   }
 });
 
+
+test('unrelated and unverifiable advice keeps its label, rationale and coverage in the artifact inspector', async () => {
+  for (const [verdict, label, count] of [['unrelated', '与主张无关', 1], ['unable_to_verify', '无法核验', 0]]) {
+    const f = await scene({scientific: true, verifierVerdict: verdict});
+    const verifier = f.inspect().report.scientificReviews.find(report => report.output.kind === 'verifier');
+    await page.evaluate(request => mount(request), {...f.request, artifactId: verifier.artifactId});
+    const scientific = page.getByTestId('artifact-scientific-review');
+    const summary = scientific.locator('summary').first();
+    await summary.waitFor();
+    assert.equal(await summary.innerText(), `${label}：${f.claim.content}`);
+    await summary.press('Enter');
+    await scientific.getByText(verifier.output.suggestions[0].rationale, {exact: true}).first().waitFor();
+    assert.match(await scientific.innerText(), new RegExp(`已检查 ${count} / 1 条证据`));
+    if (verdict === 'unable_to_verify') {
+      await scientific.getByText('未检查原因：Required source inspection was unavailable.', {exact: true}).waitFor();
+    }
+    await scientific.getByText('绑定当前材料，待人工判断', {exact: true}).waitFor();
+    await page.screenshot({path: join(artifacts, `scientific-${verdict}.png`)});
+  }
+});
 
 test('independent opinions remain immutable and human responses bind current verification through keyboard controls', async () => {
   const f = await scene({scientific: true});

@@ -718,3 +718,110 @@ layout-verified 50 状态、cut=0；设置焦点回归 1/1。最终 build exit 0
 IME 合成事件 + 助手/终端/设置 smoke 14/14；真实 OS IME 未运行。
 final-verification.json 固定源码与证据 hash；S07 工程 Verified passing，进入 S08。
 本次恢复重新读取原始会话用户授权和 plan，pending session 34096/2696 均 exit 0。
+
+## 2026-11-07 S08 恢复与导出实施
+
+再次从指定 JSONL 核对原授权：逐阶段完成、验证、提交。HEAD 0734156e，恢复时干净。
+采用 validation v1 公共投影和 manifest v4；在现有审核/交付边界同时复核人工快照与
+语义报告 currentness，不增加兼容 decoder。历史 Skill 来源为 immutable run context，
+复现层级明确 not_run/not_verified，metadata-only 与本地 prepare 不代表外部发布。
+使用既有 CodeGraph 查询调用方，未更新索引。组合读取曾截断，后按相关范围读取；
+误猜 runs/、*context*.ts 和 research-export-service fixture 已纠正，真实 context
+位于 run-repository.ts；不再用不存在的路径作为依据。
+
+S08 首轮 build 通过，validation + semantic-publication 单测 10/10。typecheck 初次误用
+artifact.version，改为精确 artifactHash 后通过。真实 P0 首轮在 review 缺少 S04 typed
+output 失败；已更新固定 provider 的逐主张核验、finding 与人工处置，第二轮成功到导出
+后在旧 event.executionKind 断言失败，现按 envelope.payload 读取并完整分页，第三轮运行中。
+离线转换 report 的 targetApp 仍写 S05，已修正为 S08-export-validation1-task-dag1。
+恢复读取曾遇到输出截断和错误 capabilities glob/task-repository 路径，已定位真实文件。
+
+S08 续作核对：真实 P0 第三轮因向已是交付目标的 export.zip 自拷贝触发 EACCES，
+改为断言交付路径同一性，第四轮 standard offline task 1/1 通过（export-p0-fourth.log）。
+迁移 sentinel 与 validation 专项 10/10（migration-validation.log）。冻结采集
+2026-11-07T06-12-06.038Z 已有 IPC/build exit 0、unit 1588/1588；renderer 继续运行。
+本轮重新核对原 JSONL 授权、计划与 Git；未使用相关 memory。一次读取完整 sourceHashes
+导致输出截断，后仅提取 checks/status 与日志尾部。S05 旧版本隔离源码已从 9d16212d
+归档到 .runtime/s08-old-9d16212d，独立构建用于真实应用迁移/恢复演练。
+
+冻结采集完成且 changedSources=[]：unit 1588、renderer 452、Harness 94、IPC/build/quality/
+workflow/chunks 通过；native 35/36（500ms timeout 场景未读到启动 marker），P0/smoke
+因 Electron dist/path.txt 缺失而未启动。独立 cancellation 原样补验 1/1；未弱化检查。
+本地 electron-v45.0.0-darwin-arm64.zip SHA256 与安装包 checksums.json 一致
+（896c3a50b148e89a158dca08a6996a022ddf39b23aac871e107f5b4087f8caa9），已恢复 dist。
+安装缺失原因尚未定位，不归因于产品代码；自动下载 fetch failed 日志保留。
+迁移应用第一轮漏设预算触发 research_project_budget_missing，第二轮遇同一 Electron
+环境缺失；已补预算与真实 plugin-data 路径、外层配置复制，第三轮执行中。
+恢复期间误猜 files.ts/paths.ts/knowledge-capabilities.ts 已改为 scoped rg 定位。
+
+S08 续接（2026-11-07）：P0 恢复 Electron 后 17/19 通过，失败均为冷重开夹具绕过
+configureRocDatabaseConnection，research.db 的触发器缺少 roc_payload_hash；改用
+生产连接初始化，保留事件完整性断言。迁移第 3～6 轮分别暴露没有 Task、预算不足、
+聊天/阶段完成时序、历史执行迁移增加 task_status 事件；失败报告全部保留。
+第六轮已证实 1 条 effect receipt 与 6 条 budget call 转换前后 hash 一致；原事件
+16 条原样保留，第 17 条为 historical_execution_not_resumable，正在补精确校验与旧版恢复。
+P4 smoke 已补项目预算并删除 chat.startRun 的旧 workspacePath 参数；待打包运行验证。
+
+S08 本地 package:dir exit 0；verify:native-packaging、arm64-only --strict（20/20）、
+verify:paths 均通过。mac smoke 首轮 shell IPC 失败：脚本仍传 source:'terminal'，
+当前严格 wire schema 已移除此主进程权限字段；删除旧夹具参数，等待原样路径补验。
+打包产物采用 ad-hoc 签名，未 notarize/发布。完整 packaged smoke 已开始。
+迁移第七轮通过：原事件逐字节保留，转换追加历史不可续跑状态；新/旧应用冷启动、
+证据/Task/receipt/预算和 sentinel 均通过。记录见 findings。
+
+S08 续作恢复：完整 packaged smoke 在保存本地测试 secret 时停住，sample 明确显示
+SecItemCopyMatching / SecKeychainItemCopyContent，SecurityAgent 同时运行。已请用户
+处理系统钥匙串提示；未修改系统权限或绕过 safeStorage。可独立继续 PDF、布局、
+mac-native smoke 和文档。使用原 plan/，不新建计划目录。
+
+Packaged PDF protocol、真实正文/图表截图及键盘关闭通过，证据
+packaged-pdf-2026-11-07T06-57-20.415Z。mac smoke 第二轮已通过 shell IPC 与
+原生库/资源检查，随后发现 redundantPackages=['highlight.js']；pnpm why 指向
+production lowlight，正在核对调用方后修复依赖分类。layout packaged 执行中。
+删除审计符号/queryIndex 零命中；linkAndSchedule 名称保留，但内部已委托同一 DAG
+pump，不是旧调度器，最终台账需按行为描述而不是声称名称删除。
+
+S08 当前源码 full smoke exit 0：基础 14/14、P4 62/62；默认播种250轮，累计516条
+消息、2439事件，检查点恢复与工具恰好一次通过。报告已复制到 S08/dist-full-smoke。
+lowlight 分类修正后的独立候选包 release/s08/mac-arm64/Roc.app 构建、原生 smoke、
+native packaging 和 arm64严格20/20通过。首包50状态布局检查通过；已目视复核
+浅色任务抽屉和最终候选包设置焦点/布局。完整 packaged smoke 仍停在钥匙串授权，
+没有将 dist 结果冒充最终候选包结果。补齐阶段勾选、最终验收矩阵与材料，S08保持
+in_progress，不提交。一次文档 patch 因整行匹配不足失败，后按精确文本修正。
+
+### S08 续接：六种结论合同与用户系统授权
+已重读原会话，继续实施并逐阶段提交的授权仍有效。用户于本轮回复已允许本次
+钥匙串访问；原 packaged full smoke 已退出1，越过 safeStorage，但崩溃后
+checkpoint dispatch 未进入 running。失败日志/报告保存在 first-package-full-smoke。
+六结论回归先红：node --test --test-name-pattern='survives persisted review'
+tests/unit/research-export-validation.test.mjs，2/2因遗漏枚举失败，日志 six-verdict-red.log。
+已补齐 schema/UI/ADR，正在验证持久化、封存、人工关系与界面消费者。
+
+六结论首轮 green 被 research_skill_schema_changed 拦截：11阶段共享输出 schema，
+必须同步合同 hash。已更新全部 manifest 到1.3.0/output v4及 catalog，正文/许可
+与科学 rules v1未改。catalog第一次生成因manifest schema仍要求v3失败；同步
+字面量后 check-research-skills --write 通过。初轮日志保留为 before-manifests。
+
+六结论定向回归42/42、ArtifactInspector/response matrix10/10、IPC通过；
+已目视核对无法核验截图：中文结论、缺少条件、0/1覆盖、未检查原因与键盘焦点均显示。
+当前源构建/typecheck及canonical arm64包完成；首包已移至release/s08-first/mac-arm64，
+上一候选仍在release/s08/mac-arm64，最终包为release/mac-arm64/Roc.app。
+
+### S08 工程收尾（2026-11-07）
+
+用户确认新包钥匙串本次访问并逐次处理重启弹窗。session75329完成exit0：最终包
+基础14/14、P4 62/62，恢复一次且ls不重做；first-package-full-smoke失败证据保留。
+session76518全量unit1590/1590，P0最终19/19，harness94、IPC/chunks、package/build/typecheck、
+native和arm64严格20/20通过。最终mac smoke及真实PDF/键盘关闭通过。
+
+布局首轮exit1（1099请求变为1184），以隔离display事件probe复现；修正测试驱动为
+viewport模拟、保留native约束和实际显示器纠正，原样完整布局入口exit0：50状态，
+cut0、viewport overflow0。最终浅色任务抽屉/深色窄设置截图与PDF截图已目视核对。
+本轮保留准确命令、失败/补验和最终包hash，更新final-acceptance/阶段/迁移/删除台账。
+
+S08本地工程状态为Verified passing，按既有授权提交；独立科学0/200、双审/live A/B、
+真实外部互操作与正式发布未完成，OS IME仅有合成事件覆盖。S09未立项，不启动。
+
+最终文档检查：python3 .artifacts/research-harness/S08/docs-check.py，13份文档、74个
+本地链接均有效，git diff --check通过。final-evidence.py汇总1538个源码hash、
+36项后续命令、329份证据，冻结基线之后24个原路径变化均单独记录；本地工程通过。

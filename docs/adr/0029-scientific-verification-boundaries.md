@@ -11,7 +11,8 @@ date: 2026-11-06
 规则/模型/Skill 的版本与 hash；建议不覆盖人工 confirmed/rejected，不替代审批或公开授权。
 
 这保留人工审查成本，但避免模型建议变成自己的证据或授权。语义 verdict 固定为
-supports/qualifies/contradicts/unrelated/insufficient/unable_to_verify；
-强化语义门必须先有独立数据评价和明确产品决定。S01 扩展现有 evaluator，
-S04 实现建议合同；当前 pilot 离线通过不表示科研有效。见
+supports/qualifies/contradicts/unrelated/insufficient/unable_to_verify；Reviewer findings 通过 response matrix
+记录人工 addressed/declined 处置，导出清单把建议标为需要人工审查。确定性来源、
+人工 relation 和导出 currentness 分别校验；当前合成工程 fixture 不表示科研有效。
+独立数据、人工盲审与受控真实模型评价未通过前，不把语义建议升级为科研正确性硬门。见
 [统一合同](../../plan/contracts.md)、[验收矩阵](../../plan/acceptance.md)。

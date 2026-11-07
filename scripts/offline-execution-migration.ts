@@ -259,7 +259,7 @@ export async function migrateExecutionDatabases(input: {source: string; destinat
   const lease = acquireDatabaseMaintenanceLease({rootDir:source,owner:{kind:'cli',pid:process.pid}});
   const opened: Connection[] = [];
   const report: {status:string; source:string; destination:string; sourceApp:string; targetApp:string; databases:unknown[]; error?:string} = {
-    status:'pending',source,destination,sourceApp:'unknown',targetApp:'S05-frozen-search1',databases:[]
+    status:'pending',source,destination,sourceApp:'unknown',targetApp:'S08-export-validation1-task-dag1',databases:[]
   };
   try {
     const sources = targets.map(target=>{

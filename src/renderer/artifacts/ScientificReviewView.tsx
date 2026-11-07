@@ -1,6 +1,7 @@
 import type {ScientificEvidenceReference, ScientificReviewInspection} from '../../shared/schemas/research-scientific-review';
 
-const verdicts = {supports: '支持建议', contradicts: '反驳建议', qualifies: '需要限定', insufficient: '证据不足'};
+const verdicts = {supports: '支持建议', qualifies: '需要限定', contradicts: '反驳建议',
+  unrelated: '与主张无关', insufficient: '证据不足', unable_to_verify: '无法核验'};
 const severities = {fatal: '致命问题', major: '主要问题', minor: '次要问题'};
 const reasons: Record<string, string> = {
   rules_changed: '核验规则已变化', manuscript_replaced: '已有新修改稿',

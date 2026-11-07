@@ -1,3 +1,4 @@
+import {exportValidationPath} from '../../../shared/schemas/research-export-validation';
 import {z} from 'zod';
 import {researchExportFileSchema, type ResearchExportExecution} from '../../../shared/schemas/research-exports';
 import {researchPublicFileProjectionSchema, researchPublicProjectionSchema} from '../../../shared/schemas/research-public-projection';
@@ -9,7 +10,7 @@ import {verifyResearchCrateFiles} from './export-ro-crate';
 import {exportScientificReviewPath} from './export-scientific-review';
 
 export const researchExportManifestSchema = z.strictObject({
-  version: z.literal(3), exportId: z.string().min(1),
+  version: z.literal(4), exportId: z.string().min(1),
   request: researchPublicProjectionSchema,
   sourceHash: researchExportFileSchema.shape.sha256,
   toolchainHash: researchExportFileSchema.shape.sha256,
@@ -31,6 +32,7 @@ export async function verifyExportPublicBundle(root: string, record: ResearchExp
   const sources = validateResearchPublicProjection(await json('provenance/sources.json'));
   if (JSON.stringify(sources) !== serializeResearchPublicProjection(record.sources).trim()) throw new Error('research_export_sources_changed');
   validateResearchPublicProjection(await json(exportScientificReviewPath));
+  validateResearchPublicProjection(await json(exportValidationPath));
   for (const file of record.files.filter(file => file.path.endsWith('.public.json'))) {
     signal.throwIfAborted();
     const input = await json(file.path);

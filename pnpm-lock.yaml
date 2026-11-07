@@ -225,9 +225,6 @@ importers:
       langchain:
         specifier: 1.5.18
         version: 1.5.18(@langchain/core@1.2.20(openai@7.8.0(undici@8.10.0)(zod@4.6.7)))(openai@7.8.0(undici@8.10.0)(zod@4.6.7))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      lowlight:
-        specifier: 3.3.0
-        version: 3.3.0
       node-pty:
         specifier: 1.1.0
         version: 1.1.0
@@ -358,6 +355,9 @@ importers:
       highlight.js:
         specifier: 11.12.0
         version: 11.12.0
+      lowlight:
+        specifier: 3.3.0
+        version: 3.3.0
       lucide-react:
         specifier: 1.61.0
         version: 1.61.0(@types/react@19.3.0)(react@19.3.1)
