@@ -77,6 +77,11 @@ test('approval card displays complete query scopes and returns the reviewed hash
   assert.match(await content.innerText(), /病例报告/u);
   assert.match(await content.innerText(), /2020 至 2026/u);
   assert.match(await content.innerText(), /每来源最多 2 页，每页 10 条，最终最多 10 篇/u);
+  assert.match(await content.innerText(), /query-1/u);
+  assert.match(await content.innerText(), /Primary evidence/u);
+  assert.match(await content.innerText(), /Answer the frozen question/u);
+  assert.match(await content.innerText(), /Reproducible reported results/u);
+  assert.match(await content.innerText(), /12/u);
   await page.screenshot({path: join(artifacts, 'plan-review.png')});
   await page.locator('[data-testid="assistant-gate-approve"]').focus();
   await page.keyboard.press('Enter');

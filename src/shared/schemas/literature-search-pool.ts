@@ -1,13 +1,13 @@
 import {z} from 'zod';
 import {literatureCandidateSchema, literatureSearchInputSchema, literatureSearchResultSchema,
-  literatureSearchStrategyReceiptSchema} from './literature-import';
+  literatureRecordedStrategySchema} from './literature-import';
 
 export const literatureRankedRecordSchema = literatureCandidateSchema.shape.origins.element.pick({
   record: true, rank: true, identifiers: true, rawIdentifiers: true, review: true
 });
 export const literatureSearchPoolBodySchema = z.object({
   schemaVersion: z.literal(1), executionId: z.string().min(1), createdAt: z.string(),
-  request: literatureSearchInputSchema, strategy: literatureSearchStrategyReceiptSchema.nullable(),
+  request: literatureSearchInputSchema, strategy: literatureRecordedStrategySchema.nullable(),
   status: z.enum(['complete', 'partial', 'failed']),
   sources: literatureSearchResultSchema.shape.sources, records: z.array(literatureRankedRecordSchema)
 }).strict();

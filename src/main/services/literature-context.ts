@@ -9,7 +9,7 @@ export type LiteratureExecutionContext = {
   signal?: AbortSignal;
   assertActive?: () => void;
   searchStrategy?: {plan: ResearchSearchPlan; artifactId: string; contentHash: string; approvedAt: string; assertCurrent: () => void};
-  queryIndex?: number;
+  queryId?: string;
 };
 const contexts = new AsyncLocalStorage<LiteratureExecutionContext>();
 export function withLiteratureContext<T>(context: LiteratureExecutionContext, action: () => T): T {

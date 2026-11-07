@@ -807,9 +807,11 @@ ${source.replace('  const rows =', `
     const output = {title: `Fixed ${stage}`, markdown: 'Original synthetic engineering fixture.',
       claims: [], sections: [], verdict: 'ready'};
     if (stage === 'discovery') output.searchPlan = {
-      researchQuestion: currentRun.instruction, refinedQuestion: 'What are the fixed synthetic group means?',
+      schemaVersion: 1, version: 1, researchQuestion: currentRun.instruction, refinedQuestion: 'What are the fixed synthetic group means?',
       keywords: ['synthetic', 'reproducibility'], synonyms: [], domain: 'Synthetic engineering fixture', excludedTerms: [],
-      queries: [{query: 'Synthetic reproducibility fixture', sources: ['openalex'], limit: 5, maxPages: 1}]
+      queries: [{id: 'primary', maxRequests: 3, query: 'Synthetic reproducibility fixture', sources: ['openalex'], limit: 5, maxPages: 1}],
+      perspectives: [{id: 'primary', label: 'Primary', rationale: 'Answer the fixed question', expectedEvidence: 'Synthetic results', queryIds: ['primary']}],
+      budget: {candidates: 5, requests: 3, paidProviderCalls: 0}
     };
     if (stage === 'figure') output.claims.push({
       subjectType: 'figure', content: 'The fixed data means are A=2 and B=4.',

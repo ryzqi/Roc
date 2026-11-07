@@ -16,8 +16,16 @@ export const literatureSearchToolSchema = z.object({
 export const literatureSearchInputSchema = literatureSearchToolSchema.safeExtend({ projectId: z.string().min(1).nullable().optional() });
 export const literatureSearchStrategyReceiptSchema = z.object({
   artifactId: z.string().min(1), contentHash: z.string().regex(/^[a-f0-9]{64}$/u),
-  approvedAt: z.string(), researchQuestion: z.string().min(1), queryIndex: z.number().int().min(0).max(2)
+  approvedAt: z.string(), researchQuestion: z.string().min(1), planVersion: z.number().int().positive(),
+  queryId: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/u),
+  perspectiveIds: z.array(z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/u)).min(1).max(6),
+  maxRequests: z.number().int().min(1).max(54)
 }).strict();
+export const literatureRecordedStrategySchema = z.union([
+  literatureSearchStrategyReceiptSchema,
+  z.object({kind: z.literal('historical'), auditId: z.string().regex(/^[a-f0-9]{64}$/u),
+    reason: z.literal('historical_search_plan_not_authorized')}).strict()
+]);
 export const literatureCandidateSchema = z.object({
   candidateId: z.string(), identity: z.string(), record: researchLiteratureSchema,
   aliases: z.array(z.string().min(1)).min(1),
@@ -70,8 +78,8 @@ export const literatureProviderCoverageSchema = z.object({
   nextPage: literaturePagePositionSchema.nullable()
 }).strict();
 export const literatureSearchResultSchema = z.object({
-  schemaVersion: z.literal(13), ranking: literatureRankingSchema, executionId: z.string().min(1),
-  strategy: literatureSearchStrategyReceiptSchema.nullable(),
+  schemaVersion: z.literal(14), ranking: literatureRankingSchema, executionId: z.string().min(1),
+  strategy: literatureRecordedStrategySchema.nullable(),
   searchId: z.string(), createdAt: z.string(), expiresAt: z.string(), status: z.enum(['complete', 'partial', 'failed']),
   candidates: z.array(literatureCandidateSchema),
   sources: z.array(z.object({ source: literatureNetworkSourceSchema, status: z.enum(['ok', 'empty', 'partial', 'timeout', 'rate_limited', 'error']),

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "roc-manuscript-export",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "stage": "export",
   "description": "核查已批准文稿、图稿、来源与可复现材料的完整性。",
   "entry": {
@@ -19,7 +19,7 @@
   "source": {
     "kind": "project",
     "origin": "Roc/resources/research-skills/export",
-    "revision": "s04-1.1.0",
+    "revision": "s05-1.2.0",
     "hash": "d174e7255fb75afc813bc0cc201766c29ececa23eb13fc52dc88568517da75f2"
   },
   "inputs": {
@@ -27,8 +27,8 @@
     "hash": "7898f7a36053375c323b8817abf2ff30409b58e4d94d669a407e83145c74d310"
   },
   "outputs": {
-    "schema": "researchStageOutput/v2",
-    "hash": "9f70097a33465c53b6dd411aa2a71f39285eb53ea60fbd42dc0bacbd95cde22e",
+    "schema": "researchStageOutput/v3",
+    "hash": "36947e6796ca5f0a44dcc89f5dc3b968d4447de79a1c9ea74b56460385fee13d",
     "artifactKind": "export_package"
   },
   "requiredCapabilities": [

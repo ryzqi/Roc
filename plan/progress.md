@@ -519,3 +519,53 @@ S04 renderer 补验完成：两份失败文件串行 40/40，通过日志收录�
 
 S04 工程交付报告 `s04-execution-report.md` 完成；工程范围 Verified passing。
 原 renderer 全量失败与串行复测结果分别登记，科学盲审仍未运行；随后提交并进入 S05。
+
+## 2026-11-07：S05 开始
+
+S04 已提交 `4381104`，提交后工作区干净。继续用户授权的全部阶段及逐阶段提交。
+S05 先切换稳定 query ID、version 与 perspectives，保留最多 3 查询/60 候选；
+复用现有人工 approval hash、每页 assertCurrent、transport ledger 和不可变 pool。
+RRF 的 provider 原始排名、identity alias/冲突和覆盖回执已存在，不重造所有者。
+Evidence rerank 尚需审查当前本地知识检索合同与独立评测边界，不在缺少独立质量证据时
+直接替换生产排序。此次查询误猜 `research-search-strategy.test.mjs` 与 renderer/features，
+实际为 research-search-plan.test.mjs，按 scoped rg 修正。
+
+S05 查询合同已切换 schemaVersion 1、稳定 queryId、视角及显式请求/候选预算；
+所有视角引用必须合法，最多 3 queries/60 candidates 不变。实际调度复用 transport ledger，
+按 artifact/hash/queryId 持久化唯一占用，阻止工具重建重置预算；审批后内存计划被修改也拒绝。
+新增 research63 离线门与唯一索引，转换器纳入 research62 来源；尚未完成 S05 冷迁移回归。
+审批界面沿用 desktop-agent-ui、React 与 TS 规范，展示视角理由、预期证据和含重试请求 cap。
+11 阶段共享 output schema 更新为 v3，manifest/catalog 一起重算，技能检查通过。
+初轮专项因 catalog 合同 hash 过期全部失败，重算后原 7 个 query 专项通过；
+随后增加预算/身份/内存变更回归，正在跑关联专项。首次 typecheck 已通过，非最终验收。
+
+本轮恢复中 notes/history 后端不可用，按项目计划与同会话记录恢复；
+若干猜测路径不存在，已用实际目录清单修正。首次 manifest 工具异常输出 data URL，
+改为捕获错误消息后确认 schema_changed；外置 zod 的 data URL bundle 不可解析，
+改用 registry 自有 hash 工厂。初次 literal 补丁未匹配精确行，按真实行修正。
+
+S05 专项补齐：query-contract-v2 98/98，ranking-v3 6/6，migration-v4 4/4，
+search-plan renderer 5/5，typecheck-v3 exit 0，日志均在 `.artifacts/research-harness/S05/`。
+首轮新增篡改测试污染共享 sources 数组，改 fixture 深拷贝；冷迁移夹具重开后缺 SQL
+hash 函数，按生产迁移初始化注册，失败日志保留。
+本地知识检索新增 RRF 回执，包含输入 hash、索引版本、chunk hash/locator、channel rank、
+分数理由、输出位置与 no_results/not_searched；来源或定位变化可检测，损坏内容拒绝返回。
+转换器保留旧 query plan 原文审计与历史文本，撤销旧计划和下游工件批准，将受影响项目
+回 discovery 重新生成和批准；原库/备份 hash 保持不变。
+未实现或采纳无独立数据支持的新语义重排算法；RH-11.3/11.5 科学评价仍待 S01 数据，
+保留现有 RRF 为唯一生产排序。此限制必须进入 S05 最终交付报告，不能声称全部科学完成。
+全量采集启动：`.artifacts/research-harness/S05/2026-11-07T02-24-12.563Z/verification.json`，
+脚本 `.artifacts/research-harness/S05/capture-verification.mjs`；进度日志
+`/tmp/roc-s05-verification.log`，运行 session 79607。renderer 本次使用
+`node --test --test-concurrency=1 tests/renderer/`，其它包含 unit、IPC、Harness、workflow、
+local retrieval、network benchmark、build/chunks/smoke。采集期间不改源码；尚未验收完成。
+
+S05 全量结果已回收：unit 1555/1555、串行 renderer 450/450、Harness 94/94、
+workflow 1/1、build/chunks/smoke 13/13、IPC、typecheck、skills、local retrieval 和
+network benchmark 全通过。精确命令与 hash 见原采集 verification.json，采集期间源码未变。
+最终复核修复 archived 项目错误激活与历史 queryIndex 结果/pool 读取失败。
+历史结果转当前只读标记、原 JSON 留审计，无策略 pool bytes/hash 不变；旧批准不可继续。
+关联专项 109/109；最终 `.artifacts/research-harness/S05/2026-11-07T03-07-01.178Z/`
+补验迁移/evaluator 14/14、IPC、build（含 typecheck/skills）通过，原日志 hash 匹配。
+补验首次 typecheck 发现 evaluator 未区分历史策略，修正并补历史实际查询的回归。
+S05 工程 Verified passing，独立科学 rerank/50 问比较未运行。随后提交并进入 S06。

@@ -88,7 +88,8 @@ export async function evaluateLocalRetrieval(value) {
         vector: mode === 'keyword' ? null : { configId: 'evaluation', configRevision: 1, blob: vectorToBlob(q.embedding) } });
       const ids = result.hits.map(h => h.chunkId);
       rows.push({ queryId: q.id, language: q.language, projectId: q.projectId, strategy: strategy.id, query: strategy.query, mode,
-        ...relevanceMetrics(ids, q.judgments), keywordReturned: result.keywordCount, vectorReturned: result.vectorCount, hits: ids });
+        ...relevanceMetrics(ids, q.judgments), keywordReturned: result.keywordCount, vectorReturned: result.vectorCount,
+        ranking: result.ranking, hits: ids });
     }
     const groups = [];
     for (const language of ['zh', 'en', 'mixed']) for (const strategy of new Set(rows.map(r => r.strategy))) for (const mode of ['keyword', 'fusion']) {

@@ -218,17 +218,64 @@ export class ResearchKnowledgeRepository {
         existing.rrfScore += vectorScore;
       }
     });
-    const hits = Array.from(merged.values())
-      .sort((left, right) => right.rrfScore - left.rrfScore)
-      .slice(0, input.request.limit);
+    const ordered = Array.from(merged.values()).sort((left, right) => right.rrfScore - left.rrfScore);
+    const hits = ordered.slice(0, input.request.limit);
+    const candidates = ordered.map((hit, index) => ({
+      ...this.indexedVersion(hit.chunkId, input.request.projectId),
+      keywordRank: hit.keywordRank, vectorRank: hit.vectorRank, score: hit.rrfScore,
+      reason: 'sum(1/(60+rank)); equal channel weights' as const,
+      outputRank: index < input.request.limit ? index + 1 : null
+    }));
+    const rankingInput = {projectId: input.request.projectId, limit: input.request.limit,
+      embedding: input.vector === null ? null : {configId: input.vector.configId,
+        revision: input.vector.configRevision, queryVectorHash: createHash('sha256').update(input.vector.blob).digest('hex')}, candidates};
     return {
       query: input.request.query,
       hits,
       keywordCount: keywordHits.length,
       vectorCount: vectorHits.length,
       embeddingModel: config?.model ?? null,
-      generatedAt: this.now()
+      generatedAt: this.now(),
+      ranking: {schemaVersion: 1, ranker: 'rrf-v1-k60', ...rankingInput,
+        inputHash: hashText(JSON.stringify({query: input.request.query, ...rankingInput})),
+        coverage: {keyword: keywordHits.length ? 'results' : 'no_results',
+          vector: input.vector === null ? 'not_searched' : vectorHits.length ? 'results' : 'no_results'}}
     };
+  }
+
+  /** A receipt describes the indexed snapshot, never a claim about an unindexed external file. */
+  assertSearchCurrent(result: ResearchKnowledgeSearchResult): void {
+    const {projectId, limit, embedding, candidates} = result.ranking;
+    if (result.ranking.inputHash !== hashText(JSON.stringify({query: result.query, projectId, limit, embedding, candidates}))) {
+      throw new Error('research_knowledge_ranking_changed');
+    }
+    if (embedding !== null) this.requireEmbeddingConfig(embedding.configId, embedding.revision);
+    for (const candidate of candidates) {
+      if (this.indexedVersion(candidate.chunkId, projectId).indexedVersion !== candidate.indexedVersion) {
+        throw new Error('research_knowledge_source_changed');
+      }
+    }
+  }
+
+  private indexedVersion(chunkId: string, projectId: string | null): {
+    chunkId: string; documentId: string; locator: string | null; indexedVersion: string; chunkHash: string;
+  } {
+    const row = this.db.prepare(`SELECT c.document_id, c.content, c.content_hash, c.locator, c.project_id,
+      d.content AS document_content, d.content_hash AS document_hash, d.project_id AS document_project,
+      d.title, d.source_type, d.source_id, d.metadata_json
+      FROM research_knowledge_chunks c JOIN research_knowledge_documents d ON d.id=c.document_id WHERE c.id=?`)
+      .get(chunkId) as {document_id: string; content: string; content_hash: string; locator: string | null;
+        project_id: string | null; document_content: string; document_hash: string; document_project: string | null;
+        title: string; source_type: string; source_id: string; metadata_json: string} | undefined;
+    if (row === undefined) throw new Error('research_knowledge_source_missing');
+    if (projectId !== null && ((row.project_id !== null && row.project_id !== projectId) ||
+      (row.document_project !== null && row.document_project !== projectId))) throw new Error('research_knowledge_project_mismatch');
+    if (hashText(row.content) !== row.content_hash || hashText(row.document_content) !== row.document_hash) {
+      throw new Error('research_knowledge_source_corrupt');
+    }
+    const {content: _content, document_content: _documentContent, ...version} = row;
+    return {chunkId, documentId: row.document_id, locator: row.locator, chunkHash: row.content_hash,
+      indexedVersion: hashText(JSON.stringify(version))};
   }
 
   private keywordSearch(query: string, projectId: string | null, limit: number): ResearchKnowledgeSearchHit[] {

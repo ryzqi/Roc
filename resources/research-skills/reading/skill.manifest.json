@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "roc-paper-reading",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "stage": "reading",
   "description": "阅读论文并生成带页码或段落定位的证据笔记。",
   "entry": {
@@ -19,7 +19,7 @@
   "source": {
     "kind": "project",
     "origin": "Roc/resources/research-skills/reading",
-    "revision": "s04-1.1.0",
+    "revision": "s05-1.2.0",
     "hash": "23faf1676e357c0bf1232139333ebc25531db541cc0a2d1cedae01df7e5ff80d"
   },
   "inputs": {
@@ -27,8 +27,8 @@
     "hash": "7898f7a36053375c323b8817abf2ff30409b58e4d94d669a407e83145c74d310"
   },
   "outputs": {
-    "schema": "researchStageOutput/v2",
-    "hash": "9f70097a33465c53b6dd411aa2a71f39285eb53ea60fbd42dc0bacbd95cde22e",
+    "schema": "researchStageOutput/v3",
+    "hash": "36947e6796ca5f0a44dcc89f5dc3b968d4447de79a1c9ea74b56460385fee13d",
     "artifactKind": "reading_notes"
   },
   "requiredCapabilities": [

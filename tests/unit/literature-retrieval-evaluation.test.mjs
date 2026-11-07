@@ -187,6 +187,12 @@ test('annotation preparation strips rankings and retains raw identifier differen
   execFileSync(process.execPath, ['scripts/evaluate-literature-retrieval.mjs', '--prepare', input, output],
     {cwd: process.cwd(), stdio: 'pipe'});
   assert.deepEqual(JSON.parse(readFileSync(output, 'utf8')), packet);
+  const historical = structuredClone(captures);
+  historical.queries[0].pool.strategy = {kind:'historical',auditId:'a'.repeat(64),reason:'historical_search_plan_not_authorized'};
+  reseal(historical.queries[0].pool);
+  const historicalPacket = api.prepareLiteratureJudgmentPacket(historical);
+  assert.equal(historicalPacket.queries[0].question,historical.queries[0].pool.request.query);
+  assert.deepEqual(historicalPacket.queries[0].records,packet.queries[0].records);
   writeFileSync(join(process.cwd(), '.artifacts/research-optimization/pr04-metrics-unlabeled-packet.json'),
     JSON.stringify(packet, null, 2) + '\n');
 });

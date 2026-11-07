@@ -41,6 +41,24 @@ test('keyword ranking retains content priority, deduplication, ordered chunks an
     assert.deepEqual(search('missing').hits.map(hit => hit.documentId), ['g-global', 'g-global']);
     assert.equal(search(null).hits.length, 10);
     assert.equal(repo.searchKnowledge({request: {query: '  ', projectId: 'a', limit: 20}, vector: null}).hits.length, 0);
+    assert.deepEqual(scoped.ranking.coverage, {keyword: 'results', vector: 'not_searched'});
+    assert.equal(scoped.ranking.ranker, 'rrf-v1-k60');
+    assert.deepEqual(scoped.ranking.candidates.map(candidate => candidate.chunkId), scoped.hits.map(hit => hit.chunkId));
+    assert.equal(scoped.ranking.candidates[0].score, 1 / 61);
+    assert.equal(scoped.ranking.candidates[0].outputRank, 1);
+    assert.equal(scoped.ranking.inputHash, search('a').ranking.inputHash);
+    assert.notEqual(scoped.ranking.inputHash, search('a', 2).ranking.inputHash);
+    repo.assertSearchCurrent(scoped);
+    const changedReceipt = structuredClone(scoped);
+    changedReceipt.ranking.candidates[0].score = 0;
+    assert.throws(() => repo.assertSearchCurrent(changedReceipt), /research_knowledge_ranking_changed/);
+    db.prepare("UPDATE research_knowledge_chunks SET locator='block:changed' WHERE id='a-body:chunk:0'").run();
+    assert.throws(() => repo.assertSearchCurrent(scoped), /research_knowledge_source_changed/);
+    const refreshed = search('a');
+    assert.notEqual(refreshed.ranking.inputHash, scoped.ranking.inputHash);
+    repo.assertSearchCurrent(refreshed);
+    db.prepare("UPDATE research_knowledge_chunks SET content_hash=? WHERE id='a-body:chunk:0'").run('0'.repeat(64));
+    assert.throws(() => search('a'), /research_knowledge_source_corrupt/);
   } finally {db.close();}
 });
 

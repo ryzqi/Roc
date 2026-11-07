@@ -9,6 +9,8 @@ import type {RocLogicalDatabaseName} from '../src/main/infrastructure/database-p
 import {researchTaskExecutionSchema, researchTaskSchema} from '../src/shared/schemas/research-tasks';
 import {z} from 'zod';
 import {researchStageRunSchema} from '../src/shared/schemas/research-runs';
+import {literatureSearchResultSchema} from '../src/shared/schemas/literature-import';
+import {literatureSearchPoolSchema} from '../src/shared/schemas/literature-search-pool';
 
 const targets: Array<{name: RocLogicalDatabaseName; file: string; version: number; migrations: RocDatabaseMigration[]}> = [
   {name:'core',file:'data/core.db',version:1,migrations:coreMigrations},
@@ -180,6 +182,70 @@ function convertSkillResearch(db: Connection): void {
     db.prepare('UPDATE research_stage_runs SET snapshot_json=? WHERE id=?').run(JSON.stringify({...run,executionSnapshot:null}),run.id);
   }
 }
+
+function convertSearchReceipts(db: Connection): void {
+  const oldStrategy = z.object({artifactId:z.string().min(1),contentHash:z.string().regex(/^[a-f0-9]{64}$/u),
+    approvedAt:z.string(),researchQuestion:z.string().min(1),queryIndex:z.number().int().min(0).max(2)}).strict();
+  const historical = (table: string, id: string, row: Record<string, unknown>) => ({kind:'historical' as const,
+    auditId:audit(db,table,id,'search-receipt-unversioned',row,'historical_search_plan_not_authorized'),
+    reason:'historical_search_plan_not_authorized' as const});
+  for (const row of rows(db,'research_literature_searches')) {
+    const result = parseRecord(row.result_json);
+    if (result.schemaVersion !== 13) throw new Error('offline_search_result_version_unapproved');
+    if (result.strategy !== null) oldStrategy.parse(result.strategy);
+    const marker = historical('research_literature_searches',String(row.id),row);
+    const current = literatureSearchResultSchema.parse({...result,schemaVersion:14,
+      strategy:result.strategy === null ? null : marker});
+    db.prepare('UPDATE research_literature_searches SET result_json=? WHERE id=?').run(JSON.stringify(current),row.id);
+  }
+  for (const row of rows(db,'research_literature_search_pools')) {
+    const {contentHash,...pool} = parseRecord(row.pool_json);
+    if (hash(JSON.stringify(pool)) !== contentHash) throw new Error('offline_search_pool_corrupt');
+    if (pool.strategy === null) {
+      // Review/monitor receipts bind these bytes. Their unchanged contract needs no conversion.
+      literatureSearchPoolSchema.parse({...pool,contentHash});
+      continue;
+    }
+    oldStrategy.parse(pool.strategy);
+    const strategy = historical('research_literature_search_pools',String(row.execution_id),row);
+    const current = literatureSearchPoolSchema.parse({...pool,strategy,contentHash:'0'.repeat(64)});
+    const {contentHash:_hash,...body} = current;
+    db.prepare('UPDATE research_literature_search_pools SET pool_json=? WHERE execution_id=?')
+      .run(JSON.stringify({...body,contentHash:hash(JSON.stringify(body))}),row.execution_id);
+  }
+}
+
+function convertSearchPlans(db: Connection): void {
+  const projects = new Set<string>();
+  const timestamp = new Date().toISOString();
+  for (const row of rows(db, 'research_artifact_contents')) {
+    const output = parseRecord(row.output_json);
+    if (output.searchPlan === undefined) continue;
+    audit(db, 'research_artifact_contents', String(row.artifact_id), 'search-plan-unversioned', row, 'historical_search_plan_not_authorized');
+    const {searchPlan, ...content} = output;
+    // Keep the exact prior plan for inspection as historical text; never invent query IDs or approval.
+    content.markdown = `${String(output.markdown)}\n\n## 历史检索计划（不可执行）\n\n升级后需重新生成并人工批准检索计划。\n\n\`\`\`json\n${JSON.stringify(searchPlan, null, 2)}\n\`\`\``;
+    db.prepare('UPDATE research_artifact_contents SET output_json=? WHERE artifact_id=?').run(JSON.stringify(content), row.artifact_id);
+    const artifact = db.prepare('SELECT * FROM research_artifacts WHERE id=?').get(row.artifact_id) as Record<string, unknown>;
+    if (artifact.status !== 'superseded') projects.add(String(row.project_id));
+  }
+  for (const projectId of projects) {
+    for (const artifact of rows(db, 'research_artifacts').filter(row => row.project_id === projectId)) {
+      audit(db, 'research_artifacts', String(artifact.id), 'search-plan-unversioned', artifact, 'historical_search_plan_not_authorized');
+    }
+    for (const state of rows(db, 'research_stage_states').filter(row => row.project_id === projectId)) {
+      audit(db, 'research_stage_states', `${projectId}:${state.stage}`, 'search-plan-unversioned', state, 'historical_search_plan_not_authorized');
+    }
+    const project = db.prepare('SELECT * FROM research_projects WHERE id=?').get(projectId);
+    audit(db, 'research_projects', projectId, 'search-plan-unversioned', project, 'historical_search_plan_not_authorized');
+    db.prepare("UPDATE research_artifacts SET status='superseded',updated_at=? WHERE project_id=?").run(timestamp, projectId);
+    db.prepare(`UPDATE research_stage_states SET status=CASE WHEN stage='discovery' THEN 'ready' ELSE 'locked' END,
+      active_run_id=NULL,artifact_ids_json='[]',entered_at=NULL,completed_at=NULL,gate_approved=0,
+      last_error='historical_search_plan_not_authorized' WHERE project_id=?`).run(projectId);
+    db.prepare(`UPDATE research_projects SET current_stage='discovery',
+      status=CASE WHEN status='archived' THEN 'archived' ELSE 'active' END,updated_at=? WHERE id=?`).run(timestamp, projectId);
+  }
+}
 /** Only explicit, stopped sources; all transformations run on disposable copies. */
 export async function migrateExecutionDatabases(input: {source: string; destination: string; stopped: boolean}) {
   if (!input.stopped) throw new Error('offline_stop_attestation_required');
@@ -190,7 +256,7 @@ export async function migrateExecutionDatabases(input: {source: string; destinat
   const lease = acquireDatabaseMaintenanceLease({rootDir:source,owner:{kind:'cli',pid:process.pid}});
   const opened: Connection[] = [];
   const report: {status:string; source:string; destination:string; sourceApp:string; targetApp:string; databases:unknown[]; error?:string} = {
-    status:'pending',source,destination,sourceApp:'unknown',targetApp:'S03-skill-manifest1',databases:[]
+    status:'pending',source,destination,sourceApp:'unknown',targetApp:'S05-frozen-search1',databases:[]
   };
   try {
     const sources = targets.map(target=>{
@@ -201,14 +267,16 @@ export async function migrateExecutionDatabases(input: {source: string; destinat
     const agentVersion = Number(agent.prepare('SELECT current_version FROM schema_metadata WHERE db_name=?').pluck().get('agent'));
     const researchVersion = Number(research.prepare('SELECT current_version FROM schema_metadata WHERE db_name=?').pluck().get('plugin:@roc/plugin-research'));
     const fromS02 = agentVersion === 20 && researchVersion === 61;
-    if (!fromS02 && !(agentVersion === 19 && researchVersion === 60)) throw new Error('offline_source_version_unapproved');
-    report.sourceApp = fromS02 ? '7120421-S02' : 'eea2087b5d2d79df3b2fea7764ce48e4975fd764';
+    const fromS04 = agentVersion === 20 && researchVersion === 62;
+    const currentExecution = fromS02 || fromS04;
+    if (!currentExecution && !(agentVersion === 19 && researchVersion === 60)) throw new Error('offline_source_version_unapproved');
+    report.sourceApp = fromS04 ? '4381104-S04' : fromS02 ? '7120421-S02' : 'eea2087b5d2d79df3b2fea7764ce48e4975fd764';
     const sourceTargets = targets.map(target=>({...target,version:target.name === 'agent' ? agentVersion :
       target.name === 'plugin:@roc/plugin-research' ? researchVersion : target.version}));
     for (const [index,target] of sourceTargets.entries()) preflight(sources[index]!,target);
     if (agent.prepare("SELECT 1 FROM agent_tool_effects WHERE status IN ('reserved','in_progress','unknown') LIMIT 1").get()) throw new Error('offline_unresolved_effect');
     if (agent.prepare('SELECT 1 FROM agent_run_leases LIMIT 1').get() || research.prepare("SELECT 1 FROM research_stage_runs WHERE status IN ('queued','running') LIMIT 1").get()) throw new Error('offline_execution_not_stopped');
-    validateLinks(agent,research,fromS02 ? 2 : 1);
+    validateLinks(agent,research,currentExecution ? 2 : 1);
     mkdirSync(destination,{mode:0o700});
     const backup = join(destination,'backup'); const current = join(destination,'current');
     cpSync(source,backup,{recursive:true,filter:path=>!path.endsWith('.database-maintenance.lock')});
@@ -228,8 +296,12 @@ export async function migrateExecutionDatabases(input: {source: string; destinat
         const budgetBefore = target.name === 'agent' ? rows(db,'agent_budget_calls').map(({state:_state,envelope_json:_envelope,...row})=>row) : null;
         applyDatabaseMigrations(db,{dbName:target.name,migrations:target.migrations,allowOffline:true});
         db.transaction(()=>{
-          if (target.name === 'agent') fromS02 ? convertSkillAgent(db) : convertAgent(db);
-          if (target.name === 'plugin:@roc/plugin-research') fromS02 ? convertSkillResearch(db) : convertResearch(db);
+          if (target.name === 'agent') currentExecution ? convertSkillAgent(db) : convertAgent(db);
+          if (target.name === 'plugin:@roc/plugin-research') {
+            currentExecution ? convertSkillResearch(db) : convertResearch(db);
+            convertSearchReceipts(db);
+            convertSearchPlans(db);
+          }
           checkIntegrity(db);
         })();
         if (budgetBefore !== null && JSON.stringify(budgetBefore) !== JSON.stringify(rows(db,'agent_budget_calls').map(({state:_state,envelope_json:_envelope,...row})=>row))) throw new Error('offline_budget_changed');

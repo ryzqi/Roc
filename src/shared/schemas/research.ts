@@ -328,7 +328,24 @@ export const researchKnowledgeSearchResultSchema = z
     keywordCount: z.number().int(),
     vectorCount: z.number().int(),
     embeddingModel: z.string().nullable(),
-    generatedAt: z.string()
+    generatedAt: z.string(),
+    ranking: z.object({
+      schemaVersion: z.literal(1), ranker: z.literal('rrf-v1-k60'),
+      inputHash: z.string().regex(/^[a-f0-9]{64}$/u),
+      projectId: z.string().nullable(), limit: z.number().int().positive(),
+      embedding: z.object({configId: z.string(), revision: z.number().int().positive(),
+        queryVectorHash: z.string().regex(/^[a-f0-9]{64}$/u)}).strict().nullable(),
+      coverage: z.object({keyword: z.enum(['results', 'no_results']),
+        vector: z.enum(['not_searched', 'results', 'no_results'])}).strict(),
+      candidates: z.array(z.object({
+        chunkId: z.string(), documentId: z.string(), locator: z.string().nullable(),
+        indexedVersion: z.string().regex(/^[a-f0-9]{64}$/u),
+        chunkHash: z.string().regex(/^[a-f0-9]{64}$/u),
+        keywordRank: z.number().int().positive().nullable(), vectorRank: z.number().int().positive().nullable(),
+        score: z.number().nonnegative(), reason: z.literal('sum(1/(60+rank)); equal channel weights'),
+        outputRank: z.number().int().positive().nullable()
+      }).strict())
+    }).strict()
   })
   .strict();
 

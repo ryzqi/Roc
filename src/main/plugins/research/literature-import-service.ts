@@ -420,13 +420,16 @@ export class LiteratureImportService {
     this.library.validateDestination(context.projectId);
     let strategy: LiteratureSearchResult['strategy'] = null;
     if (context.searchStrategy !== undefined) {
-      if (context.queryIndex === undefined) throw new Error('research_search_query_index_required');
-      const query = context.searchStrategy.plan.queries[context.queryIndex];
-      if (query === undefined) throw new Error('research_search_query_index_invalid');
+      if (context.queryId === undefined) throw new Error('research_search_query_id_required');
+      const plan = context.searchStrategy.plan;
+      const selected = plan.queries.find(query => query.id === context.queryId);
+      if (selected === undefined) throw new Error('research_search_query_id_invalid');
+      const {id: _id, maxRequests, ...query} = selected;
       const {projectId: _projectId, ...parameters} = request;
       if (JSON.stringify(parameters) !== JSON.stringify(query)) throw new Error('research_search_query_changed');
       strategy = {artifactId: context.searchStrategy.artifactId, contentHash: context.searchStrategy.contentHash,
-        approvedAt: context.searchStrategy.approvedAt, researchQuestion: context.searchStrategy.plan.researchQuestion, queryIndex: context.queryIndex};
+        approvedAt: context.searchStrategy.approvedAt, researchQuestion: plan.researchQuestion, planVersion: plan.version,
+        queryId: context.queryId, perspectiveIds: plan.perspectives.filter(view => view.queryIds.includes(context.queryId!)).map(view => view.id), maxRequests};
     }
     const scopedRequest = {...request, projectId: context.projectId};
     const executionId = this.searchLedger.begin(context, scopedRequest, strategy);
@@ -455,7 +458,7 @@ export class LiteratureImportService {
         return {...candidate, matchedLibraryItemId: match?.id ?? null, archived: match?.archived ?? false,
           missingFields: ['doi', 'abstract', 'publishedYear'].filter(field => candidate.record[field as 'doi' | 'abstract' | 'publishedYear'] === null)};
       });
-      const result: LiteratureSearchResult = { schemaVersion: 13, ranking: literatureRanking(request.sources), executionId, strategy,
+      const result: LiteratureSearchResult = { schemaVersion: 14, ranking: literatureRanking(request.sources), executionId, strategy,
         searchId: `search_${randomUUID()}`, createdAt, expiresAt: new Date(Date.parse(createdAt) + 7 * 86400_000).toISOString(),
         status: found.status, candidates, sources: found.sources, truncated: found.truncated || grouped.length > request.limit,
         warnings: [...found.warnings, ...(unknownYear ? ['年份未知的候选未计入年份筛选结果。'] : [])], total: candidates.length, nextOffset: null };

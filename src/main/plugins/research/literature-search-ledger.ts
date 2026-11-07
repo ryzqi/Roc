@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Database } from 'better-sqlite3';
-import type { LiteratureSearchInput, LiteratureSearchResult } from '../../../shared/schemas/literature-import';
+import type { LiteratureSearchInput, LiteratureSearchResult, literatureSearchStrategyReceiptSchema } from '../../../shared/schemas/literature-import';
+import type {z} from 'zod';
 import type { LiteratureExecutionContext } from '../../services/literature-context';
 import type { LiteratureRequestAudit } from './literature-service';
 
@@ -12,11 +13,19 @@ export class LiteratureRequestAuditError extends Error {
 export class LiteratureSearchLedger {
   constructor(private readonly db: Database, private readonly now: () => string) {}
 
-  begin(context: LiteratureExecutionContext, request: LiteratureSearchInput, strategy: LiteratureSearchResult['strategy']): string {
+  begin(context: LiteratureExecutionContext, request: LiteratureSearchInput, strategy: z.infer<typeof literatureSearchStrategyReceiptSchema> | null): string {
     const id = `search_exec_${randomUUID()}`;
-    this.db.prepare(`INSERT INTO research_literature_search_executions
-      (id,owner,project_id,run_id,request_json,status,created_at) VALUES (?,?,?,?,?,'running',?)`)
-      .run(id, context.owner, context.projectId, context.runId ?? null, JSON.stringify({request, strategy}), this.now());
+    this.db.transaction(() => {
+      if (strategy !== null && this.db.prepare(`SELECT id FROM research_literature_search_executions
+        WHERE project_id IS ? AND json_extract(request_json,'$.strategy.artifactId')=?
+          AND json_extract(request_json,'$.strategy.contentHash')=? AND json_extract(request_json,'$.strategy.queryId')=?`)
+        .get(context.projectId, strategy.artifactId, strategy.contentHash, strategy.queryId)) {
+        throw new Error('research_search_query_already_dispatched');
+      }
+      this.db.prepare(`INSERT INTO research_literature_search_executions
+        (id,owner,project_id,run_id,request_json,status,created_at) VALUES (?,?,?,?,?,'running',?)`)
+        .run(id, context.owner, context.projectId, context.runId ?? null, JSON.stringify({request, strategy}), this.now());
+    })();
     return id;
   }
 
@@ -24,6 +33,12 @@ export class LiteratureSearchLedger {
     return (phase, source, receipt) => {
       try {
         if (phase === 'started') {
+          const budget = this.db.prepare(`SELECT json_extract(request_json,'$.strategy.maxRequests') AS cap,
+            (SELECT COUNT(*) FROM research_literature_request_receipts WHERE execution_id=?) AS used
+            FROM research_literature_search_executions WHERE id=? AND status='running'`)
+            .get(executionId, executionId) as {cap: number | null; used: number} | undefined;
+          if (budget === undefined) throw new Error('literature_search_execution_not_active');
+          if (budget.cap !== null && budget.used >= budget.cap) throw new Error('research_search_request_budget_exhausted');
           this.db.prepare(`INSERT INTO research_literature_request_receipts
             (execution_id,source,attempt,state,receipt_json) VALUES (?,?,?,'dispatched',?)`)
             .run(executionId, source, receipt.attempt, JSON.stringify(receipt));

@@ -51,7 +51,7 @@ before(async () => {
         React.createElement('button', {id: 'review-open', onClick: () => setOpen(true)}, '打开检索'),
         React.createElement(ImportDialog, {open, initialTab: 'search', onClose: () => setOpen(false),
           selectedItem: null, canAttachToSelection: false, pickFile: async () => null,
-          searchLiterature: async () => ({ok: true, result: {schemaVersion: 13, strategy: null,
+          searchLiterature: async () => ({ok: true, result: {schemaVersion: 14, strategy: null,
             executionId: 'search-exec-review', searchId: 'search-review', candidates, total: candidates.length,
             status: 'complete', warnings: [], sources: [], nextOffset: null}}),
           addCandidate: async (searchId, candidateId) => {

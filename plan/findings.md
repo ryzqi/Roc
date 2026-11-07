@@ -214,3 +214,43 @@ tool，其他输入仍进入消息流；Core 1.2.20 的 assembled output 无条�
   元数据冲突/DOI/别名/arXiv 版本；标题不建立身份。无需再造 identity system。
 - Search ledger 和 immutable pool 已保存 execution/request/strategy、每次 transport
   receipt、unknown interrupted 状态及原始 provider records。S05 在这些拥有者扩展。
+
+### S05 验收与迁移复核
+
+- 全量 unit 1555/1555 通过，renderer 串行执行中；采集期间保持业务源文件不变。
+- 最终差异发现旧检索计划转换将归档项目强制改回 active；应保留 archived，
+  只重置其内部检索阶段并撤销旧计划批准。等当前采集结束后修复并补迁移回归。
+- S06 预查：当前 StageRuntime 直接 schedule/executeChild，执行 snapshot 和 linkStage
+  明确只接受 nodeBinding=none；Task v3 需同步这些边界、两库关联和人工接受，不仅加表。
+
+- S05 审批截图已核对：浅色完整视角/预算说明、深色 800px 长查询内部滚动，
+  焦点和底部审批动作可见，无横向溢出。全量 renderer 仍在运行。
+- S06 接入边界：`execution.ts` 已预留 `{kind: dag,nodeId,graphRevision}`，
+  但 Task budget、grant broker 与 run frozen validator 目前明确拒绝 dag。
+  不能仅新增表；需一起切换 agent/research 两库 pending intent、关联确认与实际工具授权。
+- Review 当前在父执行内 Promise.all 三个 child，再归并。新 scheduler 必须把
+  child 和 reducer 都当节点，否则父占并发槽等待 child 会死锁，且绕过 lease。
+  child 完成只产只读建议，父结果仍走现有人工 gate。
+- 本轮误猜 `phase-06-orchestration.md`、`agent-execution.ts` 和 `tool-effects.ts`；
+  实际分别为 phase-06-task-dag.md、execution.ts，effect 调用方待按符号定位。
+
+### S05 归档回归与 S06 调度切换边界
+
+- 临时隔离回归已复现旧计划离线转换将 archived 改为 active；证据
+  `.artifacts/research-harness/S05/archive-before-v2.log`。初版错误期待 SQLite backup
+  API 产生与源库完全相同的文件 bytes；已改按报告 backupHash 与真实归档行核对，
+  源库 bytes 仍必须不变。待完整采集结束后将回归纳入正式测试并修正 SQL。
+- CodeGraph 当前读取的源码确认 `insertRun` 先提交 agent DB pending intent，
+  research DB 记录后 `bindTask/confirmExecution`。S06 节点需由这个边界创建，
+  不在已冻结 snapshot 之后补造 nodeBinding；retry 必须保留原 node 的逻辑身份。
+- `research:retrieval-eval` CLI 必须带 input/output 两个参数；全量 unit 中的
+  literature-retrieval-evaluation 测试已经实际运行 CLI，覆盖工程报告、拒绝覆盖、
+  非法输入不发布结果与人工标注包。没有独立语料时不能运行成科学指标。
+
+### S05 最终结果
+
+- 上述 renderer 等待及待修状态已结束：450/450 通过，归档迁移回归已纳入正式测试。
+- 旧 result schema13 和 queryIndex pool 必须在离线门转换；运行时双 reader 不保留。
+  历史策略只给 auditId/reason，不伪造 query ID 或批准；无策略 review/monitor pool
+  保持原 bytes/hash，历史请求账本原样留存。冷读取、原排名/来源一致和损坏拒绝通过。
+- 最终补验记录全量后 7 个源码变化与所有日志 hash，见 S05 执行报告。

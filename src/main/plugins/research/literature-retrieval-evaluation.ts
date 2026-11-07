@@ -71,7 +71,8 @@ export function prepareLiteratureJudgmentPacket(input: unknown): LiteratureJudgm
         url: item.record.url, openAccessUrl: item.record.openAccessUrl, identifiers});
     }
     return {queryId: query.queryId, topicId: query.topicId, executionId: query.pool.executionId,
-      poolHash: query.pool.contentHash, question: query.pool.strategy?.researchQuestion ?? query.pool.request.query,
+      poolHash: query.pool.contentHash, question: query.pool.strategy !== null && 'researchQuestion' in query.pool.strategy
+        ? query.pool.strategy.researchQuestion : query.pool.request.query,
       yearFrom: query.pool.request.yearFrom ?? null, yearTo: query.pool.request.yearTo ?? null,
       records: [...records.values()].sort((left, right) => compare(left.recordHash, right.recordHash))};
   });

@@ -3,7 +3,7 @@
 日期：2026-11-06。来源 SHA：`eea2087b5d2d79df3b2fea7764ce48e4975fd764`。
 状态：S02 的 M01～M06 已实现并通过隔离迁移/恢复验收；真实用户数据转换未运行。
 S01 的 M12 工程切换已完成，独立科学数据仍待补齐。
-S03 的 M07 已通过隔离迁移/重开验收，目标 agent20/research62。S00 只执行隔离空库 schema 探测。
+S03 的 M07 已通过隔离迁移/重开验收，目标 agent20/research62。S05 M09 已通过隔离转换，目标 agent20/research63。S00 只执行隔离空库 schema 探测。
 本台账固定允许的来源、目标合同和拒绝条件；后续实现不能放宽为泛用历史 decoder。
 
 ## 1. 版本与来源锁
@@ -34,7 +34,7 @@ execution v2 从 S02 起包含显式 `nodeBinding`：`kind=none` 表示无 DAG �
 | M06 / S02 | agent budget call/observation，Task/project budget policy v1 | 同一账源与 policy v1；新增幂等 settlement receipt 合同 v1 | 原 call ID、tokens/cost/pricing/version 及 unknown 原样保留；停机后未结 reservation 按真实对账转 unknown；历史未知费用不填零，不从其他 ledger 再计一次 | call ID 唯一、前后已知总额/unknown/reservation 分项对账、重复结算同 receipt、不一致拒绝；complete（工程/隔离演练，见 s02-execution-report.md） |
 | M07 / S03 | raw 11 阶段 Skill、stage skillHash/context_json；Task facts contractVersion 1；context/harness revisions | 强制 Skill Manifest v1；facts 保持 v1；context/harness 新冻结 revision 引用 Manifest hash | 11 份内容保留并声明版本/许可/能力/output schema；旧 skillHash 的历史产物不改写。新执行使用新 Manifest；旧执行未固定完整版本时不可 resume；事实来源/ref/hash 与人工决定保持 | 11/11 Manifest、许可/hash/output schema 校验、facts 行数/hash、隔离上下文与权限交集；complete（S03 工程，见 s03-execution-report.md） |
 | M08 / S04 | research 60 的 Evidence/Claim/Locator/人工 relation revisions、citation coverage v2 | 保留既有事实与 coverage v2；新增 semantic verdict/finding v1 | 无旧语义建议可迁移；新记录冻结 claim/source/artifact/rules/model/Skill refs/hash。人工 confirmed/rejected 原样保存，版本变化仅使建议失效 | Evidence/Claim/relation 行数/hash/reviewer 不变、建议失效、人工决定不可被模型覆盖；pending |
-| M09 / S05 | 无独立版本字段的 search plan；检索执行/pool/`research_literature_request_receipts` 与 source refs | 新冻结 search plan v1、ranking receipt v1；复用既有检索来源表 | 历史检索原请求、来源和 receipt 保留；没有排序证据不生成历史 ranking receipt。新查询/候选预算变化需新审批；旧可恢复检索只有冻结边界全可证明才继续 | query/request hash、来源 refs、候选 count/预算、无越权扩查询、等额预算 evaluator；pending |
+| M09 / S05 | 无独立版本字段的 search plan；检索执行/pool/`research_literature_request_receipts` 与 source refs | 新冻结 search plan v1、ranking receipt v1；复用既有检索来源表 | 历史检索原请求、来源和 receipt 保留；没有排序证据不生成历史 ranking receipt。新查询/候选预算变化需新审批；旧可恢复检索只有冻结边界全可证明才继续 | agent19/research60、agent20/research61 或 research62 离线到 research63；原 JSON/hash 审计、归档保留、旧批准撤销、结果 v13 到 v14、pool hash 与冷读取通过；complete（工程），科学比较未运行，见 s05-execution-report.md |
 | M10 / S06 | Task v2、S02 execution v2，无 DAG node/edge/lease | Task v3；node/edge/lease 合同 v1；启用 execution v2 的 node-bound 类型 | 根任务 goal/status/budget/ID 不改成节点状态；历史 execution 不猜依赖边，不自动领取。需继续者根据当前人工确认输入建立新 graph revision；新节点持久化在同一 agent DB | 无环/同 Task/project、单有效 lease、generation/CAS、旧提交拒绝、根预算不重置；pending |
 | M11 / S08 | manuscripts、export execution、artifact/provenance 与 public projection | 既有来源事实保留；新导出证据清单 v1 | 历史 ZIP 与审批不能宣称符合新清单；新导出从有效 refs 构建闭包并重新审核。工作区原文件不移动、不删除；路径/bytes hash 对账 | 实际 ZIP 内容/hash/manifest、私有字段排除、来源闭包、人工审核/公开授权分开；pending |
 | M12 / S01 | 16 pilot fixture、protocol lock/journal、runner 文件数据 | 冻结 evaluation protocol 与 dataset revision；扩展同一 runner | 不触及用户 DB；pilot 保留工程 fixture；独立标注/来源 split 单独新建并冻结，不把 fixture 换名成 holdout。旧 journal 保留协议/hash，不伪造 live 结果 | hidden view、split/source 分离、旧 journal 可审计、live adapter 隔离；complete（工程）；科学数据/人工评价未运行，见 evaluation/scientific-readiness.md |

@@ -278,17 +278,27 @@ export function ResearchGateApprovalCard({
           tabIndex={0} aria-label="待确认检索计划" data-testid="assistant-gate-search-plan">
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
             <dt className="text-muted">原始研究指令</dt><dd>{plan.data.researchQuestion}</dd>
+            <dt className="text-muted">计划版本</dt><dd>{plan.data.version}</dd>
             <dt className="text-muted">建议研究问题</dt><dd>{plan.data.refinedQuestion}</dd>
             <dt className="text-muted">领域</dt><dd>{plan.data.domain}</dd>
             <dt className="text-muted">关键词</dt><dd>{plan.data.keywords.join('、')}</dd>
             <dt className="text-muted">同义词</dt><dd>{plan.data.synonyms.length === 0 ? '无' : plan.data.synonyms.map(entry => `${entry.term}：${entry.alternatives.join('、')}`).join('；')}</dd>
             <dt className="text-muted">筛选排除项</dt><dd>{plan.data.excludedTerms.length === 0 ? '无' : plan.data.excludedTerms.join('、')}</dd>
+            <dt className="text-muted">本版预算</dt><dd>最多 {plan.data.budget.candidates} 篇候选，{plan.data.budget.requests} 次请求（含重试），不调用付费来源</dd>
           </dl>
+          <ul className="mt-2 flex flex-col gap-2" aria-label="检索视角">
+            {plan.data.perspectives.map(view => <li key={view.id}>
+              <p className="font-medium">{view.label}</p>
+              <p>{view.rationale}</p>
+              <p className="text-muted">预期证据：{view.expectedEvidence}；查询：{view.queryIds.join('、')}</p>
+            </li>)}
+          </ul>
           <ol className="mt-2 flex flex-col gap-2">
             {plan.data.queries.map((query, index) => (
-              <li key={index} className="border-t-[0.5px] border-line pt-2">
-                <p className="font-medium">查询 {index + 1}：{query.query}</p>
+              <li key={query.id} className="border-t-[0.5px] border-line pt-2">
+                <p className="font-medium">查询 {index + 1}（{query.id}）：{query.query}</p>
                 <p className="text-muted">{query.sources.join('、')}，{query.yearFrom ?? '不限'} 至 {query.yearTo ?? '不限'}，每来源最多 {query.maxPages} 页，每页 {query.limit} 条，最终最多 {query.limit} 篇</p>
+                <p className="text-muted">本查询最多 {query.maxRequests} 次请求；已执行后需批准新版计划才能再次检索。</p>
               </li>
             ))}
           </ol>

@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "roc-literature-retrieval",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "stage": "retrieval",
   "description": "多源查找文献并建立可追溯的证据集。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "d84cd4e71edda4e73096cf333339ae2d8760fbb5dbca69987096ecdd88060d28"
+    "hash": "8fe875cde3d5864fc5fcbba48328302c1a07ce9b486e4aa9114f31239f0c667e"
   },
   "references": [],
   "license": {
@@ -19,16 +19,16 @@
   "source": {
     "kind": "project",
     "origin": "Roc/resources/research-skills/retrieval",
-    "revision": "s04-1.1.0",
-    "hash": "d84cd4e71edda4e73096cf333339ae2d8760fbb5dbca69987096ecdd88060d28"
+    "revision": "s05-1.2.0",
+    "hash": "8fe875cde3d5864fc5fcbba48328302c1a07ce9b486e4aa9114f31239f0c667e"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
     "hash": "7898f7a36053375c323b8817abf2ff30409b58e4d94d669a407e83145c74d310"
   },
   "outputs": {
-    "schema": "researchStageOutput/v2",
-    "hash": "9f70097a33465c53b6dd411aa2a71f39285eb53ea60fbd42dc0bacbd95cde22e",
+    "schema": "researchStageOutput/v3",
+    "hash": "36947e6796ca5f0a44dcc89f5dc3b968d4447de79a1c9ea74b56460385fee13d",
     "artifactKind": "source_corpus"
   },
   "requiredCapabilities": [

@@ -1,7 +1,7 @@
 # S05：冻结多视角检索、来源身份与证据重排
 
 优先级：P1。依赖：S01 评测协议、S02、S03。
-来源：WP-04、RH-10/RH-11。实施状态：pending。建议时间：第 7～10 周。
+来源：WP-04、RH-10/RH-11。实施状态：complete（工程）；RH-11.3/11.5 科学采纳未运行。建议时间：第 7～10 周。
 
 ## 目标与关口
 
@@ -21,29 +21,29 @@
 
 ## 按顺序执行
 
-- [ ] **RH-10.1 Perspective Plan**：明确 question/version、视角理由、query ID、
+- [x] **RH-10.1 Perspective Plan**：明确 question/version、视角理由、query ID、
   具体 provider/filter/pagination/request cap、候选/费用上限和预期证据类型。
   视角可共用获批 query，不强制六个视角或擅自将 query cap 从 3 放大。
-- [ ] **RH-10.2 人工冻结**：新目标 plan schema 给每个 query 稳定 ID，
+- [x] **RH-10.2 人工冻结**：新目标 plan schema 给每个 query 稳定 ID，
   审批绑定 exact serialized plan/hash 和范围；如需改变上限，先定义新合同和
   用户可审查预算，再获批，不以视角功能默认扩张。
-- [ ] **RH-10.3 唯一 dispatch**：retrieval worker 只执行审批版本内 query ID，
+- [x] **RH-10.3 唯一 dispatch**：retrieval worker 只执行审批版本内 query ID，
   query/provider/filter/page cap 不匹配就拒绝。新发现提交下一版 draft，
   不修改已批准计划；取消/恢复沿 S02 身份与 receipt。
-- [ ] **RH-11.1 Canonical source identity**：DOI/arXiv/PMID 与别名合并沿已有 identity
+- [x] **RH-11.1 Canonical source identity**：DOI/arXiv/PMID 与别名合并沿已有 identity
   repository；标题相近但元数据冲突保留不同来源与冲突记录，不自动造相同版本。
-- [ ] **RH-11.2 Ranking receipt**：保存原始 provider 排名、RRF 输入/版本与融合结果，
+- [x] **RH-11.2 Ranking receipt**：保存原始 provider 排名、RRF 输入/版本与融合结果，
   evidence rerank 记录 input hash、ranker version、分数理由、locator 与来源版本。
   不改写原始 API 回执，不让 unknown/corrupt 来源静默排进可信 evidence。
 - [ ] **RH-11.3 Evidence rerank**：在已有 chunk 上考虑相关性、方法匹配、信息增益、
   反证覆盖、定位和版本。只读 source、排序输出独立；写缓存/索引仍声明真实资源/effect。
-- [ ] **RH-11.4 网络合同**：复用当前 cache/rate limit/resource/budget。
+- [x] **RH-11.4 网络合同**：复用当前 cache/rate limit/resource/budget。
   429、provider 失败、分页提前终止、取消、receipt 缺失各有 partial coverage。
   `no results` 与 `not searched` 明确分开。
 - [ ] **RH-11.5 公平采纳**：50 个独立问题比较 RRF、RRF+rerank、perspective+rerank，
   同语料、模型、查询数、provider 上限和费用。主指标 Recall@20、nDCG@20、
   Evidence Recall，另报相关作品数、wall time、费用和缺失源。
-- [ ] **RH-10/11.6 切换与删除**：一次更新 schema、审批、stage/worker、IPC 和现有
+- [x] **RH-10/11.6 切换与删除**：一次更新 schema、审批、stage/worker、IPC 和现有
   检索计划审核组件；删除旧 query 无身份执行入口与兼容 serializer。
   评价后只保留采纳策略；RRF 若仍是当前排序组成部分，不因来自旧仓库视为遗留代码。
 
@@ -83,3 +83,5 @@ pnpm build
 AC-09 成立；所有排名可回查原始回执和当前源版本。
 新策略只有在质量非退步和预算公平成立时采纳，无法证明收益时删除候选实现。
 通过 G-C，S06 在获批 query/input/output 合同上构造有限依赖任务。
+
+工程验收及科学限制详见 [S05 执行报告](s05-execution-report.md)。

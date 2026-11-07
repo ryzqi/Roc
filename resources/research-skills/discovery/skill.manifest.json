@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "roc-research-discovery",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "stage": "discovery",
   "description": "将研究目标转为可执行且可验证的研究问题与检索策略。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "0d53b599b8d3e0329632ef2a5e88a9ba9440094a390c329bbbb0ed1a5dcfb580"
+    "hash": "5ebc3ff69610b59907c530711d601f76f1d291cdd817919aec085fa44bff5100"
   },
   "references": [],
   "license": {
@@ -19,16 +19,16 @@
   "source": {
     "kind": "project",
     "origin": "Roc/resources/research-skills/discovery",
-    "revision": "s04-1.1.0",
-    "hash": "0d53b599b8d3e0329632ef2a5e88a9ba9440094a390c329bbbb0ed1a5dcfb580"
+    "revision": "s05-1.2.0",
+    "hash": "5ebc3ff69610b59907c530711d601f76f1d291cdd817919aec085fa44bff5100"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
     "hash": "7898f7a36053375c323b8817abf2ff30409b58e4d94d669a407e83145c74d310"
   },
   "outputs": {
-    "schema": "researchStageOutput/v2",
-    "hash": "9f70097a33465c53b6dd411aa2a71f39285eb53ea60fbd42dc0bacbd95cde22e",
+    "schema": "researchStageOutput/v3",
+    "hash": "36947e6796ca5f0a44dcc89f5dc3b968d4447de79a1c9ea74b56460385fee13d",
     "artifactKind": "search_strategy"
   },
   "requiredCapabilities": [

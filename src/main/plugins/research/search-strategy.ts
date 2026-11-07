@@ -35,6 +35,7 @@ export function requireConfirmedSearchStrategy(repository: ResearchRepository, c
   if (frozen.output?.searchPlan === undefined) throw new Error('research_search_plan_required');
   const contentHash = hash(frozen.output);
   const assertCurrent = () => {
+    if (hash(frozen.output!) !== contentHash) throw new Error('research_search_plan_changed');
     const discovery = repository.getWorkflow(context.project.id).stages.find(stage => stage.stage === 'discovery');
     if (discovery?.gateApproved !== true) throw new Error('research_confirmed_search_plan_required');
     const artifact = repository.getArtifact(frozen.artifact.id);

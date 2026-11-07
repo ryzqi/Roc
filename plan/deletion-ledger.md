@@ -23,6 +23,13 @@ S03 完成 D07/D08 与空摘要继续路径删除，见 [S03 执行报告](s03-e
 | D11 / S06 | 无 DAG 的 stage 局部 scheduling 分支中被 node scheduler 替代的 dispatch/重试决策 | Task node scheduler + repository 原子 claim；领域 executor 保留执行 | `ResearchStageRuntime.schedule/linkAndSchedule`、review children、Task Controller | 无两份 scheduler；revision/lease/fence/依赖/取消恢复专项；并行无收益时新 scheduler concurrency=1；pending |
 | D12 / S02 | [tool-effect-store.ts](../src/main/services/deep-agent/tool-effect-store.ts) 的 identity v0 正常业务 upgrade/read 分支 | 当前 identity v1 操作合同；旧行离线有限转换或只读审计隔离 | reserve/read/reconcile、[tool-effect-store tests](../tests/unit/tool-effect-store.test.mjs)、checkpoint/effect 恢复 | 未知副作用不自动重做；无法重建身份的历史回执保留、阻止继续；不能删除真实旧 receipt；complete（S02 工程，见 s02-execution-report.md） |
 
+## S05 增补
+
+D13：`LiteratureExecutionContext.queryIndex`、无 ID 的 plan 执行参数与旧审批 UI 字段已删除，
+切换到 schemaVersion/version/queryId、perspective 和持久化预算占用；stage search plan 的工具、context、ledger 和 import 执行路径中
+queryIndex 零引用；独立 systematic review 协议仍使用其已有冻结版本/数组索引。旧数据只经离线转换器成为历史审计/文本，不进入执行授权。
+消费者、冷迁移和构建证据见 [S05 执行报告](s05-execution-report.md)。状态 complete（工程）。
+
 ## 不列入代码清理
 
 以下仍为有效责任：通用 Agent runtime、领域 begin/complete、Task/Effect/预算唯一 ledger、

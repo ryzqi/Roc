@@ -58,7 +58,7 @@ test('original research question cannot be replaced by the model or smuggled int
   } finally { other.close(); }
 });
 
-test('human approval freezes visible plan content and retrieval tools select only approved query indices', async () => {
+test('human approval freezes visible plan content and retrieval tools select only approved query IDs', async () => {
   const f = createResearchFixture(api, 'discovery');
   const http = [];
   const {service, search} = importer(f, async url => {
@@ -77,21 +77,62 @@ test('human approval freezes visible plan content and retrieval tools select onl
         return service.search(request);
       }}, signal: new AbortController().signal});
     const tool = tools.find(tool => tool.name === 'search_literature');
-    assert.deepEqual(Object.keys(tool.schema.shape), ['queryIndex']);
-    await assert.rejects(tool.invoke({queryIndex: 1}), /research_search_query_index_invalid/u);
-    await assert.rejects(tool.invoke({queryIndex: 0, query: 'changed query'}));
+    assert.deepEqual(Object.keys(tool.schema.shape), ['queryId']);
+    await assert.rejects(tool.invoke({queryId: 'unapproved'}), /research_search_query_id_invalid/u);
+    await assert.rejects(tool.invoke({queryId: 'query-1', query: 'changed query'}));
     assert.equal(http.length, 0);
-    const result = await tool.invoke({queryIndex: 0});
+    const result = await tool.invoke({queryId: 'query-1'});
     assert.equal(http.length, 2);
     assert.ok(http.every(url => url.searchParams.get('query') === query.query));
     assert.deepEqual(http.map(url => url.searchParams.get('offset')), ['0', '1']);
     assert.deepEqual(result.strategy, {artifactId, contentHash: api.requireConfirmedSearchStrategy(f.repository, context).contentHash,
-      approvedAt: f.repository.getArtifact(artifactId).updatedAt, researchQuestion: f.run.instruction, queryIndex: 0});
+      approvedAt: f.repository.getArtifact(artifactId).updatedAt, researchQuestion: f.run.instruction, queryId: 'query-1', planVersion: 1, perspectiveIds: ['primary'], maxRequests: 6});
     const execution = JSON.parse(f.db.prepare('SELECT request_json FROM research_literature_search_executions WHERE id=?').pluck().get(result.executionId));
     assert.deepEqual(execution.strategy, result.strategy);
     assert.deepEqual(execution.request, {...query, projectId: f.project.id});
     assert.equal(f.repository.library.list({projectId: f.project.id, query: '', includeArchived: false, limit: 10}).length, 0);
+    const rebuilt = api.createResearchRoleTools({run, context, repository: f.repository,
+      capabilities: {invoke: (_name, request) => service.search(request)}, signal: new AbortController().signal});
+    await assert.rejects(rebuilt.find(tool => tool.name === 'search_literature').invoke({queryId: 'query-1'}),
+      /research_search_query_already_dispatched/u);
+    assert.equal(http.length, 2, 'rebuilding tools cannot reset the approved query budget');
   } finally { await search.shutdown(); f.close(); }
+});
+
+test('perspective references, stable IDs, request caps and explicit budgets must agree before creating any artifact', () => {
+  const f = createResearchFixture(api, 'discovery');
+  try {
+    for (const change of [
+      plan => {plan.queries.push({...plan.queries[0]});},
+      plan => {plan.perspectives[0].queryIds = ['unapproved'];},
+      plan => {plan.perspectives = [];},
+      plan => {plan.queries[0].maxRequests = 100;},
+      plan => {plan.budget.requests++;},
+      plan => {plan.budget.candidates++;},
+      plan => {plan.budget.paidProviderCalls = 1;},
+      plan => {plan.queries[0].sources.push('crossref');},
+      plan => {delete plan.schemaVersion;}
+    ]) {
+      const plan = researchSearchPlanFixture(f.run.instruction, [query]);
+      change(plan);
+      assert.throws(() => f.repository.runs.complete(f.run.id, f.project.id, {...output, searchPlan: plan}));
+      assert.equal(f.repository.listArtifacts(f.project.id).length, 0);
+    }
+  } finally {f.close();}
+});
+
+test('changing an in-memory frozen plan is rejected before any network call', async () => {
+  const f = createResearchFixture(api, 'discovery');
+  let calls = 0;
+  const {service, search} = importer(f, async () => {calls++; return Response.json({message: {items: []}});});
+  try {
+    const {context, run} = await confirm(f);
+    const searchStrategy = api.requireConfirmedSearchStrategy(f.repository, context);
+    searchStrategy.plan.queries[0].query = 'unapproved replacement';
+    await assert.rejects(api.withLiteratureContext({owner: `stage:${run.id}`, projectId: f.project.id, runId: run.id,
+      searchStrategy, queryId: 'query-1'}, () => service.search({...query, query: 'unapproved replacement'})), /research_search_plan_changed/u);
+    assert.equal(calls, 0);
+  } finally {await search.shutdown();f.close();}
 });
 
 test('manual artifacts, missing human approval and changed plan contents cannot authorize retrieval', async () => {
@@ -133,9 +174,9 @@ test('import boundary rejects parameter drift and missing query identity before 
       searchStrategy: api.requireConfirmedSearchStrategy(f.repository, context)};
     for (const parameters of [{...query, query: 'changed'}, {...query, sources: ['openalex']},
       {...query, yearFrom: 2021}, {...query, maxPages: 3}, {...query, limit: 2}]) {
-      await assert.rejects(api.withLiteratureContext({...scope, queryIndex: 0}, () => service.search(parameters)), /research_search_query_changed/u);
+      await assert.rejects(api.withLiteratureContext({...scope, queryId: 'query-1'}, () => service.search(parameters)), /research_search_query_changed/u);
     }
-    await assert.rejects(api.withLiteratureContext(scope, () => service.search(query)), /research_search_query_index_required/u);
+    await assert.rejects(api.withLiteratureContext(scope, () => service.search(query)), /research_search_query_id_required/u);
     assert.equal(calls, 0);
     assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_literature_search_executions').pluck().get(), 0);
   } finally { await search.shutdown(); f.close(); }
@@ -153,7 +194,7 @@ test('superseded plan between pages stops the next HTTP request and retains the 
     const confirmed = await confirm(f);
     artifactId = confirmed.artifactId;
     const scope = {owner: `stage:${confirmed.run.id}`, projectId: f.project.id, runId: confirmed.run.id,
-      searchStrategy: api.requireConfirmedSearchStrategy(f.repository, confirmed.context), queryIndex: 0};
+      searchStrategy: api.requireConfirmedSearchStrategy(f.repository, confirmed.context), queryId: 'query-1'};
     await assert.rejects(api.withLiteratureContext(scope, () => service.search(query)), /literature_request_audit_failed/u);
     assert.equal(calls, 1);
     assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_literature_searches').pluck().get(), 0);
@@ -191,7 +232,7 @@ test('actual gate interrupt carries the visible plan and requires its original h
       const config = {configurable: {thread_id: `gate-${change}`}};
       const pending = await graph.invoke({done: false}, config);
       const args = pending.__interrupt__[0].value.request.actionRequests[0].args;
-      assert.deepEqual(args.searchPlan.queries, [query]);
+      assert.deepEqual(args.searchPlan.queries, researchSearchPlanFixture(f.run.instruction, [query]).queries);
       assert.equal(args.searchPlan.researchQuestion, f.run.instruction);
       assert.match(args.searchPlanHash, /^[a-f0-9]{64}$/u);
       assert.equal(args.artifactLinks.length,1);

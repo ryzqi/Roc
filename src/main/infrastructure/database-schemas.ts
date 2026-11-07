@@ -2774,6 +2774,13 @@ WHEN json_type(NEW.context_json,'$.skillPin') IS NOT 'object'
 BEGIN SELECT RAISE(ABORT,'research_stage_skill_pin_required'); END;
 `});
 
+researchMigrations.push({version: 63, name: 'frozen_search_query_identity', offlineOnly: true, sql: `
+CREATE UNIQUE INDEX research_literature_frozen_query ON research_literature_search_executions(
+  project_id, json_extract(request_json,'$.strategy.artifactId'),
+  json_extract(request_json,'$.strategy.contentHash'), json_extract(request_json,'$.strategy.queryId')
+) WHERE json_type(request_json,'$.strategy.queryId')='text';
+`});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,
