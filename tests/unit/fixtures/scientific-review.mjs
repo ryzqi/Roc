@@ -1,4 +1,4 @@
-import {createResearchFixture, captureResearchArtifactVersions} from './research-test-kit.mjs';
+import {withResearchTestWorker, createResearchFixture, captureResearchArtifactVersions} from './research-test-kit.mjs';
 
 const plain = {title: 'Review', markdown: 'Controlled engineering fixture.', claims: [], sections: [], verdict: 'uncertain'};
 export function createScientificReviewFixture(api, {contradiction = false} = {}) {
@@ -7,9 +7,9 @@ export function createScientificReviewFixture(api, {contradiction = false} = {})
     sourceId: 'negative.md', title: 'Negative result', content: 'A negative result with uncertainty.',
     chunks: [{content: 'A negative result with uncertainty.', locator: 'block:0'}], embeddingPolicy: 'none'});
   f.evidence = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'scientific-source:chunk:0'});
-  f.artifactId = f.repository.runs.complete(f.run.id, f.project.id, {...plain,
+  f.artifactId = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {...plain,
     claims: [{subjectType: 'paragraph', content: 'A negative result with uncertainty.', status: 'supported', evidenceIds: [f.evidence.id]}],
-    sections: [{title: 'Results', claimIndexes: [0]}]}).outputArtifactIds[0];
+    sections: [{title: 'Results', claimIndexes: [0]}]})).outputArtifactIds[0];
   f.claim = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: f.artifactId})[0];
   const relation = f.repository.evidence.relations.list({projectId: f.project.id, claimId: f.claim.id})[0];
   f.repository.evidence.relations.review({projectId: f.project.id, relationId: relation.id, expectedVersion: relation.version,
@@ -22,9 +22,23 @@ export function createScientificReviewFixture(api, {contradiction = false} = {})
   f.repository.transitionWorkflow({projectId: f.project.id, expectedStage: 'writing', action: 'approve',
     expectedArtifactVersions: captureResearchArtifactVersions(f.repository, f.project.id)});
   const queued = f.repository.runs.begin({projectId: f.project.id, expectedStage: 'review', instruction: 'Review current manuscript', requestId: 'review-1'});
-  f.parent = f.repository.runs.markRunning(queued.id, f.project.id, {providerId: 'fixture', modelId: 'fixture'});
-  f.children = f.repository.runs.createReviewChildren(f.parent.id, f.project.id)
-    .map(child => f.repository.runs.markRunning(child.id, f.project.id, {providerId: 'fixture', modelId: 'fixture'}));
+  f.parent = queued;
+  f.children = f.repository.runs.createReviewChildren(f.parent.id, f.project.id);
+  f.worker = (id, work) => withResearchTestWorker(api, f.repository, id, f.project.id, workerRunId => {
+    if (f.repository.runs.get(workerRunId, f.project.id).status === 'queued') {
+      f.repository.runs.markRunning(workerRunId, f.project.id, {providerId: 'fixture', modelId: 'fixture'});
+    }
+    return work(workerRunId);
+  });
+  f.bindReviewDependencies = () => {
+    const graph = f.tasks.graph.read(f.parent.taskId, f.project.id);
+    const parent = f.tasks.requireExecution('stage', f.parent.id, f.project.id).nodeBinding;
+    f.tasks.graph.addDependencies(f.parent.taskId, f.project.id, graph.revision, f.children.map(child => ({
+      prerequisite: f.tasks.requireExecution('stage', child.id, f.project.id).nodeBinding.nodeId,
+      dependent: parent.nodeId
+    })));
+  };
+  f.bindReviewDependencies();
   f.input = f.repository.runs.getContext(f.parent.id).scientificInput;
   f.reference = {evidenceId: f.evidence.id, sourceDigest: api.relationSourceDigest(f.input.evidence[0]),
     start: 0, end: f.evidence.excerpt.length, quote: f.evidence.excerpt};
@@ -43,9 +57,9 @@ export function createScientificReviewFixture(api, {contradiction = false} = {})
       observation: 'State the uncertainty limit.', action: 'Retain uncertainty in Results.', acceptance: 'Exact qualifying text remains.'}],
     noFindingsRationale: null};
   f.complete = () => {
-    const completed = f.children.map(child => f.repository.runs.complete(child.id, f.project.id, {...plain, scientificReview: f.output(child)}));
-    f.repository.runs.setReviewReports(f.parent.id, f.project.id, completed);
-    f.repository.runs.complete(f.parent.id, f.project.id, plain);
+    const completed = f.children.map(child => f.worker(child.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {...plain, scientificReview: f.output(child)})));
+    f.worker(f.parent.id, workerRunId => f.repository.runs.setReviewReports(workerRunId, f.project.id, completed));
+    f.worker(f.parent.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, plain));
     f.repository.transitionWorkflow({projectId: f.project.id, expectedStage: 'review', action: 'complete'});
     return completed;
   };

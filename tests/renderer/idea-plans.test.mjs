@@ -68,10 +68,10 @@ after(async () => {
 });
 function fixture() {
   const f = createResearchFixture(api, 'ideation'); fixtures.push(f);
-  const run = f.repository.runs.complete(f.run.id, f.project.id, {
+  const run = f.withWorker(() => f.repository.runs.complete(f.run.id, f.project.id, {
     title: 'Testable hypothesis', markdown: 'Saved synthetic Canvas', claims: [], sections: [], verdict: 'uncertain',
     ideaCanvas: ideaCanvasContentFixture()
-  });
+  }));
   f.repository.transitionWorkflow({projectId: f.project.id, expectedStage: 'ideation', action: 'complete'});
   const artifactId = run.outputArtifactIds[0], canvas = f.repository.ideas.get(artifactId), handlers = new Map();
   const context = {pluginId: 'fixture', capabilities: {register(_id, descriptor, handler) {handlers.set(descriptor.name, handler);}}};

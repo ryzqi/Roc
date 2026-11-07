@@ -19,6 +19,11 @@ import { ProjectBudgetLedger } from '../../services/deep-agent/project-budget-le
 import {ResearchTaskObservabilityStore} from './task-observability-store';
 import {ResearchTaskFactsStore} from './task-facts-store';
 
+import {ResearchTaskGraphRepository} from './execution/task-graph';
+import {researchWorkerLease} from './execution/worker-context';
+import {ResearchWorkerEffects} from './execution/worker-effects';
+import {AgentToolEffectStore} from '../../services/deep-agent/tool-effect-store';
+
 type ExecutionIdentity = Pick<ResearchTaskExecution, 'kind' | 'executionId'>;
 type ExecutionInput = Omit<ResearchTaskExecution, 'schemaVersion' | 'createdAt' | 'nodeBinding' | 'origin' | 'frozenInputs' | 'associationState'> &
   Partial<Pick<ResearchTaskExecution, 'nodeBinding' | 'origin' | 'frozenInputs' | 'associationState'>>;
@@ -40,11 +45,15 @@ function parseChatSnapshot(raw: string) {
 
 /** Task identity and accounting share the agent database. Domain runs keep their own storage. */
 export class ResearchTaskRepository {
+  readonly graph: ResearchTaskGraphRepository;
+  readonly workerEffects: ResearchWorkerEffects;
   readonly projectBudgets: ProjectBudgetLedger;
   readonly facts: ResearchTaskFactsStore;
   readonly observability: ResearchTaskObservabilityStore;
   constructor(private readonly db: Database, private readonly now = () => new Date().toISOString()) {
     registerExecutionEventFunctions(db);
+    this.graph = new ResearchTaskGraphRepository(db, this, now);
+    this.workerEffects = new ResearchWorkerEffects(this.graph, new AgentToolEffectStore(db));
     this.projectBudgets = new ProjectBudgetLedger(db);
     this.facts = new ResearchTaskFactsStore(db);
     this.observability = new ResearchTaskObservabilityStore(db);
@@ -94,12 +103,15 @@ export class ResearchTaskRepository {
   }
 
   authorizeStage(run: ResearchStageRun): void {
-    new ExecutionGrantBroker(this.db).authorizeResearchStage(run);
+    new ExecutionGrantBroker(this.db, () => new Date(this.now())).authorizeResearchStage(run);
+    const lease = researchWorkerLease();
+    if (lease.executionId !== run.id) throw new Error('research_node_worker_mismatch');
+    this.graph.assertLease(lease);
   }
 
   budgetForExecution(kind: 'chat' | 'stage', executionId: string, projectId: string): RunLimits {
     const execution = this.requireExecution(kind, executionId, projectId);
-    if (execution.associationState !== 'confirmed' || execution.nodeBinding.kind !== 'none' || execution.frozenInputs === null) {
+    if (execution.associationState !== 'confirmed' || execution.frozenInputs === null) {
       throw new Error('research_task_execution_not_confirmed');
     }
     if (this.get(execution.taskId, projectId).status !== 'active') throw new Error('research_task_not_active');
@@ -138,7 +150,8 @@ export class ResearchTaskRepository {
   hasUnresolvedEffects(taskId: string, projectId: string): boolean {
     const executions = this.executions(taskId, projectId);
     const pending = this.db.prepare("SELECT 1 FROM agent_tool_effects WHERE run_id = ? AND status IN ('reserved','in_progress','unknown') LIMIT 1");
-    return executions.some(execution => execution.kind === 'chat' && pending.get(execution.executionId) !== undefined);
+    return executions.some(execution => pending.get(execution.nodeBinding.kind === 'dag'
+      ? execution.nodeBinding.nodeId : execution.executionId) !== undefined);
   }
 
   recoveryIssues(taskId: string, projectId: string): Array<'historical_execution_not_resumable' | 'research_execution_intent_uncommitted' | 'agent_tool_effect_receipt_missing'> {
@@ -148,7 +161,8 @@ export class ResearchTaskRepository {
     if (executions.some(execution => execution.associationState === 'pending' || execution.associationState === 'failed')) issues.push('research_execution_intent_uncommitted');
     const missing = this.db.prepare(
       "SELECT 1 FROM agent_tool_effects e LEFT JOIN agent_tool_effect_results r ON r.operation_id=e.operation_id WHERE e.run_id=? AND e.status='succeeded' AND r.operation_id IS NULL LIMIT 1");
-    if (executions.some(execution => missing.get(execution.executionId) !== undefined)) issues.push('agent_tool_effect_receipt_missing');
+    if (executions.some(execution => missing.get(execution.nodeBinding.kind === 'dag'
+      ? execution.nodeBinding.nodeId : execution.executionId) !== undefined)) issues.push('agent_tool_effect_receipt_missing');
     return issues;
   }
 
@@ -307,7 +321,7 @@ export class ResearchTaskRepository {
       const manifestHash = digest({ policy: run.policy, skillHash: run.skillHash, toolNames: run.toolNames });
       const contract = run.executionSnapshot;
       const previous = this.findExecution('stage', run.id, run.projectId);
-      if (contract === null || contract.nodeBinding.kind !== 'none' || contract.frozenInputs.manifestHash !== manifestHash) {
+      if (contract === null || contract.frozenInputs.manifestHash !== manifestHash) {
         throw new Error('research_stage_snapshot_invalid');
       }
       if (dispatch !== null) {
@@ -318,11 +332,24 @@ export class ResearchTaskRepository {
       }
       if (previous !== null) {
         if (previous.manifestHash !== manifestHash || JSON.stringify(previous.frozenInputs) !== JSON.stringify(contract.frozenInputs) ||
+            JSON.stringify(previous.nodeBinding) !== JSON.stringify(contract.nodeBinding) ||
             (dispatch !== null && (previous.parentKind !== 'chat' || previous.parentExecutionId !== dispatch.runId))) {
           throw new Error('research_task_execution_conflict');
         }
         return previous;
       }
+      if (contract.nodeBinding.kind !== 'none') throw new Error('research_stage_snapshot_invalid');
+      const attach = (execution: ResearchTaskExecution): ResearchTaskExecution => {
+        const previousNode = run.retryOfRunId === null ? null : this.requireExecution('stage', run.retryOfRunId, run.projectId).nodeBinding;
+        if (previousNode?.kind === 'none') throw new Error('historical_execution_not_resumable');
+        const node = this.graph.register(execution, {stage: run.stage, role: run.role, readonly: run.parentRunId !== null,
+          retryNodeId: previousNode?.kind === 'dag' ? previousNode.nodeId : null});
+        const nodeBinding = {kind: 'dag' as const, nodeId: node.id, graphRevision: node.graphRevision};
+        const linked = researchTaskExecutionSchema.parse({...execution, nodeBinding});
+        this.db.prepare("UPDATE research_task_executions SET snapshot_json=? WHERE kind='stage' AND execution_id=?").run(JSON.stringify(linked), run.id);
+        run.executionSnapshot = {...contract, nodeBinding};
+        return linked;
+      };
       const captured = {...contract, associationState: 'pending' as const};
       const {schemaVersion: _version, ...binding} = captured;
       if (dispatch !== null) {
@@ -335,20 +362,20 @@ export class ResearchTaskRepository {
         const task = chat === null ? this.createTask(run.projectId, run.instruction, dispatch.runId) : this.get(chat.taskId, run.projectId);
         this.link({ taskId: task.id, projectId: run.projectId, kind: 'chat', executionId: dispatch.runId,
           parentKind: null, parentExecutionId: null, associationSource: 'direct', manifestHash: dispatch.manifestHash });
-        return this.link({ taskId: task.id, projectId: run.projectId, kind: 'stage', executionId: run.id,
-          parentKind: 'chat', parentExecutionId: dispatch.runId, associationSource: 'chat_dispatch', manifestHash, ...binding });
+        return attach(this.link({ taskId: task.id, projectId: run.projectId, kind: 'stage', executionId: run.id,
+          parentKind: 'chat', parentExecutionId: dispatch.runId, associationSource: 'chat_dispatch', manifestHash, ...binding }));
       }
       const parentId = run.parentRunId ?? run.retryOfRunId;
       if (parentId !== null) {
         const parent = this.findExecution('stage', parentId, run.projectId);
-        if (parent !== null) return this.link({ taskId: parent.taskId, projectId: run.projectId, kind: 'stage', executionId: run.id,
+        if (parent !== null) return attach(this.link({ taskId: parent.taskId, projectId: run.projectId, kind: 'stage', executionId: run.id,
           parentKind: 'stage', parentExecutionId: parentId,
-          associationSource: run.parentRunId === null ? 'retry' : 'review', manifestHash, ...binding });
+          associationSource: run.parentRunId === null ? 'retry' : 'review', manifestHash, ...binding }));
         throw new Error('research_task_execution_unlinked');
       }
       const task = this.createTask(run.projectId, run.instruction, null);
-      return this.link({ taskId: task.id, projectId: run.projectId, kind: 'stage', executionId: run.id,
-        parentKind: null, parentExecutionId: null, associationSource: 'direct', manifestHash, ...binding });
+      return attach(this.link({ taskId: task.id, projectId: run.projectId, kind: 'stage', executionId: run.id,
+        parentKind: null, parentExecutionId: null, associationSource: 'direct', manifestHash, ...binding }));
     }).immediate();
   }
 
@@ -429,7 +456,7 @@ export class ResearchTaskRepository {
 
   private createTask(projectId: string, goal: string, rootAgentRunId: string | null): ResearchTask {
     const task = researchTaskSchema.parse({
-      schemaVersion: 2, id: `research_task_${randomUUID()}`, projectId, goal, rootAgentRunId,
+      schemaVersion: 3, id: `research_task_${randomUUID()}`, projectId, goal, rootAgentRunId,
       status: 'active', statusReason: null, deadlineClock: 'continuous',
       budgetPolicyVersion: 1, createdAt: this.now(), updatedAt: this.now()
     });
@@ -461,7 +488,7 @@ export class ResearchTaskRepository {
     const chatSnapshot = snapshot === undefined ? null : parseChatSnapshot(snapshot.snapshot_json);
     const frozenInputs = input.frozenInputs ?? chatSnapshot?.frozenInputs;
     if (frozenInputs === undefined) throw new Error('research_execution_inputs_required');
-    const candidate = researchTaskExecutionSchema.parse({schemaVersion: 2, nodeBinding: {kind: 'none'},
+    const candidate = researchTaskExecutionSchema.parse({schemaVersion: 3, nodeBinding: {kind: 'none'},
       origin: chatSnapshot?.origin ?? {kind: 'main', action: 'owned', requestId: input.executionId}, frozenInputs, associationState: 'confirmed',
       ...input, createdAt: existing?.createdAt ?? this.now()});
     if (existing !== null) {

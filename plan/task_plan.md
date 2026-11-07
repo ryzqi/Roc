@@ -2,8 +2,8 @@
 
 编制日期：2026-11-06。
 来源：[`Roc_Research_Agent_Harness_Plan.md`](../Roc_Research_Agent_Harness_Plan.md)。
-当前执行范围：S02/S03/S04 已提交，S05 工程验收完成，下一阶段 S06。S01 科学验收仍需独立材料。
-计划编制、S00、S01 工程合同与 S02 已完成；S01 科学数据/双审/L2 未运行，S03 工程完成，S04 工程完成，S05 工程完成，S06～S09 尚未启动。
+当前执行范围：S02～S05 已提交，S06 工程验收完成，下一阶段 S07。S01 科学验收仍需独立材料。
+计划编制、S00、S01 工程合同与 S02 已完成；S01 科学数据/双审/L2 未运行，S03 工程完成，S04 工程完成，S05 工程完成，S06 工程完成，S07～S09 尚未启动。
 执行原则：允许大范围重构；不做向后兼容；不保留遗留路径；不以防御性兜底掩盖合同错误。
 
 ## 计划编制进度
@@ -27,7 +27,7 @@
 | S03 | P0/P1 | S01 工程合同、S02 | complete（工程） | Verified passing；11 阶段 Manifest、权限交集与上下文恢复，见 s03-execution-report.md；科学评价未运行 |
 | S04 | P0/P1 | S01 最小独立数据、S02、S03 | complete（工程） | Verified passing；见 s04-execution-report.md；科学盲审未运行 |
 | S05 | P1 | S01 协议、S02、S03 | complete（工程） | Verified passing；冻结查询与回执/冷迁移见 s05-execution-report.md；科学比较未运行 |
-| S06 | P1 | S02、S03、S05 合同 | pending | 依赖一致、单有效 lease、旧提交拒绝、取消恢复 |
+| S06 | P1 | S02、S03、S05 合同 | complete（工程） | Verified passing；DAG/lease/恢复与分轮补验见 s06-execution-report.md；科学对照未运行 |
 | S07 | P1 | S02、S04、S05、S06 后端 | pending | 真实 effect 攻击回归、单壳 UI、焦点/布局/迟到响应 |
 | S08 | P1 | S01～S07 | pending | 真实导出闭包、全链路、迁移/冷恢复、打包和分项报告 |
 | S09 | P2 | S08、需求/预算/隔离条件 | pending | 独立立项；实验树和远程后端分别验收 |

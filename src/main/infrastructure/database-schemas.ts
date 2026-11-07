@@ -902,6 +902,24 @@ CREATE TRIGGER research_task_effect_committed AFTER INSERT ON agent_tool_effect_
 END;
 `});
 
+agentMigrations.push({version: 21, name: 'research_task_dag', offlineOnly: true, sql: `
+CREATE TABLE research_task_graphs (
+  task_id TEXT PRIMARY KEY REFERENCES research_tasks(id) ON DELETE CASCADE,
+  revision INTEGER NOT NULL CHECK(revision >= 0)
+);
+CREATE TABLE research_task_nodes (
+  id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES research_tasks(id) ON DELETE CASCADE,
+  project_id TEXT NOT NULL, execution_id TEXT NOT NULL UNIQUE, status TEXT NOT NULL, snapshot_json TEXT NOT NULL
+);
+CREATE INDEX research_task_nodes_ready ON research_task_nodes(status,task_id);
+CREATE TABLE research_task_dependencies (
+  task_id TEXT NOT NULL REFERENCES research_tasks(id) ON DELETE CASCADE,
+  prerequisite TEXT NOT NULL REFERENCES research_task_nodes(id),
+  dependent TEXT NOT NULL REFERENCES research_task_nodes(id),
+  PRIMARY KEY(prerequisite,dependent), CHECK(prerequisite != dependent)
+);
+`});
+
 export const memoryMigrations: RocDatabaseMigration[] = [
   {
     version: 1,
@@ -2779,6 +2797,19 @@ CREATE UNIQUE INDEX research_literature_frozen_query ON research_literature_sear
   project_id, json_extract(request_json,'$.strategy.artifactId'),
   json_extract(request_json,'$.strategy.contentHash'), json_extract(request_json,'$.strategy.queryId')
 ) WHERE json_type(request_json,'$.strategy.queryId')='text';
+`});
+
+researchMigrations.push({version: 64, name: 'task_node_commit_receipts', offlineOnly: true, sql: `
+CREATE TABLE research_node_output_receipts (
+  execution_id TEXT PRIMARY KEY REFERENCES research_stage_runs(id),
+  lease_json TEXT NOT NULL CHECK(json_valid(lease_json)),
+  output_json TEXT NOT NULL CHECK(json_valid(output_json))
+);
+CREATE TABLE research_node_decision_receipts (
+  node_id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES research_projects(id),
+  output_hash TEXT NOT NULL, output_revision INTEGER NOT NULL,
+  accepted INTEGER NOT NULL CHECK(accepted IN (0,1))
+);
 `});
 
 function applySchema(

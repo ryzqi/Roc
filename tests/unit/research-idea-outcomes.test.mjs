@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {after, before, test} from 'node:test';
 import Database from 'better-sqlite3';
-import {loadResearchTestApi, createResearchFixture} from './fixtures/research-test-kit.mjs';
+import {withResearchTestWorker, loadResearchTestApi, createResearchFixture} from './fixtures/research-test-kit.mjs';
 import {ideaCanvasContentFixture, ideaPlanBodyFixture} from './fixtures/research-idea-plan.mjs';
 
 let api;
@@ -60,10 +60,10 @@ test('actual plan/result evidence comparison reports precise definition unit dir
 test('DB45 to46 preserves original Canvas and frozen method bytes and adds only the empty assessment timeline', () => {
   const f = createResearchFixture(api, 'ideation'), old = new Database(':memory:');
   try {
-    const run = f.repository.runs.complete(f.run.id, f.project.id, {
+    const run = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {
       title: 'Frozen plan migration', markdown: 'Synthetic Canvas', claims: [], sections: [], verdict: 'uncertain',
       ideaCanvas: ideaCanvasContentFixture()
-    }), artifactId = run.outputArtifactIds[0], canvas = f.repository.ideas.get(artifactId);
+    })), artifactId = run.outputArtifactIds[0], canvas = f.repository.ideas.get(artifactId);
     const plan = api.withResearchHumanContext({capability: 'research.ideaPlans.save', projectId: f.project.id, windowId: 61},
       () => f.repository.ideaPlans.save({projectId: f.project.id, artifactId, requestId: 'method',
         canvas: {version: canvas.version, contentHash: canvas.contentHash}, parent: null, revisionReason: null, body: ideaPlanBodyFixture()}));

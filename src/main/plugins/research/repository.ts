@@ -777,7 +777,11 @@ export class ResearchRepository {
           break;
       }
     });
-    transition();
+    if (request.action === 'approve' || request.action === 'reject') {
+      this.requireStatus(current, ['waiting_approval'], 'research_stage_not_waiting_approval');
+      this.assertArtifactReview(request);
+      this.runs.commitStageDecision(request.projectId, current.stage, current.artifactIds, request.action === 'approve', transition);
+    } else transition();
     return this.getWorkflow(request.projectId);
   }
 

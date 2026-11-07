@@ -12,7 +12,7 @@ let api;
 before(async () => { api = await loadResearchTestApi(); });
 after(() => api.dispose());
 
-function setup(overrides = {}) {
+function setup(overrides = {}, includeChild = true) {
   const f = createResearchFixture(api, 'discovery');
   const budget = {
     ...api.createRunBudget({ contextBudgetTokens: 1000, maxOutputTokens: 250 }),
@@ -21,8 +21,8 @@ function setup(overrides = {}) {
   };
   f.agentDb.prepare('UPDATE research_task_budgets SET limits_json = ? WHERE task_id = ?')
     .run(JSON.stringify(budget), f.run.taskId);
-  const child = { ...f.run, id: 'child-stage', parentRunId: f.run.id, retryOfRunId: null, role: 'reviewer' };
-  f.tasks.linkStage(child, null);
+  const child = { ...f.run, executionSnapshot: {...f.run.executionSnapshot, nodeBinding: {kind: 'none'}}, id: 'child-stage', parentRunId: f.run.id, retryOfRunId: null, role: 'reviewer' };
+  if (includeChild) f.tasks.linkStage(child, null);
   return { ...f, budget, child, ledger: new api.RunBudgetLedger(f.agentDb) };
 }
 function reservation(id, overrides = {}) {
@@ -167,7 +167,7 @@ test('temporary concurrency denial does not erase budget; permanent task stop su
 });
 
 test('actual stage createAgent accounts provider attempt and refuses the next call before model execution', async () => {
-  const f = setup({ maxModelCalls: 1 });
+  const f = setup({ maxModelCalls: 1 }, false);
   let requests = 0;
   class Model extends BaseChatModel {
     _llmType() { return 'budget-fixture'; }
@@ -206,10 +206,9 @@ test('actual stage createAgent accounts provider attempt and refuses the next ca
     assert.equal(f.agentDb.prepare('SELECT stop_reason FROM research_task_budgets').pluck().get(), 'run_model_call_budget_exhausted');
     f.repository.runs.terminate(f.run.id, f.project.id, 'failed', 'fixture_provider_failure');
     const runtime = new api.ResearchStageRuntime(f.repository, {}, executor, { complete: async () => {} }, {cancelOwned: async () => {}});
-    const retried = runtime.retry({ projectId: f.project.id, runId: f.run.id, requestId: 'budget-retry' });
-    await runtime.waitForIdle();
-    assert.equal(f.repository.runs.get(retried.id, f.project.id).error, 'run_model_call_budget_exhausted');
-    assert.equal(retried.taskId, f.run.taskId);
+    assert.throws(() => runtime.retry({ projectId: f.project.id, runId: f.run.id, requestId: 'budget-retry' }),
+      /run_model_call_budget_exhausted/);
+    assert.equal(f.repository.runs.list({projectId: f.project.id, limit: 10}).length, 1);
     assert.equal(requests, 1);
     const events = f.tasks.events({ taskId: f.run.taskId, projectId: f.project.id, afterSequence: 0, limit: 200 }).events;
     assert.equal(events.filter(event => event.eventType === 'call_reserved').length, 1);

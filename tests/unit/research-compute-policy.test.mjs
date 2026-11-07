@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { before, after, test } from 'node:test';
-import { loadResearchTestApi, createResearchFixture } from './fixtures/research-test-kit.mjs';
+import {createResearchTestRoleTools,  loadResearchTestApi, createResearchFixture } from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => { api = await loadResearchTestApi(); });
@@ -42,7 +42,7 @@ test('actual role SDK refuses a model networking request before invoking effects
     }
   };
   const effects = new api.ResearchProductionEffectService(f.repository, undefined, service);
-  const tools = api.createResearchRoleTools({
+  const tools = createResearchTestRoleTools(api, {
     run: f.run, context: f.repository.runs.getContext(f.run.id), repository: f.repository,
     capabilities: {}, effects, signal: new AbortController().signal
   });

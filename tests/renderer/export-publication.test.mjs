@@ -73,9 +73,9 @@ async function scene({approved = true, stage = 'export', imported = false} = {})
   f.repository.knowledge.upsertFromSource({id:'export-ui-source',projectId:f.project.id,sourceType:'file',sourceId:'synthetic.md',
     title:'Synthetic source',content:'Measured difference was -4 ms.',chunks:[{content:'Measured difference was -4 ms.',locator:'block:0'}],embeddingPolicy:'none'});
   const evidence = f.repository.evidence.capture({projectId:f.project.id,chunkId:'export-ui-source:chunk:0'});
-  f.artifactId = f.repository.runs.complete(f.run.id,f.project.id,{title:'合成导出验收',markdown:'Synthetic manuscript',
+  f.artifactId = f.withWorker(() => f.repository.runs.complete(f.run.id,f.project.id,{title:'合成导出验收',markdown:'Synthetic manuscript',
     claims:[{subjectType:'paragraph',content:'Measured difference was -4 ms.',status:'supported',evidenceIds:[evidence.id]}],
-    sections:[{title:'Results',claimIndexes:[0]}],verdict:'ready'}).outputArtifactIds[0];
+    sections:[{title:'Results',claimIndexes:[0]}],verdict:'ready'})).outputArtifactIds[0];
   for (const claim of f.repository.evidence.listClaims({projectId:f.project.id,artifactId:f.artifactId})) {
     const source = f.repository.evidence.inspectEvidence(evidence.id,f.project.id);
     const relation = f.repository.evidence.relations.propose({projectId:f.project.id,claimId:claim.id,expectedClaimVersion:claim.version,

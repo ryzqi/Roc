@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {after, before, test} from 'node:test';
 import Database from 'better-sqlite3';
-import {createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {withResearchTestWorker, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => { api = await loadResearchTestApi(); });
@@ -29,19 +29,18 @@ for (const change of ['approval', 'content']) {
       agentDb = new Database(join(directory, 'agent.db'));
       api.applyResearchDatabaseSchema(db, () => '2026-11-03T00:00:00.000Z');
       api.applyDatabaseMigrations(agentDb, {dbName: 'agent', migrations: api.agentMigrations});
-      const tasks = new api.ResearchTaskRepository(agentDb);
+      const tasks = new api.ResearchTaskRepository(agentDb, () => '2026-11-03T00:00:00.000Z');
       const repository = new api.ResearchRepository(db, tasks, () => '2026-11-03T00:00:00.000Z');
-      assert.equal(repository.runs.requireActive(queued.id, f.project.id).id, queued.id);
+      assert.equal(withResearchTestWorker(api, repository, queued.id, f.project.id, () => repository.runs.requireActive(queued.id, f.project.id)).id, queued.id);
       const mutate = () => db.prepare(change === 'approval'
         ? "UPDATE research_artifacts SET status='draft' WHERE id=?"
         : "UPDATE research_artifacts SET title='Changed without a new timestamp' WHERE id=?").run(artifact.id);
       mutate();
-      assert.throws(() => repository.runs.markRunning(queued.id, f.project.id, {providerId: 'fixture', modelId: 'fixture'}), /research_stage_inputs_stale/);
+      assert.throws(() => withResearchTestWorker(api, repository, queued.id, f.project.id, workerRunId => repository.runs.markRunning(workerRunId, f.project.id, {providerId: 'fixture', modelId: 'fixture'})), /research_stage_inputs_stale/);
       db.prepare("UPDATE research_artifacts SET status='approved',title='Approved input' WHERE id=?").run(artifact.id);
-      repository.runs.markRunning(queued.id, f.project.id, {providerId: 'fixture', modelId: 'fixture'});
+      withResearchTestWorker(api, repository, queued.id, f.project.id, workerRunId => repository.runs.markRunning(workerRunId, f.project.id, {providerId: 'fixture', modelId: 'fixture'}));
       mutate();
-      assert.throws(() => repository.runs.complete(queued.id, f.project.id,
-        {title: 'Plan', markdown: 'Stale result', claims: [], sections: [], verdict: 'ready'}), /research_stage_inputs_stale/);
+      assert.throws(() => withResearchTestWorker(api, repository, queued.id, f.project.id, workerRunId => repository.runs.complete(workerRunId, f.project.id, {title: 'Plan', markdown: 'Stale result', claims: [], sections: [], verdict: 'ready'})), /research_stage_inputs_stale/);
       assert.deepEqual(repository.runs.get(queued.id, f.project.id).outputArtifactIds, []);
       repository.runs.terminate(queued.id, f.project.id, 'interrupted', 'fixture_restart');
       tasks.setStatus(queued.taskId, f.project.id, 'interrupted', 'fixture_restart', ['active']);
@@ -76,8 +75,8 @@ test('approval restoration refuses inputs changed after the completed stage was 
     f.db.prepare("UPDATE research_projects SET current_stage='planning' WHERE id=?").run(f.project.id);
     const run = f.repository.runs.begin({projectId: f.project.id, expectedStage: 'planning',
       instruction: 'Use the approved input', requestId: 'approval-input'});
-    f.repository.runs.markRunning(run.id, f.project.id, {providerId: 'fixture', modelId: 'fixture'});
-    f.repository.runs.complete(run.id, f.project.id, {title: 'Plan', markdown: 'Plan', claims: [], sections: [], verdict: 'ready'});
+    withResearchTestWorker(api, f.repository, run.id, f.project.id, workerRunId => f.repository.runs.markRunning(workerRunId, f.project.id, {providerId: 'fixture', modelId: 'fixture'}));
+    withResearchTestWorker(api, f.repository, run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {title: 'Plan', markdown: 'Plan', claims: [], sections: [], verdict: 'ready'}));
     await gate.complete({projectId: f.project.id, expectedStage: 'planning', action: 'complete'});
     runtime.synchronizeTaskState(run.taskId, f.project.id);
     const request = {projectId: f.project.id, taskId: run.taskId};

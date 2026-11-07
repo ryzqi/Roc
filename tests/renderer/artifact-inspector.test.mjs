@@ -160,8 +160,8 @@ async function scene({long=false,managed=false,experiment=false}={}) {
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run('inspector-evidence',f.project.id,'inspector-document','inspector-document:chunk:0',
     'file','synthetic-source','parse-v1','Original synthetic source','page:2',excerpt,hash(excerpt),'2026-11-04T00:00:00.000Z');
   const empty=f.repository.createArtifact({projectId:f.project.id,stage:'reading',kind:'reading_notes',title:'Empty real artifact',path:null});
-  const completed=f.repository.runs.complete(f.run.id,f.project.id,{title:'真实保存的阅读产物',markdown:'# Saved result\n\nActual **persisted** markdown.',
-    claims:[{subjectType:'claim',content:'A working hypothesis',status:'hypothesis',evidenceIds:[evidenceId]}],sections:[],verdict:'uncertain'});
+  const completed=f.withWorker(() => f.repository.runs.complete(f.run.id,f.project.id,{title:'真实保存的阅读产物',markdown:'# Saved result\n\nActual **persisted** markdown.',
+    claims:[{subjectType:'claim',content:'A working hypothesis',status:'hypothesis',evidenceIds:[evidenceId]}],sections:[],verdict:'uncertain'}));
   const artifactId=completed.outputArtifactIds[0];
   await api.createResearchHumanGate({repository:f.repository}).complete({projectId:f.project.id,expectedStage:'reading',action:'complete'});
   const snapshot=f.repository.inspectArtifact({projectId:f.project.id,artifactId,expectedVersion:null}).snapshot;
@@ -497,15 +497,15 @@ test('inspector rereads the entire stage and returns to the original real interr
   const f=await scene();
   const original=f.approval.interruptId;
   await openArtifact();
-  f.db.prepare("UPDATE research_artifact_contents SET output_json=json_set(output_json,'$.markdown','Reviewed latest body') WHERE artifact_id=?").run(f.link.artifactId);
+  f.db.prepare("UPDATE research_artifacts SET title='Reviewed latest title' WHERE id=?").run(f.link.artifactId);
   const before=f.db.prepare('SELECT total_changes()').pluck().get();
   await page.getByTestId('artifact-inspector-review').focus();await page.keyboard.press('Enter');
   await page.getByTestId('artifact-inspector-gate-context').waitFor();
   assert.match(await page.getByTestId('artifact-inspector-gate-context').innerText(),/Empty real artifact/u);
-  assert.match(await page.getByTestId('artifact-inspector-gate-context').innerText(),/真实保存的阅读产物/u);
+  assert.match(await page.getByTestId('artifact-inspector-gate-context').innerText(),/Reviewed latest title/u);
   assert.equal(await page.getByTestId('artifact-inspector-return-review').isDisabled(),true);
   await page.getByTestId('artifact-inspector-refresh').click();
-  await page.getByTestId('artifact-inspector-content').getByText('Reviewed latest body',{exact:true}).waitFor();
+  await page.getByTestId('artifact-inspector-panel').getByRole('heading',{name:'Reviewed latest title',exact:true}).waitFor();
   assert.equal(await page.getByTestId('artifact-inspector-return-review').isDisabled(),false);
   await audit('gate-whole-context');
   assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
@@ -528,7 +528,7 @@ test('inspector rereads the entire stage and returns to the original real interr
 
 test('old card approval refuses stale data and displays a new real interrupt before a new human decision',async()=>{
   const f=await scene(),original=f.approval.interruptId;
-  f.db.prepare("UPDATE research_artifact_contents SET output_json=json_set(output_json,'$.markdown','Changed after review') WHERE artifact_id=?").run(f.link.artifactId);
+  f.db.prepare("UPDATE research_artifacts SET title='Changed after review' WHERE id=?").run(f.link.artifactId);
   const before=f.db.prepare('SELECT total_changes()').pluck().get();
   await page.getByTestId('assistant-gate-approve').click();
   await page.getByTestId('assistant-gate-review-error').waitFor();
@@ -544,6 +544,21 @@ test('old card approval refuses stale data and displays a new real interrupt bef
   assert.equal(await page.evaluate(()=>window.resumeError),null);
   assert.equal(f.repository.getWorkflow(f.project.id).currentStage,'reading');
   assert.equal(f.repository.getWorkflow(f.project.id).stages.find(value=>value.stage==='reading').status,'running');
+});
+
+test('human rereading cannot approve a tampered immutable worker result',async()=>{
+  const f=await scene();
+  f.db.prepare("UPDATE research_artifact_contents SET output_json=json_set(output_json,'$.markdown','Tampered worker result') WHERE artifact_id=?").run(f.link.artifactId);
+  const before=f.db.prepare('SELECT total_changes()').pluck().get();
+  await page.getByTestId('assistant-gate-refresh').click();
+  await page.getByTestId('assistant-gate-reviewed-at').waitFor();
+  await page.getByTestId('assistant-gate-approve').click();
+  await page.waitForFunction(()=>window.resumeResult?.done===true||window.resumeError!==null);
+  assert.equal(await page.evaluate(()=>window.resumeError),'research_node_output_changed');
+  assert.equal(f.repository.getWorkflow(f.project.id).currentStage,'reading');
+  assert.equal(f.repository.getArtifact(f.link.artifactId).status,'draft');
+  assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+  assert.equal(f.tasks.graph.get(f.lease.nodeId,f.project.id).status,'pending_review');
 });
 
 test('late whole-context reads are discarded on selection or project replacement and never submit decisions',async()=>{

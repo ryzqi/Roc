@@ -1,7 +1,7 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {withResearchTestWorker, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async()=>{api=await loadResearchTestApi();});
@@ -34,9 +34,9 @@ test('owned artifact inspection retains actual empty content, origin and scoped 
     assert.match(first.snapshot.version,/^[a-f0-9]{64}$/u);
     assert.deepEqual(f.repository.inspectArtifact(readInput(f,empty,first.snapshot.version)),first);
     assert.equal(totalChanges(f),before);
-    const completed=f.repository.runs.complete(f.run.id,f.project.id,{title:'Recorded notes',markdown:'Actual saved markdown',
+    const completed=withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {title:'Recorded notes',markdown:'Actual saved markdown',
       claims:[{subjectType:'claim',content:'Synthetic working hypothesis',status:'hypothesis',evidenceIds:[]}],
-      sections:[],verdict:'uncertain'});
+      sections:[],verdict:'uncertain'}));
     const artifact=f.repository.getArtifact(completed.outputArtifactIds[0]);
     f.repository.addProvenance({projectId:f.project.id,artifactId:artifact.id,subjectType:'artifact',subjectId:artifact.id,
       sourceType:'file',sourceId:'synthetic-input',locator:'page:2',excerpt:'Original source location.'});

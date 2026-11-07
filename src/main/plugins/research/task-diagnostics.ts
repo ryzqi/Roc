@@ -52,6 +52,7 @@ export class ResearchTaskDiagnosticsService {
       workflow.projectStatus !== 'archived';
     return researchTaskDiagnosticsSchema.parse({
       task, budget: this.ledger.readTaskBudgetStatus(task.id, task.projectId), executions,
+      graph: this.repository.tasks.graph.read(task.id, task.projectId),
       continuationRunId: canContinue ? continuation?.association.executionId ?? null : null,
       canRestoreApproval: cleanupConfirmed && effectsResolved && task.status === 'paused' && waiting && workflow.projectStatus !== 'archived',
       recoveryIssues, eventDelivery: this.repository.runs.flushTaskEvents(task.id), externalCost: 'unknown'

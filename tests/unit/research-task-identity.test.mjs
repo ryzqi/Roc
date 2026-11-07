@@ -227,7 +227,7 @@ test('owned executions and three review roles retain stage parentage, deny reass
     }
     for (const role of ['methods-reviewer', 'evidence-reviewer', 'writing-reviewer']) {
       const child = { ...f.run, id: role, parentRunId: f.run.id, retryOfRunId: null, role };
-      const execution = f.tasks.linkStage(child, null);
+      const execution = f.tasks.linkStage({...child, executionSnapshot: {...child.executionSnapshot, nodeBinding: {kind: 'none'}}}, null);
       assert.equal(execution.taskId, f.run.taskId);
       assert.equal(execution.parentKind, 'stage');
       assert.equal(execution.parentExecutionId, f.run.id);
@@ -237,8 +237,8 @@ test('owned executions and three review roles retain stage parentage, deny reass
       ownerRunId: null, goal: 'Standalone', snapshot: {} });
     assert.equal(direct.parentKind, null);
     assert.notEqual(direct.taskId, f.run.taskId);
-    assert.throws(() => f.tasks.linkStage({ ...f.run, id: 'orphan', parentRunId: 'missing' }, null), /research_task_execution_unlinked/);
-    assert.throws(() => f.tasks.linkStage({ ...f.run, id: 'orphan-retry', parentRunId: null, retryOfRunId: 'missing' }, null), /research_task_execution_unlinked/);
+    assert.throws(() => f.tasks.linkStage({ ...f.run, executionSnapshot: {...f.run.executionSnapshot, nodeBinding: {kind: 'none'}}, id: 'orphan', parentRunId: 'missing' }, null), /research_task_execution_unlinked/);
+    assert.throws(() => f.tasks.linkStage({ ...f.run, executionSnapshot: {...f.run.executionSnapshot, nodeBinding: {kind: 'none'}}, id: 'orphan-retry', parentRunId: null, retryOfRunId: 'missing' }, null), /research_task_execution_unlinked/);
     assert.equal(f.tasks.executions(f.run.taskId, f.project.id).length, 7);
   } finally { f.close(); }
 });

@@ -79,11 +79,11 @@ async function scene({long = false, waiting = false, scientific = false} = {}) {
     content: 'The measured difference was -4 ms.', chunks: [{content: 'The measured difference was -4 ms.', locator: 'block:0'}],
     embeddingPolicy: 'none'});
   f.evidence = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'response-source:chunk:0'});
-  f.artifactId = f.repository.runs.complete(f.run.id, f.project.id, {title: '审稿意见与当前修改稿',
+  f.artifactId = f.withWorker(() => f.repository.runs.complete(f.run.id, f.project.id, {title: '审稿意见与当前修改稿',
     markdown: 'Synthetic response manuscript', claims: [
       {subjectType: 'paragraph', content: `${long ? '逐项核对原始意见、修改稿与测量来源。'.repeat(20) : ''}The measured difference was -4 ms. 𝛥 verified.`,
         status: 'supported', evidenceIds: [f.evidence.id]}],
-    sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'}).outputArtifactIds[0];
+    sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'})).outputArtifactIds[0];
   f.claim = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: f.artifactId})[0];
   if (waiting) f.repository.transitionWorkflow({projectId: f.project.id, expectedStage: 'writing', action: 'complete'});
   }

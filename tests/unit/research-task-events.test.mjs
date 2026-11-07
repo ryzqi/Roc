@@ -11,8 +11,8 @@ const requestFor = f => ({ taskId: f.run.taskId, projectId: f.project.id, afterS
 test('project task listing uses stable creation cursors despite identical timestamps and status updates', () => {
   const f = createResearchFixture(api, 'discovery');
   try {
-    const second = f.tasks.linkStage({ ...f.run, id: 'second-stage', taskId: null, requestId: 'second-stage' }, null);
-    const third = f.tasks.linkStage({ ...f.run, id: 'third-stage', taskId: null, requestId: 'third-stage' }, null);
+    const second = f.tasks.linkStage({ ...f.run, executionSnapshot: {...f.run.executionSnapshot, nodeBinding: {kind: 'none'}}, id: 'second-stage', taskId: null, requestId: 'second-stage' }, null);
+    const third = f.tasks.linkStage({ ...f.run, executionSnapshot: {...f.run.executionSnapshot, nodeBinding: {kind: 'none'}}, id: 'third-stage', taskId: null, requestId: 'third-stage' }, null);
     const request = { projectId: f.project.id, afterTaskId: null, limit: 2 };
     const firstPage = f.tasks.list(request);
     assert.deepEqual(firstPage.tasks.map(task => task.id), [third.taskId, second.taskId]);
@@ -49,7 +49,7 @@ test('task events persist reservation, settlement and startup uncertainty with e
     ledger.reconcileStartup();
     const events = f.tasks.events(requestFor(f)).events;
     assert.deepEqual(events.map(event => event.eventType), [
-      'task_created', 'execution_linked', 'call_reserved', 'call_settled', 'call_reserved', 'call_unknown'
+      'task_created', 'execution_linked', 'node_claimed', 'call_reserved', 'call_settled', 'call_reserved', 'call_unknown'
     ]);
     const modelEvents = events.map(event => event.payload).filter(event => event.callId !== null);
     assert.deepEqual(modelEvents.map(event => [event.callId, event.state]), [
@@ -118,12 +118,8 @@ test('v13 migration retains tasks without fabricating historical event rows', ()
       .run(task.id, task.projectId, task.status, JSON.stringify(task), task.createdAt);
     api.applyDatabaseMigrations(db, { dbName: 'agent', migrations: api.agentMigrations, allowOffline:true });
     const tasks = new api.ResearchTaskRepository(db);
-    const request = { taskId: task.id, projectId: task.projectId, afterSequence: 0, limit: 200 };
-    assert.deepEqual(tasks.get(task.id, task.projectId), task);
-    assert.deepEqual(tasks.events(request).events, []);
-    tasks.setStatus(task.id, task.projectId, 'cancelled', 'fixture', ['active']);
-    const event = tasks.events(request).events[0];
-    assert.equal(event.eventType, 'task_status');
-    assert.equal(event.payload.state, 'cancelled');
+    assert.deepEqual(JSON.parse(db.prepare('SELECT snapshot_json FROM research_tasks WHERE id=?').pluck().get(task.id)), task);
+    assert.equal(db.prepare('SELECT COUNT(*) FROM research_task_events WHERE task_id=?').pluck().get(task.id), 0);
+    assert.throws(() => tasks.get(task.id, task.projectId), /expected 3/); // Offline conversion, not DDL, owns historical snapshots.
   } finally { db.close(); }
 });

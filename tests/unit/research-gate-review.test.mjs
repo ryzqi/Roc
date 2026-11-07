@@ -2,7 +2,7 @@ import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {Annotation, Command, END, MemorySaver, START, StateGraph} from '@langchain/langgraph';
-import {createResearchFixture, loadResearchTestApi, captureResearchArtifactVersions} from './fixtures/research-test-kit.mjs';
+import {withResearchTestWorker, createResearchFixture, loadResearchTestApi, captureResearchArtifactVersions} from './fixtures/research-test-kit.mjs';
 import {createPublishedFigureFixture} from './fixtures/research-production-test-kit.mjs';
 
 let api;
@@ -11,7 +11,7 @@ after(()=>api.dispose());
 const output={title:'Recorded plan',markdown:'Recorded synthetic output',claims:[],sections:[],verdict:'uncertain'};
 function waiting(stage='planning') {
   const f=createResearchFixture(api,stage);
-  const completed=f.repository.runs.complete(f.run.id,f.project.id,output);
+  const completed=withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, output));
   f.repository.transitionWorkflow({projectId:f.project.id,expectedStage:stage,action:'complete'});
   return {...f,artifactId:completed.outputArtifactIds[0]};
 }
@@ -157,7 +157,7 @@ test('human gate refuses stale versions before production IO and rechecks after 
   }
 });
 
-test('real interrupt replay refuses original versions and needs explicit whole-stage reread for a new decision',async()=>{
+test('real interrupt replay refuses stale versions and rereading cannot authorize a tampered worker output',async()=>{
   for(const type of ['approve','reject','revise']) {
     const f=waiting();
     try {
@@ -195,7 +195,9 @@ test('real interrupt replay refuses original versions and needs explicit whole-s
       const fresh=f.repository.readGateReviewContext({projectId:f.project.id,expectedStage:'planning',artifactId:f.artifactId});
       const reviewed=fresh.artifactLinks.map(link=>({artifactId:link.artifactId,version:link.expectedVersion}));
       assert.notDeepEqual(reviewed,original);
-      assert.equal((await graph.invoke(new Command({resume:{decisions:[{type,reviewedArtifactVersions:reviewed}]}}),config)).done,true);
+      await assert.rejects(graph.invoke(new Command({resume:{decisions:[{type,reviewedArtifactVersions:reviewed}]}}),config), /research_node_output_changed/u);
+      assert.equal(changes(f),before);
+      assert.equal(f.repository.getArtifact(f.artifactId).status,'draft');
     }finally{f.close();}
   }
 });

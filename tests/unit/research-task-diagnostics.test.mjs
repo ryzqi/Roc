@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
-import { createResearchFixture, loadResearchTestApi } from './fixtures/research-test-kit.mjs';
+import {withResearchTestWorker,  createResearchFixture, loadResearchTestApi } from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => { api = await loadResearchTestApi(); });
@@ -17,7 +17,7 @@ test('task diagnostics aggregate authoritative calls once and preserve unknown s
       (id,project_id,stage,request_id,parent_run_id,task_id,status,snapshot_json,context_json)
       SELECT ?,project_id,stage,?,?,task_id,status,?,context_json FROM research_stage_runs WHERE id = ?`)
       .run(child.id, child.requestId, f.run.id, JSON.stringify(child), f.run.id);
-    f.tasks.linkStage(child, null);
+    f.tasks.linkStage({...child, executionSnapshot: {...child.executionSnapshot, nodeBinding: {kind: 'none'}}}, null);
     f.tasks.confirmExecution('stage', child.id, f.project.id, child.executionSnapshot.frozenInputs);
     const ledger = new api.RunBudgetLedger(f.agentDb);
     const reserve = (runId, id, tokens, cost) => ledger.reserve(runId, budget, {
@@ -62,7 +62,7 @@ test('chat task diagnostics enforce thread and project scope before returning ta
     f.agentDb.prepare(`INSERT INTO agent_runs
       (id,thread_id,run_number,user_input,status,started_at,ended_at,provider_id,model_id,enabled_capabilities_json,run_origin)
       VALUES ('chat','thread',1,'private-chat-prompt','completed',?,?,'provider','model','{}','chat')`).run(timestamp, timestamp);
-    const execution = { ...f.tasks.requireExecution('stage',f.run.id,f.project.id), schemaVersion: 2, taskId: f.run.taskId, projectId: f.project.id, kind: 'chat',
+    const execution = { ...f.tasks.requireExecution('stage',f.run.id,f.project.id), schemaVersion: 3, nodeBinding: {kind: 'none'}, taskId: f.run.taskId, projectId: f.project.id, kind: 'chat',
       executionId: 'chat', parentKind: null, parentExecutionId: null, associationSource: 'direct',
       manifestHash: 'a'.repeat(64), createdAt: timestamp };
     f.agentDb.prepare(`INSERT INTO research_task_executions
@@ -95,9 +95,9 @@ test('pausing approval and restoring it keeps the completed execution and origin
   });
   try {
     const budget = f.tasks.budgetForExecution('stage', f.run.id, f.project.id);
-    f.repository.runs.complete(f.run.id, f.project.id, {
+    withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {
       title: 'Plan', markdown: 'Review this plan', claims: [], sections: [], verdict: 'ready'
-    });
+    }));
     await gate.complete({ projectId: f.project.id, expectedStage: 'planning', action: 'complete' });
     runtime.synchronizeTaskState(f.run.taskId, f.project.id);
     await controller.pause({ taskId: f.run.taskId, projectId: f.project.id });

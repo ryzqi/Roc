@@ -169,7 +169,7 @@ export class ResearchExperimentRepository {
     return this.db.transaction(() => {
       const run = this.get(projectId, id);
       if (run.status !== 'completed') throw new Error('research_experiment_completed_required');
-      if (run.ownerRunId !== null) this.research.runs.requireActive(run.ownerRunId, projectId);
+      if (run.ownerRunId !== null) this.research.runs.requireProductionOwner(run.ownerRunId, projectId);
       if (run.artifactId !== null) return run;
       const artifact = this.research.createArtifact({ projectId, stage: 'experiment', kind: 'experiment_run', title: run.request.label, path: join(this.root(projectId, id), 'manifest.json') });
       this.research.addProvenance({ projectId, artifactId: artifact.id, subjectType: 'artifact', subjectId: artifact.id, sourceType: 'experiment', sourceId: id,

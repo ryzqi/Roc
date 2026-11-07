@@ -13,7 +13,8 @@ type TaskCancellationServices = {
 export class ResearchTaskController {
   private readonly cancellations = new Map<string, Promise<ResearchTask>>();
 
-  constructor(private readonly tasks: ResearchTaskRepository, private readonly services: TaskCancellationServices) {}
+  constructor(private readonly tasks: ResearchTaskRepository, private readonly services: TaskCancellationServices,
+    private readonly onCleanupComplete: () => void = () => undefined) {}
 
   cancel(request: { taskId: string; projectId: string }): Promise<ResearchTask> {
     const current = this.tasks.get(request.taskId, request.projectId);
@@ -92,7 +93,10 @@ export class ResearchTaskController {
           status === 'cancelled' ? 'research_task_cancelled' : 'research_task_paused', [status]);
       }
       return current;
-    }).finally(() => this.cancellations.delete(key));
+    }).finally(() => {
+      this.cancellations.delete(key);
+      this.onCleanupComplete();
+    });
     this.cancellations.set(key, cleanup);
     return cleanup;
   }

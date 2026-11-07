@@ -72,9 +72,9 @@ async function scene() {
     sourceId: 'synthetic.md', title: 'Synthetic source', content: 'Measured difference was -4 ms.',
     chunks: [{content: 'Measured difference was -4 ms.', locator: 'block:0'}], embeddingPolicy: 'none'});
   f.evidence = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'journal-ui-source:chunk:0'});
-  f.artifactId = f.repository.runs.complete(f.run.id, f.project.id, {title: '合成投稿规则验收', markdown: 'Synthetic manuscript',
+  f.artifactId = f.withWorker(() => f.repository.runs.complete(f.run.id, f.project.id, {title: '合成投稿规则验收', markdown: 'Synthetic manuscript',
     claims: [{subjectType: 'paragraph', content: 'Measured difference was -4 ms.', status: 'supported', evidenceIds: [f.evidence.id]}],
-    sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'}).outputArtifactIds[0];
+    sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'})).outputArtifactIds[0];
   f.service = new api.ResearchJournalComplianceService(f.repository, {verify: async () => assert.fail('no figure selected')});
   const handlers = new Map(), context = {pluginId: 'fixture', capabilities: {
     register(_id, descriptor, handler) {handlers.set(descriptor.name, handler);}

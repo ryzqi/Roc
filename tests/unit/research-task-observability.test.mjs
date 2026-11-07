@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import Database from 'better-sqlite3';
 import {AIMessage, HumanMessage} from '@langchain/core/messages';
-import {createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {withResearchTestWorker, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => {api = await loadResearchTestApi();});
@@ -160,8 +160,8 @@ test('artifact observations use current inspector version and explicitly report 
   try {
     f.scope = {projectId: f.project.id, taskId: f.run.taskId};
     f.diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb), null, unusedSource);
-    const completed = f.repository.runs.complete(f.run.id, f.project.id, {
-      title: 'Plan', markdown: 'Source v1', claims: [], sections: [], verdict: 'ready'});
+    const completed = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {
+      title: 'Plan', markdown: 'Source v1', claims: [], sections: [], verdict: 'ready'}));
     const id = completed.outputArtifactIds[0];
     const first = f.diagnostics.get(f.scope).executions[0].artifacts[0];
     assert.equal(first.id, id); assert.equal(first.versionSource, 'current_inspector');

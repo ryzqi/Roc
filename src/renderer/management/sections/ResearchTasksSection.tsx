@@ -8,6 +8,7 @@ import { TaskControls } from '../../research/tasks/TaskControls';
 import {TaskExecutionObservations} from '../../research/tasks/TaskExecutionObservations';
 import {TaskDiagnosticsExportButton} from '../../research/tasks/TaskDiagnosticsExportButton';
 import {TaskFactsPanel} from '../../research/tasks/TaskFactsPanel';
+import {TaskGraph} from '../../research/tasks/TaskGraph';
 import { useTaskDiagnostics } from '../../research/tasks/use-task-diagnostics';
 import { FormSection, formSecondaryButtonClass, formSelectClass } from '../../shared/form-ui';
 import { formatBeijingDateTime } from '../../shared/format';
@@ -27,7 +28,8 @@ const eventLabels: Record<ResearchTaskEvent['eventType'], string> = {
   task_created: '创建任务', task_status: '任务状态', execution_linked: '关联执行', call_linked: '关联调用',
   call_reserved: '调用预留', call_settled: '调用结算', call_unknown: '调用消费未知',
   plan_approved: '计划已批准', source_invalidated: '来源已失效', claim_reviewed: '论断已审核',
-  quality_gate: '质量检查', effect_committed: '操作已确认', node_claimed: '节点已领取', lease_expired: '租约已过期'
+  quality_gate: '质量检查', effect_committed: '操作已确认', node_claimed: '节点已领取', lease_expired: '租约已过期',
+  node_output: '节点结果已保存', node_accepted: '节点结果审核'
 };
 
 function ExecutionTree({ executions, client }: { executions: ResearchTaskExecutionDiagnostics[]; client: RocClient }): React.JSX.Element {
@@ -114,6 +116,7 @@ function TaskDetail({ client, projectId, taskId }: {
               {resource.data.eventDelivery.pending} 条事件等待同步，其中 {resource.data.eventDelivery.failed} 条投递失败。刷新详情可重试。
             </p>}
             <TaskControls client={client} data={resource.data} onChanged={refresh} />
+            <TaskGraph graph={resource.data.graph} />
             <FormSection title="执行树与工件" testId="mgmt-task-executions">
               <ExecutionTree client={client} executions={resource.data.executions} />
             </FormSection>

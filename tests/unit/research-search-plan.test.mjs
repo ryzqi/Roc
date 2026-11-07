@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {captureResearchArtifactVersions} from './fixtures/research-test-kit.mjs';
+import {createResearchTestRoleTools, withResearchTestWorker, captureResearchArtifactVersions} from './fixtures/research-test-kit.mjs';
 import { after, before, test } from 'node:test';
 import { createResearchFixture, loadResearchTestApi, researchSearchPlanFixture } from './fixtures/research-test-kit.mjs';
 import { Annotation, Command, END, MemorySaver, START, StateGraph } from '@langchain/langgraph';
@@ -11,8 +11,7 @@ const output = {title: 'Search proposal', markdown: 'Proposed research strategy'
 const query = {query: 'frozen query', sources: ['crossref'], limit: 1, maxPages: 2, yearFrom: 2020, yearTo: 2026};
 
 async function confirm(f) {
-  const completed = f.repository.runs.complete(f.run.id, f.project.id,
-    {...output, searchPlan: researchSearchPlanFixture(f.run.instruction, [query])});
+  const completed = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {...output, searchPlan: researchSearchPlanFixture(f.run.instruction, [query])}));
   const gate = api.createResearchHumanGate({repository: f.repository});
   await gate.complete({projectId: f.project.id, expectedStage: 'discovery', action: 'complete'});
   assert.equal(f.repository.getWorkflow(f.project.id).currentStage, 'discovery');
@@ -21,7 +20,7 @@ async function confirm(f) {
     expectedSearchPlanHash: api.searchPlanApprovalHash(f.project.id, completed.outputArtifactIds[0],
       f.repository.runs.getArtifactContent(f.project.id, completed.outputArtifactIds[0]).output)});
   const queued = f.repository.runs.begin({projectId: f.project.id, expectedStage: 'retrieval', instruction: 'Execute approved plan', requestId: 'retrieval'});
-  const run = f.repository.runs.markRunning(queued.id, f.project.id, {providerId: 'fixture', modelId: 'fixture'});
+  const run = withResearchTestWorker(api, f.repository, queued.id, f.project.id, workerRunId => f.repository.runs.markRunning(workerRunId, f.project.id, {providerId: 'fixture', modelId: 'fixture'}));
   return {run, artifactId: completed.outputArtifactIds[0], context: f.repository.runs.getContext(run.id)};
 }
 
@@ -35,10 +34,9 @@ function importer(f, fetchImpl) {
 test('discovery refuses an untyped search proposal before creating an artifact', () => {
   const f = createResearchFixture(api, 'discovery');
   try {
-    assert.throws(() => f.repository.runs.complete(f.run.id, f.project.id, output), /research_search_plan_required/u);
+    assert.throws(() => withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, output)), /research_search_plan_required/u);
     assert.deepEqual(f.repository.listArtifacts(f.project.id), []);
-    assert.throws(() => f.repository.runs.complete(f.run.id, f.project.id,
-      {...output, searchPlan: researchSearchPlanFixture(f.run.instruction, [query, {...query, limit: 30}, {...query, limit: 30}])}),
+    assert.throws(() => withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {...output, searchPlan: researchSearchPlanFixture(f.run.instruction, [query, {...query, limit: 30}, {...query, limit: 30}])})),
       /research_search_plan_candidate_budget_exceeded/u);
     assert.equal(f.repository.runs.get(f.run.id, f.project.id).status, 'running');
   } finally { f.close(); }
@@ -47,14 +45,12 @@ test('discovery refuses an untyped search proposal before creating an artifact',
 test('original research question cannot be replaced by the model or smuggled into another stage', () => {
   const f = createResearchFixture(api, 'discovery');
   try {
-    assert.throws(() => f.repository.runs.complete(f.run.id, f.project.id,
-      {...output, searchPlan: researchSearchPlanFixture('Changed original question')}), /research_search_question_changed/u);
+    assert.throws(() => withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {...output, searchPlan: researchSearchPlanFixture('Changed original question')})), /research_search_question_changed/u);
     assert.deepEqual(f.repository.listArtifacts(f.project.id), []);
   } finally { f.close(); }
   const other = createResearchFixture(api, 'planning');
   try {
-    assert.throws(() => other.repository.runs.complete(other.run.id, other.project.id,
-      {...output, searchPlan: researchSearchPlanFixture(other.run.instruction)}), /research_search_plan_stage_invalid/u);
+    assert.throws(() => withResearchTestWorker(api, other.repository, other.run.id, other.project.id, workerRunId => other.repository.runs.complete(workerRunId, other.project.id, {...output, searchPlan: researchSearchPlanFixture(other.run.instruction)})), /research_search_plan_stage_invalid/u);
   } finally { other.close(); }
 });
 
@@ -71,7 +67,7 @@ test('human approval freezes visible plan content and retrieval tools select onl
     assert.match(artifact.output.markdown, /待确认检索计划/u);
     assert.match(artifact.output.markdown, /yearFrom/u);
     assert.equal(artifact.output.searchPlan.researchQuestion, f.run.instruction);
-    const tools = api.createResearchRoleTools({run, context, repository: f.repository,
+    const tools = createResearchTestRoleTools(api, {run, context, repository: f.repository,
       capabilities: {invoke: (name, request) => {
         assert.equal(name, 'research.literature.search');
         return service.search(request);
@@ -91,10 +87,10 @@ test('human approval freezes visible plan content and retrieval tools select onl
     assert.deepEqual(execution.strategy, result.strategy);
     assert.deepEqual(execution.request, {...query, projectId: f.project.id});
     assert.equal(f.repository.library.list({projectId: f.project.id, query: '', includeArchived: false, limit: 10}).length, 0);
-    const rebuilt = api.createResearchRoleTools({run, context, repository: f.repository,
+    const rebuilt = createResearchTestRoleTools(api, {run, context, repository: f.repository,
       capabilities: {invoke: (_name, request) => service.search(request)}, signal: new AbortController().signal});
-    await assert.rejects(rebuilt.find(tool => tool.name === 'search_literature').invoke({queryId: 'query-1'}),
-      /research_search_query_already_dispatched/u);
+    assert.deepEqual(await rebuilt.find(tool => tool.name === 'search_literature').invoke({queryId: 'query-1'}), result,
+      'the same logical node operation replays its recorded result');
     assert.equal(http.length, 2, 'rebuilding tools cannot reset the approved query budget');
   } finally { await search.shutdown(); f.close(); }
 });
@@ -115,7 +111,7 @@ test('perspective references, stable IDs, request caps and explicit budgets must
     ]) {
       const plan = researchSearchPlanFixture(f.run.instruction, [query]);
       change(plan);
-      assert.throws(() => f.repository.runs.complete(f.run.id, f.project.id, {...output, searchPlan: plan}));
+      assert.throws(() => withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {...output, searchPlan: plan})));
       assert.equal(f.repository.listArtifacts(f.project.id).length, 0);
     }
   } finally {f.close();}
@@ -138,8 +134,7 @@ test('changing an in-memory frozen plan is rejected before any network call', as
 test('manual artifacts, missing human approval and changed plan contents cannot authorize retrieval', async () => {
   const f = createResearchFixture(api, 'discovery');
   try {
-    const completed = f.repository.runs.complete(f.run.id, f.project.id,
-      {...output, searchPlan: researchSearchPlanFixture(f.run.instruction, [query])});
+    const completed = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {...output, searchPlan: researchSearchPlanFixture(f.run.instruction, [query])}));
     const gate = api.createResearchHumanGate({repository: f.repository});
     await gate.complete({projectId: f.project.id, expectedStage: 'discovery', action: 'complete'});
     const artifactId = completed.outputArtifactIds[0];
@@ -210,8 +205,7 @@ test('actual gate interrupt carries the visible plan and requires its original h
   for (const change of ['none', 'valid_content', 'missing_hash']) {
     const f = createResearchFixture(api, 'discovery');
     try {
-      const completed = f.repository.runs.complete(f.run.id, f.project.id,
-        {...output, searchPlan: researchSearchPlanFixture(f.run.instruction, [query])});
+      const completed = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {...output, searchPlan: researchSearchPlanFixture(f.run.instruction, [query])}));
       const artifactId = completed.outputArtifactIds[0];
       const gate = api.createResearchHumanGate({repository: f.repository});
       await gate.complete({projectId: f.project.id, expectedStage: 'discovery', action: 'complete'});

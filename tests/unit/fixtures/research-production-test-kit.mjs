@@ -22,6 +22,7 @@ export async function createPublishedFigureFixture(api, {figureSource} = {}) {
   },root,{error:()=>assert.fail('unexpected figure persistence error')});
   const dispose=async()=>{await figureService.shutdown();f.close();await rm(temporary,{recursive:true,force:true});};
   try {
+    return await f.withWorker(async () => {
     const started=await figureService.start(figureRequest(f.project.id,f.run.id,{timeoutMs:10_000}));
     const deadline=Date.now()+10_000;
     while(['preparing','running'].includes(f.repository.figureRuns.get(f.project.id,started.id).status)) {
@@ -42,5 +43,6 @@ export async function createPublishedFigureFixture(api, {figureSource} = {}) {
       sections:[],verdict:'uncertain'});
     f.repository.transitionWorkflow({projectId:f.project.id,expectedStage:'figure',action:'complete'});
     return {...f,figureService,figureId:publication.id,artifactId:publication.artifactId,productionRun:completed,dispose};
+    });
   }catch(error){await dispose();throw error;}
 }

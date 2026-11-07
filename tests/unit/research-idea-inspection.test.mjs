@@ -1,6 +1,6 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {withResearchTestWorker, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 import {ideaCanvasContentFixture, ideaPlanBodyFixture} from './fixtures/research-idea-plan.mjs';
 
 let api;
@@ -10,10 +10,10 @@ after(() => api.dispose());
 test('actual human review snapshot includes Canvas and plan methods, freeze and evidence drift without timestamp aliases', () => {
   const f = createResearchFixture(api, 'ideation');
   try {
-    const run = f.repository.runs.complete(f.run.id, f.project.id, {
+    const run = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {
       title: 'Testable synthetic hypothesis', markdown: 'Synthetic idea', claims: [], sections: [], verdict: 'uncertain',
       ideaCanvas: ideaCanvasContentFixture()
-    });
+    }));
     const artifactId = run.outputArtifactIds[0], canvas = f.repository.ideas.get(artifactId);
     f.repository.transitionWorkflow({projectId: f.project.id, expectedStage: 'ideation', action: 'complete'});
     const request = {projectId: f.project.id, artifactId, expectedVersion: null};

@@ -14,7 +14,7 @@ after(() => api.dispose());
 function setup() {
   const f = createResearchFixture(api, 'discovery');
   const other = f.tasks.linkStage({
-    ...f.run, id: 'independent-stage', taskId: null, parentRunId: null, retryOfRunId: null, requestId: 'independent-stage'
+    ...f.run, executionSnapshot: {...f.run.executionSnapshot, nodeBinding: {kind: 'none'}}, id: 'independent-stage', taskId: null, parentRunId: null, retryOfRunId: null, requestId: 'independent-stage'
   }, null);
   const limits = { ...api.createRunBudget({ contextBudgetTokens: 1000, maxOutputTokens: 250 }),
     maxCallTokens: 1400, maxTotalTokens: 10000, maxModelCalls: 20, maxConcurrentModelCalls: 5 };
@@ -192,7 +192,7 @@ test('frozen root chat scope is charged before research task linkage and missing
     const otherProject = f.repository.createProject({
       title: 'Unconfigured', description: '', workspacePath: join(tmpdir(), 'roc-project-budget-unconfigured')
     });
-    const unconfigured = f.tasks.linkStage({...f.run, id: 'unconfigured', projectId: otherProject.id, taskId: null}, null);
+    const unconfigured = f.tasks.linkStage({...f.run, executionSnapshot: {...f.run.executionSnapshot, nodeBinding: {kind: 'none'}}, id: 'unconfigured', projectId: otherProject.id, taskId: null}, null);
     f.agentDb.prepare('UPDATE research_task_budgets SET limits_json=? WHERE task_id=?').run(JSON.stringify(f.limits), unconfigured.taskId);
     assert.throws(() => f.ledger.reserve('unconfigured', f.limits, reserve('missing')), /research_project_budget_missing/);
     assert.equal(f.tasks.projectBudgets.status(otherProject.id), null);

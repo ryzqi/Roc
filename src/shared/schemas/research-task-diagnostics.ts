@@ -4,6 +4,7 @@ import { runBudgetStatusSchema } from './agent';
 import { researchTaskSchema, researchTaskExecutionSchema } from './research-tasks';
 import { researchStageSchema } from './research';
 import { taskStatusSchema } from './ipc-core';
+import {researchTaskGraphSchema} from './research-task-graph';
 
 const id = z.string().min(1).max(256);
 export const researchTaskForChatRequestSchema = z.object({ projectId: id, threadId: id, runId: id }).strict();
@@ -23,6 +24,7 @@ export const researchTaskDiagnosticsSchema = z.object({
   task: researchTaskSchema,
   budget: runBudgetStatusSchema,
   executions: z.array(researchTaskExecutionDiagnosticsSchema),
+  graph: researchTaskGraphSchema,
   continuationRunId: id.nullable(),
   canRestoreApproval: z.boolean(),
   recoveryIssues: z.array(z.enum(['historical_execution_not_resumable', 'research_execution_intent_uncommitted', 'agent_tool_effect_receipt_missing', 'research_stage_inputs_stale', 'research_stage_snapshot_invalid'])),

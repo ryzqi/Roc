@@ -105,8 +105,9 @@ export class ExecutionGrantBroker {
     if (execution.executionId !== run.id || execution.kind !== 'stage' || execution.taskId !== run.taskId ||
         task.id !== run.taskId || row.task_id !== run.taskId || execution.projectId !== run.projectId ||
         task.projectId !== run.projectId || row.project_id !== run.projectId || task.status !== 'active' || row.status !== 'active' ||
-        execution.associationState !== 'confirmed' || execution.nodeBinding.kind !== 'none' ||
+        execution.associationState !== 'confirmed' || execution.nodeBinding.kind !== 'dag' ||
         execution.frozenInputs === null || run.executionSnapshot === null ||
+        JSON.stringify(execution.nodeBinding) !== JSON.stringify(run.executionSnapshot.nodeBinding) ||
         JSON.stringify(execution.frozenInputs) !== JSON.stringify(run.executionSnapshot.frozenInputs)) {
       throw new Error('research_stage_grant_binding_invalid');
     }

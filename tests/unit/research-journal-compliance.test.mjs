@@ -5,7 +5,7 @@ import {mkdtemp, writeFile, rm, symlink, mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import Database from 'better-sqlite3';
-import {createResearchFixture, loadResearchTestApi, captureResearchArtifactVersions} from './fixtures/research-test-kit.mjs';
+import {withResearchTestWorker, createResearchFixture, loadResearchTestApi, captureResearchArtifactVersions} from './fixtures/research-test-kit.mjs';
 import {createPublishedFigureFixture} from './fixtures/research-production-test-kit.mjs';
 
 let api;
@@ -42,9 +42,9 @@ async function scene(withBibliography = false) {
     sourceId: withBibliography ? f.item.id : 'synthetic.md', title: 'Synthetic measurement', content: 'Measured difference was -4 ms.',
     chunks: [{content: 'Measured difference was -4 ms.', locator: 'block:0'}], embeddingPolicy: 'none'});
   f.source = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'journal-source:chunk:0'});
-  f.artifactId = f.repository.runs.complete(f.run.id, f.project.id, {title: 'Synthetic manuscript', markdown: 'Synthetic draft',
+  f.artifactId = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {title: 'Synthetic manuscript', markdown: 'Synthetic draft',
     claims: [{subjectType: 'paragraph', content: 'Measured difference was -4 ms.', status: 'supported', evidenceIds: [f.source.id]}],
-    sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'}).outputArtifactIds[0];
+    sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'})).outputArtifactIds[0];
   f.service = new api.ResearchJournalComplianceService(f.repository, {verify: async () => assert.fail('no figure selected')});
   f.inspect = (selected = null, expectedHash = null) => f.service.inspect({
     projectId: f.project.id, artifactId: f.artifactId, selection: selected, expectedHash

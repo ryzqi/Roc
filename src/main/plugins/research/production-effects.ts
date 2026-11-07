@@ -95,7 +95,7 @@ export class ResearchProductionEffectService {
     this.requireOwnedExperiment(ownerRunId, projectId, experimentId);
     const published = await this.experiments.publish(projectId, experimentId);
     this.requireOwner(ownerRunId, projectId);
-    if (published.ownerRunId !== ownerRunId) throw new Error('research_production_owner_mismatch');
+    this.requireSameNode(ownerRunId, projectId, published.ownerRunId);
     return published;
   }
 
@@ -119,14 +119,14 @@ export class ResearchProductionEffectService {
   getExport(ownerRunId: string, projectId: string, exportId: string): ResearchExportExecution {
     this.requireOwner(ownerRunId, projectId);
     const record = this.repository.exports.get(projectId, exportId);
-    if (record.ownerRunId !== ownerRunId) throw new Error('research_production_owner_mismatch');
+    this.requireSameNode(ownerRunId, projectId, record.ownerRunId);
     return record;
   }
 
   async publishExport(ownerRunId: string, projectId: string, exportId: string, replacesExportId: string | null): Promise<ResearchExportExecution> {
     this.requireOwner(ownerRunId, projectId);
     const record = this.repository.exports.get(projectId, exportId);
-    if (record.ownerRunId !== ownerRunId) throw new Error('research_production_owner_mismatch');
+    this.requireSameNode(ownerRunId, projectId, record.ownerRunId);
     const published = await this.exports.publish(projectId, exportId, replacesExportId);
     this.requireOwner(ownerRunId, projectId);
     return published;
@@ -150,15 +150,21 @@ export class ResearchProductionEffectService {
   private requireOwnedFigure(ownerRunId: string, projectId: string, runId: string): ResearchFigureRun {
     this.requireOwner(ownerRunId, projectId);
     const execution = this.repository.figureRuns.get(projectId, runId);
-    if (execution.ownerRunId !== ownerRunId) throw new Error('research_production_owner_mismatch');
+    this.requireSameNode(ownerRunId, projectId, execution.ownerRunId);
     return execution;
   }
 
   private requireOwnedExperiment(ownerRunId: string, projectId: string, experimentId: string): ResearchExperimentExecution {
     this.requireOwner(ownerRunId, projectId);
     const execution = this.repository.experiments.get(projectId, experimentId);
-    if (execution.ownerRunId !== ownerRunId) throw new Error('research_production_owner_mismatch');
+    this.requireSameNode(ownerRunId, projectId, execution.ownerRunId);
     return execution;
+  }
+
+  private requireSameNode(ownerRunId: string, projectId: string, producerRunId: string | null): void {
+    if (producerRunId === null || this.repository.runs.requireProductionOwner(producerRunId, projectId).id !== ownerRunId) {
+      throw new Error('research_production_owner_mismatch');
+    }
   }
 
   private requireOwner(ownerRunId: string, projectId: string) {

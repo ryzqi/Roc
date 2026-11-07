@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { after, before, test } from 'node:test';
-import { loadResearchTestApi, createResearchFixture, figureRequest } from './fixtures/research-test-kit.mjs';
+import {createResearchTestRoleTools,  loadResearchTestApi, createResearchFixture, figureRequest } from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => { api = await loadResearchTestApi(); });
@@ -25,7 +25,7 @@ async function setup(renderer) {
   const effects = new api.ResearchProductionEffectService(
     fixture.repository, undefined, undefined, service
   );
-  const tools = api.createResearchRoleTools({
+  const tools = createResearchTestRoleTools(api, {
     repository: fixture.repository, run: fixture.run,
     context: fixture.repository.runs.getContext(fixture.run.id), capabilities: {},
     effects, signal: new AbortController().signal
@@ -56,6 +56,7 @@ function realRenderer() {
 test('real figure rendering is polled with runId and published into a persisted artifact', async () => {
   const fixture = await setup(realRenderer());
   try {
+    await fixture.withWorker(async () => {
     const { project, run, tools, effects, repository, service } = fixture;
     const { projectId, ownerRunId, ...request } = figureRequest(project.id, run.id, { timeoutMs: 10_000 });
     const started = await tools.find((entry) => entry.name === 'start_figure').invoke(request);
@@ -89,12 +90,14 @@ test('real figure rendering is polled with runId and published into a persisted 
     const repeated = await effects.publishFigure(run.id, project.id, started.runId, null);
     assert.equal(repeated.id, published.figureId);
     assert.equal(effects.getFigure(run.id, project.id, started.runId).artifactId, published.artifactId);
+      });
   } finally { await fixture.dispose(); }
 });
 
 test('post-transform scene data retains negative aggregates and formula values with explicit encoding limits', async () => {
   const f = await setup(realRenderer());
   try {
+    await f.withWorker(async () => {
     const spec = {data: {values: [{group: 'A', value: -2}, {group: 'A', value: -4}, {group: 'B', value: 99}]},
       transform: [{filter: "datum.group === 'A'"}, {aggregate: [{op: 'mean', field: 'value', as: 'mean'}], groupby: ['group']},
         {calculate: 'datum.mean * 0.001', as: 'seconds'}],
@@ -135,6 +138,7 @@ test('post-transform scene data retains negative aggregates and formula values w
       }
     }
     assert.deepEqual(traces[0], traces[1], 'scene trace bytes have no run ID or wall-clock variability');
+      });
   } finally {await f.dispose();}
 });
 
@@ -146,6 +150,7 @@ test('changed trace between renderer return and validation prevents completion a
     return result;
   }});
   try {
+    await f.withWorker(async () => {
     const started = await f.service.start(figureRequest(f.project.id, f.run.id, {timeoutMs: 10_000}));
     await waitFor(() => !['preparing', 'running'].includes(f.repository.figureRuns.get(f.project.id, started.id).status));
     const completed = f.repository.figureRuns.get(f.project.id, started.id);
@@ -153,12 +158,14 @@ test('changed trace between renderer return and validation prevents completion a
     assert.equal(completed.error, 'research_figure_data_trace_changed');
     await assert.rejects(f.service.publish(f.project.id, started.id, null), /research_figure_completed_required/u);
     assert.equal(f.repository.figures.list(f.project.id, 10).length, 0);
+      });
   } finally {await f.dispose();}
 });
 test('association persistence failure prevents renderer dispatch and records failed figure', async () => {
   let renders = 0;
   const fixture = await setup({ renderFigure() { renders += 1; throw new Error('must_not_render'); } });
   try {
+    await fixture.withWorker(async () => {
     const { agentDb, project, run, service, repository } = fixture;
     agentDb.exec(`CREATE TRIGGER reject_figure_task BEFORE INSERT ON research_task_executions
       WHEN NEW.kind = 'figure' BEGIN SELECT RAISE(ABORT, 'fixture_figure_link_failed'); END`);
@@ -168,12 +175,14 @@ test('association persistence failure prevents renderer dispatch and records fai
     assert.equal(saved.status, 'failed');
     assert.equal(saved.error, 'research_task_association_failed');
     assert.equal(repository.figures.list(project.id, 10).length, 0);
+      });
   } finally { await fixture.dispose(); }
 });
 
 test('high-DPI fractional figure sizes preserve physical SVG/PDF dimensions and exact PNG pixel bounds', async () => {
   const fixture = await setup(realRenderer());
   try {
+    await fixture.withWorker(async () => {
     const { project, run, effects, service } = fixture;
     const options = { widthInches: 2.125, heightInches: 1.625, dpi: 300, seed: 42 };
     const request = figureRequest(project.id, run.id, { figure: options, timeoutMs: 10_000 });
@@ -187,6 +196,7 @@ test('high-DPI fractional figure sizes preserve physical SVG/PDF dimensions and 
     assert.equal(verified.validation.heightPixels, Math.trunc(options.heightInches * options.dpi));
     assert.equal(verified.validation.widthPoints, options.widthInches * 72);
     assert.equal(verified.validation.heightPoints, options.heightInches * 72);
+      });
   } finally { await fixture.dispose(); }
 });
 
@@ -200,6 +210,7 @@ test('rendering cancellation persists terminal state and rejects late publicatio
     }
   });
   try {
+    await fixture.withWorker(async () => {
     const { project, run, effects, service, repository } = fixture;
     const figure = await effects.startFigure(run.id, project.id, figureRequest(project.id, run.id));
     await waitFor(() => started);
@@ -208,5 +219,6 @@ test('rendering cancellation persists terminal state and rejects late publicatio
     assert.equal(effects.getFigure(run.id, project.id, figure.id).error, 'research_figure_cancelled');
     await assert.rejects(effects.publishFigure(run.id, project.id, figure.id, null), /research_figure_completed_required/);
     assert.equal(repository.figures.list(project.id, 10).length, 0);
+      });
   } finally { await fixture.dispose(); }
 });

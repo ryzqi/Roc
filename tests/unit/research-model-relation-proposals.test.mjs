@@ -1,6 +1,6 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {createResearchTestRoleTools, withResearchTestWorker, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => {api = await loadResearchTestApi();});
@@ -26,7 +26,7 @@ function scene() {
 test('actual stage completion records model supported associations as proposed with real producer identity and no fabricated reviews', () => {
   const f = scene();
   try {
-    const completed = f.repository.runs.complete(f.run.id, f.project.id, f.output);
+    const completed = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, f.output));
     const artifactId = completed.outputArtifactIds[0];
     const claims = f.repository.evidence.listClaims({projectId: f.project.id, artifactId});
     const supported = claims.find(claim => claim.status === 'supported');
@@ -47,7 +47,7 @@ test('actual stage completion records model supported associations as proposed w
     assert.equal(claims.find(claim => claim.status === 'hypothesis').status, 'hypothesis');
     assert.throws(() => f.repository.evidence.relations.propose(f.proposeInput(supported), {kind: 'agent', id: completed.id}),
       /research_relation_proposer_invalid/u);
-    assert.throws(() => f.repository.runs.complete(f.run.id, f.project.id, f.output), /research_run_not_current/u);
+    assert.throws(() => withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, f.output)), /research_node_lease_stale/u);
     assert.equal(f.repository.evidence.relations.list({projectId: f.project.id, claimId: null}).length, 1);
   } finally {f.close();}
 });
@@ -60,12 +60,12 @@ test('model relation history failure rolls back output artifact, claims, content
       .map(table => f.db.prepare(`SELECT count(*) FROM ${table}`).pluck().get());
     const before = counts();
     f.db.exec("CREATE TRIGGER fail_model_relation_history BEFORE INSERT ON research_evidence_relation_revisions BEGIN SELECT RAISE(ABORT,'synthetic_relation_history_failure'); END");
-    assert.throws(() => f.repository.runs.complete(f.run.id, f.project.id, f.output), /synthetic_relation_history_failure/u);
+    assert.throws(() => withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, f.output)), /synthetic_relation_history_failure/u);
     assert.deepEqual(counts(), before);
     assert.equal(f.repository.runs.get(f.run.id, f.project.id).status, 'running');
     assert.deepEqual(f.repository.runs.get(f.run.id, f.project.id).outputArtifactIds, []);
     f.db.exec('DROP TRIGGER fail_model_relation_history');
-    const completed = f.repository.runs.complete(f.run.id, f.project.id, f.output);
+    const completed = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, f.output));
     assert.equal(completed.status, 'completed');
     assert.equal(f.repository.evidence.relations.list({projectId: f.project.id, claimId: null}).length, 1);
   } finally {f.close();}
@@ -79,7 +79,7 @@ test('role tools expose paginated fixed source and relation facts with bound pro
     const claim = f.repository.evidence.createClaim({projectId: f.project.id, artifactId: artifact.id, subjectType: 'claim',
       content: 'A pending synthetic relation.', status: 'hypothesis', evidenceIds: [f.evidence.id]});
     const proposed = f.repository.evidence.relations.propose(f.proposeInput(claim), {kind: 'agent', id: f.run.id});
-    const tools = api.createResearchRoleTools({run: f.run, context: f.repository.runs.getContext(f.run.id),
+    const tools = createResearchTestRoleTools(api, {run: f.run, context: f.repository.runs.getContext(f.run.id),
       repository: f.repository, capabilities: {invoke: () => assert.fail('readonly role relation facts use the bound repository')}, signal: controller.signal});
     const inspect = tools.find(tool => tool.name === 'inspect_evidence_source');
     const list = tools.find(tool => tool.name === 'list_evidence_relations');

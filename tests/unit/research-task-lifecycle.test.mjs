@@ -57,7 +57,7 @@ test('continuation refuses unresolved effects from a linked chat run', () => {
   try {
     const timestamp = '2026-11-03T00:00:00.000Z';
     const execution = { ...f.tasks.requireExecution('stage', f.run.id, f.project.id), taskId: f.run.taskId, projectId: f.project.id,
-      kind: 'chat', executionId: 'parent-chat', parentKind: null, parentExecutionId: null,
+      kind: 'chat', nodeBinding: {kind: 'none'}, executionId: 'parent-chat', parentKind: null, parentExecutionId: null,
       associationSource: 'direct', manifestHash: 'a'.repeat(64), createdAt: timestamp };
     f.agentDb.prepare(`INSERT INTO research_task_executions
       (kind,execution_id,task_id,project_id,snapshot_json,created_at) VALUES ('chat','parent-chat',?,?,?,?)`)
@@ -197,8 +197,9 @@ test('v12 task migration preserves identity and status while requiring the new l
     db.prepare('INSERT INTO research_tasks (id,project_id,snapshot_json,created_at) VALUES (?,?,?,?)')
       .run(task.id, task.projectId, JSON.stringify(task), task.createdAt);
     api.applyDatabaseMigrations(db, { dbName: 'agent', migrations: api.agentMigrations, allowOffline: true });
-    const migrated = new api.ResearchTaskRepository(db).get(task.id, task.projectId);
+    const migrated = JSON.parse(db.prepare('SELECT snapshot_json FROM research_tasks WHERE id=?').pluck().get(task.id));
     assert.deepEqual(migrated, { ...task, schemaVersion: 2, statusReason: null, deadlineClock: 'continuous' });
     assert.equal(db.prepare('SELECT COUNT(*) FROM research_task_executions').pluck().get(), 0);
+    assert.throws(() => new api.ResearchTaskRepository(db).get(task.id, task.projectId), /expected 3/); // Current readers require the explicit offline converter.
   } finally { db.close(); }
 });

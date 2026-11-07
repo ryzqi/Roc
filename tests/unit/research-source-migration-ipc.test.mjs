@@ -1,7 +1,7 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {createResearchTestRoleTools, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => {api = await loadResearchTestApi();});
@@ -270,7 +270,7 @@ test('active role reads actual candidate selection history and stale target fact
   const f = scene();
   try {
     const decision = (await f.adapter.invoke('research.captureSourceMigration', [f.capture], 31)).data;
-    const tools = api.createResearchRoleTools({run: f.run, context: f.repository.runs.getContext(f.run.id),
+    const tools = createResearchTestRoleTools(api, {run: f.run, context: f.repository.runs.getContext(f.run.id),
       repository: f.repository, capabilities: {}, signal: new AbortController().signal});
     const read = tools.find(tool => tool.name === 'read_source_migrations');
     assert.ok(read);

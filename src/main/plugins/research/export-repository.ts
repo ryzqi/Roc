@@ -98,7 +98,7 @@ export class ResearchExportRepository {
       const record = this.get(projectId, id);
       if (record.status !== 'ready') throw new Error('research_export_ready_required');
       assertCurrentExportScientificReview(this.research, record);
-      if (record.ownerRunId !== null) this.research.runs.requireActive(record.ownerRunId, projectId);
+      if (record.ownerRunId !== null) this.research.runs.requireProductionOwner(record.ownerRunId, projectId);
       if (record.artifactId !== null) {
         if (record.replacesExportId !== replacesExportId) throw new Error('research_export_publish_conflict');
         return record;

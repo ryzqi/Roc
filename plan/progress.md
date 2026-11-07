@@ -569,3 +569,108 @@ network benchmark 全通过。精确命令与 hash 见原采集 verification.jso
 补验迁移/evaluator 14/14、IPC、build（含 typecheck/skills）通过，原日志 hash 匹配。
 补验首次 typecheck 发现 evaluator 未区分历史策略，修正并补历史实际查询的回归。
 S05 工程 Verified passing，独立科学 rerank/50 问比较未运行。随后提交并进入 S06。
+
+S06 从 `9d16212d`、干净工作区开始。继续已有授权逐阶段完成并提交。
+沿用 planning-with-files、TypeScript 与 agent-development 技能。notes/history 后端仍不可用，
+从本项目计划与同会话用户记录恢复；不派发子代理，不新增外部授权。
+先前误猜 task-repository/阶段文档路径，已按文件清单修正。
+目标：同一 agent DB 持久节点/CAS lease、同一 stage scheduler、审稿 children→reducer，
+工具与结果边界拒绝过期 lease；人工 gate 持续拥有批准，实际资源仍归既有 coordinator。
+
+S06 初步接通持久节点与统一调度；结果与人工接受增加两库提交回执，
+用于启动时核验并完成中断的提交。重试保留逻辑操作身份并递增节点版本；
+审稿子节点完成后 reducer 才可领取，等待人工审核释放租约。
+此实现尚未运行竞争、冷恢复或完整专项测试，稳定 effect 重试、迁移与读侧仍待完成。
+`pnpm typecheck` 首轮仅因两个新增事件缺少 UI 文案失败；补齐后
+`.artifacts/research-harness/S06/typecheck-receipts-v2.log` exit 0，`git diff --check` exit 0。
+当前为 `Changed, unverified`，类型检查不代表调度和恢复已验证。
+
+S06 DAG 首轮专项 5/5，关联专项 34/39，日志 `S06/dag-initial.log`。5 项失败
+来自复制父 nodeBinding 的旧夹具和 v2 快照，已开始更新。广泛 research 专项
+启动后暴露多处旧测试直接执行受租约保护的仓储/工具，无 worker 上下文；需明确
+在夹具里领取租约并运行，而不放松生产边界。该轮正在运行，不能算最终证据。
+读侧开始加入 graph 与原任务抽屉的依赖/等待/版本详情；迁移器补 S05 来源，
+旧执行仅保留历史审计。补充发现 retry 不应删上游依赖，现仅替换审稿子面板边；
+已接受输入工件自动形成同 Task 前置边，reducer 校验子节点结果 hash。
+
+S06 首轮 research 全集已结束：879 项、733 pass、146 fail，日志
+`.artifacts/research-harness/S06/research-initial.log`，exit 1。大部分失败是旧夹具直接
+调用受保护 run/role/effect 入口缺少 Worker 上下文；生产边界不放松。
+复制父 DAG binding 的预算/event 夹具已改独立未绑定快照；聊天夹具明确 none。
+历史 DDL 测试改直接核对旧快照保持、当前 reader 拒绝，离线转换由 migration 专项验收。
+预算/lifecycle/events 31 项复测 30 pass，剩余 budget 用例在重试创建时提前收到
+`run_model_call_budget_exhausted`；当前调度已在注册节点时拒绝预算耗尽。
+日志 `S06/budget-lifecycle-v2.log`，cwd 仓库根；events 历史用例在采集后又修正，需补验。
+本轮继续按项目计划与同会话用户原文恢复；notes/history 后端不可用。
+
+S06 后续专项收敛：research-v2 仍有 14 项失败；对应迁移、工件批准、输入版本和
+权限修复后的 contracts-v3、gate-v4 已通过。冷迁移覆盖 S02/S04/S05，保留原库、
+备份与历史记录；新仓储不读取旧合同。结果 schema 统一解析解决字段顺序误判。
+审稿 DAG 单槽/双槽调度与关闭 4/4（dag-runtime-v3）；关闭先 fence 根任务，
+再停止活动、排队子节点和 reducer，避免误走公开父任务取消入口。
+production-retry-v2 17/17：真实 SQLite worker 抢占仅一方成功、过期返回拒绝、
+双库提交崩溃冷恢复不调用模型、人工接受核对 hash、真实文件重试不新增修订。
+重试工件只允许同一冻结节点查询/发布；其他节点/项目/旧 Worker 拒绝。
+首轮 production-retry-v1 15/17，两个失败为新增夹具缺启动步骤和表名错误，已修复。
+任务抽屉 renderer 17/17（task-renderer-v1），浅/深色依赖、等待、租约与键盘可达。
+最新 typecheck-production-retry exit 0。仍需 30 任务调度对照和最终全量采集；
+工程状态仍为 Changed, unverified。notes/history 不可用，按本会话本地记录恢复。
+本轮误猜 run-budget.ts（真实为 run-budget-ledger.ts），已按文件清单定位。
+
+S06 调度对照已完成：30 个受控场景 × 3 次配对 × 2 个并行度，共 180 次；
+`scheduler-benchmark-v2.json` 全部通过，输出投影与预算 digest 一致，每次 4 calls/320 tokens。
+单槽 p50 156.95ms、p95 167.84ms；双槽 p50 138.14ms、p95 153.01ms。
+这是 synthetic engineering，独立科研任务 0、真实 provider dispatch 0、真实费用 null；
+不能据此宣称科学质量或生产收益。最终默认采用同一 scheduler 的 concurrency=1，
+待独立质量/费用证据后再采纳 2；当前源码尚待此调整。
+全量采集 `.artifacts/research-harness/S06/2026-11-07T04-21-18.193Z/` 正在运行，
+初轮 typecheck/skills pass；发现 literature-import 自建 bundle 漏导出 withResearchWorker，
+单例复现 `shutdown-diagnosis.log` exit 1。最终复核还需从逻辑 effect 身份剔除请求尝试 ID，
+补跨请求编号重试回归，并核对清理期间同项目写入准入。采集结束后修复/补验。
+
+S06 全量首轮 unit 1517/1575，58 fail；57 个为 literature-import/Zotero 自建 bundle
+未导出 withResearchWorker，1 个预算用例创建无 research 行的账本 child 导致 shutdown
+失败，单例 budget-diagnosis-v2 已复现。renderer 串行仍在运行，采集期间未改业务源码。
+最终修复还包括 project cleanup pending/failed 阻止同项目新写入，以及清理完毕唤醒
+统一 scheduler；默认并发降到 1，测试双槽场景显式指定 2。
+本窗口恢复时 notes/history 仍失败；只读本会话原始用户记录确认授权为
+“plan 继续s02剩下的任务,完成后提交，进入下一任务，直到全部任务完成为止”。
+误猜 execution/scheduler.ts、phase-07-safety-ui.md 后已按目录清单纠正。
+
+S06 首轮全量 renderer/build 采集仍在运行；期间仅改测试文件和 plan，未改生产源码。
+已修 literature-import/zotero-import/zotero-preview/zotero-sync 自建 bundle 导出，
+budget 的 setup 增加 includeChild，真实 executor 用例不再创建无研究行的伪 child。
+新增两条回归先复现：requestId 改变重复 effect、清理期间同项目 writer 仍可领取。
+命令 `node --test tests/unit/research-task-dag.test.mjs tests/unit/research-task-budget.test.mjs tests/unit/literature-import.test.mjs tests/unit/zotero-import.test.mjs tests/unit/zotero-preview.test.mjs tests/unit/zotero-sync.test.mjs`
+在仓库根运行，163/165 pass，仅上述两条预期失败；日志 `S06/final-regressions-before.log`。
+因此原采集 changedSources 会包含本次测试修订；最终补验需记录差异，不宣称原源码完全未变。
+已创建 s06-execution-report.md 草稿，仍标 Changed, unverified。
+
+S06 最终修复已落地：三类生产启动工具的逻辑 identity 排除 requestId，业务参数变化仍为新操作；
+任一同项目根任务 cleanup pending/failed 阻止新节点领取，Controller 清理落盘后唤醒调度器。
+默认并发 1，双槽取消用例显式指定 2。final-regressions-after 182/183，唯一失败来自该
+旧用例隐含默认 2；明确配置后 cleanup-wakeup-final 19/19 通过，新增实际排队根任务自动唤醒回归。
+原始全量采集仍在 renderer 阶段时已改上述生产代码，changedSources 将如实包含差异；
+不把原报告当作单一源码快照通过。最终单测/typecheck 独立冻结采集于
+`.artifacts/research-harness/S06/2026-11-07T04-40-55.340Z/`，session 30567。
+原采集随后执行的 build/harness 等会读取最终源码，完成后逐项核对时间与 hash。
+
+S06 最终冻结单测补验已完成：`2026-11-07T04-40-55.340Z/verification.json` 中
+unit 1577/1577、typecheck exit 0，源码 hash 采集期间未变。随后收尾发现调度前校验失败
+分支清理结束未唤醒同项目下一根任务；隔离回归 `scheduler-cleanup-before.log` 稳定复现
+0 次实际 executor 调用（预期 1）。已在清理完成后重新 pump，并纳入正式 DAG runtime 回归；
+受影响 DAG/取消/生命周期专项正在补验。该补丁在最终单测后，需明确两轮源码差异。
+原始全量 renderer 仍在执行，未发现新失败。误猜 S08 阶段路径已纠正为 phase-08-export-release.md。
+
+S06 收尾补验：scheduler-cleanup-after 39/39。renderer-worker-recheck 83/85，
+两项旧用例直接 SQL 改写已冻结 output 后期待批准/退回，违反新结果 hash 合同。
+改用实际 updateArtifact 标题修订继续验证 stale approval/重新确认，并增加独立 UI
+回归确认篡改正文即使重读仍不可批准；完整 inspector 补验正在执行。原失败日志保留。
+该窗口误猜 phase-07-safety-desktop-ui/artifact-repository/gate-review glob，已按真实路径纠正。
+
+S06 工程验收完成：最终 inspector 26/26；上次两项的 updateArtifact 尝试因审批等待
+不可编辑失败，现用隔离 SQL 元数据漂移验证重读确认，正文篡改单独断言拒绝。
+首轮全量 failed 保留（unit 1517/1575、renderer 374/451）；最终 unit 1577/1577、
+清理补验 39/39 与受影响 renderer 补验分轮登记，未拼成单次通过。
+admission/IPC/Harness 94/workflow/build/chunks/smoke 13 均在最终生产修复后 exit 0。
+所有报告/log hash 核对，汇总 final-verification.json；工程 Verified passing。

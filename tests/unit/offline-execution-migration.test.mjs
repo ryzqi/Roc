@@ -15,11 +15,11 @@ after(()=>api.dispose());
 const digest = value => createHash('sha256').update(value).digest('hex');
 const definitions = [['core',1],['agent',19],['memory',2],['task',1],['workspace',1],['diagnostics',1],['research',60]];
 const location = (root,name) => join(root,name === 'core' ? 'data/core.db' : `data/plugins/@roc/plugin-${name}.db`);
-function fixture(fromS02 = false, fromS04 = false) {
+function fixture(fromS02 = false, fromS04 = false, fromS05 = false) {
   const root=mkdtempSync(join(tmpdir(),'roc-offline-contract-'));
   const source=join(root,'source');mkdirSync(source);
   for (const [name,oldVersion] of definitions) {
-    const version = fromS04 && name === 'research' ? 62 : (fromS02 || fromS04) && ['agent','research'].includes(name) ? oldVersion + 1 : oldVersion;
+    const version = fromS05 && name === 'research' ? 63 : fromS04 && name === 'research' ? 62 : (fromS02 || fromS04 || fromS05) && ['agent','research'].includes(name) ? oldVersion + 1 : oldVersion;
     const file=location(source,name);mkdirSync(dirname(file),{recursive:true});
     const db=new Database(file);
     api.applyDatabaseMigrations(db,{dbName:['core','agent','memory','task'].includes(name)?name:`plugin:@roc/plugin-${name}`,
@@ -27,10 +27,13 @@ function fixture(fromS02 = false, fromS04 = false) {
   }
   writeFileSync(join(source,'private-config.json'),'preserved-local-fixture');
   const agent=new Database(location(source,'agent'));const research=new Database(location(source,'research'));
-  if (fromS02 || fromS04) {
+  if (fromS02 || fromS04 || fromS05) {
     api.applyDatabaseMigrations(agent,{dbName:'agent',migrations:schemas.agentMigrations.slice(0,20)});
-    api.applyDatabaseMigrations(research,{dbName:'plugin:@roc/plugin-research',migrations:schemas.researchMigrations.slice(0,fromS04 ? 62 : 61)});
+    api.applyDatabaseMigrations(research,{dbName:'plugin:@roc/plugin-research',migrations:schemas.researchMigrations.slice(0,fromS05 ? 63 : fromS04 ? 62 : 61)});
   }
+  // Current writers construct the records; remove their temporary DAG tables and
+  // explicitly encode the historical envelopes before treating this as an old database.
+  agent.exec(schemas.agentMigrations.find(migration => migration.version === 21).sql);
   const now=()=> new Date().toISOString();
   const tasks=new api.ResearchTaskRepository(agent,now);
   const repository=new api.ResearchRepository(research,tasks,now);
@@ -39,10 +42,13 @@ function fixture(fromS02 = false, fromS04 = false) {
   repository.runs.terminate(run.id,project.id,'interrupted','stopped-for-migration');
   const current=tasks.requireExecution('stage',run.id,project.id);
   const {nodeBinding:_nodeBinding,origin:_origin,frozenInputs:_frozenInputs,associationState:_associationState,...legacy}=current;
-  if (!fromS02 && !fromS04) agent.prepare("UPDATE research_task_executions SET snapshot_json=? WHERE execution_id=?").run(JSON.stringify({...legacy,schemaVersion:1}),run.id);
+  const oldExecution = !fromS02 && !fromS04 && !fromS05 ? {...legacy,schemaVersion:1} : {...current,schemaVersion:2,nodeBinding:{kind:'none'}};
+  agent.prepare("UPDATE research_task_executions SET snapshot_json=? WHERE execution_id=?").run(JSON.stringify(oldExecution),run.id);
+  agent.exec("UPDATE research_tasks SET snapshot_json=json_set(snapshot_json,'$.schemaVersion',2); DROP TABLE research_task_dependencies; DROP TABLE research_task_nodes; DROP TABLE research_task_graphs;");
   const {executionSnapshot:_executionSnapshot,...oldRun}=repository.runs.get(run.id,project.id);
-  if (!fromS02 && !fromS04) research.prepare('UPDATE research_stage_runs SET snapshot_json=? WHERE id=?').run(JSON.stringify(oldRun),run.id);
-  if (!fromS04) research.prepare("UPDATE research_stage_runs SET context_json=json_remove(context_json,'$.skillPin') WHERE id=?").run(run.id);
+  research.prepare('UPDATE research_stage_runs SET snapshot_json=? WHERE id=?').run(JSON.stringify(!fromS02 && !fromS04 && !fromS05 ? oldRun :
+    {...oldRun,executionSnapshot:{..._executionSnapshot,nodeBinding:{kind:'none'}}}),run.id);
+  if (!fromS04 && !fromS05) research.prepare("UPDATE research_stage_runs SET context_json=json_remove(context_json,'$.skillPin') WHERE id=?").run(run.id);
   if (fromS04) {
     const plan = researchSearchPlanFixture(run.instruction);
     const {schemaVersion, version, perspectives, budget: _budget, ...legacyPlan} = plan;
@@ -87,14 +93,14 @@ test('offline conversion preserves source and cold backup, fences historical ide
     const agent=new Database(location(join(f.destination,'current'),'agent'));
     const research=new Database(location(join(f.destination,'current'),'research'));
     try {
-      assert.equal(agent.prepare('SELECT current_version FROM schema_metadata').pluck().get(),20);
+      assert.equal(agent.prepare('SELECT current_version FROM schema_metadata').pluck().get(),21);
       const calls=agent.prepare('SELECT * FROM agent_budget_calls ORDER BY call_id').all();
       assert.deepEqual(calls,f.budgetBefore.map(row=>({...row,state:row.state==='reserved'?'unknown':row.state})));
       const tasks=new api.ResearchTaskRepository(agent);
       const repository=new api.ResearchRepository(research,tasks);
       repository.runs.reconcileTaskLinks();
       const association=tasks.requireExecution('stage',f.run.id,f.project.id);
-      assert.equal(association.schemaVersion,2);assert.equal(association.associationState,'historical');
+      assert.equal(association.schemaVersion,3);assert.equal(association.associationState,'historical');
       assert.equal(association.frozenInputs,null);assert.equal(association.origin.kind,'historical');
       assert.throws(()=>tasks.continueWith(f.run.taskId,f.project.id,()=>assert.fail('no dispatch')),/historical_execution_not_resumable/);
       assert.equal(repository.runs.get(f.run.id,f.project.id).executionSnapshot,null);
@@ -131,22 +137,23 @@ test('offline converter rejects active effects, drift, broken links and nested d
   }
 });
 
-for (const phase of ['S02', 'S04']) test(`${phase} cutover keeps raw context, events and unrelated chat while fencing historical stages after cold open`,async()=>{
-  const f=fixture(phase === 'S02', phase === 'S04');
+for (const phase of ['S02', 'S04', 'S05']) test(`${phase} cutover keeps raw context, events and unrelated chat while fencing historical stages after cold open`,async()=>{
+  const f=fixture(phase === 'S02', phase === 'S04', phase === 'S05');
   try {
     const oldResearch=new Database(location(f.source,'research'));
     const original=oldResearch.prepare('SELECT * FROM research_stage_runs WHERE id=?').get(f.run.id);
     assert.throws(()=>schemas.applyResearchDatabaseSchema(oldResearch),/database_offline_migration_required/);
     oldResearch.close();
     const report=await migrateExecutionDatabases({...f,stopped:true});
-    assert.equal(report.sourceApp,phase === 'S02' ? '7120421-S02' : '4381104-S04');
-    assert.deepEqual(report.databases.find(entry=>entry.name==='plugin:@roc/plugin-research').from,phase === 'S02' ? 61 : 62);
+    assert.equal(report.sourceApp,phase === 'S02' ? '7120421-S02' : phase === 'S04' ? '4381104-S04' : '9d16212d-S05');
+    assert.deepEqual(report.databases.find(entry=>entry.name==='plugin:@roc/plugin-research').from,phase === 'S02' ? 61 : phase === 'S04' ? 62 : 63);
     for(const [name] of definitions) assert.equal(digest(readFileSync(location(f.source,name))),f.bytes[name]);
     const agent=new Database(location(join(f.destination,'current'),'agent'));
     const research=new Database(location(join(f.destination,'current'),'research'));
     try {
       schemas.applyAgentDatabaseSchema(agent);schemas.applyResearchDatabaseSchema(research);
-      assert.equal(research.prepare('SELECT current_version FROM schema_metadata').pluck().get(),63);
+      assert.equal(research.prepare('SELECT current_version FROM schema_metadata').pluck().get(),64);
+      assert.equal(agent.prepare('SELECT COUNT(*) FROM research_task_nodes').pluck().get(),0);
       const tasks=new api.ResearchTaskRepository(agent);
       const repository=new api.ResearchRepository(research,tasks);
       repository.runs.reconcileTaskLinks();

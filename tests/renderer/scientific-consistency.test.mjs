@@ -91,11 +91,11 @@ async function scene({long = false, waiting = false} = {}) {
     parameters: {}, arguments: [], seed: null}};
   f.result = f.repository.experimentResults.save({snapshot, snapshotHash: hash(snapshot)});
   f.evidence = f.repository.experimentResults.captureMetric(f.result, 'mean');
-  f.artifactId = f.repository.runs.complete(f.run.id, f.project.id, {title: '数值来源与规则',
+  f.artifactId = f.withWorker(() => f.repository.runs.complete(f.run.id, f.project.id, {title: '数值来源与规则',
     markdown: 'Synthetic measured report', claims: [
       {subjectType: 'paragraph', content: `${long ? '长主张、单位与指标来源逐项核对。'.repeat(25) : 'Mean '}-2.35 ms and comparison 17 ms.`,
         status: 'supported', evidenceIds: [f.evidence.id]}],
-    sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'}).outputArtifactIds[0];
+    sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'})).outputArtifactIds[0];
   f.claim = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: f.artifactId})[0];
   if (waiting) f.repository.transitionWorkflow({projectId: f.project.id, expectedStage: 'writing', action: 'complete'});
   // UI lifecycle uses synthetic recorded result material. Actual CPython byte verification is separately exercised by A4A.

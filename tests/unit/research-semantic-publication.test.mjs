@@ -2,7 +2,7 @@ import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {Annotation, Command, END, MemorySaver, START, StateGraph} from '@langchain/langgraph';
-import {captureResearchArtifactVersions, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {withResearchTestWorker, captureResearchArtifactVersions, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => {api = await loadResearchTestApi();});
@@ -19,12 +19,12 @@ function scene(stage = 'reading', count = 1) {
       embeddingPolicy: 'none'});
     f.sources.push(f.repository.evidence.capture({projectId: f.project.id, chunkId: `${id}:chunk:0`}));
   }
-  const completed = f.repository.runs.complete(f.run.id, f.project.id, {
+  const completed = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {
     title: 'Synthetic publication claim', markdown: 'A model declares support but has not obtained human review.',
     claims: [{subjectType: stage === 'writing' ? 'paragraph' : 'claim', content: 'The synthetic result is supported.',
       status: 'supported', evidenceIds: f.sources.map(source => source.id)}],
     sections: stage === 'writing' ? [{title: 'Result', claimIndexes: [0]}] : [], verdict: 'ready'
-  });
+  }));
   f.artifactId = completed.outputArtifactIds[0];
   f.claim = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: f.artifactId})[0];
   f.gate = api.createResearchHumanGate({repository: f.repository});

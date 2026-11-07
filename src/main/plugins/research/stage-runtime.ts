@@ -1,3 +1,5 @@
+import {randomUUID} from 'node:crypto';
+import {withResearchWorker, researchWorkerLease} from './execution/worker-context';
 import { ZodError } from 'zod';
 
 import type { ResearchStageRun, ResearchStageRunIdRequest, ResearchStageRunRetryRequest, ResearchStageRunStartRequest, ResearchWorkflowTransitionRequest } from '../../../shared/types';
@@ -12,11 +14,16 @@ import { researchDispatchRequestHash } from '../../services/research-dispatch-co
 import {ResearchTaskFactsService} from './task-facts';
 import type { ResearchTaskController } from './task-controller';
 
-type ActiveRole = { controller: AbortController; pending: Promise<void>; cleanup: Promise<void>; projectId: string };
+type ActiveRole = { controller: AbortController; pending: Promise<void>; cleanup: Promise<void>; projectId: string; taskId: string };
 
 export class ResearchStageRuntime {
+  private readonly workerId = `research_worker_${randomUUID()}`;
+  private closed = false;
+  private pumping = false;
   private readonly active = new Map<string, ActiveRole>();
   private readonly cleanups = new Set<Promise<void>>();
+  private readonly cleanupFailures = new Set<string>();
+  private readonly cleanupReasons = new Map<string, string>();
 
   private readonly gate: ResearchHumanGate;
   private taskController: Pick<ResearchTaskController, 'cancel' | 'pause'> | undefined;
@@ -27,7 +34,8 @@ export class ResearchStageRuntime {
     private readonly executor: ResearchRoleExecutor,
     gate: ResearchHumanGate,
     private readonly effects: ResearchProductionEffectService,
-    private readonly onChanged?: (taskId: string, projectId: string) => void
+    private readonly onChanged?: (taskId: string, projectId: string) => void,
+    private readonly concurrency: 1 | 2 = 1
   ) {
     if (executor === undefined || executor === null) throw new Error('research_model_executor_required');
     if (effects === undefined || effects === null) throw new Error('research_effect_coordinator_required');
@@ -36,6 +44,7 @@ export class ResearchStageRuntime {
   }
 
   start(request: ResearchStageRunStartRequest, dispatch: ConsumedResearchDispatchGrant): ResearchStageRun {
+    if (this.closed) throw new Error('research_scheduler_closed');
     assertResearchDispatchGrant(dispatch);
     if (dispatch.requestHash !== researchDispatchRequestHash(request)) throw new Error('research_dispatch_request_mismatch');
     const run = this.repository.runs.begin(request, undefined, dispatch);
@@ -43,6 +52,7 @@ export class ResearchStageRuntime {
   }
 
   retry(request: ResearchStageRunRetryRequest): ResearchStageRun {
+    if (this.closed) throw new Error('research_scheduler_closed');
     if (this.executor === undefined) throw new Error('research_model_executor_unavailable');
     const execution = this.repository.tasks.requireExecution('stage', request.runId, request.projectId);
     const task = this.repository.tasks.get(execution.taskId, request.projectId);
@@ -98,26 +108,25 @@ export class ResearchStageRuntime {
   }
 
   async shutdown(): Promise<void> {
+    this.closed = true;
     const errors: unknown[] = [];
     const fenced = new Map<string, { taskId: string; projectId: string }>();
-    for (const [runId, entry] of this.active) {
+    // A queued reducer or capacity-blocked task is also owned by this scheduler.
+    // Stop each root once so children never pass through the public parent-only cancel path.
+    const entries = [...this.active.values(), ...this.repository.tasks.graph.candidates()];
+    for (const entry of entries) {
       try {
-        const run = this.repository.runs.get(runId, entry.projectId);
-        if (run.taskId !== null && !fenced.has(run.taskId)) {
-          const task = this.repository.tasks.get(run.taskId, entry.projectId);
+        if (!fenced.has(entry.taskId)) {
+          const task = this.repository.tasks.get(entry.taskId, entry.projectId);
           if (task.status === 'active') {
             this.repository.tasks.setStatus(task.id, task.projectId, 'interrupted', 'research_task_cleanup_pending', ['active']);
-            fenced.set(task.id, { taskId: task.id, projectId: task.projectId });
           }
+          fenced.set(task.id, { taskId: task.id, projectId: task.projectId });
         }
       } catch (error) { errors.push(error); }
-      try { this.stop({ projectId: entry.projectId, runId }, 'interrupted', 'research_run_interrupted_by_shutdown'); }
-      catch (error) {
-        errors.push(error);
-        entry.controller.abort(new Error('research_run_interrupted_by_shutdown'));
-      }
     }
-    const pending = new Set([...this.active.values()].map(entry => entry.cleanup));
+    const pending = new Set([...fenced.values()].map(({taskId, projectId}) =>
+      this.stopTask(taskId, projectId, 'interrupted', 'research_run_interrupted_by_shutdown')));
     for (const cleanup of this.cleanups) pending.add(cleanup);
     const results = await Promise.allSettled(pending);
     errors.push(...results.flatMap(result => result.status === 'rejected' ? [result.reason] : []));
@@ -134,7 +143,31 @@ export class ResearchStageRuntime {
   }
 
   async waitForIdle(): Promise<void> {
-    await Promise.all([...this.active.values()].map((entry) => entry.cleanup).concat([...this.cleanups]));
+    while (this.active.size > 0 || this.cleanups.size > 0) {
+      await Promise.all([...this.active.values()].map((entry) => entry.cleanup).concat([...this.cleanups]));
+    }
+  }
+
+  resumeScheduler(): void { this.pump(); }
+
+  /** Resume only the saved output's gate check; no model call and no human decision. */
+  async recoverPendingOutputs(): Promise<void> {
+    for (const run of this.repository.runs.pendingOutputReviews()) {
+      const task = this.repository.tasks.get(run.taskId!, run.projectId);
+      if (!['active', 'waiting_approval'].includes(task.status)) continue;
+      try {
+        this.repository.runs.assertInputsCurrent(run);
+        if (this.repository.tasks.hasUnresolvedEffects(task.id, task.projectId)) throw new Error('research_task_effect_unresolved');
+        const stage = this.repository.getWorkflow(run.projectId).stages.find(stage => stage.stage === run.stage);
+        if (stage?.status === 'running') {
+          await this.gate.complete({projectId: run.projectId, expectedStage: run.stage, action: 'complete'});
+        }
+        this.synchronizeTaskState(task.id, task.projectId);
+      } catch (error) {
+        this.repository.tasks.setStatus(task.id, task.projectId, 'failed', executionErrorCode(error), ['active', 'waiting_approval']);
+      }
+      this.notify(run);
+    }
   }
 
   async cancelTask(taskId: string, projectId: string): Promise<void> {
@@ -228,22 +261,83 @@ export class ResearchStageRuntime {
     return run;
   }
 
-  private schedule(run: ResearchStageRun): void {
-    if (run.status !== 'queued' || this.active.has(run.id)) return;
-    const controller = new AbortController();
-    const pending = Promise.resolve().then(() => this.execute(run, controller)).finally(() => {
-      this.active.delete(run.id);
-      this.notify(run);
-    });
-    this.active.set(run.id, { controller, pending, cleanup: pending, projectId: run.projectId });
+  private pump(): void {
+    if (this.closed || this.pumping) return;
+    this.pumping = true;
+    try {
+      for (const node of this.repository.tasks.graph.candidates()) {
+        if (this.active.size >= this.concurrency) break;
+        if (this.repository.tasks.get(node.taskId, node.projectId).status !== 'active') continue;
+        let run: ResearchStageRun;
+        let lease;
+        try {
+          run = this.repository.runs.requireDispatchable(node.executionId, node.projectId);
+          lease = this.repository.tasks.graph.claim({nodeId: node.id, projectId: node.projectId,
+            workerId: this.workerId, expectedRevision: node.revision, ttlMs: 30_000, concurrency: this.concurrency});
+        } catch (error) {
+          this.repository.tasks.setStatus(node.taskId, node.projectId, 'failed', 'research_task_cleanup_pending', ['active']);
+          const cleanup = this.stopTask(node.taskId, node.projectId, 'interrupted', executionErrorCode(error)).then(() => {
+            this.repository.tasks.setStatus(node.taskId, node.projectId, 'failed', executionErrorCode(error), ['failed']);
+          }, cleanupError => {
+            this.repository.tasks.setStatus(node.taskId, node.projectId, 'failed', 'research_task_cleanup_failed', ['failed']);
+            throw cleanupError;
+          });
+          this.cleanups.add(cleanup);
+          const settled = () => { this.cleanups.delete(cleanup); this.pump(); };
+          void cleanup.then(settled, settled);
+          continue;
+        }
+        if (lease === null) continue;
+        const controller = new AbortController();
+        const heartbeat = setInterval(() => {
+          try {
+            const current = this.repository.tasks.graph.get(lease.nodeId, lease.projectId);
+            if (current.lease === null && ['pending_review','done'].includes(current.status)) { clearInterval(heartbeat); return; }
+            this.repository.tasks.graph.heartbeat(lease, 30_000);
+          }
+          catch (error) { controller.abort(error); }
+        }, 10_000);
+        heartbeat.unref();
+        const pending = withResearchWorker(lease, () => Promise.resolve().then(() => this.execute(run, controller)))
+          .finally(() => {
+            clearInterval(heartbeat);
+            this.active.delete(run.id);
+            if (![...this.active.values()].some(entry => entry.taskId === node.taskId)) {
+              const task = this.repository.tasks.get(node.taskId, node.projectId);
+              if (task.status === 'failed' && task.statusReason === 'research_task_cleanup_pending') {
+                this.repository.tasks.setStatus(task.id, task.projectId, 'failed', this.cleanupFailures.has(task.id)
+                  ? 'research_task_cleanup_failed' : this.cleanupReasons.get(task.id) ?? 'research_role_execution_failed', ['failed']);
+                this.cleanupReasons.delete(task.id);
+              }
+            }
+            this.notify(run);
+            this.pump();
+          });
+        // Observe the promise immediately; waitForIdle/shutdown still receive failures.
+        void pending.catch(() => undefined);
+        this.active.set(run.id, {controller, pending, cleanup: pending, projectId: run.projectId, taskId: node.taskId});
+      }
+    } finally { this.pumping = false; }
   }
 
   private linkAndSchedule(run: ResearchStageRun, dispatch: ConsumedResearchDispatchGrant | null): ResearchStageRun {
-    if (run.status === 'queued') this.repository.runs.requireActive(run.id, run.projectId);
+    if (run.status === 'queued') this.repository.runs.requireDispatchable(run.id, run.projectId);
     try {
       this.repository.tasks.linkStage(run, dispatch);
       const linked = this.repository.runs.bindTask(run.id, run.projectId);
-      this.schedule(linked);
+      if (linked.status === 'queued' && linked.stage === 'review' && linked.parentRunId === null) {
+        const children = this.repository.runs.createReviewChildren(linked.id, linked.projectId);
+        const graph = this.repository.tasks.graph.read(linked.taskId!, linked.projectId);
+        const parent = this.repository.tasks.requireExecution('stage', linked.id, linked.projectId).nodeBinding;
+        if (parent.kind !== 'dag') throw new Error('research_node_binding_invalid');
+        const edges = children.map(child => {
+          const binding = this.repository.tasks.requireExecution('stage', child.id, child.projectId).nodeBinding;
+          if (binding.kind !== 'dag') throw new Error('research_node_binding_invalid');
+          return {prerequisite: binding.nodeId, dependent: parent.nodeId};
+        }).filter(edge => !graph.edges.some(saved => saved.prerequisite === edge.prerequisite && saved.dependent === edge.dependent));
+        if (edges.length > 0) this.repository.tasks.graph.addDependencies(linked.taskId!, linked.projectId, graph.revision, edges);
+      }
+      this.pump();
       this.notify(linked);
       return linked;
     } catch (error) {
@@ -256,31 +350,38 @@ export class ResearchStageRuntime {
 
   private async execute(queued: ResearchStageRun, controller: AbortController): Promise<void> {
     const timeout = setTimeout(() => controller.abort(new Error('research_run_timeout')), queued.policy.timeoutMs);
-    let children: Promise<ResearchStageRun>[] = [];
     try {
-      const { prepared, run } = await this.prepareRole(queued, controller.signal);
-      if (run.stage === 'review') {
-        children = this.repository.runs.createReviewChildren(run.id, run.projectId)
-          .map((child) => {
-            this.repository.tasks.linkStage(child, null);
-            return this.executeChild(this.repository.runs.bindTask(child.id, child.projectId), controller.signal);
-          });
-        const reports = await Promise.all(children);
-        this.repository.runs.setReviewReports(run.id, run.projectId, reports);
+      if (queued.stage === 'review' && queued.parentRunId === null) {
+        const children = this.repository.tasks.executions(queued.taskId!, queued.projectId)
+          .filter(execution => execution.kind === 'stage' && execution.parentExecutionId === queued.id)
+          .map(execution => this.repository.runs.get(execution.executionId, queued.projectId));
+        this.repository.runs.setReviewReports(queued.id, queued.projectId, children);
       }
+      const { prepared, run } = await this.prepareRole(queued, controller.signal);
       await this.executeOutput(run, prepared, controller.signal);
     } catch (error) {
       controller.abort(error);
-      await Promise.allSettled(children);
       const task = queued.taskId === null ? null : this.repository.tasks.get(queued.taskId, queued.projectId);
       if (task?.status === 'active') {
+        this.cleanupReasons.set(task.id, executionErrorCode(error));
         this.repository.tasks.setStatus(task.id, task.projectId,
           controller.signal.reason instanceof Error && controller.signal.reason.message === 'research_run_interrupted_by_shutdown'
-            ? 'interrupted' : 'failed', executionErrorCode(error), ['active']);
+            ? 'interrupted' : 'failed', 'research_task_cleanup_pending', ['active']);
       }
       if (this.repository.runs.get(queued.id, queued.projectId).status === 'completed') return;
       this.repository.runs.terminate(queued.id, queued.projectId, 'failed', executionErrorCode(error));
-      await this.effects.cancelOwned(queued.projectId, queued.id);
+      if (queued.taskId !== null) {
+        for (const execution of this.repository.tasks.executions(queued.taskId, queued.projectId)) {
+          if (execution.kind !== 'stage' || execution.executionId === queued.id) continue;
+          this.repository.runs.terminate(execution.executionId, queued.projectId, 'interrupted', executionErrorCode(error));
+          this.active.get(execution.executionId)?.controller.abort(error);
+        }
+      }
+      try { await this.effects.cancelOwned(queued.projectId, queued.id); }
+      catch (cleanupError) {
+        if (queued.taskId !== null) this.cleanupFailures.add(queued.taskId);
+        throw cleanupError;
+      }
     } finally {
       clearTimeout(timeout);
     }
@@ -312,6 +413,7 @@ export class ResearchStageRuntime {
       run, context, loadTaskContext, tools, signal, onBudgetStatus: () => this.notify(run)
     }), signal);
     signal.throwIfAborted();
+    this.repository.tasks.graph.assertLease(researchWorkerLease());
     this.repository.runs.recordModelVersion(run.id, run.projectId, result.modelVersion);
     const completed = this.repository.runs.complete(run.id, run.projectId, result.output);
     if (completed.parentRunId === null) {
@@ -340,15 +442,7 @@ export class ResearchStageRuntime {
       status === 'waiting_approval' ? 'research_task_waiting_approval' : null, ['active', 'waiting_approval']);
   }
 
-  private async executeChild(queued: ResearchStageRun, signal: AbortSignal): Promise<ResearchStageRun> {
-    try {
-      const { prepared, run } = await this.prepareRole(queued, signal);
-      return await this.executeOutput(run, prepared, signal);
-    } catch (error) {
-      this.repository.runs.terminate(queued.id, queued.projectId, signal.aborted ? 'interrupted' : 'failed', executionErrorCode(error));
-      throw error;
-    }
-  }
+
 }
 
 function withAbort<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {

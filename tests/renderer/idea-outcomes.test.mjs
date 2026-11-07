@@ -62,9 +62,9 @@ with open(os.path.join(roc.output_dir, "metrics.json"), "w") as output:
   }, pythonService), root, {error: (...args) => errors.push(JSON.stringify(args))});
   const runtime = {kind: 'python', selectionId: selection.snapshot.id, expectedHash: selection.snapshotHash};
   const environment = await service.inspect(f.project.id, runtime);
-  run = await service.start({projectId: f.project.id, ownerRunId: f.run.id, requestId: 'actual-run', label: 'Actual negative mean',
+  run = await f.withWorker(() => service.start({projectId: f.project.id, ownerRunId: f.run.id, requestId: 'actual-run', label: 'Actual negative mean',
     engine: 'python', sourceVersion: 1, source: {kind: 'file', path: 'analysis.py'}, inputPaths: ['data.txt'], parameters: {},
-    seed: 73, arguments: [], runtime, expectedEnvironmentHash: environment.hash, timeoutMs: 5000, network: 'disabled'});
+    seed: 73, arguments: [], runtime, expectedEnvironmentHash: environment.hash, timeoutMs: 5000, network: 'disabled'}));
   const deadline = Date.now() + 20000;
   while (['preparing', 'running'].includes(run.status) && Date.now() < deadline) {
     await new Promise(done => setTimeout(done, 20)); run = f.repository.experiments.get(f.project.id, run.id);

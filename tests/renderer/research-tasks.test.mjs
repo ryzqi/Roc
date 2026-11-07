@@ -31,7 +31,7 @@ before(async () => {
         window.opened = [];
         window.makeData = (projectId = 'project-a', taskId = 'task-a', chatId = 'chat-a') => {
           const association = (kind, executionId, parentKind, parentExecutionId) => ({
-            schemaVersion: 2, taskId, projectId, kind, executionId, parentKind, parentExecutionId,
+            schemaVersion: 3, taskId, projectId, kind, executionId, parentKind, parentExecutionId,
             nodeBinding: {kind: 'none'}, origin: {kind: 'main', action: 'start', requestId: executionId},
             frozenInputs: {schemaVersion: 1, requestHash: 'a'.repeat(64), manifestHash: 'a'.repeat(64), policyHash: 'a'.repeat(64), versions: []},
             associationState: 'confirmed',
@@ -45,7 +45,7 @@ before(async () => {
             startedAt: '2026-11-03T00:00:00.000Z', endedAt: status === 'completed' ? '2026-11-03T00:00:01.000Z' : null
           });
           return {
-            task: { schemaVersion: 2, id: taskId, projectId, goal: '验证科研任务 ' + taskId,
+            task: { schemaVersion: 3, id: taskId, projectId, goal: '验证科研任务 ' + taskId,
               rootAgentRunId: chatId, status: 'active', statusReason: null, deadlineClock: 'continuous',
               budgetPolicyVersion: 1, createdAt: '2026-11-03T00:00:00.000Z', updatedAt: '2026-11-03T00:00:00.000Z' },
             budget: {
@@ -59,7 +59,7 @@ before(async () => {
               execution('stage', 'stage-a', 'chat', chatId, 'running', []),
               execution('figure', 'figure-a', 'stage', 'stage-a', 'completed', ['artifact-figure'])
             ],
-            continuationRunId: null, canRestoreApproval: false, externalCost: 'unknown',
+            graph: {revision: 0, nodes: [], edges: []}, continuationRunId: null, canRestoreApproval: false, externalCost: 'unknown',
             recoveryIssues: [], eventDelivery: {pending: 0, failed: 0}
           };
         };
@@ -642,4 +642,37 @@ test('expanded diagnostics and export receipts fit light/dark narrow desktop lay
   }
   writeFileSync(join(artifacts, 'observations-clip-audit.json'), JSON.stringify(receipts, null, 2));
   for (const receipt of receipts) assert.equal(receipt.cut, 0);
+});
+
+test('task drawer shows dependency waits and keyboard-accessible lease and result details in both themes', async () => {
+  for (const theme of ['light', 'dark']) {
+    await page.setViewportSize({width: 560, height: 840});
+    await page.evaluate(theme => {
+      reset(); document.documentElement.dataset.theme = theme;
+      const data = makeData();
+      const base = {schemaVersion: 1, taskId: 'task-a', projectId: 'project-a', graphRevision: 3,
+        revision: 1, inputHash: 'a'.repeat(64), operationKey: 'b'.repeat(64), readonly: true,
+        attempt: 1, generation: 1, outputRevision: 0, lease: null, output: null,
+        createdAt: '2026-11-03T00:00:00.000Z', updatedAt: '2026-11-03T00:00:00.000Z'};
+      data.graph = {revision: 3, nodes: [
+        {...base, id: 'reviewer', executionId: 'stage-reviewer', stage: 'review', role: '证据审稿',
+          status: 'done', reason: null, outputRevision: 1,
+          output: {revision: 1, hash: 'c'.repeat(64), artifactIds: ['report-a'], schemaVersion: 1}},
+        {...base, id: 'reducer', executionId: 'stage-reducer', stage: 'review', role: '审稿汇总',
+          status: 'pending', reason: 'research_node_dependency_pending', readonly: false, attempt: 0, generation: 0}
+      ], edges: [{prerequisite: 'reviewer', dependent: 'reducer'}]};
+      response = {ok: true, data}; mountDrawer();
+    }, theme);
+    const graph = page.getByTestId('mgmt-task-graph');
+    await graph.getByText('等待前置结果被接受').waitFor();
+    assert.equal(await graph.getByTestId('mgmt-task-node').count(), 2);
+    await graph.getByText('前置：证据审稿').waitFor();
+    const details = graph.locator('summary').first();
+    await details.focus(); await page.keyboard.press('Enter');
+    await graph.getByText('工件 report-a').waitFor();
+    await graph.getByText('当前无执行租约').first().waitFor();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await graph.screenshot({path: join(artifacts, `dag-${theme}.png`)});
+  }
+  await page.setViewportSize({width: 760, height: 680});
 });

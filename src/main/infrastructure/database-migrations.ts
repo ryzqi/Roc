@@ -279,6 +279,7 @@ function getExpectedSchemaObjects(
 function readSchemaObjects(sql: string): Map<string, string> {
   const probe = new Database(':memory:');
   try {
+    registerExecutionEventFunctions(probe);
     probe.exec(sql);
     return readSchemaObjectsFromDatabase(probe);
   } finally {

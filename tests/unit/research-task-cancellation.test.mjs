@@ -32,7 +32,7 @@ test('task cancellation fences new dispatch, awaits owned cleanup and leaves unr
     }
   }, { complete: async () => { throw new Error('late_gate_must_not_execute'); } }, {
     cancelOwned: async (projectId) => { if (projectId === f.project.id) await cleanup.promise; }
-  });
+  }, undefined, 2);
   try {
     f.repository.runs.terminate(f.run.id, f.project.id, 'failed', 'fixture');
     const current = runtime.retry({ projectId: f.project.id, runId: f.run.id, requestId: 'current' });
@@ -50,7 +50,7 @@ test('task cancellation fences new dispatch, awaits owned cleanup and leaves unr
       (id,project_id,stage,request_id,parent_run_id,task_id,status,snapshot_json,context_json)
       SELECT ?,project_id,stage,?,?,task_id,status,?,context_json FROM research_stage_runs WHERE id = ?`)
       .run(child.id, child.requestId, current.id, JSON.stringify(child), current.id);
-    f.tasks.linkStage(child, null);
+    f.tasks.linkStage({...child, executionSnapshot: {...child.executionSnapshot, nodeBinding: {kind: 'none'}}}, null);
     const controller = new api.ResearchTaskController(f.tasks, {
       stages: runtime, cancelChat: async () => { throw new Error('no_chat_expected'); },
       cancelJob: async () => { throw new Error('no_job_expected'); }
@@ -187,7 +187,7 @@ test('stage cleanup waits for other effects after a synchronous effect failure',
       (id,project_id,stage,request_id,parent_run_id,task_id,status,snapshot_json,context_json)
       SELECT ?,project_id,stage,?,?,task_id,status,?,context_json FROM research_stage_runs WHERE id = ?`)
       .run(child.id, child.requestId, f.run.id, JSON.stringify(child), f.run.id);
-    f.tasks.linkStage(child, null);
+    f.tasks.linkStage({...child, executionSnapshot: {...child.executionSnapshot, nodeBinding: {kind: 'none'}}}, null);
     const seen = [];
     const runtime = new api.ResearchStageRuntime(f.repository, {}, {prepare: async () => {throw new Error('unexpected_prepare');}}, { complete: async () => {} }, {
       cancelOwned(_projectId, runId) {
@@ -255,7 +255,7 @@ test('stage cleanup continues for all executions when one stage snapshot is corr
       (id,project_id,stage,request_id,parent_run_id,task_id,status,snapshot_json,context_json)
       SELECT ?,project_id,stage,?,?,task_id,status,?,context_json FROM research_stage_runs WHERE id = ?`)
       .run(child.id, child.requestId, f.run.id, JSON.stringify(child), f.run.id);
-    f.tasks.linkStage(child, null);
+    f.tasks.linkStage({...child, executionSnapshot: {...child.executionSnapshot, nodeBinding: {kind: 'none'}}}, null);
     f.db.prepare("UPDATE research_stage_runs SET snapshot_json = json_set(snapshot_json, '$.id', 'wrong-id') WHERE id = ?")
       .run(f.run.id);
     await assert.rejects(runtime.stopTask(f.run.taskId, f.project.id, 'cancelled', 'test'), /research_task_stage_cleanup_failed/);
@@ -383,7 +383,7 @@ test('actual agent cancellation capability propagates through a trusted chat ass
     f.agentDb.prepare(`INSERT INTO agent_runs
       (id,thread_id,run_number,user_input,status,started_at,ended_at,enabled_capabilities_json,run_origin)
       VALUES ('parent-chat','parent-thread',1,'Research','completed',?,?,'{}','chat')`).run(timestamp, timestamp);
-    const execution = { ...f.tasks.requireExecution('stage',f.run.id,f.project.id), schemaVersion: 2, taskId: f.run.taskId, projectId: f.project.id,
+    const execution = { ...f.tasks.requireExecution('stage',f.run.id,f.project.id), schemaVersion: 3, nodeBinding: {kind: 'none'}, taskId: f.run.taskId, projectId: f.project.id,
       kind: 'chat', executionId: 'parent-chat', parentKind: null, parentExecutionId: null,
       associationSource: 'direct', manifestHash: 'a'.repeat(64), createdAt: timestamp };
     f.agentDb.prepare(`INSERT INTO research_task_executions

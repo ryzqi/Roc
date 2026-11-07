@@ -41,6 +41,7 @@ const group = (usage, type, retention, scope) => usage.groups.find(g => g.type =
 test('generated preload method reaches the production storage capability with explicit project scope', async () => {
   const f = await scene();
   try {
+    await f.withWorker(async () => {
     const registry = new api.CapabilityRegistry();
     registry.declare('research', api.researchStorageCapability);
     api.registerResearchStorageCapability({pluginId: 'research', capabilities: registry}, f.service);
@@ -51,12 +52,14 @@ test('generated preload method reaches the production storage capability with ex
     assert.equal(result.ok, true); assert.equal(result.data.projectId, f.project.id);
     assert.equal(result.data.deletion, 'none');
     assert.throws(() => api.parseIpcRequestArgs('roc:research:storage-usage', [{}]));
+      });
   } finally {await f.cleanup();}
 });
 
 test('inventory reads actual managed bytes, deduplicates hardlinks and excludes foreign identities without mutating', async () => {
   const f = await scene();
   try {
+    await f.withWorker(async () => {
     const other = f.repository.createProject({title: 'Other', description: '', workspacePath: '/tmp/foreign-storage'});
     const own = document(f, 'own', f.project.id), foreign = document(f, 'foreign', other.id);
     await f.put('library', `documents/${own.id}/source.pdf`, 'source:own');
@@ -85,12 +88,14 @@ test('inventory reads actual managed bytes, deduplicates hardlinks and excludes 
     assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(), before);
     assert.equal(f.agentDb.prepare('SELECT total_changes()').pluck().get(), agentBefore);
     assert.deepEqual(await readFile(unknown), unknownBefore);
+      });
   } finally {await f.cleanup();}
 });
 
 test('shared document references remain nonadditive, distinct from unclassified files', async () => {
   const f = await scene();
   try {
+    await f.withWorker(async () => {
     const other = f.repository.createProject({title: 'Shared owner', description: '', workspacePath: '/tmp/shared-storage'});
     const doc = document(f, 'shared', f.project.id);
     f.db.prepare('INSERT INTO research_library_projects (item_id,project_id) VALUES (?,?)')
@@ -100,12 +105,14 @@ test('shared document references remain nonadditive, distinct from unclassified 
     assert.equal(group(a, 'source', 'traceable_source', 'shared').bytes, 6);
     assert.deepEqual(a.groups, b.groups);
     assert.match(a.accounting, /shared_project_references_are_not_additive/);
+      });
   } finally {await f.cleanup();}
 });
 
 test('approved run output, source, log and scratch have different retention; index payload counts UTF8 and vectors', async () => {
   const f = await scene();
   try {
+    await f.withWorker(async () => {
     const run = f.repository.figureRuns.create(figureRequest(f.project.id, f.run.id),
       f.project.workspacePath, f.project.workspacePath, f.roots.experiment);
     const artifact = f.repository.createArtifact({projectId: f.project.id, stage: 'figure', kind: 'figure', title: 'Approved', path: 'output/figure.svg'});
@@ -127,12 +134,14 @@ test('approved run output, source, log and scratch have different retention; ind
     assert.equal(group(usage, 'figure', 'retained_record', 'project').bytes, 7);
     assert.equal(group(usage, 'figure', 'cache', 'project').bytes, 9);
     assert.deepEqual(usage.logicalIndex, {chunks: 1, contentBytes: 9, embeddingBytes: 12});
+      });
   } finally {await f.cleanup();}
 });
 
 test('missing/unconfigured roots are explicit; invalid project and request fail', async () => {
   const f = await scene();
   try {
+    await f.withWorker(async () => {
     const service = new api.ResearchStorageUsageService(f.db, f.repository,
       {...f.roots, library: join(f.directory, 'missing'), index: null});
     const usage = await service.get({projectId: f.project.id});
@@ -140,12 +149,14 @@ test('missing/unconfigured roots are explicit; invalid project and request fail'
     assert.equal(usage.roots.find(r => r.kind === 'index').state, 'unconfigured');
     await assert.rejects(service.get({projectId: 'missing'}), /research_project_not_found/);
     await assert.rejects(service.get({projectId: f.project.id, root: '/private'}));
+      });
   } finally {await f.cleanup();}
 });
 
 test('symlinks, overlapping roots and invalid entries fail without following targets', async () => {
   const f = await scene();
   try {
+    await f.withWorker(async () => {
     const overlap = new api.ResearchStorageUsageService(f.db, f.repository, {...f.roots, index: f.roots.library});
     await assert.rejects(overlap.get({projectId: f.project.id}), /research_storage_roots_overlap/);
     const external = await f.put('model', 'external.bin', 'private');
@@ -158,5 +169,6 @@ test('symlinks, overlapping roots and invalid entries fail without following tar
     const invalid = new api.ResearchStorageUsageService(f.db, f.repository, {...f.roots, library: external});
     await assert.rejects(invalid.get({projectId: f.project.id}), /research_storage_root_invalid/);
     assert.equal((await readFile(external)).toString(), 'private');
+      });
   } finally {await f.cleanup();}
 });

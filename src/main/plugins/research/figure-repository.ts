@@ -62,7 +62,7 @@ export class ResearchFigureRepository {
     return this.db.transaction(() => {
       const run = this.research.figureRuns.get(projectId, runId);
       assertFigureRun(run, validation);
-      if (run.ownerRunId !== null) this.research.runs.requireActive(run.ownerRunId, projectId);
+      if (run.ownerRunId !== null) this.research.runs.requireProductionOwner(run.ownerRunId, projectId);
       const existing = this.db.prepare('SELECT figure_id FROM research_figure_publications WHERE run_id = ?').get(runId) as { figure_id: string } | undefined;
       if (existing !== undefined) {
         const record = this.get(projectId, existing.figure_id);

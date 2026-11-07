@@ -98,10 +98,10 @@ async function scene({long = false, bibliography = false, waiting = false} = {})
     }], f.project.id, {flush: false, notify: false}).items[0];
     f.source = f.repository.evidence.capture({projectId: f.project.id, chunkId: `library:${f.item.id}:chunk:0`});
   }
-  const completed = f.repository.runs.complete(f.run.id, f.project.id, {title: '当前正文工件', markdown: 'Actual saved manuscript.',
+  const completed = f.withWorker(() => f.repository.runs.complete(f.run.id, f.project.id, {title: '当前正文工件', markdown: 'Actual saved manuscript.',
     claims: [{subjectType: 'paragraph', content: long ? '当前段落与完整来源对照。'.repeat(40) : 'The measured synthetic difference is -4 ms.',
       status: 'supported', evidenceIds: [f.source.id]}],
-    sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'});
+    sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'}));
   f.artifactId = completed.outputArtifactIds[0];
   if (waiting) f.repository.transitionWorkflow({projectId: f.project.id, expectedStage: 'writing', action: 'complete'});
   f.claim = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: f.artifactId})[0];

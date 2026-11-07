@@ -5,7 +5,7 @@ import {mkdtempSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import Database from 'better-sqlite3';
-import {captureResearchArtifactVersions, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {withResearchTestWorker, captureResearchArtifactVersions, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => {api = await loadResearchTestApi();});
@@ -19,9 +19,9 @@ function scene() {
     content: 'The measured difference was -4 ms.', chunks: [{content: 'The measured difference was -4 ms.', locator: 'block:0'}],
     embeddingPolicy: 'none'});
   f.source = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'response-source:chunk:0'});
-  f.artifactId = f.repository.runs.complete(f.run.id, f.project.id, {title: 'Synthetic manuscript', markdown: 'Saved manuscript',
+  f.artifactId = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {title: 'Synthetic manuscript', markdown: 'Saved manuscript',
     claims: [{subjectType: 'paragraph', content: 'The measured difference was -4 ms.', status: 'supported', evidenceIds: [f.source.id]}],
-    sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'}).outputArtifactIds[0];
+    sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'})).outputArtifactIds[0];
   f.claim = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: f.artifactId})[0];
   f.inspect = (expectedHash = null) => f.repository.responseMatrix.inspect({projectId: f.project.id, artifactId: f.artifactId, expectedHash});
   f.location = () => ({claimId: f.claim.id, claimHash: api.relationClaimHash(f.claim),

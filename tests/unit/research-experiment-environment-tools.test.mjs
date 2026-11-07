@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { before, after, test } from 'node:test';
 import { createHash } from 'node:crypto';
-import { loadResearchTestApi, createResearchFixture } from './fixtures/research-test-kit.mjs';
+import {createResearchTestRoleTools,  loadResearchTestApi, createResearchFixture } from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => { api = await loadResearchTestApi(); });
@@ -22,7 +22,7 @@ function selection(f, index) {
 }
 
 function tools(f, capabilities = {}, signal = new AbortController().signal) {
-  return Object.fromEntries(api.createResearchRoleTools({
+  return Object.fromEntries(createResearchTestRoleTools(api, {
     run: f.run, context: f.repository.runs.getContext(f.run.id), repository: f.repository,
     capabilities, signal
   }).map(tool => [tool.name, tool]));

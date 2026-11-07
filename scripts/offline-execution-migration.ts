@@ -21,6 +21,9 @@ const targets: Array<{name: RocLogicalDatabaseName; file: string; version: numbe
     file:`data/plugins/@roc/plugin-${name}.db`,version,migrations}))
 ];
 const hash = (raw: string | Buffer) => createHash('sha256').update(raw).digest('hex');
+// Version 2 had the same parent contract; only its envelope version differs.
+const historicalExecutionSchema = z.object({...researchTaskExecutionSchema.shape, schemaVersion:z.literal(2)}).strict()
+  .refine(value => (value.parentKind === null) === (value.parentExecutionId === null), {message:'research_task_parent_incomplete'});
 const rows = (db: Connection, table: string) => {
   if (!/^[a-z_][a-z0-9_]*$/u.test(table)) throw new Error('offline_table_invalid');
   // pi-lens-ignore: sql-injection
@@ -62,7 +65,7 @@ function validateLinks(agent: Connection, research: Connection, executionVersion
     const old = parseRecord(row.snapshot_json);
     const task = agent.prepare('SELECT project_id FROM research_tasks WHERE id=?').get(row.task_id) as {project_id:string}|undefined;
     if (old.schemaVersion !== executionVersion || old.executionId !== row.execution_id || old.kind !== row.kind || old.taskId !== row.task_id || old.projectId !== row.project_id || task?.project_id !== row.project_id) throw new Error('offline_execution_identity_invalid');
-    if (executionVersion === 2) researchTaskExecutionSchema.parse(old);
+    if (executionVersion === 2) historicalExecutionSchema.parse(old);
     if (old.parentKind !== null) {
       const parent = agent.prepare('SELECT task_id,project_id FROM research_task_executions WHERE kind=? AND execution_id=?').get(old.parentKind,old.parentExecutionId) as {task_id:string;project_id:string}|undefined;
       if (!parent || parent.task_id !== row.task_id || parent.project_id !== row.project_id) throw new Error('offline_execution_parent_invalid');
@@ -89,16 +92,16 @@ function convertAgent(db: Connection): void {
   for (const row of rows(db,'research_task_executions')) {
     const old = parseRecord(row.snapshot_json);
     const auditId = audit(db,'research_task_executions',`${row.kind}:${row.execution_id}`,'1',row);
-    const current = researchTaskExecutionSchema.parse({...old,schemaVersion:2,nodeBinding:{kind:'none'},
+    const current = researchTaskExecutionSchema.parse({...old,schemaVersion:3,nodeBinding:{kind:'none'},
       origin:{kind:'historical',auditId,reason:'historical_execution_not_resumable'},frozenInputs:null,associationState:'historical'});
     db.prepare('UPDATE research_task_executions SET snapshot_json=? WHERE kind=? AND execution_id=?').run(JSON.stringify(current),row.kind,row.execution_id);
   }
   for (const row of rows(db,'research_tasks')) {
-    const task = researchTaskSchema.parse(parseRecord(row.snapshot_json));
+    const task = researchTaskSchema.extend({schemaVersion:z.literal(2)}).parse(parseRecord(row.snapshot_json));
     if (task.id !== row.id || task.projectId !== row.project_id || task.status !== row.status) throw new Error('offline_task_identity_invalid');
     audit(db,'research_tasks',task.id,'2',row);
     const status = ['completed','cancelled','failed'].includes(task.status) ? task.status : 'interrupted';
-    db.prepare('UPDATE research_tasks SET status=?,snapshot_json=? WHERE id=?').run(status,JSON.stringify({...task,status,statusReason:'historical_execution_not_resumable',updatedAt:now}),task.id);
+    db.prepare('UPDATE research_tasks SET status=?,snapshot_json=? WHERE id=?').run(status,JSON.stringify({...task,schemaVersion:3,status,statusReason:'historical_execution_not_resumable',updatedAt:now}),task.id);
   }
   // Raw bytes, original global sequence and retention boundaries remain in the audit and backup.
   const eventTables = [
@@ -140,13 +143,13 @@ function convertResearch(db: Connection): void {
 function convertSkillAgent(db: Connection): void {
   const now = new Date().toISOString();
   const taskIds = new Set(rows(db,'research_task_executions').filter(row=>row.kind === 'stage' &&
-    researchTaskExecutionSchema.parse(parseRecord(row.snapshot_json)).associationState !== 'historical').map(row=>String(row.task_id)));
+    historicalExecutionSchema.parse(parseRecord(row.snapshot_json)).associationState !== 'historical').map(row=>String(row.task_id)));
   for (const row of rows(db,'research_task_executions')) {
     if (!taskIds.has(String(row.task_id))) continue;
-    const execution = researchTaskExecutionSchema.parse(parseRecord(row.snapshot_json));
+    const execution = historicalExecutionSchema.parse(parseRecord(row.snapshot_json));
     if (execution.associationState === 'historical') continue;
     const auditId = audit(db,'research_task_executions',`${row.kind}:${row.execution_id}`,'2',row);
-    const current = researchTaskExecutionSchema.parse({...execution,origin:{kind:'historical',auditId,
+    const current = researchTaskExecutionSchema.parse({...execution,schemaVersion:3,origin:{kind:'historical',auditId,
       reason:'historical_execution_not_resumable'},frozenInputs:null,associationState:'historical'});
     db.prepare('UPDATE research_task_executions SET snapshot_json=? WHERE kind=? AND execution_id=?')
       .run(JSON.stringify(current),row.kind,row.execution_id);
@@ -163,12 +166,12 @@ function convertSkillAgent(db: Connection): void {
   }
   for (const row of rows(db,'research_tasks')) {
     if (!taskIds.has(String(row.id))) continue;
-    const task = researchTaskSchema.parse(parseRecord(row.snapshot_json));
+    const task = researchTaskSchema.extend({schemaVersion:z.literal(2)}).parse(parseRecord(row.snapshot_json));
     if (task.id !== row.id || task.projectId !== row.project_id || task.status !== row.status) throw new Error('offline_task_identity_invalid');
     audit(db,'research_tasks',task.id,'2',row);
     const status = ['completed','cancelled','failed'].includes(task.status) ? task.status : 'interrupted';
     db.prepare('UPDATE research_tasks SET status=?,snapshot_json=? WHERE id=?')
-      .run(status,JSON.stringify({...task,status,statusReason:'historical_execution_not_resumable',updatedAt:now}),task.id);
+      .run(status,JSON.stringify({...task,schemaVersion:3,status,statusReason:'historical_execution_not_resumable',updatedAt:now}),task.id);
     db.prepare("UPDATE agent_budget_calls SET state='unknown' WHERE task_id=? AND state='reserved'").run(task.id);
   }
 }
@@ -268,9 +271,10 @@ export async function migrateExecutionDatabases(input: {source: string; destinat
     const researchVersion = Number(research.prepare('SELECT current_version FROM schema_metadata WHERE db_name=?').pluck().get('plugin:@roc/plugin-research'));
     const fromS02 = agentVersion === 20 && researchVersion === 61;
     const fromS04 = agentVersion === 20 && researchVersion === 62;
-    const currentExecution = fromS02 || fromS04;
+    const fromS05 = agentVersion === 20 && researchVersion === 63;
+    const currentExecution = fromS02 || fromS04 || fromS05;
     if (!currentExecution && !(agentVersion === 19 && researchVersion === 60)) throw new Error('offline_source_version_unapproved');
-    report.sourceApp = fromS04 ? '4381104-S04' : fromS02 ? '7120421-S02' : 'eea2087b5d2d79df3b2fea7764ce48e4975fd764';
+    report.sourceApp = fromS05 ? '9d16212d-S05' : fromS04 ? '4381104-S04' : fromS02 ? '7120421-S02' : 'eea2087b5d2d79df3b2fea7764ce48e4975fd764';
     const sourceTargets = targets.map(target=>({...target,version:target.name === 'agent' ? agentVersion :
       target.name === 'plugin:@roc/plugin-research' ? researchVersion : target.version}));
     for (const [index,target] of sourceTargets.entries()) preflight(sources[index]!,target);
@@ -296,11 +300,14 @@ export async function migrateExecutionDatabases(input: {source: string; destinat
         const budgetBefore = target.name === 'agent' ? rows(db,'agent_budget_calls').map(({state:_state,envelope_json:_envelope,...row})=>row) : null;
         applyDatabaseMigrations(db,{dbName:target.name,migrations:target.migrations,allowOffline:true});
         db.transaction(()=>{
-          if (target.name === 'agent') currentExecution ? convertSkillAgent(db) : convertAgent(db);
+          if (target.name === 'agent') {
+            currentExecution ? convertSkillAgent(db) : convertAgent(db);
+            // Non-stage histories also adopt the sole current envelope, without new authority.
+            db.exec("UPDATE research_tasks SET snapshot_json=json_set(snapshot_json,'$.schemaVersion',3); UPDATE research_task_executions SET snapshot_json=json_set(snapshot_json,'$.schemaVersion',3);");
+          }
           if (target.name === 'plugin:@roc/plugin-research') {
             currentExecution ? convertSkillResearch(db) : convertResearch(db);
-            convertSearchReceipts(db);
-            convertSearchPlans(db);
+            if (!fromS05) { convertSearchReceipts(db); convertSearchPlans(db); }
           }
           checkIntegrity(db);
         })();

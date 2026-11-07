@@ -468,8 +468,9 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
             case 'review_search': return await reviewSearches.cancelTaskQuery(projectId, executionId);
           }
         }
-      });
+      }, () => runtime.resumeScheduler());
       runtime.attachTaskController(taskController);
+      await runtime.recoverPendingOutputs();
       registerTaskFactCapabilities(context, new ResearchTaskFactsService(researchRepository));
       const taskDiagnostics = new ResearchTaskDiagnosticsService(researchRepository, options.budgetLedger, reviewSearches, researchExperiments);
       registerResearchTaskCapabilities(context, options.tasks, taskController, taskDiagnostics,

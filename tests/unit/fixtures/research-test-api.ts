@@ -101,6 +101,7 @@ export {ResearchReviewCorpusRepository} from '../../../src/main/plugins/research
 export {registerResearchReviewCorpusCapabilities, researchReviewCorpusCapabilities} from '../../../src/main/plugins/research/review-corpus-capabilities';
 export {LiteratureProviderGovernor} from '../../../src/main/plugins/research/literature-provider-governor';
 export { AgentToolEffectStore, hashToolInput } from '../../../src/main/services/deep-agent/tool-effect-store';
+export {withResearchWorker} from '../../../src/main/plugins/research/execution/worker-context';
 export { createToolEffectIdempotencyMiddleware } from '../../../src/main/services/deep-agent/tool-effect-idempotency';
 export { createMcpClientAdapter } from '../../../src/main/plugins/mcp/mcp-client-adapter';
 

@@ -1,6 +1,6 @@
 import {before, after, test} from 'node:test';
 import assert from 'node:assert/strict';
-import {loadResearchTestApi, captureResearchArtifactVersions} from './fixtures/research-test-kit.mjs';
+import {withResearchTestWorker, loadResearchTestApi, captureResearchArtifactVersions} from './fixtures/research-test-kit.mjs';
 
 import {createScientificReviewFixture} from './fixtures/scientific-review.mjs';
 
@@ -37,11 +37,11 @@ test('frozen original locators, claim versions and read-only reviewer output are
       value => {value.suggestions[0].coverage.examinedEvidenceIds = [];}, value => {value.suggestions = [];}]) {
       const value = structuredClone(f.output(child)); mutate(value);
       const before = f.repository.listArtifacts(f.project.id).length;
-      assert.throws(() => f.repository.runs.complete(child.id, f.project.id, {...plain, scientificReview: value}));
+      assert.throws(() => f.worker(child.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {...plain, scientificReview: value})));
       assert.equal(f.repository.listArtifacts(f.project.id).length, before);
     }
-    assert.throws(() => f.repository.runs.complete(child.id, f.project.id, {...plain, scientificReview: f.output(child),
-      claims: [{subjectType: 'paragraph', content: 'Unauthorized rewrite', status: 'pending', evidenceIds: []}]}), /reviewer_readonly/);
+    assert.throws(() => f.worker(child.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {...plain, scientificReview: f.output(child),
+      claims: [{subjectType: 'paragraph', content: 'Unauthorized rewrite', status: 'pending', evidenceIds: []}]})), /reviewer_readonly/);
     f.complete();
     const reports = f.repository.scientificReviews.reportsForManuscript(f.project.id, f.artifactId);
     assert.equal(reports.length, 3);
@@ -58,9 +58,9 @@ test('review tools expose only frozen material and deny cross-claim, cross-repor
     const child = f.children[0], context = f.repository.runs.getContext(child.id);
     assert.ok(context.inputs.every(entry => entry.output === null && entry.ideaCanvas === null));
     assert.deepEqual(context.reviewReports, []);
-    const tools = api.createResearchRoleTools({run: child, context, repository: f.repository,
-      capabilities: {invoke: async () => assert.fail('No global retrieval allowed')}, signal: new AbortController().signal});
-    const call = (name, args) => tools.find(tool => tool.name === name).invoke(args);
+    const tools = f.worker(child.id, () => api.createResearchRoleTools({run: f.repository.runs.get(child.id, f.project.id), context, repository: f.repository,
+      capabilities: {invoke: async () => assert.fail('No global retrieval allowed')}, signal: new AbortController().signal}));
+    const call = (name, args) => f.worker(child.id, () => tools.find(tool => tool.name === name).invoke(args));
     assert.ok(!tools.some(tool => ['read_review_report', 'capture_evidence', 'read_source_migrations', 'save_workspace_file'].includes(tool.name)));
     await assert.rejects(call('read_artifact', {artifactId: 'other-report', offset: 0, limit: 100}), /not_in_run_inputs/);
     await assert.rejects(call('inspect_evidence_source', {evidenceId: 'other-evidence', offset: 0, limit: 100}), /not_in_run_inputs/);
@@ -112,9 +112,9 @@ test('known counterevidence cannot be omitted and changes invalidate frozen scie
   try {
     const child = f.children.find(child => child.role === 'evidence-reviewer');
     const value = f.output(child);
-    assert.throws(() => f.repository.runs.complete(child.id, f.project.id, {...plain, scientificReview: value}), /counterevidence_required/);
+    assert.throws(() => f.worker(child.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {...plain, scientificReview: value})), /counterevidence_required/);
     value.suggestions[0].counterevidence = [f.reference];
-    const completed = f.repository.runs.complete(child.id, f.project.id, {...plain, scientificReview: value});
+    const completed = f.worker(child.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {...plain, scientificReview: value}));
     const report = f.repository.scientificReviews.inspect(f.project.id, completed.outputArtifactIds[0]);
     assert.equal(report.status, 'current');
     assert.ok(f.repository.scientificReviews.staleReasons({...f.input, rulesVersion: 'retired'}).includes('rules_changed'));
@@ -122,7 +122,7 @@ test('known counterevidence cannot be omitted and changes invalidate frozen scie
     assert.ok(f.repository.scientificReviews.staleReasons(changedClaim).includes('manuscript_or_claim_changed'));
     f.repository.evidence.invalidateChunksOf(f.evidence.documentId);
     assert.ok(f.repository.scientificReviews.inspect(f.project.id, report.artifactId).reasons.includes('evidence_or_source_changed'));
-    assert.throws(() => f.repository.runs.complete(f.children[0].id, f.project.id, {...plain, scientificReview: f.output(f.children[0])}), /stale/);
+    assert.throws(() => f.worker(f.children[0].id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {...plain, scientificReview: f.output(f.children[0])})), /stale/);
   } finally {f.close();}
 });
 
@@ -134,10 +134,10 @@ test('revision lineage retains old findings and requires a verifier bound to the
     f.repository.transitionWorkflow({projectId: f.project.id, expectedStage: 'review', action: 'approve', reviewDecision: 'revise',
       expectedArtifactVersions: captureResearchArtifactVersions(f.repository, f.project.id)});
     const revision = f.repository.runs.begin({projectId: f.project.id, expectedStage: 'revision', instruction: 'Qualify results', requestId: 'revision-1'});
-    f.repository.runs.markRunning(revision.id, f.project.id, {providerId: 'fixture', modelId: 'fixture'});
-    const revisedId = f.repository.runs.complete(revision.id, f.project.id, {...plain, title: 'Revised manuscript',
+    withResearchTestWorker(api, f.repository, revision.id, f.project.id, workerRunId => f.repository.runs.markRunning(workerRunId, f.project.id, {providerId: 'fixture', modelId: 'fixture'}));
+    const revisedId = withResearchTestWorker(api, f.repository, revision.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {...plain, title: 'Revised manuscript',
       claims: [{subjectType: 'paragraph', content: 'A limited negative result with uncertainty.', status: 'supported', evidenceIds: [f.evidence.id]}],
-      sections: [{title: 'Results', claimIndexes: [0]}]}).outputArtifactIds[0];
+      sections: [{title: 'Results', claimIndexes: [0]}]})).outputArtifactIds[0];
     const claim = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: revisedId})[0];
     const relation = f.repository.evidence.relations.list({projectId: f.project.id, claimId: claim.id})[0];
     f.repository.evidence.relations.review({projectId: f.project.id, relationId: relation.id, expectedVersion: relation.version,
@@ -149,10 +149,10 @@ test('revision lineage retains old findings and requires a verifier bound to the
     const inherited = f.repository.scientificReviews.reportsForManuscript(f.project.id, revisedId);
     assert.equal(inherited.length, 3);
     assert.ok(inherited.every(report => report.status === 'stale' && report.reasons.includes('manuscript_replaced')));
-    f.parent = f.repository.runs.markRunning(f.repository.runs.begin({projectId: f.project.id, expectedStage: 'review',
-      instruction: 'Review revised manuscript', requestId: 'review-2'}).id, f.project.id, {providerId: 'fixture', modelId: 'fixture'});
-    f.children = f.repository.runs.createReviewChildren(f.parent.id, f.project.id)
-      .map(child => f.repository.runs.markRunning(child.id, f.project.id, {providerId: 'fixture', modelId: 'fixture'}));
+    f.parent = f.repository.runs.begin({projectId: f.project.id, expectedStage: 'review',
+      instruction: 'Review revised manuscript', requestId: 'review-2'});
+    f.children = f.repository.runs.createReviewChildren(f.parent.id, f.project.id);
+    f.bindReviewDependencies();
     f.claim = claim; f.input = f.repository.runs.getContext(f.parent.id).scientificInput; f.complete();
     const reports = f.repository.scientificReviews.reportsForManuscript(f.project.id, revisedId);
     assert.equal(reports.length, 6);

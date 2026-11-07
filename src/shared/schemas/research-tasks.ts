@@ -13,7 +13,7 @@ export const researchTaskStatusSchema = z.enum([
   'active', 'paused', 'waiting_approval', 'interrupted', 'completed', 'cancelled', 'failed'
 ]);
 export const researchTaskSchema = z.object({
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(3),
   id,
   projectId: id,
   goal: z.string().trim().min(1).max(10000),
@@ -26,7 +26,7 @@ export const researchTaskSchema = z.object({
   updatedAt: z.iso.datetime()
 }).strict();
 export const researchTaskExecutionSchema = z.object({
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(3),
   nodeBinding: executionNodeBindingSchema,
   origin: executionOriginSchema,
   frozenInputs: frozenExecutionInputsSchema.nullable(),
@@ -55,7 +55,7 @@ export const researchTaskListPageSchema = z.object({
 
 export const researchTaskEventSchema = executionEventEnvelopeSchema.extend({
   eventType: z.enum(['task_created', 'task_status', 'execution_linked', 'call_linked', 'call_reserved', 'call_settled', 'call_unknown',
-    'plan_approved', 'source_invalidated', 'claim_reviewed', 'quality_gate', 'effect_committed', 'node_claimed', 'lease_expired']),
+    'plan_approved', 'source_invalidated', 'claim_reviewed', 'quality_gate', 'effect_committed', 'node_claimed', 'lease_expired', 'node_output', 'node_accepted']),
   payload: z.object({
   taskId: id,
   executionKind: researchExecutionKindSchema.nullable(),

@@ -1,7 +1,7 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {createResearchTestRoleTools, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => {api = await loadResearchTestApi();});
@@ -258,7 +258,7 @@ test('experiment rerun lineage requires two real completed executions and captur
     assert.deepEqual(f.repository.evidence.getClaim(f.claim.id), f.claim);
     assert.equal(f.repository.evidence.relations.get(f.review.id, f.project.id).status, 'invalidated');
     assert.throws(() => f.repository.evidence.assertReviewedSupport(f.claim), /research_evidence_reference_superseded/u);
-    const tools = api.createResearchRoleTools({run: f.run, context: f.repository.runs.getContext(f.run.id),
+    const tools = createResearchTestRoleTools(api, {run: f.run, context: f.repository.runs.getContext(f.run.id),
       repository: f.repository, capabilities: {}, signal: new AbortController().signal});
     const read = tools.find(tool => tool.name === 'read_source_replacements');
     const after = f.changes();
@@ -305,7 +305,7 @@ test('actual role lineage tools page both endpoints with fixed hashes and curren
   const f = scene(), controller = new AbortController();
   try {
     const record = (await f.adapter.invoke('research.replaceEvidenceSource', [f.request], 31)).data;
-    const tools = api.createResearchRoleTools({run: f.run, context: f.repository.runs.getContext(f.run.id),
+    const tools = createResearchTestRoleTools(api, {run: f.run, context: f.repository.runs.getContext(f.run.id),
       repository: f.repository, capabilities: {invoke: () => assert.fail('lineage reads use the bound repository')}, signal: controller.signal});
     const replacements = tools.find(tool => tool.name === 'read_source_replacements');
     const migrations = tools.find(tool => tool.name === 'read_source_migrations');
@@ -344,7 +344,7 @@ test('actual role lineage tools page both endpoints with fixed hashes and curren
     controller.abort(new Error('synthetic_lineage_cancelled'));
     await assert.rejects(replacements.invoke({evidenceId: f.target.evidence.id, offset: 0, limit: 8000}), /synthetic_lineage_cancelled/u);
     assert.equal(f.changes(), invalidated);
-    const activeTools = api.createResearchRoleTools({run: f.run, context: f.repository.runs.getContext(f.run.id),
+    const activeTools = createResearchTestRoleTools(api, {run: f.run, context: f.repository.runs.getContext(f.run.id),
       repository: f.repository, capabilities: {}, signal: new AbortController().signal});
     f.repository.runs.terminate(f.run.id, f.project.id, 'cancelled', 'synthetic_lineage_terminated');
     await assert.rejects(activeTools.find(tool => tool.name === 'read_source_replacements').invoke(

@@ -1,7 +1,7 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {captureResearchArtifactVersions, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {withResearchTestWorker, captureResearchArtifactVersions, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => {api = await loadResearchTestApi();});
@@ -40,11 +40,11 @@ function scene(count = 1, imported = false) {
       chunks: [{content: `Measured result ${i}.`, locator: `block:${i}`}], embeddingPolicy: 'none'});
     f.sources.push(f.repository.evidence.capture({projectId: f.project.id, chunkId: `${id}:chunk:0`}));
   }
-  const completed = f.repository.runs.complete(f.run.id, f.project.id, {
+  const completed = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {
     title: 'Citation inspection fixture', markdown: 'Synthetic claim awaiting human verification.',
     claims: [{subjectType: 'paragraph', content: 'A measured synthetic result.', status: 'supported', evidenceIds: f.sources.map(s => s.id)}],
     sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'
-  });
+  }));
   f.artifactId = completed.outputArtifactIds[0];
   f.claim = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: f.artifactId})[0];
   f.request = {projectId: f.project.id, artifactId: f.artifactId, expectedHash: null};

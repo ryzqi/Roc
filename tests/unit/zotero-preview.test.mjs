@@ -30,6 +30,7 @@ before(async () => {
   symlinkSync(join(process.cwd(), 'node_modules'), join(directory, 'node_modules'), 'dir');
   const outfile = join(directory, 'api.mjs');
   await esbuild.build({stdin: {contents: `
+    export {withResearchWorker} from './src/main/plugins/research/execution/worker-context';
     export {ResearchRepository} from './src/main/plugins/research/repository';
     export {ResearchTaskRepository} from './src/main/plugins/research/research-task-repository';
     export {applyResearchDatabaseSchema, agentMigrations, researchMigrations} from './src/main/infrastructure/database-schemas';

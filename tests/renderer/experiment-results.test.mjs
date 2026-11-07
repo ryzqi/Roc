@@ -61,9 +61,9 @@ before(async()=>{
   const runtime={kind:'python',selectionId:selection.snapshot.id,expectedHash:selection.snapshotHash};
   const environment=await service.inspect(f.project.id,runtime);
   async function execute(id,scale) {
-    const started=await service.start({projectId:f.project.id,ownerRunId:f.run.id,requestId:id,label:id,
+    const started=await f.withWorker(() => service.start({projectId:f.project.id,ownerRunId:f.run.id,requestId:id,label:id,
       engine:'python',sourceVersion:1,source:{kind:'file',path:'analysis.py'},inputPaths:['data.txt'],parameters:{scale},
-      seed:73,arguments:[],runtime,expectedEnvironmentHash:environment.hash,timeoutMs:5000,network:'disabled'});
+      seed:73,arguments:[],runtime,expectedEnvironmentHash:environment.hash,timeoutMs:5000,network:'disabled'}));
     const deadline=Date.now()+20000;
     let run;
     do {
@@ -72,10 +72,10 @@ before(async()=>{
       await new Promise(done=>setTimeout(done,20));
     }while(Date.now()<deadline);
     assert.equal(run.status,'completed',run.error);
-    return service.publish(f.project.id,run.id);
+    return f.withWorker(() => service.publish(f.project.id,run.id));
   }
   first=await execute('first','1');repeat=await execute('repeat','1');scaled=await execute('scaled','2');
-  f.repository.runs.complete(f.run.id,f.project.id,{title:'真实合成指标',markdown:'三个受控运行保留原始指标输出',claims:[],sections:[],verdict:'uncertain'});
+  f.withWorker(() => f.repository.runs.complete(f.run.id,f.project.id,{title:'真实合成指标',markdown:'三个受控运行保留原始指标输出',claims:[],sections:[],verdict:'uncertain'}));
   f.repository.transitionWorkflow({projectId:f.project.id,expectedStage:'experiment',action:'complete'});
   inputs=new api.ResearchProductionInputService(f.repository,service,{verify:async()=>assert.fail('no figure'),read:async()=>assert.fail('no figure')},
     {inspect:async()=>assert.fail('no export'),read:async()=>assert.fail('no export')});

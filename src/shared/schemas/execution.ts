@@ -3,7 +3,7 @@ import { z } from 'zod';
 const id = z.string().min(1).max(256);
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 
-/** A root Task is not a DAG node. S02 deliberately dispatches only `none`. */
+/** A root Task is not a DAG node; chat/owned operations bind to their stage owner. */
 export const executionNodeBindingSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('none') }).strict(),
   z.object({ kind: z.literal('dag'), nodeId: id, graphRevision: z.number().int().positive() }).strict()

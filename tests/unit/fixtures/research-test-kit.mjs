@@ -20,7 +20,7 @@ async function loadApi(productionWorkers) {
       loader: { '.md': 'text', '.c': 'text' }, logLevel: 'silent'
     });
     const api = await import(outfile);
-    return { ...api, dispose: () => rmSync(directory, { recursive: true, force: true }) };
+    return { ...api, modulePath: outfile, dispose: () => rmSync(directory, { recursive: true, force: true }) };
   } catch (error) {
     rmSync(directory, { recursive: true, force: true });
     throw error;
@@ -29,6 +29,35 @@ async function loadApi(productionWorkers) {
 
 export function loadResearchTestApi() { return loadApi(false); }
 export function loadResearchWorkerTestApi() { return loadApi(true); }
+
+const testWorkerLeases = new WeakMap();
+/** Explicit worker adapter for repository tests; uses the production claim and fencing checks. */
+export function withResearchTestWorker(api, repository, runId, projectId, work) {
+  let leases = testWorkerLeases.get(repository);
+  if (leases === undefined) { leases = new Map(); testWorkerLeases.set(repository, leases); }
+  let lease = leases.get(runId);
+  if (lease === undefined) {
+    const run = repository.runs.get(runId, projectId);
+    const binding = repository.tasks.requireExecution('stage', runId, run.projectId).nodeBinding;
+    if (binding.kind !== 'dag') throw new Error('fixture_worker_binding_missing');
+    const node = repository.tasks.graph.get(binding.nodeId, run.projectId);
+    lease = node.lease ?? repository.tasks.graph.claim({nodeId: node.id, projectId: run.projectId,
+      workerId: 'fixture-worker', expectedRevision: node.revision, ttlMs: 300_000, concurrency: 2});
+    if (lease === null) throw new Error('fixture_worker_claim_failed');
+    leases.set(runId, lease);
+  }
+  return api.withResearchWorker(lease, () => work(runId));
+}
+
+/** Run both tool construction and invocation in the same explicitly claimed test worker. */
+export function createResearchTestRoleTools(api, input) {
+  const worker = work => withResearchTestWorker(api, input.repository, input.run.id, input.run.projectId, work);
+  return worker(() => api.createResearchRoleTools(input)).map(tool => {
+    const invoke = tool.invoke.bind(tool);
+    tool.invoke = (...args) => worker(() => invoke(...args));
+    return tool;
+  });
+}
 
 export function researchSearchPlanFixture(researchQuestion, queries = [
   {query: 'Synthetic reproducibility fixture', sources: ['openalex'], limit: 5, maxPages: 1}
@@ -69,8 +98,13 @@ export function createResearchFixture(api, stage = 'figure', workspacePath = '/t
   });
   tasks.linkStage(queued, null);
   repository.runs.bindTask(queued.id, project.id);
-  const run = repository.runs.markRunning(queued.id, project.id, { providerId: 'fixture-provider', modelId: 'fixture-model' });
-  return { db, agentDb, tasks, repository, project, run, close: () => { db.close(); agentDb.close(); } };
+  const binding = tasks.requireExecution('stage', queued.id, project.id).nodeBinding;
+  const lease = tasks.graph.claim({nodeId: binding.nodeId, projectId: project.id, workerId: 'fixture-worker',
+    expectedRevision: 1, ttlMs: 300_000, concurrency: 2});
+  if (lease === null) throw new Error('fixture_worker_claim_failed');
+  const withWorker = work => api.withResearchWorker(lease, work);
+  const run = withWorker(() => repository.runs.markRunning(queued.id, project.id, { providerId: 'fixture-provider', modelId: 'fixture-model' }));
+  return { db, agentDb, tasks, repository, project, run, lease, withWorker, close: () => { db.close(); agentDb.close(); } };
 }
 
 export function figureRequest(projectId, ownerRunId, overrides = {}) {

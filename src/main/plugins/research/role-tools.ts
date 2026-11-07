@@ -201,12 +201,12 @@ export function createResearchRoleTools(input: {
     start_experiment: () => tool(async (request) => {
       const started = await effects().startExperiment(input.run.id, input.run.projectId, request);
       return after(summarizeExperiment(started));
-    }, { name: 'start_experiment', description: '启动当前项目的脚本实验。Python 先读取用户选择并预览环境，明确 source:{kind:"file",path} 或冻结 Notebook 的 source:{kind:"notebook",notebookId,expectedHash,subsetVersion:1}、sourceVersion:1、uint32 seed、arguments 和 expectedEnvironmentHash。项目和运行身份由服务绑定；相同 requestId 返回已有终态，显式新 requestId 才新运行。',
+    }, { name: 'start_experiment', description: '启动当前项目的脚本实验。Python 先读取用户选择并预览环境，明确 source:{kind:"file",path} 或冻结 Notebook 的 source:{kind:"notebook",notebookId,expectedHash,subsetVersion:1}、sourceVersion:1、uint32 seed、arguments 和 expectedEnvironmentHash。项目和运行身份由服务绑定；同一冻结节点的相同业务参数返回已有结果，requestId 变化不重复执行。',
       schema: researchOwnedExperimentStartSchema }),
     start_figure: () => tool(async (request) => {
       const started = await effects().startFigure(input.run.id, input.run.projectId, request);
       return after(summarizeFigure(started));
-    }, { name: 'start_figure', description: '启动当前项目的图稿渲染。项目和运行身份由服务绑定；相同 requestId 重复提交返回已有运行。',
+    }, { name: 'start_figure', description: '启动当前项目的图稿渲染。项目和运行身份由服务绑定；同一冻结节点的相同业务参数返回已有运行。',
       schema: researchOwnedFigureStartSchema }),
     get_experiment: () => tool(async ({ experimentId }) => {
       return after(summarizeExperiment(effects().getExperiment(input.run.id, input.run.projectId, experimentId)));
@@ -245,7 +245,7 @@ export function createResearchRoleTools(input: {
     prepare_export: () => tool(async (request) => {
       const started = await effects().prepareExport(input.run.id, input.run.projectId, request);
       return after(summarizeExport(started));
-    }, { name: 'prepare_export', description: '准备当前项目的最终导出。项目和运行身份由服务绑定；相同 requestId 重复提交返回已有作业。',
+    }, { name: 'prepare_export', description: '准备当前项目的最终导出。项目和运行身份由服务绑定；同一冻结节点的相同业务参数返回已有作业。',
       schema: researchOwnedExportPrepareSchema }),
     get_export: () => tool(async ({ exportId }) => {
       return after(summarizeExport(effects().getExport(input.run.id, input.run.projectId, exportId)));
@@ -265,9 +265,23 @@ export function createResearchRoleTools(input: {
   return input.run.toolNames.map((name) => {
     const factory = factories[name];
     if (factory === undefined) throw new Error('research_role_tool_unavailable');
-    return factory();
+    const original = factory();
+    const effectClass = workerEffectClasses[name];
+    if (effectClass === undefined) return original;
+    return tool(async args => {
+      assertActive();
+      return input.repository.tasks.workerEffects.execute(name, args, effectClass, () => original.invoke(args));
+    }, {name, description: original.description, schema: original.schema});
   });
 }
+
+const workerEffectClasses: Partial<Record<string, import('../../services/deep-agent/tool-effect-store').ToolEffectOperationInput['effectClass']>> = {
+  capture_evidence: 'workspace_mutation', save_workspace_file: 'workspace_mutation',
+  save_template_file: 'workspace_mutation', compile_template: 'host_execution',
+  start_experiment: 'host_execution', start_figure: 'host_execution', prepare_export: 'host_execution',
+  publish_experiment: 'workspace_mutation', publish_figure: 'workspace_mutation', publish_export: 'workspace_mutation',
+  search_literature: 'network_read', add_literature: 'workspace_mutation', cancel_literature_import: 'workspace_mutation'
+};
 
 function page(content: string, offset: number, limit: number) {
   return { content: content.slice(offset, offset + limit), totalChars: content.length,
