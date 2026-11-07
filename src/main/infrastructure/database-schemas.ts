@@ -2812,6 +2812,32 @@ CREATE TABLE research_node_decision_receipts (
 );
 `});
 
+researchMigrations.push({version: 65, name: 'reading_notes_and_academic_radar', sql: `
+CREATE TABLE research_reading_notes (
+ id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL, updated_at TEXT NOT NULL, snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json))
+);
+CREATE INDEX research_reading_notes_project ON research_reading_notes(project_id,updated_at);
+CREATE TABLE research_reading_highlights (
+ id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+ document_id TEXT NOT NULL, source_hash TEXT NOT NULL, snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json))
+);
+CREATE INDEX research_reading_highlights_document ON research_reading_highlights(project_id,document_id,source_hash);
+CREATE TABLE research_radar_feeds (
+ id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+ snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json))
+);
+CREATE TABLE research_radar_articles (
+ id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+ feed_id TEXT NOT NULL, snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json))
+);
+CREATE INDEX research_radar_articles_feed ON research_radar_articles(project_id,feed_id);
+CREATE TABLE research_radar_recommendations (
+ project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+ cache_key TEXT NOT NULL, snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)), PRIMARY KEY(project_id,cache_key)
+);
+`});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

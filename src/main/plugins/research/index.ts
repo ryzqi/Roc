@@ -1,3 +1,8 @@
+import {ReadingDiscoveryService} from './reading-discovery';
+import {ReadingRepository} from './reading-repository';
+import {RadarService} from './radar-service';
+import {ReadingTranslationService} from './reading-translation';
+import {researchReadingCapabilities,registerResearchReadingCapabilities} from './reading-capabilities';
 import {ResearchTaskFactsService} from './task-facts';
 import {taskFactCapabilities, registerTaskFactCapabilities} from './task-fact-capabilities';
 import {ResearchStorageUsageService, researchStorageCapability, registerResearchStorageCapability} from './storage-usage';
@@ -248,6 +253,9 @@ export type ResearchPluginOptions = {
 
 export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin {
   let repository: ResearchRepository | null = null;
+  let radar: RadarService | null = null;
+  let readingDiscovery: ReadingDiscoveryService | null = null;
+  let readingTranslation: ReadingTranslationService | null = null;
   let stageRuntime: ResearchStageRuntime | null = null;
   let templates: ResearchTemplateService | null = null;
   let library: ResearchLibraryService | null = null;
@@ -283,7 +291,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [...taskFactCapabilities, researchStorageCapability, researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchIdeaPlanCapabilities, ...researchIdeaOutcomeCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchScholarlyCapabilities, ...researchResourceCapabilities, ...researchOpenReviewCapabilities, ...researchMonitorCapabilities, ...researchZenodoCapabilities, ...researchZenodoPublicationCapabilities, ...researchHuggingFaceCapabilities, ...researchHuggingFaceDownloadCapabilities, ...researchResourceAssociationCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchNotebookCapabilities, ...researchExperimentResultCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities, researchCitationCoverageCapability, ...researchCitationReviewCapabilities, ...researchConsistencyCapabilities, ...researchFigureConsistencyCapabilities, ...researchResponseMatrixCapabilities, ...researchJournalComplianceCapabilities]
+      capabilities: [...researchReadingCapabilities, ...taskFactCapabilities, researchStorageCapability, researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchIdeaPlanCapabilities, ...researchIdeaOutcomeCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchScholarlyCapabilities, ...researchResourceCapabilities, ...researchOpenReviewCapabilities, ...researchMonitorCapabilities, ...researchZenodoCapabilities, ...researchZenodoPublicationCapabilities, ...researchHuggingFaceCapabilities, ...researchHuggingFaceDownloadCapabilities, ...researchResourceAssociationCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchNotebookCapabilities, ...researchExperimentResultCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities, researchCitationCoverageCapability, ...researchCitationReviewCapabilities, ...researchConsistencyCapabilities, ...researchFigureConsistencyCapabilities, ...researchResponseMatrixCapabilities, ...researchJournalComplianceCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，
@@ -372,6 +380,11 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       registerResearchConsistencyCapabilities(context, new ResearchConsistencyService(researchRepository, researchResults), researchRepository.consistency);
       library = new ResearchLibraryService(researchRepository.library, toolchain, options.libraryRoot ?? null, options.libraryFetch);
       registerResearchLibraryCapabilities(context, researchRepository.library, library);
+      const reading = new ReadingRepository(db, researchRepository);
+      radar = new RadarService(reading, researchEmbeddings, library);
+      readingTranslation = new ReadingTranslationService(context);
+      readingDiscovery=new ReadingDiscoveryService(reading,radar);
+      registerResearchReadingCapabilities(context, reading, radar, readingTranslation,readingDiscovery);
       const scholarlyRepository = new ScholarlyRelationsRepository(db, researchRepository);
       scholarly = new ScholarlyRelationsService(scholarlyRepository, literatureService);
       registerResearchScholarlyCapabilities(context, scholarly, scholarlyRepository);
@@ -598,6 +611,8 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       researchIndexer.start();
     },
     shutdown: async () => {
+      await readingDiscovery?.shutdown();
+      await Promise.allSettled([radar?.shutdown(),readingTranslation?.shutdown()]);
       try {
         await shutdownResearchPlugin({ literature: literatureService, monitors, zenodo, scholarly, resources, openreview, huggingface, huggingfaceDownloads, zotero, literatureImports, productionInputs, exports, figures, experiments, pythonEnvironments, indexer, embeddings, stageRuntime, reviewSearch, templates, documents, library, prose });
       } finally {

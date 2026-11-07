@@ -10,6 +10,7 @@
 | [research-figures.md](research-figures.md) | 可复现图稿渲染与审核 |
 | [research-prose.md](research-prose.md) | 文稿检查（Vale）：投影、规则集与运行边界 |
 | [research-exports.md](research-exports.md) | 批准正文与图稿的最终 ZIP |
+| [research-reading-radar.md](research-reading-radar.md) | 结构化阅读、双链笔记、翻译与学术雷达，功能对应和验证边界 |
 | [rtk-integration.md](rtk-integration.md) | bundled RTK 压缩 shell 输出 |
 | [research-optimization-status.md](research-optimization-status.md) | 实施里程碑、本地验证与尚未完成的验收 |
 | [builtin-skills.md](builtin-skills.md) | 内置 Skill 来源、安装、同步与许可边界 |

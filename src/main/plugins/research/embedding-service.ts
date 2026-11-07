@@ -97,6 +97,25 @@ export class ResearchEmbeddingService {
     return row === null ? null : { configId: row.id, revision: row.revision };
   }
 
+  /** Reuses the selected provider and its revision/secret boundary for daily discovery. */
+  async embedReadingTexts(texts: string[], signal?: AbortSignal): Promise<{configId: string; revision: number; vectors: number[][]}> {
+    this.requireOpen();
+    const row = this.select(null);
+    if (row === null) throw new Error('请先在检索设置中配置并启用嵌入模型。');
+    return await this.task(row.id, signal, async active => {
+      const vectors: number[][] = [];
+      for (let offset = 0; offset < texts.length; offset += 16) {
+        this.requireActive(active);
+        this.knowledge.requireEmbeddingConfig(row.id, row.revision);
+        vectors.push(...await this.client.embed({config: await this.config(row), apiKey: await this.apiKey(row),
+          texts: texts.slice(offset,offset+16), signal: active}));
+      }
+      this.requireActive(active);
+      this.knowledge.requireEmbeddingConfig(row.id, row.revision);
+      return {configId: row.id, revision: row.revision, vectors};
+    });
+  }
+
   async embedDocument(documentId: string, configId: string | null, signal?: AbortSignal): Promise<ResearchEmbeddingReceipt> {
     this.requireOpen();
     const row = this.select(configId);

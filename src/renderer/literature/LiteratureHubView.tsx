@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { AlertCircle, Bell, BookOpen, Database, Layers, Loader2, PanelLeft, Plus, Share2 } from 'lucide-react';
+import { AlertCircle, NotebookPen, Radar, Bell, BookOpen, Database, Layers, Loader2, PanelLeft, Plus, Share2 } from 'lucide-react';
 import { useWorkspaceScope } from '../app/workspace-scope';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
@@ -21,10 +21,14 @@ import { libraryItemTitle } from './format';
  */
 
 type SubViewId = LiteratureSubView;
+const ReadingNotesPanel = lazy(() => import('./ReadingNotesPanel'));
+const AcademicRadarPanel = lazy(() => import('./AcademicRadarPanel'));
 const MonitorsPanel = lazy(() => import('./MonitorsPanel'));
 
 const SUB_VIEWS: Array<{ id: SubViewId; label: string; icon: typeof BookOpen; iconClass: string }> = [
   { id: 'reader', label: '阅读', icon: BookOpen, iconClass: 'text-[var(--icon-literature)]' },
+  { id: 'notes', label: '笔记', icon: NotebookPen, iconClass: 'text-[var(--icon-literature)]' },
+  { id: 'radar', label: '学术雷达', icon: Radar, iconClass: 'text-[var(--icon-literature)]' },
   { id: 'rag', label: '检索', icon: Database, iconClass: 'text-[var(--icon-rag)]' },
   { id: 'wiki', label: '知识库', icon: Layers, iconClass: 'text-[var(--icon-wiki)]' },
   { id: 'graph', label: '图谱', icon: Share2, iconClass: 'text-[var(--icon-graph)]' },
@@ -180,7 +184,7 @@ export function LiteratureHubView(): React.JSX.Element {
 
       <div className="flex min-h-0 flex-1">
         {/* At narrow canvas widths, the selector above replaces this list. */}
-        <aside id="literature-navigation" style={{ display: navigationOpen && subView !== 'monitors' ? 'flex' : 'none' }} className="literature-library-column min-h-0 w-[min(240px,40cqw)] shrink-0 border-r-[0.5px] border-line" aria-label="文献列表">
+        <aside id="literature-navigation" style={{ display: navigationOpen && !['monitors','radar','notes'].includes(subView) ? 'flex' : 'none' }} className="literature-library-column min-h-0 w-[min(240px,40cqw)] shrink-0 border-r-[0.5px] border-line" aria-label="文献列表">
           <LibraryList onRequestImport={() => openImport('document')} />
         </aside>
 
@@ -288,6 +292,16 @@ export function LiteratureHubView(): React.JSX.Element {
             </div>
             </div>
           ) : null}
+          {visited.has('notes') ? <div style={{display:subView==='notes'?'contents':'none'}}>
+            <Suspense fallback={<p role="status" className="p-3">加载笔记…</p>}>
+              {scope.projectId===null?<p className="p-3 text-muted">选择项目后使用阅读笔记</p>:<ReadingNotesPanel key={scope.projectId}
+                client={scope.client} projectId={scope.projectId} items={store.items} writable={scope.writable}/>}
+            </Suspense></div>:null}
+          {visited.has('radar') ? <div style={{display:subView==='radar'?'contents':'none'}}>
+            <Suspense fallback={<p role="status" className="p-3">加载学术雷达…</p>}>
+              {scope.projectId===null?<p className="p-3 text-muted">选择项目后使用学术雷达</p>:<AcademicRadarPanel key={scope.projectId}
+                client={scope.client} projectId={scope.projectId} writable={scope.writable} active={subView==='radar'} onImported={store.reload}/>}
+            </Suspense></div>:null}
           {visited.has('monitors') ? (
             <div style={{display: subView === 'monitors' ? 'contents' : 'none'}}>
               <Suspense fallback={<p role="status" className="p-3 text-muted">加载监控界面中</p>}>

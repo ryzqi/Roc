@@ -351,6 +351,15 @@ async function createWindow(): Promise<void> {
     showMainWindowOnce('mainWindow.did-finish-load');
   });
 
+  // Install the preview handler before the first renderer navigation. The
+  // renderer eagerly fetches the original PDF while mounting the reader; a
+  // later registration leaves that first request at Chromium's
+  // ERR_UNKNOWN_URL_SCHEME and only a reload can recover it.
+  if (!pdfPreviewProtocolRegistered) {
+    registerPdfPreviewProtocol(() => pdfPreviewKernel,
+      isDevelopment && process.env.ELECTRON_RENDERER_URL !== undefined ? new URL(process.env.ELECTRON_RENDERER_URL).origin : null);
+    pdfPreviewProtocolRegistered = true;
+  }
   const rendererLoaded = kernel.performanceObserverService.measureAsync('renderer_loaded', 'mainWindow.loadRenderer', () => loadMainRenderer(mainWindow!));
   await kernelStarted;
   await rendererLoaded;
@@ -369,11 +378,6 @@ async function createWindow(): Promise<void> {
       broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, event ?? null);
     }
   });
-  if (!pdfPreviewProtocolRegistered) {
-    registerPdfPreviewProtocol(() => pdfPreviewKernel,
-      isDevelopment && process.env.ELECTRON_RENDERER_URL !== undefined ? new URL(process.env.ELECTRON_RENDERER_URL).origin : null);
-    pdfPreviewProtocolRegistered = true;
-  }
 
   const terminalOutputBatcher = createTerminalOutputBatcher({
     intervalMs: 16,

@@ -38,6 +38,7 @@ before(async () => {
       createDocumentAnnotation:input=>window.readFromHost('createDocumentAnnotation',input),
       captureDocumentAnnotation:input=>window.readFromHost('captureDocumentAnnotation',input),
       listDocumentAnnotations:input=>window.readFromHost('listDocumentAnnotations',input),
+      listReadingHighlights:input=>window.readFromHost('listReadingHighlights',input),
       getDocumentAnnotation:input=>window.readFromHost('getDocumentAnnotation',input),
       getDocumentContent:input=>window.readFromHost('getDocumentContent',input),
       getModelsStatus:async()=>({ok:true,data:{ready:false,error:null,models:[],downloading:false,selectedPack:'compact'}})
@@ -98,6 +99,11 @@ before(async () => {
   await page.exposeFunction('readFromHost', async (method, input) => {
     const f = active;
     calls.push({fixture: f.project.id, method, input});
+    if (method === 'listReadingHighlights') {
+      api.parseIpcRequestArgs('roc:research:reading-listReadingHighlights', [input]);
+      const reading = new api.ReadingRepository(f.db, f.repository);
+      return {ok: true, data: reading.highlights(input.projectId, input.documentId, input.sourceHash)};
+    }
     if (method === 'source' || method === 'asset') {
       try {
         const response = await f.registry.invoke(`research.document.${method}`, input);
@@ -376,11 +382,19 @@ test('wrong returned parse identity is rejected; selected layouts preserve reada
 });
 
 async function waitForOriginal() {
-  await page.waitForFunction(() => {
+  try {await page.waitForFunction(() => {
     const canvas=document.querySelector('[data-testid="reader-pdf-canvas"]');
     return canvas !== null && canvas.width > 0 && canvas.height > 0 && canvas.parentElement.style.visibility === 'visible' &&
       getComputedStyle(canvas).visibility === 'visible';
-  });
+  });} catch(error) {
+    await writeFile(join(artifacts,'original-paint-failure.json'),JSON.stringify(await page.evaluate(()=>{
+      const canvas=document.querySelector('[data-testid="reader-pdf-canvas"]');
+      return {width:innerWidth,height:innerHeight,workers:window.liveWorkers,canvas:canvas?{width:canvas.width,height:canvas.height,
+        parent:canvas.parentElement.style.cssText,visibility:getComputedStyle(canvas).visibility}:null,
+        errors:[...document.querySelectorAll('[role="alert"]')].map(element=>element.textContent)};
+    }),null,2));
+    await page.screenshot({path:join(artifacts,'original-paint-failure.png')});throw error;
+  }
 }
 test('actual PDF comparison opens sealed bytes lazily with one native worker and measured region projection', async () => {
   const f = await realPdfScene(), before = f.changes();
@@ -615,7 +629,7 @@ test('actual rotated PDF hit chooses a unique block while overlap and absent reg
   const canvas=page.getByTestId('reader-pdf-canvas');
   const clickAt=async(x,y)=>{
     const size=await canvas.evaluate(canvas=>({width:canvas.getBoundingClientRect().width,height:canvas.getBoundingClientRect().height}));
-    await canvas.click({position:{x:size.width*x,y:size.height*y}});
+    await page.getByTestId('reader-pdf-page').click({position:{x:size.width*x,y:size.height*y}});
   };
   await clickAt(.75,.25);
   await page.waitForFunction(()=>document.activeElement?.getAttribute('data-block-id')==='reverse-right' &&
@@ -671,7 +685,7 @@ test('PDF without measured regions offers page-block choices and never infers a 
   await publishReverseLayout(f,{pageOnly:true});const before=f.changes();
   await mount(f);await textEquals('Explicit synthetic Left');
   await page.getByTestId('reader-compare-pdf').click();await waitForOriginal();
-  await page.getByTestId('reader-pdf-canvas').click({position:{x:10,y:10}});
+  await page.getByTestId('reader-pdf-page').click({position:{x:10,y:10}});
   assert.equal(await page.locator('[data-focused="true"]').count(),0);
   assert.equal(await page.getByTestId('reader-pdf-block-candidate').count(),3);
   assert.match(await page.getByTestId('reader-pdf-block-candidates').innerText(),/仅有页定位/);
@@ -951,7 +965,7 @@ test('keyboard page-only annotation records no invented region or block; region 
   assert.equal(await select.getAttribute('aria-pressed'),'false');
   assert.equal(await page.getByTestId('reader-pdf-selection-drag').count(),0);
   await select.click();
-  await page.getByTestId('reader-pdf-canvas').click({position:{x:30,y:30}});
+  await page.getByTestId('reader-pdf-page').click({position:{x:30,y:30}});
   await page.getByText('请拖出非空区域。',{exact:true}).waitFor();
   assert.equal(await page.getByTestId('reader-annotation-form').count(),0);
   assert.equal(measured.changes(),before);
@@ -1084,7 +1098,7 @@ test('annotation form and long saved source facts fit light800 dark1099 with act
   await row.evaluate(row=>row.scrollIntoView({block:'start'}));
   await row.locator('details p').first().waitFor({state:'visible'});
   const savedLayout=await row.evaluate(row=>{
-    const rect=row.getBoundingClientRect(),scroller=row.closest('[class*="overflow-y-auto"]').getBoundingClientRect();
+    const rect=row.getBoundingClientRect(),scroller=row.closest('[data-testid="reader-pdf-scroll"]').getBoundingClientRect();
     return {overflow:row.scrollWidth-row.clientWidth,top:rect.top,bottom:rect.bottom,scrollerTop:scroller.top,scrollerBottom:scroller.bottom};
   });
   assert.ok(savedLayout.overflow<=1);assert.ok(savedLayout.top>=savedLayout.scrollerTop-1);
@@ -1140,12 +1154,13 @@ async function openAssetReader(f,focus={parseId:null,locator:null}) {
   await page.getByTestId('reader-block-table').waitFor();
 }
 async function waitForAsset() {
-  await page.getByTestId('reader-block-asset-image').scrollIntoViewIfNeeded();
   await page.waitForFunction(()=>{
     const image=document.querySelector('[data-testid="reader-block-asset-image"]');
+    // Retry replaces the failed image while the resource reload effect starts.
+    // Resolve the live node on each poll and bring lazy images into the viewport.
+    image?.scrollIntoView({block:'nearest'});
     return image?.complete&&image.naturalWidth>0&&image.naturalHeight>0;
   });
-  await page.getByTestId('reader-block-asset-image').scrollIntoViewIfNeeded();
 }
 
 test('parsed table formula assets load lazily as exact original PNG pixels beside raw text with grounded quality facts', async () => {
@@ -1183,6 +1198,8 @@ test('parsed table formula assets load lazily as exact original PNG pixels besid
     parseId:'synthetic-asset-parse',assetId:expected.id,sha256:expected.sha256});
   const formula=page.getByTestId('reader-block-formula').filter({hasText:'mean(A)'});
   await formula.getByTestId('reader-block-asset-toggle').click();await waitForAsset();
+  await formula.getByText('公式 LaTeX 原文', {exact:true}).click();
+  await formula.locator('details pre').waitFor({state:'visible'});
   assert.equal(await page.getByTestId('reader-block-asset-image').count(),1);
   assert.equal(await toggle.getAttribute('aria-expanded'),'false');
   assert.match(await formula.innerText(),/mean\(A\) = 2/);
@@ -1257,6 +1274,7 @@ test('asset text comparison and original PDF fit light800 dark1099 with one PNG 
   const f=await realPdfScene();await publishAssetLayout(f);await openAssetReader(f);
   const formula=page.getByTestId('reader-block-formula').filter({hasText:'mean(A)'});
   await formula.getByTestId('reader-block-asset-toggle').click();await waitForAsset();
+  await formula.getByText('公式 LaTeX 原文', {exact:true}).click();
   await formula.getByTestId('reader-block-source').click();await waitForOriginal();
   const auditSource=await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8'),audits=[];
   await page.mouse.move(10,10);

@@ -12,6 +12,10 @@ import { downloadModels, getModelsStatus } from '../shared/research-models-store
 import type { LiteratureStore } from './use-literature-store';
 import {useReaderDocument} from './use-reader-document';
 
+const ReadingDiscoveryPanel = lazy(() => import('./ReadingDiscoveryPanel'));
+const ReadingNotesPanel = lazy(() => import('./ReadingNotesPanel'));
+const ReadingTranslationPanel = lazy(() => import('./ReadingTranslationPanel'));
+const ReadingFormula = lazy(() => import('./ReadingFormula'));
 const PaperPdfView = lazy(() => import('./PaperPdfView'));
 const PaperBlockAsset = lazy(() => import('./PaperBlockAsset'));
 const ScholarlyRelationsPanel = lazy(() => import('./ScholarlyRelationsPanel'));
@@ -24,44 +28,8 @@ const TIER_OPTIONS: ReadonlyArray<{ value: ResearchParseTier; label: string; tit
   { value: 'complete', label: '完整', title: '轻量解析加公式识别，约 330 MB' }
 ];
 
-/** The paper reader (P5/T5.4).
- *
- * Scope, stated honestly: this renders what the contract can actually deliver —
- * metadata from the library record, and the parse's `blocks` (heading / paragraph /
- * table / formula / figure **as text**, each with its `locator`). It does **not**
- * render figures as interpreted markup. Original PDFs load only when the user
- * opens the comparison; measured source/parse geometry stays version-bound.
- *
- * Parse progress is the backend's own `document.runs` statuses; the contract has no
- * stage names, so none are invented. The legacy `MINERU_PIPELINE_STAGES` progression
- * is gone — it used to advance on a timer, which is exactly the fake progress this
- * phase is supposed to delete.
- *
- * Two entry points, both real:
- *   - the parse blocks, rendered in order;
- *   - `focusLocator`, set when the user arrives from a retrieval hit. The contract
- *     gives a hit a `locator` string and gives blocks their own `locator`, so the
- *     jump requires one exact match in the requested parse. Missing or ambiguous
- *     locations are reported without selecting another parse or nearby block.
- *
- * The header actions are the contract's own operations, each one named where it
- * lands: `library.export` returns content (there is no save-as dialog — F16), so
- * copying goes to the clipboard and writing goes through `files.writeText` into the
- * bound workspace, and the message says which relative path was used.
- *
- * ## The one control that is not a backend call: the text size
- *
- * The toolbar ends with a 字号 toggle (标准 / 大号) that swaps the article's own type
- * size. It is the reader's only *reading* control — every other button in that row is
- * an IPC call — and reading a parsed paper is the one thing a researcher does here for
- * a long time.
- *
- * The button is labelled by the action (「大号」 while the text is standard) and the
- * two sizes are tokens (`--font-read-size` / `--font-read-large-size`), so the
- * scale stays in one place rather than becoming a magic number in this file. The
- * choice is component state: leaving the reader resets it, and nothing about a paper's
- * text size belongs in the project record.
- */
+/** Structured reading stays bound to the selected source and parse. Personal notes and
+ * highlights are stored separately from immutable scientific evidence. */
 
 export type PaperReaderProps = {
   literature: LiteratureStore;
@@ -114,8 +82,16 @@ export function PaperReader({
   /** Reader text size (the 字号 toggle). State, not persisted: see the header. */
   const [largeText, setLargeText] = useState(false);
   const [comparePdf, setComparePdf] = useState(false);
+  const [notesOpen,setNotesOpen]=useState(false),[notesVisited,setNotesVisited]=useState(false);
+  const [noteSeed,setNoteSeed]=useState<{id:string;text:string}|null>(null);
+  const [translation,setTranslation]=useState<{id:string;segments:{label:string;text:string}[];label:string}|null>(null);
+  const [blockFilter,setBlockFilter]=useState('all'),[selectedText,setSelectedText]=useState('');
+  const addNote=(text:string):void=>{setNoteSeed({id:crypto.randomUUID(),text});setNotesVisited(true);setNotesOpen(true);};
+  const translate=(segments:{label:string;text:string}[],label:string):void=>setTranslation({id:crypto.randomUUID(),segments,label});
   const [pdfSelection, setPdfSelection] = useState<{parseId: string; blockId: string; locationIndex: number} | null>(null);
   const [openAsset, setOpenAsset] = useState<string | null>(null);
+  const [discoveryOpen,setDiscoveryOpen]=useState(false);
+  useEffect(()=>{setTranslation(null);setSelectedText('');setNoteSeed(null);},[selected?.id]);
   const [relationsOpen, setRelationsOpen] = useState(false);
   const [resourcesOpen, setResourcesOpen] = useState(false);
   const [resourcesLocked, setResourcesLocked] = useState(false);
@@ -415,6 +391,7 @@ export function PaperReader({
           {selected.archived ? <span className="text-[var(--st-warn)]">已归档</span> : null}
         </p>
         <div className="flex flex-wrap items-center gap-1.5" data-testid="reader-actions">
+          <button type="button" className="rounded-control border border-line px-2 py-1" aria-expanded={discoveryOpen} disabled={!literature.projectId} onClick={()=>setDiscoveryOpen(!discoveryOpen)}>引文发现 / 批量入库</button>
           <button type="button" disabled={literature.projectId === null} aria-expanded={relationsOpen}
             onClick={() => setRelationsOpen(current => !current)} data-testid="reader-scholarly-toggle"
             className="min-h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
@@ -541,7 +518,8 @@ export function PaperReader({
         )}
       </header>
 
-      {(relationsOpen || resourcesOpen || huggingFaceOpen || openReviewOpen) && literature.projectId !== null ? <div className="max-h-[55%] shrink-0 overflow-y-auto border-b-[0.5px] border-line">
+      {(discoveryOpen || relationsOpen || resourcesOpen || huggingFaceOpen || openReviewOpen) && literature.projectId !== null ? <div className="max-h-[55%] shrink-0 overflow-y-auto border-b-[0.5px] border-line">
+        {discoveryOpen?<Suspense fallback={<p role="status">加载引文发现…</p>}><ReadingDiscoveryPanel key={`${literature.projectId}:${selected.id}`} client={literature.client} projectId={literature.projectId} itemId={selected.id} writable={scope.writable} onImported={literature.reload}/></Suspense>:null}
         {relationsOpen ? <Suspense fallback={<p role="status" className="px-3 py-2 text-muted">载入学术关系</p>}>
           <ScholarlyRelationsPanel key={`${literature.projectId}:${selected.id}`} client={literature.client}
             projectId={literature.projectId} item={selected} writable={scope.writable}/>
@@ -750,7 +728,22 @@ export function PaperReader({
             )}
           </div>
 
-          {activeDocument?.mediaType === 'application/pdf' && reader.parsed !== null ? (
+          <div className="reading-toolbar">
+            <button type="button" aria-expanded={notesOpen} onClick={()=>{setNotesVisited(true);setNotesOpen(!notesOpen);}}>论文笔记</button>
+            <select aria-label="结构化阅读分类" value={blockFilter} onChange={event=>setBlockFilter(event.target.value)}>
+              <option value="all">全部内容</option><option value="heading">章节</option><option value="figure">图</option><option value="table">表格</option><option value="formula">公式</option><option value="algorithm">算法</option>
+            </select>
+            <select aria-label="跳转章节" value="" onChange={event=>{setBlockFilter('all');const id=event.target.value;requestAnimationFrame(()=>document.getElementById(`reader-block-${id}`)?.scrollIntoView({block:'start'}));}}>
+              <option value="">跳转章节</option>{blocks.filter(block=>block.kind==='heading').map(block=><option key={block.id} value={block.id}>{block.text}</option>)}
+            </select>
+            <button type="button" disabled={!blocks.length} onClick={()=>translate(blocks.filter(block=>block.text.trim()).map(block=>({label:`${block.label} · ${block.locator}`,text:block.text})),'解析全文翻译')}>翻译解析全文</button>
+            <button type="button" disabled={!blocks.length} onClick={()=>void copy.copy(blocks.map(block=>block.kind==='heading'?`## ${block.text}`:block.kind==='formula'?`$$\n${block.text}\n$$`:block.text).join('\n\n'))}>复制 Markdown</button>
+            {selectedText?<><button type="button" disabled={!scope.writable} onClick={()=>addNote(`> ${selectedText.replace(/\n/g,'\n> ')}`)}>选区存为笔记</button>
+              <button type="button" onClick={()=>translate([{label:'解析文本选区',text:selectedText}],'选区翻译')}>翻译选区</button></>:null}
+          </div>
+          {translation && literature.projectId?<Suspense fallback={<p role="status">加载翻译…</p>}><ReadingTranslationPanel key={translation.id} client={literature.client} projectId={literature.projectId}
+            segments={translation.segments} label={translation.label} onNote={addNote} onClose={()=>setTranslation(null)}/></Suspense>:null}
+          {activeDocument?.mediaType === 'application/pdf' ? (
             <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-2 py-1.5">
               <button type="button" onClick={() => setComparePdf(compare => !compare)} aria-pressed={comparePdf}
                 data-testid="reader-compare-pdf" className="flex items-center gap-1 rounded-control border border-line px-2 py-1 text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)]">
@@ -770,14 +763,15 @@ export function PaperReader({
             </div>
           ) : null}
           <div className="flex min-h-0 flex-1">
-          {comparePdf && activeDocument?.mediaType === 'application/pdf' && reader.parsed !== null && literature.projectId !== null ? (
-            <div className="min-h-0 w-1/2 min-w-0 border-r border-line">
+          {!reader.loading && (comparePdf || reader.parsed===null) && activeDocument?.mediaType === 'application/pdf' && literature.projectId !== null ? (
+            <div className={`${reader.parsed===null?'w-full':'w-1/2'} min-h-0 min-w-0 border-r border-line`}>
               <Suspense fallback={<p role="status" className="p-2 text-muted">加载原文阅读器…</p>}>
                 <PaperPdfView client={literature.client} projectId={literature.projectId} document={activeDocument} parsed={reader.parsed}
+                  onNote={addNote} onTranslate={translate}
                   canAnnotate={scope.writable && scope.projectId === literature.projectId}
                   selection={selectedPdfBlock === null ? null : {blockId: selectedPdfBlock, locationIndex: selectedPdfLocation}}
                   onSelectBlock={selection => {
-                    setPdfSelection({parseId: reader.parsed!.run.id, ...selection});
+                    if(!reader.parsed)return;setPdfSelection({parseId: reader.parsed.run.id, ...selection});
                     const target = document.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(selection.blockId)}"]`);
                     target?.focus({preventScroll: true});
                     target?.scrollIntoView({block: 'center'});
@@ -785,7 +779,8 @@ export function PaperReader({
               </Suspense>
             </div>
           ) : null}
-          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-3 py-3" data-testid="reader-content-area">
+          <div hidden={activeDocument?.mediaType==='application/pdf' && reader.parsed===null} className="min-h-0 min-w-0 flex-1 overflow-y-auto px-3 py-3" data-testid="reader-content-area" onPointerUp={event=>{const selection=window.getSelection();if(selection && event.currentTarget.contains(selection.anchorNode) && event.currentTarget.contains(selection.focusNode))setSelectedText(selection.toString());}}>
+
             {content?.parseMode === 'ocr' || content?.parseMode === 'mixed' ?
               <p role="note" className="mb-2 text-[var(--font-meta-size)] text-muted" data-testid="reader-quality-ocr">
                 此版本含 OCR 识别内容，请核对数字、单位和公式。
@@ -826,6 +821,7 @@ export function PaperReader({
                 data-text-size={largeText ? 'large' : 'standard'}
               >
                 {blocks.map((block, index) => {
+                  if(blockFilter!=='all' && (blockFilter==='algorithm'?!/algorithm|伪代码|算法/i.test(`${block.label} ${block.text}`):block.kind!==blockFilter))return null;
                   const assetKey = JSON.stringify([literature.projectId, activeDocumentId, reader.parsed?.run.id, block.id]);
                   const comparingAsset = openAsset === assetKey;
                   const hasAssetSurface = content.blocks[index].imageAssetId !== null ||
@@ -847,9 +843,7 @@ export function PaperReader({
                     {block.kind === 'heading' ? (
                       <h3 className="text-ink">{block.text}</h3>
                     ) : block.kind === 'formula' ? (
-                      <p className="overflow-x-auto whitespace-pre-wrap rounded-control border border-line bg-bg-soft px-2 py-1">
-                        {block.text}
-                      </p>
+                      <Suspense fallback={<pre>{block.text}</pre>}><ReadingFormula text={block.text}/></Suspense>
                     ) : (
                       <p className="min-w-0 whitespace-pre-wrap break-words">
                         {block.kind === 'figure' ? <span className="text-subtle">[图] </span> : null}
@@ -876,6 +870,11 @@ export function PaperReader({
                         className="mt-1 rounded-control px-1 py-0.5 text-[var(--font-meta-size)] text-muted hover:bg-[var(--overlay-hover)]">
                         {comparingAsset ? '收起解析图像' : '核对解析图像'}
                       </button>}
+                    <div className="reading-toolbar">
+                      <button type="button" disabled={!scope.writable||block.isBlank} onClick={()=>addNote(`## ${block.label}\n\n${block.text}\n\n${block.locator}`)}>摘录到笔记</button>
+                      <button type="button" disabled={block.isBlank} onClick={()=>translate([{label:block.label,text:block.text}],'内容块翻译')}>翻译</button>
+                      <button type="button" disabled={block.isBlank} onClick={()=>void copy.copy(block.text)}>复制{block.kind==='formula'?' LaTeX':''}</button>
+                    </div>
                     {activeDocument?.mediaType === 'application/pdf' ? (
                       <button type="button" disabled={content.blocks[index].locations.length === 0}
                         aria-label={`查看${block.label}原文位置`} aria-pressed={selectedPdfBlock === block.id}
@@ -889,6 +888,10 @@ export function PaperReader({
               </article>
             )}
           </div>
+          {notesVisited && literature.projectId?<aside hidden={!notesOpen} className="reading-paper-notes min-h-0 w-[40%] min-w-64 max-w-md border-l border-line" aria-label="论文关联笔记">
+            <Suspense fallback={<p role="status">加载笔记…</p>}><ReadingNotesPanel key={literature.projectId} client={literature.client} projectId={literature.projectId}
+              items={literature.items} itemId={selected.id} writable={scope.writable} seed={noteSeed} onReveal={()=>setNotesOpen(true)} onSeedConsumed={()=>setNoteSeed(null)}/></Suspense>
+          </aside>:null}
           </div>
 
         </div>

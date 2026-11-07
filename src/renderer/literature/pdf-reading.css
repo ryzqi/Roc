@@ -1,0 +1,12 @@
+/* Text transforms follow pdfjs-dist's TextLayer contract. All annotation hues use Roc's tokens. */
+.roc-pdf-text-layer { position:absolute; inset:0; overflow:clip; line-height:1; letter-spacing:normal; word-spacing:normal; text-align:initial; text-size-adjust:none; forced-color-adjust:none; transform-origin:0 0; --scale-round-x:1px; --scale-round-y:1px; --min-font-size:1; --text-scale-factor:calc(var(--total-scale-factor) * var(--min-font-size)); --min-font-size-inv:calc(1 / var(--min-font-size)); }
+.roc-pdf-text-layer :is(span,br) { color:transparent; position:absolute; white-space:pre; cursor:text; transform-origin:0 0; user-select:text; }
+.roc-pdf-text-layer > :not(.markedContent), .roc-pdf-text-layer .markedContent span:not(.markedContent) { z-index:1; --font-height:0; font-size:calc(var(--text-scale-factor) * var(--font-height)); --scale-x:1; --rotate:0deg; transform:rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv)); }
+.roc-pdf-text-layer .markedContent { display:contents; }
+.roc-pdf-text-layer ::selection { background:var(--accent-soft); }
+.roc-pdf-text-layer .pdf-find-hit { background:color-mix(in srgb,var(--st-warn) 40%,transparent); outline:1px solid var(--st-warn); }
+.pdf-saved-highlight { position:absolute; pointer-events:none; opacity:.3; mix-blend-mode:multiply; }
+.pdf-highlight-yellow { background:var(--st-warn); }
+.pdf-highlight-green { background:var(--st-good); }
+.pdf-highlight-blue { background:var(--accent); }
+.pdf-highlight-pink { background:var(--icon-literature); }

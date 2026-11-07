@@ -161,7 +161,7 @@ for (const phase of ['S02', 'S04', 'S05']) test(`${phase} cutover keeps raw cont
     const research=new Database(location(join(f.destination,'current'),'research'));
     try {
       schemas.applyAgentDatabaseSchema(agent);schemas.applyResearchDatabaseSchema(research);
-      assert.equal(research.prepare('SELECT current_version FROM schema_metadata').pluck().get(),64);
+      assert.equal(research.prepare('SELECT current_version FROM schema_metadata').pluck().get(),65);
       assert.equal(agent.prepare('SELECT COUNT(*) FROM research_task_nodes').pluck().get(),0);
       const tasks=new api.ResearchTaskRepository(agent);
       const repository=new api.ResearchRepository(research,tasks);

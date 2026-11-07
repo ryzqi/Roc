@@ -1,3 +1,4 @@
+import {registerRadarBrowserIpc} from './radar-browser-ipc';
 import { type BrowserWindow, ipcMain } from 'electron';
 
 import { ipcChannels } from '../../shared/ipc';
@@ -106,6 +107,7 @@ export function registerIpc(
   registerPluginCapabilityIpc(timedHandle, kernel);
   registerLegacyAppSupplementIpc(timedHandle, controls);
   registerWindowIpc(timedHandle, mainWindow, controls);
+  registerRadarBrowserIpc(timedHandle, mainWindow);
   registerShellConfirmIpc(timedHandle, mainWindow, kernel.logService);
   registerSettingsIpc(
     timedHandle,
