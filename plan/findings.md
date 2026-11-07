@@ -1,5 +1,22 @@
 # 仓库核对与设计依据
 
+## S09 启动核对（2026-11-07）
+
+- 用户已明确启动 S09；基线 `5b8ac3e95179b1a664760d11f37a2d110733dba0`，工作区干净。
+- RH-20 与 RH-21 独立决定。研究问题、方法/指标/数据、预算和远端目标尚未提供；
+  先交付有现有代码依据的合同设计/RFC，不创建无消费者的 backend stub 或假实验指标。
+- 现有 Experiment Service、Result Service、Task DAG、Effect 与 Budget 是复用入口；
+  需核对受控执行与 scheduler 是否已能承载 experiment 节点，不能仅凭名称认定已接通。
+- 核对结果：S06 graph claim/assertLease 与 StageRuntime pump 均只接受 stage；
+  首版保留一个写者阶段，A/B 是其拥有的 Experiment 子执行，串行运行。
+- Result.compare 将方法/参数/seed 等差异判为不可比，不能直接用于方法 A/B 的预注册比较。
+  ExportSources 仅收集正文引用的 completed 实验，需要全分支库存接入才覆盖未引用失败。
+- RunBudgetLedger 的 model/tool/child 与项目模型费用 admission 不能代替实验计算费用预留；
+  CPU/内存当前仅采样监测。Remote 必要性只有能力边界证据，没有真实 workload 证明。
+- 完整合同、源文件入口与后续验收见 [RH-20 设计](s09-experiment-tree-design.md) 和
+  [RH-21 RFC](s09-remote-workspace-rfc.md)，两者是设计，不是已实现能力。
+- 用户已回复暂不真实实验，远程目标暂未确定、先完成 RFC；本轮完成设计与缺口审查。
+
 ## 已核对
 
 - 来源文档 862 行已完整阅读，覆盖 WP-00～WP-12、RH-00～RH-21、

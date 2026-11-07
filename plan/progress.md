@@ -825,3 +825,35 @@ S08本地工程状态为Verified passing，按既有授权提交；独立科学0
 最终文档检查：python3 .artifacts/research-harness/S08/docs-check.py，13份文档、74个
 本地链接均有效，git diff --check通过。final-evidence.py汇总1538个源码hash、
 36项后续命令、329份证据，冻结基线之后24个原路径变化均单独记录；本地工程通过。
+
+## S09 启动（2026-11-07）
+
+用户明确要求“开始 S9”。起点 `5b8ac3e95179b1a664760d11f37a2d110733dba0`，
+`git status --short` 为空。先交付 RH-20 分支合同/接入设计和 RH-21 Remote RFC，
+条件审查分别进行。用户未提供研究问题、批准的指标/方法/数据、具体预算或远端目标；
+已异步询问，继续不依赖这些输入的代码盘点和文档工作。不把历史 Keychain 允许
+视为远端上传、账号使用、费用或科学实验批准。
+
+采用 planning-with-files 与 agent-development 技能，沿用 plan/；查询已有 CodeGraph，
+没有刷新索引。组合读取输出曾截断，改为分段限量读取；无匹配的 scoped AGENTS 搜索
+返回 1，并非运行测试失败。首个文档补丁因 findings 标题上下文错误整体未应用，核对
+工作区仍干净后修正。尚未实施 S09 产品代码或运行 S09 测试。
+
+S09 设计形成：RH-20 明确同一阶段串行两候选，补预注册计划、非模型计算预算、
+Effect 身份和全失败/负结果导出；RH-21 RFC 区分文件 backend 与计算隔离，规定真实
+目标能力、manifest、对账/取消、数据/费用 hard cap。没有假设已存在 Remote 或实验树。
+同步入口 README/总计划/验收页；S08 历史报告不改写，当前状态另附接续说明。
+研究问题/数据/指标/预算与远端目标问题仍未答复；设计交付可独立检查，运行仍待条件。
+
+用户随后回复“暂不真实实验”和“暂未确定，先完成 RFC（推荐）”；已同步报告与阶段状态。
+设计复核补清 planHash 包含批准中的 deadline/有效期，仅排除审计时间戳/运行状态；
+重复次数必须为有限正整数。查找历史验证脚本时递归列出复制的技能文件导致截断，
+改为直接读取已知 docs-check.py；S09 证据目录尚未创建，随后创建本次检查入口。
+
+S09 文档检查通过：工作目录 `/Users/Apple_501/Desktop/Roc/Roc`，命令
+`python3 .artifacts/research-harness/S09/docs-check.py`，退出码 0。
+10 份文档、93 个本地链接目标有效、23 个源码/配置/测试入口 hash 已保存；
+3 个测试 script/入口存在但未执行；`git diff 5b8ac3e95179b1a664760d11f37a2d110733dba0 --check`
+通过，变更范围仅为 10 份文档。实际命令、版本与结果位于 S09/verification.json。
+本次范围状态为 `Verified passing（设计文档与一致性检查）`；按已有授权提交。
+S09 总体保持 in_progress（Designed），产品实现/科学/远端验证未完成；按用户答复不运行真实实验。
