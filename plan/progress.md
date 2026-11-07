@@ -674,3 +674,47 @@ S06 工程验收完成：最终 inspector 26/26；上次两项的 updateArtifact
 清理补验 39/39 与受影响 renderer 补验分轮登记，未拼成单次通过。
 admission/IPC/Harness 94/workflow/build/chunks/smoke 13 均在最终生产修复后 exit 0。
 所有报告/log hash 核对，汇总 final-verification.json；工程 Verified passing。
+
+S06 已提交 `3647317`，提交后工作区干净。S07 开始；继续沿用 agent-development、
+TypeScript、desktop-agent-ui 与 planning-with-files，复用既有原生资源/环境检查。
+先固定权限/威胁矩阵和实际到达层，再运行组合攻击与单壳窗口检查。
+不把 schema 拒绝称为 OS sandbox，不把未知 effect 记为零；不读取真实用户目录。
+
+S07 已发现并修复 consumed shell grant 的执行前状态缺口。6 条真实 sentinel 回归
+覆盖 revoke/terminal/expiry/frozen input/approval/grant 变化；修前全部能写文件，
+修后 grant+IPC 21/21（`S07/grant-after.log`）。初版重定向夹具被 policy 早拒绝，
+不算有效复现；`grant-before-v2.log` 才是实际文件改写证据。
+原生四文件 integration 串行 36/36（`S07/native-boundaries.log`），exit 0。
+新增 `s07-permission-matrix.md`；完整攻击目录、UI 和最终检查尚未完成。
+本窗口误猜 actor-context.ts、research-production-effects.test.mjs；已通过文件清单定位
+research-human-context.ts、research-workspace-files.test.mjs/production test kit。
+notes/history 后端继续不可用；已核对本会话原始用户消息授权继续并逐阶段提交。
+
+## 2026-11-07 S07 恢复续作
+
+从用户指定会话 `01a1b1b3-93c8-7a10-abab-2ea92a6e6065` 恢复。原授权为逐阶段
+实现、验证、提交；S02～S06 已提交，当前 HEAD 为 S06。恢复时保留 S07 grant
+生产补丁、6 条 sentinel 回归与权限矩阵。S08 尚待本地导出/E2E/打包，S09 未立项。
+本轮继续攻击目录和桌面检查；外部账号、付费模型、独立科学数据仍无可用验收条件。
+使用现有 CodeGraph 定位 grant/role tools；未刷新索引。首次原始日志 tail 输出过大，
+随后按 JSON message 类型有界提取用户授权和最后进展。误猜 scripts/research-harness
+目录，实际入口为 scripts/harness-eval 与各 tests。未修改 memory。
+
+S07 续作：版本化安全目录首轮 153/153 通过，其中攻击 123、控制 30（修正此前口头
+124/29 计数）；独立结果在 security-2026-11-07T05-27-29.065Z/report.json。
+新增网页/MCP description/result 注入经真实工具协议拦截，单文件 20/20；将三例纳入
+目录后仅补验 S07-154～156。八个 renderer 文件 94/94 通过。
+构建 UI audit 已真实复现 720px 浅色设置 modal 左右阴影各裁 3.2px；修前 JSON/截图
+已保留 S07/layout-before。根因 max-width 92vw 未给阴影 blur 留余量；同根因影响共用
+ModalShell。加入随主题的 inline/block gutter token，保留圆角内容裁切，并扩展任务
+抽屉键盘捕获/返回审计。当前补丁待 build 与布局复验。生产最小宽度 1184，窄测为
+一次性 Electron 窗口 override，不宣称产品支持 380px 原生窗。
+
+S07 最终补验：网页/MCP 注入目录 3/3；156 场景为 126 攻击 + 30 控制，分轮记录。
+720px modal、380px drawer 阴影与设置表单挤压均已修复，失败截图分别保留，最终
+layout-verified 50 状态、cut=0；设置焦点回归 1/1。最终 build exit 0。
+真实 hostile PDF/MCP P0 首轮因旧 queryIndex 与错误 result receipt hash 0/2；
+按当前 queryId/规范化结果更新 fixture 后 2/2，生产拒绝边界未弱化。
+IME 合成事件 + 助手/终端/设置 smoke 14/14；真实 OS IME 未运行。
+final-verification.json 固定源码与证据 hash；S07 工程 Verified passing，进入 S08。
+本次恢复重新读取原始会话用户授权和 plan，pending session 34096/2696 均 exit 0。

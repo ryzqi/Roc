@@ -134,7 +134,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
       testId="settings-section-models-body"
     >
       <div className="flex flex-wrap items-end gap-2">
-        <label className="flex w-[260px] flex-col gap-0.5">
+        <label className="flex w-[260px] max-w-full flex-col gap-0.5">
           <span className="text-subtle text-[var(--font-micro-size)]">供应商</span>
           <select
             value={provider.id}

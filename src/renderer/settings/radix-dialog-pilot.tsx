@@ -147,7 +147,7 @@ export function RadixSettingsDialogShell({
                   exit="exit"
                   transition={modalPopTransition}
                   data-testid={testId === undefined ? undefined : `${testId}-panel`}
-                  className={`relative z-10 m-auto flex max-h-[86vh] max-w-[92vw] flex-col overflow-hidden rounded-window border border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[680px]'}`}
+                  className={`relative z-10 m-auto flex max-h-[min(86vh,calc(100dvh-2*var(--shadow-modal-gutter-block)))] max-w-[min(92vw,calc(100vw-2*var(--shadow-modal-gutter-inline)))] flex-col overflow-hidden rounded-window border border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[680px]'}`}
                 >
                   <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-2.5">
                     <Dialog.Title asChild>

@@ -83,7 +83,7 @@ const grantProfiles = {
 const maxDurationMs = 120_000;
 const approvalLifetimeMs = 30_000;
 const grantLifetimeMs = 30_000;
-const consumedGrantTokens = new WeakSet<object>();
+const consumedGrantTokens = new WeakMap<object, () => void>();
 const executedGrantTokens = new WeakSet<object>();
 
 export class ExecutionGrantBroker {
@@ -375,11 +375,31 @@ export class ExecutionGrantBroker {
         maxDurationMs: row.max_duration_ms,
         maxOutputBytes: row.max_output_bytes
       });
-      consumedGrantTokens.add(token);
+      const frozenBinding = structuredClone(binding);
+      consumedGrantTokens.set(token, () => this.assertConsumedGrantCurrent(token.grantId, frozenBinding));
       return token;
     }).immediate();
     if (result === null) throw new Error('execution_grant_expired');
     return result;
+  }
+
+  /** Consumption is not permission to execute after cancellation, expiry or input changes. */
+  private assertConsumedGrantCurrent(grantId: string, binding: ExecutionGrantBinding): void {
+    this.db.transaction(() => {
+      const prepared = prepareBinding(binding);
+      this.assertRunThread(binding, prepared, binding.profile === 'trusted_host');
+      const row = this.db.prepare('SELECT * FROM agent_execution_grants WHERE id = ?').get(grantId) as GrantRow | undefined;
+      if (row === undefined || row.status !== 'consumed') throw new Error('execution_grant_not_current');
+      if (Date.parse(row.expires_at) <= this.now().getTime()) throw new Error('execution_grant_expired');
+      assertGrantMatches(row, binding, prepared);
+      if (row.approval_reference !== null) {
+        const approval = this.db.prepare('SELECT * FROM agent_execution_approvals WHERE approval_reference = ?')
+          .get(row.approval_reference) as ApprovalRow | undefined;
+        if (approval === undefined || approval.status !== 'consumed') throw new Error('execution_grant_approval_not_current');
+        if (Date.parse(approval.expires_at) <= this.now().getTime()) throw new Error('execution_grant_expired');
+        assertApprovalMatches(approval, binding, prepared);
+      }
+    }).immediate();
   }
 
   revokeRun(runId: string): number {
@@ -551,6 +571,7 @@ export function assertConsumedExecutionGrant(
     throw new Error('execution_grant_cwd_mismatch');
   }
   if (grant.commandHash !== hash(input.command)) throw new Error('execution_grant_command_mismatch');
+  consumedGrantTokens.get(grant)!();
   executedGrantTokens.add(grant);
 }
 

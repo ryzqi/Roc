@@ -872,7 +872,7 @@ ${source.replace('  const rows =', `
             return selected;
           };
           if (input.run.stage === 'retrieval') {
-            produced.search = await tool('search_literature').invoke({queryIndex: 0});
+            produced.search = await tool('search_literature').invoke({queryId: 'primary'});
             assert.equal(produced.search.status, 'complete');
             assert.equal(f.repository.library.list({projectId: f.project.id, query: '', limit: 20,
               includeArchived: false}).length, 0, 'search alone cannot import');
@@ -2093,11 +2093,13 @@ test('MCP timeout after a local external write requires a matching receipt and r
       const receipts = JSON.parse(receiptText);
       assert.equal(receipts.length, 1);
       assert.equal(api.hashToolInput(receipts[0].args), api.hashToolInput(operation.args));
-      const receipt = {schemaVersion: 1, kind: 'resolution', source: 'provider', outcome: 'applied',
-        operationId: unknown.operationId, reference: receipts[0].receiptId,
-        evidenceHash: api.hashToolInput(receipts[0]), recordedAt: new Date().toISOString()};
+      // Explicit verifier reconstructs a result from the queried provider receipt. The replay seal
+      // covers that exact result; a hash of unrelated provider metadata is not a result receipt.
       const result = {kind: 'tool_message', name: request.toolCall.name, toolCallId: request.toolCall.id,
-        content: `Receipt ${receipt.reference}`, status: 'success'};
+        content: JSON.stringify(receipts[0]), status: 'success'};
+      const receipt = {schemaVersion: 1, kind: 'resolution', source: 'operator', outcome: 'applied',
+        operationId: unknown.operationId, reference: receipts[0].receiptId,
+        evidenceHash: api.hashToolInput(result), recordedAt: new Date().toISOString()};
       assert.throws(() => store.reconcile({operation, expectedLeaseGeneration: unknown.leaseGeneration,
         receipt: {...receipt, operationId: hash('unrelated-operation')}, result}), /agent_tool_effect_receipt_mismatch/u);
       assert.equal(store.readState(operation).status, 'unknown');

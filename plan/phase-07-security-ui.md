@@ -2,7 +2,7 @@
 
 优先级：P1。依赖：S02、S04、S05、S06 后端合同。
 来源：WP-10/WP-12、RH-17/RH-15/RH-07。
-实施状态：pending。建议时间：第 11～14 周。
+实施状态：complete（工程）；Verified passing，见 [执行报告](s07-execution-report.md)。建议时间：第 11～14 周。
 
 ## 目标与关口
 
@@ -22,37 +22,37 @@
 
 ## 按顺序执行
 
-- [ ] **RH-17.1 权限矩阵**：actor（human/main/worker）× tool × scope
+- [x] **RH-17.1 权限矩阵**：actor（human/main/worker）× tool × scope
   （project/global literature/MCP/network/environment/publish）× effectClass × approval；
   每格注明真实执行边界、grant、resource、receipt 与拒绝结果。
-- [ ] **RH-17.2 真实路径检查**：项目/目录 canonical identity、symlink 目标、
+- [x] **RH-17.2 真实路径检查**：项目/目录 canonical identity、symlink 目标、
   执行时 source/input/request hash、过期 grant、归档状态都在实际 I/O 前检查。
   以实际文件/网络/进程权限为准，不把 renderer schema 当授权。
-- [ ] **RH-17.3 攻击样本**：构造文献正文、网页、MCP description/result 注入，
+- [x] **RH-17.3 攻击样本**：构造文献正文、网页、MCP description/result 注入，
   traversal/symlink/TOCTOU、跨项目窗、伪造人类决定、旧 approval、旧 Worker、
   越权上传/发布与任意 shell 读用户目录。
   100～200 个独立攻击场景注明覆盖边界和真实到达层。
-- [ ] **RH-17.4 Side-effect 观察**：使用隔离目录 sentinel、受控网络接收器、
+- [x] **RH-17.4 Side-effect 观察**：使用隔离目录 sentinel、受控网络接收器、
   进程/文件/hash/receipt 确认真 effect；分别记录 policy denied、
   sandbox denied、not dispatched、unknown effect，不能仅看模型拒绝语句。
-- [ ] **RH-17.5 资源边界**：核验超时、取消、父进程崩溃、child cleanup、
+- [x] **RH-17.5 资源边界**：核验超时、取消、父进程崩溃、child cleanup、
   native code/input/environment receipt；CPU/RSS 采样治理不宣称内核硬配额。
   未支持硬限制必须拒绝该要求，不伪造 enforcement 成功。
-- [ ] **RH-15.2 任务抽屉**：同一 task source 展示依赖、节点/attempt、等待和失败原因、
+- [x] **RH-15.2 任务抽屉**：同一 task source 展示依赖、节点/attempt、等待和失败原因、
   预算/资源、结果链接、取消/继续；恢复继续同一 run。
   执行发起仍由助手，观察视图不另建“运行工作流”按钮。
-- [ ] **RH-07.4 工件核验**：使用原检查器展示主张 verdict、反证、方法 finding、
+- [x] **RH-07.4 工件核验**：使用原检查器展示主张 verdict、反证、方法 finding、
   版本失效与人工接受/退回；打开真实 PDF locator，不复制证据正文存储。
-- [ ] **RH-12/15.3 助手与诊断**：计划摘要、批准卡片、等待、取消、恢复沿现有 conversation
+- [x] **RH-12/15.3 助手与诊断**：计划摘要、批准卡片、等待、取消、恢复沿现有 conversation
   和 IPC；unknown cost、replay gap、source changed、未科学验证清楚可见。
   内部 lease/grant/receipt 细节按需展开，不默认灌入普通操作流程。
-- [ ] **RH-15.4 Desktop states**：loading/empty/error/pending/disabled、
+- [x] **RH-15.4 Desktop states**：loading/empty/error/pending/disabled、
   late response/project switch/archive readonly、取消 cleanup 和恢复状态逐项验收。
   迟到回复不得填入另一项目/task 的面板。
-- [ ] **RH-15.5 键盘与布局**：主动作可键盘操作，focus visible、抽屉焦点捕获/返回、
+- [x] **RH-15.5 键盘与布局**：主动作可键盘操作，focus visible、抽屉焦点捕获/返回、
   IME 不误提交、reduced motion、light/dark、宽窄窗无裁切。
   `data-testid` 使用当前 shell area 命名，不添加 legacy prefix。
-- [ ] **RH-17/15.6 删除旧边界**：切换后去掉重复 UI store、旧 IPC action、独立 task page、
+- [x] **RH-17/15.6 删除旧边界**：切换后去掉重复 UI store、旧 IPC action、独立 task page、
   绕过 broker 的 Worker 工具和仅靠 prompt 的权限承诺。
 
 ## 交付物

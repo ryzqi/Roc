@@ -254,3 +254,21 @@ tool，其他输入仍进入消息流；Core 1.2.20 的 assembled output 无条�
   历史策略只给 auditId/reason，不伪造 query ID 或批准；无策略 review/monitor pool
   保持原 bytes/hash，历史请求账本原样留存。冷读取、原排名/来源一致和损坏拒绝通过。
 - 最终补验记录全量后 7 个源码变化与所有日志 hash，见 S05 执行报告。
+
+### S07 恢复与验收边界
+
+- consumed grant 的持久状态复核已经落地，执行到 spawn 之间保持同步；
+  6 条真实 host sentinel 攻击与原生 36 条已有日志保留，完整 S07 尚未通过。
+- 现有原生/发布/角色/事实账本回归可复用为独立攻击目录；须按每项实际到达层
+  区分 schema、policy、SQLite、transport stub、native process，不能统一称 sandbox。
+- 当前 UI layout audit 会降低一次性测试窗口 minWidth；生产最小宽度应另记，
+  380px 只能按 renderer fixture 验证，不能声称生产原生窗口支持。
+
+### S07 最终结论与 S08 起点
+
+- 窄设置表单仅检测 viewport overflow/阴影不足：列宽也需验收。增加 body>=240px、
+  内部横向 overflow<=1px；380px 改纵向导航并限制 provider 控件宽度，截图已复核。
+- 真实 PDF/MCP P0 旧 fixture 与 S05 queryId、严格 result receipt 合同漂移；只修夹具。
+- S08 需核对现有 schema3 export manifest 和 schema5 scientific-review 对 S04 语义
+  finding/方法建议、Skill/gate 版本和复现等级的闭包，不新建第二套导出系统。
+- 本次工具组合输出曾截断；已拆分重新读取 S08、权限矩阵、技能和最终日志。

@@ -1,0 +1,1745 @@
+{
+  "schemaVersion": 1,
+  "kind": "deterministic-regression-catalog",
+  "countingRule": "One named regression counts once; loops and payload variants are not additional independent scenarios. Some tests also run authorized controls.",
+  "limits": "No real model attack-success estimate, real remote account or user-directory access. Each layer is reported separately. Unknown effect stays unknown. Invariant/recovery controls are counted separately from adversarial regressions. Labels are asserted outcomes, not independent evidence beyond the linked test.",
+  "scenarios": [
+    {
+      "file": "tests/unit/execution-grant-broker.test.mjs",
+      "name": "v10 pins workspace and frozen inputs; all historical versions reject grants without online conversion",
+      "boundary": "broker-sqlite",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-001",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/execution-grant-broker.test.mjs",
+      "name": "isolated grant is bound to the exact tool call and can be consumed only once",
+      "boundary": "broker-sqlite",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-002",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/execution-grant-broker.test.mjs",
+      "name": "trusted-host grant requires a matching one-use native approval receipt",
+      "boundary": "broker-sqlite",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-003",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/execution-grant-broker.test.mjs",
+      "name": "trusted-host approval is unavailable to background runs",
+      "boundary": "broker-sqlite",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-004",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/execution-grant-broker.test.mjs",
+      "name": "run cancellation revokes issued grants and expiry is persisted",
+      "boundary": "broker-sqlite",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-005",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/execution-grant-broker.test.mjs",
+      "name": "workspace replacement between grant issue and consume is rejected",
+      "boundary": "broker-sqlite",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-006",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/execution-grant-broker.test.mjs",
+      "name": "run binding must match persisted workspace identity and capability manifest",
+      "boundary": "broker-sqlite",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-007",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/execution-grant-broker.test.mjs",
+      "name": "terminal runs cannot issue new execution grants",
+      "boundary": "broker-sqlite",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-008",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/execution-grant-broker.test.mjs",
+      "name": "startup reconciliation revokes stale grants and approvals while allowing new work for active runs",
+      "boundary": "broker-sqlite",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-009",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/execution-grant-broker.test.mjs",
+      "name": "startup reconciliation fences terminal runs and preserves consumed grants and receipts",
+      "boundary": "broker-sqlite",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-010",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/execution-grant-broker.test.mjs",
+      "name": "approval-bound grants use the main-manual tool scope from the frozen manifest",
+      "boundary": "broker-sqlite",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-011",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/ipc-execution-boundary.test.mjs",
+      "name": "renderer run-start cannot select task source, workspace or shell allowlist",
+      "boundary": "ipc-schema",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-012",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/ipc-execution-boundary.test.mjs",
+      "name": "renderer shell IPC is terminal-scoped and cannot provide run identity",
+      "boundary": "ipc-schema",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-013",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/run-capability-manifest.test.mjs",
+      "name": "plan cards exclude local execution, deletion and self configuration",
+      "boundary": "manifest-and-mcp-stub",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-014",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/run-capability-manifest.test.mjs",
+      "name": "execution profiles split isolated read/write from main-only trusted host approval",
+      "boundary": "manifest-and-mcp-stub",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-015",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/run-capability-manifest.test.mjs",
+      "name": "MCP selection preserves disabled and missing reasons and rejects reserved tool names",
+      "boundary": "manifest-and-mcp-stub",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-016",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/run-capability-manifest.test.mjs",
+      "name": "explicit skills are included once, with content hashes and readiness validation",
+      "boundary": "manifest-and-mcp-stub",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-017",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/run-capability-manifest.test.mjs",
+      "name": "MCP contract hashing covers canonical input and output schemas",
+      "boundary": "manifest-and-mcp-stub",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-018",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/run-capability-manifest.test.mjs",
+      "name": "MCP contracts bind into and rehash the frozen manifest",
+      "boundary": "manifest-and-mcp-stub",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-019",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/run-capability-manifest.test.mjs",
+      "name": "MCP structured outputs are validated against the frozen schema",
+      "boundary": "manifest-and-mcp-stub",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-020",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/run-capability-manifest.test.mjs",
+      "name": "MCP tool invocation propagates caller cancellation to the remote request",
+      "boundary": "manifest-and-mcp-stub",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-021",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/run-capability-manifest.test.mjs",
+      "name": "MCP invocation timeout aborts while waiting for a server permit",
+      "boundary": "manifest-and-mcp-stub",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-022",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/run-capability-manifest.test.mjs",
+      "name": "MCP tool rejects oversized input before the provider call",
+      "boundary": "manifest-and-mcp-stub",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-023",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/run-capability-manifest.test.mjs",
+      "name": "MCP tool rejects oversized structured responses",
+      "boundary": "manifest-and-mcp-stub",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-024",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/run-capability-manifest.test.mjs",
+      "name": "bounded MCP fetch rejects oversized JSON Content-Length before reading",
+      "boundary": "manifest-and-mcp-stub",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-025",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/run-capability-manifest.test.mjs",
+      "name": "bounded MCP fetch rejects oversized streamed JSON before parsing",
+      "boundary": "manifest-and-mcp-stub",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-026",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/run-capability-manifest.test.mjs",
+      "name": "bounded MCP fetch enforces the SSE event limit",
+      "boundary": "manifest-and-mcp-stub",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-027",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-skill-registry.test.mjs",
+      "name": "unknown, unaccepted and false project licenses are rejected",
+      "boundary": "skill-and-role-policy",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-028",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-skill-registry.test.mjs",
+      "name": "hash, output schema, role identity and runtime contract changes are rejected",
+      "boundary": "skill-and-role-policy",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-029",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-skill-registry.test.mjs",
+      "name": "hash-approved body cannot import unapproved references or request new capabilities",
+      "boundary": "skill-and-role-policy",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-030",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-skill-registry.test.mjs",
+      "name": "an existing pin cannot silently load a changed version, license, or body with new hashes",
+      "boundary": "skill-and-role-policy",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-031",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-skill-registry.test.mjs",
+      "name": "tool execution rejects forged context, expanded tool lists, revoked and paused grants before retrieval",
+      "boundary": "skill-and-role-policy",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-032",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-skill-registry.test.mjs",
+      "name": "broker rejects a forged manifest even if the caller supplies a valid run identity",
+      "boundary": "skill-and-role-policy",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-033",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-export-publication.test.mjs",
+      "name": "every input output template and reference requires an explicit selection; foreign and duplicate selections fail",
+      "boundary": "publication-preparation",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-034",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-export-publication.test.mjs",
+      "name": "restricted figure and template bytes cannot become successful deliveries and source identities cannot drift",
+      "boundary": "publication-preparation",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-035",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-export-publication.test.mjs",
+      "name": "public metadata is required and rejects software without URL/version and private paths instead of filling defaults",
+      "boundary": "publication-preparation",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-036",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-export-public-files.test.mjs",
+      "name": "log projection declares private text omission and refuses malformed encoding or JSON",
+      "boundary": "local-file-projection",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-037",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-export-public-files.test.mjs",
+      "name": "original binary bytes remain unchanged and recognized private original text refuses delivery",
+      "boundary": "local-file-projection",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-038",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-export-public-projection.test.mjs",
+      "name": "private values in arbitrary excerpts, parameters, keys and credential URLs are explicitly omitted",
+      "boundary": "public-projection",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-039",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-export-public-projection.test.mjs",
+      "name": "changing only private source still changes original provenance and invalidates the complete public seal",
+      "boundary": "public-projection",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-040",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-export-public-projection.test.mjs",
+      "name": "public projection validator rejects altered public bytes, undeclared private values and old raw receipts",
+      "boundary": "public-projection",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-041",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-current-execution-contracts.test.mjs",
+      "name": "current experiment creation and stored execution use identical strict request limits",
+      "boundary": "execution-contract",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-042",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-current-execution-contracts.test.mjs",
+      "name": "Python inspection and starts require exact path-free selections, version, seed and preview identity",
+      "boundary": "execution-contract",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-043",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-current-execution-contracts.test.mjs",
+      "name": "repository refuses obsolete snapshots without rewriting or deleting retained user records",
+      "boundary": "execution-contract",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-044",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-current-execution-contracts.test.mjs",
+      "name": "figure runs require actual Vega renderer identity and never manufacture missing pipeline versions",
+      "boundary": "execution-contract",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-045",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-task-dag.test.mjs",
+      "name": "simultaneous SQLite claims from separate workers commit exactly one generation",
+      "boundary": "dag-sqlite-and-effect",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-046",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-task-dag.test.mjs",
+      "name": "two SQLite connections cannot claim one node twice; dependencies and human review gate dispatch",
+      "boundary": "dag-sqlite-and-effect",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-047",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-task-dag.test.mjs",
+      "name": "DAG revisions, root boundaries and cycles reject changes atomically",
+      "boundary": "dag-sqlite-and-effect",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-048",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-task-dag.test.mjs",
+      "name": "two roots in one project cannot hold simultaneous writer leases",
+      "boundary": "dag-sqlite-and-effect",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-049",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-task-dag.test.mjs",
+      "name": "expired worker cannot heartbeat or submit; cleanup and a new generation fence the old worker",
+      "boundary": "dag-sqlite-and-effect",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-050",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-task-dag.test.mjs",
+      "name": "cancellation blocks completion and new claims, while failed dependencies remain blocked",
+      "boundary": "dag-sqlite-and-effect",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-051",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-task-dag.test.mjs",
+      "name": "node retry replays a recorded effect and an unresolved effect blocks continuation",
+      "boundary": "dag-sqlite-and-effect",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-052",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-task-dag.test.mjs",
+      "name": "attempt request IDs cannot duplicate a frozen operation while changed business inputs remain distinct",
+      "boundary": "dag-sqlite-and-effect",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-053",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-task-dag.test.mjs",
+      "name": "completed output acceptance fences content drift and keeps a repeated rejection from approving a rejected result",
+      "boundary": "dag-sqlite-and-effect",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-054",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-task-dag.test.mjs",
+      "name": "a retried worker replays one real workspace write without creating a second revision",
+      "boundary": "dag-sqlite-and-effect",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-055",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-evidence-relations.test.mjs",
+      "name": "agent can only propose exact versions; explicit human confirm records identity and history without promoting the claim",
+      "boundary": "human-and-evidence-sqlite",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-056",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-evidence-relations.test.mjs",
+      "name": "waiting at the original gate permits only human relation metadata, keeps body editing locked and refuses inactive immutable drafts",
+      "boundary": "human-and-evidence-sqlite",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-057",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-evidence-relations.test.mjs",
+      "name": "foreign missing stale source and unbound agent proposals refuse before any relation or review write",
+      "boundary": "human-and-evidence-sqlite",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-058",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-evidence-relations.test.mjs",
+      "name": "same-version underlying content or source changes refuse the captured review, and damaged saved snapshots remain errors",
+      "boundary": "human-and-evidence-sqlite",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-059",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-evidence-relations.test.mjs",
+      "name": "history insertion failure rolls back the decision and a claim/source invalidation together with its writer",
+      "boundary": "human-and-evidence-sqlite",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-060",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-task-lifecycle.test.mjs",
+      "name": "continuation refuses unresolved effects from a linked chat run",
+      "boundary": "lifecycle-sqlite",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-061",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-task-lifecycle.test.mjs",
+      "name": "cancellation during asynchronous human-gate verification cannot commit workflow completion",
+      "boundary": "lifecycle-sqlite",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-062",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-task-lifecycle.test.mjs",
+      "name": "startup interrupts active linked tasks, preserves cancellation and never restarts their executions",
+      "boundary": "lifecycle-sqlite",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-063",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-zenodo-publication.test.mjs",
+      "name": "main sender, strict wire, scoped secret facade and separate sandbox credentials",
+      "boundary": "publication-stub-transport",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-064",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-zenodo-publication.test.mjs",
+      "name": "durable operation precedes POST; exact/concurrent retry and changed requests cannot create another record",
+      "boundary": "publication-stub-transport",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-065",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-zenodo-publication.test.mjs",
+      "name": "unknown create never resends; complete unique marker query binds ID and explicit resume uploads",
+      "boundary": "publication-stub-transport",
+      "outcomeClasses": [
+        "unknown_effect"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-066",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-zenodo-publication.test.mjs",
+      "name": "incomplete, zero and multiple marker matches remain unresolved without create or upload retries",
+      "boundary": "publication-stub-transport",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-067",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-zenodo-publication.test.mjs",
+      "name": "unknown PUT queries before resume; uploaded matching bytes are not sent again",
+      "boundary": "publication-stub-transport",
+      "outcomeClasses": [
+        "unknown_effect"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-068",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-zenodo-publication.test.mjs",
+      "name": "remote metadata and file drift stay reviewable; wrong ID owner and marker cannot replace the bound snapshot",
+      "boundary": "publication-stub-transport",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-069",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-zenodo-publication.test.mjs",
+      "name": "final approval is a distinct immutable receipt; exact retry after operation revision advances cannot grant anew",
+      "boundary": "publication-stub-transport",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-070",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-zenodo-publication.test.mjs",
+      "name": "publish requires unchanged source and refreshed remote review; changed local or remote identities send zero publish requests",
+      "boundary": "publication-stub-transport",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-071",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-zenodo-publication.test.mjs",
+      "name": "accepted publish is queried; unknown publish and duplicate grant never POST again, completed receipt records DOI and version",
+      "boundary": "publication-stub-transport",
+      "outcomeClasses": [
+        "unknown_effect"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-072",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-zenodo-publication.test.mjs",
+      "name": "lost publish response retains requested identity; refresh reports actual published state without local rollback",
+      "boundary": "publication-stub-transport",
+      "outcomeClasses": [
+        "unknown_effect"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-073",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-zenodo-publication.test.mjs",
+      "name": "archive/read ownership, cancellation and restart preserve uncertain operations without automatic provider work",
+      "boundary": "publication-stub-transport",
+      "outcomeClasses": [
+        "unknown_effect"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-074",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-zenodo-publication.test.mjs",
+      "name": "physical and nested receipt corruption rejects readback; approval insert failure rolls back the operation revision",
+      "boundary": "publication-stub-transport",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-075",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-zenodo-publication.test.mjs",
+      "name": "transport rejects redirects token query credential echoes invalid buckets and oversized or stalled responses",
+      "boundary": "publication-stub-transport",
+      "outcomeClasses": [
+        "unknown_effect"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-076",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-zenodo-publication.test.mjs",
+      "name": "429 cooldown and bounded admission send no automatic retry and report safe HTTP error codes",
+      "boundary": "publication-stub-transport",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-077",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-zenodo-publication.test.mjs",
+      "name": "missing or failed secret storage exposes only a safe failure and creates no durable remote operation",
+      "boundary": "publication-stub-transport",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-078",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-zenodo-publication.test.mjs",
+      "name": "source changes during remote final review prevent both a new human grant and a publish POST",
+      "boundary": "publication-stub-transport",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-079",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-zenodo-publication.test.mjs",
+      "name": "shutdown cancels a stalled response and preserves a durable unknown create without publishing work",
+      "boundary": "publication-stub-transport",
+      "outcomeClasses": [
+        "unknown_effect"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-080",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-zenodo-publication.test.mjs",
+      "name": "history pages and approvals remain scoped after archive and damaged grants cannot authorize publishing",
+      "boundary": "publication-stub-transport",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-081",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-compute-policy.test.mjs",
+      "name": "the computation sandbox refuses unused network grants before resolving any executable or file scope",
+      "boundary": "compute-policy",
+      "outcomeClasses": [
+        "not_dispatched"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-082",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-compute-policy.test.mjs",
+      "name": "actual role SDK refuses a model networking request before invoking effects or creating an execution",
+      "boundary": "compute-policy",
+      "outcomeClasses": [
+        "not_dispatched"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-083",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-compute-policy.test.mjs",
+      "name": "actual main experiment capability refuses networking before its handler and accepts the explicit offline contract",
+      "boundary": "compute-policy",
+      "outcomeClasses": [
+        "not_dispatched"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-084",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-task-facts.test.mjs",
+      "name": "actual artifact versions expire explicitly and historical facts do not silently upgrade",
+      "boundary": "facts-sqlite-model-fixture",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-085",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-task-facts.test.mjs",
+      "name": "document parse/source drift and removal are explicit; another task execution cannot supply authority",
+      "boundary": "facts-sqlite-model-fixture",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-086",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-task-facts.test.mjs",
+      "name": "real model receives injection, counterevidence and fixed evaluation only as user data",
+      "boundary": "facts-sqlite-model-fixture",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-087",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-task-facts.test.mjs",
+      "name": "ledger requires authenticated human writes and rejects forged authority, foreign task and execution sources",
+      "boundary": "facts-sqlite-model-fixture",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-088",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-task-facts.test.mjs",
+      "name": "context rechecks sources before each model request and omits stale content without rewriting history",
+      "boundary": "facts-sqlite-model-fixture",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-089",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-task-facts.test.mjs",
+      "name": "entry bounds and duplicate IDs fail before writes; corrupt stored hash is never accepted",
+      "boundary": "facts-sqlite-model-fixture",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-090",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-task-facts.test.mjs",
+      "name": "rehashing a stored revision cannot change its physical task/revision identity",
+      "boundary": "facts-sqlite-model-fixture",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-091",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-task-facts.test.mjs",
+      "name": "retry reconstructs durable task facts as data while injected approval text cannot authorize a write",
+      "boundary": "facts-sqlite-model-fixture",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-092",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-task-diagnostics.test.mjs",
+      "name": "chat task diagnostics enforce thread and project scope before returning task data",
+      "boundary": "diagnostics-scope",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-093",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-source-migration-ipc.test.mjs",
+      "name": "wire actors, missing sender, direct capabilities and different human contexts cannot authorize source decisions",
+      "boundary": "native-sender-adapter-sqlite",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-094",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-source-migration-ipc.test.mjs",
+      "name": "stale hashes, unproposed blocks, foreign projects and request conflicts refuse without writes",
+      "boundary": "native-sender-adapter-sqlite",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-095",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-source-migration-ipc.test.mjs",
+      "name": "decision failure rolls back the actual new evidence and locator; corrupt chunks cannot be captured",
+      "boundary": "native-sender-adapter-sqlite",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-096",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-source-migration-ipc.test.mjs",
+      "name": "stale targets and archived projects refuse capture, and changed target parsing refuses rejection",
+      "boundary": "native-sender-adapter-sqlite",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-097",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-source-migration-ipc.test.mjs",
+      "name": "active role reads actual candidate selection history and stale target facts without deciding or restoring support",
+      "boundary": "native-sender-adapter-sqlite",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-098",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-review-owned-search.test.mjs",
+      "name": "owned reads and cancellation require actual owner and frozen main scope; manual authority stays distinct",
+      "boundary": "query-service-stub-transport",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-099",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-review-owned-search.test.mjs",
+      "name": "internal owned capabilities reject missing trusted contexts and renderer arguments before dispatch",
+      "boundary": "query-service-stub-transport",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-100",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-review-owned-search.test.mjs",
+      "name": "task link failure leaves an exact failed query without a network request, phantom chat task or resettable owner",
+      "boundary": "query-service-stub-transport",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-101",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-review-owned-search.test.mjs",
+      "name": "actual parent abort cancels a held provider request and discards a late apparent successful response",
+      "boundary": "query-service-stub-transport",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-102",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-review-owned-search.test.mjs",
+      "name": "task budget refusal prevents the first provider request and task mutation between pages stops further dispatch",
+      "boundary": "query-service-stub-transport",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-103",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-review-owned-search.test.mjs",
+      "name": "damaged or missing ownership cannot turn an agent query into a manual read, foreign task or successful cleanup",
+      "boundary": "query-service-stub-transport",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-104",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-review-owned-search.test.mjs",
+      "name": "disk restart preserves exact owner and task while interrupting a held query without repeating network execution",
+      "boundary": "query-service-stub-transport",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-105",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-julia-controls.test.mjs",
+      "name": "Julia explicit manifest must exist and match actual interpreter version; missing lock and malformed declarations fail",
+      "boundary": "local-file-controls",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-106",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-julia-controls.test.mjs",
+      "name": "Julia workspace and manifest path declarations cannot read outside workspace or follow symlinked local packages",
+      "boundary": "local-file-controls",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-107",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-julia-controls.test.mjs",
+      "name": "Julia workspace cycles, excessive declared projects and cancelled discovery fail without an environment receipt",
+      "boundary": "local-file-controls",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-108",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-native-code.test.mjs",
+      "name": "native code identity detects changed bytes of unchanged-size files even when mtime is restored",
+      "boundary": "local-file-code-identity",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-109",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-native-code.test.mjs",
+      "name": "native code identity binds permissions and full file/directory membership",
+      "boundary": "local-file-code-identity",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-110",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-native-code.test.mjs",
+      "name": "native code links resolve only into declared roots and retargeting is part of identity",
+      "boundary": "local-file-code-identity",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-111",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-native-code.test.mjs",
+      "name": "native code capture refuses oversized files and special entries before any blocking content read",
+      "boundary": "local-file-code-identity",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-112",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-native-code.test.mjs",
+      "name": "native code receipt cryptographically connects complete inventory to original environment metadata identity",
+      "boundary": "local-file-code-identity",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-113",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-resources.test.mjs",
+      "name": "schema or identity failure is saved as failure and cannot contaminate validated cache",
+      "boundary": "resource-stub-transport",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-114",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-resources.test.mjs",
+      "name": "transport failure makes one attempt and oversized streamed JSON cannot enter cache or resource metadata",
+      "boundary": "resource-stub-transport",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-115",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-resources.test.mjs",
+      "name": "timeout includes admission and never fabricates resource metadata",
+      "boundary": "resource-stub-transport",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-116",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-resources.test.mjs",
+      "name": "exact concurrent replay shares one job and cancellation fences even a response that ignores its signal",
+      "boundary": "resource-stub-transport",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-117",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-resources.test.mjs",
+      "name": "shutdown aborts active requests and never saves a late response",
+      "boundary": "resource-stub-transport",
+      "outcomeClasses": [
+        "invariant_checked"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-118",
+      "scenarioKind": "invariant_or_recovery_control"
+    },
+    {
+      "file": "tests/unit/research-resources.test.mjs",
+      "name": "archives block new captures and archive during a request cannot save a new observation",
+      "boundary": "resource-stub-transport",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-119",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-resources.test.mjs",
+      "name": "one shared quota isolates project caches and enforces the configured HTTPS host before any GET",
+      "boundary": "resource-stub-transport",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-120",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-resources.test.mjs",
+      "name": "capability and generated IPC contracts expose bounded metadata and reject undeclared authority fields",
+      "boundary": "resource-stub-transport",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-121",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-scientific-review.test.mjs",
+      "name": "typed scientific output rejects unsupported causal, numerical, novelty and hypothesis success",
+      "boundary": "scientific-input-and-human-gate",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-122",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-scientific-review.test.mjs",
+      "name": "frozen original locators, claim versions and read-only reviewer output are enforced before any artifact writes",
+      "boundary": "scientific-input-and-human-gate",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-123",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-scientific-review.test.mjs",
+      "name": "review tools expose only frozen material and deny cross-claim, cross-report and global retrieval",
+      "boundary": "scientific-input-and-human-gate",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-124",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-scientific-review.test.mjs",
+      "name": "human dispositions bind immutable findings, exact text and current reverification before acceptance",
+      "boundary": "scientific-input-and-human-gate",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-125",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/research-scientific-review.test.mjs",
+      "name": "known counterevidence cannot be omitted and changes invalidate frozen scientific inputs",
+      "boundary": "scientific-input-and-human-gate",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "linked test assertions at the declared boundary; effects outside this boundary are not measured",
+      "id": "S07-126",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/execution-grant-broker.test.mjs",
+      "name": "consumed grant rechecks run revocation before a real host write",
+      "boundary": "production-shell-dispatch",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "real sentinel bytes unchanged and linked denial audit",
+      "id": "S07-127",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/execution-grant-broker.test.mjs",
+      "name": "consumed grant rechecks terminal run before a real host write",
+      "boundary": "production-shell-dispatch",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "real sentinel bytes unchanged and linked denial audit",
+      "id": "S07-128",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/execution-grant-broker.test.mjs",
+      "name": "consumed grant rechecks grant expiry before a real host write",
+      "boundary": "production-shell-dispatch",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "real sentinel bytes unchanged and linked denial audit",
+      "id": "S07-129",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/execution-grant-broker.test.mjs",
+      "name": "consumed grant rechecks frozen input mutation before a real host write",
+      "boundary": "production-shell-dispatch",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "real sentinel bytes unchanged and linked denial audit",
+      "id": "S07-130",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/execution-grant-broker.test.mjs",
+      "name": "consumed grant rechecks approval revocation before a real host write",
+      "boundary": "production-shell-dispatch",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "real sentinel bytes unchanged and linked denial audit",
+      "id": "S07-131",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/unit/execution-grant-broker.test.mjs",
+      "name": "consumed grant rechecks grant revocation before a real host write",
+      "boundary": "production-shell-dispatch",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "real sentinel bytes unchanged and linked denial audit",
+      "id": "S07-132",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-process-resources.test.mjs",
+      "name": "computation cannot signal its supervisor or forge a success receipt, and its own exit 125 stays distinct from supervision failure",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "sandbox_denied"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-133",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-process-resources.test.mjs",
+      "name": "hard CPU and memory requirements are refused before launching any code",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-134",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-process-resources.test.mjs",
+      "name": "cancelling a queued same-project process launches no code and does not cancel its active peer",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-135",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-process-resources.test.mjs",
+      "name": "real DNS resolution and application credentials are unavailable to the compute process",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "sandbox_denied"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-136",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-process-resources.test.mjs",
+      "name": "real file boundaries allow declared reads and outputs while denying input mutation and undeclared traversal",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "sandbox_denied"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-137",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-process-resources.test.mjs",
+      "name": "an output symlink cannot read undeclared data and fails the real monitored output contract",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "sandbox_denied"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-138",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-process-resources.test.mjs",
+      "name": "real child session/group changes and atomic posix_spawn group escape are denied",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "sandbox_denied"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-139",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-process-resources.test.mjs",
+      "name": "missing or incomplete write limits refuse execution before any file is created",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-140",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-process-resources.test.mjs",
+      "name": "real log flooding preserves at most the declared combined byte cap and terminates computation",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "resource_terminated"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-141",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-process-resources.test.mjs",
+      "name": "obsolete network grants are rejected before spawning a native computation",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "policy_denied",
+        "not_dispatched"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-142",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-native-environment-boundaries.test.mjs",
+      "name": "actual R launch sandbox reads declared lock/settings and denies undeclared project data during environment inspection",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "sandbox_denied"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-143",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-native-environment-boundaries.test.mjs",
+      "name": "a forged environment report cannot make the main process read undeclared project files as package metadata",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-144",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-julia-environment-boundaries.test.mjs",
+      "name": "Julia inspection reads version-selected controls and local package metadata while denying undeclared workspace/package data",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "sandbox_denied"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-145",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-julia-environment-boundaries.test.mjs",
+      "name": "Julia control report cannot grant the main process access to undeclared project files",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-146",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-julia-environment-boundaries.test.mjs",
+      "name": "Julia package report cannot widen exact local Project metadata access to private package data",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-147",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-julia-environment-boundaries.test.mjs",
+      "name": "Julia control report must contain the entire frozen declared control set",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-148",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-julia-environment-boundaries.test.mjs",
+      "name": "Julia reports cannot change a frozen control hash or duplicate a control",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-149",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-julia-environment-boundaries.test.mjs",
+      "name": "Julia controls and local package metadata are checked against pre-probe bytes after actual native dispatch",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-150",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-native-code-integrity.test.mjs",
+      "name": "native environment identity detects an actually loaded runtime dylib changing with executable/version/package metadata unchanged",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-151",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-native-code-integrity.test.mjs",
+      "name": "native environment identity detects actually loaded package code through an intentional renv cache link",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-152",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "file": "tests/integration/research-native-code-integrity.test.mjs",
+      "name": "native code changed after actual probe dispatch invalidates the environment instead of returning an original-metadata success",
+      "boundary": "native-process-and-receipt",
+      "outcomeClasses": [
+        "policy_denied"
+      ],
+      "effectObservation": "real process/file/receiver assertions; C probe fixtures for R and Julia, not real scientific workloads",
+      "id": "S07-153",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "id": "S07-154",
+      "file": "tests/unit/run-capability-manifest.test.mjs",
+      "name": "hostile web text remains untrusted and its forged execution proposals dispatch no effects",
+      "boundary": "production-tool-protocol-with-controlled-web-or-MCP-input",
+      "outcomeClasses": [
+        "not_dispatched"
+      ],
+      "effectObservation": "forged deterministic tool proposals dispatch zero callbacks; isolated sentinel bytes and frozen manifest unchanged; no real model or internet",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "id": "S07-155",
+      "file": "tests/unit/run-capability-manifest.test.mjs",
+      "name": "hostile MCP description cannot expand frozen tools or remove approval before effect dispatch",
+      "boundary": "production-tool-protocol-with-controlled-web-or-MCP-input",
+      "outcomeClasses": [
+        "not_dispatched"
+      ],
+      "effectObservation": "forged deterministic tool proposals dispatch zero callbacks; isolated sentinel bytes and frozen manifest unchanged; no real model or internet",
+      "scenarioKind": "adversarial_boundary_regression"
+    },
+    {
+      "id": "S07-156",
+      "file": "tests/unit/run-capability-manifest.test.mjs",
+      "name": "hostile MCP result stays tool data and forged follow-up effects are not dispatched",
+      "boundary": "production-tool-protocol-with-controlled-web-or-MCP-input",
+      "outcomeClasses": [
+        "not_dispatched"
+      ],
+      "effectObservation": "forged deterministic tool proposals dispatch zero callbacks; isolated sentinel bytes and frozen manifest unchanged; no real model or internet",
+      "scenarioKind": "adversarial_boundary_regression"
+    }
+  ]
+}

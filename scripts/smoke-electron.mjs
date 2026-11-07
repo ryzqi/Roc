@@ -271,6 +271,27 @@ try {
   await page.waitForSelector('[data-testid="assistant-composer-input"]', { timeout: 20_000 });
   await page.fill('[data-testid="assistant-composer-input"]', '用一句话说明这次 smoke 在验证什么。');
   await page.focus('[data-testid="assistant-composer-input"]');
+  // Synthetic events exercise the built React guards; native OS IME is a separate manual check.
+  const ime = await page.getByTestId('assistant-composer-input').evaluate(input => {
+    const enter = options => {
+      const event = new KeyboardEvent('keydown', {key: 'Enter', code: 'Enter', bubbles: true,
+        cancelable: true, ...options});
+      input.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    input.dispatchEvent(new CompositionEvent('compositionstart', {bubbles: true, data: '验'}));
+    const duringComposition = enter({});
+    input.dispatchEvent(new CompositionEvent('compositionend', {bubbles: true, data: '验证'}));
+    return {duringComposition, nativeComposing: enter({isComposing: true}),
+      legacy229: enter({keyCode: 229}), draft: input.value};
+  });
+  await page.waitForTimeout(250);
+  assertCheck('3 助手', '合成 IME 组字/原生标志/229 的 Enter 均不进入提交分支',
+    !ime.duringComposition && !ime.nativeComposing && !ime.legacy229 &&
+    await page.getByTestId('assistant-composer-input').inputValue() === ime.draft &&
+    await page.getByTestId('assistant-message-content').count() === 0,
+    'Synthetic DOM events only; native input method not exercised');
+
   await page.keyboard.press('Enter');
   await page.waitForSelector('[data-testid="assistant-message-content"]', { timeout: 120_000 });
   // 空闲时状态标签本身不渲染（`statusLabel === null`），所以等的是「不再是 running / recovering」。

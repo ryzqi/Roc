@@ -286,14 +286,14 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
         // The left rail brings its own columns; see `bodyPadding` in `ModalShell`.
         bodyPadding="none"
       >
-        <div className="flex h-full">
+        <div className="flex h-full flex-col min-[720px]:flex-row">
           <div
             ref={listRef}
             role="tablist"
             aria-orientation="vertical"
             aria-label="设置分区"
             onKeyDown={onListKeyDown}
-            className="flex w-[190px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line bg-bg p-2"
+            className="flex max-h-[128px] w-full shrink-0 flex-col gap-0.5 overflow-y-auto border-b border-line bg-bg p-2 min-[720px]:max-h-none min-[720px]:w-[190px] min-[720px]:border-r min-[720px]:border-b-0"
             data-testid="settings-sections"
           >
             {SETTINGS_SECTIONS.map((section) => {
@@ -317,8 +317,8 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
                   data-testid={`settings-section-${section.id}`}
                   className={
                     selected
-                      ? 'flex h-10 items-center gap-2 rounded-card border border-line-strong bg-[var(--surface-card-hover)] px-2.5 text-left font-semibold text-ink shadow-[var(--shadow-card)]'
-                      : 'flex h-10 items-center gap-2 rounded-card border border-transparent px-2.5 text-left text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]'
+                      ? 'flex h-10 shrink-0 items-center gap-2 rounded-card border border-line-strong bg-[var(--surface-card-hover)] px-2.5 text-left font-semibold text-ink shadow-[var(--shadow-card)]'
+                      : 'flex h-10 shrink-0 items-center gap-2 rounded-card border border-transparent px-2.5 text-left text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]'
                   }
                 >
                   <Icon
@@ -342,9 +342,9 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
             })}
           </div>
 
-          <div className="flex min-w-0 flex-1 flex-col p-3">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col p-3">
             <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line pb-2">
-              <span className="min-w-0 flex-1 text-muted text-[var(--font-meta-size)]" data-testid="settings-dirty-bar">
+              <span className="min-w-0 flex-1 basis-full text-muted text-[var(--font-meta-size)] min-[720px]:basis-0" data-testid="settings-dirty-bar">
                 {dirtyBarText(dirty, dirtyCount, store.savedAt !== null)}
               </span>
               <button

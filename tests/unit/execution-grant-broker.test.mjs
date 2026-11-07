@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, realpathSync, renameSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
@@ -386,3 +386,44 @@ test('approval-bound grants use the main-manual tool scope from the frozen manif
   assert.deepEqual(trusted.approvalPolicy, { kind: 'native_dialog' });
   fixture.db.close();
 });
+
+// Each transition happens after consume and before the real shell dispatch.
+for (const scenario of [
+  { name: 'run revocation', mutate: f => f.broker.revokeRun(f.runId), error: /execution_grant_run_revoked/ },
+  { name: 'terminal run', mutate: f => f.db.prepare("UPDATE agent_runs SET status = 'cancelled'").run(), error: /execution_grant_run_not_active/ },
+  { name: 'grant expiry', mutate: f => f.advance(), error: /execution_grant_expired/ },
+  { name: 'frozen input mutation', mutate: f => {
+    const snapshot = JSON.parse(f.db.prepare('SELECT snapshot_json FROM agent_runs').pluck().get());
+    snapshot.budget.maxTotalTokens += 1;
+    f.db.prepare('UPDATE agent_runs SET snapshot_json = ?').run(JSON.stringify(snapshot));
+  }, error: /execution_grant_run_snapshot_invalid/ },
+  { name: 'approval revocation', mutate: f => f.db.prepare("UPDATE agent_execution_approvals SET status = 'revoked'").run(), error: /execution_grant_approval_not_current/ },
+  { name: 'grant revocation', mutate: f => f.db.prepare("UPDATE agent_execution_grants SET status = 'revoked'").run(), error: /execution_grant_not_current/ }
+]) {
+  test(`consumed grant rechecks ${scenario.name} before a real host write`, async () => {
+    const fixture = createFixture();
+    try {
+      let now = new Date();
+      fixture.advance = () => { now = new Date(now.getTime() + 30_001); };
+      fixture.broker = new api.ExecutionGrantBroker(fixture.db, () => now);
+      const sentinel = join(fixture.workspacePath, 'sentinel.txt');
+      writeFileSync(sentinel, 'unchanged');
+      writeFileSync(join(fixture.workspacePath, 'mutate.cjs'), "require('node:fs').writeFileSync('sentinel.txt', 'unauthorized');");
+      const request = binding(fixture, { profile: 'trusted_host', command: `"${process.execPath}" mutate.cjs` });
+      const approvalReference = fixture.broker.recordTrustedHostApproval(request);
+      const authorized = { ...request, approvalReference };
+      const grant = fixture.broker.consume(fixture.broker.issue(authorized), authorized);
+      scenario.mutate(fixture);
+      const events = [];
+      const shellService = new api.ShellExecutionService({}, { getExecutionMetadata: () => ({resourceState: 'unavailable'}) },
+        {recordEvent: event => events.push(event)});
+      const result = await shellService.executeGrantedAgentAsync({command: request.command, grant}).then(
+        () => null, error => error);
+      assert.equal(readFileSync(sentinel, 'utf8'), 'unchanged', 'denied operation must leave real sentinel bytes intact');
+      assert.match(result?.message ?? 'dispatch succeeded', scenario.error);
+      assert.equal(events.length, 1);
+      assert.equal(events[0].payload.grantId, grant.grantId);
+      assert.match(events[0].payload.executionError, scenario.error);
+    } finally { fixture.db.close(); }
+  });
+}

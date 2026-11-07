@@ -190,8 +190,8 @@ export function ModalShell({
             transition={kind === 'drawer' ? drawerTransition : modalPopTransition}
             className={
               kind === 'drawer'
-                ? `relative z-10 ml-auto flex h-full max-w-full flex-col border-l border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[520px]'}`
-                : `relative z-10 m-auto flex max-h-[86vh] max-w-[92vw] flex-col overflow-clip rounded-window border border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[680px]'}`
+                ? `relative z-10 ml-auto flex h-full max-w-[calc(100vw-var(--shadow-modal-gutter-inline))] flex-col border-l border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[520px]'}`
+                : `relative z-10 m-auto flex max-h-[min(86vh,calc(100dvh-2*var(--shadow-modal-gutter-block)))] max-w-[min(92vw,calc(100vw-2*var(--shadow-modal-gutter-inline)))] flex-col overflow-clip rounded-window border border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[680px]'}`
             }
           >
             <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-2.5">
