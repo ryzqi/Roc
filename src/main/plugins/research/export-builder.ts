@@ -1,9 +1,12 @@
+import {buildPandocExports} from './pandoc-export';
+import {researchCitationStyles} from '../../../shared/schemas/research-citation-style';
 import { writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join, relative } from 'node:path';
 import type { ResearchExportExecution, ResearchExportSources } from '../../../shared/schemas/research-exports';
 import { exportFileLimit, ResearchExportFiles, type ExportToolchain } from './export-files';
 import { unknownCitationKeysIn } from './citation-integrity';
-import { latexReachability, prunableTexFiles, runArxivPreflight } from './arxiv-preflight';
+import { latexReachability } from './arxiv-preflight';
+import {buildArxivSubmission} from './arxiv-submission';
 import { defaultExportEntry, renderExportBody } from './export-sources';
 import { createTypstReport } from './typst-report';
 import { compileLatex } from './latex-service';
@@ -28,7 +31,6 @@ export async function buildExportFiles(input: { record: ResearchExportExecution;
   // 模板里所有 `.tex` 的正文。三件事共用这一份：引用键扫描、引用闭包（决定剪枝）、
   // arXiv 预检的草稿标记扫描。
   const texContents = new Map<string, string>();
-  let pruned: string[] = [];
   // 模板里所有会参与编译的 .tex 文本。缺失的 `\cite` 键**不会**让编译失败（Tectonic 退出码 0，
   // 现有 BibTeX 闸门只管「.bib 文件缺失」），只会在 PDF 里渲染成未定义引用；
   // 所以必须在编译前对真实字节做一次键的存在性检查。理由与实测见 `citation-integrity.ts`。
@@ -43,7 +45,8 @@ export async function buildExportFiles(input: { record: ResearchExportExecution;
     // 先把整棵树的 `.tex` 读进来：`\input` 闭包与「哪些文件到不了」都不可能逐个文件看出来。
     for (const file of sources.template.files) {
       signal.throwIfAborted();
-      if (!file.path.endsWith('.tex') || file.size > 1024 * 1024) continue;
+      if (!/\.(?:tex|sty|cls)$/u.test(file.path)) continue;
+      if (file.size > 1024 * 1024) throw new Error('research_export_template_text_too_large');
       texContents.set(file.path, (await readResearchFile(root, file.path, 1024 * 1024)).toString('utf8'));
     }
     const entry = (texContents.get(entryPath) ?? '').replace(/(?<!\\)%[^\n]*/gu, '');
@@ -51,15 +54,14 @@ export async function buildExportFiles(input: { record: ResearchExportExecution;
     const tree = new Map(texContents);
     for (const file of sources.template.files) if (!tree.has(file.path)) tree.set(file.path, '');
     const reachability = latexReachability({ entryPath, files: tree });
-    pruned = prunableTexFiles({ entryPath, files: tree, reachable: reachability.texFiles });
-    // 剪掉的 `.tex` 不参与引用键扫描：它们不进编译，扫描它们只会报出假缺失。
-    for (const path of reachability.texFiles) citationSources.push(texContents.get(path) ?? '');
+    // 动态依赖无法解析时扫描全部 TeX；确定的依赖仅扫描可达正文。
+    for (const path of reachability.uncertain.length ? [...texContents.keys()].filter(path => path.endsWith('.tex')) : reachability.texFiles) citationSources.push(texContents.get(path) ?? '');
     for (const file of sources.template.files) {
       signal.throwIfAborted();
       if (!bundled({...file, kind: 'template', id: sources.template.id, area: null})) throw new Error('research_export_resource_bundled_required');
       const reserved = reservedPaths.includes(file.path);
       // Unreachable files are explicitly licensed provenance, outside the compilation tree.
-      await copyPublicExportFile(writer, root, file, `${reserved || pruned.includes(file.path) ? 'provenance/template' : 'source'}/${file.path}`);
+      await copyPublicExportFile(writer, root, file, `${reserved ? 'provenance/template' : 'source'}/${file.path}`);
     }
   } else {
     const entry = defaultExportEntry(record.request.title, record.request.template.language);
@@ -148,43 +150,32 @@ export async function buildExportFiles(input: { record: ResearchExportExecution;
   if (researchContentHash(pdf) !== result.pdfHash) throw new Error('research_export_snapshot_changed');
   assertPublicExportText(pdf.toString('utf8'));
   await writer.write('paper.pdf', pdf);
-  // `--keep-intermediates` 在内夹了 `.bbl`：arXiv 不跑 BibTeX，随包不带 `.bbl` 的提交在那边
-  // 引用会全部变成 `?`。同名文件如果模板自己就带了，以模板为准，不覆盖（writer 也会报冲突）。
+  // Preserve the compiled bibliography for submission compatibility; never overwrite a supplied bbl.
   const bblName = `${basename(entryPath, extname(entryPath))}.bbl`;
   const bblTarget = join('source', entryDirectory, bblName);
   const bblPresent = writer.list().some((file) => file.path === bblTarget);
   const bblBytes = bblPresent ? null : await readOptionalIntermediates(scratch, join('compiled', bblName), signal);
   if (bblBytes !== null) { assertPublicExportText(bblBytes.toString('utf8')); await writer.write(bblTarget, bblBytes); }
   const bblNameOrNull = bblPresent || bblBytes !== null ? bblName : null;
-  const origin = sources.template === null ? [] : sources.template.files;
-  const figurePrefix = `source/${join(entryDirectory, 'figures')}/`;
-  const preflight = runArxivPreflight({ entryPath, texFiles: texContents,
-    files: [
-      ...origin.filter((file) => !pruned.includes(file.path)).map((file) => ({ path: file.path, size: file.size })),
-      ...writer.list().filter((file) => file.path.startsWith(figurePrefix))
-        .map((file) => ({ path: `figures/${file.path.slice(figurePrefix.length)}`, size: file.size }))
-    ],
-    bbl: bblNameOrNull });
-  await writer.write('logs/arxiv-preflight.json', `${JSON.stringify({
-    ...preflight,
-    // 剪掉的文件原件在 provenance/template；这里记录它们不参与编译的原因与哈希。
-    pruned: preflight.pruned.map((path) => ({ path, sha256: origin.find((file) => file.path === path)?.sha256 ?? null })),
-    bbl: bblNameOrNull
-  }, null, 2)}\n`);
+  await buildArxivSubmission({writer, entryPath, bbl: bblNameOrNull, scratch, projectId: record.projectId,
+    exportId: record.id, artifactId: sources.manuscriptArtifact.id, sourceHash: record.sourceHash, tools, signal});
   const preview = await tools.renderPdf({ projectRoot: repository.exports.root(record.projectId, record.id), sourcePath: join(writer.root, 'paper.pdf'),
     outputDir: join(scratch, 'preview'), jobDir: scratch, page: 1, scale: 1, signal,
     admission: { projectId: record.projectId, priority: 'user' } });
   if (preview.sourceHash !== result.pdfHash) throw new Error('research_export_snapshot_changed');
   const report = await createTypstReport({ tools, jobDir: scratch, sources, bibliography: references.content,
-    language: repository.getProject(record.projectId).language, signal, admission: { projectId: record.projectId, priority: 'user' } });
+    language: repository.getProject(record.projectId).language, style: record.request.reportCitationStyle, signal, admission: { projectId: record.projectId, priority: 'user' } });
   assertPublicExportText(report.source);
   assertPublicExportText(report.pdf.toString('utf8'));
   await writer.write(report.filename, report.pdf);
   await writer.write('report.typ', report.source);
+  await writer.write(researchCitationStyles[report.style].file, await tools.typstStyle(researchCitationStyles[report.style].file));
+  await buildPandocExports({record, sources, writer, tools, scratch, signal, bibliography: references.content,
+    language: repository.getProject(record.projectId).language});
   await writer.write('README.txt', `Roc 科研交付文件\n\nPDF：paper.pdf\n编译入口：source/${entryPath}\n参考文献：references.bib\n` +
-    `source/${join(entryDirectory, bblName)} 是编译产出的 BibTeX 结果，arXiv 不运行 BibTeX，上传时一并带上。\n` +
+    `source/${join(entryDirectory, bblName)} 是参考文献中间文件（若本次存在）；提交前检查目标处理器兼容性。\n` +
     `source/${join(entryDirectory, 'figures')} 保留 PNG、SVG、PDF；provenance 保存批准正文、公开来源投影和明确获准交付的原件。\n` +
-    'arXiv 提交预检的结论在 logs/arxiv-preflight.json（警告不阻断导出；被剪掉的文件也记在那里）。\n' +
+    'arXiv 候选目录为 submission/source；submission/manifest.json 记录原始/派生哈希、删减原因及本地编译结果。存在阻塞项时不生成投稿 ZIP；仍需目标平台人工核验。\n' +
     '复现时使用 manifest.json 记录的固定科研工具链，在 source 目录编译指定入口；保持仅使用本地 TeX bundle。\n' +
     'provenance/validation.json 记录语义建议、人工审核引用、历史 Skill 固定版本及仅元数据依赖；实验未重新运行，科学复现未验证。\n' +
     '文件字节哈希位于 manifest.json；provenance/sources.json 保存公开投影及独立的原始 JSON 摘要。\n' +

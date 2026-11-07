@@ -138,7 +138,8 @@ export default defineConfig({
       manifest: true,
       rolldownOptions: {
         input: {
-          index: resolve(__dirname, 'index.html')
+          index: resolve(__dirname, 'index.html'),
+          'diagram-worker': resolve(__dirname, 'diagram-worker.html')
         },
         output: {
           manualChunks: resolveRendererManualChunk

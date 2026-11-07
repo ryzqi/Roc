@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import {researchCitationStyleSchema} from './research-citation-style';
 import { researchArtifactSchema, researchProvenanceSchema } from './research';
 import { researchClaimSchema, researchEvidenceSchema, researchManuscriptSchema } from './research-evidence';
 import { researchExperimentExecutionSchema, researchExperimentPathSchema } from './research-experiments';
@@ -22,6 +23,8 @@ export const researchExportInputsRequestSchema = z.strictObject({
   figureIds: z.array(id).max(100).refine((ids) => new Set(ids).size === ids.length), template: researchExportTemplateSchema
 });
 const researchExportPrepareFields = {
+  reportCitationStyle: researchCitationStyleSchema.optional(),
+  conversionFormats: z.array(z.enum(['docx', 'html'])).max(2).refine(formats => new Set(formats).size === formats.length).optional(),
   requestId: id.max(128), title: z.string().trim().min(1).max(256),
   ...researchExportInputsRequestSchema.omit({projectId: true}).shape,
   publicationReview: researchExportPublicationReviewSchema

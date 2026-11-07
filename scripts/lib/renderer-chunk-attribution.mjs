@@ -54,6 +54,7 @@ export const EAGER_FORBIDDEN_PACKAGES = [
   'streamdown',
   'react-virtuoso',
   'pdfjs-dist',
+  'mermaid',
   'zod'
 ];
 

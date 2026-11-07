@@ -1,3 +1,4 @@
+import {researchCitationStyles, type ResearchCitationStyle} from '../../../shared/schemas/research-citation-style';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ResearchExportSources } from '../../../shared/schemas/research-exports';
@@ -31,14 +32,8 @@ import {researchPrivateValueReason} from '../../../shared/schemas/research-publi
  * 报告失败会使当前导出失败；未生成完整交付包不能进入批准状态。
  */
 
-export type TypstCitationStyle = 'apa' | 'ieee' | 'gb-t-7714';
-
-/** 样式名 → 工具链 `csl/` 下的文件名。加样式时要同时改这里与 `resources/research-runtime/csl/README.md`。 */
-export const typstCitationStyles: Readonly<Record<TypstCitationStyle, string>> = {
-  apa: 'apa.csl',
-  ieee: 'ieee.csl',
-  'gb-t-7714': 'china-national-standard-gb-t-7714-2015-numeric.csl'
-};
+export type TypstCitationStyle = ResearchCitationStyle;
+export const typstCitationStyles = Object.fromEntries(Object.entries(researchCitationStyles).map(([name, style]) => [name, style.file])) as Record<TypstCitationStyle, string>;
 
 /** 文稿语言决定默认引用样式：中文投稿默认 GB/T 7714，英文默认 APA。 */
 export function defaultTypstCitationStyle(language: 'zh' | 'en'): TypstCitationStyle {

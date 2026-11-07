@@ -233,6 +233,7 @@ before(async () => {
             } : null;
             return {source:{previewId:input.previewId,scope:{serverId:snapshot.sourcePage.serverId,library:snapshot.sourcePage.library},
                 libraryVersion:20,item,itemHash:'e'.repeat(64),metadata,cslJson:item.csljson,capturedAt:at},
+              citationKeyMapping:{candidates:[],sourceKey:null,localKey:local?.bibliography.citationKey ?? null,selection:local===null ? 'generated' : 'existing',issues:[]},
               objectState:scenario.reviewState || (local===null ? 'new' : 'new_version'),
               mappedVersion:local===null ? null : scenario.reviewState==='version_regressed' ? 9 : scenario.reviewState==='version_conflict' ? 8 : 7,local,
               previousScopedSource:local===null ? null : {scope:{serverId:snapshot.sourcePage.serverId,library:snapshot.sourcePage.library},

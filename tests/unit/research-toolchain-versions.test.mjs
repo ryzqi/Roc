@@ -116,11 +116,11 @@ test('the shipped lock satisfies the reader contract for every architecture it d
     assert.notEqual(versions, null, `the shipped lock is unreadable for ${architecture}`);
     // Every declared archive has a version, and vice versa: that is the whole contract.
     assert.deepEqual(Object.keys(versions).sort(), Object.keys(shipped.architectures[architecture]).sort(), architecture);
-    for (const name of ['tectonic', 'vale', 'typst']) {
+    for (const name of ['tectonic', 'vale', 'typst', 'pandoc']) {
       assert.equal(typeof versions[name], 'string', `${name} lost its version for ${architecture}`);
     }
   }
-  assert.deepEqual(Object.keys(shipped.architectures.arm64).sort(), ['tectonic', 'typst', 'vale']);
+  assert.deepEqual(Object.keys(shipped.architectures.arm64).sort(), ['pandoc', 'tectonic', 'typst', 'vale']);
   assert.equal(typeof shipped.valeVersion, 'string');
   assert.equal(lockedToolVersions(shipped, 'arm64').vale, shipped.valeVersion);
   assert.equal(typeof shipped.typstVersion, 'string');

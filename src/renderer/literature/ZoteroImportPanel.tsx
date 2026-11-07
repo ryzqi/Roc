@@ -369,6 +369,7 @@ function SourceReview({review, client, projectId, collectionKey, attachments}: {
           {item.local?.archived ? <><span className="ml-2 text-muted">已归档，不能收录</span>{' '}</> : null}
           <span className="ml-2 text-subtle">{item.differences.length} 个字段不同</span>
         </summary>
+        <CitationKeyMapping mapping={item.citationKeyMapping} preview />
         {item.local?.archived ? <p className="mt-1 text-muted">本地文献已归档，恢复后才能收录。</p> : null}
         {item.differences.length === 0 ? null : <table className="mt-2 w-full table-fixed text-left">
           <caption className="sr-only">Zotero 来源原值与 Roc 本地现值</caption>
@@ -387,6 +388,19 @@ function SourceReview({review, client, projectId, collectionKey, attachments}: {
       </details>)}
     </div>
   </section>;
+}
+
+function CitationKeyMapping({mapping, preview = false}: {
+  mapping: ZoteroReview['items'][number]['citationKeyMapping']; preview?: boolean
+}): React.JSX.Element {
+  const issues = {invalid_source_key: '来源键格式无效', source_disagreement: '多个来源键不一致',
+    key_collision: '来源键已被其他文献占用', local_key_retained: '保留已使用的本地键'};
+  return <p className="mt-1 break-all text-muted" data-testid="literature-zotero-citation-key-mapping">
+    来源引文键：{mapping.candidates.map(candidate => `${candidate.origin}: ${candidate.value}`).join('；') || '未提供'}；
+    {preview ? '预计本地键' : '本地键'}：{mapping.localKey ?? '收录时生成'}。
+    {mapping.issues.map(issue => issues[issue]).join('；')}
+    {preview ? '收录时会重新检查重名，以回执为准。' : null}
+  </p>;
 }
 
 function ImportReceipt({job}: {job: ZoteroImportJob}): React.JSX.Element | null {
@@ -412,6 +426,7 @@ function ImportReceipt({job}: {job: ZoteroImportJob}): React.JSX.Element | null 
         {job.result.items.map(item => <li key={item.entryKey} className="border-b-[0.5px] border-line py-1">
           <span className="break-words text-ink">{job.selection[item.inputPositions[0]].title}</span>
           <span className="ml-2 text-muted">{labels[item.disposition]}</span>
+          {item.citationKeyMapping === undefined ? null : <CitationKeyMapping mapping={item.citationKeyMapping} />}
           {item.errorCode === null ? null : <span className="ml-2 break-all font-mono text-muted">{item.errorCode}</span>}
         </li>)}
       </ul>

@@ -3,19 +3,7 @@ import assert from 'node:assert/strict';
 
 import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 
-/**
- * The arXiv preflight answers two questions the compile gate cannot:
- *
- *   * which template files actually take part in the build (so the rest can be dropped from
- *     `source/` instead of shipped), and
- *   * what would still be wrong with the ZIP if a human uploaded it to arXiv, where `pdflatex`
- *     runs once and BibTeX does not run at all.
- *
- * The properties pinned here are the conservative ones: a `.tex` that is merely *mentioned*
- * anywhere in the reachable tree is kept, comments and `verbatim` content never create
- * "missing file" noise, and findings are warnings — the preflight must never be the reason a
- * legitimate export fails.
- */
+// Static preflight is advisory for internal exports; blocking findings gate the submission derivative.
 
 const { latexReachability, prunableTexFiles, runArxivPreflight, isPortableFileName, stripLatexComments } =
   await importTypeScriptModule(new URL('../../src/main/plugins/research/arxiv-preflight.ts', import.meta.url).pathname);
@@ -63,8 +51,8 @@ test('缺图与缺 \\input 目标都会报出来，但不抛错', () => {
   assert.deepEqual(result.missing.map((entry) => entry.name).sort(), ['figures/plot', 'gone']);
 });
 
-test('用 BibTeX 却没有 .bbl 是警告（arXiv 不跑 BibTeX）', () => {
-  const files = tree({ 'main.tex': '\\bibliographystyle{plain}\n\\bibliography{refs}\n\\input{body}', 'body.tex': 'body' });
+test('使用文献处理器但缺 bbl 会阻止投稿派生包', () => {
+  const files = tree({ 'main.tex': '\\bibliographystyle{plain}\n\\bibliography{refs}\n\\input{body}', 'body.tex': 'body', 'refs.bib': '' });
   const withoutBbl = runArxivPreflight({ entryPath: 'main.tex', texFiles: files, files: [{ path: 'main.tex', size: 10 }], bbl: null });
   assert.deepEqual(withoutBbl.findings.map((finding) => finding.code), ['missing_bbl']);
   const withBbl = runArxivPreflight({ entryPath: 'main.tex', texFiles: files, files: [{ path: 'main.tex', size: 10 }], bbl: 'main.bbl' });

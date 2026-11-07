@@ -2,12 +2,15 @@ import { lstat, mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import type { z } from 'zod';
 
-import type { researchProseLintRequestSchema, ResearchProseLintReport } from '../../../shared/schemas/research-prose';
-import { buildProseBundle, projectProseAlerts, summarizeProseFindings } from './prose-projection';
+import type { researchProseLintRequestSchema, researchTexLintRequestSchema, ResearchProseLintReport } from '../../../shared/schemas/research-prose';
+import { buildProseBundle, projectProseAlerts, summarizeProseFindings, type ProseBundle } from './prose-projection';
 import type { ResearchRepository } from './repository';
 import type { ResearchToolchain } from './toolchain';
 
-type ProseTools = Pick<ResearchToolchain, 'lintProse' | 'status' | 'identity'>;
+import {researchContentHash, readResearchFile, researchWorkspace} from './research-files';
+import {projectTexProse} from './tex-prose-projection';
+
+type ProseTools = Pick<ResearchToolchain, 'lintProse' | 'status' | 'utilityIdentity'>;
 
 /**
  * 按当前文稿结构跑一次确定性的 prose 检查。
@@ -29,6 +32,8 @@ type ProseTools = Pick<ResearchToolchain, 'lintProse' | 'status' | 'identity'>;
 export class ResearchProseLintService {
   private readonly active = new Set<{ controller: AbortController; promise: Promise<unknown> }>();
   private closed = false;
+  private readonly cache = new Map<string, string>();
+  private cacheBytes = 0;
 
   constructor(private readonly repository: ResearchRepository, private readonly tools: ProseTools, private readonly rootPath: string | null) {}
 
@@ -45,21 +50,69 @@ export class ResearchProseLintService {
         sections: bundle.manuscript.sections.map((section) => ({ title: section.title, claimIds: section.claimIds })),
         claims: bundle.claims
       });
-      const status = await this.tools.status();
-      const valeVersion = status.versions?.vale;
-      if (status.available !== true || valeVersion === undefined) throw new Error('research_prose_lint_unavailable');
-      const toolchainHash = await this.tools.identity();
-      const raw = await this.tools.lintProse({ jobDir: directory, units: projection.units, signal, admission: { projectId: request.projectId, priority: 'user' } });
-      this.requireActive(signal);
-      const { findings, truncated, droppedUnits } = projectProseAlerts(raw, projection);
-      return { projectId: request.projectId, artifactId: request.artifactId, artifactTitle: artifact.title,
-        language: project.language, valeVersion, toolchainHash, checkedAt: new Date().toISOString(),
-        counts: summarizeProseFindings(findings), truncated, droppedUnits, findings };
+      const contentHash = researchContentHash(JSON.stringify({sections: bundle.manuscript.sections, claims: bundle.claims}));
+      if (request.expectedHash !== undefined && request.expectedHash !== contentHash) throw new Error('research_prose_target_changed');
+      const report = await this.checkProjection(directory, signal, projection, {projectId: request.projectId, artifactId: artifact.id,
+        artifactTitle: artifact.title, language: project.language,
+        target: {kind: 'artifact', path: null, contentHash, projectionVersion: 'roc-prose-v2', limitations: []}});
+      const current = this.repository.manuscripts.inspectBundle({projectId: request.projectId, artifactId: request.artifactId});
+      if (researchContentHash(JSON.stringify({sections: current.manuscript.sections, claims: current.claims})) !== contentHash) {
+        throw new Error('research_prose_target_changed');
+      }
+      return report;
     });
+  }
+
+  async lintTex(request: z.infer<typeof researchTexLintRequestSchema>): Promise<ResearchProseLintReport> {
+    return this.job(async (directory, signal) => {
+      const project = this.repository.getProject(request.projectId);
+      if (!request.path.endsWith('.tex')) throw new Error('research_prose_tex_required');
+      const root = await researchWorkspace(project.workspacePath);
+      const bytes = await readResearchFile(root, request.path, 2 * 1024 * 1024);
+      const contentHash = researchContentHash(bytes);
+      if (request.expectedHash !== undefined && request.expectedHash !== contentHash) throw new Error('research_prose_target_changed');
+      const {projection, limitations} = projectTexProse(new TextDecoder('utf-8', {fatal: true}).decode(bytes));
+      const report = await this.checkProjection(directory, signal, projection, {projectId: request.projectId, artifactId: null,
+        artifactTitle: request.path, language: project.language,
+        target: {kind: 'workspace_tex', path: request.path, contentHash, projectionVersion: 'roc-prose-v2', limitations}});
+      if (researchContentHash(await readResearchFile(root, request.path, 2 * 1024 * 1024)) !== contentHash) throw new Error('research_prose_target_changed');
+      return report;
+    });
+  }
+
+  private async checkProjection(directory: string, signal: AbortSignal, projection: ProseBundle,
+    target: Pick<ResearchProseLintReport, 'projectId' | 'artifactId' | 'artifactTitle' | 'language' | 'target'>): Promise<ResearchProseLintReport> {
+    const status = await this.tools.status();
+    const valeVersion = status.versions?.vale;
+    if (status.available !== true || valeVersion === undefined) throw new Error('research_prose_lint_unavailable');
+    const toolchainHash = await this.tools.utilityIdentity();
+    const key = researchContentHash(JSON.stringify({projectId: target.projectId, version: target.target.projectionVersion,
+      language: target.language, toolchainHash, valeVersion, units: projection.units.map(({path, content}) => ({path, content}))}));
+    const cached = this.cache.get(key);
+    const raw: unknown = cached === undefined ? await this.tools.lintProse({jobDir: directory, units: projection.units,
+      signal, admission: {projectId: target.projectId, priority: 'user'}}) : JSON.parse(cached);
+    this.requireActive(signal);
+    // Always remap raw alerts against the current claim IDs; never cache located findings.
+    const {findings, truncated, droppedUnits} = projectProseAlerts(raw, projection);
+    if (cached === undefined && !truncated && droppedUnits.length === 0) {
+      const serialized = JSON.stringify(raw);
+      const bytes = Buffer.byteLength(serialized);
+      if (bytes <= 1024 * 1024) {
+        while (this.cache.size >= 32 || this.cacheBytes + bytes > 8 * 1024 * 1024) {
+          const oldest = this.cache.keys().next().value;
+          if (oldest === undefined) break;
+          this.cacheBytes -= Buffer.byteLength(this.cache.get(oldest)!); this.cache.delete(oldest);
+        }
+        this.cache.set(key, serialized); this.cacheBytes += bytes;
+      }
+    }
+    return {...target, cache: cached === undefined ? 'miss' : 'hit', valeVersion, toolchainHash, checkedAt: new Date().toISOString(),
+      counts: summarizeProseFindings(findings), truncated, droppedUnits, findings};
   }
 
   async shutdown(): Promise<void> {
     this.closed = true;
+    this.cache.clear(); this.cacheBytes = 0;
     for (const task of this.active) task.controller.abort();
     await Promise.allSettled([...this.active].map((task) => task.promise));
   }

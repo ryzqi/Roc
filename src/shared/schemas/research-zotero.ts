@@ -1,6 +1,7 @@
 import {z} from 'zod';
 import {researchLiteratureSchema} from './research';
 import {researchLibraryItemSchema} from './research-library';
+import {zoteroCitationKeyMappingSchema} from './zotero-citation-key';
 
 const version = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 export const zoteroServerIdSchema = z.string().min(1).max(256).regex(/^[\x21-\x7e]+$/u);
@@ -114,6 +115,7 @@ export const zoteroReviewSchema = z.object({
     mappedVersion: version.nullable(),
     local: researchLibraryItemSchema.pick({id: true, revision: true, archived: true, metadata: true, bibliography: true, updatedAt: true}).nullable(),
     previousScopedSource: zoteroImportedObjectSchema.nullable(),
+    citationKeyMapping: zoteroCitationKeyMappingSchema,
     differences: z.array(z.object({
       field: z.enum(['title', 'authors', 'doi', 'abstract', 'url']), source: z.json(), local: z.json()
     }).strict())

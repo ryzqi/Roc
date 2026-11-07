@@ -1,3 +1,5 @@
+import {researchDiagramRequestSchema, researchDiagramResultSchema} from '../../../shared/schemas/research-diagrams';
+import {withResearchDiagramSignal} from '../research/diagram-service';
 import type {ResearchGateReviewContext} from '../../../shared/schemas/research-gate-review';
 import {researchArtifactVersionsSchema} from '../../../shared/schemas/research-artifact-version';
 import { DynamicStructuredTool } from '@langchain/core/tools';
@@ -10,7 +12,10 @@ import { createLiteratureTools } from './literature-tools';
 import {createReviewTools, REVIEW_TOOL_DESCRIPTORS} from './review-tools';
 import {createReviewQueryTools, REVIEW_QUERY_TOOL_DESCRIPTORS, type DispatchReviewQuery} from './review-query-tools';
 import { researchStageSchema } from '../../../shared/schemas/research';
+import {referenceCheckRequestSchema, referenceCheckReportSchema} from '../../../shared/schemas/research-reference-check';
+import {withLiteratureContext} from '../../services/literature-context';
 import type { ResearchProseLintReport } from '../../../shared/schemas/research-prose';
+import {researchTexLintRequestSchema} from '../../../shared/schemas/research-prose';
 import type {
   ResearchArtifact,
   ResearchArtifactContent,
@@ -45,6 +50,9 @@ export const RESEARCH_TOOL_DESCRIPTORS: readonly ResearchToolDescriptor[] = [
   { name: 'research_list_artifacts', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
   { name: 'research_read_artifact', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
   { name: 'research_lint_manuscript', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
+  { name: 'research_check_references', scope: 'network', effectClass: 'network_read', riskLevel: 'low', executionScopes: readScopes },
+  { name: 'research_render_diagram', scope: 'workspace', effectClass: 'workspace_mutation', riskLevel: 'medium', executionScopes: ['main'] },
+  { name: 'research_lint_tex', scope: 'workspace', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
   { name: 'research_list_evidence', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
   { name: 'research_stage_runs', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
   { name: 'research_search_knowledge', scope: 'memory', effectClass: 'network_read', riskLevel: 'low', executionScopes: readScopes },
@@ -235,6 +243,27 @@ export function createResearchTools(input: {
       description: '按 artifactId 读取阶段产物的结构化内容（正文 markdown、主张、章节）。读正文优先用这个，不要猜文件名。',
       schema: z.object({ artifactId: z.string().trim().min(1) }).strict()
     }),
+    tool(async request => withResearchDiagramSignal(input.signal, async () =>
+      researchDiagramResultSchema.parse(await invoke('research.diagrams.render', {...request, projectId}))), {
+      name: 'research_render_diagram',
+      description: '将工作区已保存的 .mmd 静态流程图/时序图/状态图/类图/ER图生成 SVG、PNG、PDF。输出在 diagrams/<id>，包含源码快照和哈希清单，可在文件栏打开。拒绝配置指令、HTML和外部资源。它不是定量数据图，不表示科研验证。expectedHash 可锁定源码版本。',
+      schema: researchDiagramRequestSchema.omit({projectId: true})
+    }),
+    tool(async ({offset, limit, ...request}) => {
+      const report = await invoke<ResearchProseLintReport>('research.prose.lintTex', {...request, projectId});
+      return {...report, findings: report.findings.slice(offset, offset + limit), totalFindings: report.findings.length,
+        nextOffset: offset + limit < report.findings.length ? offset + limit : null};
+    }, {
+      name: 'research_lint_tex',
+      description: '检查项目工作区已保存的单个 .tex 文件。返回字节哈希、原文件行列位置和未展开宏/省略环境等覆盖限制；不含未保存编辑，不递归检查 input/include。expectedHash 可锁定版本。不能把无告警称为全文通过。',
+      schema: researchTexLintRequestSchema.omit({projectId: true}).extend({offset: z.number().int().nonnegative().default(0), limit: z.number().int().min(1).max(200).default(100)})
+    }),
+    tool(async ({ids, titleSearch}) => withLiteratureContext({owner: `thread:${input.threadId ?? 'research'}`, projectId, signal: input.signal},
+      async () => referenceCheckReportSchema.parse(await invoke('research.library.checkReferences', {projectId, ids, titleSearch}))), {
+      name: 'research_check_references',
+      description: '核对当前项目文库条目的 DOI、题名、作者和年份。最多10项；发送 DOI 到外部元数据服务。缺 DOI 时可设 titleSearch=true，发送题名和第一作者查询最多3个候选/服务，候选始终待人工复核。分别返回 Crossref/OpenAlex 的字段差异、撤稿观察、响应哈希和错误。consistent 只表示字段一致，不是可信度证明；unknown/needs_review 必须人工复核。只读，不改引用。',
+      schema: referenceCheckRequestSchema.omit({projectId: true})
+    }),
     tool(async ({ artifactId, offset, limit }) => {
       const artifact = await invoke<ResearchArtifact>('research.artifacts.get', { id: artifactId });
       if (artifact.projectId !== projectId) throw new Error('research_artifact_project_mismatch');
@@ -242,7 +271,7 @@ export function createResearchTools(input: {
       // 报告可能很长（上限 2000 条），按 severity 先给汇总再分页给明细，
       // 既不丢信息也不把整份报告塞进上下文。
       return { artifactId, artifactTitle: report.artifactTitle, language: report.language,
-        valeVersion: report.valeVersion, counts: report.counts, truncated: report.truncated,
+        valeVersion: report.valeVersion, target: report.target, cache: report.cache, counts: report.counts, truncated: report.truncated,
         droppedUnits: report.droppedUnits,
         findings: report.findings.slice(offset, offset + limit).map((finding) => ({
           claimId: finding.claimId, sectionIndex: finding.sectionIndex, sectionTitle: finding.sectionTitle,

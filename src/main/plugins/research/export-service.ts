@@ -240,7 +240,7 @@ export class ResearchExportService {
       toolchainHash = await this.tools.identity();
       const toolchain = await this.tools.status();
       if (!toolchain.available || toolchain.versions === null) throw new Error('research_export_toolchain_unavailable');
-      await buildExportFiles({ record, sources, writer, repository: this.repository, tools: this.tools, scratch, signal });
+      await buildExportFiles({ record: {...record, sourceHash}, sources, writer, repository: this.repository, tools: this.tools, scratch, signal });
       await writer.write(exportValidationPath, serializeResearchPublicProjection(captureExportValidation(this.repository, sources, record.request, writer.list())));
       await writer.write(researchCrateProfilePath, researchCrateProfileHtml);
       await writer.write(researchCrateMetadataPath, serializeResearchCrate(buildExportCrate(this.repository, record, sources, writer.list())));

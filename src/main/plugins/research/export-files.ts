@@ -8,7 +8,7 @@ import { createResearchDirectory, readResearchFile, researchContentHash, researc
 import type { ResearchToolchain } from './toolchain';
 
 export type ExportToolchain = Pick<ResearchToolchain, 'status' | 'identity' | 'writeBibliography' | 'compile' | 'renderPdf'
-  | 'compileTypst' | 'typstStyle'>;
+  | 'compileTypst' | 'typstStyle' | 'convertDocument' | 'utilityIdentity'>;
 
 export { archiveBuilderProvenance, exportArchiveLimit, exportFileLimit, exportTotalLimit };
 

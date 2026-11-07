@@ -182,6 +182,7 @@ try {
       'bin/tectonic',
       'bin/vale',
       'bin/typst',
+    'bin/pandoc',
       'typescript-experiment-runner.mts',
       'tex/bundle.zip',
       'licenses/README.md',

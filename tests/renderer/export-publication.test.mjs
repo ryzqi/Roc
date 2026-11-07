@@ -169,6 +169,8 @@ test('approved manuscript uses lazy explicit publication review and exact replay
   await page.getByTestId('artifact-export-preview-button').click(); await editor().getByRole('alert').waitFor();
   assert.equal(calls.filter(call=>call.method==='prepareExport').length,0);
   await complete();
+  await select('报告与转换稿引用格式','nature');
+  await editor().getByRole('checkbox',{name:'DOCX',exact:true}).check();
   for(const id of ['artifact-inspector-refresh','artifact-citation-coverage-toggle','artifact-consistency-toggle',
     'artifact-response-toggle','artifact-journal-toggle','artifact-export-toggle','artifact-export-history-load'])
     assert.equal(await page.getByTestId(id).isDisabled(),true,id);
@@ -176,6 +178,13 @@ test('approved manuscript uses lazy explicit publication review and exact replay
   await preview(); await text('出版说明','Changed publication description.');
   assert.equal(await page.getByTestId('artifact-export-preview').count(),0);
   assert.equal(await page.getByTestId('artifact-export-prepare').isDisabled(),true); await preview();
+  await editor().getByRole('checkbox',{name:'HTML',exact:true}).check();
+  assert.equal(await page.getByTestId('artifact-export-preview').count(),0);
+  await preview();
+  await select('报告与转换稿引用格式','ieee');
+  assert.equal(await page.getByTestId('artifact-export-preview').count(),0);
+  await preview();
+  assert.match(await page.getByTestId('artifact-export-preview').innerText(),/docx、html.*ieee/u);
   const held=f.hold('prepareExport',true);
   await page.getByTestId('artifact-export-prepare').click(); await held.ready.promise;
   assert.equal(await page.getByTestId('artifact-export-discard').isDisabled(),true);
@@ -183,6 +192,8 @@ test('approved manuscript uses lazy explicit publication review and exact replay
   await page.getByTestId('artifact-export-prepare').click(); await editor().waitFor({state:'hidden'});
   await page.getByTestId('artifact-export-cancel').waitFor();
   const writes=calls.filter(call=>call.method==='prepareExport'); assert.equal(writes.length,2); assert.deepEqual(writes[0].input,writes[1].input);
+  assert.deepEqual(writes[0].input.conversionFormats,['docx','html']);
+  assert.equal(writes[0].input.reportCitationStyle,'ieee');
   assert.equal(f.repository.exports.list(f.project.id,200).length,1);
   await page.getByTestId('artifact-export-cancel').click(); await review().getByText('已取消，尚未登记科研工件',{exact:true}).waitFor();
 });

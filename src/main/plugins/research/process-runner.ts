@@ -113,6 +113,11 @@ export async function researchSandboxProfile(request: Pick<ResearchProcessReques
 
 const processCoordinator = new ToolResourceCoordinator();
 
+/** Browser-based research utilities share the same global process admission budget. */
+export async function acquireResearchUtility(projectId: string, signal: AbortSignal) {
+  return processCoordinator.acquireResearchProcess({projectId, priority: 'user', resourceClass: 'utility', gpu: false}, signal);
+}
+
 export async function runResearchProcess(request: ResearchProcessRequest): Promise<ResearchProcessResult> {
   assertResearchProcessResourceLimits(request.resourceLimits);
   const lease = await processCoordinator.acquireResearchProcess({ ...request.admission, gpu: request.allowGpuAcceleration }, request.signal);

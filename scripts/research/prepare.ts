@@ -46,6 +46,7 @@ type ToolsLock = {
    * 只取出归档里那一个 `typst` 二进制，其余内容丢弃。
    */
   typstVersion: string;
+  pandocVersion: string;
   texBundle: { url: string; sha256: string; size: number; zipSha256: string };
   architectures: Record<string, Record<string, { url: string; sha256: string }>>;
 };
@@ -243,12 +244,12 @@ export async function prepare(architecture: string, outputPath: string, cachePat
       const archTools = tools.architectures[architecture];
       if (archTools === undefined) fail('research_tools_lock_invalid');
       for (const [name, item] of Object.entries(archTools)) {
-        const archiveName = item.url.endsWith('.tar.xz') ? `${name}-${architecture}.tar.xz` : `${name}-${architecture}.tar.gz`;
+        const archiveName = `${name}-${architecture}${item.url.endsWith('.zip') ? '.zip' : item.url.endsWith('.tar.xz') ? '.tar.xz' : '.tar.gz'}`;
         const archive = await downloadVerified(item.url, item.sha256, join(cache, archiveName));
         const extracted = join(staging, name);
         // xz 只有 `.tar.xz` 这一种（当前只有 typst）：Node 没有 xz 解码器，用系统 bsdtar。
         // 安全边界留给调用方：只从解出来的树里 copy 一个同名二进制进 `bin/`，其余丢弃。
-        if (item.url.endsWith('.tar.xz')) await extractTarXz(archive, extracted);
+        if (item.url.endsWith('.tar.xz') || item.url.endsWith('.zip')) await extractTarXz(archive, extracted);
         else await extractToolArchive(archive, extracted);
         const candidates = await findNamedFiles(extracted, name);
         if (candidates.length !== 1) fail(`research_tool_binary_ambiguous:${name}`);
@@ -277,7 +278,7 @@ export async function prepare(architecture: string, outputPath: string, cachePat
       await cp(join(SOURCES, 'licenses'), join(root, 'licenses'), { recursive: true, preserveTimestamps: true });
       await cp(join(SOURCES, 'vale'), join(root, 'vale'), { recursive: true, preserveTimestamps: true });
       await cp(join(SOURCES, 'csl'), join(root, 'csl'), { recursive: true, preserveTimestamps: true });
-      const versions = { tectonic: tools.tectonicVersion, vale: tools.valeVersion, typst: tools.typstVersion };
+      const versions = { tectonic: tools.tectonicVersion, vale: tools.valeVersion, typst: tools.typstVersion, pandoc: tools.pandocVersion };
       const manifest = await writeManifest(root, { architecture, versions, lockHashes });
       await rename(root, output);
       console.log(`科研工具链已准备：${output}（${manifest.entries.length} 个文件或链接）`);

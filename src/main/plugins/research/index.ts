@@ -1,3 +1,5 @@
+import {ResearchDiagramService} from './diagram-service';
+import {researchDiagramCapability, registerResearchDiagramCapability} from './diagram-capabilities';
 import {ReadingDiscoveryService} from './reading-discovery';
 import {ReadingRepository} from './reading-repository';
 import {RadarService} from './radar-service';
@@ -96,6 +98,8 @@ import {ResearchFigureConsistencyService} from './figure-consistency-service';
 import {registerResearchFigureConsistencyCapabilities, researchFigureConsistencyCapabilities} from './figure-consistency-capabilities';
 import { ResearchLibraryService } from './library-service';
 import { registerResearchLibraryCapabilities, researchLibraryCapabilities } from './library-capabilities';
+import {referenceCheckCapability, registerReferenceCheckCapability} from './reference-check-capabilities';
+import {ReferenceCheckService} from './reference-check-service';
 import {ScholarlyRelationsRepository} from './scholarly-relations-repository';
 import {ScholarlyRelationsService} from './scholarly-relations-service';
 import {registerResearchScholarlyCapabilities, researchScholarlyCapabilities} from './scholarly-relations-capabilities';
@@ -274,6 +278,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
   let figures: ResearchFigureService | null = null;
   let exports: ResearchExportService | null = null;
   let productionInputs: ResearchProductionInputService | null = null;
+  let diagrams: ResearchDiagramService | null = null;
   let prose: ResearchProseLintService | null = null;
   const toolchain = new ResearchToolchain(options.toolchainRoot ?? null, options.modelsRoot ?? null);
   let literatureImports: LiteratureImportService | null = null;
@@ -291,7 +296,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [...researchReadingCapabilities, ...taskFactCapabilities, researchStorageCapability, researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchIdeaPlanCapabilities, ...researchIdeaOutcomeCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchScholarlyCapabilities, ...researchResourceCapabilities, ...researchOpenReviewCapabilities, ...researchMonitorCapabilities, ...researchZenodoCapabilities, ...researchZenodoPublicationCapabilities, ...researchHuggingFaceCapabilities, ...researchHuggingFaceDownloadCapabilities, ...researchResourceAssociationCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchNotebookCapabilities, ...researchExperimentResultCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities, researchCitationCoverageCapability, ...researchCitationReviewCapabilities, ...researchConsistencyCapabilities, ...researchFigureConsistencyCapabilities, ...researchResponseMatrixCapabilities, ...researchJournalComplianceCapabilities]
+      capabilities: [researchDiagramCapability, referenceCheckCapability, ...researchReadingCapabilities, ...taskFactCapabilities, researchStorageCapability, researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchIdeaPlanCapabilities, ...researchIdeaOutcomeCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchScholarlyCapabilities, ...researchResourceCapabilities, ...researchOpenReviewCapabilities, ...researchMonitorCapabilities, ...researchZenodoCapabilities, ...researchZenodoPublicationCapabilities, ...researchHuggingFaceCapabilities, ...researchHuggingFaceDownloadCapabilities, ...researchResourceAssociationCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchNotebookCapabilities, ...researchExperimentResultCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities, researchCitationCoverageCapability, ...researchCitationReviewCapabilities, ...researchConsistencyCapabilities, ...researchFigureConsistencyCapabilities, ...researchResponseMatrixCapabilities, ...researchJournalComplianceCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，
@@ -369,6 +374,8 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       productionJob.recover();
       productionInputs = new ResearchProductionInputService(researchRepository, researchExperiments, researchFigures, researchExports);
       registerResearchProductionInputCapabilities(context, productionInputs);
+      diagrams = new ResearchDiagramService(researchRepository);
+      registerResearchDiagramCapability(context, diagrams);
       const researchProse = new ResearchProseLintService(researchRepository, toolchain, options.proseRoot ?? null);
       prose = researchProse;
       registerResearchProseCapabilities(context, researchProse);
@@ -380,6 +387,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       registerResearchConsistencyCapabilities(context, new ResearchConsistencyService(researchRepository, researchResults), researchRepository.consistency);
       library = new ResearchLibraryService(researchRepository.library, toolchain, options.libraryRoot ?? null, options.libraryFetch);
       registerResearchLibraryCapabilities(context, researchRepository.library, library);
+      registerReferenceCheckCapability(context, new ReferenceCheckService(researchRepository, literatureService));
       const reading = new ReadingRepository(db, researchRepository);
       radar = new RadarService(reading, researchEmbeddings, library);
       readingTranslation = new ReadingTranslationService(context);
@@ -614,6 +622,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       await readingDiscovery?.shutdown();
       await Promise.allSettled([radar?.shutdown(),readingTranslation?.shutdown()]);
       try {
+        await diagrams?.shutdown(); diagrams = null;
         await shutdownResearchPlugin({ literature: literatureService, monitors, zenodo, scholarly, resources, openreview, huggingface, huggingfaceDownloads, zotero, literatureImports, productionInputs, exports, figures, experiments, pythonEnvironments, indexer, embeddings, stageRuntime, reviewSearch, templates, documents, library, prose });
       } finally {
         reviewSearch = null;

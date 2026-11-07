@@ -9,6 +9,7 @@ import {
 import type { z } from 'zod';
 import { assertLiteratureActive, literatureContext, type LiteratureExecutionContext } from '../../services/literature-context';
 import { betterBibtexKey } from './cite-key';
+import {zoteroCitationKeyMapping} from './zotero-citation-key';
 import { normalizeResearchDoi, literatureIdentity } from './literature-identity';
 import { groupLiteratureIdentities } from './literature-identity-graph';
 import type {LiteratureProviderIdentifierRecord} from '../../../shared/schemas/literature-identifiers';
@@ -152,6 +153,7 @@ export class LiteratureImportService {
         metadata: localItem.metadata, bibliography: localItem.bibliography, updatedAt: localItem.updatedAt
       };
       return {source, objectState, mappedVersion: mapped?.object_version ?? null, local, differences,
+        citationKeyMapping: zoteroCitationKeyMapping(source, source.metadata, local?.bibliography.citationKey ?? null, this.library.usedCitationKeys(), true),
         previousScopedSource: this.zoteroObjects.latestScoped(context, source)};
     });
     return {previewId: preview.previewId, scope: {serverId: preview.sourcePage.serverId, library: preview.sourcePage.library},
@@ -656,6 +658,8 @@ export class LiteratureImportService {
           const row = this.db.prepare('SELECT cancel_requested FROM research_literature_imports WHERE id = ?').get(result.operationId) as { cancel_requested: number };
           if (row.cancel_requested === 1) throw new Error('literature_import_cancelled');
           const current = reusable === null ? this.library.findByIdentity(expectedIdentity, identities[0].aliases) : this.library.get(reusable.item_id);
+          if (entry.source.kind === 'zotero') item.citationKeyMapping = zoteroCitationKeyMapping(entry.source.object,
+            prepared[0]?.metadata ?? entry.source.object.metadata, current?.bibliography.citationKey ?? null, this.library.usedCitationKeys());
           if (current?.archived === true) {
             Object.assign(item, { disposition: 'skipped_archived', libraryItemId: current.id, citationKey: current.bibliography.citationKey });
           } else {
@@ -666,7 +670,7 @@ export class LiteratureImportService {
                 saved = this.library.link(saved.id, result.destinationProjectId, true, {notify: false});
               }
             } else {
-              const citationKey = current?.bibliography.citationKey ?? betterBibtexKey(prepared[0].metadata, this.library.usedCitationKeys());
+              const citationKey = item.citationKeyMapping?.localKey ?? current?.bibliography.citationKey ?? betterBibtexKey(prepared[0].metadata, this.library.usedCitationKeys());
               for (const source of prepared) source.bibliography.citationKey = citationKey;
               saved = this.library.import(prepared, result.destinationProjectId, {flush: false, notify: false, skipArchived: true}).items[0];
             }

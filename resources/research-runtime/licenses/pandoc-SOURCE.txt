@@ -1,0 +1,7 @@
+Pandoc 3.13 is distributed unmodified as a separate command-line program.
+Binary: https://github.com/jgm/pandoc/releases/download/3.13/pandoc-3.13-arm64-macOS.zip
+Corresponding source and build instructions: https://github.com/jgm/pandoc/tree/3.13
+Source archive: https://github.com/jgm/pandoc/archive/refs/tags/3.13.tar.gz
+Dependencies and exact build configuration: https://github.com/jgm/pandoc/blob/3.13/stack.yaml
+License and bundled third-party notices: pandoc-GPL-2.0.md and pandoc-COPYRIGHT.txt.
+Downstream distributors must provide corresponding source (including dependency sources and build inputs) with their distribution or a GPL-compliant source offer; these upstream links alone are not a source offer.

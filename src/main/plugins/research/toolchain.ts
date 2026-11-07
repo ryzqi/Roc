@@ -90,6 +90,12 @@ export class ResearchToolchain {
     return researchContentHash(JSON.stringify(researchParserIdentityPayload(modelPackManifest(this.models.selectedPack))));
   }
 
+  /** Utility provenance includes pinned binaries, rules and styles; parser identity stays stable. */
+  async utilityIdentity(): Promise<string> {
+    const {manifest} = await this.resolve();
+    return researchContentHash(JSON.stringify(manifest));
+  }
+
   async nativeRuntime(jobDir: string): Promise<{ root: string; hash: string; environment: NodeJS.ProcessEnv }> {
     const { root, manifest } = await this.resolve();
     return { root, hash: researchContentHash(JSON.stringify(manifest.lockHashes)), environment: await this.baseEnvironment(root, jobDir, true) };
@@ -212,7 +218,7 @@ export class ResearchToolchain {
       assertResearchDescendant(proseDir, target);
       await mkdir(dirname(target), { recursive: true });
       await writeFile(target, unit.content, 'utf8');
-      targets.push(target);
+      targets.push(relative);
     }
     const result = await runResearchProcess({
       command: join(root, 'bin/vale'),
@@ -249,8 +255,7 @@ export class ResearchToolchain {
   async compile(input: { rootPath: string; entryPath: string; outputDir: string; jobDir: string; signal?: AbortSignal; admission: ResearchProcessScope }): Promise<ResearchProcessResult> {
     const { root } = await this.resolve();
     const environment = await this.baseEnvironment(root, input.jobDir, true);
-    // `--keep-intermediates` 是为了拿到 `.bbl`：arXiv 不运行 BibTeX，随包不带 `.bbl` 的提交
-    // 在那边会把每一处引用渲染成 `?`（`arxiv-preflight.ts` 的 `missing_bbl` 就是这条）。
+    // Keep .bbl for submission compatibility; the target bibliography processor must be reviewed.
     // 中间文件只落在 `outputDir`（即导出的 scratch），不会进交付包——取 `.bbl` 是调用方的事。
     return await runResearchProcess({ command: join(root, 'bin/tectonic'),
       args: ['--bundle', join(root, 'tex/bundle.zip'), '--only-cached', '--untrusted', '--keep-logs', '--keep-intermediates',
@@ -302,6 +307,26 @@ export class ResearchToolchain {
     if (!/^[\w.-]+\.csl$/u.test(name)) throw new ResearchProcessError('research_typst_style_invalid');
     const { root } = await this.resolve();
     return await readResearchFile(root, `csl/${name}`, 1024 * 1024);
+  }
+
+  /** Only Roc-generated AST and local resources enter this offline conversion process. */
+  async convertDocument(input: { rootPath: string; format: 'docx' | 'html'; jobDir: string;
+    signal?: AbortSignal; admission: ResearchProcessScope }): Promise<ResearchProcessResult> {
+    const { root } = await this.resolve();
+    return await runResearchProcess({command: join(root, 'bin/pandoc'),
+      // The process runner supplies the OS sandbox and denies network access. Pandoc's
+      // internal --sandbox currently rejects local image resources even when they are
+      // under --resource-path, so keep resource reads governed by the outer sandbox.
+      args: ['document.json', '--from=json', `--to=${input.format === 'html' ? 'html5' : 'docx'}`,
+        '--standalone', '--fail-if-warnings', '--citeproc', '--bibliography=references.bib',
+        '--csl=style.csl', '--resource-path=.', ...(input.format === 'html' ? ['--embed-resources'] : []),
+        '--output', `paper.${input.format}`],
+      cwd: input.rootPath, readablePaths: [root, input.rootPath], writablePaths: [input.jobDir],
+      environment: await this.baseEnvironment(root, input.jobDir, true),
+      writeLimits: [{path: input.jobDir, ...utilityOutputLimits}],
+      resourceLimits: {mode: 'monitored', cpuTimeMs: 120_000, maxResidentBytes: 1024 ** 3},
+      admission: {...input.admission, resourceClass: 'utility'}, timeoutMs: 60_000,
+      signal: input.signal, allowGpuAcceleration: false, networkAccess: 'none'});
   }
 
   async modelsStatus(): Promise<ResearchModelsStatus> {

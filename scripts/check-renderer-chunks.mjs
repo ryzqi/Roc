@@ -37,7 +37,7 @@ try {
 }
 
 const entries = Object.entries(manifest);
-const entry = entries.find(([, value]) => value.isEntry === true);
+const entry = entries.find(([key, value]) => key === 'index.html' && value.isEntry === true);
 if (entry === undefined) {
   throw new Error('renderer_chunk_entry_missing');
 }

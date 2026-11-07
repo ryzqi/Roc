@@ -10,7 +10,8 @@ const digest = z.string().regex(/^[a-f0-9]{64}$/u);
  * Vale 版本下给出不同结论时，报告本身要能说明这件事发生过。检查不写库、不改文稿，只返回
  * 结果，因此可以随时重跑。
  */
-export const researchProseLintRequestSchema = z.object({ projectId: id, artifactId: id }).strict();
+export const researchProseLintRequestSchema = z.object({ projectId: id, artifactId: id, expectedHash: digest.optional() }).strict();
+export const researchTexLintRequestSchema = z.object({projectId: id, path: id, expectedHash: digest.optional()}).strict();
 
 export const researchProseFindingSchema = z.object({
   /** 命中落在哪个段落；`null` 表示落在小节本身（标题或空行），不是某个 claim 的问题。 */
@@ -38,7 +39,10 @@ export const researchProseLintCountsSchema = z.object({
 }).strict();
 
 export const researchProseLintReportSchema = z.object({
-  projectId: id, artifactId: id, artifactTitle: z.string(),
+  projectId: id, artifactId: id.nullable(), artifactTitle: z.string(),
+  target: z.object({kind: z.enum(['artifact', 'workspace_tex']), path: z.string().nullable(),
+    contentHash: digest, projectionVersion: z.literal('roc-prose-v2'), limitations: z.array(z.string())}).strict(),
+  cache: z.enum(['hit', 'miss']),
   language: z.enum(['zh', 'en']),
   valeVersion: z.string(),
   toolchainHash: digest,

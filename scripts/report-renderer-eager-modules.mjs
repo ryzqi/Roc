@@ -31,7 +31,7 @@ try {
   throw new Error(`renderer_manifest_unreadable: run \`pnpm build\` first (${String(error)})`);
 }
 
-const entry = Object.entries(manifest).find(([, value]) => value.isEntry === true);
+const entry = Object.entries(manifest).find(([key, value]) => key === 'index.html' && value.isEntry === true);
 if (entry === undefined) {
   throw new Error('renderer_chunk_entry_missing');
 }

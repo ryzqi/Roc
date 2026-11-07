@@ -18,5 +18,15 @@
     "file": "csl-CC-BY-SA-3.0.txt",
     "source": "https://raw.githubusercontent.com/spdx/license-list-data/v3.25.0/text/CC-BY-SA-3.0.txt",
     "sha256": "3f941b3b89cf7b8370ceb83cc76d2120d471b58735d8ca60238a751a48d7f72f"
+  },
+  {
+    "file": "pandoc-COPYRIGHT.txt",
+    "source": "https://raw.githubusercontent.com/jgm/pandoc/3.13/COPYRIGHT",
+    "sha256": "842e33ef01625e93f85bebb8bac83aa570186b7aa77a09971257cc29f8f60740"
+  },
+  {
+    "file": "pandoc-GPL-2.0.md",
+    "source": "https://raw.githubusercontent.com/jgm/pandoc/3.13/COPYING.md",
+    "sha256": "3ebfbf9235b049d384cdba5a66a1a3434bb544391e720b76faa8e1b3ee61a4e5"
   }
 ]

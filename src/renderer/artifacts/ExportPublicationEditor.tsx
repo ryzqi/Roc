@@ -1,3 +1,4 @@
+import {researchCitationStyles, researchCitationStyleSchema, type ResearchCitationStyle} from '../../shared/schemas/research-citation-style';
 import {useEffect, useRef, useState} from 'react';
 import type {ResearchExportInputs} from '../../shared/schemas/research-export-publication';
 import {researchExportPrepareRequestSchema, type ResearchExportExecution, type ResearchExportInputsRequest,
@@ -18,6 +19,8 @@ export function ExportPublicationEditor({client, selection, inputs, writable, on
   onDirty: (value: boolean) => void; onPending: (value: boolean) => void;
   onPrepared: (value: ResearchExportExecution) => void; onDiscard: () => void
 }): React.JSX.Element {
+  const [conversionFormats, setConversionFormats] = useState<('docx' | 'html')[]>([]);
+  const [reportCitationStyle, setReportCitationStyle] = useState<ResearchCitationStyle | ''>('');
   const [publication, setPublication] = useState(() => ({name: '', description: '', datePublished: '', license: emptyExportLicense()}));
   const [authors, setAuthors] = useState(() => [{name: '', orcid: ''}]);
   const [resources, setResources] = useState<ExportResourceDraft[]>(() => inputs.resources.map(() =>
@@ -52,6 +55,14 @@ export function ExportPublicationEditor({client, selection, inputs, writable, on
   }}>
     <fieldset disabled={pending || !writable} className="flex min-w-0 flex-col gap-3">
       <h3 className="font-medium">公开出版信息</h3>
+      <label className="flex flex-col gap-1">报告与转换稿引用格式
+        <select className={formSelectClass} value={reportCitationStyle} onChange={event => {
+          setReportCitationStyle(event.target.value === '' ? '' : researchCitationStyleSchema.parse(event.target.value)); change();
+        }}>
+          <option value="">按项目语言选择</option>
+          {Object.entries(researchCitationStyles).map(([key, style]) => <option key={key} value={key}>{style.label}</option>)}
+        </select>
+      </label>
       <ExportTextField label="出版名称" value={publication.name} onChange={name => {setPublication({...publication, name}); change();}}/>
       <ExportTextField label="出版说明" value={publication.description} multiline
         onChange={description => {setPublication({...publication, description}); change();}}/>
@@ -110,7 +121,17 @@ export function ExportPublicationEditor({client, selection, inputs, writable, on
     {recapture.error === null ? null : <p role="alert" className="text-[var(--st-warn)]">{recapture.error}</p>}
     {prepare.error === null ? null : <p role="alert" className="text-[var(--st-warn)]">{prepare.error}</p>}
     {pending ? <p role="status">{recapture.pending ? '正在核对当前来源…' : '正在提交生成请求…'}</p> : null}
+    <fieldset className="flex flex-col gap-2" disabled={!writable || pending}>
+      <legend>附加转换稿</legend>
+      {(['docx', 'html'] as const).map(format => <label key={format} className="flex items-center gap-2">
+        <input type="checkbox" checked={conversionFormats.includes(format)} onChange={event => {
+          setConversionFormats(current => event.target.checked ? [...current, format] : current.filter(value => value !== format)); setPreview(null);
+        }}/>{format.toUpperCase()}
+      </label>)}
+      <p className="text-muted">由已批准正文生成；不转换 TeX 模板布局，正文中的公式和表格语法保留为文本。请检查转换稿。</p>
+    </fieldset>
     {preview === null ? null : <section className="flex min-w-0 flex-col gap-2 border-t-[0.5px] border-line pt-2" data-testid="artifact-export-preview">
+      <p>转换稿：{preview.conversionFormats?.join("、") || "不生成"}；引用样式：{preview.reportCitationStyle || "按语言默认"}</p>
       <ExportPublicationReceipt review={preview.publicationReview}/>
     </section>}
     <div className="flex flex-wrap gap-2">
@@ -122,6 +143,8 @@ export function ExportPublicationEditor({client, selection, inputs, writable, on
           if (missing !== -1) {setValidation(`资源 ${missing + 1} 需要明确选择对象类型与交付方式。`); return;}
           const parsed = researchExportPrepareRequestSchema.safeParse({
             ...selection, requestId: requestId.current, title: publication.name,
+            ...(conversionFormats.length ? {conversionFormats} : {}),
+            ...(reportCitationStyle === '' ? {} : {reportCitationStyle}),
             publicationReview: {
               sourceHash: inputs.sourceHash,
               publication: {...publication, profile: researchCrateProfile, version: researchCrateVersion,

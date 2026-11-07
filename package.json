@@ -89,6 +89,7 @@
     "js-tiktoken": "1.0.21",
     "katex": "0.19.1",
     "langchain": "1.5.18",
+    "mermaid": "12.3.0",
     "node-pty": "1.1.0",
     "onnxruntime-node": "1.22.0-rev",
     "p-retry": "7.1.1",

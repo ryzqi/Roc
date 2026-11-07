@@ -1187,3 +1187,46 @@ test('reusing a global Zotero object links the requested project after commit wi
     assert.equal(f.events.at(-1).operationId, second.operationId);
   } finally {await f.dispose();}
 });
+
+
+test('Zotero explicit keys survive import, collision, version migration and durable replay', async () => {
+  const native = item('ITEM2345'); native.data.citationKey = 'Smith2024';
+  const collision = item('ITEM6789', {doi: '10.1234/OTHER'}); collision.data.citationKey = 'smith2024';
+  const csl = item('CSLS2345', {doi: '10.1234/CSL'});
+  csl.csljson = JSON.stringify([{...JSON.parse(csl.csljson)[0], 'citation-key': 'CSL2024'}]);
+  const legacy = item('EXTR2345', {doi: '10.1234/EXTRA'}); legacy.data.extra = 'Citation Key: Legacy2024';
+  const conflict = item('CONF2345', {doi: '10.1234/CONFLICT'});
+  conflict.data.citationKey = 'Native2024'; conflict.data.extra = 'Citation Key: Different2024';
+  const invalid = item('INVA2345', {doi: '10.1234/INVALID'}); invalid.data.citationKey = 'bad key';
+  const plain = item('PLAI2345', {doi: '10.1234/PLAIN'});
+  const originals = [native, collision, csl, legacy, conflict, invalid, plain];
+  const f = fixture(originals);
+  try {
+    const preview = await f.preview();
+    const result = await f.add(preview, originals.map(value => value.key), 'explicit-keys');
+    assert.equal(result.status, 'completed');
+    assert.deepEqual(result.items.slice(0, 4).map(value => value.citationKey),
+      ['Smith2024', result.items[1].citationKey, 'CSL2024', 'Legacy2024']);
+    assert.notEqual(result.items[1].citationKey.toLowerCase(), 'smith2024');
+    assert.deepEqual(result.items[1].citationKeyMapping.issues, ['key_collision']);
+    assert.deepEqual(result.items[4].citationKeyMapping.issues, ['source_disagreement']);
+    assert.deepEqual(result.items[5].citationKeyMapping.issues, ['invalid_source_key']);
+    assert.equal(result.items[6].citationKeyMapping.sourceKey, null);
+    assert.notEqual(result.items[6].citationKey, plain.key);
+    assert.deepEqual(await f.add(preview, originals.map(value => value.key), 'explicit-keys'), result);
+    const next = structuredClone(native); next.version = next.data.version = 9; next.data.citationKey = 'Renamed2025';
+    f.setSource([next]);
+    const nextPreview = await f.preview();
+    const review = f.run(() => f.service.reviewZotero({previewId: nextPreview.previewId, itemKeys: [next.key]}));
+    assert.equal(review.items[0].citationKeyMapping.localKey, 'Smith2024');
+    assert.deepEqual(review.items[0].citationKeyMapping.issues, ['local_key_retained']);
+    const updated = await f.add(nextPreview, [next.key], 'explicit-update');
+    assert.equal(updated.items[0].citationKey, 'Smith2024');
+    assert.equal(updated.items[0].citationKeyMapping.sourceKey, 'Renamed2025');
+    const calls = f.workerCalls();
+    const reused = await f.add(await f.preview(), [next.key], 'explicit-reuse');
+    assert.deepEqual(reused.items[0].citationKeyMapping, updated.items[0].citationKeyMapping);
+    assert.equal(f.workerCalls(), calls);
+    assert.deepEqual(f.run(() => f.service.readZoteroSources({id: updated.items[0].libraryItemId})).records.at(-1).item, next);
+  } finally {await f.dispose();}
+});

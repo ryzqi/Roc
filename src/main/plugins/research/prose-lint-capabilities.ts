@@ -1,17 +1,22 @@
 import { z } from 'zod';
 
-import { researchProseLintReportSchema, researchProseLintRequestSchema } from '../../../shared/schemas/research-prose';
+import { researchProseLintReportSchema, researchProseLintRequestSchema, researchTexLintRequestSchema } from '../../../shared/schemas/research-prose';
 import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
 import { RocDomainError } from '../../services/errors';
 import type { ResearchProseLintService } from './prose-lint-service';
 
 const capabilities = {
-  lint: descriptor('research.prose.lint', researchProseLintRequestSchema, researchProseLintReportSchema)
+  lint: descriptor('research.prose.lint', researchProseLintRequestSchema, researchProseLintReportSchema),
+  tex: descriptor('research.prose.lintTex', researchTexLintRequestSchema, researchProseLintReportSchema)
 };
 
 export const researchProseCapabilities = Object.values(capabilities);
 
 export function registerResearchProseCapabilities(context: RocPluginContext, prose: ResearchProseLintService): void {
+  context.capabilities.register(context.pluginId, capabilities.tex, async input => {
+    try { return await prose.lintTex(researchTexLintRequestSchema.parse(input)); }
+    catch (error) { throw mapProseLintError(error); }
+  });
   context.capabilities.register(context.pluginId, capabilities.lint, async (input) => {
     try {
       return await prose.lint(capabilities.lint.inputSchema.parse(input));
@@ -40,6 +45,12 @@ function mapProseLintError(error: unknown): never {
       category: 'degraded',
       retryable: false
     });
+  }
+  if (code === 'research_prose_target_changed') {
+    throw new RocDomainError({code, message: '检查目标已修改，请基于当前保存版本重新检查。', category: 'conflict', retryable: true});
+  }
+  if (code === 'research_prose_tex_required') {
+    throw new RocDomainError({code, message: '请选择工作区内已保存的 .tex 文件。', category: 'validation', retryable: false});
   }
   if (code === 'research_prose_artifact_kind_invalid') {
     throw new RocDomainError({

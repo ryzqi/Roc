@@ -3,6 +3,7 @@ import { researchLiteratureSchema } from './research';
 import {zoteroItemKeySchema} from './research-zotero';
 import {literatureIdentifierObservationSchema, literatureRawIdentifiersSchema} from './literature-identifiers';
 import {literatureReviewSchema} from './literature-review';
+import {zoteroCitationKeyMappingSchema} from './zotero-citation-key';
 
 export const literatureNetworkSourceSchema = z.enum(['openalex', 'crossref', 'semantic_scholar', 'arxiv', 'pubmed', 'europe_pmc']);
 export const literatureSearchToolSchema = z.object({
@@ -117,6 +118,7 @@ export const literatureImportItemSchema = z.object({
   entryKey: z.string(), inputPositions: z.array(z.number().int()), libraryItemId: z.string().nullable(), citationKey: z.string().nullable(),
   disposition: z.enum(['created', 'linked', 'already_present', 'skipped_archived', 'failed', 'cancelled', 'not_processed']),
   metadataUpdated: z.boolean(), errorCode: z.string().nullable(), retryable: z.boolean(),
+  citationKeyMapping: zoteroCitationKeyMappingSchema.optional(),
   metadata: z.enum(['ready', 'failed', 'not_requested']), attachment: z.literal('not_requested'), parse: z.literal('not_requested'),
   index: z.object({ scope: z.literal('metadata'), keyword: z.enum(['ready', 'pending', 'failed', 'not_requested']), vector: z.literal('not_requested') }).strict()
 }).strict();
