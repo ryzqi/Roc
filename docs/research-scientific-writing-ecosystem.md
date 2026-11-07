@@ -383,7 +383,7 @@ Roc 已有 provider 治理、响应缓存和文献身份去重；library 撤稿�
 
 上述能力沿用现有助手、能力合同和导出界面。新增主要服务为 `reference-check-service.ts`、`tex-prose-projection.ts`、`arxiv-submission.ts`、`pandoc-export.ts`、`diagram-service.ts` 和 `diagram-renderer.ts`，均位于 `src/main/plugins/research/`。Mermaid 使用独立、按需启动的 Electron 渲染窗口和 renderer entry；没有 preload、Node 权限或网络访问，不随主界面首屏加载。
 
-工具链固定为 Tectonic 0.17.0、Vale 3.24.0、Typst 0.15.0、Pandoc 3.13，Mermaid 固定为 12.3.0。开发默认目录 `.runtime/research-toolchain/darwin-arm64` 已更新；旧目录保留在 `.runtime/research-toolchain/darwin-arm64.pre-p0-p1-20261107-223433`。构建、打包要求和许可证资源已补入 Pandoc。工具缓存与导出来源使用完整工具链 manifest 指纹；原文档解析身份保持独立。
+工具链固定为 Tectonic 0.17.0、Vale 3.24.0、Typst 0.15.0、Pandoc 3.13，Mermaid 固定为 12.3.0。开发默认目录为 `.runtime/research-toolchain/darwin-arm64`。构建、打包要求和许可证资源已补入 Pandoc。工具缓存与导出来源使用完整工具链 manifest 指纹；原文档解析身份保持独立。
 
 ### 11.2 已执行的验证
 
