@@ -44,6 +44,5 @@ export const taskDiagnosticsExportSchema = z.strictObject({
   createdAt: z.iso.datetime(), redacted: z.literal(true), externalTrace: z.literal('not_exported')
 });
 export type TaskExecutionDiagnosticsRequest = z.infer<typeof taskExecutionDiagnosticsRequestSchema>;
-export type TaskCallDiagnostics = z.infer<typeof taskCallDiagnosticsSchema>;
 export type TaskExecutionObservations = z.infer<typeof taskExecutionObservationsSchema>;
 export type TaskDiagnosticsExport = z.infer<typeof taskDiagnosticsExportSchema>;

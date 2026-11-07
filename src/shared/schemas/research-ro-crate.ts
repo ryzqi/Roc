@@ -105,4 +105,3 @@ export const researchCrateInputSchema = z.strictObject({
 });
 
 export type ResearchCrateInput = z.infer<typeof researchCrateInputSchema>;
-export type ResearchCratePublication = z.infer<typeof researchCratePublicationSchema>;

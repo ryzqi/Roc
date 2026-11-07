@@ -210,7 +210,7 @@ test('every ?view= in a gate script resolves to a real canvas view', () => {
   //
   // Two patterns, because a view id reaches the URL two ways: interpolated into a query string, or
   // written as a literal next to the word `view` (a parameter default, an object property).
-  const patterns = [/view=([a-z][a-z-]*)/gu, /view\s*[=:]\s*['"`]([a-z][a-z-]*)['"`]/gu];
+  const patterns = [/[?&'"`]view=([a-z][a-z-]*)/gu, /view\s*[=:]\s*['"`]([a-z][a-z-]*)['"`]/gu];
   const failures = [];
   let checked = 0;
   for (const file of listScripts()) {

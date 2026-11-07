@@ -25,4 +25,3 @@ export const literatureRetrievalEvaluationSchema = z.discriminatedUnion('kind', 
   corpus.extend({kind: z.literal('engineering_fixture'), annotation: z.null()}),
   corpus.extend({kind: z.literal('human_reviewed'), annotation})
 ]);
-export type LiteratureRetrievalEvaluation = z.infer<typeof literatureRetrievalEvaluationSchema>;

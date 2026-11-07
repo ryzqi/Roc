@@ -8,7 +8,6 @@ import type { Transition, Variants } from 'motion/react';
  * |------------------------|-----------------------------------|
  * | canvas tab indicator   | `tabIndicatorTransition` 0.18     |
  * | popover / dropdown     | `popoverVariants` 0.12            |
- * | collapsible section    | `collapseVariants` 0.16 / 0.15    |
  * | modal                  | `modalPopVariants` 0.18           |
  * | drawer                 | `drawerVariants` 0.2              |
  *
@@ -40,20 +39,6 @@ export const popoverVariants: Variants = {
   animate: { opacity: 1, y: 0, scale: 1 },
   exit: { opacity: 0, y: 4, scale: 0.98 }
 };
-
-/**
- * Collapsible detail sections (tool-call bodies, reasoning blocks).
- *
- * `height: 'auto'` in a variant is a layout read per frame; it needs
- * `overflow-hidden` on the same element.
- */
-export function collapseVariants(): Variants {
-  return {
-    initial: { opacity: 0, height: 0 },
-    animate: { opacity: 1, height: 'auto' },
-    exit: { opacity: 0, height: 0 }
-  };
-}
 
 /** Modal entrance (opacity + 0.98 scale), for portal-hosted panels. */
 export const modalPopTransition: Transition = { duration: 0.18, ease: SOFT };

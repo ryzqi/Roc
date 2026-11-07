@@ -1,7 +1,6 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { ChatOpenAICallOptions } from '@langchain/openai';
-import { anthropicThinkingMinBudgetTokens, type ProviderConfig, type ProviderModelOptions, type ProviderType } from '../../shared/types';
-import type { LlamaCppParams, NvidiaParams, OpenAICompatibleParams } from '../../shared/types/provider-config';
+import { anthropicThinkingMinBudgetTokens, type ProviderConfig, type ProviderModelOptions } from '../../shared/types';
 import { RocDomainError } from './errors';
 import {
   applyProviderOverride,
@@ -41,7 +40,7 @@ export function resolveLlamaCppSamplingProfile(
   return applyProviderOverride(familyProfile, overrides);
 }
 
-export function buildLlamaCppSamplingModelKwargs(options: LlamaCppParams, profile: SamplingProfile | null): Record<string, unknown> {
+export function buildLlamaCppSamplingModelKwargs(options: ProviderModelOptions, profile: SamplingProfile | null): Record<string, unknown> {
   const kwargs: Record<string, unknown> = {};
   const topK = options.topK ?? profile?.topK;
   if (typeof topK === 'number') {
@@ -58,21 +57,9 @@ export function buildLlamaCppSamplingModelKwargs(options: LlamaCppParams, profil
   return kwargs;
 }
 
-export function isLangChainProviderType(
-  type: ProviderType
-): type is 'openai_compatible' | 'anthropic_compatible' | 'nvidia' | 'openrouter' | 'llama_cpp' {
-  return (
-    type === 'openai_compatible' ||
-    type === 'anthropic_compatible' ||
-    type === 'nvidia' ||
-    type === 'openrouter' ||
-    type === 'llama_cpp'
-  );
-}
-
 export function buildNvidiaModelKwargs(
   modelId: string,
-  options: NvidiaParams,
+  options: ProviderModelOptions,
   streaming: boolean
 ): Record<string, unknown> {
   const kwargs: Record<string, unknown> = {};
@@ -167,7 +154,7 @@ export function resolveStreamUsage(provider: ProviderConfig, modelOptions: Provi
 export function resolveAnthropicThinking(
   options: ProviderModelOptions
 ): { type: 'disabled' } | { type: 'adaptive' } | { type: 'enabled'; budget_tokens: number } | undefined {
-  if (options?.anthropicThinking === undefined) {
+  if (options.anthropicThinking === undefined) {
     return undefined;
   }
   if (options.anthropicThinking.mode === 'disabled') {
@@ -214,7 +201,7 @@ export function resolveAnthropicThinking(
 }
 
 export function resolveOpenAiCompatibleDefaultOptions(
-  params: OpenAICompatibleParams | null
+  params: ProviderModelOptions | null
 ): Partial<ChatOpenAICallOptions> & { parallel_tool_calls?: boolean } {
   if (params === null) {
     return {};
@@ -253,7 +240,6 @@ export function createFetchWithoutAuthorization(): typeof fetch {
       headers.set(key, value);
     });
     headers.delete('authorization');
-    headers.delete('Authorization');
     headers.delete('api-key');
     headers.delete('x-api-key');
     const nextInit = {

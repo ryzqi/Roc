@@ -43,14 +43,6 @@ export type SidebarTab = 'files' | 'literature' | 'sessions';
  * neither key exists under `roc.ui.*`.
  */
 
-/**
- * Legacy keys written by the pre-migration shell. They are garbage — we delete
- * them once at startup. This is cleanup, not a compatibility layer: nothing
- * reads them.
- */
-export const LEGACY_STORAGE_KEYS = ['codex_projects_list', 'codex_model_settings'] as const;
-export const LEGACY_STORAGE_PREFIXES = ['codex_project_data_'] as const;
-
 function storage(): Storage | null {
   try {
     return window.localStorage;
@@ -284,44 +276,6 @@ export function clearUiState(): string[] {
       }
     }
     for (const key of keys) {
-      store.removeItem(key);
-      removed.push(key);
-    }
-  } catch {
-    return removed;
-  }
-  return removed;
-}
-
-/* ------------------------------------------------------------------ */
-/* Legacy cleanup                                                      */
-/* ------------------------------------------------------------------ */
-
-/** Removes keys left behind by earlier shells. Never reads them. */
-export function purgeLegacyStorage(): string[] {
-  const store = storage();
-  if (store === null) {
-    return [];
-  }
-  const removed: string[] = [];
-  try {
-    for (const key of LEGACY_STORAGE_KEYS) {
-      if (store.getItem(key) !== null) {
-        store.removeItem(key);
-        removed.push(key);
-      }
-    }
-    const prefixed: string[] = [];
-    for (let index = 0; index < store.length; index += 1) {
-      const key = store.key(index);
-      if (key === null) {
-        continue;
-      }
-      if (LEGACY_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))) {
-        prefixed.push(key);
-      }
-    }
-    for (const key of prefixed) {
       store.removeItem(key);
       removed.push(key);
     }

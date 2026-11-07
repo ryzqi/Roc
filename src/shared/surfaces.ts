@@ -240,8 +240,6 @@ export const PARKED_CAPABILITIES = [
   { id: 'policies', label: '阶段策略', capability: 'research.workflow.policies' }
 ] as const satisfies readonly ParkedCapability[];
 
-export type ParkedCapabilityId = (typeof PARKED_CAPABILITIES)[number]['id'];
-
 const parkedById: ReadonlyMap<string, ParkedCapability> = new Map(
   PARKED_CAPABILITIES.map((entry) => [entry.id, entry])
 );
@@ -288,7 +286,7 @@ export function resolveSurface(value: string | null | undefined): SurfaceResolut
  * 类型由它派生，所以 IPC 契约里的 `z.enum(menuPages)`、意图表 `MENU_PAGES` 与主进程的函数签名
  * 三者不可能漂移。P10 之前这里只有 `z.string()` 与 `(page: string) => void`：任何渲染层代码都能发一个
  * 任意字符串，主进程把它当 navigate 事件原样广播回来（`register-ipc.ts` 那个通道自己叫
- * "Legacy App Supplement"）。
+ * `registerAppNavigationIpc`）。
  */
 export const menuPages = ['settings', 'research-new', 'chat', 'tasks'] as const;
 

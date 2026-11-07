@@ -15,7 +15,6 @@ export * from './diagnostics';
 export * from './performance';
 export * from './metrics';
 export * from './shell';
-export * from './provider-config';
 export * from './hooks';
 export * from './token-usage';
 export * from './research';

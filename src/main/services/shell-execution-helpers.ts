@@ -1,79 +1,8 @@
 import type { ShellExecutionResult } from '../../shared/types';
-import { CommandRewriter, parseRtkArgs } from '../../rtk-integration';
 import type { RtkExecutionMetadata } from './rtk-service';
 import { redact } from './deep-agent/redaction';
-import { normalizeShellCommand } from './deep-agent/shell-policy';
 
 const maxPersistedAgentOutputChars = 4096;
-const directCommandPattern = /^[A-Za-z0-9_./:@%+=,-]+(?:[ \t]+[A-Za-z0-9_./:@%+=,-]+)*$/;
-
-export type RtkRoutingDecision =
-  | {
-      kind: 'rtk';
-      args: string[];
-    }
-  | {
-      kind: 'fallback';
-      bypassReason: ShellExecutionResult['bypassReason'];
-    };
-
-export function resolveRtkRoute(command: string): RtkRoutingDecision {
-  if (!directCommandPattern.test(command.trim())) {
-    return { kind: 'fallback', bypassReason: 'command_not_supported' };
-  }
-  const explicitRtkArgs = parseRtkArgs(command.trim());
-  if (explicitRtkArgs !== null) {
-    return { kind: 'rtk', args: explicitRtkArgs };
-  }
-
-  const normalized = normalizeShellCommand(command);
-  if (normalized === 'ls' || normalized.startsWith('ls ')) {
-    return {
-      kind: 'rtk',
-      args: command.trim().split(/\s+/)
-    };
-  }
-  if (normalized === 'git status' || normalized.startsWith('git status ')) {
-    return {
-      kind: 'rtk',
-      args: command.trim().split(/\s+/)
-    };
-  }
-  if (normalized === 'git diff' || normalized.startsWith('git diff ')) {
-    return {
-      kind: 'rtk',
-      args: command.trim().split(/\s+/)
-    };
-  }
-  return {
-    kind: 'fallback',
-    bypassReason: 'command_not_supported'
-  };
-}
-
-export async function resolveRtkRouteAsync(
-  command: string,
-  metadata: RtkExecutionMetadata,
-  signal?: AbortSignal,
-  environment?: NodeJS.ProcessEnv
-): Promise<RtkRoutingDecision> {
-  if (!directCommandPattern.test(command.trim())) {
-    return { kind: 'fallback', bypassReason: 'command_not_supported' };
-  }
-  const explicitRtkArgs = parseRtkArgs(command.trim());
-  if (explicitRtkArgs !== null) {
-    return { kind: 'rtk', args: explicitRtkArgs };
-  }
-
-  const rewritten = await new CommandRewriter(metadata.binaryPath, { environment }).rewrite(command, signal);
-  if (rewritten.rtkArgs === null) {
-    return resolveRtkRoute(command);
-  }
-  return {
-    kind: 'rtk',
-    args: rewritten.rtkArgs
-  };
-}
 
 export function buildRtkEnvironment(metadata: RtkExecutionMetadata): Record<string, string> {
   return {

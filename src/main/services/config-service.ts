@@ -14,7 +14,6 @@ import { RocDomainError } from './errors';
 import type { RocPaths } from './paths';
 import { requireText } from './validation';
 import { defaultMcpConfig, defaultPermissions, defaultProviders, defaultSettings, defaultShortcuts } from './config/defaults';
-import { isCurrentSettingsDocument } from './config/migration';
 import {
   defaultModelStateForProviders,
   deleteProviderFromConfig,
@@ -329,7 +328,7 @@ export class ConfigService {
       });
       return;
     }
-    if (!isCurrentSettingsDocument(rawSettings)) {
+    if (rawSettings === null || typeof rawSettings !== 'object' || !('schemaVersion' in rawSettings) || rawSettings.schemaVersion !== 4) {
       throw new RocDomainError({
         code: 'settings_schema_current_required',
         message: '设置文件不是当前 schema。',

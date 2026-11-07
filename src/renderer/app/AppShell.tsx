@@ -10,7 +10,7 @@ import { useMenuIntentBridge, useAppRoute } from './use-app-route';
 import { useContentPreferenceSync } from './use-content-preferences';
 import { useLayoutState, type LayoutPreset } from './use-layout-state';
 import { useKeyboardShortcuts } from './shortcuts';
-import { clearUiState, purgeLegacyStorage, recordProjectVisit, CONTENT_PREFERENCES_CHANGED } from './ui-state';
+import { clearUiState, recordProjectVisit, CONTENT_PREFERENCES_CHANGED } from './ui-state';
 import { ViewContent } from './ViewContent';
 import { WorkspaceLayout } from './WorkspaceLayout';
 import { WorkspaceScopeProvider, type WorkspaceScope } from './workspace-scope';
@@ -477,12 +477,6 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
     navigate({ ...route, assistantOpen: true });
     literature.adoptAssistantThread();
   }, [literature, literatureAssistantThreadId, navigate, route]);
-
-  // Cleanup of pre-migration keys. Deliberately not a compatibility layer:
-  // nothing reads these values, we just stop them from accumulating.
-  useEffect(() => {
-    purgeLegacyStorage();
-  }, []);
 
   useEffect(() => {
     if (managementOpen) {

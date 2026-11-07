@@ -6,7 +6,6 @@ import type {
   rocHookConfigSchema,
   rocHookConfigSnapshotSchema,
   rocHookEventNameSchema,
-  settingsSaveHookConfigRequestSchema,
   settingsTrustHookRequestSchema
 } from '../schemas/ipc-memory-settings';
 import type { hookRunSummarySchema } from '../schemas/task-event';
@@ -17,14 +16,10 @@ export type RocHookEventName = z.infer<typeof rocHookEventNameSchema>;
 export type RocHookConfig = z.infer<typeof rocHookConfigSchema>;
 export type RocHookMatcherGroup = NonNullable<RocHookConfig['hooks'][RocHookEventName]>[number];
 export type RocHookCommandHandler = RocHookMatcherGroup['hooks'][number];
-export type RocHookFailureMode = RocHookCommandHandler['failureMode'];
-export type RocHookHandlerType = RocHookCommandHandler['type'];
 export type RocHookConfigSnapshot = z.infer<typeof rocHookConfigSnapshotSchema>;
 export type RocHookConfiguredHandlerSnapshot = RocHookConfigSnapshot['handlers'][number];
 export type RocHookTrustState = RocHookConfiguredHandlerSnapshot['trustState'];
-
 export type RocHookTrustRequest = z.infer<typeof settingsTrustHookRequestSchema>;
-export type RocHookSaveConfigRequest = z.infer<typeof settingsSaveHookConfigRequestSchema>;
 export type RocHookRunSummary = z.infer<typeof hookRunSummarySchema>;
 export type RocHookRunStatus = RocHookRunSummary['status'];
 export type RocHookRunEvent = Extract<
@@ -33,9 +28,7 @@ export type RocHookRunEvent = Extract<
 >;
 
 export type RocHookSessionSource = 'chat' | 'background_task';
-
 export type RocHookSessionEndStatus = 'completed' | 'failed' | 'cancelled';
-
 export type RocHookCommandInputPayload =
   | {
       event: 'SessionStart';
@@ -93,7 +86,6 @@ export type RocHookCommandInput = {
 } & RocHookCommandInputPayload;
 
 export type RocHookCommandOutputAction = 'continue' | 'block' | 'replace_input' | 'add_context' | 'request_continue';
-
 export type RocHookCommandOutput = {
   action: RocHookCommandOutputAction;
   message?: string;

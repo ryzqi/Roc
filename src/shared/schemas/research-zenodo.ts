@@ -49,7 +49,7 @@ export const zenodoListSchema = z.strictObject({
 export const zenodoListResultSchema = z.strictObject({
   records: z.array(zenodoPreparedSchema).max(20), total: z.number().int().nonnegative(), nextOffset: z.number().int().nonnegative().nullable()
 });
-export type ZenodoMetadata = z.infer<typeof zenodoMetadataSchema>;
+
 export type ZenodoInputsRequest = z.infer<typeof zenodoInputsRequestSchema>;
 export type ZenodoInputs = z.infer<typeof zenodoInputsSchema>;
 export type ZenodoPrepare = z.infer<typeof zenodoPrepareSchema>;

@@ -2,7 +2,6 @@ import type { z } from 'zod';
 
 import type {
   builtinSkillSourceStatusSchema,
-  builtinSkillsAutoUpdateRequestSchema,
   builtinSkillsCheckRequestSchema,
   builtinSkillsCheckResultSchema,
   builtinSkillsStatusSchema
@@ -23,9 +22,7 @@ export type SkillFileEntry = SkillFileTreeResult['entries'][number];
 export type SkillFilePreviewRequest = z.infer<typeof skillFilePreviewRequestSchema>;
 export type SkillFilePreviewResult = z.infer<typeof skillFilePreviewResultSchema>;
 export type SkillImportRequest = z.infer<typeof skillImportRequestSchema>;
-
 export type BuiltinSkillSourceStatus = z.infer<typeof builtinSkillSourceStatusSchema>;
 export type BuiltinSkillsStatus = z.infer<typeof builtinSkillsStatusSchema>;
 export type BuiltinSkillsCheckRequest = z.infer<typeof builtinSkillsCheckRequestSchema>;
 export type BuiltinSkillsCheckResult = z.infer<typeof builtinSkillsCheckResultSchema>;
-export type BuiltinSkillsAutoUpdateRequest = z.infer<typeof builtinSkillsAutoUpdateRequestSchema>;

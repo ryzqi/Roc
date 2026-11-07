@@ -5,7 +5,6 @@ import { type ChatOpenAIFields } from '@langchain/openai';
 import { DEFAULT_CONTEXT_BUDGET_TOKENS, resolveNvidiaBaseUrl } from '../../shared/provider-defaults';
 import { DEFAULT_RUN_MODEL_OUTPUT_TOKENS, resolveRunModelOutputTokens } from '../../shared/run-budget-policy';
 import { type ProviderConfig, type ProviderModelOptions, type ProviderType } from '../../shared/types';
-import { toTypedProviderConfig } from '../../shared/types/provider-config';
 import type { ConfigService } from './config-service';
 import { RocDomainError } from './errors';
 import {
@@ -19,7 +18,6 @@ import {
   buildLlamaCppSamplingModelKwargs,
   buildNvidiaModelKwargs,
   createFetchWithoutAuthorization,
-  isLangChainProviderType,
   resolveAnthropicThinking,
   resolveLlamaCppSamplingProfile,
   resolveOpenAiCompatibleDefaultOptions,
@@ -272,13 +270,11 @@ export class LangChainModelFactory {
 
     const apiKey = await this.resolveCredential(provider);
     const modelOptions: ProviderModelOptions = targetModel.options ?? {};
-    const typedProvider = isLangChainProviderType(provider.type) ? toTypedProviderConfig(provider, modelOptions) : null;
     const llamaCppSamplingProfile =
       provider.type === 'llama_cpp' ? resolveLlamaCppSamplingProfile(provider, modelId, modelOptions, this.logService) : null;
-    const llamaCppParams = typedProvider?.type === 'llama_cpp' ? typedProvider.params : null;
     const temperature =
       provider.type === 'llama_cpp'
-        ? llamaCppParams?.temperature ?? llamaCppSamplingProfile?.temperature
+        ? modelOptions.temperature ?? llamaCppSamplingProfile?.temperature
         : modelOptions.temperature;
     const requestedMaxOutputTokens = options.maxOutputTokens ?? DEFAULT_RUN_MODEL_OUTPUT_TOKENS;
     if (!Number.isSafeInteger(requestedMaxOutputTokens) || requestedMaxOutputTokens <= 0) {
@@ -288,7 +284,7 @@ export class LangChainModelFactory {
     const streaming = provider.type === 'llama_cpp' ? true : requestedStreaming;
     const requestTimeoutMs = provider.type === 'llama_cpp' ? llamaCppProviderRequestTimeoutMs : providerRequestTimeoutMs;
     const contextBudgetTokens =
-      llamaCppParams?.contextBudgetTokens ?? modelOptions.contextBudgetTokens ?? DEFAULT_CONTEXT_BUDGET_TOKENS;
+      modelOptions.contextBudgetTokens ?? DEFAULT_CONTEXT_BUDGET_TOKENS;
     const maxTokens = resolveRunModelOutputTokens(
       contextBudgetTokens,
       Math.min(modelOptions.maxTokens ?? requestedMaxOutputTokens, requestedMaxOutputTokens)
@@ -319,15 +315,15 @@ export class LangChainModelFactory {
     }
 
     const modelKwargs: Record<string, unknown> = {};
-    if (typedProvider?.type === 'openai_compatible') {
-      Object.assign(modelKwargs, typedProvider.params.modelKwargs);
+    if (provider.type === 'openai_compatible') {
+      Object.assign(modelKwargs, modelOptions.modelKwargs);
     }
-    if (typedProvider?.type === 'nvidia') {
-      Object.assign(modelKwargs, buildNvidiaModelKwargs(modelId, typedProvider.params, streaming));
+    if (provider.type === 'nvidia') {
+      Object.assign(modelKwargs, buildNvidiaModelKwargs(modelId, modelOptions, streaming));
     }
-    if (typedProvider?.type === 'llama_cpp') {
+    if (provider.type === 'llama_cpp') {
       modelKwargs.cache_prompt = true;
-      Object.assign(modelKwargs, buildLlamaCppSamplingModelKwargs(typedProvider.params, llamaCppSamplingProfile));
+      Object.assign(modelKwargs, buildLlamaCppSamplingModelKwargs(modelOptions, llamaCppSamplingProfile));
     }
 
     const baseUrl = provider.type === 'nvidia' ? resolveNvidiaBaseUrl(provider) : provider.endpoint.trim();
@@ -344,15 +340,15 @@ export class LangChainModelFactory {
           : undefined;
     const openAiRequestTimeoutMs =
       provider.type === 'openai_compatible' ? provider.options?.timeoutMs ?? requestTimeoutMs : requestTimeoutMs;
-    const openAiParams = typedProvider?.type === 'openai_compatible' ? typedProvider.params : null;
+    const openAiParams = provider.type === 'openai_compatible' ? modelOptions : null;
     const openAiDefaultOptions = resolveOpenAiCompatibleDefaultOptions(openAiParams);
     const openAiReasoning = openAiParams?.reasoning;
     const openAiOrganization =
       provider.type === 'openai_compatible' ? provider.options?.organization?.trim() ?? '' : '';
-    const openAiTopP = provider.type === 'llama_cpp' ? llamaCppParams?.topP ?? llamaCppSamplingProfile?.topP : modelOptions.topP;
+    const openAiTopP = provider.type === 'llama_cpp' ? modelOptions.topP ?? llamaCppSamplingProfile?.topP : modelOptions.topP;
     const openAiPresencePenalty =
       provider.type === 'llama_cpp'
-        ? llamaCppParams?.presencePenalty ?? llamaCppSamplingProfile?.presencePenalty
+        ? modelOptions.presencePenalty ?? llamaCppSamplingProfile?.presencePenalty
         : modelOptions.presencePenalty;
     const openAiStop = provider.type === 'openai_compatible' ? openAiParams?.stop : undefined;
     const openAiFrequencyPenalty = provider.type === 'openai_compatible' ? openAiParams?.frequencyPenalty : undefined;

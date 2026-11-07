@@ -18,7 +18,6 @@ export const ROC_SHELL_TOOL_DESCRIPTION_LINES = [
   '引用工作区文件时用相对路径，或用当前系统的真实绝对路径。',
   '适合运行测试、构建、编译、脚本执行和进程类命令。'
 ] as const;
-export const ROC_SHELL_TOOL_DESCRIPTION = ROC_SHELL_TOOL_DESCRIPTION_LINES.join('\n');
 
 export type ShellPolicyReason =
   | 'virtual_workspace_path'

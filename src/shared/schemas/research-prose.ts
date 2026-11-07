@@ -56,4 +56,3 @@ export const researchProseLintReportSchema = z.object({
 }).strict();
 
 export type ResearchProseLintReport = z.infer<typeof researchProseLintReportSchema>;
-export type ResearchProseFinding = z.infer<typeof researchProseFindingSchema>;

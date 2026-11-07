@@ -132,13 +132,3 @@ class SseEventBudget {
 export function isMcpTransportLimitError(error: unknown): error is McpTransportMessageTooLargeError {
   return error instanceof McpTransportMessageTooLargeError;
 }
-
-export function isMcpTransportLimitCode(error: unknown): boolean {
-  if (error instanceof McpTransportMessageTooLargeError) {
-    return true;
-  }
-  if (error === null || typeof error !== 'object' || !('code' in error)) {
-    return false;
-  }
-  return error.code === 'mcp_inbound_message_too_large';
-}

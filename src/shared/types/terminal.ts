@@ -11,8 +11,6 @@ import type {
 } from '../schemas/ipc-workspace';
 
 export type TerminalSessionSnapshot = z.infer<typeof terminalSessionSnapshotSchema>;
-export type TerminalSessionId = TerminalSessionSnapshot['id'];
-export type TerminalSessionStatus = TerminalSessionSnapshot['status'];
 export type TerminalSessionCreateRequest = z.infer<typeof terminalSessionCreateRequestSchema>;
 export type TerminalSessionInputRequest = z.infer<typeof terminalSessionInputRequestSchema>;
 export type TerminalSessionResizeRequest = z.infer<typeof terminalSessionResizeRequestSchema>;

@@ -105,7 +105,7 @@ export function registerIpc(
   }
 
   registerPluginCapabilityIpc(timedHandle, kernel);
-  registerLegacyAppSupplementIpc(timedHandle, controls);
+  registerAppNavigationIpc(timedHandle, controls);
   registerWindowIpc(timedHandle, mainWindow, controls);
   registerRadarBrowserIpc(timedHandle, mainWindow);
   registerShellConfirmIpc(timedHandle, mainWindow, kernel.logService);
@@ -135,7 +135,7 @@ export function registerIpc(
   });
 }
 
-function registerLegacyAppSupplementIpc(timedHandle: (channel: string, handler: IpcMainHandler) => void, controls: AppWindowControls): void {
+function registerAppNavigationIpc(timedHandle: (channel: string, handler: IpcMainHandler) => void, controls: AppWindowControls): void {
   timedHandle(ipcChannels.appOpenSettings, () =>
     wrapIpc(() => {
       controls.openMainPage('settings');

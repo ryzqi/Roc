@@ -31,4 +31,3 @@ export const executionOriginSchema = z.discriminatedUnion('kind', [
 ]);
 
 export type FrozenExecutionInputs = z.infer<typeof frozenExecutionInputsSchema>;
-export type ExecutionOrigin = z.infer<typeof executionOriginSchema>;

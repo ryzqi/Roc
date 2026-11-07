@@ -11,9 +11,8 @@ export const researchToolchainStatusSchema = z.object({
 export const researchModelPacks = ['compact', 'complete'] as const;
 export type ResearchModelPack = (typeof researchModelPacks)[number];
 export const researchModelKinds = ['onnx', 'dictionary', 'tokenizer'] as const;
-export type ResearchModelKind = (typeof researchModelKinds)[number];
+
 export const researchModelStates = ['missing', 'downloading', 'verifying', 'importing', 'ready', 'incompatible', 'failed'] as const;
-export type ResearchModelState = (typeof researchModelStates)[number];
 
 export const researchModelPackStatusSchema = z.object({
   pack: z.enum(researchModelPacks),
@@ -134,7 +133,6 @@ export const researchParsedDocumentSchema = z.object({
   artifacts: z.object({ middleJson: z.string(), markdown: z.string(), structuredContent: z.string() }).strict(),
   warnings: z.array(z.string())
 }).strict();
-
 
 export const researchRenderedPdfSchema = z.object({
   path: z.string(), page: z.number().int().positive(), pageCount: z.number().int().positive(),

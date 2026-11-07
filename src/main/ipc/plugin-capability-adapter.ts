@@ -42,14 +42,11 @@ import type { IpcResult } from '../../shared/types';
 import { wrapIpc } from '../services/errors';
 import type { TimedHandle } from './ipc-common';
 
-export type PluginCapabilityDomain = GeneratedPluginCapabilityMapping['domain'];
-
 export type PluginCapabilityInvoker = {
   invokeCapability<TInput, TOutput>(name: string, input: TInput): Promise<TOutput>;
 };
 
 export type PluginCapabilityMapping = GeneratedPluginCapabilityMapping;
-
 export type PluginCapabilityAdapter = {
   invoke(preloadMethod: string, args: readonly unknown[], windowId?: number): Promise<IpcResult<unknown>>;
 };

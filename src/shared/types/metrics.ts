@@ -4,9 +4,7 @@ import type { metricFilterSchema, metricsSnapshotSchema } from '../schemas/ipc-c
 
 export type MetricsSnapshot = z.infer<typeof metricsSnapshotSchema>;
 export type Metric = MetricsSnapshot['metrics'][number];
-export type MetricType = Metric['type'];
 export type MetricFilter = z.infer<typeof metricFilterSchema>;
-
 export type HistogramStats = {
   count: number;
   sum: number;

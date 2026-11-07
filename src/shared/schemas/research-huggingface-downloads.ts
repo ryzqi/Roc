@@ -46,4 +46,3 @@ export const hfDownloadHistoryResultSchema = z.strictObject({
 export type HfDownloadStart = z.infer<typeof hfDownloadStartSchema>;
 export type HfDownloadReceipt = z.infer<typeof hfDownloadReceiptSchema>;
 export type HfDownloadRequestReceipt = z.infer<typeof hfDownloadRequestReceiptSchema>;
-export type HfDownloadedFile = z.infer<typeof hfDownloadedFileSchema>;

@@ -246,13 +246,7 @@ export function appRouteToSearch(route: AppRoute): string {
  * behaviour so the assistant panel toggle does not flood history.
  */
 export function writeAppRoute(route: AppRoute, mode: 'replace' | 'push' = 'replace'): void {
-  let url: URL;
-  try {
-    url = new URL(window.location.href);
-  } catch {
-    // A malformed location must never take the view down.
-    return;
-  }
+  const url = new URL(window.location.href);
 
   url.search = appRouteToSearch(route);
 

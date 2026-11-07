@@ -102,7 +102,8 @@ try {
   // ---- 1 启动 -------------------------------------------------------------------
   app = await electron.launch({
     executablePath: target.executablePath,
-    args: target.launchArgs,
+    // ROC_DATA_ROOT isolates application data; Chromium stores UI preferences separately.
+    args: [...target.launchArgs, `--user-data-dir=${join(dataRoot, 'chromium')}`],
     env: {
       ...process.env,
       ROC_SMOKE: '1',
@@ -348,6 +349,9 @@ try {
   await page.waitForSelector('[data-testid="settings-modal-panel"]', { state: 'detached', timeout: 15_000 });
 
   assertCheck('1 启动', '整轮没有 renderer error', rendererErrors.length === 0, rendererErrors.slice(0, 2).join(' | '));
+} catch (error) {
+  record('执行', '流程未完成', false, error instanceof Error ? error.message : String(error));
+  throw error;
 } finally {
   if (app !== undefined) {
     await app.close().catch(() => {});

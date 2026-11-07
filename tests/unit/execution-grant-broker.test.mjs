@@ -10,7 +10,7 @@ import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 const repositoryRoot = process.cwd();
 const bundleOptions = {
   platform: 'node',
-  external: ['better-sqlite3'],
+  external: ['better-sqlite3', 'yazl'],
   tempDir: join(repositoryRoot, '.runtime/tmp')
 };
 let directory;

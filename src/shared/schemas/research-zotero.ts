@@ -124,5 +124,4 @@ export const zoteroReviewSchema = z.object({
 export type ZoteroReview = z.infer<typeof zoteroReviewSchema>;
 export type ZoteroScope = z.infer<typeof zoteroScopeSchema>;
 export type ZoteroPageRequest = z.infer<typeof zoteroPageRequestSchema>;
-export type ZoteroItemsRequest = z.infer<typeof zoteroItemsRequestSchema>;
 export type ZoteroItem = z.infer<typeof zoteroItemSchema>;

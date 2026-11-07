@@ -4,7 +4,6 @@ import type {
   activeTaskItemSchema,
   backgroundTaskPreviewRequestSchema,
   backgroundTaskPreviewSchema,
-  backgroundTaskRiskSchema,
   backgroundTaskSchema,
   backgroundTaskSummarySchema,
   backgroundTaskTriggerSchema,
@@ -24,7 +23,6 @@ import type {
   updateBackgroundTaskRequestSchema
 } from '../schemas/ipc-core';
 import type {
-  guardrailTaskEventPayloadSchema,
   persistedTaskEventSchema,
   taskEventSchema
 } from '../schemas/task-event';
@@ -34,12 +32,10 @@ export type TaskKind = z.infer<typeof taskThreadSchema>['kind'];
 export type TaskThread = z.infer<typeof taskThreadSchema>;
 export type TaskEvent = z.infer<typeof taskEventSchema>;
 export type PersistedTaskEvent = z.infer<typeof persistedTaskEventSchema>;
-export type GuardrailNudgePayload = z.infer<typeof guardrailTaskEventPayloadSchema>;
 export type TaskSnapshot = z.infer<typeof taskSnapshotSchema>;
 export type TaskMessageHistoryRequest = z.infer<typeof taskMessageHistoryRequestSchema>;
 export type TaskMessageHistoryPage = z.infer<typeof taskMessageHistoryPageSchema>;
 export type TaskRun = z.infer<typeof taskRunSchema>;
-
 export type AgentOutboxEvent =
   | {
       id: string;
@@ -100,7 +96,6 @@ export type AgentOutboxEvent =
 export type TaskDeleteThreadRequest = z.infer<typeof taskDeleteThreadRequestSchema>;
 export type TaskDeleteThreadResult = z.infer<typeof taskDeleteThreadResultSchema>;
 export type BackgroundTaskTrigger = z.infer<typeof backgroundTaskTriggerSchema>;
-export type BackgroundTaskRisk = z.infer<typeof backgroundTaskRiskSchema>;
 export type BackgroundTaskPreviewRequest = z.infer<typeof backgroundTaskPreviewRequestSchema>;
 export type BackgroundTaskPreview = z.infer<typeof backgroundTaskPreviewSchema>;
 export type BackgroundTask = z.infer<typeof backgroundTaskSchema>;

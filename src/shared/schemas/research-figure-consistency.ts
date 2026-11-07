@@ -1,6 +1,5 @@
 import {z} from 'zod';
-import {researchConsistencyCalculationSchema, researchConsistencyRuleSchema, researchConsistencyHeadSchema,
-  researchConsistencyHistorySchema} from './research-consistency';
+import {researchConsistencyCalculationSchema, researchConsistencyRuleSchema, researchConsistencyHistorySchema} from './research-consistency';
 import {researchClaimSchema, researchEvidenceSchema} from './research-evidence';
 import {researchExperimentResultReceiptSchema} from './research-experiment-results';
 import {researchRelationReviewerSchema} from './research-evidence-relations';
@@ -66,7 +65,7 @@ export const researchFigureConsistencyHistorySchema = researchConsistencyHistory
 export const researchFigureConsistencyHistoryResultSchema = z.strictObject({
   verification: z.literal('stored_receipt'), items: researchFigureConsistencyReceiptSchema.array(), total: z.number().int().nonnegative()
 });
-export const researchFigureConsistencyHeadSchema = researchConsistencyHeadSchema;
+
 export type ResearchFigureConsistencyBinding = z.infer<typeof researchFigureConsistencyBindingSchema>;
 export type ResearchFigureConsistencySave = z.infer<typeof researchFigureConsistencySaveSchema>;
 export type ResearchFigureConsistencyMaterial = z.infer<typeof researchFigureConsistencyMaterialSchema>;

@@ -60,4 +60,3 @@ export type TaskContract = z.infer<typeof taskContractSchema>;
 export type TaskCriterion = z.infer<typeof taskCriterionSchema>;
 export type TaskAcceptance = z.infer<typeof taskAcceptanceSchema>;
 export type TaskHandoff = z.infer<typeof taskHandoffSchema>;
-export type ChildTaskEnvelope = z.infer<typeof childTaskEnvelopeSchema>;
