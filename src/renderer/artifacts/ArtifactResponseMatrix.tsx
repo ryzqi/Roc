@@ -60,7 +60,7 @@ export function ArtifactResponseMatrix({client, snapshot, writable, locked: exte
       <button type="button" className={`${button} self-start`} disabled={locked || result.status !== 'current'}
         data-testid="artifact-response-edit" onClick={() => setEditing(value => !value)}>{editing ? '收起矩阵编辑' : '编辑审稿矩阵'}</button>
       {!editing ? null : <ResponseMatrixEditor key={result.reportHash} client={client} snapshot={snapshot} report={result.report}
-        writable={writable && !externalLocked && result.status === 'current'}
+        writable={writable && result.report.canEdit && !externalLocked && result.status === 'current'}
         onDirty={value => {setDirty(value); onDirty(value);}} onPending={value => {setPending(value); onPending(value);}} onSaved={onSaved}/>}
     </>}
     <button type="button" className={`${button} self-start`} disabled={locked || history.status === 'loading'}

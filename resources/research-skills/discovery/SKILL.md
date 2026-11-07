@@ -7,3 +7,5 @@ description: 将研究目标转为可执行且可验证的研究问题与检索�
 检索已有知识和证据；记录查询式、同义词、数据源与停止条件。
 输出结构化 searchPlan：researchQuestion 逐字保留本次 instruction，refinedQuestion、keywords、synonyms、domain、excludedTerms 标为建议；queries 最多3组，固定来源、查询式、时间窗、条数与页数。原始问题不得替换为模型改写。
 检索策略须由用户通过现有 discovery 闸门批准后，才进入下一阶段。不得编造文献、DOI、实验结果或来源定位。
+
+说明研究类型（综述、方法论文或实验报告）与选择依据；无法判定时保留未知。列出明确不回答的问题、排除原因和覆盖不足，不能用未检索到的结果证明不存在。

@@ -10,6 +10,8 @@ import { RunBudgetObserver } from '../../services/deep-agent/run-budget-observer
 import { createRunBudgetMiddleware } from '../../services/deep-agent/run-budget-middleware';
 import type {ResearchTaskContext} from '../../../shared/schemas/research-task-facts';
 import {createResearchTaskContextMiddleware} from '../../services/deep-agent/research-task-context-middleware';
+import {scientificReviewHash} from './verification/scientific-review';
+import {scientificCriteria} from '../../../shared/schemas/research-scientific-review';
 
 export type ResearchRoleExecution = {
   run: ResearchStageRun;
@@ -50,7 +52,10 @@ export function createResearchRoleExecutor(factory: AgentModelFactoryAdapter, le
           const agent = createAgent({
             model,
             tools: input.tools,
-            middleware: [createResearchTaskContextMiddleware(input.loadTaskContext),
+            middleware: [createResearchTaskContextMiddleware(() => {
+              const context = input.loadTaskContext();
+              return input.run.stage === 'review' && input.run.parentRunId !== null ? null : context;
+            }),
               createRunBudgetMiddleware(ledger, input.run.id, limits, observer)],
             systemPrompt: [
               `你是 Roc 科研工作流的 ${input.run.role}，只负责 ${input.run.stage} 阶段。`,
@@ -76,6 +81,12 @@ export function createResearchRoleExecutor(factory: AgentModelFactoryAdapter, le
                 '完成本阶段前必须发布真实导出作业。结构化输出会记录到已发布的交付工件。'
               ] : []),
               '输出 title、markdown、claims、sections、verdict。无内容的数组使用 []。正文 sections 用 claimIndexes 引用本次 claims 中受证据支持的段落。',
+              ...(input.context.scientificInput === undefined || input.run.parentRunId === null ? [] : [
+                '你是独立只读审核者，不能使用作者工作记录或其他审核者报告。claims/sections 必须为空。scientificReview.inputHash 必须原样复制给定哈希。',
+                input.run.role === 'evidence-reviewer'
+                  ? 'scientificReview.kind=verifier；对冻结稿件每个 claim 输出一个 suggestion，分类 factual/comparative/numerical/causal/experimental/novelty/hypothesis，逐项检查对应条件。所有引用给出固定 sourceDigest 和 excerpt 的准确 UTF-16 start/end/quote。保留反证、负结果、替代解释和限定条件；缺少证据不得 supports。未搜索完必须说明范围；未发现反例不证明不存在。不得填写 confidence 或宣称 verified。'
+                  : 'scientificReview.kind=reviewer；coveredClaimIds 覆盖冻结稿件。findings 分别给出 severity、category、claimIds、原始 references、observation、action 和 acceptance。无意见须说明 noFindingsRationale。finding 驱动人工修订，不代替证据 verdict 或人工批准。'
+              ]),
               ...(input.run.stage === 'discovery' ? [
                 '必须输出 searchPlan。researchQuestion 逐字复制本次 instruction；refinedQuestion、keywords、synonyms、domain、excludedTerms 是模型建议。queries 给出最多3组明确查询、来源、limit、maxPages 和需要的 yearFrom/yearTo。原始问题与建议不得混写；用户批准此工件后检索只执行这些固定查询。'
               ] : []),
@@ -89,6 +100,12 @@ export function createResearchRoleExecutor(factory: AgentModelFactoryAdapter, le
           const result = await agent.invoke({
             messages: [{ role: 'user', content: JSON.stringify({
               instruction: input.run.instruction, project: input.context.project,
+              ...(input.context.scientificInput === undefined ? {} : {
+                scientificInputHash: scientificReviewHash(input.context.scientificInput), scientificCriteria,
+                manuscriptArtifactId: input.context.scientificInput.manuscript.artifactId,
+                claimCount: input.context.scientificInput.claims.length, evidenceCount: input.context.scientificInput.evidence.length,
+                materialInstructions: 'read_artifact 分页读取稿件和 claims/claimHash；list_evidence + inspect_evidence_source 读取冻结原文及 sourceDigest；list_evidence_relations 读取反证。研究类型与主张类型是待人工审核的分类建议。'
+              }),
               inputs: input.context.inputs.map((entry) => entry.artifact),
               reviewReports: input.context.reviewReports.map((report) => ({
                 role: report.role, artifactId: report.artifactId, title: report.output.title, verdict: report.output.verdict

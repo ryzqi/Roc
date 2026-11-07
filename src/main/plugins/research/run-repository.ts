@@ -26,11 +26,13 @@ import type {ConsumedResearchDispatchGrant} from '../../services/deep-agent/exec
 import {assertResearchDispatchGrant} from '../../services/deep-agent/execution-grant-broker';
 import {researchDispatchRequestHash} from '../../services/research-dispatch-context';
 import {executionInputVersionSchema} from '../../../shared/schemas/execution';
+import {scientificReviewInputSchema} from '../../../shared/schemas/research-scientific-review';
 
 const executionContextSchema = z.object({
   project: researchProjectSchema,
   skillInstructions: z.string().min(1),
   skillPin: researchSkillPinSchema,
+  scientificInput: scientificReviewInputSchema.optional(),
   inputVersions: z.array(executionInputVersionSchema),
   reviewReports: z.array(z.object({ role: z.string(), runId: z.string(), artifactId: z.string(), output: researchStageOutputSchema }).strict()),
   inputs: z.array(z.object({
@@ -54,7 +56,8 @@ export function freezeStageInputs(run: ResearchStageRun, context: ResearchExecut
     versions: [
       ...run.skillIds.map(id => ({kind: 'skill' as const, id, hash: run.skillHash})),
       ...context.inputVersions,
-      {kind: 'context' as const, id: run.id, hash: hashStageValue({project: context.project, skillInstructions: context.skillInstructions, skillPin: context.skillPin, inputs: context.inputs})}
+      {kind: 'context' as const, id: run.id, hash: hashStageValue({project: context.project, skillInstructions: context.skillInstructions, skillPin: context.skillPin, inputs: context.inputs,
+        ...(context.scientificInput === undefined ? {} : {scientificInput: context.scientificInput})})}
     ]
   };
 }
@@ -250,14 +253,16 @@ export class ResearchRunRepository {
       const context = this.getContext(parent.id);
       const cycle = this.research.reviews.requireForStage(projectId, 'review');
       if (cycle === null) throw new Error('research_review_cycle_missing');
-      const inputs = context.inputs.filter(({ artifact }) => artifact.kind !== 'review_report' &&
-        (artifact.kind !== 'manuscript' || artifact.id === cycle.manuscriptArtifactId));
+      const inputs = context.inputs.filter(({ artifact }) =>
+        (artifact.kind === 'manuscript' && artifact.id === cycle.manuscriptArtifactId) ||
+        artifact.kind === 'experiment_run' || artifact.kind === 'figure')
+        .map(input => ({...input, output: null, ideaCanvas: null}));
       return researchReviewRoles.map(({ role, focus }) => {
         const skillInstructions = `${context.skillInstructions}\n\n本角色职责：${focus}\n不得读取其他评审角色的报告。`;
         const child: ResearchStageRun = {
           ...parent, id: `research_run_${randomUUID()}`, parentRunId: parent.id, retryOfRunId: null,
           requestId: `${parent.id}:${role}`, role, status: 'queued', instruction: `${parent.instruction}\n${focus}`,
-          toolNames: parent.toolNames.filter((name) => name !== 'read_review_report'),
+          toolNames: parent.toolNames.filter((name) => !['read_review_report', 'read_source_migrations', 'read_source_replacements'].includes(name)),
           inputArtifactIds: inputs.map((entry) => entry.artifact.id),
           skillHash: hashStageValue({pin: context.skillPin, instructions: skillInstructions}), outputArtifactIds: [],
           providerId: null, modelId: null, modelVersion: null, error: null, createdAt: this.now(), startedAt: null, endedAt: null
@@ -305,6 +310,8 @@ export class ResearchRunRepository {
       if (child.parentRunId !== parent.id || child.status !== 'completed' || !artifactIds.includes(report.artifactId)) {
         throw new Error('research_review_panel_incomplete');
       }
+      const inspection = this.research.scientificReviews.inspect(projectId, report.artifactId);
+      if (inspection.status !== 'current') throw new Error('research_scientific_review_stale');
     }
   }
 
@@ -342,6 +349,12 @@ export class ResearchRunRepository {
     return this.db.transaction(() => {
       const run = this.requireActive(id, projectId);
       if (run.status !== 'running') throw new Error('research_run_not_started');
+      if (run.stage === 'review' && run.parentRunId !== null) {
+        const input = this.getContext(run.id).scientificInput;
+        if (input === undefined || output.scientificReview === undefined) throw new Error('research_scientific_review_required');
+        if (output.claims.length > 0 || output.sections.length > 0) throw new Error('research_reviewer_readonly');
+        this.research.scientificReviews.validate(run, input, output.scientificReview);
+      } else if (output.scientificReview !== undefined) throw new Error('research_scientific_review_role_invalid');
       if (run.stage === 'discovery') {
         if (output.searchPlan === undefined) throw new Error('research_search_plan_required');
         if (output.searchPlan.researchQuestion !== run.instruction) throw new Error('research_search_question_changed');
@@ -458,7 +471,8 @@ export class ResearchRunRepository {
     const skill = researchSkills.load(stage);
     return {
       project: this.research.getProject(projectId), skillInstructions: skill.instructions, skillPin: skill.pin, reviewReports: [],
-      inputs, inputVersions: this.captureInputVersions(projectId, inputs.map(input => input.artifact.id))
+      inputs, inputVersions: this.captureInputVersions(projectId, inputs.map(input => input.artifact.id)),
+      ...(stage === 'review' && cycle !== null ? {scientificInput: this.research.scientificReviews.capture(projectId, cycle.manuscriptArtifactId)} : {})
     };
   }
 
@@ -467,11 +481,12 @@ export class ResearchRunRepository {
     for (const artifactId of artifactIds) {
       const {snapshot} = this.research.inspectArtifact({projectId, artifactId, expectedVersion: null});
       const {artifact, content, origin, claims, evidence, relations, production, ideaCanvas, ideaPlan,
-        ideaOutcomes, citationReviews, consistencyReviews, responseMatrix, journalCompliance, provenance} = snapshot;
+        ideaOutcomes, citationReviews, consistencyReviews, responseMatrix, journalCompliance, provenance, scientificReview} = snapshot;
       // UI state (current stage, available actions) changes as this run starts. Only freeze input material.
       versions.set(`artifact:${artifactId}`, {kind: 'artifact', id: artifactId,
         hash: hashStageValue({artifact, content, origin, claims, evidence, relations, production, ideaCanvas,
-          ideaPlan, ideaOutcomes, citationReviews, consistencyReviews, responseMatrix, journalCompliance, provenance})});
+          ideaPlan, ideaOutcomes, citationReviews, consistencyReviews, responseMatrix, journalCompliance, provenance,
+          ...(scientificReview === undefined ? {} : {scientificReview})})});
       for (const source of evidence) versions.set(`source:${source.evidence.id}`,
         {kind: 'source', id: source.evidence.id, hash: hashStageValue(source)});
       if (ideaPlan !== null) versions.set(`plan:${artifactId}`, {kind: 'plan', id: artifactId, hash: hashStageValue(ideaPlan)});
@@ -482,6 +497,7 @@ export class ResearchRunRepository {
   }
 
   private verifyCurrentInputs(projectId: string, context: ResearchExecutionContext): void {
+    if (context.scientificInput !== undefined) this.research.scientificReviews.assertCurrent(context.scientificInput);
     const artifactIds = context.inputs.map(input => input.artifact.id);
     if (context.project.id !== projectId || artifactIds.some(id => this.research.getArtifact(id).status !== 'approved') ||
         JSON.stringify(context.inputVersions) !== JSON.stringify(this.captureInputVersions(projectId, artifactIds))) {

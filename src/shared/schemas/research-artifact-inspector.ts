@@ -12,6 +12,7 @@ import {researchCitationReviewHeadSchema} from './research-citation-reviews';
 import {researchConsistencyHeadSchema} from './research-consistency';
 import {researchResponseMatrixHeadSchema} from './research-response-matrix';
 import {researchJournalHeadSchema} from './research-journal-compliance';
+import {scientificReviewInspectionSchema} from './research-scientific-review';
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 export const researchArtifactInspectRequestSchema = z.object({
@@ -38,6 +39,7 @@ export const researchArtifactInspectionBodySchema = z.object({
   consistencyReviews: researchConsistencyHeadSchema.array(),
   responseMatrix: researchResponseMatrixHeadSchema.nullable(),
   journalCompliance: researchJournalHeadSchema.nullable(),
+  scientificReview: scientificReviewInspectionSchema.optional(),
   production: researchProductionInputSchema.shape.source.nullable(),
   provenance: researchProvenanceSchema.array(), availableActions: z.enum(['return_to_task', 'review_gate']).array().max(2)
 }).strict();

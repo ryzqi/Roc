@@ -25,6 +25,23 @@ export class ResearchResponseMatrixRepository {
     if (artifact.kind !== 'manuscript') throw new Error('research_manuscript_artifact_required');
   }
 
+  private canReviewApproved(projectId: string, artifactId: string): boolean {
+    const project = this.research.getProject(projectId);
+    return project.status !== 'archived' && project.currentStage === 'review' &&
+      this.research.getArtifact(artifactId).status === 'approved' &&
+      this.research.reviews.get(projectId)?.manuscriptArtifactId === artifactId &&
+      this.research.getWorkflow(projectId).stages.find(stage => stage.stage === 'review')?.status === 'waiting_approval';
+  }
+
+  private canEdit(projectId: string, artifactId: string): boolean {
+    if (this.canReviewApproved(projectId, artifactId)) return true;
+    const project = this.research.getProject(projectId), artifact = this.research.getArtifact(artifactId);
+    const stage = this.research.getWorkflow(projectId).stages.find(stage => stage.stage === artifact.stage);
+    return project.status !== 'archived' && artifact.status === 'draft' && project.currentStage === artifact.stage &&
+      stage !== undefined && ['ready', 'running', 'paused', 'blocked', 'failed', 'waiting_approval'].includes(stage.status) &&
+      stage.artifactIds.includes(artifactId);
+  }
+
   latest(projectId: string, artifactId: string): ResearchResponseMatrixReceipt | null {
     this.scope(projectId, artifactId);
     const row = this.db.prepare('SELECT * FROM research_response_matrices WHERE artifact_id=? ORDER BY version DESC LIMIT 1')
@@ -38,14 +55,16 @@ export class ResearchResponseMatrixRepository {
       this.scope(request.projectId, request.artifactId);
       const review = this.latest(request.projectId, request.artifactId);
       const material = this.captureMaterial(request, review?.snapshot.request.rows ?? []);
-      const reviewCurrent = review !== null && JSON.stringify(material) === JSON.stringify(review.snapshot.material);
       const rows = review?.snapshot.request.rows ?? [];
+      const scientificReviews = this.research.scientificReviews.reportsForManuscript(request.projectId, request.artifactId);
+      const reviewCurrent = review !== null && JSON.stringify(material) === JSON.stringify(review.snapshot.material) &&
+        this.research.scientificReviews.findingRowsIssue(request.projectId, request.artifactId, rows, scientificReviews) === null;
       const report = {
         schemaVersion: 1 as const, projectId: request.projectId, artifactId: request.artifactId,
         artifactVersion: this.research.inspectArtifact({
           projectId: request.projectId, artifactId: request.artifactId, expectedVersion: null
         }).snapshot.version,
-        material, review, reviewCurrent,
+        material, review, reviewCurrent, scientificReviews, canEdit: this.canEdit(request.projectId, request.artifactId),
         openCommentIds: rows.filter(row => row.status === 'open').map(row => row.commentId),
         addressedCommentIds: rows.filter(row => row.status === 'addressed').map(row => row.commentId),
         declinedCommentIds: rows.filter(row => row.status === 'declined').map(row => row.commentId)
@@ -73,7 +92,7 @@ export class ResearchResponseMatrixRepository {
         this.assertReceiptCurrent(receipt);
         return receipt;
       }
-      this.research.requireRelationReviewableArtifact(request.artifactId);
+      if (!this.canReviewApproved(request.projectId, request.artifactId)) this.research.requireRelationReviewableArtifact(request.artifactId);
       const latest = this.latest(request.projectId, request.artifactId);
       if (latest === null ? request.parent !== null :
         request.parent?.reviewId !== latest.snapshot.id || request.parent.reviewHash !== latest.snapshotHash) {
@@ -87,7 +106,9 @@ export class ResearchResponseMatrixRepository {
       }
       if (latest !== null && latest.snapshot.request.rows.some(row => {
         const next = request.rows.find(next => next.commentId === row.commentId);
-        return next?.comment !== row.comment || next.reviewer !== row.reviewer;
+        return next?.comment !== row.comment || next.reviewer !== row.reviewer ||
+          next.finding?.artifactId !== row.finding?.artifactId || next.finding?.reportHash !== row.finding?.reportHash ||
+          next.finding?.findingId !== row.finding?.findingId;
       })) throw new Error('research_response_comment_changed');
       const material = this.captureMaterial(request, request.rows);
       const snapshot = researchResponseMatrixReceiptSchema.shape.snapshot.parse({
@@ -95,6 +116,8 @@ export class ResearchResponseMatrixRepository {
         request, actor, recordedAt: this.now(), material
       });
       this.assertMaterial(snapshot);
+      const issue = this.research.scientificReviews.findingRowsIssue(request.projectId, request.artifactId, request.rows);
+      if (issue !== null) throw new Error(issue);
       const json = JSON.stringify(snapshot), snapshotHash = researchContentHash(json);
       this.db.prepare(`INSERT INTO research_response_matrices
         (id,project_id,artifact_id,version,request_id,snapshot_json,snapshot_hash,created_at) VALUES (?,?,?,?,?,?,?,?)`)
@@ -109,6 +132,8 @@ export class ResearchResponseMatrixRepository {
     if (JSON.stringify(this.captureMaterial(request, request.rows)) !== JSON.stringify(material)) {
       throw new Error('research_response_source_changed');
     }
+    const issue = this.research.scientificReviews.findingRowsIssue(request.projectId, request.artifactId, request.rows);
+    if (issue !== null) throw new Error(issue);
   }
 
   history(input: ResearchResponseMatrixHistory) {

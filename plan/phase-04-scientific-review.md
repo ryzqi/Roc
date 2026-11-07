@@ -2,7 +2,7 @@
 
 优先级：P0/P1。依赖：S01 最小独立数据、S02、S03。
 来源：WP-03/WP-08、RH-06/RH-07/RH-09/RH-16。
-实施状态：pending。建议时间：第 4～9 周。
+实施状态：complete（工程）；科学盲审未运行。详见 [执行报告](s04-execution-report.md)。建议时间：第 4～9 周。
 
 ## 目标与关口
 
@@ -22,35 +22,35 @@ writer、verifier、reviewer、人类批准各有清晰责任；科学建议不�
 
 ## 按顺序执行
 
-- [ ] **RH-06.1 确定性核验统一**：以当前服务为拥有者收敛重复引用检查，
+- [x] **RH-06.1 确定性核验统一**：以当前服务为拥有者收敛重复引用检查，
   校验 citation key、source/artifact version、locator、数值/图稿/实验映射、
   人工关系和导出审批。缺定位/过期/未审核不能被语义模型覆盖。
-- [ ] **RH-06.2 Semantic suggestion schema**：输入明确 claim ID/version、
+- [x] **RH-06.2 Semantic suggestion schema**：输入明确 claim ID/version、
   固定 evidence/source versions、反证、限定条件、研究类型和 task/run。
   输出 verdict、原文 locators、rationale、counter evidence、规则/模型/Skill hash、
   status 与输入 hash；不提供修改人工关系或 workflow approve 的能力。
-- [ ] **RH-06.3 类型化审查**：事实、比较、数值、因果、实验结果、贡献/SOTA、假设
+- [x] **RH-06.3 类型化审查**：事实、比较、数值、因果、实验结果、贡献/SOTA、假设
   各有证据条件。因果/SOTA 无充分设计或覆盖时显式 insufficient/qualifies，
   confidence 不能被当作科学概率。
-- [ ] **RH-07.1 反证覆盖**：支持与反驳、负结果及替代解释进入同一审查输入；
+- [x] **RH-07.1 反证覆盖**：支持与反驳、负结果及替代解释进入同一审查输入；
   没找到反例标记检索覆盖，不能把“未发现”写成不存在。
-- [ ] **RH-07.2 失效合同**：claim、正文、source、解析、evidence 或规则版本改变时
+- [x] **RH-07.2 失效合同**：claim、正文、source、解析、evidence 或规则版本改变时
   原 suggestion 失效，保留历史与审计，下一次输出重新核验。
-- [ ] **RH-09.2 科研判断规则**：discovery 明确问题/排除，ideation 明确竞争假设/
+- [x] **RH-09.2 科研判断规则**：discovery 明确问题/排除，ideation 明确竞争假设/
   失败条件，planning 明确变量、对照、指标、预算与停止条件。
   fatal flaw、method fit、evidence sufficiency、novelty support、reproducibility、
   writing integrity 都有原始证据引用和可执行动作。
-- [ ] **RH-16.1 独立 Reviewer**：只读冻结稿件、证据、反例、实验和标准，
+- [x] **RH-16.1 独立 Reviewer**：只读冻结稿件、证据、反例、实验和标准，
   不共享 writer 推理上下文、不直接改批准稿、不授予额外工具。
   Reviewer 与 verifier 的输出不同：finding 驱动修订，verdict 驱动证据核验。
-- [ ] **RH-16.2 Finding/修订闭环**：finding 保存 severity、claim/evidence、
+- [x] **RH-16.2 Finding/修订闭环**：finding 保存 severity、claim/evidence、
   reviewer、source/artifact versions、action、status。
   finding → revision task → 修改位置 → reverify → 人工接受/退回可追踪，
   旧意见不被新稿静默覆盖。
-- [ ] **RH-16.3 Quality gate**：确定性门阻断真实违规；
+- [x] **RH-16.3 Quality gate**：确定性门阻断真实违规；
   语义建议进入人工批准。经独立评测决定是否启用更强语义门，
   不由模型直接终止研究、推进阶段或批准公开发布。
-- [ ] **RH-07.3 现有 UI 合同**：返回工件检查器所需原文定位、反证、失效和人工动作
+- [x] **RH-07.3 现有 UI 合同**：返回工件检查器所需原文定位、反证、失效和人工动作
   数据；S07 完整核验布局/焦点，后端合同本阶段同步必要消费者。
 - [ ] **RH-06/16.4 盲审**：首批 30～50 条 claim pilot，最终目标 300 条；
   覆盖综述、方法论文、实验报告，报告支持 precision/recall、反证漏检、

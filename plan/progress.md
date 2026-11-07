@@ -480,3 +480,42 @@ smoke 为 dist-main-fallback / full=false，未运行完整应用包验收。
 
 接下来提交 S03 并实施 S04。S01 独立科学材料、双审与费用授权仍缺失，
 不把工程 fixture 当作科学收益，也不将 S09 的独立立项条件视作已满足。
+
+## 2026-11-07：S04 开始
+
+S03 提交 `f62ce04`，提交后工作区干净；53 个本地文档链接与两轮证据 hash 核对通过。
+S04 先完成确定性合同、冻结语义建议、独立 finding 与人工修订关联；独立 claim pilot
+和真实模型盲审依赖 S01 材料，当前没有新增科学/外部调用授权。
+当前审稿三子角色已分别实例化、只读且不能读取其他报告，保留此执行路径。
+缺口为结构化输出、输入绑定记录及来源/稿件变化失效；将接到现有 run complete、
+工件检查器和 response matrix，不创建第二个审核事实源。
+
+S04 已接通冻结 scientificInput、typed verifier/reviewer、准确原文定位、反证覆盖、
+版本失效、独立只读工具、finding 与 response matrix 的人工处置及跨修订追踪。
+必要 UI 已同步到原工件检查器；未新增壳或路由。既有引用/证据/矩阵专项 51 项、
+新科学审查 6 项通过；矩阵旧 UI 8 项与新增独立意见 UI 1 项分别通过。
+新增 UI 首轮在原生 details 展开动画结束前断言失败，改为等待可见内容后通过；
+截图仍可能处于 160ms 展开动画中，完整验收后需补稳定截图。
+完整 S04 验收正在串行运行，目录
+`.artifacts/research-harness/S04/2026-11-06T19-16-40.659Z/`，尚不能标为通过。
+
+S04 全量验收结果已回收：unit 1552/1552，typecheck、skills、IPC、Harness 94/94、
+review workflow、build、renderer chunks、Electron smoke 13/13 全 exit 0。首轮
+renderer 为 446/450，四项失败位于 lifecycles 与 review-quality-assessment；
+日志含超时和 browser closed，耗时约 6.5 小时，不能据此断定业务根因。
+正以 `node --test --test-concurrency=1 tests/renderer/lifecycles.test.mjs tests/renderer/review-quality-assessment.test.mjs`
+串行复核，cwd 仓库根，日志 `/tmp/roc-s04-renderer-isolated.log`；尚未结束。
+已核对原采集全部日志 hash，生产源码未变；仅 response-matrix renderer 用例新增
+等待 details 展开动画完成与截图前滚动到可见处，随后补验该文件。
+原始报告保留为 failed；不改写首轮失败结论。
+恢复期间 notes/history 后端仍不可用，按本项目计划与同会话本地记录恢复；
+S05 查询误用不存在 glob 与 `src/main/services/literature-tools.ts`，后续按 scoped rg 定位。
+
+S04 renderer 补验完成：两份失败文件串行 40/40，通过日志收录至
+`.artifacts/research-harness/S04/renderer-recheck/isolated.log`；矩阵专项 9/9、exit 0。
+浅色/深色 560px 展开详情截图已复核：原文、反证、条件、替代解释与键盘焦点可见，
+无横向溢出。补验 report 验证原采集日志 hash，生产源码未变，仅矩阵测试等待动画变化。
+首轮 renderer 446/450 的超时/关闭原因未在串行复测复现，保留环境稳定性限制。
+
+S04 工程交付报告 `s04-execution-report.md` 完成；工程范围 Verified passing。
+原 renderer 全量失败与串行复测结果分别登记，科学盲审仍未运行；随后提交并进入 S05。

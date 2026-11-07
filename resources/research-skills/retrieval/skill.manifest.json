@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "roc-literature-retrieval",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "stage": "retrieval",
   "description": "多源查找文献并建立可追溯的证据集。",
   "entry": {
@@ -19,7 +19,7 @@
   "source": {
     "kind": "project",
     "origin": "Roc/resources/research-skills/retrieval",
-    "revision": "s03-1.0.0",
+    "revision": "s04-1.1.0",
     "hash": "d84cd4e71edda4e73096cf333339ae2d8760fbb5dbca69987096ecdd88060d28"
   },
   "inputs": {
@@ -27,8 +27,8 @@
     "hash": "7898f7a36053375c323b8817abf2ff30409b58e4d94d669a407e83145c74d310"
   },
   "outputs": {
-    "schema": "researchStageOutput/v1",
-    "hash": "f69152a9e196b60d4e29bebcc4314ad8e3e6db79704a2c44a666d4102f3295ff",
+    "schema": "researchStageOutput/v2",
+    "hash": "9f70097a33465c53b6dd411aa2a71f39285eb53ea60fbd42dc0bacbd95cde22e",
     "artifactKind": "source_corpus"
   },
   "requiredCapabilities": [

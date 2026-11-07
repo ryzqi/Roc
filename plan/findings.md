@@ -204,3 +204,13 @@ tool，其他输入仍进入消息流；Core 1.2.20 的 assembled output 无条�
   `ResearchReviewRepository` 只通过明确人工 accept/revise 推进；保留这两个事实拥有者。
   当前 stage output 只有通用 verdict 和文本，没有结构化 semantic suggestion/finding。
   S04 在这些所有者上接入独立、可失效的建议及修订关联，不创建第二个 Evidence ledger。
+
+### S05 入口预查（S04 验收期间，只读）
+
+- 当前 `research-search-plan.ts` 没有 schemaVersion、稳定 query ID 或 perspectives，
+  `LiteratureExecutionContext.queryIndex` 仍按数组下标授权；ImportService 实际发请求前
+  对 query JSON 严格比较、每页复核 assertCurrent，既有边界需保留并切换为 ID。
+- `literature-fusion.ts` 已记录原始 provider rank、RRF k=60/version=1、来源权重、
+  元数据冲突/DOI/别名/arXiv 版本；标题不建立身份。无需再造 identity system。
+- Search ledger 和 immutable pool 已保存 execution/request/strategy、每次 transport
+  receipt、unknown interrupted 状态及原始 provider records。S05 在这些拥有者扩展。

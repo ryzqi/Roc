@@ -56,6 +56,7 @@ import {ResearchConsistencyRepository} from './consistency-repository';
 import {ResearchResponseMatrixRepository} from './response-matrix-repository';
 import {ResearchJournalComplianceRepository} from './journal-compliance-repository';
 import {ResearchFigureConsistencyRepository} from './figure-consistency-repository';
+import {ResearchScientificReviewService} from './verification/scientific-review';
 import { ResearchKnowledgeRepository, type KnowledgeSourceWrite } from './knowledge-repository';
 import type { ResearchTaskRepository } from './research-task-repository';
 import {researchArtifactInspectionBodySchema, researchArtifactInspectResultSchema,
@@ -106,6 +107,7 @@ export class ResearchRepository {
   readonly responseMatrix: ResearchResponseMatrixRepository;
   readonly consistency: ResearchConsistencyRepository;
   readonly figureConsistency: ResearchFigureConsistencyRepository;
+  readonly scientificReviews: ResearchScientificReviewService;
   readonly knowledge: ResearchKnowledgeRepository;
   private knowledgeWriter: ((input: KnowledgeSourceWrite, sourceMetadata?: Record<string, unknown>) => Promise<ResearchKnowledgeDocument>) | null = null;
   private readonly pendingKnowledgeWrites: Array<{ input: KnowledgeSourceWrite; sourceMetadata: Record<string, unknown> }> = [];
@@ -148,6 +150,7 @@ export class ResearchRepository {
     this.responseMatrix = new ResearchResponseMatrixRepository(db, this, now);
     this.consistency = new ResearchConsistencyRepository(db, this, now);
     this.figureConsistency = new ResearchFigureConsistencyRepository(db, this, now);
+    this.scientificReviews = new ResearchScientificReviewService(this);
     this.knowledge = new ResearchKnowledgeRepository(db, (id) => { this.getProject(id); }, now);
   }
 
@@ -405,6 +408,7 @@ export class ResearchRepository {
         artifact, projectStatus: project.status, currentStage: project.currentStage,
         stage, content, origin, claims, evidence, relations,
         production, ideaCanvas, ideaPlan, ideaOutcomes, citationReviews, consistencyReviews, responseMatrix, journalCompliance,
+        ...(content?.output.scientificReview === undefined ? {} : {scientificReview: this.scientificReviews.inspect(project.id, artifact.id)}),
         provenance: rows.map(toProvenance), availableActions
       });
       const version = createHash('sha256').update(JSON.stringify(body)).digest('hex');

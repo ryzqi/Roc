@@ -235,3 +235,5 @@ export {taskFactCapabilities, registerTaskFactCapabilities} from '../../../src/m
 export {ResearchTaskDiagnosticsExporter} from '../../../src/main/plugins/research/task-diagnostics-export';
 export {AgentRunTelemetryAccumulator} from '../../../src/main/plugins/agent/run-telemetry';
 export {AgentRunEventLog} from '../../../src/main/plugins/agent/run-event-log';
+export {scientificReviewHash} from '../../../src/main/plugins/research/verification/scientific-review';
+export {scientificReviewOutputSchema, scientificCriteria} from '../../../src/shared/schemas/research-scientific-review';

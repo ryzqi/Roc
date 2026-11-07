@@ -200,10 +200,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
           {!responseOpen ? null : <Suspense fallback={<p role="status">正在加载审稿矩阵…</p>}>
             <ResponseMatrix key={`${snapshot.artifact.id}:${snapshot.version}`} client={client} snapshot={snapshot}
               locked={otherLocked || consistencyLocked || figureLocked || journalLocked || exportLocked}
-              writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived' &&
-                snapshot.artifact.status === 'draft' && snapshot.currentStage === snapshot.artifact.stage &&
-                snapshot.stage.artifactIds.includes(snapshot.artifact.id) &&
-                ['ready', 'running', 'paused', 'blocked', 'failed', 'waiting_approval'].includes(snapshot.stage.status)}
+              writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived'}
               onDirty={setResponseDirty} onPending={setResponsePending}
               onSaved={() => {setResponsePending(false); setResponseDirty(false); baseline.current = null; reading.save(); read.reload();}}/>
           </Suspense>}

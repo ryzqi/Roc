@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { researchArtifactKindSchema, researchStageSchema } from './research';
 import { researchIdeaCanvasContentSchema } from './research-ideas';
 import { researchSearchPlanSchema } from './research-search-plan';
+import {scientificReviewOutputSchema} from './research-scientific-review';
 import { executionNodeBindingSchema, executionOriginSchema, frozenExecutionInputsSchema } from './execution';
 
 export const stageExecutionSnapshotSchema = z.object({
@@ -52,6 +53,7 @@ export const researchStageOutputSchema = z.object({
   }).strict()).max(100),
   ideaCanvas: researchIdeaCanvasContentSchema.optional(),
   searchPlan: researchSearchPlanSchema.optional(),
+  scientificReview: scientificReviewOutputSchema.optional(),
   verdict: z.enum(['ready', 'revise', 'uncertain'])
 }).strict();
 

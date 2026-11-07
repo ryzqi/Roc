@@ -22,6 +22,12 @@ export function ResponseMatrixRow({row, original, snapshot, report, disabled, on
   const sources = [...new Map([...snapshot.evidence, ...report.material.evidence].map(source => [source.evidence.id, source])).values()];
   const candidate = (): void => {onCandidate(true); setValidation(null);};
   const clear = (): void => {setClaimId(''); setStart(''); setEnd(''); setValidation(null); onCandidate(false);};
+  const findingLink = row.finding;
+  const originalReview = report.scientificReviews.find(review => review.artifactId === findingLink?.artifactId);
+  const finding = originalReview?.output.kind === 'reviewer'
+    ? originalReview.output.findings.find(item => item.id === findingLink?.findingId) : undefined;
+  const verifiers = report.scientificReviews.filter(review => review.status === 'current' &&
+    review.manuscriptArtifactId === report.artifactId && review.output.kind === 'verifier');
   return <fieldset disabled={disabled} className="flex min-w-0 flex-col gap-3" data-testid="artifact-response-row">
     <legend className="mb-2 break-all font-medium">意见 {row.commentId}</legend>
     <label className="flex min-w-0 flex-col gap-1 text-muted">审稿人{original ? '（原始记录，只读）' : ''}
@@ -32,12 +38,28 @@ export function ResponseMatrixRow({row, original, snapshot, report, disabled, on
       <textarea required maxLength={12000} rows={4} aria-label="原始审稿意见" className={textarea} readOnly={original} value={row.comment}
         onChange={event => onChange({...row, comment: event.target.value})}/>
     </label>
+    {finding === undefined ? null : <div className="flex min-w-0 flex-col gap-1" data-testid="artifact-response-linked-finding">
+      <p className="text-muted">{originalReview?.status === 'stale' ? '历史审稿意见' : '独立审稿意见'}</p>
+      <p className="break-words">修改建议：{finding.action}</p><p className="break-words">验收条件：{finding.acceptance}</p>
+    </div>}
     <label className="flex min-w-0 flex-col gap-1 text-muted">人工处理状态
       <select aria-label="人工处理状态" className={input} value={row.status}
-        onChange={event => onChange({...row, status: event.target.value as Row['status']})}>
+        onChange={event => onChange({...row, status: event.target.value as Row['status'],
+          ...(findingLink === undefined ? {} : {finding: {...findingLink, reverification: event.target.value === 'addressed' ? findingLink.reverification : null}})})}>
         {Object.entries(responseStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select>
     </label>
+    {findingLink === undefined || row.status !== 'addressed' ? null : <label className="flex min-w-0 flex-col gap-1 text-muted">当前稿件核验记录
+      <select required aria-label="当前稿件核验记录" className={input}
+        value={verifiers.some(review => review.artifactId === findingLink.reverification?.artifactId && review.reportHash === findingLink.reverification.reportHash)
+          ? findingLink.reverification!.artifactId : ''} onChange={event => {
+          const verifier = verifiers.find(review => review.artifactId === event.target.value);
+          onChange({...row, finding: {...findingLink, reverification: verifier === undefined ? null : {artifactId: verifier.artifactId, reportHash: verifier.reportHash}}});
+        }}>
+        <option value="">{verifiers.length === 0 ? '当前稿件尚无有效核验记录' : '选择核验记录'}</option>
+        {verifiers.map(review => <option key={review.artifactId} value={review.artifactId}>{review.producer.role} / {review.producer.modelId}</option>)}
+      </select>
+    </label>}
     <label className="flex min-w-0 flex-col gap-1 text-muted">审稿回复或未采纳理由
       <textarea required={row.status !== 'open'} maxLength={12000} rows={5} aria-label="审稿回复或未采纳理由"
         className={textarea} value={row.response} onChange={event => onChange({...row, response: event.target.value})}/>

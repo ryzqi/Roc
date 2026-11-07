@@ -15,7 +15,7 @@ import type { ResearchProductionEffectService } from './production-effects';
 import type { ResearchRepository } from './repository';
 import type { ResearchExecutionContext } from './run-repository';
 import { requireConfirmedSearchStrategy } from './search-strategy';
-import {relationSourceDigest} from './evidence-relation-repository';
+import {relationClaimHash, relationSourceDigest} from './evidence-relation-repository';
 
 export function createResearchRoleTools(input: {
   run: ResearchStageRun;
@@ -47,6 +47,13 @@ export function createResearchRoleTools(input: {
     return input.effects;
   };
   const after = <T>(value: T): T => { assertActive(); return value; };
+  const scientificInput = input.run.stage === 'review' && input.run.parentRunId !== null
+    ? input.context.scientificInput : undefined;
+  const frozenEvidence = (evidenceId: string) => {
+    const source = scientificInput?.evidence.find(source => source.evidence.id === evidenceId);
+    if (source === undefined) throw new Error('research_evidence_not_in_run_inputs');
+    return source;
+  };
   const factories: Record<string, () => StructuredToolInterface> = {
     read_source_migrations: () => tool(async ({evidenceId, offset, limit}) => {
       assertActive();
@@ -64,7 +71,8 @@ export function createResearchRoleTools(input: {
         limit: z.number().int().min(1).max(8000)}).strict()}),
     inspect_evidence_source: () => tool(async ({evidenceId, offset, limit}) => {
       assertActive();
-      const source = input.repository.evidence.inspectEvidence(evidenceId, input.run.projectId);
+      const source = scientificInput === undefined ? input.repository.evidence.inspectEvidence(evidenceId, input.run.projectId)
+        : frozenEvidence(evidenceId);
       return {evidenceId, sourceDigest: relationSourceDigest(source), referenceStatus: source.referenceStatus,
         ...page(JSON.stringify(source), offset, limit)};
     }, {name: 'inspect_evidence_source', description: '分页读取当前项目的固定证据原文、parse/source版本、定位及校验。superseded来源只能核查历史，不能当作当前支持。',
@@ -72,7 +80,11 @@ export function createResearchRoleTools(input: {
         limit: z.number().int().min(1).max(8000)}).strict()}),
     list_evidence_relations: () => tool(async ({claimId, offset, limit}) => {
       assertActive();
-      const relations = input.repository.evidence.relations.list({projectId: input.run.projectId, claimId});
+      if (scientificInput !== undefined && claimId !== null && !scientificInput.claims.some(claim => claim.id === claimId)) {
+        throw new Error('research_claim_not_in_run_inputs');
+      }
+      const relations = scientificInput === undefined ? input.repository.evidence.relations.list({projectId: input.run.projectId, claimId})
+        : scientificInput.relations.filter(relation => claimId === null || relation.claimId === claimId);
       return {total: relations.length, items: relations.slice(offset, offset + limit).map(relation => ({
         id: relation.id, claimId: relation.claimId, claimVersion: relation.claimVersion,
         evidenceId: relation.evidenceId, kind: relation.kind, status: relation.status, condition: relation.condition,
@@ -116,6 +128,14 @@ export function createResearchRoleTools(input: {
       schema: z.object({ artifactId: z.string().min(1), offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(8000) }).strict() }),
     search_knowledge: () => tool(async ({ query, limit }) => {
       assertActive();
+      if (scientificInput !== undefined) {
+        const terms = query.toLocaleLowerCase().split(/\s+/u);
+        const matches = scientificInput.evidence.filter(source => terms.some(term => source.evidence.excerpt.toLocaleLowerCase().includes(term)));
+        return {scope: 'frozen_review_evidence', total: matches.length, hits: matches.slice(0, limit).map(source => ({
+          evidenceId: source.evidence.id, sourceDigest: relationSourceDigest(source),
+          excerpt: source.evidence.excerpt.slice(0, 8000), excerptChars: source.evidence.excerpt.length
+        }))};
+      }
       const result = await input.capabilities.invoke<ResearchKnowledgeSearchRequest, ResearchKnowledgeSearchResult>('research.knowledge.search', {
         projectId: input.run.projectId, query, limit, embeddingConfigId: null
       });
@@ -131,7 +151,8 @@ export function createResearchRoleTools(input: {
       schema: z.object({ chunkId: z.string().min(1) }).strict() }),
     list_evidence: () => tool(async ({ offset, limit }) => {
       assertActive();
-      const evidence = input.repository.evidence.list(input.run.projectId);
+      const evidence = scientificInput === undefined ? input.repository.evidence.list(input.run.projectId)
+        : scientificInput.evidence.map(source => source.evidence);
       return { total: evidence.length, items: evidence.slice(offset, offset + limit).map((entry) => ({
         ...entry, excerpt: entry.excerpt.slice(0, 2000), excerptChars: entry.excerpt.length
       })) };
@@ -139,7 +160,9 @@ export function createResearchRoleTools(input: {
       schema: z.object({ offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(20) }).strict() }),
     read_artifact: () => tool(async ({ artifactId, offset, limit }) => {
       const artifact = requireInput(artifactId);
-      return { artifactId, ...page(JSON.stringify(artifact), offset, limit) };
+      const material = scientificInput?.manuscript.artifactId === artifactId ? {...artifact,
+        claims: scientificInput.claims.map(claim => ({...claim, claimHash: relationClaimHash(claim)}))} : artifact;
+      return { artifactId, ...page(JSON.stringify(material), offset, limit) };
     }, { name: 'read_artifact', description: '分页读取本次运行固定的已批准输入产物，保留其原始内容和证据引用。',
       schema: z.object({ artifactId: z.string().min(1), offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(8000) }).strict() }),
     read_workspace_file: () => tool(async ({ path, offset, limit }) => {

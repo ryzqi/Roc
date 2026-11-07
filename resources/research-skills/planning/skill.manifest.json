@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "roc-research-planning",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "stage": "planning",
   "description": "将研究假设转成方案、数据需求和验收标准。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "4537dfdf41f9b1836f989c67e9f88e6f941c612ad4670c4787f318585b118f68"
+    "hash": "88b653de8e10425e0ba816bd6de740e970a097213ebf0eb0a1f693e671bd9550"
   },
   "references": [],
   "license": {
@@ -19,16 +19,16 @@
   "source": {
     "kind": "project",
     "origin": "Roc/resources/research-skills/planning",
-    "revision": "s03-1.0.0",
-    "hash": "4537dfdf41f9b1836f989c67e9f88e6f941c612ad4670c4787f318585b118f68"
+    "revision": "s04-1.1.0",
+    "hash": "88b653de8e10425e0ba816bd6de740e970a097213ebf0eb0a1f693e671bd9550"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
     "hash": "7898f7a36053375c323b8817abf2ff30409b58e4d94d669a407e83145c74d310"
   },
   "outputs": {
-    "schema": "researchStageOutput/v1",
-    "hash": "f69152a9e196b60d4e29bebcc4314ad8e3e6db79704a2c44a666d4102f3295ff",
+    "schema": "researchStageOutput/v2",
+    "hash": "9f70097a33465c53b6dd411aa2a71f39285eb53ea60fbd42dc0bacbd95cde22e",
     "artifactKind": "research_plan"
   },
   "requiredCapabilities": [

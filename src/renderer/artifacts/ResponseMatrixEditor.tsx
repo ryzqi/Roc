@@ -20,6 +20,9 @@ export function ResponseMatrixEditor({client, snapshot, report, writable, onDirt
   const save = useAsyncAction((request: ResearchResponseMatrixSave) => client.api.research.saveResponseMatrix(request), {label: '保存审稿矩阵'});
   const change = (): void => {setDirty(true); onDirty(true); requestId.current = crypto.randomUUID(); setValidation(null); save.reset();};
   const row = rows.find(item => item.commentId === selected);
+  const availableFindings = report.scientificReviews.flatMap(review => review.output.kind === 'reviewer'
+    ? review.output.findings.filter(finding => !rows.some(row => row.finding?.artifactId === review.artifactId && row.finding.findingId === finding.id))
+      .map(finding => ({review, finding})) : []);
   return <form className="flex min-w-0 flex-col gap-3 border-t-[0.5px] border-line pt-2" data-testid="artifact-response-editor" onSubmit={event => {
     event.preventDefault();
     if (!writable || busy.current) return;
@@ -40,6 +43,23 @@ export function ResponseMatrixEditor({client, snapshot, report, writable, onDirt
     });
   }}>
     <fieldset disabled={!writable || save.pending} className="flex min-w-0 flex-col gap-3">
+      {availableFindings.length === 0 ? null : <label className="flex min-w-0 flex-col gap-1 text-muted">纳入独立审稿意见
+        <select aria-label="纳入独立审稿意见" className={`${formInputClass} border-[0.5px]`} value=""
+          disabled={!writable || save.pending || candidateDirty || rows.length >= 200} onChange={event => {
+            const item = availableFindings.find(item => `${item.review.artifactId}:${item.finding.id}` === event.target.value);
+            if (item === undefined) return;
+            const commentId = crypto.randomUUID();
+            setRows(previous => [...previous, {commentId, reviewer: item.review.producer.role, comment: item.finding.observation,
+              status: 'open', response: '', locations: [], evidenceIds: [...new Set(item.finding.references.map(ref => ref.evidenceId))],
+              finding: {artifactId: item.review.artifactId, reportHash: item.review.reportHash, findingId: item.finding.id, reverification: null}}]);
+            setSelected(commentId); change();
+          }}>
+          <option value="">选择待处理意见</option>
+          {availableFindings.map(({review, finding}) => <option key={`${review.artifactId}:${finding.id}`} value={`${review.artifactId}:${finding.id}`}>
+            {review.status === 'stale' ? '历史意见：' : ''}{review.producer.role}：{finding.observation}
+          </option>)}
+        </select>
+      </label>}
       <label className="flex min-w-0 flex-col gap-1 text-muted">选择审稿意见
         <select aria-label="选择审稿意见" className={`${formInputClass} border-[0.5px]`} value={selected} disabled={!writable || save.pending || candidateDirty}
           onChange={event => setSelected(event.target.value)}>
@@ -56,7 +76,7 @@ export function ResponseMatrixEditor({client, snapshot, report, writable, onDirt
           setSelected(commentId); change();
         }}>录入新意见</button>
       {row === undefined ? null : <>
-        <ResponseMatrixRow key={`${row.commentId}:${nonce}`} row={row} original={initial.some(item => item.commentId === row.commentId)}
+        <ResponseMatrixRow key={`${row.commentId}:${nonce}`} row={row} original={row.finding !== undefined || initial.some(item => item.commentId === row.commentId)}
           snapshot={snapshot} report={report} disabled={!writable || save.pending}
           onChange={value => {setRows(previous => previous.map(item => item.commentId === value.commentId ? value : item)); change();}}
           onCandidate={value => {setCandidateDirty(value); if (value) change();}}/>

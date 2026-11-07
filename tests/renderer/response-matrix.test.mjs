@@ -8,6 +8,8 @@ import {_electron} from '@playwright/test';
 import {createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
 import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 
+import {createScientificReviewFixture} from '../unit/fixtures/scientific-review.mjs';
+
 let api, directory, app, page, active;
 const fixtures = [], errors = [], calls = [];
 const artifacts = join(process.cwd(), '.artifacts/research-optimization/response-matrix-ui');
@@ -67,9 +69,11 @@ after(async () => {
   assert.deepEqual(errors, []);
 });
 
-async function scene({long = false, waiting = false} = {}) {
-  const f = createResearchFixture(api, 'writing');
+async function scene({long = false, waiting = false, scientific = false} = {}) {
+  const f = scientific ? createScientificReviewFixture(api) : createResearchFixture(api, 'writing');
   fixtures.push(f); active = f; calls.length = 0; f.holds = new Map();
+  if (scientific) f.complete();
+  else {
   f.repository.knowledge.upsertFromSource({id: 'response-source', projectId: f.project.id, sourceType: 'file',
     sourceId: 'synthetic-measurement.md', title: 'Synthetic measurement',
     content: 'The measured difference was -4 ms.', chunks: [{content: 'The measured difference was -4 ms.', locator: 'block:0'}],
@@ -82,6 +86,7 @@ async function scene({long = false, waiting = false} = {}) {
     sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'}).outputArtifactIds[0];
   f.claim = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: f.artifactId})[0];
   if (waiting) f.repository.transitionWorkflow({projectId: f.project.id, expectedStage: 'writing', action: 'complete'});
+  }
   const handlers = new Map();
   const context = {pluginId: 'fixture', capabilities: {register(_id, descriptor, handler) {handlers.set(descriptor.name, handler);}}};
   api.registerResearchArtifactInspectorCapability(context, f.repository);
@@ -360,4 +365,56 @@ test('candidate positions refuse whole save and long controls fit narrow themes 
       await page.screenshot({path: join(artifacts, `${theme}-${state}-650.png`)});
     }
   }
+});
+
+
+test('independent opinions remain immutable and human responses bind current verification through keyboard controls', async () => {
+  const f = await scene({scientific: true});
+  assert.equal(f.repository.getArtifact(f.artifactId).status, 'approved');
+  await openReport(); await openEditor();
+  const reports = f.inspect().report.scientificReviews;
+  const reviewer = reports.find(report => report.output.kind === 'reviewer');
+  const verifier = reports.find(report => report.output.kind === 'verifier');
+  await editor().getByRole('combobox', {name: '纳入独立审稿意见'}).selectOption(`${reviewer.artifactId}:f1`);
+  assert.equal(await row().getByRole('textbox', {name: '原始审稿意见', exact: true}).getAttribute('readonly'), '');
+  assert.match(await page.getByTestId('artifact-response-linked-finding').innerText(), /Retain uncertainty/);
+  await row().getByRole('combobox', {name: '人工处理状态'}).selectOption('addressed');
+  await row().getByRole('textbox', {name: '审稿回复或未采纳理由'}).fill('Human checked the exact qualifying paragraph.');
+  await row().getByRole('combobox', {name: '选择修改稿段落'}).selectOption(f.claim.id);
+  await page.getByTestId('artifact-response-whole-paragraph').click();
+  await page.waitForFunction(() => !document.querySelector('[data-testid="artifact-response-location-add"]').disabled);
+  await page.getByTestId('artifact-response-location-add').click();
+  await editor().getByRole('textbox', {name: '矩阵修订理由'}).fill('Review the independent opinion.');
+  await page.getByTestId('artifact-response-save').click();
+  assert.equal(calls.some(call => call.method === 'saveResponseMatrix'), false);
+  await row().getByRole('combobox', {name: '当前稿件核验记录'}).selectOption(verifier.artifactId);
+  await page.getByTestId('artifact-response-save').focus(); await page.keyboard.press('Enter');
+  await editor().waitFor({state: 'hidden'});
+  const saved = f.history().items[0].snapshot.request.rows[0];
+  assert.deepEqual(saved.finding, {artifactId: reviewer.artifactId, reportHash: reviewer.reportHash, findingId: 'f1',
+    reverification: {artifactId: verifier.artifactId, reportHash: verifier.reportHash}});
+  assert.equal(f.repository.getWorkflow(f.project.id).currentStage, 'review');
+
+  await page.evaluate(request => mount(request), {...f.request, artifactId: verifier.artifactId});
+  const scientific = page.getByTestId('artifact-scientific-review');
+  await scientific.getByText('绑定当前材料，待人工判断').waitFor();
+  const summary = scientific.locator('summary').first();
+  await summary.press('Enter');
+  await scientific.getByText('替代解释：Sampling variation remains possible.', {exact: true}).waitFor();
+  await scientific.evaluate(async node => {
+    await Promise.all(node.getAnimations({subtree: true}).map(animation => animation.finished));
+  });
+  assert.match(await scientific.innerText(), /Sampling variation remains possible/);
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(theme => document.documentElement.setAttribute('data-theme', theme), theme);
+    await page.setViewportSize({width: 560, height: 900});
+    await scientific.scrollIntoViewIfNeeded();
+    await page.screenshot({path: join(artifacts, `scientific-review-${theme}.png`)});
+    assert.equal(await scientific.evaluate(node => node.scrollWidth > node.clientWidth + 1), false);
+  }
+  await page.setViewportSize({width: 1100, height: 900});
+  f.repository.evidence.invalidateChunksOf(f.evidence.documentId);
+  await page.evaluate(request => mount(request), {...f.request, artifactId: verifier.artifactId});
+  await scientific.getByText('历史意见，材料已变化').waitFor();
+  assert.match(await scientific.innerText(), /证据或来源已变化/);
 });

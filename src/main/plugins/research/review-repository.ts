@@ -51,6 +51,7 @@ export class ResearchReviewRepository {
       if (cycle === null) throw new Error('research_review_cycle_missing');
       if (decision === undefined) throw new Error('research_review_decision_required');
       this.research.runs.requireReviewPanel(projectId, artifactIds);
+      if (decision === 'accept') this.research.scientificReviews.requireFindingDispositions(projectId, cycle.manuscriptArtifactId);
       if (decision === 'revise' && cycle.revisionRound >= 2) throw new Error('research_revision_limit_reached');
       this.db.prepare('UPDATE research_review_cycles SET status = ?, report_artifact_ids_json = ?, updated_at = ? WHERE project_id = ?')
         .run(decision === 'accept' ? 'accepted' : 'revision_required', JSON.stringify(artifactIds), this.now(), projectId);
