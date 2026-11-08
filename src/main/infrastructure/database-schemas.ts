@@ -1,3 +1,4 @@
+import {researchWikiSchema} from './wiki-schema';
 import {backfillStructuredChunks} from '../plugins/research/knowledge-chunks';
 import {backfillKnowledgeKeywordsV1} from '../plugins/research/knowledge-keywords';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
@@ -2915,6 +2916,8 @@ CREATE TABLE research_knowledge_chunk_structure (
 );
 CREATE INDEX research_knowledge_child_parent ON research_knowledge_chunk_structure(parent_chunk_id);
 `, data: {dataVersion: 'structured-children-v1', migrate: backfillStructuredChunks}});
+
+researchMigrations.push({version: 70, name: 'persistent_wiki_revisions_and_compile_jobs', sql: researchWikiSchema});
 
 function applySchema(
   db: DatabaseConnection,

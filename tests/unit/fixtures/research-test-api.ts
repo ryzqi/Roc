@@ -251,3 +251,5 @@ export {ReadingTranslationService} from '../../../src/main/plugins/research/read
 export {parseRadarFeed, cosineSimilarity, plainArticleText} from '../../../src/main/plugins/research/radar-parser';
 export {fetchReadingText, publicReadingUrl} from '../../../src/main/plugins/research/reading-network';
 export * from '../../../src/shared/schemas/research-reading';
+
+export {researchWikiCapabilities, registerResearchWikiCapabilities} from '../../../src/main/plugins/research/wiki-capabilities';

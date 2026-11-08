@@ -1,3 +1,4 @@
+import {researchWikiCapabilities, registerResearchWikiCapabilities} from './wiki-capabilities';
 import {knowledgeJobSchema, knowledgeJobsListSchema, knowledgeJobRetrySchema} from '../../../shared/schemas/research-knowledge-jobs';
 import {ResearchDiagramService} from './diagram-service';
 import {researchDiagramCapability, registerResearchDiagramCapability} from './diagram-capabilities';
@@ -299,7 +300,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       required: true,
       order: 55,
       dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace'],
-      capabilities: [researchDiagramCapability, referenceCheckCapability, ...researchReadingCapabilities, ...taskFactCapabilities, researchStorageCapability, researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchIdeaPlanCapabilities, ...researchIdeaOutcomeCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchScholarlyCapabilities, ...researchResourceCapabilities, ...researchOpenReviewCapabilities, ...researchMonitorCapabilities, ...researchZenodoCapabilities, ...researchZenodoPublicationCapabilities, ...researchHuggingFaceCapabilities, ...researchHuggingFaceDownloadCapabilities, ...researchResourceAssociationCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchNotebookCapabilities, ...researchExperimentResultCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities, researchCitationCoverageCapability, ...researchCitationReviewCapabilities, ...researchConsistencyCapabilities, ...researchFigureConsistencyCapabilities, ...researchResponseMatrixCapabilities, ...researchJournalComplianceCapabilities]
+      capabilities: [researchDiagramCapability, referenceCheckCapability, ...researchReadingCapabilities, ...taskFactCapabilities, researchStorageCapability, researchArtifactInspectorCapability, researchGateReviewCapability, ...researchProjectBudgetCapabilities, ...researchTaskCapabilities, ...researchCapabilityDescriptors, ...Object.values(lifecycleCapabilities), ...researchEvidenceCapabilities, ...researchWikiCapabilities, ...researchManuscriptCapabilities, ...researchIdeaCapabilities, ...researchIdeaPlanCapabilities, ...researchIdeaOutcomeCapabilities, ...researchRunCapabilities, ...researchProductionCapabilities, ...researchLibraryCapabilities, ...researchScholarlyCapabilities, ...researchResourceCapabilities, ...researchOpenReviewCapabilities, ...researchMonitorCapabilities, ...researchZenodoCapabilities, ...researchZenodoPublicationCapabilities, ...researchHuggingFaceCapabilities, ...researchHuggingFaceDownloadCapabilities, ...researchResourceAssociationCapabilities, ...researchDocumentCapabilities, ...researchSystematicReviewCapabilities, ...researchReviewSearchCapabilities, ...researchOwnedReviewSearchCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities, ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities, ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities, researchReviewReportCapability, ...researchIndexCapabilities, ...researchExperimentCapabilities, ...researchPythonEnvironmentCapabilities, ...researchNotebookCapabilities, ...researchExperimentResultCapabilities, ...researchFigureCapabilities, ...researchExportCapabilities, ...researchProductionInputCapabilities, ...researchProseCapabilities, researchCitationCoverageCapability, ...researchCitationReviewCapabilities, ...researchConsistencyCapabilities, ...researchFigureConsistencyCapabilities, ...researchResponseMatrixCapabilities, ...researchJournalComplianceCapabilities]
     },
     initialize: async (context: RocPluginContext) => {
       // 模型选择存在 `plugin_config` 里：存储构造时还没有 context，必须在这里接上，
@@ -503,6 +504,8 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       registerResearchRunCapabilities(context, researchRepository.runs, runtime, researchRepository.reviews, options.executionGrantBroker);
       registerResearchArtifactInspectorCapability(context, researchRepository);
       registerResearchEvidenceCapabilities(context, researchRepository.evidence);
+      registerResearchWikiCapabilities(context, researchRepository.wiki);
+      researchRepository.wiki.start();
       registerResearchManuscriptCapabilities(context, researchRepository.manuscripts);
       registerResearchIdeaCapabilities(context, researchRepository.ideas);
       registerResearchIdeaPlanCapabilities(context, researchRepository.ideaPlans);
@@ -632,6 +635,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       researchIndexer.start();
     },
     shutdown: async () => {
+      await repository?.wiki.shutdown();
       await repository?.knowledgeJobs.shutdown();
       await readingDiscovery?.shutdown();
       await Promise.allSettled([radar?.shutdown(),readingTranslation?.shutdown()]);

@@ -1,3 +1,4 @@
+import {ResearchWikiRepository} from './wiki-repository';
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { Database as DatabaseConnection } from 'better-sqlite3';
@@ -109,6 +110,7 @@ export class ResearchRepository {
   readonly figureConsistency: ResearchFigureConsistencyRepository;
   readonly scientificReviews: ResearchScientificReviewService;
   readonly knowledge: ResearchKnowledgeRepository;
+  readonly wiki: ResearchWikiRepository;
   readonly knowledgeJobs: ResearchKnowledgeJobs;
   private readonly projectLanguageReady: boolean;
 
@@ -152,6 +154,7 @@ export class ResearchRepository {
     this.scientificReviews = new ResearchScientificReviewService(this);
     this.knowledgeJobs = new ResearchKnowledgeJobs(db, now);
     this.knowledge = new ResearchKnowledgeRepository(db, (id) => { this.getProject(id); }, now);
+    this.wiki = new ResearchWikiRepository(db, this.evidence, id => {this.getProject(id);}, now);
   }
 
   queueKnowledgeFromSource(input: KnowledgeSourceWrite, _sourceMetadata: Record<string, unknown> = {}): void {
