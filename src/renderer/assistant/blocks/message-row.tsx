@@ -168,15 +168,15 @@ function ChatMessageRowImpl({ message, onApprovalDecision, onResumeCheckpoint, o
           ) : null}
         </article>
       ) : (
-        <article className="flex max-w-[85%] flex-col gap-1.5 rounded-window rounded-br-control border border-line-strong bg-[var(--surface-card-hover)] px-4 py-3 shadow-[var(--shadow-card)]">
-          <p className="whitespace-pre-wrap text-ink text-[var(--font-body-size)] leading-relaxed">
+        <article className="flex max-w-[85%] flex-col gap-1.5 rounded-window rounded-br-control border-[0.5px] border-line-strong bg-[var(--surface-card-hover)] px-4 py-3 shadow-[var(--shadow-card)]">
+          <p className="whitespace-pre-wrap text-ink text-[length:var(--font-body-size)] leading-relaxed">
             {message.content}
           </p>
           {attachments.length === 0 ? null : (
             <div className="flex flex-wrap gap-1" data-testid="assistant-message-attachments">
               {attachments.map((attachment) => (
                 <span
-                  className="flex items-center gap-1 rounded-control bg-[var(--overlay-hover)] px-1.5 py-0.5 text-muted text-[var(--font-micro-size)]"
+                  className="flex items-center gap-1 rounded-control bg-[var(--overlay-hover)] px-1.5 py-0.5 text-muted text-[length:var(--font-micro-size)]"
                   key={`${attachment.name}-${attachment.sizeBytes}`}
                 >
                   <span className="max-w-[180px] truncate">{attachment.name}</span>
@@ -229,7 +229,7 @@ function StreamingText({ text, isStreaming }: { text: string; isStreaming: boole
   if (View === null) {
     // First paint before the Markdown chunk lands: show the raw text rather than a
     // spinner, so the answer never appears to stall.
-    return <p className="whitespace-pre-wrap text-[var(--font-read-size)]">{text}</p>;
+    return <p className="whitespace-pre-wrap text-[length:var(--font-read-size)]">{text}</p>;
   }
   return <View text={text} isStreaming={isStreaming} />;
 }

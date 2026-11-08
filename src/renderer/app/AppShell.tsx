@@ -580,7 +580,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
           Visible only while focused. */}
       <a
         href="#roc-main"
-        className="sr-only rounded-control border border-line bg-surface px-3 py-1 text-ink focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50"
+        className="sr-only rounded-control border-[0.5px] border-line bg-surface px-3 py-1 text-ink focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50"
         data-testid="skip-to-canvas"
       >
         跳到内容
@@ -618,7 +618,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
               type="button"
               data-testid="project-load-error-back"
               onClick={() => navigate({ ...route, projectId: null, view: DEFAULT_VIEW })}
-              className="h-[var(--control-height)] rounded-control border border-line px-3 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+              className="h-[var(--control-height)] rounded-control border-[0.5px] border-line px-3 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
             >
               返回项目列表
             </button>
@@ -686,7 +686,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
                 <p
                   role="note"
                   data-testid="project-readonly-banner"
-                  className="shrink-0 border-b border-line bg-bg-soft px-3 py-1.5 text-[var(--st-warn)] text-[var(--font-meta-size)]"
+                  className="shrink-0 border-b-[0.5px] border-line bg-bg-soft px-3 py-1.5 text-[var(--st-warn)] text-[length:var(--font-meta-size)]"
                 >
                   项目已归档，仅可阅读：无法启动阶段运行、修改产物或写入文件。恢复项目后才能继续。
                 </p>
@@ -698,7 +698,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
                       <button key={id} type="button" aria-pressed={layout.preset === id} data-testid={`layout-preset-${id}`}
                         title={id === 'focus' ? '专注工作 (⌘⇧F)' : `${label}模式`}
                         onClick={() => applyLayoutPreset(id)}
-                        className="rounded-control px-2 py-1 text-[var(--font-meta-size)] text-muted hover:bg-[var(--overlay-hover)] aria-pressed:bg-[var(--overlay-active)] aria-pressed:text-ink">
+                        className="rounded-control px-2 py-1 text-[length:var(--font-meta-size)] text-muted hover:bg-[var(--overlay-hover)] aria-pressed:bg-[var(--overlay-active)] aria-pressed:text-ink">
                         {label}
                       </button>
                     ))}

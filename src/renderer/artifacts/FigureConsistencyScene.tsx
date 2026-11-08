@@ -34,7 +34,7 @@ export function FigureConsistencyScene({client, snapshot, report, editing, writa
     {mark === undefined ? null : <>
       <p className="break-words text-muted">常量通道：{mark.constantChannels.join('，') || '无'}。无法直接映射的通道：{mark.unsupportedChannels.join('，') || '无'}。</p>
       <details className="text-muted"><summary className="cursor-pointer">完整场景编码</summary>
-        <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{mark.encoding}</pre>
+        <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{mark.encoding}</pre>
       </details>
     </>}
     {page.status === 'loading' ? <p role="status">正在读取场景数据…</p> : null}
@@ -49,7 +49,7 @@ export function FigureConsistencyScene({client, snapshot, report, editing, writa
       <ul className="flex min-w-0 flex-col gap-2" data-testid="artifact-figure-consistency-items">
         {current.report.items.map(item => <li className="min-w-0 break-words" key={JSON.stringify(item.scenePath)}>
           <p>路径 {item.scenePath.join('/')}</p>
-          <pre className="whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(item.numericFields)}</pre>
+          <pre className="whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(item.numericFields)}</pre>
           {item.unavailableFields.length === 0 ? null : <p className="text-muted">非数值字段：{item.unavailableFields.join('，')}</p>}
         </li>)}
       </ul>

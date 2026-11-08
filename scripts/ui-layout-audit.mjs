@@ -18,7 +18,7 @@ import { auditLayout, writeLayoutAudit } from '../tests/smoke/lib/electron-smoke
 import { waitForAppReady } from '../tests/smoke/lib/assertions.mjs';
 import { createSmokePaths, seedSmokeSkillSource, seedSmokeWorkspace, startSmokeProvider } from '../tests/smoke/lib/fixtures.mjs';
 
-const artifactDir = resolve('.artifacts/layout-audit');
+const artifactDir = resolve(process.env.ROC_UI_AUDIT_DIR ?? '.artifacts/layout-audit');
 mkdirSync(artifactDir, { recursive: true });
 process.env.ROC_UI_AUDIT_DIR = artifactDir;
 
@@ -48,6 +48,9 @@ const VIEWPORTS = [
 ];
 
 async function capture(page, id) {
+  // Motion opacity continues under reduced motion. Capture its settled state.
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-overlay-kind] [data-testid$="-panel"]')]
+    .every(panel => Number(getComputedStyle(panel).opacity) === 1));
   const audit = await auditLayout(page, `${currentTheme}-${id}`);
   audit.clip = await page.evaluate(`(${clipSource})({viewport: true})`);
   audit.theme = currentTheme;
@@ -55,6 +58,7 @@ async function capture(page, id) {
   audit.belowNativeMinimum = audit.viewport.width < nativeMinimum[0];
   audits.push(audit);
   assert.deepEqual(audit.viewportOverflow, [], `${id}: viewport overflow`);
+  assert.deepEqual(audit.fontSizeViolations, [], `${id}: UI text below 12px`);
   assert.equal(audit.clip.cut, 0, `${id}: clipped shadows`);
   return audit;
 }
@@ -198,6 +202,40 @@ try {
       throw new Error(`assistant columns are incomplete at ${viewport.width}px: ${JSON.stringify(layout)}`);
     }
     await capture(page, `assistant-${viewport.id}`);
+    await page.getByTestId('assistant-model-settings').hover();
+    await capture(page, `assistant-hover-${viewport.id}`);
+    await page.getByTestId('assistant-model-settings').click();
+    await page.getByTestId('assistant-model-picker').waitFor();
+    await capture(page, `assistant-models-${viewport.id}`);
+    // An empty model list still needs Escape to close only this popover.
+    await page.keyboard.press('Escape');
+    await page.getByTestId('assistant-model-picker').waitFor({state: 'detached'});
+    assert.equal(await page.getByTestId('assistant-panel').isVisible(), true, 'popover Escape keeps the assistant open');
+    if (viewport.id === 'wide') {
+      const divider = page.getByTestId('divider-assistant');
+      await divider.focus();
+      for (let index = 0; index < 12; index += 1) await page.keyboard.press('Shift+ArrowLeft');
+      await page.waitForFunction(() => {
+        const handle = document.querySelector('[data-testid="divider-assistant"]');
+        return handle.getAttribute('aria-valuenow') === handle.getAttribute('aria-valuemin');
+      });
+      await page.getByTestId('assistant-model-settings').click();
+      const menu = await page.getByTestId('assistant-model-picker').boundingBox();
+      const column = await page.getByTestId('assistant-column').boundingBox();
+      assert.ok(menu.x >= column.x && menu.x + menu.width <= column.x + column.width,
+        'model menu stays inside the minimum assistant column');
+      await capture(page, `assistant-minimum-${viewport.id}`);
+      await page.keyboard.press('Escape');
+      await divider.focus();
+      await page.keyboard.press('Home');
+    }
+    const composerInput = page.getByTestId('assistant-composer-input');
+    await composerInput.fill(Array.from({length: 30}, (_, index) => `研究笔记 ${index + 1}：保留长内容与换行。`).join('\n'));
+    const composerDimensions = await composerInput.evaluate(element => ({height: element.clientHeight, scroll: element.scrollHeight}));
+    assert.ok(composerDimensions.height <= 200 && composerDimensions.scroll > composerDimensions.height,
+      'long drafts scroll inside a bounded input');
+    await capture(page, `assistant-long-${viewport.id}`);
+    await composerInput.fill('');
 
     // Native menu navigation remains reachable while ambient drawers cover the titlebar.
     await navigate(page, `page=settings&project=${project.id}&view=latex&assistant=1`);
@@ -210,6 +248,26 @@ try {
     assert.ok(settingsBody.width >= 240, 'settings form retains a usable column');
     assert.ok(settingsBody.scrollWidth <= settingsBody.width + 1, 'settings form has no horizontal clipping');
     await capture(page, `settings-${viewport.id}`);
+    await page.getByTestId('settings-modal-scrim').click({position: {x: 4, y: 4}});
+    assert.equal(await page.getByTestId('settings-modal-panel').count(), 1, 'form backdrop does not dismiss settings');
+    await page.getByTestId('settings-section-models').click();
+    const remoteModelOpener = page.getByTestId('settings-model-pull');
+    await remoteModelOpener.click();
+    await page.getByTestId('settings-provider-models-pull-panel').waitFor();
+    await capture(page, `settings-remote-models-${viewport.id}`);
+    await page.getByTestId('settings-provider-models-pull-endpoint').fill(smokeProvider.endpoint);
+    await page.keyboard.press('Escape');
+    await page.getByTestId('settings-provider-models-pull-panel').waitFor({state: 'detached'});
+    assert.equal(await remoteModelOpener.evaluate(button => button === document.activeElement), true,
+      'nested model dialog returns focus to settings');
+    await page.getByTestId('settings-section-app').click();
+    await page.getByTestId('settings-open-at-login').click();
+    await page.keyboard.press('Escape');
+    await page.getByTestId('settings-discard-panel').waitFor();
+    await capture(page, `settings-unsaved-${viewport.id}`);
+    await page.getByTestId('settings-discard-cancel').click();
+    await page.getByTestId('settings-discard-panel').waitFor({state: 'detached'});
+    await page.getByTestId('settings-open-at-login').click();
     await page.keyboard.press('Escape');
     await page.waitForSelector('[data-testid="settings-modal-panel"]', { state: 'detached', timeout: 15_000 });
   }

@@ -60,7 +60,7 @@ export function HookCallBlock({ block }: HookCallBlockProps): React.JSX.Element 
     <ActivityBlockShell
       testId="assistant-activity-hook"
       icon={state.Icon}
-      title={`Hook · ${block.event}`}
+      title={`Hook，${block.event}`}
       statusLabel={state.label}
       tone={state.tone}
       open={open}
@@ -70,8 +70,8 @@ export function HookCallBlock({ block }: HookCallBlockProps): React.JSX.Element 
         <dl className="flex flex-col gap-0.5">
           {rows.map((row) => (
             <div key={row.label} className="flex gap-2">
-              <dt className="w-[68px] shrink-0 text-subtle text-[var(--font-micro-size)]">{row.label}</dt>
-              <dd className="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-[var(--code-text)] text-[var(--font-code-size)]">
+              <dt className="w-[68px] shrink-0 text-subtle text-[length:var(--font-micro-size)]">{row.label}</dt>
+              <dd className="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-[var(--code-text)] text-[length:var(--font-code-size)]">
                 {row.value}
               </dd>
             </div>

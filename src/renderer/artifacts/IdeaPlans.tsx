@@ -33,10 +33,10 @@ export function IdeaPlanReceipt({plan}: {plan: ResearchIdeaPlanInspection}): Rea
         <dt>审核人</dt><dd className="break-all">{freeze.actor.id}</dd>
         <dt>审核说明</dt><dd className="break-words">{freeze.request.reviewNote}</dd></>}
     </dl>
-    <p className="break-all font-mono text-muted text-[var(--font-meta-size)]">计划 SHA-256 {plan.versionHash}</p>
-    {plan.freezeHash === null ? null : <p className="break-all font-mono text-muted text-[var(--font-meta-size)]">冻结 SHA-256 {plan.freezeHash}</p>}
+    <p className="break-all font-mono text-muted text-[length:var(--font-meta-size)]">计划 SHA-256 {plan.versionHash}</p>
+    {plan.freezeHash === null ? null : <p className="break-all font-mono text-muted text-[length:var(--font-meta-size)]">冻结 SHA-256 {plan.freezeHash}</p>}
     <details><summary className="cursor-pointer">保存的方法与预期结果</summary>
-      <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(version.request.body, null, 2)}</pre>
+      <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(version.request.body, null, 2)}</pre>
     </details>
   </section>;
 }

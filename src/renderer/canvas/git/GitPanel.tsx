@@ -117,7 +117,7 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
         className="flex h-[var(--control-height-compact)] min-w-0 flex-1 items-center gap-1.5 rounded-control px-2 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
       >
         <GitBranch size={13} aria-hidden="true" className="shrink-0" />
-        <span className="min-w-0 flex-1 truncate font-mono text-left text-[var(--font-meta-size)]">
+        <span className="min-w-0 flex-1 truncate font-mono text-left text-[length:var(--font-meta-size)]">
           {currentBranch.length === 0 ? '无分支信息' : currentBranch}
         </span>
       </button>
@@ -131,7 +131,7 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
           className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control px-2 text-[var(--st-warn)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline focus-visible:outline-2"
         >
           <X size={12} aria-hidden="true" />
-          <span className="text-[var(--font-micro-size)]">取消</span>
+          <span className="text-[length:var(--font-micro-size)]">取消</span>
         </button>
       ) : (
         <button
@@ -143,7 +143,7 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
           className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control px-2 text-muted hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
         >
           <Upload size={12} aria-hidden="true" />
-          <span className="text-[var(--font-micro-size)]">Push</span>
+          <span className="text-[length:var(--font-micro-size)]">Push</span>
         </button>
       )}
       <button
@@ -173,7 +173,7 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
         aria-label="提交信息"
         rows={2}
         data-testid="git-commit-message"
-        className="w-full resize-none rounded-control border border-line bg-surface px-2 py-1.5 text-ink placeholder:text-subtle disabled:opacity-60"
+        className="w-full resize-none rounded-control border-[0.5px] border-line bg-surface px-2 py-1.5 text-ink placeholder:text-subtle disabled:opacity-60"
       />
       <div className="flex items-center gap-2">
         <button
@@ -185,7 +185,7 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
         >
           {git.pending === 'commit' ? '提交中…' : `提交（${git.snapshot?.changedFiles ?? 0} 个文件）`}
         </button>
-        <span className="min-w-0 flex-1 truncate text-muted text-[var(--font-micro-size)]">
+        <span className="min-w-0 flex-1 truncate text-muted text-[length:var(--font-micro-size)]">
           {commitState.enabled || git.pending === 'commit' ? '' : commitState.reason}
         </span>
       </div>
@@ -193,14 +193,14 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
   );
 
   const historySection = (
-    <section className="mt-3 border-t border-line-soft pt-2" data-testid="git-history">
-      <h3 className="flex items-center gap-1.5 px-1 py-0.5 text-subtle text-[var(--font-micro-size)]">
+    <section className="mt-3 border-t-[0.5px] border-line-soft pt-2" data-testid="git-history">
+      <h3 className="flex items-center gap-1.5 px-1 py-0.5 text-subtle text-[length:var(--font-micro-size)]">
         <History size={11} aria-hidden="true" />
         提交历史
       </h3>
       {git.lastCommit === null ? null : (
-        <p className="px-1 py-1 text-muted text-[var(--font-micro-size)]" data-testid="git-last-commit">
-          本次会话提交 <span className="font-mono">{git.lastCommit.commitSha.slice(0, 8)}</span> ·{' '}
+        <p className="px-1 py-1 text-muted text-[length:var(--font-micro-size)]" data-testid="git-last-commit">
+          本次会话提交 <span className="font-mono">{git.lastCommit.commitSha.slice(0, 8)}</span>，{' '}
           {git.lastCommit.commitMessage}
         </p>
       )}
@@ -209,7 +209,7 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
 
   const footer = (
     <div
-      className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 border-t border-line-soft px-1 pt-1.5 text-[var(--font-micro-size)]"
+      className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 border-t-[0.5px] border-line-soft px-1 pt-1.5 text-[length:var(--font-micro-size)]"
       data-testid="git-footer"
     >
       {rtk.status === 'idle' ? null : (
@@ -311,7 +311,7 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
   const listColumn = (
     <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-2" data-testid="git-change-scroll">
       {writable ? null : (
-        <p role="note" className="mb-1 px-1 text-[var(--st-warn)] text-[var(--font-micro-size)]" data-testid="git-readonly-note">
+        <p role="note" className="mb-1 px-1 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" data-testid="git-readonly-note">
           项目已归档，仅可阅读：暂存、提交、推送与丢弃都不可用。
         </p>
       )}
@@ -326,7 +326,7 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
       {git.diffStat !== null && git.diffStat.trim().length > 0 ? (
         <pre
           data-testid="git-diff-stat"
-          className="mb-1 overflow-x-auto rounded-control bg-code-surface px-2 py-1 font-mono text-[var(--font-micro-size)] text-[var(--code-text)]"
+          className="mb-1 overflow-x-auto rounded-control bg-code-surface px-2 py-1 font-mono text-[length:var(--font-micro-size)] text-[var(--code-text)]"
         >
           {git.diffStat.trimEnd()}
         </pre>
@@ -384,7 +384,7 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
 
       <div className="flex min-h-0 flex-1 flex-col gap-2">
         {listColumn}
-        <div className="flex min-h-[40%] flex-col border-t border-line-soft pt-1">{diffColumn}</div>
+        <div className="flex min-h-[40%] flex-col border-t-[0.5px] border-line-soft pt-1">{diffColumn}</div>
       </div>
 
       {footer}

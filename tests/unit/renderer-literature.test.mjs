@@ -109,8 +109,8 @@ test('formatAuthorList degrades honestly', () => {
   assert.equal(format.formatAuthorList([]), '作者未知');
   assert.equal(format.formatAuthorList(['  ', '']), '作者未知');
   assert.equal(format.formatAuthorList(['A. One']), 'A. One');
-  assert.equal(format.formatAuthorList(['A. One', 'B. Two']), 'A. One · B. Two');
-  assert.equal(format.formatAuthorList(['A. One', 'B. Two', 'C. Three', 'D. Four']), 'A. One · B. Two 等 4 人');
+  assert.equal(format.formatAuthorList(['A. One', 'B. Two']), 'A. One、B. Two');
+  assert.equal(format.formatAuthorList(['A. One', 'B. Two', 'C. Three', 'D. Four']), 'A. One、B. Two 等 4 人');
 });
 
 test('null metadata is rendered as absent, not as a guess', () => {

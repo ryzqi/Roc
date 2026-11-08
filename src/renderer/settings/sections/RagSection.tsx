@@ -111,7 +111,7 @@ function PatternsArea({
   }, [patterns]);
   return (
     <label className="flex flex-col gap-0.5">
-      <span className="text-subtle text-[var(--font-micro-size)]">{label}</span>
+      <span className="text-subtle text-[length:var(--font-micro-size)]">{label}</span>
       <textarea
         value={text}
         rows={4}
@@ -180,12 +180,12 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
       title="向量与 RAG"
       testId="settings-section-rag-body"
     >
-      <section className="flex flex-col gap-2 rounded-card border border-line bg-bg-soft px-3 py-2">
+      <section className="flex flex-col gap-2 rounded-card border-[0.5px] border-line bg-bg-soft px-3 py-2">
         <header className="flex flex-wrap items-center gap-2">
-          <h4 className="text-ink text-[var(--font-meta-size)]">索引（当前项目）</h4>
+          <h4 className="text-ink text-[length:var(--font-meta-size)]">索引（当前项目）</h4>
           {indexStatus === null ? null : (
-            <span className="font-mono text-subtle text-[var(--font-micro-size)]" data-testid="settings-index-status">
-              phase {indexStatus.phase} · revision {indexStatus.settings.revision} · ready {indexStatus.counts.ready}/
+            <span className="font-mono text-subtle text-[length:var(--font-micro-size)]" data-testid="settings-index-status">
+              phase {indexStatus.phase}，revision {indexStatus.settings.revision}，ready {indexStatus.counts.ready}/
               {indexStatus.counts.total}
             </span>
           )}
@@ -249,7 +249,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
                 testId="settings-index-paused"
               />
               <label className="flex w-[260px] flex-col gap-0.5">
-                <span className="text-subtle text-[var(--font-micro-size)]">嵌入配置</span>
+                <span className="text-subtle text-[length:var(--font-micro-size)]">嵌入配置</span>
                 <select
                   value={index.embeddingConfigId ?? ''}
                   onChange={(event) => {
@@ -273,9 +273,9 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
         )}
       </section>
 
-      <section className="flex flex-col gap-2 rounded-card border border-line bg-bg-soft px-3 py-2">
+      <section className="flex flex-col gap-2 rounded-card border-[0.5px] border-line bg-bg-soft px-3 py-2">
         <header className="flex flex-wrap items-center gap-2">
-          <h4 className="text-ink text-[var(--font-meta-size)]">嵌入配置（{configs.length}）</h4>
+          <h4 className="text-ink text-[length:var(--font-meta-size)]">嵌入配置（{configs.length}）</h4>
           <button
             type="button"
             data-testid="settings-embedding-add"
@@ -318,7 +318,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
 
         <ul className="flex flex-col gap-1" data-testid="settings-embedding-list">
           {configs.map((config) => (
-            <li key={config.id} className="flex flex-wrap items-center gap-2 text-[var(--font-meta-size)]">
+            <li key={config.id} className="flex flex-wrap items-center gap-2 text-[length:var(--font-meta-size)]">
               <button
                 type="button"
                 data-testid={`settings-embedding-select-${config.id}`}
@@ -335,9 +335,9 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
               >
                 {config.name || config.id}
               </button>
-              <span className="font-mono text-subtle text-[var(--font-micro-size)]">{config.model}</span>
-              <span className="text-subtle text-[var(--font-micro-size)]">
-                {config.dimensions} 维 · {config.enabled ? '启用' : '停用'} ·{' '}
+              <span className="font-mono text-subtle text-[length:var(--font-micro-size)]">{config.model}</span>
+              <span className="text-subtle text-[length:var(--font-micro-size)]">
+                {config.dimensions} 维，{config.enabled ? '启用' : '停用'}，{' '}
                 {config.keyConfigured ? '密钥已配置' : '缺少密钥'}
               </span>
             </li>
@@ -346,7 +346,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
       
 
         {form === null ? null : (
-          <div className="flex flex-col gap-2 border-t border-line pt-2" data-testid="settings-embedding-editor">
+          <div className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2" data-testid="settings-embedding-editor">
             <div className="grid grid-cols-2 gap-2">
               <TextField
                 label="标识"
@@ -428,9 +428,9 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
               >
                 保存嵌入配置
               </button>
-              <span className="text-subtle text-[var(--font-micro-size)]">
+              <span className="text-subtle text-[length:var(--font-micro-size)]">
                 {selectedConfig === null ? '新增' : `编辑 ${selectedConfig.id}`}
-                {form.dimensions === null ? ' · 保存时探测维度' : ''}
+                {form.dimensions === null ? '，保存时探测维度' : ''}
               </span>
             </div>
             {saveEmbedding.error === null ? null : (

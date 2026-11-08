@@ -17,6 +17,7 @@ import {
   type LucideIcon
 } from 'lucide-react';
 import { RadixSettingsConfirmDialog, RadixSettingsDialogShell } from './radix-dialog-pilot';
+import { formPrimaryButtonClass } from '../shared/form-ui';
 import { EmptyState } from '../shell/EmptyState';
 import type { ThemeOverride } from '../app/ui-state';
 import type { RocClient } from '../shared/roc-client';
@@ -187,7 +188,7 @@ function dirtyBarText(dirty: boolean, dirtyCount: number, savedOnce: boolean): s
   if (dirty) {
     return `未保存 ${dirtyCount} 项`;
   }
-  return savedOnce ? '没有未保存的改动 · 已保存' : '没有未保存的改动';
+  return savedOnce ? '所有修改已保存' : '没有未保存的改动';
 }
 
 export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
@@ -279,6 +280,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
         title="设置"
         onClose={props.onClose}
         beforeClose={requestClose}
+        closeOnBackdrop={false}
         widthClassName="w-[min(1100px,92vw)] h-[min(86vh,760px)]"
         testId="settings-modal"
         initialFocusRef={activeTabRef}
@@ -293,7 +295,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
             aria-orientation="vertical"
             aria-label="设置分区"
             onKeyDown={onListKeyDown}
-            className="flex max-h-[128px] w-full shrink-0 flex-col gap-0.5 overflow-y-auto border-b border-line bg-bg p-2 min-[720px]:max-h-none min-[720px]:w-[190px] min-[720px]:border-r min-[720px]:border-b-0"
+            className="flex max-h-[128px] w-full shrink-0 flex-col gap-1 overflow-y-auto border-b-[0.5px] border-line bg-[var(--material-sidebar)] p-3 min-[720px]:max-h-none min-[720px]:w-[200px] min-[720px]:border-r-[0.5px] min-[720px]:border-b-0"
             data-testid="settings-sections"
           >
             {SETTINGS_SECTIONS.map((section) => {
@@ -317,8 +319,8 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
                   data-testid={`settings-section-${section.id}`}
                   className={
                     selected
-                      ? 'flex h-10 shrink-0 items-center gap-2 rounded-card border border-line-strong bg-[var(--surface-card-hover)] px-2.5 text-left font-semibold text-ink shadow-[var(--shadow-card)]'
-                      : 'flex h-10 shrink-0 items-center gap-2 rounded-card border border-transparent px-2.5 text-left text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]'
+                      ? 'flex h-9 shrink-0 items-center gap-2.5 rounded-control bg-[var(--overlay-active)] px-2.5 text-left font-medium text-ink'
+                      : 'flex h-9 shrink-0 items-center gap-2.5 rounded-control px-2.5 text-left text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]'
                   }
                 >
                   <Icon
@@ -326,7 +328,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
                     aria-hidden="true"
                     className={selected ? 'shrink-0 text-ink' : 'shrink-0 text-subtle'}
                   />
-                  <span className="text-[var(--font-meta-size)]">{section.label}</span>
+                  <span className="text-[length:var(--font-meta-size)]">{section.label}</span>
                   {sectionDirty ? (
                     <>
                       <span
@@ -342,9 +344,9 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
             })}
           </div>
 
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col p-3">
-            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line pb-2">
-              <span className="min-w-0 flex-1 basis-full text-muted text-[var(--font-meta-size)] min-[720px]:basis-0" data-testid="settings-dirty-bar">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col px-4 py-3 min-[720px]:px-6">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b-[0.5px] border-line pb-3">
+              <span className="min-w-0 flex-1 basis-full text-muted text-[length:var(--font-meta-size)] min-[720px]:basis-0" data-testid="settings-dirty-bar">
                 {dirtyBarText(dirty, dirtyCount, store.savedAt !== null)}
               </span>
               <button
@@ -364,7 +366,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
                 onClick={requestSave}
                 disabled={!dirty || store.save.pending}
                 data-testid="settings-save"
-                className="h-[var(--control-height-compact)] rounded-control border border-line bg-surface-strong px-3 text-ink hover:bg-[var(--surface-card-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40"
+                className={formPrimaryButtonClass}
               >
                 {store.save.pending ? '保存中…' : '保存设置'}
               </button>
@@ -374,7 +376,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
               <p
                 role="alert"
                 data-testid="settings-save-error"
-                className="mt-2 flex items-start gap-1.5 rounded-card border border-[var(--st-bad-line)] px-2 py-1.5 text-[var(--st-bad)] text-[var(--font-meta-size)]"
+                className="mt-2 flex items-start gap-1.5 rounded-card border-[0.5px] border-[var(--st-bad-line)] px-2 py-1.5 text-[var(--st-bad)] text-[length:var(--font-meta-size)]"
               >
                 <AlertTriangle size={12} aria-hidden="true" className="mt-0.5 shrink-0" />
                 <span className="min-w-0">{store.save.error}</span>
@@ -385,17 +387,17 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
               <ul
                 role="alert"
                 data-testid="settings-field-issues"
-                className="mt-2 flex flex-col gap-0.5 rounded-card border border-[var(--st-warn-line)] px-2 py-1.5"
+                className="mt-2 flex flex-col gap-0.5 rounded-card border-[0.5px] border-[var(--st-warn-line)] px-2 py-1.5"
               >
                 {issueEntries.map(({ issue, section }) => (
                   <li
                     key={`${issue.path}:${issue.message}`}
-                    className="flex items-start gap-1.5 text-[var(--st-warn)] text-[var(--font-meta-size)]"
+                    className="flex items-start gap-1.5 text-[var(--st-warn)] text-[length:var(--font-meta-size)]"
                   >
                     <AlertTriangle size={12} aria-hidden="true" className="mt-0.5 shrink-0" />
                     <span className="min-w-0">
                       {section === null ? (
-                        <span className="mr-1 font-mono text-[var(--font-micro-size)]">{issue.path}</span>
+                        <span className="mr-1 font-mono text-[length:var(--font-micro-size)]">{issue.path}</span>
                       ) : (
                         <button
                           type="button"
@@ -418,7 +420,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
               id={`settings-panel-${activeSection}`}
               aria-labelledby={`settings-tab-${activeSection}`}
               tabIndex={-1}
-              className="min-h-0 flex-1 overflow-y-auto pt-3"
+              className="min-h-0 flex-1 overflow-y-auto pt-5 pb-3"
               data-testid="settings-panel"
             >
               {renderPanel(activeSection, store, props)}

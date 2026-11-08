@@ -24,7 +24,7 @@ export function TaskGraph({graph}: {graph: ResearchTaskGraph}): React.JSX.Elemen
             <p key={edge.prerequisite} className="break-words text-subtle">前置：{nodes.get(edge.prerequisite)?.role ?? edge.prerequisite}</p>)}
           <details className="text-subtle">
             <summary className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]">执行记录</summary>
-            <div className="grid gap-1 break-all pt-2 font-mono text-[var(--font-meta-size)]">
+            <div className="grid gap-1 break-all pt-2 font-mono text-[length:var(--font-meta-size)]">
               <p>节点 {node.id}</p><p>执行 {node.executionId}</p>
               <p>输入 {node.inputHash}</p>
               {node.lease === null ? <p>当前无执行租约</p> : <p>租约 {node.generation} / 到期 {formatBeijingDateTime(node.lease.expiresAt)}</p>}

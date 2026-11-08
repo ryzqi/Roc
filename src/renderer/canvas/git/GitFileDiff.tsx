@@ -98,12 +98,12 @@ export function GitFileDiff({
     return (
       <div className="flex flex-col gap-2 p-3" data-testid="git-diff-large">
         <p className="text-ink">该 diff 较大（{patch.length.toLocaleString('zh-CN')} 字符），已折叠。</p>
-        <p className="text-muted text-[var(--font-meta-size)]">展开后可能占用较多内存与渲染时间。</p>
+        <p className="text-muted text-[length:var(--font-meta-size)]">展开后可能占用较多内存与渲染时间。</p>
         <button
           type="button"
           onClick={() => setExpandedLarge(true)}
           data-testid="git-diff-expand"
-          className="h-[var(--control-height)] self-start rounded-control border border-line bg-surface-strong px-3 text-ink hover:bg-[var(--surface-card-hover)] active:bg-[var(--overlay-active)]"
+          className="h-[var(--control-height)] self-start rounded-control border-[0.5px] border-line bg-surface-strong px-3 text-ink hover:bg-[var(--surface-card-hover)] active:bg-[var(--overlay-active)]"
         >
           展开 diff
         </button>
@@ -123,12 +123,12 @@ export function GitFileDiff({
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="git-diff">
-      <div className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-1.5">
-        <span className="min-w-0 flex-1 truncate font-mono text-[var(--font-meta-size)]" title={relativePath}>
+      <div className="flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-3 py-1.5">
+        <span className="min-w-0 flex-1 truncate font-mono text-[length:var(--font-meta-size)]" title={relativePath}>
           {relativePath}
         </span>
-        <span className="text-subtle text-[var(--font-micro-size)]">{stateLabel}</span>
-        <span className="text-subtle text-[var(--font-micro-size)]">{file.type}</span>
+        <span className="text-subtle text-[length:var(--font-micro-size)]">{stateLabel}</span>
+        <span className="text-subtle text-[length:var(--font-micro-size)]">{file.type}</span>
         {large ? (
           <button
             type="button"
@@ -137,10 +137,10 @@ export function GitFileDiff({
             data-testid="git-diff-collapse"
           >
             <ChevronDown size={11} aria-hidden="true" />
-            <span className="text-[var(--font-micro-size)]">折叠</span>
+            <span className="text-[length:var(--font-micro-size)]">折叠</span>
           </button>
         ) : (
-          <span className="flex items-center gap-1 text-subtle text-[var(--font-micro-size)]">
+          <span className="flex items-center gap-1 text-subtle text-[length:var(--font-micro-size)]">
             <ChevronRight size={11} aria-hidden="true" />
             {buildGitDiffTitle(file)}
           </span>

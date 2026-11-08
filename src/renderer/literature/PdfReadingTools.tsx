@@ -85,13 +85,13 @@ export default function PdfReadingTools({client,projectId,documentId,sourceHash,
       })}>保存高亮</button>
     </div>:null}
     {error?<p role="alert" className="p-2 text-[var(--st-warn)]">{error}</p>:null}
-    {panel==='outline'?<nav aria-label="PDF 目录" className="max-h-48 overflow-auto border-b border-line p-2">
-      {outline.length?outline.map((item,index)=><button type="button" key={index} className="block w-full rounded-control py-1 text-left hover:bg-[var(--overlay-hover)]" style={{paddingInlineStart:8+item.depth*12}} onClick={()=>navigate(item.page)}>{item.title} · {item.page}</button>):<p className="text-muted">原 PDF 未提供目录。</p>}
+    {panel==='outline'?<nav aria-label="PDF 目录" className="max-h-48 overflow-auto border-b-[0.5px] border-line p-2">
+      {outline.length?outline.map((item,index)=><button type="button" key={index} className="block w-full rounded-control py-1 text-left hover:bg-[var(--overlay-hover)]" style={{paddingInlineStart:8+item.depth*12}} onClick={()=>navigate(item.page)}>{item.title}，{item.page}</button>):<p className="text-muted">原 PDF 未提供目录。</p>}
     </nav>:null}
-    {panel==='highlights'?<div className="max-h-56 overflow-auto border-b border-line p-2">
-      {highlights.length?highlights.map(row=><div key={row.id} className="mb-2 border-b border-line pb-2">
-        <button type="button" className="block text-left" onClick={()=>navigate(row.page)}>第 {row.page} 页 · {row.text}</button>
-        <textarea aria-label={`第 ${row.page} 页高亮备注`} className="w-full rounded-control border border-line bg-surface p-1" defaultValue={row.note} disabled={!writable||busy||row.archived}
+    {panel==='highlights'?<div className="max-h-56 overflow-auto border-b-[0.5px] border-line p-2">
+      {highlights.length?highlights.map(row=><div key={row.id} className="mb-2 border-b-[0.5px] border-line pb-2">
+        <button type="button" className="block text-left" onClick={()=>navigate(row.page)}>第 {row.page} 页，{row.text}</button>
+        <textarea aria-label={`第 ${row.page} 页高亮备注`} className="w-full rounded-control border-[0.5px] border-line bg-surface p-1" defaultValue={row.note} disabled={!writable||busy||row.archived}
           onBlur={event=>{if(event.target.value!==row.note)void run(()=>saveHighlight({...row,note:event.target.value}));}}/>
         <button type="button" disabled={!writable||busy} onClick={()=>void run(()=>saveHighlight({...row,archived:!row.archived}))}>{row.archived?'恢复高亮':'归档高亮'}</button>
       </div>):<p className="text-muted">在 PDF 中选择文字以创建高亮。</p>}

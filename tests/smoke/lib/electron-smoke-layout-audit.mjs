@@ -2,7 +2,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const AUDIT_SCRIPT = `(() => {
-  const MIN_FONT_PX = 9;
+  const MIN_FONT_PX = 12;
   const MIN_TARGET_PX = 24;
       const SIGNIFICANT_OVERLAP_PX = 3;
   const SIGNIFICANT_RATIO = 0.35;

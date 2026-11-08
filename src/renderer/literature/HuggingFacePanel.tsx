@@ -46,7 +46,7 @@ export default function HuggingFacePanel({client, projectId, writable, onLockCha
     setNote(result.data.cancelled ? '主进程已接收取消查询信号' : '没有进行中的查询，请检查观察历史');
     history.reload();
   };
-  return <section aria-label="Hugging Face 资源" className="space-y-3 px-3 py-2 text-[var(--font-body-size)]" data-testid="reader-hf-panel">
+  return <section aria-label="Hugging Face 资源" className="space-y-3 px-3 py-2 text-[length:var(--font-body-size)]" data-testid="reader-hf-panel">
     <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-2">
       <label>仓库类型 <select value={kind} disabled={locked || !writable} className={hfInput}
         onChange={event => setKind(event.target.value as 'model' | 'dataset')}>

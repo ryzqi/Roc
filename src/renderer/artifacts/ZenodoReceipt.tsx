@@ -28,7 +28,7 @@ export function ZenodoReceipt({preparation, operation}: {preparation: ZenodoPrep
         <h3 className="font-medium">完整远端快照</h3>
         <p>草稿 {operation.remote.id}，所有者 {operation.remote.owner}，{operation.remote.state}，{operation.remote.submitted?'已提交':'未提交'}</p>
         <p>远端修改时间 {operation.remote.modified}</p>
-        <pre className="whitespace-pre-wrap break-all font-mono text-[var(--font-chrome-size)]" aria-label="远端完整元数据">{JSON.stringify(operation.remote.metadata,null,2)}</pre>
+        <pre className="whitespace-pre-wrap break-all font-mono text-[length:var(--font-chrome-size)]" aria-label="远端完整元数据">{JSON.stringify(operation.remote.metadata,null,2)}</pre>
         <ul aria-label="远端文件">{operation.remote.files.map(file=><li className="break-all border-t-[0.5px] border-line py-1" key={file.id}>
           {file.name}，{file.size} B，MD5 {file.md5}，文件 ID {file.id}
         </li>)}</ul>

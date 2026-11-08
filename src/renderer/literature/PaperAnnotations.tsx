@@ -27,7 +27,7 @@ export default function PaperAnnotations(props: Props): React.JSX.Element {
     client.api.research.listDocumentAnnotations({projectId, documentId: document.id, parseId: parsed.run.id}), {label: '读取研究批注'});
   const [saved, setSaved] = useState<ResearchDocumentAnnotationInspection | null>(null);
   const annotations = read.status === 'ready' ? read.data : null;
-  return <section className="mb-2 min-w-0 border-b-[0.5px] border-line pb-2 text-[var(--font-meta-size)]"
+  return <section className="mb-2 min-w-0 border-b-[0.5px] border-line pb-2 text-[length:var(--font-meta-size)]"
     data-testid="reader-annotations" aria-label="研究批注">
     <div className="flex items-center gap-2">
       <span className="mr-auto font-medium">研究批注</span>

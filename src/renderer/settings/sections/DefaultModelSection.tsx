@@ -35,7 +35,7 @@ export function DefaultModelSection({ store }: { store: SettingsStore }): React.
       testId="settings-section-default-model-body"
     >
       <label className="flex max-w-[420px] flex-col gap-0.5">
-        <span className="text-subtle text-[var(--font-micro-size)]">默认模型</span>
+        <span className="text-subtle text-[length:var(--font-micro-size)]">默认模型</span>
         <select
           value={current ?? ''}
           onChange={(event) => {
@@ -54,7 +54,7 @@ export function DefaultModelSection({ store }: { store: SettingsStore }): React.
             </option>
           ))}
         </select>
-        <span className="text-subtle text-[var(--font-micro-size)]">
+        <span className="text-subtle text-[length:var(--font-micro-size)]">
           格式为 <span className="font-mono">provider:model</span>
           {parsed === null ? null : `（当前：${parsed.providerId} / ${parsed.modelId}）`}
         </span>

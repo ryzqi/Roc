@@ -78,7 +78,7 @@ async function sleep(ms) {
 async function launchApp() {
   const launched = await electron.launch({
     executablePath: target.executablePath,
-    args: target.launchArgs,
+    args: [...target.launchArgs, `--user-data-dir=${join(dataRoot, 'electron-profile')}`],
     env: launchEnv
   });
   const window = await launched.firstWindow();
@@ -161,6 +161,19 @@ let lastSaveSawImpactConfirm = false;
 async function saveThroughUi() {
   await page.click('[data-testid="settings-save"]');
   lastSaveSawImpactConfirm = false;
+  // React commits the confirmation or save outcome after the click handler returns.
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="settings-impact-confirm-confirm"]') !== null
+      || document.querySelector('[data-testid="settings-dirty-bar"]')?.textContent === '所有修改已保存'
+      || document.querySelector('[data-testid="settings-save-error"]') !== null
+      || document.querySelector('[data-testid="settings-field-issues"]') !== null,
+    undefined,
+    { timeout: 30_000 }
+  );
+  const issues = page.locator('[data-testid="settings-field-issues"]');
+  if ((await issues.count()) > 0) {
+    fail('保存', '保存设置', `字段校验失败：${await issues.textContent()}`);
+  }
   const confirm = page.locator('[data-testid="settings-impact-confirm-confirm"]');
   if ((await confirm.count()) > 0) {
     const impactText = ((await page.locator('[data-testid="settings-impact-confirm-message"]').textContent()) ?? '') + ((await page.locator('[data-testid="settings-impact-confirm-panel"]').textContent()) ?? '');
@@ -174,7 +187,7 @@ async function saveThroughUi() {
         return false;
       }
       const error = document.querySelector('[data-testid="settings-save-error"]');
-      return bar.textContent.includes('没有未保存') || error !== null;
+      return bar.textContent === '所有修改已保存' || error !== null;
     },
     undefined,
     { timeout: 30_000 }
@@ -768,7 +781,10 @@ try {
   assertCheck('4 关闭确认', '选择继续编辑后未保存项仍在', (await dirtyCount()) === dirtyBeforeClose, `dirty=${await dirtyCount()}`);
 
   await page.click('[data-testid="settings-discard-draft"]');
-  await page.waitForFunction(() => document.querySelector('[data-testid="settings-dirty-bar"]')?.textContent.includes('没有未保存'), undefined, { timeout: 10_000 });
+  await page.waitForFunction(() => {
+    const status = document.querySelector('[data-testid="settings-dirty-bar"]')?.textContent;
+    return status === '没有未保存的改动' || status === '所有修改已保存';
+  }, undefined, { timeout: 10_000 });
   await page.fill('[data-testid="settings-char-limit-agents"]', '27000');
   await page.locator('[data-testid="settings-char-limit-agents"]').blur();
   await page.click('[data-testid="settings-modal-close"]');

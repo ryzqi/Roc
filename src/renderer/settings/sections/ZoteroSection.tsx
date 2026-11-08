@@ -20,14 +20,14 @@ export function ZoteroSection({client}: {client: RocClient}): React.JSX.Element 
   return (
     <section className="flex flex-col gap-2 border-t-[0.5px] border-line pt-3" aria-label="Zotero" data-testid="settings-zotero">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-[var(--font-body-size)] font-medium text-ink">Zotero</h3>
+        <h3 className="text-[length:var(--font-body-size)] font-medium text-ink">Zotero</h3>
         <button type="button" className={`${formSecondaryButtonClass} border-[0.5px]`} disabled={resource.status === 'loading'}
           data-testid="settings-zotero-check" onClick={() => setAttempt(current => current + 1)}>
           {resource.status === 'loading' ? '检测中…' : '检测连接'}
         </button>
       </div>
       {status === null ? null : (
-        <dl className="flex flex-col gap-1 text-[var(--font-meta-size)]" data-testid="settings-zotero-status">
+        <dl className="flex flex-col gap-1 text-[length:var(--font-meta-size)]" data-testid="settings-zotero-status">
           <StatusRow label="应用目录" testId="settings-zotero-installation"
             value={status.installation.status === 'found' ? `已发现（${status.installation.location === 'system' ? '系统' : '用户'}应用目录）` : '常用应用目录未发现 Zotero'} />
           <StatusRow label="本地 API" value={CONNECTION_LABELS[status.connection.status]} testId="settings-zotero-connection" />
@@ -39,16 +39,16 @@ export function ZoteroSection({client}: {client: RocClient}): React.JSX.Element 
           ) : null}
         </dl>
       )}
-      {connection?.status === 'disabled' ? <p className="text-[var(--font-meta-size)] text-muted" data-testid="settings-zotero-help">
+      {connection?.status === 'disabled' ? <p className="text-[length:var(--font-meta-size)] text-muted" data-testid="settings-zotero-help">
         在 Zotero 的高级设置中允许其他应用通信，然后重新检测。
-      </p> : connection?.status === 'unreachable' ? <p className="text-[var(--font-meta-size)] text-muted" data-testid="settings-zotero-help">
+      </p> : connection?.status === 'unreachable' ? <p className="text-[length:var(--font-meta-size)] text-muted" data-testid="settings-zotero-help">
         打开 Zotero 后重新检测。应用目录检测范围为 /Applications 与 ~/Applications。
-      </p> : connection?.status === 'unsupported' ? <p className="text-[var(--font-meta-size)] text-muted" data-testid="settings-zotero-help">
+      </p> : connection?.status === 'unsupported' ? <p className="text-[length:var(--font-meta-size)] text-muted" data-testid="settings-zotero-help">
         需要支持实例标识的 Zotero 10 或更新版本。
-      </p> : connection?.status === 'invalid_response' ? <p className="text-[var(--font-meta-size)] text-muted" data-testid="settings-zotero-help">
+      </p> : connection?.status === 'invalid_response' ? <p className="text-[length:var(--font-meta-size)] text-muted" data-testid="settings-zotero-help">
         本地服务响应不符合 Zotero API 合同，请检查客户端。
       </p> : null}
-      {resource.error === null ? null : <p role="alert" className="flex items-start gap-1 text-[var(--font-meta-size)] text-[var(--st-warn)]" data-testid="settings-zotero-error"><AlertTriangle size={14} aria-hidden="true" />{resource.error}</p>}
+      {resource.error === null ? null : <p role="alert" className="flex items-start gap-1 text-[length:var(--font-meta-size)] text-[var(--st-warn)]" data-testid="settings-zotero-error"><AlertTriangle size={14} aria-hidden="true" />{resource.error}</p>}
     </section>
   );
 }

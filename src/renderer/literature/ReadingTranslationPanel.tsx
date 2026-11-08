@@ -32,7 +32,7 @@ export default function ReadingTranslationPanel({client,projectId,segments,label
       if(!result.ok)throw new Error(result.error.message);setApiKey('');setConfigured(result.data.keyConfigured);setSettings(false);
     }catch(error){setError(String(error));}finally{setBusy(false);}
   };
-  return <section className="max-h-[55vh] shrink-0 overflow-auto border-b border-line" data-testid="reader-translation" aria-label="阅读翻译">
+  return <section className="max-h-[55vh] shrink-0 overflow-auto border-b-[0.5px] border-line" data-testid="reader-translation" aria-label="阅读翻译">
     <div className="reading-toolbar"><strong>{label}</strong><select aria-label="翻译目标语言" value={target} disabled={busy} onChange={event=>setTarget(event.target.value)}>
       <option value="zh-CN">简体中文</option><option value="en">English</option><option value="ja">日本語</option><option value="de">Deutsch</option><option value="fr">Français</option></select>
       <button type="button" disabled={busy} onClick={()=>void translate()}>开始翻译</button><button type="button" disabled={busy} onClick={()=>setSettings(!settings)}>翻译设置</button>
@@ -44,8 +44,8 @@ export default function ReadingTranslationPanel({client,projectId,segments,label
       <input aria-label="翻译 API Key" type="password" autoComplete="off" placeholder={configured?'已保存；留空保留':'API Key'} value={apiKey} onChange={event=>setApiKey(event.target.value)}/></>:null}
       <button type="button" disabled={busy} onClick={()=>void saveSettings()}>保存翻译设置</button></div>:null}
     {error?<p role="alert" className="p-2 text-[var(--st-warn)]">{error}</p>:null}
-    <p role="status" className="px-3 text-muted">{busy?`已翻译 ${output.length} / ${segments.length} 段`:`${providers[provider].label} · ${segments.length} 段`}</p>
-    {output.map((part,index)=><div key={index} className="grid grid-cols-2 gap-3 border-b border-line p-3"><div><b>{part.label} · 原文</b><p className="mt-1 whitespace-pre-wrap">{segments.find(segment=>segment.label===part.label)?.text}</p></div><div><b>译文</b><p className="mt-1 whitespace-pre-wrap">{part.text}</p></div></div>)}
+    <p role="status" className="px-3 text-muted">{busy?`已翻译 ${output.length} / ${segments.length} 段`:`${providers[provider].label}，${segments.length} 段`}</p>
+    {output.map((part,index)=><div key={index} className="grid grid-cols-2 gap-3 border-b-[0.5px] border-line p-3"><div><b>{part.label}，原文</b><p className="mt-1 whitespace-pre-wrap">{segments.find(segment=>segment.label===part.label)?.text}</p></div><div><b>译文</b><p className="mt-1 whitespace-pre-wrap">{part.text}</p></div></div>)}
     {output.length?<div className="reading-toolbar"><button type="button" onClick={()=>onNote(output.map(part=>`## ${part.label}\n\n${part.text}`).join('\n\n'))}>译文存为笔记</button></div>:null}
   </section>;
 }

@@ -19,8 +19,8 @@ export function IdeaOutcomeReceipt({receipt}: {receipt: Receipt}): React.JSX.Ele
       <dt>审核说明</dt><dd className="break-words">{request.reviewNote}</dd>
       {request.revisionReason === null ? null : <><dt>修订原因</dt><dd className="break-words">{request.revisionReason}</dd></>}
     </dl>
-    <p className="break-all font-mono text-muted text-[var(--font-meta-size)]">评估 SHA-256 {snapshotHash}</p>
-    <p className="break-all font-mono text-muted text-[var(--font-meta-size)]">冻结 SHA-256 {material.plan.freezeHash}</p>
+    <p className="break-all font-mono text-muted text-[length:var(--font-meta-size)]">评估 SHA-256 {snapshotHash}</p>
+    <p className="break-all font-mono text-muted text-[length:var(--font-meta-size)]">冻结 SHA-256 {material.plan.freezeHash}</p>
     <ul className="flex flex-col gap-2">{request.metrics.map(mapping => {
       const planned = material.plan.version.request.body.metrics.find(metric => metric.id === mapping.plannedMetricId)!;
       const differences = material.differences.find(item => item.plannedMetricId === mapping.plannedMetricId);
@@ -37,7 +37,7 @@ export function IdeaOutcomeReceipt({receipt}: {receipt: Receipt}): React.JSX.Ele
       <div className="mt-2"><ExperimentResultReceipt receipt={material.result}/></div>
     </details>
     <details><summary className="cursor-pointer text-muted">完整冻结方法、证据与评估回执</summary>
-      <pre tabIndex={0} className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">
+      <pre tabIndex={0} className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">
         {JSON.stringify(receipt, null, 2)}
       </pre>
     </details>

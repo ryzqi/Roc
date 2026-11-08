@@ -36,7 +36,7 @@ export function FigureConsistencyEditor({client, snapshot, report, editing, writ
           <p>{binding.markName}，路径 {binding.scenePath.join('/')}，{binding.channel} → {binding.field}，指标 {binding.metricId}，单位 {binding.unit}</p>
           <p className="break-all text-muted">主张 {binding.claimId}，结果 {binding.resultId}，证据 {binding.evidenceId}</p>
           <details className="text-muted"><summary className="cursor-pointer">待保存场景映射规则</summary>
-            <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(binding, null, 2)}</pre>
+            <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(binding, null, 2)}</pre>
           </details>
           <button type="button" className={formSecondaryButtonClass} disabled={!writable || externalLocked || save.pending}
             data-testid="artifact-figure-consistency-remove"

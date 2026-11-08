@@ -5,7 +5,7 @@ export function ExperimentResultReceipt({receipt}: {receipt: ResearchExperimentR
   return <section className="flex min-w-0 flex-col gap-2" data-testid="artifact-experiment-result-receipt">
     <p className="break-all">结果 {snapshot.id}</p>
     <p className="break-all text-muted">运行 {execution.runId}</p>
-    <p className="break-all font-mono text-muted text-[var(--font-meta-size)]">回执 SHA-256 {snapshotHash}</p>
+    <p className="break-all font-mono text-muted text-[length:var(--font-meta-size)]">回执 SHA-256 {snapshotHash}</p>
     <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-muted">
       <dt>分析脚本</dt><dd className="break-all">{execution.source.path}</dd>
       <dt>脚本 SHA-256</dt><dd className="break-all font-mono">{execution.source.sha256}</dd>
@@ -46,7 +46,7 @@ export function ExperimentResultReceipt({receipt}: {receipt: ResearchExperimentR
       </dl>
     </section>
     <details><summary className="cursor-pointer text-muted">完整输入、参数和审核回执</summary>
-      <pre tabIndex={0} className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(receipt,null,2)}</pre>
+      <pre tabIndex={0} className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(receipt,null,2)}</pre>
     </details>
   </section>;
 }

@@ -55,7 +55,7 @@ export function ReviewQualityPlan({client, protocol, phase, extraction, writable
       <p className="text-muted break-words">审核人 {read.data.snapshot.reviewer.name} {read.data.snapshot.reviewer.id}</p>
       <p className="text-muted break-all">记录人 {read.data.snapshot.actor.id} {read.data.snapshot.recordedAt}</p>
       <details><summary className="cursor-pointer text-muted">冻结的逐域定义与准确版本</summary>
-        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">{JSON.stringify(read.data.snapshot, null, 2)}</pre>
+        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(read.data.snapshot, null, 2)}</pre>
       </details>
       <button type="button" className={`${button} self-start`} disabled={create.pending || assessmentPending}
         data-testid="artifact-review-quality-assessment-inspect" onClick={() => setAssessmentOpen(true)}>核查逐域人工质量评价</button>

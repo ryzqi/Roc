@@ -214,7 +214,7 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
           event.key === 'Home' ? 1 : event.key === 'End' ? current.pdf.numPages : null;
         if (page !== null) {event.preventDefault(); navigate(page);}
       }}>
-      <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-1.5 text-[var(--font-meta-size)]">
+      <div className="flex shrink-0 flex-wrap items-center gap-1 border-b-[0.5px] border-line px-2 py-1.5 text-[length:var(--font-meta-size)]">
         <span className="mr-auto text-muted">原 PDF</span>
         <button type="button" aria-label="上一页" disabled={current === null || pageNumber <= 1} onClick={() => navigate(pageNumber - 1)}
           className="rounded-control p-1 hover:bg-[var(--overlay-hover)] disabled:opacity-40"><ChevronLeft size={14}/></button>
@@ -227,7 +227,7 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
           setPageError(null); navigate(requested);
         }}>
           <input type="number" min={1} max={current?.pdf.numPages} value={pageDraft} onChange={event => setPageDraft(event.target.value)}
-            aria-label="PDF 页码" disabled={current === null} className="w-12 rounded-control border border-line bg-surface px-1 text-center"/>
+            aria-label="PDF 页码" disabled={current === null} className="w-12 rounded-control border-[0.5px] border-line bg-surface px-1 text-center"/>
           <span className="text-muted">/ {current?.pdf.numPages ?? '…'}</span>
           <button type="submit" disabled={current === null} className="rounded-control px-1 hover:bg-[var(--overlay-hover)] disabled:opacity-40">前往</button>
         </form>
@@ -271,9 +271,9 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
             navigate(target.page);
             canvasRef.current?.scrollIntoView({block: 'nearest'});
           }}/>}
-        {currentPaint?.pageOnly ? <p role="note" className="mb-2 text-muted text-[var(--font-meta-size)]" data-testid="reader-pdf-page-only">该页未记录区域坐标，仅定位到页。</p> : null}
-        {currentPaint?.wholePage ? <p role="note" className="mb-2 text-muted text-[var(--font-meta-size)]" data-testid="reader-pdf-whole-page">解析器记录的是整页范围，未细分块区域。</p> : null}
-        {candidates === null ? null : <div className="mb-2 text-[var(--font-meta-size)]" data-testid="reader-pdf-block-candidates">
+        {currentPaint?.pageOnly ? <p role="note" className="mb-2 text-muted text-[length:var(--font-meta-size)]" data-testid="reader-pdf-page-only">该页未记录区域坐标，仅定位到页。</p> : null}
+        {currentPaint?.wholePage ? <p role="note" className="mb-2 text-muted text-[length:var(--font-meta-size)]" data-testid="reader-pdf-whole-page">解析器记录的是整页范围，未细分块区域。</p> : null}
+        {candidates === null ? null : <div className="mb-2 text-[length:var(--font-meta-size)]" data-testid="reader-pdf-block-candidates">
           {candidates.pageOnly ? <p role="note" className="text-muted">仅有页定位，请选择本页解析块。</p> :
             candidates.fromPoint && candidates.locations.length > 1 ? <p role="note" className="text-muted">多个区域覆盖该位置，请选择解析块。</p> : null}
           {candidates.locations.length === 0 ? <p role="note" className="text-muted">此处没有已记录的解析区域。</p> :

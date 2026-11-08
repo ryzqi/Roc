@@ -37,21 +37,21 @@ export function ErrorBar({ error, onDismiss }: ErrorBarProps): React.JSX.Element
       <div className="min-w-0 flex-1">
         <p className="text-ink break-words">{error.message}</p>
         {error.code === undefined || error.code === null ? null : (
-          <p className="font-mono text-muted text-[var(--font-micro-size)]">{error.code}</p>
+          <p className="font-mono text-muted text-[length:var(--font-micro-size)]">{error.code}</p>
         )}
         <div className="mt-1 flex items-center gap-2">
           {error.retry === undefined ? null : (
             <button
               type="button"
               onClick={error.retry}
-              className="inline-flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-muted hover:text-ink active:bg-[var(--overlay-active)]"
+              className="inline-flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-muted hover:text-ink active:bg-[var(--overlay-active)]"
             >
               <RotateCcw size={12} aria-hidden="true" />
               重试
             </button>
           )}
           {error.actionLabel === undefined ? null : (
-            <span className="text-muted text-[var(--font-meta-size)]">{error.actionLabel}</span>
+            <span className="text-muted text-[length:var(--font-meta-size)]">{error.actionLabel}</span>
           )}
         </div>
       </div>

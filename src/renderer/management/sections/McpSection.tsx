@@ -136,12 +136,12 @@ export function McpSection({
         void mcp.toggle.run(server.id, !mcp.serverEnabled(server));
       }}
       data-testid={`mgmt-mcp-enabled-${server.id}`}
-      className="inline-flex shrink-0 items-center gap-2 rounded-control px-2 py-2 text-[var(--font-meta-size)] text-muted hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-accent"
+      className="inline-flex shrink-0 items-center gap-2 rounded-control px-2 py-2 text-[length:var(--font-meta-size)] text-muted hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-accent"
     >
       {mcp.serverEnabled(server) ? '已启用' : '已停用'}
       <span
         aria-hidden="true"
-        className={`flex h-5 w-8 items-center rounded-full border p-0.5 ${mcp.serverEnabled(server) ? 'justify-end border-accent bg-accent' : 'justify-start border-line-strong bg-[var(--surface-card-hover)]'}`}
+        className={`flex h-5 w-8 items-center rounded-full border-[0.5px] p-0.5 ${mcp.serverEnabled(server) ? 'justify-end border-accent bg-accent' : 'justify-start border-line-strong bg-[var(--surface-card-hover)]'}`}
       >
         <span className="h-3 w-3 rounded-full bg-[var(--control-thumb)]" />
       </span>
@@ -168,7 +168,7 @@ export function McpSection({
         <MoreHorizontal size={16} aria-hidden="true" />
       </summary>
       <div
-        className="absolute right-0 top-full z-10 mt-1 w-36 rounded-card border border-line bg-surface p-1 shadow-[var(--shadow-popover)]"
+        className="absolute right-0 top-full z-10 mt-1 w-36 rounded-card border-[0.5px] border-line bg-surface p-1 shadow-[var(--shadow-popover)]"
         onClick={(event) => {
           const details = event.currentTarget.closest('details');
           if (details) details.open = false;
@@ -225,7 +225,7 @@ export function McpSection({
   return (
     <div
       ref={root}
-      className="flex min-h-0 flex-col gap-4 text-[var(--font-body-size)]"
+      className="flex min-h-0 flex-col gap-4 text-[length:var(--font-body-size)]"
       data-testid="mgmt-mcp"
     >
       {page === 'list' ? (
@@ -235,15 +235,15 @@ export function McpSection({
               <h3
                 ref={heading}
                 tabIndex={-1}
-                className="text-[var(--font-h3-size)] font-semibold text-ink outline-none"
+                className="text-[length:var(--font-h3-size)] font-semibold text-ink outline-none"
               >
                 MCP 服务
               </h3>
               <p
-                className="mt-1 text-[var(--font-meta-size)] text-muted"
+                className="mt-1 text-[length:var(--font-meta-size)] text-muted"
                 data-testid="mgmt-mcp-summary"
               >
-                {mcp.rows.length} 个服务 · {enabledCount} 个已启用
+                {mcp.rows.length} 个服务，{enabledCount} 个已启用
               </p>
             </div>
             <button
@@ -321,7 +321,7 @@ export function McpSection({
           )}
           <div data-testid="mgmt-mcp-servers">
             <ul
-              className="divide-y divide-line border-y border-line"
+              className="divide-y divide-line border-y-[0.5px] border-line"
               data-testid="mgmt-mcp-rows"
             >
               {visibleRows.map(({ server }) => {
@@ -352,14 +352,13 @@ export function McpSection({
                         <div className="truncate font-semibold text-ink">
                           {server.name}
                         </div>
-                        <p className="mt-1 text-[var(--font-meta-size)] text-muted">
+                        <p className="mt-1 text-[length:var(--font-meta-size)] text-muted">
                           {server.transport === 'stdio'
                             ? '本地命令'
-                            : server.transport.toUpperCase()}{' '}
-                          · {toolSummary(server)}
+                            : server.transport.toUpperCase()}，{toolSummary(server)}
                         </p>
                         <p
-                          className={`mt-1 flex items-start gap-1 text-[var(--font-meta-size)] ${issue ? 'text-[var(--st-warn)]' : 'text-subtle'}`}
+                          className={`mt-1 flex items-start gap-1 text-[length:var(--font-meta-size)] ${issue ? 'text-[var(--st-warn)]' : 'text-subtle'}`}
                           data-testid={`mgmt-mcp-status-${server.id}`}
                         >
                           {issue ? (
@@ -407,7 +406,7 @@ export function McpSection({
                     ? '还没有 MCP 服务'
                     : '没有符合条件的服务'}
                 </p>
-                <p className="text-[var(--font-meta-size)]">
+                <p className="text-[length:var(--font-meta-size)]">
                   {mcp.rows.length === 0
                     ? '添加服务，让助手使用外部工具。'
                     : '试试其他关键词，或查看全部服务。'}
@@ -462,7 +461,7 @@ export function McpSection({
           <h3
             ref={heading}
             tabIndex={-1}
-            className="text-[var(--font-h3-size)] font-semibold text-ink outline-none"
+            className="text-[length:var(--font-h3-size)] font-semibold text-ink outline-none"
           >
             添加服务
           </h3>
@@ -514,12 +513,12 @@ export function McpSection({
               <h3
                 ref={heading}
                 tabIndex={-1}
-                className="break-words text-[var(--font-h3-size)] font-semibold text-ink outline-none"
+                className="break-words text-[length:var(--font-h3-size)] font-semibold text-ink outline-none"
               >
                 {selected.server.name}
               </h3>
-              <p className="mt-1 text-[var(--font-meta-size)] text-muted">
-                {mcp.serverEnabled(selected.server) ? '已启用' : '已停用'} ·{' '}
+              <p className="mt-1 text-[length:var(--font-meta-size)] text-muted">
+                {mcp.serverEnabled(selected.server) ? '已启用' : '已停用'}，{' '}
                 {mcpTransportLabels[selected.server.transport]}
               </p>
             </div>
@@ -569,10 +568,10 @@ export function McpSection({
                       key={tool.name}
                       className="flex items-start justify-between gap-3 py-3"
                     >
-                      <span className="min-w-0 break-all font-mono text-[var(--font-code-size)] text-ink">
+                      <span className="min-w-0 break-all font-mono text-[length:var(--font-code-size)] text-ink">
                         {tool.name}
                       </span>
-                      <span className="shrink-0 text-[var(--font-meta-size)] text-muted">
+                      <span className="shrink-0 text-[length:var(--font-meta-size)] text-muted">
                         {tool.approval === 'native_dialog'
                           ? '系统对话框确认'
                           : tool.approval === 'required'
@@ -634,7 +633,7 @@ export function McpSection({
               >
                 {mcp.test.pending ? '校验中…' : '校验配置'}
               </button>
-              <span className="text-[var(--font-meta-size)] text-muted">
+              <span className="text-[length:var(--font-meta-size)] text-muted">
                 仅检查配置完整性，尚未检查实际连接。
               </span>
             </div>
@@ -662,7 +661,7 @@ export function McpSection({
         </FormNote>
       )}
       {page === 'editor' || page === 'add' ? null : (
-        <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3 text-[var(--font-meta-size)] text-muted">
+        <footer className="flex flex-wrap items-center justify-between gap-2 border-t-[0.5px] border-line pt-3 text-[length:var(--font-meta-size)] text-muted">
           <span data-testid="mgmt-mcp-approval-mode">
             {mcpApprovalModeLabels[mcp.config.approvalMode]}
           </span>
@@ -678,7 +677,7 @@ export function McpSection({
       )}
       {page !== 'list' ? null : (
         <details
-          className="text-[var(--font-meta-size)] text-muted"
+          className="text-[length:var(--font-meta-size)] text-muted"
           data-testid="mgmt-mcp-preview"
         >
           <summary className="cursor-pointer rounded-control py-1 focus-visible:outline-2 focus-visible:outline-accent">

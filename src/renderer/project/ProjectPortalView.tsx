@@ -164,32 +164,32 @@ export function ProjectPortalView({
 
   return (
     <div className="h-full overflow-y-auto" data-testid="portal">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-        <header className="flex items-center justify-between gap-3 border-b-[0.5px] border-line pb-4">
-          <h1 className="text-[var(--font-h2-size)] font-semibold">研究工作台</h1>
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-7 px-4 py-8 sm:px-6 lg:px-8">
+        <header className="flex items-center justify-between gap-3 pb-1">
+          <h1 className="text-[length:var(--font-h2-size)] font-semibold">研究项目</h1>
           <button type="button" data-testid="portal-new-project" aria-label="新建研究项目" onClick={() => setCreateOpen(true)}
-            className="flex h-[var(--control-height)] shrink-0 items-center gap-1.5 rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] hover:bg-[var(--accent-deep)] active:opacity-90">
+            className="flex h-[var(--control-height)] shrink-0 items-center gap-1.5 rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] hover:bg-[var(--fill-strong-hover)] active:opacity-90">
             <Plus size={14} aria-hidden="true" />新建项目
           </button>
         </header>
         {recent.length === 0 || query.trim() !== '' || filter === 'archived' ? null : (
           <section aria-labelledby="portal-recent-heading" data-testid="portal-recent">
-            <h2 id="portal-recent-heading" className="mb-2 text-[var(--font-ui-size)] font-medium">最近使用</h2>
+            <h2 id="portal-recent-heading" className="mb-2 text-[length:var(--font-ui-size)] font-medium">最近使用</h2>
             <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
               {recent.map(project => (
                 <button key={project.id} type="button" onClick={() => onOpenProject(project.id)}
                   className="min-w-0 rounded-control border-[0.5px] border-line p-3 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]">
                   <span className="block truncate font-medium">{project.title}</span>
-                  <span className="text-muted text-[var(--font-meta-size)]">{projectStageLabel(project.currentStage)}</span>
+                  <span className="text-muted text-[length:var(--font-meta-size)]">{projectStageLabel(project.currentStage)}</span>
                 </button>
               ))}
             </div>
           </section>
         )}
         <section aria-labelledby="portal-all-heading" className="flex flex-col gap-3">
-        <h2 id="portal-all-heading" className="text-[var(--font-ui-size)] font-medium">全部项目</h2>
+        <h2 id="portal-all-heading" className="flex items-baseline gap-2 text-[length:var(--font-ui-size)] font-medium">全部项目 <span className="font-normal text-muted tabular-nums text-[length:var(--font-meta-size)]">{shown.length}</span></h2>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex h-[var(--control-height)] min-w-[220px] flex-1 items-center gap-2 rounded-control border border-line bg-surface px-2.5">
+          <div className="flex h-[var(--control-height)] min-w-[160px] flex-1 items-center gap-2 rounded-control border-[0.5px] border-line bg-surface px-2.5">
             <Search size={13} aria-hidden="true" className="shrink-0 text-subtle" />
             <input
               value={query}
@@ -212,7 +212,7 @@ export function ProjectPortalView({
               </button>
             )}
           </div>
-          <div role="group" aria-label="项目状态筛选" className="flex items-center gap-0.5">
+          <div role="group" aria-label="项目状态筛选" className="flex items-center gap-0.5 rounded-control bg-[var(--overlay-hover)] p-0.5">
             {STATUS_FILTERS.map((entry) => {
               const selected = entry.id === filter;
               return (
@@ -227,11 +227,11 @@ export function ProjectPortalView({
                   data-testid={`portal-filter-${entry.id}`}
                   className={
                     selected
-                      ? 'h-[var(--control-height)] rounded-control bg-accent-soft px-2.5 text-ink active:bg-[var(--accent-soft-strong)]'
-                      : 'h-[var(--control-height)] rounded-control px-2.5 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]'
+                      ? 'h-[var(--control-height-compact)] rounded-chip bg-surface px-2.5 font-medium text-ink active:bg-[var(--accent-soft-strong)]'
+                      : 'h-[var(--control-height-compact)] rounded-chip px-2.5 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]'
                   }
                 >
-                  <span className="text-[var(--font-meta-size)]">{entry.label}</span>
+                  <span className="text-[length:var(--font-meta-size)]">{entry.label}</span>
                 </button>
               );
             })}
@@ -259,7 +259,7 @@ export function ProjectPortalView({
         ) : null}
 
         {writeError === null ? null : (
-          <p role="alert" className="rounded-card border border-[var(--st-bad-line)] px-3 py-2 text-[var(--st-bad)]" data-testid="portal-write-error">
+          <p role="alert" className="rounded-card border-[0.5px] border-[var(--st-bad-line)] px-3 py-2 text-[var(--st-bad)]" data-testid="portal-write-error">
             {writeError}
           </p>
         )}

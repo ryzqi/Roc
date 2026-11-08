@@ -51,7 +51,7 @@ export function ReviewReportBody({report}: {report: ResearchReviewReportInspecti
       <p className="text-muted">计数依据 PRISMA 2020 的记录、报告与研究定义。正式模板尚需确认综述类型及全部检索来源。</p>
     </section>
     <details data-testid="artifact-review-report-basis"><summary className="cursor-pointer font-medium">准确冻结依据与协议</summary>
-      <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">{JSON.stringify({
+      <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify({
         basis: body.basis, protocol: body.protocol, deduplication: body.deduplication, title: body.title, fullText: body.fullText, studyGrouping: body.studyGrouping
       }, null, 2)}</pre>
     </details>
@@ -62,7 +62,7 @@ export function ReviewReportBody({report}: {report: ResearchReviewReportInspecti
         <p className="text-muted break-words">{query.source.status} {query.source.coverageComplete ? '分页覆盖完整' : '分页覆盖有缺口'}
           {' '}开始 {query.search.snapshot.startedAt} 结束 {query.search.receipt!.endedAt}</p>
         <details><summary className="cursor-pointer text-muted">查询参数、来源错误与真实回执</summary>
-          <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">{JSON.stringify(query, null, 2)}</pre>
+          <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(query, null, 2)}</pre>
         </details>
       </li>)}</ol>
     </details>
@@ -71,7 +71,7 @@ export function ReviewReportBody({report}: {report: ResearchReviewReportInspecti
         <p className="break-words">{row.record.record.title}</p>
         <p className="text-muted">原始命中 {row.hit.recordIndex + 1} 年份 {row.record.record.publishedYear ?? '未报告'}</p>
         <details><summary className="cursor-pointer text-muted">原始元数据与准确命中</summary>
-          <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">{JSON.stringify(row, null, 2)}</pre>
+          <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(row, null, 2)}</pre>
         </details>
       </li>)}</ol>
       <ReportPage label="原始记录" offset={recordOffset} total={body.records.length} onOffset={setRecordOffset} />
@@ -81,7 +81,7 @@ export function ReviewReportBody({report}: {report: ResearchReviewReportInspecti
         <p>{row.phase === 'title_abstract' ? '标题摘要排除' : '全文资格排除'} 原始命中 {row.hit.recordIndex + 1}</p>
         <p className="break-words">主原因 {row.criterion.text}</p>
         <details><summary className="cursor-pointer text-muted">人工决定、仲裁与来源引用</summary>
-          <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">{JSON.stringify(row, null, 2)}</pre>
+          <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(row, null, 2)}</pre>
         </details>
       </li>)}</ol>
       <ReportPage label="排除清单" offset={exclusionOffset} total={body.exclusions.length} onOffset={setExclusionOffset} />

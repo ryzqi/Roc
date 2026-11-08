@@ -76,7 +76,7 @@ export function ReviewExtractionField({client, projectId, binding, label, value,
       <blockquote tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-words">{source.evidence.excerpt}</blockquote>
       <p className="text-muted break-words">{source.evidence.locator} {matches ? '对应所选全文来源' : '来源失效或不对应所选全文'}</p>
       <details><summary className="cursor-pointer text-muted">证据定位与准确摘要</summary>
-        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">{JSON.stringify(read.data, null, 2)}</pre>
+        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(read.data, null, 2)}</pre>
       </details>
       <button type="button" className={`${button} self-start`} disabled={!matches || value.evidence.length >= 10 || value.evidence.some(ref => ref.id === candidateId)}
         data-testid="artifact-review-extraction-evidence-add" onClick={() => {

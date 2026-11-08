@@ -97,8 +97,8 @@ const SEARCH_SOURCES: LiteratureSearchSource[] = [
 ];
 
 const fieldClass =
-  'h-[var(--control-height)] w-full rounded-control border border-line bg-surface px-2 text-ink text-[var(--font-meta-size)] placeholder:text-subtle';
-const labelClass = 'text-muted text-[var(--font-micro-size)]';
+  'h-[var(--control-height)] w-full rounded-control border-[0.5px] border-line bg-surface px-2 text-ink text-[length:var(--font-meta-size)] placeholder:text-subtle';
+const labelClass = 'text-muted text-[length:var(--font-micro-size)]';
 
 function outcomeMessage(outcome: LiteratureImportOutcome): { tone: 'ok' | 'bad'; text: string } {
   if (!outcome.ok) {
@@ -221,6 +221,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
 
   return (
     <ModalShell
+      closeOnBackdrop={false}
       open={open}
       title="导入文献"
       onClose={onClose}
@@ -254,8 +255,8 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
               data-testid={`literature-import-tab-${entry.id}`}
               className={
                 entry.id === tab
-                  ? 'h-[var(--control-height-compact)] rounded-control border border-line bg-accent-soft px-2.5 text-ink text-[var(--font-meta-size)]'
-                  : 'h-[var(--control-height-compact)] rounded-control border border-transparent px-2.5 text-muted text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] hover:text-ink'
+                  ? 'h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line bg-accent-soft px-2.5 text-ink text-[length:var(--font-meta-size)]'
+                  : 'h-[var(--control-height-compact)] rounded-control border-[0.5px] border-transparent px-2.5 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] hover:text-ink'
               }
             >
               {entry.label}
@@ -266,7 +267,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
         {tab === 'document' ? (
           <div className="flex flex-col gap-2" data-testid="literature-import-panel-document">
             <div className="flex flex-wrap gap-3">
-              <label className="flex items-center gap-1.5 text-[var(--font-meta-size)]">
+              <label className="flex items-center gap-1.5 text-[length:var(--font-meta-size)]">
                 <input
                   type="radio"
                   name="document-target"
@@ -276,7 +277,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 />
                 作为新条目
               </label>
-              <label className="flex items-center gap-1.5 text-[var(--font-meta-size)]">
+              <label className="flex items-center gap-1.5 text-[length:var(--font-meta-size)]">
                 <input
                   type="radio"
                   name="document-target"
@@ -293,11 +294,11 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 type="button"
                 onClick={() => void pick(setDocumentPath)}
                 data-testid="literature-import-pick-document"
-                className="h-[var(--control-height)] shrink-0 rounded-control border border-line px-3 text-ink text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+                className="h-[var(--control-height)] shrink-0 rounded-control border-[0.5px] border-line px-3 text-ink text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
               >
                 选择文件…
               </button>
-              <span className="min-w-0 flex-1 truncate font-mono text-muted text-[var(--font-micro-size)]" data-testid="literature-import-document-path">
+              <span className="min-w-0 flex-1 truncate font-mono text-muted text-[length:var(--font-micro-size)]" data-testid="literature-import-document-path">
                 {documentPath === null ? '未选择' : `${documentPath}（${documentKindLabel(documentPath)}）`}
               </span>
             </div>
@@ -331,12 +332,12 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                   data-testid="literature-import-document-key"
                 />
                 {documentKey.trim().length > 0 && !isCitationKeyValid(documentKey.trim()) ? (
-                  <p role="alert" className="text-[var(--st-bad)] text-[var(--font-micro-size)]">
+                  <p role="alert" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
                     引用键含有不支持的字符，请检查空格、逗号、花括号、反斜杠、%、# 和引号。
                   </p>
                 ) : null}
                 {documentDerivedKey === null && documentKey.trim().length === 0 && documentTitle.trim().length > 0 ? (
-                  <p className="text-muted text-[var(--font-micro-size)]">题名里没有可用的词，请自己指定一个 key。</p>
+                  <p className="text-muted text-[length:var(--font-micro-size)]">题名里没有可用的词，请自己指定一个 key。</p>
                 ) : null}
               </>
             ) : null}
@@ -360,7 +361,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 });
               }}
               data-testid="literature-import-document-submit"
-              className="mt-1 h-[var(--control-height)] shrink-0 self-start rounded-control bg-accent-soft px-3 text-ink text-[var(--font-meta-size)] active:bg-[var(--accent-soft-strong)] disabled:opacity-40"
+              className="mt-1 h-[var(--control-height)] shrink-0 self-start rounded-control bg-accent-soft px-3 text-ink text-[length:var(--font-meta-size)] active:bg-[var(--accent-soft-strong)] disabled:opacity-40"
             >
               导入文档
             </button>
@@ -381,7 +382,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
               data-testid="literature-import-doi"
             />
             {doiInput.trim().length > 0 && normalizedDoi === null ? (
-              <p role="alert" className="text-[var(--st-bad)] text-[var(--font-micro-size)]">
+              <p role="alert" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
                 这不是一个 DOI（形如 10.xxxx/yyyy）。
               </p>
             ) : null}
@@ -395,7 +396,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 void run(() => props.importDoi(normalizedDoi));
               }}
               data-testid="literature-import-doi-submit"
-              className="mt-1 h-[var(--control-height)] self-start rounded-control bg-accent-soft px-3 text-ink text-[var(--font-meta-size)] active:bg-[var(--accent-soft-strong)] disabled:opacity-40"
+              className="mt-1 h-[var(--control-height)] self-start rounded-control bg-accent-soft px-3 text-ink text-[length:var(--font-meta-size)] active:bg-[var(--accent-soft-strong)] disabled:opacity-40"
             >
               从 DOI 导入
             </button>
@@ -415,8 +416,8 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                   data-testid={`literature-import-format-${entry.id}`}
                   className={
                     entry.id === bibliographyFormat
-                      ? 'h-[var(--control-height-compact)] rounded-control border border-line bg-accent-soft px-2.5 text-ink text-[var(--font-meta-size)]'
-                      : 'h-[var(--control-height-compact)] rounded-control border border-line px-2.5 text-muted text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)]'
+                      ? 'h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line bg-accent-soft px-2.5 text-ink text-[length:var(--font-meta-size)]'
+                      : 'h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2.5 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)]'
                   }
                 >
                   {entry.label}
@@ -428,11 +429,11 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 type="button"
                 onClick={() => void pick(setBibliographyPath)}
                 data-testid="literature-import-pick-bibliography"
-                className="h-[var(--control-height)] shrink-0 rounded-control border border-line px-3 text-ink text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+                className="h-[var(--control-height)] shrink-0 rounded-control border-[0.5px] border-line px-3 text-ink text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
               >
                 选择文件…
               </button>
-              <span className="min-w-0 flex-1 truncate font-mono text-muted text-[var(--font-micro-size)]" data-testid="literature-import-bibliography-path">
+              <span className="min-w-0 flex-1 truncate font-mono text-muted text-[length:var(--font-micro-size)]" data-testid="literature-import-bibliography-path">
                 {bibliographyPath ?? '未选择'}
               </span>
             </div>
@@ -447,7 +448,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 void run(() => props.importBibliographyFile(path, bibliographyFormat));
               }}
               data-testid="literature-import-bibliography-submit"
-              className="mt-1 h-[var(--control-height)] self-start rounded-control bg-accent-soft px-3 text-ink text-[var(--font-meta-size)] active:bg-[var(--accent-soft-strong)] disabled:opacity-40"
+              className="mt-1 h-[var(--control-height)] self-start rounded-control bg-accent-soft px-3 text-ink text-[length:var(--font-meta-size)] active:bg-[var(--accent-soft-strong)] disabled:opacity-40"
             >
               导入参考文献
             </button>
@@ -474,7 +475,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
               value={manualAuthors}
               onChange={(event) => setManualAuthors(event.target.value)}
               rows={2}
-              className="w-full rounded-control border border-line bg-surface px-2 py-1 text-ink text-[var(--font-meta-size)]"
+              className="w-full rounded-control border-[0.5px] border-line bg-surface px-2 py-1 text-ink text-[length:var(--font-meta-size)]"
               data-testid="literature-import-manual-authors"
             />
             <div className="flex gap-2">
@@ -522,7 +523,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
               value={manualAbstract}
               onChange={(event) => setManualAbstract(event.target.value)}
               rows={3}
-              className="w-full rounded-control border border-line bg-surface px-2 py-1 text-ink text-[var(--font-meta-size)]"
+              className="w-full rounded-control border-[0.5px] border-line bg-surface px-2 py-1 text-ink text-[length:var(--font-meta-size)]"
               data-testid="literature-import-manual-abstract"
             />
             <label className={labelClass} htmlFor="literature-import-manual-key">
@@ -537,7 +538,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
               data-testid="literature-import-manual-key"
             />
             {effectiveManualKey.length > 0 && !isCitationKeyValid(effectiveManualKey) ? (
-              <p role="alert" className="text-[var(--st-bad)] text-[var(--font-micro-size)]">
+              <p role="alert" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
                 引用键含有不支持的字符，请检查空格、逗号、花括号、反斜杠、%、# 和引号。
               </p>
             ) : null}
@@ -564,7 +565,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 );
               }}
               data-testid="literature-import-manual-submit"
-              className="mt-1 h-[var(--control-height)] self-start rounded-control bg-accent-soft px-3 text-ink text-[var(--font-meta-size)] active:bg-[var(--accent-soft-strong)] disabled:opacity-40"
+              className="mt-1 h-[var(--control-height)] self-start rounded-control bg-accent-soft px-3 text-ink text-[length:var(--font-meta-size)] active:bg-[var(--accent-soft-strong)] disabled:opacity-40"
             >
               录入
             </button>
@@ -609,24 +610,24 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                     .finally(() => setPending(false));
                 }}
                 data-testid="literature-import-search-submit"
-                className="flex h-[var(--control-height)] shrink-0 items-center gap-1 rounded-control border border-line px-3 text-ink text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+                className="flex h-[var(--control-height)] shrink-0 items-center gap-1 rounded-control border-[0.5px] border-line px-3 text-ink text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
               >
                 <Search size={12} aria-hidden="true" />
                 检索
               </button>
             </div>
             {arxivId === null ? null : (
-              <p className="text-muted text-[var(--font-micro-size)]">
+              <p className="text-muted text-[length:var(--font-micro-size)]">
                 识别为 arXiv id <span className="font-mono">{arxivId}</span>，只在 arXiv 上检索。
               </p>
             )}
             {searchError === null ? null : (
-              <p role="alert" className="text-[var(--st-bad)] text-[var(--font-micro-size)]">
+              <p role="alert" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
                 {searchError}
               </p>
             )}
             {searchResult === null ? null : (
-              <p role="status" className="text-muted text-[var(--font-micro-size)]">
+              <p role="status" className="text-muted text-[length:var(--font-micro-size)]">
                 {searchResult.status === 'failed' ? '检索失败，请稍后重试。' : searchResult.status === 'partial' ? '部分来源未完成，以下为可用结果。' : `找到 ${searchResult.total} 篇候选，尚未加入文献库。`}
                 {searchResult.warnings.join(' ')}
               </p>
@@ -645,7 +646,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
         ) : null}
 
         {pending ? (
-          <p role="status" className="flex items-center gap-1.5 text-muted text-[var(--font-micro-size)]" data-testid="literature-import-pending">
+          <p role="status" className="flex items-center gap-1.5 text-muted text-[length:var(--font-micro-size)]" data-testid="literature-import-pending">
             <Loader2 size={12} aria-hidden="true" className="animate-spin" />
             正在导入…
           </p>
@@ -655,7 +656,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
           <p
             role={message.tone === 'ok' ? 'status' : 'alert'}
             data-testid="literature-import-message"
-            className={`flex items-center gap-1.5 text-[var(--font-meta-size)] ${
+            className={`flex items-center gap-1.5 text-[length:var(--font-meta-size)] ${
               message.tone === 'ok' ? 'text-[var(--st-ok)]' : 'text-[var(--st-bad)]'
             }`}
           >

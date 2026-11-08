@@ -49,7 +49,7 @@ export default function OpenReviewPanel({client, projectId, writable, onLockChan
     setNote(result.data.cancelled ? '主进程已接收取消查询信号' : '没有进行中的查询，请检查观察历史');
     history.reload();
   };
-  return <section aria-label="OpenReview 公开来源" className="space-y-3 px-3 py-2 text-[var(--font-body-size)]" data-testid="reader-openreview-panel">
+  return <section aria-label="OpenReview 公开来源" className="space-y-3 px-3 py-2 text-[length:var(--font-body-size)]" data-testid="reader-openreview-panel">
     <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-2">
       <label>查询范围<select value={kind} disabled={busy || uncertain || !writable} className={inputStyle}
         onChange={event => {setKind(event.target.value as OpenReviewQuery['kind']); setDirty(true);}}>

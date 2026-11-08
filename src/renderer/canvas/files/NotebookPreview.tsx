@@ -12,7 +12,7 @@ type Props = {
 };
 const pageSize = 20;
 const recordedDate = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'short', timeStyle: 'short' });
-const buttonClass = 'inline-flex items-center gap-1 rounded-control border border-line px-2 py-1 text-muted hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-50';
+const buttonClass = 'inline-flex items-center gap-1 rounded-control border-[0.5px] border-line px-2 py-1 text-muted hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-50';
 
 export default function NotebookPreview(props: Props): React.JSX.Element {
   return <NotebookPreviewContent key={JSON.stringify([props.projectId, props.workspacePath, props.relativePath])} {...props} />;
@@ -71,7 +71,7 @@ function NotebookPreviewContent({ client, projectId, workspacePath, relativePath
     current.status === 'ready' && current.data?.preview.sha256 !== selected.snapshot.sha256;
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="file-preview" data-kind="notebook">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b-[0.5px] border-line px-3 py-2">
         <span className="min-w-0 flex-1 truncate font-mono text-xs" title={relativePath}>{relativePath}</span>
         <button type="button" className={buttonClass} disabled={importNotebook.pending} aria-label="重新读取 Notebook"
           onClick={() => { current.reload(); history.reload(); frozen.reload(); }}>
@@ -138,7 +138,7 @@ function NotebookCells({ preview }: { preview: ResearchNotebookPreview }): React
         <summary className="cursor-pointer">文件来源哈希</summary>
         <p className="mt-1 break-all font-mono" data-testid="file-notebook-hash">{preview.sha256}</p>
       </details>
-      {preview.cells.map(cell => <details key={cell.id} open={cell.index === 0} className="border-t border-line py-2"
+      {preview.cells.map(cell => <details key={cell.id} open={cell.index === 0} className="border-t-[0.5px] border-line py-2"
         data-testid="file-notebook-cell" data-cell-id={cell.id}>
         <summary className="cursor-pointer text-xs">
           <span className="mr-2 tabular-nums">{cell.index + 1}</span>

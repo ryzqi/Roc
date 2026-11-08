@@ -190,12 +190,12 @@ export function ModalShell({
             transition={kind === 'drawer' ? drawerTransition : modalPopTransition}
             className={
               kind === 'drawer'
-                ? `relative z-10 ml-auto flex h-full max-w-[calc(100vw-var(--shadow-modal-gutter-inline))] flex-col border-l border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[520px]'}`
-                : `relative z-10 m-auto flex max-h-[min(86vh,calc(100dvh-2*var(--shadow-modal-gutter-block)))] max-w-[min(92vw,calc(100vw-2*var(--shadow-modal-gutter-inline)))] flex-col overflow-clip rounded-window border border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[680px]'}`
+                ? `relative z-10 ml-auto flex h-full max-w-[calc(100vw-var(--shadow-modal-gutter-inline))] flex-col border-l-[0.5px] border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[520px]'}`
+                : `relative z-10 m-auto flex max-h-[min(86vh,calc(100dvh-2*var(--shadow-modal-gutter-block)))] max-w-[min(92vw,calc(100vw-2*var(--shadow-modal-gutter-inline)))] flex-col overflow-clip rounded-window border-[0.5px] border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[680px]'}`
             }
           >
-            <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-2.5">
-              <h2 id={titleId} className="min-w-0 flex-1 truncate text-ink text-[var(--font-h3-size)]">
+            <div className="flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-4 py-2.5">
+              <h2 id={titleId} className="min-w-0 flex-1 truncate text-ink text-[length:var(--font-h3-size)]">
                 {title}
               </h2>
               <button
@@ -222,7 +222,7 @@ export function ModalShell({
             </div>
 
             {footer === undefined ? null : (
-              <div className="flex shrink-0 items-center justify-end gap-2 border-t border-line px-4 py-2.5">
+              <div className="flex shrink-0 items-center justify-end gap-2 border-t-[0.5px] border-line px-4 py-2.5">
                 {footer}
               </div>
             )}

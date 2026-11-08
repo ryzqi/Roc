@@ -49,8 +49,9 @@ export function SkillFilesModal({
 
   return (
     <ModalShell
+      closeOnBackdrop={false}
       open={open && selected !== null}
-      title={selected === null ? '技能文件' : `技能文件 · ${selected.name}`}
+      title={selected === null ? '技能文件' : `技能文件，${selected.name}`}
       onClose={onClose}
       widthClassName="w-[min(680px,92vw)] h-[min(78vh,680px)]"
       testId="mgmt-skill-files"
@@ -67,7 +68,7 @@ export function SkillFilesModal({
               type="button"
               onClick={() => skills.setDirPath('')}
               data-testid="mgmt-skill-crumb-root"
-              className="rounded-control px-1 text-muted text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+              className="rounded-control px-1 text-muted text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
             >
               {selected.name}
             </button>
@@ -80,7 +81,7 @@ export function SkillFilesModal({
                     type="button"
                     onClick={() => skills.setDirPath(path)}
                     data-testid={`mgmt-skill-crumb-${path}`}
-                    className="rounded-control px-1 text-muted text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                    className="rounded-control px-1 text-muted text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
                   >
                     {segment}
                   </button>
@@ -111,7 +112,7 @@ export function SkillFilesModal({
                         type="button"
                         onClick={() => skills.setDirPath(parentRelativePath(skills.dirPath))}
                         data-testid="mgmt-skill-up"
-                        className="flex w-full items-center gap-1 rounded-control px-1 py-0.5 text-left text-muted text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                        className="flex w-full items-center gap-1 rounded-control px-1 py-0.5 text-left text-muted text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
                       >
                         <Folder size={11} aria-hidden="true" />
                         ..
@@ -143,8 +144,8 @@ export function SkillFilesModal({
                           ) : (
                             <FileIcon size={11} aria-hidden="true" className="shrink-0 text-muted" />
                           )}
-                          <span className="min-w-0 flex-1 truncate text-muted text-[var(--font-micro-size)]">{entry.name}</span>
-                          <span className="shrink-0 text-subtle text-[var(--font-micro-size)]">
+                          <span className="min-w-0 flex-1 truncate text-muted text-[length:var(--font-micro-size)]">{entry.name}</span>
+                          <span className="shrink-0 text-subtle text-[length:var(--font-micro-size)]">
                             {entry.type === 'directory' ? '' : formatBytes(entry.size)}
                           </span>
                         </button>
@@ -160,15 +161,15 @@ export function SkillFilesModal({
               ) : null}
             </div>
 
-            <div className="flex min-h-0 min-w-0 flex-col gap-1 overflow-y-auto border-l border-line-soft pl-2">
+            <div className="flex min-h-0 min-w-0 flex-col gap-1 overflow-y-auto border-l-[0.5px] border-line-soft pl-2">
               {skills.previewPath === null ? (
                 <FormNote testId="mgmt-skill-preview-empty">从左边选一个文件查看内容。</FormNote>
               ) : (
                 <div className="flex flex-col gap-1" data-testid="mgmt-skill-preview">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate font-mono text-muted text-[var(--font-micro-size)]">{skills.previewPath}</span>
+                    <span className="min-w-0 flex-1 truncate font-mono text-muted text-[length:var(--font-micro-size)]">{skills.previewPath}</span>
                     {skills.preview === null ? null : (
-                      <span className="shrink-0 text-subtle text-[var(--font-micro-size)]">{previewSizeLabel(skills.preview)}</span>
+                      <span className="shrink-0 text-subtle text-[length:var(--font-micro-size)]">{previewSizeLabel(skills.preview)}</span>
                     )}
                     <button
                       type="button"
@@ -200,7 +201,7 @@ export function SkillFilesModal({
                           src={skills.preview.content}
                           alt={skills.preview.relativePath}
                           data-testid="mgmt-skill-preview-image"
-                          className="max-h-[240px] max-w-full rounded-card border border-line"
+                          className="max-h-[240px] max-w-full rounded-card border-[0.5px] border-line"
                         />
                       ) : filePreviewKind(skills.preview) === 'binary' ? (
                         <FormNote testId="mgmt-skill-preview-binary">
@@ -209,7 +210,7 @@ export function SkillFilesModal({
                       ) : filePreviewKind(skills.preview) === 'markdown' ? (
                         <Suspense fallback={<DelayedFallback label="正在加载 Markdown 渲染…" />}>
                           <div
-                            className="rounded-card border border-line bg-surface px-2 py-1.5"
+                            className="rounded-card border-[0.5px] border-line bg-surface px-2 py-1.5"
                             data-testid="mgmt-skill-preview-markdown"
                           >
                             <MarkdownView text={skills.preview.content} />
@@ -217,7 +218,7 @@ export function SkillFilesModal({
                         </Suspense>
                       ) : (
                         <pre
-                          className="whitespace-pre-wrap rounded-card border border-line bg-bg-soft px-2 py-1.5 font-mono text-[var(--font-code-size)] text-muted"
+                          className="whitespace-pre-wrap rounded-card border-[0.5px] border-line bg-bg-soft px-2 py-1.5 font-mono text-[length:var(--font-code-size)] text-muted"
                           data-testid="mgmt-skill-preview-text"
                         >
                           {skills.preview.content}

@@ -18,10 +18,10 @@ export function ExperimentSourceView({source,client,request,writable}: {
       <dt>退出码</dt><dd>{run.exitCode===null?'未记录':run.exitCode}</dd>
       <dt>开始时间</dt><dd className="break-words">{run.startedAt??'未记录'}</dd>
       <dt>结束时间</dt><dd className="break-words">{run.endedAt??'未记录'}</dd>
-      <dt>输入 SHA-256</dt><dd className="break-all font-mono text-[var(--font-meta-size)]">{run.inputHash??'未记录'}</dd>
+      <dt>输入 SHA-256</dt><dd className="break-all font-mono text-[length:var(--font-meta-size)]">{run.inputHash??'未记录'}</dd>
     </dl>
     <details data-reading-key="experiment-request" className="text-muted"><summary data-reading-key="experiment-request-summary" className="cursor-pointer">保存的运行参数</summary>
-      <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(run.request,null,2)}</pre>
+      <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(run.request,null,2)}</pre>
     </details>
     <ExperimentResults client={client} run={run} request={request} writable={writable}/>
   </section>;

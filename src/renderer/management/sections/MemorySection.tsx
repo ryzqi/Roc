@@ -83,7 +83,7 @@ export function MemorySection({ scope, store: files }: { scope: ManagementScope;
           {unavailable === null ? null : <FormNote tone="warn" testId="mgmt-memory-slot-unavailable">{unavailable}</FormNote>}
           {files.save.outcome === null ? null : <div role="status"><FormNote tone={files.save.outcome.status === 'saved' ? 'default' : 'warn'} testId="mgmt-memory-outcome">
             {files.save.outcome.status === 'saved' ? <span className="memory-inline"><Check size={12} aria-hidden="true" />已保存</span> : `未保存：${files.save.outcome.message}`}
-            {files.save.outcome.issues.length > 0 ? ` · 命中：${files.save.outcome.issues.map((issue) => `${issue.category}(${issue.pattern})`).join('、')}` : null}
+            {files.save.outcome.issues.length > 0 ? `，命中：${files.save.outcome.issues.map((issue) => `${issue.category}(${issue.pattern})`).join('、')}` : null}
           </FormNote></div>}
           {files.save.error === null ? null : <FormNote tone="warn" testId="mgmt-memory-save-error">{files.save.error}</FormNote>}
           {files.contentLoading ? <FormNote>正在读取内容…</FormNote> : files.contentError !== null ? null : editing ? (
@@ -99,7 +99,7 @@ export function MemorySection({ scope, store: files }: { scope: ManagementScope;
                 <span data-testid="mgmt-memory-length">{codePointCount(files.draft).toLocaleString('en-US')} / {selectedMeta?.charLimit.toLocaleString('en-US') ?? '—'} 字符</span>
                 <button type="button" data-testid="mgmt-memory-assist" disabled={files.save.pending} onClick={() => scope.onAskAssistant(buildMemoryAssistPrompt(files.selected, files.draft))} className={formSecondaryButtonClass}><Bot size={12} aria-hidden="true" />请助手整理</button>
               </div>
-              <p className="memory-editor-hint">支持 Markdown · ⌘ Enter 保存</p>
+              <p className="memory-editor-hint">支持 Markdown，⌘ Enter 保存</p>
             </div>
           ) : (
             <>
@@ -131,16 +131,16 @@ function MemoryToolPanel({ tool, scope, files, previewRevision }: { tool: Memory
   if (tool === 'audit') return <section data-testid="mgmt-memory-audit"><h3>最近变更</h3><p className="memory-tool-description">助手自动整理记忆的最近记录</p>
     {memory.autoMemory.recent.length === 0 ? <FormNote>还没有自动整理记录。</FormNote> : <ul className="memory-audit-list" data-testid="mgmt-memory-audit-list">{memory.autoMemory.recent.map((record) => <li key={record.id}>
       <p>{record.summary}</p><div className="memory-audit-meta"><span>{autoMemoryActionLabels[record.action]}</span><span>{formatBeijingDateTime(record.createdAt)}</span></div>
-      <details><summary>处理详情</summary><p>{autoMemoryTypeLabels[record.type]} · {record.reason}</p>{record.targetPath === null ? null : <code>{record.targetPath}</code>}</details>
+      <details><summary>处理详情</summary><p>{autoMemoryTypeLabels[record.type]}，{record.reason}</p>{record.targetPath === null ? null : <code>{record.targetPath}</code>}</details>
     </li>)}</ul>}
   </section>;
   return <section data-testid="mgmt-memory-details"><h3>记忆详情</h3><dl>
     <KeyValueRow label="存储位置" value={memory.root} testId="mgmt-memory-root" />
     <KeyValueRow label="工作目录" value={memory.workspaceLabel ?? '未绑定'} testId="mgmt-memory-workspace" />
-    <KeyValueRow label="生效预览" value={`${memory.snapshot.enabled ? '启用' : '停用'} · ${memory.snapshot.totalChars} / ${memory.snapshot.totalLimit} 字符`} testId="mgmt-memory-snapshot-state" />
-    <KeyValueRow label="会话消息" value={`${memory.sessionMessages.totalRows} 行 · 保留 ${memory.sessionMessages.retentionDays} 天 · 最早 ${memory.sessionMessages.oldestAt === null ? '—' : formatBeijingDateTime(memory.sessionMessages.oldestAt)}`} testId="mgmt-memory-sessions" />
+    <KeyValueRow label="生效预览" value={`${memory.snapshot.enabled ? '启用' : '停用'}，${memory.snapshot.totalChars} / ${memory.snapshot.totalLimit} 字符`} testId="mgmt-memory-snapshot-state" />
+    <KeyValueRow label="会话消息" value={`${memory.sessionMessages.totalRows} 行，保留 ${memory.sessionMessages.retentionDays} 天，最早 ${memory.sessionMessages.oldestAt === null ? '—' : formatBeijingDateTime(memory.sessionMessages.oldestAt)}`} testId="mgmt-memory-sessions" />
     <KeyValueRow label="全文索引" value={memory.fullTextIndex.healthy ? '健康' : '异常（会话检索可能无结果）'} testId="mgmt-memory-index" />
-    {files.rows.map(({ slot, meta }) => <KeyValueRow key={slot.virtualPath} label={slot.label} value={`${slot.virtualPath} · ${capacityLabel(meta)}`} testId={`mgmt-memory-capacity-${slot.scope}-${slot.kind}`} />)}
+    {files.rows.map(({ slot, meta }) => <KeyValueRow key={slot.virtualPath} label={slot.label} value={`${slot.virtualPath}，${capacityLabel(meta)}`} testId={`mgmt-memory-capacity-${slot.scope}-${slot.kind}`} />)}
   </dl></section>;
 }
 
@@ -148,7 +148,7 @@ function MemoryPreview({ scope, files, revision }: { scope: ManagementScope; fil
   const preview = useMemorySnapshot(scope.client, revision);
   return <section data-testid="mgmt-memory-preview"><h3>生效内容预览</h3><p className="memory-tool-description">按当前配置生成下一次对话的记忆预览，可能与保存的完整内容不同。</p>
     {preview.error !== null ? <FormNote tone="warn" testId="mgmt-memory-preview-error">{preview.error}</FormNote> : preview.status === 'loading' ? <FormNote>正在读取预览…</FormNote> : <>
-      <p className="memory-tool-description" data-testid="mgmt-memory-preview-count">{preview.charCount} 字符 · {snapshotIncludesSlot(preview.text ?? '', files.selected) ? '包含当前分类' : '未包含当前分类（内容为空或未生效）'}</p>
+      <p className="memory-tool-description" data-testid="mgmt-memory-preview-count">{preview.charCount} 字符，{snapshotIncludesSlot(preview.text ?? '', files.selected) ? '包含当前分类' : '未包含当前分类（内容为空或未生效）'}</p>
       <pre data-testid="mgmt-memory-preview-text">{preview.text || '当前没有可带入的记忆。'}</pre>
     </>}
   </section>;

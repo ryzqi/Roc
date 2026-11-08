@@ -42,7 +42,7 @@ function ExecutionTree({ executions, client }: { executions: ResearchTaskExecuti
     children.set(parent, siblings);
   }
   const render = (parent: string | null): React.JSX.Element => (
-    <ol className={parent === null ? 'grid gap-2' : 'ml-2 grid gap-2 border-l border-line pl-3 pt-2'}>
+    <ol className={parent === null ? 'grid gap-2' : 'ml-2 grid gap-2 border-l-[0.5px] border-line pl-3 pt-2'}>
       {(children.get(parent) ?? []).map(execution => {
         const association = execution.association;
         const key = `${association.kind}:${association.executionId}`;
@@ -52,9 +52,9 @@ function ExecutionTree({ executions, client }: { executions: ResearchTaskExecuti
               <span>{execution.stage === null ? executionLabels[association.kind] : STAGE_LABELS[execution.stage]}</span>
               <span>{executionStatusLabels[execution.status]}</span>
             </div>
-            <p className="break-all font-mono text-subtle text-[var(--font-meta-size)]">{association.executionId}</p>
+            <p className="break-all font-mono text-subtle text-[length:var(--font-meta-size)]">{association.executionId}</p>
             {execution.modelId === null ? null : <p className="text-subtle">{execution.providerId} / {execution.modelId}</p>}
-            <p className="text-subtle text-[var(--font-meta-size)]">
+            <p className="text-subtle text-[length:var(--font-meta-size)]">
               开始 {execution.startedAt === null ? '未开始' : formatBeijingDateTime(execution.startedAt)}
               {' / 结束 '}{execution.endedAt === null ? '未结束' : formatBeijingDateTime(execution.endedAt)}
               {execution.startedAt === null || execution.endedAt === null ? '' :
@@ -134,7 +134,7 @@ function TaskDetail({ client, projectId, taskId }: {
                     <span className="text-ink">#{event.sequence} {eventLabels[event.eventType]}</span>
                     <span className="text-subtle">{formatBeijingDateTime(event.createdAt)}</span>
                   </div>
-                  <p className="break-all font-mono text-subtle text-[var(--font-meta-size)]">
+                  <p className="break-all font-mono text-subtle text-[length:var(--font-meta-size)]">
                     {event.payload.executionId === null ? '' : `执行 ${event.payload.executionKind} / ${event.payload.executionId}`}
                     {event.payload.callId === null ? '' : ` / 调用 ${event.payload.callId}`}
                   </p>

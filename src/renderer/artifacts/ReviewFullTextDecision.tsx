@@ -43,7 +43,7 @@ export function ReviewFullTextDecision({client, protocol, plan, titleFreezeHash,
       <p className="text-muted break-words">审核人 {parent.snapshot.reviewer.name} {parent.snapshot.reviewer.id}</p>
       <p className="text-muted break-all">记录人 {parent.snapshot.actor.id} {parent.snapshot.recordedAt}</p>
       <details><summary className="cursor-pointer text-muted">决定准则与准确引用</summary>
-        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">
+        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">
           {JSON.stringify(parent.snapshot.request, null, 2)}
         </pre>
       </details>
@@ -63,7 +63,7 @@ export function ReviewFullTextDecision({client, protocol, plan, titleFreezeHash,
           <p className="text-muted">{item.sourceCurrent ? '当前来源建议' : '历史来源建议，不适用于当前绑定'}</p>
           <p className="break-words">{item.snapshot.request.outcome.reason}</p>
           <details><summary className="cursor-pointer text-muted">建议准则与工具来源</summary>
-            <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">
+            <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">
               {JSON.stringify({outcome: item.snapshot.request.outcome, origin: item.snapshot.origin, recordedAt: item.snapshot.recordedAt}, null, 2)}
             </pre>
           </details>

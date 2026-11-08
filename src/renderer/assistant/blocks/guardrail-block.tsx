@@ -28,19 +28,19 @@ export function GuardrailBlock({ block }: { block: GuardrailBlockModel }): React
         : `tier ${block.tier}`
       : block.tier === null
         ? block.toolName
-        : `${block.toolName} · tier ${block.tier}`;
+        : `${block.toolName}，tier ${block.tier}`;
 
   return (
     <ActivityBlockShell
       testId="assistant-activity-guardrail"
       icon={ShieldAlert}
-      title={`护栏 · ${block.nudgeKind}`}
+      title={`护栏，${block.nudgeKind}`}
       meta={meta}
       tone="error"
       open={open}
       onToggle={setOpen}
     >
-      <div className="border-t border-line-soft px-2 py-1.5" data-testid="assistant-guardrail-body">
+      <div className="border-t-[0.5px] border-line-soft px-2 py-1.5" data-testid="assistant-guardrail-body">
         <Suspense fallback={null}>
           <StreamingMarkdownView text={block.content} isStreaming={false} />
         </Suspense>

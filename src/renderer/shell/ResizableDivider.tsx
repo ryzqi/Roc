@@ -1,96 +1,88 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { GripVertical } from 'lucide-react';
 
-/**
- * Column resize handle.
- *
- * Pointer drag is the primary interaction, but AGENTS.md requires every
- * important action to be keyboard reachable, so the separator takes focus and
- * responds to arrow keys (8px per press, 32px with Shift). Double-click resets
- * to the default width; double-click is a convenience, never the only path.
- *
- * The hairline is drawn at 1px inside an 8px hit area: the hit target is
- * comfortable without making the two panels look separated by a gutter.
- *
- * The handle's feedback has three states: the hairline brightens
- * under the pointer, the grab chip fades in on hover, and while dragging it goes
- * solid, grows 5% and casts a soft glow (`--divider-glow`) so it is clear that
- * the divider — not the window — is what the pointer is moving.
- *
- * Colors come from the token layer through arbitrary Tailwind values so no
- * component hard-codes a hex.
- */
-
+/** An 8px pointer target around a hairline. Escape restores the drag's exact baseline. */
 export type ResizableDividerProps = {
   ariaLabel: string;
-  /** Positive means "the panel to the left grew". */
-  onDelta: (deltaPx: number) => void;
+  value: number;
+  min: number;
+  max: number;
+  onResize: (width: number) => void;
   onReset?: () => void;
   onDragChange?: (dragging: boolean) => void;
-  /** Announces that the panel cannot shrink further in this direction. */
   atLimit?: 'min' | 'max' | null;
   testId?: string;
 };
 
-const KEYBOARD_STEP = 8;
-const KEYBOARD_STEP_LARGE = 32;
-
 export function ResizableDivider({
-  ariaLabel,
-  onDelta,
-  onReset,
-  onDragChange,
-  atLimit = null,
-  testId
+  ariaLabel, value, min, max, onResize, onReset, onDragChange, atLimit = null, testId
 }: ResizableDividerProps): React.JSX.Element {
   const [dragging, setDragging] = useState(false);
+  const cleanupRef = useRef<(() => void) | null>(null);
+  const callbacks = useRef({ onResize, onDragChange });
+  callbacks.current = { onResize, onDragChange };
+  useEffect(() => () => cleanupRef.current?.(), []);
 
   const startDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (event.button !== 0 || !event.isPrimary || cleanupRef.current !== null) return;
     event.preventDefault();
     const target = event.currentTarget;
-    target.setPointerCapture(event.pointerId);
+    const pointerId = event.pointerId;
+    const startX = event.clientX;
+    const startWidth = value;
+    target.focus();
+    target.setPointerCapture(pointerId);
     setDragging(true);
-    onDragChange?.(true);
-    let lastX = event.clientX;
+    callbacks.current.onDragChange?.(true);
 
-    const onMove = (moveEvent: PointerEvent): void => {
-      const delta = moveEvent.clientX - lastX;
-      lastX = moveEvent.clientX;
-      if (delta !== 0) {
-        onDelta(delta);
-      }
-    };
-
-    const onUp = (upEvent: PointerEvent): void => {
-      try {
-        target.releasePointerCapture(upEvent.pointerId);
-      } catch {
-        // Pointer capture may already be gone; releasing twice is harmless.
-      }
-      setDragging(false);
-      onDragChange?.(false);
+    const cleanup = (): void => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
+      window.removeEventListener('pointercancel', onCancel);
+      window.removeEventListener('keydown', onEscape, true);
+      target.removeEventListener('lostpointercapture', onCancel);
+      cleanupRef.current = null;
+      if (target.hasPointerCapture(pointerId)) target.releasePointerCapture(pointerId);
+      callbacks.current.onDragChange?.(false);
     };
-
+    const finish = (cancelled: boolean): void => {
+      cleanup();
+      if (cancelled) callbacks.current.onResize(startWidth);
+      setDragging(false);
+    };
+    const onMove = (moveEvent: PointerEvent): void => {
+      if (moveEvent.pointerId === pointerId) callbacks.current.onResize(startWidth + moveEvent.clientX - startX);
+    };
+    const onUp = (upEvent: PointerEvent): void => {
+      if (upEvent.pointerId === pointerId) finish(false);
+    };
+    const onCancel = (cancelEvent: PointerEvent): void => {
+      if (cancelEvent.pointerId === pointerId) finish(true);
+    };
+    const onEscape = (keyEvent: KeyboardEvent): void => {
+      if (keyEvent.key !== 'Escape') return;
+      keyEvent.preventDefault();
+      keyEvent.stopPropagation();
+      finish(true);
+    };
+    cleanupRef.current = cleanup;
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
+    window.addEventListener('pointercancel', onCancel);
+    window.addEventListener('keydown', onEscape, true);
+    target.addEventListener('lostpointercapture', onCancel);
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (dragging) return;
     if (event.key === 'Home' && onReset !== undefined) {
       event.preventDefault();
       onReset();
-      return;
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      const step = event.shiftKey ? 32 : 8;
+      onResize(value + (event.key === 'ArrowLeft' ? -step : step));
     }
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
-      return;
-    }
-    event.preventDefault();
-    const step = event.shiftKey ? KEYBOARD_STEP_LARGE : KEYBOARD_STEP;
-    onDelta(event.key === 'ArrowLeft' ? -step : step);
   };
 
   return (
@@ -98,6 +90,11 @@ export function ResizableDivider({
       role="separator"
       aria-orientation="vertical"
       aria-label={ariaLabel}
+      aria-valuenow={Math.round(value)}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuetext={`${Math.round(value)} 像素`}
+      title="拖动调整宽度，Escape 撤销；方向键微调，Home 重置"
       tabIndex={0}
       data-testid={testId}
       data-dragging={dragging}
@@ -112,15 +109,15 @@ export function ResizableDivider({
       <div
         className={
           dragging
-            ? 'h-full w-px bg-line-strong shadow-[var(--divider-glow)] transition-colors duration-[var(--duration-fast)]'
-            : 'h-full w-px bg-line transition-colors duration-[var(--duration-fast)] group-hover:bg-line-strong'
+            ? 'h-full w-[0.5px] bg-accent transition-colors duration-[var(--duration-fast)]'
+            : 'h-full w-[0.5px] bg-line transition-colors duration-[var(--duration-fast)] group-hover:bg-line-strong'
         }
       />
       <div
         className={
           dragging
-            ? 'pointer-events-none absolute top-1/2 flex h-6 w-3.5 -translate-y-1/2 scale-105 items-center justify-center rounded-control border border-line bg-[var(--surface-card-hover)] opacity-100 shadow-[var(--shadow-card)] transition-all duration-[var(--duration-fast)]'
-            : 'pointer-events-none absolute top-1/2 flex h-6 w-3.5 -translate-y-1/2 scale-100 items-center justify-center rounded-control border border-line bg-surface opacity-0 shadow-[var(--shadow-card)] transition-all duration-[var(--duration-fast)] group-hover:opacity-100'
+            ? 'pointer-events-none absolute top-1/2 flex h-6 w-3.5 -translate-y-1/2 scale-105 items-center justify-center rounded-control border-[0.5px] border-line bg-[var(--surface-card-hover)] opacity-100 transition-all duration-[var(--duration-fast)]'
+            : 'pointer-events-none absolute top-1/2 flex h-6 w-3.5 -translate-y-1/2 scale-100 items-center justify-center rounded-control border-[0.5px] border-line bg-surface opacity-0 transition-all duration-[var(--duration-fast)] group-hover:opacity-100'
         }
       >
         <GripVertical size={10} aria-hidden="true" className="text-muted" />

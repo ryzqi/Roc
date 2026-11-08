@@ -46,14 +46,9 @@ export function isTaskApproval(approval: ChatPendingApproval): boolean {
   return (TASK_APPROVAL_TOOL_NAMES as readonly string[]).includes(name);
 }
 
-function approvalButtonClass(kind: 'approve' | 'neutral' | 'reject' | 'edit'): string {
-  if (kind === 'approve') {
-    return 'h-[var(--control-height)] rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] active:bg-[var(--accent-deep)]';
-  }
-  if (kind === 'reject') {
-    return 'h-[var(--control-height)] rounded-control border border-[var(--st-bad-line)] px-3 text-[var(--st-bad)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]';
-  }
-  return 'h-[var(--control-height)] rounded-control border border-line px-3 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]';
+// Approval choices carry equal emphasis; the labels describe the decision.
+function approvalButtonClass(_kind: 'approve' | 'neutral' | 'reject' | 'edit'): string {
+  return 'h-[var(--control-height)] rounded-control border-[0.5px] border-line px-3 text-ink hover:border-line-strong hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50';
 }
 
 function ApprovalShell({
@@ -69,15 +64,15 @@ function ApprovalShell({
 }): React.JSX.Element {
   return (
     <section
-      className="my-2 rounded-card border border-[var(--st-warn-line)] bg-surface px-3 py-2"
+      className="my-2 rounded-card border-[0.5px] border-[var(--st-warn-line)] bg-surface px-3 py-2"
       data-testid={testId}
     >
       <header className="mb-1 flex flex-col gap-0.5">
-        <span className="flex items-center gap-1.5 text-[var(--st-warn)] text-[var(--font-micro-size)]">
+        <span className="flex items-center gap-1.5 text-[var(--st-warn)] text-[length:var(--font-micro-size)]">
           <ShieldCheck size={12} aria-hidden="true" />
           {eyebrow}
         </span>
-        <strong className="text-ink text-[var(--font-h3-size)]">{title}</strong>
+        <strong className="text-ink text-[length:var(--font-h3-size)]">{title}</strong>
       </header>
       {children}
     </section>
@@ -108,7 +103,7 @@ export function ChatApprovalCard({
   return (
     <ApprovalShell
       testId="assistant-approval-card"
-      eyebrow={`等待审批 · ${approval.actionRequests.length}`}
+      eyebrow={`等待审批，${approval.actionRequests.length}`}
       title="助手请求执行工具"
     >
       <ul className="flex flex-col gap-1.5">
@@ -116,14 +111,14 @@ export function ChatApprovalCard({
           const reviewConfig = approval.reviewConfigs.find((config) => config.actionName === request.name);
           return (
             <li key={`${request.name}-${index}`} className="rounded-control bg-bg-soft px-2 py-1.5">
-              <span className="font-mono text-ink text-[var(--font-meta-size)]" data-testid="assistant-approval-tool-name">
+              <span className="font-mono text-ink text-[length:var(--font-meta-size)]" data-testid="assistant-approval-tool-name">
                 {request.name}
               </span>
-              <pre className="mt-1 max-h-[220px] overflow-auto whitespace-pre-wrap font-mono text-[var(--code-text)] text-[var(--font-code-size)]">
+              <pre className="mt-1 max-h-[220px] overflow-auto whitespace-pre-wrap font-mono text-[var(--code-text)] text-[length:var(--font-code-size)]">
                 {JSON.stringify(request.args, null, 2)}
               </pre>
               {reviewConfig === undefined ? null : (
-                <span className="text-subtle text-[var(--font-micro-size)]" data-testid="assistant-approval-decisions">
+                <span className="text-subtle text-[length:var(--font-micro-size)]" data-testid="assistant-approval-decisions">
                   {reviewConfig.allowedDecisions.join(' / ')}
                 </span>
               )}
@@ -259,7 +254,7 @@ export function ResearchGateApprovalCard({
         </span>
       }
     >
-      <p className="text-muted text-[var(--font-meta-size)]" data-testid="assistant-gate-summary">
+      <p className="text-muted text-[length:var(--font-meta-size)]" data-testid="assistant-gate-summary">
         {summary === '' ? '确认通过本阶段产物并进入下一阶段。' : summary}
       </p>
       {reviewError === '' ? null : <p role="alert" className="mt-2 text-[var(--st-bad)]" data-testid="assistant-gate-review-error">
@@ -274,7 +269,7 @@ export function ResearchGateApprovalCard({
         </li>)}
       </ul> : <p role="alert" className="mt-2 text-[var(--st-bad)]">真实工件标识缺失或无效，闸门决定已禁用。请重新读取本阶段审核上下文。</p>}
       {isDiscovery ? plan?.success && canApprovePlan ? (
-        <div className="mt-2 max-h-[320px] overflow-auto break-words text-ink text-[var(--font-meta-size)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
+        <div className="mt-2 max-h-[320px] overflow-auto break-words text-ink text-[length:var(--font-meta-size)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
           tabIndex={0} aria-label="待确认检索计划" data-testid="assistant-gate-search-plan">
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
             <dt className="text-muted">原始研究指令</dt><dd>{plan.data.researchQuestion}</dd>
@@ -310,8 +305,8 @@ export function ResearchGateApprovalCard({
           className={`${approvalButtonClass('neutral')} disabled:cursor-not-allowed disabled:opacity-50`}
           onClick={() => setRefreshNonce(value => value + 1)}>重新读取本阶段审核上下文</button>
         {refreshNonce > 0 && refreshed.status === 'loading' ? <span role="status" className="text-muted">正在读取全部阶段工件…</span> : null}
-        {context === null ? null : <span className="text-muted text-[var(--font-meta-size)]" data-testid="assistant-gate-reviewed-at">
-          已重读 {context.artifactLinks.length} 个工件，需重新确认 · {context.readAt}
+        {context === null ? null : <span className="text-muted text-[length:var(--font-meta-size)]" data-testid="assistant-gate-reviewed-at">
+          已重读 {context.artifactLinks.length} 个工件，需重新确认，{context.readAt}
         </span>}
       </div>
       {refreshNonce > 0 && refreshed.error !== null ? <p role="alert" className="mt-2 text-[var(--st-bad)]">{refreshed.error}</p> : null}
@@ -384,11 +379,11 @@ export function TaskApprovalCard({
       eyebrow="任务审批"
       title={isCancel ? '取消后台任务' : '新建 / 修改后台任务'}
     >
-      <p className="text-ink text-[var(--font-read-size)]">{goal}</p>
+      <p className="text-ink text-[length:var(--font-read-size)]">{goal}</p>
       {schedule === '' ? null : (
-        <p className="mt-0.5 font-mono text-muted text-[var(--font-meta-size)]">计划：{schedule}</p>
+        <p className="mt-0.5 font-mono text-muted text-[length:var(--font-meta-size)]">计划：{schedule}</p>
       )}
-      <pre className="mt-1.5 max-h-[220px] overflow-auto whitespace-pre-wrap rounded-control bg-code-surface px-2 py-1 font-mono text-[var(--code-text)] text-[var(--font-code-size)]">
+      <pre className="mt-1.5 max-h-[220px] overflow-auto whitespace-pre-wrap rounded-control bg-code-surface px-2 py-1 font-mono text-[var(--code-text)] text-[length:var(--font-code-size)]">
         {JSON.stringify(args, null, 2)}
       </pre>
       <div className="mt-2 flex items-center gap-2">

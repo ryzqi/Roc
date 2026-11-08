@@ -23,7 +23,7 @@ import { createGateRecorder, finishGate, navigate, prepareArtifactDir } from './
  *      `files.selectFromDialog`（src/main/ipc/files-ipc.ts）返回固定的
  *      `<workspace>/assets/smoke-image.png`，因此**无法**用它选中夹具 PDF。
  *      导入这一步用 `research.document.import`；对话框本身按它能做的事断言
- *      （5 个 tab、题名/citationKey 必填、选择器回填、手工录入真写库）。
+ *      （6 个 tab、题名/citationKey 必填、选择器回填、手工录入真写库）。
  *   3. **索引不重复解析 PDF。** 索引复用闸门 1 的原生 `parse_document` 结果；再跑一遍
  *      只会重复模型推理而没有新覆盖。索引闸门改用真实可索引的 markdown 文件（快、确定），并把它
  *      真实报告两个坏文件（种子里那对占位 PDF/PNG）当作失败可见性的证据。
@@ -183,7 +183,7 @@ async function waitForInputValue(page, selector, predicate, timeoutMs) {
 try {
   app = await electron.launch({
     executablePath: target.executablePath,
-    args: target.launchArgs,
+    args: [...target.launchArgs, `--user-data-dir=${join(dataRoot, 'electron-profile')}`],
     env: {
       ...process.env,
       ROC_SMOKE: '1',
@@ -501,8 +501,13 @@ try {
   await openLiteratureHub(page, projectId);
   await page.click('[data-testid="literature-hub-import"]');
   await page.waitForSelector('[data-testid="literature-import-dialog"]', { timeout: 20_000 });
-  const tabs = await page.locator('[data-testid^="literature-import-tab-"]').count();
-  assertCheck('1 导入 UI', '导入弹窗提供 5 条真实路径（文档 / DOI / 参考文献文件 / 手工录入 / 检索）', tabs === 5, `tabs=${tabs}`);
+  const tabs = await page.locator('[data-testid^="literature-import-tab-"]').allTextContents();
+  assertCheck(
+    '1 导入 UI',
+    '导入弹窗提供 6 条真实路径（文档 / DOI / 参考文献文件 / 手工录入 / 检索 / Zotero）',
+    JSON.stringify(tabs.map((tab) => tab.trim())) === JSON.stringify(['文档', 'DOI', '参考文献文件', '手工录入', '检索', 'Zotero']),
+    `tabs=${JSON.stringify(tabs)}`
+  );
   assertCheck(
     '1 导入 UI',
     '新条目导入要求先给题名 + citationKey（契约如此）',

@@ -28,8 +28,8 @@ export function LiteratureCandidateReview({candidate, pending, onAdd}: {
   return <li className="min-w-0 border-b-[0.5px] border-line py-2" data-testid="literature-candidate">
     <div className="flex items-start gap-2">
       <div className="min-w-0 flex-1">
-        <p className="break-words text-ink text-[var(--font-body-size)]">{candidate.record.title}</p>
-        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-muted text-[var(--font-meta-size)]">
+        <p className="break-words text-ink text-[length:var(--font-body-size)]">{candidate.record.title}</p>
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-muted text-[length:var(--font-meta-size)]">
           <span>{[...new Set(candidate.origins.map(origin => origin.source))].join(' / ')}</span>
           <span>{candidate.record.publishedYear ?? '年份未知'}</span>
           <span>{candidate.record.authors.slice(0, 2).join('；') || '作者未知'}</span>
@@ -38,11 +38,11 @@ export function LiteratureCandidateReview({candidate, pending, onAdd}: {
       <button type="button" disabled={pending || candidate.archived} onClick={onAdd}
         title={candidate.archived ? '文献已归档，请先在文献库恢复' : '加入元数据；不下载或解析PDF'}
         data-testid={`literature-import-hit-${candidate.record.id}`}
-        className="h-[var(--control-height-compact)] shrink-0 rounded-control border-[0.5px] border-line px-2 text-ink text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
+        className="h-[var(--control-height-compact)] shrink-0 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
         {candidate.archived ? '已归档' : candidate.matchedLibraryItemId === null ? '加入' : '关联到项目'}
       </button>
     </div>
-    <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[var(--font-meta-size)]">
+    <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[length:var(--font-meta-size)]">
       <dt className="text-muted">类型</dt><dd className="break-words text-ink">{publicationTypes.join(' / ') || '未知'}</dd>
       <dt className="text-muted">版本</dt><dd className="break-words text-ink">{versionValues.join(' / ') || '未知'}</dd>
       <dt className="text-muted">许可</dt><dd className="break-all text-ink">{licenses.join(' / ') || '未知'}</dd>
@@ -53,11 +53,11 @@ export function LiteratureCandidateReview({candidate, pending, onAdd}: {
         {updates.length === 0 ? '未知' : [...new Set(updates.map(update => update.label || update.type))].join('；')}
       </dd>
     </dl>
-    {hasConflicts || retracted || updates.length > 0 ? <p className="mt-2 flex items-start gap-1 text-[var(--st-warn)] text-[var(--font-meta-size)]">
+    {hasConflicts || retracted || updates.length > 0 ? <p className="mt-2 flex items-start gap-1 text-[var(--st-warn)] text-[length:var(--font-meta-size)]">
       <TriangleAlert size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
       {retracted ? '有撤稿标记，请核对来源。' : hasConflicts ? '来源信息存在冲突，请核对后收录。' : '有更正/更新关系，请核对对象。'}
     </p> : null}
-    <details className="mt-2 text-[var(--font-meta-size)]">
+    <details className="mt-2 text-[length:var(--font-meta-size)]">
       <summary className="cursor-pointer text-muted hover:text-ink" data-testid="literature-candidate-review-toggle">核对来源与冲突</summary>
       <div className="mt-2 flex min-w-0 flex-col gap-3" data-testid="literature-candidate-review">
         <p className="break-all text-muted">身份 {candidate.identity}</p>

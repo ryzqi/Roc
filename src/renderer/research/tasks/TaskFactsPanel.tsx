@@ -54,10 +54,10 @@ export function TaskFactsPanel({client, projectId, taskId}: {client: RocClient; 
     {action.error === null ? null : <p role="alert" className="break-words text-[var(--st-bad)]">{action.error}</p>}
     {resource.status === 'ready' && entries.length === 0 ? <p className="text-subtle">尚无任务事实。</p> : null}
     <ol className="grid gap-3">
-      {entries.map(entry => <li key={entry.id} className="grid gap-1 border-b border-line pb-2" data-testid="mgmt-task-fact">
+      {entries.map(entry => <li key={entry.id} className="grid gap-1 border-b-[0.5px] border-line pb-2" data-testid="mgmt-task-fact">
         <div className="flex flex-wrap justify-between gap-2"><span>{kinds[entry.kind]}</span><span className="text-subtle">{states[entry.state]}</span></div>
         <p className="whitespace-pre-wrap break-words">{entry.content}</p>
-        <ul className="grid gap-1 text-subtle text-[var(--font-meta-size)]" aria-label="事实出处">
+        <ul className="grid gap-1 text-subtle text-[length:var(--font-meta-size)]" aria-label="事实出处">
           {entry.sources.map((source, index) => {
             const freshness = resource.data?.freshness.find(row => row.entryId === entry.id && row.sourceIndex === index);
             const locator = source.kind === 'user' ? source.locator : source.kind === 'artifact' ? `${source.artifactId} / ${source.version}`

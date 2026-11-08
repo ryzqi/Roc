@@ -209,7 +209,7 @@ export function FileSidebarPanel({
 
   const createForm = writable && creating ? (
     <form
-      className="flex shrink-0 flex-col gap-1 border-b border-line-soft px-2 pb-2"
+      className="flex shrink-0 flex-col gap-1 border-b-[0.5px] border-line-soft px-2 pb-2"
       data-testid="file-create-form"
       onSubmit={(event) => {
         event.preventDefault();
@@ -224,7 +224,7 @@ export function FileSidebarPanel({
           placeholder="新文件名，例如 notes.md"
           aria-label="新文件名"
           data-testid="file-create-name"
-          className="h-[var(--control-height-compact)] min-w-0 flex-1 rounded-control border border-line bg-surface px-2 text-ink placeholder:text-subtle"
+          className="h-[var(--control-height-compact)] min-w-0 flex-1 rounded-control border-[0.5px] border-line bg-surface px-2 text-ink placeholder:text-subtle"
         />
         <button
           type="submit"
@@ -248,11 +248,11 @@ export function FileSidebarPanel({
           <X size={12} aria-hidden="true" />
         </button>
       </div>
-      <p className="text-subtle text-[var(--font-micro-size)]">
+      <p className="text-subtle text-[length:var(--font-micro-size)]">
         创建于 {targetDirectory.length === 0 ? '工作目录根' : `${targetDirectory}/`}
       </p>
       {createError === null ? null : (
-        <p role="alert" className="text-[var(--st-bad)] text-[var(--font-micro-size)]" data-testid="file-create-error">
+        <p role="alert" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]" data-testid="file-create-error">
           {createError}
         </p>
       )}
@@ -262,7 +262,7 @@ export function FileSidebarPanel({
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="file-sidebar-panel">
       <div className="flex shrink-0 items-center gap-1 px-2 py-1.5">
-        <div className="flex h-[var(--control-height-compact)] min-w-0 flex-1 items-center gap-1.5 rounded-control border border-line bg-surface px-2">
+        <div className="flex h-[var(--control-height-compact)] min-w-0 flex-1 items-center gap-1.5 rounded-control border-[0.5px] border-line bg-surface px-2">
           <Search size={12} aria-hidden="true" className="shrink-0 text-subtle" />
           <input
             value={query}
@@ -317,11 +317,11 @@ export function FileSidebarPanel({
             正在搜索文件名…
           </p>
         ) : search.status === 'error' ? (
-          <p role="alert" className="px-3 py-3 text-[var(--st-bad)] text-[var(--font-meta-size)]" data-testid="file-search-error">
+          <p role="alert" className="px-3 py-3 text-[var(--st-bad)] text-[length:var(--font-meta-size)]" data-testid="file-search-error">
             {search.error ?? '搜索失败'}
           </p>
         ) : search.data === null || search.data.matches.length === 0 ? (
-          <p className="px-3 py-3 text-muted text-[var(--font-meta-size)]" data-testid="file-search-empty">
+          <p className="px-3 py-3 text-muted text-[length:var(--font-meta-size)]" data-testid="file-search-empty">
             没有匹配的文件名。
           </p>
         ) : (
@@ -339,15 +339,15 @@ export function FileSidebarPanel({
                       : 'flex w-full flex-col items-start px-2 py-1 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]'
                   }
                 >
-                  <span className="w-full truncate text-[var(--font-meta-size)]">{match.name}</span>
-                  <span className="w-full truncate text-subtle text-[var(--font-micro-size)]">
+                  <span className="w-full truncate text-[length:var(--font-meta-size)]">{match.name}</span>
+                  <span className="w-full truncate text-subtle text-[length:var(--font-micro-size)]">
                     {match.relativePath}
                   </span>
                 </button>
               </li>
             ))}
             {search.data.truncated ? (
-              <li className="px-2 py-1 text-subtle text-[var(--font-micro-size)]">
+              <li className="px-2 py-1 text-subtle text-[length:var(--font-micro-size)]">
                 结果已截断，请使用更具体的关键词。
               </li>
             ) : null}
@@ -394,7 +394,7 @@ export function FileSidebarPanel({
             aria-label={`预览 ${previewPath}`}
             data-testid="file-preview-modal-panel"
             tabIndex={-1}
-            className="relative z-10 flex h-[min(86vh,760px)] w-[min(1100px,92vw)] flex-col overflow-hidden rounded-window border border-line bg-surface shadow-[var(--shadow-modal)] focus:outline-none"
+            className="relative z-10 flex h-[min(86vh,760px)] w-[min(1100px,92vw)] flex-col overflow-hidden rounded-window border-[0.5px] border-line bg-surface shadow-[var(--shadow-modal)] focus:outline-none"
           >
             <FilePreview
               client={client}

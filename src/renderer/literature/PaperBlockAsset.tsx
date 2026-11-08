@@ -40,7 +40,7 @@ export default function PaperBlockAsset({client, projectId, document, parsed, bl
       <img key={asset.resourceUrl} src={asset.resourceUrl} alt={`${block.label}保存的解析图像`} loading="lazy" decoding="async"
         className="h-auto max-w-full border-[0.5px] border-line" data-testid="reader-block-asset-image"
         onError={() => setImageError({key, message: '所选解析图像读取或解码失败，请重新核对原文。'})}/>
-      <figcaption className="mt-1 break-words text-[var(--font-meta-size)] text-muted">
+      <figcaption className="mt-1 break-words text-[length:var(--font-meta-size)] text-muted">
         解析图像{asset.page === null ? '' : `，第 ${asset.page} 页`}
       </figcaption>
     </>}

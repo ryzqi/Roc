@@ -24,7 +24,7 @@ export function ArtifactEvidenceSource({client, source, canDecide, onChanged}: {
     <blockquote className="mt-1 whitespace-pre-wrap break-words text-ink">{evidence.excerpt}</blockquote>
     {source.invalidatedAt === null ? null : <p className="text-muted">失效时间 {source.invalidatedAt}</p>}
     <p className="break-all text-muted">来源版本 {evidence.sourceVersion}</p>
-    <p className="break-all font-mono text-[var(--font-meta-size)] text-muted">SHA-256 {evidence.contentHash}</p>
+    <p className="break-all font-mono text-[length:var(--font-meta-size)] text-muted">SHA-256 {evidence.contentHash}</p>
     {evidence.sourceType!=='experiment'?null:<>
       <button type="button" className={`${formSecondaryButtonClass} mt-2 border-[0.5px]`} aria-expanded={showExperiment}
         data-testid={`artifact-experiment-evidence-toggle-${evidence.id}`} onClick={()=>setShowExperiment(value=>!value)}>

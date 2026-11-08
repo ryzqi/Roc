@@ -15,24 +15,24 @@ import type { ChatPendingQuestion } from '../../../shared/types';
 export function QuestionInterruptCard({ question }: { question: ChatPendingQuestion }): React.JSX.Element {
   return (
     <section
-      className="my-2 rounded-card border border-[var(--st-info-line)] bg-surface px-3 py-2"
+      className="my-2 rounded-card border-[0.5px] border-[var(--st-info-line)] bg-surface px-3 py-2"
       data-testid="assistant-question-card"
     >
-      <header className="mb-1 flex items-center gap-1.5 text-[var(--st-info)] text-[var(--font-micro-size)]">
+      <header className="mb-1 flex items-center gap-1.5 text-[var(--st-info)] text-[length:var(--font-micro-size)]">
         <MessageCircleQuestion size={12} aria-hidden="true" />
         等待回复
       </header>
-      <p className="whitespace-pre-wrap text-ink text-[var(--font-read-size)]">{question.question}</p>
+      <p className="whitespace-pre-wrap text-ink text-[length:var(--font-read-size)]">{question.question}</p>
       {question.context === undefined ? null : (
-        <p className="mt-1 whitespace-pre-wrap text-muted text-[var(--font-meta-size)]">{question.context}</p>
+        <p className="mt-1 whitespace-pre-wrap text-muted text-[length:var(--font-meta-size)]">{question.context}</p>
       )}
       {question.suggestedResponses === undefined || question.suggestedResponses.length === 0 ? null : (
         <>
-          <p className="mt-2 text-subtle text-[var(--font-micro-size)]">可参考的回答：</p>
+          <p className="mt-2 text-subtle text-[length:var(--font-micro-size)]">可参考的回答：</p>
           <ul className="mt-0.5 flex flex-col gap-0.5">
             {question.suggestedResponses.map((response) => (
-              <li key={response} className="text-muted text-[var(--font-meta-size)]">
-                · {response}
+              <li key={response} className="text-muted text-[length:var(--font-meta-size)]">
+                {response}
               </li>
             ))}
           </ul>

@@ -69,7 +69,7 @@ function ExperimentResultReviewForm({client,run,file,metrics,writable,onSaved}: 
         <h3 className="font-medium break-words">{metric.id} <span className="tabular-nums">{metric.value} {metric.unit}</span></h3>
         <p className="text-muted tabular-nums">样本量 {metric.sampleSize}</p>
         <details><summary className="cursor-pointer text-muted">输出记录的误差、区间与效应量</summary>
-          <pre tabIndex={0} className="max-h-60 overflow-auto whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(metric,null,2)}</pre>
+          <pre tabIndex={0} className="max-h-60 overflow-auto whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(metric,null,2)}</pre>
         </details>
         {(['label','definition'] as const).map(field=><label key={field} className="flex flex-col gap-1 text-muted">
           {metric.id}{field==='label'?'指标名称':'指标定义'}

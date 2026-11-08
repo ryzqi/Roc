@@ -79,8 +79,8 @@ export function ActivityBlockShell({
     <details
       className={
         visualDensity === 'quiet'
-          ? 'rounded-control border border-transparent bg-transparent hover:bg-[var(--overlay-hover)]'
-          : 'rounded-card border border-line bg-surface'
+          ? 'rounded-control border-[0.5px] border-transparent bg-transparent hover:bg-[var(--overlay-hover)]'
+          : 'rounded-card border-[0.5px] border-line bg-surface'
       }
       data-testid={testId}
       data-tone={tone}
@@ -94,15 +94,15 @@ export function ActivityBlockShell({
         ].join(' ')}
         data-testid={`${testId}-summary`}
       >
-        <Icon size={13} aria-hidden="true" strokeWidth={2.5} className={`shrink-0 ${TONE_ICON[tone]}`} />
-        <span className="min-w-0 flex-1 truncate font-mono text-[var(--font-meta-size)]" title={title}>
+        <Icon size={13} aria-hidden="true" strokeWidth={1.75} className={`shrink-0 ${TONE_ICON[tone]}`} />
+        <span className="min-w-0 flex-1 truncate font-mono text-[length:var(--font-meta-size)]" title={title}>
           {title}
         </span>
         {meta === undefined ? null : (
-          <span className="shrink-0 text-subtle text-[var(--font-micro-size)]">{meta}</span>
+          <span title={meta} className="max-w-[35%] truncate text-subtle tabular-nums text-[length:var(--font-micro-size)]">{meta}</span>
         )}
         {statusLabel === undefined ? null : (
-          <span className={`shrink-0 rounded-chip px-1.5 py-0.5 text-[var(--font-micro-size)] ${TONE_PILL[tone]}`}>
+          <span className={`shrink-0 rounded-chip px-1.5 py-0.5 text-[length:var(--font-micro-size)] ${TONE_PILL[tone]}`}>
             {statusLabel}
           </span>
         )}
@@ -133,7 +133,7 @@ export function ActivityBlockBody({
 }): React.JSX.Element {
   return (
     <div
-      className="min-w-0 border-t border-line-soft px-3 py-2.5 text-[var(--font-meta-size)]"
+      className="min-w-0 border-t-[0.5px] border-line-soft px-3 py-2.5 text-[length:var(--font-meta-size)]"
       data-testid={testId}
     >
       {children}

@@ -23,7 +23,7 @@ export default function MonitorsPanel({client, projectId, items, writable, activ
     () => client.api.research.getMonitorVersions({projectId, monitorId: selected!, offset: 0, limit: 20}), {label: '读取当前查询'});
   const currentVersion = versions.data?.records.find(value => value.version === monitor.data?.queryVersion);
   const refresh = (): void => {list.reload(); monitor.reload(); versions.reload();};
-  return <section aria-label="文献监控" data-testid="literature-monitors" className="min-h-0 flex-1 overflow-y-auto p-3 text-[var(--font-body-size)]">
+  return <section aria-label="文献监控" data-testid="literature-monitors" className="min-h-0 flex-1 overflow-y-auto p-3 text-[length:var(--font-body-size)]">
     <div className="flex flex-wrap items-center gap-2">
       <button className={monitorButton} type="button" disabled={!writable || locked}
         onClick={() => {setSelected(null); setCreating(true);}}>新建监控</button>

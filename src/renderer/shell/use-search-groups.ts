@@ -209,7 +209,7 @@ export function useSearchGroups({
                     .map((item) => ({
                       id: `library:${item.id}`,
                       title: item.metadata.title.trim().length > 0 ? item.metadata.title : item.bibliography.title,
-                      subtitle: item.metadata.authors.slice(0, 2).join(' · '),
+                      subtitle: item.metadata.authors.slice(0, 2).join('、'),
                       onOpen: () => onOpenLiterature(item.id)
                     }))
           };
@@ -388,7 +388,7 @@ function buildSkillsGroup(
       .map((skill) => ({
         id: `skill:${skill.id}`,
         title: skill.name,
-        subtitle: `${skill.enabled ? '已启用' : '已停用'} · ${skill.description}`,
+        subtitle: `${skill.enabled ? '已启用' : '已停用'}，${skill.description}`,
         onOpen: () => onOpenManagementView('skills')
       }))
   };
@@ -467,7 +467,7 @@ function buildSessionGroup(
     items: search.data.items.map((message) => ({
       id: `session:${message.id}`,
       title: message.threadTitle ?? message.threadId,
-      subtitle: `${message.role} · ${previewLine(message.snippet.length === 0 ? message.content : message.snippet)}`,
+      subtitle: `${message.role}，${previewLine(message.snippet.length === 0 ? message.content : message.snippet)}`,
       onOpen: () => onOpenSession(message.threadId)
     }))
   };

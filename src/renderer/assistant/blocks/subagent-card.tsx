@@ -98,11 +98,11 @@ export function SubagentActivityCard({ block, depth = 0 }: SubagentActivityCardP
   const state = SUBAGENT_STATE[block.status];
 
   return (
-    <div className={depth > 0 ? 'ml-2 border-l border-line-soft pl-1.5' : ''}>
+    <div className={depth > 0 ? 'ml-2 border-l-[0.5px] border-line-soft pl-1.5' : ''}>
       <ActivityBlockShell
         testId="assistant-activity-subagent"
         icon={state.Icon}
-        title={`Subagent · ${block.identity.name}`}
+        title={`Subagent，${block.identity.name}`}
         statusLabel={state.label}
         meta={block.identity.execution}
         tone={state.tone}
@@ -111,13 +111,13 @@ export function SubagentActivityCard({ block, depth = 0 }: SubagentActivityCardP
         expandable={hasBody}
       >
         {hasBody ? (
-          <div className="border-t border-line-soft px-2 py-1.5" data-testid="assistant-subagent-body">
+          <div className="border-t-[0.5px] border-line-soft px-2 py-1.5" data-testid="assistant-subagent-body">
             {metaChips.length === 0 ? null : (
               <div className="mb-1.5 flex flex-wrap gap-1" aria-label="子代理元信息">
                 {metaChips.map((chip) => (
                   <span
                     key={chip}
-                    className="rounded-control bg-[var(--overlay-hover)] px-1.5 py-0.5 text-subtle text-[var(--font-micro-size)]"
+                    className="rounded-control bg-[var(--overlay-hover)] px-1.5 py-0.5 text-subtle text-[length:var(--font-micro-size)]"
                   >
                     {chip}
                   </span>
@@ -125,12 +125,12 @@ export function SubagentActivityCard({ block, depth = 0 }: SubagentActivityCardP
               </div>
             )}
             {block.error === null ? null : (
-              <pre className="mb-1.5 max-h-[240px] overflow-auto whitespace-pre-wrap rounded-control bg-[var(--tool-st-error-bg)] px-2 py-1 font-mono text-[var(--tool-st-error-text)] text-[var(--font-code-size)]">
+              <pre className="mb-1.5 max-h-[240px] overflow-auto whitespace-pre-wrap rounded-control bg-[var(--tool-st-error-bg)] px-2 py-1 font-mono text-[var(--tool-st-error-text)] text-[length:var(--font-code-size)]">
                 {block.error}
               </pre>
             )}
             {block.summary === null ? null : (
-              <p className="mb-1 text-muted text-[var(--font-meta-size)]">{block.summary}</p>
+              <p className="mb-1 text-muted text-[length:var(--font-meta-size)]">{block.summary}</p>
             )}
             {block.blocks.map((child) => renderSubagentBlock(child, isStreaming))}
             {block.children.map((child) => (

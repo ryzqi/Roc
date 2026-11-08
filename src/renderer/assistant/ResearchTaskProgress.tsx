@@ -12,7 +12,7 @@ export function ResearchTaskProgress({ client, projectId, threadId, runId, runSt
   const data = resource.data;
   if (resource.status === 'ready' && data === null) return null;
   return (
-    <section className="grid min-w-0 gap-2 border-t-[0.5px] border-line pt-2 text-[var(--font-meta-size)]"
+    <section className="grid min-w-0 gap-2 border-t-[0.5px] border-line pt-2 text-[length:var(--font-meta-size)]"
       data-testid="assistant-task" aria-label="科研任务" aria-busy={resource.status === 'loading'}>
       {resource.status === 'error' ? (
         <div>

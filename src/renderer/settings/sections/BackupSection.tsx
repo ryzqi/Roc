@@ -91,7 +91,7 @@ export function BackupSection({
           >
             写入工作目录（{exportFileName}）
           </button>
-          <span className="text-subtle text-[var(--font-micro-size)]">
+          <span className="text-subtle text-[length:var(--font-micro-size)]">
             {workspacePath === null ? '未绑定工作目录，只能查看快照文本' : `工作目录：${workspacePath}`}
           </span>
         </div>
@@ -102,7 +102,7 @@ export function BackupSection({
         )}
         {/* Not hidden while writing: the sentence describes the snapshot's contents, and hiding it
             exactly when the write happens reads like a state change. */}
-        <p className="text-subtle text-[var(--font-micro-size)]" data-testid="settings-export-note">
+        <p className="text-subtle text-[length:var(--font-micro-size)]" data-testid="settings-export-note">
           快照只含 settings / providers / defaultModelId / permissions / hooks；密钥正文不在其中，只保留凭据引用与「已配置」状态。
         </p>
         <textarea
@@ -115,8 +115,8 @@ export function BackupSection({
         />
       </div>
 
-      <div className="flex flex-col gap-1 border-t border-line pt-2">
-        <span className="text-subtle text-[var(--font-micro-size)]">从 JSON 导入</span>
+      <div className="flex flex-col gap-1 border-t-[0.5px] border-line pt-2">
+        <span className="text-subtle text-[length:var(--font-micro-size)]">从 JSON 导入</span>
         <textarea
           value={importText}
           rows={6}
@@ -160,7 +160,7 @@ export function BackupSection({
             导入到草稿
           </button>
           {imported ? (
-            <span className="text-[var(--font-micro-size)] text-muted" data-testid="settings-import-ok">
+            <span className="text-[length:var(--font-micro-size)] text-muted" data-testid="settings-import-ok">
               已导入草稿；顶部「保存设置」才会写入（可先「放弃修改」撤销）。
             </span>
           ) : null}
@@ -172,7 +172,7 @@ export function BackupSection({
         )}
       </div>
 
-      <div className="flex flex-col gap-1 border-t border-line pt-2">
+      <div className="flex flex-col gap-1 border-t-[0.5px] border-line pt-2">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"

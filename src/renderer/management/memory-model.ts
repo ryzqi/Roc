@@ -296,7 +296,7 @@ export const autoMemoryConfidenceLabels: Readonly<Record<AutoMemoryConfidence, s
 };
 
 export function auditRecordLine(record: AutoMemoryAuditRecord): string {
-  return `${autoMemoryActionLabels[record.action]} · ${autoMemoryTypeLabels[record.type]} · ${autoMemoryConfidenceLabels[record.confidence]} · ${record.summary}`;
+  return `${autoMemoryActionLabels[record.action]}，${autoMemoryTypeLabels[record.type]}，${autoMemoryConfidenceLabels[record.confidence]}，${record.summary}`;
 }
 
 /* ------------------------------------------------------------------ */

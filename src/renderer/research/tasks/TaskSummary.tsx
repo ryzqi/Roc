@@ -12,7 +12,7 @@ const cost = (value: number | null): string => value === null ? '未知' : `$${(
 
 export function TaskBudget({ budget }: { budget: RunBudgetStatus }): React.JSX.Element {
   return (
-    <dl className="grid gap-1 text-subtle text-[var(--font-meta-size)]" data-testid="task-budget">
+    <dl className="grid gap-1 text-subtle text-[length:var(--font-meta-size)]" data-testid="task-budget">
       <div className="flex flex-wrap gap-x-3 gap-y-1">
         <dt>Tokens</dt>
         <dd>已知 {number.format(budget.tokens.settled)}</dd>
@@ -50,7 +50,7 @@ export function TaskSummary({ data, details = false }: {
           {researchTaskStatusLabels[data.task.status]}
         </span>
       </div>
-      <p className="text-subtle text-[var(--font-meta-size)]" data-testid="task-progress">
+      <p className="text-subtle text-[length:var(--font-meta-size)]" data-testid="task-progress">
         执行已完成 {completed}/{data.executions.length}
       </p>
       <TaskBudget budget={data.budget} />
@@ -58,7 +58,7 @@ export function TaskSummary({ data, details = false }: {
         <p className="break-words text-[var(--st-warn)]" data-testid="task-reason">任务停止原因：{data.task.statusReason}</p>
       )}
       {details ? (
-        <div className="grid gap-1 text-subtle text-[var(--font-meta-size)]">
+        <div className="grid gap-1 text-subtle text-[length:var(--font-meta-size)]">
           <p>截止时间 {formatBeijingDateTime(data.budget.deadlineAt)}（暂停期间继续计时）</p>
           <p>外部服务费用：未知，尚无费用回执。</p>
           {data.budget.cost.state === 'unknown' ? <p>部分调用缺少 usage 或可信价格回执，未知消费仍保留预算占用。</p> : null}

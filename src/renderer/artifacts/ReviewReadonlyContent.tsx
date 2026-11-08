@@ -70,7 +70,7 @@ export function ReviewReadonlyContent({client, link}: {client: RocClient; link: 
     {read.error === null ? null : <p role="alert" className="break-words text-[var(--st-warn)]">{read.error}</p>}
     {read.data === null || read.status === 'ready' ? null : <p className="text-muted">以下为上次已核对的回执。</p>}
     <details><summary className="cursor-pointer text-muted">链接目标与校验依据</summary>
-      <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">
+      <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">
         {JSON.stringify({projectId: link.projectId, target: link.target}, null, 2)}
       </pre>
     </details>
@@ -84,7 +84,7 @@ function ProtocolBody({protocol}: {protocol: ResearchReviewProtocolInspection}):
     <h3 className="font-medium whitespace-pre-wrap break-words">{body.question}</h3>
     <p className="text-muted">版本 {protocol.version.version} {protocol.isLatest ? '当前版本' : '历史版本'}
       {' '}{protocol.freeze === null ? '草稿' : '已冻结'}</p>
-    <p className="break-all text-muted text-[var(--font-meta-size)]">版本 SHA-256 {protocol.versionHash}</p>
+    <p className="break-all text-muted text-[length:var(--font-meta-size)]">版本 SHA-256 {protocol.versionHash}</p>
     <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
       <dt className="text-muted">发表年份</dt><dd>{body.publicationYears.from ?? '不限'} 至 {body.publicationYears.to ?? '不限'}</dd>
       <dt className="text-muted">标题摘要审核</dt><dd>{body.screening.titleAbstractReviewers} 人</dd>
@@ -117,7 +117,7 @@ function ProtocolBody({protocol}: {protocol: ResearchReviewProtocolInspection}):
       </li>)}</ul>
     </details>
     <details><summary className="cursor-pointer text-muted">完整协议与冻结回执</summary>
-      <pre tabIndex={0} className="max-h-96 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">
+      <pre tabIndex={0} className="max-h-96 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">
         {JSON.stringify(protocol, null, 2)}
       </pre>
     </details>
@@ -135,7 +135,7 @@ function ReceiptBody({client, inspection}: {client: RocClient; inspection: Inspe
         {' '}{inspection.corpus.searchCoverageComplete ? '查询分页覆盖完整' : '查询分页覆盖有缺口'}
         {' '}{inspection.corpus.currentProtocol ? '对应当前协议' : '协议版本已变化'}</p>
       <details><summary className="cursor-pointer text-muted">固定查询来源与回执</summary>
-        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">
+        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">
           {JSON.stringify(inspection.corpus.snapshot.sources, null, 2)}
         </pre>
       </details>
@@ -166,7 +166,7 @@ function QueryBody({client, search, protocol}: {
     {search.receipt?.errorCode == null ? null :
       <p role="alert" className="break-words text-[var(--st-warn)]">{search.receipt.errorCode}</p>}
     <details><summary className="cursor-pointer text-muted">准确请求、来源与终态回执</summary>
-      <pre tabIndex={0} className="max-h-96 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">
+      <pre tabIndex={0} className="max-h-96 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">
         {JSON.stringify(search, null, 2)}
       </pre>
     </details>

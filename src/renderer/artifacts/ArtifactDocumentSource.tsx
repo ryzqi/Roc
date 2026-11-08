@@ -50,7 +50,7 @@ export function ArtifactDocumentSource({client, evidence, locator}: {
   const assetKey = JSON.stringify([key, selected.blockId]);
   const comparingAsset = assetSelection === assetKey;
   return <section className="mt-2 flex min-w-0 flex-col gap-2" data-testid="artifact-document-source" aria-label="证据原文固定版本">
-    <p className="break-all font-mono text-[var(--font-meta-size)] text-muted">解析 {locator.parseId}，SHA-256 {locator.parseHash}</p>
+    <p className="break-all font-mono text-[length:var(--font-meta-size)] text-muted">解析 {locator.parseId}，SHA-256 {locator.parseHash}</p>
     {read.status !== 'loading' ? null : <p role="status">读取证据原文…</p>}
     {read.error === null ? null : <ErrorBar error={{level: 'blocked', message: read.error, retry: read.reload}}/>}
     {loaded === null || block === undefined ? null : <>
@@ -86,7 +86,7 @@ export function ArtifactDocumentSource({client, evidence, locator}: {
         {block.imageAssetId !== null ?
           <button type="button" aria-expanded={comparingAsset} data-testid="artifact-document-source-asset-toggle"
             onClick={() => setAssetSelection(comparingAsset ? null : assetKey)}
-            className="mt-1 rounded-control px-1 py-0.5 text-[var(--font-meta-size)] text-muted hover:bg-[var(--overlay-hover)]">
+            className="mt-1 rounded-control px-1 py-0.5 text-[length:var(--font-meta-size)] text-muted hover:bg-[var(--overlay-hover)]">
             {comparingAsset ? '收起固定解析图像' : '核对固定解析图像'}
           </button> : null}
       </div>

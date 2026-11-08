@@ -361,17 +361,17 @@ export function PaperReader({
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="paper-reader" data-library-item={selected.id}>
-      <header className="flex shrink-0 flex-col gap-1 border-b border-line px-3 py-2">
+      <header className="flex shrink-0 flex-col gap-1 border-b-[0.5px] border-line px-3 py-2">
         <h2 className="text-ink" data-testid="reader-title">
           {selected.metadata.title.trim().length > 0 ? selected.metadata.title : selected.bibliography.title}
         </h2>
-        <p className="flex flex-wrap gap-x-2 text-muted text-[var(--font-meta-size)]" data-testid="reader-authors">
+        <p className="flex flex-wrap gap-x-2 text-muted text-[length:var(--font-meta-size)]" data-testid="reader-authors">
           <span>{selected.metadata.authors.length === 0 ? '作者未知' : selected.metadata.authors.join('，')}</span>
           {selected.metadata.publishedYear === null ? null : <span>{selected.metadata.publishedYear}</span>}
           {selected.metadata.citationCount === null ? null : <span>被引 {selected.metadata.citationCount}</span>}
         </p>
-        <p className="flex flex-wrap items-center gap-2 text-[var(--font-micro-size)]">
-          <span className="rounded-control border border-line px-1 font-mono text-muted" data-testid="reader-citation-key">
+        <p className="flex flex-wrap items-center gap-2 text-[length:var(--font-micro-size)]">
+          <span className="rounded-control border-[0.5px] border-line px-1 font-mono text-muted" data-testid="reader-citation-key">
             {selected.bibliography.citationKey}
           </span>
           {readerDoi === null ? null : (
@@ -391,25 +391,25 @@ export function PaperReader({
           {selected.archived ? <span className="text-[var(--st-warn)]">已归档</span> : null}
         </p>
         <div className="flex flex-wrap items-center gap-1.5" data-testid="reader-actions">
-          <button type="button" className="rounded-control border border-line px-2 py-1" aria-expanded={discoveryOpen} disabled={!literature.projectId} onClick={()=>setDiscoveryOpen(!discoveryOpen)}>引文发现 / 批量入库</button>
+          <button type="button" className="rounded-control border-[0.5px] border-line px-2 py-1" aria-expanded={discoveryOpen} disabled={!literature.projectId} onClick={()=>setDiscoveryOpen(!discoveryOpen)}>引文发现 / 批量入库</button>
           <button type="button" disabled={literature.projectId === null} aria-expanded={relationsOpen}
             onClick={() => setRelationsOpen(current => !current)} data-testid="reader-scholarly-toggle"
-            className="min-h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
+            className="min-h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
             学术关系
           </button>
           <button type="button" disabled={literature.projectId === null || resourcesLocked} aria-expanded={resourcesOpen}
             onClick={() => setResourcesOpen(current => !current)} data-testid="reader-resources-toggle"
-            className="min-h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
+            className="min-h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
             科研资源
           </button>
           <button type="button" disabled={literature.projectId === null || huggingFaceLocked} aria-expanded={huggingFaceOpen}
             onClick={() => setHuggingFaceOpen(current => !current)} data-testid="reader-hf-toggle"
-            className="min-h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
+            className="min-h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
             Hugging Face
           </button>
           <button type="button" disabled={literature.projectId === null || openReviewLocked} aria-expanded={openReviewOpen}
             onClick={() => setOpenReviewOpen(current => !current)} data-testid="reader-openreview-toggle"
-            className="min-h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
+            className="min-h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
             OpenReview
           </button>
           <button
@@ -417,7 +417,7 @@ export function PaperReader({
             disabled={actionBusy}
             onClick={copyBibtex}
             data-testid="reader-copy-bibtex"
-            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
           >
             {copy.copied ? <Check size={11} aria-hidden="true" /> : <ClipboardCopy size={11} aria-hidden="true" />}
             {copy.copied ? '已复制' : '复制 BibTeX'}
@@ -428,7 +428,7 @@ export function PaperReader({
             onClick={exportBibtexToWorkspace}
             data-testid="reader-export-bibtex"
             title="library.export 没有另存为对话框，只能写进绑定工作目录"
-            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
           >
             <Save size={11} aria-hidden="true" />
             导出 .bib 到工作区
@@ -438,7 +438,7 @@ export function PaperReader({
             disabled={actionBusy}
             onClick={() => setKeyDraft(selected.bibliography.citationKey)}
             data-testid="reader-edit-key"
-            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
           >
             <Pencil size={11} aria-hidden="true" />
             改引用 key
@@ -449,7 +449,7 @@ export function PaperReader({
             onClick={askAssistant}
             data-testid="reader-ask-assistant"
             title="就这条文献向助手提问"
-            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
           >
             {literature.assistant.pending ? (
               <Loader2 size={11} aria-hidden="true" className="animate-spin" />
@@ -464,7 +464,7 @@ export function PaperReader({
             aria-pressed={largeText}
             title={largeText ? '切回标准字号' : '切换到大号字号'}
             data-testid="reader-text-size"
-            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
+            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
           >
             <Type size={11} aria-hidden="true" />
             {largeText ? '标准' : '大号'}
@@ -477,14 +477,14 @@ export function PaperReader({
               onChange={(event) => setKeyDraft(event.target.value)}
               aria-label="引用 key"
               data-testid="reader-key-input"
-              className="h-[var(--control-height-compact)] w-56 rounded-control border border-line bg-surface px-2 font-mono text-ink text-[var(--font-micro-size)]"
+              className="h-[var(--control-height-compact)] w-56 rounded-control border-[0.5px] border-line bg-surface px-2 font-mono text-ink text-[length:var(--font-micro-size)]"
             />
             <button
               type="button"
               disabled={actionBusy}
               onClick={saveCitationKey}
               data-testid="reader-key-save"
-              className="h-[var(--control-height-compact)] rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+              className="h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
             >
               保存
             </button>
@@ -496,7 +496,7 @@ export function PaperReader({
                 year: selected.metadata.publishedYear
               }) ?? '')}
               data-testid="reader-key-derive"
-              className="h-[var(--control-height-compact)] rounded-control border border-line px-2 text-muted text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink"
+              className="h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-muted text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink"
             >
               推导
             </button>
@@ -504,7 +504,7 @@ export function PaperReader({
               type="button"
               onClick={() => setKeyDraft(null)}
               data-testid="reader-key-cancel"
-              className="flex h-[var(--control-height-compact)] items-center gap-0.5 rounded-control border border-line px-2 text-muted text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink"
+              className="flex h-[var(--control-height-compact)] items-center gap-0.5 rounded-control border-[0.5px] border-line px-2 text-muted text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink"
             >
               <X size={10} aria-hidden="true" />
               取消
@@ -512,7 +512,7 @@ export function PaperReader({
           </div>
         )}
         {actionNote === null && copy.error === null && literature.assistant.error === null ? null : (
-          <p role="status" className="text-muted text-[var(--font-micro-size)]" data-testid="reader-action-note">
+          <p role="status" className="text-muted text-[length:var(--font-micro-size)]" data-testid="reader-action-note">
             {actionNote ?? copy.error ?? literature.assistant.error}
           </p>
         )}
@@ -548,7 +548,7 @@ export function PaperReader({
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div role="tablist" aria-label="文档" className="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-1.5">
+          <div role="tablist" aria-label="文档" className="flex shrink-0 flex-wrap items-center gap-1 border-b-[0.5px] border-line px-2 py-1.5">
             {documents.map((document) => (
               <button
                 key={document.id}
@@ -571,8 +571,8 @@ export function PaperReader({
                 data-testid={`reader-document-tab-${document.id}`}
                 className={
                   document.id === activeDocumentId
-                    ? 'h-[var(--control-height-compact)] max-w-[16rem] truncate rounded-control border border-line bg-accent-soft px-2 text-ink text-[var(--font-meta-size)]'
-                    : 'h-[var(--control-height-compact)] max-w-[16rem] truncate rounded-control border border-transparent px-2 text-muted text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] hover:text-ink'
+                    ? 'h-[var(--control-height-compact)] max-w-[16rem] truncate rounded-control border-[0.5px] border-line bg-accent-soft px-2 text-ink text-[length:var(--font-meta-size)]'
+                    : 'h-[var(--control-height-compact)] max-w-[16rem] truncate rounded-control border-[0.5px] border-transparent px-2 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] hover:text-ink'
                 }
               >
                 {document.filename}
@@ -581,13 +581,13 @@ export function PaperReader({
           </div>
 
           {activeDocument === null ? null : (
-            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-2 text-[var(--font-meta-size)]">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b-[0.5px] border-line px-3 py-2 text-[length:var(--font-meta-size)]">
               <span className="text-muted" data-testid="reader-document-status" data-status={activeDocument.status}>
                 {STATUS_LABELS[activeDocument.status]}
               </span>
               {activeDocument.status === 'parsing' ? (
                 <>
-                  <span className="flex items-center gap-1 text-muted text-[var(--font-micro-size)]">
+                  <span className="flex items-center gap-1 text-muted text-[length:var(--font-micro-size)]">
                     <Loader2 size={11} aria-hidden="true" className="animate-spin" />
                     正在解析文档…
                   </span>
@@ -602,7 +602,7 @@ export function PaperReader({
                       void literature.cancelParse({ documentId: activeDocument.id, parseId });
                     }}
                     data-testid="reader-cancel-parse"
-                    className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-[var(--st-warn)] text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+                    className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-[var(--st-warn)] text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
                   >
                     <Square size={11} aria-hidden="true" />
                     取消解析
@@ -617,7 +617,7 @@ export function PaperReader({
                       disabled={literature.parseInFlight !== null || literature.projectId === null}
                       onChange={(event) => setParseTier(event.target.value as ResearchParseTier)}
                       data-testid="reader-parse-tier"
-                      className="h-[var(--control-height-compact)] rounded-control border border-line bg-surface px-1 text-ink text-[var(--font-micro-size)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:opacity-40"
+                      className="h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line bg-surface px-1 text-ink text-[length:var(--font-micro-size)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:opacity-40"
                     >
                       {TIER_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value} title={option.title}>
@@ -631,7 +631,7 @@ export function PaperReader({
                     disabled={literature.parseInFlight !== null || literature.projectId === null}
                     onClick={() => void literature.startParse(activeDocument.id, parseTier)}
                     data-testid="reader-start-parse"
-                    className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+                    className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
                   >
                   {literature.parseInFlight === activeDocument.id ? (
                     <Loader2 size={11} aria-hidden="true" className="animate-spin" />
@@ -647,7 +647,7 @@ export function PaperReader({
                 </>
               )}
               {activeDocument.error === null ? null : (
-                <span className="text-[var(--st-bad)] text-[var(--font-micro-size)]" data-testid="reader-document-error">
+                <span className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]" data-testid="reader-document-error">
                   {activeDocument.error}
                 </span>
               )}
@@ -656,7 +656,7 @@ export function PaperReader({
                 onClick={() => openInFilesView(activeDocument.filename)}
                 data-testid="reader-open-workspace-file"
                 title="在工作区找同名文件"
-                className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-muted text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink"
+                className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-muted text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink"
               >
                 <FileSearch size={11} aria-hidden="true" />
                 在工作区找同名文件
@@ -672,7 +672,7 @@ export function PaperReader({
             is reflected here too.
           */}
           <div
-            className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-1.5 text-[var(--font-micro-size)]"
+            className="flex shrink-0 flex-wrap items-center gap-2 border-b-[0.5px] border-line px-3 py-1.5 text-[length:var(--font-micro-size)]"
             data-testid="reader-models"
           >
             <span
@@ -690,7 +690,7 @@ export function PaperReader({
                 onClick={startModelDownload}
                 data-testid="reader-models-download"
                 title="首次使用需下载解析模型，文件较大。"
-                className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+                className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
               >
                 {modelsState.downloading || downloadPending ? (
                   <Loader2 size={10} aria-hidden="true" className="animate-spin" />
@@ -718,7 +718,7 @@ export function PaperReader({
                 onClick={() => void startReparseAll()}
                 data-testid="reader-reparse-pending"
                 title="按当前档位重新解析所有还没有解析结果的文档。"
-                className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+                className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
               >
                 {reparsePending === null ? null : <Loader2 size={10} aria-hidden="true" className="animate-spin" />}
                 {reparsePending === null
@@ -736,7 +736,7 @@ export function PaperReader({
             <select aria-label="跳转章节" value="" onChange={event=>{setBlockFilter('all');const id=event.target.value;requestAnimationFrame(()=>document.getElementById(`reader-block-${id}`)?.scrollIntoView({block:'start'}));}}>
               <option value="">跳转章节</option>{blocks.filter(block=>block.kind==='heading').map(block=><option key={block.id} value={block.id}>{block.text}</option>)}
             </select>
-            <button type="button" disabled={!blocks.length} onClick={()=>translate(blocks.filter(block=>block.text.trim()).map(block=>({label:`${block.label} · ${block.locator}`,text:block.text})),'解析全文翻译')}>翻译解析全文</button>
+            <button type="button" disabled={!blocks.length} onClick={()=>translate(blocks.filter(block=>block.text.trim()).map(block=>({label:`${block.label}，${block.locator}`,text:block.text})),'解析全文翻译')}>翻译解析全文</button>
             <button type="button" disabled={!blocks.length} onClick={()=>void copy.copy(blocks.map(block=>block.kind==='heading'?`## ${block.text}`:block.kind==='formula'?`$$\n${block.text}\n$$`:block.text).join('\n\n'))}>复制 Markdown</button>
             {selectedText?<><button type="button" disabled={!scope.writable} onClick={()=>addNote(`> ${selectedText.replace(/\n/g,'\n> ')}`)}>选区存为笔记</button>
               <button type="button" onClick={()=>translate([{label:'解析文本选区',text:selectedText}],'选区翻译')}>翻译选区</button></>:null}
@@ -744,16 +744,16 @@ export function PaperReader({
           {translation && literature.projectId?<Suspense fallback={<p role="status">加载翻译…</p>}><ReadingTranslationPanel key={translation.id} client={literature.client} projectId={literature.projectId}
             segments={translation.segments} label={translation.label} onNote={addNote} onClose={()=>setTranslation(null)}/></Suspense>:null}
           {activeDocument?.mediaType === 'application/pdf' ? (
-            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-2 py-1.5">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b-[0.5px] border-line px-2 py-1.5">
               <button type="button" onClick={() => setComparePdf(compare => !compare)} aria-pressed={comparePdf}
-                data-testid="reader-compare-pdf" className="flex items-center gap-1 rounded-control border border-line px-2 py-1 text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)]">
+                data-testid="reader-compare-pdf" className="flex items-center gap-1 rounded-control border-[0.5px] border-line px-2 py-1 text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)]">
                 <Columns2 size={14}/>{comparePdf ? '仅解析文本' : '原文与解析'}
               </button>
               {comparePdf && selectedPdfBlock !== null && content !== null && content.blocks.find(block => block.id === selectedPdfBlock)!.locations.length > 1 ? (
-                <label className="flex items-center gap-1 text-[var(--font-meta-size)]">块位置
+                <label className="flex items-center gap-1 text-[length:var(--font-meta-size)]">块位置
                   <select aria-label="解析块位置" value={selectedPdfLocation} onChange={event => setPdfSelection({
                     parseId: reader.parsed!.run.id, blockId: selectedPdfBlock, locationIndex: Number(event.target.value)
-                  })} className="rounded-control border border-line bg-surface px-1">
+                  })} className="rounded-control border-[0.5px] border-line bg-surface px-1">
                     {content.blocks.find(block => block.id === selectedPdfBlock)!.locations.map((location, index) => (
                       <option key={index} value={index}>第 {location.page} 页，位置 {index + 1}</option>
                     ))}
@@ -764,7 +764,7 @@ export function PaperReader({
           ) : null}
           <div className="flex min-h-0 flex-1">
           {!reader.loading && (comparePdf || reader.parsed===null) && activeDocument?.mediaType === 'application/pdf' && literature.projectId !== null ? (
-            <div className={`${reader.parsed===null?'w-full':'w-1/2'} min-h-0 min-w-0 border-r border-line`}>
+            <div className={`${reader.parsed===null?'w-full':'w-1/2'} min-h-0 min-w-0 border-r-[0.5px] border-line`}>
               <Suspense fallback={<p role="status" className="p-2 text-muted">加载原文阅读器…</p>}>
                 <PaperPdfView client={literature.client} projectId={literature.projectId} document={activeDocument} parsed={reader.parsed}
                   onNote={addNote} onTranslate={translate}
@@ -782,15 +782,15 @@ export function PaperReader({
           <div hidden={activeDocument?.mediaType==='application/pdf' && reader.parsed===null} className="min-h-0 min-w-0 flex-1 overflow-y-auto px-3 py-3" data-testid="reader-content-area" onPointerUp={event=>{const selection=window.getSelection();if(selection && event.currentTarget.contains(selection.anchorNode) && event.currentTarget.contains(selection.focusNode))setSelectedText(selection.toString());}}>
 
             {content?.parseMode === 'ocr' || content?.parseMode === 'mixed' ?
-              <p role="note" className="mb-2 text-[var(--font-meta-size)] text-muted" data-testid="reader-quality-ocr">
+              <p role="note" className="mb-2 text-[length:var(--font-meta-size)] text-muted" data-testid="reader-quality-ocr">
                 此版本含 OCR 识别内容，请核对数字、单位和公式。
               </p> : null}
             {content?.warnings.map((warning,index) => <p key={`${index}:${warning}`} role="note"
-              className="mb-2 break-words text-[var(--font-meta-size)] text-muted" data-testid="reader-quality-warning">
+              className="mb-2 break-words text-[length:var(--font-meta-size)] text-muted" data-testid="reader-quality-warning">
               {warning === 'research_models_missing_native_text_only' ? '此版本仅提取原生文本，未进行 OCR 核查。' : `解析提示：${warning}`}
             </p>)}
             {focusLocator !== null && matchedBlockId === null && content !== null ? (
-              <p role="note" className="mb-2 text-[var(--st-warn)] text-[var(--font-micro-size)]" data-testid="reader-jump-missed">
+              <p role="note" className="mb-2 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" data-testid="reader-jump-missed">
                 locator「{focusLocator}」没有唯一的精确位置，未跳转。
               </p>
             ) : null}
@@ -814,8 +814,8 @@ export function PaperReader({
               <article
                 className={
                   largeText
-                    ? 'flex flex-col gap-2 text-[var(--font-read-large-size)] leading-[1.7]'
-                    : 'flex flex-col gap-2 text-[var(--font-read-size)] leading-[1.65]'
+                    ? 'flex flex-col gap-2 text-[length:var(--font-read-large-size)] leading-[1.7]'
+                    : 'flex flex-col gap-2 text-[length:var(--font-read-size)] leading-[1.65]'
                 }
                 data-testid="reader-blocks"
                 data-text-size={largeText ? 'large' : 'standard'}
@@ -856,18 +856,18 @@ export function PaperReader({
                           parsed={reader.parsed} block={content.blocks[index]}/>
                       </Suspense>}
                     </div>
-                    {block.isBlank ? <p role="note" className="mt-1 text-[var(--font-meta-size)] text-muted"
+                    {block.isBlank ? <p role="note" className="mt-1 text-[length:var(--font-meta-size)] text-muted"
                       data-testid="reader-quality-empty">此块没有解析文本，请核对原文。</p> : null}
-                    <p className="mt-0.5 font-mono text-subtle text-[var(--font-micro-size)]">
+                    <p className="mt-0.5 font-mono text-subtle text-[length:var(--font-micro-size)]">
                       <span>{block.label}</span>{' '}<span>{block.locator}</span>{' '}<span>第 {block.page ?? '?'} 页</span>
                     </p>
                     {!hasAssetSurface ? null : content.blocks[index].imageAssetId === null ?
-                      <p role="note" className="mt-1 text-[var(--font-meta-size)] text-muted" data-testid="reader-block-asset-absent">
+                      <p role="note" className="mt-1 text-[length:var(--font-meta-size)] text-muted" data-testid="reader-block-asset-absent">
                         此块未保存解析图像。
                       </p> :
                       <button type="button" data-testid="reader-block-asset-toggle" aria-expanded={comparingAsset}
                         onClick={() => setOpenAsset(comparingAsset ? null : assetKey)}
-                        className="mt-1 rounded-control px-1 py-0.5 text-[var(--font-meta-size)] text-muted hover:bg-[var(--overlay-hover)]">
+                        className="mt-1 rounded-control px-1 py-0.5 text-[length:var(--font-meta-size)] text-muted hover:bg-[var(--overlay-hover)]">
                         {comparingAsset ? '收起解析图像' : '核对解析图像'}
                       </button>}
                     <div className="reading-toolbar">
@@ -878,7 +878,7 @@ export function PaperReader({
                     {activeDocument?.mediaType === 'application/pdf' ? (
                       <button type="button" disabled={content.blocks[index].locations.length === 0}
                         aria-label={`查看${block.label}原文位置`} aria-pressed={selectedPdfBlock === block.id}
-                        data-testid="reader-block-source" className="mt-1 flex items-center gap-1 rounded-control px-1 py-0.5 text-muted text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+                        data-testid="reader-block-source" className="mt-1 flex items-center gap-1 rounded-control px-1 py-0.5 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
                         onClick={() => {setComparePdf(true); setPdfSelection({parseId: reader.parsed!.run.id, blockId: block.id, locationIndex: 0});}}>
                         <ScanLine size={13}/>{selectedPdfBlock === block.id ? '所选位置' : '原文位置'}
                       </button>
@@ -888,7 +888,7 @@ export function PaperReader({
               </article>
             )}
           </div>
-          {notesVisited && literature.projectId?<aside hidden={!notesOpen} className="reading-paper-notes min-h-0 w-[40%] min-w-64 max-w-md border-l border-line" aria-label="论文关联笔记">
+          {notesVisited && literature.projectId?<aside hidden={!notesOpen} className="reading-paper-notes min-h-0 w-[40%] min-w-64 max-w-md border-l-[0.5px] border-line" aria-label="论文关联笔记">
             <Suspense fallback={<p role="status">加载笔记…</p>}><ReadingNotesPanel key={literature.projectId} client={literature.client} projectId={literature.projectId}
               items={literature.items} itemId={selected.id} writable={scope.writable} seed={noteSeed} onReveal={()=>setNotesOpen(true)} onSeedConsumed={()=>setNoteSeed(null)}/></Suspense>
           </aside>:null}

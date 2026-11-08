@@ -53,7 +53,7 @@ export default function ScholarlyRelationsPanel({client, projectId, item, writab
     if (result.data.cancelled) setRequest(null);
     history.reload();
   };
-  return <section aria-label="学术关系" className="space-y-3 px-3 py-2 text-[var(--font-body-size)]" data-testid="reader-scholarly-panel">
+  return <section aria-label="学术关系" className="space-y-3 px-3 py-2 text-[length:var(--font-body-size)]" data-testid="reader-scholarly-panel">
     <fieldset disabled={busy} className="flex flex-wrap items-center gap-3">
       <legend className="mb-1 text-muted">查询来源</legend>
       {(Object.keys(providerNames) as ScholarlyProvider[]).map(source => <label key={source} className="flex items-center gap-1">
@@ -73,7 +73,7 @@ export default function ScholarlyRelationsPanel({client, projectId, item, writab
         disabled={!writable} onClick={() => void submit(request)}>重试原请求</button> : null}
       {blocked === null ? null : <span className="text-muted">{blocked}</span>}
     </div>
-    <p className="text-muted text-[var(--font-meta-size)]">来源观察不构成科研审批。未报告撤稿不等于没有撤稿。</p>
+    <p className="text-muted text-[length:var(--font-meta-size)]">来源观察不构成科研审批。未报告撤稿不等于没有撤稿。</p>
     {capture.error === null ? null : <p role="alert" className="break-words text-[var(--st-bad)]">{capture.error}</p>}
     {cancel.error === null ? null : <p role="alert" className="break-words text-[var(--st-bad)]">{cancel.error}</p>}
     {note === null ? null : <p role="status" className="text-muted">{note}</p>}

@@ -95,23 +95,23 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
       title="受限试点"
       testId="settings-section-pilot-body"
     >
-      <div className="flex flex-wrap items-center gap-2 text-[var(--font-meta-size)]" data-testid="settings-pilot-state">
-        <span className="text-subtle text-[var(--font-micro-size)]">当前状态</span>
-        <span className="text-ink">{settings.enabled ? `已开启 · ${settings.profile}` : '已关闭'}</span>
+      <div className="flex flex-wrap items-center gap-2 text-[length:var(--font-meta-size)]" data-testid="settings-pilot-state">
+        <span className="text-subtle text-[length:var(--font-micro-size)]">当前状态</span>
+        <span className="text-ink">{settings.enabled ? `已开启，${settings.profile}` : '已关闭'}</span>
         {settings.circuitOpen ? (
           <span className="text-[var(--st-warn)]">
-            · 熔断中{settings.breakerReason === null ? '' : ` · ${settings.breakerReason}`}
+            熔断中{settings.breakerReason === null ? '' : `，${settings.breakerReason}`}
           </span>
         ) : null}
         <span className="text-subtle">
-          · 失败连击 {settings.failureStreak}/{settings.maxFailureStreak}
-          {settings.budgetAcknowledgedAt === null ? '' : ` · 预算确认于 ${settings.budgetAcknowledgedAt}`}
+          失败连击 {settings.failureStreak}/{settings.maxFailureStreak}
+          {settings.budgetAcknowledgedAt === null ? '' : `，预算确认于 ${settings.budgetAcknowledgedAt}`}
         </span>
       </div>
 
 
       <label className="flex max-w-[520px] flex-col gap-0.5">
-        <span className="text-subtle text-[var(--font-micro-size)]">配置文件</span>
+        <span className="text-subtle text-[length:var(--font-micro-size)]">配置文件</span>
         <select
           value={profile}
           onChange={(event) => setProfile(event.target.value as PilotProfile)}
@@ -148,7 +148,7 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
         </div>
       </div>
 
-      <label className="flex items-start gap-2 text-[var(--font-meta-size)] text-muted">
+      <label className="flex items-start gap-2 text-[length:var(--font-meta-size)] text-muted">
         <input
           type="checkbox"
           checked={acknowledged}
@@ -191,18 +191,18 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
 
       {data.lastRun === null ? null : (
         <div
-          className="flex flex-col gap-0.5 text-[var(--font-meta-size)] text-muted"
+          className="flex flex-col gap-0.5 text-[length:var(--font-meta-size)] text-muted"
           data-testid="settings-pilot-last-run"
         >
-          <span className="text-subtle text-[var(--font-micro-size)]">最近一次试点运行</span>
+          <span className="text-subtle text-[length:var(--font-micro-size)]">最近一次试点运行</span>
           <span>
-            <span className="font-mono">{data.lastRun.runId}</span> · {data.lastRun.profile ?? '无配置'} · 分桶{' '}
-            {data.lastRun.bucket} · {data.lastRun.state}
+            <span className="font-mono">{data.lastRun.runId}</span>，{data.lastRun.profile ?? '无配置'}，分桶{' '}
+            {data.lastRun.bucket}，{data.lastRun.state}
           </span>
           <span className="text-subtle">当次披露：{data.lastRun.disclosure}</span>
           <span>
-            已用 {data.lastRun.spent.modelCalls}/{data.lastRun.allowance.modelCalls} 次模型调用 ·{' '}
-            {data.lastRun.spent.toolCalls}/{data.lastRun.allowance.toolCalls} 次工具调用 ·{' '}
+            已用 {data.lastRun.spent.modelCalls}/{data.lastRun.allowance.modelCalls} 次模型调用，{' '}
+            {data.lastRun.spent.toolCalls}/{data.lastRun.allowance.toolCalls} 次工具调用，{' '}
             {data.lastRun.spent.totalTokens}/{data.lastRun.allowance.totalTokens} tokens
           </span>
         </div>

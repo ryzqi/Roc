@@ -48,7 +48,7 @@ export function ReviewQualityJudgement({label, question, choices, sources, value
       <blockquote tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-words">{source.evidence.excerpt}</blockquote>
       <p className="text-muted break-words">{source.evidence.locator}</p>
       <details><summary className="cursor-pointer text-muted">提取固定的定位与摘要</summary>
-        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">{JSON.stringify(source, null, 2)}</pre>
+        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(source, null, 2)}</pre>
       </details>
       <button type="button" className={`${button} self-start`} disabled={value.evidence.length >= 10 || value.evidence.some(item => item.id === source.evidence.id)}
         data-testid="artifact-review-quality-evidence-add" onClick={() => onChange({...value,

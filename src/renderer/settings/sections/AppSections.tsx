@@ -74,7 +74,7 @@ export function AppSection({
         />
       </dl>
 
-      <div className="flex flex-col gap-2 border-t border-line pt-2">
+      <div className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2">
         <CheckboxField
           label="开机时启动 Roc"
           checked={draft.settings.startup.openAtLogin}
@@ -97,7 +97,7 @@ export function AppSection({
         ) : null}
       </div>
 
-      <div className="flex flex-col gap-2 border-t border-line pt-2">
+      <div className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2">
         <div className="max-w-[320px]">
           <TextField
             label="全局热键（留空表示不注册）"
@@ -129,7 +129,7 @@ export function AppSection({
         ) : null}
       </div>
 
-      <div className="flex flex-col gap-2 border-t border-line pt-2">
+      <div className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2">
         <div className="flex flex-wrap gap-2">
           {(['system', 'light', 'dark'] as const).map((option) => (
             <button
@@ -176,7 +176,7 @@ export function TasksSection({ store }: { store: SettingsStore }): React.JSX.Ele
       title="任务与调度"
       testId="settings-section-tasks-body"
     >
-      <h4 className="text-ink text-[var(--font-meta-size)]">长任务判定阈值</h4>
+      <h4 className="text-ink text-[length:var(--font-meta-size)]">长任务判定阈值</h4>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <NumberField
           label="运行秒数"
@@ -219,7 +219,7 @@ export function TasksSection({ store }: { store: SettingsStore }): React.JSX.Ele
         />
       </div>
 
-      <h4 className="text-ink text-[var(--font-meta-size)]">调度器</h4>
+      <h4 className="text-ink text-[length:var(--font-meta-size)]">调度器</h4>
       <div className="flex flex-wrap items-end gap-3">
         <CheckboxField
           label="启动时补跑错过的任务"
@@ -244,7 +244,7 @@ export function TasksSection({ store }: { store: SettingsStore }): React.JSX.Ele
         />
       </div>
 
-      <div className="border-t border-line pt-2">
+      <div className="border-t-[0.5px] border-line pt-2">
         {scheduler.error === null ? null : (
           <FormNote tone="warn" testId="settings-scheduler-error">
             {scheduler.error}
@@ -275,7 +275,7 @@ export function TasksSection({ store }: { store: SettingsStore }): React.JSX.Ele
         </dl>
       </div>
 
-      <div className="border-t border-line pt-2">
+      <div className="border-t-[0.5px] border-line pt-2">
         {tray.error === null ? null : (
           <FormNote tone="warn" testId="settings-tray-error">
             {tray.error}

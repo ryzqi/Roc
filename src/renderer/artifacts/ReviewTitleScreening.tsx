@@ -124,7 +124,7 @@ function ReviewTitleRecord({client, protocol, phase, item, writable, onPending, 
       <p className="text-muted">数据库 {read.data!.source.databaseIndex + 1} 检索式 {read.data!.source.queryIndex + 1}
         {' '}原始记录 {read.data!.reference.recordIndex + 1}</p>
       <details><summary className="cursor-pointer text-muted">完整原始元数据与固定引用</summary>
-        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">
+        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">
           {JSON.stringify(read.data, null, 2)}
         </pre>
       </details>

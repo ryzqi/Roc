@@ -181,7 +181,7 @@ test('every auto-memory audit action and candidate type has a label', () => {
       workspacePath: null,
       targetPath: null
     }),
-    /重复，跳过 · 用户偏好 · 高 · 重复的偏好/
+    /重复，跳过，用户偏好，高，重复的偏好/
   );
 });
 
@@ -199,8 +199,8 @@ test('skills sort enabled-first then by name, and the summary counts invalids', 
     skill.sortSkills(skills).map((entry) => entry.id),
     ['a', 'c', 'b']
   );
-  assert.equal(skill.skillSummary(skills), '3 个技能 · 2 个已启用 · 1 个无效');
-  assert.equal(skill.skillSummary([]), '0 个技能 · 0 个已启用');
+  assert.equal(skill.skillSummary(skills), '3 个技能，2 个已启用，1 个无效');
+  assert.equal(skill.skillSummary([]), '0 个技能，0 个已启用');
 });
 
 test('the import path must be absolute, because the backend resolves it against the cwd', () => {
@@ -324,7 +324,7 @@ test('per-server tool names come from the capability preview manifest, not from 
   assert.equal(tools[0].approval, 'required');
   assert.deepEqual(mcp.builtInTools(preview), ['read_file']);
   assert.deepEqual(mcp.skippedCapabilities(preview), [{ id: 'ghost', type: 'MCP 服务', reason: '未启用' }]);
-  assert.match(mcp.previewSummary(preview), /内置工具 1 个 · MCP 工具 0 个/);
+  assert.match(mcp.previewSummary(preview), /内置工具 1 个，MCP 工具 0 个/);
   assert.match(mcp.previewSummary(null), /尚未读取/);
 });
 
@@ -439,7 +439,7 @@ test('the list row and the run history row are rendered from backend fields', ()
 
   assert.match(
     task.scheduledRunLine({ id: 'r', backgroundTaskId: 't1', taskRunId: null, scheduledAt: '2026-10-16T01:00:00.000Z', triggeredAt: null, status: 'skipped', skipReason: '上一轮还在跑' }),
-    /已跳过 · 2026-10-16T01:00:00\.000Z · 上一轮还在跑/
+    /已跳过，2026-10-16T01:00:00\.000Z，上一轮还在跑/
   );
   assert.match(task.scheduledRunStatusLabels.fired, /已触发/);
   assert.equal(task.taskSummaryLine({ ...recorded, nextRunAt: null }).includes('无下次运行'), true);

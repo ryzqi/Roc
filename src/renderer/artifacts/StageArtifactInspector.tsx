@@ -76,7 +76,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
   const statuses = {draft: '草稿', approved: '已批准', superseded: '已被替代'};
   return <ModalShell open kind="drawer" title={snapshot?.artifact.title ?? '科研工件'} onClose={close} bodyRef={reading.bodyRef}
     widthClassName="w-[560px]" testId="artifact-inspector" beforeClose={() => !planLocked}>
-    <div className="flex flex-col gap-3 text-[var(--font-body-size)]">
+    <div className="flex flex-col gap-3 text-[length:var(--font-body-size)]">
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={button} disabled={read.status === 'loading' || planLocked}
           data-testid="artifact-inspector-refresh" data-reading-key="refresh" onClick={()=>{reading.save(); read.reload();}}>刷新工件</button>
@@ -123,7 +123,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
         <h2 className="font-medium">本阶段全部待核对工件</h2>
         <ul className="flex flex-col gap-1">
           {review.data.artifactLinks.map(link => <li className="break-words" key={link.artifactId}>{link.title}
-            <span className="ml-2 break-all font-mono text-muted text-[var(--font-meta-size)]">{link.expectedVersion}</span>
+            <span className="ml-2 break-all font-mono text-muted text-[length:var(--font-meta-size)]">{link.expectedVersion}</span>
           </li>)}
         </ul>
         <p className="text-muted">重读时间 {review.data.readAt}。返回后核对全部内容，再提交人工决定。</p>
@@ -141,7 +141,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
           <dt>工件状态</dt><dd>{statuses[snapshot.artifact.status]}</dd>
           <dt>人工闸门</dt><dd>{snapshot.stage.gateApproved ? '已通过' :
             snapshot.stage.status === 'waiting_approval' ? '等待人工审核' : '尚未通过'}</dd>
-          <dt>快照版本</dt><dd className="break-all font-mono text-[var(--font-meta-size)]">{snapshot.version}</dd>
+          <dt>快照版本</dt><dd className="break-all font-mono text-[length:var(--font-meta-size)]">{snapshot.version}</dd>
         </dl>
         <Suspense fallback={<p role="status">正在加载工件正文…</p>}>
           <StageContent snapshot={snapshot} />
@@ -266,7 +266,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
             onChanged={() => {reading.save(); setRelationSaved(true); read.reload();}}/>
         </Suspense>
         <details data-reading-key="raw-snapshot" className="text-muted"><summary data-reading-key="raw-snapshot-summary" className="cursor-pointer">工件与来源快照原文</summary>
-          <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(snapshot, null, 2)}</pre>
+          <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(snapshot, null, 2)}</pre>
         </details>
       </>}
     </div>

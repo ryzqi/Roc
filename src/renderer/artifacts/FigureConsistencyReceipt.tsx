@@ -13,12 +13,12 @@ export function FigureConsistencyReceipt({receipt}: {receipt: ResearchFigureCons
           {value.consistent ? '数值一致' : '数值不一致'}，差异 {value.difference}，允许 {value.allowedDifference}</p>
         <p className="whitespace-pre-wrap">{mapping.claim.content}</p>
         <details className="text-muted"><summary className="cursor-pointer">来源指标、场景位置与规则</summary>
-          <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify({binding, mapping}, null, 2)}</pre>
+          <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify({binding, mapping}, null, 2)}</pre>
         </details>
       </div>;
     })}
     <details className="text-muted"><summary className="cursor-pointer">图稿审核回执原文</summary>
-      <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(receipt, null, 2)}</pre>
+      <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(receipt, null, 2)}</pre>
     </details>
   </section>;
 }

@@ -44,7 +44,7 @@ export function ArtifactResponseMatrix({client, snapshot, writable, locked: exte
         <dt>未处理</dt><dd>{result.report.openCommentIds.length}</dd>
         <dt>{result.report.reviewCurrent ? '已处理' : '历史已处理'}</dt><dd>{result.report.addressedCommentIds.length}</dd>
         <dt>{result.report.reviewCurrent ? '未采纳' : '历史未采纳'}</dt><dd>{result.report.declinedCommentIds.length}</dd>
-        <dt>报告 SHA-256</dt><dd className="break-all font-mono text-[var(--font-meta-size)]" data-testid="artifact-response-hash">{result.reportHash}</dd>
+        <dt>报告 SHA-256</dt><dd className="break-all font-mono text-[length:var(--font-meta-size)]" data-testid="artifact-response-hash">{result.reportHash}</dd>
       </dl>
       {result.report.review === null ? <p className="text-muted">尚无保存的审稿矩阵。</p> : <>
         {!result.report.reviewCurrent ? <p role="alert" className="text-[var(--st-warn)]" data-testid="artifact-response-source-changed">

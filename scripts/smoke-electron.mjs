@@ -284,11 +284,12 @@ try {
     const duringComposition = enter({});
     input.dispatchEvent(new CompositionEvent('compositionend', {bubbles: true, data: '验证'}));
     return {duringComposition, nativeComposing: enter({isComposing: true}),
-      legacy229: enter({keyCode: 229}), draft: input.value};
+      legacy229: enter({keyCode: 229}), companionEnter: enter({}), draft: input.value};
   });
   await page.waitForTimeout(250);
-  assertCheck('3 助手', '合成 IME 组字/原生标志/229 的 Enter 均不进入提交分支',
+  assertCheck('3 助手', '合成 IME 组字/原生标志/229/结束伴生 Enter 均不进入提交分支',
     !ime.duringComposition && !ime.nativeComposing && !ime.legacy229 &&
+    ime.companionEnter &&
     await page.getByTestId('assistant-composer-input').inputValue() === ime.draft &&
     await page.getByTestId('assistant-message-content').count() === 0,
     'Synthetic DOM events only; native input method not exercised');
@@ -343,7 +344,7 @@ try {
   );
   const saveError = await page.locator('[data-testid="settings-save-error"]').count();
   const afterSave = ((await page.locator('[data-testid="settings-dirty-bar"]').textContent()) ?? '').trim();
-  assertCheck('5 设置', '保存成功后脏状态条回到「没有未保存的改动」且没有保存错误', saveError === 0, afterSave);
+  assertCheck('5 设置', '保存成功后脏状态条显示「所有修改已保存」且没有保存错误', saveError === 0 && afterSave === '所有修改已保存', afterSave);
   await page.screenshot({ path: join(artifactDir, 'settings.png') });
   await page.click('[data-testid="settings-modal-close"]');
   await page.waitForSelector('[data-testid="settings-modal-panel"]', { state: 'detached', timeout: 15_000 });

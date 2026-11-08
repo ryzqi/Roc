@@ -38,7 +38,7 @@ export function describeRtkStatus(status: RtkStatus): RtkSummary {
   if (status.teeDir.length > 0) {
     detailParts.push(`tee: ${status.teeDir}`);
   }
-  const detail = detailParts.join(' · ');
+  const detail = detailParts.join('、');
 
   if (status.resourceState === 'missing') {
     return { tone: 'warn', label: 'RTK 未启用（资源缺失）', detail };

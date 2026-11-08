@@ -40,11 +40,11 @@ export default function ReadingDiscoveryPanel({client,projectId,itemId,writable,
       <button type="button" disabled={busy||!writable||!selected.size} onClick={()=>void importSelected()}>批量入库 ({selected.size})</button>
     </div>
     {busy?<p role="status">正在处理…</p>:null}{error?<p role="alert" className="whitespace-pre-wrap text-[var(--st-warn)]">{error}</p>:null}{status?<p role="status">{status}</p>:null}
-    {result?<><p className="text-muted">{result.source} · {result.articles.length} 篇 · {result.cached?'本地缓存':'刚刚获取'}</p>
+    {result?<><p className="text-muted">{result.source}，{result.articles.length} 篇，{result.cached?'本地缓存':'刚刚获取'}</p>
       {result.warnings.map(warning=><p className="text-muted" key={warning}>{warning}</p>)}
-      {result.articles.length===0?<p className="py-3">没有找到公开的引文记录。</p>:result.articles.map(article=><article className="border-b border-line py-2" key={article.id}>
+      {result.articles.length===0?<p className="py-3">没有找到公开的引文记录。</p>:result.articles.map(article=><article className="border-b-[0.5px] border-line py-2" key={article.id}>
         <label className="flex items-start gap-2"><input type="checkbox" disabled={busy||!selectable(article)} checked={selected.has(article.id)} onChange={event=>setSelected(previous=>{const next=new Set(previous);if(event.target.checked)next.add(article.id);else next.delete(article.id);return next;})}/>
-          <span className="min-w-0"><span className="font-medium">{article.title}</span><span className="block text-muted">{article.authors.join(', ')} {article.publishedAt?.slice(0,4)} {article.importedItemId?' · 已入库':''}</span></span></label>
+          <span className="min-w-0"><span className="font-medium">{article.title}</span><span className="block text-muted">{article.authors.join(', ')} {article.publishedAt?.slice(0,4)} {article.importedItemId?'，已入库':''}</span></span></label>
         {article.summary?<details className="ml-5"><summary>摘要</summary><p className="whitespace-pre-wrap">{article.summary}</p></details>:null}
       </article>)}
       {result.nextOffset!==null?<button type="button" disabled={busy} onClick={()=>void load(false,result.nextOffset!)}>加载更多</button>:null}

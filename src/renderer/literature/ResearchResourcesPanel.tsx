@@ -43,7 +43,7 @@ export default function ResearchResourcesPanel({client, projectId, writable, onL
     if (result.data.cancelled) setRequest(null);
     history.reload();
   };
-  return <section aria-label="项目科研资源" className="space-y-3 px-3 py-2 text-[var(--font-body-size)]" data-testid="reader-resources-panel">
+  return <section aria-label="项目科研资源" className="space-y-3 px-3 py-2 text-[length:var(--font-body-size)]" data-testid="reader-resources-panel">
     <p className="text-muted">查询数据集或软件 DOI。元数据许可字段不构成内容下载授权。</p>
     <label className="block">资源 DOI
       <input className="w-full min-w-0 rounded-control border-[0.5px] border-line bg-surface px-2 py-1 text-ink" value={doi}

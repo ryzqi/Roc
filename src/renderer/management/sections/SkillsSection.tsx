@@ -60,12 +60,12 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
         testId="mgmt-skills-builtin"
       >
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-muted text-[var(--font-meta-size)]" data-testid="mgmt-skills-builtin-summary">
+          <span className="text-muted text-[length:var(--font-meta-size)]" data-testid="mgmt-skills-builtin-summary">
             {builtinSnapshot === null
               ? builtin.status === 'loading'
                 ? '读取内置技能源…'
                 : '没有可用的内置技能源'
-              : `${builtinSnapshot.sources.length} 个来源 · 上次检查 ${formatBuiltinTimestamp(builtinSnapshot.lastCheckedAt)}${builtinSnapshot.updating ? ' · 正在同步' : ''}`}
+              : `${builtinSnapshot.sources.length} 个来源，上次检查 ${formatBuiltinTimestamp(builtinSnapshot.lastCheckedAt)}${builtinSnapshot.updating ? '，正在同步' : ''}`}
           </span>
           <button
             type="button"
@@ -79,7 +79,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
             <RefreshCw size={11} aria-hidden="true" />
             {builtin.check.pending || builtinSnapshot?.updating === true ? '检查中…' : '立即检查更新'}
           </button>
-          <label className="flex items-center gap-1 text-[var(--font-micro-size)] text-muted">
+          <label className="flex items-center gap-1 text-[length:var(--font-micro-size)] text-muted">
             <input
               type="checkbox"
               checked={builtinSnapshot?.autoUpdate ?? true}
@@ -88,7 +88,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
                 void builtin.autoUpdate.run(event.target.checked);
               }}
               data-testid="mgmt-skills-builtin-auto-update"
-              className="h-3.5 w-3.5 rounded-[3px] border border-line accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+              className="h-3.5 w-3.5 rounded-[3px] border-[0.5px] border-line accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
             />
             每天自动检查
           </label>
@@ -119,9 +119,9 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                     <DownloadCloud size={12} aria-hidden="true" className="text-muted" />
-                    <span className="text-ink text-[var(--font-meta-size)]">{source.displayName}</span>
-                    <span className="font-mono text-subtle text-[var(--font-micro-size)]">{source.repo}</span>
-                    <span className="text-muted text-[var(--font-micro-size)]" data-testid={`mgmt-skills-builtin-license-${source.id}`}>
+                    <span className="text-ink text-[length:var(--font-meta-size)]">{source.displayName}</span>
+                    <span className="font-mono text-subtle text-[length:var(--font-micro-size)]">{source.repo}</span>
+                    <span className="text-muted text-[length:var(--font-micro-size)]" data-testid={`mgmt-skills-builtin-license-${source.id}`}>
                       {source.license ?? '许可证未知'}
                     </span>
                   </span>
@@ -139,8 +139,8 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
                       : builtinSourceActionLabel(source)}
                   </button>
                 </div>
-                <span className="text-muted text-[var(--font-micro-size)]" data-testid={`mgmt-skills-builtin-state-${source.id}`}>
-                  {builtinSourceSummary(source)} · 上游 {shortCommit(source.installedCommit)} · 检查于{' '}
+                <span className="text-muted text-[length:var(--font-micro-size)]" data-testid={`mgmt-skills-builtin-state-${source.id}`}>
+                  {builtinSourceSummary(source)}，上游 {shortCommit(source.installedCommit)}，检查于{' '}
                   {formatBuiltinTimestamp(source.lastCheckedAt)}
                 </span>
                 {source.lastError === null ? null : (
@@ -165,7 +165,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
         testId="mgmt-skills-list-section"
       >
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-muted text-[var(--font-meta-size)]" data-testid="mgmt-skills-summary">
+          <span className="text-muted text-[length:var(--font-meta-size)]" data-testid="mgmt-skills-summary">
             {skillSummary(skills.skills)}
           </span>
           <button
@@ -220,30 +220,30 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
                     >
                       <span className="flex flex-wrap items-center gap-2">
                         <Package size={12} aria-hidden="true" className="text-muted" />
-                        <span className="text-ink text-[var(--font-meta-size)]">{skill.name}</span>
-                        <span className="font-mono text-subtle text-[var(--font-micro-size)]">{skill.id}</span>
+                        <span className="text-ink text-[length:var(--font-meta-size)]">{skill.name}</span>
+                        <span className="font-mono text-subtle text-[length:var(--font-micro-size)]">{skill.id}</span>
                         <span
                           className={
                             skill.status === 'ready'
-                              ? 'text-muted text-[var(--font-micro-size)]'
-                              : 'text-[var(--st-bad)] text-[var(--font-micro-size)]'
+                              ? 'text-muted text-[length:var(--font-micro-size)]'
+                              : 'text-[var(--st-bad)] text-[length:var(--font-micro-size)]'
                           }
                           data-testid={`mgmt-skill-status-${skill.id}`}
                         >
                           {skillStatusLabels[skill.status]}
                         </span>
                         <span
-                          className="text-subtle text-[var(--font-micro-size)]"
+                          className="text-subtle text-[length:var(--font-micro-size)]"
                           data-testid={`mgmt-skill-origin-${skill.id}`}
                         >
                           {skill.origin === 'builtin'
-                            ? `内置 · ${skill.sourceId ?? ''} · ${shortCommit(skill.upstreamCommit ?? null)}`
+                            ? `内置，${skill.sourceId ?? ''}，${shortCommit(skill.upstreamCommit ?? null)}`
                             : '用户导入'}
                         </span>
                       </span>
-                      <span className="block text-muted text-[var(--font-micro-size)]">{skill.description}</span>
+                      <span className="block text-muted text-[length:var(--font-micro-size)]">{skill.description}</span>
                     </button>
-                    <label className="flex items-center gap-1 text-[var(--font-micro-size)] text-muted">
+                    <label className="flex items-center gap-1 text-[length:var(--font-micro-size)] text-muted">
                       <input
                         type="checkbox"
                         checked={skills.skillEnabled(skill)}
@@ -252,7 +252,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
                           void skills.toggleEnabled.run(skill, event.target.checked);
                         }}
                         data-testid={`mgmt-skill-enabled-${skill.id}`}
-                        className="h-3.5 w-3.5 rounded-[3px] border border-line accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                        className="h-3.5 w-3.5 rounded-[3px] border-[0.5px] border-line accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
                       />
                       启用
                     </label>
@@ -282,7 +282,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
 
       <FormSection title="导入技能" testId="mgmt-skills-import">
         <label className="flex flex-col gap-0.5">
-          <span className="text-subtle text-[var(--font-micro-size)]">技能目录的绝对路径</span>
+          <span className="text-subtle text-[length:var(--font-micro-size)]">技能目录的绝对路径</span>
           <input
             value={importPath}
             onChange={(event) => setImportPath(event.target.value)}
@@ -304,7 +304,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
             {skills.importFrom.pending ? '导入中…' : '导入'}
           </button>
           {skills.importFrom.lastImported === null ? null : (
-            <span className="text-muted text-[var(--font-micro-size)]" data-testid="mgmt-skills-import-result">
+            <span className="text-muted text-[length:var(--font-micro-size)]" data-testid="mgmt-skills-import-result">
               已导入 {skills.importFrom.lastImported.name}（{skills.importFrom.lastImported.path}）
             </span>
           )}

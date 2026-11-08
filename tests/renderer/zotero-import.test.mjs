@@ -485,13 +485,14 @@ test('local/source differences retain both sides and stale or failed comparison 
     const header=panel.children[0];
     return {panelScroll:panel.scrollTop,bodyScroll:body.scrollTop,
       panelTop:panel.getBoundingClientRect().top,headerTop:header.getBoundingClientRect().top,
+      borderTop:parseFloat(getComputedStyle(panel).borderTopWidth),
       panelHeight:panel.clientHeight,panelContent:panel.scrollHeight,bodyHeight:body.clientHeight,bodyContent:body.scrollHeight,
       bodyStyle:{overflow:getComputedStyle(body).overflowY,minHeight:getComputedStyle(body).minHeight,flex:getComputedStyle(body).flex},
       children:[...panel.children].map(child=>({class:child.className,height:child.clientHeight,scroll:child.scrollHeight}))};
   });
   writeFileSync(join(artifacts,'source-local-scroll.json'),JSON.stringify(scrollLayout,null,2));
   assert.equal(scrollLayout.panelScroll,0);
-  assert.equal(scrollLayout.headerTop,scrollLayout.panelTop+1);
+  assert.equal(scrollLayout.headerTop,scrollLayout.panelTop+scrollLayout.borderTop);
   assert.ok(scrollLayout.bodyScroll>0);
   const dialogBody=page.getByRole('dialog').locator(':scope > div').nth(1);
   await dialogBody.evaluate(body=>{body.scrollTop=0;});
@@ -759,9 +760,10 @@ test('source-state UI displays truthful membership trash missing and version out
           await inspect('source-state-missing-'+theme+'-'+width);
           const layout=await page.getByRole('dialog').evaluate(panel=>({
             scroll:panel.scrollTop,header:panel.children[0].getBoundingClientRect().top,
-            top:panel.getBoundingClientRect().top,horizontal:panel.scrollWidth>panel.clientWidth
+            top:panel.getBoundingClientRect().top,borderTop:parseFloat(getComputedStyle(panel).borderTopWidth),
+            horizontal:panel.scrollWidth>panel.clientWidth
           }));
-          assert.equal(layout.scroll,0);assert.equal(layout.header,layout.top+1);assert.equal(layout.horizontal,false);
+          assert.equal(layout.scroll,0);assert.equal(layout.header,layout.top+layout.borderTop);assert.equal(layout.horizontal,false);
         }
       }
       await page.setViewportSize({width:1100,height:900});

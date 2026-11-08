@@ -291,7 +291,7 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
         />
         {phase === 'starting' ? (
           <p
-            className="pointer-events-none absolute left-3 top-2 flex items-center gap-2 text-[var(--terminal-text)] text-[var(--font-meta-size)]"
+            className="pointer-events-none absolute left-3 top-2 flex items-center gap-2 text-[var(--terminal-text)] text-[length:var(--font-meta-size)]"
             role="status"
           >
             <Loader2 size={12} aria-hidden="true" className="animate-spin" />
@@ -301,7 +301,7 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
       </div>
 
       <div
-        className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-[var(--terminal-line)] px-2 py-1 text-[var(--terminal-text)] text-[var(--font-micro-size)]"
+        className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-0.5 border-t-[0.5px] border-[var(--terminal-line)] px-2 py-1 text-[var(--terminal-text)] text-[length:var(--font-micro-size)]"
         data-testid="terminal-footer"
       >
         <span className="min-w-0 flex-1 truncate font-mono" data-testid="terminal-cwd" title={session?.cwd ?? workspacePath}>

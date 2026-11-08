@@ -104,12 +104,12 @@ export function CodeBlock({ children, className }: CodeBlockProps): React.JSX.El
 
   return (
     <div
-      className="roc-code my-2 overflow-hidden rounded-card border border-line bg-code-surface"
+      className="roc-code my-2 overflow-hidden rounded-card border-[0.5px] border-line bg-code-surface"
       data-language={language ?? 'text'}
       data-testid="assistant-code-block"
     >
-      <div className="flex items-center gap-2 border-b border-line-soft bg-code-header-bg px-2 py-1">
-        <span className="min-w-0 flex-1 truncate font-mono text-[var(--code-header-text)] text-[var(--font-micro-size)]">
+      <div className="flex items-center gap-2 border-b-[0.5px] border-line-soft bg-code-header-bg px-2 py-1">
+        <span className="min-w-0 flex-1 truncate font-mono text-[var(--code-header-text)] text-[length:var(--font-micro-size)]">
           {language ?? 'text'}
         </span>
         <button
@@ -125,12 +125,12 @@ export function CodeBlock({ children, className }: CodeBlockProps): React.JSX.El
           ) : (
             <Copy size={11} aria-hidden="true" />
           )}
-          <span className="text-[var(--font-micro-size)]">{copy.copied ? '已复制' : '复制'}</span>
+          <span className="text-[length:var(--font-micro-size)]">{copy.copied ? '已复制' : '复制'}</span>
         </button>
       </div>
       <pre
         className={[
-          'overflow-x-auto p-2 font-mono text-[var(--font-code-size)] text-[var(--code-text)]',
+          'overflow-x-auto p-2 font-mono text-[length:var(--font-code-size)] text-[var(--code-text)]',
           className ?? ''
         ].join(' ')}
       >

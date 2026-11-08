@@ -44,7 +44,7 @@ export function ArtifactConsistency({client, snapshot, writable, locked: externa
         {Object.entries({已映射: result.report.counts.mapped, 数值一致: result.report.counts.consistent,
           数值不一致: result.report.counts.inconsistent, 主张已变化: result.report.counts.changed,
           未映射数值: result.report.counts.unmappedValues}).map(([label, value]) => <div className="contents" key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
-        <dt>报告 SHA-256</dt><dd className="break-all font-mono text-[var(--font-meta-size)]" data-testid="artifact-consistency-hash">{result.reportHash}</dd>
+        <dt>报告 SHA-256</dt><dd className="break-all font-mono text-[length:var(--font-meta-size)]" data-testid="artifact-consistency-hash">{result.reportHash}</dd>
       </dl>
       <p className="text-muted">数值一致不代表科学批准。图稿说明的数值不代表实际绘制数据已核对。</p>
       <ul className="flex min-w-0 flex-col gap-2" data-testid="artifact-consistency-unmapped">

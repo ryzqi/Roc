@@ -107,8 +107,8 @@ function ChangeRow({
         data-testid={`git-select-${change.relativePath}`}
         className="flex h-6 min-w-0 flex-1 items-center gap-1.5 text-left"
       >
-        <span className="min-w-0 flex-1 truncate font-mono text-[var(--font-meta-size)]">{change.relativePath}</span>
-        <span className="shrink-0 text-subtle text-[var(--font-micro-size)]">{label}</span>
+        <span className="min-w-0 flex-1 truncate font-mono text-[length:var(--font-meta-size)]">{change.relativePath}</span>
+        <span className="shrink-0 text-subtle text-[length:var(--font-micro-size)]">{label}</span>
       </button>
 
       <div className="flex shrink-0 items-center">
@@ -164,8 +164,8 @@ function Group({
   return (
     <section className="mt-2 first:mt-0">
       <header className="flex items-center gap-2 px-1 py-0.5">
-        <h3 className="flex-1 text-subtle text-[var(--font-micro-size)]">
-          {title} · {count}
+        <h3 className="flex-1 text-subtle text-[length:var(--font-micro-size)]">
+          {title}，{count}
         </h3>
         {actions}
       </header>
@@ -196,7 +196,7 @@ export function GitChangeLists({
 
   if (noChanges) {
     return (
-      <p className="px-2 py-4 text-muted text-[var(--font-meta-size)]" data-testid="git-changes-clean">
+      <p className="px-2 py-4 text-muted text-[length:var(--font-meta-size)]" data-testid="git-changes-clean">
         工作区干净，没有未提交的改动。
       </p>
     );
@@ -239,7 +239,7 @@ export function GitChangeLists({
               data-testid="git-select-all"
               className="rounded-control px-1.5 text-muted hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
             >
-              <span className="text-[var(--font-micro-size)]">全选</span>
+              <span className="text-[length:var(--font-micro-size)]">全选</span>
             </button>
             <button
               type="button"
@@ -248,7 +248,7 @@ export function GitChangeLists({
               data-testid="git-stage-selected"
               className="rounded-control px-1.5 text-muted hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
             >
-              <span className="text-[var(--font-micro-size)]">暂存所选（{selectableCount}）</span>
+              <span className="text-[length:var(--font-micro-size)]">暂存所选（{selectableCount}）</span>
             </button>
             <button
               type="button"
@@ -257,13 +257,13 @@ export function GitChangeLists({
               data-testid="git-clear-selection"
               className="rounded-control px-1.5 text-muted hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
             >
-              <span className="text-[var(--font-micro-size)]">清空</span>
+              <span className="text-[length:var(--font-micro-size)]">清空</span>
             </button>
           </div>
         }
       >
         {groups.unstaged.length === 0 ? (
-          <p className="px-2 py-1 text-subtle text-[var(--font-micro-size)]">没有未暂存的改动。</p>
+          <p className="px-2 py-1 text-subtle text-[length:var(--font-micro-size)]">没有未暂存的改动。</p>
         ) : (
           groups.unstaged.map((change) => row(change, true))
         )}

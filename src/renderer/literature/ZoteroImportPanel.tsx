@@ -10,7 +10,7 @@ import {ZoteroOriginalSource} from './ZoteroSourceStatePanel';
 import type {ZoteroAttachmentJobs} from './use-zotero-attachment-jobs';
 
 const buttonClass = `${formSecondaryButtonClass} border-[0.5px]`;
-const inputClass = `${formInputClass} border-[0.5px] text-[var(--font-meta-size)]`;
+const inputClass = `${formInputClass} border-[0.5px] text-[length:var(--font-meta-size)]`;
 const connectionLabels = {disabled: '未启用通信。请在 Zotero 高级设置中允许其他应用通信。',
   unreachable: 'Zotero 不可达。打开应用后重新连接。',
   unsupported: '版本不支持。需要 Zotero 10 或更新版本。',
@@ -21,7 +21,7 @@ export function ZoteroImportPanel({client, job, attachments}: {client: RocClient
   const probe = useAsyncResource(attempt === 0 ? null : `zotero:probe:${attempt}`,
     () => client.api.research.probeZotero({}), {label: '连接 Zotero'});
   const connection = probe.status === 'ready' ? probe.data : null;
-  return <div className="flex flex-col gap-3 text-[var(--font-meta-size)]" data-testid="literature-import-panel-zotero">
+  return <div className="flex flex-col gap-3 text-[length:var(--font-meta-size)]" data-testid="literature-import-panel-zotero">
     <div className="flex items-center justify-between gap-2">
       <span className="text-muted">{connection?.status === 'connected' ? 'Zotero 已连接' : 'Zotero 本地文库'}</span>
       <button type="button" className={buttonClass} disabled={probe.status === 'loading' || job.pending || job.cancelling}
@@ -231,9 +231,9 @@ function LibraryPreview({client, scope, libraryName, job, attachments}: {
       </div>
       {sync === null ? <p className="text-subtle">逐页收录或明确跳过后才推进检查点；中断后可继续。</p> : <p className="break-words text-muted" role="status">
         {sync.status === 'active' ? '核对中' : sync.status === 'paused' ? '已暂停' : sync.status === 'completed' ? '本次核对完成' : '需要重新建立核对'}
-        {' · '}已确认 {sync.nextOffset} 个对象，完整版本 {sync.checkpointVersion ?? '尚未建立'}
+        {'，'}已确认 {sync.nextOffset} 个对象，完整版本 {sync.checkpointVersion ?? '尚未建立'}
         {sync.targetVersion === null ? null : `，本次版本 ${sync.targetVersion}`}
-        {sync.errorCode === null ? null : ` · ${sync.errorCode}`}
+        {sync.errorCode === null ? null : `，${sync.errorCode}`}
       </p>}
       {sync?.mode === 'rebaseline' ? <p className="text-subtle">本次按当前来源版本重新建立检查点；旧核对历史与本地资料保留。</p> : null}
       {[lookup.error, begin.error, syncPage.error, readPending.error, readState.error, control.error, acknowledge.error]
@@ -314,7 +314,7 @@ function ObjectRow({item, checked, disabled, imported, onSelect, client, attachm
       <input type="checkbox" checked={checked} disabled={disabled || !selectable}
         onChange={event => onSelect(event.target.checked)} className="mt-1 shrink-0"
         aria-label={`选择 ${title || item.key}`} />
-      <span className="min-w-0 break-words text-[var(--font-body-size)] text-ink">{title || '题名未提供'}</span>
+      <span className="min-w-0 break-words text-[length:var(--font-body-size)] text-ink">{title || '题名未提供'}</span>
     </label>
     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 pl-5 text-subtle">
       <span>{item.data.itemType}</span><span>对象 {item.key}</span><span>版本 {item.version}</span>
@@ -323,7 +323,7 @@ function ObjectRow({item, checked, disabled, imported, onSelect, client, attachm
     </div>
     <details className="mt-1 pl-5" data-testid="literature-zotero-object-details">
       <summary className="cursor-pointer text-muted">题录、标签、集合与附件引用</summary>
-      <pre className="mt-1 whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)] text-muted">{JSON.stringify(item, null, 2)}</pre>
+      <pre className="mt-1 whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)] text-muted">{JSON.stringify(item, null, 2)}</pre>
     </details>
     {imported ? <ImportedSource client={client} attachments={attachments} previewId={previewId} itemKey={item.key} collectionKey={collectionKey} /> : null}
   </li>;
@@ -382,7 +382,7 @@ function SourceReview({review, client, projectId, collectionKey, attachments}: {
         </table>}
         {item.local === null ? null : <details className="mt-2 text-muted" data-testid="literature-zotero-local-fields">
           <summary className="cursor-pointer">本地书目字段</summary>
-          <pre className="whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(item.local.bibliography.fields, null, 2)}</pre>
+          <pre className="whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(item.local.bibliography.fields, null, 2)}</pre>
         </details>}
         <ZoteroOriginalSource client={client} projectId={projectId} collectionKey={collectionKey} original={item.previousScopedSource} attachments={attachments} />
       </details>)}
@@ -438,7 +438,7 @@ function ImportReceipt({job}: {job: ZoteroImportJob}): React.JSX.Element | null 
 }
 
 function Failure({message}: {message: string}): React.JSX.Element {
-  return <p role="alert" className="flex items-start gap-1 text-[var(--font-meta-size)] text-[var(--st-warn)]">
+  return <p role="alert" className="flex items-start gap-1 text-[length:var(--font-meta-size)] text-[var(--st-warn)]">
     <AlertTriangle size={14} aria-hidden="true" className="shrink-0" /><span className="min-w-0 break-words">{message}</span>
   </p>;
 }

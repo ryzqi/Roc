@@ -30,7 +30,7 @@ export function IdeaOutcomes(props: Props): React.JSX.Element {
     {heads.length === 0 ? <p className="text-muted">尚无保存的人工结果评估。</p> : <ul className="flex flex-col gap-2">
       {heads.map(head => <li key={head.outcomeId} className="break-words">
         {outcomeVerdicts[head.verdict]} 评估版本 {head.version} {head.recordedAt}
-        <p className="break-all font-mono text-muted text-[var(--font-meta-size)]">评估 SHA-256 {head.outcomeHash}</p>
+        <p className="break-all font-mono text-muted text-[length:var(--font-meta-size)]">评估 SHA-256 {head.outcomeHash}</p>
       </li>)}
     </ul>}
     <button type="button" className={button} disabled={selectionLocked || history.status === 'loading'}

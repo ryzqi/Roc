@@ -30,7 +30,7 @@ export function PythonEnvironmentSection({ client, projectId }: {
 
   return (
     <FormSection title="项目 Python 环境" testId="mgmt-python-environment">
-      <p className="text-muted text-[var(--font-meta-size)]">
+      <p className="text-muted text-[length:var(--font-meta-size)]">
         选择已有 CPython 3.14 环境。运行前重新核验，环境变化后需重新选择。
       </p>
       {resource.status === 'error' ? (
@@ -49,7 +49,7 @@ export function PythonEnvironmentSection({ client, projectId }: {
               <summary className="cursor-pointer text-muted focus-visible:outline-2 focus-visible:outline-accent">
                 选择记录（{data.selections.length}）
               </summary>
-              <ol className="mt-2 grid gap-3 text-[var(--font-meta-size)]">
+              <ol className="mt-2 grid gap-3 text-[length:var(--font-meta-size)]">
                 {[...data.selections].reverse().map(({ snapshot }) => (
                   <li key={snapshot.id} className="grid min-w-0 gap-1">
                     <p className="text-ink">Python {snapshot.version}

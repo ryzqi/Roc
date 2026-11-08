@@ -43,9 +43,9 @@ export function ArtifactFigureConsistency({client, snapshot, writable, locked: e
         {Object.entries({场景数值位置: result.report.counts.numericLocations, 数值一致: result.report.counts.consistent,
           数值不一致: result.report.counts.inconsistent, 主张已变化: result.report.counts.changed, 未映射: result.report.counts.unmapped})
           .map(([label, value]) => <div className="contents" key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
-        <dt>图稿清单 SHA-256</dt><dd className="break-all font-mono text-[var(--font-meta-size)]">{result.report.figure.manifestHash}</dd>
-        <dt>场景 SHA-256</dt><dd className="break-all font-mono text-[var(--font-meta-size)]">{result.report.trace.file.sha256}</dd>
-        <dt>报告 SHA-256</dt><dd className="break-all font-mono text-[var(--font-meta-size)]" data-testid="artifact-figure-consistency-hash">{result.reportHash}</dd>
+        <dt>图稿清单 SHA-256</dt><dd className="break-all font-mono text-[length:var(--font-meta-size)]">{result.report.figure.manifestHash}</dd>
+        <dt>场景 SHA-256</dt><dd className="break-all font-mono text-[length:var(--font-meta-size)]">{result.report.trace.file.sha256}</dd>
+        <dt>报告 SHA-256</dt><dd className="break-all font-mono text-[length:var(--font-meta-size)]" data-testid="artifact-figure-consistency-hash">{result.reportHash}</dd>
       </dl>
       <p className="text-muted">场景数据一致不代表科学批准，也不验证最终像素位置。</p>
       <ul className="flex min-w-0 flex-col gap-2" data-testid="artifact-figure-consistency-locations">

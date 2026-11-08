@@ -34,7 +34,7 @@ export function ReviewFullTextArbitration({client, protocol, phase, item, bindin
       <p>{decision.snapshot.reviewer.name} {screeningDecisions[decision.snapshot.request.outcome.decision]} 版本 {decision.snapshot.version}</p>
       <p className="text-muted">{decision.snapshot.request.outcome.reason}</p>
       <details><summary className="cursor-pointer text-muted">准则与审核引用</summary>
-        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">
+        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">
           {JSON.stringify({request: decision.snapshot.request, id: decision.snapshot.id, snapshotHash: decision.snapshotHash}, null, 2)}
         </pre>
       </details>

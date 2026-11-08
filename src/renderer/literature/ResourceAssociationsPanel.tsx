@@ -75,7 +75,7 @@ export default function ResourceAssociationsPanel({client, resource, writable, o
           <textarea className={control} rows={3} maxLength={8192} value={rationale} onChange={event => {setRationale(event.target.value); setSaved(null);}}/>
         </label>
         {target === null ? null : <details><summary className="cursor-pointer text-muted">将绑定的版本身份</summary>
-          <pre className="whitespace-pre-wrap break-all text-muted text-[var(--font-meta-size)]">{JSON.stringify(target.target, null, 2)}</pre></details>}
+          <pre className="whitespace-pre-wrap break-all text-muted text-[length:var(--font-meta-size)]">{JSON.stringify(target.target, null, 2)}</pre></details>}
       </fieldset>
       <div className="flex flex-wrap gap-2">
         <button type="button" className={scholarlyButton} disabled={!writable || locked || target === null || rationale.trim() === ''}
@@ -102,7 +102,7 @@ export default function ResourceAssociationsPanel({client, resource, writable, o
             <p className="whitespace-pre-wrap break-words">{record.association.request.rationale}</p>
             <p className="break-words text-muted">{record.association.actor.id} {record.association.createdAt}</p>
             <details><summary className="cursor-pointer text-muted">保存的关联身份</summary>
-              <pre className="whitespace-pre-wrap break-all text-muted text-[var(--font-meta-size)]">{JSON.stringify(record.association, null, 2)}</pre>
+              <pre className="whitespace-pre-wrap break-all text-muted text-[length:var(--font-meta-size)]">{JSON.stringify(record.association, null, 2)}</pre>
             </details>
           </li>)}</ul>}
         <div className="flex flex-wrap gap-2">

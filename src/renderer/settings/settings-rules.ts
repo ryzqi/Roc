@@ -237,7 +237,7 @@ function modelLabel(providers: readonly ProviderConfig[], key: string | null): s
   for (const provider of providers) {
     const model = provider.models.find((entry) => buildProviderModelKey(provider.id, entry.id) === key);
     if (model !== undefined) {
-      return `${model.displayName} · ${provider.name}`;
+      return `${model.displayName}（${provider.name}）`;
     }
   }
   return key;
@@ -306,7 +306,7 @@ export function modelOptions(providers: readonly ProviderConfig[]): ModelOption[
   return providers.flatMap((provider) =>
     provider.models.map((model) => ({
       key: buildProviderModelKey(provider.id, model.id),
-      label: `${model.displayName} · ${provider.name}${model.enabled ? '' : '（已停用）'}`,
+      label: `${model.displayName}（${provider.name}）${model.enabled ? '' : '（已停用）'}`,
       providerId: provider.id,
       modelId: model.id,
       enabled: model.enabled

@@ -165,7 +165,7 @@ export function ChatTranscriptPanel({
             animate="animate"
             exit="exit"
             transition={popoverTransition}
-            className="absolute bottom-2 left-1/2 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full border border-line bg-surface text-muted shadow-[var(--shadow-popover)] hover:text-ink active:bg-[var(--overlay-active)]"
+            className="absolute bottom-2 left-1/2 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full border-[0.5px] border-line bg-surface text-muted shadow-[var(--shadow-popover)] hover:text-ink active:bg-[var(--overlay-active)]"
           >
             <ChevronDown size={14} aria-hidden="true" />
           </motion.button>

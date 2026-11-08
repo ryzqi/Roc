@@ -43,9 +43,9 @@ export function formatAuthorList(authors: readonly string[], max = 2): string {
     return '作者未知';
   }
   if (cleaned.length <= max) {
-    return cleaned.join(' · ');
+    return cleaned.join('、');
   }
-  return `${cleaned.slice(0, max).join(' · ')} 等 ${cleaned.length} 人`;
+  return `${cleaned.slice(0, max).join('、')} 等 ${cleaned.length} 人`;
 }
 
 /** `2024` / `—`. Deliberately not "n.d." — an absent year is an absent year. */

@@ -84,7 +84,7 @@ export function ManagementPanel({
           testIdPrefix="mgmt"
         />
 
-        <p className="shrink-0 text-muted text-[var(--font-meta-size)]" data-testid="mgmt-summary">
+        <p className="shrink-0 text-muted text-[length:var(--font-meta-size)]" data-testid="mgmt-summary">
           {managementSummary(tab, visibleSummaries)}
         </p>
 

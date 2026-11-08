@@ -81,7 +81,7 @@ function DiagnosticsContent({ data }: { data: RunDiagnosticsData }): React.JSX.E
         <DiagnosticRow label="准入等待 / 持锁总耗时" value={`${formatDuration(data.toolAdmission.wait.totalMs)} / ${formatDuration(data.toolAdmission.hold.totalMs)}`} />
         <DiagnosticRow label="准入冲突 / 取消" value={`${formatCount(data.toolAdmission.contendedCount)} / ${formatCount(data.toolAdmission.cancellationCount)}`} />
       </dl>
-      <section className="grid gap-1 border-t border-line pt-2" aria-label="上下文保留检查">
+      <section className="grid gap-1 border-t-[0.5px] border-line pt-2" aria-label="上下文保留检查">
         <div className="flex flex-wrap justify-between gap-1">
           <h3 className="font-medium text-ink">上下文保留检查</h3>
           <span className={missingRequirements + invalidRequirements > 0 ? 'text-[var(--st-warn)]' : 'text-subtle'}>{contextQuality}</span>
@@ -94,7 +94,7 @@ function DiagnosticsContent({ data }: { data: RunDiagnosticsData }): React.JSX.E
           <DiagnosticRow label="工作区版本" value={data.context.compactionCount === 0 ? '尚未检查' : audit.workspaceVersionPresent ? '已保留' : '未提供'} />
         </dl>
       </section>
-      <details className="border-t border-line pt-2" data-testid="assistant-diagnostics-spans">
+      <details className="border-t-[0.5px] border-line pt-2" data-testid="assistant-diagnostics-spans">
         <summary className="cursor-pointer rounded-control text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent">
           本地 trace：{formatCount(data.trace.spans.length)} spans
           {data.trace.droppedSpanCount > 0 ? ` / 超限未保留 ${formatCount(data.trace.droppedSpanCount)}` : ''}
@@ -157,7 +157,7 @@ export function RunDiagnostics({
   );
 
   return (
-    <div className="min-w-0 text-[var(--font-meta-size)]" data-testid="assistant-diagnostics">
+    <div className="min-w-0 text-[length:var(--font-meta-size)]" data-testid="assistant-diagnostics">
       <div className="flex items-center justify-between gap-2">
         <button
           type="button"

@@ -300,14 +300,14 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="rag-studio">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-2">
-        <span className="flex items-center gap-1.5 text-[var(--font-meta-size)]" data-testid="rag-phase" data-phase={status?.phase ?? 'loading'}>
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b-[0.5px] border-line px-3 py-2">
+        <span className="flex items-center gap-1.5 text-[length:var(--font-meta-size)]" data-testid="rag-phase" data-phase={status?.phase ?? 'loading'}>
           {status === null ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : null}
           {status === null ? '读取索引状态…' : PHASE_LABELS[status.phase]}
         </span>
         {counts === null ? null : (
-          <span className="font-mono text-muted text-[var(--font-micro-size)]" data-testid="rag-counts">
-            文件 {counts.total} · 已索引 {counts.ready} · 排队 {counts.queued} · 进行 {counts.running} · 失败 {counts.failed}
+          <span className="font-mono text-muted text-[length:var(--font-micro-size)]" data-testid="rag-counts">
+            文件 {counts.total}，已索引 {counts.ready}，排队 {counts.queued}，进行 {counts.running}，失败 {counts.failed}
           </span>
         )}
         <div className="ml-auto flex items-center gap-1">
@@ -316,7 +316,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
             disabled={revision === null || actionPending}
             onClick={() => void runControl('scan')}
             data-testid="rag-scan"
-            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
           >
             <RefreshCw size={11} aria-hidden="true" />
             增量扫描
@@ -326,7 +326,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
             disabled={revision === null || actionPending}
             onClick={() => void runControl('rebuild')}
             data-testid="rag-rebuild"
-            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
           >
             <Play size={11} aria-hidden="true" />
             重建
@@ -336,7 +336,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
             disabled={revision === null || actionPending}
             onClick={() => void runControl(status?.phase === 'paused' ? 'resume' : 'pause')}
             data-testid="rag-toggle-pause"
-            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-[var(--st-warn)] text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-[var(--st-warn)] text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
           >
             <Square size={11} aria-hidden="true" />
             {status?.phase === 'paused' ? '继续' : '暂停'}
@@ -352,9 +352,9 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         <section className="mb-4">
-          <h3 className="mb-1.5 text-muted text-[var(--font-meta-size)]">检索（关键词与语义匹配）</h3>
+          <h3 className="mb-1.5 text-muted text-[length:var(--font-meta-size)]">检索（关键词与语义匹配）</h3>
           <div className="flex gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-control border border-line bg-surface px-2">
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-control border-[0.5px] border-line bg-surface px-2">
               <Search size={11} aria-hidden="true" className="shrink-0 text-subtle" />
               <input
                 type="search"
@@ -369,7 +369,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
                 aria-label="检索知识库"
                 placeholder="检索已索引内容"
                 data-testid="rag-query"
-                className="h-[var(--control-height)] min-w-0 flex-1 bg-transparent text-ink text-[var(--font-meta-size)] placeholder:text-subtle"
+                className="h-[var(--control-height)] min-w-0 flex-1 bg-transparent text-ink text-[length:var(--font-meta-size)] placeholder:text-subtle"
               />
             </div>
             <button
@@ -377,7 +377,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
               disabled={query.trim().length === 0 || searching}
               onClick={() => void runSearch()}
               data-testid="rag-search"
-              className="flex h-[var(--control-height)] items-center gap-1 rounded-control bg-accent-soft px-3 text-ink text-[var(--font-meta-size)] active:bg-[var(--accent-soft-strong)] disabled:opacity-40"
+              className="flex h-[var(--control-height)] items-center gap-1 rounded-control bg-accent-soft px-3 text-ink text-[length:var(--font-meta-size)] active:bg-[var(--accent-soft-strong)] disabled:opacity-40"
             >
               {searching ? <Loader2 size={11} aria-hidden="true" className="animate-spin" /> : null}
               检索
@@ -385,18 +385,18 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
           </div>
 
           {searchError === null ? null : (
-            <p role="alert" className="mt-1.5 flex items-center gap-1 text-[var(--st-bad)] text-[var(--font-micro-size)]" data-testid="rag-search-error">
+            <p role="alert" className="mt-1.5 flex items-center gap-1 text-[var(--st-bad)] text-[length:var(--font-micro-size)]" data-testid="rag-search-error">
               <AlertCircle size={11} aria-hidden="true" />
               {searchError}
             </p>
           )}
           {jumpError === null ? null : (
-            <p role="alert" className="mt-1.5 text-[var(--st-warn)] text-[var(--font-micro-size)]" data-testid="rag-jump-error">
+            <p role="alert" className="mt-1.5 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" data-testid="rag-jump-error">
               {jumpError}
             </p>
           )}
           {note === null && literature.action.error === null ? null : (
-            <p role="status" className="mt-1.5 text-muted text-[var(--font-micro-size)]" data-testid="rag-note">
+            <p role="status" className="mt-1.5 text-muted text-[length:var(--font-micro-size)]" data-testid="rag-note">
               {note ?? literature.action.error}
             </p>
           )}
@@ -405,28 +405,28 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
             <EmptyState compact icon={Search} title="没有命中" description="换一个说法，或先建索引。" testId="rag-no-hits" />
           ) : (
             <>
-              <p className="mt-2 font-mono text-subtle text-[var(--font-micro-size)]" data-testid="rag-search-meta">
-                关键词 {result.keywordCount} · 向量 {result.vectorCount} · 嵌入模型 {result.embeddingModel ?? '未配置'} · {result.generatedAt}
+              <p className="mt-2 font-mono text-subtle text-[length:var(--font-micro-size)]" data-testid="rag-search-meta">
+                关键词 {result.keywordCount}，向量 {result.vectorCount}，嵌入模型 {result.embeddingModel ?? '未配置'}，{result.generatedAt}
               </p>
               <ul className="mt-1.5 flex flex-col gap-1.5" data-testid="rag-hits">
                 {result.hits.map((hit) => (
                   <li
                     key={hit.chunkId}
-                    className="rounded-card border border-line bg-surface px-2.5 py-2"
+                    className="rounded-card border-[0.5px] border-line bg-surface px-2.5 py-2"
                     data-testid={`rag-hit-${hit.chunkId}`}
                   >
                     <header className="flex items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate text-ink text-[var(--font-meta-size)]">{hit.title}</span>
-                      <span className="shrink-0 font-mono text-subtle text-[var(--font-micro-size)]">
+                      <span className="min-w-0 flex-1 truncate text-ink text-[length:var(--font-meta-size)]">{hit.title}</span>
+                      <span className="shrink-0 font-mono text-subtle text-[length:var(--font-micro-size)]">
                         综合相关度 {hit.rrfScore.toFixed(4)}
-                        {hit.keywordRank === null ? '' : ` · 关键词第 ${hit.keywordRank}`}
-                        {hit.vectorRank === null ? '' : ` · 语义第 ${hit.vectorRank}`}
+                        {hit.keywordRank === null ? '' : `，关键词第 ${hit.keywordRank}`}
+                        {hit.vectorRank === null ? '' : `，语义第 ${hit.vectorRank}`}
                       </span>
                     </header>
-                    <p className="mt-1 whitespace-pre-wrap text-muted text-[var(--font-meta-size)]">{hit.content}</p>
+                    <p className="mt-1 whitespace-pre-wrap text-muted text-[length:var(--font-meta-size)]">{hit.content}</p>
                     <footer className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      <span className="min-w-0 flex-1 truncate font-mono text-subtle text-[var(--font-micro-size)]">
-                        {hit.sourceType} · {hit.locator ?? '无 locator'}
+                      <span className="min-w-0 flex-1 truncate font-mono text-subtle text-[length:var(--font-micro-size)]">
+                        {hit.sourceType}，{hit.locator ?? '无 locator'}
                       </span>
                       <button
                         type="button"
@@ -436,7 +436,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
                         }}
                         title="复制这条命中的正文"
                         data-testid={`rag-hit-copy-${hit.chunkId}`}
-                        className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
+                        className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
                       >
                         {hitCopy.copied && copiedChunkId === hit.chunkId ? (
                           <Check size={10} aria-hidden="true" className="text-[var(--st-ok)]" />
@@ -449,7 +449,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
                         type="button"
                         onClick={() => openHit(hit)}
                         data-testid={`rag-hit-open-${hit.chunkId}`}
-                        className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
+                        className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
                       >
                         <ExternalLink size={10} aria-hidden="true" />
                         {hit.documentId.startsWith('project-index:') ? '打开来源文件' : '在阅读器里定位'}
@@ -460,7 +460,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
                         onClick={() => captureHit(hit)}
                         title="将当前检索结果保存为项目证据。"
                         data-testid={`rag-hit-capture-${hit.chunkId}`}
-                        className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+                        className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
                       >
                         <FlaskConical size={10} aria-hidden="true" />
                         捕获为证据
@@ -470,7 +470,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
                         onClick={() => saveHitAsNote(hit)}
                         title="将当前检索结果保存为知识库笔记。"
                         data-testid={`rag-hit-save-${hit.chunkId}`}
-                        className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
+                        className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
                       >
                         <Bookmark size={10} aria-hidden="true" />
                         写入知识库
@@ -485,26 +485,26 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
 
         <section className="mb-4">
           <div className="mb-1.5 flex items-center gap-2">
-            <h3 className="text-muted text-[var(--font-meta-size)]">已索引文件</h3>
+            <h3 className="text-muted text-[length:var(--font-meta-size)]">已索引文件</h3>
             <input
               value={fileQuery}
               onChange={(event) => setFileQuery(event.target.value)}
               placeholder="按路径过滤"
               aria-label="按路径过滤索引文件"
               data-testid="rag-file-filter"
-              className="ml-auto h-[var(--control-height-compact)] w-40 rounded-control border border-line bg-surface px-2 text-ink text-[var(--font-micro-size)] placeholder:text-subtle"
+              className="ml-auto h-[var(--control-height-compact)] w-40 rounded-control border-[0.5px] border-line bg-surface px-2 text-ink text-[length:var(--font-micro-size)] placeholder:text-subtle"
             />
           </div>
           {filesResource.status === 'error' ? (
             <ErrorBar error={{ level: 'page', message: filesResource.error ?? '读取索引文件失败', retry: reloadFiles }} />
           ) : indexedFiles.length === 0 ? (
-            <p className="text-subtle text-[var(--font-micro-size)]" data-testid="rag-no-files">
+            <p className="text-subtle text-[length:var(--font-micro-size)]" data-testid="rag-no-files">
               当前工作目录还没有已索引文件。选择「增量扫描」可添加新文件。
             </p>
           ) : (
-            <table className="w-full border-collapse text-[var(--font-meta-size)]" data-testid="rag-files">
+            <table className="w-full border-collapse text-[length:var(--font-meta-size)]" data-testid="rag-files">
               <thead>
-                <tr className="text-left text-subtle text-[var(--font-micro-size)]">
+                <tr className="text-left text-subtle text-[length:var(--font-micro-size)]">
                   <th className="py-0.5 font-normal">路径</th>
                   <th className="py-0.5 font-normal">类型</th>
                   <th className="py-0.5 font-normal">状态</th>
@@ -513,7 +513,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
               </thead>
               <tbody>
                 {indexedFiles.map((file) => (
-                  <tr key={file.id} className="border-t border-line-soft" data-testid={`rag-file-${file.id}`}>
+                  <tr key={file.id} className="border-t-[0.5px] border-line-soft" data-testid={`rag-file-${file.id}`}>
                     <td className="max-w-[24rem] truncate py-0.5 font-mono text-ink">{file.path}</td>
                     <td className="py-0.5 text-muted">{file.kind}</td>
                     <td className="py-0.5" data-file-status={file.status}>
@@ -531,20 +531,20 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
         </section>
 
         <section className="mb-4">
-          <h3 className="mb-1.5 text-muted text-[var(--font-meta-size)]">索引作业</h3>
+          <h3 className="mb-1.5 text-muted text-[length:var(--font-meta-size)]">索引作业</h3>
           {jobs.length === 0 ? (
-            <p className="text-subtle text-[var(--font-micro-size)]" data-testid="rag-no-jobs">
+            <p className="text-subtle text-[length:var(--font-micro-size)]" data-testid="rag-no-jobs">
               还没有索引作业记录。
             </p>
           ) : (
             <ul className="flex flex-col gap-1" data-testid="rag-jobs">
               {jobs.map((job) => (
-                <li key={job.id} className="flex items-center gap-2 text-[var(--font-meta-size)]" data-testid={`rag-job-${job.id}`}>
+                <li key={job.id} className="flex items-center gap-2 text-[length:var(--font-meta-size)]" data-testid={`rag-job-${job.id}`}>
                   <span className="w-16 shrink-0 text-muted">{JOB_STATUS_LABELS[job.status]}</span>
                   <span className="min-w-0 flex-1 truncate font-mono text-ink">{job.path}</span>
-                  <span className="shrink-0 text-subtle text-[var(--font-micro-size)]">
+                  <span className="shrink-0 text-subtle text-[length:var(--font-micro-size)]">
                     gen {job.generation}
-                    {job.finishedAt === null ? '' : ` · ${job.finishedAt}`}
+                    {job.finishedAt === null ? '' : `，${job.finishedAt}`}
                   </span>
                   <button
                     type="button"
@@ -572,7 +572,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
                         .finally(() => setActionPending(false));
                     }}
                     data-testid={`rag-job-retry-${job.id}`}
-                    className="h-[var(--control-height-compact)] shrink-0 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+                    className="h-[var(--control-height-compact)] shrink-0 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
                   >
                     重试
                   </button>
@@ -583,20 +583,20 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
         </section>
 
         <section>
-          <h3 className="mb-1.5 flex items-center gap-2 text-muted text-[var(--font-meta-size)]">
+          <h3 className="mb-1.5 flex items-center gap-2 text-muted text-[length:var(--font-meta-size)]">
             生效配置（只读，写入口在设置中心）
             <button
               type="button"
               onClick={() => scope.openSettings()}
               data-testid="rag-open-settings"
-              className="ml-auto flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
+              className="ml-auto flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
             >
               <Settings2 size={10} aria-hidden="true" />
               打开设置中心
             </button>
           </h3>
           {status === null ? null : (
-            <dl className="grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono text-[var(--font-micro-size)]" data-testid="rag-settings">
+            <dl className="grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono text-[length:var(--font-micro-size)]" data-testid="rag-settings">
               <dt className="text-subtle">revision</dt>
               <dd className="text-ink">{status.settings.revision}</dd>
               <dt className="text-subtle">generation</dt>
@@ -620,7 +620,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
             </dl>
           )}
           {status === null ? null : status.error === null ? null : (
-            <p role="alert" className="mt-1 text-[var(--st-bad)] text-[var(--font-micro-size)]">
+            <p role="alert" className="mt-1 text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
               {status.error}
             </p>
           )}

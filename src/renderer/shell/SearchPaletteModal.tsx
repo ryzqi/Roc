@@ -103,7 +103,7 @@ export function SearchPaletteModal({
       initialFocusRef={inputRef}
     >
       <div onKeyDown={onKeyDown} className="flex flex-col gap-3">
-        <div className="flex h-[var(--control-height)] items-center gap-2 rounded-control border border-line bg-surface-strong px-2.5">
+        <div className="flex h-[var(--control-height)] items-center gap-2 rounded-control border-[0.5px] border-line bg-surface-strong px-2.5">
           <Search size={13} aria-hidden="true" className="shrink-0 text-subtle" />
           <input
             ref={inputRef}
@@ -138,15 +138,15 @@ export function SearchPaletteModal({
           ) : (
             groups.map((group) => (
               <section key={group.id} className="mb-3" data-testid={`search-group-${group.id}`} data-status={group.status}>
-                <h3 className="px-1 py-1 text-subtle text-[var(--font-micro-size)]">{group.label}</h3>
+                <h3 className="px-1 py-1 text-subtle text-[length:var(--font-micro-size)]">{group.label}</h3>
                 {group.status === 'unavailable' ? (
-                  <p className="px-1 py-1.5 text-[var(--st-warn)] text-[var(--font-meta-size)]">
+                  <p className="px-1 py-1.5 text-[var(--st-warn)] text-[length:var(--font-meta-size)]">
                     该分组不可用{group.unavailableReason === undefined ? '' : `：${group.unavailableReason}`}
                   </p>
                 ) : group.status === 'loading' ? (
-                  <p className="px-1 py-1.5 text-muted text-[var(--font-meta-size)]">正在搜索…</p>
+                  <p className="px-1 py-1.5 text-muted text-[length:var(--font-meta-size)]">正在搜索…</p>
                 ) : group.items.length === 0 ? (
-                  <p className="px-1 py-1.5 text-muted text-[var(--font-meta-size)]">
+                  <p className="px-1 py-1.5 text-muted text-[length:var(--font-meta-size)]">
                     {group.emptyLabel ?? '没有匹配项'}
                   </p>
                 ) : (
@@ -171,7 +171,7 @@ export function SearchPaletteModal({
                           >
                             <span className="w-full truncate text-ink">{item.title}</span>
                             {item.subtitle === undefined ? null : (
-                              <span className="w-full truncate text-muted text-[var(--font-micro-size)]">
+                              <span className="w-full truncate text-muted text-[length:var(--font-micro-size)]">
                                 {item.subtitle}
                               </span>
                             )}
@@ -186,7 +186,7 @@ export function SearchPaletteModal({
           )}
         </div>
 
-        <p className="text-subtle text-[var(--font-micro-size)]">↑ ↓ 选择 · Enter 打开 · Esc 关闭</p>
+        <p className="text-subtle text-[length:var(--font-micro-size)]">↑ ↓ 选择，Enter 打开，Esc 关闭</p>
       </div>
     </ModalShell>
   );

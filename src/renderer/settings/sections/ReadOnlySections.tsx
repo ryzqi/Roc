@@ -110,7 +110,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
         />
         <KeyValueRow
           label="当前配置"
-          value={status === null ? '读取中…' : `${PACK_LABELS[status.selectedPack].label} · ${STATE_LABELS[selected?.state ?? 'missing']}`}
+          value={status === null ? '读取中…' : `${PACK_LABELS[status.selectedPack].label}，${STATE_LABELS[selected?.state ?? 'missing']}`}
           testId="settings-models-selected"
         />
         <KeyValueRow
@@ -131,7 +131,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
             label="解析配置"
             value={status.selectedPack}
             disabled={select.pending || downloading}
-            options={status.packs.map((pack) => ({ value: pack.pack, label: `${PACK_LABELS[pack.pack].label} · ${STATE_LABELS[pack.state]}` }))}
+            options={status.packs.map((pack) => ({ value: pack.pack, label: `${PACK_LABELS[pack.pack].label}，${STATE_LABELS[pack.state]}` }))}
             onChange={(next) => {
               void select.run({ pack: next }).then(refresh);
             }}
@@ -139,7 +139,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
           />
           <ul className="flex flex-col gap-0.5" data-testid="settings-models-list">
             {status.packs.map((pack) => (
-              <li key={pack.pack} className="flex flex-wrap items-center gap-2 text-[var(--font-micro-size)]">
+              <li key={pack.pack} className="flex flex-wrap items-center gap-2 text-[length:var(--font-micro-size)]">
                 <span className="text-muted">{PACK_LABELS[pack.pack].label}</span>
                 <span className="text-subtle">
                   {pack.installedBytes > 0 ? `${formatBytes(pack.installedBytes)} / ` : ''}{formatBytes(pack.bytes)}
@@ -307,7 +307,7 @@ export function SandboxSection({ store }: { store: SettingsStore }): React.JSX.E
         </FormNote>
       ) : null}
 
-      <div className="border-t border-line pt-2">
+      <div className="border-t-[0.5px] border-line pt-2">
         {rtk.error === null ? null : (
           <FormNote tone="warn" testId="settings-rtk-error">
             {rtk.error}

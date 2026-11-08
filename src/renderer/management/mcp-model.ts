@@ -224,5 +224,5 @@ export function previewSummary(preview: AgentCapabilityPreview | null): string {
   if (preview === null) {
     return '装配预览尚未读取。';
   }
-  return `本次装配：内置工具 ${preview.builtInTools.length} 个 · MCP 工具 ${preview.toolCards.length} 个 · 技能 ${preview.skillCards.length} 个 · 子代理 ${preview.subagents.length} 个`;
+  return `本次装配：内置工具 ${preview.builtInTools.length} 个，MCP 工具 ${preview.toolCards.length} 个，技能 ${preview.skillCards.length} 个，子代理 ${preview.subagents.length} 个`;
 }

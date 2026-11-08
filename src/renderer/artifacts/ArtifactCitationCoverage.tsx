@@ -68,7 +68,7 @@ export function ArtifactCitationCoverage({client, projectId, artifactId, artifac
         <dt>间接引用</dt><dd>{report.counts.indirectCitations}</dd>
         <dt>不支持引用</dt><dd>{report.counts.unsupportedCitations}</dd>
         <dt>直接性待审核</dt><dd>{report.counts.unreviewedDirectnessCitations}</dd>
-        <dt>报告版本</dt><dd className="break-all font-mono text-[var(--font-meta-size)]" data-testid="artifact-citation-coverage-hash">{result.reportHash}</dd>
+        <dt>报告版本</dt><dd className="break-all font-mono text-[length:var(--font-meta-size)]" data-testid="artifact-citation-coverage-hash">{result.reportHash}</dd>
         <dt>读取时间</dt><dd className="break-words">{result.readAt}</dd>
       </dl>
       <label className="flex items-center gap-2 text-muted">
@@ -96,7 +96,7 @@ export function ArtifactCitationCoverage({client, projectId, artifactId, artifac
             书目版本 {source.bibliography.revision}，引用键 {source.bibliography.entry.citationKey}
             {source.bibliography.archived ? '，已归档' : ''}
           </p>}
-          {source.source.sourceLocator === null ? null : <pre className="whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)] text-muted">
+          {source.source.sourceLocator === null ? null : <pre className="whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)] text-muted">
             {JSON.stringify(source.source.sourceLocator, null, 2)}
           </pre>}
           <ArtifactEvidenceSource client={client} source={source.source} canDecide={false} onChanged={read.reload}/>

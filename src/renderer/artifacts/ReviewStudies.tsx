@@ -33,7 +33,7 @@ export function ReviewStudies({client, phase, writable, onPending}: Props): Reac
       <ul className="mt-2 flex flex-col gap-2">{history.data!.map(item => <li key={item.snapshot.id} className="text-muted break-words">
         版本 {item.snapshot.version} 纳入报告 {item.includedReports} 声明研究 {item.includedStudies}<p>{item.snapshot.request.revisionReason}</p>
         <details><summary className="cursor-pointer">此版本研究与准确报告来源</summary>
-          <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">{JSON.stringify(item.snapshot, null, 2)}</pre>
+          <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(item.snapshot, null, 2)}</pre>
         </details>
       </li>)}</ul>
     </details>}
@@ -62,7 +62,7 @@ function ReviewStudiesEditor({client, phase, parent, writable, onPending, onSave
       <p className="text-muted break-words">审核人 {parent.snapshot.reviewer.name} {parent.snapshot.reviewer.id}</p>
       <p className="text-muted break-all">记录人 {parent.snapshot.actor.id} {parent.snapshot.recordedAt}</p>
       <details><summary className="cursor-pointer text-muted">声明研究、报告与准确来源</summary>
-        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">{JSON.stringify(parent.snapshot, null, 2)}</pre>
+        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(parent.snapshot, null, 2)}</pre>
       </details>
       {!writable || editing ? null : <button type="button" className={`${button} self-start`} data-testid="artifact-review-studies-revise"
         onClick={() => setEditing(true)}>修订人工研究归组</button>}

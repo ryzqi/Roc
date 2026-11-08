@@ -38,7 +38,7 @@ export function StartupFailure({
       data-testid="roc-app-startup-error"
       role="alert"
     >
-      <div className="max-w-md rounded-card border border-line bg-surface px-5 py-4">
+      <div className="max-w-md rounded-card border-[0.5px] border-line bg-surface px-5 py-4">
         <p className="text-ink">{title}</p>
         <p className="mt-1 break-words text-muted">{message}</p>
       </div>

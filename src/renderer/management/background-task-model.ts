@@ -220,12 +220,12 @@ export function schedulerStatusWord(scheduler: { running: boolean } | null): str
 export function taskSummaryLine(task: BackgroundTask): string {
   const status = taskStatusLabels[task.status];
   const next = task.nextRunAt === null ? '无下次运行' : `下次 ${task.nextRunAt}`;
-  return `${status} · ${task.triggerDescription} · ${next} · 已运行 ${task.runCount} 次`;
+  return `${status}，${task.triggerDescription}，${next}，已运行 ${task.runCount} 次`;
 }
 
 /** The status text for a scheduled run row (real history, never a frontend-generated list). */
 export function scheduledRunLine(run: ScheduledTaskRun): string {
   const when = run.triggeredAt ?? run.scheduledAt;
-  const skipped = run.skipReason === null ? '' : ` · ${run.skipReason}`;
-  return `${scheduledRunStatusLabels[run.status]} · ${when}${skipped}`;
+  const skipped = run.skipReason === null ? '' : `，${run.skipReason}`;
+  return `${scheduledRunStatusLabels[run.status]}，${when}${skipped}`;
 }

@@ -24,12 +24,12 @@ import { AlertTriangle, Info } from 'lucide-react';
  */
 
 export const formInputClass =
-  'h-[var(--control-height)] w-full rounded-control border border-line bg-bg px-2 text-ink disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+  'h-[var(--control-height)] w-full rounded-control border-[0.5px] border-line bg-bg px-2.5 text-ink transition-colors hover:border-line-strong disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
 export const formSelectClass = formInputClass;
 export const formTextAreaClass =
-  'w-full min-h-[72px] resize-y rounded-control border border-line bg-bg px-2 py-1 font-mono text-[var(--font-code-size)] text-ink disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+  'w-full min-h-[72px] resize-y rounded-control border-[0.5px] border-line bg-bg px-2 py-1 font-mono text-[length:var(--font-code-size)] text-ink disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
 export const formSecondaryButtonClass =
-  'h-[var(--control-height-compact)] rounded-control border border-line px-2 text-muted text-[var(--font-meta-size)] hover:text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+  'h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-muted text-[length:var(--font-meta-size)] hover:text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
 /**
  * 与输入框同高的按钮（P10）。
  *
@@ -38,10 +38,10 @@ export const formSecondaryButtonClass =
  * 高度不一致也让 hover 区域与输入框不是同一条水平带。所以凡是与输入框同排的动作按钮用这个。
  */
 export const formButtonClass =
-  'h-[var(--control-height)] rounded-control border border-line px-2.5 text-muted text-[var(--font-meta-size)] hover:text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+  'h-[var(--control-height)] rounded-control border-[0.5px] border-line px-2.5 text-muted text-[length:var(--font-meta-size)] hover:text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
 /** 与输入框同高的主按钮（保存/确认）。 */
 export const formPrimaryButtonClass =
-  'h-[var(--control-height)] rounded-control border border-line bg-surface-strong px-3 text-ink text-[var(--font-meta-size)] hover:bg-[var(--surface-card-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+  'h-[var(--control-height)] rounded-control border-[0.5px] border-transparent bg-[var(--fill-strong)] px-3 font-medium text-[var(--fill-strong-text)] text-[length:var(--font-meta-size)] hover:bg-[var(--fill-strong-hover)] active:opacity-90 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
 
 export function FormSection({
   title,
@@ -55,11 +55,11 @@ export function FormSection({
   testId: string;
 }): React.JSX.Element {
   return (
-    <section className="flex flex-col gap-2" data-testid={testId}>
-      <header className="flex flex-wrap items-baseline gap-2 border-b border-line pb-1">
-        <h3 className="text-ink text-[var(--font-h3-size)]">{title}</h3>
+    <section className="flex flex-col gap-4" data-testid={testId}>
+      <header className="flex flex-wrap items-baseline gap-2 border-b-[0.5px] border-line pb-2.5">
+        <h3 className="font-medium text-ink text-[length:var(--font-h3-size)]">{title}</h3>
         {readOnly ? (
-          <span className="rounded-control border border-line px-1.5 text-subtle text-[var(--font-micro-size)]">
+          <span className="rounded-control border-[0.5px] border-line px-1.5 text-muted text-[length:var(--font-meta-size)]">
             只读
           </span>
         ) : null}
@@ -83,13 +83,13 @@ export function Field({
   inline?: boolean;
 }): React.JSX.Element {
   return (
-    <div className={inline ? 'flex items-center gap-2' : 'flex flex-col gap-0.5'} data-testid={testId}>
-      <span className="text-subtle text-[var(--font-micro-size)]">{label}</span>
+    <div className={inline ? 'flex items-center gap-2' : 'flex flex-col gap-1.5'} data-testid={testId}>
+      <span className="text-muted text-[length:var(--font-meta-size)]">{label}</span>
       <div className={inline ? 'flex min-w-0 flex-1 items-center gap-2' : 'flex min-w-0 flex-col gap-1'}>
         {children}
       </div>
       {issue === undefined || issue === null ? null : (
-        <span className="flex items-start gap-1 text-[var(--st-warn)] text-[var(--font-micro-size)]" role="alert">
+        <span className="flex items-start gap-1 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" role="alert">
           <AlertTriangle size={11} aria-hidden="true" className="mt-0.5 shrink-0" />
           {issue}
         </span>
@@ -118,8 +118,8 @@ export function TextField({
   type?: 'text' | 'password';
 }): React.JSX.Element {
   return (
-    <label className="flex flex-col gap-0.5" data-testid={`${testId}-field`}>
-      <span className="text-subtle text-[var(--font-micro-size)]">{label}</span>
+    <label className="flex flex-col gap-1.5" data-testid={`${testId}-field`}>
+      <span className="text-muted text-[length:var(--font-meta-size)]">{label}</span>
       <input
         type={type}
         value={value}
@@ -130,7 +130,7 @@ export function TextField({
         className={formInputClass}
       />
       {issue === undefined || issue === null ? null : (
-        <span className="flex items-start gap-1 text-[var(--st-warn)] text-[var(--font-micro-size)]" role="alert">
+        <span className="flex items-start gap-1 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" role="alert">
           <AlertTriangle size={11} aria-hidden="true" className="mt-0.5 shrink-0" />
           {issue}
         </span>
@@ -196,8 +196,8 @@ export function NumberField({
   };
 
   return (
-    <label className="flex flex-col gap-0.5" data-testid={`${testId}-field`}>
-      <span className="text-subtle text-[var(--font-micro-size)]">{label}</span>
+    <label className="flex flex-col gap-1.5" data-testid={`${testId}-field`}>
+      <span className="text-muted text-[length:var(--font-meta-size)]">{label}</span>
       <input
         type="number"
         inputMode="decimal"
@@ -217,7 +217,7 @@ export function NumberField({
         className={formInputClass}
       />
       {issue === undefined || issue === null ? null : (
-        <span className="flex items-start gap-1 text-[var(--st-warn)] text-[var(--font-micro-size)]" role="alert">
+        <span className="flex items-start gap-1 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" role="alert">
           <AlertTriangle size={11} aria-hidden="true" className="mt-0.5 shrink-0" />
           {issue}
         </span>
@@ -249,12 +249,12 @@ export function CheckboxField({
         disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}
         data-testid={testId}
-        className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded-[3px] border border-line accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+        className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded-[3px] border-[0.5px] border-line accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
       />
       <span className="min-w-0">
-        <span className="block text-ink text-[var(--font-meta-size)]">{label}</span>
+        <span className="block text-ink text-[length:var(--font-meta-size)]">{label}</span>
         {description === undefined ? null : (
-          <span className="block text-subtle text-[var(--font-micro-size)]">{description}</span>
+          <span className="block text-muted text-[length:var(--font-meta-size)]">{description}</span>
         )}
       </span>
     </label>
@@ -277,8 +277,8 @@ export function SelectField<T extends string>({
   testId: string;
 }): React.JSX.Element {
   return (
-    <label className="flex flex-col gap-0.5" data-testid={`${testId}-field`}>
-      <span className="text-subtle text-[var(--font-micro-size)]">{label}</span>
+    <label className="flex flex-col gap-1.5" data-testid={`${testId}-field`}>
+      <span className="text-muted text-[length:var(--font-meta-size)]">{label}</span>
       <select
         value={value}
         disabled={disabled}
@@ -310,8 +310,8 @@ export function FormNote({
     <p
       className={
         tone === 'warn'
-          ? 'flex items-start gap-1.5 text-[var(--st-warn)] text-[var(--font-meta-size)]'
-          : 'flex items-start gap-1.5 text-muted text-[var(--font-meta-size)]'
+          ? 'flex items-start gap-1.5 text-[var(--st-warn)] text-[length:var(--font-meta-size)]'
+          : 'flex items-start gap-1.5 text-muted text-[length:var(--font-meta-size)]'
       }
       data-testid={testId}
       role={tone === 'warn' ? 'note' : undefined}
@@ -328,7 +328,7 @@ export function FormNote({
 
 export function KeyValueRow({ label, value, testId }: { label: string; value: string; testId?: string }): React.JSX.Element {
   return (
-    <div className="flex gap-2 text-[var(--font-micro-size)]" data-testid={testId}>
+    <div className="flex gap-2 text-[length:var(--font-micro-size)]" data-testid={testId}>
       <dt className="w-[110px] shrink-0 text-subtle">{label}</dt>
       <dd className="min-w-0 flex-1 break-words font-mono text-muted">{value}</dd>
     </div>

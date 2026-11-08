@@ -240,7 +240,7 @@ export function AssistantPanel({
         (item) => buildProviderModelKey(provider.id, item.id) === snapshot.defaultModelId
       );
       if (model !== undefined) {
-        return `${model.displayName} · ${provider.name}`;
+        return `${model.displayName}（${provider.name}）`;
       }
     }
     return snapshot.defaultModelId;
@@ -312,20 +312,20 @@ export function AssistantPanel({
   );
 
   const header = (
-    <div className="flex shrink-0 flex-col gap-1.5 border-b border-line px-3 py-2">
+    <div className="flex shrink-0 flex-col gap-1.5 border-b-[0.5px] border-line px-3 py-2">
       <div className="flex min-w-0 items-center gap-2">
         <Bot size={14} aria-hidden="true" className="shrink-0 text-[var(--icon-agent)]" />
-        <span className="min-w-0 truncate font-medium text-ink text-[var(--font-meta-size)]">研究助手</span>
+        <span className="min-w-0 truncate font-medium text-ink text-[length:var(--font-meta-size)]">研究助手</span>
         {statusLabel === null ? null : (
           <span
             className={
               runStatus === 'failed'
-                ? 'shrink-0 rounded-control bg-[var(--tool-st-error-bg)] px-1.5 py-0.5 text-[var(--tool-st-error-text)] text-[var(--font-micro-size)]'
+                ? 'shrink-0 rounded-control bg-[var(--tool-st-error-bg)] px-1.5 py-0.5 text-[var(--tool-st-error-text)] text-[length:var(--font-micro-size)]'
                 : runStatus === 'completed'
-                  ? 'shrink-0 rounded-control bg-[var(--tool-st-end-bg)] px-1.5 py-0.5 text-[var(--tool-st-end-text)] text-[var(--font-micro-size)]'
+                  ? 'shrink-0 rounded-control bg-[var(--tool-st-end-bg)] px-1.5 py-0.5 text-[var(--tool-st-end-text)] text-[length:var(--font-micro-size)]'
                   : runStatus === 'cancelled'
-                    ? 'shrink-0 rounded-control bg-[var(--overlay-hover)] px-1.5 py-0.5 text-muted text-[var(--font-micro-size)]'
-                    : 'shrink-0 rounded-control bg-[var(--tool-st-progress-bg)] px-1.5 py-0.5 text-[var(--tool-st-progress-text)] text-[var(--font-micro-size)]'
+                    ? 'shrink-0 rounded-control bg-[var(--overlay-hover)] px-1.5 py-0.5 text-muted text-[length:var(--font-micro-size)]'
+                    : 'shrink-0 rounded-control bg-[var(--tool-st-progress-bg)] px-1.5 py-0.5 text-[var(--tool-st-progress-text)] text-[length:var(--font-micro-size)]'
             }
             data-testid="assistant-run-status"
             data-status={runStatus}
@@ -351,33 +351,33 @@ export function AssistantPanel({
       </div>
       <div className="flex min-w-0 items-center gap-2">
         <span
-          className="min-w-0 max-w-[45%] truncate text-subtle text-[var(--font-micro-size)]"
+          className="min-w-0 max-w-[45%] truncate text-subtle text-[length:var(--font-micro-size)]"
           data-testid="assistant-context"
           title={projectName ?? '未进入项目'}
         >
           {stageLabel ?? projectName ?? '未进入项目'}
         </span>
-        <span className="ml-auto shrink-0 font-mono text-subtle text-[var(--font-micro-size)]" data-testid="assistant-message-count">
+        <span className="ml-auto shrink-0 font-mono tabular-nums text-subtle text-[length:var(--font-micro-size)]" data-testid="assistant-message-count">
           {session.messages.length} 条
         </span>
       </div>
       {session.runState.budget === null ? null : (
-        <div
-          className="grid min-w-0 gap-0.5 text-subtle text-[var(--font-micro-size)]"
-          data-testid="assistant-budget-status"
-          title={session.runState.budget.stopReason ?? undefined}
-          aria-label={formatRunBudgetStatus(session.runState.budget)}
-        >
-          <span className="truncate">
-            Tokens: {formatBudgetCount(session.runState.budget.tokens.settled)} known · {formatBudgetCount(session.runState.budget.tokens.unknown)} unknown · {formatBudgetCount(session.runState.budget.tokens.reserved)} reserved · {formatBudgetCount(session.runState.budget.tokens.remaining)} remaining
-          </span>
-          <span className="truncate">
-            Models {session.runState.budget.calls.models.total}/{session.runState.budget.calls.models.limit} · Tools {session.runState.budget.calls.tools.total}/{session.runState.budget.calls.tools.limit} · {session.runState.budget.cost.state === 'unknown'
-              ? 'Cost unknown'
-              : `Cost ${formatMicroUsd(session.runState.budget.cost.settledMicrousd ?? 0)} settled · ${formatMicroUsd(session.runState.budget.cost.reservedMicrousd ?? 0)} reserved`}
-            {session.runState.budget.stopReason === null ? '' : ` · Stopped: ${session.runState.budget.stopReason}`}
-          </span>
-        </div>
+        <details className="min-w-0 text-muted tabular-nums text-[length:var(--font-meta-size)]"
+          data-testid="assistant-budget-status" aria-label={formatRunBudgetStatus(session.runState.budget)}>
+          <summary className="cursor-default rounded-chip py-1 hover:text-ink">
+            用量 <span className="ml-2">{formatBudgetCount(session.runState.budget.tokens.settled)} tokens</span>
+            {session.runState.budget.stopReason === null ? null : <span className="ml-2 text-st-warn">预算已停止</span>}
+          </summary>
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 py-2">
+            <dt>Token 余量</dt><dd>{formatBudgetCount(session.runState.budget.tokens.remaining)}</dd>
+            <dt>预留 / 未知</dt><dd>{formatBudgetCount(session.runState.budget.tokens.reserved)} / {formatBudgetCount(session.runState.budget.tokens.unknown)}</dd>
+            <dt>模型调用</dt><dd>{session.runState.budget.calls.models.total} / {session.runState.budget.calls.models.limit}</dd>
+            <dt>工具调用</dt><dd>{session.runState.budget.calls.tools.total} / {session.runState.budget.calls.tools.limit}</dd>
+            <dt>已结算费用</dt><dd>{session.runState.budget.cost.state === 'unknown' ? '未知' : formatMicroUsd(session.runState.budget.cost.settledMicrousd ?? 0)}</dd>
+            <dt>预留费用</dt><dd>{session.runState.budget.cost.state === 'unknown' ? '未知' : formatMicroUsd(session.runState.budget.cost.reservedMicrousd ?? 0)}</dd>
+          </dl>
+          {session.runState.budget.stopReason === null ? null : <p className="pb-2 break-words text-st-warn">{session.runState.budget.stopReason}</p>}
+        </details>
       )}
       {diagnosticsRunId === null || threadId === null ? null : (
         <RunDiagnostics
@@ -411,7 +411,7 @@ export function AssistantPanel({
 
       {!session.runState.historyComplete ? (
         <div
-          className="shrink-0 border-b border-line bg-[var(--tool-st-progress-bg)] px-3 py-2 text-[var(--tool-st-progress-text)] text-[var(--font-micro-size)]"
+          className="shrink-0 border-b-[0.5px] border-line bg-[var(--tool-st-progress-bg)] px-3 py-2 text-[var(--tool-st-progress-text)] text-[length:var(--font-micro-size)]"
           data-testid="assistant-history-gap"
           role="status"
         >
@@ -463,7 +463,7 @@ export function AssistantPanel({
       </div>
 
       {waitingUser ? (
-        <p className="shrink-0 border-t border-line px-3 py-1 text-[var(--st-warn)] text-[var(--font-micro-size)]" data-testid="assistant-waiting-note">
+        <p className="shrink-0 border-t-[0.5px] border-line px-3 py-1 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" data-testid="assistant-waiting-note">
           <AlertTriangle size={10} aria-hidden="true" className="mr-1 inline" />
           运行已挂起，等待你在上面的卡片里做出决定；刷新后仍会回到这里。
         </p>
@@ -515,7 +515,7 @@ export function AssistantPanel({
         <button
           type="button"
           onClick={onOpenSettings}
-          className="shrink-0 px-3 pb-2 text-left text-accent text-[var(--font-micro-size)]"
+          className="shrink-0 px-3 pb-2 text-left text-accent text-[length:var(--font-micro-size)]"
           data-testid="assistant-open-settings-hint"
         >
           <Settings2 size={10} aria-hidden="true" className="mr-1 inline" />

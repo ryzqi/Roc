@@ -109,12 +109,12 @@ export function GitBranchSwitcher({
     <section
       aria-label="分支切换"
       data-testid="git-branch-controls"
-      className="flex flex-col gap-2 rounded-card border border-line bg-surface-strong p-2"
+      className="flex flex-col gap-2 rounded-card border-[0.5px] border-line bg-surface-strong p-2"
     >
       <header className="flex items-center gap-2">
         <GitBranch size={13} aria-hidden="true" className="shrink-0 text-subtle" />
-        <span className="min-w-0 flex-1 truncate text-ink text-[var(--font-meta-size)]">
-          当前分支 · {currentBranch.length === 0 ? '（未命名）' : currentBranch}
+        <span className="min-w-0 flex-1 truncate text-ink text-[length:var(--font-meta-size)]">
+          当前分支，{currentBranch.length === 0 ? '（未命名）' : currentBranch}
         </span>
         <button
           type="button"
@@ -134,18 +134,18 @@ export function GitBranchSwitcher({
         placeholder="搜索分支…"
         aria-label="搜索分支"
         data-testid="git-branch-search"
-        className="h-[var(--control-height-compact)] w-full rounded-control border border-line bg-surface px-2 text-ink placeholder:text-subtle"
+        className="h-[var(--control-height-compact)] w-full rounded-control border-[0.5px] border-line bg-surface px-2 text-ink placeholder:text-subtle"
       />
 
       {readOnly ? (
-        <p role="note" className="text-[var(--st-warn)] text-[var(--font-micro-size)]" data-testid="git-branch-readonly-note">
+        <p role="note" className="text-[var(--st-warn)] text-[length:var(--font-micro-size)]" data-testid="git-branch-readonly-note">
           项目已归档，仅可阅读：不能创建或切换分支。
         </p>
       ) : null}
 
       <ul className="max-h-52 min-h-0 overflow-y-auto" data-testid="git-branch-list">
         {visibleBranches.length === 0 ? (
-          <li className="px-1 py-2 text-muted text-[var(--font-meta-size)]">
+          <li className="px-1 py-2 text-muted text-[length:var(--font-meta-size)]">
             {branchInfo === null ? '分支列表尚未加载。' : '没有匹配的分支。'}
           </li>
         ) : (
@@ -165,15 +165,15 @@ export function GitBranchSwitcher({
                 ) : (
                   <span className="w-3 shrink-0" aria-hidden="true" />
                 )}
-                <span className="min-w-0 flex-1 truncate font-mono text-[var(--font-meta-size)]">{branch.name}</span>
-                {branch.current ? <span className="text-subtle text-[var(--font-micro-size)]">当前</span> : null}
+                <span className="min-w-0 flex-1 truncate font-mono text-[length:var(--font-meta-size)]">{branch.name}</span>
+                {branch.current ? <span className="text-subtle text-[length:var(--font-micro-size)]">当前</span> : null}
               </button>
             </li>
           ))
         )}
       </ul>
 
-      <div className="flex items-center gap-1.5 border-t border-line-soft pt-2">
+      <div className="flex items-center gap-1.5 border-t-[0.5px] border-line-soft pt-2">
         <input
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
@@ -187,9 +187,9 @@ export function GitBranchSwitcher({
           placeholder="新分支名称"
           aria-label="新分支名称"
           data-testid="git-branch-create-input"
-          className="h-[var(--control-height-compact)] min-w-0 flex-1 rounded-control border border-line bg-surface px-2 font-mono text-ink placeholder:text-subtle"
+          className="h-[var(--control-height-compact)] min-w-0 flex-1 rounded-control border-[0.5px] border-line bg-surface px-2 font-mono text-ink placeholder:text-subtle"
         />
-        <label className="flex shrink-0 items-center gap-1 text-muted text-[var(--font-micro-size)]">
+        <label className="flex shrink-0 items-center gap-1 text-muted text-[length:var(--font-micro-size)]">
           <input
             type="checkbox"
             checked={checkoutAfterCreate}
@@ -204,7 +204,7 @@ export function GitBranchSwitcher({
           disabled={busy || readOnly || draft.trim().length === 0}
           onClick={() => void create()}
           data-testid="git-branch-create"
-          className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border border-line px-2 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40"
+          className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40"
         >
           <Plus size={11} aria-hidden="true" />
           创建

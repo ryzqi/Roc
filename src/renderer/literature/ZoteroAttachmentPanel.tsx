@@ -41,7 +41,7 @@ export function ZoteroAttachmentPanel({client, original, jobs}: {
               <Attachment item={item} jobs={jobs} source={{...original.scope, operationId: original.operationId,
                 itemKey: original.itemKey, attachmentKey: item.key}} />}
             <details><summary className="cursor-pointer">子项原文</summary>
-              <pre className="whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(item, null, 2)}</pre>
+              <pre className="whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(item, null, 2)}</pre>
             </details>
           </li>)}
         </ul>
@@ -113,7 +113,7 @@ function Attachment({item, jobs, source}: {item: ZoteroItem; jobs: ZoteroAttachm
         <p>{state.receipt.destinationProjectId === null ? '仅文库' : '文库与当前项目'}，{documentStates[state.receipt.document.status]}</p>
         <p className="break-all">内容 SHA-256 {state.receipt.document.sourceHash}</p>
         <details><summary className="cursor-pointer">附件导入回执</summary>
-          <pre className="whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(state.receipt, null, 2)}</pre>
+          <pre className="whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(state.receipt, null, 2)}</pre>
         </details>
       </div>}
     </div>}

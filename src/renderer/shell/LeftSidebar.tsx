@@ -22,7 +22,7 @@ import { EmptyState } from './EmptyState';
  *
  * ## Four bands
  *
- *   1. **project banner** — folder glyph + slug + 「切换课题」, on `--surface/90`.
+ *   1. **project banner** — folder glyph + slug + 「切换」, on `--surface/90`.
  *      It answers "which project am I in" and "how do I leave" in one strip, which
  *      is the question a three-column workbench has to answer above the fold.
  *   2. **segmented tabs** — a recessed track (`bg-bg/90`, 1px border) holding
@@ -227,7 +227,7 @@ function SidebarFilesTab({
         {workspaceError === null ? null : (
           <p
             role="alert"
-            className="px-3 pb-2 text-[var(--st-bad)] text-[var(--font-micro-size)]"
+            className="px-3 pb-2 text-[var(--st-bad)] text-[length:var(--font-micro-size)]"
             data-testid="sidebar-files-workspace-error"
           >
             {workspaceError}
@@ -262,9 +262,9 @@ function SidebarFilesTab({
             onClick={onSelectWorkspace}
             disabled={workspacePending}
             data-testid="sidebar-files-reselect"
-            className="h-[var(--control-height-compact)] rounded-control border border-line px-2 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40"
+            className="h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40"
           >
-            <span className="flex items-center gap-1 text-[var(--font-meta-size)]">
+            <span className="flex items-center gap-1 text-[length:var(--font-meta-size)]">
               <RotateCcw size={11} aria-hidden="true" />
               选择其它目录
             </span>
@@ -290,7 +290,7 @@ function SidebarFilesTab({
       {workspaceError === null ? null : (
         <p
           role="alert"
-          className="px-3 pb-2 text-[var(--st-bad)] text-[var(--font-micro-size)]"
+          className="px-3 pb-2 text-[var(--st-bad)] text-[length:var(--font-micro-size)]"
           data-testid="sidebar-files-workspace-error"
         >
           {workspaceError}
@@ -349,13 +349,13 @@ export function LeftSidebar({
   const theme = themeAction(themeOverride);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-bg text-text" data-testid="sidebar">
+    <div className="flex h-full min-h-0 flex-col bg-[var(--material-sidebar)] text-text" data-testid="sidebar">
       {/* Band 1 — current project, and the way out of it. */}
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line bg-surface/90 px-2.5 py-1.5">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b-[0.5px] border-line px-3 py-2">
         <span className="flex min-w-0 items-center gap-1.5 truncate text-text">
           <FolderGit2 size={12} aria-hidden="true" className="shrink-0 text-muted" />
           <span
-            className="truncate font-medium text-[var(--font-micro-size)]"
+            className="truncate font-medium text-[length:var(--font-micro-size)]"
             title={projectName}
             data-testid="sidebar-project-name"
           >
@@ -366,18 +366,18 @@ export function LeftSidebar({
           type="button"
           onClick={onBackToPortal}
           title="返回研究项目门户"
-          className="shrink-0 rounded-control px-1 py-0.5 text-muted text-[var(--font-micro-size)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink"
+          className="flex h-7 shrink-0 items-center rounded-control px-1.5 text-muted text-[length:var(--font-micro-size)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink"
         >
-          切换课题
+          切换
         </button>
       </div>
 
       {/* Band 2 — the segmented tab track. */}
-      <div className="shrink-0 border-b border-line bg-surface/60 p-2">
+      <div className="shrink-0 px-2 py-2.5">
         <div
           role="tablist"
           aria-label="项目上下文"
-          className="flex items-center gap-1 rounded-control border border-line bg-bg/90 p-0.5"
+          className="flex items-center gap-1 rounded-control bg-[var(--overlay-hover)] p-0.5"
         >
           {TABS.map((tab, index) => {
             const selected = tab.id === activeTab;
@@ -405,12 +405,12 @@ export function LeftSidebar({
                 data-testid={`sidebar-tab-${tab.id}`}
                 className={
                   selected
-                    ? 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1.5 rounded-chip bg-[var(--surface-card-hover)] font-semibold text-ink shadow-[var(--shadow-card)] transition-colors duration-[var(--duration-fast)]'
+                    ? 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1.5 rounded-chip bg-surface font-medium text-ink transition-colors duration-[var(--duration-fast)]'
                     : 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1.5 rounded-chip text-muted transition-colors duration-[var(--duration-fast)] hover:text-ink active:bg-[var(--overlay-active)]'
                 }
               >
                 <Icon size={12} aria-hidden="true" className={tab.iconClass} />
-                <span className="text-[var(--font-meta-size)]">{tab.label}</span>
+                <span className="text-[length:var(--font-meta-size)]">{tab.label}</span>
               </button>
             );
           })}
@@ -454,14 +454,14 @@ export function LeftSidebar({
       </div>
 
       {/* Band 4 — theme + management. */}
-      <div className="flex shrink-0 items-center gap-1.5 border-t border-line bg-surface/50 p-2">
+      <div className="flex shrink-0 items-center gap-1.5 border-t-[0.5px] border-line p-2">
         <button
           type="button"
           onClick={onCycleTheme}
-          title={`切换为${theme.label}（⌘D）· 当前 ${themeState(themeOverride)}`}
+          title={`切换为${theme.label}（⌘D），当前 ${themeState(themeOverride)}`}
           aria-label={`切换为${theme.label}，当前 ${themeState(themeOverride)}`}
           data-testid="sidebar-theme-toggle"
-          className="flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-2 rounded-control border border-line bg-surface font-medium text-text text-[var(--font-meta-size)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--surface-card-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
+          className="flex h-[var(--control-height-compact)] flex-1 items-center justify-start gap-2 rounded-control px-2 font-medium text-text text-[length:var(--font-meta-size)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--surface-card-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
         >
           <span className={theme.iconClass}>{theme.icon}</span>
           <span className="truncate">{theme.label}</span>
@@ -472,7 +472,7 @@ export function LeftSidebar({
           title="管理（记忆 / 技能 / MCP / 任务）"
           aria-label="打开管理面板"
           data-testid="sidebar-management"
-          className="flex h-[var(--control-height-compact)] items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-muted transition-colors duration-[var(--duration-fast)] hover:bg-[var(--surface-card-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
+          className="flex h-[var(--control-height-compact)] items-center gap-1.5 rounded-control px-2 text-muted transition-colors duration-[var(--duration-fast)] hover:bg-[var(--surface-card-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
         >
           <Sliders size={13} aria-hidden="true" className="text-[var(--icon-manage)]" />
         </button>

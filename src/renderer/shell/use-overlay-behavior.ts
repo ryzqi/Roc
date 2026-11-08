@@ -18,7 +18,7 @@ export { overlayStackDepth, topOverlayId } from './overlay-stack';
  *
  *   - **Escape** closes only the top layer (sequential case).
  *   - **Tab** is trapped only by the top layer. Without this, every open
- *     overlay's capture listener would refocus *its own* first element and Tab
+ *     overlay's listener would refocus *its own* first element and Tab
  *     would ping-pong instead of advancing.
  *   - **`aria-hidden` on `#root`** follows the presence of a *dialog*, not the stack
  *     depth: an ambient drawer (the narrow-window sidebar) is part of the page and must
@@ -112,6 +112,8 @@ export function useOverlayBehavior({
     };
 
     const onKeyDown = (event: KeyboardEvent): void => {
+      // Nested controls get first refusal (e.g. Escape closes a model popover).
+      if (event.defaultPrevented) return;
       // Only the top layer traps. Lower layers stay inert but keep their state.
       if (topOverlayId() !== overlayId) {
         return;
@@ -130,11 +132,11 @@ export function useOverlayBehavior({
     };
 
     if (manageFocus) {
-      window.addEventListener('keydown', onKeyDown, true);
+      window.addEventListener('keydown', onKeyDown);
     }
     return () => {
       if (manageFocus) {
-        window.removeEventListener('keydown', onKeyDown, true);
+        window.removeEventListener('keydown', onKeyDown);
       }
       popOverlay(overlayId);
       // Only re-expose the app once no dialog is layered on it any more.

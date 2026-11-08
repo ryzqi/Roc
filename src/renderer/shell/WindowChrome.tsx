@@ -21,8 +21,8 @@ import { ArrowLeft, Bot, GitBranch, PanelLeft, PanelLeftClose, Search, Settings,
  *      the shell's own 1100px breakpoint, not an arbitrary viewport width, so a label
  *      never disappears just because the window is narrow.
  *
- * The rest of the bar: the layered material bar, the boxed 项目列表 button next to the
- * breadcrumb, `~/<project>` in medium weight, the branch as bare mono text, the
+ * The rest of the bar: the layered material bar, one return action in the
+ * breadcrumb, the project in medium weight, the branch as bare mono text, the
  * centered 搜索… field, and the category icon hues (`--icon-*`) that identify
  * 管理 / Git at a glance.
  */
@@ -50,7 +50,7 @@ const ICON_BUTTON =
   'no-drag flex h-7 w-7 items-center justify-center rounded-control text-muted transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]';
 
 const LABELED_BUTTON =
-  'no-drag flex h-7 items-center gap-1.5 rounded-control border border-line px-2 text-muted transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]';
+  'no-drag flex h-7 items-center gap-1.5 rounded-control px-2 text-muted transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]';
 
 export function WindowChrome({
   projectName,
@@ -70,7 +70,7 @@ export function WindowChrome({
 
   return (
     <header
-      className="drag-region flex h-11 shrink-0 items-center gap-2 overflow-hidden border-b border-line bg-bg/95 px-3 backdrop-blur-md"
+      className="drag-region flex h-11 shrink-0 items-center gap-2 overflow-hidden border-b-[0.5px] border-line bg-[var(--material-titlebar)] px-3 backdrop-blur-md"
       data-testid="titlebar"
     >
       {/* 74px + the header's 12px padding = the 86px the traffic lights need. */}
@@ -91,30 +91,18 @@ export function WindowChrome({
       </div>
 
       <div className="flex min-w-0 shrink items-center gap-2.5">
-        {!inProject ? null : (
-          <button
-            type="button"
-            onClick={onBackToPortal}
-            title="返回项目列表"
-            data-testid="titlebar-projects"
-            className="no-drag flex h-7 shrink-0 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-ink text-[var(--font-meta-size)] transition-colors duration-[var(--duration-fast)] hover:border-line-strong hover:bg-[var(--surface-card-hover)] active:bg-[var(--overlay-active)]"
-          >
-            <ArrowLeft size={13} aria-hidden="true" className="text-muted" />
-            <span>项目列表</span>
-          </button>
-        )}
-
-        <nav aria-label="面包屑" className="flex min-w-0 items-center gap-1.5 text-muted text-[var(--font-meta-size)]">
+        <nav aria-label="面包屑" className="flex min-w-0 items-center gap-1.5 text-muted text-[length:var(--font-meta-size)]">
           {inProject ? (
             <>
               <button
                 type="button"
                 onClick={onBackToPortal}
-                className="no-drag truncate rounded-control px-1 transition-colors duration-[var(--duration-fast)] hover:text-ink active:bg-[var(--overlay-active)]"
+                className="no-drag flex h-7 shrink-0 items-center gap-1 rounded-control px-1.5 transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
                 title="点击返回课题门户"
-                data-testid="titlebar-back-to-portal"
+                data-testid="titlebar-projects"
               >
-                所有项目
+                <ArrowLeft size={13} aria-hidden="true" />
+                <span className="hidden min-[720px]:inline">项目</span>
               </button>
               <span aria-hidden="true" className="text-subtle">
                 /
@@ -124,17 +112,17 @@ export function WindowChrome({
                 title={projectName}
                 data-testid="titlebar-project-name"
               >
-                ~/{projectName}
+                {projectName}
               </span>
               {branchLabel === null ? null : (
                 <>
-                  <span aria-hidden="true" className="text-subtle">
+                  <span aria-hidden="true" className="hidden text-subtle min-[1100px]:inline">
                     /
                   </span>
                   {/* Bare mono text: the branch is context, not a
                       control. `--icon-git` keeps the hue and flips with the theme. */}
                   <span
-                    className="shrink-0 font-mono text-[var(--font-micro-size)]"
+                    className="hidden max-w-[120px] truncate font-mono text-[length:var(--font-micro-size)] min-[1100px]:inline"
                     data-testid="titlebar-branch"
                   >
                     <GitBranch size={11} aria-hidden="true" className="mr-1 inline text-[var(--icon-git)]" />
@@ -156,13 +144,13 @@ export function WindowChrome({
           type="button"
           onClick={onOpenSearch}
           data-testid="titlebar-search"
-          className="no-drag flex h-7 w-32 min-w-0 items-center justify-between gap-2 truncate rounded-control border border-line bg-surface px-3 text-muted transition-colors duration-[var(--duration-fast)] hover:border-line-strong hover:bg-[var(--surface-card-hover)] hover:text-ink active:bg-[var(--overlay-active)] sm:w-48 md:w-56"
+          className="no-drag flex h-7 w-full max-w-64 min-w-0 items-center justify-between gap-2 truncate rounded-control border-[0.5px] border-line bg-surface px-3 text-muted transition-colors duration-[var(--duration-fast)] hover:border-line-strong hover:bg-[var(--surface-card-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
         >
           <span className="flex min-w-0 items-center gap-1.5 truncate">
             <Search size={12} aria-hidden="true" className="shrink-0 text-subtle" />
-            <span className="truncate text-[var(--font-meta-size)]">搜索…</span>
+            <span className="truncate text-[length:var(--font-meta-size)]">搜索…</span>
           </span>
-          <kbd className="hidden shrink-0 rounded-[var(--r-control)] border border-line bg-bg-soft px-1.5 py-0.5 font-mono text-muted text-[var(--font-micro-size)] sm:inline">
+          <kbd className="hidden shrink-0 px-1 py-0.5 font-mono text-muted text-[length:var(--font-micro-size)] sm:inline">
             ⌘K
           </kbd>
         </button>
@@ -171,15 +159,14 @@ export function WindowChrome({
       <div className="flex shrink-0 items-center gap-1.5">
         {backgroundRunLabel === null ? null : (
           <span
-            className="hidden items-center gap-1.5 px-1 text-muted text-[var(--font-micro-size)] md:flex"
+            className="hidden items-center gap-1.5 px-1 text-muted text-[length:var(--font-micro-size)] md:flex"
             data-testid="titlebar-background-runs"
           >
             {backgroundRunLabel}
           </span>
         )}
 
-        {/* Active state inverts to a solid fill — and through the palette flip it
-            stays legible in light theme, where `--fill-strong` is the dark stop. */}
+        {/* A selected utility stays at navigation emphasis. */}
         <button
           type="button"
           onClick={onToggleAssistant}
@@ -189,11 +176,11 @@ export function WindowChrome({
           data-testid="titlebar-toggle-assistant"
           className={
             assistantOpen
-              ? 'no-drag flex h-7 items-center gap-1.5 rounded-control border border-line-strong bg-[var(--fill-strong)] px-2.5 font-medium text-[var(--fill-strong-text)] transition-colors duration-[var(--duration-fast)] active:opacity-90'
+              ? 'no-drag flex h-7 items-center gap-1.5 rounded-control bg-[var(--overlay-active)] px-2.5 font-medium text-ink transition-colors duration-[var(--duration-fast)] active:opacity-90'
               : `${LABELED_BUTTON} px-2.5`
           }
         >
-          <Bot size={13} aria-hidden="true" />
+          <Bot size={13} aria-hidden="true" className="text-[var(--icon-agent)]" />
           <span>助手</span>
         </button>
 
@@ -227,7 +214,7 @@ export function WindowChrome({
           aria-label="打开设置"
           title="设置（⌘,）"
           data-testid="titlebar-settings"
-          className={`${ICON_BUTTON} border border-line`}
+          className={ICON_BUTTON}
         >
           <Settings size={14} aria-hidden="true" />
         </button>

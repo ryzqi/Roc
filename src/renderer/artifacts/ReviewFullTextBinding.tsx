@@ -55,7 +55,7 @@ export function ReviewFullTextBinding({client, projectId, corpusId, hitId, title
       <p className="text-muted break-words">{raw.data!.record.record.doi ?? 'DOI 未提供'}</p>
       <p className="break-words">{raw.data!.record.record.abstract ?? '摘要未提供'}</p>
       <details><summary className="cursor-pointer text-muted">固定原始命中与完整元数据</summary>
-        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">{JSON.stringify(raw.data, null, 2)}</pre>
+        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(raw.data, null, 2)}</pre>
       </details>
     </>}
     {parent === null ? null : <section className="flex flex-col gap-1" data-testid="artifact-review-fulltext-binding-current">
@@ -66,7 +66,7 @@ export function ReviewFullTextBinding({client, projectId, corpusId, hitId, title
         {' '}{parent.snapshot.source.parse === null ? '仅原文件' : `解析 ${parent.snapshot.source.parse.id}`}</p>}
       <p className="text-muted break-all">记录人 {parent.snapshot.actor.id} {parent.snapshot.recordedAt}</p>
       <details><summary className="cursor-pointer text-muted">保存的来源与版本</summary>
-        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">{JSON.stringify(parent.snapshot, null, 2)}</pre>
+        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(parent.snapshot, null, 2)}</pre>
       </details>
       {!writable || editing ? null : <button type="button" className={`${button} self-start`}
         data-testid="artifact-review-fulltext-binding-revise" onClick={() => setEditing(true)}>修订全文获取与来源</button>}

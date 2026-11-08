@@ -45,7 +45,7 @@ export function ProjectBudgetSection({ client, projectId }: {
         </div>
       ) : resource.status === 'loading' && data === null ? <p role="status" className="text-subtle">读取项目预算中…</p> :
         data === null ? <p className="text-[var(--st-warn)]">尚未配置项目预算，模型调用已禁用。</p> : (
-          <div className="grid gap-1 text-muted text-[var(--font-meta-size)]" data-testid="mgmt-project-budget-data">
+          <div className="grid gap-1 text-muted text-[length:var(--font-meta-size)]" data-testid="mgmt-project-budget-data">
             <p>Tokens 已知 {number.format(data.tokens.settled)} / 未知 {number.format(data.tokens.unknown)}
               {' / 预留 '}{number.format(data.tokens.reserved)} / 剩余 {number.format(data.tokens.remaining)}</p>
             <p>模型调用 {data.models.total}/{data.limits.maxModelCalls}
@@ -81,7 +81,7 @@ export function ProjectBudgetSection({ client, projectId }: {
           </div>
           <TextField label="费用上限（微美元，留空表示未设置）" value={draft.cost} onChange={value => update('cost', value)}
             disabled={save.pending} testId="mgmt-project-budget-cost" />
-          <p className="text-subtle text-[var(--font-meta-size)]">预算累计包含整个项目的历史调用。修改上限不会重置消耗。</p>
+          <p className="text-subtle text-[length:var(--font-meta-size)]">预算累计包含整个项目的历史调用。修改上限不会重置消耗。</p>
           {save.error === null ? null : <p role="alert" className="break-words text-[var(--st-bad)]">{save.error}</p>}
           <div className="flex gap-2">
             <button type="submit" className={formSecondaryButtonClass} disabled={invalid || save.pending}

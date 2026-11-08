@@ -49,7 +49,7 @@ export function ReviewExtractionEditor({client, protocol, phase, binding, parent
       <p className="text-muted break-words">审核人 {parent.snapshot.reviewer.name} {parent.snapshot.reviewer.id}</p>
       <p className="text-muted break-all">记录人 {parent.snapshot.actor.id} {parent.snapshot.recordedAt}</p>
       <details><summary className="cursor-pointer text-muted">字段值、单位与准确 Evidence</summary>
-        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">{JSON.stringify(parent.snapshot, null, 2)}</pre>
+        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(parent.snapshot, null, 2)}</pre>
       </details>
       <button type="button" className={`${button} self-start`} disabled={pending} data-testid="artifact-review-quality-inspect"
         onClick={() => {setQualitySelection(null); setQualityOpen(true);}}>核查研究设计与质量框架</button>
@@ -119,7 +119,7 @@ export function ReviewExtractionEditor({client, protocol, phase, binding, parent
         版本 {item.snapshot.version} {item.snapshot.request.reviewNote}<p>{item.snapshot.request.revisionReason}</p>
         <p>记录人 {item.snapshot.actor.id} {item.snapshot.recordedAt}</p>
         <details><summary className="cursor-pointer">此版本字段与原文证据</summary>
-          <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">{JSON.stringify(item.snapshot, null, 2)}</pre>
+          <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(item.snapshot, null, 2)}</pre>
         </details>
         <button type="button" className={`${button} self-start`} disabled={pending}
           onClick={() => {setQualitySelection(item); setQualityOpen(true);}}>核查此提取版本的质量框架</button>

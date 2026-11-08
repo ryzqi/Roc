@@ -78,7 +78,7 @@ async function trackFinishedRuns(targetPage) {
 async function launchSmokeApp() {
   const launched = await electron.launch({
     executablePath: target.executablePath,
-    args: target.launchArgs,
+    args: [...target.launchArgs, `--user-data-dir=${join(dataRoot, 'electron-profile')}`],
     env: {
       ...process.env,
       ROC_SMOKE: '1',

@@ -61,14 +61,15 @@ export type LayoutState = {
   sidebarWidth: number;
   sidebarCollapsed: boolean;
   assistantWidth: number;
+  assistantMaxWidth: number;
   /** Sidebar and assistant render inside drawers rather than as columns. */
   sidebarAsDrawer: boolean;
   assistantAsDrawer: boolean;
   sidebarTab: SidebarTab;
   toggleSidebar: () => void;
-  growSidebar: (deltaPx: number) => void;
+  resizeSidebar: (width: number) => void;
   resetSidebar: () => void;
-  growAssistant: (deltaPx: number) => void;
+  resizeAssistant: (width: number) => void;
   resetAssistant: () => void;
   setSidebarTab: (tab: SidebarTab) => void;
 };
@@ -168,10 +169,10 @@ export function useLayoutState(): LayoutState {
     });
   }, []);
 
-  const growSidebar = useCallback(
-    (deltaPx: number) => {
+  const resizeSidebar = useCallback(
+    (width: number) => {
       setSidebarWidth((current) => {
-        const next = clamp(current + deltaPx, SIDEBAR_WIDTH.min, SIDEBAR_WIDTH.max);
+        const next = clamp(width, SIDEBAR_WIDTH.min, SIDEBAR_WIDTH.max);
         if (next !== current) {
           schedulePersistWidths();
         }
@@ -181,12 +182,12 @@ export function useLayoutState(): LayoutState {
     [schedulePersistWidths]
   );
 
-  const growAssistant = useCallback(
-    (deltaPx: number) => {
+  const resizeAssistant = useCallback(
+    (width: number) => {
       setAssistantWidth((current) => {
         // The divider sits on the assistant's *right* edge, so dragging it right
         // widens the panel.
-        const next = clamp(current + deltaPx, ASSISTANT_WIDTH.min, assistantMaxWidth(windowWidth, effectiveSidebarWidth));
+        const next = clamp(width, ASSISTANT_WIDTH.min, assistantMaxWidth(windowWidth, effectiveSidebarWidth));
         if (next !== current) {
           schedulePersistWidths();
         }
@@ -222,13 +223,14 @@ export function useLayoutState(): LayoutState {
       ASSISTANT_WIDTH.min,
       assistantMaxWidth(windowWidth, effectiveSidebarWidth)
     ),
+    assistantMaxWidth: assistantMaxWidth(windowWidth, effectiveSidebarWidth),
     sidebarAsDrawer: mode === 'drawers',
     assistantAsDrawer: mode === 'drawers',
     sidebarTab,
     toggleSidebar,
-    growSidebar,
+    resizeSidebar,
     resetSidebar,
-    growAssistant,
+    resizeAssistant,
     resetAssistant,
     setSidebarTab
   };

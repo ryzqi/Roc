@@ -40,7 +40,7 @@ export function ReviewCorpusRecords({client, corpus, disabled, onSelect}: {
             onClick={() => onSelect('right', item.reference.id)}>选为记录 B</button>
         </div>}
         <details><summary className="cursor-pointer text-muted">核对完整原始元数据</summary>
-          <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono" tabIndex={0}>
+          <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono" tabIndex={0}>
             {JSON.stringify(item.record, null, 2)}
           </pre>
         </details>

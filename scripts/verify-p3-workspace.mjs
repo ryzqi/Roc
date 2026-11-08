@@ -132,7 +132,7 @@ async function typeInTerminal(page, command) {
 try {
   app = await electron.launch({
     executablePath: target.executablePath,
-    args: target.launchArgs,
+    args: [...target.launchArgs, `--user-data-dir=${join(dataRoot, 'electron-profile')}`],
     env: {
       ...process.env,
       ROC_SMOKE: '1',

@@ -1,6 +1,6 @@
 export function InlineHint({ text, testId }: { text: string; testId?: string }): React.JSX.Element {
   return (
-    <p className="text-muted text-[var(--font-meta-size)]" role="status" data-testid={testId}>
+    <p className="text-muted text-[length:var(--font-meta-size)]" role="status" data-testid={testId}>
       {text}
     </p>
   );

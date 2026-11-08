@@ -69,7 +69,7 @@ function MigrationCandidate({client, inspection, canDecide, onChanged}: {
       <p className="break-all text-muted">原解析 {proposal.source.sourceLocator!.parseId}，目标解析 {proposal.targetParseId}</p>
       <details data-reading-key={`source-migration-hashes:${proposal.id}`} className="text-muted">
         <summary data-reading-key={`source-migration-hashes-summary:${proposal.id}`} className="cursor-pointer">固定来源与候选哈希</summary>
-        <dl className="mt-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1 font-mono text-[var(--font-meta-size)]">
+        <dl className="mt-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1 font-mono text-[length:var(--font-meta-size)]">
           <dt>候选</dt><dd className="break-all">{inspection.proposalHash}</dd>
           <dt>原来源</dt><dd className="break-all">{proposal.sourceDigest}</dd>
           <dt>目标原文</dt><dd className="break-all">{proposal.targetSourceHash}</dd>
@@ -128,7 +128,7 @@ function MigrationDecision({decision, currentStatus}: {
     </>}
     <details data-reading-key={`source-migration-decision:${decision.id}`}>
       <summary data-reading-key={`source-migration-decision-summary:${decision.id}`} className="cursor-pointer">决定与请求原记录</summary>
-      <pre className="whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(decision, null, 2)}</pre>
+      <pre className="whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(decision, null, 2)}</pre>
     </details>
     <p>原证据与科学审核记录保持不变。</p>
   </div>;

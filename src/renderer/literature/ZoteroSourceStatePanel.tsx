@@ -46,7 +46,7 @@ export function ZoteroSourceStatePanel({client, projectId, collectionKey, origin
       {state.remote.status === 'not_found' ? <p>本次未找到来源，不能据此确认永久删除。</p> : null}
       {state.remote.status === 'present' && state.membership !== 'not_listed' ? null : <p>Roc 已收录的题录、证据与附件保留。</p>}
       <details><summary className="cursor-pointer">来源状态观察原文</summary>
-        <pre className="whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(state, null, 2)}</pre>
+        <pre className="whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(state, null, 2)}</pre>
       </details>
     </div>}
     {[stored.error, observe.error].map((error, index) => error === null ? null : <p key={index} role="alert"
@@ -66,7 +66,7 @@ export function ZoteroOriginalSource({client, projectId, collectionKey, original
         client={client} projectId={projectId} collectionKey={collectionKey} original={original} /> : null}
       <ZoteroAttachmentPanel key={JSON.stringify([projectId, original.scope, original.operationId, original.itemKey, original.version])}
         client={client} original={original} jobs={attachments} />
-      <pre className="whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(original.item, null, 2)}</pre>
+      <pre className="whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(original.item, null, 2)}</pre>
     </>}
   </details>;
 }

@@ -30,7 +30,7 @@ export function ManagementView({ view }: ViewProps): React.JSX.Element {
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 p-4" data-testid="management-view" data-view={view}>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-ink text-[var(--font-h3-size)]">管理</span>
+        <span className="text-ink text-[length:var(--font-h3-size)]">管理</span>
       </div>
       <div className="max-w-[520px]">
         <ManagementTabStrip
@@ -41,7 +41,7 @@ export function ManagementView({ view }: ViewProps): React.JSX.Element {
           testIdPrefix="mgmt-view"
         />
       </div>
-      <p className="shrink-0 text-muted text-[var(--font-meta-size)]" data-testid="mgmt-view-summary">
+      <p className="shrink-0 text-muted text-[length:var(--font-meta-size)]" data-testid="mgmt-view-summary">
         {managementSummary(tab, visibleSummaries)}
       </p>
       <ManagementSectionBody tab={tab} scope={scope} idPrefix="mgmt-view" testIdPrefix="mgmt-view" />

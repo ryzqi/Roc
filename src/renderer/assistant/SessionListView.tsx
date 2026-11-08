@@ -48,15 +48,15 @@ export function SessionListView({
   if (threads.error !== null) {
     return (
       <div className="px-3 py-4">
-        <p role="alert" className="text-[var(--st-bad)] text-[var(--font-meta-size)]" data-testid="session-list-error">
+        <p role="alert" className="text-[var(--st-bad)] text-[length:var(--font-meta-size)]" data-testid="session-list-error">
           {threads.error}
         </p>
         <button
           type="button"
           onClick={threads.reload}
-          className="mt-2 h-[var(--control-height-compact)] rounded-control border border-line px-2 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+          className="mt-2 h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
         >
-          <span className="text-[var(--font-meta-size)]">重试</span>
+          <span className="text-[length:var(--font-meta-size)]">重试</span>
         </button>
       </div>
     );
@@ -80,12 +80,12 @@ export function SessionListView({
           type="button"
           onClick={onStartNewThread}
           data-testid="session-new"
-          className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+          className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
         >
           <Plus size={11} aria-hidden="true" />
-          <span className="text-[var(--font-meta-size)]">新建会话</span>
+          <span className="text-[length:var(--font-meta-size)]">新建会话</span>
         </button>
-        <span className="min-w-0 flex-1 truncate text-subtle text-[var(--font-micro-size)]">
+        <span className="min-w-0 flex-1 truncate text-subtle text-[length:var(--font-micro-size)]">
           {activeThreadId === null ? '新会话（首次发送时创建）' : ''}
         </span>
       </div>
@@ -106,8 +106,8 @@ export function SessionListView({
                     : 'flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded-control px-2 py-1 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]'
                 }
               >
-                <span className="w-full truncate text-[var(--font-meta-size)]">{thread.title}</span>
-                <span className="text-subtle text-[var(--font-micro-size)]">
+                <span className="w-full truncate text-[length:var(--font-meta-size)]">{thread.title}</span>
+                <span className="text-subtle text-[length:var(--font-micro-size)]">
                   {formatRelativeBeijing(thread.updatedAt)}
                 </span>
               </button>
@@ -127,7 +127,7 @@ export function SessionListView({
       </ul>
 
       {threads.removeError === null ? null : (
-        <p role="alert" className="px-3 pb-2 text-[var(--st-bad)] text-[var(--font-micro-size)]">
+        <p role="alert" className="px-3 pb-2 text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
           {threads.removeError}
         </p>
       )}

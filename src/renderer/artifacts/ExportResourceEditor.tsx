@@ -12,7 +12,7 @@ export function ExportResourceEditor({candidate, value, onChange}: {
 }): React.JSX.Element {
   return <section className="flex min-w-0 flex-col gap-2" data-testid="artifact-export-resource-editor">
     <p className="break-all text-muted">{candidate.source.kind} / {candidate.source.area} / {candidate.source.path}</p>
-    <p className="break-all font-mono text-muted text-[var(--font-meta-size)]">
+    <p className="break-all font-mono text-muted text-[length:var(--font-meta-size)]">
       SHA-256 {candidate.source.sha256}，{candidate.source.size} B
     </p>
     {candidate.reason === null ? null : <p className="break-words text-muted">{candidate.reason}</p>}

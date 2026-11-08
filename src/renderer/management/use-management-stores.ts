@@ -34,8 +34,8 @@ export function useManagementStoresSource(scope: ManagementScope): ManagementSto
     () => ({
       memory: memorySummary(memory),
       skills: skillSummary(skills.skills),
-      mcp: `${mcp.rows.length} 个服务 · ${mcp.rows.filter((row) => mcp.serverEnabled(row.server)).length} 个已启用`,
-      tasks: `后台任务 ${tasks.tasks.length} 个 · 调度器 ${schedulerStatusWord(tasks.scheduler)}`
+      mcp: `${mcp.rows.length} 个服务，${mcp.rows.filter((row) => mcp.serverEnabled(row.server)).length} 个已启用`,
+      tasks: `后台任务 ${tasks.tasks.length} 个，调度器 ${schedulerStatusWord(tasks.scheduler)}`
     }),
     [memory, skills.skills, mcp, tasks.tasks.length, tasks.scheduler]
   );
@@ -54,5 +54,5 @@ function memorySummary(memory: MemoryFilesStore): string {
   if (memory.memory !== null && memory.memory.workspaceHash === null) {
     parts.push('打开项目后可查看项目记忆');
   }
-  return parts.join(' · ');
+  return parts.join('、');
 }

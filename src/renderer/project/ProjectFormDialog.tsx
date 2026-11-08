@@ -150,6 +150,7 @@ export function ProjectFormDialog({
 
   return (
     <ModalShell
+      closeOnBackdrop={false}
       open={open}
       title={mode === 'create' ? '新建研究项目' : '编辑研究项目'}
       onClose={onCancel}
@@ -165,41 +166,41 @@ export function ProjectFormDialog({
         }}
       >
         <label className="flex flex-col gap-1">
-          <span className="text-muted text-[var(--font-meta-size)]">标题</span>
+          <span className="text-muted text-[length:var(--font-meta-size)]">标题</span>
           <input
             ref={titleRef}
             value={values.title}
             onChange={(event) => setValues((current) => ({ ...current, title: event.target.value }))}
             aria-invalid={errors.title !== undefined}
             data-testid="project-form-title"
-            className="h-[var(--control-height)] rounded-control border border-line bg-surface-strong px-2.5 text-ink"
+            className="h-[var(--control-height)] rounded-control border-[0.5px] border-line bg-surface-strong px-2.5 text-ink"
           />
           {errors.title === undefined ? null : (
-            <span role="alert" className="text-[var(--st-bad)] text-[var(--font-micro-size)]" data-testid="project-form-title-error">
+            <span role="alert" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]" data-testid="project-form-title-error">
               {errors.title}
             </span>
           )}
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-muted text-[var(--font-meta-size)]">研究目标</span>
+          <span className="text-muted text-[length:var(--font-meta-size)]">研究目标</span>
           <textarea
             value={values.description}
             rows={4}
             onChange={(event) => setValues((current) => ({ ...current, description: event.target.value }))}
             aria-invalid={errors.description !== undefined}
             data-testid="project-form-description"
-            className="resize-none rounded-control border border-line bg-surface-strong px-2.5 py-2 text-ink"
+            className="resize-none rounded-control border-[0.5px] border-line bg-surface-strong px-2.5 py-2 text-ink"
           />
           {errors.description === undefined ? null : (
-            <span role="alert" className="text-[var(--st-bad)] text-[var(--font-micro-size)]" data-testid="project-form-description-error">
+            <span role="alert" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]" data-testid="project-form-description-error">
               {errors.description}
             </span>
           )}
         </label>
 
         <fieldset className="flex flex-col gap-1">
-          <legend className="text-muted text-[var(--font-meta-size)]">文稿语言</legend>
+          <legend className="text-muted text-[length:var(--font-meta-size)]">文稿语言</legend>
           <div role="radiogroup" aria-label="文稿语言" className="flex items-center gap-1">
             {(
               [
@@ -223,21 +224,21 @@ export function ProjectFormDialog({
                       : 'h-[var(--control-height-compact)] rounded-control px-2.5 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-60'
                   }
                 >
-                  <span className="text-[var(--font-meta-size)]">{option.label}</span>
+                  <span className="text-[length:var(--font-meta-size)]">{option.label}</span>
                 </button>
               );
             })}
           </div>
           {languageLocked ? (
-            <span className="text-subtle text-[var(--font-micro-size)]">创建后不可更改。</span>
+            <span className="text-subtle text-[length:var(--font-micro-size)]">创建后不可更改。</span>
           ) : null}
         </fieldset>
 
         <div className="flex flex-col gap-1">
-          <span className="text-muted text-[var(--font-meta-size)]">工作目录</span>
+          <span className="text-muted text-[length:var(--font-meta-size)]">工作目录</span>
           <div className="flex items-center gap-2">
             <span
-              className="min-w-0 flex-1 truncate rounded-control border border-line bg-bg-soft px-2.5 py-1.5 font-mono text-[var(--font-meta-size)]"
+              className="min-w-0 flex-1 truncate rounded-control border-[0.5px] border-line bg-bg-soft px-2.5 py-1.5 font-mono text-[length:var(--font-meta-size)]"
               title={values.workspacePath}
               data-testid="project-form-workspace"
             >
@@ -252,26 +253,26 @@ export function ProjectFormDialog({
               onClick={() => void pickWorkspace()}
               disabled={pickingWorkspace}
               data-testid="project-form-pick-workspace"
-              className="flex h-[var(--control-height)] shrink-0 items-center gap-1.5 rounded-control border border-line px-2.5 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50"
+              className="flex h-[var(--control-height)] shrink-0 items-center gap-1.5 rounded-control border-[0.5px] border-line px-2.5 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50"
             >
               <FolderOpen size={13} aria-hidden="true" />
               选择目录
             </button>
           </div>
           {errors.workspacePath === undefined ? null : (
-            <span role="alert" className="text-[var(--st-bad)] text-[var(--font-micro-size)]" data-testid="project-form-workspace-error">
+            <span role="alert" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]" data-testid="project-form-workspace-error">
               {errors.workspacePath}
             </span>
           )}
           {workspaceError === null ? null : (
-            <span role="alert" className="text-[var(--st-bad)] text-[var(--font-micro-size)]" data-testid="project-form-workspace-pick-error">
+            <span role="alert" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]" data-testid="project-form-workspace-pick-error">
               {workspaceError}
             </span>
           )}
         </div>
 
         {submitError === null ? null : (
-          <p role="alert" className="rounded-card border border-[var(--st-bad-line)] px-2.5 py-1.5 text-[var(--st-bad)]" data-testid="project-form-error">
+          <p role="alert" className="rounded-card border-[0.5px] border-[var(--st-bad-line)] px-2.5 py-1.5 text-[var(--st-bad)]" data-testid="project-form-error">
             {submitError}
           </p>
         )}
@@ -281,7 +282,7 @@ export function ProjectFormDialog({
             type="button"
             onClick={onCancel}
             data-testid="project-form-cancel"
-            className="h-[var(--control-height)] rounded-control border border-line px-3 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+            className="h-[var(--control-height)] rounded-control border-[0.5px] border-line px-3 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
           >
             取消
           </button>

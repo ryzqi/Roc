@@ -31,7 +31,7 @@ export function MonitorQueryView({query}: {query: MonitorQuery}): React.JSX.Elem
 function MonitorRawSource({source}: {source: MonitorSource}): React.JSX.Element {
   const [open, setOpen] = useState(false);
   return <details onToggle={event => setOpen(event.currentTarget.open)}><summary className="cursor-pointer text-muted">请求回执与来源快照</summary>
-    {open ? <pre className="max-w-full whitespace-pre-wrap break-all py-2 text-[var(--font-meta-size)]">{JSON.stringify(source, null, 2)}</pre> : null}
+    {open ? <pre className="max-w-full whitespace-pre-wrap break-all py-2 text-[length:var(--font-meta-size)]">{JSON.stringify(source, null, 2)}</pre> : null}
   </details>;
 }
 export function MonitorCheckView({check}: {check: MonitorCheck}): React.JSX.Element {

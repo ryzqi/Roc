@@ -29,7 +29,7 @@ export function GuardrailSection({ store }: { store: SettingsStore }): React.JSX
       testId="settings-section-guardrail-body"
     >
       <label className="flex max-w-[420px] flex-col gap-0.5">
-        <span className="text-subtle text-[var(--font-micro-size)]">工具审批模式</span>
+        <span className="text-subtle text-[length:var(--font-micro-size)]">工具审批模式</span>
         <select
           value={draft.permissions.mode}
           onChange={(event) =>
@@ -51,7 +51,7 @@ export function GuardrailSection({ store }: { store: SettingsStore }): React.JSX
         </FormNote>
       ) : null}
 
-      <h4 className="text-ink text-[var(--font-meta-size)]">记忆安全扫描</h4>
+      <h4 className="text-ink text-[length:var(--font-meta-size)]">记忆安全扫描</h4>
       <div className="flex flex-wrap gap-4">
         <CheckboxField
           label="提示注入"
@@ -83,7 +83,7 @@ export function GuardrailSection({ store }: { store: SettingsStore }): React.JSX
         />
       </div>
 
-      <h4 className="text-ink text-[var(--font-meta-size)]">记忆容量与会话保留</h4>
+      <h4 className="text-ink text-[length:var(--font-meta-size)]">记忆容量与会话保留</h4>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <NumberField
           label="USER.md 字符上限"

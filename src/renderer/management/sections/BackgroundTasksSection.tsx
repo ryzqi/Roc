@@ -67,8 +67,8 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
         testId="mgmt-tasks-list-section"
       >
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-muted text-[var(--font-meta-size)]" data-testid="mgmt-tasks-summary">
-            {tasks.tasks.length} 个任务 · 调度器 {schedulerStatusWord(tasks.scheduler)} · 已注册{' '}
+          <span className="text-muted text-[length:var(--font-meta-size)]" data-testid="mgmt-tasks-summary">
+            {tasks.tasks.length} 个任务，调度器 {schedulerStatusWord(tasks.scheduler)}，已注册{' '}
             {tasks.scheduler?.registeredTaskCount ?? '—'}
           </span>
           <button
@@ -123,7 +123,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
                   className={
                     selected
                       ? 'flex flex-col gap-1 rounded-card bg-accent-soft px-2 py-1.5'
-                      : 'flex flex-col gap-1 rounded-card border border-line px-2 py-1.5'
+                      : 'flex flex-col gap-1 rounded-card border-[0.5px] border-line px-2 py-1.5'
                   }
                   data-testid={`mgmt-task-${task.id}`}
                 >
@@ -134,13 +134,13 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
                     className="flex min-w-0 flex-col gap-0.5 text-left"
                   >
                     <span className="flex flex-wrap items-center gap-2">
-                      <span className="text-ink text-[var(--font-meta-size)]">{task.goal}</span>
-                      <span className="text-muted text-[var(--font-micro-size)]">{taskStatusLabels[task.status]}</span>
-                      <span className="text-subtle text-[var(--font-micro-size)]">
-                        {triggerTypeLabels[task.triggerType]} · {task.triggerDescription}
+                      <span className="text-ink text-[length:var(--font-meta-size)]">{task.goal}</span>
+                      <span className="text-muted text-[length:var(--font-micro-size)]">{taskStatusLabels[task.status]}</span>
+                      <span className="text-subtle text-[length:var(--font-micro-size)]">
+                        {triggerTypeLabels[task.triggerType]}，{task.triggerDescription}
                       </span>
                     </span>
-                    <span className="text-subtle text-[var(--font-micro-size)]">{taskSummaryLine(task)}</span>
+                    <span className="text-subtle text-[length:var(--font-micro-size)]">{taskSummaryLine(task)}</span>
                   </button>
                   <div className="flex flex-wrap items-center gap-2">
                     {availability.runNow ? (
@@ -231,7 +231,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
         >
           <dl className="flex flex-col gap-0.5">
             <KeyValueRow label="状态" value={taskStatusLabels[tasks.selected.status]} testId="mgmt-task-detail-status" />
-            <KeyValueRow label="触发" value={`${triggerTypeLabels[tasks.selected.triggerType]} · ${tasks.selected.triggerDescription}`} testId="mgmt-task-detail-trigger" />
+            <KeyValueRow label="触发" value={`${triggerTypeLabels[tasks.selected.triggerType]}，${tasks.selected.triggerDescription}`} testId="mgmt-task-detail-trigger" />
             <KeyValueRow
               label="cron"
               value={tasks.selected.cronExpression ?? '—'}
@@ -247,7 +247,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
               value={
                 tasks.selected.lastRunAt === null
                   ? '—'
-                  : `${formatBeijingDateTime(tasks.selected.lastRunAt)} · ${tasks.selected.lastRunStatus ?? '未知'}`
+                  : `${formatBeijingDateTime(tasks.selected.lastRunAt)}，${tasks.selected.lastRunStatus ?? '未知'}`
               }
               testId="mgmt-task-detail-last"
             />
@@ -255,7 +255,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
             <KeyValueRow label="工作目录" value={tasks.selected.workspacePath} testId="mgmt-task-detail-workspace" />
             <KeyValueRow
               label="风险 / 需确认"
-              value={`${tasks.selected.riskLevel} · ${tasks.selected.requiresConfirmation ? '需要确认' : '不需要'}`}
+              value={`${tasks.selected.riskLevel}，${tasks.selected.requiresConfirmation ? '需要确认' : '不需要'}`}
               testId="mgmt-task-detail-risk"
             />
             <KeyValueRow
@@ -282,11 +282,11 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
           ) : (
             <ul className="flex flex-col gap-0.5" data-testid="mgmt-task-runs">
               {tasks.runs.map((run) => (
-                <li key={run.id} className="flex flex-col gap-0.5 text-[var(--font-micro-size)]">
+                <li key={run.id} className="flex flex-col gap-0.5 text-[length:var(--font-micro-size)]">
                   <span className="text-muted">{scheduledRunLine(run)}</span>
                   <span className="text-subtle">
                     scheduled {run.scheduledAt}
-                    {run.taskRunId === null ? '' : ` · run ${run.taskRunId}`}
+                    {run.taskRunId === null ? '' : `，run ${run.taskRunId}`}
                   </span>
                 </li>
               ))}
@@ -301,7 +301,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
           testId="mgmt-task-editor"
         >
           <label className="flex flex-col gap-0.5">
-            <span className="text-subtle text-[var(--font-micro-size)]">目标（会作为这一轮任务的目标）</span>
+            <span className="text-subtle text-[length:var(--font-micro-size)]">目标（会作为这一轮任务的目标）</span>
             <textarea
               value={draft.goal}
               rows={3}
@@ -312,7 +312,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
           </label>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <label className="flex flex-col gap-0.5">
-              <span className="text-subtle text-[var(--font-micro-size)]">触发方式</span>
+              <span className="text-subtle text-[length:var(--font-micro-size)]">触发方式</span>
               <select
                 value={draft.triggerType}
                 onChange={(event) =>
@@ -327,7 +327,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
               </select>
             </label>
             <label className="flex flex-col gap-0.5">
-              <span className="text-subtle text-[var(--font-micro-size)]">触发描述（显示在列表里）</span>
+              <span className="text-subtle text-[length:var(--font-micro-size)]">触发描述（显示在列表里）</span>
               <input
                 value={draft.triggerDescription}
                 onChange={(event) => tasks.setDraft(draftField(draft, 'triggerDescription', event.target.value))}
@@ -337,7 +337,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
             </label>
             {draft.triggerType === 'manual' ? null : (
               <label className="flex flex-col gap-0.5">
-                <span className="text-subtle text-[var(--font-micro-size)]">
+                <span className="text-subtle text-[length:var(--font-micro-size)]">
                   首次运行时间（本地时间；once 就是唯一一次）
                 </span>
                 <input
@@ -351,7 +351,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
             )}
             {draft.triggerType === 'cron' ? (
               <label className="flex flex-col gap-0.5">
-                <span className="text-subtle text-[var(--font-micro-size)]">cron（五段，例如 0 9 * * *）</span>
+                <span className="text-subtle text-[length:var(--font-micro-size)]">cron（五段，例如 0 9 * * *）</span>
                 <input
                   value={draft.cronExpression}
                   onChange={(event) => tasks.setDraft(draftField(draft, 'cronExpression', event.target.value))}
@@ -363,7 +363,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <label className="flex flex-col gap-0.5">
-              <span className="text-subtle text-[var(--font-micro-size)]">允许的动作（每行一个；空表示未限制）</span>
+              <span className="text-subtle text-[length:var(--font-micro-size)]">允许的动作（每行一个；空表示未限制）</span>
               <textarea
                 value={draft.allowedActionsText}
                 rows={3}
@@ -373,7 +373,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
               />
             </label>
             <label className="flex flex-col gap-0.5">
-              <span className="text-subtle text-[var(--font-micro-size)]">禁止的动作（每行一个）</span>
+              <span className="text-subtle text-[length:var(--font-micro-size)]">禁止的动作（每行一个）</span>
               <textarea
                 value={draft.forbiddenActionsText}
                 rows={3}
@@ -385,7 +385,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
           </div>
           {tasks.mode === 'edit' ? (
             <label className="flex flex-col gap-0.5">
-              <span className="text-subtle text-[var(--font-micro-size)]">修改原因（必填，会记进任务溯源）</span>
+              <span className="text-subtle text-[length:var(--font-micro-size)]">修改原因（必填，会记进任务溯源）</span>
               <input
                 value={draft.reason}
                 onChange={(event) => tasks.setDraft(draftField(draft, 'reason', event.target.value))}
@@ -459,7 +459,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
             </FormNote>
           )}
           {tasks.preview === null ? null : (
-            <dl className="flex flex-col gap-0.5 rounded-card border border-line px-2 py-1.5" data-testid="mgmt-task-preview-result">
+            <dl className="flex flex-col gap-0.5 rounded-card border-[0.5px] border-line px-2 py-1.5" data-testid="mgmt-task-preview-result">
               <KeyValueRow label="会调度" value={tasks.preview.scheduled ? '是' : '否（手动）'} testId="mgmt-task-preview-scheduled" />
               <KeyValueRow label="cron" value={tasks.preview.cronExpression ?? '—'} testId="mgmt-task-preview-cron" />
               <KeyValueRow

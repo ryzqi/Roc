@@ -223,14 +223,14 @@ export function LatexPanel(): React.JSX.Element {
       onClose={() => setPendingLeave(null)}
       widthClassName="w-[520px]"
       footer={<>
-        <button type="button" disabled={save.pending} onClick={() => setPendingLeave(null)} className="rounded-control border border-line px-3 py-1">取消</button>
+        <button type="button" disabled={save.pending} onClick={() => setPendingLeave(null)} className="rounded-control border-[0.5px] border-line px-3 py-1">取消</button>
         <button type="button" disabled={save.pending} onClick={() => {
           const action = pendingLeave;
           setPendingLeave(null);
           dirtyRef.current = false;
           setDraft(baseline);
           action?.proceed();
-        }} className="rounded-control border border-line px-3 py-1">放弃修改</button>
+        }} className="rounded-control border-[0.5px] border-line px-3 py-1">放弃修改</button>
         <button type="button" disabled={save.pending || !canEdit} onClick={() => {
           const action = pendingLeave;
           void saveDraft().then((saved) => {
@@ -245,13 +245,13 @@ export function LatexPanel(): React.JSX.Element {
       {save.error === null ? null : <p role="alert" className="text-[var(--st-bad)]">{save.error}</p>}
     </ModalShell>
     <div className="production-latex-layout flex h-full min-h-0" data-testid="production-latex">
-      <label className="latex-file-picker hidden shrink-0 items-center gap-2 border-b border-line px-3 py-2">
-        <span className="shrink-0 text-muted text-[var(--font-meta-size)]">文稿</span>
+      <label className="latex-file-picker hidden shrink-0 items-center gap-2 border-b-[0.5px] border-line px-3 py-2">
+        <span className="shrink-0 text-muted text-[length:var(--font-meta-size)]">文稿</span>
         <select
           aria-label="选择文稿文件"
           value={selectedPath ?? ""}
           onChange={(event) => onSelect(event.target.value === "" ? null : event.target.value)}
-          className="h-8 min-w-0 flex-1 rounded-control border border-line bg-surface px-2 text-ink text-[var(--font-meta-size)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+          className="h-8 min-w-0 flex-1 rounded-control border-[0.5px] border-line bg-surface px-2 text-ink text-[length:var(--font-meta-size)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
         >
           <option value="">选择文稿文件</option>
           {(files.data ?? []).map((file) => (
@@ -261,10 +261,10 @@ export function LatexPanel(): React.JSX.Element {
       </label>
       <nav
         aria-label="文稿文件"
-        className="production-latex-file-list flex w-[200px] shrink-0 flex-col gap-1 overflow-y-auto border-r border-line p-2"
+        className="production-latex-file-list flex w-[200px] shrink-0 flex-col gap-1 overflow-y-auto border-r-[0.5px] border-line p-2"
         data-testid="production-latex-files"
       >
-        <span className="text-subtle text-[var(--font-meta-size)]">
+        <span className="text-subtle text-[length:var(--font-meta-size)]">
           文稿文件（{files.data?.length ?? 0}）
         </span>
         {files.status === 'error' ? (
@@ -289,10 +289,10 @@ export function LatexPanel(): React.JSX.Element {
                       : 'text-muted hover:bg-[var(--overlay-hover)] hover:text-ink'
                   ].join(' ')}
                 >
-                  <span className="w-full truncate font-mono text-[var(--font-meta-size)]" title={file.path}>
+                  <span className="w-full truncate font-mono text-[length:var(--font-meta-size)]" title={file.path}>
                     {file.path}
                   </span>
-                  <span className="text-subtle text-[var(--font-meta-size)]">
+                  <span className="text-subtle text-[length:var(--font-meta-size)]">
                     {formatBytes(file.sizeBytes)}　{formatBeijingDateTime(file.updatedAt)}
                   </span>
                 </button>
@@ -312,8 +312,8 @@ export function LatexPanel(): React.JSX.Element {
         ) : (
           <section className="flex min-h-0 flex-1 flex-col" data-testid="production-latex-editor">
             <header className="flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-3 py-2">
-              <h2 className="min-w-0 flex-1 truncate text-[var(--font-ui-size)] font-medium" title={selectedPath}>{fileName(selectedPath)}</h2>
-              <span role="status" data-testid="latex-dirty-indicator" className="text-muted text-[var(--font-meta-size)]">{dirty ? '未保存' : canEdit ? '已保存' : '只读'}</span>
+              <h2 className="min-w-0 flex-1 truncate text-[length:var(--font-ui-size)] font-medium" title={selectedPath}>{fileName(selectedPath)}</h2>
+              <span role="status" data-testid="latex-dirty-indicator" className="text-muted text-[length:var(--font-meta-size)]">{dirty ? '未保存' : canEdit ? '已保存' : '只读'}</span>
               <button type="button" disabled={save.pending} data-testid="production-latex-reload"
                 onClick={() => requestLeave(() => {
                   loadedPathRef.current = null;
@@ -340,7 +340,7 @@ export function LatexPanel(): React.JSX.Element {
               />
             ) : null}
             {isTruncated ? (
-              <p className="text-[var(--st-warn)] text-[var(--font-meta-size)]" data-testid="production-latex-truncated" role="note">
+              <p className="text-[var(--st-warn)] text-[length:var(--font-meta-size)]" data-testid="production-latex-truncated" role="note">
                 文件过大，编辑器只读。
               </p>
             ) : null}
@@ -348,22 +348,22 @@ export function LatexPanel(): React.JSX.Element {
               <>
                 <SourceEditor key={selectedPath} value={draft ?? previewData.content} readOnly={!canEdit || save.pending} onChange={(value) => { setDraft(value); setNote(null); setRecovery(null); }} />
                 <div className="flex shrink-0 flex-wrap items-center gap-2 border-t-[0.5px] border-line px-3 py-1.5">
-                  <span className="text-subtle text-[var(--font-meta-size)]" role="status" data-testid="production-latex-state">
+                  <span className="text-subtle text-[length:var(--font-meta-size)]" role="status" data-testid="production-latex-state">
                     {canEdit ? (dirty ? '有未保存的修改' : '与磁盘一致') : '只读'}　{formatBytes(previewData.sizeBytes)}
                   </span>
                   {canWrite ? null : (
-                    <span className="text-[var(--st-warn)] text-[var(--font-meta-size)]" data-testid="production-latex-readonly">
+                    <span className="text-[var(--st-warn)] text-[length:var(--font-meta-size)]" data-testid="production-latex-readonly">
                       项目已归档：文件只读。
                     </span>
                   )}
                 </div>
                 {note === null ? null : (
-                  <p role="status" className="shrink-0 px-3 text-muted text-[var(--font-meta-size)]" data-testid="production-latex-save-note">
+                  <p role="status" className="shrink-0 px-3 text-muted text-[length:var(--font-meta-size)]" data-testid="production-latex-save-note">
                     {note}
                   </p>
                 )}
                 {recovery === null ? null : (
-                  <p className="shrink-0 px-3 text-subtle text-[var(--font-meta-size)]" data-testid="production-latex-recovery">
+                  <p className="shrink-0 px-3 text-subtle text-[length:var(--font-meta-size)]" data-testid="production-latex-recovery">
                     {recovery}
                   </p>
                 )}

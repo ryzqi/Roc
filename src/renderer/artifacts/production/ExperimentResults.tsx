@@ -49,7 +49,7 @@ export function ExperimentResults({client,run,request,writable}: {
           onClick={()=>setSelection({projectId:run.projectId,resultId:receipt.snapshot.id,expectedHash:receipt.snapshotHash})}>
           {receipt.snapshot.recordedAt} {receipt.snapshot.id}
         </button>
-        <p className="break-all font-mono text-muted text-[var(--font-meta-size)]">SHA-256 {receipt.snapshotHash}</p>
+        <p className="break-all font-mono text-muted text-[length:var(--font-meta-size)]">SHA-256 {receipt.snapshotHash}</p>
       </li>)}</ul>
       <div className="flex flex-wrap gap-2">
         <button type="button" className={button} disabled={historyChoice.offset===0} onClick={()=>loadHistory(historyChoice.offset-pageSize)}>上一页指标回执</button>

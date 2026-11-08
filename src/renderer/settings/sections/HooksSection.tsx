@@ -128,21 +128,21 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
         {handlers.map((handler) => (
           <li
             key={handler.id}
-            className="flex flex-col gap-1 rounded-card border border-line bg-surface px-3 py-2"
+            className="flex flex-col gap-1 rounded-card border-[0.5px] border-line bg-surface px-3 py-2"
             data-testid={`settings-hook-${handler.id}`}
             data-trust={handler.trustState}
           >
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-ink text-[var(--font-meta-size)]">{handler.event}</span>
-              <span className="text-subtle text-[var(--font-micro-size)]">
+              <span className="font-mono text-ink text-[length:var(--font-meta-size)]">{handler.event}</span>
+              <span className="text-subtle text-[length:var(--font-micro-size)]">
                 matcher: {handler.matcher ?? '（无）'}
               </span>
-              <span className="text-subtle text-[var(--font-micro-size)]" data-testid={`settings-hook-state-${handler.id}`}>
-                {handlerEnabled(draft, handler) ? '启用' : '停用'} ·{' '}
+              <span className="text-subtle text-[length:var(--font-micro-size)]" data-testid={`settings-hook-state-${handler.id}`}>
+                {handlerEnabled(draft, handler) ? '启用' : '停用'}，{' '}
                 {handler.failureMode === 'block' ? '阻塞失败' : '继续失败'}
               </span>
               <span
-                className="ml-auto flex items-center gap-1 rounded-control border border-line px-1.5 text-[var(--font-micro-size)]"
+                className="ml-auto flex items-center gap-1 rounded-control border-[0.5px] border-line px-1.5 text-[length:var(--font-micro-size)]"
                 data-testid={`settings-hook-trust-${handler.id}`}
               >
                 {handler.trustState === 'trusted' ? (
@@ -159,7 +159,7 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
                       : '配置无效'}
               </span>
             </div>
-            <p className="break-all font-mono text-muted text-[var(--font-micro-size)]">{handler.command}</p>
+            <p className="break-all font-mono text-muted text-[length:var(--font-micro-size)]">{handler.command}</p>
             {handler.validationError === null ? null : (
               <FormNote tone="warn" testId={`settings-hook-error-${handler.id}`}>
                 {handler.validationError}
@@ -192,9 +192,9 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
                 </button>
               ) : null}
               {handler.lastRun === null ? (
-                <span className="text-subtle text-[var(--font-micro-size)]">还没有运行记录</span>
+                <span className="text-subtle text-[length:var(--font-micro-size)]">还没有运行记录</span>
               ) : (
-                <span className="text-subtle text-[var(--font-micro-size)]">
+                <span className="text-subtle text-[length:var(--font-micro-size)]">
                   最近运行：{handler.lastRun.status}
                 </span>
               )}
@@ -210,8 +210,8 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
         </FormNote>
       )}
 
-      <div className="flex flex-col gap-1 border-t border-line pt-2">
-        <span className="text-subtle text-[var(--font-micro-size)]">配置 JSON</span>
+      <div className="flex flex-col gap-1 border-t-[0.5px] border-line pt-2">
+        <span className="text-subtle text-[length:var(--font-micro-size)]">配置 JSON</span>
         <textarea
           value={jsonText}
           rows={8}
@@ -258,7 +258,7 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
           >
             还原为草稿值
           </button>
-          <span className="text-subtle text-[var(--font-micro-size)]">改动由顶部「保存设置」写入。</span>
+          <span className="text-subtle text-[length:var(--font-micro-size)]">改动由顶部「保存设置」写入。</span>
         </div>
         {jsonError === null ? null : (
           <FormNote tone="warn" testId="settings-hooks-json-error">

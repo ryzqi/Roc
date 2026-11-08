@@ -409,7 +409,7 @@ export function FileTreeView({
             actionLabel: `被拒绝的路径：${rejectedPath.relativePath}`
           }}
         />
-        <p className="text-muted text-[var(--font-meta-size)]">文件路径必须位于工作目录之内。</p>
+        <p className="text-muted text-[length:var(--font-meta-size)]">文件路径必须位于工作目录之内。</p>
       </div>
     );
   }
@@ -439,10 +439,10 @@ export function FileTreeView({
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="file-tree">
-      <div className="flex shrink-0 items-center gap-1 border-b border-line-soft px-2 py-1">
-        <span className="min-w-0 flex-1 truncate text-subtle text-[var(--font-micro-size)]">
+      <div className="flex shrink-0 items-center gap-1 border-b-[0.5px] border-line-soft px-2 py-1">
+        <span className="min-w-0 flex-1 truncate text-subtle text-[length:var(--font-micro-size)]">
           {tree.rows.length} 项
-          {tree.truncatedRoot ? ' · 已截断' : ''}
+          {tree.truncatedRoot ? '，已截断' : ''}
         </span>
         <button
           type="button"
@@ -450,7 +450,7 @@ export function FileTreeView({
           className="rounded-control px-1.5 py-0.5 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
           data-testid="file-tree-collapse-all"
         >
-          <span className="text-[var(--font-micro-size)]">折叠</span>
+          <span className="text-[length:var(--font-micro-size)]">折叠</span>
         </button>
         <button
           type="button"
@@ -589,12 +589,12 @@ function TreeRow({
           <span className="w-[11px] shrink-0" aria-hidden="true" />
         )}
         <RowIcon row={row} busy={busy} />
-        <span className="min-w-0 flex-1 truncate text-[var(--font-meta-size)]">{row.entry.name}</span>
+        <span className="min-w-0 flex-1 truncate text-[length:var(--font-meta-size)]">{row.entry.name}</span>
       </button>
       {error === undefined ? null : (
         <p
           role="alert"
-          className="px-3 py-0.5 text-[var(--st-bad)] text-[var(--font-micro-size)]"
+          className="px-3 py-0.5 text-[var(--st-bad)] text-[length:var(--font-micro-size)]"
           style={{ paddingLeft: 18 + row.depth * 12 }}
         >
           {error}

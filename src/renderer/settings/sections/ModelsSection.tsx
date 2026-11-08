@@ -135,7 +135,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
     >
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex w-[260px] max-w-full flex-col gap-0.5">
-          <span className="text-subtle text-[var(--font-micro-size)]">供应商</span>
+          <span className="text-subtle text-[length:var(--font-micro-size)]">供应商</span>
           <select
             value={provider.id}
             onChange={(event) => {
@@ -173,7 +173,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
         </button>
         {builtIn ? (
           <span
-            className="inline-flex h-[var(--control-height)] items-center rounded-control border border-line px-2.5 text-subtle text-[var(--font-meta-size)]"
+            className="inline-flex h-[var(--control-height)] items-center rounded-control border-[0.5px] border-line px-2.5 text-subtle text-[length:var(--font-meta-size)]"
             data-testid="settings-provider-builtin"
           >
             内置
@@ -224,7 +224,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
           {/* 与输入框同高同框：这里是只读值，但不是「没有控件」—— 高度不一致会让这一行
               的两个单元格看起来不在同一条基线上。 */}
           <span
-            className="flex h-[var(--control-height)] items-center truncate rounded-control border border-line bg-bg-soft px-2 font-mono text-muted text-[var(--font-meta-size)]"
+            className="flex h-[var(--control-height)] items-center truncate rounded-control border-[0.5px] border-line bg-bg-soft px-2 font-mono text-muted text-[length:var(--font-meta-size)]"
             title={provider.credentialRef ?? '未引用'}
             data-testid="settings-provider-credential-ref"
           >
@@ -240,12 +240,12 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
         testId="settings-provider-enabled"
       />
 
-      <section className="flex flex-col gap-2 rounded-card border border-line bg-bg-soft px-3 py-2">
+      <section className="flex flex-col gap-2 rounded-card border-[0.5px] border-line bg-bg-soft px-3 py-2">
         <header className="flex items-center gap-2">
           <KeyRound size={12} aria-hidden="true" className="text-muted" />
-          <h4 className="text-ink text-[var(--font-meta-size)]">API Key</h4>
+          <h4 className="text-ink text-[length:var(--font-meta-size)]">API Key</h4>
           <span
-            className="rounded-control border border-line px-1.5 text-[var(--font-micro-size)]"
+            className="rounded-control border-[0.5px] border-line px-1.5 text-[length:var(--font-micro-size)]"
             data-testid="settings-provider-secret-status"
             data-stored={String(stored)}
           >
@@ -304,7 +304,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
 
       <section className="flex flex-col gap-2">
         <header className="flex flex-wrap items-center gap-2">
-          <h4 className="text-ink text-[var(--font-meta-size)]">模型（{provider.models.length}）</h4>
+          <h4 className="text-ink text-[length:var(--font-meta-size)]">模型（{provider.models.length}）</h4>
           <button
             type="button"
             data-testid="settings-model-pull"
@@ -329,7 +329,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
           {provider.models.map((model, modelIndex) => (
             <li
               key={`${provider.id}:${modelIndex}`}
-              className="flex flex-col gap-2 rounded-card border border-line bg-surface px-3 py-2"
+              className="flex flex-col gap-2 rounded-card border-[0.5px] border-line bg-surface px-3 py-2"
               data-testid={`settings-model-${modelIndex}`}
             >
               <div className="grid grid-cols-2 gap-2">
@@ -445,11 +445,11 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
         </ul>
       </section>
 
-      <section className="flex flex-col gap-2 rounded-card border border-line bg-bg-soft px-3 py-2">
-        <h4 className="text-ink text-[var(--font-meta-size)]">测速</h4>
+      <section className="flex flex-col gap-2 rounded-card border-[0.5px] border-line bg-bg-soft px-3 py-2">
+        <h4 className="text-ink text-[length:var(--font-meta-size)]">测速</h4>
         <div className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
           <label className="flex flex-col gap-0.5">
-            <span className="text-subtle text-[var(--font-micro-size)]">用于测试的模型</span>
+            <span className="text-subtle text-[length:var(--font-micro-size)]">用于测试的模型</span>
             <select
               value={testModelId ?? ''}
               onChange={(event) => {

@@ -57,8 +57,8 @@ export default function RadarBrowser({client,source,active,projectId,writable,on
     </div>
     {error?<p role="alert" className="p-2 text-[var(--st-warn)]">{error}</p>:null}{status?<p role="status" className="p-2">{status}</p>:null}
     <div ref={area} className="relative min-h-0 flex-1 overflow-auto" aria-label={source==='cool'?'Cool Papers 浏览区':'魔搭论文浏览区'}>
-      {papers!==null?<div className="p-3">{papers.length===0?<p>当前页没有可识别的论文链接，请打开论文详情后重试。</p>:papers.map(paper=><article className="border-b border-line py-3" key={paper.url}>
-        <h3 className="font-medium">{paper.title}</h3><p className="break-all text-muted">{paper.url}</p><button className="mt-2 rounded-control border border-line px-3 py-1" type="button" disabled={busy||!writable} onClick={()=>void importPaper(paper)}>加入文献库</button>
+      {papers!==null?<div className="p-3">{papers.length===0?<p>当前页没有可识别的论文链接，请打开论文详情后重试。</p>:papers.map(paper=><article className="border-b-[0.5px] border-line py-3" key={paper.url}>
+        <h3 className="font-medium">{paper.title}</h3><p className="break-all text-muted">{paper.url}</p><button className="mt-2 rounded-control border-[0.5px] border-line px-3 py-1" type="button" disabled={busy||!writable} onClick={()=>void importPaper(paper)}>加入文献库</button>
       </article>)}</div>:<p className="p-4 text-muted">正在加载 {source==='cool'?'Cool Papers':'魔搭论文'}…</p>}
     </div>
   </div>;

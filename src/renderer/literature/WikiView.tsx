@@ -147,11 +147,11 @@ export function WikiView({
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="wiki-view">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-2 text-[var(--font-micro-size)]">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b-[0.5px] border-line px-3 py-2 text-[length:var(--font-micro-size)]">
         <span className="text-muted" data-testid="wiki-counts">
-          {projection.pages.length} 个概念 · {projection.backlinks.length} 条共现 · {projection.timeline.length} 个年份
+          {projection.pages.length} 个概念，{projection.backlinks.length} 条共现，{projection.timeline.length} 个年份
         </span>
-        <div className="ml-auto flex h-[var(--control-height-compact)] min-w-[150px] items-center gap-1.5 rounded-control border border-line bg-surface px-2 sm:max-w-[240px]">
+        <div className="ml-auto flex h-[var(--control-height-compact)] min-w-[150px] items-center gap-1.5 rounded-control border-[0.5px] border-line bg-surface px-2 sm:max-w-[240px]">
           <Search size={11} aria-hidden="true" className="shrink-0 text-subtle" />
           <input
             value={query}
@@ -159,7 +159,7 @@ export function WikiView({
             placeholder="搜索概念、证据、文献…"
             aria-label="搜索概念页"
             data-testid="wiki-search"
-            className="min-w-0 flex-1 bg-transparent text-ink text-[var(--font-micro-size)] placeholder:text-subtle"
+            className="min-w-0 flex-1 bg-transparent text-ink text-[length:var(--font-micro-size)] placeholder:text-subtle"
           />
           {query.length === 0 ? null : (
             <button
@@ -177,12 +177,12 @@ export function WikiView({
 
       <div className="flex min-h-0 flex-1">
         <aside
-          className="flex w-56 shrink-0 flex-col gap-3 overflow-y-auto border-r border-line p-2 md:w-64"
+          className="flex w-56 shrink-0 flex-col gap-3 overflow-y-auto border-r-[0.5px] border-line p-2 md:w-64"
           aria-label="概念列表"
         >
           <ul className="flex flex-col gap-0.5" data-testid="wiki-concept-list">
             {visiblePages.length === 0 ? (
-              <li className="px-2 py-3 text-muted text-[var(--font-meta-size)]" data-testid="wiki-no-match">
+              <li className="px-2 py-3 text-muted text-[length:var(--font-meta-size)]" data-testid="wiki-no-match">
                 没有匹配的概念。
               </li>
             ) : null}
@@ -201,8 +201,8 @@ export function WikiView({
                         : 'border-transparent hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]'
                     }`}
                   >
-                    <span className="w-full truncate text-ink text-[var(--font-meta-size)]">{page.title}</span>
-                    <span className="flex items-center gap-1.5 text-[var(--font-micro-size)]">
+                    <span className="w-full truncate text-ink text-[length:var(--font-meta-size)]">{page.title}</span>
+                    <span className="flex items-center gap-1.5 text-[length:var(--font-micro-size)]">
                       <span className={STATUS_CLASS[page.status]}>{STATUS_LABELS[page.status]}</span>
                       <span className="text-subtle">{page.evidence.length} 条证据</span>
                     </span>
@@ -214,13 +214,13 @@ export function WikiView({
 
           {projection.backlinks.length === 0 ? null : (
             <section>
-              <h3 className="mb-1 flex items-center gap-1.5 text-muted text-[var(--font-micro-size)]">
+              <h3 className="mb-1 flex items-center gap-1.5 text-muted text-[length:var(--font-micro-size)]">
                 <Link2 size={11} aria-hidden="true" />
                 共现（共享证据的主张）
               </h3>
               <ul className="flex flex-col gap-1" data-testid="wiki-backlinks">
                 {projection.backlinks.map((link) => (
-                  <li key={`${link.fromClaimId}:${link.toClaimId}`} className="text-[var(--font-micro-size)]">
+                  <li key={`${link.fromClaimId}:${link.toClaimId}`} className="text-[length:var(--font-micro-size)]">
                     <button
                       type="button"
                       onClick={() => selectConcept(link.fromClaimId)}
@@ -245,7 +245,7 @@ export function WikiView({
 
           {projection.timeline.length === 0 ? null : (
             <section>
-              <h3 className="mb-1 flex items-center gap-1.5 text-muted text-[var(--font-micro-size)]">
+              <h3 className="mb-1 flex items-center gap-1.5 text-muted text-[length:var(--font-micro-size)]">
                 <CalendarClock size={11} aria-hidden="true" />
                 演进时间线
               </h3>
@@ -262,7 +262,7 @@ export function WikiView({
                       }}
                       data-testid={`wiki-timeline-${entry.year}`}
                       title="跳到这一年的第一条主张"
-                      className="rounded-control border border-line px-2 py-1 text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
+                      className="rounded-control border-[0.5px] border-line px-2 py-1 text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
                     >
                       <span className="font-mono text-ink">{entry.year}</span>{' '}
                       <span className="text-muted">{entry.claimIds.length} 条主张</span>
@@ -275,12 +275,12 @@ export function WikiView({
 
           {projection.orphanEvidence.length === 0 ? null : (
             <section>
-              <h3 className="mb-1 text-muted text-[var(--font-micro-size)]">
+              <h3 className="mb-1 text-muted text-[length:var(--font-micro-size)]">
                 未归类证据（{projection.orphanEvidence.length}）
               </h3>
               <ul className="flex flex-col gap-1" data-testid="wiki-orphan-evidence">
                 {projection.orphanEvidence.map((card) => (
-                  <li key={card.id} className="truncate text-[var(--font-micro-size)]">
+                  <li key={card.id} className="truncate text-[length:var(--font-micro-size)]">
                     <span className="text-ink">{card.title}</span>
                     <span className="ml-1.5 font-mono text-subtle">{card.locator}</span>
                   </li>
@@ -300,14 +300,14 @@ export function WikiView({
           ) : (
             <article
               key={selected.claimId}
-              className="rounded-card border border-line bg-surface px-3 py-2.5"
+              className="rounded-card border-[0.5px] border-line bg-surface px-3 py-2.5"
               data-testid={`wiki-page-${selected.claimId}`}
             >
               <header className="flex items-start gap-2">
                 <h4 className="min-w-0 flex-1 text-ink" data-testid={`wiki-page-title-${selected.claimId}`}>
                   {selected.title}
                 </h4>
-                <span className={`shrink-0 text-[var(--font-micro-size)] ${STATUS_CLASS[selected.status]}`}>
+                <span className={`shrink-0 text-[length:var(--font-micro-size)] ${STATUS_CLASS[selected.status]}`}>
                   {STATUS_LABELS[selected.status]}
                 </span>
                 <button
@@ -315,7 +315,7 @@ export function WikiView({
                   onClick={() => copy.copy(pageAsMarkdown(selected))}
                   title="复制这一页为 Markdown"
                   data-testid="wiki-copy-markdown"
-                  className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
+                  className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
                 >
                   {copy.copied ? <Check size={11} aria-hidden="true" /> : <ClipboardCopy size={11} aria-hidden="true" />}
                   {copy.copied ? '已复制' : '复制'}
@@ -323,24 +323,24 @@ export function WikiView({
               </header>
 
               <p
-                className="mt-1.5 whitespace-pre-wrap text-ink text-[var(--font-read-size)] leading-[1.7]"
+                className="mt-1.5 whitespace-pre-wrap text-ink text-[length:var(--font-read-size)] leading-[1.7]"
                 data-testid={`wiki-page-content-${selected.claimId}`}
               >
                 {selected.content}
               </p>
 
               {selected.evidence.length === 0 ? (
-                <p className="mt-2 text-subtle text-[var(--font-micro-size)]" data-testid={`wiki-page-no-evidence-${selected.claimId}`}>
+                <p className="mt-2 text-subtle text-[length:var(--font-micro-size)]" data-testid={`wiki-page-no-evidence-${selected.claimId}`}>
                   这条主张还没有引用任何证据。
                 </p>
               ) : (
                 <ul className="mt-2 flex flex-col gap-1.5" data-testid={`wiki-page-evidence-${selected.claimId}`}>
                   {selected.evidence.map((card) => (
-                    <li key={card.id} className="rounded-card border border-line-soft bg-bg-soft px-2.5 py-1.5">
-                      <p className="text-ink text-[var(--font-meta-size)]">{card.title}</p>
-                      <p className="line-clamp-3 text-muted text-[var(--font-micro-size)]">{card.excerpt}</p>
-                      <p className="font-mono text-subtle text-[var(--font-micro-size)]">
-                        {card.sourceType} · {card.locator}
+                    <li key={card.id} className="rounded-card border-[0.5px] border-line-soft bg-bg-soft px-2.5 py-1.5">
+                      <p className="text-ink text-[length:var(--font-meta-size)]">{card.title}</p>
+                      <p className="line-clamp-3 text-muted text-[length:var(--font-micro-size)]">{card.excerpt}</p>
+                      <p className="font-mono text-subtle text-[length:var(--font-micro-size)]">
+                        {card.sourceType}，{card.locator}
                       </p>
                     </li>
                   ))}
@@ -348,21 +348,21 @@ export function WikiView({
               )}
 
               {selected.hasMissingEvidence ? (
-                <p className="mt-1.5 text-[var(--st-warn)] text-[var(--font-micro-size)]" data-testid={`wiki-page-missing-${selected.claimId}`}>
+                <p className="mt-1.5 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" data-testid={`wiki-page-missing-${selected.claimId}`}>
                   这条主张引用了当前未加载的证据。
                 </p>
               ) : null}
 
-              <footer className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-line-soft pt-2">
+              <footer className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t-[0.5px] border-line-soft pt-2">
                 {selected.papers.map((paper) =>
                   onOpenPaper === undefined ? (
                     <span
                       key={paper.libraryItemId}
-                      className="rounded-control border border-line px-1.5 text-muted text-[var(--font-micro-size)]"
+                      className="rounded-control border-[0.5px] border-line px-1.5 text-muted text-[length:var(--font-micro-size)]"
                       data-testid={`wiki-page-paper-${paper.libraryItemId}`}
                     >
                       {paper.title}
-                      {paper.year === null ? '' : ` · ${paper.year}`}
+                      {paper.year === null ? '' : `，${paper.year}`}
                     </span>
                   ) : (
                     <button
@@ -371,10 +371,10 @@ export function WikiView({
                       onClick={() => onOpenPaper(paper.libraryItemId)}
                       title="在阅读器里打开这条文献"
                       data-testid={`wiki-page-paper-${paper.libraryItemId}`}
-                      className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+                      className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
                     >
                       {paper.title}
-                      {paper.year === null ? '' : ` · ${paper.year}`}
+                      {paper.year === null ? '' : `，${paper.year}`}
                     </button>
                   )
                 )}
@@ -384,7 +384,7 @@ export function WikiView({
                       type="button"
                       onClick={() => onAskAssistant(`请在对话中分析知识库概念：${selected.title}`)}
                       data-testid="wiki-ask-assistant"
-                      className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+                      className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
                     >
                       <Bot size={11} aria-hidden="true" className="text-[var(--icon-agent)]" />
                       问助手
@@ -394,7 +394,7 @@ export function WikiView({
                     type="button"
                     onClick={() => onOpenClaim(selected.claimId)}
                     data-testid={`wiki-page-graph-${selected.claimId}`}
-                    className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border border-line px-2 text-ink text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+                    className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
                   >
                     <Link2 size={10} aria-hidden="true" />
                     在图谱里看关系
@@ -402,7 +402,7 @@ export function WikiView({
                 </span>
               </footer>
 
-              <p className="mt-1.5 text-subtle text-[var(--font-micro-size)]">
+              <p className="mt-1.5 text-subtle text-[length:var(--font-micro-size)]">
                 来源：当前文献、主张与关联证据
               </p>
             </article>

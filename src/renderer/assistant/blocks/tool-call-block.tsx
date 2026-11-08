@@ -69,12 +69,12 @@ export function ToolDataSection({
 
   return (
     <div className="mb-1.5 last:mb-0" data-testid={`assistant-tool-data-${label}`}>
-      <div className="mb-1 text-subtle text-[var(--font-meta-size)]">{label}</div>
+      <div className="mb-1 text-subtle text-[length:var(--font-meta-size)]">{label}</div>
       <pre
         className={
           variant === 'error'
-            ? 'max-h-[320px] overflow-auto whitespace-pre-wrap rounded-control border border-line bg-[var(--tool-st-error-bg)] p-2 font-mono text-[var(--tool-st-error-text)] text-[var(--font-code-size)]'
-            : 'max-h-[320px] overflow-auto whitespace-pre-wrap rounded-control border border-line bg-code-surface p-2 font-mono text-[var(--code-text)] text-[var(--font-code-size)]'
+            ? 'max-h-[320px] overflow-auto whitespace-pre-wrap rounded-control border-[0.5px] border-line bg-[var(--tool-st-error-bg)] p-2 font-mono text-[var(--tool-st-error-text)] text-[length:var(--font-code-size)]'
+            : 'max-h-[320px] overflow-auto whitespace-pre-wrap rounded-control border-[0.5px] border-line bg-code-surface p-2 font-mono text-[var(--code-text)] text-[length:var(--font-code-size)]'
         }
       >
         {text}

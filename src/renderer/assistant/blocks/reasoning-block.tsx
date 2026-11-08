@@ -52,7 +52,7 @@ export function ReasoningTimeline({ content }: { content: string }): React.JSX.E
     .filter((paragraph) => paragraph.length > 0);
 
   return (
-    <div className="flex flex-col gap-1.5 text-muted text-[var(--font-meta-size)]">
+    <div className="flex flex-col gap-1.5 text-muted text-[length:var(--font-meta-size)]">
       {paragraphs.map((paragraph, index) => (
         <p key={`${index}-${paragraph.slice(0, 16)}`} className="whitespace-pre-wrap">
           {paragraph}

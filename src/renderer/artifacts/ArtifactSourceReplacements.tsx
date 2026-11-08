@@ -143,7 +143,7 @@ function SelectedSource({label, source, digest}: {
       {source.sourceLocator === null ? null : <p className="break-all text-muted">
         文档 {source.sourceLocator.documentId}，解析 {source.sourceLocator.parseId}，原文 SHA-256 {source.sourceLocator.sourceHash}
       </p>}
-      <p className="break-all font-mono text-[var(--font-meta-size)] text-muted">来源摘要 SHA-256 {digest}</p>
+      <p className="break-all font-mono text-[length:var(--font-meta-size)] text-muted">来源摘要 SHA-256 {digest}</p>
     </div>
   </details>;
 }
@@ -158,7 +158,7 @@ function RunFacts({previous, current}: {previous: ResearchExperimentExecution; c
           <p className="break-all">{label} {execution.id}，状态 {execution.status}</p>
           <p className="break-all text-muted">输入 SHA-256 {execution.inputHash}</p>
           <p className="break-all text-muted">环境 SHA-256 {execution.environment?.hash}</p>
-          <pre className="whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify({
+          <pre className="whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify({
             request: execution.request, environment: execution.environment, files: execution.files
           }, null, 2)}</pre>
         </div>;
@@ -186,8 +186,8 @@ function ReplacementHistory({inspection, evidenceId}: {
         <RunFacts previous={replacement.experimentLineage.previous} current={replacement.experimentLineage.current}/>}
       <details>
         <summary className="cursor-pointer">固定替代记录与哈希</summary>
-        <p className="mt-1 break-all font-mono text-[var(--font-meta-size)]">{inspection.replacementHash}</p>
-        <pre className="whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(replacement, null, 2)}</pre>
+        <p className="mt-1 break-all font-mono text-[length:var(--font-meta-size)]">{inspection.replacementHash}</p>
+        <pre className="whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(replacement, null, 2)}</pre>
       </details>
     </div>
   </details>;

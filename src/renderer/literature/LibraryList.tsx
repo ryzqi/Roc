@@ -73,7 +73,7 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
     <div className="flex h-full min-h-0 flex-col" data-testid="literature-list">
       <div className={compact ? 'flex shrink-0 flex-col gap-1 px-2 py-1.5' : 'flex shrink-0 flex-col gap-2 px-3 py-2'}>
         <div className="flex items-center gap-1.5">
-          <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-control border border-line bg-surface px-2">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-control border-[0.5px] border-line bg-surface px-2">
             <Search size={11} aria-hidden="true" className="shrink-0 text-subtle" />
             <input
               type="search"
@@ -85,7 +85,7 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
               placeholder="搜索文献"
               aria-label="搜索文献"
               data-testid="literature-search"
-              className="h-[var(--control-height-compact)] min-w-0 flex-1 bg-transparent text-ink text-[var(--font-meta-size)] placeholder:text-subtle"
+              className="h-[var(--control-height-compact)] min-w-0 flex-1 bg-transparent text-ink text-[length:var(--font-meta-size)] placeholder:text-subtle"
             />
           </div>
           <button
@@ -94,7 +94,7 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
             aria-label="重新读取文献库"
             title="重新读取文献库"
             data-testid="literature-refresh"
-            className="flex h-[var(--control-height-compact)] w-[var(--control-height-compact)] shrink-0 items-center justify-center rounded-control border border-line text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
+            className="flex h-[var(--control-height-compact)] w-[var(--control-height-compact)] shrink-0 items-center justify-center rounded-control border-[0.5px] border-line text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
           >
             {literature.status === 'loading' ? (
               <Loader2 size={12} aria-hidden="true" className="animate-spin" />
@@ -108,13 +108,13 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
             aria-label="导入文献"
             title="导入文献（DOI / 参考文献文件 / 手工录入 / 文档）"
             data-testid="literature-import-open"
-            className="flex h-[var(--control-height-compact)] w-[var(--control-height-compact)] shrink-0 items-center justify-center rounded-control border border-line text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
+            className="flex h-[var(--control-height-compact)] w-[var(--control-height-compact)] shrink-0 items-center justify-center rounded-control border-[0.5px] border-line text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
           >
             <FilePlus2 size={12} aria-hidden="true" />
           </button>
         </div>
         <div className="flex items-center justify-between gap-2">
-          <label className="flex items-center gap-1.5 text-muted text-[var(--font-micro-size)]">
+          <label className="flex items-center gap-1.5 text-muted text-[length:var(--font-micro-size)]">
             <input
               type="checkbox"
               checked={literature.includeArchived}
@@ -124,7 +124,7 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
             />
             显示已归档
           </label>
-          <span className="text-subtle text-[var(--font-micro-size)]" data-testid="literature-count">
+          <span className="text-subtle text-[length:var(--font-micro-size)]" data-testid="literature-count">
             {literature.status === 'ready' ? `${literature.items.length} 条` : ''}
           </span>
         </div>
@@ -170,35 +170,36 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
                   }}
                   aria-current={selected ? 'true' : undefined}
                   data-testid={`literature-row-${item.id}`}
-                  className={`flex w-full flex-col gap-0.5 rounded-control pr-7 text-left ${rowPad} ${
+                  className={`flex w-full flex-col gap-1.5 rounded-control pr-7 text-left ${rowPad} ${
                     selected
                       ? 'bg-accent-soft active:bg-[var(--accent-soft-strong)]'
                       : 'hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]'
                   }`}
                 >
-                  <span className="line-clamp-2 text-ink text-[var(--font-meta-size)]">{libraryItemTitle(item)}</span>
-                  <span className="truncate text-muted text-[var(--font-micro-size)]">
-                    {formatAuthorList(item.metadata.authors)} · {formatYear(item.metadata.publishedYear)}
-                    {venue === null ? '' : ` · ${venue}`}
+                  <span className="line-clamp-2 font-medium text-ink text-[length:var(--font-body-size)]">{libraryItemTitle(item)}</span>
+                  <span className="flex w-full min-w-0 items-baseline gap-2 text-muted text-[length:var(--font-meta-size)]">
+                    <span className="min-w-0 truncate">{formatAuthorList(item.metadata.authors)}</span>
+                    <span className="shrink-0 tabular-nums">{formatYear(item.metadata.publishedYear)}</span>
+                    {venue === null ? null : <span className="min-w-0 truncate" title={venue}>{venue}</span>}
                   </span>
                   <span className="flex flex-wrap items-center gap-1">
-                    <span className="rounded-control border border-line px-1 text-subtle text-[var(--font-micro-size)]">
+                    <span className="rounded-control border-[0.5px] border-line px-1 text-subtle text-[length:var(--font-micro-size)]">
                       {SOURCE_LABELS[item.metadata.source]}
                     </span>
-                    <span className="font-mono text-subtle text-[var(--font-micro-size)]" data-testid={`literature-citekey-${item.id}`}>
+                    <span className="font-mono text-subtle text-[length:var(--font-micro-size)]" data-testid={`literature-citekey-${item.id}`}>
                       {copyKey}
                     </span>
-                    <span className="text-subtle text-[var(--font-micro-size)]">
+                    <span className="text-subtle text-[length:var(--font-micro-size)]">
                       {formatCitationCount(item.metadata.citationCount)}
                     </span>
                     {linked ? (
-                      <span className="flex items-center gap-0.5 text-[var(--st-ok)] text-[var(--font-micro-size)]">
+                      <span className="flex items-center gap-0.5 text-[var(--st-ok)] text-[length:var(--font-micro-size)]">
                         <Link2 size={9} aria-hidden="true" />
                         本项目
                       </span>
                     ) : null}
                     {item.archived ? (
-                      <span className="flex items-center gap-0.5 text-[var(--st-warn)] text-[var(--font-micro-size)]">
+                      <span className="flex items-center gap-0.5 text-[var(--st-warn)] text-[length:var(--font-micro-size)]">
                         <Archive size={9} aria-hidden="true" />
                         已归档
                       </span>
@@ -225,7 +226,7 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
 
       {literature.status === 'ready' && literature.items.length >= 200 ? (
         <p
-          className="shrink-0 px-2 pb-2 text-subtle text-[var(--font-micro-size)]"
+          className="shrink-0 px-2 pb-2 text-subtle text-[length:var(--font-micro-size)]"
           data-testid="literature-truncated"
           role="note"
         >
@@ -235,7 +236,7 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
 
       {literature.action.error === null ? null : (
         <div className="shrink-0 px-2 pb-2">
-          <p role="alert" className="flex items-start gap-1 text-[var(--st-bad)] text-[var(--font-micro-size)]">
+          <p role="alert" className="flex items-start gap-1 text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
             <AlertCircle size={11} aria-hidden="true" className="mt-0.5 shrink-0" />
             <span className="min-w-0 flex-1">{literature.action.error}</span>
           </p>

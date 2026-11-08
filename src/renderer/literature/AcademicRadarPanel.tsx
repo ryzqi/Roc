@@ -34,7 +34,7 @@ export default function AcademicRadarPanel({client,projectId,writable,active,onI
   };
   const recommend=async(force:boolean):Promise<void>=>{
     setDaily(null);const result=await client.api.research.recommendRadar({projectId,categories:categories.split(/[,，\s]+/u).filter(Boolean),force});
-    if(!result.ok)throw new Error(result.error.message);setDaily(result.data.articles);setStatus(`${result.data.date} · 基于 ${result.data.corpusSize} 篇文献${result.data.cached?' · 今日缓存':''}`);articles.reload();
+    if(!result.ok)throw new Error(result.error.message);setDaily(result.data.articles);setStatus(`${result.data.date}，基于 ${result.data.corpusSize} 篇文献${result.data.cached?'，今日缓存':''}`);articles.reload();
   };
   const importSelected=async(ids:string[]):Promise<void>=>{
     const errors:string[]=[];for(const id of ids){const result=await client.api.research.importRadarArticle({projectId,articleId:id});if(!result.ok)errors.push(result.error.message);}
@@ -76,16 +76,16 @@ export default function AcademicRadarPanel({client,projectId,writable,active,onI
       <p role="status" className="px-3 py-1 text-muted">{busy?'正在处理…':status||`${rows.length} 篇文章`}</p>
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="min-w-0 flex-1 overflow-y-auto px-3" data-testid="radar-articles">
-          {rows.length===0&&!busy?<p className="py-8 text-center text-muted">{source==='daily'?'根据项目文献生成今日推荐。需先启用嵌入模型。':'添加订阅并刷新后，文章将保存在这里。'}</p>:rows.map(row=><article key={row.id} className="border-b border-line py-3">
+          {rows.length===0&&!busy?<p className="py-8 text-center text-muted">{source==='daily'?'根据项目文献生成今日推荐。需先启用嵌入模型。':'添加订阅并刷新后，文章将保存在这里。'}</p>:rows.map(row=><article key={row.id} className="border-b-[0.5px] border-line py-3">
             <div className="flex items-start gap-2"><input type="checkbox" aria-label={`选择 ${row.title}`} checked={selected.has(row.id)} onChange={event=>setSelected(current=>{const next=new Set(current);if(event.target.checked)next.add(row.id);else next.delete(row.id);return next;})}/>
               <button type="button" className={`text-left ${row.read?'text-muted':'font-medium text-ink'}`} onClick={()=>{setArticle(row);if(writable)void run(async()=>{const result=await client.api.research.markRadarArticle({projectId,articleId:row.id,read:true});if(!result.ok)throw new Error(result.error.message);articles.reload();});}}>{row.title}</button></div>
-            <p className="mt-1 line-clamp-2 text-muted">{row.summary}</p><div className="mt-2 flex flex-wrap items-center gap-3 text-[var(--font-meta-size)] text-muted"><span>{row.publishedAt?.slice(0,10)??'日期未知'}</span>
+            <p className="mt-1 line-clamp-2 text-muted">{row.summary}</p><div className="mt-2 flex flex-wrap items-center gap-3 text-[length:var(--font-meta-size)] text-muted"><span>{row.publishedAt?.slice(0,10)??'日期未知'}</span>
               {row.score!==null?<span>相关度 {row.score.toFixed(3)}</span>:null}<span>{row.read?'已读':'未读'}</span>
               {row.importedItemId?<span className="inline-flex items-center gap-1"><Check size={12}/>已入库</span>:<button className="text-accent" type="button" disabled={busy||!writable} onClick={()=>void run(()=>importSelected([row.id]))}>加入文献库</button>}
             </div>
           </article>)}
         </div>
-        {article?<aside className="w-[45%] min-w-0 overflow-y-auto border-l border-line p-3"><button type="button" onClick={()=>setArticle(null)}>关闭详情</button><h3 className="my-3 font-semibold">{article.title}</h3><p className="text-muted">{article.authors.join(', ')}</p><p className="my-3 whitespace-pre-wrap">{article.summary}</p><p className="break-all text-muted">{article.url}</p>
+        {article?<aside className="w-[45%] min-w-0 overflow-y-auto border-l-[0.5px] border-line p-3"><button type="button" onClick={()=>setArticle(null)}>关闭详情</button><h3 className="my-3 font-semibold">{article.title}</h3><p className="text-muted">{article.authors.join(', ')}</p><p className="my-3 whitespace-pre-wrap">{article.summary}</p><p className="break-all text-muted">{article.url}</p>
           <div className="reading-toolbar"><button type="button" disabled={busy||!writable} onClick={()=>void run(()=>importSelected([article.id]))}>入库</button><button type="button" disabled={busy||!writable} onClick={()=>void run(async()=>{const result=await client.api.research.markRadarArticle({projectId,articleId:article.id,read:false});if(!result.ok)throw new Error(result.error.message);articles.reload();setArticle(null);})}>标为未读</button></div>
         </aside>:null}
       </div>

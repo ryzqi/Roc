@@ -46,11 +46,11 @@ export function ArtifactRelations({client, snapshot, current, onChanged}: {
         <option value="conflict">已确认反对</option><option value="pending">存在待审核提议</option>
       </select>
     </label>
-    <p className="text-muted text-[var(--font-meta-size)]">按主张原顺序排列。统计当前版本的人工确认与待审核提议；历史关联不计为支持。</p>
+    <p className="text-muted text-[length:var(--font-meta-size)]">按主张原顺序排列。统计当前版本的人工确认与待审核提议；历史关联不计为支持。</p>
     {visible.length === 0 ? <p className="text-muted">没有符合条件的主张。</p> : <>
       <table className="w-full table-fixed text-left" data-testid="artifact-relations-matrix">
         <colgroup><col className="w-[46%]"/><col className="w-[18%]"/><col className="w-[18%]"/><col className="w-[18%]"/></colgroup>
-        <thead className="text-muted text-[var(--font-meta-size)]"><tr>
+        <thead className="text-muted text-[length:var(--font-meta-size)]"><tr>
           <th scope="col" className="py-1 font-medium">主张</th>
           {(['supports', 'contradicts', 'qualifies'] as const).map(kind => <th key={kind} scope="col" className="py-1 font-medium">{kinds[kind]}</th>)}
         </tr></thead>
@@ -120,7 +120,7 @@ function RelationRecord({client, relation, canReview, onChanged}: {
     {relation.invalidatedReason === null ? null : <p className="text-[var(--st-warn)]">{reasons[relation.invalidatedReason]}</p>}
     <details data-reading-key={`relation-source:${relation.id}`} className="text-muted">
       <summary data-reading-key={`relation-source-summary:${relation.id}`} className="cursor-pointer">固定来源与版本</summary>
-      <dl className="mt-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1 text-[var(--font-meta-size)]">
+      <dl className="mt-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1 text-[length:var(--font-meta-size)]">
         <dt>证据</dt><dd className="break-all">{relation.evidenceId}</dd>
         <dt>来源版本</dt><dd className="break-all">{source.evidence.sourceVersion}</dd>
         <dt>主张版本</dt><dd>{relation.claimVersion}</dd>
@@ -129,7 +129,7 @@ function RelationRecord({client, relation, canReview, onChanged}: {
         <dt>主张校验</dt><dd className="break-all font-mono">{relation.claimHash}</dd>
       </dl>
       {source.sourceLocator === null ? <p>没有托管文档坐标，保留原始定位文字。</p> : <pre
-        className="mt-1 whitespace-pre-wrap break-all text-[var(--font-meta-size)]">{JSON.stringify(source.sourceLocator, null, 2)}</pre>}
+        className="mt-1 whitespace-pre-wrap break-all text-[length:var(--font-meta-size)]">{JSON.stringify(source.sourceLocator, null, 2)}</pre>}
       {source.sourceLocator === null ? null : <>
         <button type="button" className={`${button} mt-2`} aria-expanded={showDocument}
           data-testid={`artifact-relation-document-source-toggle-${relation.id}`}

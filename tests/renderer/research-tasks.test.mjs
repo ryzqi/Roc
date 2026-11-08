@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as esbuild from 'esbuild';
 import electronPath from 'electron';
-import { _electron } from '@playwright/test';
+import { _electron, expect } from '@playwright/test';
 
 let directory, app, page;
 const rendererErrors = [];
@@ -544,7 +544,8 @@ test('execution drill is lazy and keyboard accessible, pages calls/events indepe
   await summary.focus(); await page.keyboard.press('Enter');
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="mgmt-task-call"]').length === 50);
   const panel = page.getByTestId('mgmt-task-observations');
-  assert.ok((await panel.innerText()).includes('17 ms / failed'));
+  // Mounted rows can precede the native details content becoming visible.
+  await expect(panel).toContainText('17 ms / failed', {useInnerText: true});
   assert.ok((await panel.innerText()).includes('已结算 未知'));
   await page.getByTestId('mgmt-task-replay-gap').waitFor();
   await panel.getByRole('button', {name: '下一页调用', exact: true}).click();

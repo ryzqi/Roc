@@ -215,7 +215,7 @@ function OrdinaryFilePreview({
           spellCheck={false}
           aria-label={`编辑 ${relativePath}`}
           data-testid="file-preview-editor"
-          className="h-full w-full resize-none bg-code-surface p-3 font-mono text-[var(--font-code-size)] text-[var(--code-text)]"
+          className="h-full w-full resize-none bg-code-surface p-3 font-mono text-[length:var(--font-code-size)] text-[var(--code-text)]"
         />
       );
     }
@@ -223,7 +223,7 @@ function OrdinaryFilePreview({
     return (
       <pre
         data-testid="file-preview-text"
-        className="h-full overflow-auto bg-code-surface p-3 font-mono text-[var(--font-code-size)] text-[var(--code-text)]"
+        className="h-full overflow-auto bg-code-surface p-3 font-mono text-[length:var(--font-code-size)] text-[var(--code-text)]"
       >
         {loaded.content}
       </pre>
@@ -232,24 +232,24 @@ function OrdinaryFilePreview({
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="file-preview" data-kind={kind}>
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-1.5">
-        <span className="min-w-0 flex-1 truncate font-mono text-[var(--font-meta-size)]" title={relativePath} data-testid="file-preview-path">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b-[0.5px] border-line px-3 py-1.5">
+        <span className="min-w-0 flex-1 truncate font-mono text-[length:var(--font-meta-size)]" title={relativePath} data-testid="file-preview-path">
           {relativePath}
         </span>
         {!isPdf && loaded !== null ? (
-          <span className="text-subtle text-[var(--font-micro-size)]">{formatBytes(loaded.sizeBytes)}</span>
+          <span className="text-subtle text-[length:var(--font-micro-size)]">{formatBytes(loaded.sizeBytes)}</span>
         ) : null}
         {loaded?.truncated === true ? (
-          <span className="text-[var(--st-warn)] text-[var(--font-micro-size)]" data-testid="file-preview-truncated">
+          <span className="text-[var(--st-warn)] text-[length:var(--font-micro-size)]" data-testid="file-preview-truncated">
             已截断
           </span>
         ) : null}
         {dirty ? (
-          <span className="text-[var(--st-warn)] text-[var(--font-micro-size)]" data-testid="file-preview-dirty">
+          <span className="text-[var(--st-warn)] text-[length:var(--font-micro-size)]" data-testid="file-preview-dirty">
             未保存
           </span>
         ) : savedAt === null ? null : (
-          <span className="text-[var(--st-ok)] text-[var(--font-micro-size)]" data-testid="file-preview-saved">
+          <span className="text-[var(--st-ok)] text-[length:var(--font-micro-size)]" data-testid="file-preview-saved">
             已保存
           </span>
         )}
@@ -270,10 +270,10 @@ function OrdinaryFilePreview({
           onClick={() => copy.copy(loaded?.content ?? '')}
           disabled={loaded === null}
           data-testid="file-preview-copy"
-          className="flex h-6 items-center gap-1 rounded-control border border-line px-1.5 text-muted hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
+          className="flex h-6 items-center gap-1 rounded-control border-[0.5px] border-line px-1.5 text-muted hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
         >
           <Copy size={11} aria-hidden="true" />
-          <span className="text-[var(--font-micro-size)]">{copy.copied ? '已复制' : '复制'}</span>
+          <span className="text-[length:var(--font-micro-size)]">{copy.copied ? '已复制' : '复制'}</span>
         </button>
 
         {!editable ? null : draft === null ? (
@@ -281,9 +281,9 @@ function OrdinaryFilePreview({
             type="button"
             onClick={() => setDraft(loaded?.content ?? '')}
             data-testid="file-preview-edit"
-            className="h-6 rounded-control border border-line px-2 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+            className="h-6 rounded-control border-[0.5px] border-line px-2 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
           >
-            <span className="text-[var(--font-micro-size)]">编辑</span>
+            <span className="text-[length:var(--font-micro-size)]">编辑</span>
           </button>
         ) : (
           <>
@@ -293,7 +293,7 @@ function OrdinaryFilePreview({
               data-testid="file-preview-discard"
               className="h-6 rounded-control px-2 text-muted hover:text-ink active:bg-[var(--overlay-active)]"
             >
-              <span className="text-[var(--font-micro-size)]">放弃</span>
+              <span className="text-[length:var(--font-micro-size)]">放弃</span>
             </button>
             <button
               type="button"
@@ -303,14 +303,14 @@ function OrdinaryFilePreview({
               className="flex h-6 items-center gap-1 rounded-control bg-[var(--fill-strong)] px-2 text-[var(--fill-strong-text)] active:bg-[var(--accent-deep)] disabled:opacity-40"
             >
               <Save size={11} aria-hidden="true" />
-              <span className="text-[var(--font-micro-size)]">{saving ? '保存中…' : '保存'}</span>
+              <span className="text-[length:var(--font-micro-size)]">{saving ? '保存中…' : '保存'}</span>
             </button>
           </>
         )}
       </div>
 
       {!writable ? (
-        <p role="note" className="shrink-0 border-b border-line bg-bg-soft px-3 py-1 text-[var(--st-warn)] text-[var(--font-micro-size)]" data-testid="file-preview-readonly">
+        <p role="note" className="shrink-0 border-b-[0.5px] border-line bg-bg-soft px-3 py-1 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" data-testid="file-preview-readonly">
           项目已归档，仅可阅读。
         </p>
       ) : null}
@@ -322,7 +322,7 @@ function OrdinaryFilePreview({
       )}
 
       {copy.error === null ? null : (
-        <p role="alert" className="shrink-0 px-3 py-1 text-[var(--st-bad)] text-[var(--font-micro-size)]">
+        <p role="alert" className="shrink-0 px-3 py-1 text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
           {copy.error}
         </p>
       )}

@@ -36,7 +36,7 @@ export function ConsistencyEditor({client, snapshot, report, writable, onDirty, 
         <p className="break-all text-muted">主张 {binding.claimId}，结果 {binding.resultId}，证据 {binding.evidenceId}</p>
         <details className="text-muted">
           <summary className="cursor-pointer">映射规则与版本</summary>
-          <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(binding, null, 2)}</pre>
+          <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(binding, null, 2)}</pre>
         </details>
         <button type="button" className={formSecondaryButtonClass} disabled={!writable || save.pending}
           data-testid="artifact-consistency-remove" onClick={() => {setBindings(previous => previous.filter((_, position) => position !== index)); change();}}>

@@ -32,12 +32,12 @@ export function MarkdownImage({ alt, height, src, width }: ComponentPropsWithout
 
   return (
     <span
-      className="my-2 block overflow-hidden rounded-card border border-line bg-bg-soft"
+      className="my-2 block overflow-hidden rounded-card border-[0.5px] border-line bg-bg-soft"
       style={aspectRatio === undefined ? undefined : { aspectRatio }}
       data-testid="assistant-markdown-image"
     >
       {failed ? (
-        <span className="block px-3 py-2 text-muted text-[var(--font-meta-size)]">{label}</span>
+        <span className="block px-3 py-2 text-muted text-[length:var(--font-meta-size)]">{label}</span>
       ) : (
         <img
           alt={alt ?? ''}

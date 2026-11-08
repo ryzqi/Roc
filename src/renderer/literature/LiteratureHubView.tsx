@@ -36,7 +36,7 @@ const SUB_VIEWS: Array<{ id: SubViewId; label: string; icon: typeof BookOpen; ic
 ];
 
 const SUB_TAB_BASE =
-  'flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-chip px-3 text-[var(--font-meta-size)] transition-colors duration-[var(--duration-fast)]';
+  'flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-chip px-3 text-[length:var(--font-meta-size)] transition-colors duration-[var(--duration-fast)]';
 
 export function LiteratureHubView(): React.JSX.Element {
   const store = useLiterature();
@@ -108,7 +108,7 @@ export function LiteratureHubView(): React.JSX.Element {
 
   return (
     <div ref={hubRef} className="literature-hub-container flex h-full min-h-0 flex-col" data-testid="literature-hub" data-sub-view={subView}>
-      <div className="no-scrollbar flex h-11 shrink-0 items-center justify-between gap-2 overflow-x-auto border-b border-line px-3">
+      <div className="no-scrollbar flex h-11 shrink-0 items-center justify-between gap-2 overflow-x-auto border-b-[0.5px] border-line px-3">
         <button type="button" onClick={() => setNavigationOverride(!navigationOpen)}
           aria-label={navigationOpen ? '收起文献列表' : '展开文献列表'} aria-expanded={navigationOpen}
           aria-controls="literature-navigation" data-testid="literature-toggle-navigation"
@@ -129,7 +129,7 @@ export function LiteratureHubView(): React.JSX.Element {
             selectSubView(id);
             event.currentTarget.querySelector<HTMLButtonElement>(`[data-testid="literature-subview-${id}"]`)?.focus();
           }}
-          className="flex shrink-0 items-center gap-1 rounded-control border border-line bg-surface p-0.5"
+          className="flex shrink-0 items-center gap-1 rounded-control border-[0.5px] border-line bg-surface p-0.5"
         >
           {SUB_VIEWS.map((entry) => {
             const selected = entry.id === subView;
@@ -161,20 +161,20 @@ export function LiteratureHubView(): React.JSX.Element {
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           <button type="button" data-testid="literature-review-inspect" disabled={scope.projectId === null}
-            className="h-7 rounded-control px-2 text-muted text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-50"
+            className="h-7 rounded-control px-2 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-50"
             onClick={() => {
               if (scope.projectId === null) throw new Error('research_review_project_required');
               scope.openReviewInspector({mode: 'manage', projectId: scope.projectId, versionId: null});
             }}>综述核查</button>
           {subView === 'reader' && returnToSearch ? (
             <button type="button" data-testid="literature-return-search" onClick={() => { selectSubView('rag'); setReturnToSearch(false); }}
-              className="h-7 rounded-control px-2 text-muted text-[var(--font-meta-size)] hover:bg-[var(--overlay-hover)]">返回检索结果</button>
+              className="h-7 rounded-control px-2 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)]">返回检索结果</button>
           ) : null}
           <button
             type="button"
             onClick={() => openImport('document')}
             data-testid="literature-hub-import"
-            className="flex h-7 items-center gap-1.5 rounded-control bg-accent px-3 font-medium text-on-accent text-[var(--font-meta-size)] shadow-[var(--shadow-card)] transition-colors duration-[var(--duration-fast)] hover:bg-accent-deep active:opacity-90"
+            className="flex h-7 items-center gap-1.5 rounded-control bg-accent px-3 font-medium text-on-accent text-[length:var(--font-meta-size)] shadow-[var(--shadow-card)] transition-colors duration-[var(--duration-fast)] hover:bg-accent-deep active:opacity-90"
           >
             <Plus size={13} aria-hidden="true" />
             导入
@@ -189,8 +189,8 @@ export function LiteratureHubView(): React.JSX.Element {
         </aside>
 
         <div id="literature-active-panel" role="tabpanel" aria-labelledby={`literature-tab-${subView}`} tabIndex={0} className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid={`literature-panel-${subView}`}>
-          <label style={navigationOpen || subView === 'monitors' ? { display: 'none' } : undefined} className="literature-paper-picker hidden shrink-0 items-center gap-2 border-b border-line px-3 py-2">
-            <span className="shrink-0 text-muted text-[var(--font-meta-size)]">当前文献</span>
+          <label style={navigationOpen || subView === 'monitors' ? { display: 'none' } : undefined} className="literature-paper-picker hidden shrink-0 items-center gap-2 border-b-[0.5px] border-line px-3 py-2">
+            <span className="shrink-0 text-muted text-[length:var(--font-meta-size)]">当前文献</span>
             <select
               aria-label="选择当前文献"
               value={store.selectedId ?? ""}
@@ -203,7 +203,7 @@ export function LiteratureHubView(): React.JSX.Element {
                   selectSubView('reader');
                 }
               }}
-              className="h-8 min-w-0 flex-1 rounded-control border border-line bg-surface px-2 text-ink text-[var(--font-meta-size)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:opacity-50"
+              className="h-8 min-w-0 flex-1 rounded-control border-[0.5px] border-line bg-surface px-2 text-ink text-[length:var(--font-meta-size)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:opacity-50"
             >
               <option value="">选择一篇文献</option>
               {store.items.map((item) => (
@@ -318,14 +318,14 @@ export function LiteratureHubView(): React.JSX.Element {
         <p
           role="alert"
           data-testid="literature-action-error"
-          className="flex shrink-0 items-center gap-1.5 border-t border-line px-3 py-1.5 text-[var(--st-bad)] text-[var(--font-meta-size)]"
+          className="flex shrink-0 items-center gap-1.5 border-t-[0.5px] border-line px-3 py-1.5 text-[var(--st-bad)] text-[length:var(--font-meta-size)]"
         >
           <AlertCircle size={11} aria-hidden="true" />
           <span className="min-w-0 flex-1 truncate">{store.action.error}</span>
           <button
             type="button"
             onClick={store.clearActionError}
-            className="rounded-control border border-line px-1.5 text-muted hover:text-ink"
+            className="rounded-control border-[0.5px] border-line px-1.5 text-muted hover:text-ink"
           >
             知道了
           </button>
@@ -352,7 +352,7 @@ export function LiteratureHubView(): React.JSX.Element {
         addDocumentToItem={store.addPdfToItem}
       />
       {actions.pickError === null ? null : (
-        <p role="alert" className="px-3 pb-1 text-[var(--st-bad)] text-[var(--font-meta-size)]">
+        <p role="alert" className="px-3 pb-1 text-[var(--st-bad)] text-[length:var(--font-meta-size)]">
           选择文件失败：{actions.pickError}
         </p>
       )}

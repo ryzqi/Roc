@@ -36,7 +36,7 @@ export function ExperimentMetricEvidence({client,receipt,writable}:{
       <p role="status">指标证据已保存。</p>
       <p className="break-all select-text">{evidence.id}</p>
       <p className="break-all text-muted">{evidence.locator}</p>
-      <p className="break-all font-mono text-[var(--font-meta-size)] text-muted">来源版本 {evidence.sourceVersion}</p>
+      <p className="break-all font-mono text-[length:var(--font-meta-size)] text-muted">来源版本 {evidence.sourceVersion}</p>
     </div>}
   </form>;
 }

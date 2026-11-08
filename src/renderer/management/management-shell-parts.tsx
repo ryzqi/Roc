@@ -73,6 +73,7 @@ export function ManagementTabStrip({
       const target = event.key === 'Home' ? MANAGEMENT_TABS[0] : MANAGEMENT_TABS[MANAGEMENT_TABS.length - 1];
       if (target !== undefined) {
         onTabChange(target.id);
+        event.currentTarget.querySelector<HTMLButtonElement>(`[id="${idPrefix}-tab-${target.id}"]`)?.focus();
       }
       return;
     }
@@ -84,6 +85,7 @@ export function ManagementTabStrip({
     const next = MANAGEMENT_TABS[(index + delta + MANAGEMENT_TABS.length) % MANAGEMENT_TABS.length];
     if (next !== undefined) {
       onTabChange(next.id);
+      event.currentTarget.querySelector<HTMLButtonElement>(`[id="${idPrefix}-tab-${next.id}"]`)?.focus();
     }
   };
 
@@ -93,7 +95,7 @@ export function ManagementTabStrip({
       aria-label="管理分组"
       onKeyDown={onKeyDown}
       data-testid="mgmt-tabs"
-      className="flex shrink-0 items-center gap-1 rounded-card border border-line bg-bg p-0.5"
+      className="flex shrink-0 items-center gap-1 rounded-control bg-[var(--overlay-hover)] p-0.5"
     >
       {MANAGEMENT_TABS.map((tab) => {
         const selected = tab.id === activeTab;
@@ -112,12 +114,12 @@ export function ManagementTabStrip({
             data-testid={`${testIdPrefix}-tab-${tab.id}`}
             className={
               selected
-                ? 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1.5 rounded-control border border-line-strong bg-[var(--surface-card-hover)] font-semibold text-ink shadow-[var(--shadow-card)]'
-                : 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1.5 rounded-control border border-transparent text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]'
+                ? 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1.5 rounded-chip bg-surface font-medium text-ink'
+                : 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1.5 rounded-chip text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]'
             }
           >
             <Icon size={12} aria-hidden="true" className={selected ? tab.iconClass : 'text-subtle'} />
-            <span className="text-[var(--font-meta-size)]">{tab.label}</span>
+            <span className="text-[length:var(--font-meta-size)]">{tab.label}</span>
           </button>
         );
       })}

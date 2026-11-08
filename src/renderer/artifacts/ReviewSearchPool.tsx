@@ -25,7 +25,7 @@ export function ReviewSearchPool({client, projectId, searchId}: {
             {ranked.record.publishedYear === null ? ' 发表年份未知' : ` 发表年份 ${ranked.record.publishedYear}`}</p>
           <p className="break-words">{ranked.record.abstract ?? '摘要未提供'}</p>
           <details><summary className="cursor-pointer text-muted">原始元数据与来源声明</summary>
-            <pre className="mt-1 max-h-80 overflow-auto whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]"
+            <pre className="mt-1 max-h-80 overflow-auto whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]"
               tabIndex={0}>{JSON.stringify(ranked, null, 2)}</pre>
           </details>
         </li>)}</ol>

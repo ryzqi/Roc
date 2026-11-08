@@ -33,7 +33,7 @@ export function ArtifactExperimentEvidence({client,evidence}:{client:RocClient;e
         onClick={()=>setShowOutput(value=>!value)} data-testid="artifact-experiment-evidence-output-toggle">{showOutput?'收起实际指标输出':'查看实际指标输出'}</button>
       {read.status==='loading'?<p role="status">正在读取实际指标输出…</p>:null}
       {read.error===null?null:<p role="alert" className="break-words text-[var(--st-warn)]">{read.error}</p>}
-      {read.status!=='ready'||read.data===null?null:<pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]"
+      {read.status!=='ready'||read.data===null?null:<pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]"
         data-testid="artifact-experiment-evidence-output">{read.data.content}</pre>}
     </>}
   </section>;

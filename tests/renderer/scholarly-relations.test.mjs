@@ -242,7 +242,8 @@ test('history paging and narrow light/dark layout preserve keyboard access witho
       if (mode === 'expanded') await observation.locator('summary').click();
       if (mode === 'settled') await page.waitForFunction(() => {
         const element = document.querySelector('[data-testid="reader-scholarly-source-openalex"]');
-        return Number.parseFloat(getComputedStyle(element, '::details-content').blockSize) >= element.querySelector('dl').getBoundingClientRect().height
+        // CSSOM serializes to three decimals; DOMRect retains subpixel precision.
+        return Number.parseFloat(getComputedStyle(element, '::details-content').blockSize) + 0.001 >= element.querySelector('dl').getBoundingClientRect().height
           && getComputedStyle(element, '::details-content').opacity === '1';
       });
       const result = await page.evaluate(`(${audit})({viewport:true})`);

@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Download, Search } from 'lucide-react';
 import type { RemoteModelEntry } from '../../shared/types';
 import { useAsyncAction } from '../app/use-async-resource';
-import { ModalShell } from '../shell/ModalShell';
 import { FormNote, TextField, formButtonClass, formPrimaryButtonClass } from '../shared/form-ui';
 import type { RocClient } from '../shared/roc-client';
 import { listRemoteModels } from './settings-store';
+import { RadixSettingsDialogShell } from './radix-dialog-pilot';
 
 /**
  * 「从端点拉取模型」浮层（P10）。
@@ -113,7 +113,8 @@ export function RemoteModelPicker({
   const confirmLabel = multiple ? `添加所选（${selected.size}）` : '使用该模型';
 
   return (
-    <ModalShell
+    <RadixSettingsDialogShell
+      closeOnBackdrop={false}
       open={open}
       title="从端点拉取模型"
       onClose={onClose}
@@ -187,8 +188,8 @@ export function RemoteModelPicker({
             testId={`${testId}-key`}
           />
           <div className="flex flex-col gap-0.5">
-            <span className="text-subtle text-[var(--font-micro-size)]">说明</span>
-            <p className="flex h-[var(--control-height)] items-center text-subtle text-[var(--font-micro-size)] leading-tight">
+            <span className="text-subtle text-[length:var(--font-micro-size)]">说明</span>
+            <p className="flex h-[var(--control-height)] items-center text-subtle text-[length:var(--font-micro-size)] leading-tight">
               本机推理服务通常不需要密钥。
             </p>
           </div>
@@ -201,13 +202,13 @@ export function RemoteModelPicker({
         )}
 
         {entries === null ? (
-          <p className="text-subtle text-[var(--font-micro-size)]" data-testid={`${testId}-hint`}>
+          <p className="text-subtle text-[length:var(--font-micro-size)]" data-testid={`${testId}-hint`}>
             填好端点后点「拉取」，这里会列出该端点声明的模型。
           </p>
         ) : (
           <>
             <div className="flex items-end gap-2">
-              <label className="flex h-[var(--control-height)] min-w-0 flex-1 items-center gap-1.5 rounded-control border border-line bg-bg px-2 focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-accent">
+              <label className="flex h-[var(--control-height)] min-w-0 flex-1 items-center gap-1.5 rounded-control border-[0.5px] border-line bg-bg px-2 focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-accent">
                 <Search size={11} aria-hidden="true" className="shrink-0 text-subtle" />
                 <input
                   value={filter}
@@ -215,11 +216,11 @@ export function RemoteModelPicker({
                   placeholder="筛选模型标识"
                   aria-label="筛选模型标识"
                   data-testid={`${testId}-filter`}
-                  className="h-full min-w-0 flex-1 bg-transparent text-ink text-[var(--font-meta-size)] outline-none placeholder:text-subtle"
+                  className="h-full min-w-0 flex-1 bg-transparent text-ink text-[length:var(--font-meta-size)] outline-none placeholder:text-subtle"
                 />
               </label>
               <span
-                className="flex h-[var(--control-height)] shrink-0 items-center text-subtle text-[var(--font-micro-size)]"
+                className="flex h-[var(--control-height)] shrink-0 items-center text-subtle text-[length:var(--font-micro-size)]"
                 data-testid={`${testId}-count`}
               >
                 {visible.length}/{entries.length} 个
@@ -227,14 +228,14 @@ export function RemoteModelPicker({
             </div>
 
             {entries.length === 0 ? (
-              <p className="text-subtle text-[var(--font-micro-size)]" data-testid={`${testId}-empty`}>
+              <p className="text-subtle text-[length:var(--font-micro-size)]" data-testid={`${testId}-empty`}>
                 端点没有返回任何模型。确认地址包含版本前缀（如 /v1），或先在该服务里下载模型。
               </p>
             ) : (
               <div
                 role={multiple ? 'group' : 'radiogroup'}
                 aria-label="可用模型"
-                className="flex max-h-[240px] flex-col gap-0.5 overflow-y-auto rounded-card border border-line-soft p-1"
+                className="flex max-h-[240px] flex-col gap-0.5 overflow-y-auto rounded-card border-[0.5px] border-line-soft p-1"
                 data-testid={`${testId}-list`}
               >
                 {/* 行用 div 而不是 ul/li：单选时外层是 radiogroup，中间夹一层 listitem
@@ -260,11 +261,11 @@ export function RemoteModelPicker({
                           data-testid={`${testId}-option-${entry.id}`}
                           className="h-3.5 w-3.5 shrink-0 accent-[var(--accent)]"
                         />
-                        <span className="min-w-0 flex-1 truncate font-mono text-[var(--font-meta-size)]">{entry.id}</span>
+                        <span className="min-w-0 flex-1 truncate font-mono text-[length:var(--font-meta-size)]">{entry.id}</span>
                         {added ? (
-                          <span className="shrink-0 text-subtle text-[var(--font-micro-size)]">已添加</span>
+                          <span className="shrink-0 text-subtle text-[length:var(--font-micro-size)]">已添加</span>
                         ) : entry.ownedBy === null ? null : (
-                          <span className="shrink-0 truncate text-subtle text-[var(--font-micro-size)]">{entry.ownedBy}</span>
+                          <span className="shrink-0 truncate text-subtle text-[length:var(--font-micro-size)]">{entry.ownedBy}</span>
                         )}
                       </label>
                     </div>
@@ -275,6 +276,6 @@ export function RemoteModelPicker({
           </>
         )}
       </div>
-    </ModalShell>
+    </RadixSettingsDialogShell>
   );
 }

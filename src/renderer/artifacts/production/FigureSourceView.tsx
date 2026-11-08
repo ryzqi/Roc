@@ -11,8 +11,8 @@ export function FigureSourceView({source}: {source: Extract<ResearchProductionIn
       <dt>物理尺寸</dt><dd>{options.widthInches} × {options.heightInches} in <span className="ml-2">{options.dpi} DPI</span></dd>
       <dt>像素尺寸</dt><dd>{figure.validation.widthPixels} × {figure.validation.heightPixels} px</dd>
       <dt>随机种子</dt><dd>{options.seed}</dd>
-      <dt>发布清单 SHA-256</dt><dd className="break-all font-mono text-[var(--font-meta-size)]">{figure.manifestHash}</dd>
-      <dt>渲染器 SHA-256</dt><dd className="break-all font-mono text-[var(--font-meta-size)]">{figure.validation.rendererHash}</dd>
+      <dt>发布清单 SHA-256</dt><dd className="break-all font-mono text-[length:var(--font-meta-size)]">{figure.manifestHash}</dd>
+      <dt>渲染器 SHA-256</dt><dd className="break-all font-mono text-[length:var(--font-meta-size)]">{figure.validation.rendererHash}</dd>
     </dl>
   </section>;
 }

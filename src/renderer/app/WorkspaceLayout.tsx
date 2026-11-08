@@ -53,7 +53,7 @@ export function WorkspaceLayout({
   // instead of the handle silently refusing to move.
   const sidebarAtLimit =
     layout.sidebarWidth <= SIDEBAR_WIDTH.min ? 'min' : layout.sidebarWidth >= SIDEBAR_WIDTH.max ? 'max' : null;
-  const assistantAtLimit = layout.assistantWidth <= ASSISTANT_WIDTH.min ? 'min' : null;
+  const assistantAtLimit = layout.assistantWidth <= ASSISTANT_WIDTH.min ? 'min' : layout.assistantWidth >= layout.assistantMaxWidth ? 'max' : null;
 
   return (
     <div
@@ -75,7 +75,10 @@ export function WorkspaceLayout({
           </div>
           <ResizableDivider
             ariaLabel="调整左栏宽度"
-            onDelta={layout.growSidebar}
+            value={layout.sidebarWidth}
+            min={SIDEBAR_WIDTH.min}
+            max={SIDEBAR_WIDTH.max}
+            onResize={layout.resizeSidebar}
             onReset={layout.resetSidebar}
             atLimit={sidebarAtLimit}
             testId="divider-sidebar"
@@ -89,10 +92,13 @@ export function WorkspaceLayout({
             {assistant}
           </div>
           {/* The divider is *after* the assistant, which is what makes dragging it right
-              widen the panel (see `growAssistant`). */}
+              widen the panel (see `resizeAssistant`). */}
           <ResizableDivider
             ariaLabel="调整助手宽度"
-            onDelta={layout.growAssistant}
+            value={layout.assistantWidth}
+            min={ASSISTANT_WIDTH.min}
+            max={layout.assistantMaxWidth}
+            onResize={layout.resizeAssistant}
             onReset={layout.resetAssistant}
             atLimit={assistantAtLimit}
             testId="divider-assistant"

@@ -46,19 +46,19 @@ export function TaskAcceptanceBlock({ block, onResumeCheckpoint }: {
       open={open}
       onToggle={setOpen}
     >
-      <div className="border-t border-line-soft px-3 py-2.5 text-[var(--font-body-size)] text-muted">
+      <div className="border-t-[0.5px] border-line-soft px-3 py-2.5 text-[length:var(--font-body-size)] text-muted">
         <ul className="space-y-2">
           {block.report.criteria.map((criterion) => (
             <li className="min-w-0" key={criterion.id}>
               <div className="flex items-start gap-2">
-                <span className="shrink-0 rounded-control bg-[var(--overlay-hover)] px-1.5 py-0.5 text-[var(--font-micro-size)]">
+                <span className="shrink-0 rounded-control bg-[var(--overlay-hover)] px-1.5 py-0.5 text-[length:var(--font-micro-size)]">
                   {VERDICT_LABEL[criterion.verdict]}
                 </span>
                 <span className="min-w-0 whitespace-pre-wrap">{criterion.description}</span>
               </div>
-              <p className="mt-1 pl-1 text-subtle text-[var(--font-micro-size)]">{criterion.detail}</p>
+              <p className="mt-1 pl-1 text-subtle text-[length:var(--font-micro-size)]">{criterion.detail}</p>
               {criterion.artifactRefs.length === 0 ? null : (
-                <ul className="mt-1 space-y-0.5 pl-1 text-subtle text-[var(--font-micro-size)]">
+                <ul className="mt-1 space-y-0.5 pl-1 text-subtle text-[length:var(--font-micro-size)]">
                   {criterion.artifactRefs.map((ref) => <li className="break-all" key={`${ref.path}:${ref.sha256}`}>证据：{ref.path}</li>)}
                 </ul>
               )}
@@ -85,7 +85,7 @@ export function TaskAcceptanceBlock({ block, onResumeCheckpoint }: {
         {block.report.checkpointResumeAvailable && onResumeCheckpoint !== undefined ? (
           <button type="button" data-testid="assistant-task-resume-checkpoint" aria-busy={resumeBusy} disabled={resumeBusy}
             onClick={() => void resume()}
-            className="mt-2 inline-flex min-h-8 items-center gap-1.5 rounded-control border border-line-strong px-2.5 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-wait disabled:opacity-60">
+            className="mt-2 inline-flex min-h-8 items-center gap-1.5 rounded-control border-[0.5px] border-line-strong px-2.5 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-wait disabled:opacity-60">
             <RotateCw size={12} aria-hidden="true" />
             {resumeBusy ? '正在恢复…' : '从检查点继续'}
           </button>

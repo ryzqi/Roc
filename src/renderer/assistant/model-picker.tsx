@@ -158,6 +158,7 @@ export function ModelPicker({
         onKeyDown={(event) => {
           if (event.key === 'Escape' && open) {
             event.preventDefault();
+            event.stopPropagation();
             close(true);
           }
         }}
@@ -168,7 +169,7 @@ export function ModelPicker({
         aria-label={`默认模型：${label}`}
         title="切换默认模型"
         data-testid="assistant-model-settings"
-        className="flex h-[var(--control-height-compact)] w-full min-w-0 items-center gap-1 rounded-control border border-line bg-surface px-2 text-left text-text text-[var(--font-micro-size)] transition-colors duration-[var(--duration-fast)] hover:border-line-strong hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+        className="flex h-[var(--control-height-compact)] w-full min-w-0 items-center gap-1 rounded-control px-1 text-left text-text text-[length:var(--font-micro-size)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
       >
         {pending ? (
           <Loader2 size={12} aria-hidden="true" className="shrink-0 animate-spin text-muted" />
@@ -216,10 +217,10 @@ export function ModelPicker({
               setOpen(false);
             }
           }}
-          className="absolute bottom-[calc(100%+6px)] left-0 z-30 flex max-h-[320px] w-[min(320px,calc(100vw-24px))] flex-col overflow-hidden rounded-card border border-line bg-surface shadow-[var(--shadow-popover)]"
+          className="absolute bottom-[calc(100%+6px)] left-0 z-30 flex max-h-[320px] w-[min(320px,calc(100vw-24px))] max-w-full flex-col overflow-hidden rounded-card border-[0.5px] border-line bg-surface shadow-[var(--shadow-popover)]"
         >
-          <div className="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1.5">
-            <span className="text-subtle text-[var(--font-micro-size)]">默认模型</span>
+          <div className="flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-2 py-1.5">
+            <span className="text-subtle text-[length:var(--font-micro-size)]">默认模型</span>
             <button
               type="button"
               onClick={() => {
@@ -227,7 +228,7 @@ export function ModelPicker({
                 onOpenSettings();
               }}
               data-testid="assistant-model-picker-manage"
-              className="ml-auto flex items-center gap-1 rounded-control px-1.5 py-0.5 text-muted text-[var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+              className="ml-auto flex items-center gap-1 rounded-control px-1.5 py-0.5 text-muted text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
             >
               <Settings2 size={10} aria-hidden="true" />
               管理模型
@@ -235,14 +236,14 @@ export function ModelPicker({
           </div>
 
           {providerGroups.length === 0 ? (
-            <p className="px-2 py-3 text-subtle text-[var(--font-micro-size)]">
+            <p className="px-2 py-3 text-subtle text-[length:var(--font-micro-size)]">
               还没有可选的模型，先在上面的端点下添加模型。
             </p>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto py-1">
               {providerGroups.map((group) => (
                 <div key={group.providerId} role="group" aria-label={group.providerLabel} className="flex flex-col">
-                  <span className="px-2 pt-1 pb-0.5 text-subtle text-[var(--font-micro-size)]">{group.providerLabel}</span>
+                  <span className="px-2 pt-1 pb-0.5 text-subtle text-[length:var(--font-micro-size)]">{group.providerLabel}</span>
                   {group.items.map((choice) => {
                     const selected = choice.key === currentKey;
                     return (
@@ -270,9 +271,9 @@ export function ModelPicker({
                             : 'flex items-center gap-2 px-2 py-1 text-left text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent disabled:opacity-40'
                         }
                       >
-                        <span className="min-w-0 flex-1 truncate text-[var(--font-meta-size)]">{choice.label}</span>
+                        <span className="min-w-0 flex-1 truncate text-[length:var(--font-meta-size)]">{choice.label}</span>
                         {choice.enabled ? null : (
-                          <span className="shrink-0 text-subtle text-[var(--font-micro-size)]">已停用</span>
+                          <span className="shrink-0 text-subtle text-[length:var(--font-micro-size)]">已停用</span>
                         )}
                         {selected ? <Check size={11} aria-hidden="true" className="shrink-0 text-accent" /> : null}
                       </button>
@@ -287,7 +288,7 @@ export function ModelPicker({
             <p
               role="alert"
               data-testid="assistant-model-picker-error"
-              className="shrink-0 border-t border-line px-2 py-1 text-[var(--st-bad)] text-[var(--font-micro-size)]"
+              className="shrink-0 border-t-[0.5px] border-line px-2 py-1 text-[var(--st-bad)] text-[length:var(--font-micro-size)]"
             >
               {error}
             </p>

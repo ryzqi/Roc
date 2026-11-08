@@ -57,7 +57,7 @@ const TABS: ReadonlyArray<{ id: CanvasTabId; label: string; icon: typeof BookOpe
   canvasTabIds.map((id) => ({ id, label: surfaceFor(id).label, ...TAB_APPEARANCE[id] }));
 
 const TAB_BASE =
-  'relative flex h-[30px] shrink-0 items-center gap-1.5 rounded-control border px-3 whitespace-nowrap text-[var(--font-meta-size)] transition-colors duration-[var(--duration-fast)]';
+  'relative flex h-[30px] shrink-0 items-center gap-1.5 rounded-control border px-3 whitespace-nowrap text-[length:var(--font-meta-size)] transition-colors duration-[var(--duration-fast)]';
 
 export function WorkspaceCanvas({
   activeTab,
@@ -82,7 +82,7 @@ export function WorkspaceCanvas({
         role="tablist"
         aria-label="画布"
         onKeyDown={onKeyDown}
-        className="no-scrollbar flex h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-3"
+        className="no-scrollbar flex h-10 shrink-0 items-center gap-1 overflow-x-auto border-b-[0.5px] border-line px-3"
       >
         {TABS.map((tab, index) => {
           const selected = tab.id === activeTab;

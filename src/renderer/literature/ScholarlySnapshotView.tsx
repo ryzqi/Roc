@@ -31,7 +31,7 @@ export default function ScholarlySnapshotView({client, snapshot, currentRevision
       <summary className="cursor-pointer">
         {providerNames[observation.source]}：{observation.status === 'ok' ? `本次请求成功，${observation.relationCount} 条关系` : '请求失败'}
       </summary>
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 py-1 text-muted text-[var(--font-meta-size)]">
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 py-1 text-muted text-[length:var(--font-meta-size)]">
         <dt>参考文献字段</dt><dd>{reported(observation.referencesReported)}</dd>
         <dt>关系字段</dt><dd>{reported(observation.relationsReported)}</dd>
         <dt>更新字段</dt><dd>{reported(observation.updatesReported)}</dd>
@@ -67,7 +67,7 @@ export default function ScholarlySnapshotView({client, snapshot, currentRevision
         <ol className="space-y-2" data-testid="reader-scholarly-relations">
           {relations.data.relations.map((row, index) => <li key={offset + index} className="border-b-[0.5px] border-line pb-2">
             <p className="break-all">{identity(row.subject)} → {identity(row.object)}</p>
-            <p className="flex flex-wrap gap-x-3 text-muted text-[var(--font-meta-size)]">
+            <p className="flex flex-wrap gap-x-3 text-muted text-[length:var(--font-meta-size)]">
               <span>{relationNames[row.kind]}</span><span className="break-all">{row.providerType}</span>
               <span className="break-all">{row.field}</span>
               {row.assertedBy === null ? null : <span>断言方：{row.assertedBy}</span>}

@@ -65,7 +65,7 @@ export function EmptyState({
       )}
       <p className={compact ? 'text-muted' : 'text-ink'}>{title}</p>
       {description === undefined ? null : (
-        <p className="max-w-[52ch] text-muted text-[var(--font-meta-size)]">{description}</p>
+        <p className="max-w-[52ch] text-muted text-[length:var(--font-meta-size)]">{description}</p>
       )}
       {action === undefined && secondaryAction === undefined ? null : (
         <div className="mt-1 flex items-center gap-2">
@@ -75,7 +75,7 @@ export function EmptyState({
               onClick={action.onClick}
               disabled={action.disabled ?? false}
               aria-disabled={action.disabled ?? false}
-              className="h-[var(--control-height)] rounded-control border border-line bg-surface-strong px-3 text-ink hover:bg-[var(--surface-card-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50"
+              className="h-[var(--control-height)] rounded-control border-[0.5px] border-line bg-surface-strong px-3 text-ink hover:bg-[var(--surface-card-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50"
             >
               {action.label}
             </button>

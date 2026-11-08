@@ -38,7 +38,7 @@ export function McpEditor({
         })();
       }}
     >
-      <h3 className="text-[var(--font-h3-size)] font-semibold text-ink">
+      <h3 className="text-[length:var(--font-h3-size)] font-semibold text-ink">
         {mcp.editingId === null ? '添加自定义服务' : '编辑配置'}
       </h3>
       <fieldset
@@ -99,7 +99,7 @@ export function McpEditor({
           启用该服务
         </label>
         <details
-          className="border-t border-line pt-3"
+          className="border-t-[0.5px] border-line pt-3"
           open={advancedIssue || undefined}
         >
           <summary className="cursor-pointer rounded-control text-muted focus-visible:outline-2 focus-visible:outline-accent">
@@ -134,7 +134,7 @@ export function McpEditor({
             </label>
             <label className="flex flex-col gap-1 text-muted">
               允许的工具
-              <span className="text-[var(--font-meta-size)]">
+              <span className="text-[length:var(--font-meta-size)]">
                 每行一个工具名，留空表示不预先限制。
               </span>
               <textarea
@@ -155,7 +155,7 @@ export function McpEditor({
           </div>
         </details>
       </fieldset>
-      <div className="sticky bottom-0 flex items-center gap-2 border-t border-line bg-surface py-3">
+      <div className="sticky bottom-0 flex items-center gap-2 border-t-[0.5px] border-line bg-surface py-3">
         <button
           type="submit"
           disabled={mcp.save.pending || mcp.issues.length > 0}

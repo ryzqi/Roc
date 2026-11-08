@@ -138,6 +138,14 @@
     user-select: text;
   }
 
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+
+  code, pre, .roc-diff {
+    direction: ltr;
+  }
+
   ::selection {
     background: var(--accent-soft-strong);
     color: var(--ink);
@@ -206,6 +214,14 @@
 }
 
 @layer utilities {
+  .font-medium {
+    font-weight: var(--font-weight-medium);
+  }
+
+  .font-semibold {
+    font-weight: var(--font-weight-semibold);
+  }
+
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
@@ -368,7 +384,7 @@ details[open]::details-content {
 }
 
 .roc-code .hljs-strong {
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
 /*
@@ -473,7 +489,7 @@ details[open]::details-content {
 
 .roc-prose th,
 .roc-prose td {
-  border: 1px solid var(--line);
+  border: 0.5px solid var(--line);
   padding: 0.3em 0.6em;
   text-align: left;
 }
@@ -481,20 +497,31 @@ details[open]::details-content {
 .roc-prose th {
   background: var(--bg-soft);
   color: var(--ink);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
 .roc-prose hr {
   border: 0;
-  border-top: 1px solid var(--line);
+  border-top: 0.5px solid var(--line);
   margin: 1em 0;
 }
 
 .roc-prose strong {
   color: var(--ink);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
 .roc-prose em {
   font-style: italic;
+}
+
+/* App-level reduced motion mirrors the system preference for CSS disclosures. */
+[data-reduce-motion="true"] *,
+[data-reduce-motion="true"] *::before,
+[data-reduce-motion="true"] *::after,
+[data-reduce-motion="true"] ::details-content {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }

@@ -43,7 +43,7 @@ export function sortSkills(skills: readonly SkillSnapshot[]): SkillSnapshot[] {
 export function skillSummary(skills: readonly SkillSnapshot[]): string {
   const enabled = skills.filter((skill) => skill.enabled).length;
   const invalid = skills.filter((skill) => skill.status === 'invalid').length;
-  return `${skills.length} 个技能 · ${enabled} 个已启用${invalid === 0 ? '' : ` · ${invalid} 个无效`}`;
+  return `${skills.length} 个技能，${enabled} 个已启用${invalid === 0 ? '' : `，${invalid} 个无效`}`;
 }
 
 /**
@@ -127,7 +127,7 @@ export function filePreviewKind(preview: SkillFilePreviewResult): FilePreviewKin
 }
 
 export function previewSizeLabel(preview: SkillFilePreviewResult): string {
-  return `${preview.sizeBytes.toLocaleString('en-US')} B${preview.truncated ? ' · 已截断' : ''}`;
+  return `${preview.sizeBytes.toLocaleString('en-US')} B${preview.truncated ? '，已截断' : ''}`;
 }
 
 /** `truncated` means the panel must not offer an edit affordance (it never does) nor compare sizes. */
@@ -169,5 +169,5 @@ export function builtinSourceActionLabel(source: BuiltinSkillSourceStatus): stri
 
 export function builtinSourceSummary(source: BuiltinSkillSourceStatus): string {
   const installed = source.installedCommit === null ? '未安装' : `已安装 ${source.skillIds.length} 个技能`;
-  return `${installed} · 内置 ${shortCommit(source.bundledCommit)} · 上游 ${shortCommit(source.installedCommit)}`;
+  return `${installed}，内置 ${shortCommit(source.bundledCommit)}，上游 ${shortCommit(source.installedCommit)}`;
 }

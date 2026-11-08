@@ -22,7 +22,7 @@ export function ReviewReportEvidence({row, status}: {row: Row; status: Status}):
         </div>;
       })}</dl>
       <details><summary className="cursor-pointer text-muted">字段及原文定位的完整提取</summary>
-        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">{JSON.stringify(row.extraction, null, 2)}</pre>
+        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(row.extraction, null, 2)}</pre>
       </details>
     </>}
     {row.qualityPlan === null ? <p>尚未冻结质量框架</p> : <>
@@ -30,7 +30,7 @@ export function ReviewReportEvidence({row, status}: {row: Row; status: Status}):
       <p className="text-muted">{status.qualityPlan!.currentExtraction && status.qualityPlan!.referenceStatus === 'current' ?
         '质量框架对应当前提取来源' : '质量框架引用已变化'}</p>
       <details><summary className="cursor-pointer text-muted">用户声明的框架定义</summary>
-        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">{JSON.stringify(row.qualityPlan, null, 2)}</pre>
+        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(row.qualityPlan, null, 2)}</pre>
       </details>
     </>}
     {row.assessment === null ? <p>尚未人工评价</p> : <>
@@ -39,7 +39,7 @@ export function ReviewReportEvidence({row, status}: {row: Row; status: Status}):
       <p className="text-muted">{status.assessment!.currentExtraction && status.assessment!.referenceStatus === 'current' ?
         '评价对应当前提取来源' : '评价引用已变化'}</p>
       <details><summary className="cursor-pointer text-muted">逐域判断、理由及准确证据</summary>
-        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[var(--font-meta-size)] font-mono">{JSON.stringify(row.assessment, null, 2)}</pre>
+        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(row.assessment, null, 2)}</pre>
       </details>
     </>}
   </section>;

@@ -37,7 +37,7 @@ export function ReviewInspector({client, request, writable, drafts, onClose}: {
     }, {label: '读取协议修订历史'});
   return <ModalShell open kind="drawer" title="综述核查" onClose={onClose} beforeClose={() => !pending}
     widthClassName="w-[560px]" testId="artifact-inspector">
-    <div className="flex min-w-0 flex-col gap-3 text-[var(--font-body-size)]" data-testid="artifact-review">
+    <div className="flex min-w-0 flex-col gap-3 text-[length:var(--font-body-size)]" data-testid="artifact-review">
       {request.mode === 'readonly' ? <ReviewReadonlyContent client={client} link={request} /> : <>
       <div className="flex flex-wrap gap-2">
         <button type="button" className={button} disabled={pending || protocols.status === 'loading' || protocol.status === 'loading'}

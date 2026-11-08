@@ -7,7 +7,7 @@ export function ResponseMatrixReceipt({receipt}: {receipt: ResearchResponseMatri
     <summary className="cursor-pointer">保存回执，第 {snapshot.version} 版，{snapshot.recordedAt}</summary>
     <div className="mt-2 flex min-w-0 flex-col gap-2">
       <p className="break-words">{snapshot.actor.id}：{snapshot.request.rationale}</p>
-      <p className="break-all font-mono text-[var(--font-meta-size)]">SHA-256 {snapshotHash}</p>
+      <p className="break-all font-mono text-[length:var(--font-meta-size)]">SHA-256 {snapshotHash}</p>
       <p className="break-all">修改稿 {snapshot.material.manuscript.contentHash}</p>
       <ul className="flex min-w-0 flex-col gap-2">
         {snapshot.request.rows.map(row => <li className="whitespace-pre-wrap break-words" key={row.commentId}>
@@ -20,7 +20,7 @@ export function ResponseMatrixReceipt({receipt}: {receipt: ResearchResponseMatri
         </li>)}
       </ul>
       <details><summary className="cursor-pointer">完整矩阵回执原文</summary>
-        <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[var(--font-meta-size)]">{JSON.stringify(receipt, null, 2)}</pre>
+        <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(receipt, null, 2)}</pre>
       </details>
     </div>
   </details>;
