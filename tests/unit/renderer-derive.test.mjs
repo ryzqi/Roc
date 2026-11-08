@@ -318,3 +318,40 @@ test('high-degree projection remains linear and pages every shared neighbor with
   assert.equal(tail.total, count); assert.equal(tail.nodes.length, 50);
   assert.deepEqual(tail.nodes.map(n => n.id), neighbors.slice(-50));
 });
+
+test('Wiki review distinguishes a declaration, human support, conditions, contradiction and superseded sources', () => {
+  const claim = claimRecord({});
+  const record = evidenceRecord({});
+  const source = {evidence: record, referenceStatus: 'recorded', invalidatedAt: null, sourceLocator: null};
+  const relation = {id: 'rel-1', claimId: claim.id, claimVersion: claim.version, evidenceId: record.id,
+    kind: 'supports', status: 'proposed', condition: null};
+  const snapshot = {claims: [claim], sources: [source], relations: []};
+  const input = {claims: [claim], evidence: [record], libraryItems: [], snapshot};
+  const page = () => wiki.deriveWiki(input).pages[0];
+  assert.equal(page().review, 'unreviewed');
+  snapshot.relations = [relation];
+  assert.equal(page().review, 'unreviewed');
+  relation.status = 'confirmed';
+  assert.equal(page().review, 'confirmed');
+  relation.kind = 'qualifies'; relation.condition = 'Only for the measured sample';
+  assert.equal(page().review, 'qualified');
+  relation.kind = 'contradicts';
+  assert.equal(page().review, 'contradicted');
+  source.referenceStatus = 'superseded'; relation.status = 'invalidated';
+  assert.equal(page().review, 'stale');
+  assert.equal(page().status, 'supported');
+  assert.equal(page().evidence[0].excerpt, record.excerpt);
+  assert.equal(page().evidence[0].referenceStatus, 'superseded');
+});
+
+test('Wiki includes reviewed endpoints outside legacy evidenceIds and never calls them orphan evidence', () => {
+  const claim = claimRecord({});
+  const sources = [evidenceRecord({}), evidenceRecord({id: 'extra'})]
+    .map(evidence => ({evidence, referenceStatus: 'recorded', invalidatedAt: null, sourceLocator: null}));
+  const snapshot = {claims: [claim], sources, relations: [{id: 'rel', claimId: claim.id, claimVersion: 1,
+    evidenceId: 'extra', status: 'confirmed', kind: 'contradicts'}]};
+  const result = wiki.deriveWiki({claims: [claim], evidence: sources.map(source => source.evidence), libraryItems: [], snapshot});
+  assert.deepEqual(result.pages[0].evidence.map(card => card.id), ['ev-1', 'extra']);
+  assert.deepEqual(result.orphanEvidence, []);
+  assert.equal(result.pages[0].review, 'contradicted');
+});

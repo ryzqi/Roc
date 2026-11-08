@@ -280,3 +280,29 @@ test('a dangling historical association aborts the migration and keeps the origi
     assert.equal(db.prepare("SELECT name FROM sqlite_master WHERE name='research_evidence_relations'").get(),undefined);
   }finally{db.close();agentDb.close();}
 });
+
+test('Wiki snapshot carries current source and relation review without promoting a claim or writing on read',()=>{
+  const f=scene();
+  try {
+    const supported=f.repository.evidence.updateClaim({id:f.claim.id,expectedVersion:1,content:f.claim.content,
+      status:'supported',evidenceIds:[f.evidence.id]});
+    f.request.expectedClaimVersion=supported.version;
+    const snapshot=()=>f.repository.evidence.wikiSnapshot(f.project.id);
+    assert.equal(snapshot().claims[0].status,'supported');
+    assert.deepEqual(snapshot().relations,[]);
+    const proposed=f.propose();
+    assert.equal(snapshot().relations[0].status,'proposed');
+    f.review(proposed);
+    assert.equal(snapshot().relations[0].status,'confirmed');
+    f.repository.evidence.invalidateChunksOf('relation-source');
+    const before=f.db.prepare('SELECT total_changes()').pluck().get();
+    const stale=snapshot();
+    assert.equal(stale.claims[0].status,'supported');
+    assert.equal(stale.sources[0].referenceStatus,'superseded');
+    assert.equal(stale.sources[0].evidence.excerpt,f.evidence.excerpt);
+    assert.equal(stale.relations[0].status,'invalidated');
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+    f.db.prepare('UPDATE research_evidence SET excerpt=? WHERE id=?').run('Corrupted',f.evidence.id);
+    assert.throws(snapshot,/research_evidence_integrity_invalid/u);
+  } finally {f.close();}
+});

@@ -92,7 +92,7 @@ export function LiteratureHubView(): React.JSX.Element {
 
   const claims = store.claims;
   const evidence = store.evidence;
-  const derivedReady = claims !== null && evidence !== null;
+  const derivedReady = claims !== null && evidence !== null && store.derivedStatus !== 'error';
 
   const openImport = (tab: ImportTabRequest): void => {
     setImportTab(tab);
@@ -249,6 +249,8 @@ export function LiteratureHubView(): React.JSX.Element {
             <div className="flex min-h-0 flex-1 flex-col">
             {derivedReady ? (
               <WikiView
+                snapshot={store.wikiSnapshot ?? undefined}
+                onRefresh={store.reloadDerived}
                 claims={claims}
                 evidence={evidence}
                 libraryItems={store.items}

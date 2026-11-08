@@ -1,9 +1,10 @@
+import type {ResearchWikiSnapshot} from '../../shared/schemas/research-wiki';
 import { useMemo, useState } from 'react';
 import { BookMarked, Bot, CalendarClock, Check, ClipboardCopy, Layers, Link2, Search, X } from 'lucide-react';
 import type { ResearchClaim, ResearchEvidence, ResearchLibraryItem } from '../../shared/types';
 import { useCopyFeedback } from '../shared/hooks/use-copy-feedback';
 import { EmptyState } from '../shell/EmptyState';
-import { deriveWiki } from './derive-wiki';
+import { deriveWiki, type WikiConceptPage } from './derive-wiki';
 
 /**
  * LLM Wiki projection view.
@@ -47,6 +48,8 @@ import { deriveWiki } from './derive-wiki';
  */
 
 export type WikiViewProps = {
+  snapshot?: ResearchWikiSnapshot;
+  onRefresh?: () => void;
   claims: readonly ResearchClaim[];
   evidence: readonly ResearchEvidence[];
   libraryItems: readonly ResearchLibraryItem[];
@@ -59,18 +62,23 @@ export type WikiViewProps = {
 };
 
 const STATUS_LABELS: Readonly<Record<ResearchClaim['status'], string>> = {
-  supported: '有支撑',
+  supported: '声明有支撑',
   hypothesis: '假设',
   pending: '待定'
 };
 
-const STATUS_CLASS: Readonly<Record<ResearchClaim['status'], string>> = {
-  supported: 'text-[var(--st-ok)]',
-  hypothesis: 'text-[var(--st-info)]',
-  pending: 'text-[var(--st-warn)]'
+const REVIEW_LABELS: Record<WikiConceptPage['review'], string> = {
+  unreviewed: '待人工审核', confirmed: '人工确认支持', qualified: '人工确认有条件支持',
+  contradicted: '存在已确认反对', stale: '来源或审核已失效'
 };
+const RELATION_LABELS = {supports: '支持', contradicts: '反对', qualifies: '条件支持', depends_on: '依赖', supersedes: '替代', historical: '历史关联'};
+const DECISION_LABELS = {proposed: '待审核', confirmed: '已人工确认', rejected: '已拒绝', invalidated: '已失效', historical: '未审核的历史关联'};
+const reviewClass = (review: WikiConceptPage['review']): string =>
+  review === 'confirmed' || review === 'qualified' ? 'text-[var(--st-ok)]' : 'text-[var(--st-warn)]';
 
 export function WikiView({
+  snapshot,
+  onRefresh,
   claims,
   evidence,
   libraryItems,
@@ -79,8 +87,8 @@ export function WikiView({
   onAskAssistant
 }: WikiViewProps): React.JSX.Element {
   const projection = useMemo(
-    () => deriveWiki({ claims, evidence, libraryItems }),
-    [claims, evidence, libraryItems]
+    () => deriveWiki({ claims, evidence, libraryItems, snapshot }),
+    [claims, evidence, libraryItems, snapshot]
   );
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -126,7 +134,10 @@ export function WikiView({
     if (page.evidence.length > 0) {
       lines.push('## 证据', '');
       for (const card of page.evidence) {
-        lines.push(`- ${card.title} — ${card.locator}`, `  > ${card.excerpt}`);
+        lines.push(`- ${card.title} — ${card.locator}（${card.referenceStatus === 'superseded' ? '来源已失效' : card.referenceStatus === 'recorded' ? '已记录来源' : '来源状态未加载'}）`, `  > ${card.excerpt}`);
+        for (const relation of card.relations) {
+          lines.push(`  ${RELATION_LABELS[relation.kind]}：${DECISION_LABELS[relation.status]}${relation.condition ? `；条件：${relation.condition}` : ''}`);
+        }
       }
       lines.push('');
     }
@@ -138,7 +149,8 @@ export function WikiView({
       lines.push('');
     }
     lines.push(
-      `状态：${STATUS_LABELS[page.status]}`,
+      `声明状态：${REVIEW_LABELS[page.review]}`,
+      `审核状态：${REVIEW_LABELS[page.review]}`,
       '',
       '来源：当前文献、主张与关联证据'
     );
@@ -151,6 +163,7 @@ export function WikiView({
         <span className="text-muted" data-testid="wiki-counts">
           {projection.pages.length} 个概念，{projection.backlinks.length} 条共现，{projection.timeline.length} 个年份
         </span>
+        {onRefresh ? <button type="button" onClick={onRefresh} className="rounded-control border-[0.5px] border-line px-2 py-1" data-testid="wiki-refresh">刷新审核状态</button> : null}
         <div className="ml-auto flex h-[var(--control-height-compact)] min-w-[150px] items-center gap-1.5 rounded-control border-[0.5px] border-line bg-surface px-2 sm:max-w-[240px]">
           <Search size={11} aria-hidden="true" className="shrink-0 text-subtle" />
           <input
@@ -203,7 +216,7 @@ export function WikiView({
                   >
                     <span className="w-full truncate text-ink text-[length:var(--font-meta-size)]">{page.title}</span>
                     <span className="flex items-center gap-1.5 text-[length:var(--font-micro-size)]">
-                      <span className={STATUS_CLASS[page.status]}>{STATUS_LABELS[page.status]}</span>
+                      <span className={reviewClass(page.review)}>{REVIEW_LABELS[page.review]}</span>
                       <span className="text-subtle">{page.evidence.length} 条证据</span>
                     </span>
                   </button>
@@ -290,7 +303,7 @@ export function WikiView({
           )}
         </aside>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-3" data-testid="wiki-body">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto break-words p-3" data-testid="wiki-body">
           {selected === null ? (
             <EmptyState
               icon={Layers}
@@ -303,12 +316,12 @@ export function WikiView({
               className="rounded-card border-[0.5px] border-line bg-surface px-3 py-2.5"
               data-testid={`wiki-page-${selected.claimId}`}
             >
-              <header className="flex items-start gap-2">
+              <header className="flex flex-wrap items-start gap-2">
                 <h4 className="min-w-0 flex-1 text-ink" data-testid={`wiki-page-title-${selected.claimId}`}>
                   {selected.title}
                 </h4>
-                <span className={`shrink-0 text-[length:var(--font-micro-size)] ${STATUS_CLASS[selected.status]}`}>
-                  {STATUS_LABELS[selected.status]}
+                <span className={`shrink-0 text-[length:var(--font-micro-size)] ${reviewClass(selected.review)}`}>
+                  {REVIEW_LABELS[selected.review]}
                 </span>
                 <button
                   type="button"
@@ -322,6 +335,7 @@ export function WikiView({
                 </button>
               </header>
 
+              <p className="mt-1 text-muted text-[length:var(--font-meta-size)]">声明状态：{STATUS_LABELS[selected.status]}</p>
               <p
                 className="mt-1.5 whitespace-pre-wrap text-ink text-[length:var(--font-read-size)] leading-[1.7]"
                 data-testid={`wiki-page-content-${selected.claimId}`}
@@ -338,6 +352,14 @@ export function WikiView({
                   {selected.evidence.map((card) => (
                     <li key={card.id} className="rounded-card border-[0.5px] border-line-soft bg-bg-soft px-2.5 py-1.5">
                       <p className="text-ink text-[length:var(--font-meta-size)]">{card.title}</p>
+                      <p className="text-[var(--st-warn)] text-[length:var(--font-meta-size)]">
+                        {card.referenceStatus === 'superseded' ? '来源已失效，保留历史摘录' : card.referenceStatus === 'unknown' ? '来源状态未加载' : null}
+                      </p>
+                      {card.relations.map(relation => <p key={relation.id} className="break-words text-muted text-[length:var(--font-meta-size)]">
+                        {RELATION_LABELS[relation.kind]}：{DECISION_LABELS[relation.status]}
+                        {relation.condition ? `；条件：${relation.condition}` : ''}
+                        {relation.reviewer ? `；审核人：${relation.reviewer.id}` : ''}
+                      </p>)}
                       <p className="line-clamp-3 text-muted text-[length:var(--font-micro-size)]">{card.excerpt}</p>
                       <p className="font-mono text-subtle text-[length:var(--font-micro-size)]">
                         {card.sourceType}，{card.locator}

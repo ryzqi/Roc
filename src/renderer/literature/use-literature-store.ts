@@ -1,3 +1,4 @@
+import type {ResearchWikiSnapshot} from '../../shared/schemas/research-wiki';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import type {
@@ -28,9 +29,7 @@ import {
   importLibraryDoi,
   importLibraryRecord,
   linkLibraryItem,
-  listClaims,
   listDocuments,
-  listEvidence,
   listLibrary,
   parseDocument,
   parseDocuments,
@@ -192,6 +191,7 @@ export type LiteratureStore = {
    */
   claims: ResearchClaim[] | null;
   evidence: ResearchEvidence[] | null;
+  wikiSnapshot: ResearchWikiSnapshot | null;
   derivedStatus: AsyncStatus;
   derivedError: string | null;
   reloadDerived: () => void;
@@ -284,21 +284,24 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
    */
   const derived = useAsyncResource(
     projectId === null ? null : `literature-derived:${projectId}`,
-    async (): Promise<IpcLikeResult<{ claims: ResearchClaim[]; evidence: ResearchEvidence[] }>> => {
-      const [claims, evidence] = await Promise.all([
-        listClaims(client, { projectId: projectId ?? '' }),
-        listEvidence(client, projectId ?? '')
-      ]);
-      if (!claims.ok) {
-        return { ok: false, error: claims.error };
-      }
-      if (!evidence.ok) {
-        return { ok: false, error: evidence.error };
-      }
-      return { ok: true, data: { claims: claims.data, evidence: evidence.data } };
-    },
+    () => client.api.research.wikiSnapshot({projectId: projectId ?? ''}),
     { label: '读取主张与证据' }
   );
+
+  const reloadDerived = derived.reload;
+  useEffect(() => {
+    if (projectId === null) return;
+    const refresh = () => { if (document.visibilityState === 'visible') reloadDerived(); };
+    const unsubscribe = client.api.research.onLibraryChanged(event => {
+      if (event.affectedProjectIds.includes(projectId)) refresh();
+    });
+    // Relation reviews and source replacements may happen in another window.
+    const timer = setInterval(refresh, 5000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { unsubscribe(); clearInterval(timer); window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh); };
+  }, [client, projectId, reloadDerived]);
 
   const reloadDocuments = documents.reload;
   const reloadList = useCallback(() => {
@@ -744,7 +747,8 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     documentsError: documents.error,
     reloadDocuments,
     claims: derived.data?.claims ?? null,
-    evidence: derived.data?.evidence ?? null,
+    evidence: derived.data?.sources.map(source => source.evidence) ?? null,
+    wikiSnapshot: derived.data,
     derivedStatus: derived.status,
     derivedError: derived.error,
     reloadDerived: derived.reload,

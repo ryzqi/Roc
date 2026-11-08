@@ -1,3 +1,4 @@
+import {researchWikiReadSchema, researchWikiSnapshotSchema} from '../../../shared/schemas/research-wiki';
 import type { z } from 'zod';
 
 import {
@@ -31,6 +32,7 @@ import {
 } from '../../../shared/schemas/research-source-replacements';
 
 const capabilities = {
+  wikiSnapshot: descriptor('research.wiki.snapshot', researchWikiReadSchema, researchWikiSnapshotSchema),
   capture: descriptor('research.evidence.capture', researchEvidenceCaptureRequestSchema, researchEvidenceSchema),
   list: descriptor('research.evidence.list', researchEvidenceListRequestSchema, researchEvidenceSchema.array()),
   createClaim: descriptor('research.claims.create', researchClaimCreateRequestSchema, researchClaimSchema),
@@ -67,13 +69,14 @@ export function registerResearchEvidenceCapabilities(context: RocPluginContext, 
           });
         }
         if (error instanceof Error && capability.name.startsWith('research.relations.')) throwRelationError(error);
-        if (error instanceof Error && capability.name === 'research.evidence.inspect') throwRelationError(error);
+        if (error instanceof Error && (capability.name === 'research.evidence.inspect' || capability.name === 'research.wiki.snapshot')) throwRelationError(error);
         if (error instanceof Error && capability.name.startsWith('research.sourceMigrations.')) throwSourceMigrationError(error);
         if (error instanceof Error && capability.name.startsWith('research.sourceReplacements.')) throwSourceReplacementError(error);
         throw error;
       }
     });
   }
+  register(capabilities.wikiSnapshot, request => repository.wikiSnapshot(request.projectId));
   register(capabilities.capture, (request) => repository.capture(request));
   register(capabilities.list, (request) => repository.list(request.projectId));
   register(capabilities.createClaim, (request) => repository.createClaim(request));

@@ -1,3 +1,4 @@
+import type {ResearchWikiSnapshot} from '../../../shared/schemas/research-wiki';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Database } from 'better-sqlite3';
 import type {ResearchInspectedEvidence} from '../../../shared/schemas/research-evidence-source';
@@ -106,6 +107,19 @@ export class ResearchEvidenceRepository {
     this.requireProject(projectId);
     return this.db.prepare(`SELECT ${evidenceColumns} FROM research_evidence WHERE project_id = ? ORDER BY rowid DESC`)
       .all(projectId).map((row) => researchEvidenceSchema.parse(row));
+  }
+
+  /** One consistent, read-only projection; immutable excerpts remain visible after invalidation. */
+  wikiSnapshot(projectId: string): ResearchWikiSnapshot {
+    return this.db.transaction(() => {
+      const claims = this.listClaims({projectId});
+      const sources = this.list(projectId).map(record => this.inspectEvidence(record.id, projectId));
+      const relations = this.relations.list({projectId, claimId: null});
+      for (const relation of relations) {
+        if (relation.status === 'proposed' || relation.status === 'confirmed') this.relations.assertCurrent(relation);
+      }
+      return {claims, sources, relations};
+    })();
   }
 
   createClaim(input: ResearchClaimCreateRequest): ResearchClaim {

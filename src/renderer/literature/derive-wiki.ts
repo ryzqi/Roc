@@ -1,3 +1,4 @@
+import type {ResearchWikiSnapshot} from '../../shared/schemas/research-wiki';
 import type { ResearchClaim, ResearchEvidence, ResearchLibraryItem } from '../../shared/types';
 
 /**
@@ -31,6 +32,8 @@ export type WikiEvidenceCard = {
   sourceId: string;
   /** Set when this evidence came from a retrieval hit, so the reader can jump. */
   chunkId: string;
+  referenceStatus: 'recorded' | 'superseded' | 'unknown';
+  relations: ResearchWikiSnapshot['relations'];
 };
 
 export type WikiRelatedPaper = {
@@ -44,6 +47,7 @@ export type WikiConceptPage = {
   title: string;
   content: string;
   status: ResearchClaim['status'];
+  review: 'unreviewed' | 'confirmed' | 'qualified' | 'contradicted' | 'stale';
   evidence: WikiEvidenceCard[];
   /** `research.library.*` items this claim's evidence resolves to. */
   papers: WikiRelatedPaper[];
@@ -90,7 +94,9 @@ function toEvidenceCard(evidence: ResearchEvidence): WikiEvidenceCard {
     locator: evidence.locator,
     sourceType: evidence.sourceType,
     sourceId: evidence.sourceId,
-    chunkId: evidence.chunkId
+    chunkId: evidence.chunkId,
+    referenceStatus: 'unknown',
+    relations: []
   };
 }
 
@@ -127,25 +133,39 @@ export function deriveWiki(input: {
   claims: readonly ResearchClaim[];
   evidence: readonly ResearchEvidence[];
   libraryItems: readonly ResearchLibraryItem[];
+  snapshot?: ResearchWikiSnapshot;
 }): WikiProjection {
   const evidenceById = new Map(input.evidence.map((record) => [record.id, record]));
 
+  const sources = new Map(input.snapshot?.sources.map(source => [source.evidence.id, source]));
+  const relationsByClaim = new Map<string, ResearchWikiSnapshot['relations']>();
+  for (const relation of input.snapshot?.relations ?? []) {
+    const group = relationsByClaim.get(relation.claimId) ?? [];
+    group.push(relation);
+    relationsByClaim.set(relation.claimId, group);
+  }
   const pages: WikiConceptPage[] = input.claims.map((claim) => {
-    const evidence = claim.evidenceIds
-      .map((id) => evidenceById.get(id))
-      .filter((record): record is ResearchEvidence => record !== undefined)
-      .map(toEvidenceCard);
+    const relations = relationsByClaim.get(claim.id) ?? [];
+    const ids = [...new Set([...claim.evidenceIds, ...relations.map(relation => relation.evidenceId)])];
+    const evidence = ids.flatMap(id => {
+      const record = evidenceById.get(id);
+      return record === undefined ? [] : [{...toEvidenceCard(record),
+        referenceStatus: sources.get(id)?.referenceStatus ?? 'unknown' as const,
+        relations: relations.filter(relation => relation.evidenceId === id)}];
+    });
+    const current = relations.filter(relation => relation.status === 'confirmed' && relation.claimVersion === claim.version &&
+      sources.get(relation.evidenceId)?.referenceStatus === 'recorded');
+    const supports = current.filter(relation => relation.kind === 'supports' || relation.kind === 'qualifies');
+    const review: WikiConceptPage['review'] = current.some(relation => relation.kind === 'contradicts') ? 'contradicted' :
+      evidence.some(card => claim.evidenceIds.includes(card.id) && card.referenceStatus === 'superseded') ? 'stale' :
+      claim.evidenceIds.length > 0 && claim.evidenceIds.every(id => supports.some(relation => relation.evidenceId === id)) ?
+        supports.some(relation => relation.kind === 'qualifies') ? 'qualified' : 'confirmed' :
+      relations.some(relation => relation.status === 'invalidated') ? 'stale' : 'unreviewed';
     return {
-      claimId: claim.id,
-      title: conceptTitle(claim.content),
-      content: claim.content,
-      status: claim.status,
-      evidence,
-      papers: papersForEvidence(
-        claim.evidenceIds.map((id) => evidenceById.get(id)).filter((record): record is ResearchEvidence => record !== undefined),
-        input.libraryItems
-      ),
-      hasMissingEvidence: evidence.length !== claim.evidenceIds.length
+      claimId: claim.id, title: conceptTitle(claim.content), content: claim.content, status: claim.status,
+      review, evidence,
+      papers: papersForEvidence(ids.flatMap(id => evidenceById.has(id) ? [evidenceById.get(id)!] : []), input.libraryItems),
+      hasMissingEvidence: evidence.length !== ids.length
     };
   });
 
@@ -203,10 +223,10 @@ export function deriveWiki(input: {
         (claimOrder.get(left.toClaimId) ?? 0) - (claimOrder.get(right.toClaimId) ?? 0)
     );
 
-  const referenced = new Set(input.claims.flatMap((claim) => claim.evidenceIds));
+  const referenced = new Set(pages.flatMap(page => page.evidence.map(card => card.id)));
   const orphanEvidence = input.evidence
     .filter((record) => !referenced.has(record.id))
-    .map(toEvidenceCard);
+    .map(record => ({...toEvidenceCard(record), referenceStatus: sources.get(record.id)?.referenceStatus ?? 'unknown' as const}));
 
   return { pages, timeline, backlinks, orphanEvidence };
 }

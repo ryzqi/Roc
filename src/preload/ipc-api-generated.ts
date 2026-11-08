@@ -164,6 +164,7 @@ export const rocApi: RocPreloadApi = {
     listArtifacts: (...args) => ipcRenderer.invoke(ipcChannels.researchArtifactsList, ...args),
     updateArtifact: (...args) => ipcRenderer.invoke(ipcChannels.researchArtifactsUpdate, ...args),
     captureEvidence: (...args) => ipcRenderer.invoke(ipcChannels.researchEvidenceCapture, ...args),
+    wikiSnapshot: (...args) => ipcRenderer.invoke(ipcChannels.researchWikiSnapshot, ...args),
     inspectEvidence: (...args) => ipcRenderer.invoke(ipcChannels.researchEvidenceInspect, ...args),
     proposeEvidenceRelation: (...args) => ipcRenderer.invoke(ipcChannels.researchRelationsPropose, ...args),
     reviewEvidenceRelation: (...args) => ipcRenderer.invoke(ipcChannels.researchRelationsReview, ...args),
