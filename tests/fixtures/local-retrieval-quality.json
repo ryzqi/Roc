@@ -1,6 +1,6 @@
 {
-  "contractVersion": 1,
-  "id": "engineering-local-retrieval-v1",
+  "contractVersion": 2,
+  "id": "engineering-local-retrieval-v2",
   "split": "development",
   "provenance": {
     "kind": "engineering_fixture",
@@ -34,9 +34,12 @@
             1,
             0,
             0
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "5cc0aab5057200bcaf343d4c0644528e53bba90384c3378bc34e7a99558ecd96"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "en",
@@ -55,9 +58,12 @@
             0,
             1,
             0
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "d3cbc52f7605b24c3615ecfdcb780860bda2330bcd53dafe86622ebbae74bbaa"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "mixed",
@@ -76,9 +82,12 @@
             0,
             0,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "75eef75fcd0c36ddf4a21f4cb3ea3cca5900a976d7a5315745b06aa14a247270"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-0",
@@ -97,9 +106,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "ad28daeb4507e3dc95b7b6620d094691726e66c789e89c51f7570c6f0af7b365"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-1",
@@ -118,9 +130,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "05f2c79d8379be3e4633f521e5abd0def6434a1b96f676070e682802bbeac4d9"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-2",
@@ -139,9 +154,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "7113d2e38049e55b0c204a47435ae8a3cc34f057181bf13aeff7d920c173b709"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-3",
@@ -160,9 +178,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "36050ab0dd8ef10d8daff4c14fc8acd578a5672e0df1ead3cbdb3a2791dd0533"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-4",
@@ -181,9 +202,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "a03408d7df252d1ec9c8caf92c9ae854da5bf2fc8524b2c10135ef02e94626d4"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-5",
@@ -202,9 +226,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "83abe67c99fdaf392430ead56f8a5404d140bb237ad6e6b1b45e55ccdfab6135"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-6",
@@ -223,9 +250,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "a7094fff74f0b0c7e69a545db7318ab743886b5d45c843a6d84a3ea5bb7c2f56"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-7",
@@ -244,9 +274,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "b6a29f7648446a0a734b03a46160293015ff0298a517f28dd66739f598aba9ce"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-8",
@@ -265,9 +298,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "16d093965674a6402971a6230e29a709837611a15677d7e6233b5e55b8d5c99d"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-9",
@@ -286,9 +322,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "f4411586522ff785065c7a4b234354c649a634005ec2ccebad11bfbc9a7b9343"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-10",
@@ -307,9 +346,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "1022f2f017afdd5a50bdaeea0a1571be0379ae3ecdfa7d0e389fba1c76c60f62"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-11",
@@ -328,9 +370,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "16c6d543c3e7d54b0d8df81866ecb3304dc49ec8f9ce7051de5abd4d4ac93d27"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-12",
@@ -349,9 +394,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "901217391f2279d498a0f3e4726bcd8733b078d610055792882e216f800101df"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-13",
@@ -370,9 +418,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "a28783fdabfd1c688cc65df2c6968a967608e732c7237724779cf157e50a3122"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-14",
@@ -391,9 +442,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "4f3ed9029cbb745f5d192717cccc8ccebd670f7c9c4e59ef7c3f45030489494e"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-15",
@@ -412,9 +466,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "4e336ba9b41e51adf049ef00cf8b48758e779bf5c0949e38e79ccd172d1cd4c0"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-16",
@@ -433,9 +490,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "a2a406aba98d9bb5f830581588941c5ba85632446e2f438cc3a5bd44e0ed2d0b"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-17",
@@ -454,9 +514,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "20a9543d6d6e204403277c36096125afd98ef31a5244584c99dca37528d1ca44"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-18",
@@ -475,9 +538,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "b070682b87d9e080e4829be0d985fd1a07255527f3b39cabef2298e3f9e0c852"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-19",
@@ -496,9 +562,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "37d02afb7e4a4c2db199a73a19d2741db7d8a1a2118f13ad2e8ac93d5fe4b1c4"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-20",
@@ -517,9 +586,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "2e0119d0eef95c1881ac5497c738b7d8d90187bce667bb2cfb76b197f4356860"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-21",
@@ -538,9 +610,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "d04391479049cbe1ffe29c9a7ff3ddd166975121c76d1a63b94cf4e2a9b837cd"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "noise-22",
@@ -559,9 +634,12 @@
             1,
             1,
             1
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "e7e05a7d6c105fedb94da2e713e0ed6ac63031643514e08f96e71b52dd9ac386"
         }
-      ]
+      ],
+      "current": true
     },
     {
       "id": "foreign",
@@ -580,7 +658,154 @@
             1,
             0,
             0
-          ]
+          ],
+          "section": null,
+          "embeddingInputSha256": "a3a99d7a9c263899f69ec754a92d4a846fdfadf60a9490a1ba7375709b9ae313"
+        }
+      ],
+      "current": true
+    },
+    {
+      "id": "zh-terms",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "zh-terms.md",
+      "sourceVersion": "engineering-v2",
+      "current": true,
+      "title": "Fixture document zh-terms",
+      "contentSha256": "201ccc159b7ee17d2892a1ada5cb598343d9475b43e3bf71e45694e2abb74207",
+      "chunks": [
+        {
+          "content": "注意力机制能够处理长序列依赖，但不能保证所有长句推断正确。",
+          "locator": "page:1",
+          "section": "方法 / 限制",
+          "contentSha256": "201ccc159b7ee17d2892a1ada5cb598343d9475b43e3bf71e45694e2abb74207",
+          "embedding": [
+            1,
+            0,
+            0
+          ],
+          "embeddingInputSha256": "c3d20b6fc0fd7e7cd9176d34e95142ed5f9d71fb0e637e239f2b6830a875d9d2"
+        }
+      ]
+    },
+    {
+      "id": "dispute-a",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "dispute-a.md",
+      "sourceVersion": "engineering-v2",
+      "current": true,
+      "title": "Fixture document dispute-a",
+      "contentSha256": "0a5b78db83cf0780578caa43abdfcb30e4bf69f7fe648f4d3160b8968182c1a5",
+      "chunks": [
+        {
+          "content": "Trial X supports benefit for adults only. DOI 10.1234/roc.2026 Table 2: 12 versus 9.",
+          "locator": "page:1",
+          "section": "Results",
+          "contentSha256": "0a5b78db83cf0780578caa43abdfcb30e4bf69f7fe648f4d3160b8968182c1a5",
+          "embedding": [
+            0,
+            1,
+            0
+          ],
+          "embeddingInputSha256": "5d73d7eea8d0c425233d43524dbdee509ae67a49bed3974d4be32c98e51be389"
+        }
+      ]
+    },
+    {
+      "id": "dispute-b",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "dispute-b.md",
+      "sourceVersion": "engineering-v2",
+      "current": true,
+      "title": "Fixture document dispute-b",
+      "contentSha256": "1c3ab919830f27541f8f06321f9d446e362f8857375036d32eaacbea3c08a91e",
+      "chunks": [
+        {
+          "content": "Trial X does not support benefit for children. Sample size was insufficient.",
+          "locator": "page:1",
+          "section": "Limitations",
+          "contentSha256": "1c3ab919830f27541f8f06321f9d446e362f8857375036d32eaacbea3c08a91e",
+          "embedding": [
+            0,
+            0.9,
+            0.1
+          ],
+          "embeddingInputSha256": "13affa89fbe6cfd766baff6e8976b0339e3c45980992160efbb5fe3949dfed2b"
+        }
+      ]
+    },
+    {
+      "id": "stale",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "stale.md",
+      "sourceVersion": "engineering-v2",
+      "current": false,
+      "title": "Fixture document stale",
+      "contentSha256": "575a1a7644bfa681f0a4d246b45c786b48a354a717ea700743e0b3826ef933a0",
+      "chunks": [
+        {
+          "content": "Retracted Trial X claims universal benefit.",
+          "locator": "page:1",
+          "section": "Historical claim",
+          "contentSha256": "575a1a7644bfa681f0a4d246b45c786b48a354a717ea700743e0b3826ef933a0",
+          "embedding": [
+            0,
+            1,
+            0
+          ],
+          "embeddingInputSha256": "d34d2a954f65636b9347269f945a664167831f45314eb79b0ebffedf8f952b48"
+        }
+      ]
+    },
+    {
+      "id": "hop-a",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "hop-a.md",
+      "sourceVersion": "engineering-v2",
+      "current": true,
+      "title": "Fixture document hop-a",
+      "contentSha256": "e8c55bc06bdcb2ac20460cc24d7da1535436ebe29d8177f208ee3da1d6c60173",
+      "chunks": [
+        {
+          "content": "NLR means negative likelihood ratio. 阴性似然比 links sensitivity to exclusion.",
+          "locator": "page:1",
+          "section": "Definitions",
+          "contentSha256": "e8c55bc06bdcb2ac20460cc24d7da1535436ebe29d8177f208ee3da1d6c60173",
+          "embedding": [
+            0,
+            0,
+            1
+          ],
+          "embeddingInputSha256": "f3293c07b7aa2ba0454aa570b12a62f870c6f1ed000e1af901ac2e9672795fc0"
+        }
+      ]
+    },
+    {
+      "id": "hop-b",
+      "projectId": "a",
+      "sourceType": "file",
+      "sourceId": "hop-b.md",
+      "sourceVersion": "engineering-v2",
+      "current": true,
+      "title": "Fixture document hop-b",
+      "contentSha256": "6b662003337a5a96d3e286fd430c98bdbb29634fe2c14941c5c0f40d38655167",
+      "chunks": [
+        {
+          "content": "Lower negative likelihood ratio improves exclusion of disease after a negative test.",
+          "locator": "page:1",
+          "section": "Interpretation",
+          "contentSha256": "6b662003337a5a96d3e286fd430c98bdbb29634fe2c14941c5c0f40d38655167",
+          "embedding": [
+            0,
+            0,
+            1
+          ],
+          "embeddingInputSha256": "a6ceb1030fd4ca64fc0465213a6316426a8eaad224cf4f44a3a8bf09fe4d4340"
         }
       ]
     }
@@ -590,19 +815,26 @@
       "id": "q-zh",
       "language": "zh",
       "projectId": "a",
-      "embedding": [
-        1,
-        0,
-        0
-      ],
       "strategies": [
         {
           "id": "raw",
-          "query": "机器学习"
+          "query": "机器学习",
+          "embedding": [
+            1,
+            0,
+            0
+          ],
+          "embeddingInputSha256": "e0ab0981aba5c06da59128fbbbd5877bc167abd3429c01ba5dc160f3c5fae6ba"
         },
         {
           "id": "expanded",
-          "query": "机器 学习"
+          "query": "机器 学习",
+          "embedding": [
+            1.02,
+            0.04,
+            0.06
+          ],
+          "embeddingInputSha256": "45ee5fcb5ba532bb8df66091134c0743ab0b6479cfe9307b1f69e023ea794ac8"
         }
       ],
       "judgments": [
@@ -735,26 +967,68 @@
           "chunkId": "noise-22:chunk:0",
           "grade": 0,
           "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "zh-terms:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "dispute-a:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "dispute-b:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "stale:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "hop-a:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "hop-b:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
         }
-      ]
+      ],
+      "answerability": "answerable",
+      "tags": [
+        "abbreviation"
+      ],
+      "evidenceChains": []
     },
     {
       "id": "q-en",
       "language": "en",
       "projectId": "a",
-      "embedding": [
-        0,
-        1,
-        0
-      ],
       "strategies": [
         {
           "id": "raw",
-          "query": "reproducibility"
+          "query": "reproducibility",
+          "embedding": [
+            0,
+            1,
+            0
+          ],
+          "embeddingInputSha256": "16cb8a02338a2a2bd7195d5993221f2fdba904c20c2e284f23ce445aa8527a5b"
         },
         {
           "id": "expanded",
-          "query": "reproduce experiments"
+          "query": "reproduce experiments",
+          "embedding": [
+            0.02,
+            1.04,
+            0.06
+          ],
+          "embeddingInputSha256": "78872b2f0a9cc358978019f8f313701d22eb319cd55e8fc92571e0a7c6788696"
         }
       ],
       "judgments": [
@@ -885,28 +1159,465 @@
         },
         {
           "chunkId": "noise-22:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "zh-terms:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "dispute-a:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "dispute-b:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "stale:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "hop-a:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "hop-b:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        }
+      ],
+      "answerability": "answerable",
+      "tags": [
+        "abbreviation"
+      ],
+      "evidenceChains": []
+    },
+    {
+      "id": "q-mixed",
+      "language": "mixed",
+      "projectId": "a",
+      "strategies": [
+        {
+          "id": "raw",
+          "query": "transformer 机器学习",
+          "embedding": [
+            0,
+            0,
+            1
+          ],
+          "embeddingInputSha256": "e6da4fe79e5b8e8e3900a6b1774349751e5fd9a9d05332f3ab98a62605bbd697"
+        },
+        {
+          "id": "expanded",
+          "query": "transformer 机器 学习",
+          "embedding": [
+            0.02,
+            0.04,
+            1.06
+          ],
+          "embeddingInputSha256": "69eb30074bec8c06a5cfe2e2daba3086418015bcaa04de7a7897f4bac4108538"
+        }
+      ],
+      "judgments": [
+        {
+          "chunkId": "zh:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "en:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "mixed:chunk:0",
+          "grade": 3,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-0:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-1:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-2:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-3:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-4:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-5:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-6:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-7:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-8:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-9:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-10:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-11:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-12:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-13:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-14:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-15:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-16:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-17:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-18:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-19:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-20:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-21:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-22:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "zh-terms:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "dispute-a:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "dispute-b:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "stale:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "hop-a:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "hop-b:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        }
+      ],
+      "answerability": "answerable",
+      "tags": [
+        "abbreviation"
+      ],
+      "evidenceChains": []
+    },
+    {
+      "id": "q-no-answer",
+      "language": "zh",
+      "projectId": "a",
+      "answerability": "no_answer",
+      "tags": [
+        "negation"
+      ],
+      "evidenceChains": [],
+      "strategies": [
+        {
+          "id": "raw",
+          "query": "不存在的治疗方案",
+          "embedding": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "embeddingInputSha256": "cdc353cb5de30a203e7a1d84c57b303077de48b7500ac9bc9ad54050c93671b5"
+        },
+        {
+          "id": "expanded",
+          "query": "没有来源的疗法",
+          "embedding": [
+            1.01,
+            1.01,
+            1.01
+          ],
+          "embeddingInputSha256": "69a0018c34c3884f51f4e26c78091916f9215aa1c18ccd824af9cd82a2c916ae"
+        }
+      ],
+      "judgments": [
+        {
+          "chunkId": "zh:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "en:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "mixed:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-0:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-1:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-2:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-3:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-4:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-5:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-6:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-7:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-8:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-9:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-10:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-11:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-12:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-13:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-14:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-15:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-16:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-17:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-18:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-19:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-20:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-21:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-22:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "zh-terms:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "dispute-a:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "dispute-b:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "stale:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "hop-a:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "hop-b:chunk:0",
           "grade": 0,
           "reviewer": "engineering-fixture-author"
         }
       ]
     },
     {
-      "id": "q-mixed",
-      "language": "mixed",
+      "id": "q-phrase",
+      "language": "zh",
       "projectId": "a",
-      "embedding": [
-        0,
-        0,
-        1
+      "answerability": "answerable",
+      "tags": [
+        "short_term",
+        "long_sentence",
+        "negation"
       ],
+      "evidenceChains": [],
       "strategies": [
         {
           "id": "raw",
-          "query": "transformer 机器学习"
+          "query": "注意力机制",
+          "embedding": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "embeddingInputSha256": "db9d8ea035323f33dcd2e878828314b495491af591156bc4ec00ca7a5bd2710f"
         },
         {
           "id": "expanded",
-          "query": "transformer 机器 学习"
+          "query": "注意力机制 长序列依赖",
+          "embedding": [
+            1.01,
+            0.01,
+            0.01
+          ],
+          "embeddingInputSha256": "df7c5adc5296e1874f66bd6cb86df5856ad11f328bbc39049a41dabe1b5ac0c7"
         }
       ],
       "judgments": [
@@ -922,7 +1633,7 @@
         },
         {
           "chunkId": "mixed:chunk:0",
-          "grade": 3,
+          "grade": 0,
           "reviewer": "engineering-fixture-author"
         },
         {
@@ -1038,6 +1749,631 @@
         {
           "chunkId": "noise-22:chunk:0",
           "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "zh-terms:chunk:0",
+          "grade": 3,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "dispute-a:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "dispute-b:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "stale:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "hop-a:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "hop-b:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        }
+      ]
+    },
+    {
+      "id": "q-dispute",
+      "language": "en",
+      "projectId": "a",
+      "answerability": "answerable",
+      "tags": [
+        "conflict",
+        "stale"
+      ],
+      "evidenceChains": [
+        [
+          "dispute-a:chunk:0",
+          "dispute-b:chunk:0"
+        ]
+      ],
+      "strategies": [
+        {
+          "id": "raw",
+          "query": "Trial X benefit",
+          "embedding": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "embeddingInputSha256": "fe60432b93f5fcfa03243d7f8bd5a8ca5bdd49008580d4ea886b22432cd6e004"
+        },
+        {
+          "id": "expanded",
+          "query": "Trial X adults children benefit",
+          "embedding": [
+            0.01,
+            1.01,
+            0.01
+          ],
+          "embeddingInputSha256": "7f8bcee4c9bded06e934de29d01e9492c73ef39d4286231367c57349138e82d6"
+        }
+      ],
+      "judgments": [
+        {
+          "chunkId": "zh:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "en:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "mixed:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-0:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-1:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-2:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-3:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-4:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-5:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-6:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-7:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-8:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-9:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-10:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-11:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-12:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-13:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-14:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-15:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-16:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-17:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-18:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-19:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-20:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-21:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-22:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "zh-terms:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "dispute-a:chunk:0",
+          "grade": 3,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "dispute-b:chunk:0",
+          "grade": 3,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "stale:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "hop-a:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "hop-b:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        }
+      ]
+    },
+    {
+      "id": "q-doi",
+      "language": "en",
+      "projectId": "a",
+      "answerability": "answerable",
+      "tags": [
+        "doi",
+        "structure"
+      ],
+      "evidenceChains": [],
+      "strategies": [
+        {
+          "id": "raw",
+          "query": "10.1234/roc.2026",
+          "embedding": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "embeddingInputSha256": "1a76a82b5a688ab4e6ba6e1488e3b393dd6dcb02261141177fbb336b34011668"
+        },
+        {
+          "id": "expanded",
+          "query": "10.1234/roc.2026 Table 2",
+          "embedding": [
+            0.01,
+            1.01,
+            0.01
+          ],
+          "embeddingInputSha256": "18023f5ea33141cc65517270311b5aec510eed91c084322cb35383f67d32575a"
+        }
+      ],
+      "judgments": [
+        {
+          "chunkId": "zh:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "en:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "mixed:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-0:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-1:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-2:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-3:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-4:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-5:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-6:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-7:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-8:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-9:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-10:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-11:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-12:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-13:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-14:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-15:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-16:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-17:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-18:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-19:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-20:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-21:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-22:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "zh-terms:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "dispute-a:chunk:0",
+          "grade": 3,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "dispute-b:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "stale:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "hop-a:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "hop-b:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        }
+      ]
+    },
+    {
+      "id": "q-chain",
+      "language": "mixed",
+      "projectId": "a",
+      "answerability": "answerable",
+      "tags": [
+        "multihop",
+        "abbreviation"
+      ],
+      "evidenceChains": [
+        [
+          "hop-a:chunk:0",
+          "hop-b:chunk:0"
+        ]
+      ],
+      "strategies": [
+        {
+          "id": "raw",
+          "query": "NLR 阴性似然比 disease",
+          "embedding": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "embeddingInputSha256": "545b9e71d7724385c2bc8fe34c1784d8fae1ff0ef351d9f8218419ffbcc36cfa"
+        },
+        {
+          "id": "expanded",
+          "query": "negative likelihood ratio exclusion disease",
+          "embedding": [
+            0.01,
+            0.01,
+            1.01
+          ],
+          "embeddingInputSha256": "cc9271ceb710027020c4353c6a7fd6a1d86cd9f9cacfec7204437f956aa60002"
+        }
+      ],
+      "judgments": [
+        {
+          "chunkId": "zh:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "en:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "mixed:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-0:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-1:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-2:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-3:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-4:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-5:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-6:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-7:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-8:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-9:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-10:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-11:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-12:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-13:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-14:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-15:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-16:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-17:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-18:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-19:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-20:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-21:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "noise-22:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "zh-terms:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "dispute-a:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "dispute-b:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "stale:chunk:0",
+          "grade": 0,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "hop-a:chunk:0",
+          "grade": 3,
+          "reviewer": "engineering-fixture-author"
+        },
+        {
+          "chunkId": "hop-b:chunk:0",
+          "grade": 3,
           "reviewer": "engineering-fixture-author"
         }
       ]
