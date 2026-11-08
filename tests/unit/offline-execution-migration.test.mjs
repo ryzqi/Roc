@@ -98,7 +98,7 @@ test('offline conversion preserves source and cold backup, fences historical ide
     const agent=new Database(location(join(f.destination,'current'),'agent'));
     const research=new Database(location(join(f.destination,'current'),'research'));
     try {
-      assert.equal(agent.prepare('SELECT current_version FROM schema_metadata').pluck().get(),21);
+      assert.equal(agent.prepare('SELECT current_version FROM schema_metadata').pluck().get(),schemas.agentMigrations.at(-1).version);
       const calls=agent.prepare('SELECT * FROM agent_budget_calls ORDER BY call_id').all();
       assert.deepEqual(calls,f.budgetBefore.map(row=>({...row,state:row.state==='reserved'?'unknown':row.state})));
       const tasks=new api.ResearchTaskRepository(agent);
@@ -161,7 +161,7 @@ for (const phase of ['S02', 'S04', 'S05']) test(`${phase} cutover keeps raw cont
     const research=new Database(location(join(f.destination,'current'),'research'));
     try {
       schemas.applyAgentDatabaseSchema(agent);schemas.applyResearchDatabaseSchema(research);
-      assert.equal(research.prepare('SELECT current_version FROM schema_metadata').pluck().get(),65);
+      assert.equal(research.prepare('SELECT current_version FROM schema_metadata').pluck().get(),schemas.researchMigrations.at(-1).version);
       assert.equal(agent.prepare('SELECT COUNT(*) FROM research_task_nodes').pluck().get(),0);
       const tasks=new api.ResearchTaskRepository(agent);
       const repository=new api.ResearchRepository(research,tasks);

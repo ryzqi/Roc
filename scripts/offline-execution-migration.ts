@@ -269,18 +269,27 @@ export async function migrateExecutionDatabases(input: {source: string; destinat
     if (!agent || !research) throw new Error('offline_source_missing');
     const agentVersion = Number(agent.prepare('SELECT current_version FROM schema_metadata WHERE db_name=?').pluck().get('agent'));
     const researchVersion = Number(research.prepare('SELECT current_version FROM schema_metadata WHERE db_name=?').pluck().get('plugin:@roc/plugin-research'));
+    const fromLegacy = agentVersion === 6 && researchVersion === 4;
     const fromS02 = agentVersion === 20 && researchVersion === 61;
     const fromS04 = agentVersion === 20 && researchVersion === 62;
     const fromS05 = agentVersion === 20 && researchVersion === 63;
     const currentExecution = fromS02 || fromS04 || fromS05;
-    if (!currentExecution && !(agentVersion === 19 && researchVersion === 60)) throw new Error('offline_source_version_unapproved');
-    report.sourceApp = fromS05 ? '9d16212d-S05' : fromS04 ? '4381104-S04' : fromS02 ? '7120421-S02' : 'eea2087b5d2d79df3b2fea7764ce48e4975fd764';
+    if (!fromLegacy && !currentExecution && !(agentVersion === 19 && researchVersion === 60)) throw new Error('offline_source_version_unapproved');
+    report.sourceApp = fromLegacy ? 'legacy-agent6-research4' : fromS05 ? '9d16212d-S05' : fromS04 ? '4381104-S04' : fromS02 ? '7120421-S02' : 'eea2087b5d2d79df3b2fea7764ce48e4975fd764';
     const sourceTargets = targets.map(target=>({...target,version:target.name === 'agent' ? agentVersion :
       target.name === 'plugin:@roc/plugin-research' ? researchVersion : target.version}));
     for (const [index,target] of sourceTargets.entries()) preflight(sources[index]!,target);
     if (agent.prepare("SELECT 1 FROM agent_tool_effects WHERE status IN ('reserved','in_progress','unknown') LIMIT 1").get()) throw new Error('offline_unresolved_effect');
     if (agent.prepare('SELECT 1 FROM agent_run_leases LIMIT 1').get() || research.prepare("SELECT 1 FROM research_stage_runs WHERE status IN ('queued','running') LIMIT 1").get()) throw new Error('offline_execution_not_stopped');
-    validateLinks(agent,research,currentExecution ? 2 : 1);
+    if (fromLegacy) {
+      // These versions predate task/execution links. Only the execution-free
+      // profile can be upgraded without interpreting unsupported snapshots.
+      if (agent.prepare('SELECT 1 FROM agent_runs LIMIT 1').get() || research.prepare('SELECT 1 FROM research_stage_runs LIMIT 1').get()) {
+        throw new Error('offline_legacy_execution_unsupported');
+      }
+    } else {
+      validateLinks(agent,research,currentExecution ? 2 : 1);
+    }
     mkdirSync(destination,{mode:0o700});
     const backup = join(destination,'backup'); const current = join(destination,'current');
     cpSync(source,backup,{recursive:true,filter:path=>!path.endsWith('.database-maintenance.lock')});

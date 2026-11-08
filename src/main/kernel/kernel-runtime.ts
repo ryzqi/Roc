@@ -79,7 +79,7 @@ export class KernelRuntime {
         now: () => new Date().toISOString()
       });
       if (fastProbe.status === 'unhealthy') {
-        throw new Error('database_fast_probe_unhealthy');
+        throw new Error('database_fast_probe_unhealthy', { cause: fastProbe });
       }
 
       const coreDb = databasePool.getCoreConnection();

@@ -8,7 +8,7 @@ import type {
   ShellConfirmationResult,
   SystemAppearanceSnapshot
 } from '../shared/types';
-import { setLogService } from './services/errors';
+import { setLogService, toLogError } from './services/errors';
 import type { SafeStorageBackend } from './infrastructure/safe-storage-backend';
 import type { DatabasePool } from './infrastructure/database-pool';
 import { KernelRuntime } from './kernel/kernel-runtime';
@@ -153,8 +153,17 @@ export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): 
     providerRuntimeService,
     performanceObserverService,
     async start() {
-      paths.ensureTree();
-      await runtime.start();
+      try {
+        paths.ensureTree();
+        await runtime.start();
+      } catch (error) {
+        logService.error('Application startup failed.', toLogError(error), { service: 'main' });
+        setLogService(null);
+        // Electron exits immediately after this rejection. Drain and close the
+        // application destination even when its asynchronous open is still pending.
+        await logService.close();
+        throw error;
+      }
     },
     startDatabaseMaintenance() {
       runtime.startDatabaseMaintenance();

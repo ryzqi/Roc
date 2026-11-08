@@ -360,8 +360,7 @@ async function createWindow(): Promise<void> {
     pdfPreviewProtocolRegistered = true;
   }
   const rendererLoaded = kernel.performanceObserverService.measureAsync('renderer_loaded', 'mainWindow.loadRenderer', () => loadMainRenderer(mainWindow!));
-  await kernelStarted;
-  await rendererLoaded;
+  await Promise.all([kernelStarted, rendererLoaded]);
   hostService.syncSettings(kernel.configService.getSettings());
   registerIpc(kernel, mainWindow, {
     openMainPage: showMainPage,
