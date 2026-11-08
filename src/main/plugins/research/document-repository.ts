@@ -1,4 +1,5 @@
 import type { Database } from 'better-sqlite3';
+import {indexDocumentBlocks} from './index-files';
 import { z } from 'zod';
 import { researchDocumentContentSchema, researchDocumentRunSchema, researchDocumentSchema } from '../../../shared/schemas/research-documents';
 import type { ResearchRepository } from './repository';
@@ -261,7 +262,7 @@ export class ResearchDocumentRepository {
   }
 
   private index(document: ResearchDocument, parseId: string, data: StoredDocumentContent) {
-    const chunks = data.content.blocks.filter((block) => block.text.trim()).map((block) => ({ content: block.text, locator: block.locator }));
+    const chunks = indexDocumentBlocks(data.content.blocks);
     const input = { id: `document:${parseId}`, projectId: null as string | null, sourceType: 'file' as const, sourceId: document.libraryItemId,
       title: `${this.research.library.get(document.libraryItemId).metadata.title} — ${document.filename}`, content: data.content.content, chunks, embeddingPolicy: 'none' as const };
     this.research.knowledge.upsertFromSource(input);

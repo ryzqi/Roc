@@ -108,3 +108,22 @@ test('broker rejects a forged manifest even if the caller supplies a valid run i
     assert.throws(() => broker.authorizeResearchStage({...f.run, projectId: 'other-project'}), /grant_binding_invalid/);
   } finally {f.close();}
 });
+
+test('knowledge tool returns bounded original parent context inside its active project',async()=>{
+  const f=createResearchFixture(api,'discovery');
+  try {
+    const content='needle and its necessary limitation. '.repeat(120);
+    f.repository.knowledge.upsertFromSource({id:'context',projectId:f.project.id,sourceType:'file',sourceId:'context.md',title:'Context',content,
+      chunks:[{content,locator:'page:1',section:'Limitations'}],embeddingPolicy:'none'});
+    const tools=createResearchTestRoleTools(api,{run:f.run,context:f.repository.runs.getContext(f.run.id),repository:f.repository,
+      capabilities:{invoke:async(_name,request)=>f.repository.knowledge.searchKnowledge({request,vector:null})},signal:new AbortController().signal});
+    const result=await tools.find(t=>t.name==='search_knowledge').invoke({query:'needle',limit:2,withContext:true});
+    assert.equal(result.hits.length,2);
+    for(const hit of result.hits) {
+      assert.equal(hit.context.parentChunkId,'context:chunk:0');
+      assert.equal(hit.context.content,content.slice(hit.context.start,hit.context.end));
+      assert.ok(hit.context.content.length<=4000);
+    }
+    assert.ok(result.hits.every(hit=>hit.chunkId!=='context:chunk:0'));
+  }finally{f.close();}
+});

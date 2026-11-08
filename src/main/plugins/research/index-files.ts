@@ -1,3 +1,4 @@
+import {knowledgeChunkVersion, structuredSpans, spanLocator} from './knowledge-chunks';
 import { lstat, readdir, realpath } from 'node:fs/promises';
 import { extname, isAbsolute, join, matchesGlob, relative, sep } from 'node:path';
 import type { z } from 'zod';
@@ -6,7 +7,7 @@ import { assertResearchDescendant, readResearchFile, researchContentHash, resear
 
 export type IndexFileKind = z.infer<typeof researchIndexKindSchema>;
 export type ScannedIndexFile = { path: string; kind: IndexFileKind; size: number; signature: string };
-export type IndexedText = { content: string; chunks: Array<{ content: string; locator: string }>; parserVersion: string };
+export type IndexedText = { content: string; chunks: Array<{ content: string; locator: string; section?: string | null }>; parserVersion: string };
 const textExtensions: Readonly<Record<string, IndexFileKind>> = { '.md': 'markdown', '.tex': 'latex', '.bib': 'bibliography', '.csv': 'csv', '.pdf': 'pdf', '.html': 'html', '.htm': 'html',
   '.png': 'image', '.jpg': 'image', '.jpeg': 'image', '.tif': 'image', '.tiff': 'image', '.bmp': 'image', '.webp': 'image' };
 
@@ -91,40 +92,25 @@ export async function readIndexFile(root: string, file: ScannedIndexFile): Promi
 }
 
 export function indexText(bytes: Buffer): IndexedText {
-  const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-  const chunks: IndexedText['chunks'] = [];
-  const lines = text.split(/\r\n|\n|\r/u);
-  let pending: string[] = [];
-  let start = 1;
-  let length = 0;
-  const flush = (end: number): void => {
-    const content = pending.join('\n');
-    if (content.trim()) chunks.push({ content, locator: `lines ${start}-${end}` });
-    pending = []; length = 0;
-  };
-  for (const [index, line] of lines.entries()) {
-    if (line.length > 2000) {
-      flush(index);
-      for (let offset = 0; offset < line.length;) {
-        let end = Math.min(offset + 2000, line.length);
-        const last = line.charCodeAt(end - 1);
-        if (end < line.length && last >= 0xd800 && last <= 0xdbff) end -= 1;
-        const content = line.slice(offset, end);
-        if (content.trim()) chunks.push({ content, locator: `line ${index + 1}; UTF-16 ${offset + 1}-${offset + content.length}` });
-        offset = end;
-      }
-      start = index + 2;
-      continue;
-    }
-    if (length + line.length + 1 > 2000) { flush(index); start = index + 1; }
-    if (pending.length === 0) start = index + 1;
-    pending.push(line); length += line.length + 1;
-  }
-  flush(lines.length);
-  return { content: chunks.map((chunk) => chunk.content).join('\n\n'), chunks, parserVersion: 'roc-text-1' };
+  const text = new TextDecoder('utf-8', {fatal: true}).decode(bytes);
+  const chunks = structuredSpans(text).filter(span => text.slice(span.start, span.end).trim()).map(span => ({
+    content: text.slice(span.start, span.end), locator: spanLocator('text', span), section: span.section
+  }));
+  return {content: text, chunks, parserVersion: knowledgeChunkVersion};
 }
 
-export function indexLocatedText(text: string, locator: string): IndexedText['chunks'] {
-  if (text.length <= 2000) return text.trim() ? [{ content: text, locator }] : [];
-  return indexText(Buffer.from(text, 'utf8')).chunks.map((chunk) => ({ content: chunk.content, locator: `${locator}; extracted ${chunk.locator}` }));
+export function indexLocatedText(text: string, locator: string, section: string | null = null): IndexedText['chunks'] {
+  const spans = structuredSpans(text, section);
+  return spans.filter(span => text.slice(span.start, span.end).trim()).map(span => ({
+    content: text.slice(span.start, span.end), locator: spans.length === 1 ? locator : spanLocator(locator, span), section: span.section
+  }));
+}
+
+/** Keep parser block identities stable; retrieval children are created by the repository. */
+export function indexDocumentBlocks(blocks: readonly {text: string; locator: string; kind: string}[]): IndexedText['chunks'] {
+  let section: string | null = null;
+  return blocks.filter(block => block.text.trim()).map(block => {
+    if (block.kind === 'heading') section = block.text.trim().slice(0, 2000);
+    return {content: block.text, locator: block.locator, section};
+  });
 }

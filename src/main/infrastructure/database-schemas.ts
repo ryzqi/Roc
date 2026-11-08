@@ -1,3 +1,4 @@
+import {backfillStructuredChunks} from '../plugins/research/knowledge-chunks';
 import {backfillKnowledgeKeywordsV1} from '../plugins/research/knowledge-keywords';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
@@ -2904,6 +2905,16 @@ CREATE TABLE research_embedding_cache (
  PRIMARY KEY(config_id,revision,input_version,input_hash)
 );
 `});
+
+researchMigrations.push({version: 69, name: 'knowledge_structured_children', sql: `
+CREATE TABLE research_knowledge_chunk_structure (
+ chunk_id TEXT PRIMARY KEY REFERENCES research_knowledge_chunks(id) ON DELETE CASCADE,
+ parent_chunk_id TEXT REFERENCES research_knowledge_chunks(id) ON DELETE CASCADE,
+ start_utf16 INTEGER NOT NULL, end_utf16 INTEGER NOT NULL, section TEXT,
+ CHECK(start_utf16 >= 0 AND end_utf16 > start_utf16)
+);
+CREATE INDEX research_knowledge_child_parent ON research_knowledge_chunk_structure(parent_chunk_id);
+`, data: {dataVersion: 'structured-children-v1', migrate: backfillStructuredChunks}});
 
 function applySchema(
   db: DatabaseConnection,

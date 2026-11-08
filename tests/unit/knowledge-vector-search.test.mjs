@@ -6,7 +6,7 @@ import { load } from 'sqlite-vec';
 import { resolve } from 'node:path';
 import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 
-const { ResearchKnowledgeRepository } = await importTypeScriptModule('src/main/plugins/research/knowledge-repository.ts', { platform: 'node' });
+const { ResearchKnowledgeRepository } = await importTypeScriptModule('src/main/plugins/research/knowledge-repository.ts', { platform: 'node', tempDir: resolve('.runtime') });
 
 test('Chinese phrase retrieval finds unsegmented text, short terms, mixed queries and title hits after migration',async()=>{
   const {applyResearchDatabaseSchema, researchMigrations}=await importTypeScriptModule('src/main/infrastructure/database-schemas.ts',{platform:'node',external:['better-sqlite3'],tempDir:resolve('.runtime')});
@@ -115,7 +115,8 @@ test('vector ranking hydrates only top hits and preserves exact project/global r
   const db = new Database(':memory:');
   try {
     load(db);
-    db.exec(`CREATE TABLE research_knowledge_embeddings(chunk_id TEXT, space_key TEXT, dimensions INTEGER, vector_blob BLOB);
+    db.exec(`CREATE TABLE research_knowledge_chunk_structure(chunk_id TEXT, parent_chunk_id TEXT);
+      CREATE TABLE research_knowledge_embeddings(chunk_id TEXT, space_key TEXT, dimensions INTEGER, vector_blob BLOB);
       CREATE TABLE research_knowledge_chunks(id TEXT PRIMARY KEY, document_id TEXT, project_id TEXT, content TEXT, locator TEXT);
       CREATE TABLE research_knowledge_documents(id TEXT PRIMARY KEY, title TEXT, source_type TEXT, source_id TEXT);`);
     const insertE = db.prepare('INSERT INTO research_knowledge_embeddings VALUES (?, ?, 32, ?)');
@@ -151,4 +152,28 @@ test('vector ranking hydrates only top hits and preserves exact project/global r
       console.log(`10k vectors / project=${projectId}: original=${sample(() => legacy.all(...args))}ms, top-k hydration=${sample(search)}ms (median of 9)`);
     }
   } finally { db.close(); }
+});
+
+test('structure migration preserves historical parents and refreshes contextual vectors for short and long sources',async()=>{
+  const {applyResearchDatabaseSchema,researchMigrations}=await importTypeScriptModule('src/main/infrastructure/database-schemas.ts',{platform:'node',external:['better-sqlite3'],tempDir:resolve('.runtime')});
+  const {applyDatabaseMigrations}=await importTypeScriptModule('src/main/infrastructure/database-migrations.ts',{platform:'node',external:['better-sqlite3'],tempDir:resolve('.runtime')});
+  const db=new Database(':memory:'); db.pragma('foreign_keys=ON');
+  try {
+    applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:researchMigrations.filter(m=>m.version<=68)});
+    const repo=new ResearchKnowledgeRepository(db,()=>{},()=> '2026-11-08');
+    for (const [id,content] of [['long','限定条件与原始证据。'.repeat(200)],['short','short evidence']]) {
+      repo.upsertFromSource({id,projectId:null,sourceType:'file',sourceId:id,title:id,content,chunks:[{content,locator:'page:1'}],embeddingPolicy:'none'});
+      db.prepare('INSERT INTO research_knowledge_embeddings VALUES (?, ?, 2, ?, ?)').run(`${id}:chunk:0`,'legacy',Buffer.from(new Float32Array([1,0]).buffer),'2026-11-08');
+    }
+    const original=db.prepare('SELECT * FROM research_knowledge_chunks ORDER BY id').all();
+    applyResearchDatabaseSchema(db);
+    for(const row of original) assert.deepEqual(db.prepare('SELECT * FROM research_knowledge_chunks WHERE id=?').get(row.id),row);
+    assert.ok(repo.knowledgeChunks('long').length>1);
+    assert.equal(repo.knowledgeChunks('short')[0].embeddingInput,'Document: short\nText:\nshort evidence');
+    assert.equal(db.prepare('SELECT count(*) FROM research_knowledge_embeddings').pluck().get(),0);
+    assert.deepEqual(db.prepare('SELECT document_id,status FROM research_knowledge_jobs ORDER BY document_id').all(),[
+      {document_id:'long',status:'queued'},{document_id:'short',status:'queued'}]);
+    const before=db.prepare('SELECT total_changes()').pluck().get();applyResearchDatabaseSchema(db);
+    assert.equal(db.prepare('SELECT total_changes()').pluck().get(),before);
+  }finally{db.close();}
 });

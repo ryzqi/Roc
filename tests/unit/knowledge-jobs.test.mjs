@@ -83,11 +83,11 @@ test('durable jobs invoke the real embedding service and store only current chun
     assert.equal(f.db.prepare('SELECT count(*) FROM research_knowledge_embeddings').pluck().get(),1);
     knowledge.upsertFromSource({...input,content:'old\nnew',chunks:[{content:'old',locator:null},{content:'new',locator:null}]});
     jobs.enqueue(input.id);jobs.wake();await jobs.idle();
-    assert.deepEqual(embedded,['old','new']);
+    assert.deepEqual(embedded,['old','new'].map(text=>`Document: Fixture\nText:\n${text}`));
     assert.equal(f.db.prepare('SELECT count(*) FROM research_knowledge_embeddings').pluck().get(),2);
     knowledge.saveEmbeddingConfig({id:'test',name:'test',baseUrl:'https://fixture.invalid',model:'fixture-new',dimensions:2,enabled:true},'fixture-key');
     jobs.configurationChanged(); await jobs.idle();
-    assert.deepEqual(embedded,['old','new','old','new']);
+    assert.deepEqual(embedded,['old','new','old','new'].map(text=>`Document: Fixture\nText:\n${text}`));
     assert.ok(f.db.prepare('SELECT space_key FROM research_knowledge_embeddings').all().some(row=>row.space_key.includes('2')));
     await jobs.shutdown();
   } finally {await service?.shutdown();f.close();}
@@ -117,4 +117,19 @@ test('transient query failures explicitly degrade while permission, integrity an
     f.db.prepare("UPDATE research_knowledge_chunks SET content_hash='corrupt'").run();
     await assert.rejects(()=>service.search(request),/source_corrupt/);
   }finally{await service?.shutdown();f.close();}
+});
+
+test('embedding publication rejects a title or section changed while the provider was running',async()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const knowledge=f.repository.knowledge;
+    knowledge.saveEmbeddingConfig({id:'test',name:'test',baseUrl:'https://fixture.invalid',model:'fixture',dimensions:2,enabled:true},'fixture-key');
+    knowledge.upsertFromSource(input);
+    for (const change of [()=>f.db.prepare('UPDATE research_knowledge_documents SET title=?').run('Changed title'),
+      ()=>f.db.prepare('UPDATE research_knowledge_chunk_structure SET section=?').run('Changed section')]) {
+      const chunks=knowledge.knowledgeChunks(input.id);change();
+      assert.throws(()=>knowledge.storeChunkEmbeddings({configId:'test',configRevision:1,chunks,vectors:[Buffer.from(new Float32Array([1,0]).buffer)]}),/source_changed/);
+    }
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_knowledge_embeddings').pluck().get(),0);
+  }finally{f.close();}
 });

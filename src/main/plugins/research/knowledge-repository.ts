@@ -1,3 +1,4 @@
+import {structuredSpans, spanLocator, knowledgeChunkVersion, chunkTokenCount} from './knowledge-chunks';
 import {keywordTextV1,keywordQueryV1} from './knowledge-keywords';
 import { createHash } from 'node:crypto';
 
@@ -22,7 +23,7 @@ export type KnowledgeSourceWrite = {
   sourceId: string;
   title: string;
   content: string;
-  chunks: Array<{ content: string; locator: string | null }>;
+  chunks: Array<{ content: string; locator: string | null; section?: string | null }>;
   embeddingPolicy: KnowledgeEmbeddingPolicy;
 };
 
@@ -146,9 +147,27 @@ export class ResearchKnowledgeRepository {
       );
       const keywordIndex = this.db.prepare("SELECT 1 FROM sqlite_master WHERE name='research_knowledge_keywords'").get()
         ? this.db.prepare('INSERT INTO research_knowledge_keywords(rowid,content,title) VALUES (?,?,?)') : null;
-      request.chunks.forEach((chunk, index) => {
-        const inserted=insertChunk.run(`${request.id}:chunk:${index}`, request.id, request.projectId, index, chunk.content, chunk.locator, hashText(chunk.content), timestamp);
-        keywordIndex?.run(inserted.lastInsertRowid,keywordTextV1(chunk.content),keywordTextV1(request.title));
+      const structured = this.db.prepare("SELECT 1 FROM sqlite_master WHERE name='research_knowledge_chunk_structure'").get();
+      const structure = structured ? this.db.prepare('INSERT INTO research_knowledge_chunk_structure VALUES (?,?,?,?,?)') : null;
+      const insert = (index: number, content: string, locator: string | null): string => {
+        const id = `${request.id}:chunk:${index}`;
+        const inserted = insertChunk.run(id, request.id, request.projectId, index, content, locator, hashText(content), timestamp);
+        keywordIndex?.run(inserted.lastInsertRowid, keywordTextV1(content), keywordTextV1(request.title));
+        return id;
+      };
+      // Preserve original parent IDs for annotation and historical evidence; only children are retrieved.
+      request.chunks.forEach((chunk, index) => insert(index, chunk.content, chunk.locator));
+      let childIndex = request.chunks.length;
+      if (structure) request.chunks.forEach((chunk, index) => {
+        const parentId = `${request.id}:chunk:${index}`;
+        const spans = structuredSpans(chunk.content, chunk.section ?? null);
+        structure.run(parentId, null, 0, chunk.content.length, chunk.section ?? spans[0]?.section ?? null);
+        if (spans.length > 1) for (const span of spans) {
+          const content = chunk.content.slice(span.start, span.end);
+          if (!content.trim()) continue;
+          const id = insert(childIndex++, content, spanLocator(chunk.locator, span));
+          structure.run(id, parentId, span.start, span.end, span.section);
+        }
       });
     });
     write();
@@ -164,9 +183,48 @@ export class ResearchKnowledgeRepository {
     return row;
   }
 
-  knowledgeChunks(documentId: string): Array<{ id: string; content: string; contentHash: string }> {
-    return this.db.prepare('SELECT id,content,content_hash AS contentHash FROM research_knowledge_chunks WHERE document_id = ? ORDER BY chunk_index')
-      .all(documentId) as Array<{ id: string; content: string; contentHash: string }>;
+  knowledgeChunks(documentId: string): Array<{id: string; content: string; contentHash: string; embeddingInput: string; inputVersion: string}> {
+    const rows = this.db.prepare(`SELECT c.id,c.content,c.content_hash AS contentHash,s.section,d.title
+      FROM research_knowledge_chunks c JOIN research_knowledge_documents d ON d.id=c.document_id
+      LEFT JOIN research_knowledge_chunk_structure s ON s.chunk_id=c.id WHERE c.document_id=?
+      AND NOT EXISTS (SELECT 1 FROM research_knowledge_chunk_structure child WHERE child.parent_chunk_id=c.id)
+      ORDER BY c.chunk_index`).all(documentId) as Array<{id: string; content: string; contentHash: string; section: string | null; title: string}>;
+    const budget = (text: string): string => {
+      let value = [...text].slice(0, 400).join('');
+      while (chunkTokenCount(value) > 128) value = [...value].slice(0, Math.floor([...value].length * 0.75)).join('');
+      return value;
+    };
+    return rows.map(({title, section, ...chunk}) => ({...chunk, inputVersion: knowledgeChunkVersion,
+      embeddingInput: `Document: ${budget(title)}\n${section ? `Section: ${budget(section)}\n` : ''}Text:\n${chunk.content}`}));
+  }
+
+  /** Read bounded original parent context. Partial text is not a new evidence identity. */
+  chunkContext(projectId: string, chunkId: string, maxChars = 6000): {
+    chunkId: string; parentChunkId: string; content: string; locator: string | null; start: number; end: number; totalChars: number; indexedVersion: string
+  } {
+    if (!Number.isInteger(maxChars) || maxChars < 1 || maxChars > 8000) throw new Error('research_knowledge_context_budget');
+    this.requireProject(projectId);
+    this.indexedVersion(chunkId, projectId, new Map());
+    const relation = this.db.prepare('SELECT parent_chunk_id,start_utf16,end_utf16 FROM research_knowledge_chunk_structure WHERE chunk_id=?')
+      .get(chunkId) as {parent_chunk_id: string | null; start_utf16: number; end_utf16: number} | undefined;
+    const parentChunkId = relation?.parent_chunk_id ?? chunkId;
+    const version = this.indexedVersion(parentChunkId, projectId, new Map());
+    const parent = this.db.prepare('SELECT content,locator FROM research_knowledge_chunks WHERE id=?').get(parentChunkId) as {content: string; locator: string | null};
+    if (relation?.parent_chunk_id) {
+      const child = this.db.prepare('SELECT content,locator,document_id FROM research_knowledge_chunks WHERE id=?').get(chunkId) as {content: string; locator: string; document_id: string};
+      const parentDocument = this.db.prepare('SELECT document_id FROM research_knowledge_chunks WHERE id=?').pluck().get(parentChunkId);
+      if (parentDocument !== child.document_id || relation.end_utf16 > parent.content.length ||
+          parent.content.slice(relation.start_utf16, relation.end_utf16) !== child.content ||
+          child.locator !== spanLocator(parent.locator, {start: relation.start_utf16, end: relation.end_utf16})) {
+        throw new Error('research_knowledge_source_corrupt');
+      }
+    }
+    let start = Math.max(0, Math.min((relation?.start_utf16 ?? 0) - Math.floor(maxChars / 4), parent.content.length - maxChars));
+    if (start > 0 && /[\uDC00-\uDFFF]/u.test(parent.content[start]!)) start++;
+    let end = Math.min(start + maxChars, parent.content.length);
+    if (end < parent.content.length && /[\uD800-\uDBFF]/u.test(parent.content[end - 1]!)) end--;
+    return {chunkId, parentChunkId, content: parent.content.slice(start, end), locator: parent.locator, start, end,
+      totalChars: parent.content.length, indexedVersion: version.indexedVersion};
   }
 
   knowledgeDocument(id: string): ResearchKnowledgeDocument {
@@ -176,16 +234,23 @@ export class ResearchKnowledgeRepository {
     return researchKnowledgeDocumentSchema.parse(row);
   }
 
-  storeChunkEmbeddings(input: { configId: string; configRevision: number; chunks: readonly { id: string; contentHash: string }[]; vectors: readonly Buffer[]; cache?: {version:string; hashes:readonly string[]} }): void {
+  storeChunkEmbeddings(input: { configId: string; configRevision: number; chunks: readonly { id: string; contentHash: string; embeddingInput?: string; inputVersion?: string }[]; vectors: readonly Buffer[]; cache?: {version:string; hashes:readonly string[]} }): void {
     if (input.chunks.length !== input.vectors.length || new Set(input.chunks.map((chunk) => chunk.id)).size !== input.chunks.length) {
       throw new Error('research_embedding_chunk_count_mismatch');
     }
     const write = this.db.transaction(() => {
       const config = this.requireEmbeddingConfig(input.configId, input.configRevision);
       const vectors: Buffer[] = [];
+      const currentInputs = new Map<string, Map<string, {embeddingInput: string; inputVersion: string}>>();
       for (const [index, chunk] of input.chunks.entries()) {
-        const current = this.db.prepare('SELECT content_hash FROM research_knowledge_chunks WHERE id = ?').get(chunk.id) as { content_hash: string } | undefined;
+        const current = this.db.prepare('SELECT content_hash,document_id FROM research_knowledge_chunks WHERE id = ?').get(chunk.id) as { content_hash: string; document_id: string } | undefined;
         if (current === undefined || current.content_hash !== chunk.contentHash) throw new Error('research_embedding_source_changed');
+        if (chunk.embeddingInput !== undefined) {
+          let inputs = currentInputs.get(current.document_id);
+          if (!inputs) {inputs = new Map(this.knowledgeChunks(current.document_id).map(value => [value.id, value])); currentInputs.set(current.document_id, inputs);}
+          const latest = inputs.get(chunk.id);
+          if (latest?.embeddingInput !== chunk.embeddingInput || latest.inputVersion !== chunk.inputVersion) throw new Error('research_embedding_source_changed');
+        }
         vectors.push(normalizeEmbeddingBlob(input.vectors[index], config.dimensions));
       }
       const statement = this.db.prepare(
@@ -331,6 +396,7 @@ export class ResearchKnowledgeRepository {
            JOIN research_knowledge_chunks c ON c.rowid = research_knowledge_chunks_fts.rowid
            JOIN research_knowledge_documents d ON d.id = c.document_id
            WHERE research_knowledge_chunks_fts MATCH ?
+             AND NOT EXISTS (SELECT 1 FROM research_knowledge_chunk_structure child WHERE child.parent_chunk_id=c.id)
              AND (? IS NULL OR (c.project_id = ? OR c.project_id IS NULL))
              AND (? IS NULL OR (d.project_id = ? OR d.project_id IS NULL))
          ),
@@ -342,6 +408,7 @@ export class ResearchKnowledgeRepository {
            JOIN research_knowledge_documents d ON d.rowid = research_knowledge_documents_fts.rowid
            JOIN research_knowledge_chunks c ON c.document_id = d.id
            WHERE research_knowledge_documents_fts MATCH ?
+             AND NOT EXISTS (SELECT 1 FROM research_knowledge_chunk_structure child WHERE child.parent_chunk_id=c.id)
              AND (? IS NULL OR (c.project_id = ? OR c.project_id IS NULL))
              AND (? IS NULL OR (d.project_id = ? OR d.project_id IS NULL))
          ),
@@ -380,6 +447,7 @@ export class ResearchKnowledgeRepository {
       SELECT c.id AS chunk_id,c.document_id,d.title,c.content,c.locator,d.source_type,d.source_id
       FROM hits JOIN research_knowledge_chunks c ON c.rowid=hits.rowid JOIN research_knowledge_documents d ON d.id=c.document_id
       WHERE (? IS NULL OR c.project_id=? OR c.project_id IS NULL) AND (? IS NULL OR d.project_id=? OR d.project_id IS NULL)
+      AND NOT EXISTS (SELECT 1 FROM research_knowledge_chunk_structure child WHERE child.parent_chunk_id=c.id)
       ORDER BY hits.source,hits.rank,c.document_id,c.chunk_index LIMIT ?`)
       .all(`content : (${match})`,`title : (${match})`,projectId,projectId,projectId,projectId,limit) as KnowledgeHitRow[];
     return rows.map(toKnowledgeHit);
@@ -405,6 +473,7 @@ export class ResearchKnowledgeRepository {
            FROM research_knowledge_embeddings e
            ${projectJoin}
            WHERE e.space_key = ? AND e.dimensions = ? ${projectClause}
+           AND NOT EXISTS (SELECT 1 FROM research_knowledge_chunk_structure child WHERE child.parent_chunk_id=e.chunk_id)
            ORDER BY distance ASC LIMIT ?
          )
          SELECT nearest.chunk_id, c.document_id, d.title, c.content, c.locator,

@@ -292,7 +292,7 @@ export const researchKnowledgeDocumentUpsertRequestSchema = z
     sourceId: z.string().min(1),
     title: z.string().trim().min(1),
     content: z.string().min(1),
-    chunks: z.array(z.object({ content: z.string().min(1), locator: z.string().nullable() }).strict()).min(1),
+    chunks: z.array(z.object({ content: z.string().min(1), locator: z.string().nullable(), section: z.string().max(2000).nullable().optional() }).strict()).min(1),
     embeddingConfigId: z.string().min(1).nullable()
   })
   .strict();

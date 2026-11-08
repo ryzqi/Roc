@@ -1,3 +1,4 @@
+import {spanLocator} from './knowledge-chunks';
 import {createHash} from 'node:crypto';
 import type {Database} from 'better-sqlite3';
 import type {ResearchEvidence} from '../../../shared/types';
@@ -23,10 +24,18 @@ export function readCurrentEvidenceSourceLocator(db: Database, evidence: Researc
   }
   const parsed = storedDocumentContentSchema.parse(JSON.parse(row.data_json));
   if (parsed.content.sourceHash !== row.source_hash) throw new Error('research_evidence_source_hash_invalid');
-  // Indexing keeps nonblank blocks in their original order. Validate the block,
-  // not a locator-text match that could select another identical paragraph.
-  const block = parsed.content.blocks.filter(block => block.text.trim())[row.chunk_index];
-  if (block === undefined || block.text !== evidence.excerpt || block.locator !== evidence.locator) {
+  const structured = db.prepare("SELECT 1 FROM sqlite_master WHERE name='research_knowledge_chunk_structure'").get();
+  const child = structured ? db.prepare(`SELECT s.start_utf16,s.end_utf16,p.chunk_index,p.content,p.locator
+    FROM research_knowledge_chunk_structure s JOIN research_knowledge_chunks p ON p.id=s.parent_chunk_id
+    WHERE s.chunk_id=? AND p.document_id=?`).get(evidence.chunkId, evidence.documentId) as {
+      start_utf16: number; end_utf16: number; chunk_index: number; content: string; locator: string
+    } | undefined : undefined;
+  const block = parsed.content.blocks.filter(block => block.text.trim())[child?.chunk_index ?? row.chunk_index];
+  const textSpan = child ? {start: child.start_utf16, end: child.end_utf16} : undefined;
+  if (block === undefined || (child && (child.content !== block.text || child.locator !== block.locator ||
+      child.start_utf16 < 0 || child.end_utf16 > block.text.length || child.end_utf16 <= child.start_utf16)) ||
+      (textSpan ? block.text.slice(textSpan.start, textSpan.end) : block.text) !== evidence.excerpt ||
+      (textSpan ? spanLocator(block.locator, textSpan) : block.locator) !== evidence.locator) {
     throw new Error('research_evidence_source_block_invalid');
   }
   const locations = block.locations.map(location => {
@@ -42,7 +51,7 @@ export function readCurrentEvidenceSourceLocator(db: Database, evidence: Researc
     documentId: row.document_id, parseId: row.parse_id, knowledgeDocumentId: evidence.documentId,
     blockId: block.id, sourceHash: row.source_hash, parseHash: hash(JSON.stringify(parsed.content)),
     parserFingerprint: parsed.content.parserFingerprint, rawLocator: evidence.locator,
-    locations
+    locations, ...(textSpan ? {textSpan} : {})
   });
 }
 

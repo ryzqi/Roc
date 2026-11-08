@@ -86,11 +86,11 @@ function MigrationCandidate({client, inspection, canDecide, onChanged}: {
               data-reading-key={`source-migration-target:${proposal.id}:${target.chunkId}`}
               className="mt-1 shrink-0 accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-accent"/>
             <span className="min-w-0 flex-1">
-              <span className="block break-words">{target.block.locator}</span>
+              <span className="block break-words">{target.block.locator}{target.textSpan ? `；原文字符 ${target.textSpan.start + 1}–${target.textSpan.end}` : ''}</span>
               <span className="block text-muted">{target.block.locations.length === 0 ? '未提供页或区域' :
                 `解析页 ${[...new Set(target.block.locations.map(location => location.page))].join('、')}`}</span>
               <span className="block break-all text-muted">块 {target.block.id}</span>
-              <span className="block whitespace-pre-wrap break-words">{target.block.text}</span>
+              <span className="block whitespace-pre-wrap break-words">{target.textSpan ? target.block.text.slice(target.textSpan.start, target.textSpan.end) : target.block.text}</span>
             </span>
           </label>)}
         </fieldset>}

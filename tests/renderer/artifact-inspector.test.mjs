@@ -119,7 +119,7 @@ after(async()=>{
   try {await app?.close();} finally {fixtures.forEach(f=>f.close());api?.dispose();if(directory)rmSync(directory,{recursive:true,force:true});}
   assert.deepEqual(errors,[]);
 });
-async function scene({long=false,managed=false,experiment=false}={}) {
+async function scene({long=false,managed=false,experiment=false,child=false}={}) {
   const f=createResearchFixture(api,'reading');fixtures.push(f);active=f;reads.length=0;
   const excerpt=long ? '原始来源长段落与定位说明。'.repeat(120) : 'An actual retained synthetic source excerpt.';
   let evidenceId='inspector-evidence';
@@ -153,7 +153,7 @@ async function scene({long=false,managed=false,experiment=false}={}) {
       }}, null);
     };
     f.reparse('inspector-old');
-    f.source=f.repository.evidence.capture({projectId:f.project.id,chunkId:'document:inspector-old:chunk:0'});
+    f.source=f.repository.evidence.capture({projectId:f.project.id,chunkId:child ? f.repository.knowledge.knowledgeChunks('document:inspector-old')[0].id : 'document:inspector-old:chunk:0'});
     evidenceId=f.source.id;
   } else f.db.prepare(`INSERT INTO research_evidence
     (id,project_id,document_id,chunk_id,source_type,source_id,source_version,title,locator,excerpt,content_hash,created_at)
@@ -1074,4 +1074,24 @@ test('replacement inspector refuses same-document locations, incompatible source
   assert.equal(await selection.getByTestId('artifact-source-replacement-save').isDisabled(),true);
   assert.equal(next.db.prepare('SELECT total_changes()').pluck().get(),before);
   assert.deepEqual(await page.evaluate(()=>decisions),[]);
+});
+
+test('migration inspector renders and captures the exact child span of a long parent',async()=>{
+  const f=await scene({managed:true,long:true,child:true});f.reparse('inspector-new');
+  await openMigrationSource(f);
+  const candidate=await openMigrationCandidate(f);
+  const inspection=f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:f.source.id})[0];
+  const target=inspection.proposal.targets[0];assert.ok(target.textSpan);
+  const radio=candidate.getByTestId('artifact-source-migration-target-0');
+  const label=radio.locator('..');
+  assert.match(await label.innerText(),/原文字符/u);
+  const excerpt=target.block.text.slice(target.textSpan.start,target.textSpan.end);
+  assert.equal(await label.locator('span.whitespace-pre-wrap').innerText(),excerpt);
+  await radio.focus();await page.keyboard.press('Space');
+  await activateRendered(candidate.getByTestId('artifact-source-migration-capture'));
+  await page.getByTestId('artifact-source-migrations').getByText('已捕获新证据',{exact:true}).waitFor();
+  await (await openMigrationCandidate(f)).getByTestId('artifact-source-migration-decision').waitFor({state:'visible'});
+  const decision=f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:f.source.id})[0].decision;
+  assert.equal(decision.capturedSource.evidence.excerpt,excerpt);
+  assert.deepEqual(decision.capturedSource.sourceLocator.textSpan,target.textSpan);
 });

@@ -126,7 +126,7 @@ export function createResearchRoleTools(input: {
       return { artifactId, ...page(JSON.stringify(report), offset, limit) };
     }, { name: 'read_review_report', description: '综合角色分页读取本轮已完成的独立评审报告。',
       schema: z.object({ artifactId: z.string().min(1), offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(8000) }).strict() }),
-    search_knowledge: () => tool(async ({ query, limit }) => {
+    search_knowledge: () => tool(async ({ query, limit, withContext }) => {
       assertActive();
       if (scientificInput !== undefined) {
         const terms = query.toLocaleLowerCase().split(/\s+/u);
@@ -140,9 +140,10 @@ export function createResearchRoleTools(input: {
         projectId: input.run.projectId, query, limit, embeddingConfigId: null
       });
       assertActive();
-      return { ...result, hits: result.hits.map((hit) => ({ ...hit, content: hit.content.slice(0, 8000), contentChars: hit.content.length })) };
-    }, { name: 'search_knowledge', description: '检索本项目与全局文献材料，返回真实 chunkId 和来源定位。',
-      schema: z.object({ query: z.string().trim().min(1).max(1000), limit: z.number().int().min(1).max(10) }).strict() }),
+      return { ...result, hits: result.hits.map((hit) => ({ ...hit, content: hit.content.slice(0, 8000), contentChars: hit.content.length,
+        ...(withContext ? {context: input.repository.knowledge.chunkContext(input.run.projectId, hit.chunkId, Math.floor(8000 / limit))} : {}) })) };
+    }, { name: 'search_knowledge', description: '检索本项目与全局文献材料，返回真实 chunkId 和来源定位。withContext 可读取命中父段的原文上下文，总预算 8000 字符；上下文不能冒充新的证据，捕获仍使用 chunkId。冻结评审仅返回固定输入。',
+      schema: z.object({ query: z.string().trim().min(1).max(1000), limit: z.number().int().min(1).max(10), withContext: z.boolean().optional() }).strict() }),
     capture_evidence: () => tool(async ({ chunkId }) => {
       assertActive();
       const evidence = input.repository.evidence.capture({ projectId: input.run.projectId, chunkId });

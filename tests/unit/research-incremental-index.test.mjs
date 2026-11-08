@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import { build } from 'esbuild';
 import Database from 'better-sqlite3';
 
@@ -35,6 +36,12 @@ test('dirty file reconciliation preserves unrelated files and falls back for dir
     repo.indexing.bindRoot(project.id, root);
     const keys = new Map([['markdown', 'roc-text-1']]);
     repo.indexing.reconcile(project.id, repo.indexing.beginScan(project.id), full, false, null, keys);
+    const job=repo.indexing.beginJob(repo.indexing.nextJob().id);
+    const indexed=modules.files.indexText(Buffer.from('# Heading\n\nbody'));
+    repo.indexing.publishText(job,{...indexed,parserKey:'roc-text-1',sourceHash:createHash('sha256').update(indexed.content).digest('hex'),
+      parseArtifactId:null,artifactPath:null,parserFingerprint:null},'fixture-cache');
+    assert.equal(repo.indexing.cached(job.fileId).payload.chunks[0].section,'Heading');
+    repo.indexing.finishJob(job,null);
     writeFileSync(join(root, 'a.md'), 'changed');
     const paths = new Set(['a.md']);
     const changed = await modules.files.scanChangedIndexFiles(root, paths, options, storage, signal);
@@ -54,6 +61,7 @@ test('dirty file reconciliation preserves unrelated files and falls back for dir
 test('full scans honor aborts, skip symlink files, and enforce safety caps', async () => {
   const dir = mkdtempSync(realpathSync(join(tmpdir())) + '/roc-index-scan-limits-');
   try {
+    symlinkSync(join(process.cwd(), 'node_modules'), join(dir, 'node_modules'), 'dir');
     const outfile = join(dir, 'index-files.mjs');
     await build({
       entryPoints: ['src/main/plugins/research/index-files.ts'],

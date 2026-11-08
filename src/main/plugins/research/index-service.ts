@@ -1,3 +1,4 @@
+import {knowledgeChunkVersion} from './knowledge-chunks';
 import { watch } from 'node:fs';
 import { cp, lstat, mkdir, mkdtemp, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { extname, isAbsolute, join, matchesGlob, relative } from 'node:path';
@@ -12,7 +13,7 @@ import type { ResearchRepository } from './repository';
 import type { ResearchToolchain } from './toolchain';
 import type { ResearchEmbeddingService } from './embedding-service';
 import { embeddingKey, knowledgeId, type IndexJob, type IndexPayload } from './index-repository';
-import { indexFileSignature, indexLocatedText, indexText, readIndexFile, scanChangedIndexFiles, scanIndexFiles, type IndexFileKind } from './index-files';
+import { indexFileSignature, indexDocumentBlocks, indexText, readIndexFile, scanChangedIndexFiles, scanIndexFiles, type IndexFileKind } from './index-files';
 import { maximumArtifactBytes } from './document-files';
 import { pruneResearchArtifacts } from './artifact-gc';
 import type { ResearchArtifactGcReport } from './artifact-gc';
@@ -316,7 +317,7 @@ export class ResearchIndexService {
           admission: { projectId: job.projectId, priority: 'background' },
           options: this.tools.defaultParseOptions(job.input.kind === 'html' ? 'text/html' : 'application/pdf') });
         if (parsed.sourceHash !== source.sourceHash) throw new Error('research_index_source_changed');
-        const chunks = parsed.blocks.flatMap((block) => indexLocatedText(block.text, block.locator));
+        const chunks = indexDocumentBlocks(parsed.blocks);
         payload = { content: chunks.map((chunk) => chunk.content).join('\n\n'), chunks, parserVersion: parsed.parserVersion, sourceHash: source.sourceHash, parserKey: job.input.parserKey,
           ...await this.publishArtifact(storage, source.sourceHash, parsed, work) };
       }
@@ -402,8 +403,8 @@ export class ResearchIndexService {
     // 否则换档位后旧索引会被当成命中，用户看不到新结果。
     const tier = this.tools.defaultParseOptions(kind === 'html' ? 'text/html' : 'application/pdf').tier;
     return ['pdf', 'image', 'html'].includes(kind)
-      ? `paddleocr.js:${await this.tools.identity()}:${tier}`
-      : 'roc-text-1';
+      ? `paddleocr.js:${await this.tools.identity()}:${tier}:${knowledgeChunkVersion}`
+      : knowledgeChunkVersion;
   }
 
   private async storage(): Promise<string> {

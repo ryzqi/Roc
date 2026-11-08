@@ -18,7 +18,7 @@ async function loadIndexFiles() {
     bundle: true,
     format: 'esm',
     platform: 'node',
-    packages: 'external'
+    packages: 'bundle'
   });
   return { dir, files: await import(outfile) };
 }
@@ -28,9 +28,9 @@ test('indexText keeps short text grouped by source lines', async () => {
   try {
     const result = files.indexText(Buffer.from('title\n\nbody text', 'utf8'));
 
-    assert.equal(result.parserVersion, 'roc-text-1');
+    assert.equal(result.parserVersion, 'roc-structure-cl100k-1');
     assert.equal(result.content, 'title\n\nbody text');
-    assert.deepEqual(result.chunks, [{ content: 'title\n\nbody text', locator: 'lines 1-3' }]);
+    assert.deepEqual(result.chunks, [{ content: 'title\n\nbody text', locator: 'text; UTF-16 1-16', section: null }]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -42,13 +42,12 @@ test('indexText splits an oversized line without breaking UTF-16 surrogate pairs
     const text = `${'界'.repeat(1999)}😀tail`;
     const result = files.indexText(Buffer.from(text, 'utf8'));
 
-    assert.equal(result.chunks.length, 2);
+    assert.ok(result.chunks.length > 2);
     assert.equal(result.chunks.map((chunk) => chunk.content).join(''), text);
-    assert.deepEqual(result.chunks.map((chunk) => chunk.locator), [
-      'line 1; UTF-16 1-1999',
-      `line 1; UTF-16 2000-${text.length}`
-    ]);
+    let offset = 0;
     for (const chunk of result.chunks) {
+      assert.equal(chunk.locator, `text; UTF-16 ${offset + 1}-${offset + chunk.content.length}`);
+      offset += chunk.content.length;
       assert.ok(chunk.content.length <= 2000);
       const decoded = new TextDecoder('utf-8', { fatal: true }).decode(Buffer.from(chunk.content, 'utf8'));
       assert.equal(decoded, chunk.content);
@@ -66,8 +65,8 @@ test('indexLocatedText preserves parser locators while splitting long extracted 
 
     assert.equal(chunks.map((chunk) => chunk.content).join(''), text);
     assert.deepEqual(chunks.map((chunk) => chunk.locator), [
-      'PDF page 7, paragraph 2; extracted line 1; UTF-16 1-2000',
-      'PDF page 7, paragraph 2; extracted line 1; UTF-16 2001-2001'
+      'PDF page 7, paragraph 2; UTF-16 1-2000',
+      'PDF page 7, paragraph 2; UTF-16 2001-2001'
     ]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -81,4 +80,28 @@ test('indexText rejects malformed UTF-8 rather than indexing replacement charact
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('structured text preserves CRLF, headings, paragraphs, literal tokens and multilingual token budgets',async()=>{
+  const {dir,files}=await loadIndexFiles();
+  const {getEncoding}=await import('js-tiktoken');const enc=getEncoding('cl100k_base');
+  try {
+    const text='# 方法\r\n\r\n'+('注意力机制 handles long context.\r\n'.repeat(80))+'\r\n## 限定条件\r\n\r\n<|endoftext|> 不代表所有任务。😀';
+    const result=files.indexText(Buffer.from(text));
+    assert.equal(result.content,text);
+    assert.equal(result.chunks.map(chunk=>chunk.content).join(''),text);
+    assert.ok(result.chunks.some(chunk=>chunk.section==='方法 / 限定条件'));
+    for(const chunk of result.chunks) assert.ok(enc.encode(chunk.content,[],[]).length<=512);
+  }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('parsed headings apply to following paragraph and table parents without changing their original text',async()=>{
+  const {dir,files}=await loadIndexFiles();
+  try {
+    const chunks=files.indexDocumentBlocks([{kind:'heading',text:'Results',locator:'p1'},
+      {kind:'paragraph',text:'exact  original\nparagraph',locator:'p2'},{kind:'table',text:'a,b\n1,2',locator:'p3'}]);
+    assert.deepEqual(chunks.map(c=>c.section),['Results','Results','Results']);
+    assert.equal(chunks[1].content,'exact  original\nparagraph');
+    assert.equal(chunks[2].locator,'p3');
+  }finally{rmSync(dir,{recursive:true,force:true});}
 });

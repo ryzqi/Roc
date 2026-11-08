@@ -30,6 +30,8 @@ async function scene({basis = true, databaseVersion = 26} = {}) {
       migrations: api.researchMigrations.filter(migration => migration.version <= databaseVersion)});
   }};
   const f = createResearchFixture(fixtureApi, 'reading');
+  // Seed historical schemas before the durable outbox existed.
+  if (databaseVersion !== 26) f.repository.queueKnowledgeFromSource = () => {};
   f.directory = await mkdtemp(join(tmpdir(), 'roc-document-annotations-'));
   f.root = await realpath(f.directory);
   f.original = await readFile('tests/fixtures/research-workflow/source.pdf');

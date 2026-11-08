@@ -130,17 +130,17 @@ export class ResearchEmbeddingService {
 
   private async embedChunks(documentId: string, row: EmbeddingConfigRow, signal: AbortSignal): Promise<void> {
     const chunks = this.knowledge.knowledgeChunks(documentId);
-    const version='raw-chunk-v1';
+    const version=chunks[0]?.inputVersion ?? 'raw-chunk-v1';
     const hashes=chunks.map(chunk=>{
       const hash=createHash('sha256').update(chunk.content).digest('hex');
       if(hash!==chunk.contentHash) throw new Error('research_knowledge_source_corrupt');
-      return hash;
+      return createHash('sha256').update(chunk.embeddingInput).digest('hex');
     });
     const byHash=new Map<string,Buffer>();
     const missing=new Map<string,string>();
     chunks.forEach((chunk,index)=>{
       const cached=this.knowledge.cachedEmbedding(row.id,row.revision,version,hashes[index]!);
-      if(cached) byHash.set(hashes[index]!,cached); else missing.set(hashes[index]!,chunk.content);
+      if(cached) byHash.set(hashes[index]!,cached); else missing.set(hashes[index]!,chunk.embeddingInput);
     });
     const inputs=[...missing.entries()];
     for (let offset=0;offset<inputs.length;offset+=32) {

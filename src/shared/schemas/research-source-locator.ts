@@ -13,6 +13,7 @@ export const researchSourceLocatorSchema = z.object({
   parseHash: hash,
   parserFingerprint: hash,
   rawLocator: identifier,
+  textSpan: z.object({start: z.number().int().nonnegative(), end: z.number().int().positive()}).strict().refine(span => span.end > span.start).optional(),
   locations: z.array(z.object({
     page: z.number().int().positive(),
     bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]).nullable(),

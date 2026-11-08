@@ -1,3 +1,4 @@
+import {spanLocator} from './knowledge-chunks';
 import {createHash, randomUUID} from 'node:crypto';
 import type {Database} from 'better-sqlite3';
 import type {ResearchInspectedEvidence} from '../../../shared/schemas/research-evidence-source';
@@ -54,6 +55,20 @@ export class ResearchSourceMigrationRepository {
       }
       append(exact, block.text, target);
       append(normalized, normalize(block.text), target);
+      const children = !this.db.prepare("SELECT 1 FROM sqlite_master WHERE name='research_knowledge_chunk_structure'").get() ? [] : this.db.prepare(`SELECT s.chunk_id,s.start_utf16,s.end_utf16,c.content,c.locator
+        FROM research_knowledge_chunk_structure s JOIN research_knowledge_chunks c ON c.id=s.chunk_id
+        WHERE s.parent_chunk_id=? ORDER BY s.start_utf16`).all(target.chunkId) as Array<{
+          chunk_id: string; start_utf16: number; end_utf16: number; content: string; locator: string
+        }>;
+      for (const child of children) {
+        const textSpan = {start: child.start_utf16, end: child.end_utf16};
+        if (block.text.slice(textSpan.start, textSpan.end) !== child.content || spanLocator(block.locator, textSpan) !== child.locator) {
+          throw new Error('research_source_migration_index_changed');
+        }
+        const target = {chunkId: child.chunk_id, block, textSpan};
+        append(exact, child.content, target);
+        append(normalized, normalize(child.content), target);
+      }
     }
     for (const row of sources) {
       if (this.db.prepare('SELECT id FROM research_source_migration_proposals WHERE evidence_id=? AND target_parse_id=?')
@@ -126,20 +141,22 @@ export class ResearchSourceMigrationRepository {
         if (inspection.targetStatus !== 'current') throw new Error('research_source_migration_target_stale');
         const target = proposal.targets.find(target => target.chunkId === request.chunkId);
         if (target === undefined) throw new Error('research_source_migration_target_not_proposed');
+        const text = target.textSpan ? target.block.text.slice(target.textSpan.start, target.textSpan.end) : target.block.text;
+        const rawLocator = target.textSpan ? spanLocator(target.block.locator, target.textSpan) : target.block.locator;
         const chunk = this.db.prepare('SELECT document_id,content,locator,content_hash FROM research_knowledge_chunks WHERE id=?')
           .get(target.chunkId) as {document_id: string; content: string; locator: string; content_hash: string} | undefined;
         if (chunk === undefined || chunk.document_id !== `document:${proposal.targetParseId}` ||
-            chunk.content !== target.block.text || chunk.locator !== target.block.locator || chunk.content_hash !== hash(target.block.text)) {
+            chunk.content !== text || chunk.locator !== rawLocator || chunk.content_hash !== hash(text)) {
           throw new Error('research_source_migration_index_changed');
         }
         const captured = this.evidence.capture({projectId: request.projectId, chunkId: target.chunkId});
         capturedSource = this.evidence.inspectEvidence(captured.id, request.projectId);
         const locator = capturedSource.sourceLocator;
-        if (capturedSource.referenceStatus !== 'recorded' || captured.excerpt !== target.block.text ||
-            captured.locator !== target.block.locator || locator === null || locator.documentId !== proposal.documentId ||
+        if (capturedSource.referenceStatus !== 'recorded' || captured.excerpt !== text ||
+            captured.locator !== rawLocator || locator === null || locator.documentId !== proposal.documentId ||
             locator.parseId !== proposal.targetParseId || locator.parseHash !== proposal.targetParseHash ||
             locator.sourceHash !== proposal.targetSourceHash || locator.parserFingerprint !== proposal.parserFingerprint ||
-            locator.blockId !== target.block.id) throw new Error('research_source_migration_capture_changed');
+            locator.blockId !== target.block.id || JSON.stringify(locator.textSpan) !== JSON.stringify(target.textSpan)) throw new Error('research_source_migration_capture_changed');
       }
       const decision = researchSourceMigrationDecisionSchema.parse({
         id: `source_migration_decision_${randomUUID()}`, projectId: request.projectId, proposalId: proposal.id,

@@ -427,3 +427,38 @@ test('Wiki resolves PDF citations through the captured document and ignores libr
     assert.deepEqual(f.repository.evidence.wikiSnapshot(f.project.id).papers,snapshot.papers,'historical sources retain their actual paper');
   }finally{f.close();}
 });
+
+test('long managed blocks keep annotation parents and exact child spans through search, capture and reparse',()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const document=importedDocument(f);
+    const text=Array.from({length:200},(_,i)=>`第${i}段的注意力机制结果与限定条件。`).join('\n\n');
+    publishParse(f,document,'long-old',[block('long',{text})]);
+    const parent=capture(f,'long-old');
+    assert.equal(parent.excerpt,text);
+    const result=f.repository.knowledge.searchKnowledge({request:{projectId:f.project.id,query:'注意力机制',limit:10},vector:null});
+    assert.ok(result.hits.length>1);
+    assert.ok(result.hits.every(hit=>hit.chunkId!=='document:long-old:chunk:0'));
+    const child=f.repository.evidence.capture({projectId:f.project.id,chunkId:result.hits[0].chunkId});
+    const source=f.repository.evidence.inspectEvidence(child.id,f.project.id);
+    const span=source.sourceLocator.textSpan;
+    assert.equal(child.excerpt,text.slice(span.start,span.end));
+    assert.equal(source.sourceLocator.blockId,'long');
+    const context=f.repository.knowledge.chunkContext(f.project.id,child.chunkId,1000);
+    assert.equal(context.parentChunkId,parent.chunkId);
+    assert.ok(context.content.length<=1000);
+    assert.equal(context.content,text.slice(context.start,context.end));
+    assert.throws(()=>f.repository.knowledge.chunkContext(f.project.id,child.chunkId,8001),/budget/);
+    publishParse(f,document,'long-new',[block('long-new',{text})]);
+    assert.deepEqual(f.repository.evidence.inspectEvidence(child.id,f.project.id).sourceLocator,source.sourceLocator);
+    const proposal=f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:child.id})[0];
+    assert.equal(proposal.proposal.match,'exact_text');
+    assert.deepEqual(proposal.proposal.targets[0].textSpan,span);
+    const decision=f.repository.evidence.sourceMigrations.decide({projectId:f.project.id,proposalId:proposal.proposal.id,
+      requestId:'long-span-capture',expectedProposalHash:proposal.proposalHash,expectedSourceDigest:proposal.proposal.sourceDigest,
+      expectedTargetParseHash:proposal.proposal.targetParseHash,note:null,action:'capture',chunkId:proposal.proposal.targets[0].chunkId},
+      {kind:'user',id:'fixture-human'});
+    assert.equal(decision.capturedSource.evidence.excerpt,child.excerpt);
+    assert.deepEqual(decision.capturedSource.sourceLocator.textSpan,span);
+  }finally{f.close();}
+});

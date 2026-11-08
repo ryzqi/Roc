@@ -22,7 +22,7 @@ const jobInputSchema = z.object({ path: z.string(), kind: researchIndexedFileSch
   root: z.string(), force: z.boolean(), parserKey: z.string().min(1), embeddingConfigId: z.string().nullable(),
   embedding: z.object({ configId: z.string(), revision: z.number().int().positive() }).strict().nullable() }).strict();
 export type IndexJob = z.infer<typeof researchIndexJobSchema> & { input: z.infer<typeof jobInputSchema> };
-const indexPayloadSchema = z.object({ content: z.string(), chunks: z.array(z.object({ content: z.string().min(1), locator: z.string().min(1) }).strict()),
+const indexPayloadSchema = z.object({ content: z.string(), chunks: z.array(z.object({ content: z.string().min(1), locator: z.string().min(1), section: z.string().max(2000).nullable().optional() }).strict()),
   sourceHash: z.string().regex(/^[a-f0-9]{64}$/u), parserKey: z.string().min(1), parserVersion: z.string().min(1),
   // 解析工件（提案 §8「工件发布与恢复」）：索引链取完文本**不能**删掉中间产物，
   // 否则阅读器与索引就不再共享同一份不可变工件。非文档输入（纯文本）为 null。
