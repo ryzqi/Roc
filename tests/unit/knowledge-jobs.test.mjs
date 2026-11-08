@@ -74,15 +74,47 @@ test('durable jobs invoke the real embedding service and store only current chun
   try {
     const knowledge=f.repository.knowledge,jobs=f.repository.knowledgeJobs;
     knowledge.saveEmbeddingConfig({id:'test',name:'test',baseUrl:'https://fixture.invalid',model:'fixture',dimensions:2,enabled:true},'fixture-key');
-    service=new ResearchEmbeddingService(knowledge,{embed:async({texts})=>texts.map(()=>[1,0])},
+    const embedded=[];
+    service=new ResearchEmbeddingService(knowledge,{embed:async({texts})=>{embedded.push(...texts);return texts.map(()=>[1,0]);}},
       {secrets:{get:async()=> 'synthetic-key'},logger:{warn(){}}});
     knowledge.upsertFromSource(input);jobs.enqueue(input.id);
     jobs.start((id,signal)=>service.embedDocument(id,null,signal));await jobs.idle();
     assert.equal(jobs.list(null)[0].status,'ready');
     assert.equal(f.db.prepare('SELECT count(*) FROM research_knowledge_embeddings').pluck().get(),1);
+    knowledge.upsertFromSource({...input,content:'old\nnew',chunks:[{content:'old',locator:null},{content:'new',locator:null}]});
+    jobs.enqueue(input.id);jobs.wake();await jobs.idle();
+    assert.deepEqual(embedded,['old','new']);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_knowledge_embeddings').pluck().get(),2);
     knowledge.saveEmbeddingConfig({id:'test',name:'test',baseUrl:'https://fixture.invalid',model:'fixture-new',dimensions:2,enabled:true},'fixture-key');
     jobs.configurationChanged(); await jobs.idle();
+    assert.deepEqual(embedded,['old','new','old','new']);
     assert.ok(f.db.prepare('SELECT space_key FROM research_knowledge_embeddings').all().some(row=>row.space_key.includes('2')));
     await jobs.shutdown();
   } finally {await service?.shutdown();f.close();}
+});
+
+test('transient query failures explicitly degrade while permission, integrity and cancellation fail',async()=>{
+  const {ResearchEmbeddingService}=await importTypeScriptModule('src/main/plugins/research/embedding-service.ts',{platform:'node'});
+  const f=createResearchFixture(api,'reading');let service;
+  try {
+    const knowledge=f.repository.knowledge;
+    knowledge.saveEmbeddingConfig({id:'test',name:'test',baseUrl:'https://fixture.invalid',model:'fixture',dimensions:2,enabled:true},'fixture-key');
+    knowledge.upsertFromSource(input);
+    let failure=new Error('embedding_provider_http_429');
+    service=new ResearchEmbeddingService(knowledge,{embed:async()=>{throw failure;}},{secrets:{get:async()=> 'synthetic-key'},logger:{warn(){}}});
+    const request={query:'old',projectId:null,limit:10,embeddingConfigId:null};
+    for(const [error,reason] of [[new Error('embedding_provider_http_429'),'rate_limit'],[new Error('embedding_provider_http_503'),'provider_unavailable'],
+      [new TypeError('fetch failed'),'network'],[new DOMException('timeout','TimeoutError'),'timeout']]) {
+      failure=error;const result=await service.search(request);
+      assert.equal(result.hits.length,1);assert.equal(result.ranking.degradation,reason);
+      assert.equal(result.ranking.coverage.vector,'not_searched');knowledge.assertSearchCurrent(result);
+    }
+    for(const code of ['embedding_provider_http_401','embedding_provider_dimensions_mismatch','research_embedding_source_changed']) {
+      failure=new Error(code);await assert.rejects(()=>service.search(request));
+    }
+    failure=new TypeError('fetch failed');
+    await assert.rejects(()=>service.search(request,AbortSignal.abort()));
+    f.db.prepare("UPDATE research_knowledge_chunks SET content_hash='corrupt'").run();
+    await assert.rejects(()=>service.search(request),/source_corrupt/);
+  }finally{await service?.shutdown();f.close();}
 });

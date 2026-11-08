@@ -393,6 +393,9 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
             </button>
           </div>
 
+          {result?.ranking?.degradation && <p role="status" className="mt-2 text-xs text-subtle" data-testid="rag-degraded">
+            语义检索暂不可用，本次仅返回关键词结果（{{timeout:'请求超时',network:'网络故障',rate_limit:'服务限流',provider_unavailable:'服务暂不可用'}[result.ranking.degradation]}）。可稍后重试。
+          </p>}
           {searchError === null ? null : (
             <p role="alert" className="mt-1.5 flex items-center gap-1 text-[var(--st-bad)] text-[length:var(--font-micro-size)]" data-testid="rag-search-error">
               <AlertCircle size={11} aria-hidden="true" />

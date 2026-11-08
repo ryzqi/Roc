@@ -176,7 +176,7 @@ export class ResearchKnowledgeRepository {
     return researchKnowledgeDocumentSchema.parse(row);
   }
 
-  storeChunkEmbeddings(input: { configId: string; configRevision: number; chunks: readonly { id: string; contentHash: string }[]; vectors: readonly Buffer[] }): void {
+  storeChunkEmbeddings(input: { configId: string; configRevision: number; chunks: readonly { id: string; contentHash: string }[]; vectors: readonly Buffer[]; cache?: {version:string; hashes:readonly string[]} }): void {
     if (input.chunks.length !== input.vectors.length || new Set(input.chunks.map((chunk) => chunk.id)).size !== input.chunks.length) {
       throw new Error('research_embedding_chunk_count_mismatch');
     }
@@ -197,13 +197,27 @@ export class ResearchKnowledgeRepository {
            created_at = excluded.created_at`
       );
       input.chunks.forEach((chunk, index) => statement.run(chunk.id, embeddingSpaceKey(config.id, config.revision), config.dimensions, vectors[index], this.now()));
+      if(input.cache) {
+        if(input.cache.hashes.length!==vectors.length) throw new Error('research_embedding_cache_count_mismatch');
+        const cache=this.db.prepare('INSERT OR REPLACE INTO research_embedding_cache VALUES (?,?,?,?,?,?)');
+        input.cache.hashes.forEach((hash,index)=>cache.run(config.id,config.revision,input.cache!.version,hash,vectors[index],this.now()));
+        this.db.prepare('DELETE FROM research_embedding_cache WHERE config_id=? AND revision<>?').run(config.id,config.revision);
+      }
     });
     write();
+  }
+
+  cachedEmbedding(configId: string, revision: number, version: string, hash: string): Buffer | null {
+    const config=this.requireEmbeddingConfig(configId,revision);
+    const row=this.db.prepare('SELECT vector_blob FROM research_embedding_cache WHERE config_id=? AND revision=? AND input_version=? AND input_hash=?')
+      .get(configId,revision,version,hash) as {vector_blob:Buffer}|undefined;
+    return row ? normalizeEmbeddingBlob(row.vector_blob,config.dimensions) : null;
   }
 
   searchKnowledge(input: {
     request: ResearchKnowledgeSearchRequest;
     vector: { configId: string; configRevision: number; blob: Buffer } | null;
+    degradation?: 'timeout'|'network'|'rate_limit'|'provider_unavailable';
   }): ResearchKnowledgeSearchResult {
     const candidateLimit=input.request.candidateLimit ?? Math.min(200,Math.max(50,input.request.limit*4));
     const rerank=input.request.rerank ?? 'none';
@@ -239,7 +253,7 @@ export class ResearchKnowledgeRepository {
       reason: 'sum(1/(60+rank)); equal channel weights' as const,
       outputRank: index < input.request.limit ? index + 1 : null
     }));
-    const rankingInput = {schemaVersion:2 as const, candidateLimit, rerank, projectId: input.request.projectId, limit: input.request.limit,
+    const rankingInput = {schemaVersion:2 as const, candidateLimit, rerank, degradation:input.degradation ?? null, projectId: input.request.projectId, limit: input.request.limit,
       embedding: input.vector === null ? null : {configId: input.vector.configId,
         revision: input.vector.configRevision, queryVectorHash: createHash('sha256').update(input.vector.blob).digest('hex')}, candidates};
     return {
@@ -259,7 +273,7 @@ export class ResearchKnowledgeRepository {
   /** A receipt describes the indexed snapshot, never a claim about an unindexed external file. */
   assertSearchCurrent(result: ResearchKnowledgeSearchResult): void {
     const {projectId, limit, embedding, candidates} = result.ranking;
-    const options=result.ranking.schemaVersion===1?{}:{schemaVersion:2,candidateLimit:result.ranking.candidateLimit,rerank:result.ranking.rerank};
+    const options=result.ranking.schemaVersion===1?{}:{schemaVersion:2,candidateLimit:result.ranking.candidateLimit,rerank:result.ranking.rerank, ...(result.ranking.degradation===undefined?{}:{degradation:result.ranking.degradation})};
     if (result.ranking.inputHash !== hashText(JSON.stringify({query: result.query,...options, projectId, limit, embedding, candidates}))) {
       throw new Error('research_knowledge_ranking_changed');
     }

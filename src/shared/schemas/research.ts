@@ -335,6 +335,7 @@ export const researchKnowledgeSearchResultSchema = z
       schemaVersion: z.union([z.literal(1),z.literal(2)]), ranker: z.literal('rrf-v1-k60'),
       candidateLimit: z.number().int().min(50).max(200).optional(),
       rerank: z.enum(['none','lexical-v1']).optional(),
+      degradation: z.enum(['timeout','network','rate_limit','provider_unavailable']).nullable().optional(),
       inputHash: z.string().regex(/^[a-f0-9]{64}$/u),
       projectId: z.string().nullable(), limit: z.number().int().positive(),
       embedding: z.object({configId: z.string(), revision: z.number().int().positive(),

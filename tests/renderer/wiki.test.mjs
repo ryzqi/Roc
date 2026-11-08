@@ -39,7 +39,7 @@ before(async () => {
       const list=async()=>({ok:true,data:[]});
       const client={api:{research:{knowledgeJobs:list,listIndexedFiles:list,listIndexJobs:list,
         getIndexStatus:async()=>({ok:false,error:{message:'Synthetic index unavailable'}}),
-        searchKnowledge:async input=>{window.searchInput=input;return {ok:true,data:{query:input.query,hits:[],keywordCount:0,vectorCount:0,embeddingModel:null,generatedAt:'2026-11-08'}};}}}};
+        searchKnowledge:async input=>{window.searchInput=input;return {ok:true,data:{query:input.query,hits:[],keywordCount:0,vectorCount:0,embeddingModel:null,generatedAt:'2026-11-08',ranking:{degradation:'rate_limit'}}};}}}};
       flushSync(()=>root.render(React.createElement(WorkspaceScopeProvider,{value:{client,writable:true}},
         React.createElement(RagStudio,{literature:{client,projectId:'p1',action:{error:null}},openInFilesView(){},onOpenInReader(){}}))));
     };
@@ -181,4 +181,5 @@ test('retrieval exposes optional reranking and sends the selected mode through I
   await page.getByTestId('rag-search').focus();await page.keyboard.press('Enter');
   await page.waitForFunction(()=>window.searchInput?.rerank==='lexical-v1');
   assert.equal(await page.evaluate(()=>window.searchInput.limit),20);
+  await page.getByTestId('rag-degraded').getByText(/仅返回关键词结果/).waitFor();
 });

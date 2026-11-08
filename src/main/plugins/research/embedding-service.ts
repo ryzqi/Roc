@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { ResearchEmbeddingConfig, ResearchEmbeddingConfigSaveRequest, ResearchKnowledgeDocument, ResearchKnowledgeDocumentUpsertRequest,
   ResearchKnowledgeSearchRequest, ResearchKnowledgeSearchResult } from '../../../shared/types';
 import type { RocPluginContext } from '../../kernel/types';
@@ -130,16 +130,29 @@ export class ResearchEmbeddingService {
 
   private async embedChunks(documentId: string, row: EmbeddingConfigRow, signal: AbortSignal): Promise<void> {
     const chunks = this.knowledge.knowledgeChunks(documentId);
-    const vectors: Buffer[] = [];
-    for (let offset = 0; offset < chunks.length; offset += 32) {
-      this.requireActive(signal);
-      this.knowledge.requireEmbeddingConfig(row.id, row.revision);
-      const values = await this.client.embed({ config: await this.config(row), apiKey: await this.apiKey(row),
-        texts: chunks.slice(offset, offset + 32).map((chunk) => chunk.content), signal });
-      vectors.push(...values.map(vectorToBlob));
+    const version='raw-chunk-v1';
+    const hashes=chunks.map(chunk=>{
+      const hash=createHash('sha256').update(chunk.content).digest('hex');
+      if(hash!==chunk.contentHash) throw new Error('research_knowledge_source_corrupt');
+      return hash;
+    });
+    const byHash=new Map<string,Buffer>();
+    const missing=new Map<string,string>();
+    chunks.forEach((chunk,index)=>{
+      const cached=this.knowledge.cachedEmbedding(row.id,row.revision,version,hashes[index]!);
+      if(cached) byHash.set(hashes[index]!,cached); else missing.set(hashes[index]!,chunk.content);
+    });
+    const inputs=[...missing.entries()];
+    for (let offset=0;offset<inputs.length;offset+=32) {
+      this.requireActive(signal); this.knowledge.requireEmbeddingConfig(row.id,row.revision);
+      const batch=inputs.slice(offset,offset+32);
+      const values=await this.client.embed({config:await this.config(row),apiKey:await this.apiKey(row),texts:batch.map(([,text])=>text),signal});
+      if(values.length!==batch.length) throw new Error('embedding_provider_count_mismatch');
+      batch.forEach(([hash],index)=>byHash.set(hash,vectorToBlob(values[index])));
     }
     this.requireActive(signal);
-    this.knowledge.storeChunkEmbeddings({ configId: row.id, configRevision: row.revision, chunks, vectors });
+    this.knowledge.storeChunkEmbeddings({configId:row.id,configRevision:row.revision,chunks,
+      vectors:hashes.map(hash=>byHash.get(hash)!),cache:{version,hashes}});
   }
 
   async search(request: ResearchKnowledgeSearchRequest, signal?: AbortSignal): Promise<ResearchKnowledgeSearchResult> {
@@ -149,9 +162,18 @@ export class ResearchEmbeddingService {
       this.requireActive(active);
       if (row === null) return this.knowledge.searchKnowledge({ request, vector: null });
       this.knowledge.requireEmbeddingConfig(row.id, row.revision);
-      const [value] = await this.client.embed({ config: await this.config(row), apiKey: await this.apiKey(row), texts: [request.query], signal: active });
+      let values: number[][];
+      try {
+        values=await this.client.embed({config:await this.config(row),apiKey:await this.apiKey(row),texts:[request.query],signal:active});
+      } catch(error) {
+        this.requireActive(active);
+        this.knowledge.requireEmbeddingConfig(row.id,row.revision);
+        const reason=transientEmbeddingFailure(error);
+        if(reason===null) throw error;
+        return this.knowledge.searchKnowledge({request,vector:null,degradation:reason});
+      }
       this.requireActive(active);
-      return this.knowledge.searchKnowledge({ request, vector: { configId: row.id, configRevision: row.revision, blob: vectorToBlob(value) } });
+      return this.knowledge.searchKnowledge({ request, vector: { configId: row.id, configRevision: row.revision, blob: vectorToBlob(values[0]) } });
     });
   }
 
@@ -231,4 +253,13 @@ export class ResearchEmbeddingService {
 
   private requireOpen(): void { if (this.closed) throw new Error('research_embeddings_closed'); }
   private requireActive(signal: AbortSignal): void { if (signal.aborted || this.closed) throw new Error('research_embedding_cancelled'); }
+}
+
+function transientEmbeddingFailure(error: unknown): 'timeout'|'network'|'rate_limit'|'provider_unavailable'|null {
+  if (!(error instanceof Error)) return null;
+  if(error.name==='TimeoutError') return 'timeout';
+  if(error instanceof TypeError && /fetch failed|network|failed to fetch/i.test(error.message)) return 'network';
+  if(error.message==='embedding_provider_http_429') return 'rate_limit';
+  if(/^embedding_provider_http_5\d\d$/u.test(error.message)) return 'provider_unavailable';
+  return null;
 }

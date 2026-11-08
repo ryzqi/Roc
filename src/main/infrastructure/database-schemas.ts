@@ -2896,6 +2896,15 @@ CREATE TRIGGER research_knowledge_keywords_delete AFTER DELETE ON research_knowl
 END;
 `, data: {dataVersion:'knowledge-positional-han-v1',migrate:backfillKnowledgeKeywordsV1}});
 
+researchMigrations.push({version: 68, name: 'knowledge_embedding_input_cache', sql: `
+CREATE TABLE research_embedding_cache (
+ config_id TEXT NOT NULL REFERENCES research_embedding_configs(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL, input_version TEXT NOT NULL, input_hash TEXT NOT NULL,
+ vector_blob BLOB NOT NULL, created_at TEXT NOT NULL,
+ PRIMARY KEY(config_id,revision,input_version,input_hash)
+);
+`});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,
