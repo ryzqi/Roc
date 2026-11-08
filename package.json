@@ -60,7 +60,8 @@
     "verify:arm64-only": "node scripts/verify-arm64-only.mjs",
     "verify:paths": "node scripts/verify-paths.mjs",
     "sync:builtin-skills": "node scripts/sync-builtin-skills.mjs",
-    "sync:ripgrep": "node scripts/fetch-ripgrep.mjs"
+    "sync:ripgrep": "node scripts/fetch-ripgrep.mjs",
+    "harness:bench": "node evaluation/lib/cli.mjs"
   },
   "dependencies": {
     "@langchain/anthropic": "1.5.13",

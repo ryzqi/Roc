@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { parseArgs } from 'node:util';
 import { createServer } from 'node:http';
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -8,7 +9,8 @@ import { build } from 'esbuild';
 import { createInventory, hash } from './inventory.mjs';
 import { scenarios } from './scenarios.mjs';
 
-const directory = resolve('.artifacts/harness-eval', new Date().toISOString().replaceAll(':', '-') + `-${process.pid}`);
+const { values: arguments_ } = parseArgs({ options: { 'output-root': { type: 'string' } } });
+const directory = resolve(arguments_['output-root'] ?? '.artifacts/harness-eval', new Date().toISOString().replaceAll(':', '-') + `-${process.pid}`);
 const expectedCaseCount = 94;
 mkdirSync(directory, { recursive: true });
 const save = (name, value) => writeFileSync(join(directory, name), JSON.stringify(value, null, 2));

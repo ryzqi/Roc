@@ -1,10 +1,13 @@
 # Offline harness pilot
 
+For manually triggered public datasets, frozen evidence and version comparisons, use
+[the benchmark workflow](../../evaluation/README.md): `pnpm harness:bench --help`.
+
 Run `pnpm harness:eval` from repository root. Requires installed Node dependencies; no credentials,
 remote provider, user config or real project. Each run retains inventory, per-case trajectories,
 SQLite databases, synthetic workspaces and a machine-readable report under `.artifacts/harness-eval/`.
 
-The 48 pilot cases exercise deterministic fixture transport and tools through installed Deep Agents,
+The 94 current cases exercise deterministic fixture transport and tools through installed Deep Agents,
 plus Roc's checkpointer, event log, outcome/budget/loop checks and effect store. Mock quality and
 fixed token usage are transport evidence only; USD cost is unknown, never zero. The report separates
 known behavior defects from runner failures. Pilot cases are not independent real-model research

@@ -58,6 +58,30 @@ const columnNames = (db, table) =>
 const ledgerVersions = (db) =>
   db.prepare('SELECT version FROM schema_migrations ORDER BY version').pluck().all();
 
+test('isolated execution migration preserves effects, operation indexes and result event trigger', () => {
+  const db = new Database(':memory:');
+  db.function('roc_task_event', {varargs: true}, () => '{}');
+  try {
+    applyDatabaseMigrations(db, {dbName: 'agent', migrations: agentMigrations.filter(m => m.version <= 21)});
+    db.prepare(`INSERT INTO agent_tool_effects
+      (run_id,thread_id,execution_path,checkpoint_id,tool_call_id,tool_name,input_hash,effect_class,
+       reconcile_strategy,status,created_at,updated_at,operation_id,lease_generation,receipt_sequence,receipt_json,receipt_hash)
+      VALUES ('run','thread','path','checkpoint','call','tool','hash','workspace_mutation',
+       'retry_safe','succeeded','created','updated','operation',4,2,'{"result":42}','receipt-hash')`).run();
+    const before = db.prepare('SELECT * FROM agent_tool_effects').all();
+    const trigger = db.prepare("SELECT sql FROM sqlite_master WHERE name='research_task_effect_committed'").pluck().get();
+    applyDatabaseMigrations(db, {dbName: 'agent', migrations: agentMigrations});
+    assert.deepEqual(db.prepare('SELECT * FROM agent_tool_effects').all(), before);
+    assert.equal(db.prepare("SELECT sql FROM sqlite_master WHERE name='research_task_effect_committed'").pluck().get(), trigger);
+    assert.equal(db.prepare("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name LIKE 'idx_agent_tool_effects_%'").pluck().get(), 4);
+    db.prepare("UPDATE agent_tool_effects SET effect_class='isolated_execution'").run();
+    assert.throws(() => db.prepare("UPDATE agent_tool_effects SET effect_class='unrecognized'").run(), /CHECK constraint/);
+    assert.throws(() => db.prepare("INSERT INTO agent_tool_effects SELECT run_id,thread_id,execution_path,checkpoint_id,'another-call',tool_name,input_hash,effect_class,reconcile_strategy,status,result_json,error_json,created_at,updated_at,identity_version,canonical_tool_identity,canonicalization_version,tool_version,operation_id,idempotency_key,attempt_id,lease_generation,attempt_count,receipt_sequence,receipt_json,receipt_hash,expected_version,result_hash FROM agent_tool_effects").run(), /UNIQUE constraint/);
+    db.prepare("INSERT INTO agent_tool_effect_results VALUES ('operation','{}','hash')").run();
+    assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 22);
+  } finally { db.close(); }
+});
+
 test('appending a migration preserves complete historical ledger rows and their original application times', () => {
   const db = new Database(':memory:');
   const initialTime = '2026-11-01T00:00:00.000Z';

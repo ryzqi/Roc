@@ -41,4 +41,17 @@ CLAUDE.md
 .planning/
 .codex/
 .vitest/
-.agents/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/roc-world/
+.agents/skills/roc-world/*
+!.agents/skills/roc-world/SKILL.md
+
+# Local evaluation data, private state and evidence
+/evaluation/datasets/
+/evaluation/runs/
+/evaluation/comparisons/
+/evaluation/.runtime/
+/evaluation/environments/
+/evaluation/local/

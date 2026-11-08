@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "trigger": "manual",
+  "suites": [
+    {"id":"roc-native","component":"harness reliability","adapter":"native","status":"available","source":"scripts/harness-eval/run.mjs","license":"project","metrics":["contractPassRate"],"evidence":"fixture"},
+    {"id":"qasper","component":"paper reading and evidence","adapter":"qasper-v1","status":"available","source":"https://huggingface.co/datasets/allenai/qasper","license":"CC-BY-4.0","metrics":["answerF1","evidenceF1","citationValidity"],"track":"roc-adapted-text"},
+    {"id":"scienceagentbench","component":"scientific task execution","adapter":"scienceagentbench-local-verified-v2","status":"requires-verified-environment","source":"https://github.com/OSU-NLP-Group/ScienceAgentBench","license":"CC-BY-4.0 with per-task upstream exceptions; do not redistribute unpacked data","split":"verified","metrics":["successRate"],"track":"roc-adapted"},
+    {"id":"beir-scifact","component":"retrieval and ranking","adapter":null,"status":"planned","source":"https://huggingface.co/datasets/BeIR/scifact","license":"CC-BY-SA-4.0","metrics":["recall20","ndcg10"]},
+    {"id":"longmemeval","component":"cross-session memory","adapter":null,"status":"planned","source":"https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned","license":"MIT","metrics":["accuracyByType"]},
+    {"id":"bfcl-v4","component":"tool selection and arguments","adapter":null,"status":"planned","source":"https://gorilla.cs.berkeley.edu/leaderboard.html","license":"Apache-2.0 dataset card; verify chosen revision","metrics":["executionAccuracy"]},
+    {"id":"agentdojo","component":"prompt injection and permissions","adapter":null,"status":"planned","source":"https://github.com/ethz-spylab/agentdojo","license":"MIT","metrics":["attackSuccessRate","benignTaskSuccessRate"]},
+    {"id":"ruler","component":"context retention","adapter":null,"status":"deferred","source":"https://github.com/NVIDIA/RULER","license":"verify chosen data generator revision","metrics":["accuracyByContextLength"]},
+    {"id":"gaia","component":"general tool-using agent","adapter":null,"status":"deferred","source":"https://huggingface.co/datasets/gaia-benchmark/GAIA","license":"gated; no crawlable redistribution","metrics":["answerAccuracy"]},
+    {"id":"core-bench","component":"scientific reproduction","adapter":null,"status":"deferred","source":"https://github.com/siegelz/core-bench","license":"per-source data terms","metrics":["taskSuccessRate"]}
+  ]
+}

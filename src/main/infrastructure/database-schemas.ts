@@ -920,6 +920,44 @@ CREATE TABLE research_task_dependencies (
 );
 `});
 
+// Keep historical migration checksums stable while accepting the execution broker's isolated effects.
+agentMigrations.push({version: 22, name: 'isolated_execution_effects', sql: `
+DROP TRIGGER research_task_effect_committed;
+CREATE TABLE agent_tool_effects_next (
+  run_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  execution_path TEXT NOT NULL,
+  checkpoint_id TEXT NOT NULL,
+  tool_call_id TEXT NOT NULL,
+  tool_name TEXT NOT NULL,
+  input_hash TEXT NOT NULL,
+  effect_class TEXT NOT NULL CHECK(effect_class IN ('external_call','host_execution','network_read','workspace_mutation','isolated_execution')),
+  reconcile_strategy TEXT NOT NULL CHECK(reconcile_strategy IN ('retry_safe','manual_confirmation')),
+  status TEXT NOT NULL CHECK(status IN ('reserved','in_progress','succeeded','failed_retryable','failed_final','unknown')),
+  result_json TEXT, error_json TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  identity_version INTEGER NOT NULL DEFAULT 0 CHECK(identity_version >= 0),
+  canonical_tool_identity TEXT, canonicalization_version TEXT, tool_version TEXT,
+  operation_id TEXT, idempotency_key TEXT, attempt_id TEXT,
+  lease_generation INTEGER NOT NULL DEFAULT 0 CHECK(lease_generation >= 0),
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count >= 0),
+  receipt_sequence INTEGER NOT NULL DEFAULT 0 CHECK(receipt_sequence >= 0),
+  receipt_json TEXT, receipt_hash TEXT, expected_version TEXT, result_hash TEXT,
+  PRIMARY KEY (run_id, execution_path, checkpoint_id, tool_call_id)
+);
+INSERT INTO agent_tool_effects_next SELECT * FROM agent_tool_effects;
+DROP TABLE agent_tool_effects;
+ALTER TABLE agent_tool_effects_next RENAME TO agent_tool_effects;
+CREATE INDEX idx_agent_tool_effects_run_status ON agent_tool_effects(run_id, status);
+CREATE INDEX idx_agent_tool_effects_thread_updated ON agent_tool_effects(thread_id, updated_at DESC);
+CREATE UNIQUE INDEX idx_agent_tool_effects_operation_id ON agent_tool_effects(operation_id) WHERE operation_id IS NOT NULL;
+CREATE INDEX idx_agent_tool_effects_run_lease ON agent_tool_effects(run_id, status, lease_generation);
+CREATE TRIGGER research_task_effect_committed AFTER INSERT ON agent_tool_effect_results BEGIN
+  INSERT INTO research_task_events(task_id,event_type,execution_kind,execution_id,state,reason,created_at)
+  SELECT e.task_id,'effect_committed',e.kind,e.execution_id,'succeeded',NEW.operation_id,strftime('%Y-%m-%dT%H:%M:%fZ','now')
+  FROM agent_tool_effects f JOIN research_task_executions e ON e.kind='chat' AND e.execution_id=f.run_id WHERE f.operation_id=NEW.operation_id;
+END;
+`});
+
 export const memoryMigrations: RocDatabaseMigration[] = [
   {
     version: 1,
