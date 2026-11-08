@@ -1,3 +1,4 @@
+import {keywordTextV1,keywordQueryV1} from './knowledge-keywords';
 import { createHash } from 'node:crypto';
 
 import type { Database as DatabaseConnection } from 'better-sqlite3';
@@ -142,8 +143,11 @@ export class ResearchKnowledgeRepository {
          (id, document_id, project_id, chunk_index, content, locator, content_hash, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       );
+      const keywordIndex = this.db.prepare("SELECT 1 FROM sqlite_master WHERE name='research_knowledge_keywords'").get()
+        ? this.db.prepare('INSERT INTO research_knowledge_keywords(rowid,content,title) VALUES (?,?,?)') : null;
       request.chunks.forEach((chunk, index) => {
-        insertChunk.run(`${request.id}:chunk:${index}`, request.id, request.projectId, index, chunk.content, chunk.locator, hashText(chunk.content), timestamp);
+        const inserted=insertChunk.run(`${request.id}:chunk:${index}`, request.id, request.projectId, index, chunk.content, chunk.locator, hashText(chunk.content), timestamp);
+        keywordIndex?.run(inserted.lastInsertRowid,keywordTextV1(chunk.content),keywordTextV1(request.title));
       });
     });
     write();
@@ -279,6 +283,7 @@ export class ResearchKnowledgeRepository {
   }
 
   private keywordSearch(query: string, projectId: string | null, limit: number): ResearchKnowledgeSearchHit[] {
+    if (/\p{Script=Han}/u.test(query)) return this.hanKeywordSearch(query,projectId,limit);
     const match = query
       .split(/\s+/u)
       .map((term) => term.replace(/"/gu, ''))
@@ -334,6 +339,23 @@ export class ResearchKnowledgeRepository {
       )
       .all(...args) as KnowledgeHitRow[];
     return rows.map((row) => toKnowledgeHit(row));
+  }
+
+  private hanKeywordSearch(query: string, projectId: string | null, limit: number): ResearchKnowledgeSearchHit[] {
+    const match=keywordQueryV1(query);
+    if (!match) return [];
+    const rows=this.db.prepare(`WITH content_hits AS MATERIALIZED (
+      SELECT rowid,bm25(research_knowledge_keywords) AS rank,0 AS source FROM research_knowledge_keywords
+      WHERE research_knowledge_keywords MATCH ?), title_hits AS MATERIALIZED (
+      SELECT rowid,bm25(research_knowledge_keywords) AS rank,1 AS source FROM research_knowledge_keywords
+      WHERE research_knowledge_keywords MATCH ?), hits AS (
+      SELECT * FROM content_hits UNION ALL SELECT * FROM title_hits WHERE rowid NOT IN (SELECT rowid FROM content_hits))
+      SELECT c.id AS chunk_id,c.document_id,d.title,c.content,c.locator,d.source_type,d.source_id
+      FROM hits JOIN research_knowledge_chunks c ON c.rowid=hits.rowid JOIN research_knowledge_documents d ON d.id=c.document_id
+      WHERE (? IS NULL OR c.project_id=? OR c.project_id IS NULL) AND (? IS NULL OR d.project_id=? OR d.project_id IS NULL)
+      ORDER BY hits.source,hits.rank,c.document_id,c.chunk_index LIMIT ?`)
+      .all(`content : (${match})`,`title : (${match})`,projectId,projectId,projectId,projectId,limit) as KnowledgeHitRow[];
+    return rows.map(toKnowledgeHit);
   }
 
   private vectorSearch(

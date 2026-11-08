@@ -8,6 +8,28 @@ import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 
 const { ResearchKnowledgeRepository } = await importTypeScriptModule('src/main/plugins/research/knowledge-repository.ts', { platform: 'node' });
 
+test('Chinese phrase retrieval finds unsegmented text, short terms, mixed queries and title hits after migration',async()=>{
+  const {applyResearchDatabaseSchema, researchMigrations}=await importTypeScriptModule('src/main/infrastructure/database-schemas.ts',{platform:'node',external:['better-sqlite3'],tempDir:resolve('.runtime')});
+  const {applyDatabaseMigrations}=await importTypeScriptModule('src/main/infrastructure/database-migrations.ts',{platform:'node',external:['better-sqlite3'],tempDir:resolve('.runtime')});
+  const db=new Database(':memory:');db.pragma('foreign_keys=ON');
+  try {
+    applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:researchMigrations.filter(m=>m.version<=66)});
+    const repo=new ResearchKnowledgeRepository(db,()=>{},()=> '2026-11-08');
+    const source={id:'zh',projectId:null,sourceType:'file',sourceId:'fixture',title:'注意力机制与长序列',content:'注意力机制能够处理长序列依赖。',
+      chunks:[{content:'注意力机制能够处理长序列依赖。',locator:'p1'}],embeddingPolicy:'none'};
+    repo.upsertFromSource(source);
+    applyResearchDatabaseSchema(db);
+    for(const query of ['注意力机制','长序列','依赖','注意力 Transformer']) {
+      assert.equal(repo.searchKnowledge({request:{query,projectId:null,limit:10},vector:null}).hits[0]?.documentId,'zh',query);
+    }
+    repo.upsertFromSource({...source,content:'new body',chunks:[{content:'new body',locator:'p2'}]});
+    assert.equal(repo.searchKnowledge({request:{query:'长序列',projectId:null,limit:10},vector:null}).hits[0]?.locator,'p2');
+    assert.equal(repo.searchKnowledge({request:{query:'依赖',projectId:null,limit:10},vector:null}).hits.length,0);
+    db.prepare("DELETE FROM research_knowledge_documents WHERE id='zh'").run();
+    assert.equal(repo.searchKnowledge({request:{query:'长序列',projectId:null,limit:10},vector:null}).hits.length,0);
+  } finally {db.close();}
+});
+
 test('keyword ranking retains content priority, deduplication, ordered chunks and both project boundaries', async () => {
   const {applyResearchDatabaseSchema} = await importTypeScriptModule('src/main/infrastructure/database-schemas.ts', {
     platform: 'node', external: ['better-sqlite3'], tempDir: resolve('.runtime')

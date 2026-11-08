@@ -1,3 +1,4 @@
+import {backfillKnowledgeKeywordsV1} from '../plugins/research/knowledge-keywords';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
 import { applyDatabaseMigrations, type RocDatabaseMigration } from './database-migrations';
@@ -2887,6 +2888,13 @@ INSERT INTO research_knowledge_jobs(document_id,generation,status,updated_at)
  SELECT id,lower(hex(randomblob(16))),'queued',indexed_at FROM research_knowledge_documents
  WHERE id LIKE 'library:%' OR id LIKE 'document:%' OR source_type='experiment';
 `});
+
+researchMigrations.push({version: 67, name: 'knowledge_positional_han_keywords', sql: `
+CREATE VIRTUAL TABLE research_knowledge_keywords USING fts5(content,title);
+CREATE TRIGGER research_knowledge_keywords_delete AFTER DELETE ON research_knowledge_chunks BEGIN
+ DELETE FROM research_knowledge_keywords WHERE rowid=old.rowid;
+END;
+`, data: {dataVersion:'knowledge-positional-han-v1',migrate:backfillKnowledgeKeywordsV1}});
 
 function applySchema(
   db: DatabaseConnection,
