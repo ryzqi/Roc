@@ -10,7 +10,7 @@ test('production FTS and frozen vectors compare identical scoped queries and kee
   assert.equal(row('en', 'raw', 'keyword').recall20, 0);
   assert.equal(row('en', 'expanded', 'keyword').recall20, 1);
   assert.equal(row('en', 'raw', 'fusion').recall20, 1);
-  assert.equal(row('zh', 'raw', 'keyword').recall20, 0);
+  assert.equal(row('zh', 'raw', 'keyword').recall20, 1);
   assert.equal(row('zh', 'expanded', 'keyword').recall20, 1);
   assert.match(report.acceptance, /tooling_only.*Blocked, not run/u);
   assert.equal(report.provenance.kind, 'engineering_fixture'); assert.equal(report.split, 'development');

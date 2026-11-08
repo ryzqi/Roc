@@ -81,6 +81,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
   const client = literature.client;
   const projectId = literature.projectId;
   const [query, setQuery] = useState('');
+  const [rerank,setRerank]=useState<'none'|'lexical-v1'>('none');
   const [result, setResult] = useState<ResearchKnowledgeSearchResult | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -187,7 +188,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
       const result = await searchKnowledge(client, {
         query: trimmed,
         projectId,
-        limit: 20,
+        limit: 20, rerank,
         // The configured embedding config, not a hard-coded null: without it the
         // backend can only return keyword hits, and the panel is displaying the
         // effective config right below the box.
@@ -355,6 +356,12 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
         <KnowledgeJobs client={client} projectId={projectId} />
         <section className="mb-4">
           <h3 className="mb-1.5 text-muted text-[length:var(--font-meta-size)]">检索（关键词与语义匹配）</h3>
+          <label className="mb-2 flex items-center gap-2 text-xs text-subtle">排序方式
+            <select aria-label="排序方式" value={rerank} onChange={event=>setRerank(event.target.value as 'none'|'lexical-v1')}
+              className="rounded-control border border-line bg-surface px-2 py-1 text-ink">
+              <option value="none">关键词与语义融合</option><option value="lexical-v1">融合后按查询词覆盖重排（实验）</option>
+            </select>
+          </label>
           <div className="flex gap-2">
             <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-control border-[0.5px] border-line bg-surface px-2">
               <Search size={11} aria-hidden="true" className="shrink-0 text-subtle" />

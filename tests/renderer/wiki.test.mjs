@@ -18,6 +18,8 @@ before(async () => {
     import {createRoot} from 'react-dom/client';
     import {flushSync} from 'react-dom';
     import {useLiteratureStore} from './src/renderer/literature/use-literature-store';
+    import {RagStudio} from './src/renderer/literature/RagStudio';
+    import {WorkspaceScopeProvider} from './src/renderer/app/workspace-scope';
     import {KnowledgeJobs} from './src/renderer/literature/KnowledgeJobs';
     import {WikiView} from './src/renderer/literature/WikiView';
     const client = {api:{research:{
@@ -33,6 +35,14 @@ before(async () => {
       window.store = store;
       return React.createElement('div', {id:'store-state'}, JSON.stringify({selected:store.selected,status:store.selectedStatus,error:store.selectedError}));
     }
+    window.mountRag = () => {
+      const list=async()=>({ok:true,data:[]});
+      const client={api:{research:{knowledgeJobs:list,listIndexedFiles:list,listIndexJobs:list,
+        getIndexStatus:async()=>({ok:false,error:{message:'Synthetic index unavailable'}}),
+        searchKnowledge:async input=>{window.searchInput=input;return {ok:true,data:{query:input.query,hits:[],keywordCount:0,vectorCount:0,embeddingModel:null,generatedAt:'2026-11-08'}};}}}};
+      flushSync(()=>root.render(React.createElement(WorkspaceScopeProvider,{value:{client,writable:true}},
+        React.createElement(RagStudio,{literature:{client,projectId:'p1',action:{error:null}},openInFilesView(){},onOpenInReader(){}}))));
+    };
     window.mountJobs = () => {
       let status='failed';
       const jobsClient={api:{research:{knowledgeJobs:async()=>({ok:true,data:[{documentId:'doc',generation:'v1',title:'Synthetic document',status,error:status==='failed'?'向量索引失败，请检查网络后重试。':null}]}),
@@ -162,4 +172,13 @@ test('source embedding jobs expose errors and keyboard retry refreshes status',a
   await panel.getByText('Synthetic document · 已完成').waitFor();
   assert.deepEqual(await page.evaluate(()=>window.retried),{documentId:'doc',generation:'v1'});
   await page.screenshot({path:join(artifacts,'embedding-jobs.png')});
+});
+
+test('retrieval exposes optional reranking and sends the selected mode through IPC',async()=>{
+  await page.evaluate(()=>window.mountRag());
+  await page.getByLabel('排序方式').selectOption('lexical-v1');
+  await page.getByTestId('rag-query').fill('注意力机制');
+  await page.getByTestId('rag-search').focus();await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>window.searchInput?.rerank==='lexical-v1');
+  assert.equal(await page.evaluate(()=>window.searchInput.limit),20);
 });

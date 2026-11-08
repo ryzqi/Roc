@@ -30,6 +30,31 @@ test('Chinese phrase retrieval finds unsegmented text, short terms, mixed querie
   } finally {db.close();}
 });
 
+test('fusion recalls beyond the display limit and records optional lexical reranking inputs',async()=>{
+  const {applyResearchDatabaseSchema}=await importTypeScriptModule('src/main/infrastructure/database-schemas.ts',{
+    platform:'node',external:['better-sqlite3'],tempDir:resolve('.runtime')});
+  const db=new Database(':memory:');
+  try {
+    load(db);applyResearchDatabaseSchema(db);
+    const repo=new ResearchKnowledgeRepository(db,()=>{},()=> '2026-11-08');
+    repo.saveEmbeddingConfig({id:'test',name:'test',baseUrl:'https://fixture.invalid',model:'test',dimensions:2,enabled:true},'fixture');
+    for (const [id,content,vector] of [['a','alpha',[0,1]],['b','alpha beta',[1,0]],['c','unrelated',[1,0.001]]]) {
+      repo.upsertFromSource({id,projectId:null,sourceType:'file',sourceId:id,title:id,content,chunks:[{content,locator:null}],embeddingPolicy:'none'});
+      repo.storeChunkEmbeddings({configId:'test',configRevision:1,chunks:repo.knowledgeChunks(id),vectors:[Buffer.from(new Float32Array(vector).buffer)]});
+    }
+    const result=repo.searchKnowledge({request:{query:'alpha beta',projectId:null,limit:1,rerank:'lexical-v1'},
+      vector:{configId:'test',configRevision:1,blob:Buffer.from(new Float32Array([1,0]).buffer)}});
+    assert.equal(result.hits[0].documentId,'b');
+    assert.ok(result.ranking.candidates.length>result.hits.length);
+    assert.equal(result.ranking.candidateLimit,50);
+    assert.equal(result.ranking.rerank,'lexical-v1');
+    assert.equal(result.ranking.candidates[0].rerankScore,1);
+    repo.assertSearchCurrent(result);
+    const changed=structuredClone(result);changed.ranking.candidateLimit=100;
+    assert.throws(()=>repo.assertSearchCurrent(changed),/ranking_changed/);
+  }finally{db.close();}
+});
+
 test('keyword ranking retains content priority, deduplication, ordered chunks and both project boundaries', async () => {
   const {applyResearchDatabaseSchema} = await importTypeScriptModule('src/main/infrastructure/database-schemas.ts', {
     platform: 'node', external: ['better-sqlite3'], tempDir: resolve('.runtime')

@@ -27,6 +27,7 @@ export type KnowledgeSourceWrite = {
 };
 
 type Clock = () => string;
+type KnowledgeVersionDocument = {document_hash:string;document_project:string|null;title:string;source_type:string;source_id:string;metadata_json:string};
 
 export type EmbeddingConfigRow = {
   id: string;
@@ -204,9 +205,11 @@ export class ResearchKnowledgeRepository {
     request: ResearchKnowledgeSearchRequest;
     vector: { configId: string; configRevision: number; blob: Buffer } | null;
   }): ResearchKnowledgeSearchResult {
-    const keywordHits = this.keywordSearch(input.request.query, input.request.projectId, input.request.limit);
+    const candidateLimit=input.request.candidateLimit ?? Math.min(200,Math.max(50,input.request.limit*4));
+    const rerank=input.request.rerank ?? 'none';
+    const keywordHits = this.keywordSearch(input.request.query, input.request.projectId, candidateLimit);
     const config = input.vector === null ? null : this.requireEmbeddingConfig(input.vector.configId, input.vector.configRevision);
-    const vectorHits = input.vector === null || config === null ? [] : this.vectorSearch(input.request.projectId, input.request.limit,
+    const vectorHits = input.vector === null || config === null ? [] : this.vectorSearch(input.request.projectId, candidateLimit,
       { spaceKey: embeddingSpaceKey(config.id, config.revision), dimensions: config.dimensions, blob: input.vector.blob });
     const merged = new Map<string, ResearchKnowledgeSearchHit>();
     keywordHits.forEach((hit, index) => {
@@ -223,14 +226,20 @@ export class ResearchKnowledgeRepository {
       }
     });
     const ordered = Array.from(merged.values()).sort((left, right) => right.rrfScore - left.rrfScore);
+    const terms=[...new Set(input.request.query.toLocaleLowerCase().match(/\p{Script=Han}+|[\p{L}\p{N}]+/gu) ?? [])];
+    const rerankScores=new Map(ordered.map(hit=>[hit.chunkId,terms.length===0?0:
+      terms.filter(term=>(hit.title+'\n'+hit.content).toLocaleLowerCase().includes(term)).length/terms.length]));
+    if (rerank==='lexical-v1') ordered.sort((a,b)=>rerankScores.get(b.chunkId)!-rerankScores.get(a.chunkId)! || b.rrfScore-a.rrfScore);
     const hits = ordered.slice(0, input.request.limit);
+    const documents=new Map<string,KnowledgeVersionDocument>();
     const candidates = ordered.map((hit, index) => ({
-      ...this.indexedVersion(hit.chunkId, input.request.projectId),
+      ...this.indexedVersion(hit.chunkId, input.request.projectId, documents),
+      rerankScore: rerank==='none' ? null : rerankScores.get(hit.chunkId)!,
       keywordRank: hit.keywordRank, vectorRank: hit.vectorRank, score: hit.rrfScore,
       reason: 'sum(1/(60+rank)); equal channel weights' as const,
       outputRank: index < input.request.limit ? index + 1 : null
     }));
-    const rankingInput = {projectId: input.request.projectId, limit: input.request.limit,
+    const rankingInput = {schemaVersion:2 as const, candidateLimit, rerank, projectId: input.request.projectId, limit: input.request.limit,
       embedding: input.vector === null ? null : {configId: input.vector.configId,
         revision: input.vector.configRevision, queryVectorHash: createHash('sha256').update(input.vector.blob).digest('hex')}, candidates};
     return {
@@ -240,7 +249,7 @@ export class ResearchKnowledgeRepository {
       vectorCount: vectorHits.length,
       embeddingModel: config?.model ?? null,
       generatedAt: this.now(),
-      ranking: {schemaVersion: 1, ranker: 'rrf-v1-k60', ...rankingInput,
+      ranking: {ranker: 'rrf-v1-k60', ...rankingInput,
         inputHash: hashText(JSON.stringify({query: input.request.query, ...rankingInput})),
         coverage: {keyword: keywordHits.length ? 'results' : 'no_results',
           vector: input.vector === null ? 'not_searched' : vectorHits.length ? 'results' : 'no_results'}}
@@ -250,36 +259,40 @@ export class ResearchKnowledgeRepository {
   /** A receipt describes the indexed snapshot, never a claim about an unindexed external file. */
   assertSearchCurrent(result: ResearchKnowledgeSearchResult): void {
     const {projectId, limit, embedding, candidates} = result.ranking;
-    if (result.ranking.inputHash !== hashText(JSON.stringify({query: result.query, projectId, limit, embedding, candidates}))) {
+    const options=result.ranking.schemaVersion===1?{}:{schemaVersion:2,candidateLimit:result.ranking.candidateLimit,rerank:result.ranking.rerank};
+    if (result.ranking.inputHash !== hashText(JSON.stringify({query: result.query,...options, projectId, limit, embedding, candidates}))) {
       throw new Error('research_knowledge_ranking_changed');
     }
     if (embedding !== null) this.requireEmbeddingConfig(embedding.configId, embedding.revision);
+    const documents=new Map<string,KnowledgeVersionDocument>();
     for (const candidate of candidates) {
-      if (this.indexedVersion(candidate.chunkId, projectId).indexedVersion !== candidate.indexedVersion) {
+      if (this.indexedVersion(candidate.chunkId, projectId, documents).indexedVersion !== candidate.indexedVersion) {
         throw new Error('research_knowledge_source_changed');
       }
     }
   }
 
-  private indexedVersion(chunkId: string, projectId: string | null): {
+  private indexedVersion(chunkId: string, projectId: string | null, documents: Map<string,KnowledgeVersionDocument>): {
     chunkId: string; documentId: string; locator: string | null; indexedVersion: string; chunkHash: string;
   } {
-    const row = this.db.prepare(`SELECT c.document_id, c.content, c.content_hash, c.locator, c.project_id,
-      d.content AS document_content, d.content_hash AS document_hash, d.project_id AS document_project,
-      d.title, d.source_type, d.source_id, d.metadata_json
-      FROM research_knowledge_chunks c JOIN research_knowledge_documents d ON d.id=c.document_id WHERE c.id=?`)
-      .get(chunkId) as {document_id: string; content: string; content_hash: string; locator: string | null;
-        project_id: string | null; document_content: string; document_hash: string; document_project: string | null;
-        title: string; source_type: string; source_id: string; metadata_json: string} | undefined;
-    if (row === undefined) throw new Error('research_knowledge_source_missing');
-    if (projectId !== null && ((row.project_id !== null && row.project_id !== projectId) ||
-      (row.document_project !== null && row.document_project !== projectId))) throw new Error('research_knowledge_project_mismatch');
-    if (hashText(row.content) !== row.content_hash || hashText(row.document_content) !== row.document_hash) {
-      throw new Error('research_knowledge_source_corrupt');
+    const chunk=this.db.prepare('SELECT document_id,content,content_hash,locator,project_id FROM research_knowledge_chunks WHERE id=?')
+      .get(chunkId) as {document_id:string;content:string;content_hash:string;locator:string|null;project_id:string|null}|undefined;
+    if (!chunk) throw new Error('research_knowledge_source_missing');
+    let document=documents.get(chunk.document_id);
+    if (!document) {
+      const row=this.db.prepare(`SELECT content AS document_content,content_hash AS document_hash,project_id AS document_project,
+        title,source_type,source_id,metadata_json FROM research_knowledge_documents WHERE id=?`).get(chunk.document_id) as KnowledgeVersionDocument & {document_content:string} | undefined;
+      if (!row) throw new Error('research_knowledge_source_missing');
+      if (hashText(row.document_content)!==row.document_hash) throw new Error('research_knowledge_source_corrupt');
+      const {document_content: _content,...fields}=row;
+      document=fields; documents.set(chunk.document_id,document);
     }
-    const {content: _content, document_content: _documentContent, ...version} = row;
-    return {chunkId, documentId: row.document_id, locator: row.locator, chunkHash: row.content_hash,
-      indexedVersion: hashText(JSON.stringify(version))};
+    if (projectId!==null && ((chunk.project_id!==null && chunk.project_id!==projectId) ||
+      (document.document_project!==null && document.document_project!==projectId))) throw new Error('research_knowledge_project_mismatch');
+    if (hashText(chunk.content)!==chunk.content_hash) throw new Error('research_knowledge_source_corrupt');
+    const {content:_content,...fields}=chunk;
+    return {chunkId,documentId:chunk.document_id,locator:chunk.locator,chunkHash:chunk.content_hash,
+      indexedVersion:hashText(JSON.stringify({...fields,...document}))};
   }
 
   private keywordSearch(query: string, projectId: string | null, limit: number): ResearchKnowledgeSearchHit[] {
