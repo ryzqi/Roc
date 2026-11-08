@@ -4,7 +4,7 @@ import { BookMarked, Bot, CalendarClock, Check, ClipboardCopy, Layers, Link2, Se
 import type { ResearchClaim, ResearchEvidence, ResearchLibraryItem } from '../../shared/types';
 import { useCopyFeedback } from '../shared/hooks/use-copy-feedback';
 import { EmptyState } from '../shell/EmptyState';
-import { deriveWiki, type WikiConceptPage } from './derive-wiki';
+import { deriveWiki, wikiNeighbors, WIKI_PAGE_SIZE, type WikiConceptPage } from './derive-wiki';
 
 /**
  * LLM Wiki projection view.
@@ -93,19 +93,10 @@ export function WikiView({
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const copy = useCopyFeedback();
-
-  if (projection.pages.length === 0 && projection.orphanEvidence.length === 0) {
-    return (
-      <EmptyState
-        icon={BookMarked}
-        title="尚无概念页"
-        testId="wiki-empty"
-      />
-    );
-  }
+  const [offsets, setOffsets] = useState({concepts: 0, neighbors: 0, orphans: 0, evidence: 0, papers: 0, years: 0});
 
   const trimmed = query.trim().toLowerCase();
-  const visiblePages = projection.pages.filter((page) => {
+  const visiblePages = useMemo(() => projection.pages.filter((page) => {
     if (trimmed.length === 0) {
       return true;
     }
@@ -118,16 +109,41 @@ export function WikiView({
       .join('\n')
       .toLowerCase();
     return haystack.includes(trimmed);
-  });
+  }), [projection.pages, trimmed]);
 
   // Selection falls back to the first *visible* page, so filtering cannot leave the
   // detail pane showing a concept the list no longer offers.
   const selected =
-    visiblePages.find((page) => page.claimId === selectedClaimId) ?? visiblePages[0] ?? null;
+    visiblePages.find((page) => page.claimId === selectedClaimId) ?? visiblePages[Math.min(offsets.concepts, Math.max(0, visiblePages.length - 1))] ?? null;
 
-  const selectConcept = (claimId: string): void => {
-    setSelectedClaimId(claimId);
+  const neighbors = useMemo(() => {
+    const result = wikiNeighbors(projection, selected?.claimId ?? '', offsets.neighbors);
+    return result.links.length === 0 && result.total > 0 ?
+      wikiNeighbors(projection, selected?.claimId ?? '', pageOffset(offsets.neighbors, result.total)) : result;
+  }, [projection, selected?.claimId, offsets.neighbors]);
+  const slice = <T,>(items: T[], area: keyof typeof offsets): T[] => {
+    const start = pageOffset(offsets[area], items.length);
+    return items.slice(start, start + WIKI_PAGE_SIZE);
   };
+  const pager = (area: keyof typeof offsets, total: number): React.JSX.Element =>
+    <WikiPager area={area} offset={pageOffset(offsets[area], total)} total={total}
+      onChange={offset => setOffsets(current => ({...current, [area]: offset}))} />;
+  const selectConcept = (claimId: string, follow = false): void => {
+    setSelectedClaimId(claimId);
+    setOffsets(current => ({...current, neighbors: 0, evidence: 0, papers: 0,
+      concepts: follow ? Math.floor(Math.max(0, projection.pages.findIndex(page => page.claimId === claimId)) / WIKI_PAGE_SIZE) * WIKI_PAGE_SIZE : current.concepts}));
+    if (follow) setQuery('');
+  };
+
+  if (projection.pages.length === 0 && projection.orphanEvidence.length === 0) {
+    return (
+      <EmptyState
+        icon={BookMarked}
+        title="尚无概念页"
+        testId="wiki-empty"
+      />
+    );
+  }
 
   const pageAsMarkdown = (page: (typeof projection.pages)[number]): string => {
     const lines = [`# ${page.title}`, '', page.content, ''];
@@ -161,14 +177,14 @@ export function WikiView({
     <div className="flex h-full min-h-0 flex-col" data-testid="wiki-view">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b-[0.5px] border-line px-3 py-2 text-[length:var(--font-micro-size)]">
         <span className="text-muted" data-testid="wiki-counts">
-          {projection.pages.length} 个概念，{projection.backlinks.length} 条共现，{projection.timeline.length} 个年份
+          {projection.pages.length} 个概念，{projection.timeline.length} 个年份
         </span>
         {onRefresh ? <button type="button" onClick={onRefresh} className="rounded-control border-[0.5px] border-line px-2 py-1" data-testid="wiki-refresh">刷新审核状态</button> : null}
         <div className="ml-auto flex h-[var(--control-height-compact)] min-w-[150px] items-center gap-1.5 rounded-control border-[0.5px] border-line bg-surface px-2 sm:max-w-[240px]">
           <Search size={11} aria-hidden="true" className="shrink-0 text-subtle" />
           <input
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => { setQuery(event.target.value); setOffsets(current => ({...current, concepts: 0, neighbors: 0})); }}
             placeholder="搜索概念、证据、文献…"
             aria-label="搜索概念页"
             data-testid="wiki-search"
@@ -199,7 +215,7 @@ export function WikiView({
                 没有匹配的概念。
               </li>
             ) : null}
-            {visiblePages.map((page) => {
+            {slice(visiblePages, 'concepts').map((page) => {
               const active = selected !== null && page.claimId === selected.claimId;
               return (
                 <li key={page.claimId}>
@@ -225,18 +241,20 @@ export function WikiView({
             })}
           </ul>
 
-          {projection.backlinks.length === 0 ? null : (
+          {pager('concepts', visiblePages.length)}
+
+          {neighbors.total === 0 ? null : (
             <section>
               <h3 className="mb-1 flex items-center gap-1.5 text-muted text-[length:var(--font-micro-size)]">
                 <Link2 size={11} aria-hidden="true" />
-                共现（共享证据的主张）
+                当前概念的共现（{neighbors.total}）
               </h3>
               <ul className="flex flex-col gap-1" data-testid="wiki-backlinks">
-                {projection.backlinks.map((link) => (
+                {neighbors.links.map((link) => (
                   <li key={`${link.fromClaimId}:${link.toClaimId}`} className="text-[length:var(--font-micro-size)]">
                     <button
                       type="button"
-                      onClick={() => selectConcept(link.fromClaimId)}
+                      onClick={() => selectConcept(link.fromClaimId, true)}
                       className="max-w-full truncate rounded-control px-1 text-left text-ink hover:bg-[var(--overlay-hover)]"
                     >
                       {conceptLabelFor(projection, link.fromClaimId)}
@@ -244,7 +262,7 @@ export function WikiView({
                     <span className="mx-0.5 text-subtle">↔</span>
                     <button
                       type="button"
-                      onClick={() => selectConcept(link.toClaimId)}
+                      onClick={() => selectConcept(link.toClaimId, true)}
                       className="max-w-full truncate rounded-control px-1 text-left text-ink hover:bg-[var(--overlay-hover)]"
                     >
                       {conceptLabelFor(projection, link.toClaimId)}
@@ -253,6 +271,7 @@ export function WikiView({
                   </li>
                 ))}
               </ul>
+              {pager('neighbors', neighbors.total)}
             </section>
           )}
 
@@ -263,14 +282,14 @@ export function WikiView({
                 引用文献年份
               </h3>
               <ol className="flex flex-wrap items-center gap-1.5" data-testid="wiki-timeline">
-                {projection.timeline.map((entry) => (
+                {slice(projection.timeline, 'years').map((entry) => (
                   <li key={entry.year}>
                     <button
                       type="button"
                       onClick={() => {
                         const first = entry.claimIds[0];
                         if (first !== undefined) {
-                          selectConcept(first);
+                          selectConcept(first, true);
                         }
                       }}
                       data-testid={`wiki-timeline-${entry.year}`}
@@ -283,6 +302,7 @@ export function WikiView({
                   </li>
                 ))}
               </ol>
+              {pager('years', projection.timeline.length)}
             </section>
           )}
 
@@ -292,13 +312,14 @@ export function WikiView({
                 未归类证据（{projection.orphanEvidence.length}）
               </h3>
               <ul className="flex flex-col gap-1" data-testid="wiki-orphan-evidence">
-                {projection.orphanEvidence.map((card) => (
+                {slice(projection.orphanEvidence, 'orphans').map((card) => (
                   <li key={card.id} className="truncate text-[length:var(--font-micro-size)]">
                     <span className="text-ink">{card.title}</span>
                     <span className="ml-1.5 font-mono text-subtle">{card.locator}</span>
                   </li>
                 ))}
               </ul>
+              {pager('orphans', projection.orphanEvidence.length)}
             </section>
           )}
         </aside>
@@ -349,7 +370,7 @@ export function WikiView({
                 </p>
               ) : (
                 <ul className="mt-2 flex flex-col gap-1.5" data-testid={`wiki-page-evidence-${selected.claimId}`}>
-                  {selected.evidence.map((card) => (
+                  {slice(selected.evidence, 'evidence').map((card) => (
                     <li key={card.id} className="rounded-card border-[0.5px] border-line-soft bg-bg-soft px-2.5 py-1.5">
                       <p className="text-ink text-[length:var(--font-meta-size)]">{card.title}</p>
                       <p className="text-[var(--st-warn)] text-[length:var(--font-meta-size)]">
@@ -369,6 +390,7 @@ export function WikiView({
                 </ul>
               )}
 
+              {pager('evidence', selected.evidence.length)}
               {selected.hasMissingEvidence ? (
                 <p className="mt-1.5 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" data-testid={`wiki-page-missing-${selected.claimId}`}>
                   这条主张引用了当前未加载的证据。
@@ -376,7 +398,7 @@ export function WikiView({
               ) : null}
 
               <footer className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t-[0.5px] border-line-soft pt-2">
-                {selected.papers.map((paper) =>
+                {slice(selected.papers, 'papers').map((paper) =>
                   onOpenPaper === undefined ? (
                     <span
                       key={paper.libraryItemId}
@@ -424,6 +446,7 @@ export function WikiView({
                 </span>
               </footer>
 
+              {pager('papers', selected.papers.length)}
               <p className="mt-1.5 text-subtle text-[length:var(--font-micro-size)]">
                 来源：当前文献、主张与关联证据
               </p>
@@ -436,5 +459,21 @@ export function WikiView({
 }
 
 function conceptLabelFor(projection: ReturnType<typeof deriveWiki>, claimId: string): string {
-  return projection.pages.find((page) => page.claimId === claimId)?.title ?? claimId;
+  return projection.pageById.get(claimId)?.title ?? claimId;
+}
+
+function pageOffset(offset: number, total: number): number {
+  return Math.min(offset, Math.floor(Math.max(0, total - 1) / WIKI_PAGE_SIZE) * WIKI_PAGE_SIZE);
+}
+function WikiPager({area, offset, total, onChange}: {
+  area: string; offset: number; total: number; onChange: (offset: number) => void;
+}): React.JSX.Element {
+  if (total <= WIKI_PAGE_SIZE) return <></>;
+  return <nav aria-label={`${({concepts:'概念',neighbors:'共现',orphans:'未归类证据',evidence:'证据',papers:'文献',years:'年份'} as Record<string,string>)[area]}分页`} className="flex flex-wrap items-center gap-2 py-1 text-[length:var(--font-meta-size)]" data-testid={`wiki-pager-${area}`}>
+    <button type="button" disabled={offset === 0} onClick={() => onChange(Math.max(0, offset - WIKI_PAGE_SIZE))}
+      className="rounded-control border-[0.5px] border-line px-2 disabled:opacity-50">上一页</button>
+    <span>{offset + 1}–{Math.min(total, offset + WIKI_PAGE_SIZE)} / {total}</span>
+    <button type="button" disabled={offset + WIKI_PAGE_SIZE >= total} onClick={() => onChange(offset + WIKI_PAGE_SIZE)}
+      className="rounded-control border-[0.5px] border-line px-2 disabled:opacity-50">下一页</button>
+  </nav>;
 }

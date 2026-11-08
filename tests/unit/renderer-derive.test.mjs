@@ -122,7 +122,7 @@ test('empty input produces an empty projection, never sample data', () => {
   const wikiProjection = wiki.deriveWiki(empty);
   assert.deepEqual(wikiProjection.pages, []);
   assert.deepEqual(wikiProjection.timeline, []);
-  assert.deepEqual(wikiProjection.backlinks, []);
+  assert.deepEqual(wiki.wikiNeighbors(wikiProjection, 'missing'), {links:[],total:0});
   assert.deepEqual(wikiProjection.orphanEvidence, []);
 
   const graphProjection = graph.deriveGraph(empty);
@@ -154,7 +154,7 @@ test('deriveWiki is stable for the same input and independent of Map order', () 
   );
   // ev-2 is shared by both claims → exactly one undirected backlink.
   assert.deepEqual(
-    projection.backlinks.map((link) => `${link.fromClaimId}->${link.toClaimId}:${link.sharedEvidenceIds.join('|')}`),
+    wiki.wikiNeighbors(projection, 'cl-a').links.map((link) => `${link.fromClaimId}->${link.toClaimId}:${link.sharedEvidenceIds.join('|')}`),
     ['cl-a->cl-b:ev-2']
   );
   assert.deepEqual(
@@ -367,4 +367,18 @@ test('Wiki uses source-associated metadata when the library list is empty or unr
     assert.deepEqual(projection.timeline,[{year:2025,claimIds:['cl-1']}]);
   }
   assert.deepEqual(wiki.deriveWiki({claims:[claim],evidence:[record],libraryItems:[libraryItem('lib-1','Coincidence',2000)]}).pages[0].papers,[]);
+});
+
+test('Wiki high-degree evidence stays linear and every neighbor remains reachable by page', () => {
+  const count = 10_000;
+  const projection = wiki.deriveWiki({claims:Array.from({length:count}, (_,i) => claimRecord({id:`c-${i}`})),
+    evidence:[evidenceRecord({})],libraryItems:[]});
+  assert.equal(projection.claimsByEvidence.size,1);
+  assert.equal(projection.claimsByEvidence.get('ev-1').size,count);
+  const first=wiki.wikiNeighbors(projection,'c-0');
+  assert.equal(first.links.length,50); assert.equal(first.total,count-1);
+  const tail=wiki.wikiNeighbors(projection,'c-0',9950);
+  assert.equal(tail.links.length,49); assert.equal(tail.links.at(-1).toClaimId,'c-9999');
+  const missing=wiki.deriveWiki({claims:[claimRecord({id:'a',evidenceIds:['missing']}),claimRecord({id:'b',evidenceIds:['missing']})],evidence:[],libraryItems:[]});
+  assert.deepEqual(wiki.wikiNeighbors(missing,'a'),{links:[],total:0});
 });

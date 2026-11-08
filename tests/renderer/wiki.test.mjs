@@ -127,3 +127,22 @@ test('the reader selection loads by ID independently of a filtered or capped lib
   assert.equal(await page.evaluate(() => window.store.selected), null);
   assert.equal(await page.evaluate(() => window.store.selectedError), 'Item missing');
 });
+
+test('large Wiki lists and shared neighborhoods are paged, searchable and navigable without mounting a clique', async () => {
+  const props = fixture();
+  props.claims = Array.from({length:1000}, (_,i) => ({...props.claims[0],id:`c-${i}`,content:`Concept ${i}`}));
+  props.snapshot.claims = props.claims;
+  await page.evaluate(props => window.mount(props), props);
+  const list = page.locator('[data-testid="wiki-concept-list"]');
+  assert.equal(await list.locator('li').count(),50);
+  assert.equal(await page.locator('[data-testid="wiki-backlinks"] li').count(),50);
+  await page.locator('[data-testid="wiki-pager-neighbors"]').getByText('下一页').focus();
+  await page.keyboard.press('Enter');
+  assert.match(await page.locator('[data-testid="wiki-pager-neighbors"]').innerText(), /51–100 \/ 999/u);
+  await page.locator('[data-testid="wiki-backlinks"]').getByRole('button', {name:'Concept 100',exact:true}).click();
+  assert.equal(await page.locator('[data-testid="wiki-page-title-c-100"]').innerText(),'Concept 100');
+  assert.equal(await page.locator('[data-testid="wiki-concept-c-100"]').getAttribute('aria-current'),'true');
+  await page.locator('[data-testid="wiki-search"]').fill('Concept 999');
+  assert.equal(await list.locator('li').count(),1);
+  assert.equal(await page.locator('[data-testid="wiki-page-title-c-999"]').innerText(),'Concept 999');
+});

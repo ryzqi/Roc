@@ -297,6 +297,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     { label: '读取主张与证据' }
   );
 
+  const evidence = useMemo(() => derived.data?.sources.map(source => source.evidence) ?? null, [derived.data]);
   const reloadDerived = derived.reload;
   useEffect(() => {
     if (projectId === null) return;
@@ -759,7 +760,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     documentsError: documents.error,
     reloadDocuments,
     claims: derived.data?.claims ?? null,
-    evidence: derived.data?.sources.map(source => source.evidence) ?? null,
+    evidence,
     wikiSnapshot: derived.data,
     derivedStatus: derived.status,
     derivedError: derived.error,

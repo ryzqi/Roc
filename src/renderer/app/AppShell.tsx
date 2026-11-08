@@ -38,7 +38,7 @@ import { useWindowState } from '../shell/use-window-state';
 import { useBoundWorkspace } from '../workspace/use-bound-workspace';
 import { LiteratureScopeProvider } from '../literature/literature-scope';
 import { useLiteratureStore } from '../literature/use-literature-store';
-import { deriveWiki } from '../literature/derive-wiki';
+import { wikiConceptRows } from '../literature/wiki-concepts';
 
 /**
  * The application shell (P1).
@@ -414,7 +414,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   /**
    * Concept rows for the ⌘K 概念 group.
    *
-   * Derived with the same `deriveWiki` the 知识库 panel renders, from the same
+   * Uses lightweight titles and citation counts from the same
    * claims/evidence snapshot the store already holds — so the palette cannot claim
    * a concept the panel would not show. Empty until the project's claims/evidence
    * have loaded, which the group's own wording says.
@@ -425,12 +425,8 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
     if (claims === null || evidence === null) {
       return [];
     }
-    return deriveWiki({ claims, evidence, libraryItems: literature.items }).pages.map((page) => ({
-      id: page.claimId,
-      label: page.title,
-      subtitle: page.evidence.length === 0 ? '尚无引用证据' : `引用 ${page.evidence.length} 条证据`
-    }));
-  }, [literature.claims, literature.evidence, literature.items]);
+    return wikiConceptRows(claims, evidence, literature.wikiSnapshot?.relations);
+  }, [literature.claims, literature.evidence, literature.wikiSnapshot]);
 
   const searchGroups = useSearchGroups({
     client,

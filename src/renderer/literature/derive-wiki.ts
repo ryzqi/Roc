@@ -1,3 +1,4 @@
+import {conceptTitle} from './wiki-concepts';
 import type {ResearchWikiSnapshot} from '../../shared/schemas/research-wiki';
 import type { ResearchClaim, ResearchEvidence, ResearchLibraryItem } from '../../shared/types';
 
@@ -70,21 +71,13 @@ export type WikiBacklink = {
 export type WikiProjection = {
   pages: WikiConceptPage[];
   timeline: WikiTimelineEntry[];
-  backlinks: WikiBacklink[];
+  pageById: Map<string, WikiConceptPage>;
+  claimsByEvidence: Map<string, Set<string>>;
   /** Evidence records that no claim references (shown as "未归类证据"). */
   orphanEvidence: WikiEvidenceCard[];
 };
 
-/** Short, stable title for a claim: its first sentence/line, trimmed. */
-export function conceptTitle(content: string, maxLength = 48): string {
-  const collapsed = content.replace(/\s+/gu, ' ').trim();
-  if (collapsed.length === 0) {
-    return '（无内容主张）';
-  }
-  const firstSentence = collapsed.split(/(?<=[。．.!?！？])\s*/u)[0] ?? collapsed;
-  const base = firstSentence.length > 0 ? firstSentence : collapsed;
-  return base.length <= maxLength ? base : `${base.slice(0, maxLength - 1)}…`;
-}
+export {conceptTitle} from './wiki-concepts';
 
 function toEvidenceCard(evidence: ResearchEvidence): WikiEvidenceCard {
   return {
@@ -187,53 +180,54 @@ export function deriveWiki(input: {
   }
   const timelineByYear = new Map<number, string[]>();
   for (const [claimId, year] of yearsByClaim) {
-    timelineByYear.set(year, [...(timelineByYear.get(year) ?? []), claimId]);
+    const group = timelineByYear.get(year) ?? [];
+    group.push(claimId);
+    timelineByYear.set(year, group);
   }
   const timeline: WikiTimelineEntry[] = [...timelineByYear.entries()]
     .map(([year, claimIds]) => ({ year, claimIds: [...claimIds].sort() }))
     .sort((left, right) => left.year - right.year);
 
-  // Backlinks = shared evidence. Computed pairwise but bounded by a per-claim
-  // inverse index, so this stays linear in the number of evidence links rather
-  // than quadratic in claims.
-  const claimsByEvidence = new Map<string, string[]>();
-  for (const claim of input.claims) {
-    for (const evidenceId of new Set(claim.evidenceIds)) {
-      claimsByEvidence.set(evidenceId, [...(claimsByEvidence.get(evidenceId) ?? []), claim.id]);
+  // Store only real incidence links. Expand shared neighbors for one page on demand.
+  const claimsByEvidence = new Map<string, Set<string>>();
+  for (const page of pages) {
+    for (const card of page.evidence) {
+      const claims = claimsByEvidence.get(card.id) ?? new Set<string>();
+      claims.add(page.claimId);
+      claimsByEvidence.set(card.id, claims);
     }
   }
-  const shared = new Map<string, string[]>();
-  for (const [evidenceId, claimIds] of claimsByEvidence) {
-    if (claimIds.length < 2) {
-      continue;
-    }
-    for (const left of claimIds) {
-      for (const right of claimIds) {
-        if (left === right) {
-          continue;
-        }
-        const key = `${left}\u0000${right}`;
-        shared.set(key, [...(shared.get(key) ?? []), evidenceId]);
-      }
-    }
-  }
-  const claimOrder = new Map(input.claims.map((claim, index) => [claim.id, index]));
-  const backlinks: WikiBacklink[] = [...shared.entries()]
-    .map(([key, sharedEvidenceIds]) => {
-      const [fromClaimId, toClaimId] = key.split('\u0000') as [string, string];
-      return { fromClaimId, toClaimId, sharedEvidenceIds: [...sharedEvidenceIds].sort() };
-    })
-    .filter((link) => (claimOrder.get(link.fromClaimId) ?? 0) < (claimOrder.get(link.toClaimId) ?? 0))
-    .sort(
-      (left, right) =>
-        (claimOrder.get(left.fromClaimId) ?? 0) - (claimOrder.get(right.fromClaimId) ?? 0) ||
-        (claimOrder.get(left.toClaimId) ?? 0) - (claimOrder.get(right.toClaimId) ?? 0)
-    );
 
   const referenced = new Set(pages.flatMap(page => page.evidence.map(card => card.id)));
   const orphanEvidence = input.evidence
     .filter((record) => !referenced.has(record.id))
     .map(record => ({...toEvidenceCard(record), referenceStatus: sources.get(record.id)?.referenceStatus ?? 'unknown' as const}));
 
-  return { pages, timeline, backlinks, orphanEvidence };
+  return { pages, timeline, claimsByEvidence, pageById: new Map(pages.map(page => [page.claimId, page])), orphanEvidence };
+}
+
+export const WIKI_PAGE_SIZE = 50;
+
+/** Memory is linear in the selected neighborhood, never in all claim pairs. */
+export function wikiNeighbors(projection: WikiProjection, claimId: string, offset = 0, limit = WIKI_PAGE_SIZE): {links: WikiBacklink[]; total: number} {
+  const shared = new Map<string, string[]>();
+  for (const card of projection.pageById.get(claimId)?.evidence ?? []) {
+    for (const neighbor of projection.claimsByEvidence.get(card.id) ?? []) {
+      if (neighbor === claimId) continue;
+      const ids = shared.get(neighbor) ?? [];
+      ids.push(card.id);
+      shared.set(neighbor, ids);
+    }
+  }
+  const start = Math.max(0, Math.trunc(offset));
+  const size = Math.max(1, Math.min(WIKI_PAGE_SIZE, Math.trunc(limit)));
+  const links: WikiBacklink[] = [];
+  let seen = 0;
+  for (const page of projection.pages) {
+    const ids = shared.get(page.claimId);
+    if (ids === undefined) continue;
+    if (seen >= start && links.length < size) links.push({fromClaimId: claimId, toClaimId: page.claimId, sharedEvidenceIds: ids.sort()});
+    seen += 1;
+  }
+  return {links, total: shared.size};
 }
