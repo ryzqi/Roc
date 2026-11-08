@@ -183,3 +183,10 @@ test('retrieval exposes optional reranking and sends the selected mode through I
   assert.equal(await page.evaluate(()=>window.searchInput.limit),20);
   await page.getByTestId('rag-degraded').getByText(/仅返回关键词结果/).waitFor();
 });
+
+test('copied Markdown keeps declaration separate from human review status',async()=>{
+  await page.evaluate(props=>{Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.copiedWiki=text;}}});window.mount(props);},fixture());
+  await page.getByTestId('wiki-copy-markdown').click();await page.waitForFunction(()=>typeof window.copiedWiki==='string');
+  const markdown=await page.evaluate(()=>window.copiedWiki);
+  assert.match(markdown,/声明状态：声明有支撑/);assert.match(markdown,/审核状态：待人工审核/);
+});

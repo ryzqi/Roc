@@ -8,7 +8,7 @@ import { KnowledgeGraphView } from './KnowledgeGraphView';
 import { LibraryList } from './LibraryList';
 import { PaperReader } from './PaperReader';
 import { RagStudio } from './RagStudio';
-import { WikiView } from './WikiView';
+import {WikiWorkspace} from './WikiWorkspace';
 import type { ImportTabRequest, LiteratureSubView } from './hub-route';
 import { useLiterature } from './literature-scope';
 import { useLiteratureImportActions } from './use-literature-import-actions';
@@ -251,7 +251,10 @@ export function LiteratureHubView(): React.JSX.Element {
             <div style={{ display: subView === 'wiki' ? 'contents' : 'none' }}>
             <div className="flex min-h-0 flex-1 flex-col">
             {derivedReady ? (
-              <WikiView
+              <WikiWorkspace
+                client={store.client}
+                projectId={store.projectId}
+                writable={scope.writable}
                 snapshot={store.wikiSnapshot ?? undefined}
                 onRefresh={store.reloadDerived}
                 claims={claims}

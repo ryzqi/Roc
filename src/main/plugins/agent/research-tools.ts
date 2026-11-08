@@ -1,3 +1,4 @@
+import {createWikiTools, WIKI_TOOL_DESCRIPTORS} from './wiki-tools';
 import {researchDiagramRequestSchema, researchDiagramResultSchema} from '../../../shared/schemas/research-diagrams';
 import {withResearchDiagramSignal} from '../research/diagram-service';
 import type {ResearchGateReviewContext} from '../../../shared/schemas/research-gate-review';
@@ -44,6 +45,7 @@ const readScopes: ResearchToolDescriptor['executionScopes'] = ['main', 'subagent
 
 /** 工具名与权限的唯一来源：manifest 和工具装配都读这张表，避免两处漂移。 */
 export const RESEARCH_TOOL_DESCRIPTORS: readonly ResearchToolDescriptor[] = [
+  ...WIKI_TOOL_DESCRIPTORS,
   ...REVIEW_TOOL_DESCRIPTORS,
   ...REVIEW_QUERY_TOOL_DESCRIPTORS,
   { name: 'research_overview', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
@@ -200,6 +202,7 @@ export function createResearchTools(input: {
   }).addEdge(START, 'review').addConditionalEdges('review', state => state.outcome === null ? 'review' : END).compile();
 
   return [
+    ...createWikiTools(input),
     ...createReviewTools(input),
     ...createReviewQueryTools(input),
     tool(async () => summarizeOverview(

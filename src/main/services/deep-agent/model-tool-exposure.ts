@@ -6,6 +6,8 @@ export const PLAN_MODE_BLOCKED_TOOL_NAMES = [
   'edit_file',
   'delete_file',
   'remember',
+  'research_wiki_create',
+  'research_wiki_draft',
   'run_shell_command',
   'execute',
   'propose_background_task',

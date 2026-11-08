@@ -6,46 +6,7 @@ import { useCopyFeedback } from '../shared/hooks/use-copy-feedback';
 import { EmptyState } from '../shell/EmptyState';
 import { deriveWiki, wikiNeighbors, WIKI_PAGE_SIZE, type WikiConceptPage } from './derive-wiki';
 
-/**
- * LLM Wiki projection view.
- *
- * The legacy view rendered `mockWikiEntries` when the store was empty. That is the
- * exact failure R12 names, so here the empty case is an empty state and nothing
- * else. Every panel is a projection of real rows: claims, the evidence they cite,
- * and the library items that evidence came from.
- *
- * What a "concept" means in this build is stated in the header rather than implied:
- * one claim plus its evidence and the papers it leans on. Two claims that cite the
- * same paper are shown as *linked*, never as "about the same thing" — the backend
- * has no concept table and inventing one would be a fabricated model.
- *
- * Every card ends with the interfaces it came from, so a user can tell a derived
- * page from a stored one.
- *
- * ## Navigable, because a wall of cards is not a wiki
- *
- * A wiki is a *reading surface*: a concept list, a selected concept with links out to
- * other concepts and to the papers behind it, and a copy button. Stacking every page
- * into one scroll column would lose all of that — a concept could not be chosen,
- * searched for, or followed. What is here:
- *
- *   - **selection** — the list on the left drives the detail on the right, with the
- *     selected row is raised;
- *   - **filter** — title, statement, evidence text and paper titles, because the
- *     only way to find a concept is to search what is actually in it;
- *   - **navigation** — the 共现 list is not decoration: clicking either side selects
- *     that concept, which is this projection's equivalent of a `[[wiki link]]`. (There is no
- *     `[[…]]` syntax to parse: a derived concept's
- *     body is the claim's own statement, not authored wiki text.)
- *   - **the papers behind a concept are buttons** — they jump to that item in the
- *     reader;
- *   - **copy as Markdown** — a 「复制」 action with 已复制 feedback,
- *     assembled from the derived page.
- *
- * The 引用文献年份 / 共现 / 未归类证据 panels stay, because the design requires every
- * derived view to be inspectable rather than summarised. They moved into the left
- * column so they do not compete with the page being read.
- */
+/** Live claim/evidence projection beside the separately persisted Wiki drafts. */
 
 export type WikiViewProps = {
   snapshot?: ResearchWikiSnapshot;
@@ -165,7 +126,7 @@ export function WikiView({
       lines.push('');
     }
     lines.push(
-      `声明状态：${REVIEW_LABELS[page.review]}`,
+      `声明状态：${STATUS_LABELS[page.status]}`,
       `审核状态：${REVIEW_LABELS[page.review]}`,
       '',
       '来源：当前文献、主张与关联证据'
