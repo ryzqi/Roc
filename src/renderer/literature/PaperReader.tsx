@@ -1,3 +1,4 @@
+import { useVisiblePolling } from '../shared/view-activity';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, CircleAlert, ClipboardCopy, Columns2, Download, FileSearch, Loader2, Pencil, Save, ScanLine, Sparkles, Square, Timer, Type, X } from 'lucide-react';
 import type { ResearchDocument, ResearchParseTier } from '../../shared/types';
@@ -154,13 +155,7 @@ export function PaperReader({
    * the backend's `downloading` flag is the progress channel and this is what reads
    * it. The interval exists only while something is downloading.
    */
-  useEffect(() => {
-    if (!modelsDownloading) {
-      return;
-    }
-    const handle = window.setInterval(reloadModels, 2_500);
-    return () => window.clearInterval(handle);
-  }, [modelsDownloading, reloadModels]);
+  useVisiblePolling(reloadModels, 2_500, modelsDownloading);
 
   const counts = useMemo(() => (content === null ? null : countParsedBlocks(content)), [content]);
   const selectReaderDocument = (documentId: string): void => {

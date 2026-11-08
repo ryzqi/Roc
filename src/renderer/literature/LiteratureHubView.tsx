@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { AlertCircle, NotebookPen, Radar, Bell, BookOpen, Database, Layers, Loader2, PanelLeft, Plus, Share2 } from 'lucide-react';
+import { ViewActivity, useViewActive } from '../shared/view-activity';
 import { useWorkspaceScope } from '../app/workspace-scope';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
@@ -40,6 +41,7 @@ const SUB_TAB_BASE =
 
 export function LiteratureHubView(): React.JSX.Element {
   const store = useLiterature();
+  const hubActive = useViewActive();
   const scope = useWorkspaceScope();
   const [subView, setSubView] = useState<SubViewId>('reader');
   const [visited, setVisited] = useState<ReadonlySet<SubViewId>>(() => new Set(['reader']));
@@ -214,7 +216,7 @@ export function LiteratureHubView(): React.JSX.Element {
             </select>
           </label>
           {visited.has('reader') ? (
-            <div style={{ display: subView === 'reader' ? 'contents' : 'none' }}>
+            <ViewActivity active={subView === 'reader'}><div style={{ display: subView === 'reader' ? 'contents' : 'none' }}>
             <div className="flex min-h-0 flex-1 flex-col">
             {store.selectedStatus === 'error' ? <ErrorBar error={{level: 'page', message: store.selectedError ?? '读取文献失败', retry: store.reloadSelected}} /> : null}
             <PaperReader
@@ -225,11 +227,11 @@ export function LiteratureHubView(): React.JSX.Element {
               focusLocator={focus.locator}
             />
             </div>
-            </div>
+            </div></ViewActivity>
           ) : null}
 
           {visited.has('rag') ? (
-            <div style={{ display: subView === 'rag' ? 'contents' : 'none' }}>
+            <ViewActivity active={subView === 'rag'}><div style={{ display: subView === 'rag' ? 'contents' : 'none' }}>
             <div className="flex min-h-0 flex-1 flex-col">
             <RagStudio
               literature={store}
@@ -244,11 +246,11 @@ export function LiteratureHubView(): React.JSX.Element {
               }}
             />
             </div>
-            </div>
+            </div></ViewActivity>
           ) : null}
 
           {visited.has('wiki') ? (
-            <div style={{ display: subView === 'wiki' ? 'contents' : 'none' }}>
+            <ViewActivity active={subView === 'wiki'}><div style={{ display: subView === 'wiki' ? 'contents' : 'none' }}>
             <div className="flex min-h-0 flex-1 flex-col">
             {derivedReady ? (
               <WikiWorkspace
@@ -278,11 +280,11 @@ export function LiteratureHubView(): React.JSX.Element {
               derivedPanel
             )}
             </div>
-            </div>
+            </div></ViewActivity>
           ) : null}
 
           {visited.has('graph') ? (
-            <div style={{ display: subView === 'graph' ? 'contents' : 'none' }}>
+            <ViewActivity active={subView === 'graph'}><div style={{ display: subView === 'graph' ? 'contents' : 'none' }}>
             <div className="flex min-h-0 flex-1 flex-col">
             {derivedReady ? (
               <KnowledgeGraphView
@@ -298,26 +300,26 @@ export function LiteratureHubView(): React.JSX.Element {
               derivedPanel
             )}
             </div>
-            </div>
+            </div></ViewActivity>
           ) : null}
-          {visited.has('notes') ? <div style={{display:subView==='notes'?'contents':'none'}}>
+          {visited.has('notes') ? <ViewActivity active={subView === 'notes'}><div style={{display:subView==='notes'?'contents':'none'}}>
             <Suspense fallback={<p role="status" className="p-3">加载笔记…</p>}>
               {scope.projectId===null?<p className="p-3 text-muted">选择项目后使用阅读笔记</p>:<ReadingNotesPanel key={scope.projectId}
                 client={scope.client} projectId={scope.projectId} items={store.items} writable={scope.writable}/>}
-            </Suspense></div>:null}
-          {visited.has('radar') ? <div style={{display:subView==='radar'?'contents':'none'}}>
+            </Suspense></div></ViewActivity>:null}
+          {visited.has('radar') ? <ViewActivity active={subView === 'radar'}><div style={{display:subView==='radar'?'contents':'none'}}>
             <Suspense fallback={<p role="status" className="p-3">加载学术雷达…</p>}>
               {scope.projectId===null?<p className="p-3 text-muted">选择项目后使用学术雷达</p>:<AcademicRadarPanel key={scope.projectId}
-                client={scope.client} projectId={scope.projectId} writable={scope.writable} active={subView==='radar'} onImported={store.reload}/>}
-            </Suspense></div>:null}
+                client={scope.client} projectId={scope.projectId} writable={scope.writable} active={hubActive && subView==='radar'} onImported={store.reload}/>}
+            </Suspense></div></ViewActivity>:null}
           {visited.has('monitors') ? (
-            <div style={{display: subView === 'monitors' ? 'contents' : 'none'}}>
+            <ViewActivity active={subView === 'monitors'}><div style={{display: subView === 'monitors' ? 'contents' : 'none'}}>
               <Suspense fallback={<p role="status" className="p-3 text-muted">加载监控界面中</p>}>
                 {scope.projectId === null ? <p className="p-3 text-muted">选择项目后查看文献监控</p> :
                   <MonitorsPanel key={scope.projectId} client={scope.client} projectId={scope.projectId}
-                    items={store.items} writable={scope.writable} active={subView === 'monitors'} onLockChange={onMonitorLock}/>}
+                    items={store.items} writable={scope.writable} active={hubActive && subView === 'monitors'} onLockChange={onMonitorLock}/>}
               </Suspense>
-            </div>
+            </div></ViewActivity>
           ) : null}
         </div>
       </div>

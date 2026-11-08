@@ -1,6 +1,6 @@
 import { readFileSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { findForbiddenPackages } from './lib/renderer-chunk-attribution.mjs';
+import { EAGER_FORBIDDEN_PACKAGES, readChunkPackages } from './lib/renderer-chunk-attribution.mjs';
 
 /**
  * Renderer eager-graph guard.
@@ -12,8 +12,8 @@ import { findForbiddenPackages } from './lib/renderer-chunk-attribution.mjs';
  *      settings families out of the entry. Only names, so it is easy to satisfy by
  *      accident, which is why (3) exists.
  *   3. **Forbidden packages in the static graph** (P3) — reads the
- *      `//#region node_modules/.pnpm/<pkg>@…` markers rolldown emits inside each
- *      eager chunk.
+ *      build-time module metadata, checked against each output's hash. This
+ *      remains effective when minification removes source region comments.
  *
  * (3) is not theoretical. Giving `react-diff-view` a manual chunk made rolldown
  * inline React's CommonJS module into it; the entry needs React, so it statically
@@ -76,7 +76,8 @@ for (const file of files) {
     continue;
   }
   const source = readFileSync(path, 'utf8');
-  for (const name of findForbiddenPackages(source)) {
+  const packages = readChunkPackages(rendererRoot, file, source);
+  for (const name of EAGER_FORBIDDEN_PACKAGES.filter(name => packages.has(name))) {
     throw new Error(
       `renderer_chunk_eager_forbidden_package:${file}:${name}: this package must stay behind a dynamic import`
     );

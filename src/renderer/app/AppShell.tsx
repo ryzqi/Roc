@@ -24,6 +24,7 @@ import { useCurrentProject } from '../project/use-projects';
 import { useProjectWorkspace } from '../project/use-project-workspace';
 import { isProjectWritable } from '../project/project-store';
 import type { RocClient } from '../shared/roc-client';
+import { ViewActivity } from '../shared/view-activity';
 import { DelayedFallback } from '../shell/DelayedFallback';
 import { ErrorBar } from '../shell/ErrorBar';
 import { LeftSidebar } from '../shell/LeftSidebar';
@@ -34,7 +35,7 @@ import { StartupFailure, StartupLoading } from '../shell/StartupSurface';
 import { WindowChrome } from '../shell/WindowChrome';
 import { useAppearanceOverride, useAppearanceSync } from '../shell/appearance';
 import { useTraySummaryLabel } from '../shell/use-tray-summary';
-import { useWindowState } from '../shell/use-window-state';
+import { useWindowState, type WindowShellState } from '../shell/use-window-state';
 import { useBoundWorkspace } from '../workspace/use-bound-workspace';
 import { LiteratureScopeProvider } from '../literature/literature-scope';
 import { useLiteratureStore } from '../literature/use-literature-store';
@@ -110,6 +111,14 @@ const GitPanel = lazy(async () => ({ default: (await import('../canvas/git/GitPa
 const ArtifactInspector = lazy(async () => ({default: (await import('../artifacts/ArtifactInspector')).ArtifactInspector}));
 
 export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
+  const windowState = useWindowState(client);
+  // Native hide/minimize notifications also cover cases where Chromium still reports visible.
+  return <ViewActivity active={!windowState.hidden}>
+    <AppShellContent client={client} windowState={windowState} />
+  </ViewActivity>;
+}
+
+function AppShellContent({ client, windowState }: { client: RocClient; windowState: WindowShellState }): React.JSX.Element {
   const [boot, setBoot] = useState<BootState>({ status: 'loading' });
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -191,7 +200,6 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
     previousViewRef.current = route.view;
   }, [route, layout, navigate]);
 
-  const windowState = useWindowState(client);
   // The chrome and the read-only gate need the real project, not the raw id.
   const currentProject = useCurrentProject(client, route.projectId);
 

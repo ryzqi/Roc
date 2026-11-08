@@ -1,3 +1,4 @@
+import { useVisiblePolling } from '../shared/view-activity';
 import {useEffect, useState} from 'react';
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncResource, useAsyncAction} from '../app/use-async-resource';
@@ -10,10 +11,7 @@ export function KnowledgeJobs({client, projectId}: {client: RocClient; projectId
   const retry = useAsyncAction((input: {documentId:string; generation:string})=>client.api.research.retryKnowledgeJob(input),
     {label:'重试向量索引'});
   useEffect(()=>{setOffset(0);},[projectId]);
-  useEffect(()=>{
-    const timer=window.setInterval(()=>{if(document.visibilityState==='visible') jobs.reload();},3000);
-    return ()=>window.clearInterval(timer);
-  },[jobs.reload]);
+  useVisiblePolling(jobs.reload, 3000);
   return <section className="border-b border-line p-4" data-testid="rag-source-jobs">
     <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-medium">文献与实验向量索引</h3>
       <button type="button" className="rounded-control border border-line px-2 py-1 disabled:opacity-50" onClick={jobs.reload}>刷新任务</button></div>

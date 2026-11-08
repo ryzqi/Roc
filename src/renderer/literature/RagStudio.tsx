@@ -1,5 +1,6 @@
+import { useVisiblePolling } from '../shared/view-activity';
 import {KnowledgeJobs} from './KnowledgeJobs';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { AlertCircle, Bookmark, Check, ClipboardCopy, DatabaseZap, ExternalLink, FlaskConical, Loader2, Play, RefreshCw, Search, Settings2, Square } from 'lucide-react';
 import type { ResearchIndexedFile, ResearchIndexJob, ResearchIndexStatus, ResearchKnowledgeSearchHit, ResearchKnowledgeSearchResult } from '../../shared/types';
 import { useAsyncResource } from '../app/use-async-resource';
@@ -137,19 +138,11 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
   const reloadStatus = statusResource.reload;
   const reloadFiles = filesResource.reload;
   const reloadJobs = jobsResource.reload;
-  const busySignature = busy ? statusResource.data?.generation ?? 0 : 0;
-  useEffect(() => {
-    if (!busy) {
-      return;
-    }
-    void busySignature;
-    const handle = window.setInterval(() => {
-      reloadStatus();
-      reloadFiles();
-      reloadJobs();
-    }, POLL_INTERVAL_MS);
-    return () => window.clearInterval(handle);
-  }, [busy, busySignature, reloadFiles, reloadJobs, reloadStatus]);
+  useVisiblePolling(() => {
+    reloadStatus();
+    reloadFiles();
+    reloadJobs();
+  }, POLL_INTERVAL_MS, busy);
 
   const counts = status?.counts ?? null;
   const revision = status?.settings.revision ?? null;

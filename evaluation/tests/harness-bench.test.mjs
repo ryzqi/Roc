@@ -8,7 +8,7 @@ import { hash, sha256, writeJson, fileInventory, snapshotNativeEvidence, ROOT } 
 import { loadDataset, prepareScience, scienceRecipeSchema } from '../lib/data.mjs';
 import { compareRuns, summarize, sealRun, inspectRun } from '../lib/report.mjs';
 import { createProvider, validateBudget } from '../lib/provider.mjs';
-import { selectTasks, profiles } from '../lib/runner.mjs';
+import { runBenchmark, selectTasks, profiles } from '../lib/runner.mjs';
 import { parseScienceGrade, gradeScience } from '../lib/science.mjs';
 
 mkdirSync('evaluation/.runtime/tests', { recursive: true });
@@ -57,7 +57,8 @@ test('selection is stable, distributes clusters, and never fills from another sp
 function run(score = .8) {
   const selection = Array.from({ length: 5 }, (_, i) => ({ id: `q${i}`, clusterId: `paper${i}` }));
   const manifest = { suite: 'qasper', evidence: 'live-model', datasetIdentity: 'dataset', selection, repeats: 3, metrics: ['answerF1'], scorerHash: 'scorer', provider: { model: 'frozen' }, environment: { node: 'same' }, split: 'holdout', exclusions: [], source: { sourceHash: String(score) } };
-  const trials = selection.flatMap(t => Array.from({ length: 3 }, (_, repeat) => ({ taskId: t.id, clusterId: t.clusterId, repeat, status: 'scored', metrics: { answerF1: score }, latencyMs: 100 })));
+  manifest.toolManifest = { tools: [{ modelVisibleName: 'read_file', executionScopes: ['main'], effect: 'read' }] };
+  const trials = selection.flatMap(t => Array.from({ length: 3 }, (_, repeat) => ({ taskId: t.id, clusterId: t.clusterId, repeat, status: 'scored', metrics: { answerF1: score }, latencyMs: 100, toolSchemaHash: hash('test-schema') })));
   return { manifest, trials, summary: summarize(manifest, trials) };
 }
 test('paired comparison detects regression and never calls fixture/small/incomplete evidence green', () => {
@@ -70,6 +71,57 @@ test('paired comparison detects regression and never calls fixture/small/incompl
   const drift = run(); drift.manifest.scorerHash = 'changed';
   assert.deepEqual(compareRuns(run(), drift).mismatches, ['scorerHash']);
   const missing = run(); missing.trials.pop(); assert.throws(() => compareRuns(run(), missing), /trial_set_invalid/);
+});
+test('comparison holds tool permissions and observed schemas fixed while allowing harness changes', () => {
+  const drift = run(); drift.manifest.toolManifest.tools.push({ modelVisibleName: 'write_file', executionScopes: ['main'], effect: 'write' });
+  assert.deepEqual(compareRuns(run(), drift).mismatches, ['toolManifest']);
+  const scope = run(); scope.manifest.toolManifest.tools[0].executionScopes.push('subagent');
+  assert.deepEqual(compareRuns(run(), scope).mismatches, ['toolManifest']);
+  const schema = run(); schema.trials.forEach(t => { t.toolSchemaHash = hash('changed-schema'); });
+  assert.deepEqual(compareRuns(run(), schema).mismatches, ['toolSchemaHash']);
+  const changed = run(); changed.manifest.source.sourceHash = 'new-harness'; changed.manifest.workerHash = 'new-worker';
+  assert.equal(compareRuns(run(), changed).conclusion, 'non-inferior');
+});
+test('legacy or partial tool evidence cannot establish non-inferiority', () => {
+  const a = run(), b = run(); delete a.manifest.toolManifest; delete b.manifest.toolManifest;
+  assert.equal(compareRuns(a, b).conclusion, 'insufficient');
+  const missing = run(); delete missing.trials[0].toolSchemaHash;
+  assert.equal(compareRuns(run(), missing).conclusion, 'insufficient');
+  const mixed = run(); mixed.trials[0].toolSchemaHash = hash('different');
+  assert.equal(compareRuns(run(), mixed).conclusion, 'incompatible');
+});
+test('impossible full-profile request budget fails before model-host access and seals diagnostics', async () => {
+  const dataset = join(root, 'budget-dataset'); mkdirSync(dataset);
+  const tasks = Array.from({ length: 50 }, (_, i) => ({ id: `q${i}`, clusterId: `paper${i}`, split: 'development', unsupported: null }));
+  writeJson(join(dataset, 'tasks.json'), tasks);
+  const suite = 'qasper', provenance = { kind: 'synthetic-budget-test' }, inventory = fileInventory(dataset);
+  writeJson(join(dataset, 'dataset.json'), { suite, provenance, inventory, identity: hash({ suite, provenance, inventory }) });
+  const result = await runBenchmark({ suite, profile: 'full', dataset, rocRoot: join(root, 'must-not-open-model-host') });
+  assert.equal(result.status, 'incomplete');
+  assert.equal(result.fatal.failureClass, 'budget');
+  assert.match(result.fatal.reason, /request_budget_infeasible.*150.*60/);
+  assert.equal(result.attempted, 0);
+  assert.equal(result.cost.costBasis, 'not-dispatched');
+  const sealed = inspectRun(result.directory);
+  assert.equal(sealed.manifest.budgetPlan.minimumRequests, 150);
+  assert.equal(sealed.manifest.budgetPlan.maxTotalRequests, 60);
+  assert.equal(readFileSync(join(result.directory, 'events.jsonl'), 'utf8').includes('provider_admitted'), false);
+});
+test('fixture runner seals actual tool schemas across independent task workspaces without a live budget', async () => {
+  const dataset = join(root, 'schema-dataset'); mkdirSync(dataset);
+  const tasks = importQasper(Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`p${i}`, paper(`q${i}`)])))
+    .filter(t => t.split === 'development').slice(0, 2);
+  assert.equal(tasks.length, 2);
+  writeJson(join(dataset, 'tasks.json'), tasks);
+  const suite = 'qasper', provenance = { kind: 'synthetic-schema-test' }, inventory = fileInventory(dataset);
+  writeJson(join(dataset, 'dataset.json'), { suite, provenance, inventory, identity: hash({ suite, provenance, inventory }) });
+  const result = await runBenchmark({ suite, profile: 'fast', dataset, fixture: true });
+  assert.equal(result.status, 'complete', JSON.stringify(result.fatal));
+  assert.equal(result.cost.requests, 4);
+  const sealed = inspectRun(result.directory);
+  assert.equal(new Set(sealed.trials.map(t => t.toolSchemaHash)).size, 1);
+  for (const trial of sealed.trials) assert.match(trial.toolSchemaHash, /^[a-f0-9]{64}$/);
+  assert.equal(compareRuns(sealed, sealed).conclusion, 'insufficient');
 });
 test('invalid trials, unattempted trials and empty selections are visible and incomplete', () => {
   const sample = run(); sample.trials.pop(); sample.trials[0] = { ...sample.trials[0], metrics: null, failureClass: 'provider' };

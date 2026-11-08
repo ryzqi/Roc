@@ -63,7 +63,7 @@ export async function executeApplication({ artifact, input, directory, config, c
   const abort = () => { void stop(); };
   taskSignal.addEventListener('abort', abort, { once: true });
   const timer = setTimeout(() => controller.abort(new Error('task_deadline')), config.taskTimeoutMs);
-  let bytes = 0, requests = 0, result = null, truncated = false, isolationVerified = false;
+  let bytes = 0, requests = 0, result = null, truncated = false, isolationVerified = false, toolSchemaHash = null;
   function retain(name, text) {
     bytes += Buffer.byteLength(text);
     if (bytes > 32 * 1024 * 1024) { truncated = true; controller.abort(new Error('evidence_limit')); return; }
@@ -87,7 +87,19 @@ export async function executeApplication({ artifact, input, directory, config, c
       const message = JSON.parse(line);
       if (message.type === 'request') {
         if (++requests > config.maxRequestsPerTask || result !== null || message.requestHash !== hash(message.body)) fail('policy', 'worker_request_invalid');
-        record({ type: 'model_request', requestHash: message.requestHash, request: requests });
+        const tools = message.body.tools;
+        // Public benchmarks have one fixed main-agent tool set; no dynamic tools or subagents.
+        const expected = artifact.manifests[input.kind].tools.filter(t => t.executionScopes.includes('main')).map(t => t.modelVisibleName).sort();
+        if (!Array.isArray(tools) || tools.some(t => t?.type !== 'function' || typeof t.function?.name !== 'string'
+          || !t.function.parameters || typeof t.function.parameters !== 'object' || Array.isArray(t.function.parameters))
+          || hash(tools.map(t => t.function.name).sort()) !== hash(expected)) fail('harness', 'worker_tool_manifest_mismatch');
+        const observed = hash(tools);
+        if (toolSchemaHash !== null && toolSchemaHash !== observed) fail('harness', 'worker_tool_schema_changed');
+        if (toolSchemaHash === null) {
+          toolSchemaHash = observed;
+          writeJson(join(directory, 'tool-schema.json'), { schemaVersion: 1, toolSchemaHash, tools });
+        }
+        record({ type: 'model_request', requestHash: message.requestHash, request: requests, toolSchemaHash });
         const body = await complete(message.body, taskSignal);
         retain('responses.jsonl', JSON.stringify({ request: requests, body }) + '\n');
         taskSignal.throwIfAborted(); send({ type: 'response', body });
@@ -114,7 +126,7 @@ export async function executeApplication({ artifact, input, directory, config, c
     if (taskSignal.aborted) fail(controller.signal.reason?.message === 'task_deadline' ? 'agent' : 'infrastructure', controller.signal.reason?.message ?? 'worker_aborted');
     if (code !== 0 || !result || !isolationVerified) fail('harness', 'application_worker_failed');
     writeJson(join(directory, 'output.json'), result);
-    return { output: result.output, workspace, requests, evidenceComplete: true };
+    return { output: result.output, workspace, requests, toolSchemaHash, evidenceComplete: true };
   } catch (error) {
     if (truncated) fail('infrastructure', 'evidence_limit');
     if (signal.aborted) fail('operator', 'run_cancelled');

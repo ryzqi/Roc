@@ -19,7 +19,7 @@ Each dataset question generates exactly the prompt in `qasperInput(task)`:
 
 ## Relevant agent conditions
 
-Real AgentPluginRuntime and DeepAgent executor in chat mode, fresh thread/database/checkpointer per repeat; only ls/read_file tools. Tools and prompt can affect results. No retrieval service, memory history, PDF vision, web browsing, subagents or production Electron UI is tested. Model uses the host stdio bridge; fixture mode makes two scripted requests and is wiring evidence only. Live calls use the existing Roc configured model through a read-only Electron model host and the production model factory; worker never receives credentials.
+Real AgentPluginRuntime and DeepAgent executor in chat mode, fresh thread/database/checkpointer per repeat; only ls/read_file tools. The innermost model wrapper filters framework-added tools by the current scope manifest. Before dispatch, the host independently requires exactly these two names and retains the complete actual schema in tool-schema.json; schema drift within or between trials invalidates the run. Tools and prompt can affect results. No retrieval service, memory history, PDF vision, web browsing, subagents or production Electron UI is tested. Model uses the host stdio bridge; fixture mode makes two scripted requests and is wiring evidence only. Live calls use the existing Roc configured model through a read-only Electron model host and the production model factory; worker never receives credentials.
 
 ## Environment
 

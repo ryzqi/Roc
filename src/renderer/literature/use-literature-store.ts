@@ -1,3 +1,4 @@
+import { useVisiblePolling } from '../shared/view-activity';
 import type {ResearchWikiSnapshot} from '../../shared/schemas/research-wiki';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
@@ -299,18 +300,16 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
 
   const evidence = useMemo(() => derived.data?.sources.map(source => source.evidence) ?? null, [derived.data]);
   const reloadDerived = derived.reload;
+  // Relation reviews and source replacements may happen in another window.
+  useVisiblePolling(reloadDerived, 5000, projectId !== null);
   useEffect(() => {
     if (projectId === null) return;
     const refresh = () => { if (document.visibilityState === 'visible') reloadDerived(); };
     const unsubscribe = client.api.research.onLibraryChanged(event => {
       if (event.affectedProjectIds.includes(projectId)) refresh();
     });
-    // Relation reviews and source replacements may happen in another window.
-    const timer = setInterval(refresh, 5000);
     window.addEventListener('focus', refresh);
-    document.addEventListener('visibilitychange', refresh);
-    return () => { unsubscribe(); clearInterval(timer); window.removeEventListener('focus', refresh);
-      document.removeEventListener('visibilitychange', refresh); };
+    return () => { unsubscribe(); window.removeEventListener('focus', refresh); };
   }, [client, projectId, reloadDerived]);
 
   const reloadDocuments = documents.reload;
@@ -346,8 +345,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
    * `document.parse` is a long backend job with no push channel, so the only
    * honest way to show progress is to re-read the documents. The interval exists
    * only while something is actually parsing, so an idle panel costs nothing —
-   * and a hidden window stops polling because the effect is tied to the React
-   * tree.
+   * and a hidden/minimized window releases the interval until it becomes visible.
    *
    * `parseInFlight` is part of the condition on purpose: `parse` does not return
    * until the backend job finishes, so between the click and the next document
@@ -355,22 +353,8 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
    * stop the poll before it ever saw `parsing` — the 「解析中」/取消 state would be
    * unreachable exactly when it matters.
    */
-  const parsingDocumentIds = useMemo(
-    () => (documents.data ?? []).filter((document) => document.status === 'parsing').map((document) => document.id),
-    [documents.data]
-  );
-  // Joined into a string so the effect below depends on *which* documents are
-  // parsing, not on the array identity that every poll recreates.
-  const parsingSignature = [parseInFlight ?? '', ...parsingDocumentIds].join(',');
-  useEffect(() => {
-    if (parsingSignature.length === 0) {
-      return;
-    }
-    const handle = window.setInterval(() => {
-      reloadDocuments();
-    }, PARSE_POLL_INTERVAL_MS);
-    return () => window.clearInterval(handle);
-  }, [parsingSignature, reloadDocuments]);
+  const parsing = parseInFlight !== null || (documents.data ?? []).some(document => document.status === 'parsing');
+  useVisiblePolling(reloadDocuments, PARSE_POLL_INTERVAL_MS, parsing);
 
   const runAction = useCallback(
     async <Result,>(run: () => Promise<IpcLikeResult<Result>>): Promise<Result | null> => {

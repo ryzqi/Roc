@@ -1,5 +1,6 @@
 import { ToolMessage } from '@langchain/core/messages';
 import { createMiddleware } from 'langchain';
+import type { RunCapabilityExecutionScopeV1, RunCapabilityManifestV1 } from '../../../shared/types';
 
 export const PLAN_MODE_BLOCKED_TOOL_NAMES = [
   'write_file',
@@ -66,6 +67,24 @@ export function createRocPlanToolExposureMiddleware() {
         tools: filterPlanModeModelTools(request.tools)
       });
     }
+  });
+}
+
+/** Framework middleware can register tools beyond Roc's custom tool list. Filter at the model boundary. */
+export function createRocCapabilityToolExposureMiddleware(
+  manifest: RunCapabilityManifestV1,
+  scope: RunCapabilityExecutionScopeV1
+) {
+  const allowed = new Set(manifest.tools.filter(tool => tool.executionScopes.includes(scope)).map(tool => tool.modelVisibleName));
+  return createMiddleware({
+    name: 'RocCapabilityToolExposureMiddleware',
+    wrapModelCall: async (request, handler) => handler({
+      ...request,
+      tools: (request.tools ?? []).filter(tool => {
+        const name = readToolName(tool);
+        return name !== null && allowed.has(name);
+      })
+    })
   });
 }
 

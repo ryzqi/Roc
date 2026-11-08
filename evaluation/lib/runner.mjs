@@ -32,7 +32,7 @@ export async function runBenchmark(options) {
   const root = directory(RUNS, options.suite), events = journal(join(root, 'events.jsonl'));
   const controller = new AbortController(), cancel = () => controller.abort(new Error('operator_interrupt'));
   process.on('SIGINT', cancel); process.on('SIGTERM', cancel);
-  const trials = []; let provider = null, fatal = null, artifact, modelHost;
+  const trials = []; let provider = null, fatal = null, artifact, modelHost, runToolSchemaHash = null;
   const profile = profiles[options.profile];
   let manifest = { schemaVersion: 1, trigger: 'manual', command: process.argv.slice(2), suite: options.suite, profile: options.profile,
     selection: [], exclusions: [], repeats: profile?.repeats ?? 1, split: profile?.split ?? null,
@@ -76,6 +76,12 @@ export async function runBenchmark(options) {
       if (options.fixture && options.suite !== 'qasper') fail('policy', 'fixture_transport_supports_qasper_only');
       const config = options.fixture ? fixtureConfig : { ...validateBudget(options.budget ? readJson(options.budget) : {}), temperature: 0 };
       if (!options.fixture) {
+        manifest.budgetPlan = { trials: selected.length * profile.repeats, minimumRequests: selected.length * profile.repeats,
+          maxTotalRequests: config.maxTotalRequests, maxRequestsPerTask: config.maxRequestsPerTask };
+        events.append({ type: 'budget_preflight', ...manifest.budgetPlan });
+        if (manifest.budgetPlan.minimumRequests > config.maxTotalRequests) {
+          fail('budget', `request_budget_infeasible:minimum=${manifest.budgetPlan.minimumRequests}:maxTotalRequests=${config.maxTotalRequests}:reduce_profile_or_raise_explicit_budget`);
+        }
         modelHost = await openRocModel(options);
         Object.assign(config, modelHost.identity);
       }
@@ -90,7 +96,15 @@ export async function runBenchmark(options) {
       for (const task of selected) for (let repeat = 0; repeat < profile.repeats; repeat++) {
         controller.signal.throwIfAborted();
         const trialDir = join(root, `trial-${hash(task.id).slice(0, 16)}-${repeat}`); mkdirSync(trialDir, { mode: 0o700 });
-        const started = Date.now(), record = e => events.append({ ...e, taskId: task.id, repeat });
+        let trialToolSchemaHash = null;
+        const started = Date.now(), record = e => {
+          if (e.type === 'model_request') {
+            trialToolSchemaHash = e.toolSchemaHash;
+            if (runToolSchemaHash !== null && runToolSchemaHash !== trialToolSchemaHash) fail('harness', 'tool_schema_changed_during_run');
+            runToolSchemaHash = trialToolSchemaHash;
+          }
+          events.append({ ...e, taskId: task.id, repeat });
+        };
         record({ type: 'trial_started' });
         let grade;
         try {
@@ -105,7 +119,7 @@ export async function runBenchmark(options) {
           grade = { status: failure.failureClass === 'agent' ? 'failed' : 'invalid', ...failure,
             metrics: failure.failureClass === 'agent' ? Object.fromEntries(manifest.metrics.map(m => [m, 0])) : null };
         }
-        const trial = { taskId: task.id, clusterId: task.clusterId, repeat, ...grade, latencyMs: Date.now() - started };
+        const trial = { taskId: task.id, clusterId: task.clusterId, repeat, ...grade, toolSchemaHash: trialToolSchemaHash, latencyMs: Date.now() - started };
         trials.push(trial); writeJson(join(trialDir, 'grade.json'), trial); record({ type: 'trial_finished', ...trial });
         // Infrastructure, provider, budget and scoring failures invalidate this run.
         if (grade.failureClass && grade.failureClass !== 'agent') fail(grade.failureClass, grade.reason);

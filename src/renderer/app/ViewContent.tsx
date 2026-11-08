@@ -2,6 +2,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { isCanvasTabId } from '../../shared/surfaces';
 import type { AppViewId } from './routes';
 import { DelayedFallback } from '../shell/DelayedFallback';
+import { ViewActivity } from '../shared/view-activity';
 import { isViewResolved, loadView, preloadView, useViewResolution, type ViewProps } from './view-registry';
 
 export type { ViewProps };
@@ -43,9 +44,9 @@ export function ViewContent({ view, projectId }: ViewProps): React.JSX.Element {
             data-view={active ? view : undefined}
             data-shown-view={active ? shownView : undefined}
             data-project={projectId ?? ''}>
-            <Suspense fallback={<DelayedFallback />}>
+            <ViewActivity active={active}><Suspense fallback={<DelayedFallback />}>
               <View view={id} projectId={projectId} />
-            </Suspense>
+            </Suspense></ViewActivity>
           </div>
         );
       })}

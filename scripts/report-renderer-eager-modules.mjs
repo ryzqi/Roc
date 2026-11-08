@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { scanPackageRegions } from './lib/renderer-chunk-attribution.mjs';
+import { readChunkPackages } from './lib/renderer-chunk-attribution.mjs';
 
 /**
  * Eager-graph module attribution report.
@@ -15,10 +15,8 @@ import { scanPackageRegions } from './lib/renderer-chunk-attribution.mjs';
  *
  * Usage: `node scripts/report-renderer-eager-modules.mjs` after `pnpm build`.
  *
- * Attribution is textual: it reads the `//#region node_modules/.pnpm/<spec>/…`
- * comments rolldown emits. That is enough to answer "which package is in this
- * file", and it deliberately does not claim to apportion bytes between packages
- * inside one chunk (a region's byte ranges are not recorded in the output).
+ * Attribution uses build-time module metadata, verified against each chunk's
+ * hash. It survives minification and reports module counts, not per-package bytes.
  */
 
 const rendererRoot = join(process.cwd(), 'dist', 'renderer');
@@ -60,14 +58,14 @@ for (const chunk of chunks) {
   const size = statSync(path).size;
   eagerTotal += size;
   const source = readFileSync(path, 'utf8');
-  const counts = scanPackageRegions(source);
+  const counts = readChunkPackages(rendererRoot, chunk.file, source);
   console.log(`${chunk.file}  ${size} B`);
   if (counts.size === 0) {
-    console.log('   (no node_modules region markers)');
+    console.log('   (no npm modules)');
     continue;
   }
   for (const name of [...counts.keys()].sort()) {
-    console.log(`   ${name}  (${counts.get(name)} region${counts.get(name) === 1 ? '' : 's'})`);
+    console.log(`   ${name}  (${counts.get(name)} module${counts.get(name) === 1 ? '' : 's'})`);
   }
 }
 

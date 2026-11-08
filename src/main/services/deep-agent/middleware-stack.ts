@@ -28,6 +28,7 @@ import {
 } from './context/context-compaction-pipeline';
 import { createRocFilesystemPathPolicyMiddleware } from './filesystem-path-policy';
 import {
+  createRocCapabilityToolExposureMiddleware,
   createRocPlanRuntimeToolGuardMiddleware,
   createRocPlanToolExposureMiddleware
 } from './model-tool-exposure';
@@ -327,6 +328,11 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
     scopes: ['main'],
     modes: ALL_MODES,
     create: () => createForgeCleanupMiddleware()
+  },
+  {
+    // Innermost model wrapper: intersect framework-added tools with this scope's frozen authority.
+    name: 'RocCapabilityToolExposureMiddleware', scopes: ALL_SCOPES, modes: ALL_MODES,
+    create: context => createRocCapabilityToolExposureMiddleware(context.policy.capabilityManifest, context.executionScope)
   }
 ];
 

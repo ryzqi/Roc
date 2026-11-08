@@ -1,8 +1,9 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import type {PDFDocumentProxy} from 'pdfjs-dist';
 import type {ReadingHighlight} from '../../shared/schemas/research-reading';
 import type {RocClient} from '../shared/roc-client';
 import type {PdfTextSelection} from './PdfTextLayer';
+import {createPdfTextCache} from './pdf-text-cache';
 import './reading.css';
 export type TranslationSegment={label:string;text:string};
 type OutlineItem={title:string;page:number;depth:number};
@@ -14,7 +15,8 @@ export default function PdfReadingTools({client,projectId,documentId,sourceHash,
   const [outline,setOutline]=useState<OutlineItem[]>([]),[panel,setPanel]=useState<'outline'|'highlights'|null>(null);
   const [query,setQuery]=useState(''),[matches,setMatches]=useState<{page:number;count:number}[]>([]),[searching,setSearching]=useState(false);
   const [error,setError]=useState<string|null>(null),[busy,setBusy]=useState(false),[note,setNote]=useState(''),[color,setColor]=useState<ReadingHighlight['color']>('yellow');
-  const alive=useRef(true),searchRun=useRef(0),textCache=useRef(new Map<number,Promise<string>>());
+  const alive=useRef(true),searchRun=useRef(0);
+  const pageText=useMemo(()=>createPdfTextCache(pdf),[pdf]);
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;searchRun.current++;};},[]);
   useEffect(()=>{
     let cancelled=false;
@@ -29,11 +31,6 @@ export default function PdfReadingTools({client,projectId,documentId,sourceHash,
       await visit(tree??[],0);if(!cancelled)setOutline(entries);
     }).catch(error=>{if(!cancelled)setError(String(error));});return()=>{cancelled=true;};
   },[client,projectId,documentId,sourceHash,pdf]);
-  const pageText=(number:number):Promise<string>=>{
-    let pending=textCache.current.get(number);
-    if(!pending){pending=pdf.getPage(number).then(page=>page.getTextContent()).then(content=>content.items.map(item=>'str'in item?`${item.str}${item.hasEOL?'\n':' '}`:'').join('')).catch(error=>{textCache.current.delete(number);throw error;});textCache.current.set(number,pending);}
-    return pending;
-  };
   useEffect(()=>{
     const run=++searchRun.current;setMatches([]);onQuery(query.trim());if(!query.trim()){setSearching(false);return;}
     const timer=setTimeout(()=>{setSearching(true);void(async()=>{
@@ -45,7 +42,7 @@ export default function PdfReadingTools({client,projectId,documentId,sourceHash,
       if(run===searchRun.current){setMatches(hits);setSearching(false);}
     })().catch(error=>{if(run===searchRun.current){setError(String(error));setSearching(false);}});},250);
     return()=>{clearTimeout(timer);searchRun.current++;};
-  },[query,pdf]);
+  },[query,pdf,pageText]);
   const run=async(action:()=>Promise<void>):Promise<void>=>{setBusy(true);setError(null);try{await action();}catch(error){if(alive.current)setError(String(error));}finally{if(alive.current)setBusy(false);}};
   const saveHighlight=async(value:ReadingHighlight):Promise<void>=>{
     const {revision,createdAt,...record}=value;

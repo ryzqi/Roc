@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { prepareApplication, executeApplication } from '../lib/application.mjs';
 import { fixtureConfig, fixtureCompletion } from '../lib/fixture.mjs';
-import { fileInventory, ROOT } from '../lib/common.mjs';
+import { fileInventory, hash, sha256, ROOT } from '../lib/common.mjs';
 import { scienceFixture } from './science-fixture.mjs';
 import { sciencePreflight, stageScience, executeScience, gradeScience } from '../lib/science.mjs';
 
@@ -21,6 +21,9 @@ test('real Roc file tool exposes only public paper; complete trace, isolation an
     protectedPaths: [hidden], signal: new AbortController().signal, record: () => {}, complete: body => { requests.push(body); return fixtureCompletion(body); } });
   assert.equal(result.output, '{"answer":"Unanswerable","evidence":[]}');
   assert.equal(requests.length, 2);
+  for (const request of requests) assert.deepEqual(request.tools.map(t => t.function.name).sort(), ['ls', 'read_file']);
+  assert.equal(result.toolSchemaHash, hash(requests[0].tools));
+  assert.deepEqual(JSON.parse(readFileSync(join(path, 'tool-schema.json'))).tools, requests[0].tools);
   assert.ok(requests[1].messages.some(m => m.role === 'tool' && JSON.stringify(m.content).includes('visible-paper-sentinel')));
   assert.equal(JSON.stringify(requests).includes('hidden-evaluation-truth'), false);
   const trace = readFileSync(join(path, 'transcript.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
@@ -28,6 +31,36 @@ test('real Roc file tool exposes only public paper; complete trace, isolation an
   assert.ok(trace.some(m => m.event?.type === 'run_completed'));
   assert.equal(JSON.parse(readFileSync(join(path, 'cleanup.json'))).processGroupGone, true);
   assert.ok(fileInventory(path).some(f => f.path === 'worker/agent.sqlite'));
+});
+test('host rejects unexpected, missing, duplicate or malformed tools before dispatch and schema drift before redispatch', async () => {
+  const valid = ['ls', 'read_file'].map(name => ({ type: 'function', function: { name, parameters: { type: 'object', properties: {} } } }));
+  const cases = [
+    { name: 'extra', schemas: [[...valid, { type: 'function', function: { name: 'task', parameters: {} } }]], calls: 0, error: /worker_tool_manifest_mismatch/ },
+    { name: 'missing', schemas: [[valid[0]]], calls: 0, error: /worker_tool_manifest_mismatch/ },
+    { name: 'duplicate', schemas: [[...valid, valid[0]]], calls: 0, error: /worker_tool_manifest_mismatch/ },
+    { name: 'malformed', schemas: [[valid[0], { type: 'function', function: { name: 'read_file', parameters: null } }]], calls: 0, error: /worker_tool_manifest_mismatch/ },
+    { name: 'schema-drift', schemas: [valid, valid.map(t => ({ ...t, function: { ...t.function, description: 'changed contract' } }))], calls: 1, error: /worker_tool_schema_changed/ }
+  ];
+  for (const scenario of cases) {
+    const path = trial(scenario.name), workerPath = join(path, 'protocol-worker.mjs');
+    // A deliberately faulty worker exercises the actual stdio admission boundary, without any provider.
+    writeFileSync(workerPath, `import { createInterface } from 'node:readline';
+import { createHash } from 'node:crypto';
+const canonical = x => Array.isArray(x) ? x.map(canonical) : x !== null && typeof x === 'object' ? Object.fromEntries(Object.keys(x).sort().map(k => [k,canonical(x[k])])) : x;
+const schemas = ${JSON.stringify(scenario.schemas)};
+let i = 0;
+createInterface({ input: process.stdin }).on('line', () => {
+  if (i >= schemas.length) return;
+  const body = { tools: schemas[i++] };
+  console.log(JSON.stringify({ type: 'request', body, requestHash: createHash('sha256').update(JSON.stringify(canonical(body))).digest('hex') }));
+});\n`);
+    const faultyArtifact = { ...artifact, path: workerPath, sha256: sha256(readFileSync(workerPath)) };
+    let calls = 0;
+    await assert.rejects(executeApplication({ artifact: faultyArtifact, input, directory: path, config: fixtureConfig,
+      protectedPaths: [hidden], signal: new AbortController().signal, record: () => {}, complete: () => { calls++; return {}; } }), scenario.error);
+    assert.equal(calls, scenario.calls);
+    assert.equal(JSON.parse(readFileSync(join(path, 'cleanup.json'))).processGroupGone, true);
+  }
 });
 function completion(body, tool, args) {
   return { id: `fixture-science-${body.messages.length}`, object: 'chat.completion', created: 0, model: body.model,
@@ -39,7 +72,10 @@ test('scientific task uses production write tool and consumed execution grant be
   const path = trial('science'); let calls = 0, executions = 0; const events = [];
   const result = await executeApplication({ artifact, input: { kind: 'scienceagentbench', prompt: 'Write solution.py and run python solution.py.', files: {} }, directory: path,
     config: fixtureConfig, protectedPaths: [hidden], signal: new AbortController().signal, record: e => events.push(e),
-    complete: body => { calls++; return calls === 1 ? completion(body, 'write_file', { file_path: '/workspace/solution.py', content: 'print(42)\n' }) : calls === 2 ? completion(body, 'run_shell_command', { command: 'python solution.py' }) : completion(body); },
+    complete: body => {
+      assert.deepEqual(body.tools.map(t => t.function.name).sort(), ['edit_file', 'ls', 'read_file', 'run_shell_command', 'write_file']);
+      calls++; return calls === 1 ? completion(body, 'write_file', { file_path: '/workspace/solution.py', content: 'print(42)\n' }) : calls === 2 ? completion(body, 'run_shell_command', { command: 'python solution.py' }) : completion(body);
+    },
     execute: async (workspace, _signal, limits) => { executions++; assert.equal(readFileSync(join(workspace, 'solution.py'), 'utf8'), 'print(42)\n');
       assert.ok(limits.timeoutMs > 0 && limits.timeoutMs <= 120000);
       assert.ok(limits.maxBytes > 0 && limits.maxBytes <= 1048576);

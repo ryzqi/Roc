@@ -1,3 +1,4 @@
+import { useVisiblePolling } from '../shared/view-activity';
 import {useEffect, useState} from 'react';
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
@@ -19,10 +20,7 @@ export function WikiPages({client, projectId, snapshot, writable, onAskAssistant
     () => client.api.research.searchWiki({projectId, query, offset}), {label: '读取 Wiki 页面'});
   const locked = creating || editing;
   useEffect(() => {onLock(locked); return () => onLock(false);}, [locked, onLock]);
-  useEffect(() => {
-    const timer = window.setInterval(() => {if (document.visibilityState === 'visible') pages.reload();}, 3000);
-    return () => window.clearInterval(timer);
-  }, [pages.reload]);
+  useVisiblePolling(pages.reload, 3000);
   return <div className="flex min-h-0 flex-1 flex-col" data-testid="wiki-pages">
     <div className="flex flex-wrap items-center gap-2 border-b border-line p-3">
       <input aria-label="搜索持久页面" className={`${field} flex-1`} value={query} disabled={locked}
@@ -100,11 +98,7 @@ function PageDetail({client, projectId, pageId, writable, onAskAssistant, onEdit
   const [historyOpen, setHistoryOpen] = useState(false);
   const compile = useAsyncAction((expectedRevision: number) => client.api.research.compileWiki({projectId, pageId, expectedRevision}), {label: '重新编译 Wiki'});
   useEffect(() => {onEditing(edit !== null); return () => onEditing(false);}, [edit, onEditing]);
-  useEffect(() => {
-    if (edit !== null) return;
-    const timer = window.setInterval(() => {if (document.visibilityState === 'visible') page.reload();}, 3000);
-    return () => window.clearInterval(timer);
-  }, [page.reload, edit]);
+  useVisiblePolling(page.reload, 3000, edit === null);
   const data = page.data;
   if (data === null) return <div><p role={page.error ? 'alert' : 'status'}>{page.error ?? '正在读取页面…'}</p><button className={button} onClick={page.reload}>重试读取</button></div>;
   return <article className="space-y-3" data-testid="wiki-page-detail">

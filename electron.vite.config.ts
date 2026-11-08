@@ -2,6 +2,7 @@ import { defineConfig } from 'electron-vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'node:path';
+import { packageNameFromModuleId, rendererChunkMetadata } from './scripts/renderer-chunk-metadata';
 
 type RendererChunkRule = {
   chunk: string;
@@ -73,18 +74,8 @@ export const rendererChunkRules: readonly RendererChunkRule[] = [
 ];
 
 export function resolveRendererManualChunk(id: string): string | undefined {
-  const normalizedId = id;
-  const marker = '/node_modules/';
-  const markerIndex = normalizedId.lastIndexOf(marker);
-  if (markerIndex < 0) {
-    return undefined;
-  }
-  const packagePath = normalizedId.slice(markerIndex + marker.length);
-  const packageParts = packagePath.split('/');
-  const packageName =
-    packageParts[0] !== undefined && packageParts[0].startsWith('@') && packageParts[1] !== undefined
-      ? `${packageParts[0]}/${packageParts[1]}`
-      : packageParts[0];
+  const normalizedId = id.replaceAll('\\', '/');
+  const packageName = packageNameFromModuleId(id);
   if (packageName === undefined) {
     return undefined;
   }
@@ -118,6 +109,7 @@ export default defineConfig({
   preload: {
     build: {
       outDir: 'dist/preload',
+      minify: 'oxc',
       rolldownOptions: {
         input: {
           index: resolve(__dirname, 'src/preload/index.ts')
@@ -132,10 +124,11 @@ export default defineConfig({
   },
   renderer: {
     root: '.',
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), rendererChunkMetadata()],
     build: {
       outDir: 'dist/renderer',
       manifest: true,
+      minify: 'oxc',
       rolldownOptions: {
         input: {
           index: resolve(__dirname, 'index.html'),

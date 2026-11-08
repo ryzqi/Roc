@@ -19,6 +19,7 @@ before(async () => {
       export * from './src/main/plugins/mcp/mcp-bounded-fetch';
       export { createLangChainTool, createMcpOutputValidator } from './src/main/plugins/mcp/mcp-client-adapter';
       export { createToolProtocolMiddleware } from './src/main/services/deep-agent/tool-protocol';
+      export { createRocCapabilityToolExposureMiddleware, createRocPlanToolExposureMiddleware } from './src/main/services/deep-agent/model-tool-exposure';
       export { WebReadService } from './src/main/services/web-read-service';
     `, resolveDir: process.cwd() },
     outfile, bundle: true, packages: 'external', platform: 'node', format: 'esm', logLevel: 'silent'
@@ -34,6 +35,27 @@ const server = {
   preset: false, riskLevel: 'medium', url: 'https://example.test/mcp', allowedTools: ['fixture_lookup']
 };
 const runtimeStatus = { defaultModelState: { status: 'ready', modelId: 'fixture-model' } };
+test('model exposure intersects scope authority with available tools and preserves Plan restrictions', async () => {
+  const manifest = { tools: [
+    { modelVisibleName: 'read_file', executionScopes: ['main', 'subagent'] },
+    { modelVisibleName: 'write_file', executionScopes: ['main'] },
+    { modelVisibleName: 'missing_binding', executionScopes: ['main'] }
+  ] };
+  const read = { name: 'read_file', schema: { path: 'original' } }, write = { name: 'write_file' };
+  const tools = [read, write, { name: 'task' }, { name: 'write_todos' }, null, {}];
+  const main = api.createRocCapabilityToolExposureMiddleware(manifest, 'main');
+  const child = api.createRocCapabilityToolExposureMiddleware(manifest, 'subagent');
+  const handler = async request => request.tools;
+  assert.deepEqual(await main.wrapModelCall({ tools }, handler), [read, write]);
+  const childTools = await child.wrapModelCall({ tools }, handler);
+  assert.deepEqual(childTools, [read]); assert.equal(childTools[0], read);
+  assert.deepEqual(await main.wrapModelCall({}, handler), []);
+  const plan = api.createRocPlanToolExposureMiddleware();
+  assert.deepEqual(await plan.wrapModelCall({ tools }, request => main.wrapModelCall(request, handler)), [read]);
+  // Hiding tools never replaces execution authorization, including malicious/hallucinated calls.
+  const guard = api.createToolProtocolMiddleware({ capabilityManifest: manifest, executionScope: 'subagent', boundToolNames: ['write_file'] });
+  await assert.rejects(guard.wrapToolCall({ tool: write, toolCall: { name: 'write_file' } }, async () => assert.fail('must not execute')), /scope_denied/);
+});
 function input(overrides = {}) {
   return {
     mode: 'chat', deleteFileApprovalMode: 'default', mcpApprovalMode: 'default',

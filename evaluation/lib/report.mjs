@@ -31,7 +31,7 @@ export function inspectRun(path) {
 }
 export function compareRuns(baseline, candidate) {
   const a = baseline.manifest, b = candidate.manifest;
-  const mismatches = ['suite', 'evidence', 'datasetIdentity', 'selection', 'repeats', 'metrics', 'scorerHash', 'provider', 'environment', 'split'].filter(k => hash(a[k]) !== hash(b[k]));
+  const mismatches = ['suite', 'evidence', 'datasetIdentity', 'selection', 'repeats', 'metrics', 'scorerHash', 'provider', 'environment', 'split', 'toolManifest'].filter(k => hash(a[k] ?? null) !== hash(b[k] ?? null));
   if (mismatches.length) return { conclusion: 'incompatible', mismatches };
   if ([baseline, candidate].some(r => r.summary.status !== 'complete')) return { conclusion: 'incomplete' };
   if (baseline.sealHash && baseline.sealHash === candidate.sealHash) return { conclusion: 'insufficient', reason: 'same_run_is_not_independent_evidence' };
@@ -43,6 +43,14 @@ export function compareRuns(baseline, candidate) {
     return result;
   };
   const left = index(baseline), right = index(candidate);
+  // Legacy runs lack this evidence. Matching omissions do not establish a fixed tool contract.
+  if (!a.toolManifest?.tools?.length || !b.toolManifest?.tools?.length
+    || [baseline, candidate].some(r => r.trials.some(t => typeof t.toolSchemaHash !== 'string' || !/^[a-f0-9]{64}$/.test(t.toolSchemaHash)))) {
+    return { conclusion: 'insufficient', reason: 'tool_contract_evidence_missing' };
+  }
+  const schemas = [baseline, candidate].map(r => new Set(r.trials.map(t => t.toolSchemaHash)));
+  if (schemas.some(s => s.size !== 1)) return { conclusion: 'incompatible', mismatches: ['toolSchemaHash'], reason: 'tool_schema_changed_within_run' };
+  if (baseline.trials[0].toolSchemaHash !== candidate.trials[0].toolSchemaHash) return { conclusion: 'incompatible', mismatches: ['toolSchemaHash'] };
   const groups = [...new Set(a.selection.map(t => t.clusterId))];
   const sufficient = a.evidence === 'live-model' && a.repeats >= 3 && groups.length >= 5;
   const metrics = {};

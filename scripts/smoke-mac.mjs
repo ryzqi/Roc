@@ -215,7 +215,8 @@ try {
       sqlitePrebuilds: fs.readdirSync(join(unpacked, 'better-sqlite3', 'prebuilds')),
       ptyPrebuilds: fs.readdirSync(join(unpacked, 'node-pty', 'prebuilds')),
       ortNativeFiles,
-      redundantPackages: ['react-dom', 'highlight.js', 'lucide-react', '@xterm/xterm', 'motion', '--frozen-lockfile']
+      redundantPackages: ['react-dom', 'highlight.js', 'lucide-react', '@xterm/xterm', 'motion', '--frozen-lockfile',
+        '@radix-ui/react-dialog', '@tiptap/react', '@tiptap/pm', 'katex', 'mermaid', 'swr', 'zustand']
         .filter((name) => fs.existsSync(join(appRoot, 'node_modules', name)))
     };
   });

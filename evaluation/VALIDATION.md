@@ -2,6 +2,25 @@
 
 工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。macOS ARM64，Node 26.13.0、pnpm 12.5.1、Electron 45、Python 3.14.7。全部手动触发，无付费推理请求、提交或远程写入。目录名使用 UTC，因此本地 11 月 8 日对应部分目录的 11 月 7 日时间。
 
+## 工具合同与预算修复验证（本轮）
+
+**Verified passing**：模型请求按 manifest 和 main/subagent scope 过滤；public benchmark 宿主在转发前核对固定工具集合并保留实际 schema；比较器拒绝工具、权限、schema 漂移，缺少实际 schema 的旧记录只能给出不足证据；最低请求预算不可行时在打开模型宿主前失败。执行授权硬守卫保持有效。
+
+先加入回归测试，旧代码按预期出现 5 项失败（QASPER/Science 额外工具、比较遗漏、缺失证据、预算预检），修改后通过。随后在本文顶部工作目录执行：
+
+```sh
+node --test evaluation/tests/harness-bench.test.mjs evaluation/tests/harness-bench-application.test.mjs evaluation/tests/roc-model.test.mjs tests/unit/quality-application-adapter.test.mjs tests/unit/quality-runner.test.mjs tests/unit/quality-evaluation.test.mjs tests/unit/quality-dataset.test.mjs tests/unit/run-capability-manifest.test.mjs tests/unit/wiki-tools.test.mjs
+pnpm typecheck
+pnpm harness:eval
+pnpm harness:quality:check
+```
+
+结果：78/78 相关测试、94/94 原生场景和类型检查通过，命令均退出 0。覆盖实际 worker 两类工具集合、宿主拒绝缺失/额外/重复/畸形工具及后续 schema 漂移、子代理 scope 与 Plan 限制、固定工具比较、150 次最低请求与默认 60 次预算的预检失败，以及两个全新工作区经 runner 执行后的 schema 证据封存。S01 仍为 16 个 fixture、独立数据 0/200、`insufficient`，没有质量通过结论。模型宿主测试仅用临时合成配置和本机回环服务，无付费调用，也未检查用户真实凭据。
+
+完整命令与日志在 [verification.json](../.artifacts/agent-harness-evaluation-fixes-2026-11-08/verification.json)。实际模型质量、官方 Science 与独立 S01 评测仍未运行。本轮修复工程评测可信度，不证明模型质量提高。
+
+以下保留工具合同修复前的验证历史；对应 run 与 seal 没有改写，不能作为修复后实际 schema 的证据。
+
 ## 状态
 
 - **Verified passing**：独立目录、Roc 只读模型工厂桥接、本机 Python 沙箱、五类自动评分校准、真实工具/授权链路、native/QASPER fixture、封存与比较。

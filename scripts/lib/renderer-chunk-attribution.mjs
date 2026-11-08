@@ -1,3 +1,7 @@
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 /**
  * Attribution of built chunks back to npm packages.
  *
@@ -57,6 +61,18 @@ export const EAGER_FORBIDDEN_PACKAGES = [
   'mermaid',
   'zod'
 ];
+
+/** Fail closed on missing/stale metadata: minified code has no region markers. */
+export function readChunkPackages(rendererRoot, file, source) {
+  const metadata = JSON.parse(readFileSync(join(rendererRoot, '.vite', 'chunk-packages.json'), 'utf8'));
+  const chunk = metadata.chunks?.[file];
+  if (metadata.version !== 1 || chunk?.sha256 !== createHash('sha256').update(source).digest('hex') ||
+      chunk.packages === null || typeof chunk.packages !== 'object' || Array.isArray(chunk.packages) ||
+      Object.values(chunk.packages).some(count => !Number.isInteger(count) || count <= 0)) {
+    throw new Error(`renderer_chunk_metadata_invalid:${file}: rebuild before checking`);
+  }
+  return new Map(Object.entries(chunk.packages));
+}
 
 /**
  * The package a `.pnpm` region belongs to.
