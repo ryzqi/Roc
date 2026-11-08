@@ -42,7 +42,7 @@ import { deriveWiki, type WikiConceptPage } from './derive-wiki';
  *   - **copy as Markdown** — a 「复制」 action with 已复制 feedback,
  *     assembled from the derived page.
  *
- * The 演进时间线 / 共现 / 未归类证据 panels stay, because the design requires every
+ * The 引用文献年份 / 共现 / 未归类证据 panels stay, because the design requires every
  * derived view to be inspectable rather than summarised. They moved into the left
  * column so they do not compete with the page being read.
  */
@@ -260,7 +260,7 @@ export function WikiView({
             <section>
               <h3 className="mb-1 flex items-center gap-1.5 text-muted text-[length:var(--font-micro-size)]">
                 <CalendarClock size={11} aria-hidden="true" />
-                演进时间线
+                引用文献年份
               </h3>
               <ol className="flex flex-wrap items-center gap-1.5" data-testid="wiki-timeline">
                 {projection.timeline.map((entry) => (
@@ -274,7 +274,7 @@ export function WikiView({
                         }
                       }}
                       data-testid={`wiki-timeline-${entry.year}`}
-                      title="跳到这一年的第一条主张"
+                      title="按主张引用文献的最早发表年份归组"
                       className="rounded-control border-[0.5px] border-line px-2 py-1 text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
                     >
                       <span className="font-mono text-ink">{entry.year}</span>{' '}

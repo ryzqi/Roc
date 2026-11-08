@@ -17,10 +17,25 @@ before(async () => {
     import React from 'react';
     import {createRoot} from 'react-dom/client';
     import {flushSync} from 'react-dom';
+    import {useLiteratureStore} from './src/renderer/literature/use-literature-store';
     import {WikiView} from './src/renderer/literature/WikiView';
+    const client = {api:{research:{
+      listLibrary: async () => ({ok:true,data:[]}),
+      getLibraryItem: async ({id}) => id === 'missing' ? ({ok:false,error:{message:'Item missing'}}) :
+        ({ok:true,data:{id,metadata:{title:'Loaded outside library page'}}}),
+      listDocuments: async () => ({ok:true,data:[]}),
+      wikiSnapshot: async () => ({ok:true,data:{claims:[],sources:[],relations:[],papers:[]}}),
+      onLibraryChanged: () => () => {}
+    }}};
+    function StoreHarness() {
+      const store = useLiteratureStore(client, 'p1');
+      window.store = store;
+      return React.createElement('div', {id:'store-state'}, JSON.stringify({selected:store.selected,status:store.selectedStatus,error:store.selectedError}));
+    }
+    window.mountStore = () => flushSync(() => root.render(React.createElement(StoreHarness)));
     const root = createRoot(document.getElementById('root'));
     window.mount = props => flushSync(() => root.render(React.createElement(WikiView,
-      {...props, onOpenClaim: id => window.opened = id, onRefresh: () => window.refreshed = true})));
+      {...props, onOpenClaim: id => window.opened = id, onOpenPaper: id => window.paper = id, onRefresh: () => window.refreshed = true})));
   `, resolveDir: process.cwd(), loader: 'js'}, outfile: join(directory, 'app.js'),
     bundle: true, platform: 'browser', format: 'iife', logLevel: 'silent'});
   const assets = join(process.cwd(), 'dist/renderer/assets');
@@ -88,4 +103,27 @@ test('Wiki renders current review and invalidation honestly, and refresh and gra
       await page.screenshot({path:join(artifacts, `review-${theme}-${width}.png`)});
     }
   }
+});
+
+test('PDF paper navigation and publication years survive an empty filtered library list', async () => {
+  const props = fixture();
+  props.evidence[0].sourceType = 'file';
+  props.snapshot.papers = [{evidenceId:'e1',libraryItemId:'paper-1',title:'Associated managed PDF',year:2025}];
+  await page.evaluate(props => window.mount(props), props);
+  assert.match(await page.locator('[data-testid="wiki-timeline"]').innerText(), /2025/u);
+  await page.locator('[data-testid="wiki-page-paper-paper-1"]').focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => window.paper), 'paper-1');
+});
+
+test('the reader selection loads by ID independently of a filtered or capped library list and exposes errors', async () => {
+  await page.evaluate(() => window.mountStore());
+  await page.waitForFunction(() => window.store.status === 'ready');
+  await page.evaluate(() => window.store.select('outside-page'));
+  await page.waitForFunction(() => window.store.selected?.id === 'outside-page');
+  assert.equal(await page.evaluate(() => window.store.items.length), 0);
+  await page.evaluate(() => window.store.select('missing'));
+  await page.waitForFunction(() => window.store.selectedStatus === 'error');
+  assert.equal(await page.evaluate(() => window.store.selected), null);
+  assert.equal(await page.evaluate(() => window.store.selectedError), 'Item missing');
 });

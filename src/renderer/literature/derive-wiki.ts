@@ -107,12 +107,17 @@ function toEvidenceCard(evidence: ResearchEvidence): WikiEvidenceCard {
  */
 function papersForEvidence(
   evidence: readonly ResearchEvidence[],
-  libraryItems: readonly ResearchLibraryItem[]
+  byId: ReadonlyMap<string, ResearchLibraryItem>,
+  references: ReadonlyMap<string, WikiRelatedPaper>
 ): WikiRelatedPaper[] {
-  const byId = new Map(libraryItems.map((item) => [item.id, item]));
   const seen = new Set<string>();
   const papers: WikiRelatedPaper[] = [];
   for (const record of evidence) {
+    const reference = references.get(record.id);
+    if (reference !== undefined) {
+      if (!seen.has(reference.libraryItemId)) { papers.push(reference); seen.add(reference.libraryItemId); }
+      continue;
+    }
     if (record.sourceType !== 'literature' || seen.has(record.sourceId)) {
       continue;
     }
@@ -137,6 +142,8 @@ export function deriveWiki(input: {
 }): WikiProjection {
   const evidenceById = new Map(input.evidence.map((record) => [record.id, record]));
 
+  const libraryById = new Map(input.libraryItems.map(item => [item.id, item]));
+  const references = new Map(input.snapshot?.papers?.map(({evidenceId, ...paper}) => [evidenceId, paper]));
   const sources = new Map(input.snapshot?.sources.map(source => [source.evidence.id, source]));
   const relationsByClaim = new Map<string, ResearchWikiSnapshot['relations']>();
   for (const relation of input.snapshot?.relations ?? []) {
@@ -164,7 +171,7 @@ export function deriveWiki(input: {
     return {
       claimId: claim.id, title: conceptTitle(claim.content), content: claim.content, status: claim.status,
       review, evidence,
-      papers: papersForEvidence(ids.flatMap(id => evidenceById.has(id) ? [evidenceById.get(id)!] : []), input.libraryItems),
+      papers: papersForEvidence(ids.flatMap(id => evidenceById.has(id) ? [evidenceById.get(id)!] : []), libraryById, references),
       hasMissingEvidence: evidence.length !== ids.length
     };
   });

@@ -355,3 +355,16 @@ test('Wiki includes reviewed endpoints outside legacy evidenceIds and never call
   assert.deepEqual(result.orphanEvidence, []);
   assert.equal(result.pages[0].review, 'contradicted');
 });
+
+test('Wiki uses source-associated metadata when the library list is empty or unrelated', () => {
+  const claim = claimRecord({});
+  const record = evidenceRecord({sourceType:'file'});
+  const snapshot = {claims:[claim],sources:[],relations:[],
+    papers:[{evidenceId:record.id,libraryItemId:'lib-1',title:'Managed PDF',year:2025}]};
+  for (const libraryItems of [[], [libraryItem('other','Unrelated',1900)]]) {
+    const projection = wiki.deriveWiki({claims:[claim],evidence:[record],libraryItems,snapshot});
+    assert.deepEqual(projection.pages[0].papers,[{libraryItemId:'lib-1',title:'Managed PDF',year:2025}]);
+    assert.deepEqual(projection.timeline,[{year:2025,claimIds:['cl-1']}]);
+  }
+  assert.deepEqual(wiki.deriveWiki({claims:[claim],evidence:[record],libraryItems:[libraryItem('lib-1','Coincidence',2000)]}).pages[0].papers,[]);
+});

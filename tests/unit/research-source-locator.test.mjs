@@ -404,3 +404,22 @@ test('19 to 20 migration preserves historical raw evidence claim state and absen
     assert.equal(db.prepare('SELECT total_changes()').pluck().get(),changes);
   }finally{db.close();agentDb.close();}
 });
+
+test('Wiki resolves PDF citations through the captured document and ignores library list filtering',()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const document=importedDocument(f);publishParse(f,document,'wiki-source-parse',[block('wiki-block')]);
+    const evidence=capture(f,'wiki-source-parse');
+    assert.equal(evidence.sourceType,'file');
+    assert.deepEqual(f.repository.library.list({projectId:f.project.id,query:'no such paper',includeArchived:false,limit:200,offset:0}),[]);
+    const snapshot=f.repository.evidence.wikiSnapshot(f.project.id);
+    assert.deepEqual(snapshot.papers,[{evidenceId:evidence.id,libraryItemId:document.libraryItemId,title:'Locator fixture',year:2026}]);
+    f.repository.knowledge.upsertFromSource({id:'unmanaged-file',projectId:f.project.id,sourceType:'file',
+      sourceId:document.libraryItemId,title:'Unmanaged file with a coincident identifier',content:'Separate raw file.',
+      chunks:[{content:'Separate raw file.',locator:'notes.md:line:1'}],embeddingPolicy:'none'});
+    f.repository.evidence.capture({projectId:f.project.id,chunkId:'unmanaged-file:chunk:0'});
+    assert.equal(f.repository.evidence.wikiSnapshot(f.project.id).papers.length,1);
+    publishParse(f,document,'wiki-source-reparse',[block('new-block')]);
+    assert.deepEqual(f.repository.evidence.wikiSnapshot(f.project.id).papers,snapshot.papers,'historical sources retain their actual paper');
+  }finally{f.close();}
+});

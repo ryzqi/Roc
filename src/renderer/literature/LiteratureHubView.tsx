@@ -194,7 +194,7 @@ export function LiteratureHubView(): React.JSX.Element {
             <select
               aria-label="选择当前文献"
               value={store.selectedId ?? ""}
-              disabled={store.items.length === 0}
+              disabled={store.items.length === 0 && store.selected === null}
               onChange={(event) => {
                 const id = event.target.value || null;
                 store.select(id);
@@ -206,6 +206,8 @@ export function LiteratureHubView(): React.JSX.Element {
               className="h-8 min-w-0 flex-1 rounded-control border-[0.5px] border-line bg-surface px-2 text-ink text-[length:var(--font-meta-size)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:opacity-50"
             >
               <option value="">选择一篇文献</option>
+              {store.selected !== null && !store.items.some(item => item.id === store.selected?.id) ?
+                <option value={store.selected.id}>{libraryItemTitle(store.selected)}</option> : null}
               {store.items.map((item) => (
                 <option key={item.id} value={item.id}>{libraryItemTitle(item)}</option>
               ))}
@@ -214,6 +216,7 @@ export function LiteratureHubView(): React.JSX.Element {
           {visited.has('reader') ? (
             <div style={{ display: subView === 'reader' ? 'contents' : 'none' }}>
             <div className="flex min-h-0 flex-1 flex-col">
+            {store.selectedStatus === 'error' ? <ErrorBar error={{level: 'page', message: store.selectedError ?? '读取文献失败', retry: store.reloadSelected}} /> : null}
             <PaperReader
               literature={store}
               onClearFocus={() => setFocus({parseId: null, locator: null})}

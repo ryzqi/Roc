@@ -123,7 +123,7 @@ export class ResearchRepository {
       get: (id) => this.getArtifact(id),
       requireEditable: (id) => this.requireEditableArtifact(id),
       requireReviewable: (id) => this.requireRelationReviewableArtifact(id)
-    }, now);
+    }, now, id => this.library.get(id));
     this.manuscripts = new ResearchManuscriptRepository(db, {
       get: (id) => this.getArtifact(id),
       requireEditable: (id) => this.requireEditableArtifact(id)

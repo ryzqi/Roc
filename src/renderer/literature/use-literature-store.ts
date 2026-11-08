@@ -102,6 +102,9 @@ export type LiteratureStore = {
   setIncludeArchived: (next: boolean) => void;
   reload: () => void;
   selectedId: string | null;
+  selectedStatus: AsyncStatus;
+  selectedError: string | null;
+  reloadSelected: () => void;
   selected: ResearchLibraryItem | null;
   select: (id: string | null) => void;
   action: LiteratureActionState;
@@ -267,7 +270,13 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     setSelectedId(null);
   }, [projectId]);
 
-  const selected = useMemo(() => items.find((item) => item.id === selectedId) ?? null, [items, selectedId]);
+  const listedSelection = useMemo(() => items.find(item => item.id === selectedId) ?? null, [items, selectedId]);
+  const selectedResource = useAsyncResource(
+    projectId === null || selectedId === null || listedSelection !== null ? null : `literature-item:${projectId}:${selectedId}`,
+    () => client.api.research.getLibraryItem({id: selectedId ?? ''}),
+    {label: '读取选中文献'}
+  );
+  const selected = listedSelection ?? selectedResource.data;
   const documentsKey = selectedId === null ? null : `literature-docs:${selectedId}`;
   const documents = useAsyncResource(
     documentsKey,
@@ -733,6 +742,9 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     reload: reloadList,
     selectedId,
     selected,
+    selectedStatus: listedSelection !== null ? 'ready' : selectedResource.status,
+    selectedError: selectedResource.error,
+    reloadSelected: selectedResource.reload,
     select: setSelectedId,
     action: { pending, error: actionError },
     clearActionError: () => setActionError(null),

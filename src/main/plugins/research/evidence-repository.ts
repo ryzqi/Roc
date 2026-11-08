@@ -42,7 +42,8 @@ export class ResearchEvidenceRepository {
   constructor(
     private readonly db: Database,
     private readonly artifacts: ArtifactAccess,
-    private readonly now: () => string
+    private readonly now: () => string,
+    private readonly libraryItem: (id: string) => import('../../../shared/types').ResearchLibraryItem
   ) {
     this.relations = new ResearchEvidenceRelationRepository(db, this, artifacts, now);
     this.sourceMigrations = new ResearchSourceMigrationRepository(db, this, now);
@@ -118,7 +119,24 @@ export class ResearchEvidenceRepository {
       for (const relation of relations) {
         if (relation.status === 'proposed' || relation.status === 'confirmed') this.relations.assertCurrent(relation);
       }
-      return {claims, sources, relations};
+      const papers: ResearchWikiSnapshot['papers'] = [];
+      const metadata = new Map<string, ReturnType<typeof this.libraryItem>>();
+      const document = this.db.prepare('SELECT library_item_id FROM research_documents WHERE id=?');
+      const exists = this.db.prepare('SELECT id FROM research_library WHERE id=?');
+      for (const source of sources) {
+        const {evidence, sourceLocator} = source;
+        let libraryItemId: string | null = evidence.sourceType === 'literature' ? evidence.sourceId : null;
+        if (evidence.sourceType === 'file' && sourceLocator !== null && sourceLocator.knowledgeDocumentId === evidence.documentId) {
+          const row = document.get(sourceLocator.documentId) as {library_item_id: string} | undefined;
+          if (row?.library_item_id === evidence.sourceId) libraryItemId = row.library_item_id;
+        }
+        if (libraryItemId === null || exists.get(libraryItemId) === undefined) continue;
+        const item = metadata.get(libraryItemId) ?? this.libraryItem(libraryItemId);
+        metadata.set(libraryItemId, item);
+        papers.push({evidenceId: evidence.id, libraryItemId, title: item.metadata.title.trim() || item.bibliography.title,
+          year: item.metadata.publishedYear});
+      }
+      return {claims, sources, relations, papers};
     })();
   }
 
