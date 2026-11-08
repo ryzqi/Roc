@@ -29,7 +29,7 @@ Roc 默认打开**项目门户**（`page=research`，未选项目）。进入某
 
 一个面按**落点**分四种，全部声明在 `src/shared/surfaces.ts`（`resolveSurface` 是唯一的解释入口）。
 渲染层、preload 与闸门脚本读同一张表；类型（`CanvasTabId` / `CanvasViewId` / `DrawerSectionId`）与集合都由它
-派生，所以不可能互相漂移。
+派生，修改时应同步检查消费者。
 
 | 落点 | 面 | 说明 |
 | --- | --- | --- |
@@ -72,13 +72,10 @@ Roc 默认打开**项目门户**（`page=research`，未选项目）。进入某
 拿到的科研工具按当前项目绑定（`src/main/plugins/agent/research-tools.ts`；工具名与权限的唯一来源是
 `RESEARCH_TOOL_DESCRIPTORS`）：
 
-`research_overview`、`research_list_artifacts`、`research_read_artifact`、`research_lint_manuscript`、
-`research_list_evidence`、`research_capture_evidence`、`research_search_knowledge`、
-`research_search_literature`、`research_stage_runs`、`research_run_stage`、`research_cancel_stage_run`、
-`research_approve_gate`。
+工具覆盖项目与工件读取、文献检索和导入、证据捕获、文稿检查、知识检索、综述协作及阶段调度。完整名称与参数以该注册表和共享 schema 为准。
 
 - 工具名与权限进入本轮能力清单（`researchProjectId` 写进运行快照），所以运行时的工具集和冻结的清单一致。
-- `research_lint_manuscript` 是唯一的确定性文稿检查入口（Vale，见 [research-prose.md](research-prose.md)）：
+- `research_lint_manuscript` 提供 Vale 确定性文稿检查（Vale，见 [research-writing-checks.md](research-writing-checks.md)）：
   只读，不改正文，草稿也可以检查。
 - 阶段推进仍是服务端的阶段角色运行（`research_run_stage` 启动，后台继续，不阻塞对话）。阶段角色运行是
   **对话代理调用的内部工具**，不是并列的第二种执行入口。
@@ -89,6 +86,7 @@ Roc 默认打开**项目门户**（`page=research`，未选项目）。进入某
   合同与失败语义见 [学术检索融合](research-literature-fusion.md)。
 - 论文正文的真身是项目工作目录里的 `.tex` / `.bib` 文件；对话代理用文件工具改、用 shell 编译。
   LaTeX 画布 tab 编辑的是同一批工作区文件（保存走 `files.writeText`，留 recovery point）。
+  阶段正文与导出另行冻结主张及来源版本；工作区编辑不会自动修改已批准工件。
 
 历史会话属于当前项目，列在左栏的会话 tab（`sidebar-tab-sessions`），行是 `session-row-<threadId>`。
 切项目会清空当前 thread；项目门户不显示任何会话。
@@ -114,12 +112,12 @@ Roc 默认打开**项目门户**（`page=research`，未选项目）。进入某
 
 模型不能指定项目身份，也不能跳过人工批准或直接写最终 ZIP。未发布的真实工件不会被空产物顶替。
 
-## 今天没有界面的域
+## 没有独立路由的域
 
-七个域**有契约、有数据库、没有界面**（[ADR 0024](adr/0024-stage-surface-removed.md) 有意保留），
+七个域**保留服务合同和数据，没有独立阶段路由**（[ADR 0024](adr/0024-stage-surface-removed.md) 有意保留），
 声明在 `src/shared/surfaces.ts` 的 `PARKED_CAPABILITIES`：**构思、实验、图稿、正文、导出、模板包、阶段策略**。
-深链到它们的 `?view=` 会明确失败（`resolveSurface` 返回 `parked`），而不是静默落回默认视图。
-能力本身仍可从对话代理调用；契约口径由这几份文档记：
+`resolveSurface` 将这些独立页面标记为 `parked`；验证脚手架拒绝将它们当作可用页面。用户 URL 中的这些 `?view=` 值由路由解析器归一到默认 `latex` 视图。
+能力由助手调度，已有工件可在[工件检查器](research-artifact-inspector.md)查看来源、结果并进行人工审核；这些检查器没有新增阶段页面。专题合同见：
 
 - [Idea Canvas](research-ideas.md)
 - [实验运行](research-experiments.md)
@@ -144,6 +142,6 @@ Roc 默认打开**项目门户**（`page=research`，未选项目）。进入某
 ## 相关文档
 
 - [术语（CONTEXT.md）](../CONTEXT.md)
-- [文稿检查（Vale）](research-prose.md)
+- [文稿检查（Vale）](research-writing-checks.md)
 - [RTK 集成](rtk-integration.md)
 - [架构 ADR](adr/0001-research-workbench-architecture.md)

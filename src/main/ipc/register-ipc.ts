@@ -13,7 +13,8 @@ import type {
   Workspace
 } from '../../shared/types';
 import type { MainKernelBootstrap } from '../main-kernel-bootstrap';
-import { toLogError, wrapIpc } from '../services/errors';
+import { RocDomainError, toLogError, wrapIpc } from '../services/errors';
+import { createIpcSenderValidator } from './ipc-sender';
 import { registerFilesDialogIpc } from './files-ipc';
 import { executeIpcRequest, type IpcHandler, type IpcMainHandler } from './ipc-common';
 import { registerPluginCapabilityIpc } from './plugin-capability-adapter';
@@ -35,8 +36,10 @@ const slowIpcThresholdMs = 50;
 export function registerIpc(
   kernel: MainKernelBootstrap,
   mainWindow: BrowserWindow,
-  controls: AppWindowControls
+  controls: AppWindowControls,
+  rendererUrl: string
 ): void {
+  const isTrustedSender = createIpcSenderValidator(mainWindow, rendererUrl);
   function timedIpc<T>(channel: string, argsLength: number, operation: IpcHandler<T>): Promise<IpcResult<T>> {
     const startedAtMs = performance.now();
     return Promise.resolve(operation()).then((result) => {
@@ -99,9 +102,18 @@ export function registerIpc(
   }
 
   function timedHandle(channel: string, handler: IpcMainHandler): void {
-    ipcMain.handle(channel, (event: unknown, ...args: unknown[]) =>
-      timedIpc(channel, args.length, () => executeIpcRequest(channel, event, args, handler))
-    );
+    ipcMain.handle(channel, (event, ...args: unknown[]) => {
+      // Check synchronously, before parsing input or running any handler.
+      if (!isTrustedSender(event)) {
+        return wrapIpc(() => {
+          throw new RocDomainError({
+            code: 'ipc_sender_forbidden', message: '此页面无权调用应用接口。',
+            category: 'permission', retryable: false
+          });
+        });
+      }
+      return timedIpc(channel, args.length, () => executeIpcRequest(channel, event, args, handler));
+    });
   }
 
   registerPluginCapabilityIpc(timedHandle, kernel);

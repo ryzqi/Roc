@@ -8,6 +8,8 @@ Roc 是一款面向个人研究者的 macOS 桌面工作台，支持 Apple Silic
 - 搜索并导入学术文献，阅读 PDF；需要 OCR 时可按需下载本地模型。
 - 在项目内使用研究助手处理文献、文件和研究任务，并连接用户配置的 MCP 工具。
 - 在 LaTeX 画布和终端中工作。
+- 执行受限的 TypeScript、R、Julia、Python 实验，查看冻结 Notebook 与实验结果。
+- 在工件检查器中核查来源、方法计划、图稿、写作检查和综述审核，准备经过人工批准的科研交付包。
 
 ## 外部集成
 
@@ -27,7 +29,7 @@ Roc 不包含云服务账号或 API 密钥。使用相应功能时，应用会�
 
 ### 随包离线工具
 
-应用还包含本机工具：Tectonic 0.17.0、Vale 3.24.0、Typst 0.15.0、TeX bundle `tlextras-2022.0r0`、ripgrep 15.2.0 和 RTK v1.1.0 OSS。版本、校验和及许可来源分别由 [`resources/research-runtime/`](resources/research-runtime/README.md)、[`resources/ripgrep-binaries/ripgrep.lock.json`](resources/ripgrep-binaries/ripgrep.lock.json) 和 [`docs/rtk-integration.md`](docs/rtk-integration.md) 维护。npm 依赖由 [`package.json`](package.json) 与 [`pnpm-lock.yaml`](pnpm-lock.yaml) 固定。
+应用还包含本机工具：Tectonic、Vale、Typst、TeX bundle、ripgrep 和 RTK OSS。版本、校验和及许可来源分别由 [`resources/research-runtime/`](resources/research-runtime/README.md)、[`resources/ripgrep-binaries/ripgrep.lock.json`](resources/ripgrep-binaries/ripgrep.lock.json) 和 [`docs/rtk-integration.md`](docs/rtk-integration.md) 维护。npm 依赖由 [`package.json`](package.json) 与 [`pnpm-lock.yaml`](pnpm-lock.yaml) 固定。
 
 ## 技术栈与第三方依赖
 
@@ -35,10 +37,10 @@ Roc 是单一 Electron 桌面应用：主进程管理数据库、原生能力和
 
 | 层 | 技术与用途 |
 | --- | --- |
-| 桌面运行时 | Electron 45.0.0；Electron 内嵌 Node.js 24.22.0。开发环境使用 Node.js 26。 |
-| 界面 | React / React DOM 19.3.1；TypeScript 7.0.2。 |
-| 开发与构建 | pnpm 12.5.1、electron-vite 6.0.0、Vite 8.3.5、Tailwind CSS 4.3.3、electron-builder 26.18.0。 |
-| 平台与产物 | `package.json` 限定 `darwin` / `arm64`；electron-builder 配置生成 macOS `.app`。 |
+| 桌面运行时 | Electron；主进程与受限 preload 提供原生能力。 |
+| 界面 | React、TypeScript、系统字体与项目语义 token。 |
+| 开发与构建 | pnpm、electron-vite、Vite、Tailwind CSS、electron-builder。 |
+| 平台与产物 | `package.json` 限定 `darwin` / `arm64`；electron-builder 生成 macOS 应用。 |
 
 ### 依赖清单
 
@@ -46,7 +48,7 @@ Roc 是单一 Electron 桌面应用：主进程管理数据库、原生能力和
 
 ### 依赖升级
 
-- npm 包的直接版本以 [`package.json`](package.json) 为准，解析结果以 [`pnpm-lock.yaml`](pnpm-lock.yaml) 为准；主要技术栈版本变化时同步更新上表。先用 `pnpm outdated` 查看可升级项；运行依赖使用 `pnpm add --save-exact package@version`，开发依赖使用 `pnpm add -D --save-exact package@version`，由 pnpm 更新 manifest 和 lockfile，不手改 lockfile。
+- npm 包的直接版本以 [`package.json`](package.json) 为准，解析结果以 [`pnpm-lock.yaml`](pnpm-lock.yaml) 为准；先用 `pnpm outdated` 查看可升级项；运行依赖使用 `pnpm add --save-exact package@version`，开发依赖使用 `pnpm add -D --save-exact package@version`，由 pnpm 更新 manifest 和 lockfile，不手改 lockfile。
 - LangGraph 版本还受 [`pnpm-workspace.yaml`](pnpm-workspace.yaml) 中的 `@langchain/langgraph` 与 `@langchain/langgraph-checkpoint` overrides 约束。升级 LangGraph 时检查并同步 overrides，避免同一进程加载不兼容的 checkpoint / schema 实例。
 - 原生模块、Electron、OCR、ripgrep、RTK 或科研工具升级时，同时检查对应架构过滤、完整性校验、资源锁、许可证和专题文档；不要只改 `package.json`。
 - 依赖升级后按改动范围运行 `pnpm typecheck`、`pnpm test`、`pnpm check:renderer-chunks` 和 `pnpm verify:native-packaging`。`pnpm test` 包含 Node 单元测试、renderer 测试和 Electron smoke。
@@ -72,7 +74,8 @@ pnpm build
 
 ## 文档
 
-- [术语与产品约定](CONTEXT.md)
+- [完整文档索引](docs/README.md)
+- [领域术语](CONTEXT.md)
 - [工作台与界面说明](docs/research-workbench.md)
 - [内置技能来源与许可](docs/builtin-skills.md)
 - [OCR 模型来源与许可](resources/research-models/README.md)

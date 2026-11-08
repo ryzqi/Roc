@@ -15,4 +15,4 @@ supports/qualifies/contradicts/unrelated/insufficient/unable_to_verify；Reviewe
 记录人工 addressed/declined 处置，导出清单把建议标为需要人工审查。确定性来源、
 人工 relation 和导出 currentness 分别校验；当前合成工程 fixture 不表示科研有效。
 独立数据、人工盲审与受控真实模型评价未通过前，不把语义建议升级为科研正确性硬门。见
-[统一合同](../../plan/contracts.md)、[验收矩阵](../../plan/acceptance.md)。
+[证据关系](../research-evidence-relations.md)、[写作检查](../research-writing-checks.md)及[审稿回复矩阵](../research-response-matrix.md)。

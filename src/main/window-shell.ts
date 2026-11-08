@@ -44,7 +44,7 @@ export function buildMainWindowOptions(
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
       backgroundThrottling: true,
       v8CacheOptions: 'code'
     }

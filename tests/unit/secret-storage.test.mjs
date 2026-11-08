@@ -67,6 +67,7 @@ function createFakeBackend() {
     isEncryptionAvailable: async () => state.available,
     encryptString: async (plaintext) => {
       state.encryptCalls += 1;
+      if (state.encryptGate != null) await state.encryptGate.promise;
       if (state.failEncrypt) {
         throw new Error('fake_encrypt_failed');
       }
@@ -98,6 +99,36 @@ function deferred() {
 
 function leftoversIn(dir) {
   return readdirSync(dir).filter((name) => name.includes('.rotating'));
+}
+
+for (const action of ['set', 'clear']) {
+  test(`轮转加密等待期间 ${action} 凭据不会被旧密文覆盖`, async () => {
+    const temp = createTempSecretsDir();
+    const {state, backend} = createFakeBackend();
+    const gate = deferred();
+    try {
+      const service = new SecretService({secretsDir: temp.dir}, backend);
+      await service.setProviderSecret('provider-a', 'sk-old');
+      state.rotation = true;
+      state.version = 'v2';
+      state.encryptGate = gate;
+      const reading = service.getProviderSecret('provider-a');
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(state.encryptCalls, 2, '轮转必须已进入加密等待窗口');
+      state.encryptGate = null;
+      if (action === 'set') await service.setProviderSecret('provider-a', 'sk-new');
+      else service.clearProviderSecret('provider-a');
+      gate.resolve();
+      assert.equal(await reading, 'sk-old');
+      const path = join(temp.dir, 'provider-a.bin');
+      if (action === 'set') assert.equal(readFileSync(path, 'utf8'), 'v2:sk-new');
+      else assert.equal(existsSync(path), false);
+      assert.deepEqual(leftoversIn(temp.dir), []);
+    } finally {
+      gate.resolve();
+      temp.cleanup();
+    }
+  });
 }
 
 test('密文落盘后能读回，且读回不需要轮转时不重写', async () => {

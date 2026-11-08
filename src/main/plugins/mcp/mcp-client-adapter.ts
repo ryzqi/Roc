@@ -85,7 +85,8 @@ class BoundedMcpClientAdapter implements McpClientAdapter {
             description,
             remoteTool,
             runtimeToolName,
-            runSignal: connected.signal,
+            // Initialization's deadline ends with discovery, not with the run.
+            runSignal: signal,
             semaphore: this.getSemaphore(server.id)
           }));
         }

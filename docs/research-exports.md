@@ -108,7 +108,7 @@ ZIP 包含：
 
 `provenance/scientific-review.json` 使用 `public_projection` envelope，内部 `value.schemaVersion` 为 5，包含评估回执及每个方法的完整历史，按每页 100 条读取。内层改写后的历史标为 `private_source_receipt`，省略声明保留在外层；原私有 serializer 仍保留严格 schema5 和 stored_receipt 语义。原冻结假设、预期结果、真实测量、人工结论和修订原因同时保留；历史标记只表示保存回执的完整性。schema 1、2、3、4 和缺少必填字段的数据被拒绝。
 
-捕获和后续审核重验当前评估 head、冻结方法、真实结果/运行时间、指标 Evidence 及计划引用的证据。来源或人工评估变化会使原导出及审核失效，必须重新准备并审核；校验不会修改原来源快照或保存的审核文件。详细验收见 [Idea 方法与结果评估](research-idea-plans.md)。
+捕获和后续审核重验当前评估 head、冻结方法、真实结果/运行时间、指标 Evidence 及计划引用的证据。来源或人工评估变化会使原导出及审核失效，必须重新准备并审核；校验不会修改原来源快照或保存的审核文件。详细验收见 [Idea 方法与结果评估](research-ideas.md)。
 
 ### Citation / Scientific Consistency 审核快照
 
@@ -163,14 +163,3 @@ await research.writeExport({ projectId, exportId, destinationPath: '/absolute/de
 ```
 
 目标父目录须已存在，目标 ZIP 须不存在。应用先在同一父目录暂存并验证副本，再排他创建目标文件；文件或链接已经存在时会失败，不覆盖旧交付文件。响应返回实际路径、哈希、大小及保存时间。正文、图稿、引用元数据或审稿接受状态失效后，须重新准备并审核。
-
-## 验证
-
-```bash
-node scripts/research/smoke.ts \
-  --toolchain .runtime/research-toolchain/darwin-arm64 \
-  --models .runtime/research-models \
-  --output .artifacts/research-toolchain-smoke
-```
-
-成功后读取该输出目录的 `result.json`，其中保留 PDF、页面图和解析结果。应用端到端另见 `pnpm test` 的 `.artifacts/smoke-electron/result.json`。

@@ -1,8 +1,8 @@
 # 科研实验运行
 
-新实验支持 TypeScript、R 和 Julia。Python 运行记录与源文件仍可查看、导出及追溯，但不能启动或重跑。`startExperiment` 选择引擎与源；未提供 `expectedEnvironmentHash` 时，主进程先检查运行时。Agent 可传入环境摘要以固定重放。每次新运行使用新的 `requestId`，相同请求重发返回已有运行。
+新实验支持 TypeScript、R、Julia 和 Python。Python 使用用户选择并绑定项目的 CPython 环境，可运行 `.py` 文件或冻结 Notebook 的受限单元子集；完整合同见[Python 环境与运行](research-python-environment.md)及[Notebook](research-notebooks.md)。`startExperiment` 选择引擎与源；TypeScript/R/Julia 未提供 `expectedEnvironmentHash` 时，主进程先检查运行时；Python 必须提供已检查的环境哈希、选择回执、`sourceVersion: 1` 和 seed。Agent 可传入环境摘要以固定重放。每次新运行使用新的 `requestId`，相同请求重发返回已有运行。
 
-TypeScript 使用 `{ engine: "typescript", runtime: { kind: "bundled-node" } }`，源文件扩展名为 `.mts`，`sourceVersion` 为 `1`。Electron 45 内置的 Node 24.22.0 直接剥离 TypeScript 类型，不运行额外转译器。模块必须导出 `async function run(context)`，并以 `undefined` 结束；需要保留的结果通过 `context.files` 写入输出目录。源文件及 `inputPaths` 会先复制到只读快照中。
+TypeScript 使用 `{ engine: "typescript", runtime: { kind: "bundled-node" } }`，源文件扩展名为 `.mts`，`sourceVersion` 为 `1`。Electron 内置 Node 直接剥离 TypeScript 类型，不运行额外转译器。模块必须导出 `async function run(context)`，并以 `undefined` 结束；需要保留的结果通过 `context.files` 写入输出目录。源文件及 `inputPaths` 会先复制到只读快照中。
 
 `context` 提供冻结的 `parameters`、声明过的 `inputPaths`、取消信号 `signal`，以及以下文件和统计接口：
 
@@ -25,7 +25,7 @@ export async function run(context: {
 }
 ```
 
-TypeScript 源码使用 Node 支持的可擦除类型语法；运行时不安装项目包。文件接口只读取快照中声明的路径，单文件最多 64 MiB、每次总输入最多 256 MiB、CSV 最多 100,000 行。输出单文件最多 64 MiB、总量最多 128 MiB、最多 1,000 个文件。Node 权限模型和 macOS 沙箱限制读取、写入、进程启动及网络；网络访问仍由每次运行的 `network` 选项显式控制。任务同时受超时与取消控制。
+TypeScript 源码使用 Node 支持的可擦除类型语法；运行时不安装项目包。文件接口只读取快照中声明的路径，单文件最多 64 MiB、每次总输入最多 256 MiB、CSV 最多 100,000 行。输出单文件最多 64 MiB、总量最多 128 MiB、最多 1,000 个文件。Node 权限模型和 macOS 沙箱限制读取、写入、进程启动及网络；当前启动合同固定 `network: "disabled"`，不授予网络访问。任务同时受超时与取消控制。
 
 R 使用 `{ kind: "renv", rootPath, libraryPath }`：`rootPath` 是所选 R 的 `R.home()` 绝对目录，`libraryPath` 是项目内的相对库目录。项目须有 `renv.lock`，库中须有 `renv`；支持 renv 创建的包缓存链接。运行前检查 R 版本、`renv::status()` 与实际包描述，锁文件中的 R/包版本不符会失败。R 以 `--vanilla` 启动，不加载项目或用户启动配置；使用指定库和该 R 自带的库，不恢复额外的 site-library。
 
@@ -33,7 +33,7 @@ Julia 使用 `{ kind: "julia", rootPath, depotPath }`：`rootPath` 包含 `bin/j
 
 R/Julia 解释器、包元数据及锁文件摘要均纳入环境指纹，运行结束时再次校验。未声明版本的 Julia 包将版本记录为 `null`。应用不安装 R/Julia 或修改其项目库/depot；所选运行时需与当前 macOS 兼容。
 
-`sourcePath` 和 `inputPaths` 均为项目内相对路径。项目外文件、符号链接和路径越界会失败；原项目中的输入保持只读。R/Julia 的脚本参数进入 `commandArgs(trailingOnly=TRUE)` 或 Julia `ARGS`；TypeScript 参数通过 `context.parameters` 提供。R/Julia 输出写入本次输出/临时目录，标准输出和错误单独保存。
+文件源码路径（Python 为 `source.path`，其他引擎为 `sourcePath`）和 `inputPaths` 均为项目内相对路径。项目外文件、符号链接和路径越界会失败；原项目中的输入保持只读。R/Julia 的脚本参数进入 `commandArgs(trailingOnly=TRUE)` 或 Julia `ARGS`；TypeScript 参数通过 `context.parameters` 提供。R/Julia 输出写入本次输出/临时目录，标准输出和错误单独保存。
 
 成功运行的持久记录保存输入/输出哈希清单、环境、日志和可检索的文本结果。`readExperimentFile` 读取已登记文件（预览上限 4 MiB）；资源 URL 按运行、文件与内容哈希核验。来源内容变化会拒绝读取。证据可以通过 `getEvidenceExperimentSource` 回到对应实验文件。
 
@@ -43,7 +43,7 @@ R/Julia 解释器、包元数据及锁文件摘要均纳入环境指纹，运行
 
 实验、绘图和导出阶段的模型输出必须绑定本次运行链已发布的真实工件。系统不会另造 `path=null` 的空产物；未发布时阶段失败并保留模型版本。失败或重试会留下已发布记录，重试成功后把模型 provenance 接到这些工件。手工创建的元数据工件不能代替实际发布。
 
-实验域**没有界面**（[ADR 0024](adr/0024-stage-surface-removed.md)）：启动 TypeScript/R/Julia 实验、读取日志与发布走上面的 capability（`research.experiment.startOwned` / `publishOwned`），由对话代理调用；深链到 `?view=experiments` 会明确失败。`inspectExperimentEnvironment` 供 Agent 与诊断，不是 UI 前置。任意本机 R/Julia 包的源码并非完整打包快照；环境摘要记录实际包版本、安装元数据及项目锁文件，运行前后都会重新检查其一致性。
+实验域**没有独立阶段页面**（[ADR 0024](adr/0024-stage-surface-removed.md)）：启动 TypeScript/R/Julia/Python 实验、读取日志与发布走上面的 capability（`research.experiment.startOwned` / `publishOwned`），由对话代理调用；旧链接 `?view=experiments` 会回到默认 LaTeX 视图。运行结果和来源由工件检查器展示；Python 环境选择位于管理任务区，原生选择须由用户发起。`inspectExperimentEnvironment` 提供真实环境检查。任意本机 R/Julia 包的源码并非完整打包快照；环境摘要记录实际包版本、安装元数据及项目锁文件，运行前后都会重新检查其一致性。
 
 修改 R 进程适配器时，构建机需要 macOS 的 Command Line Tools；以下命令只构建 arm64 库，并更新源码与二进制哈希。应用运行时直接使用已构建资源。
 

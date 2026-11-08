@@ -1,6 +1,6 @@
 # 科研写作检查
 
-## X-WRITE A1：当前正文引用覆盖
+## 当前正文引用覆盖
 
 `research.inspectCitationCoverage({projectId, artifactId, expectedHash})` 通过现有正文仓库读取当前已保存的正文，不要求正文已批准。`expectedHash` 必填，首次读取显式传 `null`；重读传上次报告的 hash。返回 `current` 或 `stale`、完整报告、报告 hash 和读取时间。
 
@@ -10,9 +10,9 @@
 
 报告 hash 包含完整正文、工件快照版本、来源、关系和书目 revision，读取时间不参与 hash。来源或正文失效明确拒绝检查；可以检查仍有效的已批准工件和归档项目，但不会批准、运行模型或写数据库。旧报告对象保持原字节，重读得到新报告。
 
-数值映射按下文 A4A 合同实现；图稿实际绘制数据、审稿回复矩阵和期刊规则仍待后续部分。
+数值映射见下文；图稿实际绘制数据见[图稿](research-figures.md)，审稿回复和期刊规则分别见[回复矩阵](research-response-matrix.md)与[期刊规则](research-journal-compliance.md)。
 
-## X-WRITE A2：同壳引用检查器
+## 同壳引用检查器
 
 正文工件检查器提供“检查正文引用”。用户展开后才加载模块并读取报告；沿用现有抽屉、来源阅读器和异步请求状态。全部、有问题、未确认支持筛选保留完整段落及原文，原生折叠面板可通过键盘操作。
 
@@ -20,7 +20,7 @@
 
 650px 两主题下长段落、原文及 hash 在抽屉内换行；筛选标签不收缩，保持单行及可用选框宽度。
 
-## X-WRITE A3A：人工引用直接性
+## 人工引用直接性
 
 `research.saveCitationReview` 要求明确填写 `direct`、`indirect` 或 `unsupported` 及理由，绑定当前报告 hash、正文主张和 Evidence。`parent` 首次显式传 `null`，后续必须传最新审核 ID 和 hash。人工身份仅来自主进程验证的窗口，不允许通过输入提供。
 
@@ -32,82 +32,13 @@ DB47 为每个主张与证据对追加不可变版本，保存完整请求、人
 
 没有旧 schema 解析或兼容别名。
 
-## 验证记录
-
-工作目录：`/Users/Apple_501/Desktop/Roc/Roc`。日志目录：`.artifacts/research-optimization/`。
-
-| 命令 | 结果 | 日志 |
-| --- | --- | --- |
-| `node --test tests/unit/research-citation-coverage.test.mjs` | 6/6 通过，含真实 SQLite 仓库、导入 PDF 坐标、人工关系和 IPC | `xwrite-a1-focused.log` |
-| `pnpm build` | 通过，包含最终源码的 typecheck | `xwrite-a1-build.log` |
-| `pnpm check:ipc` | 通过，生成合同当前 | `xwrite-a1-ipc.log` |
-| `pnpm check:renderer-chunks` | 通过 | `xwrite-a1-chunks.log` |
-| `node scripts/smoke-electron.mjs` | 13/13 通过，零 renderer error | `xwrite-a1-startup.log` |
-| `pnpm test:unit` | 1220/1220 通过；A1 提交后收集的补充完整验证，后续 A2 仅修改 renderer | `xwrite-a1-unit.log` |
-| `node scripts/run-research-p0.mjs` | 13/13 通过 | `xwrite-a1-p0.log` |
-| `pnpm harness:eval` | 94/94 通过 | `xwrite-a1-harness.log` |
-
-最初 typecheck 失败是 `supportReview` 被推断为 `string`，已用合同 enum 类型明确标注。修复后类型检查及最终构建通过，未放宽 schema。实际 PDF 测试揭示并覆盖了文件来源书目遗漏。
-
-这些检查证明本地工程行为；不证明独立科研样本的引用准确率，也不代替人工语义审核。
-
-### A2 最终检查
-
-以下命令在同一工作目录依次运行，最终退出码为 0。
-
-| 命令 | 结果 | 日志 |
-| --- | --- | --- |
-| `pnpm build` | 通过，包含 typecheck | `xwrite-a2-layout-build.log` |
-| `node --test tests/renderer/citation-coverage.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs` | 40/40 通过，含 6 项新引用检查 | `xwrite-a2-layout-renderer.log` |
-| `node scripts/smoke-electron.mjs` | 13/13 通过，零 renderer error | `xwrite-a2-layout-startup.log` |
-| `pnpm check:ipc` | 生成合同当前 | `xwrite-a2-layout-ipc.log` |
-| `pnpm check:renderer-chunks` | 1,134,084 bytes，6 个 eager 文件 | `xwrite-a2-layout-chunks.log` |
-
-最初夹具在原生 disclosure 内容可见前读取文本，以及错误调用匿名审计函数，已修正并保留实际键盘/原文断言。审计 `cut=0`；3 个 `hidden` 是既有抽屉在物理窗口 top/right/bottom 边缘完全隐藏的阴影，精确断言元素、方向、类型、gap=0 和原因。截图及审计在 `citation-coverage-ui/`，最终两主题截图已实际查看；标签孤字换行已修复并增加布局回归。
-
-验证使用真实 Electron renderer、SQLite 仓库及 IPC 适配器，场景包含合成来源，不构成独立科学准确率验证。A2 没有修改主进程或共享合同；A1 完整 unit、P0 和 Harness 的补充结果见上表。
-
-### A3A 检查
-
-| 命令 | 结果 | 日志 |
-| --- | --- | --- |
-| `node --test tests/unit/research-citation-reviews.test.mjs tests/unit/research-citation-coverage.test.mjs tests/unit/research-artifact-inspector.test.mjs tests/unit/research-idea-inspection.test.mjs tests/unit/research-export-body-gate.test.mjs tests/unit/research-semantic-publication.test.mjs tests/unit/research-gate-review.test.mjs` | 最终快照合同上 39/39 通过，含新增审核 7 项 | `xwrite-a3a-head-final-focused.log` |
-| `pnpm build` | 最终源码通过，含 typecheck | `xwrite-a3a-head-build.log` |
-| `node --test tests/renderer/citation-coverage.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs` | 40/40 通过 | `xwrite-a3a-head-renderer.log` |
-| `node scripts/run-research-p0.mjs` | 13/13 通过，含实际实验重启 | `xwrite-a3a-head-p0.log` |
-| `node scripts/smoke-electron.mjs` | 13/13 通过，零 renderer error | `xwrite-a3a-head-startup.log` |
-| `pnpm check:ipc` | 生成合同当前 | `xwrite-a3a-head-ipc.log` |
-| `pnpm check:renderer-chunks` | 1,134,084 bytes，6 eager 文件 | `xwrite-a3a-head-chunks.log` |
-| `pnpm test:unit` | 快照回执头修改前 1226/1226 通过；最终合同另由上表 39 项和实际消费者验证 | `xwrite-a3a-unit.log` |
-| `pnpm harness:eval` | 快照回执头修改前 94/94 通过 | `xwrite-a3a-harness.log` |
-
-首次审核测试错误读取 Evidence 包装层的 sourceVersion、使用错误数据库名；已按现有合同修正。产品历史读取原来要求当前有效来源，现改为校验存储来源身份，允许明确标注的历史回执。新闸门夹具最初处于 running 状态，已使用真实工作流转换进入 waiting_approval。原 P0 12/13 的实际实验启动超时保留在 `xwrite-a3a-p0.log`；最终串行 P0 13/13，通过时未改变等待条件或超时阈值。
-
-A3A 范围状态：`Verified passing`。最终完整补充检查 `pnpm test:unit` 1227/1227、`pnpm harness:eval` 94/94 通过，日志 `xwrite-a3a-head-unit.log`、`xwrite-a3a-head-harness.log`。历史校验、来源版本、跨项目和窗口身份拒绝均有回归；验证不构成科学直接性准确率证明。
-
-
-## X-WRITE A3B：人工编辑与历史界面
+## 人工编辑与历史界面
 
 现有正文工件的引用检查内，每条引用可打开一个人工直接性编辑器。判断初始为空，理由必填；直接、间接、不支持和待审核计数独立于语义支持。显示当前/过期判断、完整理由、审核人、时间、hash 和原始 JSON 回执。历史按需读取，每页 10 项，明确只校验保存回执；等待或失败时隐藏旧页。
 
 未保存或保存中锁定筛选、来源重查、引用选择及父抽屉的关闭、Escape、背景关闭、工件刷新和整阶段审核。请求 ID 在输入改变时更新；回复丢失后相同内容重试保留 ID，主进程返回原回执且零重复写入。保存成功刷新整个工件，旧审批上下文失效。项目切换隔离迟到回复。已批准、归档或非当前可写阶段只读。
 
-### A3B 最终检查
-
-工作目录同上。状态：`Verified passing`，覆盖本地工程及实际 Electron renderer，不声明独立样本的科学直接性准确率。
-
-| 命令 | 结果 | 日志 |
-| --- | --- | --- |
-| `pnpm build` | 通过，含 typecheck；之后仅新增测试截图/同步断言 | `xwrite-a3b-build.log` |
-| `node --test tests/renderer/citation-coverage.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs` | 44/44 通过，新增 4 项直接性场景 | `xwrite-a3b-final-renderer.log` |
-| `node --test --test-name-pattern='long citation source' tests/renderer/citation-coverage.test.mjs` | 补充控件截图，1/1 通过 | `xwrite-a3b-controls-renderer.log` |
-| `node scripts/smoke-electron.mjs` | 13/13 通过，零 renderer error | `xwrite-a3b-startup.log` |
-| `pnpm check:ipc` | 生成合同当前 | `xwrite-a3b-ipc.log` |
-| `pnpm check:renderer-chunks` | 1,134,152 bytes，6 eager 文件 | `xwrite-a3b-chunks.log` |
-
-最初 renderer 9/10 中，既有支持筛选测试读取父刷新前的旧 DOM。原样单跑通过，随后将同步条件明确为新报告 hash 与旧 hash 不同，保留空列表和 hash 断言；最终全套通过。没有修改产品来掩盖错误。两主题 650px 的理由框/按钮截图实际查看，宽度、焦点及内部滚动正常。裁切审计 `cut=0`，仅 3 个既有抽屉物理边缘 `hidden`，精确断言保留；证据在 `citation-coverage-ui/`。
-
-## X-WRITE A4A：来源指标与主张数值位置
+## 来源指标与主张数值位置
 
 `research.saveConsistencyReview` 将摘要、正文、表格或图稿 caption 中的完整数值字符位置绑定到真实实验结果指标及其 Evidence。每条映射显式包含主张 hash、位置、展示单位、指标 ID、结果 ID/hash、来源证据，以及转换、舍入和容差规则。位置使用 JS 字符索引，必须覆盖整个十进制数值 token（含符号和指数）。正文主张必须属于当前保存的正文。
 
@@ -119,31 +50,9 @@ DB48 按工件追加不可变人工审核版本，保存完整主张、Evidence�
 
 `research.getConsistencyHistory` 分页读取 `stored_receipt`，独立核对保存原文/hash、材料计算、数据库字段和父版本锚点。当前来源失效后仍可阅读原始历史，历史不会冒充当前来源检查。
 
-A4A 实现主张数值位置合同和主进程能力，A4B 提供下述同壳编辑器。图稿 caption 的文字核对不能证明实际绘制数据一致；实际图稿数据映射将在后续部分实现。
+主张数值位置由主进程合同与下述同壳编辑器共同约束。图稿 caption 的文字核对不能证明实际绘制数据一致；实际绘制数据需另行核对[图稿数据映射](research-figures.md)。
 
-### A4A 检查
-
-工作目录同上，日志位于 `.artifacts/research-optimization/`。
-
-| 命令 | 结果 | 日志 |
-| --- | --- | --- |
-| `node --test tests/unit/research-consistency.test.mjs tests/unit/research-citation-reviews.test.mjs tests/unit/research-artifact-inspector.test.mjs tests/unit/research-gate-review.test.mjs` | 23/23 通过 | `xwrite-a4a-final2-focused.log` |
-| `node --test tests/unit/research-consistency.test.mjs` | 补充直接保存边界回归后 7/7 通过 | `xwrite-a4a-storage-focused.log` |
-| `node --test --test-name-pattern='scientific consistency' tests/integration/research-python-experiments.test.mjs` | 真实 CPython 1/1 通过；摘要/正文/表格 2 一致、1 不一致，改结果字节明确拒绝，历史保留 | `xwrite-a4a-python.log` |
-| `pnpm build` | 最终源码通过，含 typecheck | `xwrite-a4a-final-build.log` |
-| `node --test tests/renderer/citation-coverage.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs` | 44/44 通过 | `xwrite-a4a-renderer.log` |
-| `node scripts/run-research-p0.mjs` | 13/13 通过 | `xwrite-a4a-p0.log` |
-| `node scripts/smoke-electron.mjs` | 13/13 通过，零 renderer error | `xwrite-a4a-startup.log` |
-| `pnpm check:ipc` | 生成合同当前 | `xwrite-a4a-ipc.log` |
-| `pnpm check:renderer-chunks` | 1,134,152 bytes，6 eager 文件 | `xwrite-a4a-chunks.log` |
-| `pnpm harness:eval` | 94/94 通过 | `xwrite-a4a-harness.log` |
-| `pnpm test:unit` | 1233/1233 通过；随后新增的直接保存边界由上表 7 项补充检查覆盖，主进程源码未再修改 | `xwrite-a4a-unit.log` |
-
-首次数值位置夹具索引错误，已修正为实际完整 token。失效来源夹具最初错误假设 `knowledge.upsert` 会使原 Evidence 失效；改用现有显式失效 API，并保留 `superseded` 和 `source_changed` 断言。来源检查补足 Evidence 当前状态及保存原文的严格核对。`xwrite-a4a-focused.log` 和 `xwrite-a4a-final-focused.log` 保留早期失败；真实 Python 测试与失败的 focused 曾在换行复合命令中执行，后者的通过不以整个命令 exit 0 推断，最终另跑严格串行检查。
-
-A4A 本地工程范围：`Verified passing`。当前检查不证明独立科学样本的准确率。
-
-## X-WRITE A4B：同壳数值映射与历史
+## 同壳数值映射与历史
 
 正文和图稿工件抽屉提供“检查科研数值”，展开后才加载模块并请求报告。每个未映射数值独立显示，已映射位置显示实际值、期望值、差异及允许差异；主张变化明确标记。报告版本与抽屉快照不一致时只显示刷新提示，历史仍可独立读取。等待或来源失败时隐藏上次成功报告。
 
@@ -153,19 +62,104 @@ A4A 本地工程范围：`Verified passing`。当前检查不证明独立科学�
 
 历史每页 10 版，完整 JSON 回执包含原主张、指标来源、单位规则和人工身份。历史明确标注当前来源未复核，不代替当前报告。650px 两主题下实际比例、偏移、舍入和容差控件可读；长 ID 换行，保存区保留焦点和原生纵向滚动。
 
-### A4B 检查
+## Vale 措辞检查
 
-工作目录同上，全部最终命令退出码为 0。
+对已落库的正文跑一次**不依赖模型**的措辞与证据口径检查。结论进审稿与修订，不进正文本身。
 
-| 命令 | 结果 | 日志 |
+### 为什么需要它
+
+`resources/research-skills/review/SKILL.md` 要求「区分重大问题、次要问题和表达建议」，`writing/SKILL.md`
+要求「没有证据的内容标记 hypothesis」。这两条在此之前**只有提示词在管**：模型自称做到了，没有
+任何可复核的对象。文稿检查补的是这一层——它不判断学术质量，只把几类能机械识别的写法变成带
+定位的条目。
+
+它**不是**语法检查器，也**不替代**同行评审。三档严重度里只有 `error` 表示「证据口径被破坏」。
+拼写是其中一类（`RocAcademic.Spelling`，`suggestion` 档）：它不参与导出闸门，只把「这段文本里
+有个词不在词典与 Roc 词表里」变成可点击的条目。
+
+### 检查的是什么文本
+
+不是 `.tex` 文件，而是**投影**：每个小节投影成一个 Markdown 单元，单元内逐行记录「这一段属于
+哪个 claim」（`src/main/plugins/research/prose-projection.ts`）。
+
+这样做有两个直接原因：
+
+- 论文正文的真身是 `sections[].claimIds` 指向的 claim 序列（`latex-source.ts` 从 claims 确定性
+  重算 LaTeX）。拿 `.tex` 去查，行号对不上 claim，`\cite{}` 与 `\section{}` 还会被当成正文词。
+- 审稿意见的落点必须是 `claimId`。「第 37 行」在文稿被重新生成后就没有意义了。
+
+小节标题行、claim 之间的空行都不属于任何 claim，落在这些位置上的命中 `claimId` 为 `null`，
+按小节级条目处理。**行号非正数或超出单元范围时一律不定位**，不做区间夹取——定位错了比没有定位更糟。
+
+### 规则集
+
+两套规则都是 Roc 自己写的，不是从上游 style 包抄来的，所以随本仓库的许可分发：
+
+| 规则集 | 语言 | 条数 | 内容 |
+| --- | --- | --- | --- |
+| `RocAcademic` | 英文 | 9 | 模糊限定词、无出处的「有研究表明」、超出证据的论断、新颖性声称、领域共识、冗长表达、被动语态、名词化、**拼写** |
+| `RocAcademicZh` | 中文 | 8 | 中文里的半角标点、模糊限定词、无出处的「有研究表明」、超出证据的论断、新颖性声称、领域共识、冗余动宾结构、口语化 |
+
+拼写那条是 `RocAcademic/Spelling.yml`，`extends: spelling`——**不是**把 Vale 自带的 `Vale`
+style 加进 `BasedOnStyles`。原因在严重度：上游 `Vale.Spelling` 把每一处拼错判成 `error`，
+在 Roc 的语义里那等于「证据口径被破坏」，一次打字错误就会变成硬问题。包一层 Roc 规则后它落在
+`suggestion` 档，并且与其它规则一样参与 `lockHashes`。词表是
+`styles/config/vocabularies/Roc/accept.txt`（术语、工具名、中文项目里的英文专名）。
+不用 Hunspell / Aspell：Vale 自带词典与词表机制，再打一个二进制进工具链是纯增重。
+
+严重度三档按「证据口径被破坏的程度」划分，不按语气好听不好听：
+
+| 档位 | 内容 | 理由 |
 | --- | --- | --- |
-| `pnpm build` | 通过，含 typecheck | `xwrite-a4b-build.log` |
-| `node --test tests/renderer/scientific-consistency.test.mjs tests/renderer/citation-coverage.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs tests/renderer/idea-outcomes.test.mjs tests/renderer/idea-plans.test.mjs` | 62/62 通过，其中新增数值界面 7 项 | `xwrite-a4b-renderer-final2.log` |
-| `node --test --test-name-pattern='long explicit conversion' tests/renderer/scientific-consistency.test.mjs` | 补充候选映射零请求检查及实际转换控件截图后 1/1 通过 | `xwrite-a4b-controls.log` |
-| `node scripts/smoke-electron.mjs` | 13/13 通过，零 renderer error | `xwrite-a4b-startup.log` |
-| `pnpm check:ipc` | 生成合同当前 | `xwrite-a4b-ipc.log` |
-| `pnpm check:renderer-chunks` | 1,134,192 bytes，6 eager 文件 | `xwrite-a4b-chunks.log` |
+| `error` | 无出处的有研究表明、声称已证实 | 直接对口 `export/SKILL.md` 的「未经支持的主张阻断导出」 |
+| `warning` | 新颖性声称（首次 / 填补空白）、领域共识（普遍认为 / it is widely accepted）、模糊限定词 | 它们的问题通常是**检索不足**，不是否定证据；当成错误会让闸门把可讨论的表述判成错 |
+| `suggestion` | 冗长表达、被动语态、名词化、口语化、拼写 | 可读性；拼写错本身不改变「有没有证据」 |
 
-真实 Electron 测试穿过 IPC 参数解析、主进程适配器、SQLite 仓库及一致性服务；UI 夹具指标为合成已保存材料，实际 CPython 和输出字节变更验证由 A4A 独立覆盖。测试保留精确浮点值 `-0.0023450000000000003`，没有增加 epsilon。原生加载帧断言等待旧报告实际消失，主进程测试钩子进入挂起状态不表示 renderer 已渲染。
+两套规则按语言分工，而且**同一条命中只能由一个规则负责**：两套 style 都作用于每一份文稿，
+所以 `一般认为` 只在 `RocAcademicZh/Consensus.yml`，英文的 `it is widely accepted that` 只在
+`RocAcademic/Consensus.yml`。重复命中会让报告里同一个位置出现两条不同严重度的条目。
 
-两主题 `consistency-ui/*-fields-650.png`、`*-save-650.png` 已查看；审计均 `cut=0`，仅既有全高抽屉 top/right/bottom 的物理边界隐藏投影，精确断言保留。A4B 范围：`Verified passing`；实际图稿数据核对、审稿回复和期刊检查仍未完成。
+规则文件在 `resources/research-runtime/vale/styles/`，配置是 `.vale.ini`。**改规则要重建工具链**：
+规则集参与 `lockHashes`（`scripts/research/prepare.ts`），所以改一条规则既会要求重建，也会被
+运行时的 `research_toolchain_source_mismatch` 抓到。
+
+### 运行边界
+
+Vale 3.24.0 作为 `bin/vale` 随工具链分发，调用点是 `toolchain.ts` 的 `lintProse()`：
+
+- 走 `/usr/bin/sandbox-exec`，网络 `none`、禁止 POSIX spawn、只写 jobDir；
+- `HOME` / `TMPDIR` / 缓存全部指向 jobDir 内的空目录，配置显式传 `--config` 且带 `--no-global`。
+  **这是可复现性要求**：否则机器上装过的 style 包会改变结论，而这些结论要进溯源；
+- 投影文件由主进程写进 `jobDir/prose/`，跑完连整个 jobDir 一起删除。
+
+Vale 的两处行为值得记住，都已在代码里处理：读不到的文件**静默返回空对象**（所以文件由我们自己
+写入并逐个核对），以及配置错误时返回 `{Code: 'E100', …}` 而不是报告（所以它被显式识别为失败，
+不会被当成「没有命中」）。
+
+### 合同
+
+```text
+capability  research.prose.lint
+IPC         roc:research:prose-lint   →  preload: research.lintManuscript
+工具        research_lint_manuscript（对话代理，只读）
+```
+
+输入 `{ projectId, artifactId }`，`artifactId` 必须是 `manuscript` 类产物。报告记录产出它的
+`valeVersion` 与 `toolchainHash`——同一份文稿在不同 Vale 版本下结论不同时，报告本身要能说明这件事。
+
+报告**不落库**，也不进阶段输出契约（`researchStageOutputSchema` 是 `.strict()` 的，往角色输出里
+加字段会让那次运行直接失败）。需要留档时由调用方写入导出的 `provenance/`。
+
+命中数有上限（2000），超出时 `truncated` 为真：报告是**被截断的**，不是「只有这些」。
+
+### 可以检查草稿
+
+检查走 `manuscripts.inspectBundle`：它与 `exportBundle` 同构，**只少一条批准要求**。写作/修订刚产出的
+未批准正文也能查——发现问题的时机越早越便宜，而导出仍然只认已批准正文。仍要求正文已保存
+（`research_manuscript_required`）且未过期（`research_manuscript_stale`）。
+
+### 角色侧仍然要做的事
+
+检查发生在产物落库之后，所以它回答不了「写的时候就别这么写」。中文学术写作的语域、数字与量词
+格式、以及「不许把 hypothesis 写成 supported」，仍然只能由 `writing` / `revision` 的 Skill 在生成时约束。
+两者回答的不是同一个问题，不要用其中一个替代另一个。

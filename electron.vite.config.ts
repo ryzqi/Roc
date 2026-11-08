@@ -124,7 +124,16 @@ export default defineConfig({
   },
   renderer: {
     root: '.',
-    plugins: [react(), tailwindcss(), rendererChunkMetadata()],
+    plugins: [react(), tailwindcss(), rendererChunkMetadata(), {
+      name: 'roc-renderer-dev-csp',
+      apply: 'serve',
+      // Vite's React refresh preamble and HMR socket exist only in development.
+      transformIndexHtml(html, context) {
+        if (context.filename !== resolve(__dirname, 'index.html')) return html;
+        return html.replace("script-src 'self'", "script-src 'self' 'unsafe-inline'")
+          .replace("connect-src 'self' roc-preview:", "connect-src 'self' roc-preview: ws: wss:");
+      }
+    }],
     build: {
       outDir: 'dist/renderer',
       manifest: true,

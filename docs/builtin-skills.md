@@ -7,7 +7,7 @@ Roc 把两个上游 Skill 仓库**随安装包内置**，并在运行时按上�
 | Nature Skills | `https://github.com/Yuan1z0825/nature-skills` | Apache-2.0 | 是（装好即启用） |
 | Academic Research Skills | `https://github.com/Imbad0202/academic-research-skills` | CC BY-NC 4.0 | 否（需在管理 → 技能里明确安装） |
 
-许可证边界见 [CONTEXT.md](../CONTEXT.md#许可)：CC BY-NC 4.0 的内容不能作为 Roc 核心开源内容默认分发，
+许可证边界见 [CONTEXT.md](../CONTEXT.md#技能许可)：CC BY-NC 4.0 的内容不能作为 Roc 核心开源内容默认分发，
 所以它同样是内置快照（离线可用），但**只有用户点「接受 CC-BY-NC-4.0 并安装」之后**才会写入
 `~/.roc/skills`，之后才会参与自动同步。
 

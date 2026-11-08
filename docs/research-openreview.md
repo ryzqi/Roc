@@ -1,12 +1,10 @@
 # OpenReview public observations
 
-A5A scope: independent project-scoped observations of anonymous OpenReview API v2 Note and Edit pages. No provider writes, login, tokens, literature creation, evidence acceptance or workflow changes.
-
-Status: **Verified passing** for the local A5A contract.
+Roc captures independent project-scoped observations of anonymous OpenReview API v2 Note and Edit pages. No provider writes, login, tokens, literature creation, evidence acceptance or workflow changes.
 
 ## Fixed provider contract
 
-Checked 2026-11-06 against the [official API v2 Note fields](https://docs.openreview.net/reference/api-v2/entities/note/fields), [Edit entity](https://docs.openreview.net/reference/api-v2/entities/edit), [OpenAPI definition](https://docs.openreview.net/reference/api-v2/openapi-definition) and [official Python v2 client](https://github.com/openreview/openreview-py/blob/master/openreview/api/client.py). Exact OpenAPI was saved at `/tmp/roc-openreview-api.yml`. Context7 contains mixed v1/v2 material; only explicitly v2 results were used.
+Checked 2026-11-06 against the [official API v2 Note fields](https://docs.openreview.net/reference/api-v2/entities/note/fields), [Edit entity](https://docs.openreview.net/reference/api-v2/entities/edit), [OpenAPI definition](https://docs.openreview.net/reference/api-v2/openapi-definition) and [official Python v2 client](https://github.com/openreview/openreview-py/blob/master/openreview/api/client.py). The contract uses API v2 only.
 
 The only endpoints are `https://api2.openreview.net/notes` and `/notes/edits`. Four explicit queries select a Note ID, forum ID, invitation or edits for a Note ID. Requests use `sort=id:asc`, `count=true`, an explicit limit and optional `after` cursor. The provider ignores Edit offsets; Roc sends no provider offset. Local history and saved-entry reads use separate offsets.
 
@@ -30,36 +28,9 @@ Provider response selection ignores unrelated fields while the raw response hash
 
 Migration 57 adds `research_openreview_observations` without synthesizing prior observations. Production plugin declaration, capability registration and shutdown all include the service.
 
-## Verification
+## Reader controls
 
-All commands run in `/Volumes/Macintosh HD/Users/Apple_501/Desktop/Roc/Roc`. HTTP payloads are synthetic; transport, governor, capability schemas, SQLite and Electron runtime are actual.
-
-```bash
-pnpm generate:ipc
-pnpm typecheck
-node --test --test-concurrency=1 tests/unit/research-openreview.test.mjs tests/unit/research-huggingface.test.mjs tests/unit/research-huggingface-downloads.test.mjs tests/unit/research-resources.test.mjs tests/unit/literature-import.test.mjs tests/unit/database-migrations.test.mjs
-pnpm build
-node scripts/run-research-p0.mjs
-pnpm test:unit
-pnpm harness:eval
-node --test --test-concurrency=1 --test-timeout=180000 tests/renderer/research-huggingface.test.mjs tests/renderer/research-resources.test.mjs tests/renderer/scholarly-relations.test.mjs tests/renderer/paper-reader.test.mjs tests/renderer/artifact-production.test.mjs
-node scripts/smoke-electron.mjs
-pnpm check:ipc
-pnpm check:renderer-chunks
-git diff --check
-```
-
-Initial generation passed; initial typecheck failed the draft's incorrect `readOpenReviewMetadata` import. Corrected to `readOpenReviewPage(request.query, payload)`; subsequent typecheck passed. Initial focused run passed 16/17 and failed a fixture's nonexistent `research_scholarly_observations` table. Corrected to actual `research_scholarly_snapshots`, retaining zero effects on literature, resources, relations, Evidence and workflow. Final related suite passed 164/164, including all 17 OpenReview cases.
-
-Logs: `.artifacts/research-optimization/openreview-a5a-*.log`. Native SQLite backup, entry pages and runtime receipts: `.artifacts/research-optimization/openreview-a5a-native/`.
-
-Final acceptance: related unit 164/164 (OpenReview 17/17), full unit 1395/1395, native production 18/18, Harness 94/94, related renderer 65/65, startup 13/13 with zero renderer errors, build/typecheck, current IPC generation, eager renderer 1,134,468 bytes in six files and diff whitespace checks all passed. Each runner returned exit code zero.
-
-Live provider connectivity, private access, independent scientific interpretation and public review acceptance remain **Blocked, not run**. This local implementation does not establish those external outcomes.
-
-## A5B reader controls
-
-Status: **Verified passing** for the local reader UI. `PaperReader` lazily loads the panel on explicit disclosure, with project/item keys resetting transient state and observation keys resetting local entry pages. It shares the existing 55% height scroller with the other source panels. No route or shell was added.
+`PaperReader` lazily loads the panel on explicit disclosure, with project/item keys resetting transient state and observation keys resetting local entry pages. It shares the existing 55% height scroller with the other source panels. No route or shell was added.
 
 The reader accepts four explicit query kinds and manual target identifiers. History pages contain 20 observations; saved entry pages contain 20 entries. A full 50-entry provider page offers an explicit next-page capture with a new request ID and the saved cursor. Each page remains a separate observation.
 
@@ -67,18 +38,4 @@ Dirty inputs, active captures and uncertain replies lock collapse, history selec
 
 Note details show source role, wrapped content, field visibility, venue/domain, signatures, license and source dates. Edit details retain original delta JSON and state that no complete historical Note was reconstructed. Content is mounted only after disclosure. No control accepts public opinions as reviewed scientific facts.
 
-Verification in the same working directory:
-
-```bash
-node --test --test-concurrency=1 --test-timeout=180000 tests/renderer/research-openreview.test.mjs tests/renderer/research-huggingface.test.mjs tests/renderer/research-resources.test.mjs tests/renderer/scholarly-relations.test.mjs tests/renderer/paper-reader.test.mjs tests/renderer/artifact-production.test.mjs
-node --test --test-concurrency=1 --test-timeout=180000 tests/renderer/research-openreview.test.mjs tests/renderer/research-resources.test.mjs
-pnpm build
-node scripts/smoke-electron.mjs
-pnpm check:ipc
-pnpm check:renderer-chunks
-git diff --check
-```
-
-The first UI run passed 7/8; the layout test read a lazy content node before it mounted. Waiting for the visible content exposed CSS serialization precision (575.562px versus DOM 575.5625px). The final full-height assertion allows only 0.001px serialization error. The combined runner passed 72/73, including OpenReview 8/8; its sole failure was an existing resource test's immediate enabled assertion before a React parent effect. That assertion now waits for the same enabled state. The final affected runner passed 18/18, including OpenReview 8/8 and resources 10/10; the other 55 combined cases passed before this test-only correction.
-
-Fresh build/typecheck, startup 13/13 with zero renderer errors, current IPC generation, unchanged eager renderer 1,134,468 bytes/six files and diff checks passed with exit zero. Actual Electron/main-service/strict-IPC fixtures cover queries, local/provider pages, empty/failure states, readonly, lost replies, cancellation and late project responses. Eight clip states in 650px light/dark windows all report cut=0/hidden=0; screenshots confirm keyboard focus, readable source details and retained document space. Logs and screenshots are under `.artifacts/research-optimization/openreview-a5b*`.
+Live provider interoperability and scientific interpretation require independent acceptance; see [verification boundaries](verification.md).

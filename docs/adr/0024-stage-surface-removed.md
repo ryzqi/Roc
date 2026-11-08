@@ -29,6 +29,6 @@
 
 ## 代价
 
-- **后端能力暂时没有界面**：`research.ideas/experiments/figures/manuscript/exports/templates/policies` 这些域仍在契约与数据库里，`pnpm check:ipc` 仍然是 current，但渲染层不再调用它们。这是有意保留的能力，不是回归；重新接界面时它们是现成的。它们登记在 `src/shared/surfaces.ts` 的 `PARKED_CAPABILITIES`，深链会明确失败而不是静默落回默认视图。
+- **阶段域没有独立页面**：`research.ideas/experiments/figures/manuscript/exports/templates/policies` 仍在契约与数据库中，其独立页面登记在 `src/shared/surfaces.ts` 的 `PARKED_CAPABILITIES`。当前助手负责执行与人工闸门，工件检查器承载来源、生产文件和专项审核；这不恢复原阶段导航。`resolveSurface` 返回 `parked`，验证脚手架拒绝将其当作可用页面；URL 路由解析则回到默认视图。
 - **视图 id 的深链会退化**：`?view=overview` 这类旧书签会落到默认视图，而不是原页面。单测里有一条专门守这个。
-- **`verify-p6-workflow` / `verify-p7-production` 的断言不能复用**：它们断言的对象已经不存在。IPC 与规则层本身没有回退，只是「界面真的把它做对了」这件事不再有端到端证据。
+- **`verify-p6-workflow` / `verify-p7-production` 的断言不能复用**：它们断言的对象已经不存在。IPC 与规则层本身没有回退，现有界面需由助手、管理抽屉及工件检查器各自的测试验证。

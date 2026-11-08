@@ -21,7 +21,9 @@ before(async () => {
   api = await loadResearchTestApi();
   directory = await mkdtemp(join(tmpdir(), 'roc-paper-reader-'));
   await mkdir(artifacts, {recursive: true});
-  await buildViteRenderer({directory,script:`
+  const csp = (await readFile('index.html', 'utf8')).match(/<meta http-equiv="Content-Security-Policy"[^>]+>/u)?.[0];
+  assert.ok(csp, 'exercise the reader with the production content security policy');
+  await buildViteRenderer({directory,csp,script:`
     import React,{useState} from 'react';
     import {createRoot} from 'react-dom/client';
     import {flushSync} from 'react-dom';

@@ -1,5 +1,7 @@
 # Scientific Writing 生态对 Roc 的集成与替换评估
 
+> 历史调研与实施回顾（2026-11-07）。文中版本、能力缺口、性能与验证结果只对应当时基线；当前合同以[文档索引](../README.md)为准。本次文档整理未重新执行外部调研或运行验收。
+
 调研日期：2026-11-07。Roc 基线：`27d26daf01f96bc7c678e3fc999692da508f9d3d`。
 
 实施更新：用户已授权并实施 P0/P1。第 1–10 节保留调研时的基线、建议和范围；当前功能入口、验证结果及限制见第 11 节。P2 尚未实施。
@@ -35,18 +37,18 @@
 
 | 领域 | 已核实的实现 | 对选型的影响 |
 | --- | --- | --- |
-| 桌面架构 | Electron、React、TypeScript；唯一壳层，画布模块惰性加载，助手为执行入口 | 不嵌入另一个完整编辑器/IDE，不增加平行前端。见 [AGENTS](../AGENTS.md)、[视图注册](../src/renderer/app/view-registry.ts) |
-| 写作真源 | 工作区 `.tex/.bib` 是用户源文件；LaTeX 编辑器使用 CodeMirror，保存走 `files.writeText` | 不把旧的 claim 投影当成所有工作区文件的最新正文。见 [CONTEXT](../CONTEXT.md)、[LatexPanel](../src/renderer/latex/LatexPanel.tsx)、[SourceEditor](../src/renderer/latex/SourceEditor.tsx) |
-| 文献编解码 | 已有 BibTeX / CSL 处理，通过隔离的 TypeScript 科研任务调用 | Pandoc 不应替换高频文献解析路径。见 [bibliography](../src/main/plugins/research/bibliography.ts)、[toolchain](../src/main/plugins/research/toolchain.ts) |
-| Zotero | 本地 API 导入与来源记录已存在；新记录导入会重新选择本地生成键 | 重点是稳定键互操作，不是再做一套 Zotero 接入。见 [适配器](../src/main/plugins/research/zotero-adapter.ts)、[导入服务](../src/main/plugins/research/literature-import-service.ts) |
-| 检索与网络 | 已有身份合并、融合排序、provider 限流、退避与熔断，以及带 TTL/LRU/字节预算的项目响应缓存 | 新校验应接入已有治理；不能把“加缓存/并发”描述为从零补齐。见 [governor](../src/main/plugins/research/literature-provider-governor.ts)、[cache](../src/main/plugins/research/literature-response-cache.ts) |
-| 撤稿信息 | 已读取 OpenAlex `is_retracted`、Crossref 更新关系；文献库检查按四条一组执行 | 新增价值是统一证据、时间与一致性结果，不是首次支持撤稿。见 [library-service](../src/main/plugins/research/library-service.ts)、[retraction-check](../src/main/plugins/research/retraction-check.ts) |
-| 写作检查 | Vale 3.24.0、17 条 Roc 中英文规则；当前服务检查 manuscript 工件的 section/claim Markdown 投影 | 不等同于实时检查任意 `.tex` 文件。先修正目标与版本语义，再讨论缓存。见 [prose-lint-service](../src/main/plugins/research/prose-lint-service.ts)、[prose-projection](../src/main/plugins/research/prose-projection.ts) |
-| 定量图稿 | Vega-Lite/Vega、SVG/PNG/PDF 产物、变换后的数据轨迹、环境哈希和输出记录 | 保留可追溯的定量图稿链；Mermaid 等补充另一类表达。见 [figure-renderer](../src/main/plugins/research/figure-renderer.ts)、[figure-service](../src/main/plugins/research/figure-service.ts) |
-| 排版与导出 | Typst 0.15.0 用于过程报告；Tectonic 0.17.0 保留 LaTeX；已有批准工件导出与 arXiv 预检 | 多格式转换与投稿包是扩展点，不应取代全部导出合同。见 [tools.lock](../resources/research-runtime/tools.lock.json)、[ADR 0025](adr/0025-typst-report-engine.md)、[export-builder](../src/main/plugins/research/export-builder.ts) |
-| 实验与 Notebook | 当前 schema/service 支持 TypeScript、R、Julia、用户选择的 Python 环境；Notebook 执行有冻结输入及运行收据 | Python 仍可执行；不能把“移除随包 Python 文档运行时”解释成“Roc 不支持 Python”。见 [schema](../src/shared/schemas/research-experiments.ts)、[环境解析](../src/main/plugins/research/experiment-environment.ts)、[执行服务](../src/main/plugins/research/experiment-service.ts) |
-| PDF / OCR | 隔离的 TypeScript、PDF.js、PaddleOCR/ONNX，模型包按需管理 | Zotero OCR 不适合作为默认重复管线；本次没有比较 OCR 准确率或速度。见 [运行时目录](../resources/research-runtime/README.md) |
-| 期刊规范 | 已有规则版本、来源和检查服务 | 投稿规则应扩充现有合同，不能重复建规则系统。见 [journal-compliance-service](../src/main/plugins/research/journal-compliance-service.ts)、[说明](research-journal-compliance.md) |
+| 桌面架构 | Electron、React、TypeScript；唯一壳层，画布模块惰性加载，助手为执行入口 | 不嵌入另一个完整编辑器/IDE，不增加平行前端。见 [AGENTS](../../AGENTS.md)、[视图注册](../../src/renderer/app/view-registry.ts) |
+| 写作真源 | 工作区 `.tex/.bib` 是用户源文件；LaTeX 编辑器使用 CodeMirror，保存走 `files.writeText` | 不把旧的 claim 投影当成所有工作区文件的最新正文。见 [CONTEXT](../../CONTEXT.md)、[LatexPanel](../../src/renderer/latex/LatexPanel.tsx)、[SourceEditor](../../src/renderer/latex/SourceEditor.tsx) |
+| 文献编解码 | 已有 BibTeX / CSL 处理，通过隔离的 TypeScript 科研任务调用 | Pandoc 不应替换高频文献解析路径。见 [bibliography](../../src/main/plugins/research/bibliography.ts)、[toolchain](../../src/main/plugins/research/toolchain.ts) |
+| Zotero | 本地 API 导入与来源记录已存在；新记录导入会重新选择本地生成键 | 重点是稳定键互操作，不是再做一套 Zotero 接入。见 [适配器](../../src/main/plugins/research/zotero-adapter.ts)、[导入服务](../../src/main/plugins/research/literature-import-service.ts) |
+| 检索与网络 | 已有身份合并、融合排序、provider 限流、退避与熔断，以及带 TTL/LRU/字节预算的项目响应缓存 | 新校验应接入已有治理；不能把“加缓存/并发”描述为从零补齐。见 [governor](../../src/main/plugins/research/literature-provider-governor.ts)、[cache](../../src/main/plugins/research/literature-response-cache.ts) |
+| 撤稿信息 | 已读取 OpenAlex `is_retracted`、Crossref 更新关系；文献库检查按四条一组执行 | 新增价值是统一证据、时间与一致性结果，不是首次支持撤稿。见 [library-service](../../src/main/plugins/research/library-service.ts)、[retraction-check](../../src/main/plugins/research/retraction-check.ts) |
+| 写作检查 | Vale 3.24.0、17 条 Roc 中英文规则；当前服务检查 manuscript 工件的 section/claim Markdown 投影 | 不等同于实时检查任意 `.tex` 文件。先修正目标与版本语义，再讨论缓存。见 [prose-lint-service](../../src/main/plugins/research/prose-lint-service.ts)、[prose-projection](../../src/main/plugins/research/prose-projection.ts) |
+| 定量图稿 | Vega-Lite/Vega、SVG/PNG/PDF 产物、变换后的数据轨迹、环境哈希和输出记录 | 保留可追溯的定量图稿链；Mermaid 等补充另一类表达。见 [figure-renderer](../../src/main/plugins/research/figure-renderer.ts)、[figure-service](../../src/main/plugins/research/figure-service.ts) |
+| 排版与导出 | Typst 0.15.0 用于过程报告；Tectonic 0.17.0 保留 LaTeX；已有批准工件导出与 arXiv 预检 | 多格式转换与投稿包是扩展点，不应取代全部导出合同。见 [tools.lock](../../resources/research-runtime/tools.lock.json)、[ADR 0025](../adr/0025-typst-report-engine.md)、[export-builder](../../src/main/plugins/research/export-builder.ts) |
+| 实验与 Notebook | 当前 schema/service 支持 TypeScript、R、Julia、用户选择的 Python 环境；Notebook 执行有冻结输入及运行收据 | Python 仍可执行；不能把“移除随包 Python 文档运行时”解释成“Roc 不支持 Python”。见 [schema](../../src/shared/schemas/research-experiments.ts)、[环境解析](../../src/main/plugins/research/experiment-environment.ts)、[执行服务](../../src/main/plugins/research/experiment-service.ts) |
+| PDF / OCR | 隔离的 TypeScript、PDF.js、PaddleOCR/ONNX，模型包按需管理 | Zotero OCR 不适合作为默认重复管线；本次没有比较 OCR 准确率或速度。见 [运行时目录](../../resources/research-runtime/README.md) |
+| 期刊规范 | 已有规则版本、来源和检查服务 | 投稿规则应扩充现有合同，不能重复建规则系统。见 [journal-compliance-service](../../src/main/plugins/research/journal-compliance-service.ts)、[说明](../research-journal-compliance.md) |
 
 仓库部分说明落后于源码：实验文档仍把 Python 视为历史合同；旧 prose 注释强调 claims 真源；ADR 0025 中的 Python/MinerU/PDFium 体积和计时属于旧架构。本文以当前实现为判断依据，没有把这些历史数据用作今天的性能结论，也没有顺手修改这些无关文档。
 
@@ -166,7 +168,7 @@
 
 这是本次找到的最具体的互操作缺口之一。[BBT 当前 README](https://github.com/retorquere/zotero-better-bibtex#readme) 明确说明：Zotero 8 已有原生 citation key 字段；原先固定在 `Extra` 的键发生迁移；旧的“是否 pinned”概念已经改变；Zotero 7 不再由最新版持续支持。仅实现 `Extra: Citation Key` 解析或直接读取 BBT 数据库，会依赖已经变化的存储细节。
 
-Roc 的 CSL 解析会读取 `citation-key`，但在 [literature-import-service](../src/main/plugins/research/literature-import-service.ts) 新记录提交路径中，仍以既有本地键或 `betterBibtexKey(...)` 选键，再覆盖 `prepared` 里的键。[cite-key](../src/main/plugins/research/cite-key.ts) 的本地生成规则并不等同于 BBT 完整公式、迁移和冲突处理。普通 `.bib` 导入的键保留行为也不能证明 Zotero 路径已经兼容。
+Roc 的 CSL 解析会读取 `citation-key`，但在 [literature-import-service](../../src/main/plugins/research/literature-import-service.ts) 新记录提交路径中，仍以既有本地键或 `betterBibtexKey(...)` 选键，再覆盖 `prepared` 里的键。[cite-key](../../src/main/plugins/research/cite-key.ts) 的本地生成规则并不等同于 BBT 完整公式、迁移和冲突处理。普通 `.bib` 导入的键保留行为也不能证明 Zotero 路径已经兼容。
 
 建议把“文献身份”和“引用键”明确分开：
 
@@ -201,7 +203,7 @@ citecheck 适合借鉴的部分，是无 DOI 时把题名、作者、年份和�
 
 ### 5.3 latex2arxiv：加强依赖分析，单独生成投稿派生包
 
-Roc 已有 [arxiv-preflight](../src/main/plugins/research/arxiv-preflight.ts)：入口可达性、缺失引用、草稿标记、路径/图稿警告，以及剪除不可达 `.tex`；[export-builder](../src/main/plugins/research/export-builder.ts) 已调用并记录日志。它刻意保留模板源文件字节，且不把一般投稿警告升级为内部导出失败。
+Roc 已有 [arxiv-preflight](../../src/main/plugins/research/arxiv-preflight.ts)：入口可达性、缺失引用、草稿标记、路径/图稿警告，以及剪除不可达 `.tex`；[export-builder](../../src/main/plugins/research/export-builder.ts) 已调用并记录日志。它刻意保留模板源文件字节，且不把一般投稿警告升级为内部导出失败。
 
 [latex2arxiv](https://github.com/YuZh98/latex2arxiv) 的增量价值在更完整的项目依赖收集、`graphicspath`、参考文献路径、草稿宏清理、`.bbl` 与 biblatex 兼容、minted 缓存及 shell-escape 检查。其清理行为会改变内容。上游示例中的 ZIP 缩小幅度只属于那个示例，不能外推到 Roc。
 
@@ -238,7 +240,7 @@ Roc 现有 Vega-Lite 轨迹描述的是经过变换的数值图形及其数据�
 
 ### 5.6 CSL 与模板：高收益的小步扩充
 
-[现有 CSL 资源说明](../resources/research-runtime/csl/README.md) 记录 APA、IEEE、GB/T 7714，固定了来源版本。新增样式不是简单复制一个 `.csl`：需要检查 dependent style 的父样式、locale、工具包哈希及允许选择的样式合同。
+[现有 CSL 资源说明](../../resources/research-runtime/csl/README.md) 记录 APA、IEEE、GB/T 7714，固定了来源版本。新增样式不是简单复制一个 `.csl`：需要检查 dependent style 的父样式、locale、工具包哈希及允许选择的样式合同。
 
 建议根据目标用户的期刊集中度，先补少量高频期刊/学会配置，并把“引文格式”“排版模板”“投稿规则”分开管理。CSL 决定参考文献格式，不保证全文符合期刊版式；Eisvogel 是通用报告模板，GitHub Pages 模板也不是官方投稿模板。每个配置记录来源、版本、许可、适用语言和人工复核项。
 
@@ -309,7 +311,7 @@ flowchart LR
 
 ### 8.1 本次没有建立新的性能基线
 
-[research-performance](research-performance.md) 中已有检索、网络、存储、任务准入和图遍历的历史测试。网络脚本使用注入 provider，可用于本地调度回归，但不能证明真实 Crossref/OpenAlex 网络耗时。ADR 0025 的排版比较也不等于当前整机、当前版本下的结果。
+[research-performance](../research-performance.md) 中已有检索、网络、存储、任务准入和图遍历的历史测试。网络脚本使用注入 provider，可用于本地调度回归，但不能证明真实 Crossref/OpenAlex 网络耗时。ADR 0025 的排版比较也不等于当前整机、当前版本下的结果。
 
 Roc 已有 provider 治理、响应缓存和文献身份去重；library 撤稿检查已按四条一组执行。图稿渲染内部有单次任务的数据缓存，Vega View 也会在 `finally` 中释放。不能把这些已存在的能力再次包装成新增优化。
 

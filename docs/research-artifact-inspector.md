@@ -27,18 +27,7 @@
 检查器不读取 `artifact.path`，不请求网络、不运行模型/worker、不写数据库。
 结构化实验、图稿和导出文件继续由既有 `inspectProductionInput` /
 `readProductionInputFile` 边界校验和读取。助手入口、叠加面板与焦点恢复见下文；
-生产类型视图和阅读定位保持仍属后续增量；人工闸门版本绑定见下文。
-
-## 本增量验证
-
-unit813/813、相关25/25、最终bridge/refusal4/4、Harness94/94、fresh build/typecheck、
-native13/13、现有来源/候选renderer23/23、最终启动12/12、IPC/chunks1131153bytes6files
-和diff通过。最终4项包括项目缺失的准确not_found分类。之前native13/unit813仍覆盖
-数据读取与严格证据消费者；最终错误分类修正不改变保存内容或发布行为。
-日志`.artifacts/research-optimization/xui-inspector-*.log`保留；原生工作流每个真实
-完成工件的只读快照位于`p0-production/<taskId>/artifact-inspections.json`，校验实际
-来源任务/内容运行对应且读取前后数据库total_changes不变。没有真实模型质量、
-真实外部客户端或新检查器UI验收的完成声明。
+生产类型视图、阅读恢复与人工闸门版本绑定见下文。
 
 ## 助手工件入口与只读叠加面板
 
@@ -54,24 +43,7 @@ native13/13、现有来源/候选renderer23/23、最终启动12/12、IPC/chunks1
 
 显式刷新沿用上次核对版本。来源变化显示实际新内容和待核对状态，另有显式按当前
 版本重读动作；不自动把旧版本视为有效。Escape/关闭恢复实际打开链接的焦点；真实
-关联任务动作复用管理抽屉。此增量没有新批准/编辑操作；原批准仍在助手人工闸门。
-把当前工件版本绑定到批准/退回，以及刷新后更新整个闸门上下文，是下一增量，
-不能把本次只读闭环当成已完成这些写入约束。
-
-最终unit813/813、相关gate/inspector11/11、Harness94/94、fresh build/typecheck/native13/13、
-完整串行renderer82/82、启动12/12、IPC/chunks1132666bytes6files与diff通过。
-日志`xui-overlay-*.log`及`artifact-inspector-ui/`截图/审计保留。新5项Electron测试
-用真实仓库/已注册能力/生成桥接读取真实保存的工件、任务与证据ID；通过Playwright
-暴露调用跨到Node测试进程，不宣称这是生产preload传输。已有native13验证实际运行时
-持久化，最终生产启动验证壳装配。新UI没有数据库写入、自动批准或模型调用。
-
-明暗1100/1099/800、长原文、reduced-motion、键盘和迟到选择均通过。审计cut0；共享
-全高抽屉贴物理上/右/下边，只有这3边阴影完全隐藏且gap0，左侧阴影可见。测试逐项
-限定这3处，拒绝其他裁切或隐藏。首轮源码summary被文本选择器与关闭JSON同时匹配，
-修正为真实summary；随后去除不符合全高抽屉物理结构的hidden0预期，保留cut0硬门禁
-并增加精确边/面板/gap断言，最终全套通过。暗色1099截图已检查，标题/关闭固定、
-正文/主张/来源可读且无水平溢出。整体检查器与执行计划仍未完成。
-
+关联任务动作复用管理抽屉。批准仍在助手人工闸门；检查器通过下述整阶段重读流程返回核对版本。
 
 ## 整阶段人工核对与版本绑定
 
@@ -95,13 +67,8 @@ native13/13、现有来源/候选renderer23/23、最终启动12/12、IPC/chunks1
 的一次中断及条件边验证流程；没有节点内多次 interrupt 的 while 循环。
 
 助手卡片批准、退回、修订都发送其展示的全部版本。无效真实链接禁用全部决定，
-显示需要重读的错误；检索计划错误但真实版本仍有效时可以退回。检查器的显式
-整阶段刷新和回到原助手确认由下一 UI 增量完成；不暴露 renderer 直接批准能力。
-
-A3A 验证：unit819、最终gate6、Harness94、fresh build/type/native13、完整串行
-renderer83、启动12、IPC/chunks1132666bytes6files和diff通过。日志`xui-gate-*.log`；
-原生来源重解析故障保留真实来源身份、禁止批准和严格证据getter拒绝记录。
-
+显示需要重读的错误；检索计划错误但真实版本仍有效时可以退回。检查器提供显式
+整阶段刷新和回到原助手确认；不暴露 renderer 直接批准能力。
 
 ## 检查器返回原助手审核
 
@@ -125,17 +92,6 @@ renderer83、启动12、IPC/chunks1132666bytes6files和diff通过。日志`xui-g
 若正文仍旧，明确提示并禁用返回；用户必须显式刷新工件、看到新正文后再返回。
 工件刷新保留已经捕获的整阶段上下文，不隐式重读或批准。
 
-A3B 最终 fresh build/type、相关Electron13、完整串行renderer87、启动12、
-IPC/chunks1132803bytes6files和diff通过。A3A unit819/Harness94/native13后端证据
-沿用；本增量未改后端。日志`xui-review-ui-*.log`，最终完整上下文和返回卡片截图
-保留；选择工件的审核hash、显示hash与最新正文已人工检查一致。
-
-生产文件读取前置修复：图稿文件按真实 figure-run ID 交给图稿服务，实验/导出分别
-交给自己的读取器。旧图稿路由到实验仓库导致真实PNG失败，已由native红/绿回归
-覆盖。最终unit819/Harness94/fresh build/type/native13/startup12/IPC/chunks通过；
-每类真实已批准文件均校验bytes/SHA/size且DB无写入，未批准角色读取继续拒绝。
-
-
 ## 生产来源版本与人工只读文件检查
 
 工件快照增加 nullable `production`，保存真实实验执行、图稿发布/验证/执行或导出
@@ -156,13 +112,7 @@ SHA/size 必须匹配捕获值和当前 metadata。单文件预览上限 4 MiB�
 运行模型、启动生产 worker 或写数据库。实验核对直接验证保存 manifest；缺失时
 失败，不重建。snapshot 写入器仍只属于实际发布流程。
 
-新入口返回明确 validation/permission/conflict/not_found/degraded 错误，未知失败
-继续传播。最终unit824/Harness94/finalreview5/fresh build/type/native13/renderer87、
-最终相关UI13/startup12/IPC/chunks通过。日志`xui-production-review-*.log`；原生
-`production-review-previews.json` 保留真实未批准三类生产文件的 bytes/SHA/size 和
-无 DB 写入证据。只有 task-created 临时 manifest 被删除/按原字节恢复以验证
-缺失拒绝；冻结科研 fixtures 没有改动。生产类型 UI 与阅读位置仍待下一增量。
-
+新入口返回明确的 validation/permission/conflict/not_found/degraded 错误，未知失败继续传播。
 
 ## 按需生产类型视图
 
@@ -176,16 +126,7 @@ SHA/size 必须匹配捕获值和当前 metadata。单文件预览上限 4 MiB�
 的只读IPC。文本由React转义，PNG/JPEG/WebP展示已验证base64内容。版本或选定
 文件改变立即清除旧内容，迟到响应不进入新范围。核对/读取错误保持失败状态并
 提供显式重试。超过4MiB的文件禁用读取；ZIP只显示校验metadata；PDF入口明确
-未接入，后续PR-07复用现有files.preview协议，不使用Blob URL。
-
-最终fresh build/type、完整串行renderer94、启动12/zero errors、IPC与chunks
-1132803bytes/6files通过。新增Electron7含真实已发布未批准图稿PNG尺寸/bytes/hash、
-原始CSV、旧版本拒绝、迟到文件/项目响应、失败重试和预览上限。实验/导出的
-renderer输入是明确标注的typed synthetic展示fixture；三类实际执行、来源和bytes
-依赖A4B1 native13证据，不将合成UI称为真实完整执行。截图与审计保留在
-.artifacts/research-optimization/artifact-production-ui/，明暗1100/1099/800均cut0；
-仅共享全高面板物理上/右/下边的阴影完全隐藏。关闭后的阅读位置恢复仍待完成。
-
+未接入。证据与主张的原文定位走[PDF 阅读导航](research-pdf-navigation.md)，与此生产文件预览入口不同。
 
 ## 关闭后的阅读恢复
 
@@ -200,15 +141,7 @@ renderer输入是明确标注的typed synthetic展示fixture；三类实际执�
 观察器随真实异步模块和文件挂载恢复阅读位置，用户的pointer/key/wheel立即停止
 恢复，迟到内容不能抢回手动位置。Escape继续由共享overlay恢复原助手入口焦点。
 
-最终fresh build/type、串行renderer96、启动12/zero errors、IPC/chunks
-1132980bytes/6files通过；新增同版本来源展开/焦点和实际CSV重读/滚动检查，
-迟到文件期间手动阅读不跳动，新版本与核对中关闭不恢复旧文件。长正文容器
-client/scroll width均553px，没有overflow后代。restored-reading.png按CSS像素
-截取真实面板，已检查完整source/hash/CSV可读。X-UI本地离线链路验证完成；
-生产PDF定位属于后续PR-07，不将此检查器称为PDF阅读器。
-
-
-PR-06A1 的 inspector evidence 现在包含 required nullable sourceLocator，保存真实
+检查器的 evidence 包含 required nullable sourceLocator，保存真实
 managed document/parse/block/source/parse hash 与原页/区域，并参与工件 SHA。
 没有托管文档关联保持 null；历史来源定位保持不可替换快照。读取不读磁盘字节，
-PDF 对齐入口仍未实现。详见 [证据来源与关系审核](research-evidence-relations.md)。
+原文导航复用托管文档的 PDF 预览；详见[证据来源与关系审核](research-evidence-relations.md)与[PDF 阅读导航](research-pdf-navigation.md)。

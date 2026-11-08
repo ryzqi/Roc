@@ -22,6 +22,7 @@ type PtyInstance = ReturnType<typeof spawn>;
 type SessionRecord = {
   logStream: WriteStream;
   logStreamClosed: boolean;
+  pausedForLog: boolean;
   pty: PtyInstance;
   snapshot: TerminalSessionSnapshot;
 };
@@ -54,16 +55,38 @@ export class TerminalSessionService {
     const logPath = join(this.paths.terminalDir, 'logs', `${sessionId}.log`);
     mkdirSync(join(this.paths.terminalDir, 'logs'), { recursive: true });
     const logStream = createWriteStream(logPath, { flags: 'a', encoding: 'utf8' });
-    const pty = spawn(shell.file, shell.args, {
-      name: 'xterm-256color',
-      cols: this.validCols(request.cols),
-      rows: this.validRows(request.rows),
-      cwd,
-      env: {
-        ...process.env,
-        TERM: 'xterm-256color'
+    let record: SessionRecord | undefined;
+    const resumeAfterLog = (): void => {
+      if (record?.pausedForLog && this.sessions.get(sessionId) === record) {
+        record.pausedForLog = false;
+        record.pty.resume();
       }
-    });
+    };
+    const stopLogging = (): void => {
+      if (record !== undefined) record.logStreamClosed = true;
+      resumeAfterLog();
+    };
+    // Install before spawning: opening the file can fail asynchronously even
+    // when spawn throws and the session never enters the registry.
+    logStream.on('error', stopLogging);
+    logStream.on('close', stopLogging);
+    logStream.on('drain', resumeAfterLog);
+    let pty: PtyInstance;
+    try {
+      pty = spawn(shell.file, shell.args, {
+        name: 'xterm-256color',
+        cols: this.validCols(request.cols),
+        rows: this.validRows(request.rows),
+        cwd,
+        env: {
+          ...process.env,
+          TERM: 'xterm-256color'
+        }
+      });
+    } catch (error) {
+      logStream.destroy();
+      throw error;
+    }
     const snapshot: TerminalSessionSnapshot = {
       id: sessionId,
       cwd,
@@ -73,15 +96,14 @@ export class TerminalSessionService {
       status: 'ready',
       exitCode: null
     };
-    const record: SessionRecord = {
+    const sessionRecord: SessionRecord = {
       logStream,
       logStreamClosed: false,
+      pausedForLog: false,
       pty,
       snapshot
     };
-    logStream.on('error', () => {
-      record.logStreamClosed = true;
-    });
+    record = sessionRecord;
 
     pty.onData((data) => {
       const activeRecord = this.sessions.get(sessionId);
@@ -89,24 +111,27 @@ export class TerminalSessionService {
         return;
       }
       if (!activeRecord.logStreamClosed) {
-        activeRecord.logStream.write(data, 'utf8');
+        if (!activeRecord.logStream.write(data, 'utf8') && !activeRecord.pausedForLog) {
+          activeRecord.pausedForLog = true;
+          activeRecord.pty.pause();
+        }
       }
       const payload: TerminalSessionOutputEvent = { sessionId, data };
       this.events.emit('output', payload);
     });
     pty.onExit(({ exitCode }) => {
-      record.snapshot = {
-        ...record.snapshot,
+      sessionRecord.snapshot = {
+        ...sessionRecord.snapshot,
         status: 'exited',
         exitCode
       };
       const payload: TerminalSessionExitEvent = { sessionId, exitCode };
       this.events.emit('exit', payload);
-      this.closeLogStream(record);
+      this.closeLogStream(sessionRecord);
       this.sessions.delete(sessionId);
     });
 
-    this.sessions.set(sessionId, record);
+    this.sessions.set(sessionId, sessionRecord);
     return snapshot;
   }
 
@@ -166,6 +191,8 @@ export class TerminalSessionService {
   }
 
   private closeLogStream(record: SessionRecord): void {
+    // A late drain/close must never resume a terminal being disposed.
+    record.pausedForLog = false;
     if (record.logStreamClosed) {
       return;
     }

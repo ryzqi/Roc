@@ -4,7 +4,7 @@ import {build} from 'vite';
 import react from '@vitejs/plugin-react';
 
 /** Compile renderer fixtures with real lazy modules and Vite's emitted worker assets. */
-export async function buildViteRenderer({directory, script, style, setup = ''}) {
+export async function buildViteRenderer({directory, script, style, setup = '', csp = ''}) {
   const input = await mkdtemp(join(process.cwd(), '.runtime/tmp/roc-vite-renderer-'));
   try {
     const assets = join(process.cwd(), 'dist/renderer/assets');
@@ -12,8 +12,9 @@ export async function buildViteRenderer({directory, script, style, setup = ''}) 
       .map(file => readFile(join(assets, file), 'utf8')));
     await writeFile(join(input, 'app.tsx'), script);
     await writeFile(join(input, 'app.css'), styles.join('\n'));
-    await writeFile(join(input, 'index.html'), `<html data-theme="light"><link rel="stylesheet" href="/app.css">
-      <style>${style}</style><div id="root"></div><script>${setup}</script>
+    if (csp) await writeFile(join(input, 'setup.js'), setup);
+    await writeFile(join(input, 'index.html'), `<html data-theme="light">${csp}<link rel="stylesheet" href="/app.css">
+      <style>${style}</style><div id="root"></div>${csp ? '<script type="module" src="/setup.js"></script>' : `<script>${setup}</script>`}
       <script type="module" src="/app.tsx"></script></html>`);
     await build({configFile: false, root: input, base: './', plugins: [react()], logLevel: 'silent',
       resolve: {alias: [{find: /^\.\/src\//u, replacement: `${join(process.cwd(), 'src')}/`}]},

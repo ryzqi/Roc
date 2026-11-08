@@ -40,83 +40,12 @@ Project archive/release and plugin shutdown cancel ongoing requests. Restart mar
 
 The eleven connector IPC methods are `saveZenodoCredential`, `clearZenodoCredential`, `getZenodoCredentialStatus`, `startZenodoOperation`, `getZenodoOperation`, `getZenodoOperations`, `refreshZenodoOperation`, `resumeZenodoOperation`, `approveZenodoPublication`, `publishZenodo` and `cancelZenodoOperation`.
 
-## Verification
-
-All commands run in the repository root. Local preparation is **Verified passing**: related units 47/47, the repaired monitor migration suite 14/14, Harness 94/94, renderer 16/16, native P0 19/19 and startup 13/13 with no renderer errors. Build/typecheck, generated IPC, renderer chunk bounds (1,134,468 eager bytes in six files) and whitespace checks pass. The complete unit run passed 1418/1419; its sole failure was the monitor fixture asserting the newest schema version was 58. The repaired fixture now exercises the actual 57-to-58 upgrade and retains original observations and migration receipts; its final 14/14 focused run passed.
-
-```sh
-node --test tests/unit/research-zenodo-preparation.test.mjs \
-  tests/unit/research-export-publication.test.mjs \
-  tests/unit/research-export-public-files.test.mjs \
-  tests/unit/research-export-public-projection.test.mjs \
-  tests/unit/research-export-body-gate.test.mjs \
-  tests/unit/research-task-identity.test.mjs \
-  tests/unit/database-migrations.test.mjs
-pnpm build
-node scripts/run-research-p0.mjs
-pnpm test:unit
-node --test tests/unit/research-monitors.test.mjs
-pnpm harness:eval
-node --test tests/renderer/export-publication.test.mjs \
-  tests/renderer/artifact-production.test.mjs
-node scripts/smoke-electron.mjs
-pnpm check:ipc
-pnpm check:renderer-chunks
-git diff --check
-```
-
-The focused preparation regressions cover strict human IPC, exact/concurrent retry, source and approval changes, archive during capture, project isolation, bounded history, receipt corruption, transactional rollback and real multi-block hashing/cancellation.
-
-The native standard research workflow verifies a real approved ZIP and compiled PDF through the production export consumer, main capability registry and generated IPC adapter. It checks actual SHA256/MD5/size identities, replay, missing selection, swapped export identity, archive tampering, and a backed-up/reopened SQLite receipt. These are local engineering fixtures. They do not establish live sandbox success, publication permission, license validity for real research, or scientific quality.
-
-Initial native acceptance exposed a consumer field-order hashing defect; the final implementation normalizes inputs before sealing them. The initial unit fixture also attempted to start an export-stage run without an approved manuscript; its project ownership fixture now starts in reading, while the native consumer retains the complete approved export workflow.
-
-Evidence and exact command logs live under `.artifacts/research-optimization/zenodo-a7a-*`. The native receipt is stored under `p0-production/<task-id>/zenodo-preparation.json` beside its SQLite backup.
-
-Live sandbox and production publication are **Blocked, not run** until isolated credentials and authorization covering the remote target are supplied.
-
-
-## Connector verification
-
-A7B focused regressions pass 21/21 and fresh build/typecheck passes. Native P0 passes 19/19, including the standard approved ZIP and compiled PDF consumer through real staging, generated strict IPC, main sender, actual SHA256/MD5/size checks, independent grant/replay, a lost publish reply with zero duplicate POST, queried DOI completion, and backed-up/reopened operation and approval SQLite records. The SecretManager integration verifies ciphertext excludes plaintext, environment separation, and encrypted SQLite backup/reopen with an isolated AES-GCM port. This does not establish live native safeStorage plus live Zenodo acceptance.
-
-A7B is **Verified passing** for local connector engineering: full unit 1440/1440, Harness 94/94, related renderer 16/16, startup 13/13 with zero renderer errors, generated IPC current, eager renderer 1,134,468 bytes in six files, and whitespace checks pass. Commands in the repository root:
-
-```sh
-node --test tests/unit/research-zenodo-publication.test.mjs
-pnpm build
-node scripts/run-research-p0.mjs
-pnpm test:unit
-pnpm harness:eval
-node --test tests/renderer/export-publication.test.mjs tests/renderer/artifact-production.test.mjs
-node scripts/smoke-electron.mjs
-pnpm check:ipc
-pnpm check:renderer-chunks
-git diff --check
-```
-
-Logs are `.artifacts/research-optimization/zenodo-a7b-*`; native evidence includes `p0-production/<task-id>/zenodo-publication.json`, the publication SQLite backup and encrypted secret SQLite backup. Live remote writes and independent scientific acceptance remain **Blocked, not run** for the authorization and credential limits above.
-
-
 ## Existing export drawer consumer
 
-A7C adds lazy reviewed Zenodo publishing inside the existing approved export receipt. It does not add a route or shell. The editor requires explicit files, upload names, environment, metadata, authors and three public-sharing declarations. Preview reads actual file hashes before preparation; any edit invalidates the preview. Lost preparation and publication replies retain the exact request. A preparation-scoped readonly operation lookup prevents reopening history from creating a second operation.
+The export inspector provides lazy reviewed Zenodo publishing inside the existing approved export receipt. It does not add a route or shell. The editor requires explicit files, upload names, environment, metadata, authors and three public-sharing declarations. Preview reads actual file hashes before preparation; any edit invalidates the preview. Lost preparation and publication replies retain the exact request. A preparation-scoped readonly operation lookup prevents reopening history from creating a second operation.
 
 Full local and remote metadata, files, ownership, marker, hashes and DOI receipts remain visible before the independent publish approval. Draft and pending states lock inspector closing, export switching and sibling actions. Credentials remain environment scoped and transient masked input; plaintext clears at dispatch and never enters a persisted retry. Archived projects retain history and prohibit write controls. Both histories page independently in groups of twenty. Cancel aborts the current transport and retains uncertain remote state; it does not withdraw a published record.
 
-A7C is **Verified passing** for local engineering: connector unit 22/22, actual Electron/Vite renderer 9/9, existing export/production renderer 16/16, fresh build/typecheck, startup 13/13 with zero renderer errors, IPC current, eager renderer 1,134,468 bytes in six files and whitespace checks. Commands in the repository root:
+## Validation boundary
 
-```sh
-node --test tests/unit/research-zenodo-publication.test.mjs
-node --test tests/renderer/zenodo-publication.test.mjs
-pnpm build
-node --test tests/renderer/export-publication.test.mjs tests/renderer/artifact-production.test.mjs
-node scripts/smoke-electron.mjs
-pnpm check:ipc
-pnpm check:renderer-chunks
-git diff --check
-```
-
-The nine cases cover preview invalidation, exact lost replies, independent approval, local/remote drift, transient credentials, archived controls, real 21-record pagination, lookup retry, late project replies, existing export drawer locks and in-flight PUT cancellation. The fixture uses real main publication/preparation services, repositories, capability registry and generated strict IPC with isolated provider responses and synthetic approved source bytes. Its existing-export UI read fixture supplies controlled export records; the separate A7B native consumer establishes the actual ZIP/PDF and encrypted staging contract. Neither fixture performs remote requests.
-
-Logs are `.artifacts/research-optimization/zenodo-a7c-*`. Light/dark 650px screenshots and eight clip results (`cut=0`, no horizontal overflow) are in `.artifacts/research-optimization/zenodo-ui/`; screenshots were visually inspected. The initial 0/6 run stopped at ambiguous select labels; explicit accessible names fixed the cause. Expanded final tests passed without relaxed assertions or timeouts. Live sandbox/native-safeStorage integration and real public publishing remain **Blocked, not run** pending the previously stated isolated credentials and target authorization.
+Local connector tests use controlled remote responses and an isolated encryption port. They do not establish live native safeStorage plus live Zenodo acceptance. See [verification](verification.md) for the required environment and target authorization.

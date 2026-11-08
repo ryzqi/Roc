@@ -30,26 +30,6 @@ Migration 58 安装监控、查询版本、mutation 请求、检查、检查点�
 
 搜索整体 `fetchedAt` 为 null；真实 fetch 和 cache 时间来自逐页搜索回执，不能把聚合时间当 Provider fetch 时间。DOI 查询保留其 transport fetch/cache/hash。
 
-## 验证
-
-命令均在仓库根目录执行，日志位于 `.artifacts/research-optimization/monitor-a6a-*`。
-
-- `pnpm typecheck`
-- `node --test --test-timeout=120000 tests/unit/research-monitors.test.mjs`
-- `pnpm test:unit`
-- `pnpm build`
-- `node scripts/run-research-p0.mjs`
-- `pnpm harness:eval`
-- `node --test tests/renderer/literature-review.test.mjs tests/renderer/scholarly-relations.test.mjs tests/renderer/research-resources.test.mjs tests/renderer/research-openreview.test.mjs`
-- `node scripts/smoke-electron.mjs`
-- `pnpm check:ipc`
-- `pnpm check:renderer-chunks`
-- `git diff --check`
-
-状态：`Verified passing`，覆盖本地监控核心。最终 focused 14/14、全量单元 1410/1410、原生 19/19、Harness 94/94、相关 renderer 29/29、启动 13/13（零 renderer error）通过；类型、构建、IPC 生成一致性和 eager graph 检查通过，eager JS 1,134,468 bytes（6 files）。
-
-首次 focused 测试发现 strict 来源回执缺 `retryAfterMs`，已补齐合同后通过。最终持久化故障回归验证两个保存失败原因均传播、running 可恢复且精确重放不新读取。原生验收使用真实 Electron SQLite、窗口 sender、到期调度、缓存、备份重开；证据保存在 `.artifacts/research-optimization/monitor-a6a-native/`。尚未进行真实 Provider API 试验、独立科研质量验收。
-
 ## 现有文献画布界面
 
 第五个内部 tab「监控」首次访问才懒加载，不增加路由或 shell。监控按项目隔离；查询版本和控制 revision 切换会重建编辑器。草稿、进行中命令和结果不确定时锁定监控选择及 tab 离开；项目变为只读后保留草稿、禁写并允许放弃。
@@ -67,7 +47,3 @@ UI 验证均在仓库根目录执行：
 - `pnpm check:ipc`
 - `pnpm check:renderer-chunks`
 - `git diff --check`
-
-状态：`Verified passing`，覆盖本地 UI。最终 10/10 监控、29/29 相关 renderer、13/13 启动（零 renderer error）通过；类型、构建、IPC 和 chunks 通过。eager JS 1,134,468 bytes（6 files）。真实 Electron 窗口连接真实 SQLite 监控服务和 strict IPC parser，Provider 为固定响应。650px 明暗主题 default/hover/disclosure/final 八个裁切检查均 `cut=0, hidden=0`，已人工检查截图。日志为 `.artifacts/research-optimization/monitor-a6b-*-final.log`，截图和 ariaSnapshot 为 `.artifacts/research-optimization/monitor-a6b/`。
-
-首次 UI 测试的两个失败为 Provider 429 错误码断言和 clip 脚本调用错误；按真实合同修正后通过，未弱化产品检查。最终增加过滤列表目标与读取失败恢复回归后重新构建并运行全部 10 条。未进行真实 Provider 或独立科研验收。

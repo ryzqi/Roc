@@ -86,8 +86,8 @@ export class SecretService {
    * ## 为什么不是直接覆盖
    *
    * `await` 会把控制权交回事件循环：这段时间里用户可能存了一份新密钥，也可能把这条凭据
-   * 删了。无条件 `writeFileSync` 会把新密钥改回旧的，或者让已删除的凭据复活。所以先确认
-   * 磁盘上的密文仍是本次读到的那一份，再用「同目录临时文件 + rename」原子替换；
+   * 删了。无条件 `writeFileSync` 会把新密钥改回旧的，或者让已删除的凭据复活。所以要在
+   * 重新加密完成后确认磁盘上的密文仍是本次读到的那一份，再用「同目录临时文件 + rename」原子替换；
    * 并发读者看不到半截密文。
    *
    * 写回失败不影响本次读取（明文已到手、旧密文仍可解密），但不能无声吞掉。
@@ -98,19 +98,19 @@ export class SecretService {
     previous: Buffer,
     plaintext: string
   ): Promise<void> {
-    let current: Buffer;
-    try {
-      current = readFileSync(target);
-    } catch {
-      // 文件已经不在了：有人显式清除过这条凭据，不要复活它。
-      return;
-    }
-    if (!current.equals(previous)) {
-      return;
-    }
     const temporary = `${target}.${randomUUID()}.rotating`;
     try {
-      writeFileSync(temporary, await this.backend.encryptString(plaintext), { mode: 0o600 });
+      const encrypted = await this.backend.encryptString(plaintext);
+      let current: Buffer;
+      try {
+        current = readFileSync(target);
+      } catch {
+        // 用户可能在解密或重新加密期间删除凭据。
+        return;
+      }
+      if (!current.equals(previous)) return;
+      // 检查与替换之间不得再 await，否则会覆盖并发保存/清除的结果。
+      writeFileSync(temporary, encrypted, { mode: 0o600 });
       renameSync(temporary, target);
     } catch {
       rmSync(temporary, { force: true });

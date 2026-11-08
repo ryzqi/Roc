@@ -13,7 +13,7 @@ import {
   systemPreferences
 } from 'electron';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ipcChannels } from '../shared/ipc';
 import type { LiteratureLibraryChanged } from '../shared/schemas/literature-import';
 import type { ResearchTaskUpdated } from '../shared/schemas/research-tasks';
@@ -61,6 +61,9 @@ import { applyChromiumRuntimeFlags } from './chromium-runtime-flags';
 
 const mainModuleDir = dirname(fileURLToPath(import.meta.url));
 const isDevelopment = !app.isPackaged;
+const mainRendererUrl = isDevelopment && process.env.ELECTRON_RENDERER_URL !== undefined
+  ? process.env.ELECTRON_RENDERER_URL
+  : pathToFileURL(join(mainModuleDir, '../renderer/index.html')).href;
 const preloadPath = join(mainModuleDir, '../preload/index.cjs');
 const trayIconPath = isDevelopment
   ? join(mainModuleDir, '../../resources/trayTemplate.png')
@@ -212,11 +215,7 @@ app.on('before-quit', (event) => {
 });
 
 async function loadMainRenderer(window: BrowserWindow): Promise<void> {
-  if (isDevelopment && process.env.ELECTRON_RENDERER_URL !== undefined) {
-    await window.loadURL(process.env.ELECTRON_RENDERER_URL);
-    return;
-  }
-  await window.loadFile(join(mainModuleDir, '../renderer/index.html'));
+  await window.loadURL(mainRendererUrl);
 }
 
 function showMainPage(page: MenuPage): void {
@@ -377,7 +376,7 @@ async function createWindow(): Promise<void> {
       hostService.refreshTray();
       broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, event ?? null);
     }
-  });
+  }, mainRendererUrl);
 
   const terminalOutputBatcher = createTerminalOutputBatcher({
     intervalMs: 16,

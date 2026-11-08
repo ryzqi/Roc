@@ -4,8 +4,7 @@
 
 `ResearchSourceLocator` 保存真实导入 document ID、固定 parse ID、知识文档 ID、
 block ID、原文 source SHA、保存解析内容 SHA、parserFingerprint、原始 locator 文本
-及解析器保存的页/区域。坐标使用原解析器的坐标系；本合同不声称已经实现 PDF
-像素投影或原文预览，二者属于后续 PR-07。
+及解析器保存的页/区域。坐标使用原解析器的坐标系；投影到 PDF 与原文预览遵循[阅读导航](research-pdf-navigation.md)的实测坐标合同。
 
 证据捕获从实际 knowledge chunk 联接原 document/parse；按原索引过滤非空块后的
 顺序选择 block，并验证完整 excerpt/locator。重复正文不能靠文本匹配选错块。
@@ -45,7 +44,7 @@ sender window ID 绑定为 `window:<id>`；请求不能指定提出者或审核�
 
 迁移只把现存 evidenceIds 保存为 historical 关联，不补造 supports、提出者、
 审核人或审核时间，不改历史 Claim status。跨项目、悬空端点或破损来源使
-整个迁移回滚，数据库保持 DB20。批准和当前导出已使用严格语义消费者准入；定位迁移候选与可信捕获已接通；明确替代/rerun lineage 仍待完成。
+整个迁移回滚，数据库保持 DB20。批准和当前导出已使用严格语义消费者准入；定位迁移候选、可信捕获与显式来源替代/实验重跑关联见下文。
 
 ## 可信用户 IPC
 
@@ -69,7 +68,7 @@ main IPC adapter 建立的窗口/项目/能力上下文中写入。缺少 sender
 
 工件 inspector 每条 evidence 增加 required nullable sourceLocator；它参与既有
 工件 SHA，读取没有文件 IO、数据库写入或 worker。UI 的显式页/区域预览仍属
-后续 PR-07；现有原文快照可核对保存定位。
+[PDF 阅读导航](research-pdf-navigation.md)；原文快照始终保留保存定位。
 
 ## 检查器矩阵
 
@@ -107,7 +106,7 @@ completion；重复完成、结束或非当前阶段的 agent 不能再提出关
 取消后的工具拒绝读取。列表明确标原文截取长度，完整来源通过分页读取。
 角色没有用户确认能力；写入 reviewer 仍只能走可信窗口上下文。
 
-本增量模型产出直接表达 supports，其他关系类型仍由用户显式提议。
+模型产出直接表达 supports，其他关系类型仍由用户显式提议。
 模型提议必须另经用户确认，不能把产出声明当作已经通过科学语义审核。
 
 ## 批准与当前导出
@@ -131,11 +130,11 @@ rejected、invalidated、depends_on、supersedes 都不能冒充支持确认。
 
 ## 固定导出审核封印
 
-每个新导出保存 `provenance/scientific-review.json`。严格 schema 记录 project、
+每个新导出保存 `provenance/scientific-review.json`。私有科学审核快照使用 schema 5，记录 project、
 原 `sourceHash`、Claim version/hash、实际 inspected evidence（含 sourceLocator）、
 所有关联关系及其完整修订历史。独立关系的证据端点也进入快照，即使它没有进入
 旧 claim.evidenceIds。原文、条件、提出者、审核人、时间和失效历史均来自真实仓库。
-JSON 采用固定序列化；manifest v2 保存文件 SHA/size，归档哈希覆盖该文件。
+JSON 采用固定序列化；公开交付使用 `public_projection`，明确记录省略与私有回执来源，见[导出合同](research-exports.md)。当前 manifest schema 3 保存文件 SHA/size，归档哈希覆盖该文件。
 
 ready 落库、publish、complete/approve 的最终事务、异步校验后及交付链接前均比较
 当前只读审核快照与已存文件 SHA/size。缺少封印返回
@@ -147,11 +146,6 @@ research_export_semantic_snapshot_changed。用户需核对当前关系并重新
 历史 inspect/read/source 仅验证保存文件和归档哈希；当前来源失效后仍可读取原 PDF
 及原审核快照。当前发布/校验/交付另要求有效来源、关系与封印。缺少新审核文件的
 历史归档可以核对其原内容，不能用于当前发布。读取不撤销、替换或生成文件。
-
-原生验收保留科学审核快照、manifest v2 和 historical-export-audit.json。实际
-PDF source/parse/block 定位、synthetic window:93 确认及修订历史均进入封印。
-任务创建文件篡改后检查/读取拒绝；精确恢复后通过。来源失效后保存记录、审核
-文件及 PDF 保持原哈希；当前交付失败、目标不存在、所有读取与拒绝零 DB 写入。
 
 ## 重解析后的定位候选
 
@@ -173,42 +167,13 @@ DB22 保存不可替换的 source-migration proposal 与完整快照 SHA。同�
 避免后续 flush 发布已回滚的解析。真实回归在旧入队位置复现了 rollback-new
 幽灵索引；修正后 DB 与外部写入队列均保持原状态。
 
-本增量为同文档重解析的仓库基础。用户选择/捕获候选、检查器展示、显式来源
-替代和实验重跑 lineage 仍待后续完成；不把同一文献的另一个附件猜成替代来源。
-
-## 已验证范围
-
-来源定位增量 unit830、Harness94、fresh build/type/native13、相关串行 renderer22、
-startup12/zero errors、IPC/chunks1132980bytes/6files通过。定位 unit6 使用真实
-repositories 和明确 synthetic parsed data，覆盖重复/空块、无区域、旧解析保留、
-来源/块冲突事务回滚、页/区域拒绝和19→20迁移历史保留。native full workflow
-实际解析冻结 PDF，经真实角色 capture 保存 document/parse/block/source/parse hash
-与原区域，readonly inspection 无 DB 写入；evidence-source-locator.json 与工件检查
-记录保留。冻结 fixtures 没有修改。
-
-关系仓库、可信 IPC 与矩阵增量的最终命令、结果和截图路径以
-`plan/research-optimization-execution-log.md` 为准。
-
-## 后续验收
-
-`evidenceIds` 是来源关联，不表示已经人工确认科学支持。明确关系、版本绑定、
-人工审核、修订历史、模型支持提议与关系 UI、严格语义消费者、历史导出封印
-及同文档定位候选/可信用户捕获已实现；候选检查器已接通；明确来源替代/rerun lineage 待完成。来源完整性、科学语义和人工审核分别报告，PR-06
-整体尚未完成。
-
-严格批准/当前导出增量已验证 focused32/unit857/Harness94/native13/UI37/startup12。
-导出审核封印增量已验证 unit858/final focused9/Harness94/native13/UI27/startup12、
-fresh build/type/IPC/chunks1132980bytes6files。明确来源替代/rerun lineage 仍未完成；上述离线
-传输和来源验收不构成真实科学结论或整体计划完成。
-
-
 ## 同文档定位候选与用户决定
 
 DB22 的候选保存不可替换的旧来源快照/digest、新 source/parse/hash/fingerprint 与
 实际索引顺序中的完整原始解析 block。算法先比较完整原文，再只规范空白；多个
 匹配保持 ambiguous，不按旧页距离挑选。改变正文保存 no_match，不猜替代。
 当前目标源与保存 parse SHA 必须一致；后续解析使旧候选 targetStatus 为 stale，
-候选原记录保持不变。原始区域尚未投影到 PDF，仍需 PR-07 坐标审计。
+候选原记录保持不变。原始区域按保存的坐标依据投影；历史记录缺少坐标依据时只允许页级定位。
 
 DB23 research_source_migration_decisions 为每个候选保存一个不可替换的用户决定。
 required proposalHash 随 list/get 返回；capture/reject 必须明确提交候选、旧来源
@@ -226,8 +191,7 @@ capturedReferenceStatus，重解析不改原决定或旧证据。
 
 定位捕获不改 Claim evidenceIds、status、version、正文、图稿或科学关系/修订历史。
 旧 supports 审核继续 invalidated。需用户/助手另建主张版本与关系并重新科学审核，
-原批准/当前导出不能通过新位置捕获恢复。后端与可信传输已接入同一工件检查器；明确来源替代与实验 rerun lineage 仍待完成。
-
+原批准/当前导出不能通过新位置捕获恢复。后端与可信传输已接入同一工件检查器；明确来源替代与实验 rerun lineage 使用下文的独立用户决定。
 
 ## 候选检查器
 
@@ -251,7 +215,6 @@ capturedReferenceStatus，重解析不改原决定或旧证据。
 原文或候选说明。沿用现有折叠动效；没有新时长、全局 CSS 或第二套布局。真实
 Electron 验证依据最终原生区域坐标，不仅依据 getAnimations().finished 或阴影审计。
 
-
 ## 明确来源替代与重跑前后关联
 
 DB24 research_source_replacements 保存用户明确选定的两个真实 Evidence。请求必须
@@ -273,13 +236,6 @@ sourceHash 与当前 ready parse SHA 一致。实验源不可由非托管记录�
 project/requestId 与 actor/request SHA 重试只返回原记录；不同内容、窗口或重复
 关系拒绝。list/get 比较固定快照 SHA，当前 targetReferenceStatus 单独显示，目标
 后续失效时原前后关联仍可读取。
-
-原生离线验收创建任务临时 PDF 版本并真实解析、捕获；window95 明确选择同父
-文献下另一文档。另以任务临时 TypeScript/CSV 真实重跑，均值由2/4变为3/5；
-window96 明确选择真实执行前后端点，保留旧代码/环境/输入/结果与 Claim。原
-导出 record/sourceHash/scientific-review/archive/PDF 保持原字节，当前交付拒绝。
-这些窗口为明确 synthetic 用户传输测试，不表示真实用户或独立科学审查。冻结
-fixtures 未修改。本增量是后端与可信传输；检查器选择界面和只读角色事实继续接入。
 
 只读角色工具 `read_source_migrations` 与 `read_source_replacements` 按字符分页返回完整固定记录；项目与运行由服务绑定，取消或终止后拒绝读取。替代记录列表包含证据作为前序或新来源的两种情况，按保存顺序返回。工具不会接受用户身份、写入替代决定或恢复科学支持；`nextOffset` 用于继续读取完整实验输入、环境和输出快照。
 

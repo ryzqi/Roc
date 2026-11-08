@@ -1,6 +1,6 @@
 # 原 PDF 与解析定位
 
-PR-07 当前已完成测量坐标、原子解析快照、安全预览元数据、原 PDF/解析文本并排阅读及 Evidence/Claim 关系的固定来源阅读。块与 PDF 的双向定位、批注保存和 Evidence 转换已接入；表格/公式解析资产核对及具体质量提示已接入；真实扫描来源与最终资源验收仍待完成。
+当前支持测量坐标、原子解析快照、安全预览元数据、原 PDF/解析文本并排阅读及 Evidence/Claim 关系的固定来源阅读。块与 PDF 的双向定位、批注保存和 Evidence 转换已接入；表格/公式解析资产核对及具体质量提示已接入；受控无文本层扫描夹具有独立测试；更广泛 OCR 质量与真实科研样本代表性仍需独立验收。
 
 ## 坐标与版本
 
@@ -45,27 +45,6 @@ roc-preview://research/projects/<projectId>/documents/<documentId>/parses/<parse
 
 协议在调用能力之前验证 Electron 提供的 `request.initiatorOrigin`。允许文件 renderer、明确配置的开发 renderer 来源和主进程/浏览器自身发起的请求；其他来源及不透明 iframe 拒绝。实际 Electron45 请求即使来自 HTTP 页面也可能没有 `Origin` header，不能用 header 或可由页面隐藏的 referrer 代替该检查。只有配置的开发来源获得对应的 CORS 响应，不使用通配来源。
 
-## 验证与证据
-
-在仓库根目录运行：
-
-```bash
-pnpm typecheck
-node --test tests/unit/research-document-coordinates.test.mjs tests/unit/zotero-import.test.mjs
-node --test tests/renderer/document-preview-protocol.test.mjs
-pnpm test:unit
-pnpm harness:eval
-pnpm build
-node scripts/run-research-p0.mjs
-pnpm check:ipc
-pnpm check:renderer-chunks
-git diff --check
-```
-
-单元场景覆盖真实原 PDF 解析到坐标/工件发布、精确版本读取、篡改/缺失、历史无坐标、跨项目和读取过程中解除关联。原生 P0 使用实际文档服务、注册器和生成适配器，保存 `document-preview.json` 及 `document-coordinate-snapshot.json`。sender97 是明确标记的合成窗口身份，不声称真实用户预加载操作。
-
-协议测试使用实际 Electron 和 Chromium fetch，核对冻结 PDF 字节、编码 ID、PNG 路由及能力失败响应。此测试的能力响应明确注入；真实 repository/文件验证由原生 P0 和单元集成建立。协议记录位于 `.artifacts/research-optimization/pr07-preview-protocol/original-byte-routing.json`。
-
 ## 阅读器版本选择
 
 普通阅读按文档记录的 `currentParseId` 请求内容。历史深链先解析请求的 parseId，再核对属于当前文献，读取该确切版本。未完成、已失效、不存在或未关联当前项目的解析显示可重读错误，不打开其他文档或邻近解析。
@@ -73,8 +52,6 @@ git diff --check
 旧辅助函数从倒序解析列表取末项，会选择最旧 ready 解析，现已删除；未保留别名。locator 跳转要求一个精确匹配；前缀、子串、重复定位均不自动选择。
 
 读取状态按项目、文献、文档、解析、来源哈希及重读次数绑定。选择变化立即阻止旧内容显示，迟到响应不能覆盖新选择。文档 tab 支持左右方向键、Home/End 和可见焦点；选择其他文档会清除历史深链。
-
-`node --test tests/renderer/paper-reader.test.mjs` 检查实际组件和生成适配器的版本、错误、键盘、迟到响应、显式重读及明暗/窄窗路径。版本选择场景明确使用合成解析快照；PDF 阅读场景使用冻结原文件或明确生成的多页/旋转 PDF，经实际解析器、工件收集器、repository、能力注册器及生成适配器读取。Node-host 桥和 sender98 是明确标记的测试接缝，不声称完整生产 kernel/preload E2E。布局截图与读取请求记录保存在 `.artifacts/research-optimization/pr07-reader-selection/`。
 
 ## 并排阅读与资源
 
@@ -87,8 +64,6 @@ git diff --check
 每次只保留一个可见页的 DOM canvas，页位图上限为 400 万像素。翻页/缩放/重绘取消旧 render 并释放页资源；关闭或切换来源取消 fetch/loading，销毁 PDF 文档、PDF worker 和原生 Worker。框选区域与页级研究批注已接入；没有逐字文本选择。
 
 阅读器测试由 Vite8.3.5 实际构建并加载 Electron/Chromium，直接使用 `?worker` 生成的独立 worker 文件，不模拟 worker import。场景覆盖冻结 PDF 真实文本位图、缩放、三个窗口边界、无坐标历史、原文损坏、CropBox/90°/UserUnit2、32 页跳转与关闭清理。32 页 PDF 只解析第一页，测试仍可读取原文件其他页面，不制造未解析页的区域。
-
-`actual-pdf-bitmap.json` 保存真实位图和编译 worker URL；`rotated-original-projection.json` 保存测量 frame/投影；`large-original-resources.json` 保存六次跳页的实际非零位图/worker 数量、耗时和进程内存。内存记录是观测值，不声称 RSS 硬上限。`comparison-clip-audit.json` 覆盖并排、hover 和缩放最终状态；截图保存明暗模式及 800/1099/1100 宽度。
 
 ## PDF 反向定位
 
@@ -116,17 +91,11 @@ git diff --check
 
 主张关系记录的「固定来源与版本」展开区提供「查看关系原文固定版本」。读取该关系保存的 `relation.source`，复用上述严格来源阅读器，不改用工件中另一条当前 Evidence。即使关系在重解析后已失效，原始 ready parse/source 仍可核查。
 
-验证用实际原 PDF 捕获 Evidence、创建明确的合成假设/用户98关系提议，再真实发布后续解析使关系失效。关系原文读取保持旧 SourceLocator/hash，假设和关系记录完全不变，数据库零写入。`claim-fixed-original.json` 保存请求、原始关系/主张、展开几何与明暗裁切审计；`claim-original-*.png` 保存布局。嵌套展开区的 summary/元数据顺序及键盘目标聚焦有实际几何断言；初始测试补齐原生展开后的渲染等待，没有加入未经验证的 CSS 修补。
-
-
 ## 批注目标契约
 
 `research-document-annotations.ts` 定义必需的 project/document/parse、sourceHash/parseHash/parserFingerprint、页和可空 blockId。坐标依据显式为 null 或同一页的实测 PDF frame 与 snapshotHash。位置只能是明确页定位，或带 `pdf-user-space` 单位的非空 XYXY 区域；区域必须位于实际 CropBox 内，并有捕获坐标依据。没有坐标时不能发送猜测区域。
 
 问题类型为笔记、数字、单位、公式、表格和识别问题，必需用户说明。请求没有 actor 或科学审核状态。契约、可信存储、PDF 框选和批注/Evidence 转换界面已接入。
-
-实际解析器/PDF.js 回归同时检查 PDF→解析 raster 投影、双向往返及整个 CropBox，与独立 `convertToViewportPoint`/`convertToPdfPoint` 对照。覆盖旋转90/270、非零裁切原点、UserUnit2 和实际缩放被限制的大页。记录保存在 `pr07-coordinates/actual-parser-frames.json`；请求中的 actor、缺失必填字段、非法单位、缺坐标和越界区域均拒绝。
-
 
 ## 批注存储与证据转换
 
@@ -140,7 +109,6 @@ DB26 保存不可变批注快照：完整请求及其 SHA-256、所选原始解�
 
 已捕获后重解析仍保留原始收据；当前引用失效状态单独返回。批注和转换不修改主张、关系或科学审核。实际原生流程保存 `p0-production/<taskId>/document-annotation.json`，窗口99是明确合成身份；验证真实解析、注册器、生成适配器、Evidence复用及重放/读取零写入。单元集成还覆盖越界身份、坐标/字节变化、旧解析拒绝转换、索引损坏零写入、收据回滚和 DB25→26 保留。
 
-
 ## 阅读器批注界面
 
 原 PDF 工具栏的「批注」展开所选解析的固定记录。可写项目中，「本页批注」提供键盘入口；框选按钮进入拖选模式，Escape 取消。框选用实际绘制视口换算 PDF 用户坐标，并把边界限定到该页实际 CropBox。页或绘制状态变化结束原框选；空区域显示错误，不自动改成页定位。缺少测量依据时框选按钮禁用，可显式保存页级批注。
@@ -148,9 +116,6 @@ DB26 保存不可变批注快照：完整请求及其 SHA-256、所选原始解�
 表单默认不关联解析块，必须明确选择本页块才能以后捕获该块为证据。可选笔记、数字、单位、公式、表格、识别问题并填写说明；保存前虚线显示用户框选区域，与解析器区域区分。保存与捕获期间相关输入禁用。失败重试保留原请求 ID，编辑内容开始另一请求；跨来源/项目或关闭后的迟到结果不会显示在新页面。重新打开可读取已提交收据，不重复写入。
 
 已保存记录显示原页、问题、说明、所选块和可展开的来源哈希/解析版本/用户时间。「回到批注位置」使用原页和区域，不猜附近块。可写当前解析中的文本块提供明确证据转换操作，历史/只读来源不提供新捕获；已捕获记录显示独立的当前引用失效状态。Evidence/Claim 原文视图可读取已保存批注，保持只读。
-
-实际 Electron 测试通过真实 Vite/PDF worker/Chromium/协议和生成主进程适配器，保存旋转90/CropBox/UserUnit2 的原始 pointer 事件坐标，与独立实际 PDF.js 换算误差小于 `1e-8`。另覆盖键盘页级批注、Escape/空框、原文件/索引损坏零写入与原请求重试、迟到保存跨项目、重解析后旧批注阅读和明暗长内容。Node-host/window98 是明确测试接缝；截图与四种裁切回执在 `pr07-reader-selection/annotation-*`，cut0/hidden0。
-
 
 ## 解析图像与质量提示
 
@@ -160,26 +125,61 @@ DB26 保存不可变批注快照：完整请求及其 SHA-256、所选原始解�
 
 质量信息只使用所选解析的事实：OCR/mixed 模式提示核对数字、单位、公式；实际 native-only 警告说明没有 OCR 核查；空块提示核对原文。未知解析警告保留原记录文本。稳定内容没有校准置信分数，因此界面没有生成百分比或从 raw structured score 推断准确率。
 
-资产验证采用明确合成的表格/公式识别布局，PNG 像素从真实解析器页图裁取；这建立版本、图像协议、显示和人工公式问题→Evidence 流程，不能作为真实 OCR/复杂表格识别质量验收。`assets-fixed-pixels.json` 与 `asset-compositor-table.png` 保留实际浏览器显示像素/来源哈希；跨协议图像正确触发浏览器 canvas taint，验证改用实际 compositor 截图，没有更改 CORS 或 webSecurity。`asset-comparison-*` 和固定 Evidence 来源截图保留明暗/800/1099及560px来源抽屉布局，默认/hover/展开/最终状态 cut0/hidden0。
+## 受控扫描验证边界
 
+`tests/fixtures/research-scanned-source.mjs` 生成无文本层的三页受控扫描 PDF 与独立源真值：正文数值/单位、合并表头和重复组表格、带分数/求和上下标的公式。测试使用仓库固定的 complete CPU 模型包和生产 sandbox worker，覆盖实际解析、采集、入库、索引、Evidence、固定坐标与 PNG 校验；不合成识别块，不调用付费语言模型。模型包使用任务工件目录并按 manifest SHA/大小校验。这类受控夹具不证明复杂科研扫描识别质量；Node host/合成窗口接缝也不等于完整生产 kernel/preload E2E。
 
-## 真实扫描验收
+### Measured coordinate frames
 
-`tests/fixtures/research-scanned-source.mjs` 生成无文本层的三页受控扫描 PDF 与独立源真值：正文数值/单位、合并表头和重复组表格、带分数/求和上下标的公式。验收使用仓库固定的 complete CPU 模型包和生产 sandbox worker，实际解析、采集、入库、索引、Evidence、固定坐标与 PNG 校验均执行；不合成识别块，不调用付费语言模型。模型包下载到任务工件目录并按现有 manifest SHA/大小校验，不改变应用模型配置。
+Parser bounding boxes are XYXY rectangles in the actual rendered raster, with a top-left
+origin. They are not PDF user-space coordinates. PaddleOCR1.2.0 crops regions using
+x2-x1/y2-y1; native text uses the full measured raster bounds. The PDF renderer requests
+scale1.5 but clamps oversized viewports to25,000,000 pixels, then rounds bitmap dimensions.
+A page rotation, CropBox offset or UserUnit changes the PDF-to-raster affine transform.
 
-从项目根运行，每次选择新的 evidence-root（解析器拒绝覆盖输出）：
+New middle/structured JSON records coordinateFrameContractVersion1 and a coordinateFrame
+for each processed page. A PDF frame preserves raster width/height and the actual PDF.js6.4.299
+viewport width/height, scale, rotation, UserUnit, viewBox and six affine matrix values. Image
+frames contain only their actual raster basis; HTML records null. No coordinate basis is
+invented for an old source or unavailable metadata.
 
-```sh
-node scripts/verify-research-pdf-scanned.mjs \
-  --models-root .artifacts/research-optimization/pr07-scanned/models \
-  --evidence-root .artifacts/research-optimization/pr07-scanned/acceptance-final
-ROC_SCAN_MODELS_ROOT="$PWD/.artifacts/research-optimization/pr07-scanned/models" \
-ROC_SCAN_EVIDENCE_ROOT="$PWD/.artifacts/research-optimization/pr07-scanned/acceptance-final" \
-node --test tests/acceptance/research-pdf-scanned-reader.test.mjs
-```
+projectParsedRegionToPdf validates a nonempty region within the captured raster and inverts
+the saved viewport transform. Bottom-left raw regions are reflected within the recorded raster
+before inversion. The output is a PDF user-space XYXY rectangle; consumers must apply the
+actual destination viewport when drawing it. Rotation and nondefault scale are never inferred
+from a locator string, filename or a universal1.5 ratio.
 
-模型包和产物必须显式提供，缺少就失败；这组独立验收不放入无模型依赖的普通 renderer suite。当前原生1/1、真实阅读器3/3通过。实际生成10块/13图像/2公式/0表格，约4.37秒；这只说明工程流程成立。`recognition-observations.json` 记录正文有两行未完整保留，表格被标成 figure，公式原文有识别错误。图像入口因此按实际资产提供，保留 figure 分类；不重新解释表格或修复公式。
+A malformed frame, singular/nonfinite transform or invalid/out-of-raster region is an error.
+A missing basis cannot produce a guessed region; the reader must explicitly use page-only
+location. Frame capture does not approve scientific support or migrate a source to a new parse.
 
-实际扫描表格可对照页2原图、区域 PNG 和原始单元文本，人工公式问题可转成保存准确 OCR 版本的 Evidence；固定 Evidence 原文也可查看 figure 图像。明暗800/1099截图和 hover 审计 cut0/hidden0；Node-host/窗口100、101仍是明确合成接缝，非完整生产 kernel/preload E2E。`actual-scanned-*`、原始解析/采集/真值文件位于 acceptance-final。
+### Verification and current limits
 
-同轮相关 renderer76/76还实际执行32页PDF资源回归和跨页选择：页2/8/16/24/32/1始终一个canvas、每页不超过400万像素，关闭后worker归零并移除canvas，保留进程内存观测。跨页识别块仍为合成布局，验证定位版本/页/索引契约。没有宣称进程RSS硬上限、扫描科学准确率或独立领域审查通过。
+Actual generated PDFs with crop[20,30,500,700], rotations90/270, UserUnit2 and a12000x15000
+page are parsed through the real PDF.js path. Projection matches independent
+PageViewport.convertToPdfPoint results, including bottom-left regions. The large page records
+actual scale0.37267799624996495 rather than1.5. Native text without a page image and the
+actual OCR raster renderer share the same measured-frame path.
+
+Primary API reference: https://github.com/mozilla/pdf.js/blob/v6.4.299/docs/contents/examples/index.md
+Installed implementation: pdfjs-dist6.4.299 PageViewport and paddleocr1.2.0 structure pipeline.
+
+### Atomic coordinate snapshot publication
+
+Research DB25 stores coordinate snapshots separately from the original parse JSON. New captures
+bind sourceHash, canonical parsed-content SHA, processed-page frames and exact structured artifact
+path/hash/size. collectDocumentContent normalizes through the persisted schema before hashing.
+Its result carries data and an explicit nullable coordinate input; complete requires that input.
+Synthetic or historical page-only records explicitly use null, with no old write-signature alias.
+
+Parse completion, coordinate insertion/hash marker, index replacement and previous source
+invalidation share a transaction. Insertion failure retains the old parse/index/source and queues
+no phantom publication. New parse records carry coordinate_snapshot_hash, allowing a lost snapshot
+to raise a missing-data error. Stored-frame corruption, changed source/parse, wrong page/region
+or an unexpected snapshot also fail. Existing rows receive only a null marker; no old parse JSON,
+Evidence, user predecessor selection or scientific history is rewritten and no frame is invented.
+
+Marked current structured artifacts must provide valid matching frames. Markerless historical
+artifacts have no captured basis and cannot be projected to a region. Coordinates are read by
+fixed document/parse identity; a later parse never replaces the old saved snapshot during reads.
+The preview boundary validates file bytes and exposes matching frame metadata.

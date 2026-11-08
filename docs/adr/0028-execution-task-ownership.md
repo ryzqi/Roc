@@ -13,5 +13,4 @@ date: 2026-11-06
 这比复制 scheduler/runtime 或只搬目录增加一次关联对账成本，但能使暂停、取消、
 恢复、预算和旧 generation 拒绝使用同一身份合同。Grant、Effect lease、Task lease、
 资源 admission 各保留独立含义；调度不增权、不重复计费。助手仍是唯一执行入口，
-任务仅在既有管理抽屉观察和控制。此决定已由 S02/S06 实现，
-版本与历史数据边界见 [迁移台账](../../plan/migration-ledger.md)。
+任务仅在既有管理抽屉观察和控制。执行身份、任务事实与恢复边界见[任务与上下文](../research-task-observability.md)。

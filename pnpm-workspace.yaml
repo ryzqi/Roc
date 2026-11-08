@@ -5,6 +5,9 @@ strictPeerDependencies: false
 dedupePeerDependents: true
 
 overrides:
+  # Security fixes for the ONNX installer and OpenAI's optional HTTP peer.
+  'onnxruntime-node>adm-zip': 0.6.1
+  'undici@>=8.0.0 <8.12.2': 8.12.2
   # 仅构建 macOS，移除非目标平台打包器。
   'app-builder-lib>electron-builder-squirrel-windows': '-'
   # langgraph 的 StateSchema 含 private symbol（名义类型），peer 链上出现两份就会类型不兼容、

@@ -184,9 +184,9 @@ executionId、会话 owner、项目、执行 runId、冻结请求和 running 状
 
 候选 7 天有效期清理只删除预览。执行身份、原始请求和回执仍保留，不能因取消
 或预览过期丢掉实际检索记录。迁移不推测旧快照对应的请求或执行，也不重写旧
-候选。当前账本为主进程持久化基础；检查器展示与检索执行读取界面待后续接入。
+候选。执行与原始池提供只读能力；综述内的查询回执界面见[系统性综述](research-systematic-review.md)。
 
-## 验证与后续范围
+## 完整原始检索池
 
 数据库 12 保存融合前完整的已验证检索池，包含每条原始来源排名、元数据、
 标识字典、审查观察、请求、确认策略和逐来源回执。年份筛选、最终候选上限和
@@ -342,16 +342,4 @@ list query 1 次/秒要求并观察响应头：
 这批不提供学术 Recall@20/nDCG@10。独立标注集尚未建立。Provider 原始请求与
 分页回执、有界缓存、进程内配额/健康度、持久化请求账本和确认检索计划已接入。
 OpenAlex/Semantic 已验证外部标识归并及候选类型/版本/许可/撤稿/更正/冲突展示
-已接入。其他来源未验证字段保持未知；独立检索标注与指标仍待后续增量。
-
-官方合同核对日期：2026-11-03。OpenAlex 当前支持无 key 的基本查询；cursor
-翻页需要 key，不能自动创建账号或读取凭证。参数和分页依据
-[OpenAlex API](https://help.openalex.org/api/paging/)，认证依据
-[OpenAlex Authentication](https://help.openalex.org/api/authentication/)。
-Crossref 的缓存、rows/cursor 和退避建议见
-[Crossref REST API tips](https://www.crossref.org/documentation/retrieve-metadata/rest-api/tips-for-using-the-crossref-rest-api/)。
-2026-11-03 另对 Europe PMC 官方示例公开标识发起一次匿名只读请求，确认 6.9
-响应包含 hitCount=1、一个记录且终页省略 cursor。原始响应 hash 与脱敏合同记录
-保存在 `.artifacts/research-optimization/pr04-coverage-live-contract.json`；随后离线
-校验同一响应通过实际适配器。此探测只验证一个响应结构，其他来源仍由本地
-fixture 验证；没有真实模型费用调用。
+已接入。其他来源未验证字段保持未知；独立检索标注与质量指标尚无验收结论，见[验证边界](verification.md)。

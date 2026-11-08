@@ -47,13 +47,6 @@ resources/rtk-binaries/darwin-arm64/rtk rewrite "git status"
 
 从仓库根目录运行完整验证：`pnpm test` 写 `.artifacts/smoke-electron/result.json`；`pnpm smoke:mac` 写 `.artifacts/mac-package/result.json`。
 
-```bash
-pnpm typecheck
-pnpm test
-pnpm package:dir
-pnpm smoke:mac
-```
-
 ## 降级行为
 
 - `RTKBinaryManager` 在非 arm64 架构上不提供 binary：middleware 不改写；Roc command tool 仅在 Roc shell 风险策略允许时按原命令执行。

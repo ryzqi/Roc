@@ -1,6 +1,6 @@
-# ResearchTask execution observations and offline diagnostics
+# ResearchTask：任务事实、执行观测与离线诊断
 
-`ResearchTask` diagnostics now connect the existing execution tree to persisted model-call observations, chat telemetry/replay and managed experiment resource receipts. The management drawer discloses these details on demand. This implements execution-plan §22.3 without another shell, route, telemetry ledger or external trace transport.
+`ResearchTask` diagnostics now connect the existing execution tree to persisted model-call observations, chat telemetry/replay and managed experiment resource receipts. The management drawer discloses these details on demand. Task ownership follows [ADR 0028](adr/0028-execution-task-ownership.md); these views use existing records and local diagnostics.
 
 ## Authoritative records
 
@@ -43,26 +43,14 @@ The export operation has no network path. External Trace export and real scienti
 
 The existing task execution tree uses native, initially closed `<details>` for observations. Opening or refreshing reads current persisted telemetry. Calls and replay have independent 50-row pages that replace the displayed page. Loading, failure, missing observations, unknown usage/cost and replay gaps are visible states. The export action prevents duplicate dispatch while pending and displays the real local receipt; late replies cannot populate another project/task panel.
 
-## Verification
+## Task facts and context
 
-Status: **Verified passing** for local execution diagnostics and export. All commands run from `/Users/Apple_501/Desktop/Roc/Roc` on macOS 27.0.1 arm64, Node v26.13.0 and pnpm 12.5.1; Electron 45.0.0 is declared by the project. Evidence is retained under `.artifacts/research-optimization/`.
+Task facts are bounded, immutable revisions in the agent identity database (migration 18). Each entry stores a kind, content, lifecycle state and one to eight typed source references. Supported kinds are confirmed constraints, source versions, human decisions, unverified hypotheses, todos, counterevidence, evaluation conditions and user corrections. Facts are research data and never grant capabilities or replace approval.
 
-| Command | Result and evidence |
-| --- | --- |
-| `node --test tests/unit/research-task-observability.test.mjs tests/unit/research-experiment-resources.test.mjs tests/unit/research-task-diagnostics.test.mjs tests/unit/run-budget-observer.test.mjs tests/unit/run-budget-ledger.test.mjs tests/unit/database-migrations.test.mjs tests/unit/research-task-notifications.test.mjs tests/unit/research-task-cancellation.test.mjs` | 44/44 passed; `observability-focused-final.log` |
-| `pnpm build` | Passed, including typecheck; `observability-build-final.log` |
-| `node --test tests/renderer/research-tasks.test.mjs` | 16/16 passed in Electron; `observability-renderer-first.log` |
-| `pnpm test:unit` | 1469/1469 passed, no skipped/cancelled tests; `observability-all-unit.log` |
-| `pnpm harness:eval` | 94/94 passed; `observability-harness.log` |
-| `node scripts/run-research-p0.mjs` | 19/19 passed; `observability-native.log` |
-| `node scripts/smoke-electron.mjs` | 13/13 passed, zero renderer errors; `observability-startup.log` |
-| `pnpm check:ipc` | Generated contracts current; `observability-ipc.log` |
-| `pnpm check:renderer-chunks` | Passed, 1,134,468 eager bytes / six files; `observability-chunks.log` |
-| `node --test tests/unit/research-task-cancellation.test.mjs` | 6/6 passed after explicitly supplying the required exporter in two fixture registrations; `observability-cancellation-final.log` |
-| `git diff --check` / `git diff --cached --check` | Passed |
+`research.getTaskFacts`, `research.saveTaskFacts` and `research.getTaskFactsHistory` require explicit project/task identity. Saving requires the main process human context for `research.task.facts.save`; the actor comes from the submitting window, with no actor or approval fields on the wire. `expectedRevision` enforces optimistic concurrency. The store seals normalized snapshots, checks their SHA256 and physical task/revision identity, refuses updates, and retains old revisions when new entries correct or supersede them. Task deletion cascades.
 
-The focused tests exercise real invocation success/failure/blocked admission, unknown accounting, immutable SQLite/backup/reopen, scoped call pagination, real telemetry/replay gaps, current/missing artifact versions, managed resource outcomes/corruption, main human IPC authority, byte hash/permissions, structural redaction, source drift and output bounds. Renderer coverage includes keyboard disclosure, independent pagination, refreshed telemetry, errors/pending/receipt handling and late project replies.
+Limits are 100 entries, 2,000 characters per content, eight references per entry and 32,000 serialized characters across entries. History pages contain at most 50 revisions. The management drawer supports user entries, explicit completion/replacement and the latest 50 history revisions. Full history remains available through the bounded cursor API. Failed saves preserve the draft; refresh reads the current revision.
 
-Light/dark layouts at 720px and 380px include 12 observation-state clip audits with `cut: 0`, saved in `task-ui/observations-clip-audit.json`. `task-ui/observations-dark-380.png` was visually inspected. These fixture-driven UI checks do not establish real paid-model quality, provider billing completeness or historical artifact-version reconstruction.
+Artifact references bind the inspector version. Documents bind the source SHA256 and committed parse identity. Execution references bind a task-owned execution and its manifest hash. Reads compare each reference to current state and explicitly report changed, unlinked or deleted sources without rewriting history. Active entries with expired references cannot be saved; completing or replacing them preserves their old reference. Storage corruption and scope mismatches fail.
 
-The initial focused runs failed at incorrect settlement-column and fixture contracts. Settlement timestamps now use the real task events; fixtures provide the required capability/search-plan/telemetry inputs and text delta event. The final focused run passed all 44 cases without relaxing production checks. Earlier failed logs are retained as `observability-focused-{first,second,third}.log`. The final renderer run preceded the settlement lookup index and pagination probe ownership check; its UI source remained unchanged and the final build/unit/native gates include those database changes.
+Stage execution and retries reconstruct the task goal and latest facts from durable storage. The main assistant harness uses the read-only scoped `research.task.facts.forChat` capability before each model call, including checkpoint continuation and compaction. A transient `HumanMessage` carries the task context; it does not accumulate in checkpoint state or modify the system message. It wraps the budget observer, so the injected data contributes to the model reservation. The same task context accompanies harness subagent model calls.

@@ -1,5 +1,7 @@
 # Zotero 本地只读接入
 
+支持本地 API 只读发现、冻结预览、逐页核对检查点、来源状态与用户授权的附件导入。自动化使用受控 HTTP fixture；真实客户端和原生选择框仍需独立互操作验收，见[验证边界](verification.md)。
+
 主进程 `zotero-adapter.ts` 固定访问 `http://127.0.0.1:23119/api/`，只发 GET。
 请求不含 API key，不访问 Connector，不触发授权、修改设置或写回 Zotero。
 重定向不跟随；返回的网页、附件或分页链接不能改变请求主机。初始化不会读取
@@ -134,27 +136,6 @@ CSL 走现有原生书目 worker，不使用只含题名/作者的临时书目�
 进行中的请求退出；已关闭适配器拒绝新请求，迟到响应不能成为有效页面。
 HTTP/解析失败显式保留为失败，不回退为成功空页。
 
-## 已验证与待完成
-
-只读适配器、冻结预览、对象收录/来源回执、主进程能力和 IPC 已接入。测试使用合成数据与真实本机 HTTP
-fixture 验证 GET/无 key、实例和库范围、原始 hash、集合/群组版本、分页完整性、
-HTTP 重定向拒绝、附件引用、取消/关闭及响应上限。开发机标准路径
-`/Applications/Zotero.app` 未发现安装；未读取真实 Zotero 数据库、用户文库或凭证。
-预览回归还覆盖 25 条原始对象完整保存、分页/hash 重建、服务重启、会话/项目隔离、
-末页损坏、有效期、数据库拒绝写入、迟到取消与 DB12→13 保留历史原文。
-本地 fixture 不等于已安装 Zotero 的实际互操作验收。
-
-逐页检查点、冲突审查 UI 与来源状态后端已实现，详见下文。
-来源状态 UI 已接入原始来源详情；附件授权/内容导入后端已接入，附件UI及真实客户端验收仍待后续增量。V1 没有任何 Zotero
-写请求，V3 写回继续另行授权。
-
-对象收录增量最终验证：单测 761/761、对象相关 26/26、Harness 94/94、原生 P0
-13/13（含真实 CSL bibliography worker）、应用启动 smoke 12/12，typecheck/build、
-IPC 和 renderer chunks 均通过。来源回执、DB13→14 原文及 ledger 保留、重复请求、
-同版本新请求复用、取消和事务回滚均有实际数据库回归。日志见
-`.artifacts/research-optimization/pr05-object-*.log`；原生 worker 的数据库与回执保留于
-`pr05-object-native-csl/`。真实 Zotero 客户端验收仍未运行。
-
 ## 设置状态
 
 现有设置弹窗的「文献与解析」区提供 Zotero「检测连接」。打开设置不自动读取
@@ -169,12 +150,6 @@ UI 独立显示应用目录与 API：已连接、未启用通信、不可达、�
 每次检测使用新资源键，立即移除旧状态；关闭后的迟到结果不能出现在再次打开
 的区块。新 UI 使用 12/13px tokens、0.5px 分隔线、键盘焦点和状态文字。
 
-最终单测762/762，实际 Electron 设置组件3/3，原设置 Radix 层级1/1，Harness94/94，
-生产 build/typecheck、IPC/chunks 通过。应用启动 smoke12/12 在最后一处纯边框修改
-前通过；最终新组件再次运行3/3并更新光暗1100/1099/800截图与阴影审计，全部
-cut0/hidden0。证据 `pr05-settings-*.log`、`zotero-settings-ui/`。真实 Zotero 客户端
-互操作仍未运行。
-
 ## Renderer 预览边界
 
 previewZotero、getZoteroPreview、getZoteroSources 的 IPC 请求显式要求
@@ -182,12 +157,6 @@ projectId（库范围用 null）。主进程 bridge 使用真实 sender ID 构�
 和项目上下文，输入不能提供 owner/runId。能力入口剥离 IPC 项目字段后，核心服务
 仍验证 scope-neutral 请求；原始快照请求与内容 hash 格式保持不变。检索池
 getLiteraturePool 同样通过文献上下文读取。
-
-实际 bridge 回归曾复现这些能力缺少上下文导致内部错误；结构映射检查未覆盖
-这条执行路径。修复后验证真实 sender/project 预览保存与隔离、原生 CSL codec
-收录/来源回执、请求重放和检索池上下文。765/765 单测、30/30 相关回归、
-Harness94/94、生产 build/typecheck、原生 P0 13/13、启动 smoke12/12 与 IPC/chunks
-通过。UI 草稿单独验证，不包含在此边界修复的完成状态中。
 
 ## 选择与收录 UI
 
@@ -208,13 +177,7 @@ Harness94/94、生产 build/typecheck、原生 P0 13/13、启动 smoke12/12 与 
 
 导入作业与回执状态由现有弹窗组件持有，关闭或切换页签不取消作业；同一画布
 重新打开Zotero可看进行中/最终结果。项目切换重建弹窗，旧项目迟到结果不能
-进入新项目。这里不承诺跨应用重启恢复UI选择；整库检查点/恢复仍属后续增量。
-
-最终生产build/typecheck、实际Electron新UI5/5及原候选审查3/3、文献动作hook1/1、
-应用启动smoke12/12、IPC/chunks通过。光暗1100/1099/800、默认/hover/展开/长字段
-和reduced-motion截图审计全部cut0/hidden0，字体至少12px。日志
-`pr05-ui-*.log`，截图/审计`zotero-import-ui/`。共享后端的765单测和原生13场景
-在前一IPC边界修复中通过；最后修改仅涉及renderer。真实Zotero客户端未运行。
+进入新项目。这里不承诺跨应用重启恢复UI选择；整库检查点/恢复使用下文独立会话合同。
 
 ## 来源与本地差异核对
 
@@ -231,15 +194,6 @@ Harness94/94、生产 build/typecheck、原生 P0 13/13、启动 smoke12/12 与 
 键盘 details 展示两侧值、本地注释/标签和本范围原始旧来源。核对是当前只读
 视图，不是持久化批准；收录仍在主进程按原有版本/身份合同检查并保留已有字段、
 补齐缺值、另存原始来源。没有字段覆盖接口或 Zotero 写回。
-
-展开长详情曾使 `overflow-hidden` 的弹窗外层被焦点滚动144px，标题移出可见区。
-共用 ModalShell 的模态外层改为 `overflow-clip`，正文仍滚动；实际键盘展开与
-滚轮回归确认外层 scrollTop0、标题位置不变、正文可滚动。截图
-`zotero-import-ui/source-local-differences.png` 与 scroll/audit JSON 保留。
-
-单测769/769、Harness94/94、实际原生P0 13/13、最终 build/typecheck、
-新界面6/6及原候选3/3、启动12/12、IPC/chunks通过。日志 `pr05-review-*.log`。
-实际 Zotero 客户端与附件授权仍待后续验收；逐页检查点见下文。
 
 ## 可恢复的逐页核对检查点
 
@@ -274,12 +228,6 @@ format=versions返回对象本地版本；includeTrashed=1和items/trash可报�
 这种推测，也不删除本地题录、证据或附件。单对象状态观察与附件检查/授权后端见下文。
 依据仍为本文固定官方源码，新增读件hash保存在`pr05-zotero-primary-contract.json`。
 
-最终unit780/780、相关37/37、Harness94/94、生产build/typecheck、
-实际native13/13、现有UI6/6、启动12/12、IPC/chunks通过。新增回归覆盖实际数据库
-文件重开、取消/迟到拒绝、页事务回滚、真实sender桥接收录回执与隔离、版本回退、
-跨页重复/总量变化、空页和损坏状态。原生CSL作业完成后实际确认检查点版本9；
-保留`pr05-sync-native-csl/`数据库与回执，日志`pr05-sync-*.log`。
-
 ## 检查点发现与恢复 UI
 
 `findZoteroSync` 只读当前可信owner/project/实例/库/集合的最新会话；
@@ -302,12 +250,6 @@ format=versions返回对象本地版本；includeTrashed=1和items/trash可报�
 reset_required状态提供「按当前来源重新建立检查点」，明确按新来源建立版本并
 保留旧历史/本地资料。该动作选择rebaseline，不自动发生；完成页后可建立较低的
 同实例检查点。既有题录/对象的版本回退和内容冲突继续拒绝，不能借此降级或覆盖。
-
-最终相关39/39、unit782/782、Harness94/94、生产build/typecheck、native13/13、
-实际UI12/12（Zotero9、原候选3）、最终键盘/暗色1099恢复1/1、启动12/12、
-IPC/chunks通过。截图`sync-paused`、`sync-paused-dark-1099`、`sync-complete`
-和光暗1100/1099/800长内容审计保留，cut0/hidden0。日志`pr05-sync-ui-*.log`。
-实际Zotero客户端及附件发现/授权导入UI仍待后续实现与验收。
 
 ## 原始收录回执对应的来源状态
 
@@ -332,13 +274,6 @@ not_found 表示本次来源未找到，不能证明永久删除。网络、解�
 关闭服务中止实际 HTTP，等待退出并拒绝迟到观察写入。本能力不修改规范题录、
 对象映射、证据或附件。来源详情 UI 见下文。
 
-最终相关46/46、unit789/789、Harness94/94、fresh build/typecheck/native13/13、
-现有UI12/12、启动12/12、IPC/chunks及diff通过。日志
-`.artifacts/research-optimization/pr05-source-state-*-complete.log`；真实 native CSL
-收录后保存/只读重放来源观察且题录修订不变，数据库/回执保留于
-`pr05-source-state-native-csl/`。固定官方源码的本地 API、Item、DataObject 合同与
-hash 保留于 `pr05-zotero-primary-contract.json`。未运行真实 Zotero 客户端互操作。
-
 ## 原始来源详情中的状态 UI
 
 沿用导入弹窗的「已收录的原始来源」详情。只有当前范围存在原始收录回执且用户展开
@@ -353,14 +288,6 @@ hash 保留于 `pr05-zotero-primary-contract.json`。未运行真实 Zotero 客�
 关闭/重开详情只读保存状态。项目/集合/实例/库/对象/原始 operationId/版本变化时
 重建状态组件，旧读取或检查响应不能替代新范围。缺少原回执时没有当前来源检查动作。
 新界面复用现有原生 details、ModalShell、token、焦点和滚动布局。
-
-最终 `node --test --test-concurrency=1 tests/renderer/` 69/69、
-键盘/光暗1100/1099/800布局复核2/2、production build/typecheck、
-启动12/12、IPC/chunks通过。后端未改，上一增量unit789/native13/Harness94仍适用。
-日志 `pr05-source-state-ui-*.log`；`zotero-import-ui/source-state-*.png` 与
-audit保留。暗色1099截图已检查，状态/版本/时间和保留文案可见，cut0/hidden0。
-首轮新增3项因父详情未可见时聚焦子标题而失败；等待真实可见后保持原键盘断言通过。
-实际 Zotero 客户端互操作与附件授权仍待验收。
 
 ## 附件引用检查后端
 
@@ -380,14 +307,6 @@ file/view/url 本地引用；链接网址、嵌入图片、回收站及未找到
 显式失败。记录保留当前原始附件、来源 hash、原收录对象版本与实际检查时间。
 只读回放检查 hash、父对象/回执链接与当前会话/项目；预览过期不抹除已收录历史。
 传输/写入失败不替代原记录。服务关闭中止 HTTP 并拒绝迟到检查写入。
-
-本增量是后端/API 检查，原生选择文件授权和内容导入见下文；附件界面仍待下一步。
-最终unit794/794、相关51/51、Harness94/94、fresh build/typecheck/native13/13、
-现有来源/候选UI15/15、启动12/12、IPC/chunks及diff通过；
-原生CSL收录后检查真实linked_file并只读回放，规范题录修订不变且文档数为0。
-日志 `pr05-attachment-*.log`；数据库与回执保留于`pr05-attachment-native-csl/`。
-官方附件源码读件及hash保留于`pr05-attachment-source-read.txt`和
-`pr05-zotero-primary-contract.json`。实际 Zotero 客户端互操作未运行。
 
 ## 原生选择的单文件输入授权
 
@@ -409,15 +328,6 @@ BrowserWindow，再调用单 openFile 的
 框架合同经 Context7 官方文档及本地 Electron45 类型核对；真实 Electron45 进程验证
 动态导入、发送窗口查询、父窗口归属和原生选择 API。取消任务结束授权等待并拒绝迟到返回；
 原生选择框本身沿所属窗口生命周期关闭，不声称主动撤销原生 sheet。
-
-最终unit801/801、相关66/66、Harness94/94、fresh build/typecheck/native13/13、
-现有来源/候选UI15/15、启动12/12、IPC/chunks及diff通过。
-原生CSL集成显式注入合成用户选择，记录/只读回放授权并保留文档数0；
-`pr05-attachment-grant-native-csl/receipt.json` 标明这一测试边界。
-模拟原生 API 的2项合同检查覆盖正确父窗口/单文件选项/取消/迟到返回；
-真实桌面绑定报告为 `pr05-attachment-grant-native-api-complete.json`。
-日志 `pr05-attachment-grant-*.log`。附件字节导入见下文；实际原生面板选择、附件UI及
-真实 Zotero 客户端互操作仍待实现或验收。
 
 ## 按单文件授权导入附件内容
 
@@ -441,14 +351,6 @@ ResearchDocumentService，保存过程不会重新打开原来源路径，避免
 hash、来源/授权/文档链接。当前请求可取消；cancelRequested表示信号已发出，原请求退出
 后才结束。服务关闭会中止实际读/复制和迟到事务，不伪造已导入或解析完成。
 
-最终unit806/806、相关76/76、Harness94/94、fresh build/typecheck/native13/13、
-现有来源/候选UI15/15、启动12/12、IPC/chunks及diff通过。
-原生CSL回归显式注入授权选择后真实复制附件、校验 sourceHash、只读/请求重放且题录修订
-不变；`pr05-attachment-import-native-csl/`保留数据库与回执，日志`pr05-attachment-import-*.log`。
-回归还覆盖损坏回执、实际sender隔离、文件删除/权限/变动、归档、事务失败副本清理、
-项目关联无早发通知、取消/关闭和DB18→19历史保留。附件发现/授权/导入UI及真实客户端
-互操作仍待后续验收，原生面板选择仍未实际操作。
-
 ## 原始父对象范围内的子项发现
 
 `getZoteroChildren` 输入显式携带 projectId、原收录 operationId、实例/库/itemKey、
@@ -460,13 +362,7 @@ parentItem 必须严格等于父对象键。其他范围和不匹配关系均显
 返回原收录父对象、实际请求与原始子项页；笔记和附件保留其真实类型、分页数量、
 对象/文库版本，不把所有子项当成附件。初始化和只读回执不发 HTTP；显式发现不写
 数据库、不读附件字节、不创建文档或授权。关闭中止真实请求并拒绝迟到返回。
-Research DB19 未变化。附件发现/检查/授权/导入界面为下一增量。
-
-最终 unit809/809、相关74/74、Harness94/94、fresh build/typecheck/native13/13、
-现有来源/候选UI15/15、启动12/12、IPC/chunks及diff通过。日志
-`pr05-children-*.log` 保留；原生CSL回归在已授权内容导入后，按真实原父回执读取
-当前原始子项。测试涵盖真实sender桥接与隔离、分页/类型/数量、父关系/版本冲突及
-关闭HTTP中止。实际 Zotero 客户端与原生选择框操作仍未运行。
+附件发现、检查、授权与导入界面见下文。
 
 ## 原始来源内的附件操作界面
 
@@ -491,11 +387,3 @@ renderer 只传 inspectionId/requestId/projectId，不传任意授权路径或�
 恢复当前弹窗保存的状态和回执，不重新选择或导入。不同来源/项目的迟到响应
 不能替代当前范围。应用重启后的底层回执仍可按正式 ID 读取；本界面不声称跨重启
 自动发现这条操作链。没有第二弹窗、后台抓取或自动解析/索引。
-
-最终 fresh production build/typecheck、完整串行 renderer77/77、启动12/12、
-IPC/chunks1131153bytes6files、diff通过。后端未改，上一增量unit809/native13/Harness94
-结果仍适用。日志`pr05-attachment-ui-*.log`、截图/审计
-`zotero-import-ui/attachment-*.png`及audit保留，明暗1100/1099/800 cut0/hidden0，
-标题/关闭固定且长路径无水平溢出。首轮18项中17通过；新测试的JSX空白精确匹配修正，
-独立重试1/1及最终全套通过。授权选择在界面测试中仍为合成返回；真实原生面板操作
-及 Zotero 客户端互操作未运行。科研质量与真实模型验收缺口保留，不宣称整体完成。

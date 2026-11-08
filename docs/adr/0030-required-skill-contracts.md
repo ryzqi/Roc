@@ -12,5 +12,4 @@ schema；执行能力为角色白名单、run Manifest、Skill requirements、gr
 
 这增加内置 Skill 的维护与版本冻结成本，但消除省略 Manifest 和默认工具列表造成的
 权限歧义。文本、摘要与 task facts 仍为来源绑定数据，不能授予权限；Writer/Reviewer
-上下文隔离，硬约束与人工决定不可被压缩改变。S03 已完成十一份内容与全部消费者，
-删除旧映射和单独装配分支。见 [删除台账](../../plan/deletion-ledger.md)。
+上下文隔离，硬约束与人工决定不可被压缩改变。十一份阶段内容与消费者使用同一合同。维护入口见[内置技能](../builtin-skills.md)与 `pnpm check:skills`。

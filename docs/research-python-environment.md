@@ -1,8 +1,6 @@
-# Python 环境预检与隔离探针（历史记录）
+# Python 环境选择、预检与执行
 
-本文记录 PR08 当时的 Python 环验、执行合同与验收证据，并非当前产品能力说明。Python 实验现在只能查看、导出和追溯既有记录，不能启动或重跑；当前实验合同以 [科研实验运行](research-experiments.md) 为准。下文“当前”等表述均指当时的实现和验收时点。
-
-PR08 当前提供环境预检、真实隔离探针、主进程确认的原生环境选择与项目绑定、Python 环境预览，以及固定版本的 Python 实验运行与冻结发布。项目管理的任务区提供环境选择入口；实验角色可读取选择与预览后运行。关闭和磁盘恢复的专项行为见下文。
+Python 支持项目绑定的 CPython 3.14 环境、真实隔离探针、文件实验与冻结 Notebook 执行。项目管理的任务区提供原生环境选择，实验角色读取选择并预检后运行；不会自动安装或修复环境。统一实验生命周期见[科研实验运行](research-experiments.md)。
 
 ## 关闭、恢复与请求重放
 
@@ -14,7 +12,9 @@ PR08 当前提供环境预检、真实隔离探针、主进程确认的原生环
 
 专项测试先启动真实 CPython 的 TERM-ignoring 父、子、孙进程，确认实际 PID 后测试关闭与清理；磁盘恢复测试在运行时备份 research/agent 两库，关闭原真实进程，再从备份重开并恢复。这模拟崩溃时的持久状态；真实 host SIGKILL 的清理证据属于 X-SAFE 的独立专项。
 
-## PR08 本地验收范围
+## 验证范围与限制
+
+下表保留已有专项的覆盖范围，测试环境使用 CPython 3.14.7；当前支持条件见下文“当前环境合同”。本次文档整理未重新执行这些专项。
 
 | 合同 | 实际检查 |
 | --- | --- |
@@ -65,7 +65,7 @@ PR08 当前提供环境预检、真实隔离探针、主进程确认的原生环
 
 示例只说明格式，版本必须来自实际环境。包名采用小写规范形式，连续的 `-`、`_`、`.` 归一为 `-`。锁文件必须列出所选 `site-packages` 的完整安装包集合；包名唯一，版本逐字一致。缺包、多包、重复身份和版本不符均失败。
 
-探针通过 `importlib.metadata.distributions(path=[明确的 site-packages])` 读取元数据，不导入包源码和入口点，也不将包目录加入自身的 `sys.path`。初版拒绝所有 `direct_url.json` 安装、`.pth`、`.egg-link`、`.egg` 和 `.egg-info`，不解释 editable、路径依赖或旧式启动语义。没有安装、下载或修复依赖的分支。
+探针通过 `importlib.metadata.distributions(path=[明确的 site-packages])` 读取元数据，不导入包源码和入口点，也不将包目录加入自身的 `sys.path`。当前拒绝所有 `direct_url.json` 安装、`.pth`、`.egg-link`、`.egg` 和 `.egg-info`，不解释 editable、路径依赖或旧式启动语义。没有安装、下载或修复依赖的分支。
 
 ## 实际启动与身份
 
@@ -106,91 +106,6 @@ Python start 的公开、owned 和存储合同一致：`engine: 'python'`、显�
 实验角色使用 `list_python_environments({ offset, limit })` 读取当前项目的用户选择，最多十条；返回选择 runtime、版本、记录时间、代码和锁文件身份。`inspect_experiment_environment({ runtime, offset, limit })` 调用实际环境预览，返回必需 `expectedEnvironmentHash` 和最多 8000 字符的分页报告。两个工具均绑定当前项目和有效阶段；迟到预览不能返回给已取消的阶段。空历史需要用户在项目管理中选择环境，模型不能打开原生选择面板、传用户 actor 或替换解释器路径。
 
 随后 `start_experiment` 绑定真实 owner/project，`get_experiment` 查询自己的运行，`publish_experiment` 发布已完成结果供人工审核。其他阶段没有新增环境工具，原有冻结阶段快照不被改写；旧工具合同不能重新执行。
-
-## 验证
-
-A4E 关闭、恢复与 PR08 本地矩阵（均从仓库根目录执行）：
-
-- `node --test --test-concurrency=1 tests/integration/research-python-experiments.test.mjs`：9/9，覆盖原服务与角色链路以及新增真实关闭、运行中双库磁盘恢复、零自动 dispatch、历史审计、旧 owner 拒绝和新请求计算。回执为 `.artifacts/research-optimization/pr08-a4e/python-experiments.json`，A4C/A4D 原回执保留。
-- `pnpm test:unit`：1181/1181，无跳过，355367 ms；新增 experiment/figure/export 关联在 cancelled/interrupted 任务下的同身份读取，以及新关联、身份变更和重新分配拒绝。
-- `pnpm build`（含 typecheck）、`node scripts/run-research-p0.mjs`（13/13）、`pnpm harness:eval`（94/94）、`node scripts/smoke-electron.mjs`（13/13，零 renderer errors）、`pnpm check:ipc`、`pnpm check:renderer-chunks`（1132907 bytes / 6 files）均通过。
-
-初次恢复回归在旧请求重放处真实复现 `research_task_not_active`。将任务的 active 检查移到已有关联的完整身份核验之后，保留父关联、项目和冲突检查；无任务激活或额外 dispatch。最终专项及完整 Python 链均通过。夹具最初误将 runtime 的 `kind` 传给严格的选择 get 请求，并将当前阶段拒绝预期写成 `research_run_not_active`；修正为显式选择字段和实际 `research_run_not_current`。所有原始失败和最终日志保留于 `pr08-a4e-*.log`。本部分无 renderer 改动，不重述先前并发 renderer 全套为通过。
-
-A4D 实验角色接入（均从仓库根目录执行）：
-
-- `node --test tests/unit/research-experiment-environment-tools.test.mjs tests/unit/research-compute-policy.test.mjs tests/unit/research-figure-owned.test.mjs`：14/14，分页、无选择、阶段隔离、输入验证、错误与取消、迟到成功预览拒绝，以及既有计算和图稿 ownership。
-- `node --test --test-name-pattern='actual experiment role' tests/integration/research-python-experiments.test.mjs`：1/1，实际选择读取、真实探针预览、owned CPython 计算、终态查询、幂等重放、发布核验、无 owner 运行查询拒绝、模型 project 注入和阶段取消后发布拒绝。实际回执为 `.artifacts/research-optimization/pr08-a4d/python-experiments.json`。
-- `pnpm build`（含 typecheck）、`node scripts/run-research-p0.mjs`（13/13）、`pnpm harness:eval`（94/94）、`node scripts/smoke-electron.mjs`（13/13，零 renderer errors）、`pnpm check:ipc`、`pnpm check:renderer-chunks`（1132907 bytes / 6 files）均通过。
-
-A4C 服务接入（均从仓库根目录执行）：
-
-- `node --test --test-concurrency=1 tests/integration/research-python-experiments.test.mjs`：最终 6/6，真实 CPython 计算、确定性重复、同请求重放、冲突与跨项目拒绝、输入/安装包漂移、版本和种子身份、预览不匹配、离线发布与导出审计、重新计算 checksum 后的身份篡改拒绝、原始 exit 7、真实超时及 TERM-ignoring 父/子/孙取消回收。
-- `node --test --test-concurrency=1 tests/integration/research-python-selection.test.mjs tests/integration/research-native-code-integrity.test.mjs tests/integration/research-native-environment-boundaries.test.mjs tests/integration/research-julia-environment-boundaries.test.mjs`：24/24。R/Julia 部分使用真实 native C 适配器，不代表真实 R/Julia 科学执行。
-- `node --test tests/unit/research-current-execution-contracts.test.mjs tests/unit/research-python-code-receipt.test.mjs tests/unit/research-experiment-resources.test.mjs tests/unit/research-environment-probe-resources.test.mjs`：14/14。
-- `pnpm build`（含 typecheck）、`node scripts/run-research-p0.mjs`（13/13）、`node scripts/smoke-electron.mjs`（13/13，零 renderer errors）、`pnpm check:ipc`、`pnpm check:renderer-chunks`（1132907 bytes / 6 files）均通过。
-
-初轮真实服务测试 5/6，第一项在环境预览阶段失败，stdout/stderr 为空且无采样，瞬态根因尚未确认。保留实际 probe 回执后原样单独复现进入计算，并发现测试跨项目 fixture 重用了已占用工作区；修正为独立工作区，原断言不变。独立 1/1 及最终全套 6/6 通过。没有增加产品重试或放宽边界。日志为 `.artifacts/research-optimization/pr08-a4c-*.log`，完整实际回执为 `pr08-a4c/python-experiments.json`。本增量未修改 renderer，也未完成 Python 专项 shutdown/restart 验收。
-
-A4B2 固定启动程序（均从仓库根目录执行）：
-
-- `node --test tests/integration/research-python-process.test.mjs`：最终 8/8，实际 CPython 包导入、源码编码、重复输出哈希、文件/网络边界、退出与异常、CPU/RSS/输出限额、超时、日志洪泛、TERM-ignoring 父/子/孙回收，以及首行报告和 dispatch 前校验。回执为 `.artifacts/research-optimization/pr08-a4b2/python-process.json`。
-- `node --test --test-concurrency=1 tests/integration/research-python-selection.test.mjs`：11/11，包含启动程序身份变化后的项目预览消费者。
-- `node --test tests/unit/research-current-execution-contracts.test.mjs tests/unit/research-python-code-receipt.test.mjs`：8/8。
-- `pnpm build`（含 typecheck）、`node scripts/run-research-p0.mjs`（13/13）、`node scripts/smoke-electron.mjs`（13/13，零 renderer errors）、`pnpm check:ipc`、`pnpm check:renderer-chunks`（1132907 bytes / 6 files）均通过。
-
-初轮实际测试 3/7，四项失败来自测试主机试图重写自身创建的 0400 源码。测试 helper 在主机侧显式改为 0600、重写后恢复 0400；实际 sandbox 和只读断言保持原样。日志保留于 `.artifacts/research-optimization/pr08-a4b2-*.log`。服务、发布和复跑接入见上面的 A4C 记录。
-
-A4B1 环境预览（下列命令均从仓库根目录执行）：
-
-- `node --test tests/unit/research-current-execution-contracts.test.mjs tests/unit/research-python-code-receipt.test.mjs`：8/8。
-- `node --test --test-concurrency=1 tests/integration/research-python-selection.test.mjs`：最终 11/11，实际 CPython 与 Seatbelt；保留最终预览和进程回执于 `.artifacts/research-optimization/pr08-a4b1/python-selection.json`。
-- R/Julia 受影响消费者：`research-native-code-integrity.test.mjs`、`research-native-environment-boundaries.test.mjs`、`research-julia-environment-boundaries.test.mjs`，在初次联合运行中 13/13。该联合运行总体 23/24，唯一失败为新 Python 预览独立哈希断言；修复完整嵌套身份的序列化顺序后，Python 全套 11/11。没有修改原断言或 R/Julia 实现行为。
-- 最终 `pnpm build`（含 typecheck）、`node scripts/run-research-p0.mjs`（13/13）、`node scripts/smoke-electron.mjs`（13/13，零 renderer errors）、`pnpm check:ipc`、`pnpm check:renderer-chunks`（1132907 bytes / 6 files）均通过。
-
-初次单元测试发现重复 fixture export，删除新增的重复导出后通过。初次后台测试误把调度优先级当作计时回执字段，改为核对真实 runner 请求的原始准入与返回的计时回执。原始失败和修复后日志保留于 `.artifacts/research-optimization/pr08-a4b1-*.log`。本段没有修改 renderer，也未重跑此前 310/312 的完整 renderer 测试，不声称该套件全部通过。
-
-工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。实际环境为已安装的 CPython 3.14.7，不代表用户已选定该环境用于产品执行。
-
-- `node --test tests/integration/research-python-environment.test.mjs`：真实 venv 探针、固定身份重复、包源码/启动钩子未导入、文件/网络/凭证边界、完整锁集合、editable/旧启动形式拒绝、重复/损坏元数据、真实 native 字节变动、探针后漂移、取消和无效报告。
-- `node --test tests/unit/research-python-controls.test.mjs tests/unit/research-environment-probe-resources.test.mjs tests/unit/research-native-code.test.mjs tests/unit/research-experiment-resources.test.mjs tests/unit/research-current-execution-contracts.test.mjs`：20/20。
-- `pnpm test:unit`：1172/1172，无跳过。
-- `pnpm build`：类型检查及构建通过。
-- `node scripts/run-research-p0.mjs`：13/13。
-- `pnpm check:ipc`、`pnpm check:renderer-chunks`：通过，renderer 入口 1132907 bytes / 6 files。
-- `node scripts/smoke-electron.mjs`：13/13，零 renderer errors。
-
-初轮真实测试 5/8：两个测试错误地要求短进程一定有采样，一个测试假定此发行版的内建 `zlib` 有 `__file__`。改为将完整回执与独立捕获的真实 runner 结果逐项核对，并使用实际 `_dbm` 原生文件；保留全部边界、漂移和失败断言。修正后的 10 项通过，初轮日志保留。
-
-完整运行日志位于 `.artifacts/research-optimization/pr08-a2-*.log`，最终实际回执为 `pr08-a2/python-environment.json`。后续实验复跑与发布见 A4C，关闭和磁盘恢复见 A4E。
-
-项目选择增量从同一工作目录验证：
-
-- `node --test tests/integration/research-python-selection.test.mjs`：9/9，真实 Python 探针、精确身份、无授权/跨项目拒绝、原生选择取消、环境变化、探针期间项目变化、真实解释器就绪后取消、损坏存储、DB41 升级及磁盘重开。
-- `node --test tests/integration/research-python-selection-electron.test.mjs`：1/1，生产 Electron 的真实 preload、主窗口 actor、面板父窗口与链接选项、实际 CPython 核验、同请求只读重放、取消和重启读取。OS 面板返回值由测试替换，不代表用户已经在产品里选择环境。
-- `pnpm build`：类型检查与构建通过。
-
-项目选择增量的最终全量检查：`pnpm test:unit` 1172/1172，无跳过，357103 ms；`node scripts/run-research-p0.mjs` 13/13；`pnpm check:ipc` 与 `pnpm check:renderer-chunks` 通过，入口 1132907 bytes / 6 files；`node scripts/smoke-electron.mjs` 13/13，零 renderer errors。
-
-选择日志为 `.artifacts/research-optimization/pr08-a3-*.log`，实际回执位于 `pr08-a3/python-selection.json` 与 `pr08-a3-electron/receipt.json`。此段仍未启用 Python 实验。
-
-管理入口增量从同一工作目录验证：
-
-- `node --test tests/renderer/python-environment.test.mjs`：6/6，键盘选择、真实 pending、取消、失败、主进程历史重读、项目切换、只读和读取失败状态。最终浅色/深色 480 × 680 窗口的长路径、焦点、hover、展开和动效落点检查通过；裁切回执均为 `cut=0, hidden=0`。
-- `node --test tests/integration/research-python-selection-electron.test.mjs`：1/1，真实生产管理入口经 Enter、preload、真实窗口 actor、原生面板接口和实际 CPython 探针保存回执，取消保持原历史，重启精确读取。仅 OS 面板返回值被替换。
-- `pnpm build`、`pnpm check:ipc`、`pnpm check:renderer-chunks`：通过，入口 1132907 bytes / 6 files。
-- `node scripts/smoke-electron.mjs`：13/13，零 renderer errors。
-- `pnpm test:renderer`：310/312，无跳过，416575 ms；会话 prepend 的可见锚点从 -9px 移至 15px，质量评价保存等待超过 10 秒。使用 `node --test --test-name-pattern='rendered transcript keeps' tests/renderer/lifecycles.test.mjs` 和 `node --test --test-name-pattern='explicit domain and overall' tests/renderer/review-quality-assessment.test.mjs` 原样分别复现，两项均通过。未改这两项代码或断言；并发全量失败根因仍未确认，不能声称全量 renderer 通过。
-
-日志位于 `.artifacts/research-optimization/pr08-a3b-*.log`；最终界面截图和裁切回执位于 `pr08-a3b-ui/`，生产管理入口回执和双主题截图位于 `pr08-a3b-electron/`。
-
-完整 Python 代码回执增量从同一工作目录验证：
-
-- `node --test tests/unit/research-python-code-receipt.test.mjs tests/unit/research-python-controls.test.mjs tests/unit/research-native-code.test.mjs`：15/15；覆盖完整清单、原始身份、重新计算清单哈希、解释器文件/启动路径不一致、启动 site 和重复安装包拒绝。
-- `node --test --test-concurrency=1 tests/integration/research-python-environment.test.mjs tests/integration/research-python-selection.test.mjs tests/integration/research-python-selection-electron.test.mjs`：20/20，无跳过；实际重复探针返回同一完整代码回执，现有选择及生产入口正常。
-- `pnpm build`、`pnpm check:ipc`、`pnpm check:renderer-chunks`：通过；`node scripts/run-research-p0.mjs` 13/13；`node scripts/smoke-electron.mjs` 13/13，零 renderer errors。
-
-初轮并行实际测试 18/19：损坏元数据用例返回底层监督程序的真实 125，stdout/stderr 均为空，未达到预期元数据错误断言。未改断言；独立原样复现 1/1 和最终串行 20/20 均通过，瞬态根因未确认。原始回执保留为 `.artifacts/research-optimization/pr08-a4a-native-initial-receipt.json`；其他日志为 `pr08-a4a-*.log`。此增量仍未启用 Python 实验。
 
 ## 官方资料
 

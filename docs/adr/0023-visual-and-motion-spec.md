@@ -20,7 +20,7 @@ Tailwind 4 `@theme` → CSS 变量 → 组件类名。组件里禁止写死 hex�
 
 ### 3. 字号角色
 
-界面正文 13px（`--font-body-size`）、chrome 与元信息 12px（`--font-meta-size`）、微信息 11px（`--font-micro-size`）、阅读区 14px（`--font-read-size`，可切 16px 大号）。标题 24 / 18 / 14。正文对比度 ≥ 4.5:1；`--subtle` 是最弱一档，低于正文尺寸时不能只靠颜色表达状态。
+界面正文 13px（`--font-body-size`）、chrome 与元信息 12px（`--font-meta-size`）、微信息 11px（`--font-micro-size`）、阅读区默认 15px（`--font-read-size`，偏好可选 14 / 15 / 16px）。标题 24 / 18 / 14。正文对比度 ≥ 4.5:1；`--subtle` 是最弱一档，低于正文尺寸时不能只靠颜色表达状态。
 
 ### 4. 栏序：左栏 | 助手 | 画布
 
@@ -70,4 +70,4 @@ Tailwind 4 `@theme` → CSS 变量 → 组件类名。组件里禁止写死 hex�
 - **栏序不能随手改回去**：助手在左栏与画布之间，改回右列要同时改 `WorkspaceLayout` 的渲染顺序与分隔条符号。
 - **`--r-chip` 是新增 token**：组件今后写 `rounded-chip` 而不是 `rounded-md`；`--r-xs` / `--r-sm` / `--r-md` / `--r-lg` 是旧拼写别名，不要在新代码里用。
 - **助手转录偏松**：块间距 12px、消息间距 24px，同样内容占的竖向空间更多。
-- **动效有实打实的字节成本**：eager 体积约 1.32 MB（预算 1.7 MB）。再加 markdown 或编辑器类依赖前要先量。
+- **动效有实打实的字节成本**：当前体积由构建产物和 `pnpm check:renderer-chunks` 实测，不能沿用历史数值。再加 markdown 或编辑器类依赖前要先量。
