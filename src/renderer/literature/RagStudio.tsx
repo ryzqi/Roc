@@ -1,3 +1,4 @@
+import {KnowledgeJobs} from './KnowledgeJobs';
 import { useEffect, useState } from 'react';
 import { AlertCircle, Bookmark, Check, ClipboardCopy, DatabaseZap, ExternalLink, FlaskConical, Loader2, Play, RefreshCw, Search, Settings2, Square } from 'lucide-react';
 import type { ResearchIndexedFile, ResearchIndexJob, ResearchIndexStatus, ResearchKnowledgeSearchHit, ResearchKnowledgeSearchResult } from '../../shared/types';
@@ -351,6 +352,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
       ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <KnowledgeJobs client={client} projectId={projectId} />
         <section className="mb-4">
           <h3 className="mb-1.5 text-muted text-[length:var(--font-meta-size)]">检索（关键词与语义匹配）</h3>
           <div className="flex gap-2">

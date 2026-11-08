@@ -27,8 +27,7 @@ import type {
   ResearchStageState,
   ResearchStage,
   ResearchWorkflowSnapshot,
-  ResearchWorkflowTransitionRequest,
-  ResearchKnowledgeDocument
+  ResearchWorkflowTransitionRequest
 } from '../../../shared/types';
 import { getResearchStageRoleProfile } from './role-profiles';
 import { assertResearchStageArtifacts } from './stage-artifacts';
@@ -57,6 +56,7 @@ import {ResearchResponseMatrixRepository} from './response-matrix-repository';
 import {ResearchJournalComplianceRepository} from './journal-compliance-repository';
 import {ResearchFigureConsistencyRepository} from './figure-consistency-repository';
 import {ResearchScientificReviewService} from './verification/scientific-review';
+import {ResearchKnowledgeJobs} from './knowledge-jobs';
 import { ResearchKnowledgeRepository, type KnowledgeSourceWrite } from './knowledge-repository';
 import type { ResearchTaskRepository } from './research-task-repository';
 import {researchArtifactInspectionBodySchema, researchArtifactInspectResultSchema,
@@ -109,8 +109,7 @@ export class ResearchRepository {
   readonly figureConsistency: ResearchFigureConsistencyRepository;
   readonly scientificReviews: ResearchScientificReviewService;
   readonly knowledge: ResearchKnowledgeRepository;
-  private knowledgeWriter: ((input: KnowledgeSourceWrite, sourceMetadata?: Record<string, unknown>) => Promise<ResearchKnowledgeDocument>) | null = null;
-  private readonly pendingKnowledgeWrites: Array<{ input: KnowledgeSourceWrite; sourceMetadata: Record<string, unknown> }> = [];
+  readonly knowledgeJobs: ResearchKnowledgeJobs;
   private readonly projectLanguageReady: boolean;
 
   constructor(
@@ -151,26 +150,15 @@ export class ResearchRepository {
     this.consistency = new ResearchConsistencyRepository(db, this, now);
     this.figureConsistency = new ResearchFigureConsistencyRepository(db, this, now);
     this.scientificReviews = new ResearchScientificReviewService(this);
+    this.knowledgeJobs = new ResearchKnowledgeJobs(db, now);
     this.knowledge = new ResearchKnowledgeRepository(db, (id) => { this.getProject(id); }, now);
   }
 
-  setKnowledgeWriter(writer: (input: KnowledgeSourceWrite, sourceMetadata?: Record<string, unknown>) => Promise<ResearchKnowledgeDocument>): void {
-    this.knowledgeWriter = writer;
+  queueKnowledgeFromSource(input: KnowledgeSourceWrite, _sourceMetadata: Record<string, unknown> = {}): void {
+    this.knowledgeJobs.enqueue(input.id);
   }
 
-  queueKnowledgeFromSource(input: KnowledgeSourceWrite, sourceMetadata: Record<string, unknown> = {}): void {
-    this.pendingKnowledgeWrites.push({ input, sourceMetadata });
-  }
-
-  flushKnowledgeFromSource(): void {
-    const pending = this.pendingKnowledgeWrites.splice(0, this.pendingKnowledgeWrites.length);
-    const writer = this.knowledgeWriter;
-    if (writer === null) return;
-    for (const item of pending) {
-      void writer({ ...item.input, embeddingPolicy: 'selected' }, item.sourceMetadata).catch(() => undefined);
-    }
-  }
-
+  flushKnowledgeFromSource(): void { this.knowledgeJobs.wake(); }
 
   listProjects(): ResearchProject[] {
     const rows = this.db

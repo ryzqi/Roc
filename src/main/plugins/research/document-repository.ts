@@ -97,7 +97,7 @@ export class ResearchDocumentRepository {
     const data = storedDocumentContentSchema.parse(input);
     const coordinates = coordinateInput === null ? null : researchDocumentCoordinateSnapshotSchema.parse(coordinateInput);
     if (coordinates !== null) this.requireCoordinateBinding(data, coordinates);
-    const indexed = this.db.transaction(() => {
+    this.db.transaction(() => {
       const document = this.get(documentId);
       if (document.activeParseId !== parseId) throw new Error('research_document_parse_stale');
       if (this.research.library.get(document.libraryItemId).archived) throw new Error('research_library_item_archived');
@@ -120,9 +120,8 @@ export class ResearchDocumentRepository {
       if (document.currentParseId !== null) this.removeIndex(document.currentParseId);
       const indexed = this.index(document, parseId, data);
       this.research.evidence.sourceMigrations.proposeForParse(documentId, parseId);
-      return indexed;
+      this.research.queueKnowledgeFromSource(indexed);
     })();
-    this.research.queueKnowledgeFromSource(indexed);
     this.research.flushKnowledgeFromSource();
   }
 

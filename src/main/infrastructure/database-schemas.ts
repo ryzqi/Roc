@@ -2876,6 +2876,18 @@ CREATE TABLE research_radar_recommendations (
 );
 `});
 
+researchMigrations.push({version: 66, name: 'durable_source_embedding_jobs', sql: `
+CREATE TABLE research_knowledge_jobs (
+ document_id TEXT PRIMARY KEY REFERENCES research_knowledge_documents(id) ON DELETE CASCADE,
+ generation TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('queued','running','blocked','failed','ready')),
+ attempts INTEGER NOT NULL DEFAULT 0, error TEXT, updated_at TEXT NOT NULL
+);
+CREATE INDEX research_knowledge_jobs_pending ON research_knowledge_jobs(status,updated_at,document_id);
+INSERT INTO research_knowledge_jobs(document_id,generation,status,updated_at)
+ SELECT id,lower(hex(randomblob(16))),'queued',indexed_at FROM research_knowledge_documents
+ WHERE id LIKE 'library:%' OR id LIKE 'document:%' OR source_type='experiment';
+`});
+
 function applySchema(
   db: DatabaseConnection,
   dbName: RocLogicalDatabaseName,

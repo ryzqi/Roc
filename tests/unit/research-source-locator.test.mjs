@@ -180,11 +180,6 @@ test('migration persistence failure rolls back the parse, index and invalidation
     const document=importedDocument(f);
     publishParse(f,document,'rollback-old',[block('old')]);
     const old=capture(f,'rollback-old'),original=f.repository.evidence.inspectEvidence(old.id,f.project.id);
-    const externalWrites=[];
-    f.repository.setKnowledgeWriter(async input=>{
-      externalWrites.push(input.id);
-      return f.repository.knowledge.upsertFromSource(input);
-    });
     f.repository.documents.begin(document.id,'rollback-new');
     f.db.exec(`CREATE TRIGGER reject_migration BEFORE INSERT ON research_source_migration_proposals
       BEGIN SELECT RAISE(ABORT,'synthetic_migration_insert_failed'); END`);
@@ -197,7 +192,7 @@ test('migration persistence failure rolls back the parse, index and invalidation
     assert.equal(f.db.prepare("SELECT id FROM research_knowledge_chunks WHERE id='document:rollback-new:chunk:0'").get(),undefined);
     assert.equal(f.db.prepare('SELECT count(*) FROM research_source_migration_proposals').pluck().get(),0);
     f.repository.flushKnowledgeFromSource();
-    assert.deepEqual(externalWrites,[]);
+    assert.equal(f.repository.knowledgeJobs.list(null).some(job=>job.documentId==='document:rollback-new'),false);
     assert.equal(f.db.prepare("SELECT id FROM research_knowledge_chunks WHERE id='document:rollback-new:chunk:0'").get(),undefined);
   }finally{f.close();}
 });
@@ -248,6 +243,8 @@ test('DB21 to26 retains captured sources and claims without inventing migration 
     const project=repository.createProject({title:'Historical source migration',description:'Synthetic DB21 fixture',workspacePath:'/tmp/source-migration-history'});
     db.prepare("UPDATE research_projects SET current_stage='reading' WHERE id=?").run(project.id);
     db.prepare("UPDATE research_stage_states SET status='running' WHERE project_id=? AND stage='reading'").run(project.id);
+    // Historical versions had no persistent embedding outbox; seed their original behavior.
+    repository.queueKnowledgeFromSource=()=>{};
     const f={db,repository,project},document=importedDocument(f);
     publishParse(f,document,'history-parse',[block('history-block')]);
     const evidence=capture(f,'history-parse');
@@ -259,6 +256,7 @@ test('DB21 to26 retains captured sources and claims without inventing migration 
     const locationsBefore=db.prepare('SELECT * FROM research_evidence_source_locators').all();
     applyOfflineResearchSchema(api, db,()=>timestamp);
     assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),api.researchMigrations.at(-1).version);
+    assert.ok(repository.knowledgeJobs.list(null).some(job=>job.documentId.startsWith('document:') && job.status==='queued'));
     assert.deepEqual(db.prepare('SELECT * FROM research_evidence').all(),sourcesBefore);
     assert.deepEqual(db.prepare('SELECT * FROM research_claims').all(),claimsBefore);
     assert.deepEqual(db.prepare('SELECT * FROM research_evidence_source_locators').all(),locationsBefore);
@@ -280,6 +278,8 @@ test('DB22 to26 preserves pending proposal snapshots and prior scientific record
     const project=repository.createProject({title:'Historical pending proposal',description:'Synthetic DB22 fixture',workspacePath:'/tmp/pending-migration-history'});
     db.prepare("UPDATE research_projects SET current_stage='reading' WHERE id=?").run(project.id);
     db.prepare("UPDATE research_stage_states SET status='running' WHERE project_id=? AND stage='reading'").run(project.id);
+    // Historical versions had no persistent embedding outbox; seed their original behavior.
+    repository.queueKnowledgeFromSource=()=>{};
     const f={db,repository,project},document=importedDocument(f);
     publishParse(f,document,'pending-old',[block('old')]);
     const evidence=capture(f,'pending-old');
@@ -293,6 +293,7 @@ test('DB22 to26 preserves pending proposal snapshots and prior scientific record
     assert.equal(original.at(-1).length,1);
     applyOfflineResearchSchema(api, db,()=>timestamp);
     assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),api.researchMigrations.at(-1).version);
+    assert.ok(repository.knowledgeJobs.list(null).some(job=>job.documentId.startsWith('document:') && job.status==='queued'));
     for (const [index,table] of tables.entries()) assert.deepEqual(db.prepare(`SELECT * FROM ${table}`).all(),original[index]);
     assert.equal(db.prepare('SELECT count(*) FROM research_source_migration_decisions').pluck().get(),0);
     const before=db.prepare('SELECT total_changes()').pluck().get();
@@ -314,6 +315,8 @@ test('DB23 to26 preserves actual captured migration decisions and creates no inf
     const project=repository.createProject({title:'Historical user migration decision',description:'Synthetic DB23 fixture',workspacePath:'/tmp/replacement-migration-history'});
     db.prepare("UPDATE research_projects SET current_stage='reading' WHERE id=?").run(project.id);
     db.prepare("UPDATE research_stage_states SET status='running' WHERE project_id=? AND stage='reading'").run(project.id);
+    // Historical versions had no persistent embedding outbox; seed their original behavior.
+    repository.queueKnowledgeFromSource=()=>{};
     const f={db,repository,project},document=importedDocument(f);
     publishParse(f,document,'decision-history-old',[block('old')]);
     const evidence=capture(f,'decision-history-old');
@@ -332,6 +335,7 @@ test('DB23 to26 preserves actual captured migration decisions and creates no inf
     assert.equal(original.at(-1).length,1);
     applyOfflineResearchSchema(api, db,()=>timestamp);
     assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),api.researchMigrations.at(-1).version);
+    assert.ok(repository.knowledgeJobs.list(null).some(job=>job.documentId.startsWith('document:') && job.status==='queued'));
     for (const [index,table] of tables.entries()) assert.deepEqual(db.prepare(`SELECT * FROM ${table}`).all(),original[index]);
     assert.equal(db.prepare('SELECT count(*) FROM research_source_replacements').pluck().get(),0);
     const before=db.prepare('SELECT total_changes()').pluck().get();

@@ -18,6 +18,7 @@ before(async () => {
     import {createRoot} from 'react-dom/client';
     import {flushSync} from 'react-dom';
     import {useLiteratureStore} from './src/renderer/literature/use-literature-store';
+    import {KnowledgeJobs} from './src/renderer/literature/KnowledgeJobs';
     import {WikiView} from './src/renderer/literature/WikiView';
     const client = {api:{research:{
       listLibrary: async () => ({ok:true,data:[]}),
@@ -32,6 +33,12 @@ before(async () => {
       window.store = store;
       return React.createElement('div', {id:'store-state'}, JSON.stringify({selected:store.selected,status:store.selectedStatus,error:store.selectedError}));
     }
+    window.mountJobs = () => {
+      let status='failed';
+      const jobsClient={api:{research:{knowledgeJobs:async()=>({ok:true,data:[{documentId:'doc',generation:'v1',title:'Synthetic document',status,error:status==='failed'?'向量索引失败，请检查网络后重试。':null}]}),
+        retryKnowledgeJob:async input=>{window.retried=input;status='ready';return {ok:true,data:{queued:true}};}}}};
+      flushSync(()=>root.render(React.createElement(KnowledgeJobs,{client:jobsClient,projectId:'p1'})));
+    };
     window.mountStore = () => flushSync(() => root.render(React.createElement(StoreHarness)));
     const root = createRoot(document.getElementById('root'));
     window.mount = props => flushSync(() => root.render(React.createElement(WikiView,
@@ -145,4 +152,14 @@ test('large Wiki lists and shared neighborhoods are paged, searchable and naviga
   await page.locator('[data-testid="wiki-search"]').fill('Concept 999');
   assert.equal(await list.locator('li').count(),1);
   assert.equal(await page.locator('[data-testid="wiki-page-title-c-999"]').innerText(),'Concept 999');
+});
+
+test('source embedding jobs expose errors and keyboard retry refreshes status',async()=>{
+  await page.evaluate(()=>window.mountJobs());
+  const panel=page.getByTestId('rag-source-jobs');
+  await panel.getByText('向量索引失败，请检查网络后重试。').waitFor();
+  await panel.getByRole('button',{name:'重试',exact:true}).focus();await page.keyboard.press('Enter');
+  await panel.getByText('Synthetic document · 已完成').waitFor();
+  assert.deepEqual(await page.evaluate(()=>window.retried),{documentId:'doc',generation:'v1'});
+  await page.screenshot({path:join(artifacts,'embedding-jobs.png')});
 });

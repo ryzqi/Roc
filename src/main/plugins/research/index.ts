@@ -1,3 +1,4 @@
+import {knowledgeJobSchema, knowledgeJobsListSchema, knowledgeJobRetrySchema} from '../../../shared/schemas/research-knowledge-jobs';
 import {ResearchDiagramService} from './diagram-service';
 import {researchDiagramCapability, registerResearchDiagramCapability} from './diagram-capabilities';
 import {ReadingDiscoveryService} from './reading-discovery';
@@ -208,6 +209,8 @@ const workbenchCapabilities = {
   stageRole: descriptor('research.workflow.role', researchStageRoleRequestSchema, researchStageRoleProfileSchema)
 };
 const knowledgeCapabilities = {
+  jobs: descriptor('research.knowledge.jobs', knowledgeJobsListSchema, knowledgeJobSchema.array()),
+  retry: descriptor('research.knowledge.retry', knowledgeJobRetrySchema, z.object({queued:z.literal(true)})),
   listEmbedding: descriptor('research.embedding.list', emptyInputSchema, researchEmbeddingConfigSchema.array()),
   saveEmbedding: descriptor('research.embedding.save', researchEmbeddingConfigSaveRequestSchema, researchEmbeddingConfigSchema),
   upsertDocument: descriptor('research.knowledge.upsert', researchKnowledgeDocumentUpsertRequestSchema, researchKnowledgeDocumentSchema),
@@ -312,7 +315,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       }));
       const researchEmbeddings = new ResearchEmbeddingService(researchRepository.knowledge, embeddingClient, context);
       embeddings = researchEmbeddings;
-      researchRepository.setKnowledgeWriter((input, sourceMetadata = {}) => researchEmbeddings.upsertFromSource(input, sourceMetadata));
+      researchRepository.knowledgeJobs.start((id, signal) => researchEmbeddings.embedDocument(id, null, signal));
       const researchIndexer = new ResearchIndexService(researchRepository, toolchain, researchEmbeddings, options.indexRoot ?? null, context.logger, options.indexWatch);
       indexer = researchIndexer;
       registerResearchIndexCapabilities(context, researchRepository.indexing, researchIndexer);
@@ -606,10 +609,20 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       context.capabilities.register(pluginId, workbenchCapabilities.stageRole, async (input) =>
         getResearchStageRoleProfile((input as ResearchStageRoleRequest).stage)
       );
+      context.capabilities.register(pluginId, knowledgeCapabilities.jobs, async input => {
+        const request=knowledgeJobsListSchema.parse(input);
+        return researchRepository.knowledgeJobs.list(request.projectId, request.offset);
+      });
+      context.capabilities.register(pluginId, knowledgeCapabilities.retry, async input => {
+        const request=knowledgeJobRetrySchema.parse(input);
+        researchRepository.knowledgeJobs.retry(request.documentId, request.generation);
+        return {queued:true as const};
+      });
       context.capabilities.register(pluginId, knowledgeCapabilities.listEmbedding, async () => await researchEmbeddings.listConfigs());
       context.capabilities.register(pluginId, knowledgeCapabilities.saveEmbedding, async (input) => {
         const config = await researchEmbeddings.saveConfig(input as ResearchEmbeddingConfigSaveRequest);
         researchIndexer.configurationChanged();
+        researchRepository.knowledgeJobs.configurationChanged();
         return config;
       });
       context.capabilities.register(pluginId, knowledgeCapabilities.upsertDocument, async (input) => await researchEmbeddings.upsertDocument(input as ResearchKnowledgeDocumentUpsertRequest));
@@ -619,6 +632,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       researchIndexer.start();
     },
     shutdown: async () => {
+      await repository?.knowledgeJobs.shutdown();
       await readingDiscovery?.shutdown();
       await Promise.allSettled([radar?.shutdown(),readingTranslation?.shutdown()]);
       try {
