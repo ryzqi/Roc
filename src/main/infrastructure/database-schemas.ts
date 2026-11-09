@@ -968,6 +968,23 @@ WHERE workflow_hint = 'background_task' AND task_source = 'workbench'
   AND NOT EXISTS (SELECT 1 FROM agent_run_leases lease WHERE lease.run_id = agent_runs.id);
 `});
 
+// Keep prior migration checksums intact while removing the retired project policy.
+// Call rows, measured usage, task limits and historical events remain available.
+agentMigrations.push({version: 24, name: 'remove_project_model_budget', sql: `
+DROP TRIGGER research_project_budget_call_revision;
+DROP TRIGGER research_project_budget_call_scope;
+DROP TRIGGER research_project_budget_policy_retained;
+DROP TRIGGER research_project_budget_policy_immutable;
+DROP TABLE research_project_budget_states;
+DROP TABLE research_project_budget_policies;
+DROP INDEX agent_budget_calls_project;
+ALTER TABLE agent_budget_calls DROP COLUMN project_budget_revision;
+ALTER TABLE agent_budget_calls DROP COLUMN project_id;
+-- The retired observer also persisted project domain and project-snapshot failures here.
+UPDATE agent_runs SET budget_stop_reason = NULL
+WHERE budget_stop_reason GLOB 'research_project_*' OR budget_stop_reason = 'run_budget_project_snapshot_missing';
+`});
+
 export const memoryMigrations: RocDatabaseMigration[] = [
   {
     version: 1,

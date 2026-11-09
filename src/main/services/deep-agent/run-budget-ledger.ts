@@ -4,8 +4,7 @@ import type { RunBudgetStatus, RunExecutionSnapshot } from '../../../shared/type
 import { taskContractSchema } from '../../../shared/schemas/task-acceptance';
 import { parseStoredJson, parseStoredJsonObject } from '../../infrastructure/stored-json';
 import { hashToolInput } from './tool-effect-store';
-import { runBudgetSchema, runExecutionSnapshotSchema } from '../../../shared/schemas/agent';
-import { ProjectBudgetLedger, ProjectBudgetRefusal } from './project-budget-ledger';
+import { runBudgetSchema } from '../../../shared/schemas/agent';
 
 export type RunLimits = RunExecutionSnapshot['budget'];
 type Reservation = {
@@ -50,10 +49,8 @@ type PilotRunDbRow = {
 
 /** One durable ledger per root run, shared by retries, summaries and child agents. */
 export class RunBudgetLedger {
-  private readonly projects: ProjectBudgetLedger;
   constructor(private readonly db: DatabaseConnection) {
     registerExecutionEventFunctions(db);
-    this.projects = new ProjectBudgetLedger(db);
   }
 
   reconcileStartup(): void {
@@ -64,7 +61,6 @@ export class RunBudgetLedger {
     try {
       this.reserveWithinTransaction(runId, limits, input);
     } catch (error) {
-      if (error instanceof ProjectBudgetRefusal) this.projects.recordRefusal(error.projectId, error.message, error.revision);
       // The exhausted marker cannot live inside the rolled-back reservation transaction, so it is
       // written here: the run is refused, and the next attempt (and the breaker) can see why.
       if (error instanceof PilotAllowanceExhausted) {
@@ -90,15 +86,12 @@ export class RunBudgetLedger {
           (!Number.isSafeInteger(input.costMicrousd) || input.costMicrousd < 0))) {
         throw new Error('run_budget_reservation_invalid');
       }
-      const execution = this.db.prepare("SELECT kind, task_id, project_id FROM research_task_executions WHERE execution_id = ? AND kind IN ('chat','stage')")
-        .get(runId) as { kind: 'chat' | 'stage'; task_id: string; project_id: string } | undefined;
+      const execution = this.db.prepare("SELECT kind, task_id FROM research_task_executions WHERE execution_id = ? AND kind IN ('chat','stage')")
+        .get(runId) as { kind: 'chat' | 'stage'; task_id: string } | undefined;
       if (execution === undefined && this.db.prepare('SELECT 1 FROM agent_runs WHERE id = ?').get(runId) === undefined) {
         throw new Error('run_budget_execution_unlinked');
       }
       if (execution !== undefined) this.assertTaskReservation(execution.task_id, input);
-      const projectId = execution?.project_id ?? this.chatProjectId(runId);
-      const projectBudgetRevision = projectId !== null && input.kind === 'model'
-        ? this.projects.assertReservation(projectId, input) : null;
       const totals = this.db.prepare(`SELECT
         COALESCE(SUM(CASE WHEN kind = 'model' THEN 1 ELSE 0 END), 0) model_calls,
         COALESCE(SUM(CASE WHEN kind IN ('tool', 'child') THEN 1 ELSE 0 END), 0) tool_calls,
@@ -141,25 +134,11 @@ export class RunBudgetLedger {
         }
       }
       this.db.prepare(`INSERT INTO agent_budget_calls
-        (run_id, call_id, execution_kind, task_id, project_id, project_budget_revision, kind, input_hash, reserved_tokens, reserved_cost_microusd, pricing_version, state, envelope_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'reserved', ?, ?)`).run(
-        runId, input.id, execution?.kind ?? 'chat', execution?.task_id ?? null, projectId, projectBudgetRevision, input.kind, input.inputHash, input.tokens, input.costMicrousd ?? null,
+        (run_id, call_id, execution_kind, task_id, kind, input_hash, reserved_tokens, reserved_cost_microusd, pricing_version, state, envelope_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'reserved', ?, ?)`).run(
+        runId, input.id, execution?.kind ?? 'chat', execution?.task_id ?? null, input.kind, input.inputHash, input.tokens, input.costMicrousd ?? null,
         input.pricingVersion ?? null, JSON.stringify(input.envelope), new Date().toISOString());
     }).immediate();
-  }
-
-  private chatProjectId(runId: string): string | null {
-    const row = this.db.prepare(`SELECT r.snapshot_json,t.research_project_id
-      FROM agent_runs r JOIN agent_threads t ON t.id=r.thread_id WHERE r.id=?`)
-      .get(runId) as { snapshot_json: string | null; research_project_id: string | null } | undefined;
-    if (row === undefined) throw new Error('run_budget_execution_unlinked');
-    if (row.snapshot_json === null) {
-      if (row.research_project_id !== null) throw new Error('run_budget_project_snapshot_missing');
-      return null;
-    }
-    const snapshot = runExecutionSnapshotSchema.parse(JSON.parse(row.snapshot_json));
-    if (snapshot.researchProjectId === undefined && row.research_project_id !== null) throw new Error('run_budget_project_snapshot_missing');
-    return snapshot.researchProjectId ?? null;
   }
 
   private assertTaskReservation(taskId: string, input: Reservation): void {
@@ -249,7 +228,6 @@ export class RunBudgetLedger {
   recordStopReason(runId: string, reason: string): void {
     this.db.prepare('UPDATE agent_runs SET budget_stop_reason = COALESCE(budget_stop_reason, ?) WHERE id = ?')
       .run(reason.slice(0, 128), runId);
-    if (reason.startsWith('research_project_')) return;
     if (reason.includes('_concurrency_exhausted')) return;
     this.db.prepare(`UPDATE research_task_budgets SET stop_reason = COALESCE(stop_reason, ?)
       WHERE task_id IN (SELECT task_id FROM research_task_executions WHERE execution_id = ? AND kind IN ('chat','stage'))`)
@@ -257,16 +235,14 @@ export class RunBudgetLedger {
   }
 
   readBudgetStatus(runId: string, limits: RunLimits, modelPricingKnown: boolean): RunBudgetStatus {
-    const row = this.db.prepare(`SELECT COALESCE(b.stop_reason,p.stop_reason,r.budget_stop_reason) budget_stop_reason
+    const row = this.db.prepare(`SELECT COALESCE(b.stop_reason,r.budget_stop_reason) budget_stop_reason
       FROM agent_runs r
       LEFT JOIN research_task_executions e ON e.kind = 'chat' AND e.execution_id = r.id
       LEFT JOIN research_task_budgets b ON b.task_id = e.task_id
-      LEFT JOIN research_project_budget_states p ON p.project_id=COALESCE(e.project_id,json_extract(r.snapshot_json,'$.researchProjectId'))
       WHERE r.id = ?
       UNION ALL
-      SELECT COALESCE(b.stop_reason,p.stop_reason) budget_stop_reason FROM research_task_executions e
+      SELECT b.stop_reason budget_stop_reason FROM research_task_executions e
       JOIN research_task_budgets b ON b.task_id = e.task_id
-      LEFT JOIN research_project_budget_states p ON p.project_id=e.project_id
       WHERE e.kind = 'stage' AND e.execution_id = ?`).get(runId, runId) as
       { budget_stop_reason: string | null } | undefined;
     if (row === undefined) throw new Error('task_run_not_found');
@@ -274,9 +250,8 @@ export class RunBudgetLedger {
   }
 
   readTaskBudgetStatus(taskId: string, projectId: string): RunBudgetStatus {
-    const row = this.db.prepare(`SELECT t.project_id,b.limits_json,COALESCE(b.stop_reason,p.stop_reason) stop_reason FROM research_tasks t
-      JOIN research_task_budgets b ON b.task_id = t.id
-      LEFT JOIN research_project_budget_states p ON p.project_id=t.project_id WHERE t.id = ?`)
+    const row = this.db.prepare(`SELECT t.project_id,b.limits_json,b.stop_reason FROM research_tasks t
+      JOIN research_task_budgets b ON b.task_id = t.id WHERE t.id = ?`)
       .get(taskId) as { project_id: string; limits_json: string; stop_reason: string | null } | undefined;
     if (row === undefined) throw new Error('research_task_budget_missing');
     if (row.project_id !== projectId) throw new Error('research_task_project_mismatch');

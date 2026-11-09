@@ -306,7 +306,9 @@ export async function migrateExecutionDatabases(input: {source: string; destinat
       const db = new Database(join(current,target.file));
       try {
         const before = inventory(db);
-        const budgetBefore = target.name === 'agent' ? rows(db,'agent_budget_calls').map(({state:_state,envelope_json:_envelope,...row})=>row) : null;
+        // Migration 24 retires project policy references; all remaining call data must survive.
+        const budgetBefore = target.name === 'agent' ? rows(db,'agent_budget_calls')
+          .map(({state:_state,envelope_json:_envelope,project_id:_projectId,project_budget_revision:_revision,...row})=>row) : null;
         applyDatabaseMigrations(db,{dbName:target.name,migrations:target.migrations,allowOffline:true});
         db.transaction(()=>{
           if (target.name === 'agent') {

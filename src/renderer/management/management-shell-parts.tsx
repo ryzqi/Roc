@@ -3,7 +3,6 @@ import { Brain, Clock, Cpu, Sparkles, type LucideIcon } from 'lucide-react';
 import type { ManagementScope } from './management-scope';
 import { BackgroundTasksSection } from './sections/BackgroundTasksSection';
 import { ResearchTasksSection } from './sections/ResearchTasksSection';
-import { ProjectBudgetSection } from './sections/ProjectBudgetSection';
 import { PythonEnvironmentSection } from './sections/PythonEnvironmentSection';
 import { McpSection } from './sections/McpSection';
 import { MemorySection } from './sections/MemorySection';
@@ -193,7 +192,6 @@ function TasksSectionContent({ scope }: { scope: ManagementScope }): ReactNode {
     <div className="grid min-w-0 gap-6">
       {scope.projectId === null ? null : (
         <div key={scope.projectId} className="grid min-w-0 gap-6">
-          <ProjectBudgetSection client={scope.client} projectId={scope.projectId} />
           <PythonEnvironmentSection client={scope.client} projectId={scope.projectId} />
           <ResearchTasksSection client={scope.client} projectId={scope.projectId}
             selectedTaskId={scope.researchTaskId} onSelectTask={scope.onSelectResearchTask} />

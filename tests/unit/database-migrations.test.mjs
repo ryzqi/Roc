@@ -78,7 +78,55 @@ test('isolated execution migration preserves effects, operation indexes and resu
     assert.throws(() => db.prepare("UPDATE agent_tool_effects SET effect_class='unrecognized'").run(), /CHECK constraint/);
     assert.throws(() => db.prepare("INSERT INTO agent_tool_effects SELECT run_id,thread_id,execution_path,checkpoint_id,'another-call',tool_name,input_hash,effect_class,reconcile_strategy,status,result_json,error_json,created_at,updated_at,identity_version,canonical_tool_identity,canonicalization_version,tool_version,operation_id,idempotency_key,attempt_id,lease_generation,attempt_count,receipt_sequence,receipt_json,receipt_hash,expected_version,result_hash FROM agent_tool_effects").run(), /UNIQUE constraint/);
     db.prepare("INSERT INTO agent_tool_effect_results VALUES ('operation','{}','hash')").run();
-    assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 23);
+    assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 24);
+  } finally { db.close(); }
+});
+
+test('retiring project budgets preserves call receipts, task limits and events on an existing database', () => {
+  const db = new Database(':memory:');
+  db.pragma('foreign_keys = ON');
+  db.function('roc_task_event', {varargs: true}, () => '{}');
+  try {
+    applyDatabaseMigrations(db, {dbName: 'agent', migrations: agentMigrations.filter(m => m.version <= 23)});
+    db.exec(`
+      INSERT INTO research_tasks(id,project_id,snapshot_json,created_at,status)
+        VALUES('task','project','{}','2026-11-09T00:00:00.000Z','active');
+      INSERT INTO research_task_budgets VALUES('task','{"maxModelCalls":2}','run_model_call_budget_exhausted','2026-11-09T00:00:00.000Z');
+      INSERT INTO research_project_budget_policies VALUES('project',1,'{"maxModelCalls":1}','2026-11-09T00:00:00.000Z');
+      INSERT INTO research_project_budget_states VALUES('project',1,'research_project_token_budget_exhausted','2026-11-09T00:00:00.000Z');
+      INSERT INTO agent_budget_calls(run_id,call_id,execution_kind,task_id,kind,input_hash,reserved_tokens,
+        actual_tokens,state,envelope_json,created_at,reserved_cost_microusd,actual_cost_microusd,pricing_version,project_id,project_budget_revision)
+        VALUES('stage','call','stage','task','model','hash',100,80,'settled','{}','2026-11-09T00:00:00.000Z',70,50,'price-v1','project',1);
+      INSERT INTO agent_budget_call_observations VALUES('stage','call','2026-11-09T00:00:00.000Z',123,'completed');
+      INSERT INTO agent_threads(id,kind,title,goal,status,created_at,updated_at)
+        VALUES('thread','chat','Migration','Migration','active','2026-11-09T00:00:00.000Z','2026-11-09T00:00:00.000Z');
+      INSERT INTO agent_runs(id,thread_id,run_number,user_input,status,started_at,enabled_capabilities_json,run_origin,budget_stop_reason)
+        VALUES('project-stopped','thread',1,'Migration','failed','2026-11-09T00:00:00.000Z','{}','chat','research_project_budget_missing'),
+          ('domain-stopped','thread',3,'Migration','failed','2026-11-09T00:00:00.000Z','{}','chat','research_project_archived'),
+          ('snapshot-stopped','thread',4,'Migration','failed','2026-11-09T00:00:00.000Z','{}','chat','run_budget_project_snapshot_missing'),
+          ('run-stopped','thread',2,'Migration','failed','2026-11-09T00:00:00.000Z','{}','chat','run_total_token_budget_exhausted');
+    `);
+    const {project_id: _projectId, project_budget_revision: _revision, ...call} = db.prepare('SELECT * FROM agent_budget_calls').get();
+    const before = Object.fromEntries(['agent_budget_call_observations', 'research_task_budgets', 'research_task_events']
+      .map(table => [table, db.prepare(`SELECT * FROM ${table}`).all()]));
+    const history = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
+    applyDatabaseMigrations(db, {dbName: 'agent', migrations: agentMigrations});
+    assert.deepEqual(db.prepare('SELECT * FROM agent_budget_calls').get(), call);
+    for (const [table, rows] of Object.entries(before)) assert.deepEqual(db.prepare(`SELECT * FROM ${table}`).all(), rows);
+    assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version <= 23 ORDER BY version').all(), history);
+    assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 24);
+    assert.deepEqual(db.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'research_project_budget_%' OR name='agent_budget_calls_project'").all(), []);
+    assert.ok(!columnNames(db, 'agent_budget_calls').includes('project_id'));
+    assert.ok(!columnNames(db, 'agent_budget_calls').includes('project_budget_revision'));
+    assert.equal(db.prepare("SELECT budget_stop_reason FROM agent_runs WHERE id='project-stopped'").pluck().get(), null);
+    assert.equal(db.prepare("SELECT budget_stop_reason FROM agent_runs WHERE id='domain-stopped'").pluck().get(), null);
+    assert.equal(db.prepare("SELECT budget_stop_reason FROM agent_runs WHERE id='snapshot-stopped'").pluck().get(), null);
+    assert.equal(db.prepare("SELECT budget_stop_reason FROM agent_runs WHERE id='run-stopped'").pluck().get(), 'run_total_token_budget_exhausted');
+    assert.deepEqual(db.pragma('foreign_key_check'), []);
+    // The remaining task settlement trigger still produces its audit event after DROP COLUMN.
+    db.prepare("UPDATE agent_budget_calls SET state='unknown' WHERE call_id='call'").run();
+    assert.equal(db.prepare('SELECT event_type FROM research_task_events ORDER BY sequence DESC LIMIT 1').pluck().get(), 'call_unknown');
+    applyDatabaseMigrations(db, {dbName: 'agent', migrations: agentMigrations});
   } finally { db.close(); }
 });
 

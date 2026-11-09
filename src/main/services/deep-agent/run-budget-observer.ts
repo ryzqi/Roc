@@ -216,7 +216,7 @@ export class RunBudgetObserver {
   }
 
   private recordErrorStopReason(error: unknown): void {
-    if (error instanceof Error && (error.message.startsWith('run_') || error.message.startsWith('research_project_'))) {
+    if (error instanceof Error && error.message.startsWith('run_')) {
       this.recordStopReason(error.message.slice(0, 128));
     }
   }

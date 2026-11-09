@@ -15,7 +15,6 @@ import type {ResearchReviewSearchSnapshot, ResearchReviewSearchOwnership} from '
 import { runBudgetSchema } from '../../../shared/schemas/agent';
 import { createRunBudget, parseRunExecutionSnapshot } from '../agent/run-execution-snapshot';
 import type { RunLimits } from '../../services/deep-agent/run-budget-ledger';
-import { ProjectBudgetLedger } from '../../services/deep-agent/project-budget-ledger';
 import {ResearchTaskObservabilityStore} from './task-observability-store';
 import {ResearchTaskFactsStore} from './task-facts-store';
 
@@ -47,14 +46,12 @@ function parseChatSnapshot(raw: string) {
 export class ResearchTaskRepository {
   readonly graph: ResearchTaskGraphRepository;
   readonly workerEffects: ResearchWorkerEffects;
-  readonly projectBudgets: ProjectBudgetLedger;
   readonly facts: ResearchTaskFactsStore;
   readonly observability: ResearchTaskObservabilityStore;
   constructor(private readonly db: Database, private readonly now = () => new Date().toISOString()) {
     registerExecutionEventFunctions(db);
     this.graph = new ResearchTaskGraphRepository(db, this, now);
     this.workerEffects = new ResearchWorkerEffects(this.graph, new AgentToolEffectStore(db));
-    this.projectBudgets = new ProjectBudgetLedger(db);
     this.facts = new ResearchTaskFactsStore(db);
     this.observability = new ResearchTaskObservabilityStore(db);
   }
@@ -422,9 +419,8 @@ export class ResearchTaskRepository {
         parent.manifestHash !== owner.manifestHash || execution.manifestHash !== expectedExecutionHash) throw new Error('research_review_owner_mismatch');
     if (this.get(execution.taskId, owner.projectId).status !== 'active') throw new Error('research_task_not_active');
     const run = this.requireReviewSearchParent(owner);
-    const budget = this.db.prepare(`SELECT b.limits_json,COALESCE(b.stop_reason,p.stop_reason) stop_reason
-      FROM research_task_budgets b LEFT JOIN research_project_budget_states p ON p.project_id=? WHERE b.task_id=?`)
-      .get(owner.projectId, execution.taskId) as {limits_json: string; stop_reason: string | null} | undefined;
+    const budget = this.db.prepare('SELECT limits_json,stop_reason FROM research_task_budgets WHERE task_id=?')
+      .get(execution.taskId) as {limits_json: string; stop_reason: string | null} | undefined;
     if (budget === undefined) throw new Error('research_task_budget_missing');
     const reason = budget.stop_reason ?? run.budget_stop_reason;
     if (reason !== null) throw new Error(reason);
@@ -503,8 +499,8 @@ export class ResearchTaskRepository {
       const drift = this.db.prepare('SELECT 1 FROM agent_budget_calls WHERE run_id = ? AND task_id IS NOT NULL AND task_id != ?')
         .get(execution.executionId, execution.taskId);
       if (drift !== undefined) throw new Error('research_task_budget_association_conflict');
-      this.db.prepare('UPDATE agent_budget_calls SET task_id = ?, project_id = ? WHERE run_id = ? AND execution_kind = ?')
-        .run(execution.taskId, execution.projectId, execution.executionId, execution.kind);
+      this.db.prepare('UPDATE agent_budget_calls SET task_id = ? WHERE run_id = ? AND execution_kind = ?')
+        .run(execution.taskId, execution.executionId, execution.kind);
     }
     return execution;
   }

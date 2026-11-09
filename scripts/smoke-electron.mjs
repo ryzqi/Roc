@@ -155,10 +155,6 @@ try {
           workspacePath
         })
       );
-      unwrap(await window.roc.research.saveProjectBudget({
-        projectId: project.id, expectedRevision: 0,
-        limits: { maxTotalTokens: 10000000, maxModelCalls: 100, maxConcurrentModelCalls: 3, maxCostMicrousd: null }
-      }));
       return { projectId: project.id };
     },
     workspaceRoot

@@ -123,7 +123,6 @@ import { runDiagnosticsRequestSchema, runDiagnosticsSchema } from './schemas/run
 import { researchTaskRequestSchema, researchTaskSchema, researchTaskExecutionSchema, researchTaskContinueRequestSchema } from './schemas/research-tasks';
 import { researchTaskForChatRequestSchema, researchTaskDiagnosticsSchema } from './schemas/research-task-diagnostics';
 import { researchTaskEventsRequestSchema, researchTaskEventsPageSchema, researchTaskUpdatedSchema, researchTaskListRequestSchema, researchTaskListPageSchema } from './schemas/research-tasks';
-import { researchProjectBudgetRequestSchema, researchProjectBudgetSaveSchema, researchProjectBudgetStatusSchema } from './schemas/research-project-budget';
 import {researchEvidenceInspectRequestSchema, researchEvidenceInspectionSchema} from './schemas/research-evidence-source';
 import {
   researchDocumentAnnotationCreateRequestSchema, researchDocumentAnnotationCaptureRequestSchema,
@@ -574,8 +573,6 @@ export const ipcRegistry = {
     request({ key: 'researchTaskPause', channel: 'roc:research:task-pause', domain: 'research', method: 'pauseTask', kind: 'plugin', capabilityName: 'research.task.pause', inputTransform: first, contract: methodContract(oneArg(researchTaskRequestSchema), researchTaskSchema) }),
     request({ key: 'researchTaskContinue', channel: 'roc:research:task-continue', domain: 'research', method: 'continueTask', kind: 'plugin', capabilityName: 'research.task.continue', inputTransform: first, contract: methodContract(oneArg(researchTaskContinueRequestSchema), researchStageRunSchema) }),
     request({ key: 'researchTaskRestoreApproval', channel: 'roc:research:task-restore-approval', domain: 'research', method: 'restoreTaskApproval', kind: 'plugin', capabilityName: 'research.task.restoreApproval', inputTransform: first, contract: methodContract(oneArg(researchTaskRequestSchema), researchTaskSchema) }),
-    request({ key: 'researchProjectBudget', channel: 'roc:research:project-budget', domain: 'research', method: 'getProjectBudget', kind: 'plugin', capabilityName: 'research.projectBudget.get', inputTransform: first, contract: methodContract(oneArg(researchProjectBudgetRequestSchema), researchProjectBudgetStatusSchema.nullable()) }),
-    request({ key: 'researchProjectBudgetSave', channel: 'roc:research:project-budget-save', domain: 'research', method: 'saveProjectBudget', kind: 'plugin', capabilityName: 'research.projectBudget.save', inputTransform: first, contract: methodContract(oneArg(researchProjectBudgetSaveSchema), researchProjectBudgetStatusSchema) }),
     request({ key: 'researchTaskList', channel: 'roc:research:task-list', domain: 'research', method: 'listTasks', kind: 'plugin', capabilityName: 'research.task.list', inputTransform: first, contract: methodContract(oneArg(researchTaskListRequestSchema), researchTaskListPageSchema) }),
     request({ key: 'researchTaskDiagnostics', channel: 'roc:research:task-diagnostics', domain: 'research', method: 'getTaskDiagnostics', kind: 'plugin', capabilityName: 'research.task.diagnostics', inputTransform: first, contract: methodContract(oneArg(researchTaskRequestSchema), researchTaskDiagnosticsSchema) }),
     request({ key: 'researchTaskForChat', channel: 'roc:research:task-for-chat', domain: 'research', method: 'getTaskForChat', kind: 'plugin', capabilityName: 'research.task.forChat', inputTransform: first, contract: methodContract(oneArg(researchTaskForChatRequestSchema), researchTaskDiagnosticsSchema.nullable()) }),
@@ -948,7 +945,6 @@ export const ipcRegistry = {
     request({ key: 'shellConfirm', channel: 'roc:shell:confirm', domain: 'shell', method: 'confirm', kind: 'direct', contract: methodContract(oneArg(shellConfirmationRequestSchema), shellConfirmationResultSchema) })
   ],
   events: [
-    event({ key: 'researchProjectBudgetUpdated', channel: 'roc:research:project-budget-updated', domain: 'research', method: 'onProjectBudgetUpdated', contract: eventContract(researchProjectBudgetRequestSchema) }),
     event({ key: 'researchTaskUpdated', channel: 'roc:research:task-updated', domain: 'research', method: 'onTaskUpdated', contract: eventContract(researchTaskUpdatedSchema) }),
     event({ key: 'researchLibraryChanged', channel: 'roc:research:library-changed', domain: 'research', method: 'onLibraryChanged', contract: eventContract(literatureLibraryChangedSchema) }),
     event({ key: 'appearanceUpdated', channel: 'roc:appearance:updated', domain: 'app', method: 'onAppearanceUpdated', contract: eventContract(systemAppearanceSnapshotSchema) }),

@@ -140,8 +140,6 @@ export const rocApi: RocPreloadApi = {
     pauseTask: (...args) => ipcRenderer.invoke(ipcChannels.researchTaskPause, ...args),
     continueTask: (...args) => ipcRenderer.invoke(ipcChannels.researchTaskContinue, ...args),
     restoreTaskApproval: (...args) => ipcRenderer.invoke(ipcChannels.researchTaskRestoreApproval, ...args),
-    getProjectBudget: (...args) => ipcRenderer.invoke(ipcChannels.researchProjectBudget, ...args),
-    saveProjectBudget: (...args) => ipcRenderer.invoke(ipcChannels.researchProjectBudgetSave, ...args),
     listTasks: (...args) => ipcRenderer.invoke(ipcChannels.researchTaskList, ...args),
     getTaskDiagnostics: (...args) => ipcRenderer.invoke(ipcChannels.researchTaskDiagnostics, ...args),
     getTaskForChat: (...args) => ipcRenderer.invoke(ipcChannels.researchTaskForChat, ...args),
@@ -468,11 +466,6 @@ export const rocApi: RocPreloadApi = {
     listIndexedFiles: (...args) => ipcRenderer.invoke(ipcChannels.researchIndexFiles, ...args),
     listIndexJobs: (...args) => ipcRenderer.invoke(ipcChannels.researchIndexJobs, ...args),
     getEvidenceIndexSource: (...args) => ipcRenderer.invoke(ipcChannels.researchIndexEvidenceSource, ...args),
-    onProjectBudgetUpdated: (callback) => {
-      const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
-      ipcRenderer.on(ipcChannels.researchProjectBudgetUpdated, listener);
-      return () => ipcRenderer.off(ipcChannels.researchProjectBudgetUpdated, listener);
-    },
     onTaskUpdated: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
       ipcRenderer.on(ipcChannels.researchTaskUpdated, listener);

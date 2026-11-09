@@ -8,6 +8,8 @@ Agent DB migration 19 adds immutable `agent_budget_call_observations`, keyed by 
 
 Duration measures the invocation boundary, including serialization, reservation, dispatch and settlement work. It is not an isolated provider service time. A process that exits before the final observation has no duration receipt; diagnostics return `invocation: null`. Unknown usage/cost still retains the existing budget occupancy. Invocation success and known billing are separate states.
 
+Model admission is governed by the frozen run and shared task budgets. Projects require no separate model budget configuration. Agent DB migration 24 removes retired project policy/state tables and project-only call columns while preserving call usage, measured observations, task limits and historical events.
+
 Call rows are read from the existing budget ledger. Creation and settlement timestamps come from the reservation and real `call_settled`/`call_unknown` task events. Task cost remains the existing authoritative aggregate; the UI/export does not add execution summaries to call totals. External service cost remains `unknown`.
 
 Chat observations project the existing `AgentRunTelemetryRepository`: first output, tool calls/errors, resource acquisition/cancellation and measured wait/hold time, plus at most 256 sanitized trace spans and their dropped count. Span identities are local sequence identifiers defined by the existing trace schema. Arbitrary tool names, arguments, results and provider/model labels are omitted.

@@ -232,20 +232,10 @@ try {
     await page.getByTestId('mgmt-tab-tasks').focus();
     await page.keyboard.press('Enter');
     await page.getByTestId('mgmt-panel-tasks').waitFor({state: 'visible'});
-    await page.getByTestId('mgmt-project-budget-edit').click();
-    await capture(page, `budget-edit-${viewport.id}`);
-    for (const field of ['tokens', 'models', 'concurrency', 'cost']) {
-      await assertControlVisible(page.getByTestId(`mgmt-project-budget-${field}`));
-    }
-    await capture(page, `budget-focus-${viewport.id}`);
-    await page.getByTestId('mgmt-project-budget-tokens').fill('1000000');
-    await page.getByTestId('mgmt-project-budget-models').fill('100');
-    await page.getByTestId('mgmt-project-budget-concurrency').fill('4');
-    await page.getByTestId('mgmt-project-budget-cost').fill('5000000');
-    await page.getByTestId('mgmt-project-budget-save').click();
-    await page.getByTestId('mgmt-project-budget-edit').waitFor();
-    await page.getByTestId('mgmt-project-budget-data').waitFor();
-    await capture(page, `budget-saved-${viewport.id}`);
+    await page.getByTestId('mgmt-research-tasks').waitFor();
+    await page.getByTestId('mgmt-research-tasks').getByText('当前项目还没有科研任务。', {exact: true}).waitFor();
+    await assertControlVisible(page.getByTestId('mgmt-task-select'));
+    await capture(page, `research-tasks-${viewport.id}`);
     for (const tab of ['memory', 'skills', 'mcp', 'tasks']) {
       await page.getByTestId(`mgmt-tab-${tab}`).click();
       const panel = page.getByTestId(`mgmt-panel-${tab}`);

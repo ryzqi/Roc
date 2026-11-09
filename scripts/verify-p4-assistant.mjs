@@ -440,11 +440,6 @@ try {
     fail('0 准备', '创建项目', project.error.message);
   }
   const projectId = project.data.id;
-  const budget = await page.evaluate(projectId => window.roc.research.saveProjectBudget({
-    projectId, expectedRevision: 0,
-    limits: { maxTotalTokens: 10000000, maxModelCalls: 2000, maxConcurrentModelCalls: 3, maxCostMicrousd: null }
-  }), projectId);
-  if (!budget.ok) fail('0 准备', '配置本地夹具项目预算', budget.error.message);
 
   /** Resolves when the given run reaches a terminal state, via the live event stream. */
   await trackFinishedRuns(page);

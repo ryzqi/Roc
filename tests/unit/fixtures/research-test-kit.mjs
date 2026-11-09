@@ -86,10 +86,6 @@ export function createResearchFixture(api, stage = 'figure', workspacePath = '/t
     title: 'Synthetic reproducibility study', description: 'Contract fixture',
     workspacePath
   });
-  tasks.projectBudgets.save({ projectId: project.id, expectedRevision: 0, limits: {
-    maxTotalTokens: Number.MAX_SAFE_INTEGER, maxModelCalls: 100000, maxConcurrentModelCalls: 100,
-    maxCostMicrousd: null
-  } });
   db.prepare('UPDATE research_projects SET current_stage = ? WHERE id = ?').run(stage, project.id);
   db.prepare("UPDATE research_stage_states SET status = 'ready' WHERE project_id = ? AND stage = ?")
     .run(project.id, stage);

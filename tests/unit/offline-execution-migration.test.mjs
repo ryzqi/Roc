@@ -66,8 +66,6 @@ function fixture(fromS02 = false, fromS04 = false, fromS05 = false) {
   }
   const budget=api.createRunBudget({contextBudgetTokens:1000});
   const ledger=new api.RunBudgetLedger(agent);
-  tasks.projectBudgets.save({projectId:project.id,expectedRevision:0,
-    limits:{maxTotalTokens:10000,maxModelCalls:20,maxConcurrentModelCalls:5,maxCostMicrousd:null}});
   ledger.reserve(run.id,budget,{id:'reserved-call',kind:'model',tokens:100,costMicrousd:70,inputHash:'hash',envelope:{private:'frozen input'}});
   ledger.reserve(run.id,budget,{id:'settled-call',kind:'model',tokens:100,costMicrousd:70,inputHash:'hash2',envelope:{}});
   ledger.settle(run.id,'settled-call',80,'settled',undefined,{},50);
@@ -100,7 +98,7 @@ test('offline conversion preserves source and cold backup, fences historical ide
     try {
       assert.equal(agent.prepare('SELECT current_version FROM schema_metadata').pluck().get(),schemas.agentMigrations.at(-1).version);
       const calls=agent.prepare('SELECT * FROM agent_budget_calls ORDER BY call_id').all();
-      assert.deepEqual(calls,f.budgetBefore.map(row=>({...row,state:row.state==='reserved'?'unknown':row.state})));
+      assert.deepEqual(calls,f.budgetBefore.map(({project_id: _projectId, project_budget_revision: _revision, ...row})=>({...row,state:row.state==='reserved'?'unknown':row.state})));
       const tasks=new api.ResearchTaskRepository(agent);
       const repository=new api.ResearchRepository(research,tasks);
       // Cold reopen uses the migrated current databases while the user workspace
@@ -178,7 +176,7 @@ for (const phase of ['S02', 'S04', 'S05']) test(`${phase} cutover keeps raw cont
       assert.deepEqual(agent.prepare('SELECT * FROM research_task_events ORDER BY sequence LIMIT ?').all(f.eventsBefore.length),f.eventsBefore);
       assert.equal(agent.prepare('SELECT COUNT(*) FROM agent_run_events').pluck().get(),1);
       assert.equal(agent.prepare("SELECT snapshot_version FROM agent_runs WHERE id='chat'").pluck().get(),9);
-      assert.deepEqual(agent.prepare('SELECT * FROM agent_budget_calls ORDER BY call_id').all(),f.budgetBefore.map(row=>({...row,state:row.state==='reserved'?'unknown':row.state})));
+      assert.deepEqual(agent.prepare('SELECT * FROM agent_budget_calls ORDER BY call_id').all(),f.budgetBefore.map(({project_id: _projectId, project_budget_revision: _revision, ...row})=>({...row,state:row.state==='reserved'?'unknown':row.state})));
       if (phase === 'S04') {
         const content = repository.runs.getArtifactContent(f.project.id,'old-plan');
         assert.equal(content.output.searchPlan,undefined);

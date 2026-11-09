@@ -132,6 +132,36 @@ test('run budget middleware blocks the provider when reservation fails', async (
   }
 });
 
+test('project domain errors do not become run budget stop reasons', async () => {
+  const { directory, RunBudgetObserver } = await loadBudgetModules();
+  try {
+    const failedState = makeLedger();
+    const failed = new RunBudgetObserver(failedState.ledger, 'run', makeLimits(), 'revision');
+    await assert.rejects(failed.invoke({
+      messages: [new HumanMessage('archived project')],
+      purpose: 'agent',
+      responseMessage: message => message,
+      invoke: async () => { throw new Error('research_project_archived'); }
+    }), /research_project_archived/u);
+    assert.deepEqual(failedState.stopReasons, []);
+    assert.equal(failedState.settlements.length, 1);
+    assert.equal(failedState.settlements[0][3], 'unknown');
+
+    const blockedState = makeLedger(new Error('research_project_not_found'));
+    const blocked = new RunBudgetObserver(blockedState.ledger, 'run', makeLimits(), 'revision');
+    await assert.rejects(blocked.invoke({
+      messages: [new HumanMessage('missing project')],
+      purpose: 'summary',
+      responseMessage: message => message,
+      invoke: async () => { throw new Error('provider must not run'); }
+    }), /research_project_not_found/u);
+    assert.deepEqual(blockedState.stopReasons, []);
+    assert.equal(blockedState.settlements.length, 0);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('run budget preserves unknown usage after missing metadata or provider interruption', async () => {
   const { directory, RunBudgetObserver } = await loadBudgetModules();
   try {

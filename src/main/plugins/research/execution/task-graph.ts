@@ -294,11 +294,10 @@ export class ResearchTaskGraphRepository {
   }
   private requireRoot(taskId: string, projectId: string): void {
     if (this.owner.get(taskId, projectId).status !== 'active') throw new Error('research_task_not_active');
-    const budget = this.db.prepare(`SELECT b.stop_reason, b.limits_json, p.stop_reason project_stop
-      FROM research_task_budgets b LEFT JOIN research_project_budget_states p ON p.project_id=? WHERE b.task_id=?`).get(projectId, taskId) as
-      {stop_reason: string|null; limits_json: string; project_stop: string|null}|undefined;
+    const budget = this.db.prepare('SELECT stop_reason, limits_json FROM research_task_budgets WHERE task_id=?').get(taskId) as
+      {stop_reason: string|null; limits_json: string}|undefined;
     if (budget === undefined) throw new Error('research_task_budget_missing');
-    if (budget.stop_reason || budget.project_stop) throw new Error(budget.stop_reason ?? budget.project_stop!);
+    if (budget.stop_reason !== null) throw new Error(budget.stop_reason);
     if (Date.parse(runBudgetSchema.parse(JSON.parse(budget.limits_json)).deadlineAt) <= Date.parse(this.now())) {
       throw new Error('run_deadline_exhausted');
     }
