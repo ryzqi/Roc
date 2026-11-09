@@ -177,6 +177,7 @@ export function AssistantComposer({
   const compositionEndedAt = useRef(Number.NEGATIVE_INFINITY);
   const dragDepthRef = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const suggestionsRef = useRef<HTMLUListElement | null>(null);
   const skillById = useMemo(() => new Map(skills.map((skill) => [skill.id, skill])), [skills]);
   const trigger = useMemo(() => (inputLocked ? null : detectComposerTrigger(text, caret)), [caret, inputLocked, text]);
   const slashCommand = useMemo(
@@ -278,15 +279,29 @@ export function AssistantComposer({
     suggestionsDismissed || trigger === null
       ? []
       : trigger.kind === 'skill'
-        ? skills.filter((skill) => skill.id.toLowerCase().includes(trigger.query.toLowerCase())).slice(0, 6)
+        ? skills.filter((skill) => skill.id.toLowerCase().includes(trigger.query.toLowerCase()))
         : [];
   const selectedSuggestionIndex =
     suggestionItems.length === 0 ? 0 : Math.min(activeSuggestionIndex, suggestionItems.length - 1);
+  const selectedSuggestionId = suggestionItems[selectedSuggestionIndex]?.id;
 
   useEffect(() => {
     setActiveSuggestionIndex(0);
     setSuggestionsDismissed(false);
   }, [skills.length, trigger?.kind, trigger?.query]);
+
+  useLayoutEffect(() => {
+    const list = suggestionsRef.current;
+    const selected = list?.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (!list || !selected) return;
+    // Scroll only the suggestions, keeping the composer and transcript in place.
+    const row = selected.getBoundingClientRect();
+    const bounds = list.getBoundingClientRect();
+    const top = bounds.top + list.clientTop;
+    const bottom = bounds.bottom - list.clientTop;
+    if (row.top < top) list.scrollTop += Math.floor(row.top - top);
+    else if (row.bottom > bottom) list.scrollTop += Math.ceil(row.bottom - bottom);
+  }, [selectedSuggestionId, selectedSuggestionIndex]);
 
   return (
     <div
@@ -356,10 +371,11 @@ export function AssistantComposer({
 
       {suggestionItems.length === 0 ? null : (
         <ul
+          ref={suggestionsRef}
           id="assistant-composer-suggestions"
           role="listbox"
           aria-label="可用技能"
-          className="mb-1.5 flex flex-col rounded-card border-[0.5px] border-line bg-surface py-0.5"
+          className="mb-1.5 flex max-h-40 flex-col overflow-y-auto overscroll-contain rounded-card border-[0.5px] border-line bg-surface py-0.5"
           data-testid="assistant-composer-suggestions"
         >
           {suggestionItems.map((skill, index) => (
@@ -372,7 +388,7 @@ export function AssistantComposer({
                 onClick={() => applyCompletion(`/${skill.id}`)}
                 data-testid={`assistant-skill-suggestion-${skill.id}`}
                 className={
-                  index === activeSuggestionIndex
+                  index === selectedSuggestionIndex
                     ? 'flex w-full items-center gap-2 bg-[var(--overlay-hover)] px-2 py-1 text-left'
                     : 'flex w-full items-center gap-2 px-2 py-1 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]'
                 }
@@ -426,8 +442,11 @@ export function AssistantComposer({
               setSuggestionsDismissed(false);
             }}
             onSelect={(event) => {
-              setCaret(event.currentTarget.selectionStart);
-              setSuggestionsDismissed(false);
+              const nextCaret = event.currentTarget.selectionStart;
+              if (nextCaret !== caret) {
+                setCaret(nextCaret);
+                setSuggestionsDismissed(false);
+              }
             }}
             onCompositionStart={() => {
               compositionRef.current = true;

@@ -27,6 +27,7 @@ before(async () => {
       const [mode, setMode] = useState('chat');
       const [running, setRunning] = useState(false);
       const [sending, setSending] = useState(false);
+      const [skills, setSkills] = useState([]);
       const [width, setWidth] = useState(240);
       const [divider, setDivider] = useState(true);
       const [drawerOpen, setDrawerOpen] = useState(false);
@@ -39,6 +40,7 @@ before(async () => {
       window.setDrawerOpen = setDrawerOpen;
       window.setRunning = setRunning;
       window.setSending = setSending;
+      window.setSkills = setSkills;
       window.setDivider = setDivider;
       window.setSettingsOpen = setSettingsOpen;
       return <main style={{padding: 32}}>
@@ -52,7 +54,7 @@ before(async () => {
         </div>
         <div style={{width: 360, marginTop: 180}}>
           <AssistantComposer mode={mode} onModeChange={setMode} draft={draft} onDraftChange={setDraft}
-            skills={[]} imageInputSupported={true} sending={sending} running={running} replyMode={false}
+            skills={skills} imageInputSupported={true} sending={sending} running={running} replyMode={false}
             onSend={async payload => {window.sent.push(payload); return true;}} onStop={() => setRunning(false)}
             model={{choices: [], currentKey: null, label: '选择模型', pending: false, error: null,
               onSelect: () => {}, onOpenSettings: () => {}}} />
@@ -152,6 +154,93 @@ test('locked and sending states disable mode and attachment mutations', async ()
   await page.keyboard.press('ArrowRight');
   assert.equal(await page.getByTestId('assistant-composer-mode-task').getAttribute('aria-checked'), 'true');
   assert.equal(await page.getByTestId('assistant-composer-mode-task').evaluate(el => el === document.activeElement), true);
+});
+
+test('slash skill navigation reaches and reveals every result beyond the first six', async () => {
+  const skills = Array.from({length: 12}, (_, index) => ({id: `review-${index + 1}`, name: `Review ${index + 1}`}));
+  const input = page.getByTestId('assistant-composer-input');
+  const list = page.getByRole('listbox', {name: '可用技能'});
+  const selected = list.getByRole('option', {selected: true});
+  const expectSelectedVisible = async id => {
+    await expect(selected).toHaveAttribute('data-testid', `assistant-skill-suggestion-${id}`);
+    const bounds = await selected.evaluate(element => {
+      const row = element.getBoundingClientRect();
+      const list = element.closest('[role="listbox"]');
+      const box = list.getBoundingClientRect();
+      return {rowTop: row.top, rowBottom: row.bottom, listTop: box.top, listBottom: box.bottom,
+        scrollTop: list.scrollTop, clientHeight: list.clientHeight, clientTop: list.clientTop};
+    });
+    assert.ok(bounds.rowTop >= bounds.listTop && bounds.rowBottom <= bounds.listBottom,
+      `${id} must scroll fully into the skill list viewport: ${JSON.stringify(bounds)}`);
+    await expect(input).toBeFocused();
+  };
+  try {
+    await page.evaluate(skills => window.setSkills(skills), skills);
+    await input.fill('/');
+    await expectSelectedVisible('review-1');
+    for (let index = 0; index < 6; index++) await input.press('ArrowDown');
+    await expectSelectedVisible('review-7');
+    await expect(list.getByRole('option')).toHaveCount(12);
+    assert.ok(await list.evaluate(element => element.scrollHeight > element.clientHeight), 'list must scroll without growing to fit every skill');
+    assert.ok(await list.evaluate(element => element.scrollTop > 0), 'keyboard selection must scroll the list');
+    for (let index = 0; index < 5; index++) await input.press('ArrowDown');
+    await expectSelectedVisible('review-12');
+    await input.press('ArrowDown');
+    await expectSelectedVisible('review-1');
+    await input.press('ArrowUp');
+    await expectSelectedVisible('review-12');
+    await input.press('ArrowUp');
+    await expectSelectedVisible('review-11');
+    await input.press('ArrowDown');
+    await input.press('Enter');
+    await expect(input).toHaveValue('/review-12 ');
+    await expect(list).toHaveCount(0);
+    const sentBefore = await page.evaluate(() => window.sent.length);
+    await input.pressSequentially('Check this draft');
+    await input.press('Enter');
+    await expect.poll(() => page.evaluate(() => window.sent.length)).toBe(sentBefore + 1);
+    assert.deepEqual(await page.evaluate(() => window.sent.at(-1)), {
+      text: 'Check this draft', attachments: [], explicitSkillIds: ['review-12']
+    });
+  } finally {
+    await page.evaluate(() => window.setSkills([]));
+    await input.fill('');
+  }
+});
+
+test('slash skill filtering resets selection and scrolling, with dismissal and mouse access', async () => {
+  const skills = Array.from({length: 12}, (_, index) => ({id: `review-${index + 1}`, name: `Review ${index + 1}`}));
+  const input = page.getByTestId('assistant-composer-input');
+  const list = page.getByRole('listbox', {name: '可用技能'});
+  try {
+    await page.evaluate(skills => window.setSkills(skills), skills);
+    await input.fill('/');
+    await input.press('ArrowUp');
+    await expect(list.getByRole('option', {selected: true})).toContainText('/review-12');
+    await input.pressSequentially('review-1');
+    await expect(list.getByRole('option')).toHaveCount(4);
+    await expect(list.getByRole('option', {selected: true})).toHaveAttribute('data-testid', 'assistant-skill-suggestion-review-1');
+    assert.equal(await list.evaluate(element => element.scrollTop), 0);
+    await input.fill('/missing');
+    await expect(list).toHaveCount(0);
+    await expect(input).toHaveAttribute('aria-expanded', 'false');
+    await input.fill('/');
+    await expect(list.getByRole('option')).toHaveCount(12);
+    await input.press('Escape');
+    await expect(list).toHaveCount(0);
+    await expect(input).toHaveValue('/');
+    await input.pressSequentially('review-');
+    await expect(list.getByRole('option')).toHaveCount(12);
+    await list.hover();
+    await page.mouse.wheel(0, 600);
+    await expect.poll(() => list.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+    await page.getByTestId('assistant-skill-suggestion-review-12').click();
+    await expect(input).toHaveValue('/review-12 ');
+    await expect(input).toBeFocused();
+  } finally {
+    await page.evaluate(() => window.setSkills([]));
+    await input.fill('');
+  }
 });
 
 test('resize cancels clamped overshoot, handles pointer cancellation, keyboard and unmount', async () => {
