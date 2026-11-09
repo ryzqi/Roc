@@ -8,8 +8,11 @@ import * as UTIF from 'utif';
 import * as ort from 'onnxruntime-node';
 import {
   createFormulaTokenizerVocabulary,
+  matchTableStructureToOcr,
   PaddleStructureService,
   type OrtModule,
+  type PaddleStructureRegionResult,
+  type PaddleStructureTableResult,
   type PaddleStructureRunOptions
 } from 'paddleocr';
 import { researchDocumentLimits, researchParseOptionsSchema, researchParsedDocumentSchema, researchParseContractVersion, researchParserVersion, type ResearchParseOptions } from '../../../shared/schemas/research-production';
@@ -125,6 +128,8 @@ async function parsePdf(
     const nativeTextPages: string[] = [];
     let usedOcr = false;
     let actualDevice: 'coreml' | 'cpu' = 'cpu';
+    // FormulaNet loses small numerators/subscripts at the compact raster's 108 DPI.
+    const ocrScale = options.tier === 'complete' ? 3 : 1.5;
     for (const pageNumber of pages) {
       throwIfAborted(signal);
       const page = await pdf.getPage(pageNumber);
@@ -153,7 +158,7 @@ async function parsePdf(
             page, pageNumber, pageCount: pdf.numPages, text: nativeText, scale: 1.5, clampToPixelLimit: true, onStage: input.onStage
           });
         } else {
-          const rendered = await renderResearchPdfPage(page, pageNumber, pdf.numPages, join(job.output, 'pages'), 1.5, true,
+          const rendered = await renderResearchPdfPage(page, pageNumber, pdf.numPages, join(job.output, 'pages'), ocrScale, true,
             researchDocumentLimits.maxAssetBytes, {
               includeRgbaImage: !nativeTextOnly,
               text: nativeText,
@@ -189,7 +194,8 @@ async function parsePdf(
         const pageRegions: unknown[] = [];
         for (const [regionIndex, region] of inference.regions.entries()) {
           const regionType = normalizeRegionType(region.type);
-          const regionText = regionTextValue(region);
+          const regionContent = extractResearchRegionContent(region);
+          const regionText = regionContent.text;
           const regionImage = region.image;
           const relativeImagePath = regionImage === undefined ? null : `regions/page-${pageNumber}-region-${regionIndex + 1}.png`;
           if (regionImage !== undefined && relativeImagePath !== null) {
@@ -224,7 +230,8 @@ async function parsePdf(
             text: regionText,
             imagePath: relativeImagePath,
             formula: region.formula?.formula ?? null,
-            table: region.table?.structure ?? null
+            table: regionContent.table?.structure ?? null,
+            tableMatches: regionContent.table?.matched ?? null
           });
         }
         if (pageBlocks.filter((block) => block.locations[0]?.page === pageNumber).length === 0 && nativeText.length > 0) {
@@ -292,7 +299,8 @@ async function parseImage(
     const regions: unknown[] = [];
     for (const [index, region] of inference.regions.entries()) {
       const regionType = normalizeRegionType(region.type);
-      const text = regionTextValue(region);
+      const regionContent = extractResearchRegionContent(region);
+      const text = regionContent.text;
       const regionImage = region.image;
       const imagePath = regionImage === undefined ? null : `regions/page-${pageNumber}-region-${index + 1}.png`;
       if (regionImage !== undefined && imagePath !== null) {
@@ -305,7 +313,8 @@ async function parseImage(
         text, pageNumber, region.bbox, imagePath);
       blocks.push(block);
       regions.push({ id: block.id, type: region.type, label: region.label, score: region.score, bbox: region.bbox,
-        status: region.status, text, imagePath, formula: region.formula?.formula ?? null, table: region.table?.structure ?? null });
+        status: region.status, text, imagePath, formula: region.formula?.formula ?? null,
+        table: regionContent.table?.structure ?? null, tableMatches: regionContent.table?.matched ?? null });
     }
     pageResults.push({ page: pageNumber, text: '', regions, coordinateFrame: researchRasterCoordinateFrameSchema.parse({
       kind: 'image', page: pageNumber, unit: 'raster-pixel', coordinateOrigin: 'TOPLEFT', width: raster.width, height: raster.height
@@ -691,17 +700,34 @@ function normalizeRegionType(type: string): ParseBlock['kind'] {
   return 'paragraph';
 }
 
-function regionTextValue(region: {
-  type: string;
-  ocr?: readonly { text: string }[];
-  table?: { structure?: { html?: string }; ocr?: readonly { text: string }[] };
-  formula?: { formula: string };
-}): string {
-  if ((region.type === 'formula' || region.type === 'equation') && region.formula?.formula) return region.formula.formula;
-  if (region.type === 'table' && region.table?.structure?.html) return region.table.structure.html;
-  const tableText = region.table?.ocr?.map((item) => item.text).join(' ');
-  if (tableText) return tableText;
-  return region.ocr?.map((item) => item.text).join(' ') ?? '';
+export function extractResearchRegionContent(region: PaddleStructureRegionResult): {
+  text: string;
+  table: PaddleStructureTableResult | null;
+} {
+  let table = region.table ?? null;
+  if (region.type === 'table' && table !== null) {
+    if (region.image !== undefined && table.structure !== undefined && table.ocr !== undefined) {
+      const { width, height } = region.image;
+      // The locked PaddleX SLANet model normalizes boxes to the source crop.
+      // paddleocr.js 1.2 decodes against square padding instead; undo that scale
+      // before matching OCR. Otherwise every row of a wide table lands in row 1.
+      const side = Math.max(width, height);
+      const structure = { ...table.structure, bbox: table.structure.bbox.map((box) =>
+        box.map((value, index) => value * (index % 2 === 0 ? width : height) / side)) };
+      table = { ...table, structure, matched: matchTableStructureToOcr(structure, table.ocr) };
+    }
+    const html = table.matched?.html || table.structure?.html;
+    if (html) {
+      const document = parseDocument(html);
+      if (htmlText(document).trim().length > 0) return { text: htmlTableText(document), table };
+    }
+    const text = table.ocr?.map((item) => item.text).join(' ');
+    if (text) return { text, table };
+  }
+  if ((region.type === 'formula' || region.type === 'equation') && region.formula?.formula) {
+    return { text: region.formula.formula, table };
+  }
+  return { text: region.ocr?.map((item) => item.text).join(' ') ?? '', table };
 }
 
 function normalizeText(value: string): string {

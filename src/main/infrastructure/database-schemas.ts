@@ -961,6 +961,13 @@ CREATE TRIGGER research_task_effect_committed AFTER INSERT ON agent_tool_effect_
 END;
 `});
 
+agentMigrations.push({version: 23, name: 'background_task_placeholder_runs', sql: `
+UPDATE agent_runs SET status = 'draft'
+WHERE workflow_hint = 'background_task' AND task_source = 'workbench'
+  AND status = 'running' AND snapshot_json IS NULL AND model_id IS NULL AND provider_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM agent_run_leases lease WHERE lease.run_id = agent_runs.id);
+`});
+
 export const memoryMigrations: RocDatabaseMigration[] = [
   {
     version: 1,

@@ -447,3 +447,22 @@ test('bounded MCP fetch permits multiple SSE events below the per-event limit', 
   const response = await boundedFetch('https://fixture.test/mcp');
   assert.equal(await response.text(), body);
 });
+
+test('unselected enabled MCP servers cannot contribute tools or require contracts', () => {
+  const compiled = api.compileRunCapabilityManifest(input({
+    requestedCapabilities: {mcpServers: [], skills: []}
+  }));
+  assert.deepEqual(compiled.manifest.mcpServers, []);
+  assert.deepEqual(compiled.manifest.tools.filter(tool => tool.provenance.kind === 'mcp'), []);
+  assert.deepEqual(compiled.toolCards.filter(tool => tool.capabilityType === 'mcp_tool'), []);
+  assert.doesNotThrow(() => api.bindMcpToolContracts(compiled.manifest, []));
+});
+
+test('MCP tools and contracts are limited to the requested enabled server', () => {
+  const unselected = {...server, id: 'unselected', allowedTools: ['other_tool']};
+  const compiled = api.compileRunCapabilityManifest(input({mcpServers: [unselected, server]}));
+  assert.deepEqual(compiled.manifest.tools.filter(tool => tool.provenance.kind === 'mcp').map(tool => tool.provenance.serverId), ['fixture']);
+  const {contract} = makeMcpTool();
+  assert.doesNotThrow(() => api.bindMcpToolContracts(compiled.manifest, [contract]));
+  assert.throws(() => api.bindMcpToolContracts(compiled.manifest, []), /mcp_tool_contract_missing/);
+});

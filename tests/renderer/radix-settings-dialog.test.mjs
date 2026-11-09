@@ -66,7 +66,7 @@ before(async () => {
             }, '设置'),
             React.createElement(SettingsModal, {
               open, client, projectId: null, workspacePath: null, themeOverride,
-              onThemeOverrideChange: setThemeOverride, onResetUiPreferences: () => {},
+              onThemeOverrideChange: setThemeOverride, onResetUiPreferences: () => { window.resetCount++; },
               onClose: () => setOpen(false)
             }),
             React.createElement(ModalShell, {
@@ -79,6 +79,7 @@ before(async () => {
         const root = createRoot(document.getElementById('root'));
         window.mount = () => {
           window.shortcutCounts = {sidebar: 0, assistant: 0, search: 0, theme: 0};
+          window.resetCount = 0;
           flushSync(() => root.render(React.createElement(MotionConfig, {reducedMotion: 'user'},
             React.createElement(LazyMotion, {features: domMax, strict: true},
               React.createElement(Harness, {client: createClient()})
@@ -167,4 +168,26 @@ test('settings dialog layers focus, Escape, animations, shortcuts, and ambient d
   assert.equal(await page.getByTestId('sidebar-drawer-panel').count(), 1, 'the dialog closes before the ambient drawer');
   await page.keyboard.press('Escape');
   await page.getByTestId('sidebar-drawer-panel').waitFor({state: 'detached'});
+});
+
+
+test('reset confirmation accepts real pointer clicks and Escape leaves settings open', async () => {
+  await page.getByTestId('titlebar-settings').click();
+  await page.getByTestId('settings-section-backup').click();
+  await page.getByTestId('settings-reset-ui').click();
+  await page.getByTestId('settings-reset-confirm-panel').waitFor();
+  await page.keyboard.press('Escape');
+  await page.getByTestId('settings-reset-confirm-panel').waitFor({state: 'detached'});
+  assert.equal(await page.getByTestId('settings-modal-panel').count(), 1);
+  assert.equal(await page.evaluate(() => window.resetCount), 0);
+  await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'settings-reset-ui');
+
+  await page.getByTestId('settings-reset-ui').click();
+  await page.getByTestId('settings-reset-confirm-confirm').click();
+  await page.getByTestId('settings-reset-confirm-panel').waitFor({state: 'detached'});
+  assert.equal(await page.evaluate(() => window.resetCount), 1);
+  assert.equal(await page.getByTestId('settings-modal-panel').count(), 1);
+  await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'settings-reset-ui');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
 });

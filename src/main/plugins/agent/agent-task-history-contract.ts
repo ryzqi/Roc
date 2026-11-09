@@ -49,20 +49,15 @@ export class AgentTaskHistoryContract {
            (id, thread_id, run_number, user_input, status, started_at, ended_at, provider_id, model_id,
             enabled_capabilities_json, workspace_path, task_source, workflow_hint)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET
-             user_input = excluded.user_input,
-             status = excluded.status,
-             enabled_capabilities_json = excluded.enabled_capabilities_json,
-             workspace_path = excluded.workspace_path,
-             task_source = excluded.task_source,
-             workflow_hint = excluded.workflow_hint`
+           ON CONFLICT(id) DO NOTHING`
         )
         .run(
           task.runId,
           task.threadId,
           1,
           task.goal,
-          task.status,
+          // This row anchors task creation events; no agent has executed it yet.
+          'draft',
           task.createdAt,
           null,
           null,

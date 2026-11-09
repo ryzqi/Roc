@@ -86,7 +86,7 @@ export const researchDocumentLimits = {
 export const researchParseContractVersion = 4;
 /** Increment only when parsed text/locations change; artifact-only contracts keep prior parses/indexes current. */
 export const researchDerivationGenerationVersion = 3;
-export const researchParserVersion = 'roc-research-parser/2' as const;
+export const researchParserVersion = 'roc-research-parser/3' as const;
 
 /** Stable index identity tracks derivation semantics, not the artifact contract version. */
 export function researchParserIdentityPayload(modelManifest: string) {

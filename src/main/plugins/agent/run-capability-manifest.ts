@@ -114,7 +114,7 @@ export function compileRunCapabilityManifest(input: {
     mode: input.mode,
     deleteFileApprovalMode: input.deleteFileApprovalMode,
     mcpApprovalMode: input.mcpApprovalMode,
-    mcpServers: input.mcpServers,
+    mcpServers: input.mcpServers.filter((server) => resolvedMcpServers.includes(server.id)),
     selfConfigAvailable: input.selfConfigAvailable ?? false,
     shellAllowedCommands: input.shellAllowedCommands,
     trustedHostAvailable: input.trustedHostAvailable === true  });

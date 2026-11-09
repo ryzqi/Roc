@@ -1161,6 +1161,42 @@ try {
   assertCheck('1b 重启保持', '重启后界面仍读回保存的值', (await isChecked('settings-open-at-login')) === true && (await readInput('settings-global-hotkey')) === hotkeyTag);
   await closeSettings();
 
+  // Reset must remain above the settings surface, own Escape, and restore focus.
+  await openSettingsViaShortcut();
+  await openSection('app');
+  await page.getByTestId('settings-theme-dark').click();
+  await openSection('backup');
+  await page.getByTestId('settings-reset-ui').click();
+  await page.getByTestId('settings-reset-confirm-panel').waitFor();
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-testid="settings-reset-confirm-panel"]')).opacity === '1');
+  await page.screenshot({ path: join(artifactDir, '08-reset-confirm-dark.png') });
+  await page.keyboard.press('Escape');
+  await page.getByTestId('settings-reset-confirm-panel').waitFor({ state: 'detached' });
+  await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'settings-reset-ui');
+  assertCheck('5d 重置确认', 'Escape 只关闭重置确认并恢复焦点，设置保持打开',
+    await page.getByTestId('settings-modal-panel').isVisible());
+  assertCheck('5d 重置确认', '取消重置保留界面偏好',
+    await page.evaluate(() => localStorage.getItem('roc.ui.theme.override')) === 'dark');
+  await page.getByTestId('settings-reset-ui').click();
+  // Normal pointer actionability detects the original occlusion; never force-click.
+  await page.getByTestId('settings-reset-confirm-confirm').click();
+  await page.getByTestId('settings-reset-confirm-panel').waitFor({ state: 'detached' });
+  await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'settings-reset-ui');
+  assertCheck('5d 重置确认', '指针可确认重置，设置保留且焦点返回入口',
+    await page.getByTestId('settings-modal-panel').isVisible());
+  await openSection('app');
+  assertCheck('5d 重置确认', '重置后外观恢复跟随系统',
+    await page.getByTestId('settings-theme-system').getAttribute('aria-pressed') === 'true');
+  await page.getByTestId('settings-theme-light').click();
+  await openSection('backup');
+  await page.getByTestId('settings-reset-ui').click();
+  await page.getByTestId('settings-reset-confirm-panel').waitFor();
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-testid="settings-reset-confirm-panel"]')).opacity === '1');
+  await page.screenshot({ path: join(artifactDir, '08-reset-confirm-light.png') });
+  await page.getByTestId('settings-reset-confirm-cancel').click();
+  await page.getByTestId('settings-reset-confirm-panel').waitFor({ state: 'detached' });
+  await closeSettings();
+
   // ---- 闸门 7：typecheck --------------------------------------------------------
   const typecheck = spawnSync('pnpm', ['typecheck'], { encoding: 'utf8', cwd: resolve('.') });
   assertCheck(
@@ -1190,6 +1226,7 @@ try {
       '4 关闭确认',
       '5b 拉取模型',
       '5c 浮层层级',
+      '5d 重置确认',
       '5 立即生效',
       '6 无内联配置',
       '7 typecheck',

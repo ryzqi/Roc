@@ -287,7 +287,7 @@ test('known content changes publish events without rebuilding for each write', a
   assert.deepEqual(diagnostics.filter((event) => event.event === 'build').map(({ buildCount, durationMs, reason, committed }) => ({ buildCount, durationMs, reason, committed })), [
     { buildCount: 1, durationMs: diagnostics.find((event) => event.event === 'build').durationMs, reason: 'initial', committed: true }
   ]);
-  assert.equal(published.length, 1);
+  assert.ok(published.length >= 2 && published.length < 100, 'content bursts are coalesced');
   assert.deepEqual(published[0], { workspacePath: root, relativePath: 'existing-file.md', eventType: 'change' });
   watcher.shutdown();
 });
@@ -321,7 +321,7 @@ test('a new path reported as a content change invalidates the snapshot', async (
   watcher.shutdown();
 });
 
-test('watcher events invalidate immediately, then publish the debounced workspace event', async () => {
+test('watcher events invalidate the snapshot before publishing immediately', async () => {
   const root = createWorkspace('watcher-event');
   writeFileSync(join(root, 'before.md'), '');
   const { service } = createFileService(root);
@@ -347,7 +347,7 @@ test('watcher events invalidate immediately, then publish the debounced workspac
   writeFileSync(join(root, 'after.md'), '');
   changed('rename', 'after.md');
   assert.deepEqual(invalidations, [root]);
-  assert.deepEqual(published, []);
+  assert.equal(published.length, 1);
   assert.deepEqual(names(await service.searchByName({ query: 'after' })), [['after.md', 'after.md']]);
 
   await new Promise((resolve) => setTimeout(resolve, 20));
@@ -535,5 +535,33 @@ test('callbacks from an earlier watcher generation stay stale after switching ba
   assert.deepEqual(invalidations, []);
   callbacks[2]('rename', 'current.md');
   assert.deepEqual(invalidations, ['/same-workspace']);
+  watcher.shutdown();
+});
+
+test('watcher publishes the first event immediately and bounds burst refresh latency', t => {
+  t.mock.timers.enable({apis: ['setTimeout']});
+  const published = [];
+  let changed;
+  const watcher = new watcherModule.WorkspaceChangeWatcherService({
+    logger: {warn() {}}, onChange: event => { published.push(event); },
+    watch: (_path, _options, listener) => {
+      changed = listener;
+      return {close() {}, on() {}};
+    }
+  });
+  watcher.setWorkspace('/workspace');
+  changed('rename', 'first/new.md');
+  assert.equal(published.length, 1, 'first event must not wait behind background work');
+  t.mock.timers.tick(50);
+  changed('rename', 'second/new.md');
+  t.mock.timers.tick(50);
+  changed('rename', 'third/new.md');
+  t.mock.timers.tick(50);
+  assert.equal(published.length, 2, 'a burst cannot keep postponing publication');
+  assert.equal(published[1].relativePath, null, 'coalescing paths must invalidate every changed directory');
+  changed('rename', 'pending.md');
+  watcher.setWorkspace('/other-workspace');
+  t.mock.timers.tick(200);
+  assert.equal(published.length, 2, 'switching workspaces cancels the pending batch');
   watcher.shutdown();
 });

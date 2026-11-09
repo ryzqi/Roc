@@ -136,7 +136,7 @@ export class WorkspaceChangeWatcherService {
     }
     this.pendingEvent = {
       workspacePath,
-      relativePath,
+      relativePath: this.pendingEvent !== null && this.pendingEvent.relativePath !== relativePath ? null : relativePath,
       eventType: eventType === 'rename' ? 'rename' : 'change'
     };
     this.schedulePublish();
@@ -154,13 +154,14 @@ export class WorkspaceChangeWatcherService {
   }
 
   private schedulePublish(): void {
-    if (this.refreshTimer !== null) {
-      clearTimeout(this.refreshTimer);
-    }
+    // Publish the leading event before background work can consume the refresh budget.
+    // A fixed window coalesces bursts without indefinitely postponing their final update.
+    if (this.refreshTimer !== null) return;
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = null;
-      void this.publishPendingEvent();
+      if (this.pendingEvent !== null) this.schedulePublish();
     }, this.debounceMs);
+    void this.publishPendingEvent();
   }
 
   private async publishPendingEvent(): Promise<void> {

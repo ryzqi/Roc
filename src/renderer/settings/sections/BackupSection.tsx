@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Download, Upload } from 'lucide-react';
 import { useAsyncAction } from '../../app/use-async-resource';
-import { ConfirmDialog } from '../../shell/ConfirmDialog';
+import { RadixSettingsConfirmDialog } from '../radix-dialog-pilot';
 import { writeTextFile } from '../../workspace/workspace-store';
 import { applyImport, parseSettingsImport, serializeSettingsExport } from '../settings-rules';
 import type { SettingsStore } from '../settings-scope';
@@ -185,7 +185,7 @@ export function BackupSection({
         </div>
       </div>
 
-      <ConfirmDialog
+      <RadixSettingsConfirmDialog
         open={resetOpen}
         title="重置本地界面偏好？"
         message="将清除本机保存的界面偏好，回到默认值。"

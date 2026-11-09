@@ -78,7 +78,7 @@ test('isolated execution migration preserves effects, operation indexes and resu
     assert.throws(() => db.prepare("UPDATE agent_tool_effects SET effect_class='unrecognized'").run(), /CHECK constraint/);
     assert.throws(() => db.prepare("INSERT INTO agent_tool_effects SELECT run_id,thread_id,execution_path,checkpoint_id,'another-call',tool_name,input_hash,effect_class,reconcile_strategy,status,result_json,error_json,created_at,updated_at,identity_version,canonical_tool_identity,canonicalization_version,tool_version,operation_id,idempotency_key,attempt_id,lease_generation,attempt_count,receipt_sequence,receipt_json,receipt_hash,expected_version,result_hash FROM agent_tool_effects").run(), /UNIQUE constraint/);
     db.prepare("INSERT INTO agent_tool_effect_results VALUES ('operation','{}','hash')").run();
-    assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 22);
+    assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 23);
   } finally { db.close(); }
 });
 
