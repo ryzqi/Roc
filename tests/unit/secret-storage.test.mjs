@@ -101,6 +101,19 @@ function leftoversIn(dir) {
   return readdirSync(dir).filter((name) => name.includes('.rotating'));
 }
 
+test('provider IDs do not impose vendor-specific credential formats', async () => {
+  const temp = createTempSecretsDir();
+  const { backend } = createFakeBackend();
+  try {
+    const service = new SecretService({ secretsDir: temp.dir }, backend);
+    await service.setProviderSecret('nvidia', 'private-gateway-key');
+    assert.equal(await service.getProviderSecret('nvidia'), 'private-gateway-key');
+    await assert.rejects(service.setProviderSecret('nvidia', ''), { code: 'provider_secret_empty' });
+  } finally {
+    temp.cleanup();
+  }
+});
+
 for (const action of ['set', 'clear']) {
   test(`轮转加密等待期间 ${action} 凭据不会被旧密文覆盖`, async () => {
     const temp = createTempSecretsDir();

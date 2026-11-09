@@ -515,17 +515,20 @@ export type ProviderType = ProviderConfig['type'];
 export const PROVIDER_TYPE_LABELS: Readonly<Record<ProviderType, string>> = {
   openai_compatible: 'OpenAI 兼容',
   anthropic_compatible: 'Anthropic 兼容',
-  nvidia: 'NVIDIA（内置）',
-  openrouter: 'OpenRouter（内置）',
-  llama_cpp: 'llama.cpp（内置）',
+  nvidia: 'NVIDIA',
+  openrouter: 'OpenRouter',
+  llama_cpp: 'llama.cpp',
   ollama: 'Ollama',
   custom: '自定义'
 };
 
-/** Types a user may create from this surface (the three built-ins always exist). */
+/** Supported protocols; providers are only created by the user. */
 export const CREATABLE_PROVIDER_TYPES: readonly ProviderType[] = [
   'openai_compatible',
   'anthropic_compatible',
+  'nvidia',
+  'openrouter',
+  'llama_cpp',
   'ollama',
   'custom'
 ];
@@ -535,18 +538,6 @@ export const DEFAULT_PROVIDER_ENDPOINTS: Readonly<Partial<Record<ProviderType, s
   anthropic_compatible: 'https://api.anthropic.com',
   ollama: 'http://127.0.0.1:11434/v1'
 };
-
-/**
- * The three providers the main process always materialises (`normalizeProvidersConfig` in
- * `config/provider-rules.ts`). Their id, name, endpoint and credential reference are
- * rewritten on every save, so the surface locks those fields and marks them 「内置」
- * rather than offering an edit the backend would silently discard.
- */
-export const FIXED_PROVIDER_IDS: readonly string[] = ['nvidia', 'openrouter', 'llama_cpp'];
-
-export function isFixedProviderId(providerId: string): boolean {
-  return FIXED_PROVIDER_IDS.includes(providerId.trim().toLowerCase());
-}
 
 /**
  * Provider id from a display name.
@@ -609,9 +600,7 @@ export function createModelDraftFromRemote(id: string): ProviderConfig['models']
 /**
  * A new provider draft with a unique id.
  *
- * Non-fixed providers keep `credentialRef` pointing at their own secret slot, which is
- * what `settings.setProviderSecret` writes — a stored key is unusable until the provider
- * references it (`resolveCredential` in the main process).
+ * Credentials are linked to the provider's own secret slot when the user saves a key.
  */
 export function createProviderDraft(type: ProviderType, existingIds: readonly string[]): ProviderConfig {
   const base = providerIdFromName(`new-${type}`) || 'provider';

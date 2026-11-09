@@ -59,6 +59,15 @@ test('provider-specific options stay scoped to NVIDIA and OpenAI', async () => {
   assert.equal(router.model.invocationParams({}).parallel_tool_calls, undefined);
 });
 
+test('NVIDIA uses the user-configured endpoint and preserves explicit endpoint overrides', async () => {
+  const config = provider('nvidia');
+  const configured = await factory.createModelForProvider(config, 'fixture-model');
+  assert.equal(configured.runtime.baseUrl, config.endpoint);
+  config.options = { endpointOverride: 'https://private-gateway.example/v1' };
+  const overridden = await factory.createModelForProvider(config, 'fixture-model');
+  assert.equal(overridden.runtime.baseUrl, config.options.endpointOverride);
+});
+
 test('llama.cpp keeps sampling fallbacks, explicit overrides and forced streaming', async () => {
   const config = provider('llama_cpp', {
     temperature: 0, topP: 0.8, presencePenalty: 0,

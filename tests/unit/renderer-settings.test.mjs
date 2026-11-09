@@ -14,8 +14,7 @@ import * as esbuild from 'esbuild';
  *
  *   - `settings.save` has no partial patch, so "dirty" is a diff against the loaded
  *     document and the bar's count and the section dots come from one call;
- *   - the backend rewrites the three fixed providers on every save, so a locked field is
- *     not a UI preference but a statement about `normalizeProvidersConfig`;
+ *   - every supported provider protocol can be added by the user;
  *   - an exported snapshot cannot contain a plaintext secret, because the draft type has no
  *     key field at all — the assertion is the positive control for that design;
  *   - an import is validated structurally before it can replace the draft, and the round
@@ -405,10 +404,12 @@ test('a new provider gets a unique id and a credential ref pointing at its own s
   );
 });
 
-test('the three fixed providers are recognised, and their fields are the locked ones', () => {
-  assert.deepEqual([...rules.FIXED_PROVIDER_IDS], ['nvidia', 'openrouter', 'llama_cpp']);
-  assert.equal(rules.isFixedProviderId('NVIDIA'), true);
-  assert.equal(rules.isFixedProviderId('my-openai'), false);
+test('every supported provider protocol can be added without built-in labels', () => {
+  assert.deepEqual([...rules.CREATABLE_PROVIDER_TYPES].sort(), Object.keys(rules.PROVIDER_TYPE_LABELS).sort());
+  for (const type of rules.CREATABLE_PROVIDER_TYPES) {
+    assert.equal(rules.createProviderDraft(type, []).type, type);
+    assert.doesNotMatch(rules.PROVIDER_TYPE_LABELS[type], /内置/u);
+  }
 });
 
 test('a created model row has the legacy defaults (streaming and tools on, images off)', () => {

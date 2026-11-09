@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { KeyRound, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import type { ProviderConfig, ProviderTestResult, RemoteModelEntry } from '../../../shared/types';
+import { parseProviderModelKey } from '../../../shared/provider-model-key';
 import { useAsyncAction } from '../../app/use-async-resource';
 import { ConfirmDialog } from '../../shell/ConfirmDialog';
 import {
@@ -10,7 +11,6 @@ import {
   createModelDraftFromRemote,
   createProviderDraft,
   credentialRefFor,
-  isFixedProviderId,
   testableModelOptions
 } from '../settings-rules';
 import type { SettingsStore } from '../settings-scope';
@@ -32,20 +32,16 @@ import {
 /**
  * 模型与服务 (T8.3).
  *
- * Three facts from the main process shape this section, and each one is why a naive
+ * Two facts from the main process shape this section, and each one is why a naive
  * "just edit the JSON" form would be wrong:
  *
- *  1. **`normalizeProvidersConfig` always materialises nvidia / openrouter / llama.cpp**
- *     and rewrites their id, name, endpoint and `credentialRef` on every save. Their
- *     fields are therefore locked and marked 「内置」 instead of offering an edit the
- *     backend discards.
- *  2. **A stored secret is unusable until the provider references it**: the model factory
+ *  1. **A stored secret is unusable until the provider references it**: the model factory
  *     reads `provider.credentialRef`, requires `secret:<providerId>` and matches it to
  *     the provider id. So 「保存密钥」 does two things — `settings.setProviderSecret`
  *     (safeStorage) *and* setting `credentialRef` on that provider in the draft, which is
  *     then written by the next 保存设置. The key itself never enters the draft: it lives in
  *     component state only and is cleared on success.
- *  3. **`settings.testProvider` requires a concrete model** (`providerId` + `modelId`,
+ *  2. **`settings.testProvider` requires a concrete model** (`providerId` + `modelId`,
  *     both `min(1)`), so the button is bound to a model selection rather than to the
  *     provider alone.
  */
@@ -113,11 +109,40 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
     { label: '测试 Provider 连通' }
   );
 
-  if (draft === null || provider === null) {
+  if (draft === null) {
     return <FormNote testId="settings-models-unavailable">设置尚未读取完成。</FormNote>;
   }
 
-  const builtIn = isFixedProviderId(provider.id);
+  const addProviderButton = (
+    <button
+      type="button"
+      data-testid="settings-provider-add"
+      onClick={() => {
+        const created = createProviderDraft(
+          CREATABLE_PROVIDER_TYPES[0] ?? 'custom',
+          providers.map((entry: ProviderConfig) => entry.id)
+        );
+        store.update((next) => {
+          next.providers.push(created);
+        });
+        setSelectedId(created.id);
+      }}
+      className={`${formButtonClass} inline-flex items-center gap-1`}
+    >
+      <Plus size={11} aria-hidden="true" />
+      新增供应商
+    </button>
+  );
+
+  if (provider === null) {
+    return (
+      <FormSection title="模型与服务" testId="settings-section-models-body">
+        <FormNote testId="settings-models-empty">尚未配置模型供应商。请新增供应商，填写接入地址并添加模型。</FormNote>
+        <div className="form-action-row">{addProviderButton}</div>
+      </FormSection>
+    );
+  }
+
   const reload = store.reload;
   const patchModel = (modelIndex: number, mutator: (model: ProviderConfig['models'][number]) => void): void => {
     patchProvider((entry) => {
@@ -153,57 +178,29 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
             ))}
           </select>
         </label>
+        {addProviderButton}
         <button
           type="button"
-          data-testid="settings-provider-add"
-          onClick={() => {
-            const created = createProviderDraft(
-              CREATABLE_PROVIDER_TYPES[0] ?? 'custom',
-              providers.map((entry: ProviderConfig) => entry.id)
-            );
-            store.update((next) => {
-              next.providers.push(created);
-            });
-            setSelectedId(created.id);
-          }}
+          data-testid="settings-provider-remove"
+          onClick={() => setRemoveProviderOpen(true)}
           className={`${formButtonClass} inline-flex items-center gap-1`}
         >
-          <Plus size={11} aria-hidden="true" />
-          新增供应商
+          <Trash2 size={11} aria-hidden="true" />
+          移除供应商
         </button>
-        {builtIn ? (
-          <span
-            className="inline-flex h-[var(--control-height)] items-center rounded-control border-[0.5px] border-line px-2.5 text-subtle text-[length:var(--font-meta-size)]"
-            data-testid="settings-provider-builtin"
-          >
-            内置
-          </span>
-        ) : (
-          <button
-            type="button"
-            data-testid="settings-provider-remove"
-            onClick={() => setRemoveProviderOpen(true)}
-            className={`${formButtonClass} inline-flex items-center gap-1`}
-          >
-            <Trash2 size={11} aria-hidden="true" />
-            移除供应商
-          </button>
-        )}
       </div>
 
       <div className="form-grid">
         <TextField
           label="名称"
           value={provider.name}
-          disabled={builtIn}
           onChange={(name) => patchProvider((entry) => void (entry.name = name))}
           testId="settings-provider-name"
         />
         <SelectField
           label="类型"
           value={provider.type}
-          disabled={builtIn}
-          options={(builtIn ? [provider.type] : [...CREATABLE_PROVIDER_TYPES]).map((type) => ({
+          options={CREATABLE_PROVIDER_TYPES.map((type) => ({
             value: type,
             label: PROVIDER_TYPE_LABELS[type]
           }))}
@@ -213,7 +210,6 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
         <TextField
           label="接入地址"
           value={provider.endpoint}
-          disabled={builtIn}
           onChange={(endpoint) => patchProvider((entry) => void (entry.endpoint = endpoint))}
           testId="settings-provider-endpoint"
         />
@@ -555,6 +551,9 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
           setRemoveProviderOpen(false);
           store.update((next) => {
             next.providers = next.providers.filter((entry) => entry.id !== provider.id);
+            if (next.defaultModelId !== null && parseProviderModelKey(next.defaultModelId)?.providerId === provider.id) {
+              next.defaultModelId = null;
+            }
           });
           setSelectedId(null);
         }}

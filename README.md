@@ -17,7 +17,7 @@ Roc 不包含云服务账号或 API 密钥。使用相应功能时，应用会�
 
 ### 模型、文献与网页
 
-- **聊天模型**：NVIDIA、OpenRouter、llama.cpp；也可配置 OpenAI-compatible 或 Anthropic-compatible API。语义索引可选用 OpenAI-compatible embedding API。
+- **聊天模型**：不预置任何供应商。用户可手动添加 OpenAI-compatible、Anthropic-compatible、NVIDIA、OpenRouter、llama.cpp 或 Ollama 服务，填写接入地址、凭据与模型；已有配置可编辑或移除。语义索引可选用 OpenAI-compatible embedding API。
 - **学术文献**：OpenAlex、Crossref、Semantic Scholar、arXiv、PubMed 和 Europe PMC。PubMed 检索通过 Europe PMC；DOI 通过 doi.org 解析；撤稿状态由 OpenAlex 提供。
 - **网页阅读**：通过 Jina Reader 获取用户请求阅读的网页内容。
 - **OCR 模型**：用户主动下载后在本地运行；模型文件来自 Hugging Face 和 GitHub 上游仓库，不随应用安装包分发。

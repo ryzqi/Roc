@@ -283,7 +283,7 @@ try {
         ok: secretResult.ok === true,
         providerCount: saved.data.providers.length,
         defaultModelId: saved.data.defaultModelId,
-        fixedProviders: saved.data.providers
+        unexpectedPresets: saved.data.providers
           .filter((provider) => ['nvidia', 'openrouter', 'llama_cpp'].includes(provider.id))
           .map((provider) => provider.id)
       };
@@ -291,7 +291,7 @@ try {
     { providerId: smokeProviderId, modelId: smokeModelId, modelKey: smokeModelKey, endpoint: smokeProvider.endpoint, secret: smokeSecret }
   );
   assertCheck('0 准备', '默认模型、permissions.mode=default 与 smoke provider 密钥就绪', configured.ok === true, configured.error ?? '');
-  assertCheck('0 准备', 'settings.get 总是返回三个内置 provider（后端规范化）', configured.fixedProviders?.length === 3, JSON.stringify(configured.fixedProviders));
+  assertCheck('0 准备', '保存设置不会自动添加内置 provider', configured.unexpectedPresets?.length === 0, JSON.stringify(configured.unexpectedPresets));
 
   const preflight = await page.evaluate(async (path) => {
     const workspace = await window.roc.workspace.select({ path });
@@ -323,12 +323,13 @@ try {
     'settings-modal-panel 可见'
   );
 
-  // 模型与服务：供应商名与模型显示名。
-  // 默认选中项是内置的 NVIDIA（后端规范化列表把三个内置 provider 排在最前），它的
-  // id / 名称 / 地址被锁定，所以要显式切到 smoke provider 再编辑。
+  // 模型与服务：用户配置的供应商名与模型显示名均可编辑。
   await openSection('models');
-  assertCheck('1 分区读回', '内置 provider 的字段是锁定的（后端会重写它们）', await page.locator('[data-testid="settings-provider-name"]').isDisabled(), 'NVIDIA（默认选中项）');
   await page.selectOption('[data-testid="settings-provider-select"]', smokeProviderId);
+  assertCheck('1 分区读回', '供应商名称、类型与接入地址均可编辑',
+    await page.locator('[data-testid="settings-provider-name"]').isEnabled()
+      && await page.locator('[data-testid="settings-provider-type"]').isEnabled()
+      && await page.locator('[data-testid="settings-provider-endpoint"]').isEnabled());
   await page.fill('[data-testid="settings-provider-name"]', providerNameTag);
   await page.fill('[data-testid="settings-model-name-0"]', modelNameTag);
   assertCheck('1 分区读回', '模型与服务改动进入脏状态', (await dirtyCount()) >= 2, `dirty=${await dirtyCount()}`);
@@ -519,7 +520,7 @@ try {
   );
 
   // 界面读回（重新打开分区，值来自重新读取的后端快照）。切换分区会卸载上一个分区的组件，
-  // 所以「当前选中的供应商」这类组件内状态会回到第一个（内置 NVIDIA）——测试要像用户那样再选一次。
+  // 所以「当前选中的供应商」这类组件内状态会回到第一个，测试要像用户那样再选一次。
   await openSection('models');
   await page.selectOption('[data-testid="settings-provider-select"]', smokeProviderId);
   assertCheck('1 分区读回', '界面读回供应商名与模型显示名', (await readInput('settings-provider-name')) === providerNameTag && (await readInput('settings-model-name-0')) === modelNameTag);

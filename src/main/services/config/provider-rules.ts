@@ -1,11 +1,3 @@
-import {
-  createFixedProviderConfig,
-  createFixedProviderConfigForId,
-  fixedProviderTypes,
-  isFixedProvider,
-  normalizeFixedProvider,
-  resolveFixedProviderType
-} from '../../../shared/provider-defaults';
 import { buildProviderModelKey, parseProviderModelKey } from '../../../shared/provider-model-key';
 import type { DefaultModelState, ProviderConfig, ProvidersConfig } from '../../../shared/types';
 
@@ -29,29 +21,10 @@ function sanitizeDefaultModelId(
 }
 
 export function normalizeProvidersConfig(config: ProvidersConfig): ProvidersConfig {
-  const fixedProviders = new Map<string, ProviderConfig>();
-  const normalizedProviders: ProviderConfig[] = [];
-
-  for (const provider of config.providers) {
-    const fixedProviderType = resolveFixedProviderType(provider);
-    if (fixedProviderType !== null) {
-      if (!fixedProviders.has(fixedProviderType)) {
-        fixedProviders.set(fixedProviderType, normalizeFixedProvider(provider));
-      }
-      continue;
-    }
-    normalizedProviders.push(provider);
-  }
-
-  const orderedProviders = [
-    ...fixedProviderTypes().map((type) => fixedProviders.get(type) ?? createFixedProviderConfig(type)),
-    ...normalizedProviders
-  ];
-
   return {
     schemaVersion: 2,
-    defaultModelId: sanitizeDefaultModelId(orderedProviders, config.defaultModelId),
-    providers: orderedProviders
+    defaultModelId: sanitizeDefaultModelId(config.providers, config.defaultModelId),
+    providers: config.providers
   };
 }
 
@@ -118,23 +91,6 @@ export function deleteProviderFromConfig(config: ProvidersConfig, providerId: st
   const provider = config.providers.find((item) => item.id === providerId);
   if (provider === undefined) {
     return config;
-  }
-
-  if (isFixedProvider(providerId)) {
-    const defaultModelKey = config.defaultModelId === null ? null : parseProviderModelKey(config.defaultModelId);
-    return {
-      schemaVersion: 2,
-      defaultModelId:
-        config.defaultModelId !== null &&
-        defaultModelKey !== null &&
-        defaultModelKey.providerId === providerId &&
-        provider.models.some((model) => buildProviderModelKey(providerId, model.id) === config.defaultModelId)
-          ? null
-          : config.defaultModelId,
-      providers: config.providers.map((item) =>
-        item.id === providerId ? createFixedProviderConfigForId(providerId) : item
-      )
-    };
   }
 
   const defaultModelKey = config.defaultModelId === null ? null : parseProviderModelKey(config.defaultModelId);
