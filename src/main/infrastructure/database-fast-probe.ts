@@ -45,7 +45,6 @@ export const managedDatabaseDefinitions: readonly ManagedDatabaseDefinition[] = 
       'database_health_checks',
       'database_backup_manifests',
       'database_maintenance_runs',
-      'schema_migrations',
       'schema_metadata'
     ],
     open: (pool) => pool.getCoreConnection(),
@@ -68,7 +67,6 @@ export const managedDatabaseDefinitions: readonly ManagedDatabaseDefinition[] = 
       'langgraph_checkpoint_writes',
       'agent_tool_effects',
       'context_artifacts',
-      'schema_migrations',
       'schema_metadata'
     ],
     open: (pool) => pool.getConnection('@roc/plugin-agent'),
@@ -77,7 +75,7 @@ export const managedDatabaseDefinitions: readonly ManagedDatabaseDefinition[] = 
   {
     dbName: 'memory',
     backupFileName: '@roc-plugin-memory.db',
-    requiredTables: ['langgraph_store_items', 'memory_events', 'memory_auto_audit', 'schema_migrations', 'schema_metadata'],
+    requiredTables: ['langgraph_store_items', 'memory_events', 'memory_auto_audit', 'schema_metadata'],
     open: (pool) => pool.getConnection('@roc/plugin-memory'),
     applySchema: applyMemoryDatabaseSchema
   },
@@ -89,7 +87,6 @@ export const managedDatabaseDefinitions: readonly ManagedDatabaseDefinition[] = 
       'scheduled_task_runs',
       'scheduled_occurrences',
       'thread_deletion_journal',
-      'schema_migrations',
       'schema_metadata'
     ],
     open: (pool) => pool.getConnection('@roc/plugin-task'),
@@ -98,14 +95,14 @@ export const managedDatabaseDefinitions: readonly ManagedDatabaseDefinition[] = 
   {
     dbName: 'plugin:@roc/plugin-workspace',
     backupFileName: '@roc-plugin-workspace.db',
-    requiredTables: ['recovery_points', 'schema_migrations', 'schema_metadata'],
+    requiredTables: ['recovery_points', 'schema_metadata'],
     open: (pool) => pool.getConnection('@roc/plugin-workspace'),
     applySchema: applyWorkspaceDatabaseSchema
   },
   {
     dbName: 'plugin:@roc/plugin-diagnostics',
     backupFileName: '@roc-plugin-diagnostics.db',
-    requiredTables: ['performance_samples', 'diagnostic_packages', 'schema_migrations', 'schema_metadata'],
+    requiredTables: ['performance_samples', 'diagnostic_packages', 'schema_metadata'],
     open: (pool) => pool.getConnection('@roc/plugin-diagnostics'),
     applySchema: applyDiagnosticsDatabaseSchema
   },
@@ -124,7 +121,6 @@ export const managedDatabaseDefinitions: readonly ManagedDatabaseDefinition[] = 
       'research_knowledge_chunks_fts',
       'research_knowledge_chunks',
       'research_knowledge_embeddings',
-      'schema_migrations',
       'schema_metadata'
     ],
     open: (pool) => pool.getConnection('@roc/plugin-research'),

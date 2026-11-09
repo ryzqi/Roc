@@ -299,22 +299,6 @@ export class ResearchTaskRepository {
     }
   }
 
-  /** Complete the other half of a restart-safe cross-database schema migration. */
-  migrateExecutionInputs(executionId: string, previousJson: string, currentJson: string): void {
-    this.db.transaction(() => {
-      const row = this.db.prepare("SELECT snapshot_json FROM research_task_executions WHERE kind='stage' AND execution_id=?")
-        .get(executionId) as {snapshot_json: string} | undefined;
-      if (row === undefined) throw new Error('research_task_execution_conflict');
-      const execution = JSON.parse(row.snapshot_json);
-      const actual = JSON.stringify(execution.frozenInputs);
-      if (actual === currentJson) return;
-      if (actual !== previousJson) throw new Error('research_task_execution_conflict');
-      execution.frozenInputs = JSON.parse(currentJson);
-      this.db.prepare("UPDATE research_task_executions SET snapshot_json=? WHERE kind='stage' AND execution_id=?")
-        .run(JSON.stringify(execution), executionId);
-    }).immediate();
-  }
-
   confirmExecution(kind: ResearchTaskExecution['kind'], executionId: string, projectId: string, frozenInputs: ResearchTaskExecution['frozenInputs']): ResearchTaskExecution {
     return this.db.transaction(() => {
       const execution = this.requireExecution(kind, executionId, projectId);

@@ -1,5 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
-import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after,before,test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -207,15 +205,14 @@ test('generated extraction API binds real main reviewer through file awaits and 
   }finally{await f.cleanup();}
 });
 
-test('DB36 upgrade and actual SQLite reopen preserve frozen review/source/Evidence without fabricated extraction or new retrieval',async()=>{
-  const oldApi=createReviewMigrationSeedApi(api,36);
-  const f=await createReviewExtractionFixture(oldApi);let db,reviews,service;
+test('SQLite reopen preserves reviewed records without network requests or writes',async()=>{
+  const f=await createReviewExtractionFixture(api);let db,reviews,service;
   try {
-    oldApi.finishSeed(f.db);
+
     const tables=['research_review_screening_freezes','research_review_screening_plans','research_review_fulltext_bindings',
       'research_evidence','research_evidence_source_locators','research_documents'];
     const columns=tables.map(table=>f.db.prepare(`PRAGMA table_info(${table})`).all().map(column=>column.name));
-    const old=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all());applyOfflineResearchSchema(api, f.db);
+    const old=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all());api.applyResearchDatabaseSchema(f.db);
     tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT * FROM ${table}`).all()
       .map(row=>Object.fromEntries(columns[index].map(key=>[key,row[key]]))),old[index]));
     assert.deepEqual(f.db.prepare('SELECT study_group_head_hash FROM research_review_screening_plans').all(),

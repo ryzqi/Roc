@@ -1,5 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
-import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after,before,test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -194,21 +192,19 @@ test('generated fulltext source API binds actual main sender through asynchronou
   }finally{await f.cleanup();}
 });
 
-test('DB34 upgrade preserves fixed title authority and actual documents; disk reopen keeps fulltext links without another request or source import',async()=>{
-  const oldApi=createReviewMigrationSeedApi(api,34);
-  const f=await scene({},oldApi),directory=await mkdtemp(join(tmpdir(),'roc-fulltext-reopen-'));
+test('SQLite reopen preserves reviewed records without network requests or writes',async()=>{
+  const f=await scene(),directory=await mkdtemp(join(tmpdir(),'roc-fulltext-reopen-'));
   let db,reviews,service;
   try {
-    oldApi.finishSeed(f.db);
+
     const tables=['research_documents','research_document_parses','research_library','research_review_screening_plans',
       'research_review_screening_decisions','research_review_screening_freezes','research_review_corpora','research_review_protocol_versions'];
-    const before=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all()),migrations=f.db.prepare('SELECT * FROM schema_migrations').all();
+    const before=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all());
     const originalColumns=tables.map(table=>f.db.prepare(`PRAGMA table_info(${table})`).all().map(column=>column.name));
-    applyOfflineResearchSchema(api, f.db);
+    api.applyResearchDatabaseSchema(f.db);
     tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT * FROM ${table}`).all()
       .map(row=>Object.fromEntries(originalColumns[index].map(key=>[key,row[key]]))),before[index]));
     assert.equal(f.db.prepare('SELECT full_freeze_hash FROM research_review_screening_plans').pluck().get(),null);
-    assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE version<=34').all(),migrations);
     assert.equal(f.db.prepare('SELECT count(*) FROM research_review_fulltext_bindings').pluck().get(),0);
     const binding=await f.fulltexts.save(f.retrieved(),actor),path=join(directory,'research.sqlite');await f.db.backup(path);
     db=new Database(path);db.pragma('foreign_keys = ON');const repository=new api.ResearchRepository(db,f.tasks,()=>f.time);

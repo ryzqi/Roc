@@ -1,4 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import assert from 'node:assert/strict';
 import {before, after, test} from 'node:test';
 import {mkdtempSync, rmSync, symlinkSync} from 'node:fs';
@@ -23,8 +22,7 @@ before(async()=>{
     export {withResearchWorker} from './src/main/plugins/research/execution/worker-context';
     export {ResearchRepository} from './src/main/plugins/research/repository';
     export {ResearchTaskRepository} from './src/main/plugins/research/research-task-repository';
-    export {applyResearchDatabaseSchema,agentMigrations,researchMigrations} from './src/main/infrastructure/database-schemas';
-    export {applyDatabaseMigrations} from './src/main/infrastructure/database-migrations';
+    export { applyAgentDatabaseSchema, applyResearchDatabaseSchema, researchSchema } from './src/main/infrastructure/database-schemas';
     export {LiteratureImportService} from './src/main/plugins/research/literature-import-service';
     export {ResearchLibraryService} from './src/main/plugins/research/library-service';
     export {readResearchBibliography} from './src/main/plugins/research/bibliography';
@@ -138,7 +136,7 @@ test('pause survives actual database reopen with pending source and original off
     const dbPath=join(directory,'restart-'+crypto.randomUUID()+'.sqlite');
     await f.db.backup(dbPath);
     diskDb=new Database(dbPath);
-    applyOfflineResearchSchema(api, diskDb,()=>at);
+    api.applyResearchDatabaseSchema(diskDb, ()=>at);
     const repository=new api.ResearchRepository(diskDb,f.tasks,()=>at);
     f.setService(f.createService(diskDb,repository));
     assert.deepEqual(f.read(paused),paused);
@@ -377,20 +375,4 @@ test('lookup finds the newest scoped session with tied clock timestamps and pend
     assert.equal(f.requests.length,1);
     assert.equal(f.workers(),1);
   }finally{await f.dispose();}
-});
-
-test('migration14 to15 preserves existing preview and applied migration receipts without fabricated checkpoints',()=>{
-  const db=new Database(':memory:');
-  try{
-    const dbName='plugin:@roc/plugin-research';
-    api.applyDatabaseMigrations(db,{dbName,migrations:api.researchMigrations.filter(m=>m.version<=14),now:()=>at});
-    db.prepare('INSERT INTO research_zotero_previews VALUES (?,?,?,?,?,?,?)')
-      .run('old-preview','old-owner',null,null,at,'2026-11-11T00:00:00.000Z','{"original":true}');
-    const old=db.prepare('SELECT * FROM schema_migrations WHERE db_name=? ORDER BY version').all(dbName);
-    api.applyDatabaseMigrations(db,{dbName,migrations:api.researchMigrations.filter(m=>m.version<=15),now:()=>at});
-    assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE db_name=? AND version<=14 ORDER BY version').all(dbName),old);
-    assert.equal(db.prepare('SELECT snapshot_json FROM research_zotero_previews').pluck().get(),'{"original":true}');
-    assert.equal(db.prepare('SELECT count(*) FROM research_zotero_sync_checkpoints').pluck().get(),0);
-    assert.equal(db.prepare('SELECT max(version) FROM schema_migrations WHERE db_name=?').pluck().get(dbName),15);
-  }finally{db.close();}
 });

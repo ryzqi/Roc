@@ -77,7 +77,7 @@ export function createResearchFixture(api, stage = 'figure', workspacePath = '/t
   api.applyResearchDatabaseSchema(db, now);
   const agentDb = new Database(':memory:');
   agentDb.pragma('foreign_keys = ON');
-  api.applyDatabaseMigrations(agentDb, { dbName: 'agent', migrations: api.agentMigrations });
+  api.applyAgentDatabaseSchema(agentDb);
   const tasks = new api.ResearchTaskRepository(agentDb, now);
   const repository = new api.ResearchRepository(db, tasks, now);
   const project = repository.createProject({

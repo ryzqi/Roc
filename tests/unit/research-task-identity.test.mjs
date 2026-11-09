@@ -313,28 +313,6 @@ test('cross-database association failure blocks model execution; startup repairs
   } finally { await r.service.shutdown(); f.close(); }
 });
 
-test('migration preserves old stage snapshots as explicitly unlinked without inventing tasks', () => {
-  const f = fixture();
-  const old = new Database(':memory:');
-  try {
-    api.applyDatabaseMigrations(old, { dbName: 'research', migrations: api.researchMigrations.filter(entry => entry.version < 6) });
-    const projectRow = f.db.prepare('SELECT * FROM research_projects WHERE id = ?').get(f.project.id);
-    const columns = Object.keys(projectRow);
-    old.prepare(`INSERT INTO research_projects (${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`)
-      .run(...Object.values(projectRow));
-    const snapshot = { ...f.run };
-    delete snapshot.taskId;
-    old.prepare(`INSERT INTO research_stage_runs
-      (id,project_id,stage,request_id,parent_run_id,status,snapshot_json,context_json)
-      VALUES (?,?,'discovery','old',NULL,'completed',?,'{}')`).run('old-run', f.project.id, JSON.stringify(snapshot));
-    api.applyDatabaseMigrations(old, { dbName: 'research', migrations: api.researchMigrations, allowOffline: true });
-    const saved = old.prepare('SELECT task_id, snapshot_json FROM research_stage_runs WHERE id = ?').get('old-run');
-    assert.equal(saved.task_id, null);
-    assert.equal(JSON.parse(saved.snapshot_json).taskId, null);
-    assert.equal(JSON.parse(saved.snapshot_json).id, snapshot.id);
-  } finally { old.close(); f.close(); }
-});
-
 test('capability dispatch consumes only its own asynchronous main-process context', async () => {
   const f = fixture();
   const r = runtime(f);

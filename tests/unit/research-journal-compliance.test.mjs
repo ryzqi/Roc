@@ -396,19 +396,3 @@ test('actual figure file dimensions and bytes obey explicit raster rules; vector
     await assert.rejects(() => inspect(selected), /research_figure_snapshot_changed/u);
   } finally {await f.dispose();}
 });
-
-test('DB50 to51 preserves original migration ledger and creates no inferred journal profile', () => {
-  const db = new Database(':memory:');
-  try {
-    db.pragma('foreign_keys=ON');
-    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research',
-      migrations: api.researchMigrations.filter(migration => migration.version <= 50)});
-    const prior = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research',
-      migrations: api.researchMigrations.filter(migration => migration.version <= 51)});
-    assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=50 ORDER BY version').all(), prior);
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 51);
-    assert.equal(db.prepare('SELECT count(*) FROM research_journal_compliance').pluck().get(), 0);
-    assert.deepEqual(db.pragma('foreign_key_check'), []);
-  } finally {db.close();}
-});

@@ -215,12 +215,6 @@ export class ResearchRunRepository {
   }
 
   reconcileTaskLinks(): void {
-    const migrations = this.db.prepare('SELECT execution_id,previous_json,current_json FROM research_execution_input_migrations').all() as
-      Array<{execution_id:string;previous_json:string;current_json:string}>;
-    for (const migration of migrations) {
-      this.research.tasks.migrateExecutionInputs(migration.execution_id, migration.previous_json, migration.current_json);
-      this.db.prepare('DELETE FROM research_execution_input_migrations WHERE execution_id=?').run(migration.execution_id);
-    }
     this.research.tasks.reconcileStageIntents((id,projectId) => this.db.prepare('SELECT 1 FROM research_stage_runs WHERE id=? AND project_id=?').get(id,projectId) !== undefined);
     this.db.transaction(() => {
       const rows = this.db.prepare('SELECT id, project_id, task_id, status, stage, request_id, parent_run_id, snapshot_json FROM research_stage_runs')

@@ -84,7 +84,7 @@ roc-preview://research/figures/{encodedProjectId}/{encodedFigureId}/{png|svg|pdf
 
 `research.saveFigureConsistencyReview` 将指定 mark、channel、field 和 scenePath 绑定到图稿主张及真实结果指标 Evidence。请求显式包含工件版本、图稿 manifest/trace hash、单位、转换/舍入/容差规则、最新父审核和人工理由。计算沿用正文合同；不一致照实保存，不授予科学批准。主进程在异步指标读取后再次核对图稿文件，并在事务中重查主张、Evidence、结果和工件版本。窗口身份由 IPC 绑定，完全相同的请求重试返回原回执且零重复写入。
 
-DB49 保存不可变版本，包括冻结运行、图稿、trace 引用、选中编码/实际 scene item、主张、Evidence、指标结果与计算。审核头纳入整个工件快照，保存后旧阶段审批版本失效。`research.getFigureConsistencyHistory` 独立验证保存 JSON/hash、来源清单关联、计算与父版本；当前来源失效后仍能读取明确标注的 `stored_receipt`。每条映射只保存选中项，不复制整个 trace。
+保存不可变版本，包括冻结运行、图稿、trace 引用、选中编码/实际 scene item、主张、Evidence、指标结果与计算。审核头纳入整个工件快照，保存后旧阶段审批版本失效。`research.getFigureConsistencyHistory` 独立验证保存 JSON/hash、来源清单关联、计算与父版本；当前来源失效后仍能读取明确标注的 `stored_receipt`。每条映射只保存选中项，不复制整个 trace。
 
 主进程合同、IPC、同壳映射界面与审批/导出消费者共同使用这一回执。核对的是实际 datum 和完整编码，不推断科学含义或最终像素位置。
 

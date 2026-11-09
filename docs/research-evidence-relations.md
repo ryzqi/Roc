@@ -11,7 +11,7 @@ block ID、原文 source SHA、保存解析内容 SHA、parserFingerprint、原�
 解析必须是该文档的当前 ready 结果，原文 sourceHash 必须与解析一致。证据、
 已有来源metadata和定位 sidecar 在同一事务中保存；失败全部回滚。
 
-DB20 `research_evidence_source_locators` 按 evidence ID 保存不可替换的定位 JSON。
+`research_evidence_source_locators` 按 evidence ID 保存不可替换的定位 JSON。
 相同捕获幂等，已保存定位冲突拒绝写入。重解析保留旧 evidence 与定位，旧引用
 仍明确标为 superseded；严格正文/图稿/导出消费者仍拒绝旧来源。旧 evidence
 保持原始 locator 与状态，不迁移猜测坐标。非托管文档来源的 sourceLocator 为
@@ -19,7 +19,7 @@ null，原始来源文字仍可核对；这不表示它已具备托管文档预�
 
 ## 关系快照与人工审核
 
-DB21 `research_evidence_relations` 保存 supports、contradicts、qualifies、
+`research_evidence_relations` 保存 supports、contradicts、qualifies、
 depends_on、supersedes 及 historical。提议绑定真实 claim/evidence/project、
 claim version/hash、完整来源快照/digest、原文、定位、适用条件和提出者。
 qualifies 必须提供条件，supersedes 必须指定同一主张版本的有效旧关系。
@@ -42,9 +42,9 @@ sender window ID 绑定为 `window:<id>`；请求不能指定提出者或审核�
 受原阶段编辑权限约束。approved、archived、非当前阶段或未附加到阶段的
 工件拒绝审核。agent 提议仍受原阶段编辑权限约束。
 
-迁移只把现存 evidenceIds 保存为 historical 关联，不补造 supports、提出者、
-审核人或审核时间，不改历史 Claim status。跨项目、悬空端点或破损来源使
-整个迁移回滚，数据库保持 DB20。批准和当前导出已使用严格语义消费者准入；定位迁移候选、可信捕获与显式来源替代/实验重跑关联见下文。
+historical 只表示保存的来源关联，不表示已确认的 supports，也不补造提出者、
+审核人或审核时间。批准和当前导出执行严格语义消费者准入；定位候选、
+可信捕获与显式来源替代/实验重跑关联见下文。
 
 ## 可信用户 IPC
 
@@ -149,10 +149,10 @@ research_export_semantic_snapshot_changed。用户需核对当前关系并重新
 
 ## 重解析后的定位候选
 
-DB22 保存不可替换的 source-migration proposal 与完整快照 SHA。同一文档的实际
+保存不可替换的 source-migration proposal 与完整快照 SHA。同一文档的实际
 新解析完成后，在原 parse/index/证据失效事务中生成候选。原来源快照、digest、
 固定旧定位及新 parse/source/hash/fingerprint 均保留；不修改旧 Evidence、Claim
-或恢复旧科学审核。没有旧已捕获来源的解析不进行块匹配。迁移不回填历史候选。
+或恢复旧科学审核。没有旧已捕获来源的解析不进行块匹配。不补造历史候选。
 
 匹配规则公开为 exact_text_then_whitespace/1：先匹配完整原文，再仅规范化空白。
 多个同文块标 ambiguous，保留真实索引顺序，不按旧页距离选一个；正文变化
@@ -169,13 +169,13 @@ DB22 保存不可替换的 source-migration proposal 与完整快照 SHA。同�
 
 ## 同文档定位候选与用户决定
 
-DB22 的候选保存不可替换的旧来源快照/digest、新 source/parse/hash/fingerprint 与
+候选保存不可替换的旧来源快照/digest、新 source/parse/hash/fingerprint 与
 实际索引顺序中的完整原始解析 block。算法先比较完整原文，再只规范空白；多个
 匹配保持 ambiguous，不按旧页距离挑选。改变正文保存 no_match，不猜替代。
 当前目标源与保存 parse SHA 必须一致；后续解析使旧候选 targetStatus 为 stale，
 候选原记录保持不变。原始区域按保存的坐标依据投影；历史记录缺少坐标依据时只允许页级定位。
 
-DB23 research_source_migration_decisions 为每个候选保存一个不可替换的用户决定。
+research_source_migration_decisions 为每个候选保存一个不可替换的用户决定。
 required proposalHash 随 list/get 返回；capture/reject 必须明确提交候选、旧来源
 和目标 parse SHA、requestId 与 nullable note。capture 必须指定实际候选 chunkId，
 即使只有一个目标也不自动选择；reject 不接受 chunkId。无匹配或旧目标可拒绝，
@@ -217,7 +217,7 @@ Electron 验证依据最终原生区域坐标，不仅依据 getAnimations().fin
 
 ## 明确来源替代与重跑前后关联
 
-DB24 research_source_replacements 保存用户明确选定的两个真实 Evidence。请求必须
+research_source_replacements 保存用户明确选定的两个真实 Evidence。请求必须
 指定 document_replacement 或 experiment_rerun、两端 ID、两端当前 digest、requestId
 和 nullable note；窗口身份仍由主进程绑定。新文档附件或同名实验本身不会产生替代。
 文档替代必须是两个不同的托管文档；同文档重解析继续走定位候选。实验关联必须

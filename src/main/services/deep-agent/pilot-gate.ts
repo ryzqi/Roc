@@ -1,4 +1,3 @@
-import { removePilotAccounting } from '../../infrastructure/remove-execution-config';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -105,9 +104,7 @@ export class PilotStateStore {
     if (!existsSync(this.path)) return { ...defaultPilotSettings };
     try {
       const raw = JSON.parse(readFileSync(this.path, 'utf8'));
-      const settings = pilotSettingsSchema.parse(removePilotAccounting(raw));
-      if (JSON.stringify(raw) !== JSON.stringify(settings)) this.write(settings);
-      return settings;
+      return pilotSettingsSchema.parse(raw);
     } catch {
       throw new Error('pilot_state_corrupt');
     }

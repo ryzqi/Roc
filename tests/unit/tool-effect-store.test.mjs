@@ -17,18 +17,14 @@ const { AgentToolEffectStore, createToolEffectIdentity, hashToolInput } = await 
   'src/main/services/deep-agent/tool-effect-store.ts',
   bundleOptions
 );
-const { applyDatabaseMigrations } = await importTypeScriptModule(
-  'src/main/infrastructure/database-migrations.ts',
-  bundleOptions
-);
-const { agentMigrations } = await importTypeScriptModule(
+const { applyAgentDatabaseSchema } = await importTypeScriptModule(
   'src/main/infrastructure/database-schemas.ts',
   bundleOptions
 );
 
-function createDatabase(migrations = agentMigrations, location = ':memory:') {
+function createDatabase(location = ':memory:') {
   const db = new Database(location);
-  applyDatabaseMigrations(db, { dbName: 'agent', migrations });
+  applyAgentDatabaseSchema(db);
   return db;
 }
 
@@ -47,20 +43,6 @@ function operation(overrides = {}) {
     reconcileStrategy: 'retry_safe',
     ...overrides
   };
-}
-
-function insertLegacyEffect(db, { runId, status, reconcileStrategy = 'retry_safe' }) {
-  db.prepare(`INSERT INTO agent_tool_effects (
-    run_id, thread_id, execution_path, checkpoint_id, tool_call_id, tool_name, input_hash,
-    effect_class, reconcile_strategy, status, created_at, updated_at
-  ) VALUES (?, ?, 'main', 'checkpoint-1', ?, 'write_file', 'legacy-input-hash',
-    'workspace_mutation', ?, ?, '2026-10-30T00:00:00.000Z', '2026-10-30T00:00:00.000Z')`).run(
-    runId,
-    `thread-${runId}`,
-    `call-${runId}`,
-    reconcileStrategy,
-    status
-  );
 }
 
 test('operation identity is stable under object key order and changes with arguments', () => {
@@ -155,7 +137,7 @@ test('reconciled replay rejects corrupted receipt and output after reopening SQL
   const directory = mkdtempSync(join(tmpdir(), 'roc-tool-effect-replay-'));
   const databasePath = join(directory, 'agent.sqlite');
   const input = operation({ runId: 'run-replay' });
-  let db = createDatabase(agentMigrations, databasePath);
+  let db = createDatabase(databasePath);
   let store = new AgentToolEffectStore(db);
   const started = store.beginOperation(input);
   store.markStarted(started.lease);
@@ -167,7 +149,7 @@ test('reconciled replay rejects corrupted receipt and output after reopening SQL
     evidenceHash: hashToolInput({ value: 'verified' }), recordedAt: '2026-10-30T00:00:00.000Z'
   }, result: { value: 'verified' } });
   db.close();
-  db = createDatabase(agentMigrations, databasePath);
+  db = createDatabase(databasePath);
   store = new AgentToolEffectStore(db);
   const changes = db.prepare('SELECT total_changes() AS changes').get().changes;
   assert.deepEqual(store.replayRecordedOperation(input), {
@@ -197,14 +179,14 @@ test('SQLite restart marks dispatched operations unknown and fences the old proc
   const directory = mkdtempSync(join(tmpdir(), 'roc-tool-effect-restart-'));
   const databasePath = join(directory, 'agent.sqlite');
   const input = operation({ runId: 'run-restart', threadId: 'thread-restart' });
-  const beforeRestart = createDatabase(agentMigrations, databasePath);
+  const beforeRestart = createDatabase(databasePath);
   const storeBeforeRestart = new AgentToolEffectStore(beforeRestart);
   const started = storeBeforeRestart.beginOperation(input);
   assert.equal(started.kind, 'execute');
   storeBeforeRestart.markStarted(started.lease);
   beforeRestart.close();
 
-  const afterRestart = createDatabase(agentMigrations, databasePath);
+  const afterRestart = createDatabase(databasePath);
   const storeAfterRestart = new AgentToolEffectStore(afterRestart);
   storeAfterRestart.markRestartedUnknown(input.runId);
 
@@ -220,10 +202,10 @@ test('SQLite restart marks dispatched operations unknown and fences the old proc
   rmSync(directory, { recursive: true, force: true });
 });
 
-test('restore rejects historical effect schemas without changing the target', () => {
-  const source = createDatabase(agentMigrations.filter(entry => entry.version <= 8));
+test('restore rejects incompatible effect schemas without changing the target', () => {
+  const source = new Database(':memory:');
   const target = createDatabase();
-  insertLegacyEffect(source, {runId:'legacy',status:'succeeded'});
+  source.exec('CREATE TABLE agent_tool_effects (run_id TEXT)');
   assert.throws(() => new AgentToolEffectStore(target).restoreFrom(source), /agent_tool_effect_restore_schema_invalid/);
   assert.equal(target.prepare('SELECT count(*) FROM agent_tool_effects').pluck().get(),0);
   source.close(); target.close();
@@ -232,7 +214,7 @@ test('restore rejects historical effect schemas without changing the target', ()
 test('current restore preserves successful receipts and fences unfinished attempts', async () => {
   const directory = mkdtempSync(join(tmpdir(),'roc-effect-restore-'));
   const sourcePath = join(directory,'source.db');
-  let source = createDatabase(agentMigrations,sourcePath);
+  let source = createDatabase(sourcePath);
   const store = new AgentToolEffectStore(source);
   const done = operation();
   const active = operation({runId:'active'});

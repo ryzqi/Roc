@@ -184,21 +184,3 @@ test('startup interrupts active linked tasks, preserves cancellation and never r
     assert.equal(cancelled.repository.runs.get(cancelled.run.id, cancelled.project.id).status, 'cancelled');
   } finally { cancelled.close(); }
 });
-
-test('v12 task migration preserves identity and status while requiring the new lifecycle contract', () => {
-  const db = new Database(':memory:');
-  try {
-    db.pragma('foreign_keys = ON');
-    api.applyDatabaseMigrations(db, { dbName: 'agent', migrations: api.agentMigrations.filter(migration => migration.version <= 12) });
-    const task = { schemaVersion: 1, id: 'existing-task', projectId: 'project', goal: 'Existing goal',
-      rootAgentRunId: null, status: 'cancelled',
-      createdAt: '2026-11-03T00:00:00.000Z', updatedAt: '2026-11-03T01:00:00.000Z' };
-    db.prepare('INSERT INTO research_tasks (id,project_id,snapshot_json,created_at) VALUES (?,?,?,?)')
-      .run(task.id, task.projectId, JSON.stringify(task), task.createdAt);
-    api.applyDatabaseMigrations(db, { dbName: 'agent', migrations: api.agentMigrations, allowOffline: true });
-    const migrated = JSON.parse(db.prepare('SELECT snapshot_json FROM research_tasks WHERE id=?').pluck().get(task.id));
-    assert.deepEqual(migrated, { ...task, schemaVersion: 2, statusReason: null });
-    assert.equal(db.prepare('SELECT COUNT(*) FROM research_task_executions').pluck().get(), 0);
-    assert.throws(() => new api.ResearchTaskRepository(db).get(task.id, task.projectId), /expected 3/); // Current readers require the explicit offline converter.
-  } finally { db.close(); }
-});

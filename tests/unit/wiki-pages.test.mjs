@@ -125,20 +125,6 @@ test('trusted IPC binds human authority and project; generated drafts cannot be 
   }finally{await f.wiki.shutdown();f.close();}
 });
 
-test('migration 70 backfills existing captured sources without rewriting original evidence',async()=>{
-  const f=createResearchFixture(api,'reading'),db=new Database(':memory:');db.pragma('foreign_keys=ON');
-  try {
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.slice(0,69),allowOffline:true});
-    const repository=new api.ResearchRepository(db,f.tasks),project=repository.createProject({title:'Old',description:'',workspacePath:'/tmp/wiki-migration'});
-    const evidence=addSource({repository,project});
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations,allowOffline:true});
-    assert.equal(repository.wiki.search(project.id).length,1);assert.equal(repository.wiki.search(project.id)[0].job.status,'queued');
-    assert.equal(repository.evidence.inspectEvidence(evidence.id,project.id).evidence.excerpt,evidence.excerpt);
-    repository.wiki.start();await repository.wiki.idle();await repository.wiki.shutdown();
-    assert.equal(repository.wiki.search(project.id)[0].revision,1);
-  }finally{db.close();f.close();}
-});
-
 test('assistant revision remains a draft with original references; structural lint reports uncited sections and broken links',async()=>{
   const f=await scene();try {
     const input=saveInput(f,{...f.page.current.sections[0],id:'synthesis'});input.section.body='A synthesis requiring verification.';

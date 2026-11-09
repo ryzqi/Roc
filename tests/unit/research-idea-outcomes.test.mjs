@@ -57,40 +57,6 @@ test('actual plan/result evidence comparison reports precise definition unit dir
   await assert.rejects(service.save(partial), /research_human_required/u);
 });
 
-test('DB45 to46 preserves original Canvas and frozen method bytes and adds only the empty assessment timeline', () => {
-  const f = createResearchFixture(api, 'ideation'), old = new Database(':memory:');
-  try {
-    const run = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {
-      title: 'Frozen plan migration', markdown: 'Synthetic Canvas', claims: [], sections: [], verdict: 'uncertain',
-      ideaCanvas: ideaCanvasContentFixture()
-    })), artifactId = run.outputArtifactIds[0], canvas = f.repository.ideas.get(artifactId);
-    const plan = api.withResearchHumanContext({capability: 'research.ideaPlans.save', projectId: f.project.id, windowId: 61},
-      () => f.repository.ideaPlans.save({projectId: f.project.id, artifactId, requestId: 'method',
-        canvas: {version: canvas.version, contentHash: canvas.contentHash}, parent: null, revisionReason: null, body: ideaPlanBodyFixture()}));
-    api.withResearchHumanContext({capability: 'research.ideaPlans.freeze', projectId: f.project.id, windowId: 61},
-      () => f.repository.ideaPlans.freeze({projectId: f.project.id, artifactId, versionId: plan.version.id,
-        expectedHash: plan.versionHash, requestId: 'freeze', reviewNote: 'Engineering migration fixture'}));
-    old.pragma('foreign_keys=ON');
-    api.applyDatabaseMigrations(old, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(entry => entry.version <= 45)});
-    const tables = ['research_projects', 'research_artifacts', 'research_idea_canvases',
-      'research_idea_canvas_revisions', 'research_idea_plan_versions', 'research_idea_plan_freezes'];
-    const originals = new Map();
-    for (const table of tables) {
-      const rows = f.db.prepare(`SELECT * FROM ${table}`).all();
-      originals.set(table, rows);
-      for (const row of rows) {
-        const columns = Object.keys(row);
-        old.prepare(`INSERT INTO ${table} (${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`).run(...Object.values(row));
-      }
-    }
-    api.applyDatabaseMigrations(old, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(entry => entry.version <= 46)});
-    assert.equal(old.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 46);
-    for (const table of tables) assert.deepEqual(old.prepare(`SELECT * FROM ${table}`).all(), originals.get(table));
-    assert.equal(old.prepare('SELECT count(*) FROM research_idea_outcomes').pluck().get(), 0);
-    assert.deepEqual(old.pragma('foreign_key_check'), []);
-  } finally {old.close(); f.close();}
-});
-
 test('outcome IPC retains known integrity errors and hides unexpected internal failures', async () => {
   let failure = new Error('research_result_evidence_changed');
   const handlers = new Map();

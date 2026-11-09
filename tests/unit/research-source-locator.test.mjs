@@ -1,4 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -232,119 +231,6 @@ test('migration reads refuse foreign sources and corrupt snapshots or current ta
   }finally{f.close();}
 });
 
-test('DB21 to26 retains captured sources and claims without inventing migration proposals or decisions',()=>{
-  const db=new Database(':memory:'),agentDb=new Database(':memory:');
-  db.pragma('foreign_keys=ON');
-  try {
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(m=>m.version<=21)});
-    api.applyDatabaseMigrations(agentDb,{dbName:'agent',migrations:api.agentMigrations});
-    const tasks=new api.ResearchTaskRepository(agentDb,()=>timestamp);
-    const repository=new api.ResearchRepository(db,tasks,()=>timestamp);
-    const project=repository.createProject({title:'Historical source migration',description:'Synthetic DB21 fixture',workspacePath:'/tmp/source-migration-history'});
-    db.prepare("UPDATE research_projects SET current_stage='reading' WHERE id=?").run(project.id);
-    db.prepare("UPDATE research_stage_states SET status='running' WHERE project_id=? AND stage='reading'").run(project.id);
-    // Historical versions had no persistent embedding outbox; seed their original behavior.
-    repository.queueKnowledgeFromSource=()=>{};
-    const f={db,repository,project},document=importedDocument(f);
-    publishParse(f,document,'history-parse',[block('history-block')]);
-    const evidence=capture(f,'history-parse');
-    const artifact=repository.createArtifact({projectId:project.id,stage:'reading',kind:'reading_notes',title:'Historical hypothesis',path:null});
-    repository.evidence.createClaim({projectId:project.id,artifactId:artifact.id,subjectType:'claim',
-      content:'Historical unreviewed inference.',status:'hypothesis',evidenceIds:[evidence.id]});
-    const sourcesBefore=db.prepare('SELECT * FROM research_evidence').all();
-    const claimsBefore=db.prepare('SELECT * FROM research_claims').all();
-    const locationsBefore=db.prepare('SELECT * FROM research_evidence_source_locators').all();
-    applyOfflineResearchSchema(api, db,()=>timestamp);
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),api.researchMigrations.at(-1).version);
-    assert.ok(repository.knowledgeJobs.list(null).some(job=>job.documentId.startsWith('document:') && job.status==='queued'));
-    assert.deepEqual(db.prepare('SELECT * FROM research_evidence').all(),sourcesBefore);
-    assert.deepEqual(db.prepare('SELECT * FROM research_claims').all(),claimsBefore);
-    assert.deepEqual(db.prepare('SELECT * FROM research_evidence_source_locators').all(),locationsBefore);
-    assert.deepEqual(repository.evidence.sourceMigrations.list({projectId:project.id,evidenceId:evidence.id}),[]);
-    assert.equal(db.prepare('SELECT count(*) FROM research_source_migration_decisions').pluck().get(),0);
-    const before=db.prepare('SELECT total_changes()').pluck().get();
-    applyOfflineResearchSchema(api, db,()=>timestamp);
-    assert.equal(db.prepare('SELECT total_changes()').pluck().get(),before);
-  }finally{db.close();agentDb.close();}
-});
-
-test('DB22 to26 preserves pending proposal snapshots and prior scientific records without inventing user decisions',()=>{
-  const db=new Database(':memory:'),agentDb=new Database(':memory:');
-  db.pragma('foreign_keys=ON');
-  try {
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(m=>m.version<=22)});
-    api.applyDatabaseMigrations(agentDb,{dbName:'agent',migrations:api.agentMigrations});
-    const repository=new api.ResearchRepository(db,new api.ResearchTaskRepository(agentDb,()=>timestamp),()=>timestamp);
-    const project=repository.createProject({title:'Historical pending proposal',description:'Synthetic DB22 fixture',workspacePath:'/tmp/pending-migration-history'});
-    db.prepare("UPDATE research_projects SET current_stage='reading' WHERE id=?").run(project.id);
-    db.prepare("UPDATE research_stage_states SET status='running' WHERE project_id=? AND stage='reading'").run(project.id);
-    // Historical versions had no persistent embedding outbox; seed their original behavior.
-    repository.queueKnowledgeFromSource=()=>{};
-    const f={db,repository,project},document=importedDocument(f);
-    publishParse(f,document,'pending-old',[block('old')]);
-    const evidence=capture(f,'pending-old');
-    const artifact=repository.createArtifact({projectId:project.id,stage:'reading',kind:'reading_notes',title:'Historical claim',path:null});
-    repository.evidence.createClaim({projectId:project.id,artifactId:artifact.id,subjectType:'claim',
-      content:'Historical unreviewed claim.',status:'supported',evidenceIds:[evidence.id]});
-    publishParse(f,document,'pending-new',[block('new',{page:3})]);
-    const tables=['research_evidence','research_evidence_source_locators','research_claims','research_claim_revisions',
-      'research_evidence_relations','research_evidence_relation_revisions','research_source_migration_proposals'];
-    const original=tables.map(table=>db.prepare(`SELECT * FROM ${table}`).all());
-    assert.equal(original.at(-1).length,1);
-    applyOfflineResearchSchema(api, db,()=>timestamp);
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),api.researchMigrations.at(-1).version);
-    assert.ok(repository.knowledgeJobs.list(null).some(job=>job.documentId.startsWith('document:') && job.status==='queued'));
-    for (const [index,table] of tables.entries()) assert.deepEqual(db.prepare(`SELECT * FROM ${table}`).all(),original[index]);
-    assert.equal(db.prepare('SELECT count(*) FROM research_source_migration_decisions').pluck().get(),0);
-    const before=db.prepare('SELECT total_changes()').pluck().get();
-    const [inspection]=repository.evidence.sourceMigrations.list({projectId:project.id,evidenceId:evidence.id});
-    assert.equal(inspection.decision,null);
-    assert.equal(inspection.proposalHash,original.at(-1)[0].snapshot_hash);
-    applyOfflineResearchSchema(api, db,()=>timestamp);
-    assert.equal(db.prepare('SELECT total_changes()').pluck().get(),before);
-  }finally{db.close();agentDb.close();}
-});
-
-test('DB23 to26 preserves actual captured migration decisions and creates no inferred replacement lineage',()=>{
-  const db=new Database(':memory:'),agentDb=new Database(':memory:');
-  db.pragma('foreign_keys=ON');
-  try {
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(m=>m.version<=23)});
-    api.applyDatabaseMigrations(agentDb,{dbName:'agent',migrations:api.agentMigrations});
-    const repository=new api.ResearchRepository(db,new api.ResearchTaskRepository(agentDb,()=>timestamp),()=>timestamp);
-    const project=repository.createProject({title:'Historical user migration decision',description:'Synthetic DB23 fixture',workspacePath:'/tmp/replacement-migration-history'});
-    db.prepare("UPDATE research_projects SET current_stage='reading' WHERE id=?").run(project.id);
-    db.prepare("UPDATE research_stage_states SET status='running' WHERE project_id=? AND stage='reading'").run(project.id);
-    // Historical versions had no persistent embedding outbox; seed their original behavior.
-    repository.queueKnowledgeFromSource=()=>{};
-    const f={db,repository,project},document=importedDocument(f);
-    publishParse(f,document,'decision-history-old',[block('old')]);
-    const evidence=capture(f,'decision-history-old');
-    const artifact=repository.createArtifact({projectId:project.id,stage:'reading',kind:'reading_notes',title:'Historical claim',path:null});
-    repository.evidence.createClaim({projectId:project.id,artifactId:artifact.id,subjectType:'claim',
-      content:'Historical supported declaration.',status:'supported',evidenceIds:[evidence.id]});
-    publishParse(f,document,'decision-history-new',[block('new',{page:3})]);
-    const [inspection]=repository.evidence.sourceMigrations.list({projectId:project.id,evidenceId:evidence.id});
-    repository.evidence.sourceMigrations.decide({projectId:project.id,proposalId:inspection.proposal.id,
-      requestId:'synthetic-historical-capture',action:'capture',chunkId:'document:decision-history-new:chunk:0',
-      expectedProposalHash:inspection.proposalHash,expectedSourceDigest:inspection.proposal.sourceDigest,
-      expectedTargetParseHash:inspection.proposal.targetParseHash,note:null},{kind:'user',id:'synthetic-recorded-user'});
-    const tables=['research_evidence','research_evidence_source_locators','research_claims','research_claim_revisions',
-      'research_evidence_relations','research_evidence_relation_revisions','research_source_migration_proposals','research_source_migration_decisions'];
-    const original=tables.map(table=>db.prepare(`SELECT * FROM ${table}`).all());
-    assert.equal(original.at(-1).length,1);
-    applyOfflineResearchSchema(api, db,()=>timestamp);
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),api.researchMigrations.at(-1).version);
-    assert.ok(repository.knowledgeJobs.list(null).some(job=>job.documentId.startsWith('document:') && job.status==='queued'));
-    for (const [index,table] of tables.entries()) assert.deepEqual(db.prepare(`SELECT * FROM ${table}`).all(),original[index]);
-    assert.equal(db.prepare('SELECT count(*) FROM research_source_replacements').pluck().get(),0);
-    const before=db.prepare('SELECT total_changes()').pluck().get();
-    assert.deepEqual(repository.evidence.sourceReplacements.list({projectId:project.id,evidenceId:evidence.id}),[]);
-    applyOfflineResearchSchema(api, db,()=>timestamp);
-    assert.equal(db.prepare('SELECT total_changes()').pluck().get(),before);
-  }finally{db.close();agentDb.close();}
-});
-
 test('zero geometry preserves a page-only location and out-of-range pages or inverted regions cannot be captured',()=>{
   const f=createResearchFixture(api,'reading');
   try {
@@ -380,33 +266,6 @@ test('changed source block or parse identity rolls back capture; existing captur
     assert.throws(()=>capture(f,'guarded-parse'),/research_evidence_source_locator_conflict/u);
     assert.deepEqual(f.repository.evidence.inspectEvidence(original.id,f.project.id).sourceLocator,captured);
   }finally{f.close();}
-});
-
-test('19 to 20 migration preserves historical raw evidence claim state and absence of captured document coordinates',()=>{
-  const db=new Database(':memory:');db.pragma('foreign_keys=ON');
-  const agentDb=new Database(':memory:');
-  try {
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(m=>m.version<=19)});
-    api.applyDatabaseMigrations(agentDb,{dbName:'agent',migrations:api.agentMigrations});
-    const repository=new api.ResearchRepository(db,new api.ResearchTaskRepository(agentDb,()=>timestamp),()=>timestamp);
-    const project=repository.createProject({title:'Historical locator',description:'Migration fixture',workspacePath:'/tmp/locator-migration'});
-    const artifact=repository.createArtifact({projectId:project.id,stage:'discovery',kind:'search_strategy',title:'Historical claim',path:null});
-    db.prepare(`INSERT INTO research_evidence (id,project_id,document_id,chunk_id,source_type,source_id,source_version,title,locator,excerpt,content_hash,created_at)
-      VALUES ('historical-evidence',?,'historical-knowledge','historical:chunk:0','file','historical-source','historical-version','Historical excerpt','p1',?,?,?)`)
-      .run(project.id,'Retained old prose.',hash('Retained old prose.'),timestamp);
-    db.prepare(`INSERT INTO research_claims (id,project_id,artifact_id,subject_type,content,status,evidence_ids_json,version,created_at,updated_at)
-      VALUES ('historical-claim',?,?,'claim','Old saved claim','supported','[\"historical-evidence\"]',1,?,?)`)
-      .run(project.id,artifact.id,timestamp,timestamp);
-    const locatorMigrations=api.researchMigrations.filter(m=>m.version<=20);
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:locatorMigrations,now:()=>timestamp});
-    const inspected=repository.evidence.inspectEvidence('historical-evidence',project.id);
-    assert.equal(inspected.evidence.locator,'p1');assert.equal(inspected.sourceLocator,null);
-    assert.equal(repository.evidence.getClaim('historical-claim').status,'supported');
-    assert.equal(db.prepare('SELECT count(*) FROM research_evidence_source_locators').pluck().get(),0);
-    const changes=db.prepare('SELECT total_changes()').pluck().get();
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:locatorMigrations,now:()=>timestamp});
-    assert.equal(db.prepare('SELECT total_changes()').pluck().get(),changes);
-  }finally{db.close();agentDb.close();}
 });
 
 test('Wiki resolves PDF citations through the captured document and ignores library list filtering',()=>{

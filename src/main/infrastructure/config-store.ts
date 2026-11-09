@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type { Database as DatabaseConnection } from 'better-sqlite3';
 
 import { assertPluginId } from './database-pool';
@@ -10,22 +8,7 @@ type PluginConfigFacade = {
 };
 
 export class ConfigStore {
-  constructor(
-    private readonly coreDb: DatabaseConnection,
-    private readonly configDir: string
-  ) {}
-
-  migrateCurrentSettings(pluginId: string): void {
-    const rawDocument = readFileSync(join(this.configDir, 'settings.json'), 'utf8');
-    // A corrupt settings document must name itself: a bare SyntaxError here reads like a crash.
-    let document: unknown;
-    try {
-      document = JSON.parse(rawDocument);
-    } catch {
-      throw new Error('config_document_corrupt');
-    }
-    this.set(pluginId, 'settingsDocument', document);
-  }
+  constructor(private readonly coreDb: DatabaseConnection) {}
 
   createPluginConfigFacade(pluginId: string): PluginConfigFacade {
     assertPluginId(pluginId);

@@ -197,8 +197,7 @@ getLiteraturePool 同样通过文献上下文读取。
 
 ## 可恢复的逐页核对检查点
 
-Research DB15 新增同步会话、逐页决定、已见对象和完成批次检查点。旧迁移保持不变；
-DB14升级保留原预览、文库、原始来源和迁移回执，不补造历史检查点。
+同步会话保存逐页决定、已见对象和完成批次检查点，不补造历史检查点。
 `startZoteroSync` 明确实例/库/集合、full、incremental或显式rebaseline及1–50页大小；incremental
 仅从同 owner/project/实例/库/集合的上次完整核对版本读取 since。full重新读取
 全范围，保留旧完整版本下限；rebaseline按当前来源完整核对，末页确认后可建立
@@ -253,8 +252,7 @@ reset_required状态提供「按当前来源重新建立检查点」，明确按
 
 ## 原始收录回执对应的来源状态
 
-Research DB16 追加不可变的 `research_zotero_source_states`，保留 DB15 数据与已应用
-迁移 SQL/name/checksum。输入显式携带 projectId、实例/库、真实收录 operationId、
+`research_zotero_source_states` 保存不可变来源状态。输入显式携带 projectId、实例/库、真实收录 operationId、
 itemKey 与 nullable collectionKey。主进程先验证原始回执归属及 hash，再请求 Zotero；
 其他会话/项目/作业不能触发来源读取。复合外键指向实际对象收录观察。
 
@@ -291,7 +289,7 @@ not_found 表示本次来源未找到，不能证明永久删除。网络、解�
 
 ## 附件引用检查后端
 
-Research DB17 追加不可变附件检查，与真实父对象收录回执建立复合外键。
+追加不可变附件检查，与真实父对象收录回执建立复合外键。
 输入携带 projectId、实例/库、父对象 operationId/itemKey 与 attachmentKey。
 先校验当前会话/项目的实际原始回执，再 GET 当前附件；type、parentItem 与 linkMode
 必须真实对应该父对象。关系或模式错误不读取路径，其他会话/项目的回执不触发 HTTP。
@@ -310,7 +308,7 @@ file/view/url 本地引用；链接网址、嵌入图片、回收站及未找到
 
 ## 原生选择的单文件输入授权
 
-Research DB18 追加拥有 owner/project 的不可变授权回执，关联实际附件检查记录。
+追加拥有 owner/project 的不可变授权回执，关联实际附件检查记录。
 输入只有 projectId、inspectionId 和 requestId；renderer 不能提交 selectedPath 来授予权限。
 调用前检查记录必须属于当前范围且文件 ready；真实路径/文件身份必须仍与检查时一致。
 用户通过当前发送窗口的原生单文件选择框选取该文件，授权按钮与路径明确标注读取范围。
@@ -331,7 +329,7 @@ BrowserWindow，再调用单 openFile 的
 
 ## 按单文件授权导入附件内容
 
-Research DB19 追加拥有 owner/project 的附件导入回执，关联实际授权与文档。
+追加拥有 owner/project 的附件导入回执，关联实际授权与文档。
 输入显式携带 projectId、grantId、requestId 和 library_only/current_project 目标。
 原授权、检查记录和原收录回执必须同范围；归档文献不能新增附件。renderer不能指定
 另一 sourcePath 或提交文件字节绕过授权。本步骤没有 Zotero HTTP、worker解析或自动索引。

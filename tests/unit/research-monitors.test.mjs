@@ -333,25 +333,3 @@ test('terminal persistence failure propagates both causes and leaves recoverable
     assert.equal(replay.status, 'interrupted'); assert.equal(f.calls.length, calls);
   } finally {await f.dispose();}
 });
-
-test('migration 58 installs monitors without rewriting earlier observation rows', () => {
-  const db = new Database(':memory:');
-  try {
-    const earlier = api.researchMigrations.filter(migration => migration.version <= 57);
-    api.applyDatabaseMigrations(db, {dbName: 'research', migrations: earlier, now: () => timestamp});
-    db.prepare(`INSERT INTO research_projects(id,title,description,status,current_stage,created_at,updated_at)
-      VALUES (?,?,?,'active','reading',?,?)`).run('retained-project', 'Original project', '', timestamp, timestamp);
-    db.prepare(`INSERT INTO research_openreview_observations(id,project_id,request_id,query_json,snapshot_json,created_at)
-      VALUES (?,?,?,?,?,?)`).run('retained-observation', 'retained-project', 'original-request',
-      '{"kind":"note","id":"original-note"}', '{"original":"observation"}', timestamp);
-    const original = db.prepare('SELECT * FROM research_openreview_observations').all();
-    const ledger = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    api.applyDatabaseMigrations(db, {dbName: 'research',
-      migrations: api.researchMigrations.filter(migration => migration.version <= 58)});
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 58);
-    assert.deepEqual(db.prepare('SELECT * FROM research_openreview_observations').all(), original);
-    assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=57 ORDER BY version').all(), ledger);
-    const tables = db.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'research_monitor%' AND type='table'").all();
-    assert.equal(tables.length, 7);
-  } finally {db.close();}
-});

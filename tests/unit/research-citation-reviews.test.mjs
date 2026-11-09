@@ -1,4 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync, rmSync} from 'node:fs';
@@ -242,22 +241,4 @@ test('persisted timeline survives disk reopening and detects damaged bytes, inde
     db.prepare('UPDATE research_citation_reviews SET snapshot_json=? WHERE id=?').run('{}', second.snapshot.id);
     assert.throws(() => reopened.citationReviews.history(input));
   } finally {db?.close(); f.close(); rmSync(directory, {recursive: true, force: true});}
-});
-
-test('DB47 is append-only, preserves previous migration receipts and installs timeline constraints', () => {
-  const db = new Database(':memory:');
-  try {
-    db.pragma('foreign_keys=ON');
-    const previous = api.researchMigrations.filter(m => m.version <= 46);
-    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: previous});
-    const ledger = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    applyOfflineResearchSchema(api, db);
-    assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=46 ORDER BY version').all(), ledger);
-    assert.equal(db.prepare("SELECT name FROM schema_migrations WHERE version=47").pluck().get(), 'human_citation_directness_timeline');
-    assert.deepEqual(db.pragma('foreign_key_check'), []);
-    const sql = db.prepare("SELECT sql FROM sqlite_schema WHERE name='research_citation_reviews'").pluck().get();
-    assert.match(sql, /UNIQUE\(claim_id,evidence_id,version\)/u);
-    assert.match(sql, /UNIQUE\(project_id,request_id\)/u);
-    assert.match(sql, /CHECK\(json_valid\(snapshot_json\)\)/u);
-  } finally {db.close();}
 });

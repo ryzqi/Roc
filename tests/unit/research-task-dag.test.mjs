@@ -216,7 +216,7 @@ test('a committed research output survives an agent transaction crash and reopen
     f.close();
     researchDb = new Database(join(dir, 'research.db')); agentDb = new Database(join(dir, 'agent.db'));
     api.applyResearchDatabaseSchema(researchDb, () => f.run.createdAt);
-    api.applyDatabaseMigrations(agentDb, {dbName: 'agent', migrations: api.agentMigrations});
+    api.applyAgentDatabaseSchema(agentDb);
     const tasks = new api.ResearchTaskRepository(agentDb);
     const repository = new api.ResearchRepository(researchDb, tasks);
     repository.runs.reconcileTaskLinks();
@@ -260,7 +260,6 @@ test('completed output acceptance fences content drift and keeps a repeated reje
     assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_node_decision_receipts').pluck().get(), 1);
   } finally {f.close();}
 });
-
 
 test('a retried worker replays one real workspace write without creating a second revision', async () => {
   const directory = realpathSync(mkdtempSync(join(tmpdir(), 'roc-node-file-')));

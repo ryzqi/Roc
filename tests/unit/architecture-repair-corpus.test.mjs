@@ -239,7 +239,7 @@ test('artifact-only contract changes preserve the index parser identity', () => 
   assert.deepEqual(researchParserIdentityPayload('a'.repeat(64)), {
     engine: 'paddleocr.js',
     contractVersion: 3,
-    parserVersion: 'roc-research-parser/2',
+    parserVersion: 'roc-research-parser/3',
     modelManifest: 'a'.repeat(64)
   });
 });

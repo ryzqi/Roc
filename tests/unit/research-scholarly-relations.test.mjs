@@ -275,20 +275,6 @@ test('exact saved request replays after source revision drift and snapshot corru
   } finally {await f.dispose();}
 });
 
-test('migration52 preserves every historical ledger row and initializes no inferred scholarly data', () => {
-  const db = new Database(':memory:');
-  try {
-    db.pragma('foreign_keys=ON');
-    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(row => row.version <= 51)});
-    const prior = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(row => row.version <= 52)});
-    assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=51 ORDER BY version').all(), prior);
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 52);
-    assert.equal(db.prepare('SELECT COUNT(*) FROM research_scholarly_snapshots').pluck().get(), 0);
-    assert.deepEqual(db.pragma('foreign_key_check'), []);
-  } finally {db.close();}
-});
-
 test('foreign project reads and canonically rehashed mismatched storage identities cannot expose another snapshot', async () => {
   const f = scene();
   try {

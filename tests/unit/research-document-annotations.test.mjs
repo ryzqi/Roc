@@ -1,4 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -24,14 +23,9 @@ before(async () => {
 });
 after(() => api?.dispose());
 
-async function scene({basis = true, databaseVersion = 26} = {}) {
-  const fixtureApi = databaseVersion === 26 ? api : {...api, applyResearchDatabaseSchema(db) {
-    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research',
-      migrations: api.researchMigrations.filter(migration => migration.version <= databaseVersion)});
-  }};
-  const f = createResearchFixture(fixtureApi, 'reading');
+async function scene({basis = true} = {}) {
+  const f = createResearchFixture(api, 'reading');
   // Seed historical schemas before the durable outbox existed.
-  if (databaseVersion !== 26) f.repository.queueKnowledgeFromSource = () => {};
   f.directory = await mkdtemp(join(tmpdir(), 'roc-document-annotations-'));
   f.root = await realpath(f.directory);
   f.original = await readFile('tests/fixtures/research-workflow/source.pdf');
@@ -275,26 +269,6 @@ test('annotation and capture snapshot tampering is a read failure with no repair
     f.db.prepare("UPDATE research_document_annotation_captures SET snapshot_json=json_set(snapshot_json,'$.source.sourceLocator.blockId','forged')").run();
     before = f.changes();
     assert.equal((await f.get(saved.annotation.id)).error.code, 'research_annotation_snapshot_invalid');
-    assert.equal(f.changes(), before);
-  } finally {await f.cleanup();}
-});
-
-test('DB25 to26 preserves actual parse/index/coordinate and Evidence snapshots without inventing user annotations', async () => {
-  const f = await scene({databaseVersion: 25});
-  try {
-    const evidence = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'document:annotation-parse:chunk:0'});
-    const source = f.repository.evidence.inspectEvidence(evidence.id, f.project.id);
-    const tables = ['research_documents', 'research_document_parses', 'research_document_parse_coordinates',
-      'research_knowledge_documents', 'research_knowledge_chunks', 'research_evidence', 'research_evidence_source_locators'];
-    const originals = tables.map(table => f.db.prepare(`SELECT * FROM ${table}`).all());
-    applyOfflineResearchSchema(api, f.db);
-    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), api.researchMigrations.at(-1).version);
-    tables.forEach((table, index) => assert.deepEqual(f.db.prepare(`SELECT * FROM ${table}`).all(), originals[index]));
-    assert.equal(f.db.prepare('SELECT count(*) FROM research_document_annotations').pluck().get(), 0);
-    assert.equal(f.db.prepare('SELECT count(*) FROM research_document_annotation_captures').pluck().get(), 0);
-    assert.deepEqual(f.repository.evidence.inspectEvidence(evidence.id, f.project.id), source);
-    const before = f.changes();
-    applyOfflineResearchSchema(api, f.db);
     assert.equal(f.changes(), before);
   } finally {await f.cleanup();}
 });

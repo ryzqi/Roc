@@ -101,21 +101,3 @@ test('task event pagination and IPC preserve scope and monotonically ordered seq
     assert.throws(() => api.parseIpcRequestArgs('roc:research:task-events', [{ ...request, limit: 201 }]));
   } finally { f.close(); }
 });
-
-test('v13 migration retains tasks without fabricating historical event rows', () => {
-  const db = new Database(':memory:');
-  try {
-    db.pragma('foreign_keys = ON');
-    api.applyDatabaseMigrations(db, { dbName: 'agent', migrations: api.agentMigrations.filter(migration => migration.version <= 13) });
-    const task = { schemaVersion: 2, id: 'existing', projectId: 'project', goal: 'Existing work', rootAgentRunId: null,
-      status: 'active', statusReason: null,
-      createdAt: '2026-11-03T00:00:00.000Z', updatedAt: '2026-11-03T00:00:00.000Z' };
-    db.prepare('INSERT INTO research_tasks(id,project_id,status,snapshot_json,created_at) VALUES (?,?,?,?,?)')
-      .run(task.id, task.projectId, task.status, JSON.stringify(task), task.createdAt);
-    api.applyDatabaseMigrations(db, { dbName: 'agent', migrations: api.agentMigrations, allowOffline:true });
-    const tasks = new api.ResearchTaskRepository(db);
-    assert.deepEqual(JSON.parse(db.prepare('SELECT snapshot_json FROM research_tasks WHERE id=?').pluck().get(task.id)), task);
-    assert.equal(db.prepare('SELECT COUNT(*) FROM research_task_events WHERE task_id=?').pluck().get(task.id), 0);
-    assert.throws(() => tasks.get(task.id, task.projectId), /expected 3/); // Offline conversion, not DDL, owns historical snapshots.
-  } finally { db.close(); }
-});

@@ -1,5 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
-import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -11,7 +9,6 @@ import {loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 import {createReviewScreeningPlanFixture, reviewScreeningActorFixture as actor,
   reviewScreeningReviewerAFixture as reviewerA, reviewScreeningReviewerBFixture as reviewerB,
   reviewScreeningAdjudicatorFixture as adjudicator} from './fixtures/research-review-screening.mjs';
-import {seedPreFreezeReviewerDecision, seedPreFreezeArbitration} from './fixtures/research-screening-migration-seed.mjs';
 let api;
 before(async()=>{api=await loadResearchTestApi();});
 after(()=>api?.dispose());
@@ -28,13 +25,13 @@ async function scene(options={},selectedApi=api) {
   f.decision=(index,reviewerId,requestId,outcome=include,extra={})=>({...f.phase,hitId:f.corpus.snapshot.hits[index].id,
     expectedPlanHash:f.plan.snapshotHash,requestId,reviewerId,outcome,consideredSuggestion:null,
     parentDecisionId:null,expectedParentHash:null,revisionReason:null,...extra});
-  f.finish=({seed=false}={})=>{
+  f.finish=()=>{
     f.votes=[];
     for(let index=0;index<f.corpus.snapshot.hits.length;index++) {
       for(const reviewer of f.plan.snapshot.request.titleAbstractReviewers) {
         const outcome=index===0&&reviewer.id===reviewerB.id||index===1?exclude:include;
         const request=f.decision(index,reviewer.id,`vote-${index}-${reviewer.id}`,outcome);
-        f.votes.push(seed?seedPreFreezeReviewerDecision(api,f,request,actor):f.decisions.save(request,actor));
+        f.votes.push(f.decisions.save(request,actor));
       }
     }
     if(f.corpus.snapshot.hits.length>0&&f.plan.snapshot.request.titleAbstractReviewers.length===2) {
@@ -42,7 +39,7 @@ async function scene(options={},selectedApi=api) {
       f.arbitrationInput={...f.phase,hitId:raw.hit.id,expectedPlanHash:f.plan.snapshotHash,requestId:'adjudicate-first',reviewerId:adjudicator.id,
         outcome:include,decisions:raw.decisions.map(decision=>({id:decision.snapshot.id,expectedHash:decision.snapshotHash})),
         parentArbitrationId:null,expectedParentHash:null,revisionReason:null};
-      f.arbitrated=seed?seedPreFreezeArbitration(api,f,f.arbitrationInput,actor):f.arbitration.save(f.arbitrationInput,actor);
+      f.arbitrated=f.arbitration.save(f.arbitrationInput,actor);
     }
   };
   f.freezeInput=()=>({...f.phase,requestId:'freeze-title',expectedReviewHash:f.freezing.getPhase(f.phase).reviewHash,
@@ -202,20 +199,18 @@ test('generated freeze API binds actual sender and exact displayed authority has
   }finally{await f.dispose();}
 });
 
-test('DB33 upgrade preserves canonical pre-freeze votes/arbitration and disk reopen retains the resulting freeze without new requests',async()=>{
-  const oldApi=createReviewMigrationSeedApi(api,33);
-  const f=await scene({},oldApi),directory=await mkdtemp(join(tmpdir(),'roc-title-freeze-reopen-'));
+test('SQLite reopen preserves reviewed records without network requests or writes',async()=>{
+  const f=await scene(),directory=await mkdtemp(join(tmpdir(),'roc-title-freeze-reopen-'));
   let db,reviews;
   try {
-    f.finish({seed:true});
-    oldApi.finishSeed(f.db);
+    f.finish();
+
     const tables=['research_review_screening_plans','research_review_screening_decisions','research_review_screening_arbitrations',
       'research_review_screening_suggestions','research_review_corpora','research_review_deduplication_freezes','research_review_protocol_versions'];
     const columns=tables.map(table=>f.db.pragma(`table_info(${table})`).map(column=>column.name).join(','));
-    const before=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all()),migrations=f.db.prepare('SELECT * FROM schema_migrations').all();
-    applyOfflineResearchSchema(api, f.db);
+    const before=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all());
+    api.applyResearchDatabaseSchema(f.db);
     tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT ${columns[index]} FROM ${table}`).all(),before[index]));
-    assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE version<=33').all(),migrations);
     assert.equal(f.db.prepare('SELECT title_freeze_hash FROM research_review_screening_plans').pluck().get(),null);
     assert.equal(f.db.prepare('SELECT count(*) FROM research_review_screening_freezes').pluck().get(),0);
     const frozen=f.freezing.freeze(f.freezeInput(),actor),path=join(directory,'research.sqlite');await f.db.backup(path);await f.reviews.releaseProject(f.project.id);

@@ -1,4 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp, rm} from 'node:fs/promises';
@@ -258,28 +257,4 @@ test('project release aborts only its own active query and keeps another project
     assert.equal(f.reviews.get({projectId:other.id,reviewSearchId:second.snapshot.id}).status,'cancelled');
     assert.equal(f.errors.length,0);
   }finally{await f.dispose();}
-});
-
-test('DB27 upgrade preserves frozen protocol bytes and migration receipts without fabricating searches',()=>{
-  const oldApi={...api,applyResearchDatabaseSchema(db,now) {
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(value=>value.version<=27),now});
-  }};
-  const f=createResearchFixture(oldApi,'reading');
-  try {
-    const draft=f.repository.systematicReviews.save({projectId:f.project.id,requestId:'old-protocol',protocolId:null,
-      expectedVersionId:null,expectedVersionHash:null,body:reviewProtocolBodyFixture(),deviationReason:null},actor);
-    const frozen=f.repository.systematicReviews.freeze({projectId:f.project.id,requestId:'old-confirm',versionId:draft.version.id,
-      expectedVersionHash:draft.versionHash,reviewNote:'Frozen before search storage migration.'},actor);
-    const versions=f.db.prepare('SELECT * FROM research_review_protocol_versions').all();
-    const receipts=f.db.prepare('SELECT * FROM research_review_protocol_freezes').all();
-    const migrations=f.db.prepare('SELECT * FROM schema_migrations').all();
-    applyOfflineResearchSchema(api, f.db);
-    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),api.researchMigrations.at(-1).version);
-    assert.deepEqual(f.db.prepare('SELECT * FROM research_review_protocol_versions').all(),versions);
-    assert.deepEqual(f.db.prepare('SELECT * FROM research_review_protocol_freezes').all(),receipts);
-    assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE version<=27').all(),migrations);
-    assert.deepEqual(f.repository.systematicReviews.get({projectId:f.project.id,versionId:draft.version.id}),frozen);
-    assert.equal(f.db.prepare('SELECT count(*) FROM research_review_searches').pluck().get(),0);
-    assert.equal(f.db.prepare('SELECT count(*) FROM research_review_search_cancellations').pluck().get(),0);
-  }finally{f.close();}
 });

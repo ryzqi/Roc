@@ -6,7 +6,7 @@
 
 解析器保留 PDF.js 实测的页视口、CropBox、UserUnit、旋转及仿射变换。解析区域使用实测 raster-pixel 坐标；不假设所有页都是 PDF points，也不使用固定 1.5 缩放推算位置。图像页单独记录 image frame，HTML 页没有 raster frame。
 
-独立坐标快照与原文件 sourceHash、规范化解析内容 parseHash、结构化工件 SHA-256/大小绑定。DB25 将快照和标记放入解析发布事务：坐标失败不能留下成功解析、新索引或已失效证据。原有解析与历史证据不重写。
+独立坐标快照与原文件 sourceHash、规范化解析内容 parseHash、结构化工件 SHA-256/大小绑定。将快照和标记放入解析发布事务：坐标失败不能留下成功解析、新索引或已失效证据。原有解析与历史证据不重写。
 
 旧解析没有测量快照时返回显式 `coordinates: null`。带快照标记但记录缺失、损坏或工件变更时返回失败，不能当成没有坐标继续投影。原始页面 bbox 与 PDF 坐标互转见 `src/shared/research-document-coordinates.ts`。
 
@@ -99,7 +99,7 @@ roc-preview://research/projects/<projectId>/documents/<documentId>/parses/<parse
 
 ## 批注存储与证据转换
 
-DB26 保存不可变批注快照：完整请求及其 SHA-256、所选原始解析块、用户窗口身份、时间和快照哈希。独立转换收据保存批注哈希、用户身份和实际捕获的 Evidence/SourceLocator。新表为空，不补写历史用户笔记。
+保存不可变批注快照：完整请求及其 SHA-256、所选原始解析块、用户窗口身份、时间和快照哈希。独立转换收据保存批注哈希、用户身份和实际捕获的 Evidence/SourceLocator。不补写历史用户笔记。
 
 四个生成的 preload 方法为 `createDocumentAnnotation`、`listDocumentAnnotations`、`getDocumentAnnotation`、`captureDocumentAnnotation`，对应 `research.annotations.create/list/get/capture`。创建请求没有 wire actor；主进程适配器验证请求，再绑定有效窗口/项目的可信人工上下文。直接工具调用不能获得人工写权限。归档项目不能创建或转换批注。
 
@@ -107,7 +107,7 @@ DB26 保存不可变批注快照：完整请求及其 SHA-256、所选原始解�
 
 历史批注保存原页/区域/文本，即使当前解析和索引已更新也可核查。转换需要明确文本块、当前 parse 和实际索引 chunk，不能从历史文本构造 chunk ID。复用 `Evidence.capture`，Evidence 与收据在同一事务中写入；收据失败必须撤回该事务的 Evidence/SourceLocator。区域保存在链接的批注快照，Evidence SourceLocator 保留原始解析块的完整位置，不能把人工框选区域说成解析器识别区域。
 
-已捕获后重解析仍保留原始收据；当前引用失效状态单独返回。批注和转换不修改主张、关系或科学审核。实际原生流程保存 `p0-production/<taskId>/document-annotation.json`，窗口99是明确合成身份；验证真实解析、注册器、生成适配器、Evidence复用及重放/读取零写入。单元集成还覆盖越界身份、坐标/字节变化、旧解析拒绝转换、索引损坏零写入、收据回滚和 DB25→26 保留。
+已捕获后重解析仍保留原始收据；当前引用失效状态单独返回。批注和转换不修改主张、关系或科学审核。实际原生流程保存 `p0-production/<taskId>/document-annotation.json`，窗口99是明确合成身份；验证真实解析、注册器、生成适配器、Evidence复用及重放/读取零写入。单元集成还覆盖越界身份、坐标/字节变化、旧解析拒绝转换、索引损坏零写入和收据回滚。
 
 ## 阅读器批注界面
 
@@ -166,7 +166,7 @@ Installed implementation: pdfjs-dist6.4.299 PageViewport and paddleocr1.2.0 stru
 
 ### Atomic coordinate snapshot publication
 
-Research DB25 stores coordinate snapshots separately from the original parse JSON. New captures
+The database stores coordinate snapshots separately from the original parse JSON. New captures
 bind sourceHash, canonical parsed-content SHA, processed-page frames and exact structured artifact
 path/hash/size. collectDocumentContent normalizes through the persisted schema before hashing.
 Its result carries data and an explicit nullable coordinate input; complete requires that input.

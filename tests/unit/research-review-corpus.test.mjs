@@ -1,5 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
-import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -182,24 +180,5 @@ test('post-insert source drift aborts corpus capture and rolls back both the cor
     assert.deepEqual(f.db.prepare('SELECT * FROM research_review_searches').all(),sources);
     f.db.exec('DROP TRIGGER change_corpus_source');
     assert.equal(f.corpora.create(f.input,actor).identifiedRecords,8);
-  }finally{await f.dispose();}
-});
-
-test('DB28 upgrade preserves actual protocols, query receipts and raw pools without fabricating corpus decisions',async()=>{
-  const oldApi=createReviewMigrationSeedApi(api,28);
-  const f=createReviewSearchFixture(oldApi);
-  try {
-    await awaitReviewSearchFixture(f,f.reviews.start(f.request,actor));
-    oldApi.finishSeed(f.db);
-    const tables=['research_review_protocol_versions','research_review_protocol_freezes','research_review_searches',
-      'research_review_search_cancellations','research_literature_search_executions','research_literature_search_pools','research_literature_request_receipts'];
-    const columns=tables.map(table=>f.db.pragma(`table_info(${table})`).map(column=>column.name).join(','));
-    const before=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all());
-    const migrations=f.db.prepare('SELECT * FROM schema_migrations').all();
-    applyOfflineResearchSchema(api, f.db);
-    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),api.researchMigrations.at(-1).version);
-    tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT ${columns[index]} FROM ${table}`).all(),before[index]));
-    assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE version<=28').all(),migrations);
-    assert.equal(f.db.prepare('SELECT count(*) FROM research_review_corpora').pluck().get(),0);
   }finally{await f.dispose();}
 });

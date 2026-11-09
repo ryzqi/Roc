@@ -40,8 +40,4 @@ ${(['UPDATE', 'DELETE'] as const).map(event => `CREATE TRIGGER research_wiki_cla
 ${(['INSERT', 'UPDATE', 'DELETE'] as const).map(event => `CREATE TRIGGER research_wiki_relation_${event.toLowerCase()}
  AFTER ${event} ON research_evidence_relations BEGIN
  ${enqueue(affected('relations', `${event === 'INSERT' ? 'new' : 'old'}.claim_id`))} END;`).join('\n')}
-INSERT INTO research_wiki_pages(id,project_id,kind,title,source_document_id,selection_json,updated_at)
- SELECT 'wiki_'||lower(hex(randomblob(16))),project_id,'source',MIN(title),document_id,
- '{"evidenceIds":[],"claimIds":[]}',MAX(created_at) FROM research_evidence GROUP BY project_id,document_id;
-${enqueue('1=1')}
 `;

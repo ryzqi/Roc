@@ -24,7 +24,7 @@
 
 `research.responseMatrix.history` 按 limit/offset 读取最多 100 条，标记 `stored_receipt`。它验证保存字节、索引、父版本和内在位置/稿件/hash 合同，不要求恢复当前来源。历史不能证明当前来源或意见已经重新核查。没有审核时当前 review 为 null、各状态 ID 集合为空，不能推断没有外部审稿意见。
 
-Research DB50 仅新增 `research_response_matrices`；旧迁移账本、用户工件与来源原样保留，不创建或推断审稿意见。没有旧 API、旧 schema 或默认字段兼容层。
+`research_response_matrices` 保存人工回复，不创建或推断审稿意见。没有旧 API、旧 schema 或默认字段兼容层。
 
 ## 实施边界
 

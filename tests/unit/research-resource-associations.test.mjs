@@ -309,17 +309,3 @@ test('target pagination and local strict schema limits reject unbounded or incom
     assert.throws(() => f.associations.read({projectId: 'missing', associationId: 'missing'}));
   } finally {await f.dispose();}
 });
-
-test('migration54 preserves earlier ledgers and never infers resource associations', () => {
-  const db = new Database(':memory:');
-  try {
-    db.pragma('foreign_keys=ON');
-    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(row => row.version <= 53)});
-    const prior = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(row => row.version <= 54)});
-    assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=53 ORDER BY version').all(), prior);
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 54);
-    assert.equal(db.prepare('SELECT COUNT(*) FROM research_resource_associations').pluck().get(), 0);
-    assert.deepEqual(db.pragma('foreign_key_check'), []);
-  } finally {db.close();}
-});

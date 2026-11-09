@@ -1,4 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import assert from 'node:assert/strict';
 import {after, before, test} from 'node:test';
 import {mkdtempSync, rmSync} from 'node:fs';
@@ -167,34 +166,18 @@ test('corrupt or deleted frozen receipts and rehashed request metadata cannot ma
   } finally {f.close();}
 });
 
-test('disk restart reads exact frozen plans without any writes, and DB44 upgrade preserves original Canvas bytes', async () => {
+test('disk restart reads exact frozen plans without any writes', async () => {
   const f = scene(), root = mkdtempSync(join(tmpdir(), 'roc-method-plan-'));
   let disk;
   try {
     const first = f.freeze(f.save(f.request)), path = join(root, 'research.sqlite');
     await f.db.backup(path); disk = new Database(path); disk.pragma('foreign_keys=ON');
-    applyOfflineResearchSchema(api, disk);
+    api.applyResearchDatabaseSchema(disk);
     const repository = new api.ResearchRepository(disk, f.tasks);
     const changes = disk.prepare('SELECT total_changes()').pluck().get();
     assert.deepEqual(repository.ideaPlans.get(f.reference(first)), first);
     assert.equal(disk.prepare('SELECT total_changes()').pluck().get(), changes);
     assert.deepEqual(disk.pragma('foreign_key_check'), []);
-    const old = new Database(':memory:'); old.pragma('foreign_keys=ON');
-    try {
-      api.applyDatabaseMigrations(old, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(entry => entry.version <= 44)});
-      for (const table of ['research_projects', 'research_artifacts', 'research_idea_canvases', 'research_idea_canvas_revisions']) {
-        for (const row of f.db.prepare(`SELECT * FROM ${table}`).all()) {
-          const columns = Object.keys(row);
-          old.prepare(`INSERT INTO ${table} (${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`).run(...Object.values(row));
-        }
-      }
-      const original = old.prepare('SELECT * FROM research_idea_canvases').get(), originalRevision = old.prepare('SELECT * FROM research_idea_canvas_revisions').get();
-      applyOfflineResearchSchema(api, old);
-      assert.equal(old.prepare('SELECT current_version FROM schema_metadata').pluck().get(), api.researchMigrations.at(-1).version);
-      assert.deepEqual(old.prepare('SELECT * FROM research_idea_canvases').get(), original);
-      assert.deepEqual(old.prepare('SELECT * FROM research_idea_canvas_revisions').get(), originalRevision);
-      assert.equal(old.prepare('SELECT count(*) FROM research_idea_plan_versions').pluck().get(), 0);
-      assert.deepEqual(old.pragma('foreign_key_check'), []);
-    } finally {old.close();}
+
   } finally {disk?.close(); f.close(); rmSync(root, {recursive: true, force: true});}
 });

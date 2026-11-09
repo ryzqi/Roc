@@ -1,5 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
-import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after,before,test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -195,35 +193,6 @@ test('historical protocol, archive and actual main sender preserve exact freeze 
     f.db.prepare("UPDATE research_projects SET status='archived' WHERE id=?").run(f.project.id);
     assert.deepEqual(f.fullFreezing.getPhase(f.fullPhase),history.data);
     await assert.rejects(f.fullFreezing.freeze({...input,requestId:'archive'},actor),/research_project_archived/);
-  }finally{await f.cleanup();}
-});
-
-test('DB35 upgrade preserves canonical pre-freeze source/title rows with a null full marker and no fabricated final decision',async()=>{
-  const oldApi=createReviewMigrationSeedApi(api,35);
-  const f=await createReviewFullTextFixture(api,{},oldApi);
-  try {
-    const request=f.retrieved(),source={
-      documentId:f.document.id,libraryItemId:f.document.libraryItemId,sourceHash:f.document.sourceHash,
-      filename:f.document.filename,mediaType:f.document.mediaType,size:f.document.size,
-      parse:{id:f.selection.parseId,hash:f.selection.parseHash,parserFingerprint:f.collected.data.content.parserFingerprint,
-        pageCount:f.collected.data.content.pageCount,coordinateHash:f.repository.documents.coordinates(f.document.id,f.selection.parseId).snapshotHash}
-    };
-    const snapshot=api.researchReviewFullTextBindingSnapshotSchema.parse({
-      id:'canonical-pre36-binding',version:1,request,requestHash:hash(JSON.stringify(request)),
-      hit:f.corpus.snapshot.hits[0],searchSource:f.corpus.snapshot.sources[0],source,actor,recordedAt:f.time
-    });
-    const json=JSON.stringify(snapshot);
-    f.db.prepare(`INSERT INTO research_review_fulltext_bindings
-      (id,project_id,corpus_id,hit_id,version,parent_id,document_id,request_id,snapshot_json,snapshot_hash,created_at)
-      VALUES (?,?,?,?,1,NULL,?,?,?,?,?)`).run(snapshot.id,request.projectId,request.corpusId,request.hitId,source.documentId,request.requestId,json,hash(json),f.time);
-    oldApi.finishSeed(f.db);
-    const tables=['research_review_screening_plans','research_review_screening_freezes','research_review_fulltext_bindings','research_documents'];
-    const original=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all()),columns=Object.keys(original[0][0]);
-    applyOfflineResearchSchema(api, f.db);
-    assert.deepEqual(f.db.prepare('SELECT * FROM research_review_screening_plans').all().map(row=>Object.fromEntries(columns.map(key=>[key,row[key]]))),original[0]);
-    tables.slice(1).forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT * FROM ${table}`).all(),original[index+1]));
-    assert.equal(f.db.prepare('SELECT full_freeze_hash FROM research_review_screening_plans').pluck().get(),null);
-    assert.equal(count(f),0);assert.equal(f.fulltexts.get(f.bindingGet(snapshot.id)).snapshotHash,hash(json));
   }finally{await f.cleanup();}
 });
 

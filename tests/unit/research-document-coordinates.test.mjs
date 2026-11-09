@@ -1,4 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -20,11 +19,8 @@ before(async () => {
   }));
 });
 after(() => api?.dispose());
-async function scene({databaseVersion = 26} = {}) {
-  const fixtureApi = databaseVersion === 26 ? api : {...api, applyResearchDatabaseSchema(db) {
-    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(migration => migration.version <= databaseVersion)});
-  }};
-  const f = createResearchFixture(fixtureApi, 'reading');
+async function scene() {
+  const f = createResearchFixture(api, 'reading');
   f.directory = await mkdtemp(join(tmpdir(), 'roc-coordinate-publication-'));
   f.root = await realpath(f.directory);
   const bytes = await readFile('tests/fixtures/research-workflow/source.pdf');
@@ -360,49 +356,5 @@ test('marked coordinate artifacts must match actual returned blocks and cannot s
     await writeFile(artifactPath, original);
     const restored = await collectDocumentContent(f.root, join(f.root, data.outputPath), f.parsed);
     assert.deepEqual(restored, f.collected);
-  } finally {await f.cleanup();}
-});
-
-test('DB24 to26 preserves actual parse and user replacement snapshots without fabricating coordinate history', async () => {
-  const f = await scene({databaseVersion: 24});
-  try {
-    f.repository.documents.begin(f.document.id, 'historical-coordinate-parse');
-    f.repository.documents.complete(f.document.id, 'historical-coordinate-parse', f.collected.data, null);
-    const evidence = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'document:historical-coordinate-parse:chunk:0'});
-    const nextBytes = Buffer.concat([await readFile(join(f.root, 'source.pdf')), Buffer.from('\n% Explicit task-owned version successor\n')]);
-    const sourcePath = join(f.root, 'source-next.pdf'), outputDir = join(f.root, 'next-output');
-    await writeFile(sourcePath, nextBytes);
-    const parsed = await parseResearchDocument({projectRoot: f.root, sourcePath, outputDir,
-      options: {tier: 'compact', device: 'cpu', pageRange: '1'}, modelFiles: null, modelManifest: ''});
-    const collected = await collectDocumentContent(f.root, outputDir, parsed);
-    const targetDocument = f.repository.documents.import({id: 'historical-coordinate-successor', libraryItemId: f.document.libraryItemId,
-      projectId: f.project.id, filename: 'source-next.pdf', mediaType: 'application/pdf', sourcePath: 'source-next.pdf',
-      sourceHash: hash(nextBytes), size: nextBytes.length, entry: null}, false).document;
-    f.repository.documents.begin(targetDocument.id, 'historical-coordinate-successor-parse');
-    f.repository.documents.complete(targetDocument.id, 'historical-coordinate-successor-parse', collected.data, null);
-    const target = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'document:historical-coordinate-successor-parse:chunk:0'});
-    f.repository.evidence.sourceReplacements.replace({projectId: f.project.id, requestId: 'historical-coordinate-replacement', kind: 'document_replacement',
-      evidenceId: evidence.id, targetEvidenceId: target.id,
-      expectedSourceDigest: api.relationSourceDigest(f.repository.evidence.inspectEvidence(evidence.id, f.project.id)),
-      expectedTargetDigest: api.relationSourceDigest(f.repository.evidence.inspectEvidence(target.id, f.project.id)), note: null},
-      {kind: 'user', id: 'synthetic-historical-frame-user'});
-    const tables = ['research_documents', 'research_document_parses', 'research_evidence', 'research_evidence_source_locators',
-      'research_source_replacements', 'research_evidence_relations', 'research_evidence_relation_revisions'];
-    const originals = tables.map(table => f.db.prepare(`SELECT * FROM ${table}`).all());
-    applyOfflineResearchSchema(api, f.db);
-    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), api.researchMigrations.at(-1).version);
-    tables.forEach((table, index) => {
-      const rows = f.db.prepare(`SELECT * FROM ${table}`).all();
-      if (table === 'research_document_parses') {
-        assert.ok(rows.every(row => row.coordinate_snapshot_hash === null));
-        assert.deepEqual(rows.map(({coordinate_snapshot_hash, ...row}) => row), originals[index]);
-      } else assert.deepEqual(rows, originals[index]);
-    });
-    assert.equal(f.db.prepare('SELECT count(*) FROM research_document_parse_coordinates').pluck().get(), 0);
-    const before = f.changes();
-    assert.equal(f.repository.documents.coordinates(f.document.id, 'historical-coordinate-parse'), null);
-    assert.equal(f.repository.documents.coordinates(targetDocument.id, 'historical-coordinate-successor-parse'), null);
-    applyOfflineResearchSchema(api, f.db);
-    assert.equal(f.changes(), before);
   } finally {await f.cleanup();}
 });

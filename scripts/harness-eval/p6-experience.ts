@@ -475,7 +475,7 @@ function verifyPilotGate(directory: string): Record<string, unknown> {
  * Usage beyond former allowances continues while capability restrictions remain enforced.
  *
  * Fixtures use a hand-written manifest so the grant/effect mapping is asserted directly, and a real
- * `agent` SQLite database with the shipped migrations so the ledger columns are the production ones.
+ * `agent` SQLite database with the current schema so the ledger columns are the production ones.
  */
 function verifyPilotProductPath(directory: string): Record<string, unknown> {
   const tool = (input: {

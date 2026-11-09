@@ -1,5 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
-import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after,before,test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -206,14 +204,13 @@ test('independent grouping after actual byte await and valid new membership revi
   }finally{await f.cleanup();}
 });
 
-test('DB39 upgrade preserves all original review/source columns and disk reopening retains study membership without network or writes',async()=>{
-  const oldApi=createReviewMigrationSeedApi(api,39);
-  const f=await scene({},oldApi);let db,reviews,service;
+test('SQLite reopen preserves reviewed records without network requests or writes',async()=>{
+  const f=await scene();let db,reviews,service;
   try {
-    oldApi.finishSeed(f.db);
+
     const tables=['research_review_screening_plans','research_review_screening_freezes','research_review_corpora','research_documents'];
     const original=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all()),columns=Object.keys(original[0][0]);
-    applyOfflineResearchSchema(api, f.db);
+    api.applyResearchDatabaseSchema(f.db);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_review_screening_plans').all().map(row=>Object.fromEntries(columns.map(key=>[key,row[key]]))),original[0]);
     for(const [index,table] of tables.entries())if(index>0)assert.deepEqual(f.db.prepare(`SELECT * FROM ${table}`).all(),original[index]);
     assert.equal(f.db.prepare('SELECT study_group_head_hash FROM research_review_screening_plans').pluck().get(),null);assert.equal(count(f),0);

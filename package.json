@@ -47,7 +47,6 @@
     "verify:p9-management": "node scripts/verify-p9-management.mjs",
     "database:backup": "node dist/main/database-maintenance-cli.js backup",
     "database:restore": "node dist/main/database-maintenance-cli.js restore",
-    "database:migrate": "node scripts/migrate-databases.mjs",
     "database:clear-agent-history": "node scripts/clear-agent-history.mjs --all-thread-kinds",
     "logs:query": "node scripts/query-logs.mjs",
     "audit:layout": "node scripts/ui-layout-audit.mjs",

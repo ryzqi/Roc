@@ -83,7 +83,7 @@ export class KernelRuntime {
       }
 
       const coreDb = databasePool.getCoreConnection();
-      const configStore = new ConfigStore(coreDb, join(this.options.rootDir, 'config'));
+      const configStore = new ConfigStore(coreDb);
       const logger = new InfrastructureLogger(join(this.options.rootDir, 'logs'));
       loggerToClose = logger;
       const secretManager = new SecretManager(

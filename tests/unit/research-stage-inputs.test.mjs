@@ -28,7 +28,7 @@ for (const change of ['approval', 'content']) {
       db = new Database(join(directory, 'research.db'));
       agentDb = new Database(join(directory, 'agent.db'));
       api.applyResearchDatabaseSchema(db, () => '2026-11-03T00:00:00.000Z');
-      api.applyDatabaseMigrations(agentDb, {dbName: 'agent', migrations: api.agentMigrations});
+      api.applyAgentDatabaseSchema(agentDb);
       const tasks = new api.ResearchTaskRepository(agentDb, () => '2026-11-03T00:00:00.000Z');
       const repository = new api.ResearchRepository(db, tasks, () => '2026-11-03T00:00:00.000Z');
       assert.equal(withResearchTestWorker(api, repository, queued.id, f.project.id, () => repository.runs.requireActive(queued.id, f.project.id)).id, queued.id);

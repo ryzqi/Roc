@@ -388,18 +388,3 @@ test('download authorization insertion drift rolls back and requires a fresh obs
     assert.equal(f.calls.length, 0); f.db.exec('DROP TRIGGER mutate_hf_observation');
   } finally {await f.dispose();}
 });
-
-test('migration56 preserves prior observations and adds only empty reviewed download storage', () => {
-  const db = new Database(':memory:');
-  try {
-    db.pragma('foreign_keys=ON');
-    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(row => row.version <= 55)});
-    const prior = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(row => row.version <= 56)});
-    assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=55 ORDER BY version').all(), prior);
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 56);
-    assert.equal(db.prepare('SELECT COUNT(*) FROM research_hf_downloads').pluck().get(), 0);
-    assert.equal(db.prepare('SELECT COUNT(*) FROM research_hf_observations').pluck().get(), 0);
-    assert.deepEqual(db.pragma('foreign_key_check'), []);
-  } finally {db.close();}
-});

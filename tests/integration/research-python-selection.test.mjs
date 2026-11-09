@@ -333,19 +333,19 @@ test('damaged stored JSON, column identity or missing selection fails without op
   } finally { await f.cleanup(); }
 });
 
-test('DB41 upgrade and disk reopen preserve existing project bytes and exact immutable selection without another probe', async () => {
+test('disk reopen preserves existing project bytes and exact immutable selection without another probe', async () => {
   const f = await fixture();
   const dbPath = join(f.path, 'research.sqlite');
   let disk;
   try {
     const selected = await f.select();
     disk = new Database(dbPath); disk.pragma('foreign_keys=ON');
-    api.applyDatabaseMigrations(disk, { dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(m => m.version <= 41) });
+    api.applyResearchDatabaseSchema(disk);
     const row = f.db.prepare('SELECT * FROM research_projects WHERE id=?').get(f.project.id), keys = Object.keys(row);
     disk.prepare(`INSERT INTO research_projects (${keys.join(',')}) VALUES (${keys.map(() => '?').join(',')})`).run(...Object.values(row));
     api.applyResearchDatabaseSchema(disk);
     assert.deepEqual(disk.prepare('SELECT * FROM research_projects').get(), row);
-    assert.equal(disk.prepare('SELECT current_version FROM schema_metadata').pluck().get(), api.researchMigrations.at(-1).version);
+    assert.equal(disk.prepare('SELECT current_version FROM schema_metadata').pluck().get(), api.researchSchema.version);
     const reopenedRepository = new api.ResearchRepository(disk, f.tasks);
     assert.deepEqual(reopenedRepository.pythonEnvironments.save(selected.snapshot), selected);
     disk.close();

@@ -9,7 +9,6 @@ export {createToolOutputProjector} from '../../../src/main/services/deep-agent/t
 export {ContextArtifactStore} from '../../../src/main/services/deep-agent/context/context-artifact-store';
 export {researchReviewLinksSchema, reviewLinksPayload} from '../../../src/shared/schemas/research-review-links';
 export { getResearchStageRoleProfile } from '../../../src/main/plugins/research/role-profiles';
-export { applyResearchDatabaseSchema } from '../../../src/main/infrastructure/database-schemas';
 export { ResearchFigureService } from '../../../src/main/plugins/research/figure-service';
 export {ResearchFigureConsistencyService} from '../../../src/main/plugins/research/figure-consistency-service';
 export {registerResearchFigureConsistencyCapabilities} from '../../../src/main/plugins/research/figure-consistency-capabilities';
@@ -26,8 +25,7 @@ export { registerResearchRunCapabilities } from '../../../src/main/plugins/resea
 export { registerResearchExperimentCapabilities, researchExperimentCapabilities } from '../../../src/main/plugins/research/experiment-capabilities';
 export { registerResearchFigureCapabilities } from '../../../src/main/plugins/research/figure-capabilities';
 export { registerResearchExportCapabilities } from '../../../src/main/plugins/research/export-capabilities';
-export { agentMigrations, researchMigrations } from '../../../src/main/infrastructure/database-schemas';
-export { applyDatabaseMigrations } from '../../../src/main/infrastructure/database-migrations';
+export { applyAgentDatabaseSchema, applyResearchDatabaseSchema, researchSchema } from '../../../src/main/infrastructure/database-schemas';
 export { configureRocDatabaseConnection } from '../../../src/main/infrastructure/database-pragmas';
 export { compileRunCapabilityManifest, bindMcpToolContracts, createRunCapabilityManifestHash } from '../../../src/main/plugins/agent/run-capability-manifest';
 export { createRunModelConfig, createRunExecutionSnapshot } from '../../../src/main/plugins/agent/run-execution-snapshot';

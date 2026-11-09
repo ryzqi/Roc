@@ -4,11 +4,11 @@
 
 ## Authoritative records
 
-Agent DB migration 25 removes financial columns and quota tables. Calls and immutable model observations live in `agent_calls` and `agent_call_observations`, keyed by `(run_id, call_id)`. `RunUsageObserver.invoke()` records token measurements, ISO start time, measured duration and `completed`/`failed` outcome. Invalid receipts or inactive tasks prevent dispatch.
+Calls and immutable model observations live in `agent_calls` and `agent_call_observations`, keyed by `(run_id, call_id)`. `RunUsageObserver.invoke()` records token measurements, ISO start time, measured duration and `completed`/`failed` outcome. Invalid receipts or inactive tasks prevent dispatch.
 
 Duration covers serialization, dispatch and completion recording. A process that exits before recording the observation has no duration receipt; diagnostics return `invocation: null`. Missing token usage remains explicitly unknown and never stops later calls.
 
-Runs and tasks have no cumulative token, monetary, call, child-task or duration quotas. Snapshot v11 retains only model context/output capacity. Migration rewrites old snapshots and replay records, verifies old hashes and recomputes hashes after deleting obsolete fields. Research migration 71 removes search-plan request quotas; an in-flight stage whose approved input hash changes must restart with fresh inputs. Cancellation, ownership, provider context capacity and resource queuing remain effective.
+Runs and tasks have no cumulative token, monetary, call, child-task or duration quotas. Snapshot v11 retains only model context/output capacity. Search plans have no request quotas. An in-flight stage whose approved input hash changes must restart with fresh inputs. Cancellation, ownership, provider context capacity and resource queuing remain effective.
 
 Call creation and completion times come from the ledger and `call_settled`/`call_unknown` events. Diagnostics and exports report token and call counts, with no prices, monetary totals or financial estimates.
 
@@ -47,7 +47,7 @@ The existing task execution tree uses native, initially closed `<details>` for o
 
 ## Task facts and context
 
-Task facts are bounded, immutable revisions in the agent identity database (migration 18). Each entry stores a kind, content, lifecycle state and one to eight typed source references. Supported kinds are confirmed constraints, source versions, human decisions, unverified hypotheses, todos, counterevidence, evaluation conditions and user corrections. Facts are research data and never grant capabilities or replace approval.
+Task facts are bounded, immutable revisions in the agent identity database. Each entry stores a kind, content, lifecycle state and one to eight typed source references. Supported kinds are confirmed constraints, source versions, human decisions, unverified hypotheses, todos, counterevidence, evaluation conditions and user corrections. Facts are research data and never grant capabilities or replace approval.
 
 `research.getTaskFacts`, `research.saveTaskFacts` and `research.getTaskFactsHistory` require explicit project/task identity. Saving requires the main process human context for `research.task.facts.save`; the actor comes from the submitting window, with no actor or approval fields on the wire. `expectedRevision` enforces optimistic concurrency. The store seals normalized snapshots, checks their SHA256 and physical task/revision identity, refuses updates, and retains old revisions when new entries correct or supersede them. Task deletion cascades.
 

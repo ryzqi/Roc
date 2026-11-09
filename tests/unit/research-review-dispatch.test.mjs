@@ -140,37 +140,6 @@ test('valid parent manifests must explicitly grant the review tool in main scope
   }
 });
 
-test('agent migration16 preserves every historical stage credential and ledger receipt with explicit tool domains', () => {
-  const f = fixture(), db = new Database(':memory:');
-  const timestamp = '2026-11-05T00:00:00.000Z';
-  try {
-    db.pragma('foreign_keys = ON');
-    api.applyDatabaseMigrations(db, {dbName: 'agent', migrations: api.agentMigrations.filter(migration => migration.version <= 15),
-      now: () => timestamp});
-    db.prepare(`INSERT INTO agent_threads(id,kind,title,goal,status,created_at,updated_at)
-      VALUES (?,'chat','Review','Review','active',?,?)`).run(f.threadId, timestamp, timestamp);
-    db.prepare(`INSERT INTO agent_runs(id,thread_id,run_number,user_input,status,started_at,enabled_capabilities_json,run_origin)
-      VALUES (?,?,1,'Review','running',?,'{}','chat')`).run(f.runId, f.threadId, timestamp);
-    for (const state of ['issued', 'consumed', 'expired', 'revoked']) {
-      db.prepare(`INSERT INTO agent_research_dispatch_grants
-        (id,run_id,thread_id,project_id,request_hash,manifest_hash,state,created_at,expires_at)
-        VALUES (?,?,?,?,?,?,?,?,?)`).run(state, f.runId, f.threadId, f.project.id, 'a'.repeat(64),
-          f.manifest.manifestHash, state, timestamp, '2026-11-05T00:00:30.000Z');
-    }
-    const rows = db.prepare('SELECT * FROM agent_research_dispatch_grants ORDER BY id').all();
-    const ledger = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    api.applyDatabaseMigrations(db, {dbName: 'agent', migrations: api.agentMigrations, allowOffline: true});
-    assert.deepEqual(db.prepare('SELECT * FROM agent_research_dispatch_grants ORDER BY id').all(),
-      rows.map(row => ({...row, tool_name: 'research_run_stage'})));
-    assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=15 ORDER BY version').all(), ledger);
-    assert.throws(() => db.prepare("UPDATE agent_research_dispatch_grants SET tool_name='invented' WHERE id='issued'").run(),
-      /CHECK constraint/u);
-    assert.deepEqual(db.pragma('foreign_key_check'), []);
-    api.applyDatabaseMigrations(db, {dbName: 'agent', migrations: api.agentMigrations, allowOffline: true});
-    assert.equal(db.prepare('SELECT count(*) FROM agent_research_dispatch_grants').pluck().get(), 4);
-  } finally {db.close(); f.close();}
-});
-
 test('review dispatch context propagates the exact parent signal across awaits and isolates concurrent operations', async () => {
   const first = new AbortController(), second = new AbortController();
   assert.equal(api.reviewSearchDispatchContext(), undefined);

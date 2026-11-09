@@ -20,10 +20,7 @@ const {
   runDiagnosticsSchema,
   runTraceSpanSchema
 } = await importTypeScriptModule('src/shared/schemas/run-diagnostics.ts', { platform: 'node' });
-const { applyDatabaseMigrations } = await importTypeScriptModule(
-  'src/main/infrastructure/database-migrations.ts', bundleOptions
-);
-const { agentMigrations } = await importTypeScriptModule(
+const { applyAgentDatabaseSchema } = await importTypeScriptModule(
   'src/main/infrastructure/database-schemas.ts', bundleOptions
 );
 const { AgentTaskHistoryContract } = await importTypeScriptModule(
@@ -94,7 +91,7 @@ function modelObservation(extra = {}) {
 function createDatabase() {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
-  applyDatabaseMigrations(db, { dbName: 'agent', migrations: agentMigrations });
+  applyAgentDatabaseSchema(db);
   db.prepare(`INSERT INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
     VALUES (?, 'chat', 'Fixture', 'Fixture', 'active', ?, ?)`).run(run.threadId, '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z');
   db.prepare(`INSERT INTO agent_runs (id, thread_id, run_number, user_input, status, started_at, enabled_capabilities_json)

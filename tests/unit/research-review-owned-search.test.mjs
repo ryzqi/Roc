@@ -1,4 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import assert from 'node:assert/strict';
 import {after, before, test} from 'node:test';
 import {createHash} from 'node:crypto';
@@ -8,7 +7,6 @@ import {join} from 'node:path';
 import Database from 'better-sqlite3';
 import {loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 import {createReviewSearchFixture, awaitReviewSearchFixture} from './fixtures/research-review-search.mjs';
-import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 
 let api;
 before(async () => {api = await loadResearchTestApi();});
@@ -314,50 +312,6 @@ test('legacy elapsed task deadline does not cancel provider work', async () => {
     assert.equal(done.status, 'complete');
     assert.equal(c.controller.signal.aborted, false);
     assert.ok(f.calls.length > 0); assert.equal(f.errors.length, 0);
-  } finally {await f.dispose();}
-});
-
-test('Agent DB17 retains historical event identities, cursor sequence and triggers while permitting review queries', () => {
-  const f = createReviewSearchFixture(api), db = new Database(':memory:');
-  try {
-    db.pragma('foreign_keys = ON');
-    api.applyDatabaseMigrations(db, {dbName: 'agent', migrations: api.agentMigrations.filter(migration => migration.version <= 16)});
-    const task = f.tasks.get(f.run.taskId, f.project.id);
-    db.prepare('INSERT INTO research_tasks(id,project_id,snapshot_json,created_at,status) VALUES (?,?,?,?,?)')
-      .run(task.id, task.projectId, JSON.stringify(task), task.createdAt, task.status);
-    db.prepare(`INSERT INTO research_task_events(task_id,event_type,execution_kind,execution_id,call_id,state,reason,created_at)
-      VALUES (?,'call_unknown','stage','historical-stage','historical-call','unknown','retained audit',?)`).run(task.id, task.createdAt);
-    const before = db.prepare('SELECT * FROM research_task_events ORDER BY sequence').all();
-    const ledger = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    api.applyDatabaseMigrations(db, {dbName: 'agent', migrations: api.agentMigrations, allowOffline: true});
-    const migrated = before.map(row => ({...row, stream_sequence: null, envelope_json: null}));
-    assert.deepEqual(db.prepare('SELECT * FROM research_task_events ORDER BY sequence').all(), migrated);
-    assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=16 ORDER BY version').all(), ledger);
-    db.prepare(`INSERT INTO research_task_executions(kind,execution_id,task_id,project_id,snapshot_json,created_at)
-      VALUES ('review_search','new-query',?,?,?,?)`).run(task.id, task.projectId, '{}', task.createdAt);
-    const after = db.prepare('SELECT * FROM research_task_events ORDER BY sequence').all();
-    assert.deepEqual(after.slice(0, before.length), migrated);
-    assert.equal(after.at(-1).execution_kind, 'review_search'); assert.equal(after.at(-1).execution_id, 'new-query');
-    assert.equal(after.at(-1).sequence, before.at(-1).sequence + 1);
-    assert.deepEqual(db.pragma('foreign_key_check'), []);
-  } finally {db.close(); f.close();}
-});
-
-test('Research DB41 preserves exact historical manual query hashes and never invents an agent owner or task', async () => {
-  const historical = createReviewMigrationSeedApi(api, 40), f = createReviewSearchFixture(historical);
-  try {
-    const manual = await awaitReviewSearchFixture(f, f.reviews.start(f.request, {kind: 'user', id: 'actual-manual-reviewer'}));
-    historical.finishSeed(f.db);
-    const before = f.db.prepare('SELECT * FROM research_review_searches').all();
-    const ledger = f.db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    const executions = f.agentDb.prepare('SELECT * FROM research_task_executions').all();
-    applyOfflineResearchSchema(api, f.db);
-    assert.deepEqual(f.db.prepare('SELECT * FROM research_review_searches').all(), before.map(row => ({...row, owner_hash: null})));
-    assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE version<=40 ORDER BY version').all(), ledger);
-    assert.equal(f.db.prepare('SELECT count(*) FROM research_review_search_owners').pluck().get(), 0);
-    assert.deepEqual(f.agentDb.prepare('SELECT * FROM research_task_executions').all(), executions);
-    assert.deepEqual(f.reviews.get({projectId: f.project.id, reviewSearchId: manual.snapshot.id}), manual);
-    assert.equal(f.calls.length, 2); assert.equal(f.errors.length, 0);
   } finally {await f.dispose();}
 });
 

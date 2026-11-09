@@ -1,4 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import assert from 'node:assert/strict';
 import {before, after, test} from 'node:test';
 import {createHash} from 'node:crypto';
@@ -218,18 +217,4 @@ test('direct storage cannot map a claim omitted from the saved manuscript', asyn
     assert.equal(f.changes(), before);
     assert.deepEqual(f.history().items, [saved]);
   } finally {f.close();}
-});
-test('DB47 to current schema preserves complete prior migration receipts and installs empty consistency timelines', () => {
-  const db = new Database(':memory:');
-  try {
-    db.pragma('foreign_keys=ON');
-    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(m => m.version <= 47)});
-    const prior = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    applyOfflineResearchSchema(api, db);
-    assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=47 ORDER BY version').all(), prior);
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), api.researchMigrations.at(-1).version);
-    assert.equal(db.prepare('SELECT count(*) FROM research_consistency_reviews').pluck().get(), 0);
-    assert.equal(db.prepare('SELECT count(*) FROM research_figure_consistency_reviews').pluck().get(), 0);
-    assert.deepEqual(db.pragma('foreign_key_check'), []);
-  } finally {db.close();}
 });

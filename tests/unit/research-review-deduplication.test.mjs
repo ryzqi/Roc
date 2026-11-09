@@ -1,5 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
-import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -279,26 +277,4 @@ test('real SQLite reopen and query shutdown retain reviewed decisions/freeze wit
     assert.deepEqual(dedup.requireFrozen(f.project.id,f.corpus.snapshot.id,frozen.freezeHash),frozen);
     assert.equal(db.prepare('SELECT total_changes()').pluck().get(),before);assert.equal(f.calls.length,4);assert.equal(f.errors.length,0);
   }finally{await reviews?.shutdown();db?.close();await f.dispose();await rm(directory,{recursive:true,force:true});}
-});
-
-test('DB29 upgrade preserves exact corpus and protocol/search records without fabricated duplicate reviews',async()=>{
-  const oldApi=createReviewMigrationSeedApi(api,29);
-  const f=await scene({},oldApi);
-  try {
-    oldApi.finishSeed(f.db);
-    const original=f.db.prepare('SELECT * FROM research_review_corpora').all();
-    const tables=['research_review_protocol_versions','research_review_protocol_freezes','research_review_searches',
-      'research_literature_search_pools','research_literature_request_receipts'];
-    const columns=tables.map(table=>f.db.pragma(`table_info(${table})`).map(column=>column.name).join(','));
-    const before=tables.map(table=>f.db.prepare(`SELECT * FROM ${table}`).all()),migrations=f.db.prepare('SELECT * FROM schema_migrations').all();
-    applyOfflineResearchSchema(api, f.db);
-    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),api.researchMigrations.at(-1).version);
-    assert.deepEqual(f.db.prepare(`SELECT ${Object.keys(original[0]).join(',')} FROM research_review_corpora`).all(),original);
-    assert.deepEqual(f.db.prepare('SELECT dedup_freeze_hash,screening_plan_hash FROM research_review_corpora').all(),original.map(()=>({dedup_freeze_hash:null,screening_plan_hash:null})));
-    tables.forEach((table,index)=>assert.deepEqual(f.db.prepare(`SELECT ${columns[index]} FROM ${table}`).all(),before[index]));
-    assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE version<=29').all(),migrations);
-    assert.equal(f.db.prepare('SELECT count(*) FROM research_review_duplicate_decisions').pluck().get(),0);
-    assert.equal(f.db.prepare('SELECT count(*) FROM research_review_deduplication_freezes').pluck().get(),0);
-    assert.equal(f.dedup.get(f.get).freeze,null);assert.deepEqual(f.corpora.get(f.get),f.corpus);
-  }finally{await f.dispose();}
 });

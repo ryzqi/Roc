@@ -19,7 +19,7 @@ import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
  *   3. 字符串比较是**码点序**（等于 SQLite 默认 BINARY 的 UTF-8 字节序），不是 JS 的 UTF-16 码元序
  *      —— 用星平面字符与 BMP 末尾字符区分这两种顺序。
  *
- * 行级事实（列存不存在、备份能不能恢复）由 `database-migrations.test.mjs` 守。
+ * 行级事实（列存不存在、备份能不能恢复）由 `database-schema.test.mjs` 守。
  */
 const repositoryRoot = fileURLToPath(new URL('../..', import.meta.url));
 const bundleOptions = {
@@ -31,12 +31,8 @@ const { RocSqliteCheckpointer } = await importTypeScriptModule(
   'src/main/services/deep-agent/sqlite-checkpointer.ts',
   bundleOptions
 );
-const { agentMigrations } = await importTypeScriptModule(
+const { applyAgentDatabaseSchema } = await importTypeScriptModule(
   'src/main/infrastructure/database-schemas.ts',
-  bundleOptions
-);
-const { applyDatabaseMigrations } = await importTypeScriptModule(
-  'src/main/infrastructure/database-migrations.ts',
   bundleOptions
 );
 
@@ -44,7 +40,7 @@ const threadId = 'thread-order';
 
 function createCheckpointer() {
   const db = new Database(':memory:');
-  applyDatabaseMigrations(db, { dbName: 'agent', migrations: agentMigrations });
+  applyAgentDatabaseSchema(db);
   return { db, checkpointer: new RocSqliteCheckpointer(db) };
 }
 

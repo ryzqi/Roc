@@ -86,7 +86,7 @@ capability。方法计划与结果评估在工件检查器中编辑与审核。�
 
 观察数据前/后是人工声明，不能充当独立预注册证明。事后计划必须引用当前有效 Evidence；一旦记录事后观察，后续版本不得改回观察前。负结果不改写历史预期。保存或冻结时拒绝缺失、跨项目或失效证据，Canvas 漂移、归档和被替代工件；历史计划保留原版本并暴露 `canvasCurrent`。
 
-IPC 提供 `saveIdeaPlan`、`freezeIdeaPlan`、`getIdeaPlan`、`getIdeaPlanHistory`，保存/冻结的人工身份仅来自主进程 sender。严格合同不接收 actor。DB45 只增加版本/冻结两表，不修改原 Canvas、修订历史或 Notebook 字节。读取校验规范 JSON、hash、请求和父版本元数据，以及冻结行与版本锚点的一致性。
+IPC 提供 `saveIdeaPlan`、`freezeIdeaPlan`、`getIdeaPlan`、`getIdeaPlanHistory`，保存/冻结的人工身份仅来自主进程 sender。严格合同不接收 actor。版本与冻结分别存储，不修改原 Canvas、修订历史或 Notebook 字节。读取校验规范 JSON、hash、请求和父版本元数据，以及冻结行与版本锚点的一致性。
 
 ### 现有工件检查器中的编辑、历史与审核
 
@@ -96,7 +96,7 @@ IPC 提供 `saveIdeaPlan`、`freezeIdeaPlan`、`getIdeaPlan`、`getIdeaPlanHisto
 
 ### 冻结方法与真实负结果的人工评估
 
-DB46 增加独立、追加式结果评估时间线。每条评估绑定精确冻结计划 ID、版本/hash、冻结 hash、真实指标结果回执 ID/hash，并保存完整计划、结果、指标 Evidence、运行起止时间和人工说明。它不修改 Canvas、冻结假设、预期结果或测量数据。历史冻结计划可回填结果；每个计划独立追加版本，修订必须指向最新父评估 ID/hash 并填写原因。
+结果评估使用独立、追加式时间线。每条评估绑定精确冻结计划 ID、版本/hash、冻结 hash、真实指标结果回执 ID/hash，并保存完整计划、结果、指标 Evidence、运行起止时间和人工说明。它不修改 Canvas、冻结假设、预期结果或测量数据。历史冻结计划可回填结果；每个计划独立追加版本，修订必须指向最新父评估 ID/hash 并填写原因。
 
 每个计划指标须明确关联该结果回执中的一个真实指标 Evidence，或注明缺失原因；至少保留一个实测指标。重复关联、遗漏和跨结果关联被拒绝。定义、单位、方向差异和缺失维度逐项保存，有差异只能选择“不可比”；支持、反驳、无法判断均由人工明确选择，服务不会根据数值自动选结论。
 

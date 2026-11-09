@@ -14,7 +14,7 @@ test('dirty file reconciliation preserves unrelated files and falls back for dir
   try {
     symlinkSync(join(process.cwd(), 'node_modules'), join(dir, 'node_modules'), 'dir');
     const modules = {};
-    for (const [name, entry] of Object.entries({ files: 'src/main/plugins/research/index-files.ts', repo: 'src/main/plugins/research/repository.ts', tasks: 'src/main/plugins/research/research-task-repository.ts', migrations: 'src/main/infrastructure/database-migrations.ts', schema: 'src/main/infrastructure/database-schemas.ts', options: 'src/shared/schemas/research-index.ts' })) {
+    for (const [name, entry] of Object.entries({ files: 'src/main/plugins/research/index-files.ts', repo: 'src/main/plugins/research/repository.ts', tasks: 'src/main/plugins/research/research-task-repository.ts', schema: 'src/main/infrastructure/database-schemas.ts', options: 'src/shared/schemas/research-index.ts' })) {
       const outfile = join(dir, `${name}.mjs`);
       await build({ entryPoints: [entry], outfile, bundle: true, format: 'esm', platform: 'node', packages: 'external', loader: { '.md': 'text' } });
       modules[name] = await import(outfile);
@@ -30,7 +30,7 @@ test('dirty file reconciliation preserves unrelated files and falls back for dir
     const full = await modules.files.scanIndexFiles(root, options, storage, signal);
     assert.equal(full.length, 2);
     modules.schema.applyResearchDatabaseSchema(db);
-    modules.migrations.applyDatabaseMigrations(agentDb, { dbName: 'agent', migrations: modules.schema.agentMigrations });
+    modules.schema.applyAgentDatabaseSchema(agentDb);
     const repo = new modules.repo.ResearchRepository(db, new modules.tasks.ResearchTaskRepository(agentDb), () => '2026-07-10T00:00:00.000Z');
     const project = repo.createProject({ title: 'dirty', description: '', workspacePath: root });
     repo.indexing.bindRoot(project.id, root);

@@ -26,7 +26,7 @@ after(() => {
 function createFixture({ taskSource = null, runOrigin = 'chat', schemaVersion = 11 } = {}) {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
-  api.applyDatabaseMigrations(db, { dbName: 'agent', migrations: api.agentMigrations, allowOffline: true });
+  api.applyAgentDatabaseSchema(db);
   const workspacePath = join(directory, `workspace-${Math.random().toString(16).slice(2)}`);
   mkdirSync(workspacePath);
   const createdAt = new Date().toISOString();
@@ -263,14 +263,12 @@ test('run binding must match persisted workspace identity and capability manifes
   fixture.db.close();
 });
 
-
 test('terminal runs cannot issue new execution grants', () => {
   const fixture = createFixture();
   fixture.db.prepare("UPDATE agent_runs SET status = 'completed' WHERE id = ?").run(fixture.runId);
   assert.throws(() => fixture.broker.issue(binding(fixture)), /execution_grant_run_not_active/u);
   fixture.db.close();
 });
-
 
 test('startup reconciliation revokes stale grants and approvals while allowing new work for active runs', () => {
   const fixture = createFixture();
@@ -311,7 +309,6 @@ test('startup reconciliation fences terminal runs and preserves consumed grants 
   assert.throws(() => restartedBroker.consume(grantId, authorizedBinding), /execution_grant_run_not_active/u);
   fixture.db.close();
 });
-
 
 test('granted agent execution records one audit event linked to grant, tool call and approval receipt', () => {
   const fixture = createFixture();

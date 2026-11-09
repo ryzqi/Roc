@@ -21,7 +21,7 @@
 
 `research.journalCompliance.save` 的人工身份由实际 IPC sender 绑定，renderer 和模型不能声明身份。归档、已批准、非当前阶段及非有效工件集合拒绝新增检查。requestId 精确重试读取同一回执，不重复写入；请求或人工身份变化拒绝重试。
 
-Research DB51 新增 `research_journal_compliance`，完整规则、来源、自动结果及人工判断追加版本。历史标记为 `stored_receipt`，验证保存字节、派生结果和上一版链；与当前来源检查分开，来源变化不会覆盖历史。没有旧 API、旧 schema 或推断默认字段。
+`research_journal_compliance` 保存完整规则、来源、自动结果及人工判断追加版本。历史标记为 `stored_receipt`，验证保存字节、派生结果和上一版链；与当前来源检查分开，来源变化不会覆盖历史。没有旧 API、旧 schema 或推断默认字段。
 
 ## 实施范围
 

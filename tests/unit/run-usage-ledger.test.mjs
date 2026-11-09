@@ -10,7 +10,7 @@ async function createLedger(location = ':memory:') {
   const api = await loadResearchTestApi();
   const db = new Database(location);
   db.pragma('foreign_keys = ON');
-  api.applyDatabaseMigrations(db, { dbName: 'agent', migrations: api.agentMigrations, allowOffline: true });
+  api.applyAgentDatabaseSchema(db);
   db.exec(`
     INSERT INTO agent_threads(id,kind,title,goal,status,created_at,updated_at)
       VALUES ('thread','chat','Usage fixture','Usage fixture','active','2026-11-03T00:00:00.000Z','2026-11-03T00:00:00.000Z');

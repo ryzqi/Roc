@@ -53,6 +53,7 @@
 
 | 文档 | 内容 |
 | --- | --- |
+| [数据库存储](database-storage.md) | 当前结构初始化、维护与不兼容库处理 |
 | [验证入口](verification.md) | 开发命令、测试范围与尚需独立验收的边界 |
 | [Research performance baselines](research-performance.md) | 历史性能协议、基线与复现入口 |
 | [内置技能源（Built-in skills）](builtin-skills.md) | 随包技能来源、安装、同步与许可 |

@@ -65,26 +65,6 @@ test('comparison refuses every changed dimension and compares canonical paramete
   }
 });
 
-test('DB43 upgrade adds the empty result ledger and preserves exact existing notebook bytes and project identity',()=>{
-  const db=new Database(':memory:');db.pragma('foreign_keys=ON');
-  try {
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(migration=>migration.version<=43)});
-    const project={id:'fixed-project',title:'Before result ledger',description:'Original project'};
-    db.prepare(`INSERT INTO research_projects (id,title,description,current_stage,status,workspace_path,created_at,updated_at)
-      VALUES (?,?,?,'idea','active',NULL,'original-created','original-updated')`).run(project.id,project.title,project.description);
-    const bytes=Buffer.from('exact original notebook bytes\r\n');
-    db.prepare(`INSERT INTO research_notebooks (id,project_id,request_id,snapshot_json,snapshot_hash,source_bytes,created_at)
-      VALUES ('notebook',?,'import','{}','original-hash',?,'original-time')`).run(project.id,bytes);
-    const before=db.prepare('SELECT * FROM research_projects').get(),notebook=db.prepare('SELECT * FROM research_notebooks').get();
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(migration=>migration.version<=44)});
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),44);
-    assert.deepEqual(db.prepare('SELECT * FROM research_projects').get(),before);
-    assert.deepEqual(db.prepare('SELECT * FROM research_notebooks').get(),notebook);
-    assert.equal(db.prepare('SELECT count(*) FROM research_experiment_results').pluck().get(),0);
-    assert.deepEqual(db.pragma('foreign_key_check'),[]);
-  }finally{db.close();}
-});
-
 test('result capabilities preserve explicit contract and source failures over IPC while unknown failures remain internal',async()=>{
   const handlers=new Map();
   let failure=new Error('research_result_output_changed');

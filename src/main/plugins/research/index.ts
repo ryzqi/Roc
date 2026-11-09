@@ -84,7 +84,6 @@ import { getResearchStageRoleProfile } from './role-profiles';
 import { ResearchTemplateService } from './template-service';
 import { ResearchToolchain } from './toolchain';
 import { registerResearchProductionCapabilities, researchProductionCapabilities } from './production-capabilities';
-import { researchDerivationGenerationVersion } from '../../../shared/schemas/research-production';
 import { ResearchProseLintService } from './prose-lint-service';
 import { registerResearchProseCapabilities, researchProseCapabilities } from './prose-lint-capabilities';
 import {ResearchCitationCoverageService} from './citation-coverage-service';
@@ -450,10 +449,6 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       registerResearchReviewScreeningCapabilities(context, reviewScreening, reviewScreeningDecisions, reviewScreeningArbitration, reviewScreeningFreeze);
       registerLiteratureImportCapabilities(context, literatureImports);
       researchRepository.documents.recover();
-      // Only text/locator derivation changes advance this index generation; artifact-only contracts keep old parses active.
-      if (researchRepository.documents.switchDerivationGeneration(researchDerivationGenerationVersion)) {
-        context.logger.info('research_derivation_generation_switched', { generationVersion: researchDerivationGenerationVersion });
-      }
       documents = new ResearchDocumentService(researchRepository, toolchain, options.libraryRoot ?? null);
       registerZoteroCapabilities(context, zotero, literatureImports, pickZoteroAttachment, documents);
       registerResearchDocumentCapabilities(context, researchRepository.documents, documents);

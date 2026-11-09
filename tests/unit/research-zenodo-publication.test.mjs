@@ -426,23 +426,6 @@ test('real multi-block staging sends only complete verified unlinked bytes and r
   } finally {await rm(root, {recursive: true, force: true});}
 });
 
-test('migration 59 to 60 retains preparations and ledger; no remote operations or approvals are fabricated', () => {
-  const db = new Database(':memory:');
-  try {
-    api.applyDatabaseMigrations(db, {dbName: 'research', migrations: api.researchMigrations.filter(value => value.version <= 59)});
-    db.prepare(`INSERT INTO research_projects(id,title,description,status,current_stage,created_at,updated_at)
-      VALUES ('p','Original','','active','reading','2026-11-06T00:00:00.000Z','2026-11-06T00:00:00.000Z')`).run();
-    db.prepare(`INSERT INTO research_zenodo_preparations VALUES ('preparation','p','request','{"original":true}','original-time')`).run();
-    const original = db.prepare('SELECT * FROM research_zenodo_preparations').all();
-    const ledger = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    api.applyDatabaseMigrations(db, {dbName: 'research', migrations: api.researchMigrations.filter(value => value.version <= 60)});
-    assert.deepEqual(db.prepare('SELECT * FROM research_zenodo_preparations').all(), original);
-    assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=59 ORDER BY version').all(), ledger);
-    assert.equal(db.prepare('SELECT count(*) FROM research_zenodo_operations').pluck().get(), 0);
-    assert.equal(db.prepare('SELECT count(*) FROM research_zenodo_publication_approvals').pluck().get(), 0);
-  } finally {db.close();}
-});
-
 test('missing or failed secret storage exposes only a safe failure and creates no durable remote operation', async () => {
   const f = await scene();
   try {

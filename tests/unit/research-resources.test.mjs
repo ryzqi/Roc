@@ -237,20 +237,6 @@ test('one shared quota isolates project caches and enforces the configured HTTPS
   } finally {await f.dispose();}
 });
 
-test('migration53 preserves all historical ledgers and introduces no inferred resource observations', () => {
-  const db = new Database(':memory:');
-  try {
-    db.pragma('foreign_keys=ON');
-    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(row => row.version <= 52)});
-    const prior = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(row => row.version <= 53)});
-    assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=52 ORDER BY version').all(), prior);
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 53);
-    assert.equal(db.prepare('SELECT COUNT(*) FROM research_resource_observations').pluck().get(), 0);
-    assert.deepEqual(db.pragma('foreign_key_check'), []);
-  } finally {db.close();}
-});
-
 test('capability and generated IPC contracts expose bounded metadata and reject undeclared authority fields', async () => {
   const f = scene(), registry = new api.CapabilityRegistry();
   try {

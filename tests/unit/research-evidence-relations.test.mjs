@@ -1,4 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -228,57 +227,6 @@ test('history insertion failure rolls back the decision and a claim/source inval
     assert.equal(f.repository.evidence.inspectEvidence(f.evidence.id,f.project.id).referenceStatus,'recorded');
     assert.equal(f.relations.history(proposal.id,f.project.id).length,1);
   }finally{f.close();}
-});
-
-test('20 to 21 preserves raw claim state and creates only explicitly unreviewed historical associations',()=>{
-  const db=new Database(':memory:');db.pragma('foreign_keys=ON');
-  const agentDb=new Database(':memory:');
-  try {
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(m=>m.version<=20)});
-    api.applyDatabaseMigrations(agentDb,{dbName:'agent',migrations:api.agentMigrations});
-    const timestamp='2026-11-04T00:00:00.000Z',repository=new api.ResearchRepository(db,new api.ResearchTaskRepository(agentDb,()=>timestamp),()=>timestamp);
-    const project=repository.createProject({title:'Historical relation',description:'Migration fixture',workspacePath:'/tmp/historical-relation'});
-    const artifact=repository.createArtifact({projectId:project.id,stage:'discovery',kind:'search_strategy',title:'Historical artifact',path:null});
-    db.prepare(`INSERT INTO research_evidence (id,project_id,document_id,chunk_id,source_type,source_id,source_version,title,locator,excerpt,content_hash,created_at)
-      VALUES ('historical-source',?,'historical-doc','historical:chunk:0','file','recorded-file','v1','Old result','p1',?,?,?)`)
-      .run(project.id,'Old retained result.',hash('Old retained result.'),timestamp);
-    db.prepare(`INSERT INTO research_claims (id,project_id,artifact_id,subject_type,content,status,evidence_ids_json,version,created_at,updated_at)
-      VALUES ('historical-claim',?,?,'claim','Saved old status','supported','[\"historical-source\"]',3,?,?)`)
-      .run(project.id,artifact.id,timestamp,timestamp);
-    const claimsBefore=db.prepare('SELECT * FROM research_claims').all();
-    applyOfflineResearchSchema(api, db,()=>timestamp);
-    assert.deepEqual(db.prepare('SELECT * FROM research_claims').all(),claimsBefore);
-    const [historical]=repository.evidence.relations.list({projectId:project.id,claimId:'historical-claim'});
-    assert.equal(historical.kind,'historical');assert.equal(historical.status,'historical');assert.equal(historical.claimVersion,3);
-    assert.equal(historical.proposer,null);assert.equal(historical.reviewer,null);assert.equal(historical.reviewedAt,null);
-    assert.equal(repository.evidence.relations.history(historical.id,project.id)[0].actor,null);
-    const changes=db.prepare('SELECT total_changes()').pluck().get();
-    assert.throws(()=>repository.evidence.assertReviewedSupport(repository.evidence.getClaim('historical-claim')),
-      error=>error.code==='research_relation_review_required');
-    assert.equal(db.prepare('SELECT total_changes()').pluck().get(),changes);
-    const before=db.prepare('SELECT total_changes()').pluck().get();applyOfflineResearchSchema(api, db,()=>timestamp);
-    assert.equal(db.prepare('SELECT total_changes()').pluck().get(),before);
-  }finally{db.close();agentDb.close();}
-});
-
-test('a dangling historical association aborts the migration and keeps the original DB20 data and ledger',()=>{
-  const db=new Database(':memory:');db.pragma('foreign_keys=ON');
-  const agentDb=new Database(':memory:');
-  try {
-    api.applyDatabaseMigrations(db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(m=>m.version<=20)});
-    api.applyDatabaseMigrations(agentDb,{dbName:'agent',migrations:api.agentMigrations});
-    const timestamp='2026-11-04T00:00:00.000Z',repository=new api.ResearchRepository(db,new api.ResearchTaskRepository(agentDb,()=>timestamp),()=>timestamp);
-    const project=repository.createProject({title:'Missing historical source',description:'Migration refusal',workspacePath:'/tmp/dangling-relation'});
-    const artifact=repository.createArtifact({projectId:project.id,stage:'discovery',kind:'search_strategy',title:'Historical artifact',path:null});
-    db.prepare(`INSERT INTO research_claims (id,project_id,artifact_id,subject_type,content,status,evidence_ids_json,version,created_at,updated_at)
-      VALUES ('dangling-claim',?,?,'claim','Retained original claim','pending','[\"missing-evidence\"]',1,?,?)`)
-      .run(project.id,artifact.id,timestamp,timestamp);
-    const before=db.prepare('SELECT * FROM research_claims').all();
-    assert.throws(()=>applyOfflineResearchSchema(api, db,()=>timestamp),/research_relation_historical_endpoint_missing/u);
-    assert.deepEqual(db.prepare('SELECT * FROM research_claims').all(),before);
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(),20);
-    assert.equal(db.prepare("SELECT name FROM sqlite_master WHERE name='research_evidence_relations'").get(),undefined);
-  }finally{db.close();agentDb.close();}
 });
 
 test('Wiki snapshot carries current source and relation review without promoting a claim or writing on read',()=>{

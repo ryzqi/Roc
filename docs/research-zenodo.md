@@ -10,7 +10,7 @@ The upload metadata explicitly declares publication type, title, description, pu
 
 `research.zenodo.prepare` requires the main IPC human sender for the exact project. Privacy, file licenses and authors each require an explicit true declaration. Wire requests cannot supply an actor or grant themselves authority. The receipt preserves the selected environment, exact request, main sender, upload bytes, export/source hashes and creation time.
 
-SQLite migration 59 adds `research_zenodo_preparations`, with project ownership and one immutable preparation per project/request ID. An identical retry returns the original receipt; a different request with that ID fails. Concurrent retries return one receipt. Historical reads remain available after a project is archived, while new preparation and current-source validation fail.
+`research_zenodo_preparations` stores receipts with project ownership and one immutable preparation per project/request ID. An identical retry returns the original receipt; a different request with that ID fails. Concurrent retries return one receipt. Historical reads remain available after a project is archived, while new preparation and current-source validation fail.
 
 Readback checks the physical row identity, project, request ID, timestamp, exact selected file tuples and both receipt hashes. Hashes are calculated after schema normalization, so real export consumer field ordering cannot change the sealed identity. The export repository also verifies the physical export ID, project, request, artifact and status before a publication consumer can use it.
 

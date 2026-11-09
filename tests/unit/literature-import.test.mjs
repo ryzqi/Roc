@@ -1,4 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {execFileSync} from 'node:child_process';
@@ -20,8 +19,7 @@ before(async () => {
   await esbuild.build({ stdin: { contents: `
     export {withResearchWorker} from './src/main/plugins/research/execution/worker-context';
     export { ResearchRepository } from './src/main/plugins/research/repository';
-    export { applyResearchDatabaseSchema, agentMigrations, researchMigrations } from './src/main/infrastructure/database-schemas';
-    export { applyDatabaseMigrations } from './src/main/infrastructure/database-migrations';
+    export { applyAgentDatabaseSchema, applyResearchDatabaseSchema, researchSchema } from './src/main/infrastructure/database-schemas';
     export { ResearchTaskRepository } from './src/main/plugins/research/research-task-repository';
     export { LiteratureImportService } from './src/main/plugins/research/literature-import-service';
     export { LiteratureSearchService, bibliographyFromRecord } from './src/main/plugins/research/literature-service';
@@ -156,10 +154,9 @@ test('fused candidate snapshots retain score, conflicts and original records thr
 function setup(options = {}) {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
-  if (options.migrations !== undefined) api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: options.migrations});
-  else applyOfflineResearchSchema(api, db, () => timestamp);
+  api.applyResearchDatabaseSchema(db, () => timestamp);
   const agentDb = new Database(':memory:');
-  api.applyDatabaseMigrations(agentDb, { dbName: 'agent', migrations: api.agentMigrations, allowOffline: true });
+  api.applyAgentDatabaseSchema(agentDb);
   const repo = new api.ResearchRepository(db, new api.ResearchTaskRepository(agentDb), () => timestamp);
   const project = repo.createProject({ title: 'Import', description: '', workspacePath: `/tmp/roc-${crypto.randomUUID()}` });
   let time = timestamp;
@@ -864,19 +861,6 @@ test('restart marks dispatched receipts unknown without inventing completion and
   } finally { f.close(); }
 });
 
-test('research v6 upgrade adds receipt tables without fabricating executions or rewriting old candidates', () => {
-  const db = new Database(':memory:');
-  try {
-    api.applyDatabaseMigrations(db, {dbName: 'research', migrations: api.researchMigrations.filter(entry => entry.version <= 6)});
-    const old = JSON.stringify({schemaVersion: 5, searchId: 'old-search', candidates: []});
-    db.prepare(`INSERT INTO research_literature_searches VALUES ('old-search','thread:old',NULL,'{}',?,'2030-01-01')`).run(old);
-    api.applyDatabaseMigrations(db, {dbName: 'research', migrations: api.researchMigrations, allowOffline: true});
-    assert.equal(db.prepare('SELECT COUNT(*) FROM research_literature_search_executions').pluck().get(), 0);
-    assert.equal(db.prepare('SELECT COUNT(*) FROM research_literature_request_receipts').pluck().get(), 0);
-    assert.equal(db.prepare('SELECT result_json FROM research_literature_searches').pluck().get(), old);
-  } finally { db.close(); }
-});
-
 test('candidate expiry removes only the preview and preserves the linked execution and original request hash', async () => {
   const search = new api.LiteratureSearchService(async () => Response.json({message: {items: []}}));
   const f = setup({search});
@@ -1444,64 +1428,6 @@ function insertHistoricalLibrary(f, id, metadata) {
   f.db.prepare('INSERT INTO research_library_projects VALUES (?,?)').run(id, f.project.id);
 }
 
-test('DB8 migrates actual source identities once, keeps namespace provenance and project links', () => {
-  const f = setup({migrations: api.researchMigrations.slice(0, 7)});
-  const observations = [
-    {...record('old-arxiv', null), source: 'arxiv', externalId: 'http://arxiv.org/abs/2601.00001v2'},
-    {...record('old-pubmed', null), source: 'pubmed', externalId: '123'},
-    {...record('old-pmc', null), source: 'europe_pmc', externalId: '123', url: 'https://europepmc.org/article/PMC/123'}
-  ];
-  try {
-    observations.forEach((metadata, index) => insertHistoricalLibrary(f, `history-${index}`, metadata));
-    applyOfflineResearchSchema(api, f.db);
-    const identities = ['arxiv:2601.00001', 'pmid:123', 'europe_pmc:PMC:123'];
-    identities.forEach((identity, index) => {
-      const saved = f.repo.library.findByIdentity(identity);
-      assert.equal(saved.id, `history-${index}`);
-      assert.deepEqual(saved.projectIds, [f.project.id]);
-      assert.deepEqual(saved.sources[0].metadata, observations[index]);
-      assert.equal(saved.sources[0].providerRecord, null);
-    });
-    assert.equal(f.repo.library.get('history-2').metadata.externalId, 'PMC:123');
-    assert.equal(f.db.pragma('foreign_keys', {simple: true}), 1);
-    assert.deepEqual(f.db.pragma('foreign_key_check'), []);
-    const before = f.db.prepare('SELECT * FROM research_library ORDER BY id').all();
-    applyOfflineResearchSchema(api, f.db);
-    assert.deepEqual(f.db.prepare('SELECT * FROM research_library ORDER BY id').all(), before);
-    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), api.researchMigrations.at(-1).version);
-  } finally { f.close(); }
-});
-
-test('DB8 preserves colliding historical rows and refuses automatic library reconciliation', () => {
-  const f = setup({migrations: api.researchMigrations.slice(0, 7)});
-  try {
-    for (const version of [1, 2]) insertHistoricalLibrary(f, `collision-${version}`,
-      {...record(`collision-${version}`, null), source: 'arxiv', externalId: `http://arxiv.org/abs/2601.00001v${version}`});
-    applyOfflineResearchSchema(api, f.db);
-    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 2);
-    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library_projects').pluck().get(), 2);
-    assert.throws(() => f.repo.library.findByIdentity('arxiv:2601.00001'), /research_literature_identity_ambiguous/u);
-    const metadata = {...record('new-collision', null), source: 'arxiv', externalId: '2601.00001v3'};
-    assert.throws(() => f.repo.library.import([{metadata, bibliography: api.bibliographyFromRecord(metadata, new Set())}], f.project.id),
-      /research_literature_identity_ambiguous/u);
-    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 2);
-  } finally { f.close(); }
-});
-
-test('DB8 refuses missing historical namespace evidence and restores schema, rows, links and FK setting', () => {
-  const f = setup({migrations: api.researchMigrations.slice(0, 7)});
-  try {
-    insertHistoricalLibrary(f, 'unresolved', {...record('unresolved', null), source: 'europe_pmc', externalId: '123', url: null});
-    const rows = f.db.prepare('SELECT * FROM research_library').all();
-    assert.throws(() => applyOfflineResearchSchema(api, f.db), /research_literature_migration_namespace_missing/u);
-    assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), rows);
-    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library_projects').pluck().get(), 1);
-    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 7);
-    assert.equal(f.db.pragma('foreign_keys', {simple: true}), 1);
-    assert.deepEqual(f.db.pragma('foreign_key_check'), []);
-  } finally { f.close(); }
-});
-
 test('DOI-free observations join a unique declared identity anchor and preserve their original metadata', () => {
   const records = [
     {...record('pubmed-free', null), source: 'pubmed', externalId: '123'},
@@ -1600,49 +1526,6 @@ test('distinct library DOIs keep their own rows and make shared DOI-free aliases
     const metadata = {...papers[0], doi: null};
     assert.throws(() => f.repo.library.import([{metadata, bibliography: api.bibliographyFromRecord(metadata, new Set())}], f.project.id),
       /research_literature_identity_ambiguous/u);
-    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 2);
-  } finally { f.close(); }
-});
-
-test('DB9 seeds declared aliases from retained raw records without rewriting DB8 rows or project links', () => {
-  const f = setup({migrations: api.researchMigrations.slice(0, 8)});
-  try {
-    const metadata = {...record('seed'), source: 'pubmed', externalId: '123'};
-    const providerRecord = {...record('seed-arxiv', metadata.doi), source: 'arxiv', externalId: 'http://arxiv.org/abs/2601.00001v2'};
-    insertHistoricalLibrary(f, 'seeded', metadata);
-    const bibliography = api.bibliographyFromRecord(metadata, new Set());
-    f.db.prepare('UPDATE research_library SET sources_json=? WHERE id=?')
-      .run(JSON.stringify([{metadata, bibliography, providerRecord}]), 'seeded');
-    const before = f.db.prepare('SELECT * FROM research_library').all();
-    applyOfflineResearchSchema(api, f.db);
-    for (const identity of [`doi:${metadata.doi}`, 'pmid:123', 'arxiv:2601.00001']) {
-      assert.equal(f.repo.library.findByIdentity(identity).id, 'seeded');
-    }
-    assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
-    assert.deepEqual(f.repo.library.get('seeded').projectIds, [f.project.id]);
-    assert.deepEqual(f.db.pragma('foreign_key_check'), []);
-    assert.equal(f.db.pragma('foreign_keys', {simple: true}), 1);
-    const aliases = f.db.prepare('SELECT * FROM research_library_aliases ORDER BY identity').all();
-    applyOfflineResearchSchema(api, f.db);
-    assert.deepEqual(f.db.prepare('SELECT * FROM research_library_aliases ORDER BY identity').all(), aliases);
-  } finally { f.close(); }
-});
-
-test('a competing stored DOI cannot promote an unresolved historical alias to a new DOI', () => {
-  const f = setup({migrations: api.researchMigrations.slice(0, 8)});
-  try {
-    const without = {...record('historical-without', null), source: 'pubmed', externalId: '123'};
-    const known = {...record('historical-known'), source: 'pubmed', externalId: '123'};
-    insertHistoricalLibrary(f, 'unresolved-history', without);
-    insertHistoricalLibrary(f, 'known-history', known);
-    f.db.prepare('UPDATE research_library SET identity_key=? WHERE id=?').run('pmid:123', 'unresolved-history');
-    f.db.exec(`UPDATE research_library SET sources_json = (
-      SELECT json_group_array(json_set(value,'$.providerRecord',NULL)) FROM json_each(research_library.sources_json))`);
-    applyOfflineResearchSchema(api, f.db);
-    const metadata = {...known, doi: '10.1234/new-competing-doi'};
-    assert.throws(() => f.repo.library.import([{metadata, bibliography: api.bibliographyFromRecord(metadata, new Set())}], f.project.id),
-      /research_literature_identity_ambiguous/u);
-    assert.equal(f.repo.library.get('unresolved-history').metadata.doi, null);
     assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 2);
   } finally { f.close(); }
 });
@@ -1901,22 +1784,6 @@ test('model previews omit raw identifier dictionaries while scoped snapshots kee
   } finally { f.close(); }
 });
 
-test('DB10 upgrades DB9 without inferring historical external identifiers or rewriting the library', () => {
-  const f = setup({migrations: api.researchMigrations.slice(0, 9)});
-  try {
-    const metadata = {...record('historical', null), source: 'openalex'};
-    insertHistoricalLibrary(f, 'history-external', metadata);
-    const before = f.db.prepare('SELECT * FROM research_library').all();
-    applyOfflineResearchSchema(api, f.db);
-    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), api.researchMigrations.at(-1).version);
-    assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
-    assert.equal(f.repo.library.getIdentifiers({id: 'history-external'}).total, 0);
-    applyOfflineResearchSchema(api, f.db);
-    assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
-    assert.deepEqual(f.db.pragma('foreign_key_check'), []);
-  } finally { f.close(); }
-});
-
 test('identifier persistence failure rolls back the candidate import and exposes no success-shaped item', async () => {
   const search = new api.LiteratureSearchService(async () => Response.json({
     results: [{id: 'W1', title: 'Rollback IDs', ids: {pmid: '123'}}]
@@ -2055,21 +1922,6 @@ test('review observation insertion failure rolls back the import operation and m
   } finally { f.close(); }
 });
 
-test('DB11 adds review storage without rewriting DB10 papers or inventing historical review observations', () => {
-  const f = setup({migrations: api.researchMigrations.slice(0, 10)});
-  try {
-    insertHistoricalLibrary(f, 'review-history', record('history-review'));
-    const before = f.db.prepare('SELECT * FROM research_library').all();
-    applyOfflineResearchSchema(api, f.db);
-    assert.equal(f.db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), api.researchMigrations.at(-1).version);
-    assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
-    assert.equal(f.repo.library.getReviews({id: 'review-history'}).total, 0);
-    applyOfflineResearchSchema(api, f.db);
-    assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
-    assert.deepEqual(f.db.pragma('foreign_key_check'), []);
-  } finally { f.close(); }
-});
-
 test('complete captured pool retains excluded and lower-ranked records beyond candidate limit and expiry', async () => {
   const records = [
     {...record('old'), publishedYear: 2019}, {...record('first'), publishedYear: 2026},
@@ -2127,26 +1979,5 @@ test('pool insertion failure atomically prevents candidate publication and prese
     assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_literature_searches').pluck().get(), 0);
     assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_literature_search_pools').pluck().get(), 0);
     assert.equal(f.db.prepare('SELECT status FROM research_literature_search_executions').pluck().get(), 'failed');
-  } finally { f.close(); }
-});
-
-test('DB12 creates no synthetic pool for old search executions and scoped capability returns the real pool', async () => {
-  const f = setup({migrations: api.researchMigrations.slice(0, 11)});
-  try {
-    f.db.prepare(`INSERT INTO research_literature_search_executions
-      (id,owner,project_id,request_json,status,created_at) VALUES ('old-exec','thread:a',?,'{}','complete',?)`).run(f.project.id, timestamp);
-    applyOfflineResearchSchema(api, f.db);
-    assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_literature_search_pools').pluck().get(), 0);
-    const {result} = await candidate(f);
-    const handlers = new Map();
-    api.registerLiteratureImportCapabilities({pluginId: 'research',
-      capabilities: {register: (_plugin, descriptor, handler) => handlers.set(descriptor.name, handler)}}, f.service);
-    const read = handlers.get('research.literature.getPool');
-    const pool = await f.run(() => read({executionId: result.executionId}));
-    assert.equal(pool.total, 1);
-    assert.equal(pool.records[0].record.title, 'Literature 1');
-    await assert.rejects(f.run(() => read({executionId: 'old-exec'})),
-      error => error.code === 'literature_pool_not_found' && error.retryable === false);
-    assert.deepEqual(f.db.pragma('foreign_key_check'), []);
   } finally { f.close(); }
 });

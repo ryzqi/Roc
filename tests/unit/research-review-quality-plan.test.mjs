@@ -1,5 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
-import {createReviewMigrationSeedApi} from './fixtures/research-review-migration-seed.mjs';
 import {after,before,test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
@@ -172,13 +170,11 @@ test('registered quality plan APIs require actual main sender across verified so
   }finally{await f.cleanup();}
 });
 
-test('DB37 upgrade preserves exact extraction fields/source and null quality marker; real SQLite reopen retains definition without new requests',async()=>{
-  const oldApi=createReviewMigrationSeedApi(api,37);
-  const f=await createReviewQualityFixture(oldApi);let db,reviews,service;
+test('SQLite reopen preserves reviewed records without network requests or writes',async()=>{
+  const f=await createReviewQualityFixture(api);let db,reviews,service;
   try {
-    oldApi.finishSeed(f.db);
     const old=f.db.prepare('SELECT * FROM research_review_extractions').all(),columns=Object.keys(old[0]);
-    const evidence=f.db.prepare('SELECT * FROM research_evidence').all();applyOfflineResearchSchema(api, f.db);
+    const evidence=f.db.prepare('SELECT * FROM research_evidence').all();api.applyResearchDatabaseSchema(f.db);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_review_extractions').all().map(row=>Object.fromEntries(columns.map(key=>[key,row[key]]))),old);
     assert.equal(f.db.prepare('SELECT quality_plan_hash FROM research_review_extractions').pluck().get(),null);
     assert.deepEqual(f.db.prepare('SELECT * FROM research_evidence').all(),evidence);assert.equal(count(f),0);

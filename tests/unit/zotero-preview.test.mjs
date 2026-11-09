@@ -1,4 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import assert from 'node:assert/strict';
 import {before, after, test} from 'node:test';
 import {createHash} from 'node:crypto';
@@ -33,8 +32,7 @@ before(async () => {
     export {withResearchWorker} from './src/main/plugins/research/execution/worker-context';
     export {ResearchRepository} from './src/main/plugins/research/repository';
     export {ResearchTaskRepository} from './src/main/plugins/research/research-task-repository';
-    export {applyResearchDatabaseSchema, agentMigrations, researchMigrations} from './src/main/infrastructure/database-schemas';
-    export {applyDatabaseMigrations} from './src/main/infrastructure/database-migrations';
+    export { applyAgentDatabaseSchema, applyResearchDatabaseSchema, researchSchema } from './src/main/infrastructure/database-schemas';
     export {LiteratureImportService} from './src/main/plugins/research/literature-import-service';
     export {ZoteroAdapter} from './src/main/plugins/research/zotero-adapter';
     export {registerZoteroCapabilities} from './src/main/plugins/research/zotero-capabilities';
@@ -192,49 +190,4 @@ test('preview shutdown drains even a late adapter and cannot publish a captured 
     await refusal;
     assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_previews').pluck().get(), 0);
   } finally {await f.adapter.shutdown(); f.db.close(); f.agentDb.close();}
-});
-
-test('DB12 upgrade preserves historical library data and creates no fictional Zotero previews', () => {
-  const db = new Database(':memory:');
-  try {
-    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(migration => migration.version <= 12)});
-    const metadata = {id: 'local:historical', source: 'local', externalId: 'historical', doi: '10.1234/historical',
-      title: 'Synthetic retained history', authors: [], abstract: null, publishedYear: null, citationCount: null,
-      url: null, openAccessUrl: null, importedAt: timestamp, updatedAt: timestamp};
-    const bibliography = {citationKey: 'historical', entryType: 'article', fields: {title: metadata.title},
-      preambles: [], csl: null, title: metadata.title, authors: [], doi: metadata.doi, publishedYear: null,
-      abstract: null, url: null};
-    db.prepare(`INSERT INTO research_library(id,identity_key,metadata_json,bibliography_json,sources_json,
-      revision,archived,created_at,updated_at) VALUES ('historical','doi:10.1234/historical',?,?,?,1,0,?,?)`)
-      .run(JSON.stringify(metadata), JSON.stringify(bibliography), JSON.stringify([{metadata, bibliography, providerRecord: null}]),
-        timestamp, timestamp);
-    const ledger = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    const before = db.prepare('SELECT * FROM research_library').all();
-    applyOfflineResearchSchema(api, db);
-    assert.equal(db.prepare('SELECT count(*) FROM research_zotero_previews').pluck().get(), 0);
-    assert.deepEqual(db.prepare('SELECT * FROM research_library').all(), before);
-    assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=12 ORDER BY version').all(), ledger);
-  } finally {db.close();}
-});
-
-test('DB13 upgrade keeps original data-only previews verbatim and fabricates no Zotero object mappings', () => {
-  const db = new Database(':memory:');
-  try {
-    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research',
-      migrations: api.researchMigrations.filter(migration => migration.version <= 13)});
-    const body = {schemaVersion: 1, previewId: 'old-preview', request,
-      sourcePage: {serverId: request.serverId, library: request.library, libraryVersion: 9, offset: 0,
-        total: records.length, nextOffset: null, responseHash: createHash('sha256').update(JSON.stringify(records)).digest('hex'),
-        fetchedAt: timestamp, records}, createdAt: timestamp, expiresAt: '2026-11-10T00:00:00.000Z'};
-    const snapshot = {...body, contentHash: createHash('sha256').update(JSON.stringify(body)).digest('hex')};
-    db.prepare(`INSERT INTO research_zotero_previews(id,owner,project_id,run_id,created_at,expires_at,snapshot_json)
-      VALUES ('old-preview','thread:history',NULL,NULL,?,?,?)`).run(timestamp, body.expiresAt, JSON.stringify(snapshot));
-    const oldPreview = db.prepare('SELECT * FROM research_zotero_previews').all();
-    const ledger = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    applyOfflineResearchSchema(api, db);
-    assert.deepEqual(db.prepare('SELECT * FROM research_zotero_previews').all(), oldPreview);
-    assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=13 ORDER BY version').all(), ledger);
-    assert.equal(db.prepare('SELECT count(*) FROM research_zotero_objects').pluck().get(), 0);
-    assert.equal(db.prepare('SELECT count(*) FROM research_zotero_object_versions').pluck().get(), 0);
-  } finally {db.close();}
 });

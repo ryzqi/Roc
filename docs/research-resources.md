@@ -20,7 +20,7 @@
 
 相同项目和 requestId 精确重放已保存观察；进行中的相同请求共享作业，修改 DOI 拒绝复用标识。新查询使用新 requestId。归档后仍可读取旧观察，但不能捕获新观察。
 
-数据库迁移 53 仅新增 `research_resource_observations` 和项目/DOI 索引，不推断既有文献或实验的资源关系。规范化 JSON 的 SHA-256 绑定物理行 id、项目、requestId、DOI、端点及主机；读取重新校验完整记录。
+当前结构保存 `research_resource_observations` 和项目/DOI 索引，不推断既有文献或实验的资源关系。规范化 JSON 的 SHA-256 绑定物理行 id、项目、requestId、DOI、端点及主机；读取重新校验完整记录。
 
 四个生成式 IPC 方法为 `captureResource`、`cancelResourceCapture`、`getResourceHistory` 和 `getResource`。捕获只返回摘要，历史每页最多 50 条，关系每页最多 100 条。标题最多 32 个、许可最多 64 个、关系最多 10000 个；超限失败，不截断成成功。
 
@@ -36,7 +36,7 @@ DataCite 只加入主进程元数据 Provider 类型，论文搜索 source 枚�
 
 论文绑定真实项目 membership、未归档状态、revision、DOI（允许显式 null）及 `{id,revision,metadata,bibliography}` 的哈希。实验只接受当前项目已完成的托管 execution，绑定 inputHash、environment.hash 与完整 schema-parsed execution 哈希；必须具有环境、输入哈希、结束时间、零退出码且无 error。手工登记或未完成实验不能作为目标。
 
-目标分页接口返回主进程计算的身份，每页最多 50 条。人工从当前窗口明确保存 rationale；IPC 参数不接受 actor 或 approved，主进程绑定实际 windowId，并核对 capability/project。数据库迁移 54 新建关联账本，不推断既有关系。事务内在插入前后校验项目、资源及目标版本；插入触发器造成的来源变化会回滚。相同 projectId/requestId 精确重放，不同内容拒绝。
+目标分页接口返回主进程计算的身份，每页最多 50 条。人工从当前窗口明确保存 rationale；IPC 参数不接受 actor 或 approved，主进程绑定实际 windowId，并核对 capability/project。当前结构保存关联账本，不推断既有关系。事务内在插入前后校验项目、资源及目标版本；插入触发器造成的来源变化会回滚。相同 projectId/requestId 精确重放，不同内容拒绝。
 
 历史/read 返回 `{association,currentState}`，状态为 current、target_changed 或 target_unavailable。论文取消项目关联/归档或托管执行不再存在时标明 unavailable；版本变化标明 changed。保存的记录保持原始目标版本、标题、资源哈希、人工身份、时间和关联哈希。资源或账本损坏明确失败，不能转成 unavailable。归档项目允许旧关联读取及精确重放，不能新增。
 

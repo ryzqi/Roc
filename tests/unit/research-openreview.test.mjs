@@ -310,20 +310,6 @@ test('post-insert archive or storage substitution rolls back the entire transact
   }
 });
 
-test('migration57 retains prior ledgers and starts with no inferred observations', () => {
-  const db = new Database(':memory:');
-  try {
-    db.pragma('foreign_keys=ON');
-    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(row => row.version <= 56)});
-    const prior = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(row => row.version <= 57)});
-    assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=56 ORDER BY version').all(), prior);
-    assert.equal(db.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 57);
-    assert.equal(db.prepare('SELECT COUNT(*) FROM research_openreview_observations').pluck().get(), 0);
-    assert.deepEqual(db.pragma('foreign_key_check'), []);
-  } finally {db.close();}
-});
-
 test('strict IPC and four bounded capabilities refuse tokens, actors, v1 data and foreign project', async () => {
   const f = scene(), registry = new api.CapabilityRegistry();
   try {

@@ -1,4 +1,3 @@
-import {applyOfflineResearchSchema} from './fixtures/offline-migration.mjs';
 import assert from 'node:assert/strict';
 import {before, after, test} from 'node:test';
 import {mkdtempSync, rmSync, symlinkSync, writeFileSync, readFileSync, chmodSync, readdirSync, unlinkSync} from 'node:fs';
@@ -25,8 +24,7 @@ before(async () => {
     export {withResearchWorker} from './src/main/plugins/research/execution/worker-context';
     export {ResearchRepository} from './src/main/plugins/research/repository';
     export {ResearchTaskRepository} from './src/main/plugins/research/research-task-repository';
-    export {applyResearchDatabaseSchema, agentMigrations, researchMigrations} from './src/main/infrastructure/database-schemas';
-    export {applyDatabaseMigrations} from './src/main/infrastructure/database-migrations';
+    export { applyAgentDatabaseSchema, applyResearchDatabaseSchema, researchSchema } from './src/main/infrastructure/database-schemas';
     export {LiteratureImportService} from './src/main/plugins/research/literature-import-service';
     export {ResearchLibraryService} from './src/main/plugins/research/library-service';
     export {ResearchDocumentService} from './src/main/plugins/research/document-service';
@@ -235,18 +233,11 @@ test('content import cancellation and shutdown abort prepared document publicati
   }
 });
 
-test('DB18 to19 preserves explicit grants and receipts validate their hash and source document linkage',async()=>{
-  const prior={...api,applyResearchDatabaseSchema(db,now){api.applyDatabaseMigrations(db,{
-    dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(row=>row.version<=18),now});}};
-  const f=await grantFixture({api:prior});
+test('attachment receipts validate their hash and source document linkage',async()=>{
+  const f=await grantFixture();
   try{
-    const grant=await selectedGrant(f),before=f.db.prepare('SELECT * FROM research_zotero_attachment_grants').all();
-    const ledger=f.db.prepare('SELECT * FROM schema_migrations WHERE db_name=? ORDER BY version').all('plugin:@roc/plugin-research');
-    applyOfflineResearchSchema(api, f.db,()=> '2026-12-01T00:00:00.000Z');
-    assert.deepEqual(f.db.prepare('SELECT * FROM research_zotero_attachment_grants').all(),before);
-    assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE db_name=? AND version<=18 ORDER BY version').all('plugin:@roc/plugin-research'),ledger);
-    assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_attachment_imports').pluck().get(),0);
-    const input={grantId:grant.grantId,requestId:'after-content-migration',destination:'library_only'};
+    const grant=await selectedGrant(f);
+    const input={grantId:grant.grantId,requestId:'receipt-linkage',destination:'library_only'};
     const result=await f.run(()=>f.service.importZoteroAttachment(input,f.documents));
     f.setTime('2026-12-01T00:00:00.000Z');
     assert.deepEqual(f.run(()=>f.service.readZoteroAttachmentImport(input.requestId)),result);
@@ -391,24 +382,6 @@ test('grant write failure cannot become success and corrupted receipts fail; shu
   }finally{await f.closeGrant();}
 });
 
-test('DB17 to18 preserves owned inspections and migration receipts; authorization remains explicit after migration',async()=>{
-  const prior={...api,applyResearchDatabaseSchema(db,now){api.applyDatabaseMigrations(db,{
-    dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(row=>row.version<=17),now});}};
-  const f=await grantFixture({api:prior});
-  try{
-    const before=f.db.prepare('SELECT * FROM research_zotero_attachment_inspections').all();
-    const receipts=f.db.prepare('SELECT * FROM schema_migrations WHERE db_name=? ORDER BY version').all('plugin:@roc/plugin-research');
-    api.applyDatabaseMigrations(f.db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(row=>row.version<=18),now:()=> '2026-12-01T00:00:00.000Z'});
-    assert.deepEqual(f.db.prepare('SELECT * FROM research_zotero_attachment_inspections').all(),before);
-    assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE db_name=? AND version<=17 ORDER BY version').all('plugin:@roc/plugin-research'),receipts);
-    assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_attachment_grants').pluck().get(),0);
-    const result=await f.run(()=>f.service.grantZoteroAttachment({inspectionId:f.inspection.inspectionId,requestId:'after-migration'},async(_context,path)=>path));
-    assert.equal(result.status,'granted');
-    assert.deepEqual(f.db.pragma('foreign_key_check'),[]);
-    assert.equal(f.db.prepare('SELECT count(*) FROM research_documents').pluck().get(),0);
-  }finally{await f.closeGrant();}
-});
-
 test('attachment inspection freezes owned raw provenance and real file identity without importing or changing library data',async()=>{
   const f=fixture([item('ITEM2345')]);
   const path=join(directory,'owned attachment.pdf');writeFileSync(path,'%PDF-synthetic-authorized-later');
@@ -527,27 +500,16 @@ test('attachment inspection failures do not publish or rewrite previous state an
   }finally{await remote.adapter.shutdown();await lost.adapter.shutdown();await f.dispose();}
 });
 
-test('DB16 to17 retains actual import and source histories and shutdown aborts active attachment reads without late inspection',async()=>{
-  const prior={...api,applyResearchDatabaseSchema(db,now){api.applyDatabaseMigrations(db,{
-    dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(row=>row.version<=16),now});}};
-  const f=fixture([item('ITEM2345')],prior);
+test('shutdown aborts active attachment reads without late inspection',async()=>{
+  const f=fixture([item('ITEM2345')]);
   let started;
   const received=new Promise(resolve=>{started=resolve;});
   const late=new api.ZoteroAdapter(async(_url,init)=>new Promise((_resolve,reject)=>{
     started();init.signal.addEventListener('abort',()=>reject(init.signal.reason),{once:true});
   }));
   try{
-    const result=await f.add(await f.preview(),['ITEM2345'],'attachment-migration');
-    const source={serverId:request.serverId,library:request.library,operationId:result.operationId,itemKey:'ITEM2345',collectionKey:null};
-    await f.run(()=>f.service.observeZoteroSource(source,f.adapter));
-    const before=f.db.prepare('SELECT * FROM research_library').all();
-    const states=f.db.prepare('SELECT * FROM research_zotero_source_states').all();
-    const receipts=f.db.prepare('SELECT * FROM schema_migrations WHERE db_name=? ORDER BY version').all('plugin:@roc/plugin-research');
-    api.applyDatabaseMigrations(f.db,{dbName:'plugin:@roc/plugin-research',migrations:api.researchMigrations.filter(row=>row.version<=17),now:()=> '2026-11-30T00:00:00.000Z'});
-    assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(),before);
-    assert.deepEqual(f.db.prepare('SELECT * FROM research_zotero_source_states').all(),states);
-    assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE db_name=? AND version<=16 ORDER BY version').all('plugin:@roc/plugin-research'),receipts);
-    const {collectionKey:_collection,...parent}=source;
+    const result=await f.add(await f.preview(),['ITEM2345'],'attachment-read');
+    const parent={serverId:request.serverId,library:request.library,operationId:result.operationId,itemKey:'ITEM2345'};
     const pending=f.run(()=>f.service.inspectZoteroAttachment({...parent,attachmentKey:'FILE2345'},late));
     const refused=assert.rejects(pending,/zotero_cancelled|research_literature_cancelled|literature_service_closed/u);
     await received;await f.service.shutdown();await refused;
@@ -555,6 +517,7 @@ test('DB16 to17 retains actual import and source histories and shutdown aborts a
     assert.deepEqual(f.db.pragma('foreign_key_check'),[]);
   }finally{await late.shutdown();await f.dispose();}
 });
+
 function item(key, overrides = {}) {
   const title = overrides.title ?? `Synthetic ${key}`;
   const doi = overrides.doi ?? '10.1234/SAME';
@@ -753,28 +716,6 @@ test('source state bridge requires owned import receipts before HTTP and rejects
     const damaged = await bridge.invoke('research.readZoteroSourceState', [source], 9);
     assert.equal(damaged.error.code, 'zotero_source_state_storage_invalid');
     assert.equal(damaged.error.retryable, false);
-  } finally {await f.dispose();}
-});
-
-test('DB15 to16 preserves actual import provenance and migration receipts without inventing source state', async () => {
-  const prior = {...api, applyResearchDatabaseSchema(db, now) {
-    api.applyDatabaseMigrations(db, {dbName: 'plugin:@roc/plugin-research', migrations: api.researchMigrations.filter(row => row.version <= 15), now});
-  }};
-  const f = fixture([item('ITEM2345')], prior);
-  try {
-    const preview = await f.preview();
-    const imported = await f.add(preview, ['ITEM2345'], 'pre-state-migration');
-    const before = f.db.prepare('SELECT * FROM research_library').all();
-    const versions = f.db.prepare('SELECT * FROM research_zotero_object_versions').all();
-    const receipts = f.db.prepare('SELECT * FROM schema_migrations WHERE db_name=? ORDER BY version').all('plugin:@roc/plugin-research');
-    api.applyDatabaseMigrations(f.db, {dbName: 'plugin:@roc/plugin-research',
-      migrations: api.researchMigrations.filter(row => row.version <= 16), now: () => '2026-11-12T00:00:00.000Z'});
-    assert.deepEqual(f.db.prepare('SELECT * FROM research_library').all(), before);
-    assert.deepEqual(f.db.prepare('SELECT * FROM research_zotero_object_versions').all(), versions);
-    assert.deepEqual(f.db.prepare('SELECT * FROM schema_migrations WHERE db_name=? AND version<=15 ORDER BY version').all('plugin:@roc/plugin-research'), receipts);
-    assert.equal(f.db.prepare('SELECT count(*) FROM research_zotero_source_states').pluck().get(), 0);
-    const input = {serverId: request.serverId, library: request.library, operationId: imported.operationId, itemKey: 'ITEM2345', collectionKey: null};
-    assert.equal((await f.run(() => f.service.observeZoteroSource(input, f.adapter))).remote.status, 'present');
   } finally {await f.dispose();}
 });
 
@@ -1187,7 +1128,6 @@ test('reusing a global Zotero object links the requested project after commit wi
     assert.equal(f.events.at(-1).operationId, second.operationId);
   } finally {await f.dispose();}
 });
-
 
 test('Zotero explicit keys survive import, collision, version migration and durable replay', async () => {
   const native = item('ITEM2345'); native.data.citationKey = 'Smith2024';
