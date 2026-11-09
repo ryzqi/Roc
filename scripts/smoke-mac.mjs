@@ -47,6 +47,9 @@ try {
   const rendererReadyMs = Math.round(performance.now() - startedAt);
   const status = await page.evaluate(() => window.roc.app.getStatus());
   assert.equal(status.ok, true, JSON.stringify(status));
+  const toolchainStatus = await page.evaluate(() => window.roc.research.getToolchainStatus());
+  assert.equal(toolchainStatus.ok, true, JSON.stringify(toolchainStatus));
+  assert.equal(toolchainStatus.data.available, true, JSON.stringify(toolchainStatus.data));
   const expectedAccent = await application.evaluate(({ systemPreferences }) => `#${systemPreferences.getAccentColor().slice(0, 6)}`);
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--system-accent').trim())).toBe(expectedAccent);
   await page.evaluate(() => {
@@ -316,7 +319,7 @@ try {
   assert.deepEqual(resources.missingImages, []);
   assert.deepEqual(errors, []);
 
-  const result = { passed: true, checkedAt: new Date().toISOString(), appPath, rendererReadyMs, signature: 'verified', appearance: { accentColor: expectedAccent, notificationReceived: true }, native, workflow, windowControls, layout, lifecycle, resources, errors };
+  const result = { passed: true, checkedAt: new Date().toISOString(), appPath, rendererReadyMs, signature: 'verified', toolchainStatus: toolchainStatus.data, appearance: { accentColor: expectedAccent, notificationReceived: true }, native, workflow, windowControls, layout, lifecycle, resources, errors };
   writeFileSync(join(artifactDir, 'result.json'), `${JSON.stringify(result, null, 2)}\n`, 'utf8');
   console.log(JSON.stringify(result, null, 2));
 } catch (error) {

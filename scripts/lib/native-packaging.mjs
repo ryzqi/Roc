@@ -422,8 +422,7 @@ function removeExcludedPackagedResearchPaths(root) {
   }
 }
 
-function collectPackagedResearchEntries(root, previousEntries) {
-  const previous = new Map(previousEntries.map((entry) => [entry.path, entry]));
+function collectPackagedResearchEntries(root) {
   const entries = [];
   const visit = (relativeDir) => {
     const directory = relativeDir === '' ? root : join(root, relativeDir);
@@ -437,11 +436,6 @@ function collectPackagedResearchEntries(root, previousEntries) {
       }
       const info = lstatSync(fullPath);
       if (info.isSymbolicLink()) {
-        const previousEntry = previous.get(relativePath);
-        if (previousEntry?.type === 'symlink') {
-          entries.push(previousEntry);
-          continue;
-        }
         const target = readlinkSync(fullPath);
         if (target.startsWith('/')) {
           throw new Error(`Packaged research toolchain symlink must be relative: ${relativePath}`);
@@ -452,23 +446,15 @@ function collectPackagedResearchEntries(root, previousEntries) {
       if (!info.isFile()) {
         throw new Error(`Packaged research toolchain file type invalid: ${relativePath}`);
       }
-      const previousEntry = previous.get(relativePath);
       const executable = (info.mode & 0o100) !== 0;
-      const reuse =
-        previousEntry?.type === 'file' &&
-        previousEntry.size === info.size &&
-        previousEntry.executable === executable;
-      entries.push(
-        reuse
-          ? previousEntry
-          : {
-              path: relativePath,
-              type: 'file',
-              size: info.size,
-              sha256: packagedToolchainSha256(fullPath),
-              executable
-            }
-      );
+      // Signing may change bytes without changing size or mode. Hash the final file.
+      entries.push({
+        path: relativePath,
+        type: 'file',
+        size: info.size,
+        sha256: packagedToolchainSha256(fullPath),
+        executable
+      });
     }
   };
   visit('');
@@ -495,7 +481,7 @@ export function finalizePackagedResearchToolchain({
   const next = {
     ...manifest,
     lockHashes,
-    entries: collectPackagedResearchEntries(root, Array.isArray(manifest.entries) ? manifest.entries : [])
+    entries: collectPackagedResearchEntries(root)
   };
   writeFileSync(manifestPath, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
 }

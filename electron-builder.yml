@@ -104,4 +104,5 @@ mac:
         - "!models/**"
         - "!bibliography.py"
   identity: "-"
+  sign: ./scripts/builder-hooks/sign.mjs
   hardenedRuntime: false
