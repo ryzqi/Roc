@@ -1,3 +1,30 @@
+# 本地实验闭环验证 — 2026-11-09
+
+**Verified passing（本地实验流程）**：已接通 `sealed run → incident → 冻结 experiment → run --experiment → assess → 人工 decide`。流程要求固定实验条件、声明候选改动、一次候选登记、独立比较、绝对与逐题质量底线；fixture、未完成、证据不足不能被采纳。使用方法见 [EXPERIMENTS.md](EXPERIMENTS.md)。
+
+在 `/Users/Apple_501/Desktop/Roc/Roc` 执行：
+
+```sh
+node --test evaluation/tests/experiment.test.mjs evaluation/tests/harness-bench.test.mjs evaluation/tests/harness-bench-application.test.mjs evaluation/tests/roc-model.test.mjs tests/unit/quality-application-adapter.test.mjs tests/unit/quality-runner.test.mjs tests/unit/quality-evaluation.test.mjs tests/unit/quality-dataset.test.mjs
+pnpm typecheck
+pnpm harness:quality:check
+```
+
+64/64 测试通过，无失败或跳过；类型检查通过，以上命令均退出 0。S01 检查仍为 16 个 fixture、独立数据 0/200、`scientificStatus=insufficient`、modelCalls=0、externalCalls=0，退出 0 不代表真实质量通过。另已检查 CLI 帮助、示例与新增文档链接，并执行 `git diff --check`。本轮未重复全量 native 94 项。
+
+测试覆盖 incident 的原始观察与人工假设分离、禁止 holdout 优化、未声明源码改动、数据/模型/预算/工具合同漂移、实际 schema 变化、重复候选登记、低分非劣仍不满足绝对底线、逐题失败不能被均分掩盖、冻结更严格非劣界限、人工决定与证据绑定，以及证据改写拒绝。尚未封存的候选明确显示等待状态；fixture 切换到真实模型会在打开模型宿主前失败。
+
+CLI 生命周期使用真实 Roc worker 和固定模型响应完成两轮运行，每轮真实执行一次 `read_file`，两次模型请求均为 fixture。工具读到答案 `25%`，固定响应却为 `Unanswerable`；独立 grader 正确给出答案与证据 F1 为 0。已核对完整 transcript、请求响应、工具结果、输出、grade、进程退出和清理；数据库文件保留，但没有查询 checkpoint 行。验收正确返回 `blocked / insufficient`，最终记录 `reject`，不构成模型效果改善的证据。
+
+- [精确命令、退出码与日志索引](../.artifacts/harness-eval-loop-2026-11-09/verification-hatlhi93/verification.json)
+- [完整轨迹核对记录](../.artifacts/harness-eval-loop-2026-11-09/verification-hatlhi93/trace-review.md)
+- [基线报告](runs/qasper-2026-11-09T10-56-34.832Z-b6a3a855/report.md) 与 [候选报告](runs/qasper-2026-11-09T10-56-38.082Z-9d8f60ca/report.md)
+- [冻结协议](local/experiments/experiment-2026-11-09T10-56-37.614Z-95ab6ef4/protocol.json)、[验收](local/experiments/experiment-2026-11-09T10-56-37.614Z-95ab6ef4/assessment.json) 与 [人工决定记录](local/experiments/experiment-2026-11-09T10-56-37.614Z-95ab6ef4/decision.json)
+
+真实模型质量基线、S01 独立留出集、MCP 故障任务环境、官方 Science 任务审计与生产发布集成仍待完成。示例阈值不是已校准产品标准，人工采纳仅是本地开发决定。本轮无付费推理、真实凭据检查、部署、提交或远程写入。本文在运行封存后补写，已封存源码身份对应执行时文件，没有改写历史证据。
+
+以下保留先前验证历史。
+
 # 本机隔离评测验证 — 2026-11-08
 
 工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。macOS ARM64，Node 26.13.0、pnpm 12.5.1、Electron 45、Python 3.14.7。全部手动触发，无付费推理请求、提交或远程写入。目录名使用 UTC，因此本地 11 月 8 日对应部分目录的 11 月 7 日时间。

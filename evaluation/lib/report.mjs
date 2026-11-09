@@ -29,9 +29,11 @@ export function inspectRun(path) {
   const manifest = readJson(join(path, 'manifest.json')), summary = readJson(join(path, 'summary.json')), trials = readJson(join(path, 'trials.json'));
   return { path, sealHash: sha256(readFileSync(join(path, 'seal.json'))), manifest, summary, trials };
 }
-export function compareRuns(baseline, candidate) {
+export const comparisonFields = ['suite', 'evidence', 'datasetIdentity', 'selection', 'repeats', 'metrics', 'scorerHash', 'provider', 'environment', 'split', 'toolManifest'];
+export function compareRuns(baseline, candidate, { margin = .05 } = {}) {
+  if (!Number.isFinite(margin) || margin < 0 || margin > .05) fail('policy', 'comparison_margin_invalid');
   const a = baseline.manifest, b = candidate.manifest;
-  const mismatches = ['suite', 'evidence', 'datasetIdentity', 'selection', 'repeats', 'metrics', 'scorerHash', 'provider', 'environment', 'split', 'toolManifest'].filter(k => hash(a[k] ?? null) !== hash(b[k] ?? null));
+  const mismatches = comparisonFields.filter(k => hash(a[k] ?? null) !== hash(b[k] ?? null));
   if (mismatches.length) return { conclusion: 'incompatible', mismatches };
   if ([baseline, candidate].some(r => r.summary.status !== 'complete')) return { conclusion: 'incomplete' };
   if (baseline.sealHash && baseline.sealHash === candidate.sealHash) return { conclusion: 'insufficient', reason: 'same_run_is_not_independent_evidence' };
@@ -63,11 +65,11 @@ export function compareRuns(baseline, candidate) {
     const samples = sufficient ? Array.from({ length: 2000 }, () => mean(Array.from({ length: groups.length }, () => clusters[Math.floor(random() * groups.length)]).flat())) : [];
     const interval = sufficient ? { low: quantile(samples, .025), high: quantile(samples, .975) } : null;
     metrics[metric] = { baseline: mean([...left.values()].map(t => t.metrics[metric])), candidate: mean([...right.values()].map(t => t.metrics[metric])), delta: mean(clusters.flat()), confidence95: interval,
-      decision: !interval ? 'insufficient' : interval.high < -.05 ? 'regression' : interval.low >= -.05 ? 'non-inferior' : 'inconclusive' };
+      decision: !interval ? 'insufficient' : interval.high < -margin ? 'regression' : interval.low >= -margin ? 'non-inferior' : 'inconclusive' };
   }
   const decisions = Object.values(metrics).map(m => m.decision);
   return { conclusion: !sufficient ? 'insufficient' : decisions.includes('regression') ? 'regression' : decisions.every(d => d === 'non-inferior') ? 'non-inferior' : 'inconclusive',
-    method: 'paired-cluster-bootstrap-percentile', iterations: 2000, margin: .05, clusters: groups.length,
+    method: 'paired-cluster-bootstrap-percentile', iterations: 2000, margin, clusters: groups.length,
     scope: 'selected public benchmark tasks; no S01 or production-wide claim', metrics,
     latency: { baseline: baseline.summary.latencyMs, candidate: candidate.summary.latencyMs },
     costs: { baseline: baseline.summary.cost ?? null, candidate: candidate.summary.cost ?? null },

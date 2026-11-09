@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "title": "QASPER 引用检索提示实验",
+  "hypothesis": "填写来自 incident 的可证伪改动假设。",
+  "incidents": ["/absolute/path/from-incident-command"],
+  "allowedChanges": ["src/main/plugins/agent/run-harness.ts"],
+  "acceptance": {
+    "nonInferiorityMargin": 0.05,
+    "absoluteFloors": {"answerF1": 0.7, "evidenceF1": 0.7, "citationValidity": 1},
+    "trialFloors": {"citationValidity": 1}
+  }
+}

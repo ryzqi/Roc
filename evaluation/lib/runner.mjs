@@ -10,6 +10,7 @@ import { openRocModel } from './roc-model.mjs';
 import { fixtureConfig, fixtureCompletion } from './fixture.mjs';
 import { sealRun, summarize } from './report.mjs';
 import { command } from './process.mjs';
+import { claimExperiment, assertExperimentManifest, assertExperimentToolSchema, assertExperimentUnchanged } from './experiment.mjs';
 
 export const profiles = { smoke: { limit: 1, repeats: 1, split: 'development' }, fast: { limit: 5, repeats: 1, split: 'development' }, full: { limit: 50, repeats: 3, split: 'development' }, release: { limit: null, repeats: 3, split: 'holdout' } };
 export function selectTasks(tasks, profile) {
@@ -32,7 +33,7 @@ export async function runBenchmark(options) {
   const root = directory(RUNS, options.suite), events = journal(join(root, 'events.jsonl'));
   const controller = new AbortController(), cancel = () => controller.abort(new Error('operator_interrupt'));
   process.on('SIGINT', cancel); process.on('SIGTERM', cancel);
-  const trials = []; let provider = null, fatal = null, artifact, modelHost, runToolSchemaHash = null;
+  const trials = []; let provider = null, fatal = null, artifact, modelHost, runToolSchemaHash = null, experiment;
   const profile = profiles[options.profile];
   let manifest = { schemaVersion: 1, trigger: 'manual', command: process.argv.slice(2), suite: options.suite, profile: options.profile,
     selection: [], exclusions: [], repeats: profile?.repeats ?? 1, split: profile?.split ?? null,
@@ -45,6 +46,11 @@ export async function runBenchmark(options) {
     const suite = registry.suites.find(s => s.id === options.suite);
     if (!suite || !['available', 'requires-verified-environment'].includes(suite.status)) fail('environment', 'suite_not_implemented');
     manifest.source = sourceIdentity(); manifest.scorerHash = scorerHash(options.suite); manifest.metrics = suite.metrics;
+    if (options.experiment) {
+      experiment = claimExperiment(options.experiment, root, manifest);
+      manifest.experiment = experiment.binding;
+      events.append({ type: 'experiment_claimed', ...experiment.binding });
+    }
     if (options.suite === 'roc-native') {
       if (options.budget || options.dataset) fail('policy', 'native_does_not_use_provider_or_dataset');
       manifest.selection = [{ id: 'native-contracts', clusterId: 'native-contracts' }]; manifest.repeats = 1; manifest.split = 'fixture';
@@ -91,6 +97,7 @@ export async function runBenchmark(options) {
       manifest.workerHash = artifact.sha256; manifest.toolManifest = artifact.manifests[options.suite];
       // Dependency changes are captured for investigation, not silently mixed into the baseline.
       manifest.environment.lockfileHash = manifest.source.lockfileHash;
+      if (experiment) assertExperimentManifest(experiment, manifest);
       writeJson(join(root, 'manifest.json'), manifest);
       provider = options.fixture ? null : createProvider(config, e => events.append(e), { complete: modelHost.complete });
       for (const task of selected) for (let repeat = 0; repeat < profile.repeats; repeat++) {
@@ -100,6 +107,7 @@ export async function runBenchmark(options) {
         const started = Date.now(), record = e => {
           if (e.type === 'model_request') {
             trialToolSchemaHash = e.toolSchemaHash;
+            if (experiment) assertExperimentToolSchema(experiment, trialToolSchemaHash);
             if (runToolSchemaHash !== null && runToolSchemaHash !== trialToolSchemaHash) fail('harness', 'tool_schema_changed_during_run');
             runToolSchemaHash = trialToolSchemaHash;
           }
@@ -127,6 +135,7 @@ export async function runBenchmark(options) {
       if (loadDataset(options.dataset).manifest.identity !== manifest.datasetIdentity) fail('data', 'dataset_changed_during_run');
     }
     if (sourceIdentity().sourceHash !== manifest.source.sourceHash) fail('state', 'source_changed_during_run');
+    if (experiment) assertExperimentUnchanged(experiment);
   } catch (error) {
     fatal = controller.signal.aborted ? { failureClass: 'operator', reason: 'run_cancelled' } : errorRecord(error);
     events.append({ type: 'run_failed', ...fatal });

@@ -14,7 +14,7 @@ evaluation/
   environments/ 本机 Python venv 与环境清单
   runs/         每轮独立工作区、数据库、轨迹和报告
   comparisons/  两轮对比报告
-  local/        本机 recipe、预算和未导入数据
+  local/        本机 recipe、预算、incident、experiment 和未导入数据
   .runtime/     构建、模型宿主与 native 临时状态
 ```
 
@@ -55,9 +55,13 @@ pnpm harness:bench run --suite qasper --dataset "$ROC_EVAL_DATASET" --profile fa
 pnpm harness:bench run --suite qasper --dataset "$ROC_EVAL_DATASET" --profile smoke --budget evaluation/budget.example.json
 ```
 
-未传 `--fixture` 的公共套件会调用所选模型。模型配置或钥匙串失败会封存 incomplete 报告，未完成题目保留在分母中。当前主机默认模型缺少 credentialRef；另一已配置模型在钥匙串可用性检查阶段超时。修复实际配置/系统访问后重跑 `doctor`，无需在评测中复制密钥或配置第二套 provider。
+未传 `--fixture` 的公共套件会调用所选模型。模型配置或钥匙串失败会封存 incomplete 报告，未完成题目保留在分母中。11 月 8 日记录曾出现默认模型缺少 credentialRef、另一模型在钥匙串可用性检查阶段超时；这是历史结果，当前可用性以重新运行 `doctor` 为准，无需在评测中复制密钥或配置第二套 provider。
 
 ## 每次更新的流程
+
+针对有明确失败假设的优化，使用[实验闭环](EXPERIMENTS.md)：从 sealed run 记录 incident，运行前冻结候选源码和验收阈值，使用 `run --experiment` 登记唯一候选，独立比较后记录人工采纳或拒绝。除非劣检查外，还要求绝对质量底线和可选逐题底线；fixture、未完成或证据不足不能被采纳。所有记录位于本地，不自动发布。
+
+下面的独立 run/compare 入口保留，用于首次基线、一般诊断与 release 留出集复核：
 
 1. 更新前手动跑 native 和所需公共套件，保存输出目录作为 baseline。
 2. 更新后用相同数据、模型配置、预算、环境、profile 再跑，得到 candidate。
@@ -149,6 +153,7 @@ pnpm harness:bench run --suite scienceagentbench --dataset /path/from-prepare --
 
 ```sh
 node --test evaluation/tests/harness-bench.test.mjs evaluation/tests/harness-bench-application.test.mjs evaluation/tests/roc-model.test.mjs tests/unit/quality-application-adapter.test.mjs
+node --test evaluation/tests/experiment.test.mjs
 node --test tests/unit/database-migrations.test.mjs tests/unit/tool-effect-store.test.mjs tests/unit/execution-grant-broker.test.mjs
 pnpm typecheck
 pnpm harness:quality:check
