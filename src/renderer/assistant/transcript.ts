@@ -86,8 +86,7 @@ export type ChatTranscriptActivityBlock =
       content: string;
       tier: number | null;
       toolName: string | null;
-    }
-  | Extract<ChatRunActivityBlock, { kind: 'task_acceptance' }>;
+    };
 
 export type ChatTranscriptMessage = {
   key: string;
@@ -530,20 +529,6 @@ function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], threadId: s
       appendGuardrailBlock(getAssistantDraft(drafts, messages, event.runId), event.payload, `guardrail-${event.runId}`);
       continue;
     }
-
-    if (event.type === 'task_acceptance') {
-      const draft = getAssistantDraft(drafts, messages, event.runId);
-      const block: Extract<ChatTranscriptActivityBlock, { kind: 'task_acceptance' }> = {
-        id: `task-acceptance:${event.runId}`,
-        kind: 'task_acceptance',
-        report: event.payload
-      };
-      const index = draft.message.blocks.findIndex((item) => item.kind === 'task_acceptance');
-      if (index < 0) draft.message.blocks.push(block);
-      else draft.message.blocks[index] = block;
-      continue;
-    }
-
     const interruptProjection = readPersistedInterruptProjection(event);
     if (interruptProjection !== null) {
       const draft = getAssistantDraft(drafts, messages, event.runId);
@@ -562,8 +547,7 @@ function buildPersistedTranscriptMessages(recentEvents: TaskEvent[], threadId: s
 }
 
 function buildLiveActivityBlocks(chatRunState: ChatRunState): ChatTranscriptActivityBlock[] {
-  const blocks: ChatTranscriptActivityBlock[] = chatRunState.activityBlocks.map((block) => {
-    if (block.kind === 'task_acceptance') return block;
+  const blocks: ChatTranscriptActivityBlock[] = chatRunState.activityBlocks.filter(block => block.kind !== 'task_acceptance').map((block) => {
     if (block.kind === 'reasoning') {
       return {
         id: block.id,

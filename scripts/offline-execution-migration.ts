@@ -127,8 +127,8 @@ function convertAgent(db: Connection): void {
   db.prepare("UPDATE agent_execution_grants SET status='revoked',revoked_at=? WHERE status='issued'").run(now);
   db.prepare("UPDATE agent_execution_approvals SET status='revoked',revoked_at=? WHERE status='issued'").run(now);
   db.exec("UPDATE agent_research_dispatch_grants SET state='revoked' WHERE state='issued'");
-  for (const row of rows(db,'agent_budget_calls')) audit(db,'agent_budget_calls',`${row.run_id}:${row.call_id}`,'1',row);
-  db.exec("UPDATE agent_budget_calls SET state='unknown' WHERE state='reserved'");
+  for (const row of rows(db,'agent_calls')) audit(db,'agent_calls',`${row.run_id}:${row.call_id}`,'1',row);
+  db.exec("UPDATE agent_calls SET state='unknown' WHERE state='reserved'");
 }
 function convertResearch(db: Connection): void {
   for (const row of rows(db,'research_stage_runs')) {
@@ -172,7 +172,7 @@ function convertSkillAgent(db: Connection): void {
     const status = ['completed','cancelled','failed'].includes(task.status) ? task.status : 'interrupted';
     db.prepare('UPDATE research_tasks SET status=?,snapshot_json=? WHERE id=?')
       .run(status,JSON.stringify({...task,schemaVersion:3,status,statusReason:'historical_execution_not_resumable',updatedAt:now}),task.id);
-    db.prepare("UPDATE agent_budget_calls SET state='unknown' WHERE task_id=? AND state='reserved'").run(task.id);
+    db.prepare("UPDATE agent_calls SET state='unknown' WHERE task_id=? AND state='reserved'").run(task.id);
   }
 }
 
@@ -307,8 +307,8 @@ export async function migrateExecutionDatabases(input: {source: string; destinat
       try {
         const before = inventory(db);
         // Migration 24 retires project policy references; all remaining call data must survive.
-        const budgetBefore = target.name === 'agent' ? rows(db,'agent_budget_calls')
-          .map(({state:_state,envelope_json:_envelope,project_id:_projectId,project_budget_revision:_revision,...row})=>row) : null;
+        const callsBefore = target.name === 'agent' ? rows(db,'agent_budget_calls')
+          .map(({state:_state,envelope_json:_envelope,project_id:_projectId,project_budget_revision:_revision,reserved_cost_microusd:_reserved,actual_cost_microusd:_actual,pricing_version:_pricing,...row})=>row) : null;
         applyDatabaseMigrations(db,{dbName:target.name,migrations:target.migrations,allowOffline:true});
         db.transaction(()=>{
           if (target.name === 'agent') {
@@ -322,7 +322,7 @@ export async function migrateExecutionDatabases(input: {source: string; destinat
           }
           checkIntegrity(db);
         })();
-        if (budgetBefore !== null && JSON.stringify(budgetBefore) !== JSON.stringify(rows(db,'agent_budget_calls').map(({state:_state,envelope_json:_envelope,...row})=>row))) throw new Error('offline_budget_changed');
+        if (callsBefore !== null && JSON.stringify(callsBefore) !== JSON.stringify(rows(db,'agent_calls').map(({state:_state,envelope_json:_envelope,...row})=>row))) throw new Error('offline_calls_changed');
         for (const row of tables(db).includes('execution_historical_audit') ? rows(db,'execution_historical_audit') : []) {
           if (hash(String(row.raw_json)) !== row.raw_hash) throw new Error('offline_audit_hash_invalid');
         }

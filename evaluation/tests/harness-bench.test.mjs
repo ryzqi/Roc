@@ -7,7 +7,7 @@ import { answerF1, evidenceF1, importQasper, qasperInput, gradeQasper } from '..
 import { hash, sha256, writeJson, fileInventory, snapshotNativeEvidence, ROOT } from '../lib/common.mjs';
 import { loadDataset, prepareScience, scienceRecipeSchema } from '../lib/data.mjs';
 import { compareRuns, summarize, sealRun, inspectRun } from '../lib/report.mjs';
-import { createProvider, validateBudget } from '../lib/provider.mjs';
+import { createProvider, validateProviderOptions } from '../lib/provider.mjs';
 import { runBenchmark, selectTasks, profiles } from '../lib/runner.mjs';
 import { parseScienceGrade, gradeScience } from '../lib/science.mjs';
 
@@ -90,24 +90,7 @@ test('legacy or partial tool evidence cannot establish non-inferiority', () => {
   const mixed = run(); mixed.trials[0].toolSchemaHash = hash('different');
   assert.equal(compareRuns(run(), mixed).conclusion, 'incompatible');
 });
-test('impossible full-profile request budget fails before model-host access and seals diagnostics', async () => {
-  const dataset = join(root, 'budget-dataset'); mkdirSync(dataset);
-  const tasks = Array.from({ length: 50 }, (_, i) => ({ id: `q${i}`, clusterId: `paper${i}`, split: 'development', unsupported: null }));
-  writeJson(join(dataset, 'tasks.json'), tasks);
-  const suite = 'qasper', provenance = { kind: 'synthetic-budget-test' }, inventory = fileInventory(dataset);
-  writeJson(join(dataset, 'dataset.json'), { suite, provenance, inventory, identity: hash({ suite, provenance, inventory }) });
-  const result = await runBenchmark({ suite, profile: 'full', dataset, rocRoot: join(root, 'must-not-open-model-host') });
-  assert.equal(result.status, 'incomplete');
-  assert.equal(result.fatal.failureClass, 'budget');
-  assert.match(result.fatal.reason, /request_budget_infeasible.*150.*60/);
-  assert.equal(result.attempted, 0);
-  assert.equal(result.cost.costBasis, 'not-dispatched');
-  const sealed = inspectRun(result.directory);
-  assert.equal(sealed.manifest.budgetPlan.minimumRequests, 150);
-  assert.equal(sealed.manifest.budgetPlan.maxTotalRequests, 60);
-  assert.equal(readFileSync(join(result.directory, 'events.jsonl'), 'utf8').includes('provider_admitted'), false);
-});
-test('fixture runner seals actual tool schemas across independent task workspaces without a live budget', async () => {
+test('fixture runner seals actual tool schemas across independent task workspaces without a live provider', async () => {
   const dataset = join(root, 'schema-dataset'); mkdirSync(dataset);
   const tasks = importQasper(Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`p${i}`, paper(`q${i}`)])))
     .filter(t => t.split === 'development').slice(0, 2);
@@ -117,7 +100,7 @@ test('fixture runner seals actual tool schemas across independent task workspace
   writeJson(join(dataset, 'dataset.json'), { suite, provenance, inventory, identity: hash({ suite, provenance, inventory }) });
   const result = await runBenchmark({ suite, profile: 'fast', dataset, fixture: true });
   assert.equal(result.status, 'complete', JSON.stringify(result.fatal));
-  assert.equal(result.cost.requests, 4);
+  assert.equal(result.usage.requests, 4);
   const sealed = inspectRun(result.directory);
   assert.equal(new Set(sealed.trials.map(t => t.toolSchemaHash)).size, 1);
   for (const trial of sealed.trials) assert.match(trial.toolSchemaHash, /^[a-f0-9]{64}$/);
@@ -143,31 +126,30 @@ test('native isolation-fixture links are retained as metadata without reading th
   assert.deepEqual(snapshotNativeEvidence(source, target), [{ path: 'fixture-link', target: '/unavailable/hidden-file' }]);
   assert.deepEqual(fileInventory(target).map(f => f.path), ['report.json']);
 });
-const config = () => ({ model: 'model', temperature: 0, ...validateBudget({
-  maxRequestsPerTask: 2, maxInputBytes: 1024, requestTimeoutMs: 1000, taskTimeoutMs: 5000, maxTotalRequests: 1, maxTotalEstimatedUsd: 1,
-  pricing: { version: 'test', inputPerMillion: 1, outputPerMillion: 1 } }) });
+const config = () => ({ model: 'model', temperature: 0, ...validateProviderOptions({
+   maxInputBytes: 1024, requestTimeoutMs: 1000, taskTimeoutMs: 5000 }) });
 const body = { model: 'model', stream: false, max_tokens: 4096, temperature: 0, messages: [] };
 const response = { choices: [{ message: { role: 'assistant', content: '{}' } }], usage: { prompt_tokens: 10, completion_tokens: 10 } };
-test('provider reserves durably before dispatch and enforces hard request budgets', async () => {
+test('provider records requests before dispatch and permits repeated calls', async () => {
   const events = []; let calls = 0;
   const provider = createProvider(config(), e => events.push(e), { complete: async () => {
     assert.equal(events.at(-1).type, 'provider_admitted'); calls++; return response;
   } });
   await provider.complete(body, new AbortController().signal);
-  await assert.rejects(provider.complete(body, new AbortController().signal), /budget_exhausted/);
-  assert.equal(calls, 1); assert.equal(provider.snapshot().costUsd, .00002);
+  await provider.complete(body, new AbortController().signal);
+  assert.equal(calls, 2); assert.deepEqual(provider.snapshot(), { requests: 2, inputTokens: 20, outputTokens: 20 });
   assert.equal(JSON.stringify(events).includes('test-only'), false);
 });
-test('unknown spend is retained; bad binding or exhausted estimate prevents dispatch', async () => {
+test('transport failure remains visible and bad binding prevents dispatch', async () => {
   let calls = 0;
   const provider = createProvider(config(), () => {}, { complete: async () => { calls++; throw new Error('secret server details'); } });
   await assert.rejects(provider.complete({ ...body, model: 'wrong' }, new AbortController().signal), /binding_changed/);
   assert.equal(calls, 0);
   await assert.rejects(provider.complete(body, new AbortController().signal), /transport_failed/);
-  assert.equal(provider.snapshot().costUsd, null); assert.ok(provider.snapshot().reservedUsd > 0);
-  const budget = createProvider({ ...config(), maxTotalEstimatedUsd: .000001 }, () => {}, { complete: async () => { throw new Error('must not dispatch'); } });
-  await assert.rejects(budget.complete(body, new AbortController().signal), /budget_exhausted/);
-  assert.throws(() => validateBudget({ apiKey: 'test-only' }));
+  assert.deepEqual(provider.snapshot(), { requests: 1, inputTokens: 0, outputTokens: 0 });
+  await assert.rejects(provider.complete(body, new AbortController().signal), /transport_failed/);
+  assert.equal(calls, 2);
+  assert.throws(() => validateProviderOptions({ apiKey: 'test-only' }));
 });
 test('Science verifier rejects absent/corrupt reward and independently scores both outcomes', () => {
   assert.equal(parseScienceGrade('{"success":true,"evidence":"arrays match"}').metrics.successRate, 1);

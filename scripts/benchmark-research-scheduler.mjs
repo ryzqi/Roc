@@ -8,8 +8,8 @@ import {createScientificReviewFixture} from '../tests/unit/fixtures/scientific-r
 
 // A scheduling experiment with controlled outputs, not independent scientific tasks.
 const protocol = {version: 1, kind: 'synthetic_engineering', scenarios: 30, repetitions: 3,
-  concurrency: [1, 2], model: 'controlled-fixture', realModelCost: null,
-  adoption: 'requires_independent_quality_and_cost_evidence'};
+  concurrency: [1, 2], model: 'controlled-fixture',
+  adoption: 'requires_independent_quality_evidence'};
 const plain = {title: 'Review', markdown: 'Controlled engineering fixture.', claims: [], sections: [], verdict: 'uncertain'};
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const target = resolve(process.argv[2] ?? '.artifacts/research-scheduler/report.json');
@@ -17,17 +17,14 @@ const api = await loadResearchTestApi();
 const rows = [];
 async function sample(scenario, repetition, concurrency) {
   const f = createScientificReviewFixture(api);
-  const limits = f.tasks.budgetForExecution('stage', f.parent.id, f.project.id);
-  f.agentDb.prepare('UPDATE research_task_budgets SET limits_json=? WHERE task_id=?')
-    .run(JSON.stringify({...limits, deadlineAt: new Date(Date.now() + 60_000).toISOString(), maxConcurrentModelCalls: 2}), f.parent.taskId);
-  const ledger = new api.RunBudgetLedger(f.agentDb);
+  const ledger = new api.RunUsageLedger(f.agentDb);
   let active = 0, peak = 0;
-  const runtime = new api.ResearchStageRuntime(f.repository, {}, {async prepare(_model, budget) {
+  const runtime = new api.ResearchStageRuntime(f.repository, {}, {async prepare(_model, usage) {
     return {providerId: 'fixture', modelId: 'fixture', async execute({run, context}) {
       if (run.parentRunId === null) assert.equal(context.reviewReports.length, 3);
       else assert.equal(context.reviewReports.length, 0);
-      ledger.reserve(run.id, budget, {id: 'model-call', kind: 'model', tokens: 100,
-        inputHash: digest({scenario, role: run.role}), envelope: {scenario, role: run.role}, costMicrousd: null});
+      ledger.reserve(run.id, usage, {id: 'model-call', kind: 'model', tokens: 100,
+        inputHash: digest({scenario, role: run.role}), envelope: {scenario, role: run.role}});
       active += 1; peak = Math.max(peak, active);
       try {
         await delay(4 + scenario % 5);
@@ -52,8 +49,8 @@ async function sample(scenario, repetition, concurrency) {
     assert.ok(children.every(node => node.status === 'done' && node.output !== null && node.lease === null));
     assert.equal(reducer.status, 'pending_review'); assert.equal(reducer.lease, null);
     assert.equal(peak, concurrency);
-    const budget = f.agentDb.prepare('SELECT COUNT(*) calls, SUM(actual_tokens) tokens, SUM(state = ?) settled FROM agent_budget_calls').get('settled');
-    assert.deepEqual(budget, {calls: 4, tokens: 320, settled: 4});
+    const usage = f.agentDb.prepare('SELECT COUNT(*) calls, SUM(actual_tokens) tokens, SUM(state = ?) settled FROM agent_calls').get('settled');
+    assert.deepEqual(usage, {calls: 4, tokens: 320, settled: 4});
     const effects = f.agentDb.prepare('SELECT COUNT(*) FROM agent_tool_effects').pluck().get();
     assert.equal(effects, 0);
     const output = [reducer, ...children].map(node => {
@@ -63,8 +60,8 @@ async function sample(scenario, repetition, concurrency) {
         observations: saved.scientificReview?.findings?.map(finding => finding.observation) ?? [],
         suggestions: saved.scientificReview?.suggestions?.map(suggestion => ({verdict: suggestion.verdict, rationale: suggestion.rationale})) ?? []};
     }).sort((a, b) => a.role.localeCompare(b.role));
-    Object.assign(row, {status: 'passed', peak, budget, effects, projectionHash: digest(output),
-      resultHashes: [reducer, ...children].map(node => node.output.hash), realCostMicrousd: null});
+    Object.assign(row, {status: 'passed', peak, usage, effects, projectionHash: digest(output),
+      resultHashes: [reducer, ...children].map(node => node.output.hash)});
   } catch (error) {row.error = error instanceof Error ? error.message : String(error);}
   finally {await runtime.shutdown(); f.close();}
   return row;

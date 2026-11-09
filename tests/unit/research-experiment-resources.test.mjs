@@ -53,7 +53,7 @@ async function completed(f) {
 
 async function observations(f, run, source = f.service) {
   const association = f.tasks.requireExecution('experiment', run.id, f.project.id);
-  const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb), null, source);
+  const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, new api.RunUsageLedger(f.agentDb), null, source);
   return diagnostics.inspectExecution({projectId: f.project.id, taskId: association.taskId, executionKind: 'experiment',
     executionId: run.id, afterCallSequence: 0, afterEventSequence: 0, limit: 50});
 }

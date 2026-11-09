@@ -6,14 +6,15 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import Database from 'better-sqlite3';
 
-async function buildBudgetEventModules() {
-  const directory = mkdtempSync(join(tmpdir(), 'roc-run-budget-events-'));
+async function buildUsageEventModules() {
+  const directory = mkdtempSync(join(tmpdir(), 'roc-run-usage-events-'));
   await build({
     entryPoints: {
       chatSchema: 'src/shared/schemas/chat.ts',
       eventLog: 'src/main/plugins/agent/run-event-log.ts',
       eventQueue: 'src/main/plugins/agent/chat-run-event-queue.ts',
-      runState: 'src/renderer/assistant/run-state.ts'
+      runState: 'src/renderer/assistant/run-state.ts',
+      executionEvents: 'src/main/infrastructure/execution-events.ts'
     },
     outdir: directory,
     bundle: true,
@@ -29,23 +30,19 @@ async function buildBudgetEventModules() {
   return { directory, chatSchema, eventLog, eventQueue, runState };
 }
 
-function makeBudget(sequence) {
+function makeUsage(sequence) {
   return {
-    tokens: { limit: 1000, settled: sequence, unknown: 0, reserved: 10, remaining: 990 - sequence },
+    tokens: { settled: sequence, unknown: 0, reserved: 10 },
     calls: {
-      models: { limit: 10, total: sequence, reserved: 1 },
-      tools: { limit: 20, total: 0, reserved: 0 },
-      children: { limit: 2, total: 0, reserved: 0 }
+      models: { total: sequence, reserved: 1 },
+      tools: { total: 0, reserved: 0 },
+      children: { total: 0, reserved: 0 }
     },
-    cost: { state: 'unknown', limitMicrousd: null, settledMicrousd: 0, reservedMicrousd: null },
-    pricingCatalogVersion: 'roc-pricing-2026-10-29-v1',
-    deadlineAt: new Date(Date.now() + 60_000).toISOString(),
-    stopReason: null
   };
 }
 
-test('run budget snapshots validate and survive durable event replay', async () => {
-  const { directory, chatSchema, eventLog } = await buildBudgetEventModules();
+test('run usage snapshots validate and survive durable event replay', async () => {
+  const { directory, chatSchema, eventLog } = await buildUsageEventModules();
   const db = new Database(':memory:');
   try {
     db.exec(`CREATE TABLE agent_runs(id TEXT, thread_id TEXT);
@@ -67,71 +64,71 @@ test('run budget snapshots validate and survive durable event replay', async () 
         PRIMARY KEY(run_id, sequence));`);
     const log = new eventLog.AgentRunEventLog(db);
     const event = {
-      type: 'run_budget',
-      runId: 'run-budget-event',
+      type: 'run_usage',
+      runId: 'run-usage-event',
       threadId: 'thread',
-      budget: makeBudget(7)
+      usage: makeUsage(7)
     };
     assert.deepEqual(chatSchema.chatRunEventSchema.parse(event), event);
     const stored = log.recordRunEvent(event);
     assert.equal(stored.sequence, 1);
     assert.deepEqual(log.listRunEvents({ runId: event.runId, afterSequence: 0 }), [stored]);
-    assert.throws(() => chatSchema.chatRunEventSchema.parse({ ...event, budget: { ...event.budget, tokens: { ...event.budget.tokens, remaining: -1 } } }));
+    assert.throws(() => chatSchema.chatRunEventSchema.parse({ ...event, usage: { ...event.usage, tokens: { ...event.usage.tokens, settled: -1 } } }));
   } finally {
     db.close();
     rmSync(directory, { recursive: true, force: true });
   }
 });
 
-test('renderer run state retains the latest replayed budget snapshot', async () => {
-  const { directory, runState } = await buildBudgetEventModules();
+test('renderer run state retains the latest replayed usage snapshot', async () => {
+  const { directory, runState } = await buildUsageEventModules();
   try {
     const started = runState.applyChatRunEvent(runState.createEmptyChatRunState(), {
-      type: 'run_started', runId: 'run-budget-state', mode: 'run', threadId: 'thread',
+      type: 'run_started', runId: 'run-usage-state', mode: 'run', threadId: 'thread',
       providerId: 'provider', modelId: 'model', createdAt: new Date().toISOString()
     });
-    assert.equal(started.budget, null);
-    const budget = makeBudget(11);
+    assert.equal(started.usage, null);
+    const usage = makeUsage(11);
     const state = runState.applyChatRunEvent(started, {
-      type: 'run_budget', runId: 'run-budget-state', threadId: 'thread', budget
+      type: 'run_usage', runId: 'run-usage-state', threadId: 'thread', usage
     });
-    assert.deepEqual(state.budget, budget);
+    assert.deepEqual(state.usage, usage);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
 });
 
-test('event queue keeps the latest budget at its chronological queue position', async () => {
-  const { directory, eventQueue } = await buildBudgetEventModules();
+test('event queue keeps the latest usage at its chronological queue position', async () => {
+  const { directory, eventQueue } = await buildUsageEventModules();
   try {
     const queue = eventQueue.createChatRunEventQueue({ maxEvents: 3 });
     const runStarted = {
-      type: 'run_started', runId: 'run-budget-queue', mode: 'run', threadId: 'thread',
+      type: 'run_started', runId: 'run-usage-queue', mode: 'run', threadId: 'thread',
       providerId: 'provider', modelId: 'model', createdAt: new Date().toISOString()
     };
     queue.push(runStarted);
-    queue.push({ type: 'run_budget', runId: runStarted.runId, threadId: 'thread', budget: makeBudget(1) });
+    queue.push({ type: 'run_usage', runId: runStarted.runId, threadId: 'thread', usage: makeUsage(1) });
     queue.push({
       type: 'assistant_block', runId: runStarted.runId,
       block: { kind: 'text', blockId: 'text', phase: 'complete', text: 'completed' }
     });
-    assert.equal(queue.push({ type: 'run_budget', runId: runStarted.runId, threadId: 'thread', budget: makeBudget(2) }), true);
+    assert.equal(queue.push({ type: 'run_usage', runId: runStarted.runId, threadId: 'thread', usage: makeUsage(2) }), true);
     assert.equal(queue.stats().queuedEventCount, 3);
     queue.close();
     const events = [];
     for await (const event of queue) events.push(event);
-    assert.deepEqual(events.map((event) => event.type), ['run_started', 'assistant_block', 'run_budget']);
-    assert.equal(events[2].budget.tokens.settled, 2);
+    assert.deepEqual(events.map((event) => event.type), ['run_started', 'assistant_block', 'run_usage']);
+    assert.equal(events[2].usage.tokens.settled, 2);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
 });
 
 test('event queue enforces per-event, aggregate byte and count bounds', async () => {
-  const { directory, eventQueue } = await buildBudgetEventModules();
+  const { directory, eventQueue } = await buildUsageEventModules();
   try {
     const runStarted = {
-      type: 'run_started', runId: 'run-budget-bounds', mode: 'run', threadId: 'thread',
+      type: 'run_started', runId: 'run-usage-bounds', mode: 'run', threadId: 'thread',
       providerId: 'provider', modelId: 'model', createdAt: '2026-10-30T00:00:00.000Z'
     };
     const eventBytes = Buffer.byteLength(JSON.stringify(runStarted));

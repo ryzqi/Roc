@@ -12,7 +12,7 @@ import { contextContractAuditSchema, contextCompactionRecordSchema } from './run
 import {
   enabledCapabilitiesSchema,
   runExecutionModeSchema,
-  runBudgetStatusSchema,
+  runUsageStatusSchema,
   workflowHintSchema
 } from './agent';
 import {
@@ -149,10 +149,10 @@ export const chatRunEventSchema = z.discriminatedUnion('type', [
     })
     .strict(),
   z.object({
-    type: z.literal('run_budget'),
+    type: z.literal('run_usage'),
     runId: z.string(),
     threadId: z.string().nullable(),
-    budget: runBudgetStatusSchema
+    usage: runUsageStatusSchema
   }).strict(),
   z.object({ type: z.literal('assistant_block'), runId: z.string(), block: chatAssistantBlockSchema }).strict(),
   z
@@ -223,7 +223,7 @@ export const chatRunEventSchema = z.discriminatedUnion('type', [
       persistedChars: z.number().optional(),
       removedChars: z.number().optional(),
       inputTokens: z.number().optional(),
-      budgetTokens: z.number().optional(),
+      capacityTokens: z.number().optional(),
       estimated: z.boolean().optional(),
       cycleId: z.string().uuid().optional(),
       record: contextCompactionRecordSchema.optional(),
@@ -377,7 +377,7 @@ export const chatRunStateSnapshotSchema: z.ZodType<ChatRunState> = z
     errorMessage: z.string().nullable(),
     recoveryAttempt: z.number().int().nonnegative().nullable(),
     retryable: z.boolean(),
-    budget: runBudgetStatusSchema.nullable(),
+    usage: runUsageStatusSchema.nullable(),
     pendingInterrupts: z.array(chatPendingInterruptSchema),
     resumeBusy: z.boolean(),
     todos: z.array(chatTodoItemSchema),

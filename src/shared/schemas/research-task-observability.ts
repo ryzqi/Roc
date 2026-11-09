@@ -7,7 +7,6 @@ const id = z.string().min(1).max(256);
 export const taskCallDiagnosticsSchema = z.strictObject({
   sequence: count, runId: id, callId: id, kind: z.enum(['model', 'tool', 'child']),
   state: z.enum(['reserved', 'settled', 'unknown']), reservedTokens: count, actualTokens: count.nullable(),
-  reservedCostMicrousd: count.nullable(), actualCostMicrousd: count.nullable(), pricingVersion: id.nullable(),
   createdAt: z.string(), settledAt: z.string().nullable(),
   invocation: z.strictObject({startedAt: z.iso.datetime(), durationMs: count, status: z.enum(['completed','failed'])}).nullable()
 });

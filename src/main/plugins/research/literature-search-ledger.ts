@@ -33,12 +33,8 @@ export class LiteratureSearchLedger {
     return (phase, source, receipt) => {
       try {
         if (phase === 'started') {
-          const budget = this.db.prepare(`SELECT json_extract(request_json,'$.strategy.maxRequests') AS cap,
-            (SELECT COUNT(*) FROM research_literature_request_receipts WHERE execution_id=?) AS used
-            FROM research_literature_search_executions WHERE id=? AND status='running'`)
-            .get(executionId, executionId) as {cap: number | null; used: number} | undefined;
-          if (budget === undefined) throw new Error('literature_search_execution_not_active');
-          if (budget.cap !== null && budget.used >= budget.cap) throw new Error('research_search_request_budget_exhausted');
+          const execution = this.db.prepare("SELECT id FROM research_literature_search_executions WHERE id=? AND status='running'").get(executionId);
+          if (execution === undefined) throw new Error('literature_search_execution_not_active');
           this.db.prepare(`INSERT INTO research_literature_request_receipts
             (execution_id,source,attempt,state,receipt_json) VALUES (?,?,?,'dispatched',?)`)
             .run(executionId, source, receipt.attempt, JSON.stringify(receipt));

@@ -1,0 +1,5 @@
+{
+  "maxInputBytes": 262144,
+  "requestTimeoutMs": 120000,
+  "taskTimeoutMs": 300000
+}

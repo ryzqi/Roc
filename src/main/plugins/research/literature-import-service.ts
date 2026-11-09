@@ -426,12 +426,12 @@ export class LiteratureImportService {
       const plan = context.searchStrategy.plan;
       const selected = plan.queries.find(query => query.id === context.queryId);
       if (selected === undefined) throw new Error('research_search_query_id_invalid');
-      const {id: _id, maxRequests, ...query} = selected;
+      const {id: _id, ...query} = selected;
       const {projectId: _projectId, ...parameters} = request;
       if (JSON.stringify(parameters) !== JSON.stringify(query)) throw new Error('research_search_query_changed');
       strategy = {artifactId: context.searchStrategy.artifactId, contentHash: context.searchStrategy.contentHash,
         approvedAt: context.searchStrategy.approvedAt, researchQuestion: plan.researchQuestion, planVersion: plan.version,
-        queryId: context.queryId, perspectiveIds: plan.perspectives.filter(view => view.queryIds.includes(context.queryId!)).map(view => view.id), maxRequests};
+        queryId: context.queryId, perspectiveIds: plan.perspectives.filter(view => view.queryIds.includes(context.queryId!)).map(view => view.id)};
     }
     const scopedRequest = {...request, projectId: context.projectId};
     const executionId = this.searchLedger.begin(context, scopedRequest, strategy);

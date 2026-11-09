@@ -6,8 +6,9 @@ export { AgentSessionRepository } from '../../../src/main/plugins/agent/session-
 export { AgentRunEventLog } from '../../../src/main/plugins/agent/run-event-log';
 export { createAgentDeepAgentExecutor } from '../../../src/main/plugins/agent/deep-agent-executor';
 export { createRunCapabilityManifestHash } from '../../../src/main/plugins/agent/run-capability-manifest';
+export { parseRunExecutionSnapshot } from '../../../src/main/plugins/agent/run-execution-snapshot';
 export { openExecutionGrantBroker } from '../../../src/main/services/deep-agent/execution-grant-broker';
-export { RunBudgetLedger } from '../../../src/main/services/deep-agent/run-budget-ledger';
+export { RunUsageLedger } from '../../../src/main/services/deep-agent/run-usage-ledger';
 export { AgentToolEffectStore } from '../../../src/main/services/deep-agent/tool-effect-store';
 export { RocSqliteCheckpointer } from '../../../src/main/services/deep-agent/sqlite-checkpointer';
 export { ContextArtifactStore } from '../../../src/main/services/deep-agent/context/context-artifact-store';

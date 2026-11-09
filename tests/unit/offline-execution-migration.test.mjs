@@ -34,6 +34,10 @@ function fixture(fromS02 = false, fromS04 = false, fromS05 = false) {
   // Current writers construct the records; remove their temporary DAG tables and
   // explicitly encode the historical envelopes before treating this as an old database.
   agent.exec(schemas.agentMigrations.find(migration => migration.version === 21).sql);
+  agent.exec(`CREATE TEMP VIEW agent_calls AS SELECT * FROM agent_budget_calls;
+    CREATE TEMP TRIGGER update_agent_calls INSTEAD OF UPDATE ON agent_calls BEGIN
+      UPDATE agent_budget_calls SET task_id=NEW.task_id WHERE run_id=OLD.run_id AND call_id=OLD.call_id;
+    END;`);
   const now=()=> new Date().toISOString();
   const tasks=new api.ResearchTaskRepository(agent,now);
   const repository=new api.ResearchRepository(research,tasks,now);
@@ -64,24 +68,26 @@ function fixture(fromS02 = false, fromS04 = false, fromS05 = false) {
     research.prepare("UPDATE research_projects SET current_stage='retrieval' WHERE id=?").run(project.id);
     research.prepare("UPDATE research_stage_states SET gate_approved=1,status='completed',artifact_ids_json='[\"old-plan\"]' WHERE project_id=? AND stage='discovery'").run(project.id);
   }
-  const budget=api.createRunBudget({contextBudgetTokens:1000});
-  const ledger=new api.RunBudgetLedger(agent);
-  ledger.reserve(run.id,budget,{id:'reserved-call',kind:'model',tokens:100,costMicrousd:70,inputHash:'hash',envelope:{private:'frozen input'}});
-  ledger.reserve(run.id,budget,{id:'settled-call',kind:'model',tokens:100,costMicrousd:70,inputHash:'hash2',envelope:{}});
-  ledger.settle(run.id,'settled-call',80,'settled',undefined,{},50);
+  for (const [id,state,actual] of [['reserved-call','reserved',null],['settled-call','settled',80]]) {
+    agent.prepare(`INSERT INTO agent_budget_calls(run_id,call_id,execution_kind,task_id,kind,input_hash,reserved_tokens,actual_tokens,
+      reserved_cost_microusd,actual_cost_microusd,state,envelope_json,created_at)
+      VALUES(?,?,'stage',?,'model',?,100,?,70,?,?,?,?)`).run(run.id,id,run.taskId,id,actual,
+        state==='settled'?50:null,state,JSON.stringify({private:'frozen input'}),now());
+  }
+  agent.exec("DROP VIEW temp.agent_calls");
   agent.prepare("INSERT INTO agent_threads(id,kind,title,goal,status,created_at,updated_at) VALUES('thread','chat','old','goal','active',?,?)").run(now(),now());
   agent.prepare(`INSERT INTO agent_runs(id,thread_id,run_number,user_input,status,started_at,enabled_capabilities_json,snapshot_version,snapshot_json)
     VALUES('chat','thread',1,'old','interrupted',?,'{}',9,'{"schemaVersion":9,"private":"original"}')`).run(now());
   agent.prepare("INSERT INTO agent_run_events(run_id,sequence,event_json,created_at) VALUES('chat',1,'{\"type\":\"legacy\"}',?)").run(now());
   agent.prepare("INSERT INTO agent_run_event_cursors(run_id,next_sequence) VALUES('chat',2)").run();
-  const budgetBefore=agent.prepare('SELECT * FROM agent_budget_calls ORDER BY call_id').all();
+  const callsBefore=agent.prepare('SELECT * FROM agent_budget_calls ORDER BY call_id').all();
   const eventsBefore=agent.prepare('SELECT * FROM research_task_events').all();
   agent.close();research.close();
   const bytes=Object.fromEntries(definitions.map(([name])=>[name,digest(readFileSync(location(source,name)))]));
-  return {root,source,destination:join(root,'converted'),project,run,budgetBefore,eventsBefore,bytes,workspacePath,workspaceSentinel,workspaceSentinelHash,
+  return {root,source,destination:join(root,'converted'),project,run,callsBefore,eventsBefore,bytes,workspacePath,workspaceSentinel,workspaceSentinelHash,
     close:()=>rmSync(root,{recursive:true,force:true})};
 }
-test('offline conversion preserves source and cold backup, fences historical identity and retains unknown budget',async()=>{
+test('offline conversion preserves source and cold backup, fences historical identity and retains unknown token usage',async()=>{
   const f=fixture();
   try {
     const report=await migrateExecutionDatabases({...f,stopped:true});
@@ -91,14 +97,14 @@ test('offline conversion preserves source and cold backup, fences historical ide
     assert.equal(digest(readFileSync(f.workspaceSentinel)),f.workspaceSentinelHash);
     const backup=new Database(location(join(f.destination,'backup'),'agent'));
     assert.equal(backup.prepare('SELECT current_version FROM schema_metadata').pluck().get(),19);
-    assert.deepEqual(backup.prepare('SELECT * FROM agent_budget_calls ORDER BY call_id').all(),f.budgetBefore);
+    assert.deepEqual(backup.prepare('SELECT * FROM agent_budget_calls ORDER BY call_id').all(),f.callsBefore);
     assert.deepEqual(backup.prepare('SELECT * FROM research_task_events').all(),f.eventsBefore);backup.close();
     const agent=new Database(location(join(f.destination,'current'),'agent'));
     const research=new Database(location(join(f.destination,'current'),'research'));
     try {
       assert.equal(agent.prepare('SELECT current_version FROM schema_metadata').pluck().get(),schemas.agentMigrations.at(-1).version);
-      const calls=agent.prepare('SELECT * FROM agent_budget_calls ORDER BY call_id').all();
-      assert.deepEqual(calls,f.budgetBefore.map(({project_id: _projectId, project_budget_revision: _revision, ...row})=>({...row,state:row.state==='reserved'?'unknown':row.state})));
+      const calls=agent.prepare('SELECT * FROM agent_calls ORDER BY call_id').all();
+      assert.deepEqual(calls,f.callsBefore.map(({project_id: _projectId, project_budget_revision: _revision, reserved_cost_microusd: _reserved, actual_cost_microusd: _actual, pricing_version: _pricing, ...row})=>({...row,state:row.state==='reserved'?'unknown':row.state})));
       const tasks=new api.ResearchTaskRepository(agent);
       const repository=new api.ResearchRepository(research,tasks);
       // Cold reopen uses the migrated current databases while the user workspace
@@ -176,7 +182,7 @@ for (const phase of ['S02', 'S04', 'S05']) test(`${phase} cutover keeps raw cont
       assert.deepEqual(agent.prepare('SELECT * FROM research_task_events ORDER BY sequence LIMIT ?').all(f.eventsBefore.length),f.eventsBefore);
       assert.equal(agent.prepare('SELECT COUNT(*) FROM agent_run_events').pluck().get(),1);
       assert.equal(agent.prepare("SELECT snapshot_version FROM agent_runs WHERE id='chat'").pluck().get(),9);
-      assert.deepEqual(agent.prepare('SELECT * FROM agent_budget_calls ORDER BY call_id').all(),f.budgetBefore.map(({project_id: _projectId, project_budget_revision: _revision, ...row})=>({...row,state:row.state==='reserved'?'unknown':row.state})));
+      assert.deepEqual(agent.prepare('SELECT * FROM agent_calls ORDER BY call_id').all(),f.callsBefore.map(({project_id: _projectId, project_budget_revision: _revision, reserved_cost_microusd: _reserved, actual_cost_microusd: _actual, pricing_version: _pricing, ...row})=>({...row,state:row.state==='reserved'?'unknown':row.state})));
       if (phase === 'S04') {
         const content = repository.runs.getArtifactContent(f.project.id,'old-plan');
         assert.equal(content.output.searchPlan,undefined);

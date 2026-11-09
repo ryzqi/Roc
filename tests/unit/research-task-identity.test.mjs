@@ -30,13 +30,13 @@ function fixture() {
   const snapshot = api.createRunExecutionSnapshot({
     runId, threadId, inputMessageId: 'message',
     snapshot: {
-      schemaVersion: 10, submissionHash: 'f'.repeat(64),
+      schemaVersion: 11, submissionHash: 'f'.repeat(64),
       taskContract: { contractVersion: 1, objective: 'Research fixture', constraints: [], kind: 'reply',
         criteria: [{ id: 'response', description: 'Return findings', check: { kind: 'response' } }] },
       runOrigin: 'chat', model: { providerId: 'fixture', modelId: 'fixture-model' }, mode: 'run',
       workspace: { path: directory, hash: 'workspace-hash' }, capabilityManifest: manifest, workflowHint: null,
       explicitSkillIds: [], dispatchKey: null, researchProjectId: project.id,
-      budget: api.createRunBudget({ contextBudgetTokens: null })
+      modelConfig: api.createRunModelConfig({ contextWindowTokens: null })
     }
   });
   agentDb.prepare(`INSERT INTO agent_threads
@@ -45,7 +45,7 @@ function fixture() {
   agentDb.prepare(`INSERT INTO agent_runs
     (id,thread_id,run_number,user_input,status,started_at,enabled_capabilities_json,
       workspace_path,run_origin,snapshot_json,snapshot_version)
-    VALUES (?,?,1,'Research','running',?,'{}',?,'chat',?,10)`)
+    VALUES (?,?,1,'Research','running',?,'{}',?,'chat',?,11)`)
     .run(runId, threadId, timestamp, directory, JSON.stringify(snapshot));
   let now = new Date(timestamp);
   const broker = new api.ExecutionGrantBroker(agentDb, () => now);

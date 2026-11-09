@@ -14,7 +14,7 @@ import { AgentSessionRepository } from '../../src/main/plugins/agent/session-rep
 import { AgentRunEventLog } from '../../src/main/plugins/agent/run-event-log';
 import { createAgentDeepAgentExecutor } from '../../src/main/plugins/agent/deep-agent-executor';
 import { createRunCapabilityManifestHash } from '../../src/main/plugins/agent/run-capability-manifest';
-import { RunBudgetLedger } from '../../src/main/services/deep-agent/run-budget-ledger';
+import { RunUsageLedger } from '../../src/main/services/deep-agent/run-usage-ledger';
 import { AgentToolEffectStore } from '../../src/main/services/deep-agent/tool-effect-store';
 import { RocSqliteCheckpointer } from '../../src/main/services/deep-agent/sqlite-checkpointer';
 import { ContextArtifactStore } from '../../src/main/services/deep-agent/context/context-artifact-store';
@@ -40,8 +40,8 @@ async function receive(): Promise<unknown> {
 }
 function send(value: unknown): void { process.stdout.write(`${JSON.stringify(value)}\n`); }
 type WorkerInput = {
-  view: unknown; providerId: string; modelId: string; temperature: number; contextBudgetTokens: number;
-  maxRequests: number; isolationProbePaths: string[]; isolationProbePort: number | null;
+  view: unknown; providerId: string; modelId: string; temperature: number; contextWindowTokens: number;
+  isolationProbePaths: string[]; isolationProbePort: number | null;
   benchmark?: unknown;
 };
 const input = await receive() as WorkerInput;
@@ -110,7 +110,6 @@ const model = new ChatOpenAI({
   configuration: {
     baseURL: 'http://roc-evaluation.invalid/v1',
     fetch: async (_url, init) => {
-      if (++requestCount > input.maxRequests) throw new Error('quality_worker_request_limit');
       const original = JSON.parse(String(init?.body)) as Record<string, unknown>;
       const { stream_options: _streamOptions, ...parameters } = original;
       const body = { ...parameters, stream: false };
@@ -141,7 +140,7 @@ const handle: LangChainChatModelHandle = {
   provider: { id: input.providerId, name: 'Evaluation host', type: 'openai_compatible',
     enabled: true, models: [], endpoint: 'http://roc-evaluation.invalid/v1', credentialRef: null },
   runtime: { providerType: 'openai_compatible', baseUrl: null, streaming: false,
-    modelKwargs: {}, contextBudgetTokens: input.contextBudgetTokens, maxOutputTokens: 4096 }
+    modelKwargs: {}, contextWindowTokens: input.contextWindowTokens, maxOutputTokens: 4096 }
 };
 const eventBus = new EventBus({ error: (message, metadata) => {
   process.stderr.write(`${JSON.stringify({ message, metadata })}\n`);
@@ -159,7 +158,7 @@ const runtime = new AgentPluginRuntime({
   repository, eventBus, runEventLog, executionGrantBroker: openExecutionGrantBroker(db),
   deepAgentExecutor: createAgentDeepAgentExecutor({
     executionGrantBroker: openExecutionGrantBroker(db),
-    budgetLedger: new RunBudgetLedger(db), capabilities,
+    usageLedger: new RunUsageLedger(db), capabilities,
     checkpointer: new RocSqliteCheckpointer(db), contextArtifactStore: new ContextArtifactStore(db),
     paths, sessionHistory: repository, store: new RocSqliteStore(memoryDb), toolEffectStore: new AgentToolEffectStore(db)
   }),

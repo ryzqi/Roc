@@ -14,7 +14,7 @@
 | [Notebook 导入与执行合同](research-notebooks.md) | Notebook 导入、预览与 Python 子集执行 |
 | [实验指标、审核与比较](research-experiment-results.md) | 结构化结果、指标 Evidence 与可比性 |
 | [科研执行资源治理](research-execution-resources.md) | 计算准入、资源采样、原生隔离与崩溃清理 |
-| [ResearchTask：任务事实、执行观测与离线诊断](research-task-observability.md) | 任务上下文、预算、日志、Trace 与诊断 |
+| [ResearchTask：任务事实、执行观测与离线诊断](research-task-observability.md) | 任务上下文、用量、日志、Trace 与诊断 |
 
 ## 文献、阅读与综述
 

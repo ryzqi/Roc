@@ -156,7 +156,7 @@ test('concurrent context cycles preserve independent stage durations and count-o
   telemetry.observeModelInvocation(modelObservation({ purpose: 'summary', contextCycleId: second }), 40);
   telemetry.observeModelInvocation(modelObservation({ purpose: 'summary', contextCycleId: first }), 45);
   telemetry.observeEvent(contextEvent('context_summary_completed', second, {
-    inputTokens: 70, budgetTokens: 100, estimated: true, contractAudit: audit
+    inputTokens: 70, capacityTokens: 100, estimated: true, contractAudit: audit
   }), 50);
   telemetry.observeEvent(contextEvent('context_compaction_failed', first), 70);
   const value = telemetry.snapshot();
@@ -282,7 +282,7 @@ test('diagnostics schemas reject arbitrary payload fields and unsafe identifier 
   const value = accumulator().snapshot();
   const diagnostics = {
     runId: run.id, threadId: run.threadId, providerId: 'provider-1', modelId: 'model-1',
-    totalDurationMs: 0, model: Object.fromEntries(Object.entries(value.model).filter(([key]) => key !== 'reportedCostUsd')),
+    totalDurationMs: 0, model: value.model,
     tool: value.tool, subagent: value.subagent, context: value.context, toolAdmission: value.toolAdmission,
     trace: value.trace, terminalStatus: null
   };
@@ -345,8 +345,7 @@ test('model invocation usage includes summaries and does not double-count event/
   assert.deepEqual(telemetry.snapshot(), beforeOutcome);
   assert.deepEqual(beforeOutcome.model, {
     callCount: 2, unknownUsageCallCount: 0, inputTokens: 35, outputTokens: 8, totalTokens: 43,
-    cacheReadTokens: 5, cacheCreationTokens: 2, reportedCostUsd: null
-  });
+    cacheReadTokens: 5, cacheCreationTokens: 2, });
   assert.equal(beforeOutcome.trace.spans.filter(span => span.operation === 'summary_model').length, 1);
 
   const legacyExecutor = accumulator();
@@ -412,7 +411,6 @@ test('run diagnostics read checks thread identity and omits internal metadata an
   });
   let reads = 0;
   let value = accumulator().snapshot();
-  value.model.reportedCostUsd = 1.5;
   const runtime = new AgentPluginRuntime({
     executionGrantBroker: {revokeRun: () => assert.fail('diagnostics must not revoke grants')},
     repository: {
@@ -485,7 +483,7 @@ test('live telemetry round-trips through SQLite and cannot overwrite terminal or
   const { compileRunCapabilityManifest } = await importTypeScriptModule(
     'src/main/plugins/agent/run-capability-manifest.ts', bundleOptions
   );
-  const { createRunExecutionSnapshot, createRunBudget } = await importTypeScriptModule(
+  const { createRunExecutionSnapshot, createRunModelConfig } = await importTypeScriptModule(
     'src/main/plugins/agent/run-execution-snapshot.ts', bundleOptions
   );
   const db = createDatabase();
@@ -498,7 +496,7 @@ test('live telemetry round-trips through SQLite and cannot overwrite terminal or
     const frozen = createRunExecutionSnapshot({
       runId: run.id, threadId: run.threadId, inputMessageId: 'message-1',
       snapshot: {
-        schemaVersion: 10,
+        schemaVersion: 11,
         submissionHash: 'f'.repeat(64),
         taskContract: {
           contractVersion: 1, objective: 'Fixture reply', constraints: [], kind: 'reply',
@@ -506,10 +504,10 @@ test('live telemetry round-trips through SQLite and cannot overwrite terminal or
         },
         runOrigin: 'chat', model: snapshot.model, mode: 'run', workspace: null,
         capabilityManifest: manifest, workflowHint: null, explicitSkillIds: [], dispatchKey: null,
-        researchProjectId: null, budget: createRunBudget({ contextBudgetTokens: null })
+        researchProjectId: null, modelConfig: createRunModelConfig({ contextWindowTokens: null })
       }
     });
-    db.prepare(`UPDATE agent_runs SET snapshot_json = ?, snapshot_version = 10, provider_id = ?, model_id = ?,
+    db.prepare(`UPDATE agent_runs SET snapshot_json = ?, snapshot_version = 11, provider_id = ?, model_id = ?,
       enabled_capabilities_json = ?, run_origin = 'chat' WHERE id = ?`).run(
       JSON.stringify(frozen), frozen.model.providerId, frozen.model.modelId,
       JSON.stringify(manifest.resolvedCapabilities), run.id

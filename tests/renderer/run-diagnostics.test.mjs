@@ -29,7 +29,7 @@ before(async () => {
           tool: {callCount: 3, errorCount: 0},
           subagent: {count: 0, failedCount: 0, maxDepth: 0},
           context: {compactionCount: 0, summaryCount: 0, artifactCount: 0, failureCount: 0, estimatedCount: 0,
-            inputTokens: null, budgetTokens: null, lastInputEstimated: null, removedChars: 0, persistedChars: 0,
+            inputTokens: null, capacityTokens: null, lastInputEstimated: null, removedChars: 0, persistedChars: 0,
             contractAudit: createEmptyContextContractAudit()},
           toolAdmission: {acquisitionCount: 0, cancellationCount: 0, contendedCount: 0, fallbackCount: 0,
             wait: {count: 0, totalMs: 0, maxMs: 0}, hold: {count: 0, totalMs: 0, maxMs: 0},

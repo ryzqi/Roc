@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { applyAgentDatabaseSchema } from '../../src/main/infrastructure/database-schemas';
 import { TaskContractStore } from '../../src/main/services/deep-agent/task-contract-store';
-import { RunBudgetLedger } from '../../src/main/services/deep-agent/run-budget-ledger';
+import { RunUsageLedger } from '../../src/main/services/deep-agent/run-usage-ledger';
 
 export async function verifyTaskContracts(directory: string): Promise<Record<string, unknown>> {
   const db = new Database(join(directory, 'agent.sqlite'));
@@ -80,7 +80,7 @@ export async function verifyTaskContracts(directory: string): Promise<Record<str
       criteria: [{ id: 'C-01', description: 'Re-check the saved artifact evidence.', check: { kind: 'unverified' } }]
     });
     store.createUnverifiedReport('run_restart', 'Process restarted before the task completed.');
-    db.prepare(`INSERT INTO agent_budget_calls
+    db.prepare(`INSERT INTO agent_calls
       (run_id,call_id,execution_kind,kind,input_hash,reserved_tokens,actual_tokens,state,envelope_json,created_at)
       VALUES ('run_restart','child_restart','chat','child','input-hash',0,0,'unknown',?,?)`)
       .run(JSON.stringify({ childTaskId: 'child_restart', outcomeStatus: 'failed', failureCode: 'child_task_failed' }), now);
@@ -94,7 +94,7 @@ export async function verifyTaskContracts(directory: string): Promise<Record<str
     assert.ok(continuation.includes('Continue the same task after process restart.'));
     assert.ok(continuation.includes('child_task_failed'));
     assert.equal((db.prepare('SELECT content FROM agent_run_inbox WHERE run_id = ?').get('run_restart') as { content: string }).content, continuation);
-    const ledger = new RunBudgetLedger(db);
+    const ledger = new RunUsageLedger(db);
     ledger.consumeCorrections('run_restart', ['roc-correction:task-handoff:run_restart']);
     const refreshedContinuation = `${continuation}\n[Refreshed acceptance evidence after a second crash.]`;
     assert.equal(store.enqueueCheckpointContinuation('run_restart', refreshedContinuation), continuationSequence);

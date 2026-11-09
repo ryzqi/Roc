@@ -62,14 +62,12 @@ export function createResearchTestRoleTools(api, input) {
 export function researchSearchPlanFixture(researchQuestion, queries = [
   {query: 'Synthetic reproducibility fixture', sources: ['openalex'], limit: 5, maxPages: 1}
 ]) {
-  const identified = queries.map((query, index) => ({...structuredClone(query), id: `query-${index + 1}`, maxRequests: query.sources.length * query.maxPages * 3}));
+  const identified = queries.map((query, index) => ({...structuredClone(query), id: `query-${index + 1}`}));
   return {schemaVersion: 1, version: 1, researchQuestion, refinedQuestion: 'What are the fixed synthetic group means?',
     keywords: ['synthetic', 'reproducibility'], synonyms: [{term: 'reproducibility', alternatives: ['replication']}],
     domain: 'Synthetic engineering fixture', excludedTerms: [], queries: identified,
     perspectives: [{id: 'primary', label: 'Primary evidence', rationale: 'Answer the frozen question',
-      expectedEvidence: 'Reproducible reported results', queryIds: identified.map(query => query.id)}],
-    budget: {candidates: queries.reduce((sum, query) => sum + query.limit, 0),
-      requests: identified.reduce((sum, query) => sum + query.maxRequests, 0), paidProviderCalls: 0}};
+      expectedEvidence: 'Reproducible reported results', queryIds: identified.map(query => query.id)}]};
 }
 
 export function createResearchFixture(api, stage = 'figure', workspacePath = '/tmp/roc-research-fixture') {

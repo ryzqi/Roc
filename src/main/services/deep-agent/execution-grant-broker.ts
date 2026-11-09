@@ -211,7 +211,7 @@ export class ExecutionGrantBroker {
     try { snapshot = parseRunExecutionSnapshot(JSON.parse(run.snapshot_json)); }
     catch (error) { throw new Error('research_dispatch_snapshot_invalid', { cause: error }); }
     const { manifestHash: storedHash, ...content } = snapshot.capabilityManifest;
-    if (snapshot.schemaVersion !== 10 || run.snapshot_version !== 10 || snapshot.runId !== runId || snapshot.threadId !== threadId
+    if (snapshot.schemaVersion !== 11 || run.snapshot_version !== 11 || snapshot.runId !== runId || snapshot.threadId !== threadId
       || snapshot.researchProjectId !== projectId || run.research_project_id !== projectId
       || storedHash !== manifestHash || hash(JSON.stringify(content)) !== manifestHash) {
       throw new Error('research_dispatch_parent_binding_invalid');

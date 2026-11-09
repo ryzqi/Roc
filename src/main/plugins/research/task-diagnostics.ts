@@ -3,14 +3,14 @@ import {
 } from '../../../shared/schemas/research-task-diagnostics';
 import type { ResearchTaskExecution } from '../../../shared/schemas/research-tasks';
 import type { ResearchRepository } from './repository';
-import type { RunBudgetLedger } from '../../services/deep-agent/run-budget-ledger';
+import type { RunUsageLedger } from '../../services/deep-agent/run-usage-ledger';
 import {taskExecutionDiagnosticsRequestSchema, taskExecutionObservationsSchema, taskResourceDiagnosticsSchema, type TaskExecutionDiagnosticsRequest} from '../../../shared/schemas/research-task-observability';
 import {researchExperimentResourceReportSchema} from '../../../shared/schemas/research-process-resources';
 import type {ResearchExperimentService} from './experiment-service';
 import type {ResearchReviewSearchService} from './review-search-service';
 
 export class ResearchTaskDiagnosticsService {
-  constructor(private readonly repository: ResearchRepository, private readonly ledger: RunBudgetLedger,
+  constructor(private readonly repository: ResearchRepository, private readonly ledger: RunUsageLedger,
     private readonly reviewSearches: Pick<ResearchReviewSearchService, 'get'> | null,
     private readonly experiments: Pick<ResearchExperimentService, 'source'>) {}
 
@@ -51,11 +51,11 @@ export class ResearchTaskDiagnosticsService {
     const canContinue = cleanupConfirmed && effectsResolved && ['paused', 'interrupted', 'failed', 'cancelled'].includes(task.status) &&
       workflow.projectStatus !== 'archived';
     return researchTaskDiagnosticsSchema.parse({
-      task, budget: this.ledger.readTaskBudgetStatus(task.id, task.projectId), executions,
+      task, usage: this.ledger.readTaskUsageStatus(task.id, task.projectId), executions,
       graph: this.repository.tasks.graph.read(task.id, task.projectId),
       continuationRunId: canContinue ? continuation?.association.executionId ?? null : null,
       canRestoreApproval: cleanupConfirmed && effectsResolved && task.status === 'paused' && waiting && workflow.projectStatus !== 'archived',
-      recoveryIssues, eventDelivery: this.repository.runs.flushTaskEvents(task.id), externalCost: 'unknown'
+      recoveryIssues, eventDelivery: this.repository.runs.flushTaskEvents(task.id)
     });
   }
 

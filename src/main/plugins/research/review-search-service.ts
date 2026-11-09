@@ -130,14 +130,11 @@ export class ResearchReviewSearchService {
       const controller = new AbortController();
       const cancelParent = () => controller.abort(new Error('research_review_search_cancelled'));
       const parent = dispatch?.signal;
-      const deadline = dispatch === null ? null : setTimeout(() => controller.abort(new Error('run_deadline_exhausted')),
-        Math.max(0, Date.parse(this.repository.tasks.budgetForExecution('chat', dispatch.grant.runId, request.projectId).deadlineAt) - Date.now()));
       parent?.addEventListener('abort', cancelParent, {once: true});
       if (parent?.aborted) cancelParent();
       const promise = Promise.resolve().then(() => this.execute(row, controller)).catch(error => this.reportFailure(error))
         .finally(() => {
           parent?.removeEventListener('abort', cancelParent);
-          if (deadline !== null) clearTimeout(deadline);
           this.jobs.delete(row.id);
         });
       this.jobs.set(row.id, {projectId: request.projectId, controller, promise});

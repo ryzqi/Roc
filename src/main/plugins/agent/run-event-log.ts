@@ -14,7 +14,7 @@ import type {
   ChatRunStateSnapshot,
   SequencedChatRunEvent
 } from '../../../shared/types';
-import { parseStoredJson } from '../../infrastructure/stored-json';
+import { parseStoredJsonObject } from '../../infrastructure/stored-json';
 import { createExecutionEvent, parseExecutionEvent } from '../../infrastructure/execution-events';
 
 export const agentRunEventLogMaxEvents = 10_000;
@@ -408,7 +408,8 @@ export class AgentRunEventLog {
 }
 
 function parseSnapshotRow(row: SnapshotRow, runId: string): ChatRunEventsSnapshot {
-  const snapshot = parseStoredJson(row.snapshot_json, chatRunEventsSnapshotSchema, 'agent_run_event_snapshot_corrupt');
+  const stored = parseStoredJsonObject(row.snapshot_json, 'agent_run_event_snapshot_corrupt');
+  const snapshot = chatRunEventsSnapshotSchema.parse(stored);
   if (row.run_id !== runId || snapshot.runId !== runId || snapshot.throughSequence !== row.through_sequence ||
       byteLength(row.snapshot_json) !== row.snapshot_bytes) {
     throw new Error('agent_run_event_snapshot_corrupt');
@@ -482,7 +483,9 @@ function rowToSequencedEvent(row: EventRow): SequencedChatRunEvent {
 
 function readEnvelopeEvent(raw: string, runId: string, sequence: number, createdAt: string): ChatRunEvent {
   const envelope = parseExecutionEvent(raw);
-  const event = chatRunEventSchema.parse(envelope.payload);
+  const payload = envelope.payload;
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('agent_run_event_envelope_mismatch');
+  const event = chatRunEventSchema.parse(payload);
   if (envelope.streamId !== 'chat:' + runId || envelope.sequence !== sequence || envelope.createdAt !== createdAt ||
       envelope.correlationId !== runId || envelope.eventType !== event.type) throw new Error('agent_run_event_envelope_mismatch');
   return event;

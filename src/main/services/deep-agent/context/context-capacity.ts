@@ -8,7 +8,7 @@ type Tokenizer = InstanceType<TiktokenLiteModule['Tiktoken']>;
 type TokenizerEncodingName = ReturnType<TiktokenLiteModule['getEncodingNameForModel']>;
 type RanksLoader = () => Promise<{ default: TiktokenBPE }>;
 
-export type ContextBudgetProfile = {
+export type ContextCapacityProfile = {
   contextWindowTokens: number;
   modelInputTokens: number;
   reservedOutputTokens: number;
@@ -41,7 +41,7 @@ const MIN_SAFETY_MARGIN_TOKENS = 128;
 const BASE_SYSTEM_TOOL_OVERHEAD_TOKENS = 128;
 const MAX_SUMMARY_INPUT_TOKENS = 16_384;
 
-const profileCache = new WeakMap<ContextTokenCounter, Map<string, ContextBudgetProfile>>();
+const profileCache = new WeakMap<ContextTokenCounter, Map<string, ContextCapacityProfile>>();
 const rankLoaders: Record<TokenizerEncodingName, RanksLoader> = {
   cl100k_base: () => import('js-tiktoken/ranks/cl100k_base'),
   gpt2: () => import('js-tiktoken/ranks/gpt2'),
@@ -132,12 +132,12 @@ export function createContextTokenCounter(input: { modelId: string; providerType
   };
 }
 
-export async function deriveContextBudgetProfile(input: {
+export async function deriveContextCapacityProfile(input: {
   contextWindowTokens: number;
   counter: ContextTokenCounter;
   systemPrompt: string;
   tools: readonly ContextToolDefinition[];
-}): Promise<ContextBudgetProfile> {
+}): Promise<ContextCapacityProfile> {
   requirePositiveInteger(input.contextWindowTokens, 'context_window_tokens_invalid');
   const overheadText = [
     input.systemPrompt,
@@ -177,7 +177,7 @@ export async function deriveContextBudgetProfile(input: {
   const modelInputTokens =
     input.contextWindowTokens - reservedOutputTokens - systemToolOverheadTokens - safetyMarginTokens;
   if (modelInputTokens <= 0) {
-    throw new Error('context_budget_profile_invalid');
+    throw new Error('context_capacity_profile_invalid');
   }
   const profile = {
     contextWindowTokens: input.contextWindowTokens,

@@ -21,18 +21,18 @@ function mainHarness(f) {
     researchProjectId: f.project.id
   }).manifest;
   const snapshot = api.createRunExecutionSnapshot({runId, threadId, inputMessageId: 'review-workflow-message', snapshot: {
-    schemaVersion: 10, submissionHash: 'a'.repeat(64),
+    schemaVersion: 11, submissionHash: 'a'.repeat(64),
     taskContract: {contractVersion: 1, objective: 'Execute frozen review queries', constraints: [], kind: 'reply',
       criteria: [{id: 'query', description: 'Read exact query receipts', check: {kind: 'response'}}]},
     runOrigin: 'chat', model: {providerId: 'fixture', modelId: 'fixture'}, mode: 'run', workspace: null,
     capabilityManifest: manifest, workflowHint: null, explicitSkillIds: [], dispatchKey: null,
-    researchProjectId: f.project.id, budget: api.createRunBudget({contextBudgetTokens: null, startedAt: time})
+    researchProjectId: f.project.id, modelConfig: api.createRunModelConfig({contextWindowTokens: null, startedAt: time})
   }});
   f.agentDb.prepare(`INSERT INTO agent_threads(id,kind,title,goal,status,research_project_id,created_at,updated_at)
     VALUES (?,'chat','Review workflow','Review workflow','active',?,?,?)`).run(threadId, f.project.id, time, time);
   f.agentDb.prepare(`INSERT INTO agent_runs
     (id,thread_id,run_number,user_input,status,started_at,enabled_capabilities_json,run_origin,snapshot_json,snapshot_version)
-    VALUES (?,?,1,'Review workflow','running',?,'{}','chat',?,10)`).run(runId, threadId, time, JSON.stringify(snapshot));
+    VALUES (?,?,1,'Review workflow','running',?,'{}','chat',?,11)`).run(runId, threadId, time, JSON.stringify(snapshot));
   const registry = new api.CapabilityRegistry(), context = {pluginId: 'research', capabilities: registry};
   const broker = new api.ExecutionGrantBroker(f.agentDb);
   const register = (descriptors, install) => {

@@ -16,7 +16,7 @@ const help = `Manual local Roc evaluation (no automatic triggers, no Docker)
   pnpm harness:bench prepare scienceagentbench --metadata verified.json --recipe recipe.json --bundle benchmark_verified.zip
   pnpm harness:bench run --suite roc-native
   pnpm harness:bench run --suite qasper --dataset PATH --profile smoke|fast|full|release [--fixture]
-  pnpm harness:bench run --suite scienceagentbench --dataset PATH [--budget evaluation/budget.example.json]
+  pnpm harness:bench run --suite scienceagentbench --dataset PATH [--provider-options evaluation/provider-options.example.json]
   pnpm harness:bench inspect RUN
   pnpm harness:bench compare BASELINE_RUN CANDIDATE_RUN
   pnpm harness:bench incident RUN --analysis analysis.json [--task TASK_ID --repeat 0]
@@ -26,20 +26,19 @@ const help = `Manual local Roc evaluation (no automatic triggers, no Docker)
   pnpm harness:bench experiment decide EXPERIMENT_DIRECTORY --review review.json
 Run uses Roc's configured default model. doctor checks configuration/keychain without inference.
 Optional --roc-root, --provider-id/--model-id select an existing Roc configuration.
-Default limits: 60 requests/run, 12/task, 120s/request, 300s/task, 4096 output tokens.
-Cost is unknown unless a versioned price estimate and budget are supplied.
+Provider defaults: 120s/request, 300s/task, 4096 output tokens.
 Exit: 0 complete/inspect/non-inferior/eligible or review recorded, 2 incomplete/incompatible/insufficient, 3 regression/inconclusive/rejected assessment.
 Experiment adoption is a local development review record, not deployment or holdout approval.
 Fixture completion is a wiring check, never a model-quality pass.`;
 try {
   const { positionals, values } = parseArgs({ allowPositionals: true, options: {
     suite: { type: 'string', default: 'roc-native' }, profile: { type: 'string', default: 'fast' },
-    dataset: { type: 'string' }, budget: { type: 'string' }, 'roc-root': { type: 'string' }, 'provider-id': { type: 'string' }, 'model-id': { type: 'string' },
+    dataset: { type: 'string' }, 'provider-options': { type: 'string' }, 'roc-root': { type: 'string' }, 'provider-id': { type: 'string' }, 'model-id': { type: 'string' },
     python: { type: 'string' }, requirements: { type: 'string' }, fixture: { type: 'boolean', default: false },
     archive: { type: 'string' }, metadata: { type: 'string' }, recipe: { type: 'string' }, bundle: { type: 'string' }, help: { type: 'boolean' },
     experiment: { type: 'string' }, spec: { type: 'string' }, analysis: { type: 'string' }, review: { type: 'string' }, task: { type: 'string' }, repeat: { type: 'string' }
   } });
-  Object.assign(values, { rocRoot: values['roc-root'], providerId: values['provider-id'], modelId: values['model-id'] });
+  Object.assign(values, { providerOptions: values['provider-options'], rocRoot: values['roc-root'], providerId: values['provider-id'], modelId: values['model-id'] });
   const [action, ...args] = positionals;
   if (values.help || !action) console.log(help);
   else if (action === 'list' && !args.length) console.log(JSON.stringify(readJson(new URL('./registry.json', import.meta.url)), null, 2));

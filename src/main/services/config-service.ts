@@ -1,3 +1,4 @@
+import { removeExecutionConfig } from '../infrastructure/remove-execution-config';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -337,7 +338,7 @@ export class ConfigService {
         userAction: '请使用当前版本的设置文件，或删除设置文件后重新启动。'
       });
     }
-    this.writeSettingsDocument(SettingsDocumentSchema.parse(rawSettings));
+    this.writeSettingsDocument(SettingsDocumentSchema.parse(removeExecutionConfig(rawSettings)));
   }
 
   private getSettingsDocument(): RocSettingsDocument {

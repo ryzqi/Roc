@@ -74,8 +74,8 @@ function DiagnosticsContent({ data }: { data: RunDiagnosticsData }): React.JSX.E
         <DiagnosticRow label="压缩 / 摘要" value={`${formatCount(data.context.compactionCount)} / ${formatCount(data.context.summaryCount)}`} />
         <DiagnosticRow label="摘要耗时（已保留 spans）" value={formatDuration(summaryDuration)} />
         <DiagnosticRow
-          label="上下文输入 / 预算 tokens"
-          value={`${formatCount(data.context.inputTokens)} / ${formatCount(data.context.budgetTokens)}${data.context.lastInputEstimated === null ? '' : data.context.lastInputEstimated ? '（估算）' : '（计数）'}`}
+          label="上下文输入 / 容量 tokens"
+          value={`${formatCount(data.context.inputTokens)} / ${formatCount(data.context.capacityTokens)}${data.context.lastInputEstimated === null ? '' : data.context.lastInputEstimated ? '（估算）' : '（计数）'}`}
         />
         <DiagnosticRow label="压缩移除 / 外存字符" value={`${formatCount(data.context.removedChars)} / ${formatCount(data.context.persistedChars)}`} />
         <DiagnosticRow label="准入等待 / 持锁总耗时" value={`${formatDuration(data.toolAdmission.wait.totalMs)} / ${formatDuration(data.toolAdmission.hold.totalMs)}`} />

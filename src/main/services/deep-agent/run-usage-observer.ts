@@ -2,16 +2,15 @@ import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { performance } from 'node:perf_hooks';
 import { AIMessage, type BaseMessage } from '@langchain/core/messages';
-import { calculateModelCostMicrousd, resolveModelPricing, estimateModelReservationMicrousd } from '../../../shared/run-budget-policy';
-import type { RunBudgetStatus } from '../../../shared/types';
+import type { RunUsageStatus } from '../../../shared/types';
 import { redactUnknown } from './redaction';
 import { hashToolInput } from './tool-effect-store';
-import { RunBudgetLedger, type RunLimits } from './run-budget-ledger';
+import { RunUsageLedger, type RunModelConfig } from './run-usage-ledger';
 
-type RunBudgetObserverOptions = {
+type RunUsageObserverOptions = {
   providerId?: string;
   modelId?: string;
-  onStatus?: (status: RunBudgetStatus) => void;
+  onStatus?: (status: RunUsageStatus) => void;
   onInvocation?: (observation: ModelInvocationObservation) => void;
 };
 
@@ -29,7 +28,7 @@ export type ModelInvocationObservation = {
   contextCycleId?: string;
 };
 
-export type BudgetedModelInvocation<T> = {
+export type ObservedModelInvocation<T> = {
   messages: readonly BaseMessage[];
   invoke: () => Promise<T>;
   responseMessage: (result: T) => unknown;
@@ -39,27 +38,18 @@ export type BudgetedModelInvocation<T> = {
 };
 
 /** Provider-boundary accounting. Every path calls invoke() before entering the provider handler. */
-export class RunBudgetObserver {
+export class RunUsageObserver {
   private revision: string;
-  private readonly pricing: ReturnType<typeof resolveModelPricing>;
   private readonly contextCycle = new AsyncLocalStorage<string>();
 
   constructor(
-    private readonly ledger: RunBudgetLedger,
+    private readonly ledger: RunUsageLedger,
     private readonly runId: string,
-    private readonly limits: RunLimits,
+    private readonly limits: RunModelConfig,
     revision: string,
-    private readonly options: RunBudgetObserverOptions = {}
+    private readonly options: RunUsageObserverOptions = {}
   ) {
     this.revision = revision;
-    this.pricing = options.providerId === undefined || options.modelId === undefined
-      ? null
-      : resolveModelPricing({
-          catalogVersion: limits.pricingCatalogVersion,
-          providerId: options.providerId,
-          modelId: options.modelId,
-          asOf: new Date().toISOString()
-        });
   }
 
   setRevision(revision: string): void {
@@ -71,10 +61,10 @@ export class RunBudgetObserver {
   }
 
   emitStatus(): void {
-    this.options.onStatus?.(this.ledger.readBudgetStatus(this.runId, this.limits, this.pricing !== null));
+    this.options.onStatus?.(this.ledger.readUsageStatus(this.runId));
   }
 
-  async invoke<T>(input: BudgetedModelInvocation<T>): Promise<T> {
+  async invoke<T>(input: ObservedModelInvocation<T>): Promise<T> {
     const startedAt = performance.now();
     const startedAtIso = new Date().toISOString();
     const callId = randomUUID();
@@ -86,46 +76,25 @@ export class RunBudgetObserver {
     let actualCacheCreationTokens: number | null = null;
     try {
       const messages = redactUnknown(input.messages.map((message) => message.toDict()));
-      const reservationCostMicrousd = this.pricing === null
-        ? null
-        : estimateModelReservationMicrousd({
-            inputTokens: this.limits.maxCallTokens - this.limits.maxOutputTokens,
-            outputTokens: this.limits.maxOutputTokens,
-            price: this.pricing
-          });
-      if (this.pricing !== null && reservationCostMicrousd === null) {
-        this.recordStopReason('run_cost_estimate_unavailable');
-        throw new Error('run_cost_estimate_unavailable');
-      }
-      const pricingVersion = this.limits.pricingCatalogVersion;
       const inputHash = hashToolInput({ purpose: input.purpose, messages });
-      try {
-        this.ledger.reserve(this.runId, this.limits, {
-          id: callId,
-          kind: 'model',
-          tokens: this.limits.maxCallTokens,
-          inputHash,
-          envelope: {
-            schemaVersion: 2,
-            callId,
-            revision: this.revision,
-            providerId: this.options.providerId ?? null,
-            modelId: this.options.modelId ?? null,
-            purpose: input.purpose,
-            messages,
-            reservedTokens: this.limits.maxCallTokens,
-            maxOutputTokens: this.limits.maxOutputTokens,
-            estimateSource: 'context-output-margin-upper-bound',
-            reservedCostMicrousd: reservationCostMicrousd,
-            pricingVersion
-          },
-          costMicrousd: reservationCostMicrousd,
-          pricingVersion
-        });
-      } catch (error) {
-        this.recordErrorStopReason(error);
-        throw error;
-      }
+      this.ledger.reserve(this.runId, this.limits, {
+        id: callId,
+        kind: 'model',
+        tokens: input.estimatedInputTokens ?? 0,
+        inputHash,
+        envelope: {
+          schemaVersion: 2,
+          callId,
+          revision: this.revision,
+          providerId: this.options.providerId ?? null,
+          modelId: this.options.modelId ?? null,
+          purpose: input.purpose,
+          messages,
+          reservedTokens: input.estimatedInputTokens ?? 0,
+          maxOutputTokens: this.limits.maxOutputTokens,
+          estimateSource: 'input-token-count'
+        }
+      });
 
       reserved = true;
       status = 'failed';
@@ -137,8 +106,7 @@ export class RunBudgetObserver {
         result = await input.invoke();
       } catch (error) {
         status = 'failed';
-        this.ledger.settle(this.runId, callId, null, 'unknown', undefined, {}, null, pricingVersion);
-        this.recordErrorStopReason(error);
+        this.ledger.settle(this.runId, callId, null, 'unknown');
         this.emitStatus();
         throw error;
       }
@@ -146,7 +114,7 @@ export class RunBudgetObserver {
       status = 'completed';
       const usage = readMessageUsage(input.responseMessage(result));
       if (usage === null) {
-        this.ledger.settle(this.runId, callId, null, 'unknown', undefined, {}, null, pricingVersion);
+        this.ledger.settle(this.runId, callId, null, 'unknown');
         this.emitStatus();
         return result;
       }
@@ -155,38 +123,7 @@ export class RunBudgetObserver {
       actualOutputTokens = usage.outputTokens;
       actualCacheReadTokens = usage.cacheReadTokens;
       actualCacheCreationTokens = usage.cacheWriteTokens;
-      const costMicrousd = this.pricing === null
-        ? null
-        : calculateModelCostMicrousd({
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
-            cacheReadTokens: usage.cacheReadTokens,
-            cacheWriteTokens: usage.cacheWriteTokens,
-            price: this.pricing
-          });
-      const settledState = costMicrousd === null && this.pricing !== null ? 'unknown' : 'settled';
-      this.ledger.settle(
-        this.runId,
-        callId,
-        usage.totalTokens,
-        settledState,
-        undefined,
-        {},
-        costMicrousd,
-        pricingVersion
-      );
-      const budgetStatus = this.ledger.readBudgetStatus(this.runId, this.limits, this.pricing !== null);
-      const overReservation = usage.totalTokens > this.limits.maxCallTokens ||
-        (costMicrousd !== null && reservationCostMicrousd !== null && costMicrousd > reservationCostMicrousd);
-      const overCostCap = budgetStatus.cost.limitMicrousd !== null &&
-        budgetStatus.cost.settledMicrousd !== null && budgetStatus.cost.reservedMicrousd !== null &&
-        budgetStatus.cost.settledMicrousd + budgetStatus.cost.reservedMicrousd > budgetStatus.cost.limitMicrousd;
-      if (overReservation || overCostCap) {
-        const reason = overCostCap ? 'run_cost_budget_exhausted' : 'run_model_call_token_reservation_exhausted';
-        this.ledger.recordStopReason(this.runId, reason);
-        this.emitStatus();
-        throw new Error(reason);
-      }
+      this.ledger.settle(this.runId, callId, usage.totalTokens, 'settled');
       this.emitStatus();
       return result;
     } catch (error) {
@@ -210,20 +147,9 @@ export class RunBudgetObserver {
       try {
         this.options.onInvocation?.(observation);
       } catch {
-        // Diagnostics must never change model execution or budget settlement.
+        // Diagnostics must never change model execution or usage recording.
       }
     }
-  }
-
-  private recordErrorStopReason(error: unknown): void {
-    if (error instanceof Error && error.message.startsWith('run_')) {
-      this.recordStopReason(error.message.slice(0, 128));
-    }
-  }
-
-  private recordStopReason(reason: string): void {
-    this.ledger.recordStopReason(this.runId, reason);
-    this.emitStatus();
   }
 }
 

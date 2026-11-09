@@ -3,7 +3,7 @@ import {createMiddleware} from 'langchain';
 import type {ResearchTaskContext} from '../../../shared/schemas/research-task-facts';
 import {assembleResearchTaskContext} from './context/research-context-assembly';
 
-/** Rebuild task data after checkpoint resume and compaction, before budget accounting. */
+/** Rebuild task data after checkpoint resume and compaction, before model invocation. */
 export function createResearchTaskContextMiddleware(load: () => ResearchTaskContext | null | Promise<ResearchTaskContext | null>) {
   return createMiddleware({
     name: 'RocResearchTaskContextMiddleware',

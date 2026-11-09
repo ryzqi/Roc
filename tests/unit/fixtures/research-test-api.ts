@@ -29,11 +29,11 @@ export { registerResearchExportCapabilities } from '../../../src/main/plugins/re
 export { agentMigrations, researchMigrations } from '../../../src/main/infrastructure/database-schemas';
 export { applyDatabaseMigrations } from '../../../src/main/infrastructure/database-migrations';
 export { configureRocDatabaseConnection } from '../../../src/main/infrastructure/database-pragmas';
-export { compileRunCapabilityManifest, bindMcpToolContracts } from '../../../src/main/plugins/agent/run-capability-manifest';
-export { createRunBudget, createRunExecutionSnapshot } from '../../../src/main/plugins/agent/run-execution-snapshot';
+export { compileRunCapabilityManifest, bindMcpToolContracts, createRunCapabilityManifestHash } from '../../../src/main/plugins/agent/run-capability-manifest';
+export { createRunModelConfig, createRunExecutionSnapshot } from '../../../src/main/plugins/agent/run-execution-snapshot';
 export { parseIpcRequestArgs } from '../../../src/shared/ipc-registry';
-export { RunBudgetLedger } from '../../../src/main/services/deep-agent/run-budget-ledger';
-export { RunBudgetObserver } from '../../../src/main/services/deep-agent/run-budget-observer';
+export { RunUsageLedger } from '../../../src/main/services/deep-agent/run-usage-ledger';
+export { RunUsageObserver } from '../../../src/main/services/deep-agent/run-usage-observer';
 export { createResearchRoleExecutor } from '../../../src/main/plugins/research/role-executor';
 export { ResearchTaskController } from '../../../src/main/plugins/research/task-controller';
 export { registerResearchTaskCapabilities, researchTaskCapabilities } from '../../../src/main/plugins/research/task-capabilities';

@@ -46,7 +46,6 @@ export type ChatTranscriptPanelProps = {
   onOpenArtifact: OpenResearchArtifact;
   onReadGateContext: ReadResearchGateContext;
   onApprovalDecision?: (approvalId: string, decisions: ChatResumeDecision[]) => void;
-  onResumeCheckpoint?: (runId: string) => Promise<boolean>;
 };
 
 export type TranscriptVirtuosoWindow = {
@@ -81,8 +80,7 @@ export function ChatTranscriptPanel({
   scrollContainerRef,
   onApprovalDecision,
   onOpenArtifact,
-  onReadGateContext,
-  onResumeCheckpoint
+  onReadGateContext
 }: ChatTranscriptPanelProps): React.JSX.Element {
   const virtuosoRef = useRef<VirtuosoHandle | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -145,8 +143,9 @@ export function ChatTranscriptPanel({
         increaseViewportBy={240}
         followOutput={isAtBottom ? 'auto' : false}
         atBottomStateChange={setIsAtBottom}
-        itemContent={(_index, message) => <ChatMessageRow message={message} onOpenArtifact={onOpenArtifact} onReadGateContext={onReadGateContext} onApprovalDecision={onApprovalDecision}
-          onResumeCheckpoint={onResumeCheckpoint} />}
+        itemContent={(_index, message) => (
+          <ChatMessageRow message={message} onOpenArtifact={onOpenArtifact} onReadGateContext={onReadGateContext} onApprovalDecision={onApprovalDecision} />
+        )}
         startReached={() => {
           if (hasMoreBefore && !loadingOlder) {
             void loadOlder();

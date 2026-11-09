@@ -52,7 +52,6 @@ export const childTaskEnvelopeSchema = z.object({
   schemaVersion: z.literal(1), childTaskId: z.string(), parentRunId: z.string(), subagentType: z.string().min(1).max(80),
   taskDescription: z.string().trim().min(1).max(10000), taskDescriptionHash: z.string().regex(/^[a-f0-9]{64}$/),
   permissions: z.array(z.enum(['workspace_read', 'research_read', 'web_read'])),
-  maxChildTasks: z.number().int().positive(), maxConcurrentChildTasks: z.number().int().positive(),
   artifactRefs: z.array(taskArtifactRefSchema),
   acceptanceCriteria: z.array(z.object({ id: z.string(), description: z.string() }).strict())
 }).strict();

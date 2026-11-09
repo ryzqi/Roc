@@ -14,7 +14,6 @@ const markdownChunkingValues = ['true', 'h1', 'h2', 'h3', 'h4', 'h5', 'structure
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 const selectorSchema = z.union([nonEmptyStringSchema, z.array(nonEmptyStringSchema).min(1)]);
-const positiveIntegerSchema = z.number().int().min(1);
 
 export const webReadRequestSchema = z.object({
   url: z.string(),
@@ -40,7 +39,6 @@ export const webReadRequestSchema = z.object({
   engine: z.enum(engineValues).optional(),
   locale: nonEmptyStringSchema.optional(),
   referer: nonEmptyStringSchema.optional(),
-  tokenBudget: positiveIntegerSchema.optional(),
   maxTokens: z.number().int().min(500).optional(),
   assertStatusCode: z.number().int().min(100).max(599).optional(),
   respondTiming: z.enum(respondTimingValues).optional(),

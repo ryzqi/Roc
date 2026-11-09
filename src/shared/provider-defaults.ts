@@ -10,7 +10,7 @@ export const fixedLlamaCppProviderId = 'llama_cpp';
 export const fixedLlamaCppProviderName = 'llama.cpp';
 export const fixedLlamaCppBaseUrl = 'http://127.0.0.1:8081/v1';
 
-export const DEFAULT_CONTEXT_BUDGET_TOKENS = 500_000;
+export const DEFAULT_CONTEXT_WINDOW_TOKENS = 500_000;
 
 export type FixedProviderType = Extract<ProviderType, 'nvidia' | 'openrouter' | 'llama_cpp'>;
 

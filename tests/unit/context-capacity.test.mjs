@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { HumanMessage } from '@langchain/core/messages';
 import * as esbuild from 'esbuild';
 
-const contextTokenBudgetSource = 'src/main/services/deep-agent/context/context-token-budget.ts';
+const contextCapacitySource = 'src/main/services/deep-agent/context/context-capacity.ts';
 const rankNames = ['gpt2', 'r50k_base', 'p50k_base', 'p50k_edit', 'cl100k_base', 'o200k_base'];
 const exactSamples = {
   english: ['The quick brown fox jumps over the lazy dog. Token counting should preserve punctuation and whitespace.', 18],
@@ -30,11 +30,11 @@ let api;
 let compiledSource;
 
 before(async () => {
-  directory = mkdtempSync(join(tmpdir(), 'roc-context-token-budget-'));
+  directory = mkdtempSync(join(tmpdir(), 'roc-context-capacity-'));
   symlinkSync(join(process.cwd(), 'node_modules'), join(directory, 'node_modules'), 'dir');
-  const outfile = join(directory, 'context-token-budget.mjs');
+  const outfile = join(directory, 'context-capacity.mjs');
   await esbuild.build({
-    entryPoints: [contextTokenBudgetSource],
+    entryPoints: [contextCapacitySource],
     outfile,
     bundle: true,
     format: 'esm',
@@ -79,7 +79,7 @@ test('cold gpt-4o counting resolves only the model-selected ranks module', () =>
   `);
   writeFileSync(runnerPath, `
     import assert from 'node:assert/strict';
-    import { createContextTokenCounter } from './context-token-budget.mjs';
+    import { createContextTokenCounter } from './context-capacity.mjs';
     const counter = createContextTokenCounter({ modelId: 'gpt-4o', providerType: 'openai_compatible', baseUrl: 'https://api.openai.com/v1' });
     const result = await counter.countText('first exact count');
     assert.equal(result.estimated, false);
@@ -124,7 +124,7 @@ test('a failed lazy ranks import can be retried with the same counter', () => {
   `);
   writeFileSync(runnerPath, `
     import assert from 'node:assert/strict';
-    import { createContextTokenCounter } from './context-token-budget.mjs';
+    import { createContextTokenCounter } from './context-capacity.mjs';
     const counter = createContextTokenCounter({ modelId: 'text-davinci-003', providerType: 'openai_compatible', baseUrl: 'https://api.openai.com/v1' });
     await assert.rejects(counter.countText('first rank load'), /transient_rank_import_failure/u);
     const result = await counter.countText('retry rank load');

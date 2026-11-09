@@ -36,8 +36,7 @@ test('discovery refuses an untyped search proposal before creating an artifact',
   try {
     assert.throws(() => withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, output)), /research_search_plan_required/u);
     assert.deepEqual(f.repository.listArtifacts(f.project.id), []);
-    assert.throws(() => withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {...output, searchPlan: researchSearchPlanFixture(f.run.instruction, [query, {...query, limit: 30}, {...query, limit: 30}])})),
-      /research_search_plan_candidate_budget_exceeded/u);
+
     assert.equal(f.repository.runs.get(f.run.id, f.project.id).status, 'running');
   } finally { f.close(); }
 });
@@ -82,7 +81,7 @@ test('human approval freezes visible plan content and retrieval tools select onl
     assert.ok(http.every(url => url.searchParams.get('query') === query.query));
     assert.deepEqual(http.map(url => url.searchParams.get('offset')), ['0', '1']);
     assert.deepEqual(result.strategy, {artifactId, contentHash: api.requireConfirmedSearchStrategy(f.repository, context).contentHash,
-      approvedAt: f.repository.getArtifact(artifactId).updatedAt, researchQuestion: f.run.instruction, queryId: 'query-1', planVersion: 1, perspectiveIds: ['primary'], maxRequests: 6});
+      approvedAt: f.repository.getArtifact(artifactId).updatedAt, researchQuestion: f.run.instruction, queryId: 'query-1', planVersion: 1, perspectiveIds: ['primary']});
     const execution = JSON.parse(f.db.prepare('SELECT request_json FROM research_literature_search_executions WHERE id=?').pluck().get(result.executionId));
     assert.deepEqual(execution.strategy, result.strategy);
     assert.deepEqual(execution.request, {...query, projectId: f.project.id});
@@ -91,21 +90,17 @@ test('human approval freezes visible plan content and retrieval tools select onl
       capabilities: {invoke: (_name, request) => service.search(request)}, signal: new AbortController().signal});
     assert.deepEqual(await rebuilt.find(tool => tool.name === 'search_literature').invoke({queryId: 'query-1'}), result,
       'the same logical node operation replays its recorded result');
-    assert.equal(http.length, 2, 'rebuilding tools cannot reset the approved query budget');
+    assert.equal(http.length, 2, 'rebuilding tools preserves the approved query identity');
   } finally { await search.shutdown(); f.close(); }
 });
 
-test('perspective references, stable IDs, request caps and explicit budgets must agree before creating any artifact', () => {
+test('perspective references and stable IDs must agree before creating any artifact', () => {
   const f = createResearchFixture(api, 'discovery');
   try {
     for (const change of [
       plan => {plan.queries.push({...plan.queries[0]});},
       plan => {plan.perspectives[0].queryIds = ['unapproved'];},
       plan => {plan.perspectives = [];},
-      plan => {plan.queries[0].maxRequests = 100;},
-      plan => {plan.budget.requests++;},
-      plan => {plan.budget.candidates++;},
-      plan => {plan.budget.paidProviderCalls = 1;},
       plan => {plan.queries[0].sources.push('crossref');},
       plan => {delete plan.schemaVersion;}
     ]) {
@@ -254,4 +249,16 @@ test('actual gate interrupt carries the visible plan and requires its original h
       }
     } finally { f.close(); }
   }
+});
+
+ test('search plans accept more queries and candidates without aggregate quotas', () => {
+  const f = createResearchFixture(api, 'discovery');
+  try {
+    const plan = researchSearchPlanFixture(f.run.instruction, Array.from({length: 5}, () => ({...query, limit: 30})));
+    const completed = withResearchTestWorker(api, f.repository, f.run.id, f.project.id,
+      workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {...output, searchPlan: plan}));
+    const content = f.repository.runs.getArtifactContent(f.project.id, completed.outputArtifactIds[0]);
+    assert.equal(content.output.searchPlan.queries.length, 5);
+    assert.equal(content.output.searchPlan.budget, undefined);
+  } finally {f.close();}
 });

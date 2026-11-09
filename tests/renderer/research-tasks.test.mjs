@@ -46,19 +46,17 @@ before(async () => {
           return {
             task: { schemaVersion: 3, id: taskId, projectId, goal: '验证科研任务 ' + taskId,
               rootAgentRunId: chatId, status: 'active', statusReason: null, deadlineClock: 'continuous',
-              budgetPolicyVersion: 1, createdAt: '2026-11-03T00:00:00.000Z', updatedAt: '2026-11-03T00:00:00.000Z' },
-            budget: {
-              tokens: {limit: 1000, settled: 80, unknown: 100, reserved: 50, remaining: 770},
-              calls: {models: {limit: 10, total: 3, reserved: 1}, tools: {limit: 20, total: 2, reserved: 0}, children: {limit: 5, total: 1, reserved: 0}},
-              cost: {state: 'unknown', limitMicrousd: null, settledMicrousd: 40, reservedMicrousd: 120},
-              pricingCatalogVersion: 'fixture', deadlineAt: '2026-11-03T12:00:00.000Z', stopReason: null
+              createdAt: '2026-11-03T00:00:00.000Z', updatedAt: '2026-11-03T00:00:00.000Z' },
+            usage: {
+              tokens: {settled: 80, unknown: 100, reserved: 50},
+              calls: {models: {total: 3, reserved: 1}, tools: {total: 2, reserved: 0}, children: {total: 1, reserved: 0}},
             },
             executions: [
               execution('chat', chatId, null, null, 'completed', []),
               execution('stage', 'stage-a', 'chat', chatId, 'running', []),
               execution('figure', 'figure-a', 'stage', 'stage-a', 'completed', ['artifact-figure'])
             ],
-            graph: {revision: 0, nodes: [], edges: []}, continuationRunId: null, canRestoreApproval: false, externalCost: 'unknown',
+            graph: {revision: 0, nodes: [], edges: []}, continuationRunId: null, canRestoreApproval: false,
             recoveryIssues: [], eventDelivery: {pending: 0, failed: 0}
           };
         };
@@ -154,8 +152,8 @@ before(async () => {
           exportResponse = {ok: true, data: {path: '/local/diagnostics/task.json', size: 512, sha256: 'c'.repeat(64),
             createdAt: '2026-11-06T00:00:00.000Z', redacted: true, externalTrace: 'not_exported'}};
           observationCalls = Array.from({length: 51}, (_, i) => ({sequence: i + 1, runId: 'chat-a', callId: 'measured-call-' + (i + 1),
-            kind: 'model', state: 'unknown', reservedTokens: 100, actualTokens: null, reservedCostMicrousd: 60,
-            actualCostMicrousd: null, pricingVersion: null, createdAt: '2026-11-06T00:00:00.000Z', settledAt: null,
+            kind: 'model', state: 'unknown', reservedTokens: 100, actualTokens: null,
+            createdAt: '2026-11-06T00:00:00.000Z', settledAt: null,
             invocation: i === 0 ? {startedAt: '2026-11-06T00:00:00.000Z', durationMs: 17, status: 'failed'} : null}));
           observationEvents = Array.from({length: 51}, (_, i) => ({sequence: i + 11, type: 'assistant_block',
             toolCallId: 'tool-call-' + (i + 1), status: 'error', failed: true, createdAt: '2026-11-06T00:00:00.000Z'}));
@@ -207,12 +205,12 @@ after(async () => {
 
 const ready = () => page.getByTestId('task-status').waitFor();
 
-test('assistant reads authoritative budgets and progress, handles keyboard detail entry and scoped notifications', async () => {
+test('assistant reads authoritative usage and progress, handles keyboard detail entry and scoped notifications', async () => {
   await page.evaluate(() => { reset(); mount(); });
   await ready();
   assert.equal(await page.getByTestId('task-progress').innerText(), '执行已完成 2/3');
-  const text = await page.getByTestId('task-budget').innerText();
-  for (const expected of ['已知 80', '未知 100', '预留 50', '剩余 770', '模型 3/10']) assert.ok(text.includes(expected));
+  const text = await page.getByTestId('task-usage').innerText();
+  for (const expected of ['已知 80', '未知 100', '预留 50', '模型 3']) assert.ok(text.includes(expected));
   const details = page.getByTestId('assistant-task-details');
   await details.focus();
   await page.keyboard.press('Enter');
@@ -221,8 +219,8 @@ test('assistant reads authoritative budgets and progress, handles keyboard detai
   await page.evaluate(() => { for (let index = 0; index < 5; index++) mount(); emit('other-task'); emit('task-a', 'other-project'); });
   assert.equal(await page.evaluate(() => calls.length), previous);
   await page.evaluate(() => {
-    response = {ok: true, data: {...makeData(), budget: {...makeData().budget,
-      tokens: {...makeData().budget.tokens, settled: 95, remaining: 755}}}};
+    response = {ok: true, data: {...makeData(), usage: {...makeData().usage,
+      tokens: {...makeData().usage.tokens, settled: 95}}}};
     emit();
   });
   await page.getByText('已知 95', {exact: true}).waitFor();
@@ -332,7 +330,7 @@ test('null tasks, failed reads and mismatched task identity remain explicit; dra
   await page.evaluate(() => { response = {ok: true, data: makeData('foreign')}; });
   await page.getByRole('button', {name: '重试读取任务'}).click();
   await page.getByText('research_task_diagnostics_identity_mismatch', {exact: true}).waitFor();
-  assert.equal(await page.getByTestId('task-budget').count(), 0);
+  assert.equal(await page.getByTestId('task-usage').count(), 0);
   await page.evaluate(() => { reset(); mountDrawer(); });
   await ready();
   await page.evaluate(() => {
@@ -375,8 +373,8 @@ test('management tasks load without project model budget controls and retain tas
   await page.getByText('尚未选择 Python 环境。', {exact: true}).waitFor();
   assert.equal(await page.getByTestId('mgmt-project-budget').count(), 0);
   assert.equal(await page.getByText('项目模型预算', {exact: true}).count(), 0);
-  const budget = await page.getByTestId('task-budget').innerText();
-  for (const expected of ['已知 80', '未知 100', '预留 50', '剩余 770', '模型 3/10']) assert.ok(budget.includes(expected));
+  const usage = await page.getByTestId('task-usage').innerText();
+  for (const expected of ['已知 80', '未知 100', '预留 50', '模型 3']) assert.ok(usage.includes(expected));
   assert.deepEqual(await page.evaluate(() => [...new Set(calls.map(call => call.method))].sort()),
     ['diagnostics', 'events', 'facts', 'list', 'project', 'python-selections']);
   await page.evaluate(() => clear());
@@ -505,7 +503,8 @@ test('execution drill is lazy and keyboard accessible, pages calls/events indepe
   const panel = page.getByTestId('mgmt-task-observations');
   // Mounted rows can precede the native details content becoming visible.
   await expect(panel).toContainText('17 ms / failed', {useInnerText: true});
-  assert.ok((await panel.innerText()).includes('已结算 未知'));
+  assert.ok((await panel.innerText()).includes('Tokens 未知'));
+  assert.doesNotMatch(await panel.innerText(), /费用|已结算|预留费用/);
   await page.getByTestId('mgmt-task-replay-gap').waitFor();
   await panel.getByRole('button', {name: '下一页调用', exact: true}).click();
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="mgmt-task-call"]').length === 1);

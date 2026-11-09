@@ -44,7 +44,7 @@ for (const change of ['approval', 'content']) {
       assert.deepEqual(repository.runs.get(queued.id, f.project.id).outputArtifactIds, []);
       repository.runs.terminate(queued.id, f.project.id, 'interrupted', 'fixture_restart');
       tasks.setStatus(queued.taskId, f.project.id, 'interrupted', 'fixture_restart', ['active']);
-      const diagnostics = new api.ResearchTaskDiagnosticsService(repository, new api.RunBudgetLedger(agentDb), null,
+      const diagnostics = new api.ResearchTaskDiagnosticsService(repository, new api.RunUsageLedger(agentDb), null,
         {source: async () => {throw new Error('unexpected_resource_read');}});
       const summary = diagnostics.get({projectId: f.project.id, taskId: queued.taskId});
       assert.deepEqual(summary.recoveryIssues, ['research_stage_inputs_stale']);
@@ -82,7 +82,7 @@ test('approval restoration refuses inputs changed after the completed stage was 
     const request = {projectId: f.project.id, taskId: run.taskId};
     await controller.pause(request);
     f.db.prepare("UPDATE research_artifacts SET status='draft' WHERE id=?").run(artifact.id);
-    const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb), null,
+    const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, new api.RunUsageLedger(f.agentDb), null,
       {source: async () => {throw new Error('unexpected_resource_read');}});
     const summary = diagnostics.get(request);
     assert.equal(summary.canRestoreApproval, false);

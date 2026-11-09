@@ -10,4 +10,4 @@
 - `rescue-parser.ts` — 4 种野生格式解析
 - `sampling-defaults.ts` — 采样默认值
 - `preview-store.ts` — propose preview session-scoped 缓存
-- `middleware/*` — LangChain middleware：错误预算、iteration 标记、文件工具错误、tiered compaction、rescue parsing、tool resolution、cleanup
+- `middleware/*` — LangChain middleware：iteration 标记、文件工具错误、tiered compaction、rescue parsing、tool resolution、cleanup

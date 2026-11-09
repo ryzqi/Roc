@@ -3,7 +3,7 @@ import { test, after } from 'node:test';
 import { createServer } from 'node:net';
 import { build } from 'esbuild';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -42,36 +42,34 @@ const protectedPaths = [secretPath, realpathSync('tests/fixtures/quality-evaluat
 const binding = { evidence: 'fixture', providerId: 'loopback-fixture', baselineModelId: 'fixture-model', candidateModelId: 'fixture-model',
   baselineCommitSha: workers.baseline.commitSha, candidateCommitSha: workers.candidate.commitSha,
   toolManifestHash: createHash('sha256').update(JSON.stringify(manifestBase)).digest('hex'),
-  environmentHash: api.qualityApplicationEnvironmentHash(workers, protectedPaths), pricingVersion: 'fixture-v1', temperature: 0,
+  environmentHash: api.qualityApplicationEnvironmentHash(workers, protectedPaths),  temperature: 0,
   isolation: 'process-files-tools', isolationHash: api.qualityIsolationHash(),
-  maxRequestsPerTask: 2, maxRequestCostMicrousd: 10 };
+   };
 let requests = 0;
-const transport = { providerId: binding.providerId, pricingVersion: binding.pricingVersion,
-  async complete({ body, maximumCostMicrousd }) {
+const transport = { providerId: binding.providerId,
+  async complete({ body, }) {
     requests++;
-    assert.equal(maximumCostMicrousd, 10);
     assert.equal(JSON.stringify(body).includes('hidden evaluator sentinel'), false);
-    return { costMicrousd: 1, body: { id: 'fixture-response', object: 'chat.completion', created: 0,
+    return {  body: { id: 'fixture-response', object: 'chat.completion', created: 0,
       model: 'fixture-model', choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '{"ok":true}' } }],
       usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14 } } };
   } };
 const executor = api.createApplicationQualityExecutor({ binding, workers, protectedPaths, artifactsRoot: root,
-  transport, maxRequestsPerTask: 2, maxRequestCostMicrousd: 10,
+  transport,
   isolationProbePaths: [secretPath, realpathSync('tests/fixtures/quality-evaluation/manifest.json')],
   isolationProbePort: sentinel.address().port });
 
-test('application Harness runs in isolated process with real budget, checkpoint and stdio transport', async () => {
+test('application Harness runs in isolated process with checkpoint and stdio transport', async () => {
   const events = [];
   const result = await executor.execute({ id: 'application-fixture', family: 'file-report', difficulty: 'easy',
     prompt: 'Return a JSON object.', outputFormat: 'json' }, {
-    arm: 'baseline', trialId: 'application-fixture:0:baseline', repeatIndex: 0, maximumCostMicrousd: 20,
+    arm: 'baseline', trialId: 'application-fixture:0:baseline', repeatIndex: 0,
     signal: new AbortController().signal, recordRequest: async event => events.push(event)
   });
   // Retain the application's output unchanged: input/context messages must never
   // become assistant text, and the adapter must not trim them to repair JSON.
   assert.equal(result.output, '{"ok":true}');
   assert.deepEqual(JSON.parse(result.output), { ok: true });
-  assert.equal(result.costMicrousd, 1);
   assert.equal(requests, 1);
   assert.equal(events.length, 1);
   const trialRoot = join(root, createHash('sha256').update('application-fixture:0:baseline').digest('hex'));
@@ -89,7 +87,7 @@ function protocol(id) {
   return protocolApi.lockQualityProtocol(dataset, protocolApi.createQualityProtocolDraft(dataset, id), {
     ...binding, executionMode: 'fixture', authorizationLevel: 'L1', taskTimeoutMs: 5000,
     promptSetHash: runnerApi.qualityPromptSetHash(dataset, 'fixture'),
-    maxTotalCostUsd: 0.00002, maxPerTaskCostUsd: 0.00002, userAuthorized: true, approvalReference: 'local-contract-only'
+      userAuthorized: true, approvalReference: 'local-contract-only'
   });
 }
 
@@ -98,7 +96,7 @@ test('application requests use the durable runner journal before dispatch and re
   const locked = protocol('application-journal-fixture');
   let called = 0;
   const checked = api.createApplicationQualityExecutor({ binding, workers, protectedPaths, artifactsRoot: journalRoot,
-    maxRequestsPerTask: 2, maxRequestCostMicrousd: 10, transport: { ...transport, async complete(input) {
+      transport: { ...transport, async complete(input) {
       called++;
       const rows = readFileSync(join(journalRoot, 'quality', `${locked.lockHash}.jsonl`), 'utf8').trim().split('\n').map(JSON.parse);
       assert.equal(rows.at(-1).type, 'request');
@@ -106,79 +104,65 @@ test('application requests use the durable runner journal before dispatch and re
       return transport.complete(input);
     } } });
   mkdirSync(journalRoot);
-  const saved = await runnerApi.runQualityEvaluationWithJournal({ dataset, expectations, protocol: locked,
-    executor: checked, artifactsRoot: journalRoot, signal: new AbortController().signal });
-  assert.equal(called, 1);
-  assert.equal(saved.result.dispatches, 1);
-  assert.equal(saved.result.trials.length, 48);
-  const failures = saved.result.validations.flatMap(row => row.validation?.failures ?? []);
-  assert.equal(failures.includes('output_not_json'), false);
-  assert.ok(failures.length > 0); // Valid JSON is still wrong for the frozen task.
-  assert.equal(saved.result.statistics.evidenceStatus, 'insufficient');
-});
-
-test('provider quote violation stops later application dispatch and retains unknown spend', async () => {
-  const costRoot = join(root, 'quote-violation');
-  mkdirSync(costRoot);
-  let called = 0;
-  const checked = api.createApplicationQualityExecutor({ binding, workers, protectedPaths, artifactsRoot: costRoot,
-    maxRequestsPerTask: 2, maxRequestCostMicrousd: 10, transport: { ...transport, async complete(input) {
-      called++;
-      const response = await transport.complete(input);
-      return { ...response, costMicrousd: 11 };
-    } } });
-  const result = await runnerApi.runQualityEvaluation({ dataset, expectations, protocol: protocol('application-quote-fixture'),
-    executor: checked, signal: new AbortController().signal, writeEvent: async () => {} });
+  const controller = new AbortController();
+  mkdirSync(join(journalRoot, 'quality'));
+  const result = await runnerApi.runQualityEvaluation({ dataset, expectations, protocol: locked,
+    executor: checked, signal: controller.signal, writeEvent: async event => {
+      appendFileSync(join(journalRoot, 'quality', `${locked.lockHash}.jsonl`), JSON.stringify(event) + '\n');
+      if (event.type === 'finished') controller.abort();
+    } });
   assert.equal(called, 1);
   assert.equal(result.dispatches, 1);
-  assert.equal(result.stopReason, 'executor_cost_ceiling_violated');
-  assert.equal(result.unknownCalls, 1);
-  assert.equal(result.heldCostMicrousd, 20);
+  assert.equal(result.trials.length, 48);
+  const failures = result.validations.flatMap(row => row.validation?.failures ?? []);
+  assert.equal(failures.includes('output_not_json'), false);
+  assert.ok(failures.length > 0); // Valid JSON is still wrong for the frozen task.
+  assert.equal(result.statistics.evidenceStatus, 'insufficient');
 });
+
 
 test('cancelled application request cleans the process tree and cannot accept a late response', async () => {
   const cancelRoot = join(root, 'cancel');
   mkdirSync(cancelRoot);
   const controller = new AbortController();
   const checked = api.createApplicationQualityExecutor({ binding, workers, protectedPaths, artifactsRoot: cancelRoot,
-    maxRequestsPerTask: 2, maxRequestCostMicrousd: 10, transport: { ...transport, async complete(input) {
+      transport: { ...transport, async complete(input) {
       controller.abort(new Error('local test cancellation'));
       return transport.complete(input);
     } } });
   await assert.rejects(checked.execute({ id: 'cancel-fixture', family: 'cancel-crash', difficulty: 'hard',
     prompt: 'Return JSON.', outputFormat: 'json' }, { arm: 'baseline', trialId: 'cancel-fixture:0:baseline',
-    repeatIndex: 0, maximumCostMicrousd: 20, signal: controller.signal, recordRequest: async () => {} }));
+    repeatIndex: 0,  signal: controller.signal, recordRequest: async () => {} }));
   const trial = join(cancelRoot, createHash('sha256').update('cancel-fixture:0:baseline').digest('hex'));
   assert.equal(JSON.parse(readFileSync(join(trial, 'cleanup.json'), 'utf8')).processGroupGone, true);
 });
 
-test('application adapter rejects changed worker or quote contract before provider dispatch', () => {
+test('application adapter rejects changed worker or provider binding before provider dispatch', () => {
   assert.throws(() => api.createApplicationQualityExecutor({ binding, protectedPaths, workers: { ...workers,
     baseline: { ...workers.baseline, sha256: 'a'.repeat(64) } }, artifactsRoot: root,
-    transport, maxRequestsPerTask: 2, maxRequestCostMicrousd: 10 }), /worker_changed/);
-  assert.throws(() => api.createApplicationQualityExecutor({ binding, workers, protectedPaths, artifactsRoot: root,
-    transport, maxRequestsPerTask: 3, maxRequestCostMicrousd: 10 }), /binding_invalid/);
+    transport,  }), /worker_changed/);
+  assert.throws(() => api.createApplicationQualityExecutor({ binding: { ...binding, providerId: 'changed' }, workers, protectedPaths, artifactsRoot: root,
+    transport }), /binding_invalid/);
   assert.throws(() => api.createApplicationQualityExecutor({ binding, protectedPaths, workers: { ...workers,
     candidate: { ...workers.candidate, lockfileSha256: 'b'.repeat(64) } }, artifactsRoot: root,
-    transport, maxRequestsPerTask: 2, maxRequestCostMicrousd: 10 }), /dependency_versions_differ/);
+    transport,  }), /dependency_versions_differ/);
 });
 
-test('provider transport failure remains classified and preserves the reservation after cleanup', async () => {
+test('provider transport failure remains classified and cleans up the worker', async () => {
   const failureRoot = join(root, 'provider-failure');
   mkdirSync(failureRoot);
   let called = 0;
   const checked = api.createApplicationQualityExecutor({ binding, workers, protectedPaths, artifactsRoot: failureRoot,
-    maxRequestsPerTask: 2, maxRequestCostMicrousd: 10, transport: { ...transport, async complete() {
+      transport: { ...transport, async complete() {
       called++;
       throw new Error('local transport unavailable');
     } } });
+  const controller = new AbortController();
   const result = await runnerApi.runQualityEvaluation({ dataset, expectations,
     protocol: protocol('application-provider-failure'), executor: checked,
-    signal: new AbortController().signal, writeEvent: async () => {} });
+    signal: controller.signal, writeEvent: async event => { if (event.type === 'finished') controller.abort(); } });
   assert.equal(called, 1);
   assert.equal(result.dispatches, 1);
-  assert.equal(result.unknownCalls, 1);
-  assert.equal(result.heldCostMicrousd, 20);
   assert.equal((result.statistics.failureCounts.baseline.provider ?? 0)
     + (result.statistics.failureCounts.candidate.provider ?? 0), 1);
   const outcome = [result.trials[0].baseline, result.trials[0].candidate].find(row => row.failureClass === 'provider');

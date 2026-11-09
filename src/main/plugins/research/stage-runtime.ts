@@ -59,7 +59,7 @@ export class ResearchStageRuntime {
     if (['paused', 'interrupted', 'failed'].includes(task.status)) {
       return this.repository.tasks.continueWith(task.id, task.projectId, () => this.retry(request));
     }
-    this.repository.tasks.budgetForExecution('stage', request.runId, request.projectId);
+    this.repository.tasks.modelConfigForExecution('stage', request.runId, request.projectId);
     const run = this.repository.runs.retry(request);
     return this.linkAndSchedule(run, null);
   }
@@ -349,7 +349,6 @@ export class ResearchStageRuntime {
   }
 
   private async execute(queued: ResearchStageRun, controller: AbortController): Promise<void> {
-    const timeout = setTimeout(() => controller.abort(new Error('research_run_timeout')), queued.policy.timeoutMs);
     try {
       if (queued.stage === 'review' && queued.parentRunId === null) {
         const children = this.repository.tasks.executions(queued.taskId!, queued.projectId)
@@ -382,8 +381,6 @@ export class ResearchStageRuntime {
         if (queued.taskId !== null) this.cleanupFailures.add(queued.taskId);
         throw cleanupError;
       }
-    } finally {
-      clearTimeout(timeout);
     }
   }
 
@@ -392,8 +389,8 @@ export class ResearchStageRuntime {
     this.repository.tasks.requireExecution('stage', queued.id, queued.projectId);
     this.repository.runs.requireActive(queued.id, queued.projectId);
     if (this.executor === undefined) throw new Error('research_model_executor_unavailable');
-    const budget = this.repository.tasks.budgetForExecution('stage', queued.id, queued.projectId);
-    const prepared = await withAbort(this.executor.prepare(queued.policy.model, budget), signal);
+    const modelConfig = this.repository.tasks.modelConfigForExecution('stage', queued.id, queued.projectId);
+    const prepared = await withAbort(this.executor.prepare(queued.policy.model, modelConfig), signal);
     signal.throwIfAborted();
     return { prepared, run: this.repository.runs.markRunning(queued.id, queued.projectId, prepared) };
   }
@@ -410,7 +407,7 @@ export class ResearchStageRuntime {
       };
     };
     const result = await withAbort(prepared.execute({
-      run, context, loadTaskContext, tools, signal, onBudgetStatus: () => this.notify(run)
+      run, context, loadTaskContext, tools, signal, onUsageStatus: () => this.notify(run)
     }), signal);
     signal.throwIfAborted();
     this.repository.tasks.graph.assertLease(researchWorkerLease());

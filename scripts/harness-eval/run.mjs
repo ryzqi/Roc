@@ -17,7 +17,7 @@ const save = (name, value) => writeFileSync(join(directory, name), JSON.stringif
 const report = { schemaVersion: 1, kind: 'deterministic-pilot', directory,
   command: 'pnpm harness:eval', cwd: process.cwd(), results: [], knownDefects: {},
   taxonomy: ['infra', 'provider', 'policy', 'effect', 'state', 'verifier', 'agent'],
-  qualityClaim: 'fixture transport only; real model quality not measured', costUsd: null, passed: false,
+  qualityClaim: 'fixture transport only; real model quality not measured', passed: false,
   limits: { externalCalls: 0, modelCallsPerTurn: 2, maxTurnsPerTask: 3, recursionLimit: 12, requestTimeoutMs: 10000 },
   thresholds: { contractFailures: 0, knownProductDefects: 'observed, not passed', qualityImprovement: 'not measured' } };
 let server;
@@ -61,18 +61,18 @@ try {
       const user = body.messages.findLast(m => m.role === 'user')?.content;
       const step = (requests.get(user) ?? 0) + 1;
       requests.set(user, step);
-      const done = user === 'budget-child-tools: preserve correction' || (body.messages.at(-1).role === 'tool'
-        && user !== 'budget-loop' && (user !== 'budget-window' || step === 3));
-      assert.ok(step <= (user === 'budget-loop' || user === 'budget-window' ? 3 : 2), 'unbounded provider calls');
+      const done = user === 'usage-child-tools: preserve correction' || (body.messages.at(-1).role === 'tool'
+        && user !== 'usage-loop' && (user !== 'usage-window' || step === 3));
+      assert.ok(step <= (user === 'usage-restart' ? 4 : user === 'usage-loop' || user === 'usage-window' ? 3 : 2), 'unbounded provider calls');
       response.setHeader('content-type', 'application/json');
       response.end(JSON.stringify({ id: `pilot-${hash(String(user)).slice(0, 16)}-${step}`, object: 'chat.completion', created: 0, model: 'roc-pilot',
         choices: [{ index: 0, finish_reason: done ? 'stop' : 'tool_calls', message: done
           ? { role: 'assistant', content: 'pilot-complete' }
           : { role: 'assistant', content: null, tool_calls: user === 'execution-child' ? [{id:'child-task',type:'function',function:{name:'task',arguments:JSON.stringify({description:'execution-child/child',subagent_type:'pilot-child'})}},{id:'parent-action',type:'function',function:{name:'pilot_action',arguments:'{"index":0}'}}] : user.startsWith('execution-') ? Array.from({ length: 4 }, (_, index) => ({ id: `execution-${index}`, type: 'function', function: { name: 'pilot_action', arguments: JSON.stringify({ index }) } })) : [{ id: `pilot-${hash(String(user)).slice(0, 16)}-${step}`, type: 'function',
-            function: user === 'budget-child-tools'
-              ? { name: 'task', arguments: JSON.stringify({ description: 'budget-child-tools-child', subagent_type: 'pilot-child' }) }
+            function: user === 'usage-child-tools'
+              ? { name: 'task', arguments: JSON.stringify({ description: 'usage-child-tools-child', subagent_type: 'pilot-child' }) }
               : { name: 'pilot_action', arguments: '{}' } }] } }],
-        ...(user === 'budget-unknown' ? {} : { usage: user === 'budget-window'
+        ...(user === 'usage-unknown' ? {} : { usage: user === 'usage-window'
           ? { prompt_tokens: 40000, completion_tokens: 5000, total_tokens: 45000 }
           : { prompt_tokens: 64, completion_tokens: 16, total_tokens: 80 } })
       }));
@@ -108,20 +108,20 @@ try {
         .reduce((total, [, count]) => total + count, 0);
       assert.equal(modelCalls, evidence.turns * 2);
       report.results.push({ id: scenario.id, passed: true, durationMs: performance.now() - start,
-        modelCalls, tokenUsage: { source: 'fixture', totalTokens: modelCalls * 80 }, costUsd: null, evidence });
+        modelCalls, tokenUsage: { source: 'fixture', totalTokens: modelCalls * 80 }, evidence });
     } catch (error) {
       report.results.push({ id: scenario.id, passed: false, failureClass: error.failureClass ?? (error.name === 'AssertionError' ? 'verifier' : 'infra'), error: String(error) });
     }
   }
-  for (const name of ['budget-model', 'budget-token', 'budget-unknown', 'budget-restart', 'budget-loop', 'budget-cost', 'budget-deadline', 'budget-inbox', 'budget-retry', 'budget-concurrency', 'budget-window', 'budget-child-tools']) {
+  for (const name of ['usage-model', 'usage-token', 'usage-unknown', 'usage-restart', 'usage-loop', 'usage-response', 'usage-continuation', 'usage-inbox', 'usage-retry', 'usage-concurrency', 'usage-window', 'usage-child-tools']) {
     const dir = join(directory, name);
     mkdirSync(dir);
     const before = [...requests.values()].reduce((a, b) => a + b, 0);
     try {
-      const evidence = await runtime.runBudgetScenario(name, dir, endpoint);
+      const evidence = await runtime.runUsageScenario(name, dir, endpoint);
       const modelCalls = [...requests.values()].reduce((a, b) => a + b, 0) - before;
-      assert.equal(modelCalls, name === 'budget-child-tools' ? 4 : name === 'budget-cost' || name === 'budget-deadline' ? 0
-        : name === 'budget-loop' || name === 'budget-concurrency' || name === 'budget-window' ? 3 : name === 'budget-inbox' ? 2 : 1);
+      assert.equal(modelCalls, ['usage-child-tools', 'usage-concurrency', 'usage-restart'].includes(name) ? 4
+        : name === 'usage-loop' || name === 'usage-window' ? 3 : 2);
       report.results.push({ id: name, passed: true, modelCalls, evidence });
     } catch (error) {
       report.results.push({ id: name, passed: false, failureClass: 'verifier', error: String(error) });
@@ -140,7 +140,7 @@ try {
     try { report.results.push({ id: name, passed: true, evidence: await runtime.verifyTaskContracts(dir) }); }
     catch (error) { report.results.push({ id: name, passed: false, failureClass: 'verifier', error: String(error) }); }
   }
-  for (const name of ['optimizer-surface', 'optimizer-isolation', 'optimizer-adopt', 'optimizer-dataset', 'optimizer-cost-manifest']) {
+  for (const name of ['optimizer-surface', 'optimizer-isolation', 'optimizer-adopt', 'optimizer-dataset', 'optimizer-invocation-manifest']) {
     const dir = join(directory, name);
     mkdirSync(dir);
     try { report.results.push({ id: name, passed: true, evidence: await runtime.verifyOptimizer(name, dir) }); }

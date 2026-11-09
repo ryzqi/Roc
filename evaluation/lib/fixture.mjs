@@ -1,5 +1,5 @@
 // Wiring check only. This transport receives no dataset references or evaluator state.
-export const fixtureConfig = { model: 'roc-fixture', temperature: 0, maxRequestsPerTask: 3, taskTimeoutMs: 30000 };
+export const fixtureConfig = { model: 'roc-fixture', temperature: 0, taskTimeoutMs: 30000 };
 export function fixtureCompletion(body) {
   const hasRead = body.messages.some(m => m.role === 'tool');
   const message = hasRead ? { role: 'assistant', content: '{"answer":"Unanswerable","evidence":[]}' }

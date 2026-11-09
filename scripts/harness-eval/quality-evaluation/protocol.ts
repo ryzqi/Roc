@@ -19,16 +19,13 @@ export type QualityEvaluationProtocol = {
   minimumClustersPerFamily: 5;
   nonInferiorityMargin: 0.05;
   subjectiveReview: 'blind-human-review-required; retain disagreements';
-  fixtureClaims: 'contract-only; no model-quality or provider-cost inference';
+  fixtureClaims: 'contract-only; no model-quality inference';
   failureClasses: readonly ['infra', 'provider', 'policy', 'effect', 'state', 'verifier', 'agent', 'data', 'operator'];
   stopRules: readonly string[];
   lock?: {
     executionMode: 'fixture' | 'pilot' | 'full';
     authorizationLevel: 'L1' | 'L2' | 'L3';
     providerId: string;
-    pricingVersion: string;
-    maxRequestsPerTask: number;
-    maxRequestCostMicrousd: number;
     temperature: number;
     isolationHash: string;
     baselineModelId: string;
@@ -39,8 +36,6 @@ export type QualityEvaluationProtocol = {
     promptSetHash: string;
     environmentHash: string;
     taskTimeoutMs: number;
-    maxTotalCostUsd: number;
-    maxPerTaskCostUsd: number;
     userAuthorized: true;
     approvalReference: string;
     explicitL3Approval: boolean;
@@ -53,9 +48,6 @@ export type QualityProtocolLockInput = {
   executionMode: 'fixture' | 'pilot' | 'full';
   authorizationLevel: 'L1' | 'L2' | 'L3';
   providerId: string;
-  pricingVersion: string;
-  maxRequestsPerTask: number;
-  maxRequestCostMicrousd: number;
   temperature: number;
   isolationHash: string;
   baselineModelId: string;
@@ -66,8 +58,6 @@ export type QualityProtocolLockInput = {
   promptSetHash: string;
   environmentHash: string;
   taskTimeoutMs: number;
-  maxTotalCostUsd: number;
-  maxPerTaskCostUsd: number;
   userAuthorized: true;
   approvalReference: string;
   explicitL3Approval?: boolean;
@@ -75,7 +65,6 @@ export type QualityProtocolLockInput = {
 };
 
 const STOP_RULES = [
-  'stop before dispatch when the locked total or per-task spend cap would be exceeded',
   'stop on any unauthorized external effect, permission bypass, or secret exposure',
   'classify provider, infrastructure, verifier, and agent failures separately; do not silently retry beyond the locked repeat count',
   'do not unlock or amend a preregistration after the first provider dispatch; create a new protocol id and dataset hash'
@@ -118,7 +107,7 @@ export function createQualityProtocolDraft(dataset: FrozenQualityDataset, id: st
     minimumClustersPerFamily: 5,
     nonInferiorityMargin: 0.05,
     subjectiveReview: 'blind-human-review-required; retain disagreements',
-    fixtureClaims: 'contract-only; no model-quality or provider-cost inference',
+    fixtureClaims: 'contract-only; no model-quality inference',
     failureClasses: ['infra', 'provider', 'policy', 'effect', 'state', 'verifier', 'agent', 'data', 'operator'],
     stopRules: STOP_RULES
   };
@@ -149,11 +138,7 @@ export function lockQualityProtocol(
   if (input.executionMode === 'pilot' && dataset.tasks.filter(task => task.split === 'dev').length < 10) {
     throw new Error('quality_protocol_pilot_too_small');
   }
-  assertIdentifier(input.pricingVersion, 'quality_protocol_pricing_invalid');
-  if (!Number.isSafeInteger(input.maxRequestsPerTask) || input.maxRequestsPerTask < 1 || input.maxRequestsPerTask > 100
-    || !Number.isSafeInteger(input.maxRequestCostMicrousd) || input.maxRequestCostMicrousd < 1
-    || input.maxRequestsPerTask * input.maxRequestCostMicrousd > input.maxPerTaskCostUsd * 1_000_000
-    || !Number.isFinite(input.temperature) || input.temperature < 0 || input.temperature > 2
+  if (!Number.isFinite(input.temperature) || input.temperature < 0 || input.temperature > 2
     || !SHA256.test(input.isolationHash)) throw new Error('quality_protocol_request_limits_invalid');
   assertIdentifier(input.providerId, 'quality_protocol_provider_invalid');
   assertIdentifier(input.baselineModelId, 'quality_protocol_baseline_invalid');
@@ -169,11 +154,8 @@ export function lockQualityProtocol(
   if (!SHA256.test(input.toolManifestHash) || !SHA256.test(input.promptSetHash) || !SHA256.test(input.environmentHash)) {
     throw new Error('quality_protocol_environment_hash_invalid');
   }
-  if (!Number.isSafeInteger(input.taskTimeoutMs) || input.taskTimeoutMs < 1000 || input.taskTimeoutMs > 600000
-    || !Number.isFinite(input.maxTotalCostUsd) || input.maxTotalCostUsd <= 0
-    || !Number.isFinite(input.maxPerTaskCostUsd) || input.maxPerTaskCostUsd <= 0
-    || input.maxPerTaskCostUsd > input.maxTotalCostUsd) {
-    throw new Error('quality_protocol_budget_or_timeout_invalid');
+  if (!Number.isSafeInteger(input.taskTimeoutMs) || input.taskTimeoutMs < 1000 || input.taskTimeoutMs > 600000) {
+    throw new Error('quality_protocol_timeout_invalid');
   }
   const rollbackPlanReference = input.rollbackPlanReference ?? null;
   if (input.authorizationLevel === 'L3'
@@ -187,9 +169,6 @@ export function lockQualityProtocol(
       executionMode: input.executionMode,
       authorizationLevel: input.authorizationLevel,
       providerId: input.providerId,
-      pricingVersion: input.pricingVersion,
-      maxRequestsPerTask: input.maxRequestsPerTask,
-      maxRequestCostMicrousd: input.maxRequestCostMicrousd,
       temperature: input.temperature,
       isolationHash: input.isolationHash,
       baselineModelId: input.baselineModelId,
@@ -200,8 +179,6 @@ export function lockQualityProtocol(
       promptSetHash: input.promptSetHash,
       environmentHash: input.environmentHash,
       taskTimeoutMs: input.taskTimeoutMs,
-      maxTotalCostUsd: input.maxTotalCostUsd,
-      maxPerTaskCostUsd: input.maxPerTaskCostUsd,
       userAuthorized: true,
       approvalReference: input.approvalReference,
       explicitL3Approval: input.explicitL3Approval === true,

@@ -34,7 +34,7 @@ export async function createConfiguredModel(root: string, storage: SafeStorageBa
   };
   const factory = new LangChainModelFactory(new ConfigService(paths), new SecretService(paths, readonlyStorage));
   const handle = await factory.createModelForProvider(selected.provider, selected.model.id, { streaming: false, maxOutputTokens: 4096 });
-  return { handle, identity: { ...selected.identity, contextBudgetTokens: handle.runtime.contextBudgetTokens,
+  return { handle, identity: { ...selected.identity, contextWindowTokens: handle.runtime.contextWindowTokens,
     maxOutputTokens: handle.runtime.maxOutputTokens, transport: 'roc-model-factory-stdio-v1' } };
 }
 

@@ -24,18 +24,18 @@ function open(file, fetch) {
     configuration:{baseURL:'http://fixture.invalid/v1',fetch}});
   const handle = {model,modelId:'resume-fixture',
     provider:{id:'fixture',name:'Fixture',type:'openai_compatible',enabled:true,models:[],endpoint:'http://fixture.invalid/v1',credentialRef:null},
-    runtime:{providerType:'openai_compatible',baseUrl:null,streaming:false,modelKwargs:{},contextBudgetTokens:65536,maxOutputTokens:512}};
+    runtime:{providerType:'openai_compatible',baseUrl:null,streaming:false,modelKwargs:{},contextWindowTokens:65536,maxOutputTokens:512}};
   const eventBus = new api.EventBus({error:() => {}});
   const runEventLog = new api.AgentRunEventLog(db);
   const repository = new api.AgentSessionRepository(db,{runEventLog});
-  const ledger = new api.RunBudgetLedger(db);
+  const ledger = new api.RunUsageLedger(db);
   const manifestBase = {schemaVersion:1,requestedCapabilities:{mcpServers:[],skills:[]},
     resolvedCapabilities:{mcpServers:[],skills:[]},skippedCapabilities:[],tools:[],skills:[],mcpServers:[],
     untrustedContextPolicy:'external_content_reference_only'};
   const manifest = {...manifestBase,manifestHash:api.createRunCapabilityManifestHash(manifestBase)};
   const runtime = new api.AgentPluginRuntime({repository,eventBus,runEventLog,executionGrantBroker:api.openExecutionGrantBroker(db),
     deepAgentExecutor:api.createAgentDeepAgentExecutor({executionGrantBroker:api.openExecutionGrantBroker(db),
-      budgetLedger:ledger,capabilities:new api.CapabilityRegistry(),checkpointer:new api.RocSqliteCheckpointer(db),
+      usageLedger:ledger,capabilities:new api.CapabilityRegistry(),checkpointer:new api.RocSqliteCheckpointer(db),
       contextArtifactStore:new api.ContextArtifactStore(db),paths,sessionHistory:repository,
       store:new api.RocSqliteStore(memory),toolEffectStore:new api.AgentToolEffectStore(db)}),
     modelFactory:{createDefaultModelHandle:async()=>({providerId:'fixture',modelId:handle.modelId,langChainHandle:handle}),
@@ -50,7 +50,7 @@ function open(file, fetch) {
   }};
 }
 
-test('same-version cold resume keeps the run, checkpoint, frozen inputs and unknown reservation', {timeout:20000}, async () => {
+test('cold resume preserves frozen inputs and unknown usage', {timeout:20000}, async () => {
   const requested = Promise.withResolvers();
   const first = open(join(directory,'before.db'),async (_url,init) => {
     requested.resolve();
@@ -63,8 +63,8 @@ test('same-version cold resume keeps the run, checkpoint, frozen inputs and unkn
     const started = await first.runtime.startRun({input:'Return exactly resumed.',mode:'chat',enabledCapabilities:{mcpServers:[],skills:[]}});
     await requested.promise;
     assert.equal(first.repository.hasCheckpoint(started.runId),true);
-    const snapshot = first.repository.getRunExecutionSnapshot(started.runId);
-    const beforeCalls = first.db.prepare('SELECT * FROM agent_budget_calls ORDER BY call_id').all();
+    let snapshot = first.repository.getRunExecutionSnapshot(started.runId);
+    const beforeCalls = first.db.prepare('SELECT * FROM agent_calls ORDER BY call_id').all();
     assert.equal(beforeCalls.length,1);assert.equal(beforeCalls[0].state,'reserved');
     // Capture the exact crash boundary before abort/shutdown can write a terminal state.
     await first.db.backup(join(directory,'reopened.db'));
@@ -91,7 +91,7 @@ test('same-version cold resume keeps the run, checkpoint, frozen inputs and unkn
     assert.equal((await terminal.promise).assistantMessage,'resumed');
     assert.equal(requests,1);
     assert.equal(reopened.db.prepare('SELECT COUNT(*) FROM agent_runs').pluck().get(),1);
-    const afterCalls = reopened.db.prepare('SELECT * FROM agent_budget_calls ORDER BY call_id').all();
+    const afterCalls = reopened.db.prepare('SELECT * FROM agent_calls ORDER BY call_id').all();
     assert.equal(afterCalls.length,2);
     assert.deepEqual(afterCalls.find(row=>row.call_id===beforeCalls[0].call_id),{...beforeCalls[0],state:'unknown'});
     assert.equal(afterCalls.find(row=>row.call_id!==beforeCalls[0].call_id).state,'settled');

@@ -138,7 +138,7 @@ export async function verifyFixedLongTaskComparisons(
     const input = {
       artifactStore: artifacts,
       readControlState: () => state,
-      budgetProfile: {
+      capacityProfile: {
         contextWindowTokens: 10000,
         modelInputTokens: MODEL_INPUT_TOKENS,
         reservedOutputTokens: 1000,
@@ -179,7 +179,7 @@ export async function verifyFixedLongTaskComparisons(
     const compactedTokens = await countMessages(compacted);
     assert.ok(compactedTokens <= MODEL_INPUT_TOKENS);
     assert.ok(summaryInputEstimates.length > 0, 'fixed task must cross the actual summary boundary');
-    assert.ok(summaryInputEstimates.every(value => value !== null && value <= input.budgetProfile.summaryInputTokens));
+    assert.ok(summaryInputEstimates.every(value => value !== null && value <= input.capacityProfile.summaryInputTokens));
     assert.deepEqual(new Set(collectUserConstraints(compacted)), originalConstraints);
     const contract = readContract(compacted);
     assert.deepEqual(contract.acceptanceConditions, state.acceptanceConditions);
@@ -232,7 +232,7 @@ export async function verifyFixedLongTaskComparisons(
         overflowCount: 1,
         preservedConstraints: originalConstraints.size,
         oracleCompletion: baselineValidation.passed,
-        runtimeCompletion: 'blocked-by-context-budget-if-dispatched',
+        runtimeCompletion: 'blocked-by-context-capacity-if-dispatched',
         artifactReadCalls: 0,
         repeatedArtifactReadCalls: 0
       },
@@ -253,7 +253,6 @@ export async function verifyFixedLongTaskComparisons(
       },
       modelCalls: 0,
       externalCalls: 0,
-      costUsd: null
     });
   }
 
@@ -262,7 +261,7 @@ export async function verifyFixedLongTaskComparisons(
   await assert.rejects(runContextCompaction({
     artifactStore: artifacts,
     readControlState: () => ({ acceptanceIds: [], acceptanceConditions: [], pendingEffects: [], pendingApprovals: [], pendingCorrections: [] }),
-    budgetProfile: { contextWindowTokens: 1000, modelInputTokens: 100, reservedOutputTokens: 0,
+    capacityProfile: { contextWindowTokens: 1000, modelInputTokens: 100, reservedOutputTokens: 0,
       systemToolOverheadTokens: 0, summaryInputTokens: 100, safetyMarginTokens: 0 },
     emitEvent: () => {},
     mode: 'run',
@@ -277,7 +276,7 @@ export async function verifyFixedLongTaskComparisons(
       countText: async (text) => ({ tokens: Math.ceil(text.length / 4), estimated: true }), wasEstimated: () => true },
     messages: [new HumanMessage('Protected oversized user requirement. '.repeat(100))],
     summarize: async () => { overflowSummaryCalls++; return emptySummary(); }
-  }), /context_summary_budget_exhausted/u);
+  }), /context_summary_too_large/u);
   assert.equal(overflowSummaryCalls, 0);
 
   const evidence = {
@@ -288,7 +287,6 @@ export async function verifyFixedLongTaskComparisons(
     tokenCountSource: INPUT_COUNT_SOURCE,
     modelCalls: 0,
     externalCalls: 0,
-    costUsd: null,
     protectedOverflow: 'denied-without-summary-call',
     comparisons
   };

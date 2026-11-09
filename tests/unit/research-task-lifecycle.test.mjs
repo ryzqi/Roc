@@ -14,7 +14,7 @@ const deferred = () => {
 };
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
-test('pause waits cleanup and continuation creates a new execution with the same budget and deadline', async () => {
+test('pause waits cleanup and continuation creates a new execution with the same model config', async () => {
   const f = createResearchFixture(api, 'discovery');
   const cleanup = deferred();
   const signals = [];
@@ -28,7 +28,7 @@ test('pause waits cleanup and continuation creates a new execution with the same
     stages: runtime, cancelChat: async () => {}, cancelJob: async () => {}
   });
   try {
-    const budget = f.tasks.budgetForExecution('stage', f.run.id, f.project.id);
+    const budget = f.tasks.modelConfigForExecution('stage', f.run.id, f.project.id);
     f.repository.runs.terminate(f.run.id, f.project.id, 'failed', 'fixture');
     const current = runtime.retry({ projectId: f.project.id, runId: f.run.id, requestId: 'pause-current' });
     await tick();
@@ -44,8 +44,9 @@ test('pause waits cleanup and continuation creates a new execution with the same
     assert.equal(next.taskId, current.taskId);
     assert.equal(next.retryOfRunId, current.id);
     assert.equal(f.repository.runs.get(current.id, f.project.id).status, 'interrupted');
-    assert.equal(f.tasks.get(next.taskId, f.project.id).deadlineClock, 'continuous');
-    assert.deepEqual(f.tasks.budgetForExecution('stage', next.id, f.project.id), budget);
+    assert.equal(f.tasks.get(next.taskId, f.project.id).deadlineClock, undefined);
+    assert.equal(budget.deadlineAt, undefined);
+    assert.deepEqual(f.tasks.modelConfigForExecution('stage', next.id, f.project.id), budget);
     await tick();
     assert.equal(signals.length, 2);
     await controller.cancel({ taskId: next.taskId, projectId: f.project.id });
@@ -134,7 +135,7 @@ test('real human gate leaves task awaiting approval and approval updates it with
     await runtime.waitForIdle();
     assert.equal(f.repository.runs.get(current.id, f.project.id).status, 'completed');
     assert.equal(f.tasks.get(current.taskId, f.project.id).status, 'waiting_approval');
-    assert.throws(() => f.tasks.budgetForExecution('stage', current.id, f.project.id), /research_task_not_active/);
+    assert.throws(() => f.tasks.modelConfigForExecution('stage', current.id, f.project.id), /research_task_not_active/);
     await gate.approve({ projectId: f.project.id, expectedStage: 'planning', action: 'approve', expectedArtifactVersions: captureResearchArtifactVersions(f.repository,f.project.id) });
     runtime.synchronizeTaskState(current.taskId, f.project.id);
     assert.equal(f.tasks.get(current.taskId, f.project.id).status, 'active');
@@ -163,17 +164,15 @@ test('cancellation during asynchronous human-gate verification cannot commit wor
 test('startup interrupts active linked tasks, preserves cancellation and never restarts their executions', () => {
   const f = createResearchFixture(api, 'discovery');
   try {
-    const ledger = new api.RunBudgetLedger(f.agentDb);
-    const budget = { ...api.createRunBudget({ contextBudgetTokens: 1000 }), maxTotalTokens: 10000 };
-    f.agentDb.prepare('UPDATE research_task_budgets SET limits_json = ? WHERE task_id = ?')
-      .run(JSON.stringify(budget), f.run.taskId);
+    const ledger = new api.RunUsageLedger(f.agentDb);
+    const budget = { ...api.createRunModelConfig({ contextWindowTokens: 1000 }), };
     ledger.reserve(f.run.id, budget, { id: 'crashed-call', kind: 'model', tokens: 100, inputHash: 'hash', envelope: {} });
     ledger.reconcileStartup();
     f.repository.runs.recoverInterrupted();
     const task = f.tasks.get(f.run.taskId, f.project.id);
     assert.equal(task.status, 'interrupted');
     assert.equal(task.statusReason, 'research_task_interrupted_by_restart');
-    assert.equal(f.agentDb.prepare('SELECT state,reserved_tokens FROM agent_budget_calls').get().state, 'unknown');
+    assert.equal(f.agentDb.prepare('SELECT state,reserved_tokens FROM agent_calls').get().state, 'unknown');
     assert.equal(f.repository.runs.get(f.run.id, f.project.id).status, 'interrupted');
     assert.equal(f.repository.runs.list({ projectId: f.project.id, limit: 100 }).length, 1);
   } finally { f.close(); }
@@ -192,13 +191,13 @@ test('v12 task migration preserves identity and status while requiring the new l
     db.pragma('foreign_keys = ON');
     api.applyDatabaseMigrations(db, { dbName: 'agent', migrations: api.agentMigrations.filter(migration => migration.version <= 12) });
     const task = { schemaVersion: 1, id: 'existing-task', projectId: 'project', goal: 'Existing goal',
-      rootAgentRunId: null, status: 'cancelled', budgetPolicyVersion: 1,
+      rootAgentRunId: null, status: 'cancelled',
       createdAt: '2026-11-03T00:00:00.000Z', updatedAt: '2026-11-03T01:00:00.000Z' };
     db.prepare('INSERT INTO research_tasks (id,project_id,snapshot_json,created_at) VALUES (?,?,?,?)')
       .run(task.id, task.projectId, JSON.stringify(task), task.createdAt);
     api.applyDatabaseMigrations(db, { dbName: 'agent', migrations: api.agentMigrations, allowOffline: true });
     const migrated = JSON.parse(db.prepare('SELECT snapshot_json FROM research_tasks WHERE id=?').pluck().get(task.id));
-    assert.deepEqual(migrated, { ...task, schemaVersion: 2, statusReason: null, deadlineClock: 'continuous' });
+    assert.deepEqual(migrated, { ...task, schemaVersion: 2, statusReason: null });
     assert.equal(db.prepare('SELECT COUNT(*) FROM research_task_executions').pluck().get(), 0);
     assert.throws(() => new api.ResearchTaskRepository(db).get(task.id, task.projectId), /expected 3/); // Current readers require the explicit offline converter.
   } finally { db.close(); }

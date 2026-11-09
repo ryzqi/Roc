@@ -1,7 +1,0 @@
-{
-  "maxRequestsPerTask": 12,
-  "maxInputBytes": 262144,
-  "requestTimeoutMs": 120000,
-  "taskTimeoutMs": 300000,
-  "maxTotalRequests": 60
-}

@@ -5,7 +5,7 @@ import { loadDataset } from './data.mjs';
 import { prepareApplication, executeApplication } from './application.mjs';
 import { qasperInput, gradeQasper } from './qasper.mjs';
 import { scienceInput, sciencePreflight, stageScience, executeScience, gradeScience } from './science.mjs';
-import { createProvider, validateBudget } from './provider.mjs';
+import { createProvider, validateProviderOptions } from './provider.mjs';
 import { openRocModel } from './roc-model.mjs';
 import { fixtureConfig, fixtureCompletion } from './fixture.mjs';
 import { sealRun, summarize } from './report.mjs';
@@ -52,7 +52,7 @@ export async function runBenchmark(options) {
       events.append({ type: 'experiment_claimed', ...experiment.binding });
     }
     if (options.suite === 'roc-native') {
-      if (options.budget || options.dataset) fail('policy', 'native_does_not_use_provider_or_dataset');
+      if (options.providerOptions || options.dataset) fail('policy', 'native_does_not_use_provider_or_dataset');
       manifest.selection = [{ id: 'native-contracts', clusterId: 'native-contracts' }]; manifest.repeats = 1; manifest.split = 'fixture';
       manifest.datasetIdentity = sha256(readFileSync(join(ROOT, 'scripts/harness-eval/scenarios.mjs')));
       writeJson(join(root, 'manifest.json'), manifest);
@@ -78,16 +78,10 @@ export async function runBenchmark(options) {
       manifest.datasetProvenance = dataset.manifest.provenance;
       writeJson(join(root, 'dataset-manifest.json'), dataset.manifest);
       if (!selected.length) fail('data', 'no_supported_tasks_in_split');
-      if (options.fixture && options.budget) fail('policy', 'fixture_and_provider_are_exclusive');
+      if (options.fixture && options.providerOptions) fail('policy', 'fixture_and_provider_are_exclusive');
       if (options.fixture && options.suite !== 'qasper') fail('policy', 'fixture_transport_supports_qasper_only');
-      const config = options.fixture ? fixtureConfig : { ...validateBudget(options.budget ? readJson(options.budget) : {}), temperature: 0 };
+      const config = options.fixture ? fixtureConfig : { ...validateProviderOptions(options.providerOptions ? readJson(options.providerOptions) : {}), temperature: 0 };
       if (!options.fixture) {
-        manifest.budgetPlan = { trials: selected.length * profile.repeats, minimumRequests: selected.length * profile.repeats,
-          maxTotalRequests: config.maxTotalRequests, maxRequestsPerTask: config.maxRequestsPerTask };
-        events.append({ type: 'budget_preflight', ...manifest.budgetPlan });
-        if (manifest.budgetPlan.minimumRequests > config.maxTotalRequests) {
-          fail('budget', `request_budget_infeasible:minimum=${manifest.budgetPlan.minimumRequests}:maxTotalRequests=${config.maxTotalRequests}:reduce_profile_or_raise_explicit_budget`);
-        }
         modelHost = await openRocModel(options);
         Object.assign(config, modelHost.identity);
       }
@@ -129,7 +123,7 @@ export async function runBenchmark(options) {
         }
         const trial = { taskId: task.id, clusterId: task.clusterId, repeat, ...grade, toolSchemaHash: trialToolSchemaHash, latencyMs: Date.now() - started };
         trials.push(trial); writeJson(join(trialDir, 'grade.json'), trial); record({ type: 'trial_finished', ...trial });
-        // Infrastructure, provider, budget and scoring failures invalidate this run.
+        // Infrastructure, provider and scoring failures invalidate this run.
         if (grade.failureClass && grade.failureClass !== 'agent') fail(grade.failureClass, grade.reason);
       }
       if (loadDataset(options.dataset).manifest.identity !== manifest.datasetIdentity) fail('data', 'dataset_changed_during_run');
@@ -146,9 +140,7 @@ export async function runBenchmark(options) {
   // Preflight failures also get a complete diagnostic report. SIGKILL leaves no seal and is incomplete.
   try { writeJson(join(root, 'manifest.json'), manifest); } catch (e) { if (e.code !== 'EEXIST') throw e; }
   writeJson(join(root, 'trials.json'), trials);
-  const summary = { ...summarize(manifest, trials, fatal), cost: provider?.snapshot() ?? { requests: trials.reduce((n, t) => n + (t.requests ?? 0), 0), costUsd: 0, costBasis: 'fixture' } };
-  if (manifest.evidence !== 'fixture' && !provider) summary.cost = { costUsd: null, costBasis: 'not-dispatched' };
-  if (options.suite === 'roc-native') summary.cost = { costUsd: null, costBasis: 'native-fixture-usage-is-not-billing-evidence' };
+  const summary = { ...summarize(manifest, trials, fatal), usage: provider?.snapshot() ?? { requests: trials.reduce((n, t) => n + (t.requests ?? 0), 0) } };
   events.append({ type: 'run_finished', status: summary.status }); events.close();
   sealRun(root, summary);
   return { directory: root, ...summary };

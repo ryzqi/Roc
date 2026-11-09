@@ -21,15 +21,14 @@ import { applyAgentDatabaseSchema } from '../../src/main/infrastructure/database
 import { AgentToolEffectStore, hashToolInput } from '../../src/main/services/deep-agent/tool-effect-store';
 import { RocSqliteCheckpointer } from '../../src/main/services/deep-agent/sqlite-checkpointer';
 import { AgentRunEventLog } from '../../src/main/plugins/agent/run-event-log';
-import { createRunBudget } from '../../src/main/plugins/agent/run-execution-snapshot';
+import { createRunModelConfig } from '../../src/main/plugins/agent/run-execution-snapshot';
 import { createChatRunEventQueue } from '../../src/main/plugins/agent/chat-run-event-queue';
 import { createUsageAccumulator, updateUsageAccumulator } from '../../src/main/services/deep-agent/stream-usage-accumulator';
-import { validateRunTokenBudget } from '../../src/main/services/deep-agent/runtime-state-validator';
 import { validateOutcomeConsistency } from '../../src/main/services/deep-agent/outcome-validator';
 import { latexCitationKeys, unknownCitationKeys } from '../../src/main/plugins/research/citation-integrity';
-import { RunBudgetLedger } from '../../src/main/services/deep-agent/run-budget-ledger';
-import { RunBudgetObserver } from '../../src/main/services/deep-agent/run-budget-observer';
-import { createRunBudgetMiddleware, createRunCorrectionMiddleware } from '../../src/main/services/deep-agent/run-budget-middleware';
+import { RunUsageLedger } from '../../src/main/services/deep-agent/run-usage-ledger';
+import { RunUsageObserver } from '../../src/main/services/deep-agent/run-usage-observer';
+import { createRunUsageMiddleware, createRunCorrectionMiddleware } from '../../src/main/services/deep-agent/run-usage-middleware';
 import { ContextArtifactStore } from '../../src/main/services/deep-agent/context/context-artifact-store';
 import { validateRocFileToolPath } from '../../src/main/services/deep-agent/filesystem-path-policy';
 import { createToolProtocolMiddleware } from '../../src/main/services/deep-agent/tool-protocol';
@@ -130,13 +129,12 @@ export function recoverCrash(directory: string, point: string): Record<string, u
 
 export function observeBaseline(directory: string): Record<string, unknown> {
   const db = openDatabase(join(directory, 'boundaries.sqlite'));
-  const ledger = new RunBudgetLedger(db);
+  const ledger = new RunUsageLedger(db);
   const usage = createUsageAccumulator();
   for (let i = 0; i < 3; i++) updateUsageAccumulator(usage, `call-${i}`, {
     inputTokens: 40000, outputTokens: 5000, totalTokens: 45000,
     cacheReadTokens: null, cacheCreationTokens: null
   });
-  const budget = validateRunTokenBudget(usage, null);
   for (let page = 1; page <= 3; page++) ledger.recordProgress('run', 'read_file', { page }, 'page-content');
   for (const [tool, value] of [['read_file', 'A'], ['write_file', 'B'], ['read_file', 'A'], ['write_file', 'C'], ['read_file', 'A']]) {
     ledger.recordProgress('run', tool, value, value);
@@ -145,13 +143,20 @@ export function observeBaseline(directory: string): Record<string, unknown> {
   try {
     for (let i = 0; i < 3; i++) ledger.recordProgress('run', 'read_file', { page: 1 }, 'empty');
   } catch (error) { idle = (error as Error).message; }
+  const historicalConfig = createRunModelConfig({contextWindowTokens: 100000});
+  for (let call = 0; call < 3; call++) {
+    ledger.reserve('run', historicalConfig, {id: `baseline-${call}`, kind: 'model', tokens: 45000, inputHash: String(call), envelope: {}});
+    ledger.settle('run', `baseline-${call}`, 45000, 'settled');
+  }
+  const recordedTokens = ledger.readUsageStatus('run').tokens.settled;
+  assert.equal(recordedTokens, usage.totalTokens);
   db.close();
   const reasoning = validateOutcomeConsistency({
     assistantChunks: [], reasoningChunks: ['Working…'], toolCallsByBlockId: new Map(),
     hookDisplayTexts: [], usageAccumulated: true
   });
   return {
-    cumulativeWindow: { observed: budget?.code ?? 'accepted', expected: 'accepted', totalTokens: usage.totalTokens },
+    cumulativeWindow: { observed: 'accepted', expected: 'accepted', totalTokens: recordedTokens },
     noProgress: { observed: idle, expected: 'tool_call_loop_detected' },
     pagination: { observed: 'accepted', expected: 'accepted' },
     reasoningOnly: { observed: reasoning?.code ?? 'accepted', expected: 'agent_run_missing_conclusion' }
@@ -181,23 +186,14 @@ export async function runScenario(scenario: Scenario, directory: string, endpoin
       trajectory.push({ tool: 'pilot_action', result });
       return JSON.stringify(result);
     }, { name: 'pilot_action', description: 'Execute synthetic pilot case', schema: z.object({}).strict() });
-    const ledger = new RunBudgetLedger(db);
-    const limits = {
-      ...createRunBudget({ contextBudgetTokens: 100_000 }),
-      maxTotalTokens: 100_000 * 4,
-      maxModelCalls: 100,
-      maxToolCalls: 500,
-      maxChildTasks: 8,
-      maxConcurrentChildTasks: 2,
-      maxConcurrentModelCalls: 4,
-      maxConcurrentToolCalls: 4
-    };
+    const ledger = new RunUsageLedger(db);
+    const limits = createRunModelConfig({ contextWindowTokens: 100_000 });
     const revision = ledger.freezeRevision('run', { kind: 'pilot', id: scenario.id });
-    const observer = new RunBudgetObserver(ledger, 'run', limits, revision);
+    const observer = new RunUsageObserver(ledger, 'run', limits, revision);
     const buildAgent = () => createDeepAgent({
       middleware: [
         createRunCorrectionMiddleware(ledger, 'run'),
-        createRunBudgetMiddleware(ledger, 'run', limits, observer)
+        createRunUsageMiddleware(ledger, 'run', limits, observer)
       ],
       model: new ChatOpenAI({ model: 'roc-pilot', apiKey: 'synthetic-fixture',
         configuration: { baseURL: endpoint }, maxRetries: 0, maxTokens: limits.maxOutputTokens, timeout: 10000 }),
@@ -229,7 +225,7 @@ export async function runScenario(scenario: Scenario, directory: string, endpoin
         assert.equal(result.messages.filter(m => m.getType() === 'tool').length, turns);
       } finally { reopened.close(); }
     }
-    const accounting = db.prepare('SELECT kind, state, actual_tokens FROM agent_budget_calls WHERE run_id = ?').all('run') as
+    const accounting = db.prepare('SELECT kind, state, actual_tokens FROM agent_calls WHERE run_id = ?').all('run') as
       { kind: string; state: string; actual_tokens: number | null }[];
     assert.equal(accounting.filter(row => row.kind === 'model').length, turns * 2);
     assert.equal(accounting.filter(row => row.kind === 'tool').length, turns);
@@ -346,13 +342,18 @@ async function exerciseScenario(s: Scenario, dir: string, db: Database.Database,
         const cancelled = assert.rejects(pending, /shell_execution_aborted/);
         let pid: number | null = null;
         if (s.variant === 'cancel-during') {
-          for (let i = 0; i < 100 && !existsSync(join(dir, 'child.pid')); i++) await delay(10);
-          assert.ok(existsSync(join(dir, 'child.pid')), 'child must start before cancellation');
-          pid = Number(readFileSync(join(dir, 'child.pid'), 'utf8').trim());
-          assert.ok(Number.isSafeInteger(pid) && pid > 1);
+          // Redirection creates the file before echo writes the PID.
+          for (let i = 0; i < 100; i++) {
+            if (existsSync(join(dir, 'child.pid'))) {
+              const candidate = Number(readFileSync(join(dir, 'child.pid'), 'utf8').trim());
+              if (Number.isSafeInteger(candidate) && candidate > 1) { pid = candidate; break; }
+            }
+            await delay(10);
+          }
           controller.abort();
         }
         await cancelled;
+        if (s.variant === 'cancel-during') assert.ok(pid !== null, 'child must start before cancellation');
         if (pid !== null) {
           let alive = true;
           for (let i = 0; i < 100 && alive; i++) {
@@ -415,121 +416,101 @@ async function exerciseScenario(s: Scenario, dir: string, db: Database.Database,
   }
 }
 
-export async function runBudgetScenario(name: string, directory: string, endpoint: string): Promise<Record<string, unknown>> {
+export async function runUsageScenario(name: string, directory: string, endpoint: string): Promise<Record<string, unknown>> {
   let db = openDatabase(join(directory, 'agent.sqlite'));
-  let ledger = new RunBudgetLedger(db);
-  const limits = {
-    ...createRunBudget({ contextBudgetTokens: 100_000 }),
-    maxModelCalls: name === 'budget-model' || name === 'budget-restart' ? 1 : 100,
-    maxToolCalls: 100,
-    maxChildTasks: 8,
-    maxConcurrentChildTasks: 2,
-    maxConcurrentModelCalls: 4,
-    maxConcurrentToolCalls: 4
-  };
-  if (name === 'budget-retry') limits.maxToolCalls = 1;
-  if (name === 'budget-concurrency') limits.maxConcurrentModelCalls = 1;
-  if (name === 'budget-child-tools') limits.maxConcurrentToolCalls = 1;
-  if (name === 'budget-child-tools') limits.maxChildTasks = 1;
-  if (name === 'budget-token' || name === 'budget-unknown') limits.maxTotalTokens = limits.maxCallTokens + 1;
-  if (name === 'budget-cost') limits.maxCostMicrousd = 1;
-  if (name === 'budget-deadline') limits.deadlineAt = '2020-01-01T00:00:00.000Z';
-  const expected = name === 'budget-retry' ? 'run_tool_call_budget_exhausted' : name === 'budget-loop' ? 'tool_call_loop_detected'
-    : name === 'budget-token' || name === 'budget-unknown' ? 'run_total_token_budget_exhausted'
-    : name === 'budget-cost' ? 'run_cost_estimate_unavailable'
-    : name === 'budget-deadline' ? 'run_deadline_exhausted' : 'run_model_call_budget_exhausted';
+  let ledger = new RunUsageLedger(db);
+  const limits = createRunModelConfig({contextWindowTokens: 100_000});
   let effects = 0;
-  let childBlocked = false;
+  let concurrentChildren = 0;
   const taskContract = {
     contractVersion: 1 as const,
-    objective: 'Budget child work against acceptance requirements.',
+    objective: 'Track child work against acceptance requirements.',
     constraints: [],
     kind: 'task' as const,
     criteria: [{ id: 'A-01', description: 'Use the expected artifact.',
       check: { kind: 'artifact_sha256' as const, path: 'result.txt', sha256: 'a'.repeat(64) } }]
   };
-  const budgetMiddleware = (observer: RunBudgetObserver) =>
-    createRunBudgetMiddleware(ledger, 'run', limits, observer, undefined, taskContract);
+  const usageMiddleware = (observer: RunUsageObserver) =>
+    createRunUsageMiddleware(ledger, 'run', limits, observer, undefined, taskContract);
   const execute = async () => {
     const revision = ledger.freezeRevision('run', { name, version: 1 });
     const model = new ChatOpenAI({ model: 'roc-pilot', apiKey: 'synthetic', maxRetries: 0,
       maxTokens: limits.maxOutputTokens, timeout: 10000, configuration: { baseURL: endpoint } });
-    const observer = new RunBudgetObserver(ledger, 'run', limits, revision);
+    const observer = new RunUsageObserver(ledger, 'run', limits, revision);
     const action = tool(async () => {
       effects++;
-      if (name === 'budget-child-tools') ledger.enqueueCorrection('run', 'during-child', 'budget-child-tools: preserve correction');
-      if (name === 'budget-retry') throw new Error('fixture_retry');
-      if (name === 'budget-concurrency') {
+      if (name === 'usage-child-tools') ledger.enqueueCorrection('run', 'during-child', 'usage-child-tools: preserve correction');
+      if (name === 'usage-retry' && effects < 3) throw new Error('fixture_retry');
+      if (name === 'usage-concurrency') {
         const results = await Promise.allSettled([1, 2].map(child => observer.invoke({
-          messages: [new HumanMessage(`budget-concurrency-child-${child}`)],
+          messages: [new HumanMessage(`usage-concurrency-child-${child}`)],
           purpose: 'agent',
           responseMessage: (result) => result,
-          invoke: async () => await model.invoke(`budget-concurrency-child-${child}`)
+          invoke: async () => await model.invoke(`usage-concurrency-child-${child}`)
         })));
-        assert.equal(results.filter(result => result.status === 'rejected').length, 1);
-        childBlocked = results.some(result => result.status === 'rejected' && String(result.reason).includes('run_model_concurrency_exhausted'));
+        assert.ok(results.every(result => result.status === 'fulfilled'));
+        concurrentChildren = results.length;
       }
       return 'same-empty-result';
     },
       { name: 'pilot_action', description: 'Deterministic read', schema: z.object({}).strict() });
     const agent = createDeepAgent({ model, tools: [action],
-      ...(name === 'budget-child-tools' ? { subagents: [{ name: 'pilot-child', description: 'Pilot child',
+      ...(name === 'usage-child-tools' ? { subagents: [{ name: 'pilot-child', description: 'Pilot child',
         systemPrompt: 'Call pilot_action then return result.', tools: [action],
-        middleware: [budgetMiddleware(observer)] }] } : {}),
-      middleware: [createRunCorrectionMiddleware(ledger, 'run'), ...(name === 'budget-retry' ? [toolRetryMiddleware({ tools: ['pilot_action'], maxRetries: 2,
+        middleware: [usageMiddleware(observer)] }] } : {}),
+      middleware: [createRunCorrectionMiddleware(ledger, 'run'), ...(name === 'usage-retry' ? [toolRetryMiddleware({ tools: ['pilot_action'], maxRetries: 2,
         initialDelayMs: 0, retryOn: error => error.message.includes('fixture_retry'), onFailure: 'error' })] : []),
-        budgetMiddleware(observer)], checkpointer: new RocSqliteCheckpointer(db) });
+        usageMiddleware(observer)], checkpointer: new RocSqliteCheckpointer(db) });
     return await agent.invoke({ messages: [{ role: 'user', content: name }] }, {
       configurable: { thread_id: 'thread' }, recursionLimit: 12
     });
   };
   try {
-    if (name === 'budget-child-tools') {
+    if (name === 'usage-child-tools') {
       await execute();
       assert.equal(effects, 1);
       assert.deepEqual(ledger.pendingCorrections('run'), []);
-      const calls = db.prepare('SELECT kind FROM agent_budget_calls').all() as { kind: string }[];
+      const calls = db.prepare('SELECT kind FROM agent_calls').all() as { kind: string }[];
       assert.equal(calls.filter(row => row.kind === 'child').length, 1);
       assert.equal(calls.filter(row => row.kind === 'tool').length, 1);
       assert.equal(calls.filter(row => row.kind === 'model').length, 4);
-      const childCall = db.prepare("SELECT call_id, input_hash, state, envelope_json FROM agent_budget_calls WHERE kind = 'child'")
+      const childCall = db.prepare("SELECT call_id, input_hash, state, envelope_json FROM agent_calls WHERE kind = 'child'")
         .get() as { call_id: string; input_hash: string; state: string; envelope_json: string };
       const envelope = JSON.parse(childCall.envelope_json) as Record<string, unknown>;
       assert.equal(childCall.state, 'settled');
       assert.equal(envelope.subagentType, 'pilot-child');
-      assert.equal(envelope.maxChildTasks, 1);
-      assert.equal(envelope.taskDescription, 'budget-child-tools-child');
-      assert.equal(envelope.taskDescriptionHash, hashToolInput('budget-child-tools-child'));
+      assert.equal(envelope.maxChildTasks, undefined);
+      assert.equal(envelope.taskDescription, 'usage-child-tools-child');
+      assert.equal(envelope.taskDescriptionHash, hashToolInput('usage-child-tools-child'));
       assert.deepEqual(envelope.acceptanceCriteria, [{ id: 'A-01', description: 'Use the expected artifact.' }]);
       assert.deepEqual(envelope.artifactRefs, [{ path: 'result.txt', sha256: 'a'.repeat(64) }]);
       assert.deepEqual(envelope.permissions, ['workspace_read', 'research_read', 'web_read']);
       assert.equal(typeof envelope.outcomeHash, 'string');
       assert.equal(envelope.outcomeStatus, 'completed');
-      assert.equal(childCall.envelope_json.includes('budget-child-tools-child'), true);
+      assert.equal(childCall.envelope_json.includes('usage-child-tools-child'), true);
       assert.throws(() => ledger.reserve('run', limits, { id: childCall.call_id, kind: 'child', tokens: 0,
-        inputHash: childCall.input_hash, envelope }), /run_budget_call_already_reserved/);
-      assert.throws(() => ledger.reserve('run', limits, { id: 'child-over-limit', kind: 'child', tokens: 0,
-        inputHash: 'over-limit', envelope }), /run_child_task_budget_exhausted/);
-      return { effects, calls, childEnvelope: envelope, replay: 'blocked', maxChildTasks: 1,
-        maxConcurrentToolCalls: 1, correction: 'consumed by parent' };
+        inputHash: childCall.input_hash, envelope }), /run_call_call_already_reserved/);
+      ledger.reserve('run', limits, { id: 'child-over-limit', kind: 'child', tokens: 0, inputHash: 'over-limit', envelope: {} });
+      ledger.settle('run', 'child-over-limit', 0, 'settled');
+      return { effects, calls, childEnvelope: envelope, replay: 'blocked', continuedPastLegacyQuota: true, correction: 'consumed by parent' };
     }
-    if (name === 'budget-window') {
+    if (name === 'usage-window') {
       await execute();
       assert.equal(effects, 2);
-      const usage = db.prepare("SELECT SUM(actual_tokens) tokens FROM agent_budget_calls WHERE kind = 'model'").get() as { tokens: number };
+      const usage = db.prepare("SELECT SUM(actual_tokens) tokens FROM agent_calls WHERE kind = 'model'").get() as { tokens: number };
       assert.equal(usage.tokens, 135000);
       return { effects, totalTokens: usage.tokens, perCallTokens: 45000, contextWindowTokens: limits.contextWindowTokens };
     }
-    if (name === 'budget-concurrency') {
+    if (name === 'usage-concurrency') {
       await execute();
-      assert.equal(childBlocked, true);
-      return { effects, childBlocked };
+      assert.equal(concurrentChildren, 2);
+      return { effects, concurrentChildren };
     }
-    if (name === 'budget-inbox') {
-      const first = ledger.enqueueCorrection('run', 'one', 'budget-inbox: keep wording');
-      assert.equal(ledger.enqueueCorrection('run', 'one', 'budget-inbox: keep wording'), first);
+    if (name === 'usage-inbox') {
+      const first = ledger.enqueueCorrection('run', 'one', 'usage-inbox: keep wording');
+      assert.equal(ledger.enqueueCorrection('run', 'one', 'usage-inbox: keep wording'), first);
       assert.throws(() => ledger.enqueueCorrection('run', 'one', 'changed'), /input_drift/);
-      ledger.enqueueCorrection('run', 'two', 'budget-inbox: use supplied data');
+      ledger.enqueueCorrection('run', 'two', 'usage-inbox: use supplied data');
       await execute();
       assert.deepEqual(ledger.pendingCorrections('run'), []);
       const tuple = await new RocSqliteCheckpointer(db).getTuple({ configurable: { thread_id: 'thread' } });
@@ -538,19 +519,20 @@ export async function runBudgetScenario(name: string, directory: string, endpoin
       assert.throws(() => ledger.freezeRevision('run', { version: 2 }), /revision_changed/);
       return { effects, corrections: 'deduplicated, persisted, consumed in order', revisionMismatch: 'rejected' };
     }
-    await assert.rejects(execute(), new RegExp(expected));
-    if (name === 'budget-restart') {
+    if (name === 'usage-loop') await assert.rejects(execute(), /tool_call_loop_detected/);
+    else await execute();
+    if (name === 'usage-restart') {
       db.close();
       db = openDatabase(join(directory, 'agent.sqlite'));
-      ledger = new RunBudgetLedger(db);
-      await assert.rejects(execute(), new RegExp(expected));
+      ledger = new RunUsageLedger(db);
+      await execute();
     }
-    const calls = db.prepare('SELECT kind, state, actual_tokens, reserved_tokens FROM agent_budget_calls').all() as
+    const calls = db.prepare('SELECT kind, state, actual_tokens, reserved_tokens FROM agent_calls').all() as
       { kind: string; state: string; actual_tokens: number | null; reserved_tokens: number }[];
-    if (name === 'budget-unknown') assert.ok(calls.some(row => row.state === 'unknown' && row.actual_tokens === null));
-    assert.equal(effects, name === 'budget-cost' || name === 'budget-deadline' ? 0 : name === 'budget-loop' ? 3 : 1);
+    if (name === 'usage-unknown') assert.ok(calls.some(row => row.state === 'unknown' && row.actual_tokens === null));
+    assert.equal(effects, name === 'usage-loop' || name === 'usage-retry' ? 3 : name === 'usage-restart' ? 2 : 1);
     writeFileSync(join(directory, 'accounting.json'), JSON.stringify(calls, null, 2));
-    return { stopped: expected, effects, calls };
+    return { stopped: name === 'usage-loop' ? 'tool_call_loop_detected' : null, effects, calls };
   } finally { db.close(); }
 }
 

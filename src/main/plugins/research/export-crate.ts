@@ -79,7 +79,6 @@ export function buildExportCrate(repository: ResearchRepository, record: Researc
       environment: {hash: run.environment.hash, version: run.environment.version,
         packages: properties(Object.fromEntries(run.environment.packages.map(item => [item.name, item.version])))},
       parameters: properties(run.request.parameters), seed: run.request.engine === 'python' ? run.request.seed : null,
-      cost: {kind: 'unknown', reason: 'No monetary cost receipt recorded for this local execution.'}
     });
   }
   for (const figure of sources.figures) {
@@ -99,7 +98,6 @@ export function buildExportCrate(repository: ResearchRepository, record: Researc
           '@napi-rs/canvas': run.environment.rendererVersion, node: run.environment.nodeVersion})},
       parameters: properties(Object.fromEntries(Object.entries(run.request.figure).map(([name, value]) => [name, String(value)]))),
       seed: run.request.figure.seed,
-      cost: {kind: 'unknown', reason: 'No monetary cost receipt recorded for this local execution.'}
     });
   }
   const approvals: ResearchCrateInput['approvals'] = [{

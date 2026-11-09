@@ -14,7 +14,7 @@ evaluation/
   environments/ 本机 Python venv 与环境清单
   runs/         每轮独立工作区、数据库、轨迹和报告
   comparisons/  两轮对比报告
-  local/        本机 recipe、预算、incident、experiment 和未导入数据
+  local/        本机 recipe、请求配置、incident、experiment 和未导入数据
   .runtime/     构建、模型宿主与 native 临时状态
 ```
 
@@ -26,7 +26,7 @@ evaluation/
 
 | 套件 | 当前能力 | 证据边界 |
 |---|---|---|
-| roc-native | 94 项预算、权限、恢复、工具副作用等确定性检查 | harness 可靠性，非模型质量 |
+| roc-native | 94 项执行、权限、恢复、工具副作用等确定性检查 | harness 可靠性，非模型质量 |
 | qasper | 官方 v0.3 dev 文本数据、真实文件工具、答案/证据 F1 | Roc 文本适配子集，非官方全量榜单 |
 | scienceagentbench | verified 数据导入、本机 Python、真实执行授权、独立 grader 与五类自动校准 | 本地合成任务链路已验证；官方任务环境尚未导入 |
 
@@ -52,7 +52,7 @@ ROC_EVAL_DATASET=evaluation/datasets/qasper-6be4b447c84046b689e019c551f3e331e962
 # 无模型请求：验证真实文件工具、评分与归档
 pnpm harness:bench run --suite qasper --dataset "$ROC_EVAL_DATASET" --profile fast --fixture
 # 使用 Roc 默认模型：先小规模试跑
-pnpm harness:bench run --suite qasper --dataset "$ROC_EVAL_DATASET" --profile smoke --budget evaluation/budget.example.json
+pnpm harness:bench run --suite qasper --dataset "$ROC_EVAL_DATASET" --profile smoke --provider-options evaluation/provider-options.example.json
 ```
 
 未传 `--fixture` 的公共套件会调用所选模型。模型配置或钥匙串失败会封存 incomplete 报告，未完成题目保留在分母中。11 月 8 日记录曾出现默认模型缺少 credentialRef、另一模型在钥匙串可用性检查阶段超时；这是历史结果，当前可用性以重新运行 `doctor` 为准，无需在评测中复制密钥或配置第二套 provider。
@@ -64,18 +64,18 @@ pnpm harness:bench run --suite qasper --dataset "$ROC_EVAL_DATASET" --profile sm
 下面的独立 run/compare 入口保留，用于首次基线、一般诊断与 release 留出集复核：
 
 1. 更新前手动跑 native 和所需公共套件，保存输出目录作为 baseline。
-2. 更新后用相同数据、模型配置、预算、环境、profile 再跑，得到 candidate。
+2. 更新后用相同数据、模型配置、请求配置、环境、profile 再跑，得到 candidate。
 3. 分别 `inspect`，再 `compare`；查看总体差值、失败题和完整轨迹。
 4. 人工决定是否接受更新。没有 push、PR、定时或应用启动触发器。
 
 ```sh
-pnpm harness:bench run --suite qasper --dataset "$ROC_EVAL_DATASET" --profile full --budget evaluation/local/full-budget.json
+pnpm harness:bench run --suite qasper --dataset "$ROC_EVAL_DATASET" --profile full --provider-options evaluation/local/provider-options.json
 pnpm harness:bench inspect /absolute/baseline-run
 pnpm harness:bench inspect /absolute/candidate-run
 pnpm harness:bench compare /absolute/baseline-run /absolute/candidate-run
 ```
 
-`full-budget.json` 需由操作者按任务数量配置；示例只适合试跑。
+`provider-options.json` 可按任务所需的输入大小和超时配置。
 
 | Profile | 分区与题数 | 重复 | 用途 |
 |---|---|---|---|
@@ -86,15 +86,13 @@ pnpm harness:bench compare /absolute/baseline-run /absolute/candidate-run
 
 按 paper/repo 分组后固定 hash 划分 development/holdout，同组不跨分区。QASPER 共 281 篇论文、1005 题；233 题包含不能映射到文本段落的证据，明确排除，支持的 development 611 / holdout 161。报告记录全部未选和排除原因。公开数据的本地 holdout 不意味着模型未见过这些数据。
 
-比较要求数据、选择、重复、模型配置哈希、预算、评分代码、环境、split、完整 capability manifest 和实际请求的工具 schema 一致；harness 源码及 worker bundle 可变化。每个 trial 必须保留实际工具 schema 哈希，缺失时返回 `insufficient/tool_contract_evidence_missing`；两轮工具或权限不同、schema 不同均为 `incompatible`。旧记录不能通过补填字段升级为质量证据，需要重新运行。工具增删、参数或描述变化的消融实验需要单独设计协议，不能套用当前固定工具比较。lockfile 变化要求新基线。只对完整的真实模型运行、至少 5 个 cluster 且每题至少 3 次重复，计算 2000 次配对 cluster bootstrap 的 95% 区间。非劣界限为 -0.05；所有指标区间下界均不低于此值才判 non-inferior，上界仍低于该值判 regression，其余为 inconclusive。这是初始工程判据，尚未做统计功效校准。fixture、smoke、fast 不能生成质量通过结论。
+比较要求数据、选择、重复、模型配置哈希、请求配置、评分代码、环境、split、完整 capability manifest 和实际请求的工具 schema 一致；harness 源码及 worker bundle 可变化。每个 trial 必须保留实际工具 schema 哈希，缺失时返回 `insufficient/tool_contract_evidence_missing`；两轮工具或权限不同、schema 不同均为 `incompatible`。旧记录不能通过补填字段升级为质量证据，需要重新运行。工具增删、参数或描述变化的消融实验需要单独设计协议，不能套用当前固定工具比较。lockfile 变化要求新基线。只对完整的真实模型运行、至少 5 个 cluster 且每题至少 3 次重复，计算 2000 次配对 cluster bootstrap 的 95% 区间。非劣界限为 -0.05；所有指标区间下界均不低于此值才判 non-inferior，上界仍低于该值判 regression，其余为 inconclusive。这是初始工程判据，尚未做统计功效校准。fixture、smoke、fast 不能生成质量通过结论。
 
-## 模型与预算
+## 模型与请求配置
 
 实际请求通过 Roc 的 `LangChainModelFactory` 构造，复用已配置的模型、采样、推理参数及请求头，并请求最多 4096 输出 tokens；更低的模型配置上限仍生效。worker 的兼容协议字段不覆盖实际工厂配置。manifest 记录 provider/model ID、配置摘要和实际输出/上下文限制，不保存端点、请求头或密钥明文。
 
-[预算示例](budget.example.json) 不包含模型配置。默认每题 12 次、每轮 60 次请求，单请求 120 秒、单题 300 秒，单请求输入最多 256 KiB。请求发出前先 fsync 预算预留，无自动重试。运行前根据实际选题数 × 重复数计算最低请求数，若超过 `maxTotalRequests`，在打开模型宿主前以 `budget/request_budget_infeasible` 拒绝，并封存 `budgetPlan`、零次 trial 和 `not-dispatched` 费用状态。例如 full 选满 50 题时至少需要 150 次请求，默认 60 不可行；请明确配置预算或减小 profile。最低值按每 trial 一次请求计算，不保证多轮工具调用能完成；运行中的预算耗尽仍为 incomplete，不会被当成低质量答案，也不会自动增加预算。
-
-默认费用为 unknown。需要估算时，同时添加 `maxTotalEstimatedUsd` 与 `pricing: { version, inputPerMillion, outputPerMillion }`。金额是按自填版本价格和输入字节数估算的准入限制，不是供应商账单硬上限；请求数量有硬限制。失败/未知用量保留预算预留。模型 alias 漂移无法靠配置哈希完全检测。
+[请求配置示例](provider-options.example.json) 仅配置输入大小和超时：单请求输入最多 256 KiB、单请求 120 秒、单题 300 秒。请求发出前先持久化调用事件，无自动重试；没有累计请求/token 配额、价格表或费用统计。模型 alias 漂移无法靠配置哈希完全检测。
 
 ## Science 本机环境
 
@@ -132,7 +130,7 @@ pnpm harness:bench run --suite scienceagentbench --dataset /path/from-prepare --
 
 ## 报告与故障定位
 
-每轮有 `manifest.json`（源码/数据/选择/模型/环境）、`events.jsonl`（预算/请求/任务事件）、`trials.json`、`summary.json`、`report.md` 和 `seal.json`。每题保留请求响应、工具事件、`tool-schema.json`（实际工具定义及哈希）、checkpoint、SQLite、最终输出、独立 grade、进程退出与清理记录。模型请求在运行时按当前 scope 的 manifest 过滤；宿主在转发前再次检查固定工具集合、重复项与 schema 结构，并拒绝 trial 内 schema 漂移。runner 拒绝不同 trial 之间的 schema 漂移；已发出请求的 agent 失败也保留 schema 哈希。native 原始普通文件归档；隔离测试故意产生的符号链接仅记录路径/目标，不跟随目标。
+每轮有 `manifest.json`（源码/数据/选择/模型/环境）、`events.jsonl`（请求/任务事件）、`trials.json`、`summary.json`、`report.md` 和 `seal.json`。每题保留请求响应、工具事件、`tool-schema.json`（实际工具定义及哈希）、checkpoint、SQLite、最终输出、独立 grade、进程退出与清理记录。模型请求在运行时按当前 scope 的 manifest 过滤；宿主在转发前再次检查固定工具集合、重复项与 schema 结构，并拒绝 trial 内 schema 漂移。runner 拒绝不同 trial 之间的 schema 漂移；已发出请求的 agent 失败也保留 schema 哈希。native 原始普通文件归档；隔离测试故意产生的符号链接仅记录路径/目标，不跟随目标。
 
 证据文件独占创建，事件 fsync，seal 保存文件清单哈希，`inspect`/`compare` 重新核验。seal 能检测修改，不是数字签名或不可改写存储。worker 轨迹超 32 MiB 显式 invalid；不会静默截断后通过。原始数据/轨迹可能含任务内容，保存在本地且不自动上传。
 
@@ -141,7 +139,7 @@ pnpm harness:bench run --suite scienceagentbench --dataset /path/from-prepare --
 | agent：错误答案、无效引用、缺产物、任务超时 | 留在质量分母中 |
 | harness/state：运行合同失败、源码变化 | incomplete |
 | data/environment：哈希错误、环境/凭据不可用 | incomplete，不算 agent 错误 |
-| provider/budget：API 失败、预算耗尽 | 停止后续任务，保留已预留和未完成分母 |
+| provider：API 失败 | 停止后续任务，保留未完成分母 |
 | verifier/policy/infrastructure：评分器、隔离、证据、清理失败 | incomplete，不能通过质量比较 |
 | operator：SIGINT/SIGTERM | 清理并封存 incomplete；SIGKILL 可能留下无 seal 目录 |
 

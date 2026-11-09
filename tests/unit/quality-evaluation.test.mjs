@@ -116,15 +116,14 @@ test('paired quality statistics keep the pilot uncertain and reject malformed pa
     family: task.family,
     clusterId: task.clusterId,
     repeatIndex,
-    baseline: { status: 'success', score: 0.6, latencyMs: 100, costUsd: null },
-    candidate: { status: 'success', score: 0.8, latencyMs: 120, costUsd: null }
+    baseline: { status: 'success', score: 0.6, latencyMs: 100, },
+    candidate: { status: 'success', score: 0.8, latencyMs: 120, }
   })));
   const summary = quality.summarizePairedQualityTrials(trials);
   assert.equal(summary.taskCount, 16);
   assert.equal(summary.evidenceStatus, 'insufficient');
   assert.equal(summary.conclusion, 'uncertain');
   assert.equal(summary.stopReason, 'independent_frozen_dataset_required');
-  assert.equal(summary.costStatus, 'unknown');
   assert.equal(summary.familyComparisons, 'exploratory-unadjusted');
   assert.throws(() => quality.summarizePairedQualityTrials([...trials, trials[0]]), /quality_trial_duplicate_pair/u);
   assert.throws(() => quality.summarizePairedQualityTrials(trials.map((trial, index) => index === 0
@@ -146,8 +145,8 @@ function buildFullTrials(candidateScoreForFamily = () => 0.8) {
         family,
         clusterId,
         repeatIndex,
-        baseline: { status: 'success', score: 0.5, latencyMs: 100 + repeatIndex, costUsd: 0 },
-        candidate: { status: 'success', score: candidateScoreForFamily(family), latencyMs: 90 + repeatIndex, costUsd: 0 }
+        baseline: { status: 'success', score: 0.5, latencyMs: 100 + repeatIndex, },
+        candidate: { status: 'success', score: candidateScoreForFamily(family), latencyMs: 90 + repeatIndex, }
       }));
     }).flat();
   });
@@ -158,8 +157,6 @@ test('statistics cannot infer scientific gains from generated full-size trial co
   assert.equal(gain.taskCount, 200);
   assert.equal(gain.evidenceStatus, 'insufficient');
   assert.equal(gain.conclusion, 'uncertain');
-  assert.equal(gain.costStatus, 'known');
-  assert.equal(gain.baselineCostUsd, 0);
 
   const regression = quality.summarizePairedQualityTrials(
     buildFullTrials(family => family === 'long-memory' ? 0.4 : 0.8),
@@ -169,12 +166,12 @@ test('statistics cannot infer scientific gains from generated full-size trial co
   assert.equal(regression.conclusion, 'uncertain');
 });
 
-test('locked protocol binds model and budget conditions, rejects incomplete data, and requires L3 rollback', () => {
+test('locked protocol binds model and execution conditions, rejects incomplete data, and requires L3 rollback', () => {
   const draft = quality.createQualityProtocolDraft(dataset, 'unit-quality-contract');
   const input = {
     executionMode: 'fixture',
     authorizationLevel: 'L1',
-    pricingVersion: 'fixture-v1', maxRequestsPerTask: 1, maxRequestCostMicrousd: 10,
+
     temperature: 0, isolationHash: 'd'.repeat(64),
     providerId: 'provider-test',
     baselineModelId: 'baseline-v1',
@@ -185,8 +182,8 @@ test('locked protocol binds model and budget conditions, rejects incomplete data
     promptSetHash: 'b'.repeat(64),
     environmentHash: 'c'.repeat(64),
     taskTimeoutMs: 10000,
-    maxTotalCostUsd: 1,
-    maxPerTaskCostUsd: 0.01,
+
+
     userAuthorized: true,
     approvalReference: 'approval-test-001'
   };
@@ -194,10 +191,10 @@ test('locked protocol binds model and budget conditions, rejects incomplete data
   assert.equal(locked.status, 'locked');
   assert.match(locked.lockHash, /^[a-f0-9]{64}$/u);
   assert.doesNotThrow(() => quality.assertQualityProtocolAuthorized(dataset, locked));
-  assert.throws(() => quality.assertQualityProtocolAuthorized(dataset, { ...locked, lock: { ...locked.lock, maxTotalCostUsd: 2 } }), /quality_protocol_lock_tampered/u);
+  assert.throws(() => quality.assertQualityProtocolAuthorized(dataset, { ...locked, lock: { ...locked.lock, temperature: 0.5 } }), /quality_protocol_lock_tampered/u);
   assert.throws(() => quality.lockQualityProtocol(dataset, draft, { ...input, userAuthorized: false }), /quality_protocol_user_authorization_required/u);
   assert.throws(() => quality.lockQualityProtocol(dataset, draft, { ...input, authorizationLevel: 'L3' }), /quality_protocol_fixture_level_invalid/u);
-  assert.throws(() => quality.lockQualityProtocol(dataset, draft, { ...input, maxPerTaskCostUsd: 2 }), /quality_protocol_budget_or_timeout_invalid/u);
+  assert.throws(() => quality.lockQualityProtocol(dataset, draft, { ...input, taskTimeoutMs: 0 }), /quality_protocol_timeout_invalid/u);
   assert.throws(() => quality.lockQualityProtocol(dataset, draft, { ...input, executionMode: 'full' }), /quality_protocol_independent_data_required/u);
 
 
@@ -223,6 +220,5 @@ test('L1 contract stays explicit about fixture-only evidence and no external cal
   assert.equal(report.evidence, 'deterministic-fixture-contract-only');
   assert.equal(report.modelCalls, 0);
   assert.equal(report.externalCalls, 0);
-  assert.equal(report.costUsd, null);
-  assert.equal(report.qualityClaim, 'contract-only; no model-quality or provider-cost inference');
+  assert.equal(report.qualityClaim, 'contract-only; no model-quality inference');
 });

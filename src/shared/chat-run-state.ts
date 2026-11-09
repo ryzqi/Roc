@@ -3,7 +3,7 @@ import type {
   ChatPendingInterrupt,
   ChatRunEvent,
   ChatTodoItem,
-  RunBudgetStatus,
+  RunUsageStatus,
   RocHookRunSummary,
   SubagentEventPayload,
   SubagentIdentity,
@@ -80,7 +80,7 @@ export type ChatRunState = {
   errorMessage: string | null;
   recoveryAttempt: number | null;
   retryable: boolean;
-  budget: RunBudgetStatus | null;
+  usage: RunUsageStatus | null;
   pendingInterrupts: ChatPendingInterrupt[];
   resumeBusy: boolean;
   todos: ChatTodoItem[];
@@ -105,7 +105,7 @@ export function createEmptyChatRunState(): ChatRunState {
     errorMessage: null,
     recoveryAttempt: null,
     retryable: false,
-    budget: null,
+    usage: null,
     pendingInterrupts: [],
     resumeBusy: false,
     todos: [],
@@ -132,7 +132,7 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
       errorMessage: null,
       recoveryAttempt: null,
       retryable: false,
-      budget: null,
+      usage: null,
       pendingInterrupts: [],
       resumeBusy: false,
       todos: [],
@@ -144,10 +144,10 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
     return state;
   }
 
-  if (event.type === 'run_budget') {
+  if (event.type === 'run_usage') {
     return {
       ...state,
-      budget: event.budget
+      usage: event.usage
     };
   }
 
@@ -175,22 +175,6 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
       activityBlocks: upsertHookActivityBlock(state.activityBlocks, event.hook)
     };
   }
-
-  if (event.type === 'task_acceptance') {
-    const block: Extract<ChatRunActivityBlock, { kind: 'task_acceptance' }> = {
-      id: `task-acceptance:${event.runId}`,
-      kind: 'task_acceptance',
-      report: event.report
-    };
-    const existing = state.activityBlocks.findIndex((item) => item.kind === 'task_acceptance');
-    return {
-      ...state,
-      activityBlocks: existing < 0
-        ? [...state.activityBlocks, block]
-        : state.activityBlocks.map((item, index) => index === existing ? block : item)
-    };
-  }
-
   if (event.type === 'run_completed') {
     const completedEvent = event;
     return {

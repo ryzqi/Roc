@@ -126,8 +126,8 @@ Crossref 保存 type、license 的 URL/content-version 与 update-to 的目标�
 discovery 输出结构化 searchPlan。researchQuestion 必须逐字等于该阶段已保存的
 instruction，这是原始研究指令快照，不冒充未经保留的原始聊天逐字记录。
 refinedQuestion、keywords、synonyms、domain、excludedTerms 和查询式是模型建议。
-queries 最多 3 组，固定 query、sources、limit、maxPages 和需要的年份范围；
-总候选上限不能超过该任务的 60 条工具预算。排除项是纳入筛选标准；只有明确
+queries 固定 query、sources、limit、maxPages 和需要的年份范围；
+不设置跨查询或跨调用的累计预算上限。排除项是纳入筛选标准；只有明确
 写入具体查询式的条件才由来源执行，不声称 API 自动理解所有计划字段。
 
 discovery 现在使用现有人工闸门。助手审批卡展示原始指令、建议问题、关键词/

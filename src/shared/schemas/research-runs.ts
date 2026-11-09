@@ -23,8 +23,8 @@ export const researchStagePolicySchema = z.object({
   stage: researchStageSchema,
   tier: z.enum(['fast', 'balanced', 'deep']),
   model: researchModelSelectionSchema,
-  maxSteps: z.number().int().min(2).max(100),
-  timeoutMs: z.number().int().min(1000).max(600000)
+  maxSteps: z.number().int().min(2).max(100).optional(),
+  timeoutMs: z.number().int().min(1000).max(600000).optional()
 }).strict();
 
 export const researchStagePoliciesRequestSchema = z.object({ projectId: id }).strict();

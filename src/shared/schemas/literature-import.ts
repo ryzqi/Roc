@@ -20,7 +20,6 @@ export const literatureSearchStrategyReceiptSchema = z.object({
   approvedAt: z.string(), researchQuestion: z.string().min(1), planVersion: z.number().int().positive(),
   queryId: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/u),
   perspectiveIds: z.array(z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/u)).min(1).max(6),
-  maxRequests: z.number().int().min(1).max(54)
 }).strict();
 export const literatureRecordedStrategySchema = z.union([
   literatureSearchStrategyReceiptSchema,

@@ -1,3 +1,5 @@
+import {removeResearchAccounting} from './remove-research-accounting';
+import {removeExecutionAccounting} from './remove-execution-accounting';
 import {researchWikiSchema} from './wiki-schema';
 import {backfillStructuredChunks} from '../plugins/research/knowledge-chunks';
 import {backfillKnowledgeKeywordsV1} from '../plugins/research/knowledge-keywords';
@@ -984,6 +986,37 @@ ALTER TABLE agent_budget_calls DROP COLUMN project_id;
 UPDATE agent_runs SET budget_stop_reason = NULL
 WHERE budget_stop_reason GLOB 'research_project_*' OR budget_stop_reason = 'run_budget_project_snapshot_missing';
 `});
+
+agentMigrations.push({version: 25, name: 'remove_execution_accounting', sql: `
+ALTER TABLE agent_budget_calls RENAME TO agent_calls;
+ALTER TABLE agent_budget_call_observations RENAME TO agent_call_observations;
+DROP TRIGGER agent_budget_call_observations_immutable;
+CREATE TRIGGER agent_call_observations_immutable BEFORE UPDATE ON agent_call_observations
+BEGIN SELECT RAISE(ABORT,'agent_call_observations_immutable'); END;
+DROP INDEX idx_agent_budget_calls_run_kind_state;
+DROP INDEX idx_agent_budget_calls_task;
+CREATE INDEX idx_agent_calls_run_kind_state ON agent_calls(run_id,kind,state);
+CREATE INDEX idx_agent_calls_task ON agent_calls(task_id,kind,state);
+ALTER TABLE agent_calls DROP COLUMN reserved_cost_microusd;
+ALTER TABLE agent_calls DROP COLUMN actual_cost_microusd;
+ALTER TABLE agent_calls DROP COLUMN pricing_version;
+ALTER TABLE agent_runs DROP COLUMN budget_stop_reason;
+DROP TABLE research_task_budgets;
+CREATE TABLE agent_pilot_runs_current (
+  run_id TEXT PRIMARY KEY REFERENCES agent_runs(id) ON DELETE CASCADE,
+  task_id TEXT NOT NULL, decision TEXT NOT NULL, disclosure TEXT NOT NULL,
+  profile TEXT CHECK(profile IN ('read-only','low-side-effect')),
+  bucket INTEGER NOT NULL CHECK(bucket >= 0 AND bucket < 100),
+  state TEXT NOT NULL CHECK(state IN ('active','finished','cancelled')),
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+INSERT INTO agent_pilot_runs_current
+SELECT run_id,task_id,decision,'Pilot ' || COALESCE(profile,'read-only') || ': restricted capabilities, user rollback available.',
+  profile,bucket,CASE WHEN state='exhausted' THEN 'finished' ELSE state END,created_at,updated_at FROM agent_pilot_runs;
+DROP TABLE agent_pilot_runs;
+ALTER TABLE agent_pilot_runs_current RENAME TO agent_pilot_runs;
+CREATE INDEX idx_agent_pilot_runs_created ON agent_pilot_runs(created_at DESC);
+`, data: {dataVersion: 'execution-accounting-removal-v1', migrate: removeExecutionAccounting}});
 
 export const memoryMigrations: RocDatabaseMigration[] = [
   {
@@ -2955,3 +2988,11 @@ function applySchema(
   }
   applyDatabaseMigrations(db, { dbName, migrations, now });
 }
+
+researchMigrations.push({version: 71, name: 'remove_search_plan_accounting', sql: `
+CREATE TABLE research_execution_input_migrations (
+ execution_id TEXT PRIMARY KEY,
+ previous_json TEXT NOT NULL CHECK(json_valid(previous_json)),
+ current_json TEXT NOT NULL CHECK(json_valid(current_json))
+);
+`, data: {dataVersion: 'search-plan-accounting-removal-v1', migrate: removeResearchAccounting}});

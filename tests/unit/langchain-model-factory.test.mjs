@@ -22,7 +22,7 @@ test('OpenAI model options reach the SDK and preserve explicit zero and false va
     temperature: 0, topP: 0.5, presencePenalty: 0, frequencyPenalty: 0.2,
     seed: 0, parallelToolCalls: false, streamUsage: false,
     stop: ['END'], reasoning: { effort: 'low' }, modelKwargs: { custom_field: 'fixture' },
-    contextBudgetTokens: 8192, maxTokens: 1024
+    contextWindowTokens: 8192, maxTokens: 1024
   });
   const { model, runtime } = await factory.createModelForProvider(config, 'fixture-model');
   const params = model.invocationParams({});
@@ -36,7 +36,7 @@ test('OpenAI model options reach the SDK and preserve explicit zero and false va
   assert.equal(params.custom_field, 'fixture');
   assert.equal(model.streamUsage, false);
   assert.deepEqual(model.reasoning, { effort: 'low' });
-  assert.equal(runtime.contextBudgetTokens, 8192);
+  assert.equal(runtime.contextWindowTokens, 8192);
   assert.equal(runtime.maxOutputTokens, 1024);
 });
 
@@ -63,7 +63,7 @@ test('llama.cpp keeps sampling fallbacks, explicit overrides and forced streamin
   const config = provider('llama_cpp', {
     temperature: 0, topP: 0.8, presencePenalty: 0,
     samplingProfileOverrides: { temperature: 0.9, topP: 0.95, topK: 20, minP: 0.05, repeatPenalty: 1.2 },
-    contextBudgetTokens: 8192, maxTokens: 2048
+    contextWindowTokens: 8192, maxTokens: 2048
   });
   config.credentialRef = null;
   const { model, runtime } = await factory.createModelForProvider(config, 'fixture-model', { streaming: false, maxOutputTokens: 512 });
@@ -76,13 +76,11 @@ test('llama.cpp keeps sampling fallbacks, explicit overrides and forced streamin
   assert.deepEqual(runtime.modelKwargs, { cache_prompt: true, top_k: 20, min_p: 0.05, repeat_penalty: 1.2 });
 });
 
-test('Anthropic keeps thinking and stop parameters and rejects invalid thinking budgets', async () => {
-  const options = { maxTokens: 4096, topK: 20, stop: ['END'], anthropicThinking: { mode: 'enabled', budgetTokens: 2048 } };
+test('Anthropic keeps adaptive thinking and stop parameters', async () => {
+  const options = { maxTokens: 4096, topK: 20, stop: ['END'], anthropicThinking: { mode: 'adaptive' } };
   const { model } = await factory.createModelForProvider(provider('anthropic_compatible', options), 'fixture-model');
-  assert.deepEqual(model.thinking, { type: 'enabled', budget_tokens: 2048 });
+  assert.deepEqual(model.thinking, { type: 'adaptive' });
   assert.deepEqual(model.stopSequences, ['END']);
-  assert.equal(model.topK, 20);
-  await assert.rejects(factory.createModelForProvider(provider('anthropic_compatible', { ...options, maxTokens: 1024 }), 'fixture-model'));
 });
 
 test('unsupported providers remain rejected', async () => {

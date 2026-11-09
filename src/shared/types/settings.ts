@@ -47,7 +47,6 @@ export type ProvidersConfig = Omit<ParsedProvidersConfig, 'schemaVersion' | 'pro
 };
 export type McpServersConfig = z.infer<typeof mcpServersConfigSchema>;
 
-export const anthropicThinkingMinBudgetTokens = 1024;
 
 type ParsedSettingsDocument = z.infer<typeof settingsDocumentSchema>;
 export type RocSettingsDocument = Omit<ParsedSettingsDocument, 'providers'> & { providers: ProvidersConfig };

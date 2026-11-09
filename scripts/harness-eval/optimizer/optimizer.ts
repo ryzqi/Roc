@@ -7,7 +7,7 @@ import {
   type DatasetReader, type OptimizerScenario, type PairedObservation
 } from './dataset';
 import { executeScenario, type ScenarioOutcome } from './eval-adapter';
-import { OptimizerCostLedger, type CallReservation } from './cost-ledger';
+import { OptimizerInvocationJournal, type CallReservation } from './invocation-journal';
 import { ExperimentManifestStore, manifestStages, type ExperimentManifest } from './manifest';
 import {
   contentHash, materialiseSurface, normalizeTrajectory, serializeTrajectory, surfaceHash,
@@ -53,7 +53,7 @@ type SurfaceProbe = {
   outcomes: ScenarioOutcome[];
   timings: Record<string, number>;
   durationMs: number;
-  totals: ReturnType<OptimizerCostLedger['totals']>;
+  totals: ReturnType<OptimizerInvocationJournal['totals']>;
 };
 
 /**
@@ -67,7 +67,6 @@ function probeSurface(input: {
   stage: string;
   surface: HarnessSurface;
   scenarios: readonly OptimizerScenario[];
-  maxMicrousd?: number | null;
 }): SurfaceProbe {
   const dir = join(input.root, input.label);
   mkdirSync(dir, { recursive: true });
@@ -78,7 +77,7 @@ function probeSurface(input: {
   const started = performance.now();
   const db = new Database(databasePath);
   try {
-    const ledger = new OptimizerCostLedger(db);
+    const ledger = new OptimizerInvocationJournal(db);
     ledger.createExperiment(input.experimentId, contentHash({ experimentId: input.experimentId, label: input.label, revision }));
     const outcomes: ScenarioOutcome[] = [];
     const timings: Record<string, number> = {};
@@ -86,7 +85,7 @@ function probeSurface(input: {
       ledger.record({
         experimentId: input.experimentId, stage: input.stage, callId: `${scenario.id}:model`, kind: 'model',
         tokens: 80, inputHash: contentHash({ scenario: scenario.id, revision }),
-        maxMicrousd: input.maxMicrousd ?? null, actualTokens: 80
+        actualTokens: 80
       });
       const scenarioStarted = performance.now();
       const outcome = executeScenario(input.surface, scenario, { workspace, allowExternalEffects: false });
@@ -128,13 +127,12 @@ type AdoptRecord = {
     ciLow: number | null; ciHigh: number | null;
     intervalMethod: 'cluster-bootstrap-percentile' | null;
     clusters: number; scenarios: number;
-    baseCostMicrousd: number; candidateCostMicrousd: number;
     candidateVerifierFailures: number; candidateArtifacts: number;
     selectorWinner: 'A' | 'B' | null;
   };
 };
 
-type AnonStats = { mean: number | null; costMicrousd: number; verifierFailures: number; artifacts: number };
+type AnonStats = { mean: number | null; verifierFailures: number; artifacts: number };
 
 /** Anonymous selector: it sees only A/B statistics, never which side is base or candidate. */
 function selectAnonymous(entries: { A: AnonStats; B: AnonStats }): 'A' | 'B' | null {
@@ -153,32 +151,27 @@ function adoptCandidate(input: {
   base: SurfaceProbe;
   candidate: SurfaceProbe;
   observations: PairedObservation[];
-  costBudgetMicrousd: number;
-  budgetStopped?: boolean;
 }): AdoptRecord {
-  const comparisonRan = input.observations.length > 0 && input.budgetStopped !== true;
+  const comparisonRan = input.observations.length > 0;
   const summary = comparisonRan
     ? pairedClusterSummary(input.observations, { seed: Number.parseInt(input.experimentId.replace(/\D/gu, '').slice(0, 8) || '1', 10) })
     : null;
   const candidateArtifacts = input.candidate.outcomes.reduce((total, outcome) => total + outcome.artifactRefs.length, 0);
   const candidateVerifierFailures = input.candidate.outcomes.filter(outcome => !outcome.verifier.ok).length;
-  const baseCost = input.base.totals.costMicrousd;
-  const candidateCost = input.candidate.totals.costMicrousd;
   let winner: 'A' | 'B' | null = null;
   let candidateWon = false;
   if (summary !== null) {
     // Anonymise before selection: labels A/B are assigned by content hash, and the selector only
     // receives the statistics. The direction is re-attached afterwards.
     const swap = Number.parseInt(contentHash(input.candidate.surfaceHash).slice(0, 2), 16) % 2 === 1;
-    const candidateStats: AnonStats = { mean: summary.candidateMean, costMicrousd: candidateCost,
+    const candidateStats: AnonStats = { mean: summary.candidateMean,
       verifierFailures: candidateVerifierFailures, artifacts: candidateArtifacts };
-    const baseStats: AnonStats = { mean: summary.baseMean, costMicrousd: baseCost,
+    const baseStats: AnonStats = { mean: summary.baseMean,
       verifierFailures: input.base.outcomes.filter(outcome => !outcome.verifier.ok).length,
       artifacts: input.base.outcomes.reduce((total, outcome) => total + outcome.artifactRefs.length, 0) };
     const anonymised = swap ? { A: candidateStats, B: baseStats } : { A: baseStats, B: candidateStats };
     winner = selectAnonymous(anonymised);
-    candidateWon = winner !== null && anonymised[winner].mean === summary.candidateMean
-      && anonymised[winner].costMicrousd === candidateCost;
+    candidateWon = winner !== null && anonymised[winner].mean === summary.candidateMean;
   }
 
   const record = (adopted: 'base' | 'candidate', reason: string, rationale: string): AdoptRecord => ({
@@ -191,13 +184,9 @@ function adoptCandidate(input: {
       meanDifference: summary?.meanDifference ?? null, ciLow: summary?.ciLow ?? null, ciHigh: summary?.ciHigh ?? null,
       intervalMethod: summary === null ? null : summary.intervalMethod,
       clusters: summary?.clusters ?? 0, scenarios: summary?.scenarios ?? 0,
-      baseCostMicrousd: baseCost, candidateCostMicrousd: candidateCost,
       candidateVerifierFailures, candidateArtifacts, selectorWinner: winner
     }
   });
-  if (input.budgetStopped === true || candidateCost > input.costBudgetMicrousd) {
-    return record('base', 'candidate_cost_over_budget', 'Candidate probe exceeded the experiment cost budget before a paired comparison.');
-  }
   if (candidateArtifacts === 0) {
     return record('base', 'candidate_missing_artifact', 'Candidate produced no artifact; the base surface is retained.');
   }
@@ -225,11 +214,6 @@ function listFiles(root: string): string[] {
     .map(entry => join(entry.parentPath, entry.name));
 }
 
-function readTotals(databasePath: string, experimentId: string): ReturnType<OptimizerCostLedger['totals']> {
-  const db = new Database(databasePath, { readonly: true });
-  try { return new OptimizerCostLedger(db).totals(experimentId); } finally { db.close(); }
-}
-
 const devScenarios = (limit?: number): OptimizerScenario[] => {
   const scenarios = readSplit(buildDataset(), 'dev', 'rewriter');
   return limit === undefined ? scenarios : scenarios.slice(0, limit);
@@ -255,7 +239,7 @@ export async function verifyOptimizer(name: string, directory: string): Promise<
     'optimizer-isolation': () => verifyIsolation(base, directory),
     'optimizer-adopt': () => verifyAdopt(base, directory),
     'optimizer-dataset': () => verifyDataset(base, directory),
-    'optimizer-cost-manifest': () => verifyCostManifest(directory)
+    'optimizer-invocation-manifest': () => verifyInvocationManifest(directory)
   };
   const run = cases[name];
   if (run === undefined) throw new Error(`unsupported_optimizer_case:${name}`);
@@ -276,7 +260,7 @@ function verifySurface(base: HarnessSurface, directory: string): Record<string, 
 
   const rejected: { proposal: unknown; pattern: RegExp }[] = [
     { proposal: proposal('forbidden-permission', [{ path: 'components.permissions.tools', value: 'all' }]), pattern: /forbidden_surface/u },
-    { proposal: proposal('forbidden-budget', [{ path: 'components.budget.maxTokens', value: '1' }]), pattern: /forbidden_surface/u },
+    { proposal: proposal('forbidden-budget', [{ path: 'components.permissions.shell', value: '1' }]), pattern: /forbidden_surface/u },
     { proposal: proposal('forbidden-scorer', [{ path: 'components.scorer.rubric', value: 'x' }]), pattern: /forbidden_surface/u },
     { proposal: proposal('forbidden-verifier', [{ path: 'components.verifier.strict', value: 'x' }]), pattern: /forbidden_surface/u },
     { proposal: proposal('absolute-path', [{ path: 'components.prompt.role', value: '/etc/passwd' }]), pattern: /unsafe_value/u },
@@ -341,23 +325,23 @@ function verifyIsolation(base: HarnessSurface, directory: string): Record<string
   assert.deepEqual(unexpectedWrites, [], 'every created file must stay inside a candidate directory');
   assert.equal(contentHash(listFiles(outside).map(file => readFileSync(file, 'utf8'))), outsideBefore);
   // Each ledger only contains its own stage; the split is real, not just a token comparison.
-  const baseStages = new Set(new OptimizerCostLedger(new Database(baseProbe.databasePath, { readonly: true }))
+  const baseStages = new Set(new OptimizerInvocationJournal(new Database(baseProbe.databasePath, { readonly: true }))
     .report(experimentId).map(row => row.stage));
-  const candidateStages = new Set(new OptimizerCostLedger(new Database(candidateProbe.databasePath, { readonly: true }))
+  const candidateStages = new Set(new OptimizerInvocationJournal(new Database(candidateProbe.databasePath, { readonly: true }))
     .report(experimentId).map(row => row.stage));
   assert.deepEqual([...baseStages], ['probe-base']);
   assert.deepEqual([...candidateStages], ['probe-candidate']);
 
-  // An invalid proposal is retried at most once with a budgeted call, then falls back to base.
+  // An invalid proposal is retried at most once with a recorded call, then falls back to base.
   const retryRoot = join(directory, 'retry');
   mkdirSync(retryRoot, { recursive: true });
   const db = new Database(join(retryRoot, 'optimizer.sqlite'));
   try {
-    const ledger = new OptimizerCostLedger(db);
+    const ledger = new OptimizerInvocationJournal(db);
     ledger.createExperiment('retry', contentHash('retry'));
     const rejected: string[] = [];
     let adopted = base;
-    const attempted = proposal('invalid-attempt', [{ path: 'components.budget.maxTokens', value: '1' }]);
+    const attempted = proposal('invalid-attempt', [{ path: 'components.permissions.shell', value: '1' }]);
     for (let attempt = 0; attempt < 2; attempt++) {
       ledger.record({
         experimentId: 'retry', stage: 'propose', callId: `propose-${attempt + 1}`,
@@ -382,33 +366,17 @@ function verifyIsolation(base: HarnessSurface, directory: string): Record<string
 
 function verifyAdopt(base: HarnessSurface, directory: string): Record<string, unknown> {
   const scenarios = devScenarios();
-  const budget = 100_000;
   const improved = materialise(base, improvedEdits, 'improved');
   const regression = materialise(base, [{ path: 'components.guidance.citation-check', value: 'skip-citations' }], 'regression');
   const missingArtifact = materialise(base, [{ path: 'components.guidance.evidence', value: 'skip-artifact' }], 'no-artifact');
   const neutral = materialise(base, [{ path: 'components.skill.flow', value: 'search-evidence-compose-v2' }], 'neutral');
 
-  const runPair = (experimentId: string, candidate: HarnessSurface, options: { candidateBudget?: number } = {}) => {
+  const runPair = (experimentId: string, candidate: HarnessSurface) => {
     const root = join(directory, experimentId);
     const baseProbe = probeSurface({ root, experimentId, label: 'base', stage: 'probe-base', surface: base, scenarios });
-    let candidateProbe: SurfaceProbe | null = null;
-    let budgetStopped = false;
-    try {
-      candidateProbe = probeSurface({ root, experimentId, label: 'candidate', stage: 'probe-candidate',
-        surface: candidate, scenarios, maxMicrousd: options.candidateBudget ?? null });
-    } catch (error) {
-      assert.match(String(error), /optimizer_budget_exhausted/u);
-      budgetStopped = true;
-    }
-    const resolved = candidateProbe ?? {
-      label: 'candidate', surfaceHash: surfaceHash(candidate),
-      workspace: join(root, 'candidate', 'workspace'), databasePath: join(root, 'candidate', 'optimizer.sqlite'),
-      credentialScope: { id: 'fixture-credential:stopped', workspace: join(root, 'candidate', 'workspace'), externalProviders: [] },
-      outcomes: [], timings: {}, durationMs: 0, totals: readTotals(join(root, 'candidate', 'optimizer.sqlite'), experimentId)
-    };
-    const paired = candidateProbe === null ? [] : observations(baseProbe, candidateProbe);
-    return { record: adoptCandidate({ experimentId, base: baseProbe, candidate: resolved, observations: paired,
-      costBudgetMicrousd: budget, budgetStopped }), baseProbe, candidateProbe: resolved };
+    const candidateProbe = probeSurface({root, experimentId, label: 'candidate', stage: 'probe-candidate', surface: candidate, scenarios});
+    return {record: adoptCandidate({experimentId, base: baseProbe, candidate: candidateProbe,
+      observations: observations(baseProbe, candidateProbe)}), baseProbe, candidateProbe};
   };
 
   const gain = runPair('adopt-gain', improved);
@@ -427,26 +395,19 @@ function verifyAdopt(base: HarnessSurface, directory: string): Record<string, un
   assert.equal(empty.record.adopted, 'base');
   assert.equal(empty.record.reason, 'candidate_missing_artifact');
 
-  const expensive = runPair('adopt-cost', improved, { candidateBudget: 100 });
-  assert.equal(expensive.record.adopted, 'base');
-  assert.equal(expensive.record.reason, 'candidate_cost_over_budget');
-  assert.equal(expensive.record.evidence.comparison, 'not_run');
-  assert.equal(expensive.record.evidence.baseMean, null);
-  assert.equal(expensive.record.evidence.ciLow, null);
-
   const tie = runPair('adopt-tie', neutral);
   assert.equal(tie.record.adopted, 'base');
   assert.equal(tie.record.reason, 'selector_inconclusive');
 
-  for (const result of [gain, failed, empty, expensive, tie]) {
+  for (const result of [gain, failed, empty, tie]) {
     assert.ok(result.record.rationale.length > 0);
     assert.equal(result.record.baseSurfaceHash, surfaceHash(base));
   }
-  writeFileSync(join(directory, 'adopt-records.json'), JSON.stringify([gain, failed, empty, expensive, tie]
+  writeFileSync(join(directory, 'adopt-records.json'), JSON.stringify([gain, failed, empty, tie]
     .map(result => result.record), null, 2));
   return {
     adopted: gain.record.adopted,
-    reasons: [gain, failed, empty, expensive, tie].map(result => result.record.reason),
+    reasons: [gain, failed, empty, tie].map(result => result.record.reason),
     selector: 'anonymous-A/B-stats', finalsOnlyDelivery: false,
     evidence: gain.record.evidence
   };
@@ -531,30 +492,30 @@ function verifyDataset(base: HarnessSurface, directory: string): Record<string, 
     repetitionsPerScenario: 1, gain, loss, ablations: ablations.length };
 }
 
-async function verifyCostManifest(directory: string): Promise<Record<string, unknown>> {
+async function verifyInvocationManifest(directory: string): Promise<Record<string, unknown>> {
   const root = join(directory, 'manifest');
   mkdirSync(root, { recursive: true });
   const manifestPath = join(root, 'manifest.json');
   const databasePath = join(root, 'optimizer.sqlite');
-  const experimentId = 'cost-manifest';
+  const experimentId = 'invocation-manifest';
   const dataset = freezeDataset(buildDataset()).dataset;
   const effects: Record<string, number> = {};
   const touch = (stage: string): void => { effects[stage] = (effects[stage] ?? 0) + 1; };
 
   const store = new ExperimentManifestStore(manifestPath);
   let db = new Database(databasePath);
-  let ledger = new OptimizerCostLedger(db);
+  let ledger = new OptimizerInvocationJournal(db);
   const manifest = store.create({ experimentId, datasetHash: contentHash(dataset.scenarios),
     baseSurfaceHash: surfaceHash(baseSurface()) });
   ledger.createExperiment(experimentId, contentHash(manifest));
   await store.runStage('dataset', () => { touch('dataset'); return { scenarios: dataset.scenarios.length }; });
-  await store.runStage('propose', () => { touch('propose'); return { proposalId: 'cost-manifest' }; });
+  await store.runStage('propose', () => { touch('propose'); return { proposalId: 'invocation-manifest' }; });
   await store.runStage('validate', () => { touch('validate'); return { valid: true }; });
   db.close();
 
   // Simulated interruption: reopen both stores and resume. Completed stages must not repeat.
   db = new Database(databasePath);
-  ledger = new OptimizerCostLedger(db);
+  ledger = new OptimizerInvocationJournal(db);
   const reopened = new ExperimentManifestStore(manifestPath);
   const pending = reopened.pending(reopened.read() as ExperimentManifest);
   assert.deepEqual(pending, ['probe-base', 'probe-candidate', 'compose', 'adopt']);
@@ -586,15 +547,8 @@ async function verifyCostManifest(directory: string): Promise<Record<string, unk
   assert.throws(() => ledger.reserve({ experimentId, stage: 'probe-base', callId: 'model-1', kind: 'model',
     tokens: 999, inputHash: contentHash('m1') }), /input_drift/u);
 
-  // A budget stop is recorded, so accounting is never silently short.
-  assert.throws(() => ledger.reserve({ experimentId, stage: 'probe-base', callId: 'over-budget', kind: 'model',
-    tokens: 10_000, inputHash: contentHash('over'), maxMicrousd: beforeResume.costMicrousd + 1 }),
-  /optimizer_budget_exhausted/u);
   const stopped = ledger.totals(experimentId);
-  assert.ok(stopped.tokens > beforeResume.tokens, 'the stopped call must still be accounted');
-  assert.ok(ledger.report(experimentId).some(row => row.state === 'budget_stopped'));
   const stoppedHash = ledger.reportHash(experimentId);
-
   const report = ledger.report(experimentId);
   assert.equal(report.length, stopped.calls);
   const child = report.find(row => row.call_id === 'child-1');
@@ -617,7 +571,7 @@ async function verifyCostManifest(directory: string): Promise<Record<string, unk
   assert.deepEqual(reopened.pending(finalManifest), ['probe-base', 'compose', 'adopt']);
   assert.deepEqual(Object.keys(finalManifest.stages).filter(stage => !manifestStages.includes(stage as never)), []);
   db.close();
-  writeFileSync(join(directory, 'cost-report.json'), JSON.stringify({ totals: stopped, report }, null, 2));
+  writeFileSync(join(directory, 'invocation-report.json'), JSON.stringify({ totals: stopped, report }, null, 2));
   return { stagesCompleted: Object.keys(finalManifest.stages), resumeSkipped: true,
     totals: stopped, calls: report.length, reportHash: stoppedHash, effects };
 }

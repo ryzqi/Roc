@@ -11,7 +11,7 @@ import type { SettingsStore } from '../settings-scope';
  * backend enforces.
  *
  * The legacy guardrail object had seven fields; only these four have a backend home
- * (F22). Shell security level, overwrite protection, session token budget, MCP timeout and
+ * (F22). Shell security level, overwrite protection, MCP timeout and
  * the external-network switch are **removed** — the approval mode plus the tool policies in
  * `permissions.grants` are what the backend actually enforces.
  */

@@ -1,6 +1,6 @@
 # 从失败证据到候选采纳
 
-本流程把现有 `run → inspect → compare` 接成一个本地、人工触发的开发实验。它复用真实 Roc runtime、独立 grader、预算与封存机制；新增 incident、冻结协议、候选登记、验收和人工决定。没有自动部署、配置修改、定时运行或轨迹上传。
+本流程把现有 `run → inspect → compare` 接成一个本地、人工触发的开发实验。它复用真实 Roc runtime、独立 grader、请求配置与封存机制；新增 incident、冻结协议、候选登记、验收和人工决定。没有自动部署、配置修改、定时运行或轨迹上传。
 
 ## 结果与边界
 
@@ -20,10 +20,10 @@ run --experiment → 唯一候选运行 → 独立比较 + 质量底线
 
 ## 1. 建立基线并记录观察
 
-先完成 [README](README.md) 中的数据与模型准备。模型、预算和 Task 范围由操作者明确选择。先 smoke 验证接通，再用 full 建立比较基线；full 的最低请求数可能大于示例预算的 60 次，需要使用明确配置的预算文件。
+先完成 [README](README.md) 中的数据与模型准备。模型、请求配置和 Task 范围由操作者明确选择。先 smoke 验证接通，再用 full 建立比较基线。请求配置只指定输入大小及超时。
 
 ```sh
-pnpm harness:bench run --suite qasper --dataset "$ROC_EVAL_DATASET" --profile full --budget evaluation/local/full-budget.json
+pnpm harness:bench run --suite qasper --dataset "$ROC_EVAL_DATASET" --profile full --provider-options evaluation/local/provider-options.json
 
 # 将输出的目录填入变量；不要直接使用历史 fixture 作为真实质量基线。
 ROC_EVAL_BASELINE=/absolute/path/to/baseline-run
@@ -72,10 +72,10 @@ pnpm harness:bench experiment inspect "$ROC_EVAL_EXPERIMENT"
 ## 3. 用现有 runner 执行唯一候选
 
 ```sh
-pnpm harness:bench run --suite qasper --dataset "$ROC_EVAL_DATASET" --profile full --budget evaluation/local/full-budget.json --experiment "$ROC_EVAL_EXPERIMENT"
+pnpm harness:bench run --suite qasper --dataset "$ROC_EVAL_DATASET" --profile full --provider-options evaluation/local/provider-options.json --experiment "$ROC_EVAL_EXPERIMENT"
 ```
 
-所选模型、profile、数据、预算、评分器、环境和工具必须与基线一致。若基线显式选择了模型，候选也应传相同的 `--provider-id` / `--model-id`。模型配置变化会触发合同不匹配。
+所选模型、profile、数据、请求配置、评分器、环境和工具必须与基线一致。若基线显式选择了模型，候选也应传相同的 `--provider-id` / `--model-id`。模型配置变化会触发合同不匹配。
 
 runner 在打开模型宿主前核对候选源码及基础条件，并以独占、fsync 的记录登记候选路径。在首个推理请求前核对完整条件；每次请求还核对实际工具 schema。运行 manifest 保存协议哈希，结果仍由现有独立 grader 评分并封存。
 

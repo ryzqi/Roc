@@ -193,11 +193,10 @@ test('a duplicate model id inside one provider is flagged before the backend rej
   assert.ok(issues.some((issue) => issue.path === 'providers.0.models.1.id' && issue.message.includes('重复')));
 });
 
-test('a thinking budget that reaches maxTokens is flagged (backend superRefine)', () => {
+test('adaptive thinking needs no token allocation', () => {
   const next = draft();
-  next.providers[0].models[0].options = { maxTokens: 2048, anthropicThinking: { mode: 'enabled', budgetTokens: 2048 } };
-  const issues = validation.validateDraft(next);
-  assert.ok(issues.some((issue) => issue.path.includes('anthropicThinking.budgetTokens')));
+  next.providers[0].models[0].options = { maxTokens: 2048, anthropicThinking: { mode: 'adaptive' } };
+  assert.equal(validation.validateDraft(next).length, 0);
 });
 
 test('a default model whose provider is disabled is flagged, because the backend nulls it', () => {

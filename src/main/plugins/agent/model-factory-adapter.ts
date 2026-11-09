@@ -1,4 +1,4 @@
-import { DEFAULT_RUN_MODEL_OUTPUT_TOKENS } from '../../../shared/run-budget-policy';
+import { DEFAULT_MODEL_OUTPUT_TOKENS } from '../../../shared/model-context';
 import type { LangChainChatModelHandle, LangChainModelFactory } from '../../services/langchain-model-factory';
 
 export type AgentModelHandle = {
@@ -71,9 +71,9 @@ export class StaticAgentModelFactoryAdapter implements AgentModelFactoryAdapter 
 }
 
 function resolveOutputLimit(maxOutputTokens: number | undefined): number {
-  const resolved = maxOutputTokens ?? DEFAULT_RUN_MODEL_OUTPUT_TOKENS;
-  if (!Number.isSafeInteger(resolved) || resolved <= 0 || resolved > DEFAULT_RUN_MODEL_OUTPUT_TOKENS) {
-    throw new Error('run_budget_output_limit_invalid');
+  const resolved = maxOutputTokens ?? DEFAULT_MODEL_OUTPUT_TOKENS;
+  if (!Number.isSafeInteger(resolved) || resolved <= 0 || resolved > DEFAULT_MODEL_OUTPUT_TOKENS) {
+    throw new Error('model_output_limit_invalid');
   }
   return resolved;
 }

@@ -3,7 +3,6 @@ import type {Database} from 'better-sqlite3';
 import {researchTaskGraphSchema, researchTaskNodeSchema, type ResearchNodeLease, type ResearchTaskNode} from '../../../../shared/schemas/research-task-graph';
 import type {ResearchTaskExecution, ResearchTask} from '../../../../shared/schemas/research-tasks';
 import type {FrozenExecutionInputs} from '../../../../shared/schemas/execution';
-import {runBudgetSchema} from '../../../../shared/schemas/agent';
 
 const digest = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 /** Request/attempt identities are audit data; the logical operation follows frozen content. */
@@ -15,7 +14,7 @@ type NodeRow = {id: string; task_id: string; project_id: string; execution_id: s
 type Owner = {get(taskId: string, projectId: string): ResearchTask;
   requireExecution(kind: 'stage', executionId: string, projectId: string): ResearchTaskExecution};
 
-/** Shares the Task database and budget owner. All mutations commit before worker dispatch. */
+/** Shares the Task database and lifecycle owner. All mutations commit before worker dispatch. */
 export class ResearchTaskGraphRepository {
   constructor(private readonly db: Database, private readonly owner: Owner,
     private readonly now = () => new Date().toISOString()) {}
@@ -294,13 +293,6 @@ export class ResearchTaskGraphRepository {
   }
   private requireRoot(taskId: string, projectId: string): void {
     if (this.owner.get(taskId, projectId).status !== 'active') throw new Error('research_task_not_active');
-    const budget = this.db.prepare('SELECT stop_reason, limits_json FROM research_task_budgets WHERE task_id=?').get(taskId) as
-      {stop_reason: string|null; limits_json: string}|undefined;
-    if (budget === undefined) throw new Error('research_task_budget_missing');
-    if (budget.stop_reason !== null) throw new Error(budget.stop_reason);
-    if (Date.parse(runBudgetSchema.parse(JSON.parse(budget.limits_json)).deadlineAt) <= Date.parse(this.now())) {
-      throw new Error('run_deadline_exhausted');
-    }
   }
   private revision(taskId: string): number {
     return (this.db.prepare('SELECT revision FROM research_task_graphs WHERE task_id=?').get(taskId) as {revision: number}|undefined)?.revision ?? 0;

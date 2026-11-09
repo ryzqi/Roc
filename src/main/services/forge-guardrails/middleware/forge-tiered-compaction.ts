@@ -8,19 +8,19 @@ import { isForgeTransientMessage, readForgeMessageTag } from '../message-tags';
 import { readIterationFromMessage } from '../state-schema';
 
 const PROTECTED_HEADER_COUNT = 1;
-const DEFAULT_BUDGET_TOKENS = 7168;
+const DEFAULT_CONTEXT_TOKENS = 7168;
 const DEFAULT_KEEP_RECENT = 2;
 const DEFAULT_PHASE_THRESHOLDS: readonly [number, number, number] = [0.6, 0.75, 0.9];
 const TRUNCATE_CHARS = 200;
 
 export type ForgeTieredCompactionOptions = {
-  budgetTokens?: number;
+  capacityTokens?: number;
   keepRecent?: number;
   phaseThresholds?: readonly [number, number, number];
 };
 
 export type RequiredForgeTieredCompactionOptions = {
-  budgetTokens: number;
+  capacityTokens: number;
   keepRecent: number;
   phaseThresholds: readonly [number, number, number];
 };
@@ -35,14 +35,14 @@ export function createForgeTieredCompactionMiddleware(opts: ForgeTieredCompactio
 export function createForgeTieredCompactionEdits(opts: ForgeTieredCompactionOptions): ContextEdit[] {
   const resolved = resolveOptions(opts);
   return [
-    new ThresholdedEdit(resolved.budgetTokens, resolved.phaseThresholds[0], resolved.keepRecent, [
+    new ThresholdedEdit(resolved.capacityTokens, resolved.phaseThresholds[0], resolved.keepRecent, [
       new ForgeDropNudgesEdit(resolved.keepRecent),
       new ForgeTruncateToolResultsEdit(resolved.keepRecent)
     ]),
-    new ThresholdedEdit(resolved.budgetTokens, resolved.phaseThresholds[1], resolved.keepRecent, [
+    new ThresholdedEdit(resolved.capacityTokens, resolved.phaseThresholds[1], resolved.keepRecent, [
       new ForgeDropToolResultsEdit(resolved.keepRecent)
     ]),
-    new ThresholdedEdit(resolved.budgetTokens, resolved.phaseThresholds[2], resolved.keepRecent, [
+    new ThresholdedEdit(resolved.capacityTokens, resolved.phaseThresholds[2], resolved.keepRecent, [
       new ForgeDropReasoningTextEdit(resolved.keepRecent)
     ])
   ];
@@ -50,7 +50,7 @@ export function createForgeTieredCompactionEdits(opts: ForgeTieredCompactionOpti
 
 function resolveOptions(opts: ForgeTieredCompactionOptions): RequiredForgeTieredCompactionOptions {
   return {
-    budgetTokens: opts.budgetTokens === undefined ? DEFAULT_BUDGET_TOKENS : opts.budgetTokens,
+    capacityTokens: opts.capacityTokens === undefined ? DEFAULT_CONTEXT_TOKENS : opts.capacityTokens,
     keepRecent: opts.keepRecent === undefined ? DEFAULT_KEEP_RECENT : opts.keepRecent,
     phaseThresholds: opts.phaseThresholds === undefined ? DEFAULT_PHASE_THRESHOLDS : opts.phaseThresholds
   };
@@ -84,7 +84,7 @@ function findEligibleEnd(messages: BaseMessage[], keepRecent: number): number {
 
 class ThresholdedEdit implements ContextEdit {
   constructor(
-    private readonly budgetTokens: number,
+    private readonly capacityTokens: number,
     private readonly threshold: number,
     private readonly keepRecent: number,
     private readonly edits: readonly ContextEdit[]
@@ -92,7 +92,7 @@ class ThresholdedEdit implements ContextEdit {
 
   async apply(params: { messages: BaseMessage[]; countTokens: (messages: BaseMessage[]) => Promise<number> }): Promise<void> {
     const tokens = await params.countTokens(params.messages);
-    if (tokens < this.budgetTokens * this.threshold) {
+    if (tokens < this.capacityTokens * this.threshold) {
       return;
     }
     refreshContextDigestMessage(params.messages, this.keepRecent);

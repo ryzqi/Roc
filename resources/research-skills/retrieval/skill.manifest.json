@@ -6,7 +6,7 @@
   "description": "多源查找文献并建立可追溯的证据集。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "8fe875cde3d5864fc5fcbba48328302c1a07ce9b486e4aa9114f31239f0c667e"
+    "hash": "7648b53bedcb6d5884e86b88b1cf3a7da37d20a0c8aa4c13a5cfb90fe96e45f9"
   },
   "references": [],
   "license": {
@@ -20,7 +20,7 @@
     "kind": "project",
     "origin": "Roc/resources/research-skills/retrieval",
     "revision": "s05-1.2.0",
-    "hash": "8fe875cde3d5864fc5fcbba48328302c1a07ce9b486e4aa9114f31239f0c667e"
+    "hash": "7648b53bedcb6d5884e86b88b1cf3a7da37d20a0c8aa4c13a5cfb90fe96e45f9"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
@@ -28,7 +28,7 @@
   },
   "outputs": {
     "schema": "researchStageOutput/v4",
-    "hash": "632dc56d8e1396241f746ab068906ffc07afb2439fd07bc771466bc31aaf13ec",
+    "hash": "2702ae8cf34eeadbaecbe226e349193a45cca66830cd6008d71e7f696e8970ca",
     "artifactKind": "source_corpus"
   },
   "requiredCapabilities": [

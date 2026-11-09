@@ -123,7 +123,7 @@ export const runDiagnosticsSchema = z.object({
     failureCount: countSchema,
     estimatedCount: countSchema,
     inputTokens: nullableCountSchema,
-    budgetTokens: nullableCountSchema,
+    capacityTokens: nullableCountSchema,
     lastInputEstimated: z.boolean().nullable(),
     removedChars: countSchema,
     persistedChars: countSchema,

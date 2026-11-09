@@ -30,7 +30,7 @@ export class ResearchTaskDiagnosticsExporter {
           ...artifact, id: privateId(artifact.id)
         })), telemetry: observation.telemetry, resources: observation.resources,
         calls: {...observation.calls, calls: observation.calls.calls.map(call => ({
-          ...call, runId: privateId(call.runId), callId: privateId(call.callId), pricingVersion: privateId(call.pricingVersion)
+          ...call, runId: privateId(call.runId), callId: privateId(call.callId)
         }))},
         replay: observation.replay === null ? null : {...observation.replay, events: observation.replay.events.map(event => ({
           ...event, toolCallId: privateId(event.toolCallId)
@@ -39,8 +39,8 @@ export class ResearchTaskDiagnosticsExporter {
     }
     const events = this.tasks.events({...request, afterSequence: 0, limit: 100});
     const payload = {schemaVersion: 1, createdAt, projectId: privateId(request.projectId), taskId: privateId(request.taskId),
-      status: summary.task.status, budget: {...summary.budget, stopReason: null, pricingCatalogVersion: privateId(summary.budget.pricingCatalogVersion)},
-      externalCost: summary.externalCost, recoveryIssues: summary.recoveryIssues, eventDelivery: summary.eventDelivery, executions,
+      status: summary.task.status, usage: summary.usage,
+      recoveryIssues: summary.recoveryIssues, eventDelivery: summary.eventDelivery, executions,
       taskEvents: {...events, events: events.events.map(event => ({sequence: event.sequence, eventType: event.eventType,
         executionKind: event.payload.executionKind, executionId: privateId(event.payload.executionId), callId: privateId(event.payload.callId),
         createdAt: event.createdAt, reasonPresent: event.payload.reason !== null}))},

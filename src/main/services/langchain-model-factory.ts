@@ -2,8 +2,8 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { ChatAnthropic, type ChatAnthropicInput } from '@langchain/anthropic';
 import { type ChatOpenAIFields } from '@langchain/openai';
-import { DEFAULT_CONTEXT_BUDGET_TOKENS, resolveNvidiaBaseUrl } from '../../shared/provider-defaults';
-import { DEFAULT_RUN_MODEL_OUTPUT_TOKENS, resolveRunModelOutputTokens } from '../../shared/run-budget-policy';
+import { DEFAULT_CONTEXT_WINDOW_TOKENS, resolveNvidiaBaseUrl } from '../../shared/provider-defaults';
+import { DEFAULT_MODEL_OUTPUT_TOKENS, resolveRunModelOutputTokens } from '../../shared/model-context';
 import { type ProviderConfig, type ProviderModelOptions, type ProviderType } from '../../shared/types';
 import type { ConfigService } from './config-service';
 import { RocDomainError } from './errors';
@@ -33,7 +33,7 @@ type LangChainModelRuntime = {
   baseUrl: string | null;
   streaming: boolean;
   modelKwargs: Record<string, unknown>;
-  contextBudgetTokens: number;
+  contextWindowTokens: number;
   maxOutputTokens: number;
 };
 
@@ -203,7 +203,7 @@ export class LangChainModelFactory {
     apiKey: string,
     options: {
       streaming: boolean;
-      contextBudgetTokens: number;
+      contextWindowTokens: number;
       maxOutputTokens: number;
       requestTimeoutMs: number;
     }
@@ -235,7 +235,7 @@ export class LangChainModelFactory {
         baseUrl,
         streaming: options.streaming,
         modelKwargs: {},
-        contextBudgetTokens: options.contextBudgetTokens,
+        contextWindowTokens: options.contextWindowTokens,
         maxOutputTokens: options.maxOutputTokens
       },
       model
@@ -276,24 +276,24 @@ export class LangChainModelFactory {
       provider.type === 'llama_cpp'
         ? modelOptions.temperature ?? llamaCppSamplingProfile?.temperature
         : modelOptions.temperature;
-    const requestedMaxOutputTokens = options.maxOutputTokens ?? DEFAULT_RUN_MODEL_OUTPUT_TOKENS;
+    const requestedMaxOutputTokens = options.maxOutputTokens ?? DEFAULT_MODEL_OUTPUT_TOKENS;
     if (!Number.isSafeInteger(requestedMaxOutputTokens) || requestedMaxOutputTokens <= 0) {
-      throw new Error('run_budget_output_limit_invalid');
+      throw new Error('model_output_limit_invalid');
     }
     const requestedStreaming = options.streaming ?? true;
     const streaming = provider.type === 'llama_cpp' ? true : requestedStreaming;
     const requestTimeoutMs = provider.type === 'llama_cpp' ? llamaCppProviderRequestTimeoutMs : providerRequestTimeoutMs;
-    const contextBudgetTokens =
-      modelOptions.contextBudgetTokens ?? DEFAULT_CONTEXT_BUDGET_TOKENS;
+    const contextWindowTokens =
+      modelOptions.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS;
     const maxTokens = resolveRunModelOutputTokens(
-      contextBudgetTokens,
+      contextWindowTokens,
       Math.min(modelOptions.maxTokens ?? requestedMaxOutputTokens, requestedMaxOutputTokens)
     );
 
     if (provider.type === 'anthropic_compatible') {
       return this.createAnthropicModel(provider, modelId, modelOptions, apiKey, {
         streaming,
-        contextBudgetTokens,
+        contextWindowTokens,
         maxOutputTokens: maxTokens,
         requestTimeoutMs
       });
@@ -400,7 +400,7 @@ export class LangChainModelFactory {
         baseUrl,
         streaming,
         modelKwargs,
-        contextBudgetTokens,
+        contextWindowTokens,
         maxOutputTokens: maxTokens
       },
       model: chatModel

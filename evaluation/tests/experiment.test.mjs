@@ -21,7 +21,7 @@ function sample({ score = .8, evidence = 'live-model', split = 'development', fa
   const path = directory(root, 'synthetic-run');
   const selection = Array.from({ length: 5 }, (_, i) => ({ id: `q${i}`, clusterId: `paper${i}` }));
   const manifest = { suite: 'qasper', evidence, profile: 'full', datasetIdentity: hash('synthetic'), selection, repeats: 3,
-    metrics: ['answerF1', 'citationValidity'], scorerHash: hash('test-scorer'), provider: { model: 'test-only', maxTotalRequests: 60 },
+    metrics: ['answerF1', 'citationValidity'], scorerHash: hash('test-scorer'), provider: { model: 'test-only', },
     environment: { node: process.version }, split, exclusions: [], source, testOnly: true,
     toolManifest: { tools: [{ modelVisibleName: 'read_file', executionScopes: ['main'], effect: 'read' }] } };
   const trials = selection.flatMap(t => Array.from({ length: 3 }, (_, repeat) => ({ taskId: t.id, clusterId: t.clusterId, repeat,
@@ -95,7 +95,7 @@ test('claim freezes source and contracts, refuses retries, and checks actual too
   assert.throws(() => claimExperiment(experiment.directory, candidate.path, candidate.manifest), /EEXIST/);
   assert.equal(inspectExperiment(experiment.directory).state, 'awaiting-sealed-candidate');
   assertExperimentManifest(context, candidate.manifest);
-  assert.throws(() => assertExperimentManifest(context, { ...candidate.manifest, provider: { ...candidate.manifest.provider, maxTotalRequests: 999 } }), /contract_mismatch:provider/);
+  assert.throws(() => assertExperimentManifest(context, { ...candidate.manifest, provider: { ...candidate.manifest.provider, model: 'changed' } }), /contract_mismatch:provider/);
   assert.throws(() => assertExperimentManifest(context, { ...candidate.manifest, datasetIdentity: 'changed' }), /contract_mismatch:datasetIdentity/);
   assertExperimentToolSchema(context, hash('test-schema'));
   assert.throws(() => assertExperimentToolSchema(context, hash('changed schema')), /tool_schema_mismatch/);
@@ -203,11 +203,11 @@ test('CLI executes the full incident/experiment/review lifecycle through the rea
   // before opening any real model host or accessing configured credentials.
   const switched = cli(['run', ...options.filter(o => o !== '--fixture'), '--experiment', experiment.directory], 2);
   assert.equal(switched.fatal.reason, 'experiment_contract_mismatch:evidence');
-  assert.equal(switched.attempted, 0); assert.equal(switched.cost.costBasis, 'not-dispatched');
+  assert.equal(switched.attempted, 0); assert.equal(switched.usage.requests, 0);
   const candidate = cli(['run', ...options, '--experiment', experiment.directory]);
   const run = inspectRun(candidate.directory);
   assert.equal(run.manifest.experiment.protocolHash, experiment.protocolHash);
-  assert.equal(run.summary.cost.requests, 2);
+  assert.equal(run.summary.usage.requests, 2);
   const assessment = cli(['experiment', 'assess', experiment.directory], 2);
   assert.equal(assessment.status, 'blocked'); assert.equal(assessment.comparison.conclusion, 'insufficient');
   const reviewPath = join(root, 'review.json');

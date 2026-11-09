@@ -7,7 +7,6 @@ export * from './preview-store';
 export * from './context-digest';
 export * from './middleware/rescue-parsing';
 export * from './middleware/tool-resolution';
-export * from './middleware/error-budget';
 export * from './middleware/tool-runtime-errors';
 export * from './middleware/forge-iteration-tracking';
 export * from './middleware/filesystem-tool-errors';

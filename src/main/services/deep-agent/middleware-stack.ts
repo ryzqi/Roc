@@ -7,7 +7,6 @@ import { RTKBinaryManager, createRTKMiddleware } from '../../../rtk-integration'
 import { createRocHookMiddleware } from '../hooks';
 import type { RocHookMiddlewareOptions } from '../hooks';
 import {
-  createErrorBudgetMiddleware,
   createFilesystemToolErrorMiddleware,
   createForgeCleanupMiddleware,
   createForgeIterationTrackingMiddleware,
@@ -20,7 +19,7 @@ import {
 import type { RescueToolCandidate } from '../forge-guardrails';
 import type { RocCompositeBackend } from './backend';
 import type { ContextArtifactStore } from './context/context-artifact-store';
-import type { ContextBudgetProfile, ContextTokenCounter } from './context/context-token-budget';
+import type { ContextCapacityProfile, ContextTokenCounter } from './context/context-capacity';
 import {
   createRocContextCompactionMiddleware,
   type PreCompactionFlushRecorder,
@@ -37,10 +36,10 @@ import { createRocPlanReadOnlyMemoryMiddleware } from './plan-readonly-tools';
 import { createRocShellPolicyMiddleware } from './shell-policy';
 import { createToolEffectIdempotencyMiddleware } from './tool-effect-idempotency';
 import type { AgentToolEffectStore } from './tool-effect-store';
-import type { RunBudgetLedger, RunLimits } from './run-budget-ledger';
+import type { RunUsageLedger, RunModelConfig } from './run-usage-ledger';
 import type { TaskContract } from '../../../shared/schemas/task-acceptance';
-import type { RunBudgetObserver } from './run-budget-observer';
-import { createRunBudgetMiddleware, createRunCorrectionMiddleware } from './run-budget-middleware';
+import type { RunUsageObserver } from './run-usage-observer';
+import { createRunUsageMiddleware, createRunCorrectionMiddleware } from './run-usage-middleware';
 import { createToolProtocolMiddleware } from './tool-protocol';
 
 import { createPreparedToolEffectMiddleware, createFinalToolGuardMiddleware, createToolAdmissionMiddleware } from './prepared-tool-effect';
@@ -55,9 +54,9 @@ export type DeepAgentMiddleware = NonNullable<NonNullable<Parameters<typeof crea
 export type ContextCompactionWiring = {
   artifactStore: ContextArtifactStore;
   artifactRecoveryEnabled?: boolean;
-  budgetProfile: ContextBudgetProfile;
+  capacityProfile: ContextCapacityProfile;
   callbacks?: RocContextCompactionOptions['callbacks'];
-  budgetObserver: RunBudgetObserver;
+  usageObserver: RunUsageObserver;
   emitEvent: RocContextCompactionOptions['emitEvent'];
   sessionHistory: PreCompactionFlushRecorder;
   tokenCounter: ContextTokenCounter;
@@ -77,9 +76,9 @@ export type MiddlewareStackPolicy = {
 };
 
 export type MiddlewareStackContext = {
-  budgetLedger: RunBudgetLedger;
-  budgetLimits: RunLimits;
-  budgetObserver: RunBudgetObserver;
+  usageLedger: RunUsageLedger;
+  modelConfig: RunModelConfig;
+  usageObserver: RunUsageObserver;
   backend: RocCompositeBackend;
   contextCompaction: ContextCompactionWiring;
   executionScope: RunCapabilityExecutionScopeV1;
@@ -129,7 +128,7 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
     name: 'RocRunCorrectionMiddleware',
     scopes: ['main'],
     modes: ALL_MODES,
-    create: context => createRunCorrectionMiddleware(context.budgetLedger, context.policy.runId)
+    create: context => createRunCorrectionMiddleware(context.usageLedger, context.policy.runId)
   },
   {
     name: 'todoListMiddleware',
@@ -200,12 +199,6 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
     })
   },
   {
-    name: 'ForgeErrorBudgetMiddleware',
-    scopes: ALL_SCOPES,
-    modes: ALL_MODES,
-    create: () => createErrorBudgetMiddleware()
-  },
-  {
     name: 'ForgeIterationTrackingMiddleware',
     scopes: ALL_SCOPES,
     modes: ALL_MODES,
@@ -231,11 +224,11 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
     modes: ALL_MODES,
     create: (context) => createRocContextCompactionMiddleware({
       artifactStore: context.contextCompaction.artifactStore,
-      readControlState: () => context.budgetLedger.readContextControlState(context.policy.runId),
+      readControlState: () => context.usageLedger.readContextControlState(context.policy.runId),
       artifactRecoveryEnabled: context.contextCompaction.artifactRecoveryEnabled,
-      budgetProfile: context.contextCompaction.budgetProfile,
+      capacityProfile: context.contextCompaction.capacityProfile,
       callbacks: context.contextCompaction.callbacks,
-      budgetObserver: context.budgetObserver,
+      usageObserver: context.usageObserver,
       emitEvent: context.contextCompaction.emitEvent,
       mode: context.policy.mode,
       model: context.model,
@@ -270,7 +263,7 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
     name: 'RocToolAdmissionMiddleware', scopes: ALL_SCOPES, modes: ALL_MODES,
     create: context => createToolAdmissionMiddleware({
       runId: context.policy.runId,
-      maxConcurrent: context.budgetLimits.maxConcurrentToolCalls,
+      maxConcurrent: 4,
       manifest: context.policy.capabilityManifest,
       workspaceHash: context.policy.workspaceHash,
       workspacePath: context.policy.workspacePath,
@@ -280,14 +273,14 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
     })
   },
   {
-    name: 'RocRunBudgetMiddleware',
+    name: 'RocRunUsageMiddleware',
     scopes: ALL_SCOPES,
     modes: ALL_MODES,
-    create: context => createRunBudgetMiddleware(
-      context.budgetLedger,
+    create: context => createRunUsageMiddleware(
+      context.usageLedger,
       context.policy.runId,
-      context.budgetLimits,
-      context.budgetObserver,
+      context.modelConfig,
+      context.usageObserver,
       context.toolEffectStore,
       context.taskContract,
       context.contextCompaction.tokenCounter

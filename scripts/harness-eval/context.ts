@@ -9,9 +9,9 @@ import { ContextArtifactStore } from '../../src/main/services/deep-agent/context
 import { createContextArtifactReadTool } from '../../src/main/services/deep-agent/context/context-artifact-tool';
 import { runContextCompaction } from '../../src/main/services/deep-agent/context/context-compaction-pipeline';
 import { collectUserConstraints, pinContextContract } from '../../src/main/services/deep-agent/context/context-contract';
-import { createContextTokenCounter, deriveContextBudgetProfile } from '../../src/main/services/deep-agent/context/context-token-budget';
+import { createContextTokenCounter, deriveContextCapacityProfile } from '../../src/main/services/deep-agent/context/context-capacity';
 import { BlockStability, buildPromptBlocks } from '../../src/main/services/deep-agent/context/prompt-blocks';
-import { RunBudgetLedger } from '../../src/main/services/deep-agent/run-budget-ledger';
+import { RunUsageLedger } from '../../src/main/services/deep-agent/run-usage-ledger';
 import { decodeJson } from '../lib/decode-json';
 import { verifyFixedLongTaskComparisons } from './context-long-task';
 
@@ -67,15 +67,15 @@ export async function verifyContext(name: string, directory: string, db: Databas
     let counts = 0;
     const counted = { ...exact, countText: async (text: string) => { counts++; return await exact.countText(text); } };
     const input = { counter: counted, contextWindowTokens: 10000, systemPrompt: 'Policy', tools: [{ name: 'a', description: 'Read', schema: { type: 'object' } }] };
-    const first = await deriveContextBudgetProfile(input);
-    assert.deepEqual(await deriveContextBudgetProfile(input), first);
+    const first = await deriveContextCapacityProfile(input);
+    assert.deepEqual(await deriveContextCapacityProfile(input), first);
     assert.equal(counts, 1);
-    await deriveContextBudgetProfile({ ...input, tools: [{ ...input.tools[0], description: 'Changed' }] });
+    await deriveContextCapacityProfile({ ...input, tools: [{ ...input.tools[0], description: 'Changed' }] });
     assert.equal(counts, 2);
     writeFileSync(join(directory, 'token-measurements.json'), JSON.stringify(measured, null, 2));
     return { measured, calibration: 'local OpenAI text tokenizer; provider message framing remains estimated', cacheInvalidated: true };
   }
-  const ledger = new RunBudgetLedger(db);
+  const ledger = new RunUsageLedger(db);
   const createdAt = new Date().toISOString();
   db.prepare(`INSERT OR IGNORE INTO agent_threads (id, kind, title, goal, status, created_at, updated_at)
     VALUES ('thread','chat','context fixture','context fixture','active',?,?)`).run(createdAt, createdAt);
@@ -103,7 +103,7 @@ export async function verifyContext(name: string, directory: string, db: Databas
   let summaryShouldFail = name === 'context-summary-failure';
   let flushes = 0;
   const input = { artifactStore: artifacts, readControlState: () => ledger.readContextControlState('run'),
-    budgetProfile: { contextWindowTokens: 20000, modelInputTokens: 10000, reservedOutputTokens: 2000,
+    capacityProfile: { contextWindowTokens: 20000, modelInputTokens: 10000, reservedOutputTokens: 2000,
       systemToolOverheadTokens: 1000, summaryInputTokens: 5000, safetyMarginTokens: 1000 },
     emitEvent: (event: unknown) => events.push(event), mode: 'run' as const, model: { invoke: async () => { throw new Error('unexpected_model'); } } as never,
     runId: 'run', threadId: 'thread', sessionHistory: { recordPreCompactionFlush: () => { flushes++; } }, workspaceHash: 'workspace', workspacePath: directory,
@@ -154,7 +154,7 @@ export async function verifyContext(name: string, directory: string, db: Databas
   assert.deepEqual(new Set(collectUserConstraints(compacted)), expected);
   assert.ok(JSON.stringify(compacted).includes('A-01') && JSON.stringify(compacted).includes('A-02'));
   assert.ok(summaries >= 2, 'both compactions must exercise the summary boundary');
-  assert.ok(await countTokens(compacted) <= input.budgetProfile.modelInputTokens);
+  assert.ok(await countTokens(compacted) <= input.capacityProfile.modelInputTokens);
   writeFileSync(join(directory, 'compaction-events.json'), JSON.stringify(events, null, 2));
   writeFileSync(join(directory, 'compacted.json'), JSON.stringify(compacted, null, 2));
   const fixedLongTasks = await verifyFixedLongTaskComparisons(artifacts, directory, name === 'context-summary-failure');

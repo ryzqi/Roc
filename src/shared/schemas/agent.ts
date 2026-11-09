@@ -168,48 +168,24 @@ export const runExecutionModeSchema = z.enum(['plan', 'run', 'task']);
 
 const safeInteger = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 
-export const runBudgetSchema = z
-  .object({
-    policyVersion: z.literal(1),
-    contextWindowTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-    maxOutputTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-    maxCallTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-    maxTotalTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-    maxCostMicrousd: safeInteger.nullable(),
-    pricingCatalogVersion: identifierSchema,
-    maxModelCalls: z.number().int().positive(),
-    maxToolCalls: z.number().int().positive(),
-    maxChildTasks: z.number().int().positive(),
-    maxConcurrentChildTasks: z.number().int().positive(),
-    maxConcurrentModelCalls: z.number().int().positive(),
-    maxConcurrentToolCalls: z.number().int().positive(),
-    deadlineAt: z.string().datetime()
-  })
-  .strict();
+export const runModelConfigSchema = z.object({
+  policyVersion: z.literal(1),
+  contextWindowTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  maxOutputTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
+}).strict();
 
-export const runBudgetStatusSchema = z
+export const runUsageStatusSchema = z
   .object({
     tokens: z.object({
-      limit: z.number().int().positive(),
       settled: safeInteger,
       unknown: safeInteger,
-      reserved: safeInteger,
-      remaining: safeInteger
+      reserved: safeInteger
     }).strict(),
     calls: z.object({
-      models: z.object({ limit: z.number().int().positive(), total: safeInteger, reserved: safeInteger }).strict(),
-      tools: z.object({ limit: z.number().int().positive(), total: safeInteger, reserved: safeInteger }).strict(),
-      children: z.object({ limit: z.number().int().positive(), total: safeInteger, reserved: safeInteger }).strict()
+      models: z.object({ total: safeInteger, reserved: safeInteger }).strict(),
+      tools: z.object({ total: safeInteger, reserved: safeInteger }).strict(),
+      children: z.object({ total: safeInteger, reserved: safeInteger }).strict()
     }).strict(),
-    cost: z.object({
-      state: z.enum(['known', 'unknown']),
-      limitMicrousd: safeInteger.nullable(),
-      settledMicrousd: safeInteger.nullable(),
-      reservedMicrousd: safeInteger.nullable()
-    }).strict(),
-    pricingCatalogVersion: identifierSchema,
-    deadlineAt: z.string().datetime(),
-    stopReason: z.string().max(128).nullable()
   })
   .strict();
 
@@ -250,13 +226,13 @@ export const workspaceFileIdentitySchema = z
   .strict();
 
 export const runExecutionSnapshotSchema = z.object({
-  schemaVersion: z.literal(10),
+  schemaVersion: z.literal(11),
   ...runExecutionSnapshotShape,
   nodeBinding: executionNodeBindingSchema,
   origin: executionOriginSchema,
   frozenInputs: frozenExecutionInputsSchema,
   workspaceIdentity: workspaceFileIdentitySchema.nullable(),
-  budget: runBudgetSchema,
+  modelConfig: runModelConfigSchema,
   shellAllowedCommands: z.array(identifierSchema).optional()
 }).strict();
 
@@ -342,8 +318,8 @@ export type RunCapabilityReconcileStrategyV1 = NonNullable<z.infer<typeof runCap
 export type RunCapabilityManifestToolV1 = z.infer<typeof runCapabilityManifestToolSchema>;
 export type RunCapabilityManifestSkillV1 = z.infer<typeof runCapabilityManifestSkillSchema>;
 export type RunCapabilityManifestV1 = z.infer<typeof runCapabilityManifestSchema>;
-export type RunBudget = z.infer<typeof runBudgetSchema>;
-export type RunBudgetStatus = z.infer<typeof runBudgetStatusSchema>;
+export type RunModelConfig = z.infer<typeof runModelConfigSchema>;
+export type RunUsageStatus = z.infer<typeof runUsageStatusSchema>;
 export type RunExecutionMode = z.infer<typeof runExecutionModeSchema>;
 export type RunExecutionSnapshot = z.infer<typeof runExecutionSnapshotSchema>;
 export type AgentRuntimeStatus = z.infer<typeof agentRuntimeStatusSchema>;

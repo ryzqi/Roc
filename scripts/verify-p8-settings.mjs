@@ -532,7 +532,7 @@ try {
   await openSection('tasks');
   assertCheck('1 分区读回', '界面读回任务与调度', (await readInput('settings-long-running-seconds')) === '90' && (await readInput('settings-scheduler-max-tasks')) === '120');
 
-  // ---- 受限试点 (P6-04)：默认关闭、需明示预算与确认、可回退且回退会熔断 ----
+  // ---- 受限试点 (P6-04)：默认关闭、可开启和回退且回退会熔断 ----
   await openSection('pilot');
   await page.waitForFunction(
     () => document.querySelector('[data-testid="settings-pilot-loading"]') === null,
@@ -543,21 +543,10 @@ try {
   const pilotEnableDisabledByDefault = await page.locator('[data-testid="settings-pilot-enable"]').isDisabled();
   assertCheck(
     '1 分区读回',
-    '受限试点默认关闭且未确认预算时不能开启',
-    pilotClosed.includes('已关闭') && pilotEnableDisabledByDefault,
+    '受限试点默认关闭且可直接开启',
+    pilotClosed.includes('已关闭') && !pilotEnableDisabledByDefault,
     `${pilotClosed.replace(/\s+/gu, ' ')} · enableDisabled=${pilotEnableDisabledByDefault}`
   );
-  const pilotCostState = await page.evaluate(async () => {
-    const snapshot = await window.roc.agent.getPilotStatus();
-    return snapshot.ok ? snapshot.data.costState : null;
-  });
-  assertCheck(
-    '1 分区读回',
-    '受限试点把美元成本声明为未知（后端字段）',
-    pilotCostState === 'unknown_without_price_table',
-    `costState=${String(pilotCostState)}`
-  );
-  await page.click('[data-testid="settings-pilot-acknowledge"]');
   await page.click('[data-testid="settings-pilot-enable"]');
   await page.waitForFunction(
     () => (document.querySelector('[data-testid="settings-pilot-state"]')?.textContent ?? '').includes('已开启'),
@@ -565,7 +554,7 @@ try {
     { timeout: 20_000 }
   );
   const pilotOn = await text('settings-pilot-state');
-  assertCheck('1 分区读回', '确认预算后试点可以开启并读回服务端状态', pilotOn.includes('read-only'), pilotOn.replace(/\s+/gu, ' '));
+  assertCheck('1 分区读回', '试点可以开启并读回服务端状态', pilotOn.includes('read-only'), pilotOn.replace(/\s+/gu, ' '));
   await page.click('[data-testid="settings-pilot-rollback"]');
   await page.waitForFunction(
     () => {

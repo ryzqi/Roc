@@ -81,7 +81,7 @@ test('approval card displays complete query scopes and returns the reviewed hash
   assert.match(await content.innerText(), /Primary evidence/u);
   assert.match(await content.innerText(), /Answer the frozen question/u);
   assert.match(await content.innerText(), /Reproducible reported results/u);
-  assert.match(await content.innerText(), /12/u);
+  assert.doesNotMatch(await content.innerText(), /预算|最多请求/u);
   await page.screenshot({path: join(artifacts, 'plan-review.png')});
   await page.locator('[data-testid="assistant-gate-approve"]').focus();
   await page.keyboard.press('Enter');

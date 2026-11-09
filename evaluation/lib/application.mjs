@@ -79,14 +79,15 @@ export async function executeApplication({ artifact, input, directory, config, c
   try {
     taskSignal.throwIfAborted();
     send({ view: { id: 'benchmark-task', family: input.kind === 'qasper' ? 'literature-verification' : 'experiment-script', difficulty: 'hard', prompt: input.prompt, outputFormat: 'json' },
-      benchmark: input.kind, providerId: 'evaluation-host', modelId: config.model, temperature: config.temperature, contextBudgetTokens: config.contextBudgetTokens ?? 65536,
-      maxRequests: config.maxRequestsPerTask, isolationProbePaths: protectedPaths, isolationProbePort: null });
+      benchmark: input.kind, providerId: 'evaluation-host', modelId: config.model, temperature: config.temperature, contextWindowTokens: config.contextWindowTokens ?? 65536,
+      isolationProbePaths: protectedPaths, isolationProbePort: null });
     for await (const line of lines) {
       retain('transcript.jsonl', line + '\n');
       taskSignal.throwIfAborted();
       const message = JSON.parse(line);
       if (message.type === 'request') {
-        if (++requests > config.maxRequestsPerTask || result !== null || message.requestHash !== hash(message.body)) fail('policy', 'worker_request_invalid');
+        requests++;
+        if (result !== null || message.requestHash !== hash(message.body)) fail('policy', 'worker_request_invalid');
         const tools = message.body.tools;
         // Public benchmarks have one fixed main-agent tool set; no dynamic tools or subagents.
         const expected = artifact.manifests[input.kind].tools.filter(t => t.executionScopes.includes('main')).map(t => t.modelVisibleName).sort();

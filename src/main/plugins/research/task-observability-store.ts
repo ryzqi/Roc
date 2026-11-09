@@ -15,12 +15,11 @@ export class ResearchTaskObservabilityStore {
   }
   calls(request: TaskExecutionDiagnosticsRequest) {
     const rows = this.db.prepare(`SELECT c.task_id taskId,c.rowid sequence,c.run_id runId,c.call_id callId,c.kind,c.state,
-      c.reserved_tokens reservedTokens,c.actual_tokens actualTokens,c.reserved_cost_microusd reservedCostMicrousd,
-      c.actual_cost_microusd actualCostMicrousd,c.pricing_version pricingVersion,c.created_at createdAt,
+      c.reserved_tokens reservedTokens,c.actual_tokens actualTokens,c.created_at createdAt,
       (SELECT MAX(e.created_at) FROM research_task_events e WHERE e.task_id=c.task_id AND e.execution_kind=c.execution_kind
         AND e.execution_id=c.run_id AND e.call_id=c.call_id AND e.event_type IN ('call_settled','call_unknown')) settledAt,
       o.started_at,o.duration_ms,o.status invocation_status
-      FROM agent_budget_calls c LEFT JOIN agent_budget_call_observations o ON o.run_id=c.run_id AND o.call_id=c.call_id
+      FROM agent_calls c LEFT JOIN agent_call_observations o ON o.run_id=c.run_id AND o.call_id=c.call_id
       WHERE c.execution_kind=? AND c.run_id=? AND c.rowid>? ORDER BY c.rowid LIMIT ?`)
       .all(request.executionKind, request.executionId, request.afterCallSequence, request.limit + 1) as Array<{
         started_at: string|null; duration_ms: number|null; invocation_status: string|null; [key: string]: unknown;

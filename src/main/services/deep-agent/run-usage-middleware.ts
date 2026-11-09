@@ -2,30 +2,30 @@ import { randomUUID } from 'node:crypto';
 import { AIMessage, HumanMessage, ToolMessage } from '@langchain/core/messages';
 import { createMiddleware } from 'langchain';
 import { readDeepAgentsExecutionIdentity } from './deep-agents-execution-identity-adapter';
-import { RunBudgetLedger, type RunLimits } from './run-budget-ledger';
-import type { RunBudgetObserver } from './run-budget-observer';
+import { RunUsageLedger, type RunModelConfig } from './run-usage-ledger';
+import type { RunUsageObserver } from './run-usage-observer';
 import { hashToolInput, type AgentToolEffectStore } from './tool-effect-store';
 import { childTaskEnvelopeSchema } from '../../../shared/schemas/task-acceptance';
 import type { TaskContract } from '../../../shared/schemas/task-acceptance';
-import { deriveContextBudgetProfile, type ContextTokenCounter } from './context/context-token-budget';
+import { deriveContextCapacityProfile, type ContextTokenCounter } from './context/context-capacity';
 
-export function createRunBudgetMiddleware(
-  ledger: RunBudgetLedger,
+export function createRunUsageMiddleware(
+  ledger: RunUsageLedger,
   runId: string,
-  limits: RunLimits,
-  budgetObserver: RunBudgetObserver,
+  limits: RunModelConfig,
+  usageObserver: RunUsageObserver,
   effects?: AgentToolEffectStore,
   taskContract?: TaskContract,
   tokenCounter?: ContextTokenCounter
 ) {
   return createMiddleware({
-    name: 'RocRunBudgetMiddleware',
+    name: 'RocRunUsageMiddleware',
     wrapModelCall: async (request, handler) => {
       request.runtime.signal?.throwIfAborted();
-      if (budgetObserver === undefined) throw new Error('run_model_budget_executor_missing');
+      if (usageObserver === undefined) throw new Error('run_model_observer_missing');
       const count = tokenCounter === undefined ? null : await tokenCounter.countMessages(request.messages);
-      const profile = tokenCounter === undefined ? null : await deriveContextBudgetProfile({
-        contextWindowTokens: limits.contextWindowTokens ?? limits.maxCallTokens,
+      const profile = tokenCounter === undefined ? null : await deriveContextCapacityProfile({
+        contextWindowTokens: limits.contextWindowTokens,
         counter: tokenCounter,
         systemPrompt: typeof request.systemMessage.content === 'string' ? request.systemMessage.content :
           JSON.stringify(request.systemMessage.content),
@@ -36,7 +36,7 @@ export function createRunBudgetMiddleware(
           return { name: tool.name, description: tool.description, schema: tool.schema };
         })
       });
-      return await budgetObserver.invoke({
+      return await usageObserver.invoke({
         messages: [request.systemMessage, ...request.messages],
         purpose: 'agent',
         estimatedInputTokens: count === null || profile === null ? null : count.tokens + profile.systemToolOverheadTokens,
@@ -78,8 +78,6 @@ export function createRunBudgetMiddleware(
           taskDescription: description,
           taskDescriptionHash: hashToolInput(description),
           permissions: subagentType === 'research' ? ['web_read'] : ['workspace_read', 'research_read', 'web_read'],
-          maxChildTasks: limits.maxChildTasks,
-          maxConcurrentChildTasks: limits.maxConcurrentChildTasks,
           artifactRefs,
           acceptanceCriteria: (taskContract?.criteria ?? []).map((criterion) => ({
             id: criterion.id,
@@ -126,7 +124,7 @@ function safeChildFailureCode(error: unknown): string {
 }
 
 // Corrections enter main state before compaction; child agents never own the user inbox.
-export function createRunCorrectionMiddleware(ledger: RunBudgetLedger, runId: string) {
+export function createRunCorrectionMiddleware(ledger: RunUsageLedger, runId: string) {
   return createMiddleware({
     name: 'RocRunCorrectionMiddleware',
     beforeModel: () => {

@@ -11,22 +11,7 @@ import {
 } from '../../shared/form-ui';
 import type { RocClient } from '../../shared/roc-client';
 
-/**
- * 受限试点 (P6-04).
- *
- * The pilot is *not* part of the whole-save settings document: it has its own durable state
- * (`agent.pilot.*`), because turning it on is a runtime execution decision rather than a
- * preference field. Three rules shape this surface:
- *
- *  1. **Opt-in discloses the extra allowance.** Enabling requires a microusd ceiling *and* an
- *     explicit acknowledgement; the button stays disabled until both are given.
- *  2. **Cost is declared unknown.** Roc has no price table, so the surface says so instead of
- *     showing a fabricated amount. The allowance it can actually meter (model calls, tool calls,
- *     tokens) is shown as numbers.
- *  3. **The breaker is visible and reversible.** A tripped breaker names its reason, and
- *     「关闭并回退」 is always available; it both disables the pilot and keeps the breaker open
- *     until a fresh opt-in, so nothing restarts silently.
- */
+/** Explicit pilot opt-in and reversible failure breaker. */
 
 const profileLabels: Record<PilotProfile, string> = {
   'read-only': '只读（禁止写工作区、宿主机命令与网络读取）',
@@ -37,11 +22,9 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
   const status = useAsyncResource('pilot', () => client.api.agent.getPilotStatus(), { label: '读取受限试点' });
   const [profile, setProfile] = useState<PilotProfile>('read-only');
   const [rolloutPercent, setRolloutPercent] = useState(10);
-  const [extraBudgetMicrousd, setExtraBudgetMicrousd] = useState(200);
-  const [acknowledged, setAcknowledged] = useState(false);
 
   const enable = useAsyncAction(
-    (request: { profile: PilotProfile; rolloutPercent: number; extraBudgetMicrousd: number; budgetAcknowledged: boolean }) =>
+    (request: { profile: PilotProfile; rolloutPercent: number }) =>
       client.api.agent.enablePilot(request),
     { label: '开启受限试点' }
   );
@@ -59,16 +42,9 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
       }
       const result = await enable.run({
         profile,
-        rolloutPercent,
-        extraBudgetMicrousd,
-        budgetAcknowledged: acknowledged
+        rolloutPercent
       });
-      if (result.ok) {
-        // The acknowledgement belongs to the disclosure just accepted: a later re-enable (which
-        // clears the breaker) must be a deliberate act, not a leftover checkbox.
-        setAcknowledged(false);
-        status.reload();
-      }
+      if (result.ok) status.reload();
     })();
   };
 
@@ -105,10 +81,8 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
         ) : null}
         <span className="text-subtle">
           失败连击 {settings.failureStreak}/{settings.maxFailureStreak}
-          {settings.budgetAcknowledgedAt === null ? '' : `，预算确认于 ${settings.budgetAcknowledgedAt}`}
         </span>
       </div>
-
 
       <label className="flex max-w-[520px] flex-col gap-0.5">
         <span className="text-subtle text-[length:var(--font-micro-size)]">配置文件</span>
@@ -136,35 +110,13 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
             testId="settings-pilot-rollout"
           />
         </div>
-        <div className="w-[180px]">
-          <NumberField
-            label="额外预算上限（微美元）"
-            value={extraBudgetMicrousd}
-            onChange={(next) => setExtraBudgetMicrousd(next === null || next === undefined ? 1 : next)}
-            min={1}
-            disabled={busy}
-            testId="settings-pilot-budget"
-          />
-        </div>
       </div>
-
-      <label className="flex items-start gap-2 text-[length:var(--font-meta-size)] text-muted">
-        <input
-          type="checkbox"
-          checked={acknowledged}
-          onChange={(event) => setAcknowledged(event.target.checked)}
-          disabled={busy}
-          data-testid="settings-pilot-acknowledge"
-          className="mt-0.5"
-        />
-        <span>我了解试点会为该运行申请额外预算，并可能因额度耗尽或连续失败自动熔断。</span>
-      </label>
 
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           data-testid="settings-pilot-enable"
-          disabled={busy || !acknowledged || extraBudgetMicrousd < 1}
+          disabled={busy}
           onClick={() => runAction('enable')}
           className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
         >
@@ -188,7 +140,6 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
           {actionError}
         </FormNote>
       )}
-
       {data.lastRun === null ? null : (
         <div
           className="flex flex-col gap-0.5 text-[length:var(--font-meta-size)] text-muted"
@@ -200,11 +151,6 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
             {data.lastRun.bucket}，{data.lastRun.state}
           </span>
           <span className="text-subtle">当次披露：{data.lastRun.disclosure}</span>
-          <span>
-            已用 {data.lastRun.spent.modelCalls}/{data.lastRun.allowance.modelCalls} 次模型调用，{' '}
-            {data.lastRun.spent.toolCalls}/{data.lastRun.allowance.toolCalls} 次工具调用，{' '}
-            {data.lastRun.spent.totalTokens}/{data.lastRun.allowance.totalTokens} tokens
-          </span>
         </div>
       )}
 

@@ -2,7 +2,7 @@ import type {OpenResearchArtifact, OpenReviewInspector, ReadResearchGateContext}
 import {ReviewLinkActionsProvider} from './blocks/review-link-actions';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Bot, Loader2, Minimize2, Settings2 } from 'lucide-react';
-import type { ChatRunMode, RunBudgetStatus, SettingsSnapshot } from '../../shared/types';
+import type { ChatRunMode, SettingsSnapshot } from '../../shared/types';
 import { buildProviderModelKey } from '../../shared/provider-model-key';
 import { useAsyncAction, useAsyncResource } from '../app/use-async-resource';
 import { useSettingsRevision, notifySettingsChanged } from '../shared/settings-events';
@@ -60,27 +60,6 @@ import { RunDiagnostics } from './RunDiagnostics';
  * one project's conversation, and carrying it across projects would be exactly the leak gate 6
  * is about.
  */
-function formatBudgetCount(value: number): string {
-  return new Intl.NumberFormat('zh-CN').format(value);
-}
-
-function formatMicroUsd(value: number): string {
-  return `$${(value / 1_000_000).toFixed(6)}`;
-}
-
-function formatRunBudgetStatus(status: RunBudgetStatus): string {
-  return [
-    `Tokens ${status.tokens.settled} known`,
-    `${status.tokens.unknown} unknown`,
-    `${status.tokens.reserved} reserved`,
-    `${status.tokens.remaining} remaining`,
-    `Models ${status.calls.models.total}/${status.calls.models.limit}`,
-    `Tools ${status.calls.tools.total}/${status.calls.tools.limit}`,
-    status.cost.state === 'unknown' ? 'Cost unknown' : `Cost ${formatMicroUsd(status.cost.settledMicrousd ?? 0)} settled`,
-    status.stopReason === null ? null : `Stopped: ${status.stopReason}`
-  ].filter((part): part is string => part !== null).join('; ');
-}
-
 export type AssistantPanelProps = {
   client: RocClient;
   projectId: string | null;
@@ -306,11 +285,6 @@ export function AssistantPanel({
     [session]
   );
 
-  const onResumeCheckpoint = useCallback(
-    (runId: string) => session.resumeCheckpoint(runId),
-    [session.resumeCheckpoint]
-  );
-
   const header = (
     <div className="flex shrink-0 flex-col gap-1.5 border-b-[0.5px] border-line px-3 py-2">
       <div className="flex min-w-0 items-center gap-2">
@@ -361,24 +335,6 @@ export function AssistantPanel({
           {session.messages.length} 条
         </span>
       </div>
-      {session.runState.budget === null ? null : (
-        <details className="min-w-0 text-muted tabular-nums text-[length:var(--font-meta-size)]"
-          data-testid="assistant-budget-status" aria-label={formatRunBudgetStatus(session.runState.budget)}>
-          <summary className="cursor-default rounded-chip py-1 hover:text-ink">
-            用量 <span className="ml-2">{formatBudgetCount(session.runState.budget.tokens.settled)} tokens</span>
-            {session.runState.budget.stopReason === null ? null : <span className="ml-2 text-st-warn">预算已停止</span>}
-          </summary>
-          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 py-2">
-            <dt>Token 余量</dt><dd>{formatBudgetCount(session.runState.budget.tokens.remaining)}</dd>
-            <dt>预留 / 未知</dt><dd>{formatBudgetCount(session.runState.budget.tokens.reserved)} / {formatBudgetCount(session.runState.budget.tokens.unknown)}</dd>
-            <dt>模型调用</dt><dd>{session.runState.budget.calls.models.total} / {session.runState.budget.calls.models.limit}</dd>
-            <dt>工具调用</dt><dd>{session.runState.budget.calls.tools.total} / {session.runState.budget.calls.tools.limit}</dd>
-            <dt>已结算费用</dt><dd>{session.runState.budget.cost.state === 'unknown' ? '未知' : formatMicroUsd(session.runState.budget.cost.settledMicrousd ?? 0)}</dd>
-            <dt>预留费用</dt><dd>{session.runState.budget.cost.state === 'unknown' ? '未知' : formatMicroUsd(session.runState.budget.cost.reservedMicrousd ?? 0)}</dd>
-          </dl>
-          {session.runState.budget.stopReason === null ? null : <p className="pb-2 break-words text-st-warn">{session.runState.budget.stopReason}</p>}
-        </details>
-      )}
       {diagnosticsRunId === null || threadId === null ? null : (
         <RunDiagnostics
           key={`${threadId}:${diagnosticsRunId}`}
@@ -456,7 +412,6 @@ export function AssistantPanel({
             onApprovalDecision={onApprovalDecision}
             onOpenArtifact={onOpenArtifact}
             onReadGateContext={onReadGateContext}
-            onResumeCheckpoint={onResumeCheckpoint}
           />
           </ReviewLinkActionsProvider>
         )}

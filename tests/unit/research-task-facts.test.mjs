@@ -44,7 +44,7 @@ test('facts persist bounded immutable revisions and retain user corrections, hyp
     const reopened = new api.ResearchTaskFactsService(repository).get(f.scope);
     assert.deepEqual(reopened.snapshot, second); assert.equal(reopened.freshness.length, 4);
     assert.equal(tasks.get(f.scope.taskId, f.scope.projectId).goal, f.tasks.get(f.scope.taskId, f.scope.projectId).goal);
-    assert.deepEqual(tasks.budgetForExecution('stage', f.run.id, f.project.id), f.tasks.budgetForExecution('stage', f.run.id, f.project.id));
+    assert.deepEqual(tasks.modelConfigForExecution('stage', f.run.id, f.project.id), f.tasks.modelConfigForExecution('stage', f.run.id, f.project.id));
   } finally {researchDb?.close(); agentDb?.close(); f.close(); await rm(directory, {recursive: true, force: true});}
 });
 
@@ -121,12 +121,10 @@ test('real model receives injection, counterevidence and fixed evaluation only a
     const snapshot = f.save([fact('injection', 'hypothesis', text), fact('counter', 'counterevidence', 'Negative result.'),
       fact('evaluation', 'evaluation_condition', 'Frozen evaluation 5.')]);
     const model = new Model({maxRetries: 0});
-    f.agentDb.prepare('UPDATE research_task_budgets SET limits_json=? WHERE task_id=?')
-      .run(JSON.stringify(api.createRunBudget({contextBudgetTokens: 16000, maxOutputTokens: 1000})), f.scope.taskId);
     const executor = api.createResearchRoleExecutor({createDefaultModelHandle: async () => ({
       providerId: 'fixture', modelId: 'fixture', langChainHandle: {model}
-    })}, new api.RunBudgetLedger(f.agentDb));
-    const prepared = await executor.prepare({kind: 'app_default'}, f.tasks.budgetForExecution('stage', f.run.id, f.project.id));
+    })}, new api.RunUsageLedger(f.agentDb));
+    const prepared = await executor.prepare({kind: 'app_default'}, f.tasks.modelConfigForExecution('stage', f.run.id, f.project.id));
     await prepared.execute({run: f.run, context: f.repository.runs.getContext(f.run.id),
       loadTaskContext: () => ({task: f.tasks.get(f.scope.taskId, f.scope.projectId), facts: f.service.get(f.scope)}),
       tools: [], signal: new AbortController().signal});
@@ -140,7 +138,7 @@ test('real model receives injection, counterevidence and fixed evaluation only a
   } finally {f.close();}
 });
 
-test('transient chat context rebuild survives empty compacted messages without changing system/state or bypassing budget order', async () => {
+test('transient chat context rebuild survives empty compacted messages without changing system/state or bypassing middleware order', async () => {
   const f = scene();
   try {
     f.save([fact('counter', 'counterevidence', 'Keep negative result.')]);

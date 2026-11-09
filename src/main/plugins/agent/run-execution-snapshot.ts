@@ -1,19 +1,7 @@
 import { realpathSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { DEFAULT_CONTEXT_BUDGET_TOKENS } from '../../../shared/provider-defaults';
-import {
-  DEFAULT_RUN_DEADLINE_MS,
-  DEFAULT_RUN_MAX_CHILD_TASKS,
-  DEFAULT_RUN_MAX_CONCURRENT_CHILD_TASKS,
-  DEFAULT_RUN_MAX_CONCURRENT_MODEL_CALLS,
-  DEFAULT_RUN_MAX_CONCURRENT_TOOL_CALLS,
-  DEFAULT_RUN_MAX_MODEL_CALLS,
-  DEFAULT_RUN_MAX_TOOL_CALLS,
-  RUN_BUDGET_POLICY_VERSION,
-  RUN_BUDGET_PRICING_CATALOG_VERSION,
-  deriveModelCallTokenReservation,
-  resolveRunModelOutputTokens
-} from '../../../shared/run-budget-policy';
+import { DEFAULT_CONTEXT_WINDOW_TOKENS } from '../../../shared/provider-defaults';
+import { resolveRunModelOutputTokens } from '../../../shared/model-context';
 import type { ChatRunMode, ChatStartRunRequest, RunExecutionSnapshot, TaskRun, WorkflowHint } from '../../../shared/types';
 import { taskSourceFromRunSnapshot } from '../../../shared/agent-task-source';
 import { runExecutionSnapshotSchema } from '../../../shared/schemas/agent';
@@ -73,7 +61,7 @@ function freezeRunInputs(snapshot: RunExecutionSnapshotSeed): RunExecutionSnapsh
     schemaVersion: 1,
     requestHash: snapshot.submissionHash,
     manifestHash: snapshot.capabilityManifest.manifestHash,
-    policyHash: hash({ budget: snapshot.budget, model: snapshot.model, taskContract: snapshot.taskContract }),
+    policyHash: hash({ modelConfig: snapshot.modelConfig, model: snapshot.model, taskContract: snapshot.taskContract }),
     versions: snapshot.capabilityManifest.skills.map(skill => ({ kind: 'skill', id: skill.canonicalIdentity, hash: skill.contentHash }))
   };
 }
@@ -85,35 +73,16 @@ function captureWorkspaceIdentity(path: string): { path: string; dev: string; in
   return { path: canonicalPath, dev: String(stat.dev), ino: String(stat.ino) };
 }
 
-export function createRunBudget(input: {
-  contextBudgetTokens: number | null;
+export function createRunModelConfig(input: {
+  contextWindowTokens: number | null;
   maxOutputTokens?: number;
-  maxCostMicrousd?: number | null;
-  startedAt?: string;
-}): RunExecutionSnapshot['budget'] {
-  const contextWindowTokens = input.contextBudgetTokens ?? DEFAULT_CONTEXT_BUDGET_TOKENS;
+}): RunExecutionSnapshot['modelConfig'] {
+  const contextWindowTokens = input.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS;
   const maxOutputTokens = resolveRunModelOutputTokens(contextWindowTokens, input.maxOutputTokens);
-  const maxCallTokens = deriveModelCallTokenReservation(contextWindowTokens, maxOutputTokens);
-  const now = input.startedAt === undefined ? Date.now() : Date.parse(input.startedAt);
-  if (!Number.isFinite(now)) throw new Error('run_budget_started_at_invalid');
-  const maxConcurrentModelCalls = DEFAULT_RUN_MAX_CONCURRENT_MODEL_CALLS;
-  const maxTotalTokens = maxCallTokens * maxConcurrentModelCalls;
-  if (!Number.isSafeInteger(maxTotalTokens)) throw new Error('run_budget_total_token_limit_invalid');
   return {
-    policyVersion: RUN_BUDGET_POLICY_VERSION,
+    policyVersion: 1,
     contextWindowTokens,
-    maxOutputTokens,
-    maxCallTokens,
-    maxTotalTokens,
-    maxCostMicrousd: input.maxCostMicrousd ?? null,
-    pricingCatalogVersion: RUN_BUDGET_PRICING_CATALOG_VERSION,
-    maxModelCalls: DEFAULT_RUN_MAX_MODEL_CALLS,
-    maxToolCalls: DEFAULT_RUN_MAX_TOOL_CALLS,
-    maxChildTasks: DEFAULT_RUN_MAX_CHILD_TASKS,
-    maxConcurrentChildTasks: DEFAULT_RUN_MAX_CONCURRENT_CHILD_TASKS,
-    maxConcurrentModelCalls,
-    maxConcurrentToolCalls: DEFAULT_RUN_MAX_CONCURRENT_TOOL_CALLS,
-    deadlineAt: new Date(now + DEFAULT_RUN_DEADLINE_MS).toISOString()
+    maxOutputTokens
   };
 }
 

@@ -45,3 +45,18 @@ test('history and thread switches invalidate the cache and match uncached projec
     assert.deepEqual(project(candidate), transcript.projectChatTranscript(candidate));
   }
 });
+
+
+test('task acceptance reports never appear in historical or live conversations', () => {
+  const acceptance = { ...event(), id: 'acceptance', type: 'task_acceptance', payload: { status: 'passed' } };
+  const started = { ...runState.createEmptyChatRunState(), threadId: 'thread', runId: 'live', status: 'completed' };
+  const updated = runState.applyChatRunEvent(started, { type: 'task_acceptance', runId: 'live', report: acceptance.payload });
+  assert.deepEqual(updated.activityBlocks, []);
+  const input = { events: [acceptance], pendingUserInput: null, threadId: 'thread', liveRun: null };
+  assert.deepEqual(transcript.projectChatTranscript(input), []);
+  const messages = transcript.projectChatTranscript({ ...input, liveRun: { ...started, assistantMessage: 'Answer',
+    activityBlocks: [{ id: 'old-acceptance', kind: 'task_acceptance', report: acceptance.payload }] } });
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].content, 'Answer');
+  assert.deepEqual(messages[0].blocks, []);
+});

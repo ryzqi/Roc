@@ -8,7 +8,6 @@ export type QualityArmOutcome = {
   status: 'success' | 'failure';
   score: number | null;
   latencyMs: number;
-  costUsd: number | null;
   failureClass?: QualityFailureClass;
 };
 
@@ -52,9 +51,6 @@ export type QualityEvaluationStatistics = {
   candidatePassRate: number;
   baselineP95LatencyMs: number;
   candidateP95LatencyMs: number;
-  baselineCostUsd: number | null;
-  candidateCostUsd: number | null;
-  costStatus: 'known' | 'unknown';
   failureCounts: Record<'baseline' | 'candidate', Partial<Record<QualityFailureClass, number>>>;
   familyStatistics: Record<QualityFamily, FamilyStatistics>;
   familyComparisons: 'exploratory-unadjusted';
@@ -89,7 +85,6 @@ function finiteNonNegative(value: number): boolean {
 
 function assertOutcome(outcome: QualityArmOutcome, label: string): void {
   if (!finiteNonNegative(outcome.latencyMs)) throw new Error(`quality_trial_latency_invalid:${label}`);
-  if (outcome.costUsd !== null && !finiteNonNegative(outcome.costUsd)) throw new Error(`quality_trial_cost_invalid:${label}`);
   if (outcome.status === 'success') {
     if (outcome.score === null || !Number.isFinite(outcome.score) || outcome.score < 0 || outcome.score > 1) {
       throw new Error(`quality_trial_score_invalid:${label}`);
@@ -174,11 +169,6 @@ function countFailures(trials: readonly PairedQualityTrial[], arm: 'baseline' | 
     }
   }
   return counts;
-}
-
-function totalCost(trials: readonly PairedQualityTrial[], arm: 'baseline' | 'candidate'): number | null {
-  const values = trials.map(trial => trial[arm].costUsd);
-  return values.every((value): value is number => value !== null) ? values.reduce((sum, value) => sum + value, 0) : null;
 }
 
 export function summarizePairedQualityTrials(
@@ -278,8 +268,6 @@ export function summarizePairedQualityTrials(
   const candidateLatencies = trials.map(trial => trial.candidate.latencyMs);
   const baselinePasses = trials.filter(trial => trial.baseline.status === 'success' && trial.baseline.score === 1).length;
   const candidatePasses = trials.filter(trial => trial.candidate.status === 'success' && trial.candidate.score === 1).length;
-  const baselineCostUsd = totalCost(trials, 'baseline');
-  const candidateCostUsd = totalCost(trials, 'candidate');
   let stopReason: string | null = null;
   if (evidenceStatus === 'insufficient') {
     stopReason = !datasetMatches ? 'independent_frozen_dataset_required' : tasks.size < targetCaseCount ? 'target_case_count_not_met' : 'family_task_or_cluster_quota_not_met';
@@ -303,9 +291,6 @@ export function summarizePairedQualityTrials(
     candidatePassRate: candidatePasses / trials.length,
     baselineP95LatencyMs: p95(baselineLatencies),
     candidateP95LatencyMs: p95(candidateLatencies),
-    baselineCostUsd,
-    candidateCostUsd,
-    costStatus: baselineCostUsd !== null && candidateCostUsd !== null ? 'known' : 'unknown',
     failureCounts: { baseline: countFailures(trials, 'baseline'), candidate: countFailures(trials, 'candidate') },
     familyStatistics,
     familyComparisons: 'exploratory-unadjusted',

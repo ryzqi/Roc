@@ -26,7 +26,7 @@ import { ResearchTaskController } from './task-controller';
 import { researchTaskCapabilities, registerResearchTaskCapabilities } from './task-capabilities';
 import {ResearchTaskDiagnosticsExporter} from './task-diagnostics-export';
 import { ResearchTaskDiagnosticsService } from './task-diagnostics';
-import type { RunBudgetLedger } from '../../services/deep-agent/run-budget-ledger';
+import type { RunUsageLedger } from '../../services/deep-agent/run-usage-ledger';
 import { notifyResearchTaskChanged } from './task-notifications';
 import { LiteratureImportService } from './literature-import-service';
 import { literatureImportCapabilities, registerLiteratureImportCapabilities } from './literature-import-capabilities';
@@ -240,7 +240,7 @@ export type ResearchPluginOptions = {
   resourceRoot: string;
   executionGrantBroker: ExecutionGrantBroker;
   tasks: ResearchTaskRepository;
-  budgetLedger: RunBudgetLedger;
+  usageLedger: RunUsageLedger;
   experimentRoot?: string;
   exportRoot?: string;
   diagnosticsRoot: string;
@@ -496,7 +496,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       runtime.attachTaskController(taskController);
       await runtime.recoverPendingOutputs();
       registerTaskFactCapabilities(context, new ResearchTaskFactsService(researchRepository));
-      const taskDiagnostics = new ResearchTaskDiagnosticsService(researchRepository, options.budgetLedger, reviewSearches, researchExperiments);
+      const taskDiagnostics = new ResearchTaskDiagnosticsService(researchRepository, options.usageLedger, reviewSearches, researchExperiments);
       registerResearchTaskCapabilities(context, options.tasks, taskController, taskDiagnostics,
         new ResearchTaskDiagnosticsExporter(taskDiagnostics, options.tasks, options.diagnosticsRoot));
       registerResearchRunCapabilities(context, researchRepository.runs, runtime, researchRepository.reviews, options.executionGrantBroker);

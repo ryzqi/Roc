@@ -63,8 +63,8 @@ Exactly one bundled manuscript MUST be the mainEntity and have a recorded human 
 Each scholarly work MUST declare its license and either bundled paths or metadata-only acquisition instructions.
 References MUST be metadata-only. A license declaration does not itself grant redistribution rights.</p>
 <p>Every graph reference MUST resolve within this flat graph and every entity MUST be reachable from the root or descriptor.
-Execution activities MUST preserve recorded environment, parameters, seed and cost;
-unknown seed or cost MUST remain explicitly unknown. Public metadata MUST NOT expose private paths or credentials.
+Execution activities MUST preserve recorded environment, parameters and seed;
+unknown seed MUST remain explicitly unknown. Public metadata MUST NOT expose private paths or credentials.
 Approval bindings MUST identify artifact, exact version, recorded time and review file;
 scientific approval does not grant permission to publish.</p></html>
 `;
@@ -119,9 +119,7 @@ export function buildResearchCrate(input: ResearchCrateInput): ResearchCrateDocu
       {name: 'execution status', value: activity.status}, {name: 'environment version', value: activity.environment.version},
       ...activity.environment.packages.map(property => ({name: `package: ${property.name}`, value: property.value})),
       ...activity.parameters.map(property => ({name: `parameter: ${property.name}`, value: property.value})),
-      ...(activity.seed === null ? [{name: 'random seed', value: 'Not recorded'}] : [{name: 'random seed', value: activity.seed}]),
-      ...(activity.cost.kind === 'known' ? [{name: 'cost (microusd)', value: activity.cost.microusd}] :
-        [{name: 'cost unknown', value: activity.cost.reason}])
+      ...(activity.seed === null ? [{name: 'random seed', value: 'Not recorded'}] : [{name: 'random seed', value: activity.seed}])
     ];
     const additionalProperty = properties.map((property, index) => {
       const propertyId = `${id}-property-${index}`;

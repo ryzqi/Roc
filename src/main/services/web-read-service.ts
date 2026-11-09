@@ -69,7 +69,6 @@ export type WebReadRequest = {
   engine?: WebReadEngine;
   locale?: string;
   referer?: string;
-  tokenBudget?: number;
   maxTokens?: number;
   assertStatusCode?: number;
   respondTiming?: WebReadRespondTiming;
@@ -241,7 +240,6 @@ export class WebReadService {
     this.setStringHeader(headers, 'X-Engine', request.engine);
     this.setStringHeader(headers, 'X-Locale', request.locale);
     this.setStringHeader(headers, 'X-Referer', request.referer);
-    this.setNumberHeader(headers, 'X-Token-Budget', request.tokenBudget);
     this.setNumberHeader(headers, 'X-Max-Tokens', request.maxTokens);
     this.setNumberHeader(headers, 'X-Assert-Status-Code', request.assertStatusCode);
     this.setStringHeader(headers, 'X-Respond-Timing', request.respondTiming);

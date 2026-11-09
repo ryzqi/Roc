@@ -26,6 +26,10 @@ before(async () => {
       import { useMcp } from './src/renderer/management/use-mcp';
       import { useChatSession } from './src/renderer/assistant/use-chat-session';
       import { buildTranscriptVirtuosoWindow, ChatTranscriptPanel, useTranscriptFirstItemIndex } from './src/renderer/assistant/transcript-panel';
+      import { projectChatTranscript } from './src/renderer/assistant/transcript';
+      import { createEmptyChatRunState } from './src/renderer/assistant/run-state';
+      window.projectChatTranscript = projectChatTranscript;
+      window.createEmptyChatRunState = createEmptyChatRunState;
       import { useGitWorkspace } from './src/renderer/workspace/use-git-workspace';
       import { useLiteratureImportActions } from './src/renderer/literature/use-literature-import-actions';
       import { researchIndexSettingsSaveSchema } from './src/shared/schemas/research-index';
@@ -1021,4 +1025,25 @@ test('file actions from an old workspace ignore late success and skip stale erro
   assert.deepEqual(await page.evaluate(() => ({workspacePath: latest.snapshot.workspacePath, actionError: latest.actionError, pending: latest.pending})), {
     workspacePath: '/third', actionError: null, pending: null
   });
+});
+
+test('conversation renders its answer without historical or live task acceptance cards', async () => {
+  for (const source of ['persisted', 'live']) {
+    await page.evaluate(source => {
+      const report = {status: 'passed', criteria: [], summary: '任务验收'};
+      const events = [{id: 'acceptance', threadId: 'no-acceptance', runId: 'past', sequence: 1,
+        type: 'task_acceptance', payload: report, createdAt: '2026-11-09T00:00:00.000Z'}];
+      if (source === 'persisted') events.push({id: 'answer', threadId: 'no-acceptance', runId: 'past', sequence: 2,
+        type: 'message', payload: {role: 'assistant', content: 'Answer remains visible'}, createdAt: '2026-11-09T00:00:01.000Z'});
+      const liveRun = source === 'live' ? {...createEmptyChatRunState(), threadId: 'no-acceptance', runId: 'live',
+        status: 'completed', assistantMessage: 'Answer remains visible',
+        activityBlocks: [{id: 'acceptance', kind: 'task_acceptance', report}]} : null;
+      mountTranscript({threadId: 'no-acceptance', messages: projectChatTranscript({events, liveRun, pendingUserInput: null, threadId: 'no-acceptance'}),
+        prependRevision: 0, trimRevision: 0, windowEpoch: 0, tailTrimmed: false, hasMoreBefore: false, loadingOlder: false,
+        loadOlder: async () => {}, onJumpToLatest: async () => {}});
+    }, source);
+    await page.getByText('Answer remains visible', {exact: true}).waitFor();
+    assert.equal(await page.getByText('任务验收').count(), 0);
+    assert.equal(await page.locator('[data-testid="assistant-message-assistant"]').count(), 1);
+  }
 });

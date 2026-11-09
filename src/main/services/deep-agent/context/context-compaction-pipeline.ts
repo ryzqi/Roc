@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { collectContextRequirements, contextEvidenceLocators, isContextContract, pinContextContractWithAudit, type ContextControlState } from './context-contract';
 import { createEmptyContextContractAudit, type ContextContractAudit, type ContextCompactionRecord } from '../../../../shared/schemas/run-diagnostics';
 import type { RunExecutionSnapshot } from '../../../../shared/types';
-import type { RunBudgetObserver } from '../run-budget-observer';
+import type { RunUsageObserver } from '../run-usage-observer';
 
 import {
   createForgeTieredCompactionEdits,
@@ -32,10 +32,10 @@ import {
   type ContextSummaryInput
 } from './context-summary';
 import {
-  deriveContextBudgetProfile,
-  type ContextBudgetProfile,
+  deriveContextCapacityProfile,
+  type ContextCapacityProfile,
   type ContextTokenCounter
-} from './context-token-budget';
+} from './context-capacity';
 
 const DEFAULT_TOOL_RESULT_PERSIST_CHARS = 30_000;
 const SUMMARY_THRESHOLD = 0.9;
@@ -62,7 +62,7 @@ export type ContextMaintenanceEvent = {
   persistedChars?: number;
   removedChars?: number;
   inputTokens?: number;
-  budgetTokens?: number;
+  capacityTokens?: number;
   estimated?: boolean;
   cycleId?: string;
   contractAudit?: ContextContractAudit;
@@ -86,9 +86,9 @@ export type RocContextCompactionOptions = {
   artifactStore: ContextArtifactStore;
   readControlState: () => ContextControlState;
   artifactRecoveryEnabled?: boolean;
-  budgetProfile: ContextBudgetProfile;
+  capacityProfile: ContextCapacityProfile;
   callbacks?: RunnableConfig['callbacks'];
-  budgetObserver?: RunBudgetObserver;
+  usageObserver?: RunUsageObserver;
   emitEvent: (event: ContextMaintenanceEvent) => void;
   mode: ContextCompactionMode;
   model: Pick<BaseChatModel, 'invoke'> & Partial<Pick<BaseChatModel, 'getNumTokens'>>;
@@ -138,7 +138,7 @@ export function createRocContextCompactionMiddleware(options: RocContextCompacti
           ...input,
           model: options.model,
           callbacks: options.callbacks,
-          budgetObserver: options.budgetObserver
+          usageObserver: options.usageObserver
         })
       });
       if (sameMessageSequence(originalMessages, compactedMessages)) {
@@ -164,15 +164,15 @@ export function createRocContextCompactionMiddleware(options: RocContextCompacti
           schema: tool.schema
         };
       });
-      const profile = await deriveContextBudgetProfile({
-        contextWindowTokens: options.budgetProfile.contextWindowTokens,
+      const profile = await deriveContextCapacityProfile({
+        contextWindowTokens: options.capacityProfile.contextWindowTokens,
         counter: tokenCounter,
         systemPrompt: contentToString(request.systemMessage.content),
         tools
       });
       const count = await tokenCounter.countMessages(request.messages);
       if (count.tokens > profile.modelInputTokens) {
-        throw new Error('context_budget_exhausted');
+        throw new Error('context_window_exceeded');
       }
       return await handler(request);
     }
@@ -183,8 +183,8 @@ export async function runContextCompaction(input: RunCompactionInput): Promise<B
   const emitEvent = input.emitEvent;
   const cycleId = randomUUID();
   input = { ...input, emitEvent: event => emitEvent({ ...event, cycleId }) };
-  return input.budgetObserver === undefined ? await runContextCompactionStages(input) :
-    await input.budgetObserver.withContextCycle(cycleId, () => runContextCompactionStages(input));
+  return input.usageObserver === undefined ? await runContextCompactionStages(input) :
+    await input.usageObserver.withContextCycle(cycleId, () => runContextCompactionStages(input));
 }
 
 async function runContextCompactionStages(input: RunCompactionInput): Promise<BaseMessage[]> {
@@ -222,14 +222,14 @@ async function runContextCompactionStages(input: RunCompactionInput): Promise<Ba
       ...createEvent(input, 'context_deterministic_compacted', stage),
       removedChars: Math.max(0, beforeDeterministicChars - afterDeterministicChars),
       inputTokens: deterministicTokens,
-      budgetTokens: input.budgetProfile.modelInputTokens,
+      capacityTokens: input.capacityProfile.modelInputTokens,
       estimated: input.countTokensEstimated?.() === true,
       contractAudit, record: structuredClone(record)
     });
     requirePreservedContract(contractAudit);
 
     const tokensAfterDeterministic = deterministicTokens;
-    if (tokensAfterDeterministic < input.budgetProfile.modelInputTokens * SUMMARY_THRESHOLD) {
+    if (tokensAfterDeterministic < input.capacityProfile.modelInputTokens * SUMMARY_THRESHOLD) {
       input.emitEvent({
         ...createEvent(input, 'context_summary_skipped', 'summary'),
         contractAudit
@@ -278,7 +278,7 @@ async function runContextCompactionStages(input: RunCompactionInput): Promise<Ba
     input.emitEvent({
       ...createEvent(input, 'context_summary_completed', stage),
       inputTokens: await input.countTokens(messages),
-      budgetTokens: input.budgetProfile.modelInputTokens,
+      capacityTokens: input.capacityProfile.modelInputTokens,
       estimated: input.countTokensEstimated?.() === true,
       contractAudit, record: structuredClone(record)
     });
@@ -374,7 +374,7 @@ async function runDeterministicCompaction(
   messages: readonly BaseMessage[]
 ): Promise<BaseMessage[]> {
   const options: ForgeTieredCompactionOptions = {
-    budgetTokens: input.budgetProfile.modelInputTokens
+    capacityTokens: input.capacityProfile.modelInputTokens
   };
   const working = [...messages];
   const edits = createForgeTieredCompactionEdits(options);
@@ -457,7 +457,7 @@ async function summarizeContext(
       ? async (summaryInput: ContextSummaryInput) => await summarizeWithCurrentModel({
           ...summaryInput,
           model: input.model,
-          budgetObserver: input.budgetObserver
+          usageObserver: input.usageObserver
         })
       : input.summarize;
   return await summarize(summaryInput);
@@ -483,7 +483,7 @@ async function prepareSummaryInput(
   }
   let summaryInput = createSummaryInput(input, references, workingMessages, allMessages);
   const measured = await countSummaryInput(input, summaryInput);
-  if (measured.tokens <= input.budgetProfile.summaryInputTokens) {
+  if (measured.tokens <= input.capacityProfile.summaryInputTokens) {
     return { artifactLocators, summaryInput: addSummaryEstimate(summaryInput, measured) };
   }
 
@@ -491,11 +491,11 @@ async function prepareSummaryInput(
     removeMessageGroup(workingMessages, 0);
     summaryInput = createSummaryInput(input, references, workingMessages, allMessages);
     const measurement = await countSummaryInput(input, summaryInput);
-    if (measurement.tokens <= input.budgetProfile.summaryInputTokens) {
+    if (measurement.tokens <= input.capacityProfile.summaryInputTokens) {
       return { artifactLocators, summaryInput: addSummaryEstimate(summaryInput, measurement) };
     }
   }
-  throw new Error('context_summary_budget_exhausted');
+  throw new Error('context_summary_too_large');
 }
 
 function createSummaryInput(
@@ -556,7 +556,7 @@ async function enforceHardContextLimit(
   messages: readonly BaseMessage[]
 ): Promise<BaseMessage[]> {
   const initialTokens = await input.countTokens(messages);
-  if (initialTokens <= input.budgetProfile.modelInputTokens) {
+  if (initialTokens <= input.capacityProfile.modelInputTokens) {
     return [...messages];
   }
 
@@ -570,7 +570,7 @@ async function enforceHardContextLimit(
     (message) => protectedSet.has(message) || !isContextDigestMessage(message)
   );
   let tokens = await input.countTokens(compacted);
-  while (tokens > input.budgetProfile.modelInputTokens) {
+  while (tokens > input.capacityProfile.modelInputTokens) {
     const removableIndex = compacted.findIndex((message) => !protectedSet.has(message));
     if (removableIndex === -1) {
       break;
@@ -579,8 +579,8 @@ async function enforceHardContextLimit(
     tokens = await input.countTokens(compacted);
   }
 
-  if (tokens > input.budgetProfile.modelInputTokens) {
-    throw new Error('context_budget_exhausted');
+  if (tokens > input.capacityProfile.modelInputTokens) {
+    throw new Error('context_window_exceeded');
   }
   return compacted;
 }

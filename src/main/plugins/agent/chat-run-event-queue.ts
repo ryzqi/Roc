@@ -78,9 +78,9 @@ export function createChatRunEventQueue(input: {
         eventBytes.splice(0, nextEventIndex);
         nextEventIndex = 0;
       }
-      if (event.type === 'run_budget') {
-        const queuedBudgetIndex = findQueuedBudgetIndex(events, nextEventIndex, event.runId);
-        if (queuedBudgetIndex >= nextEventIndex) removeQueuedEvent(queuedBudgetIndex);
+      if (event.type === 'run_usage') {
+        const queuedUsageIndex = findQueuedUsageIndex(events, nextEventIndex, event.runId);
+        if (queuedUsageIndex >= nextEventIndex) removeQueuedEvent(queuedUsageIndex);
       }
       const lastIndex = events.length - 1;
       const last = lastIndex < nextEventIndex ? undefined : events[lastIndex];
@@ -231,10 +231,10 @@ function serializedBytes(event: ChatRunEvent): number | null {
   return serialized === null ? null : Buffer.byteLength(serialized, 'utf8');
 }
 
-function findQueuedBudgetIndex(events: readonly ChatRunEvent[], from: number, runId: string): number {
+function findQueuedUsageIndex(events: readonly ChatRunEvent[], from: number, runId: string): number {
   for (let index = events.length - 1; index >= from; index -= 1) {
     const event = events[index];
-    if (event?.type === 'run_budget' && event.runId === runId) return index;
+    if (event?.type === 'run_usage' && event.runId === runId) return index;
   }
   return -1;
 }

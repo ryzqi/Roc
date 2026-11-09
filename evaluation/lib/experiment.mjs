@@ -10,7 +10,7 @@ const score = z.number().min(0).max(1);
 const taskRef = z.strictObject({ taskId: text, repeat: z.number().int().nonnegative() });
 const changePath = z.string().regex(/^(src|resources)\//).refine(p => !/[\\\r\n]/.test(p) && !p.split('/').some(s => ['', '.', '..'].includes(s)));
 const analysisSchema = z.strictObject({
-  category: z.enum(['agent', 'harness', 'environment', 'verifier', 'provider', 'budget', 'unknown']),
+  category: z.enum(['agent', 'harness', 'environment', 'verifier', 'provider', 'unknown']),
   observation: text, hypothesis: text, proposedChange: text, expectedOutcome: text
 });
 export const experimentSpecSchema = z.strictObject({

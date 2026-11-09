@@ -100,7 +100,7 @@ export function classifyFailure(error: unknown): StructuredFailure {
   // 系统内部错误
   if (
     baseFailure.code?.startsWith('agent_checkpoint_') ||
-    baseFailure.code === 'context_budget_exhausted' ||
+    baseFailure.code === 'context_window_exceeded' ||
     baseFailure.code === 'context_contract_required_data_lost'
   ) {
     return {

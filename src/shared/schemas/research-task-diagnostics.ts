@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import {taskTelemetrySchema} from './research-task-observability';
-import { runBudgetStatusSchema } from './agent';
+import { runUsageStatusSchema } from './agent';
 import { researchTaskSchema, researchTaskExecutionSchema } from './research-tasks';
 import { researchStageSchema } from './research';
 import { taskStatusSchema } from './ipc-core';
@@ -22,14 +22,13 @@ export const researchTaskExecutionDiagnosticsSchema = z.object({
 }).strict();
 export const researchTaskDiagnosticsSchema = z.object({
   task: researchTaskSchema,
-  budget: runBudgetStatusSchema,
+  usage: runUsageStatusSchema,
   executions: z.array(researchTaskExecutionDiagnosticsSchema),
   graph: researchTaskGraphSchema,
   continuationRunId: id.nullable(),
   canRestoreApproval: z.boolean(),
   recoveryIssues: z.array(z.enum(['historical_execution_not_resumable', 'research_execution_intent_uncommitted', 'agent_tool_effect_receipt_missing', 'research_stage_inputs_stale', 'research_stage_snapshot_invalid'])),
   eventDelivery: z.object({pending: z.number().int().nonnegative(), failed: z.number().int().nonnegative()}).strict(),
-  externalCost: z.literal('unknown')
 }).strict();
 export type ResearchTaskDiagnostics = z.infer<typeof researchTaskDiagnosticsSchema>;
 export type ResearchTaskExecutionDiagnostics = z.infer<typeof researchTaskExecutionDiagnosticsSchema>;

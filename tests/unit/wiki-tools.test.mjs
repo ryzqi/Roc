@@ -38,12 +38,12 @@ test('real SDK Wiki tools bind project, navigate citations and publish only gene
     f.controller.abort();await assert.rejects(()=>f.call('search',{query:'',offset:0}));
   }finally{await f.repository.wiki.shutdown();f.close();}
 });
-test('navigation has an enforced per-run budget and read tools never mutate originals',async()=>{
+test('navigation continues past old per-run quotas and read tools never mutate originals',async()=>{
   const f=scene();try {
     f.repository.wiki.start();await f.repository.wiki.idle();
     const changes=f.db.prepare('SELECT total_changes()').pluck().get();
     for(let i=0;i<12;i++)await f.call('search',{query:'missing',offset:i});
-    await assert.rejects(()=>f.call('search',{query:'missing',offset:12}),/budget_exhausted/);
+    await f.call('search',{query:'missing',offset:12});
     assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),changes);
     assert.deepEqual(f.tools.map(t=>t.name).sort(),api.WIKI_TOOL_DESCRIPTORS.map(t=>t.name).sort());
     assert.ok(api.WIKI_TOOL_DESCRIPTORS.filter(t=>t.effectClass!=='none').every(t=>t.executionScopes.join()==='main'));

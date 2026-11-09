@@ -11,13 +11,10 @@ export type QualityWorkerArtifact = {
   path: string; sha256: string; commitSha: string;
   nodeModulesPath: string; lockfilePath: string; lockfileSha256: string; nodeVersion: string;
 };
-/** Trusted host transport; provider must enforce each quoted request ceiling, including retries.
- * Credentials stay inside this host closure. No ambient credentials or tracing are used by worker.
- */
 export type QualityHostTransport = {
-  providerId: string; pricingVersion: string;
-  complete(input: { body: Record<string, unknown>; maximumCostMicrousd: number; signal: AbortSignal }):
-    Promise<{ body: unknown; costMicrousd: number | null }>;
+  providerId: string;
+  complete(input: { body: Record<string, unknown>; signal: AbortSignal }):
+    Promise<{ body: unknown }>;
 };
 export function qualityIsolationHash(): string {
   return qualityHash({ version: 2, platform: 'macOS-sandbox-exec', network: 'deny',
@@ -30,7 +27,7 @@ export function qualityApplicationEnvironmentHash(workers: Record<'baseline' | '
 export function createApplicationQualityExecutor(options: {
   binding: QualityExecutorBinding; workers: Record<'baseline' | 'candidate', QualityWorkerArtifact>;
   artifactsRoot: string; transport: QualityHostTransport;
-  maxRequestsPerTask: number; maxRequestCostMicrousd: number; protectedPaths: string[];
+  protectedPaths: string[];
   isolationProbePaths?: string[]; isolationProbePort?: number;
 }): QualityExecutor {
   const input = { ...options, binding: Object.freeze({ ...options.binding }),
@@ -43,14 +40,8 @@ export function createApplicationQualityExecutor(options: {
     throw new Error('quality_application_dependency_versions_differ');
   }
   if (input.binding.isolationHash !== qualityIsolationHash() || input.binding.isolation !== 'process-files-tools'
-    || input.binding.providerId !== input.transport.providerId || input.binding.pricingVersion !== input.transport.pricingVersion
-    || input.binding.maxRequestsPerTask !== input.maxRequestsPerTask
-    || input.binding.maxRequestCostMicrousd !== input.maxRequestCostMicrousd) {
+    || input.binding.providerId !== input.transport.providerId) {
     throw new Error('quality_application_binding_invalid');
-  }
-  if (!Number.isSafeInteger(input.maxRequestsPerTask) || input.maxRequestsPerTask < 1
-    || !Number.isSafeInteger(input.maxRequestCostMicrousd) || input.maxRequestCostMicrousd < 1) {
-    throw new Error('quality_application_request_limits_invalid');
   }
   for (const arm of ['baseline', 'candidate'] as const) {
     const worker = input.workers[arm];
@@ -67,7 +58,6 @@ export function createApplicationQualityExecutor(options: {
   }
   return {
     binding: Object.freeze({ ...input.binding }),
-    quote: () => input.maxRequestsPerTask * input.maxRequestCostMicrousd,
     async execute(view, context) {
       const trial = join(input.artifactsRoot, createHash('sha256').update(context.trialId).digest('hex'));
       mkdirSync(trial, { mode: 0o700 }); // Existing state blocks automatic replay.
@@ -118,9 +108,6 @@ export function createApplicationQualityExecutor(options: {
       const abort = () => { void terminate(); };
       context.signal.addEventListener('abort', abort, { once: true });
       let bytes = 0;
-      let requests = 0;
-      let held = 0;
-      let unknown = false;
       let output: string | null = null;
       let resultSeen = false;
       let stderr = '';
@@ -137,7 +124,7 @@ export function createApplicationQualityExecutor(options: {
         context.signal.throwIfAborted();
         send({ view, providerId: input.binding.providerId,
           modelId: input.binding[`${context.arm}ModelId`], temperature: input.binding.temperature,
-          maxRequests: input.maxRequestsPerTask, isolationProbePaths: input.isolationProbePaths ?? [],
+          isolationProbePaths: input.isolationProbePaths ?? [],
           isolationProbePort: input.isolationProbePort ?? null });
         for await (const line of lines) {
           bytes += Buffer.byteLength(line);
@@ -146,30 +133,22 @@ export function createApplicationQualityExecutor(options: {
           context.signal.throwIfAborted();
           const message = JSON.parse(line);
           if (message.type === 'request') {
-            if (++requests > input.maxRequestsPerTask || resultSeen
+            if (resultSeen
               || message.body.model !== input.binding[`${context.arm}ModelId`]
               || message.body.temperature !== input.binding.temperature
               || message.body.stream !== false || message.body.max_tokens !== 4096
-              || message.requestHash !== qualityHash(message.body)
-              || input.maxRequestCostMicrousd > context.maximumCostMicrousd - held) {
+              || message.requestHash !== qualityHash(message.body)) {
               throw new QualityExecutionFailure('policy', 'executor_request_policy_violated');
             }
-            held += input.maxRequestCostMicrousd;
-            await context.recordRequest({ requestHash: message.requestHash, maximumCostMicrousd: input.maxRequestCostMicrousd });
+            await context.recordRequest({ requestHash: message.requestHash });
             context.signal.throwIfAborted();
             const response = await input.transport.complete({
-              body: message.body, maximumCostMicrousd: input.maxRequestCostMicrousd, signal: context.signal
+              body: message.body, signal: context.signal
             }).catch(error => {
               if (context.signal.aborted || (error instanceof Error && error.name === 'QualityExecutionFailure')) throw error;
               throw new QualityExecutionFailure('provider');
             });
             context.signal.throwIfAborted();
-            if (response.costMicrousd === null) unknown = true;
-            else if (!Number.isSafeInteger(response.costMicrousd) || response.costMicrousd < 0
-              || response.costMicrousd > input.maxRequestCostMicrousd) {
-              throw new QualityExecutionFailure('effect', 'executor_cost_ceiling_violated');
-            }
-            else held -= input.maxRequestCostMicrousd - response.costMicrousd;
             send({ type: 'response', body: response.body });
           } else if (message.type === 'result') {
             if (resultSeen || message.manifestHash !== input.binding.toolManifestHash) {
@@ -181,7 +160,7 @@ export function createApplicationQualityExecutor(options: {
         }
         const code = await close;
         if (code !== 0 || !resultSeen) throw new Error(`quality_application_worker_failed:${code}:${stderr.slice(0, 1200)}:${stderr.slice(-500)}`);
-        return { output, costMicrousd: unknown ? null : held };
+        return { output };
       } finally {
         context.signal.removeEventListener('abort', abort);
         lines.close();

@@ -127,7 +127,7 @@ export class TaskContractStore {
     const pendingEffects = this.db.prepare(`SELECT tool_call_id, status FROM agent_tool_effects
       WHERE run_id = ? AND status IN ('reserved', 'in_progress', 'unknown') ORDER BY tool_call_id`)
       .all(runId) as Array<{ tool_call_id: string; status: 'reserved' | 'in_progress' | 'unknown' }>;
-    const childRows = this.db.prepare(`SELECT call_id, state, envelope_json FROM agent_budget_calls
+    const childRows = this.db.prepare(`SELECT call_id, state, envelope_json FROM agent_calls
       WHERE run_id = ? AND kind = 'child' ORDER BY created_at, call_id`)
       .all(runId) as Array<{ call_id: string; state: 'reserved' | 'settled' | 'unknown'; envelope_json: string }>;
     const childTasks = childRows.map((row) => {

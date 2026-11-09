@@ -27,8 +27,7 @@ test('dispatch-validation cleanup wakes the next same-project root', async () =>
     f.repository.runs.terminate(f.run.id, f.project.id, 'failed', 'fixture');
     invalid = f.repository.runs.begin({projectId: f.project.id, expectedStage: 'planning',
       instruction: 'Invalid queued root', requestId: 'bad'});
-    f.agentDb.prepare('UPDATE research_task_budgets SET stop_reason=? WHERE task_id=?')
-      .run('run_model_call_budget_exhausted', invalid.taskId);
+    f.db.prepare("UPDATE research_stage_runs SET context_json='{}' WHERE id=?").run(invalid.id);
     runtime.resumeScheduler();
     assert.equal(f.tasks.get(invalid.taskId, f.project.id).statusReason, 'research_task_cleanup_pending');
     const queued = f.repository.runs.begin({projectId: f.project.id, expectedStage: 'planning',

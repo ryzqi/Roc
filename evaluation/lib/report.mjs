@@ -18,7 +18,7 @@ export function summarize(manifest, trials, fatal = null) {
 }
 export function sealRun(path, summary) {
   writeJson(join(path, 'summary.json'), summary);
-  writeFileSync(join(path, 'report.md'), `# Roc harness evaluation\n\n- Status: ${summary.status}\n- Suite: ${summary.suite}\n- Evidence: ${summary.evidence} (${summary.qualityConclusion})\n- Trials: ${summary.scored}/${summary.expected} scored, ${summary.invalid} invalid, ${summary.unattempted} unattempted\n\n## Metrics\n\n${Object.entries(summary.metrics).map(([k,v]) => `- ${k}: ${v ?? 'unavailable'}`).join('\n')}\n\n## Diagnostics and resource use\n\n\`\`\`json\n${JSON.stringify({ fatal: summary.fatal, failures: summary.failureCounts, exclusions: summary.exclusions, latencyMs: summary.latencyMs, cost: summary.cost }, null, 2)}\n\`\`\`\n\nSee manifest.json for frozen selection and exclusions, trials.json for per-task results, events.jsonl for dispatch history, and trial directories for full application traces. Partial metrics never establish a passing run.\n`, { flag: 'wx', mode: 0o600 });
+  writeFileSync(join(path, 'report.md'), `# Roc harness evaluation\n\n- Status: ${summary.status}\n- Suite: ${summary.suite}\n- Evidence: ${summary.evidence} (${summary.qualityConclusion})\n- Trials: ${summary.scored}/${summary.expected} scored, ${summary.invalid} invalid, ${summary.unattempted} unattempted\n\n## Metrics\n\n${Object.entries(summary.metrics).map(([k,v]) => `- ${k}: ${v ?? 'unavailable'}`).join('\n')}\n\n## Diagnostics and resource use\n\n\`\`\`json\n${JSON.stringify({ fatal: summary.fatal, failures: summary.failureCounts, exclusions: summary.exclusions, latencyMs: summary.latencyMs, usage: summary.usage }, null, 2)}\n\`\`\`\n\nSee manifest.json for frozen selection and exclusions, trials.json for per-task results, events.jsonl for dispatch history, and trial directories for full application traces. Partial metrics never establish a passing run.\n`, { flag: 'wx', mode: 0o600 });
   const inventory = fileInventory(path);
   writeJson(join(path, 'seal.json'), { schemaVersion: 1, inventory, sha256: hash(inventory) });
 }
@@ -72,6 +72,5 @@ export function compareRuns(baseline, candidate, { margin = .05 } = {}) {
     method: 'paired-cluster-bootstrap-percentile', iterations: 2000, margin, clusters: groups.length,
     scope: 'selected public benchmark tasks; no S01 or production-wide claim', metrics,
     latency: { baseline: baseline.summary.latencyMs, candidate: candidate.summary.latencyMs },
-    costs: { baseline: baseline.summary.cost ?? null, candidate: candidate.summary.cost ?? null },
     baselineSource: a.source.sourceHash, candidateSource: b.source.sourceHash };
 }

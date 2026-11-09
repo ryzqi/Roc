@@ -6,12 +6,10 @@ let api;
 before(async () => { api = await loadResearchTestApi(); });
 after(() => api.dispose());
 
-test('task diagnostics aggregate authoritative calls once and preserve unknown spend without exposing prompts', () => {
+test('task diagnostics aggregate authoritative calls once and preserve unknown token usage without exposing prompts', () => {
   const f = createResearchFixture(api, 'discovery');
   try {
-    const budget = { ...api.createRunBudget({ contextBudgetTokens: 1000 }), maxTotalTokens: 1000, maxCallTokens: 300 };
-    f.agentDb.prepare('UPDATE research_task_budgets SET limits_json = ? WHERE task_id = ?')
-      .run(JSON.stringify(budget), f.run.taskId);
+    const budget = { ...api.createRunModelConfig({ contextWindowTokens: 1000 }),  };
     const child = { ...f.run, id: 'review-child', parentRunId: f.run.id, requestId: 'review-child', role: 'reviewer' };
     f.db.prepare(`INSERT INTO research_stage_runs
       (id,project_id,stage,request_id,parent_run_id,task_id,status,snapshot_json,context_json)
@@ -19,28 +17,22 @@ test('task diagnostics aggregate authoritative calls once and preserve unknown s
       .run(child.id, child.requestId, f.run.id, JSON.stringify(child), f.run.id);
     f.tasks.linkStage({...child, executionSnapshot: {...child.executionSnapshot, nodeBinding: {kind: 'none'}}}, null);
     f.tasks.confirmExecution('stage', child.id, f.project.id, child.executionSnapshot.frozenInputs);
-    const ledger = new api.RunBudgetLedger(f.agentDb);
-    const reserve = (runId, id, tokens, cost) => ledger.reserve(runId, budget, {
-      id, kind: 'model', tokens, inputHash: id, costMicrousd: cost, envelope: { messages: ['private-prompt-marker'] }
+    const ledger = new api.RunUsageLedger(f.agentDb);
+    const reserve = (runId, id, tokens) => ledger.reserve(runId, budget, {
+      id, kind: 'model', tokens, inputHash: id,  envelope: { messages: ['private-prompt-marker'] }
     });
-    reserve(f.run.id, 'settled', 100, 60);
-    ledger.settle(f.run.id, 'settled', 80, 'settled', undefined, {}, 40);
-    reserve(child.id, 'unknown', 100, 70);
+    reserve(f.run.id, 'settled', 100);
+    ledger.settle(f.run.id, 'settled', 80, 'settled');
+    reserve(child.id, 'unknown', 100);
     ledger.settle(child.id, 'unknown', null, 'unknown');
-    reserve(f.run.id, 'pending', 50, 50);
+    reserve(f.run.id, 'pending', 50);
     const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, ledger, null, {source: async () => {throw new Error('fixture_resource_source_unused');}});
     const summary = diagnostics.get({ projectId: f.project.id, taskId: f.run.taskId });
-    assert.deepEqual(summary.budget.tokens, { limit: 1000, settled: 80, unknown: 100, reserved: 50, remaining: 770 });
-    assert.equal(summary.budget.calls.models.total, 3);
-    assert.equal(summary.budget.cost.state, 'unknown');
-    assert.equal(summary.budget.cost.settledMicrousd, 40);
-    assert.equal(summary.budget.cost.reservedMicrousd, 120);
-    assert.equal(summary.externalCost, 'unknown');
+    assert.deepEqual(summary.usage.tokens, { settled: 80, unknown: 100, reserved: 50 });
+    assert.equal(summary.usage.calls.models.total, 3);
     assert.equal(summary.executions.length, 2);
     assert.equal(JSON.stringify(summary).includes('private-prompt-marker'), false);
     assert.equal(summary.executions[1].association.parentExecutionId, f.run.id);
-    ledger.recordStopReason(child.id, 'run_cost_budget_exhausted');
-    assert.equal(diagnostics.get({ projectId: f.project.id, taskId: f.run.taskId }).budget.stopReason, 'run_cost_budget_exhausted');
     f.repository.runs.terminate(f.run.id, f.project.id, 'interrupted', 'fixture');
     f.tasks.setStatus(f.run.taskId, f.project.id, 'interrupted', 'fixture', ['active']);
     assert.equal(diagnostics.get({ projectId: f.project.id, taskId: f.run.taskId }).continuationRunId, f.run.id);
@@ -68,7 +60,7 @@ test('chat task diagnostics enforce thread and project scope before returning ta
     f.agentDb.prepare(`INSERT INTO research_task_executions
       (kind,execution_id,task_id,project_id,snapshot_json,created_at) VALUES ('chat','chat',?,?,?,?)`)
       .run(f.run.taskId, f.project.id, JSON.stringify(execution), timestamp);
-    const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb), null, {source: async () => {throw new Error('fixture_resource_source_unused');}});
+    const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, new api.RunUsageLedger(f.agentDb), null, {source: async () => {throw new Error('fixture_resource_source_unused');}});
     const request = { projectId: f.project.id, threadId: 'thread', runId: 'chat' };
     const summary = diagnostics.forChat(request);
     assert.equal(summary.task.id, f.run.taskId);
@@ -86,7 +78,7 @@ test('chat task diagnostics enforce thread and project scope before returning ta
   } finally { f.close(); }
 });
 
-test('pausing approval and restoring it keeps the completed execution and original budget', async () => {
+test('pausing approval and restoring it keeps the completed execution and original model config', async () => {
   const f = createResearchFixture(api, 'planning');
   const gate = api.createResearchHumanGate({ repository: f.repository });
   const runtime = new api.ResearchStageRuntime(f.repository, {}, {prepare: async () => {throw new Error('unexpected_prepare');}}, gate, {cancelOwned: async () => {}});
@@ -94,14 +86,13 @@ test('pausing approval and restoring it keeps the completed execution and origin
     stages: runtime, cancelChat: async () => {}, cancelJob: async () => {}
   });
   try {
-    const budget = f.tasks.budgetForExecution('stage', f.run.id, f.project.id);
     withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {
       title: 'Plan', markdown: 'Review this plan', claims: [], sections: [], verdict: 'ready'
     }));
     await gate.complete({ projectId: f.project.id, expectedStage: 'planning', action: 'complete' });
     runtime.synchronizeTaskState(f.run.taskId, f.project.id);
     await controller.pause({ taskId: f.run.taskId, projectId: f.project.id });
-    const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb), null, {source: async () => {throw new Error('fixture_resource_source_unused');}});
+    const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, new api.RunUsageLedger(f.agentDb), null, {source: async () => {throw new Error('fixture_resource_source_unused');}});
     assert.equal(diagnostics.get({ taskId: f.run.taskId, projectId: f.project.id }).canRestoreApproval, true);
     f.tasks.setStatus(f.run.taskId, f.project.id, 'paused', 'research_task_cleanup_pending', ['paused']);
     assert.equal(diagnostics.get({ taskId: f.run.taskId, projectId: f.project.id }).canRestoreApproval, false);
@@ -113,9 +104,9 @@ test('pausing approval and restoring it keeps the completed execution and origin
     f.db.prepare('UPDATE research_projects SET status = ? WHERE id = ?').run(originalStatus, f.project.id);
     const restored = controller.restoreApproval({ taskId: f.run.taskId, projectId: f.project.id });
     assert.equal(restored.status, 'waiting_approval');
+    assert.throws(() => f.tasks.modelConfigForExecution('stage', f.run.id, f.project.id), /research_task_not_active/);
     assert.equal(f.repository.runs.list({ projectId: f.project.id, limit: 100 }).length, 1);
     assert.equal(f.repository.runs.get(f.run.id, f.project.id).status, 'completed');
-    assert.equal(diagnostics.get({ taskId: f.run.taskId, projectId: f.project.id }).budget.deadlineAt, budget.deadlineAt);
     assert.throws(() => controller.restoreApproval({ taskId: f.run.taskId, projectId: f.project.id }), /research_task_status_conflict/);
   } finally { await runtime.shutdown(); f.close(); }
 });

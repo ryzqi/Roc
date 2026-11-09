@@ -6,7 +6,7 @@
   "description": "将研究假设转成方案、数据需求和验收标准。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "88b653de8e10425e0ba816bd6de740e970a097213ebf0eb0a1f693e671bd9550"
+    "hash": "cf1761f847387e85c27bd306b36230e63619244bb863b77e13c51d18315f6463"
   },
   "references": [],
   "license": {
@@ -20,7 +20,7 @@
     "kind": "project",
     "origin": "Roc/resources/research-skills/planning",
     "revision": "s05-1.2.0",
-    "hash": "88b653de8e10425e0ba816bd6de740e970a097213ebf0eb0a1f693e671bd9550"
+    "hash": "cf1761f847387e85c27bd306b36230e63619244bb863b77e13c51d18315f6463"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
@@ -28,7 +28,7 @@
   },
   "outputs": {
     "schema": "researchStageOutput/v4",
-    "hash": "632dc56d8e1396241f746ab068906ffc07afb2439fd07bc771466bc31aaf13ec",
+    "hash": "2702ae8cf34eeadbaecbe226e349193a45cca66830cd6008d71e7f696e8970ca",
     "artifactKind": "research_plan"
   },
   "requiredCapabilities": [

@@ -16,8 +16,6 @@ import { RocDomainError } from '../../services/errors';
 import { createToolOutputProjector } from '../../services/deep-agent/tool-output-projection';
 import { validateOutcomeConsistency } from '../../services/deep-agent/outcome-validator';
 import { resolveCheckpointResume } from './checkpoint-resume';
-import { defaultErrorTracker } from '../../services/forge-guardrails';
-import { validateRunTokenBudget } from '../../services/deep-agent/runtime-state-validator';
 import type { MetricsService } from '../../services/metrics-service';
 import type { AgentDeepAgentExecutor } from './runtime';
 import type { AgentModelUsageTelemetry } from './run-telemetry';
@@ -147,15 +145,6 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         return;
       }
       const agent = harness.agent;
-      const deadline = input.snapshot.budget.deadlineAt;
-      let deadlineTimer: ReturnType<typeof setTimeout> | null = null;
-      const checkDeadline = (): void => {
-        if (deadline === null) return;
-        const remaining = Date.parse(deadline) - Date.now();
-        if (remaining <= 0) executionAbortController.abort(new Error('run_deadline_exhausted'));
-        else deadlineTimer = setTimeout(checkDeadline, Math.min(2_147_483_647, remaining));
-      };
-      checkDeadline();
       const runInput =
         input.resumePayload !== undefined
           ? new Command({ resume: input.resumePayload })
@@ -172,7 +161,6 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         },
         signal: executionAbortController.signal
       }).catch((error: unknown) => {
-        if (deadlineTimer !== null) clearTimeout(deadlineTimer);
         input.abortSignal.removeEventListener('abort', abortFromParent);
         throw error;
       });
@@ -238,11 +226,6 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
             }
             const finalMessage = outcomeText.finish().trim();
 
-            const budgetError = validateRunTokenBudget(usageAccumulator, input.snapshot.budget.maxTotalTokens);
-            if (budgetError !== null) {
-              throw new Error(budgetError.code);
-            }
-
             // Outcome 一致性校验
             const validationError = validateOutcomeConsistency({
               assistantChunks,
@@ -282,7 +265,6 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
         }
         await consumeRun;
       } finally {
-        if (deadlineTimer !== null) clearTimeout(deadlineTimer);
         executionAbortController.abort(new Error('chat_run_event_consumer_stopped'));
         await consumeRun.catch((error: unknown) => {
           rejectOutcome(error);
@@ -419,7 +401,6 @@ function recordPromptCacheMetrics(input: {
  */
 type AgentInitialState = {
   messages: HumanMessage[];
-  forge_error_tracker: ReturnType<typeof defaultErrorTracker>;
 };
 
 function createInitialState(
@@ -439,13 +420,11 @@ function createInitialState(
             }))
           ]
         })
-      ],
-      forge_error_tracker: defaultErrorTracker()
+      ]
     };
   }
   return {
-    messages: [new HumanMessage(input)],
-    forge_error_tracker: defaultErrorTracker()
+    messages: [new HumanMessage(input)]
   };
 }
 

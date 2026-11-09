@@ -17,14 +17,12 @@ const secret = 'PRIVATE_PROMPT_TOOL_PATH_ACTOR';
 function scene() {
   const f = createResearchFixture(api, 'discovery');
   f.scope = {projectId: f.project.id, taskId: f.run.taskId};
-  f.ledger = new api.RunBudgetLedger(f.agentDb);
+  f.ledger = new api.RunUsageLedger(f.agentDb);
   f.diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, f.ledger, null, unusedSource);
   f.request = {...f.scope, executionKind: 'stage', executionId: f.run.id, afterCallSequence: 0, afterEventSequence: 0, limit: 2};
-  f.limits = {...api.createRunBudget({contextBudgetTokens: 1000}), maxCallTokens: 300, maxOutputTokens: 100, maxTotalTokens: 5000};
-  f.agentDb.prepare('UPDATE research_task_budgets SET limits_json=? WHERE task_id=?')
-    .run(JSON.stringify(f.limits), f.scope.taskId);
+  f.limits = {...api.createRunModelConfig({contextWindowTokens: 1000}),  maxOutputTokens: 100, };
   f.reserve = (id, kind = 'model') => f.ledger.reserve(f.run.id, f.limits, {
-    id, kind, tokens: 100, inputHash: id, costMicrousd: 60, envelope: {messages: [secret]}
+    id, kind, tokens: 100, inputHash: id,  envelope: {messages: [secret]}
   });
   return f;
 }
@@ -43,12 +41,12 @@ const humanExport = (f, exporter) => api.withResearchHumanContext({
   capability: 'research.task.diagnostics.export', projectId: f.project.id, windowId: 71
 }, () => exporter.export(f.scope));
 
-test('actual model boundary persists success/failure timings and unknown spend, survives SQLite backup and refuses fabricated observations', async () => {
+test('actual model boundary persists success/failure timings and unknown usage, survives SQLite backup and refuses fabricated observations', async () => {
   const f = scene(), directory = await mkdtemp(join(tmpdir(), 'roc-task-observations-'));
   let reopened;
   try {
-    const observer = new api.RunBudgetObserver(f.ledger, f.run.id, f.limits, 'revision');
-    const invoke = operation => observer.invoke({messages: [new HumanMessage(secret)], purpose: 'agent',
+    const observer = new api.RunUsageObserver(f.ledger, f.run.id, f.limits, 'revision');
+    const invoke = operation => observer.invoke({messages: [new HumanMessage(secret)], purpose: 'agent', estimatedInputTokens: 300,
       responseMessage: value => value, invoke: operation});
     await invoke(async () => new AIMessage({content: 'ok', usage_metadata: {input_tokens: 12, output_tokens: 8, total_tokens: 20}}));
     await assert.rejects(invoke(async () => {throw new Error('provider_failure');}), /provider_failure/);
@@ -57,39 +55,41 @@ test('actual model boundary persists success/failure timings and unknown spend, 
     for (const call of result.calls.calls) {
       assert.ok(call.invocation.durationMs >= 0);
       assert.ok(Number.isFinite(Date.parse(call.invocation.startedAt)));
-      assert.equal(call.actualCostMicrousd, null);
     }
     assert.equal(result.calls.calls[1].state, 'unknown');
     assert.equal(result.calls.calls[1].actualTokens, null);
     const summary = f.diagnostics.get(f.scope);
-    assert.equal(summary.budget.calls.models.total, 2);
-    assert.equal(summary.budget.tokens.unknown, 300);
-    const capped = new api.RunBudgetObserver(f.ledger, f.run.id, {...f.limits, maxModelCalls: 2}, 'revision');
+    assert.equal(summary.usage.calls.models.total, 2);
+    assert.equal(summary.usage.tokens.unknown, 300);
+    const capped = new api.RunUsageObserver(f.ledger, f.run.id, {...f.limits, }, 'revision');
     let dispatched = false;
-    await assert.rejects(capped.invoke({messages: [], purpose: 'agent', responseMessage: value => value,
-      invoke: async () => {dispatched = true; return new AIMessage('blocked');}}), /run_model_call_budget_exhausted/);
-    assert.equal(dispatched, false);
-    assert.equal(f.agentDb.prepare('SELECT COUNT(*) FROM agent_budget_call_observations').pluck().get(), 2);
+    await capped.invoke({messages: [], purpose: 'agent', responseMessage: value => value,
+      invoke: async () => {dispatched = true; return new AIMessage('continued');}});
+    assert.equal(dispatched, true);
+    assert.equal(f.agentDb.prepare('SELECT COUNT(*) FROM agent_call_observations').pluck().get(), 3);
+    const continuedCalls = f.tasks.observability.calls(f.request);
+    assert.deepEqual(continuedCalls.calls, result.calls.calls);
+    assert.equal(continuedCalls.hasMore, true);
     assert.equal(JSON.stringify(result).includes(secret), false);
     const callId = result.calls.calls[0].callId;
     assert.throws(() => f.ledger.recordModelObservation(f.run.id, callId, {startedAt: now, durationMs: 1, status: 'completed'}), /UNIQUE/);
     assert.throws(() => f.ledger.recordModelObservation(f.run.id, 'absent', {startedAt: now, durationMs: 1, status: 'failed'}), /run_model_observation_call_invalid/);
-    assert.throws(() => f.agentDb.prepare('UPDATE agent_budget_call_observations SET duration_ms=0').run(), /immutable/);
-    assert.throws(() => f.agentDb.prepare('INSERT INTO agent_budget_call_observations VALUES (?,?,?,?,?)')
+    assert.throws(() => f.agentDb.prepare('UPDATE agent_call_observations SET duration_ms=0').run(), /immutable/);
+    assert.throws(() => f.agentDb.prepare('INSERT INTO agent_call_observations VALUES (?,?,?,?,?)')
       .run('absent', 'absent', now, 0, 'failed'), /FOREIGN KEY/);
     await f.agentDb.backup(join(directory, 'agent.db'));
     reopened = new Database(join(directory, 'agent.db'));
     const restored = new api.ResearchTaskRepository(reopened);
-    assert.deepEqual(restored.observability.calls(f.request), result.calls);
+    assert.deepEqual(restored.observability.calls(f.request), continuedCalls);
     assert.deepEqual(reopened.pragma('foreign_key_check'), []);
   } finally {reopened?.close(); f.close(); await rm(directory, {recursive: true, force: true});}
 });
 
-test('call pages keep real IDs and strict execution/task ownership without re-counting fees', async () => {
+test('call pages keep real IDs and strict execution/task ownership without duplicating calls', async () => {
   const f = scene();
   try {
     for (const id of ['one', 'two', 'three']) f.reserve(id);
-    f.ledger.settle(f.run.id, 'one', 80, 'settled', undefined, {}, 40);
+    f.ledger.settle(f.run.id, 'one', 80, 'settled', undefined, {});
     f.ledger.settle(f.run.id, 'two', null, 'unknown');
     const first = await f.diagnostics.inspectExecution(f.request);
     assert.deepEqual(first.calls.calls.map(call => call.callId), ['one', 'two']);
@@ -99,15 +99,13 @@ test('call pages keep real IDs and strict execution/task ownership without re-co
     assert.deepEqual(second.calls.calls.map(call => call.callId), ['three']);
     assert.equal(second.calls.hasMore, false);
     assert.equal(second.calls.calls[0].settledAt, null);
-    assert.equal(f.diagnostics.get(f.scope).budget.cost.settledMicrousd, 40);
-    assert.equal(f.diagnostics.get(f.scope).budget.cost.reservedMicrousd, 120);
     await assert.rejects(f.diagnostics.inspectExecution({...f.request, projectId: 'foreign'}), /research_task_project_mismatch/);
     await assert.rejects(f.diagnostics.inspectExecution({...f.request, executionId: 'absent'}), /research_task_execution/);
     const linked = f.tasks.linkOwned({projectId: f.project.id, kind: 'figure', executionId: 'other',
       ownerRunId: null, goal: 'Other', snapshot: {}});
     const other = f.tasks.get(linked.taskId, f.project.id);
     await assert.rejects(f.diagnostics.inspectExecution({...f.request, taskId: other.id}), /research_task_execution_mismatch/);
-    f.agentDb.prepare('UPDATE agent_budget_calls SET task_id=? WHERE call_id=?').run(other.id, 'one');
+    f.agentDb.prepare('UPDATE agent_calls SET task_id=? WHERE call_id=?').run(other.id, 'one');
     await assert.rejects(f.diagnostics.inspectExecution(f.request), /research_task_call_scope_corrupt/);
   } finally {f.close();}
 });
@@ -159,7 +157,7 @@ test('artifact observations use current inspector version and explicitly report 
   const f = createResearchFixture(api, 'planning');
   try {
     f.scope = {projectId: f.project.id, taskId: f.run.taskId};
-    f.diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb), null, unusedSource);
+    f.diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, new api.RunUsageLedger(f.agentDb), null, unusedSource);
     const completed = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {
       title: 'Plan', markdown: 'Source v1', claims: [], sections: [], verdict: 'ready'}));
     const id = completed.outputArtifactIds[0];
@@ -179,7 +177,6 @@ test('main human IPC exports local redacted bytes with real hash, permissions an
   try {
     chat(f);
     f.reserve('private-call');
-    f.ledger.recordStopReason(f.run.id, secret);
     const exporter = new api.ResearchTaskDiagnosticsExporter(f.diagnostics, f.tasks, directory);
     await assert.rejects(exporter.export(f.scope), /research_human_required/);
     await assert.rejects(api.withResearchHumanContext({capability: 'research.task.diagnostics.export', projectId: 'foreign', windowId: 71},
@@ -201,7 +198,6 @@ test('main human IPC exports local redacted bytes with real hash, permissions an
     for (const marker of [secret, 'provider-private', 'model-private', 'private-call', f.project.id, f.run.taskId, f.run.id])
       assert.equal(content.includes(marker), false, marker);
     assert.equal(payload.externalTrace, 'not_exported');
-    assert.equal(payload.budget.stopReason, null);
     assert.equal(payload.executions[0].calls.calls.length, 1);
     assert.equal(payload.executions[0].executionId, payload.executions[0].calls.calls[0].runId);
     assert.match(payload.coverage, /hasMore_and_gap/);
@@ -229,7 +225,7 @@ test('export refuses changed sources and excessive output before creating files'
       association: {...summary.executions[0].association, executionId: `run-${i}`}}))};
     const calls = Array.from({length: 100}, (_, i) => ({sequence: i + 1, runId: f.run.id,
       callId: `${'c'.repeat(240)}-${i}`, kind: 'model', state: 'reserved', reservedTokens: 100, actualTokens: null,
-      reservedCostMicrousd: null, actualCostMicrousd: null, pricingVersion: null, createdAt: now,
+      createdAt: now,
       settledAt: null, invocation: null}));
     exporter = new api.ResearchTaskDiagnosticsExporter({get: () => bloated, inspectExecution: async () => ({
       calls: {calls, nextSequence: 100, hasMore: true}, replay: null, resources: null, telemetry: null

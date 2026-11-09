@@ -78,7 +78,7 @@ test('isolated execution migration preserves effects, operation indexes and resu
     assert.throws(() => db.prepare("UPDATE agent_tool_effects SET effect_class='unrecognized'").run(), /CHECK constraint/);
     assert.throws(() => db.prepare("INSERT INTO agent_tool_effects SELECT run_id,thread_id,execution_path,checkpoint_id,'another-call',tool_name,input_hash,effect_class,reconcile_strategy,status,result_json,error_json,created_at,updated_at,identity_version,canonical_tool_identity,canonicalization_version,tool_version,operation_id,idempotency_key,attempt_id,lease_generation,attempt_count,receipt_sequence,receipt_json,receipt_hash,expected_version,result_hash FROM agent_tool_effects").run(), /UNIQUE constraint/);
     db.prepare("INSERT INTO agent_tool_effect_results VALUES ('operation','{}','hash')").run();
-    assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 24);
+    assert.equal(readSchemaMetadata(db, 'agent').currentVersion, 25);
   } finally { db.close(); }
 });
 
@@ -110,7 +110,7 @@ test('retiring project budgets preserves call receipts, task limits and events o
     const before = Object.fromEntries(['agent_budget_call_observations', 'research_task_budgets', 'research_task_events']
       .map(table => [table, db.prepare(`SELECT * FROM ${table}`).all()]));
     const history = db.prepare('SELECT * FROM schema_migrations ORDER BY version').all();
-    applyDatabaseMigrations(db, {dbName: 'agent', migrations: agentMigrations});
+    applyDatabaseMigrations(db, {dbName: 'agent', migrations: agentMigrations.filter(m => m.version <= 24)});
     assert.deepEqual(db.prepare('SELECT * FROM agent_budget_calls').get(), call);
     for (const [table, rows] of Object.entries(before)) assert.deepEqual(db.prepare(`SELECT * FROM ${table}`).all(), rows);
     assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version <= 23 ORDER BY version').all(), history);
@@ -126,7 +126,7 @@ test('retiring project budgets preserves call receipts, task limits and events o
     // The remaining task settlement trigger still produces its audit event after DROP COLUMN.
     db.prepare("UPDATE agent_budget_calls SET state='unknown' WHERE call_id='call'").run();
     assert.equal(db.prepare('SELECT event_type FROM research_task_events ORDER BY sequence DESC LIMIT 1').pluck().get(), 'call_unknown');
-    applyDatabaseMigrations(db, {dbName: 'agent', migrations: agentMigrations});
+    applyDatabaseMigrations(db, {dbName: 'agent', migrations: agentMigrations.filter(m => m.version <= 24)});
   } finally { db.close(); }
 });
 

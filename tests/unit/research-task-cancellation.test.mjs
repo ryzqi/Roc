@@ -18,8 +18,8 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 
 test('task cancellation fences new dispatch, awaits owned cleanup and leaves unrelated stages running', async () => {
   const f = createResearchFixture(api, 'discovery');
-  const budget = { ...f.tasks.budgetForExecution('stage', f.run.id, f.project.id),
-    deadlineAt: new Date(Date.now() + 60_000).toISOString() };
+  const budget = { ...f.tasks.modelConfigForExecution('stage', f.run.id, f.project.id),
+    };
   const cleanup = deferred();
   const calls = new Map();
   const runtime = new api.ResearchStageRuntime(f.repository, {}, {
@@ -60,8 +60,8 @@ test('task cancellation fences new dispatch, awaits owned cleanup and leaves unr
     let finished = false;
     const cancelled = runtime.cancel({ projectId: f.project.id, runId: current.id }).then(run => { finished = true; return run; });
     assert.equal(f.tasks.get(current.taskId, f.project.id).status, 'cancelled');
-    assert.throws(() => f.tasks.budgetForExecution('stage', current.id, f.project.id), /research_task_not_active/);
-    assert.throws(() => new api.RunBudgetLedger(f.agentDb).reserve(current.id, budget, {
+    assert.throws(() => f.tasks.modelConfigForExecution('stage', current.id, f.project.id), /research_task_not_active/);
+    assert.throws(() => new api.RunUsageLedger(f.agentDb).reserve(current.id, budget, {
       id: 'late', kind: 'model', tokens: 1, inputHash: 'late', envelope: {}
     }), /research_task_not_active/);
     assert.equal(calls.get(current.id).signal.aborted, true);
@@ -127,8 +127,8 @@ test('task cancellation shares stage-owned cleanup across concurrent cancellatio
 
 test('cleanup failures are reported after other jobs finish and cancelled identity survives restart', async () => {
   const f = createResearchFixture(api, 'discovery');
-  const budget = { ...f.tasks.budgetForExecution('stage', f.run.id, f.project.id),
-    deadlineAt: new Date(Date.now() + 60_000).toISOString() };
+  const budget = { ...f.tasks.modelConfigForExecution('stage', f.run.id, f.project.id),
+    };
   let completed = false;
   try {
     const execution = f.tasks.linkOwned({ kind: 'figure', executionId: 'figure-1', projectId: f.project.id, ownerRunId: null,
@@ -149,7 +149,7 @@ test('cleanup failures are reported after other jobs finish and cancelled identi
     assert.equal(restarted.get(execution.taskId, f.project.id).statusReason, 'research_task_cleanup_failed');
     assert.throws(() => restarted.continueWith(execution.taskId, f.project.id, () => {}), /research_task_cleanup_unconfirmed/);
     f.tasks.setStatus(f.run.taskId, f.project.id, 'cancelled', 'fixture', ['active']);
-    const ledger = new api.RunBudgetLedger(f.agentDb);
+    const ledger = new api.RunUsageLedger(f.agentDb);
     assert.throws(() => ledger.reserve(f.run.id, budget, {
       id: 'late', kind: 'model', tokens: 1, inputHash: 'late', envelope: {}
     }), /research_task_not_active/);
@@ -399,7 +399,7 @@ test('actual agent cancellation capability propagates through a trusted chat ass
       new api.ResearchTaskController(f.tasks, {
         stages, cancelChat: async runId => await capabilities.invoke('agent.run.cancel', { runId }),
         cancelJob: async () => { throw new Error('no_job_expected'); }
-      }), new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb), null, {source: async () => {throw new Error('fixture_resource_source_unused');}}),
+      }), new api.ResearchTaskDiagnosticsService(f.repository, new api.RunUsageLedger(f.agentDb), null, {source: async () => {throw new Error('fixture_resource_source_unused');}}),
       {export: async () => {throw new Error('fixture_export_unused');}});
     const result = await capabilities.invoke('agent.run.cancel', { runId: 'parent-chat' });
     assert.equal(result.cancelled, false);
@@ -418,7 +418,7 @@ test('task IPC and capability requests reject trusted parent fields and cross-pr
       register(_plugin, descriptor, handler) { handlers.set(descriptor.name, handler); }
     } }, f.tasks, new api.ResearchTaskController(f.tasks, {
       stages: { cancelTask: async () => {} }, cancelChat: async () => {}, cancelJob: async () => {}
-    }), new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb), null, {source: async () => {throw new Error('fixture_resource_source_unused');}}),
+    }), new api.ResearchTaskDiagnosticsService(f.repository, new api.RunUsageLedger(f.agentDb), null, {source: async () => {throw new Error('fixture_resource_source_unused');}}),
     {export: async () => {throw new Error('fixture_export_unused');}});
     const request = { taskId: f.run.taskId, projectId: f.project.id };
     assert.deepEqual(api.parseIpcRequestArgs('roc:research:task-cancel', [request]), [request]);

@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import type { RunnableConfig } from '@langchain/core/runnables';
 import { createContextDigestMessage } from '../../forge-guardrails/context-digest';
-import { readStructuredModelResponse, type RunBudgetObserver } from '../run-budget-observer';
+import { readStructuredModelResponse, type RunUsageObserver } from '../run-usage-observer';
 
 export const contextSummarySchema = z.object({
   goal: z.string(),
@@ -37,7 +37,7 @@ type ContextSummaryModel = Pick<BaseChatModel, 'invoke'> & {
 export type SummarizeWithCurrentModelInput = ContextSummaryInput & {
   model: ContextSummaryModel;
   callbacks?: RunnableConfig['callbacks'];
-  budgetObserver?: RunBudgetObserver;
+  usageObserver?: RunUsageObserver;
 };
 
 const contextSummaryInvokeConfig = {
@@ -53,7 +53,7 @@ export async function summarizeWithCurrentModel(input: SummarizeWithCurrentModel
     input.model,
     messages,
     input.callbacks,
-    input.budgetObserver,
+    input.usageObserver,
     input.estimatedInputTokens ?? null,
     input.estimateApproximate ?? null
   );
@@ -64,7 +64,7 @@ export async function summarizeWithCurrentModel(input: SummarizeWithCurrentModel
     input.model,
     messages,
     input.callbacks,
-    input.budgetObserver,
+    input.usageObserver,
     input.estimatedInputTokens ?? null,
     input.estimateApproximate ?? null
   );
@@ -79,7 +79,7 @@ async function summarizeWithStructuredOutput(
   model: ContextSummaryModel,
   messages: BaseMessage[],
   callbacks: RunnableConfig['callbacks'],
-  budgetObserver: RunBudgetObserver | undefined,
+  usageObserver: RunUsageObserver | undefined,
   estimatedInputTokens: number | null,
   estimateApproximate: boolean | null
 ): Promise<ContextSummary | null> {
@@ -104,9 +104,9 @@ async function summarizeWithStructuredOutput(
   let summary: unknown;
   try {
     const invoke = () => structuredModel.invoke(messages, { ...contextSummaryInvokeConfig, callbacks });
-    const response = budgetObserver === undefined
+    const response = usageObserver === undefined
       ? await invoke()
-      : await budgetObserver.invoke({
+      : await usageObserver.invoke({
           messages,
           purpose: 'summary',
           estimatedInputTokens,
@@ -205,14 +205,14 @@ async function invokeSummaryModel(
   model: Pick<BaseChatModel, 'invoke'>,
   messages: BaseMessage[],
   callbacks: RunnableConfig['callbacks'],
-  budgetObserver: RunBudgetObserver | undefined,
+  usageObserver: RunUsageObserver | undefined,
   estimatedInputTokens: number | null,
   estimateApproximate: boolean | null
 ): Promise<string> {
   const invoke = () => model.invoke(messages, { ...contextSummaryInvokeConfig, callbacks });
-  const response = budgetObserver === undefined
+  const response = usageObserver === undefined
     ? await invoke()
-    : await budgetObserver.invoke({
+    : await usageObserver.invoke({
         messages,
         purpose: 'summary',
         estimatedInputTokens,

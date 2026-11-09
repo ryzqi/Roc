@@ -12,13 +12,12 @@ import {
   buildFailureFixture, evaluateUpgradeGate, type VersionFingerprint
 } from '../../src/main/services/memory/experience-fixtures';
 import { HarnessReleaseStore } from '../../src/main/services/deep-agent/harness-release';
-import { PilotStateStore, defaultPilotSettings, evaluatePilotDecision, pilotAllowance } from '../../src/main/services/deep-agent/pilot-gate';
+import { PilotStateStore, defaultPilotSettings } from '../../src/main/services/deep-agent/pilot-gate';
 import { PilotRunCoordinator } from '../../src/main/services/deep-agent/pilot-run';
-import { RunBudgetLedger } from '../../src/main/services/deep-agent/run-budget-ledger';
-import { toRunFailure } from '../../src/main/services/deep-agent/error-mapping';
+import { RunUsageLedger } from '../../src/main/services/deep-agent/run-usage-ledger';
 import { AgentSessionRepository } from '../../src/main/plugins/agent/session-repository';
 import { AgentRunEventLog } from '../../src/main/plugins/agent/run-event-log';
-import { createRunBudget } from '../../src/main/plugins/agent/run-execution-snapshot';
+import { createRunModelConfig } from '../../src/main/plugins/agent/run-execution-snapshot';
 import { AgentPluginRuntime } from '../../src/main/plugins/agent/runtime';
 import { EventBus } from '../../src/main/kernel/event-bus';
 import {
@@ -38,7 +37,7 @@ import { buildDataset, readSplit, type PairedObservation } from './optimizer/dat
 import { materialiseSurface } from './optimizer/surface';
 import { transferReport, transferStrata, type TransferStratum } from './optimizer/transfer';
 
-type RunBudgetLedgerLimits = RunExecutionSnapshot['budget'];
+type RunUsageLedgerLimits = RunExecutionSnapshot['modelConfig'];
 
 const hex = (value: string): string => createHash('sha256').update(value).digest('hex');
 
@@ -392,33 +391,47 @@ function verifyPilotGate(directory: string): Record<string, unknown> {
   assert.equal(defaultPilotSettings.enabled, false);
   assert.equal(store.read().enabled, false);
   assert.equal(store.decide({ taskId: 'task-1', grants: ['workspace.read'], effectClasses: [] }).start, false);
-  assert.throws(() => store.enable({ profile: 'read-only', rolloutPercent: 100, extraBudgetMicrousd: 500, budgetAcknowledged: false }), /budget_not_acknowledged/);
 
-  const enabled = store.enable({ profile: 'read-only', rolloutPercent: 100, extraBudgetMicrousd: 500, budgetAcknowledged: true });
+  const enabled = store.enable({ profile: 'read-only', rolloutPercent: 100 });
   assert.equal(enabled.enabled, true);
   const decision = store.decide({ taskId: 'task-1', grants: ['workspace.read', 'provider.model'], effectClasses: [] });
   assert.equal(decision.start, true);
-  if (decision.start) assert.match(decision.disclosure, /500 microusd/);
+  if (decision.start) assert.match(decision.disclosure, /read-only/);
   // A task outside the deterministic bucket never starts, and the bucket is stable.
-  store.enable({ profile: 'read-only', rolloutPercent: 1, extraBudgetMicrousd: 500, budgetAcknowledged: true });
+  store.enable({ profile: 'read-only', rolloutPercent: 1 });
   const excluded = store.decide({ taskId: 'task-2', grants: ['workspace.read'], effectClasses: [] });
   assert.equal(excluded.start, false);
   assert.equal(store.decide({ taskId: 'task-2', grants: ['workspace.read'], effectClasses: [] }).start, false);
 
-  store.enable({ profile: 'read-only', rolloutPercent: 100, extraBudgetMicrousd: 500, budgetAcknowledged: true });
+  store.enable({ profile: 'read-only', rolloutPercent: 100 });
   assert.equal(store.decide({ taskId: 'task-1', grants: ['workspace.write'], effectClasses: [] }).start, false);
   assert.equal(store.decide({ taskId: 'task-1', grants: ['workspace.read'], effectClasses: ['host_execution'] }).start, false);
 
-  store.enable({ profile: 'low-side-effect', rolloutPercent: 100, extraBudgetMicrousd: 500, budgetAcknowledged: true });
+  store.enable({ profile: 'low-side-effect', rolloutPercent: 100 });
   assert.equal(store.decide({ taskId: 'task-1', grants: ['workspace.write'], effectClasses: ['workspace_mutation'] }).start, true);
   assert.equal(store.decide({ taskId: 'task-1', grants: ['workspace.write'], effectClasses: ['external_call'] }).start, false);
   assert.equal(store.decide({ taskId: 'task-1', grants: ['network.read'], effectClasses: [] }).start, false);
 
-  const spent = store.recordSpend(500);
-  assert.equal(spent.circuitOpen, true);
-  assert.equal(store.decide({ taskId: 'task-1', grants: ['workspace.write'], effectClasses: [] }).start, false);
-
-  store.enable({ profile: 'read-only', rolloutPercent: 100, extraBudgetMicrousd: 500, budgetAcknowledged: true });
+  store.enable({ profile: 'read-only', rolloutPercent: 100 });
+  for (const { breakerReason, failureStreak, maxFailureStreak, expectedFailures, canStart } of [
+    { breakerReason: 'pilot_budget_exhausted', failureStreak: 0, maxFailureStreak: 2, expectedFailures: 0, canStart: true },
+    { breakerReason: 'pilot_allowance_exhausted', failureStreak: 1, maxFailureStreak: 1, expectedFailures: 0, canStart: true },
+    { breakerReason: 'pilot_allowance_exhausted', failureStreak: 2, maxFailureStreak: 2, expectedFailures: 1, canStart: true },
+    { breakerReason: 'pilot_budget_exhausted', failureStreak: 2, maxFailureStreak: 2, expectedFailures: 2, canStart: false }
+  ]) {
+    writeFileSync(join(directory, 'pilot-state.json'), JSON.stringify({
+      ...store.read(), circuitOpen: true, breakerReason, failureStreak, maxFailureStreak,
+      extraBudgetMicrousd: 1, spentMicrousd: 2,
+      allowance: { modelCalls: 1, toolCalls: 1, tokens: 1 }
+    }));
+    const reopened = new PilotStateStore({ directory });
+    assert.equal(reopened.decide({ taskId: 'task-1', grants: ['workspace.read'], effectClasses: [] }).start, canStart);
+    assert.equal(reopened.read().failureStreak, expectedFailures);
+    assert.equal(reopened.read().breakerReason, null);
+    assert.equal('extraBudgetMicrousd' in reopened.read(), false);
+    assert.equal('allowance' in reopened.read(), false);
+  }
+  store.enable({ profile: 'read-only', rolloutPercent: 100 });
   store.recordFailure();
   store.recordFailure();
   assert.equal(store.read().circuitOpen, true);
@@ -434,30 +447,20 @@ function verifyPilotGate(directory: string): Record<string, unknown> {
     'pilot_profile_denied:workspace.write',
     'pilot_effect_denied:host_execution',
     'pilot_bucket_excluded',
-    // Reaching the budget also opens the breaker, which wins over the budget reason.
-    'pilot_circuit_open',
     'pilot_circuit_open'
   ];
   const observed: string[] = [];
   const fresh = new PilotStateStore({ directory: join(directory, 'observed'), now: () => '2026-10-21T12:00:00.000Z' });
-  fresh.enable({ profile: 'read-only', rolloutPercent: 100, extraBudgetMicrousd: 10, budgetAcknowledged: true });
+  fresh.enable({ profile: 'read-only', rolloutPercent: 100 });
   observed.push(String((fresh.decide({ taskId: 'o1', grants: ['workspace.write'], effectClasses: [] }) as { reason: string }).reason));
   observed.push(String((fresh.decide({ taskId: 'o2', grants: ['workspace.read'], effectClasses: ['host_execution'] }) as { reason: string }).reason));
-  fresh.enable({ profile: 'read-only', rolloutPercent: 1, extraBudgetMicrousd: 10, budgetAcknowledged: true });
+  fresh.enable({ profile: 'read-only', rolloutPercent: 1 });
   observed.push(String((fresh.decide({ taskId: 'o3', grants: ['workspace.read'], effectClasses: [] }) as { reason: string }).reason));
-  fresh.enable({ profile: 'read-only', rolloutPercent: 100, extraBudgetMicrousd: 10, budgetAcknowledged: true });
-  fresh.recordSpend(10);
-  observed.push(String((fresh.decide({ taskId: 'o4', grants: ['workspace.read'], effectClasses: [] }) as { reason: string }).reason));
-  fresh.enable({ profile: 'read-only', rolloutPercent: 100, extraBudgetMicrousd: 10, budgetAcknowledged: true });
+  fresh.enable({ profile: 'read-only', rolloutPercent: 100 });
   fresh.recordFailure();
   fresh.recordFailure();
   observed.push(String((fresh.decide({ taskId: 'o5', grants: ['workspace.read'], effectClasses: [] }) as { reason: string }).reason));
   assert.deepEqual(observed, deniedReasons);
-  const budgetOnly = evaluatePilotDecision({ ...defaultPilotSettings, enabled: true, rolloutPercent: 100,
-    extraBudgetMicrousd: 10, budgetAcknowledgedAt: '2026-10-21T00:00:00.000Z', spentMicrousd: 10 },
-  { taskId: 'o6', grants: ['workspace.read'], effectClasses: [] });
-  assert.equal(budgetOnly.start, false);
-  assert.equal((budgetOnly as { reason: string }).reason, 'pilot_budget_exhausted');
   return {
     defaultOff: store.read().enabled === false,
     denied: observed,
@@ -468,8 +471,8 @@ function verifyPilotGate(directory: string): Record<string, unknown> {
 
 
 /**
- * P6-04 product path: the gate is decided from the frozen manifest, the grant lands in the durable
- * budget ledger, and the breaker reacts to exhaustion instead of the run silently retrying.
+ * P6-04 product path: the gate is decided from the frozen manifest and enrollment is persisted.
+ * Usage beyond former allowances continues while capability restrictions remain enforced.
  *
  * Fixtures use a hand-written manifest so the grant/effect mapping is asserted directly, and a real
  * `agent` SQLite database with the shipped migrations so the ledger columns are the production ones.
@@ -551,23 +554,21 @@ function verifyPilotProductPath(directory: string): Record<string, unknown> {
       db.prepare(`INSERT INTO agent_runs (id,thread_id,run_number,user_input,status,started_at,enabled_capabilities_json)
         VALUES (?, ?, 1, 'pilot fixture', 'running', ?, '{}')`).run(runId, threadId, now);
     }
-    const ledger = new RunBudgetLedger(db);
-    const limits = (overrides: Partial<RunBudgetLedgerLimits> = {}): RunBudgetLedgerLimits => ({
-      ...createRunBudget({ contextBudgetTokens: 1000 }),
-      maxModelCalls: 1,
-      maxToolCalls: 1,
+    const ledger = new RunUsageLedger(db);
+    const limits = (overrides: Partial<RunUsageLedgerLimits> = {}): RunUsageLedgerLimits => ({
+      ...createRunModelConfig({ contextWindowTokens: 1000 }),
       ...overrides
     });
-    const reserve = (runId: string, id: string, kind: 'model' | 'tool', tokens: number, budget = limits()): void => {
-      ledger.reserve(runId, budget, { id, kind, tokens, inputHash: hex(`${runId}:${id}`), envelope: { id } });
+    const reserve = (runId: string, id: string, kind: 'model' | 'tool', tokens: number, modelConfig = limits()): void => {
+      ledger.reserve(runId, modelConfig, { id, kind, tokens, inputHash: hex(`${runId}:${id}`), envelope: { id } });
     };
 
-    // Ordinary request: no pilot row, and the base limit throws exactly as before.
+    // Ordinary requests run without quotas or pilot enrollment.
     assert.equal(ledger.latestPilotRun(), null);
     reserve('run-ordinary', 'model-1', 'model', 100);
-    assert.throws(() => reserve('run-ordinary', 'model-2', 'model', 100), /run_model_call_budget_exhausted/);
+    assert.doesNotThrow(() => reserve('run-ordinary', 'model-2', 'model', 100));
     reserve('run-ordinary', 'tool-1', 'tool', 0);
-    assert.throws(() => reserve('run-ordinary', 'tool-2', 'tool', 0), /run_tool_call_budget_exhausted/);
+    assert.doesNotThrow(() => reserve('run-ordinary', 'tool-2', 'tool', 0));
     assert.equal(ledger.readPilotRun('run-ordinary'), null);
 
     const store = new PilotStateStore({ directory: join(directory, 'pilot-state'), now: () => '2026-10-21T13:00:00.000Z' });
@@ -575,12 +576,9 @@ function verifyPilotProductPath(directory: string): Record<string, unknown> {
     // Default-off: the gate refuses, nothing is attached, and the status says why.
     assert.equal(coordinator.plan(derived).start, false);
     assert.equal(coordinator.status().lastRun, null);
-    // `costState` is a schema literal; the substantive claim is that no USD figure exists anywhere.
-    assert.equal(coordinator.status().costState, 'unknown_without_price_table');
-    assert.equal(coordinator.status().settings.spentMicrousd, 0);
 
     // The unrestricted manifest is refused: deciding on it would refuse almost every real run.
-    store.enable({ profile: 'low-side-effect', rolloutPercent: 100, extraBudgetMicrousd: 500, budgetAcknowledged: true });
+    store.enable({ profile: 'low-side-effect', rolloutPercent: 100 });
     const unrestricted = coordinator.plan(derived);
     assert.equal(unrestricted.start, false);
     assert.equal((unrestricted as { reason: string }).reason, 'pilot_profile_denied:network.read');
@@ -591,62 +589,22 @@ function verifyPilotProductPath(directory: string): Record<string, unknown> {
     assert.equal(started.start, true);
     if (!started.start) throw new Error('pilot_fixture_not_started');
     assert.equal(started.reason, 'pilot_started');
-    assert.equal(started.costState, 'unknown_without_price_table');
     // The decision carries the documented constant; the ledger row below is what governs behaviour.
-    assert.deepEqual(started.allowance, pilotAllowance);
 
-    // Model allowance: 1 base call + the granted extra calls, then the breaker error.
+    // Pilot enrollment never adds a quota to ordinary usage accounting.
     coordinator.attach({ runId: 'run-model', taskId: 'task-hash', decision: started });
-    reserve('run-model', 'model-1', 'model', 100);
-    reserve('run-model', 'model-2', 'model', 100);
-    reserve('run-model', 'model-3', 'model', 100);
-    let exhaustionError: unknown = null;
-    try {
-      reserve('run-model', 'model-4', 'model', 100);
-    } catch (error) {
-      exhaustionError = error;
-    }
-    assert.match(String(exhaustionError), /run_pilot_allowance_exhausted/);
-    // The run's error code is produced by the production mapper, not by this fixture. Without the
-    // allowlist entry this became provider_execution_failed and the breaker never saw the reason.
-    const mapped = toRunFailure(exhaustionError);
-    assert.equal(mapped.code, 'run_pilot_allowance_exhausted');
-    const exhausted = ledger.readPilotRun('run-model');
-    assert.equal(exhausted?.state, 'exhausted');
-    assert.equal(exhausted?.spent.modelCalls, pilotAllowance.modelCalls);
-    assert.equal(exhausted?.extraBudgetMicrousd, 500);
-    // The disclosure the user saw at opt-in time is stored with the run, not just computed.
-    assert.match(exhausted?.disclosure ?? '', /500 microusd/u);
-    assert.match(exhausted?.disclosure ?? '', /cost unknown without a price table/u);
-    assert.match(exhausted?.disclosure ?? '', /24000 tokens/u);
-
-    // Exhaustion trips the breaker, and the reason survives into the status the surface renders.
-    coordinator.recordOutcome({ runId: 'run-model', status: 'failed', errorCode: mapped.code });
-    assert.equal(store.read().circuitOpen, true);
-    assert.equal(store.read().breakerReason, 'pilot_allowance_exhausted');
+    for (let index = 0; index < 12; index++) reserve('run-model', `model-${index}`, 'model', 100_000);
+    assert.equal(ledger.readPilotRun('run-model')?.state, 'active');
+    assert.match(ledger.readPilotRun('run-model')?.disclosure ?? '', /low-side-effect/);
+    coordinator.recordOutcome({ runId: 'run-model', status: 'failed', errorCode: 'provider_failed' });
+    coordinator.attach({ runId: 'run-tool', taskId: 'task-tool', decision: started });
+    coordinator.recordOutcome({ runId: 'run-tool', status: 'failed', errorCode: 'provider_failed' });
     const trippedStatus = coordinator.status();
-    assert.equal(trippedStatus.lastRun?.runId, 'run-model');
-    assert.equal(trippedStatus.lastRun?.state, 'exhausted');
     assert.equal(trippedStatus.settings.circuitOpen, true);
-
-    // A fresh opt-in clears the breaker; tool and token allowances meter independently.
-    store.enable({ profile: 'low-side-effect', rolloutPercent: 100, extraBudgetMicrousd: 500, budgetAcknowledged: true });
+    assert.equal(trippedStatus.settings.breakerReason, 'pilot_failure_streak');
+    store.enable({ profile: 'low-side-effect', rolloutPercent: 100 });
     const restarted = coordinator.plan(derivePilotRequest(lowSideEffect.manifest, 'task-hash'));
-    assert.equal(restarted.start, true);
     if (!restarted.start) throw new Error('pilot_fixture_not_restarted');
-    coordinator.attach({ runId: 'run-tool', taskId: 'task-hash', decision: restarted });
-    reserve('run-tool', 'tool-1', 'tool', 0);
-    reserve('run-tool', 'tool-2', 'tool', 0);
-    assert.equal(ledger.readPilotRun('run-tool')?.spent.toolCalls, 1);
-    coordinator.attach({ runId: 'run-token', taskId: 'task-hash-token', decision: restarted });
-    // Model calls stay within the base allowance here, so only the token allowance is metered.
-    const tokenLimits = limits({ maxTotalTokens: 100, maxModelCalls: 5 });
-    reserve('run-token', 'model-1', 'model', 200, tokenLimits);
-    reserve('run-token', 'model-2', 'model', 200, tokenLimits);
-    const tokenRun = ledger.readPilotRun('run-token');
-    // Both reservations are above the frozen token budget, so both consume the token allowance.
-    assert.equal(tokenRun?.spent.totalTokens, 400);
-    assert.equal(tokenRun?.spent.modelCalls, 0);
 
     // Completion closes the grant without changing the failure streak.
     coordinator.attach({ runId: 'run-done', taskId: 'task-hash-done', decision: restarted });
@@ -668,10 +626,7 @@ function verifyPilotProductPath(directory: string): Record<string, unknown> {
       readOnlyRemoved: readOnly.removedTools,
       lowSideEffectRemoved: lowSideEffect.removedTools,
       ordinaryRunHasNoGrant: ledger.readPilotRun('run-ordinary') === null,
-      modelAllowance: exhausted?.allowance,
       breaker: { open: trippedStatus.settings.circuitOpen, reason: trippedStatus.settings.breakerReason },
-      costState: trippedStatus.costState,
-      mappedExhaustionCode: mapped.code,
       rollback: rolledBack.settings
     };
   } finally {
@@ -742,7 +697,7 @@ async function verifyPilotDispatch(directory: string): Promise<Record<string, un
   const workspacePath = join(directory, 'workspace');
   mkdirSync(workspacePath, { recursive: true });
   const store = new PilotStateStore({ directory: join(directory, 'pilot-state') });
-  const ledger = new RunBudgetLedger(db);
+  const ledger = new RunUsageLedger(db);
   const coordinator = new PilotRunCoordinator({ store, ledger });
   const eventBus = new EventBus({ error: () => {} });
   const started: { manifestHash: string | null }[] = [];
@@ -787,7 +742,7 @@ async function verifyPilotDispatch(directory: string): Promise<Record<string, un
 
     // Pilot request: the frozen snapshot itself carries the narrowed manifest, and the preview the
     // event advertises is the same one.
-    store.enable({ profile: 'low-side-effect', rolloutPercent: 100, extraBudgetMicrousd: 500, budgetAcknowledged: true });
+    store.enable({ profile: 'low-side-effect', rolloutPercent: 100 });
     const piloted = await runtime.startRun(request('pilot dispatch fixture: piloted request'));
     const restricted = restrictManifestForPilot(manifest, 'low-side-effect');
     const pilotedSnapshot = repository.getRunExecutionSnapshot(piloted.runId);
@@ -798,8 +753,7 @@ async function verifyPilotDispatch(directory: string): Promise<Record<string, un
     assert.equal(started.at(-1)?.manifestHash, restricted.manifest.manifestHash);
     const pilotRow = ledger.readPilotRun(piloted.runId);
     assert.equal(pilotRow?.profile, 'low-side-effect');
-    assert.equal(pilotRow?.extraBudgetMicrousd, 500);
-    assert.match(pilotRow?.disclosure ?? '', /500 microusd/u);
+    assert.match(pilotRow?.disclosure ?? '', /restricted capabilities/u);
 
     // Cancelling the piloted run is its own terminal state, not "finished".
     const cancellation = await runtime.cancelRun({ runId: piloted.runId });

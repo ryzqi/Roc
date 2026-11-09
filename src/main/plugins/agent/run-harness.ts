@@ -48,14 +48,14 @@ import type {
 } from '../../services/deep-agent/context/context-compaction-pipeline';
 import {
   createContextTokenCounter,
-  deriveContextBudgetProfile
-} from '../../services/deep-agent/context/context-token-budget';
-import type { ContextBudgetProfile, ContextToolDefinition } from '../../services/deep-agent/context/context-token-budget';
+  deriveContextCapacityProfile
+} from '../../services/deep-agent/context/context-capacity';
+import type { ContextCapacityProfile, ContextToolDefinition } from '../../services/deep-agent/context/context-capacity';
 import { loadExplicitSkillContexts } from '../../services/deep-agent/context/explicit-skills';
 import { loadReferencedFileContexts } from '../../services/deep-agent/context/referenced-files';
 import { memoryApplicability } from '../../services/deep-agent/harness-revision';
-import { RunBudgetObserver, type ModelInvocationObservation } from '../../services/deep-agent/run-budget-observer';
-import type { RunBudgetLedger } from '../../services/deep-agent/run-budget-ledger';
+import { RunUsageObserver, type ModelInvocationObservation } from '../../services/deep-agent/run-usage-observer';
+import type { RunUsageLedger } from '../../services/deep-agent/run-usage-ledger';
 import type { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
 import type { ToolAdmissionObserver } from '../../services/deep-agent/tool-resource-coordinator';
 import type { AgentExecuteAdapter, StringDynamicStructuredTool } from '../../services/deep-agent/types';
@@ -67,7 +67,7 @@ import { SecurityScanService } from '../../services/memory/security-scan';
 import type { SelfConfigDryRunConfirmRequest, SelfConfigService } from '../../services/self-config';
 
 export type RunHarnessServices = {
-  budgetLedger: RunBudgetLedger;
+  usageLedger: RunUsageLedger;
   capabilities: RocCapabilityRegistry;
   checkpointer: BaseCheckpointSaver;
   contextArtifactStore: ContextArtifactStore;
@@ -106,11 +106,11 @@ export type RunHarness =
     };
 
 /**
- * 把一轮运行需要的全部执行面装配起来：工具集、上下文 harness、预算画像、运行时 backend、
+ * 把一轮运行需要的全部执行面装配起来：工具集、上下文 harness、容量画像、运行时 backend、
  * 子代理、hook 接线，最后交出一个可 `streamEvents` 的 agent。
  *
  * 调用方只需要知道两件事：装配可能被 SessionStart hook 拦掉，以及成功后拿到的 agent 已经接好一切。
- * 工具定序、预算取最保守画像、manifest 授权过滤这些不变量都留在这里面。
+ * 工具定序、容量取最保守画像、manifest 授权过滤这些不变量都留在这里面。
  */
 export async function buildRunHarness(
   services: RunHarnessServices,
@@ -204,13 +204,13 @@ export async function buildRunHarness(
     researchProjectId: request.snapshot.researchProjectId ?? null,
     taskContract: request.snapshot.taskContract
   });
-  const contextWindowTokens = request.snapshot.budget.contextWindowTokens;
+  const contextWindowTokens = request.snapshot.modelConfig.contextWindowTokens;
   if (contextWindowTokens === null) {
-    throw new Error('agent_context_budget_missing');
+    throw new Error('agent_context_capacity_missing');
   }
   const contextTokenCounter = createContextTokenCounter({ modelId: handle.modelId, providerType: handle.runtime.providerType, baseUrl: handle.runtime.baseUrl });
   const runSubagents = createRunSubagents({ webReadTool: tools.webReadTool });
-  const contextBudgetProfile = await deriveConservativeContextBudgetProfile({
+  const contextCapacityProfile = await deriveConservativeContextCapacityProfile({
     contextWindowTokens,
     counter: contextTokenCounter,
     mainSystemPrompt: contextHarness.systemPrompt,
@@ -225,20 +225,20 @@ export async function buildRunHarness(
   if (initialHookContexts.kind === 'blocked') {
     return initialHookContexts;
   }
-  const budgetObserver = new RunBudgetObserver(
-    services.budgetLedger,
+  const usageObserver = new RunUsageObserver(
+    services.usageLedger,
     request.run.id,
-    request.snapshot.budget,
+    request.snapshot.modelConfig,
     'pending',
     {
       providerId: request.snapshot.model.providerId,
       modelId: request.snapshot.model.modelId,
       onInvocation: request.observeModelInvocation,
-      onStatus: (budget) => request.emitRuntimeEvent({
-        type: 'run_budget',
+      onStatus: (usage) => request.emitRuntimeEvent({
+        type: 'run_usage',
         runId: request.run.id,
         threadId: request.run.threadId,
-        budget
+        usage
       })
     }
   );
@@ -246,8 +246,8 @@ export async function buildRunHarness(
     loadResearchTaskContext: request.snapshot.researchProjectId === null || request.snapshot.researchProjectId === undefined
       ? undefined : () => services.capabilities.invoke<{projectId: string; threadId: string; runId: string}, ResearchTaskContext | null>(
         'research.task.facts.forChat', {projectId: request.snapshot.researchProjectId!, threadId: request.run.threadId, runId: request.run.id}),
-    budgetLedger: services.budgetLedger,
-    budgetObserver,
+    usageLedger: services.usageLedger,
+    usageObserver,
     snapshot: request.snapshot,
     model: handle.model,
     systemPrompt: contextHarness.systemPrompt,
@@ -261,8 +261,8 @@ export async function buildRunHarness(
     contextCompaction: {
       artifactStore: services.contextArtifactStore,
       artifactRecoveryEnabled: mainManifestToolNames.includes('read_context_artifact'),
-      budgetProfile: contextBudgetProfile,
-      budgetObserver,
+      capacityProfile: contextCapacityProfile,
+      usageObserver,
       emitEvent: (event) => emitContextMaintenanceEvent(request, mode, event),
       sessionHistory: services.sessionHistory,
       tokenCounter: contextTokenCounter
@@ -280,8 +280,8 @@ export async function buildRunHarness(
             signal: request.abortSignal
           }
   });
-  budgetObserver.setRevision(revision);
-  budgetObserver.emitStatus();
+  usageObserver.setRevision(revision);
+  usageObserver.emitStatus();
   return {
     kind: 'ready',
     agent,
@@ -306,7 +306,7 @@ function emitContextMaintenanceEvent(
     ...(event.persistedChars === undefined ? {} : { persistedChars: event.persistedChars }),
     ...(event.removedChars === undefined ? {} : { removedChars: event.removedChars }),
     ...(event.inputTokens === undefined ? {} : { inputTokens: event.inputTokens }),
-    ...(event.budgetTokens === undefined ? {} : { budgetTokens: event.budgetTokens }),
+    ...(event.capacityTokens === undefined ? {} : { capacityTokens: event.capacityTokens }),
     ...(event.estimated === undefined ? {} : { estimated: event.estimated }),
     ...(event.cycleId === undefined ? {} : { cycleId: event.cycleId }),
     ...(event.record === undefined ? {} : { record: event.record }),
@@ -358,16 +358,16 @@ async function runSessionStartHook(input: {
 }
 
 /**
- * 主 agent 与每个子代理各有自己的系统提示，因此各有自己的输入预算；取最小的那份，
+ * 主 agent 与每个子代理各有自己的系统提示，因此各有自己的输入容量；取最小的那份，
  * 保证任何一条执行路径都不会超出。
  */
-async function deriveConservativeContextBudgetProfile(input: {
+async function deriveConservativeContextCapacityProfile(input: {
   contextWindowTokens: number;
   counter: ReturnType<typeof createContextTokenCounter>;
   mainSystemPrompt: string;
   subagents: ReturnType<typeof createRunSubagents>;
   tools: readonly ClientTool[];
-}): Promise<ContextBudgetProfile> {
+}): Promise<ContextCapacityProfile> {
   const contextTools = input.tools.map((tool): ContextToolDefinition => {
     if (typeof tool.description !== 'string') {
       throw new Error(`agent_tool_description_missing:${tool.name}`);
@@ -379,13 +379,13 @@ async function deriveConservativeContextBudgetProfile(input: {
     };
   });
   const profiles = await Promise.all([
-    deriveContextBudgetProfile({
+    deriveContextCapacityProfile({
       contextWindowTokens: input.contextWindowTokens,
       counter: input.counter,
       systemPrompt: input.mainSystemPrompt,
       tools: contextTools
     }),
-    deriveContextBudgetProfile({
+    deriveContextCapacityProfile({
       contextWindowTokens: input.contextWindowTokens,
       counter: input.counter,
       systemPrompt: GENERAL_PURPOSE_SUBAGENT.systemPrompt,
@@ -395,7 +395,7 @@ async function deriveConservativeContextBudgetProfile(input: {
       if (!('systemPrompt' in subagent) || typeof subagent.systemPrompt !== 'string') {
         throw new Error(`agent_subagent_system_prompt_missing:${subagent.name}`);
       }
-      return deriveContextBudgetProfile({
+      return deriveContextCapacityProfile({
         contextWindowTokens: input.contextWindowTokens,
         counter: input.counter,
         systemPrompt: subagent.systemPrompt,
@@ -405,7 +405,7 @@ async function deriveConservativeContextBudgetProfile(input: {
   ]);
   const first = profiles[0];
   if (first === undefined) {
-    throw new Error('agent_context_budget_profile_missing');
+    throw new Error('agent_context_capacity_profile_missing');
   }
   return profiles.slice(1).reduce(
     (selected, candidate) => candidate.modelInputTokens < selected.modelInputTokens ? candidate : selected,

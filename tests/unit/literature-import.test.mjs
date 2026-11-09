@@ -1253,7 +1253,7 @@ test('cancellation between pages or during a later page stops dispatch and retai
   }
 });
 
-test('main-process tool context is absent from schemas; budgets and cancellation enforce execution boundary', async () => {
+test('main-process tool context is absent from schemas; unlimited searches preserve the cancellation boundary', async () => {
   const calls = [];
   const controller = new AbortController();
   const tools = api.createLiteratureTools({ invoke: async (name, input) => {
@@ -1264,10 +1264,11 @@ test('main-process tool context is absent from schemas; budgets and cancellation
   assert.equal('projectId' in tools[0].schema.shape, false);
   await tools[0].invoke({ query: 'x', limit: 30 });
   await tools[0].invoke({ query: 'y', limit: 30 });
-  await assert.rejects(tools[0].invoke({ query: 'z', limit: 1 }), /literature_search_budget_exhausted/);
+  await tools[0].invoke({ query: 'z', limit: 30 });
+  await tools[0].invoke({ query: 'fourth', limit: 30 });
   controller.abort();
   await assert.rejects(tools[1].invoke({ searchId: 'search_fixture' }));
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 4);
 });
 
 test('Europe PMC namespaces remain distinct while MED records and PubMed share the real PMID', async () => {

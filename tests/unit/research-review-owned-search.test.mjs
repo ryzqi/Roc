@@ -23,35 +23,35 @@ function chat(f, id = 'owned-query-parent', overrides = {}) {
     shellAllowedCommands: undefined, trustedHostAvailable: false, skills: [], workflowHint: null,
     researchProjectId: f.project.id
   }).manifest;
-  const budget = {...api.createRunBudget({contextBudgetTokens: null, startedAt: timestamp}), ...overrides};
+  const budget = {...api.createRunModelConfig({contextWindowTokens: null, startedAt: timestamp}), ...overrides};
   const snapshot = api.createRunExecutionSnapshot({runId, threadId, inputMessageId: `${id}-message`, snapshot: {
-    schemaVersion: 10, submissionHash: 'a'.repeat(64),
+    schemaVersion: 11, submissionHash: 'a'.repeat(64),
     taskContract: {contractVersion: 1, objective: 'Execute exact frozen query', constraints: [], kind: 'reply',
       criteria: [{id: 'query', description: 'Read exact receipts', check: {kind: 'response'}}]},
     runOrigin: 'chat', model: {providerId: 'fixture', modelId: 'fixture'}, mode: 'run', workspace: null,
     capabilityManifest: manifest, workflowHint: null, explicitSkillIds: [], dispatchKey: null,
-    researchProjectId: f.project.id, budget
+    researchProjectId: f.project.id, modelConfig: budget
   }});
   f.agentDb.prepare(`INSERT INTO agent_threads(id,kind,title,goal,status,research_project_id,created_at,updated_at)
     VALUES (?,'chat','Review','Review','active',?,?,?)`).run(threadId, f.project.id, timestamp, timestamp);
   f.agentDb.prepare(`INSERT INTO agent_runs
     (id,thread_id,run_number,user_input,status,started_at,enabled_capabilities_json,run_origin,snapshot_json,snapshot_version)
-    VALUES (?,?,1,'Review','running',?,'{}','chat',?,10)`).run(runId, threadId, timestamp, JSON.stringify(snapshot));
+    VALUES (?,?,1,'Review','running',?,'{}','chat',?,11)`).run(runId, threadId, timestamp, JSON.stringify(snapshot));
   const broker = new api.ExecutionGrantBroker(f.agentDb), controller = new AbortController();
   const grant = (request = f.request) => broker.consumeReviewSearchDispatch(
     broker.issueReviewSearchDispatch({runId, threadId, manifest, request}), request);
   const owner = (toolName = 'research_review_get_query') => broker.authorizeReviewSearchOwner({
     runId, threadId, projectId: f.project.id, manifest, toolName
   });
-  return {runId, threadId, manifest, budget, snapshot, broker, controller, grant, owner};
+  return {runId, threadId, manifest, modelConfig: budget, snapshot, broker, controller, grant, owner};
 }
 
-test('first owned query creates a trusted chat task before network and backfills existing model budget exactly once', async () => {
-  const f = createReviewSearchFixture(api), c = chat(f, undefined, {maxCostMicrousd: 100});
+test('first owned query creates a trusted chat task before network and backfills existing model usage exactly once', async () => {
+  const f = createReviewSearchFixture(api), c = chat(f, undefined, {});
   try {
-    const ledger = new api.RunBudgetLedger(f.agentDb);
-    ledger.reserve(c.runId, c.budget, {id: 'parent-model', kind: 'model', inputHash: 'a'.repeat(64),
-      tokens: 50, costMicrousd: 60, envelope: {}});
+    const ledger = new api.RunUsageLedger(f.agentDb);
+    ledger.reserve(c.runId, c.modelConfig, {id: 'parent-model', kind: 'model', inputHash: 'a'.repeat(64),
+      tokens: 50,  envelope: {}});
     ledger.settle(c.runId, 'parent-model', 40, 'settled', undefined, {}, 45);
     assert.equal(f.tasks.taskForChat(c.runId), null);
     const started = f.reviews.startOwned(f.request, c.grant(), c.controller.signal);
@@ -61,10 +61,9 @@ test('first owned query creates a trusted chat task before network and backfills
     assert.equal(association.parentKind, 'chat'); assert.equal(association.parentExecutionId, c.runId);
     assert.equal(association.taskId, task.id); assert.equal(task.rootAgentRunId, c.runId);
     assert.deepEqual(started.search.snapshot.actor, {kind: 'agent', id: c.runId});
-    assert.deepEqual(f.tasks.budgetForExecution('chat', c.runId, f.project.id), c.budget);
-    assert.equal(f.agentDb.prepare('SELECT task_id FROM agent_budget_calls WHERE call_id=?').pluck().get('parent-model'), task.id);
-    assert.equal(ledger.readTaskBudgetStatus(task.id, f.project.id).tokens.settled, 40);
-    assert.equal(ledger.readTaskBudgetStatus(task.id, f.project.id).cost.settledMicrousd, 45);
+    assert.deepEqual(f.tasks.modelConfigForExecution('chat', c.runId, f.project.id), c.modelConfig);
+    assert.equal(f.agentDb.prepare('SELECT task_id FROM agent_calls WHERE call_id=?').pluck().get('parent-model'), task.id);
+    assert.equal(ledger.readTaskUsageStatus(task.id, f.project.id).tokens.settled, 40);
     const done = await awaitReviewSearchFixture(f, started.search);
     assert.equal(done.status, 'complete'); assert.equal(done.rawRecordCount, 4);
     const count = f.agentDb.prepare('SELECT COUNT(*) FROM research_task_executions').pluck().get(), changes = f.changes();
@@ -230,14 +229,13 @@ test('cancelling one task waits for its own query cleanup and leaves another cha
   } finally {await f.dispose();}
 });
 
-test('task budget refusal prevents the first provider request and task mutation between pages stops further dispatch', async () => {
+test('task mutation between pages stops further dispatch', async () => {
   const f = createReviewSearchFixture(api), c = chat(f);
   try {
     const started = f.reviews.startOwned(f.request, c.grant(), c.controller.signal);
-    f.agentDb.prepare("UPDATE research_task_budgets SET stop_reason='run_cost_budget_exhausted' WHERE task_id=?").run(started.association.taskId);
     const done = await awaitReviewSearchFixture(f, started.search);
-    assert.equal(done.status, 'failed'); assert.equal(done.receipt.errorCode, 'run_cost_budget_exhausted');
-    assert.equal(f.calls.length, 0); assert.equal(f.errors.length, 0);
+    assert.equal(done.status, 'complete');
+    assert.ok(f.calls.length > 0); assert.equal(f.errors.length, 0);
   } finally {await f.dispose();}
   let entered, release;
   const ready = new Promise(resolve => {entered = resolve;});
@@ -308,19 +306,14 @@ test('disk restart preserves exact owner and task while interrupting a held quer
   } finally {await restarted?.shutdown(); db?.close(); agentDb?.close(); await f.dispose(); await rm(directory, {recursive: true, force: true});}
 });
 
-test('continuous task deadline cancels a held query even while its chat remains active', async () => {
-  let entered, signal;
-  const ready = new Promise(resolve => {entered = resolve;});
-  const f = createReviewSearchFixture(api, {fetch: async (_url, options) => {
-    signal = options.signal; entered();
-    return new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), {once: true}));
-  }}), c = chat(f, 'deadline-parent', {deadlineAt: new Date(Date.now() + 2000).toISOString()});
+test('legacy elapsed task deadline does not cancel provider work', async () => {
+  const f = createReviewSearchFixture(api), c = chat(f, 'deadline-parent', {});
   try {
-    const started = f.reviews.startOwned(f.request, c.grant(), c.controller.signal); await ready;
+    const started = f.reviews.startOwned(f.request, c.grant(), c.controller.signal);
     const done = await awaitReviewSearchFixture(f, started.search);
-    assert.equal(done.status, 'cancelled'); assert.equal(done.receipt.errorCode, 'run_deadline_exhausted');
-    assert.equal(signal.aborted, true); assert.equal(c.controller.signal.aborted, false);
-    assert.equal(f.calls.length, 1); assert.equal(f.errors.length, 0);
+    assert.equal(done.status, 'complete');
+    assert.equal(c.controller.signal.aborted, false);
+    assert.ok(f.calls.length > 0); assert.equal(f.errors.length, 0);
   } finally {await f.dispose();}
 });
 
@@ -368,13 +361,13 @@ test('Research DB41 preserves exact historical manual query hashes and never inv
   } finally {await f.dispose();}
 });
 
-test('exact partial query retries and later stages share the chat task without resetting its frozen budget', async () => {
+test('exact partial query retries and later stages share the chat task without resetting its model configuration', async () => {
   const f = createReviewSearchFixture(api, {maxPages: 1}), c = chat(f);
   try {
     const initial = f.reviews.startOwned(f.request, c.grant(), c.controller.signal);
     const partial = await awaitReviewSearchFixture(f, initial.search);
     assert.equal(partial.status, 'partial');
-    const budget = f.agentDb.prepare('SELECT limits_json FROM research_task_budgets WHERE task_id=?').pluck().get(initial.association.taskId);
+    const budget = JSON.stringify(f.tasks.modelConfigForExecution('chat', c.runId, f.project.id));
     const request = {...f.request, requestId: 'repeat-partial', retryOf: partial.snapshot.id, expectedRetrySnapshotHash: partial.snapshotHash};
     const repeated = f.reviews.startOwned(request, c.grant(request), c.controller.signal);
     assert.equal(repeated.association.taskId, initial.association.taskId);
@@ -388,7 +381,7 @@ test('exact partial query retries and later stages share the chat task without r
     const linked = f.tasks.linkStage(stage, dispatch);
     assert.equal(linked.taskId, initial.association.taskId); assert.equal(stage.parentRunId, null);
     assert.equal(linked.parentKind, 'chat'); assert.equal(linked.parentExecutionId, c.runId);
-    assert.equal(f.agentDb.prepare('SELECT limits_json FROM research_task_budgets WHERE task_id=?').pluck().get(initial.association.taskId), budget);
+    assert.equal(JSON.stringify(f.tasks.modelConfigForExecution('chat', c.runId, f.project.id)), budget);
     assert.deepEqual(f.reviews.get({projectId: f.project.id, reviewSearchId: partial.snapshot.id}), partial);
     assert.equal(f.errors.length, 0);
   } finally {await f.dispose();}

@@ -1,4 +1,4 @@
-/** Fair, abortable reader/writer admission. Waiting work holds no budget reservation. */
+/** Fair, abortable reader/writer admission. Waiting work holds no execution slot. */
 export class ToolExecutionGate {
   private readers = 0;
   private writer = false;

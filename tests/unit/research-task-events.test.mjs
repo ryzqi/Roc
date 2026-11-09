@@ -36,10 +36,8 @@ test('project task listing uses stable creation cursors despite identical timest
 test('task events persist reservation, settlement and startup uncertainty with exact call identities', () => {
   const f = createResearchFixture(api, 'discovery');
   try {
-    const budget = api.createRunBudget({ contextBudgetTokens: 1000 });
-    f.agentDb.prepare('UPDATE research_task_budgets SET limits_json = ? WHERE task_id = ?')
-      .run(JSON.stringify(budget), f.run.taskId);
-    const ledger = new api.RunBudgetLedger(f.agentDb);
+    const budget = api.createRunModelConfig({ contextWindowTokens: 1000 });
+    const ledger = new api.RunUsageLedger(f.agentDb);
     const reserve = id => ledger.reserve(f.run.id, budget, {
       id, kind: 'model', tokens: 100, inputHash: id, envelope: { messages: ['private-prompt-marker'] }
     });
@@ -72,17 +70,15 @@ test('rolled-back activation and denied or repeated calls produce no successful-
     assert.deepEqual(resumedEvents.slice(pausedEvents.length).map(event=>event.payload.state), ['active','paused']);
     assert.equal(f.tasks.get(f.run.taskId, f.project.id).status, 'paused');
     f.tasks.setStatus(f.run.taskId, f.project.id, 'active', null, ['paused']);
-    const budget = api.createRunBudget({ contextBudgetTokens: 1000 });
-    f.agentDb.prepare('UPDATE research_task_budgets SET limits_json = ? WHERE task_id = ?')
-      .run(JSON.stringify(budget), f.run.taskId);
-    const ledger = new api.RunBudgetLedger(f.agentDb);
+    const budget = api.createRunModelConfig({ contextWindowTokens: 1000 });
+    const ledger = new api.RunUsageLedger(f.agentDb);
     const reservation = { id: 'one', kind: 'model', tokens: 100, inputHash: 'one', envelope: {} };
     ledger.reserve(f.run.id, budget, reservation);
     ledger.settle(f.run.id, 'one', 20, 'settled');
     const saved = f.tasks.events(requestFor(f)).events;
     ledger.settle(f.run.id, 'one', 20, 'settled');
-    assert.throws(() => ledger.reserve(f.run.id, budget, reservation), /run_budget_call_already_reserved/);
-    assert.throws(() => ledger.settle(f.run.id, 'one', 1, 'settled'), /run_budget_settlement_invalid/);
+    assert.throws(() => ledger.reserve(f.run.id, budget, reservation), /run_call_call_already_reserved/);
+    assert.throws(() => ledger.settle(f.run.id, 'one', 1, 'settled'), /run_call_settlement_invalid/);
     assert.deepEqual(f.tasks.events(requestFor(f)).events, saved);
   } finally { f.close(); }
 });
@@ -112,7 +108,7 @@ test('v13 migration retains tasks without fabricating historical event rows', ()
     db.pragma('foreign_keys = ON');
     api.applyDatabaseMigrations(db, { dbName: 'agent', migrations: api.agentMigrations.filter(migration => migration.version <= 13) });
     const task = { schemaVersion: 2, id: 'existing', projectId: 'project', goal: 'Existing work', rootAgentRunId: null,
-      status: 'active', statusReason: null, deadlineClock: 'continuous', budgetPolicyVersion: 1,
+      status: 'active', statusReason: null,
       createdAt: '2026-11-03T00:00:00.000Z', updatedAt: '2026-11-03T00:00:00.000Z' };
     db.prepare('INSERT INTO research_tasks(id,project_id,status,snapshot_json,created_at) VALUES (?,?,?,?,?)')
       .run(task.id, task.projectId, task.status, JSON.stringify(task), task.createdAt);

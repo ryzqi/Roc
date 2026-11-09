@@ -12,7 +12,7 @@ const schemas = await importTypeScriptModule('src/shared/schemas/research-ro-cra
 const researchCrateFixture = () => fixture(api.researchCrateProfileHtml);
 const clone = value => structuredClone(value);
 
-test('RO-Crate 1.2 graph preserves registered UTF-8 files, source relations, real fields and explicit unknown cost', () => {
+test('RO-Crate 1.2 graph preserves registered UTF-8 files, source relations, real fields without financial metadata', () => {
   const {input} = researchCrateFixture(), crate = api.buildResearchCrate(input);
   const serialized = api.serializeResearchCrate(crate);
   assert.deepEqual(api.validateResearchCrate(JSON.parse(serialized), input.files), crate);
@@ -23,7 +23,7 @@ test('RO-Crate 1.2 graph preserves registered UTF-8 files, source relations, rea
   assert.deepEqual(crate['@graph'].find(node => node['@id'] === 'ro-crate-profile.html')['@type'], ['File', 'CreativeWork', 'Profile']);
   assert.deepEqual(crate['@graph'].find(node => node['@id'] === 'code/run.py')['@type'], ['File', 'SoftwareSourceCode']);
   assert.ok(crate['@graph'].some(node => node.propertyID === 'random seed' && node.value === 42));
-  assert.ok(crate['@graph'].some(node => node.propertyID === 'cost unknown' && node.value === input.activities[0].cost.reason));
+  assert.equal(JSON.stringify(crate).includes('cost unknown'), false);
   assert.equal(api.serializeResearchCrate(api.buildResearchCrate(input)), serialized);
 });
 

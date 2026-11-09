@@ -15,14 +15,14 @@ export function verifyQualityEvaluation(dataset: FrozenQualityDataset, expectati
   }
   const trials: PairedQualityTrial[] = dataset.tasks.flatMap(task => Array.from({ length: 3 }, (_, repeatIndex) => ({
     taskId: task.id, family: task.family, clusterId: task.clusterId, repeatIndex,
-    baseline: { status: 'success', score: 0.75, latencyMs: 100, costUsd: null },
-    candidate: { status: 'success', score: 0.8, latencyMs: 110, costUsd: null }
+    baseline: { status: 'success', score: 0.75, latencyMs: 100 },
+    candidate: { status: 'success', score: 0.8, latencyMs: 110 }
   })));
   const statistics = summarizePairedQualityTrials(trials);
   assert.equal(statistics.evidenceStatus, 'insufficient');
   return { ...auditQualityDataset(dataset), evidence: dataset.evidence === 'fixture'
     ? 'deterministic-fixture-contract-only' : 'offline-independent-dataset-contract-only',
-    modelCalls: 0, externalCalls: 0, costUsd: null,
+    modelCalls: 0, externalCalls: 0,
     qualityClaim: draft.fixtureClaims, fixtureEvidenceStatus: statistics.evidenceStatus };
 }
 export * from './dataset';

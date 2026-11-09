@@ -29,7 +29,7 @@ export function researchCrateFixture(profileHtml) {
       endedAt: '2026-11-06T00:00:01.000Z', inputs: [], outputs: ['result'], software: 'software',
       environment: {hash: hash('synthetic-environment'), version: 'CPython synthetic',
         packages: [{name: 'synthetic-package', value: '1.0'}]}, parameters: [{name: 'iterations', value: '1'}], seed: 42,
-      cost: {kind: 'unknown', reason: 'No trusted price receipt recorded'}}],
+      }],
     approvals: [{artifactId: 'synthetic-manuscript', artifactVersion: hash('synthetic-artifact-version'),
       workId: 'paper', recordedAt: '2026-11-06T00:00:02.000Z', reviewPath: 'provenance/review.json'}]
   };

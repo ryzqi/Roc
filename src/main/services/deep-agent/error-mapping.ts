@@ -22,12 +22,12 @@ export function toRunFailure(error: unknown): RunFailure {
     };
   }
   if (error instanceof Error) {
-    if (/^(run_(model_concurrency_exhausted|tool_concurrency_exhausted|total_token_budget_exhausted|model_call_budget_exhausted|tool_call_budget_exhausted|pilot_allowance_exhausted|deadline_exhausted|cost_estimate_unavailable|harness_revision_changed)|tool_call_loop_detected|agent_run_missing_conclusion)$/.test(error.message)) {
+    if (/^(run_harness_revision_changed|tool_call_loop_detected|agent_run_missing_conclusion)$/.test(error.message)) {
       return { code: error.message, message: '运行已停止：' + error.message, retryable: false };
     }
-    const contextBudgetFailure = readContextBudgetFailure(error);
-    if (contextBudgetFailure !== null) {
-      return contextBudgetFailure;
+    const contextCapacityFailure = readContextCapacityFailure(error);
+    if (contextCapacityFailure !== null) {
+      return contextCapacityFailure;
     }
     const recursionFailure = readGraphRecursionFailure(error);
     if (recursionFailure !== null) {
@@ -95,7 +95,7 @@ export function toRunFailure(error: unknown): RunFailure {
   };
 }
 
-function readContextBudgetFailure(error: Error): RunFailure | null {
+function readContextCapacityFailure(error: Error): RunFailure | null {
   if (error.message === 'context_contract_required_data_lost') {
     return {
       code: 'context_contract_required_data_lost',
@@ -103,24 +103,24 @@ function readContextBudgetFailure(error: Error): RunFailure | null {
       retryable: false
     };
   }
-  if (error.message === 'context_budget_exhausted') {
+  if (error.message === 'context_window_exceeded') {
     return {
-      code: 'context_budget_exhausted',
-      message: '上下文压缩后仍超过模型输入预算，已停止本轮执行。',
+      code: 'context_window_exceeded',
+      message: '上下文压缩后仍超过模型输入容量，已停止本轮执行。',
       retryable: false
     };
   }
-  if (error.message === 'context_budget_profile_invalid') {
+  if (error.message === 'context_capacity_profile_invalid') {
     return {
-      code: 'context_budget_profile_invalid',
+      code: 'context_capacity_profile_invalid',
       message: '模型上下文窗口无法容纳系统、工具、输出和安全预留，已停止本轮执行。',
       retryable: false
     };
   }
-  if (error.message === 'agent_context_budget_missing') {
+  if (error.message === 'agent_context_capacity_missing') {
     return {
-      code: 'agent_context_budget_missing',
-      message: '运行快照缺少模型上下文预算，已停止本轮执行。',
+      code: 'agent_context_capacity_missing',
+      message: '运行快照缺少模型上下文容量，已停止本轮执行。',
       retryable: false
     };
   }

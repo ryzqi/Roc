@@ -44,7 +44,7 @@ test('failed task cleanup invalidates its persisted failure and foreign requests
       cancelChat: async () => {}, cancelJob: async () => {}
     });
     api.registerResearchTaskCapabilities(context, f.tasks, controller,
-      new api.ResearchTaskDiagnosticsService(f.repository, new api.RunBudgetLedger(f.agentDb), null, {source: async () => {throw new Error('fixture_resource_source_unused');}}),
+      new api.ResearchTaskDiagnosticsService(f.repository, new api.RunUsageLedger(f.agentDb), null, {source: async () => {throw new Error('fixture_resource_source_unused');}}),
       {export: async () => {throw new Error('fixture_export_unused');}});
     const request = { taskId: f.run.taskId, projectId: f.project.id };
     await assert.rejects(handlers.get('research.task.cancel')({ ...request, projectId: 'foreign' }), /research_task_project_mismatch/);
@@ -63,8 +63,8 @@ test('notification delivery errors do not change execution records or authoritat
   const warnings = [];
   try {
     const previous = f.tasks.get(f.run.taskId, f.project.id);
-    const ledger = new api.RunBudgetLedger(f.agentDb);
-    const budget = ledger.readTaskBudgetStatus(f.run.taskId, f.project.id);
+    const ledger = new api.RunUsageLedger(f.agentDb);
+    const budget = ledger.readTaskUsageStatus(f.run.taskId, f.project.id);
     api.notifyResearchTaskChanged({
       pluginId: 'fixture', eventBus: { publish: async () => { throw new Error('fixture_notification_failure'); } },
       logger: { warn: (...args) => warnings.push(args) }
@@ -73,6 +73,6 @@ test('notification delivery errors do not change execution records or authoritat
     assert.equal(warnings.length, 1);
     assert.equal(warnings[0][0], 'research_task_notification_failed');
     assert.deepEqual(f.tasks.get(f.run.taskId, f.project.id), previous);
-    assert.deepEqual(ledger.readTaskBudgetStatus(f.run.taskId, f.project.id), budget);
+    assert.deepEqual(ledger.readTaskUsageStatus(f.run.taskId, f.project.id), budget);
   } finally { f.close(); }
 });

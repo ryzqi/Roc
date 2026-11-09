@@ -1,7 +1,6 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { ChatOpenAICallOptions } from '@langchain/openai';
-import { anthropicThinkingMinBudgetTokens, type ProviderConfig, type ProviderModelOptions } from '../../shared/types';
-import { RocDomainError } from './errors';
+import { type ProviderConfig, type ProviderModelOptions } from '../../shared/types';
 import {
   applyProviderOverride,
   resolveSamplingProfile,
@@ -153,51 +152,9 @@ export function resolveStreamUsage(provider: ProviderConfig, modelOptions: Provi
 
 export function resolveAnthropicThinking(
   options: ProviderModelOptions
-): { type: 'disabled' } | { type: 'adaptive' } | { type: 'enabled'; budget_tokens: number } | undefined {
-  if (options.anthropicThinking === undefined) {
-    return undefined;
-  }
-  if (options.anthropicThinking.mode === 'disabled') {
-    return {
-      type: 'disabled'
-    };
-  }
-  if (options.anthropicThinking.mode === 'adaptive') {
-    return {
-      type: 'adaptive'
-    };
-  }
-  if (options.anthropicThinking.mode === 'enabled') {
-    if (
-      !Number.isInteger(options.anthropicThinking.budgetTokens) ||
-      options.anthropicThinking.budgetTokens < anthropicThinkingMinBudgetTokens
-    ) {
-      throw new RocDomainError({
-        code: 'provider_invalid',
-        message: `Anthropic thinking budget tokens 必须大于等于 ${anthropicThinkingMinBudgetTokens}。`,
-        category: 'validation',
-        retryable: false,
-        userAction: '请在设置页将 Anthropic thinking budget tokens 调整到官方下限以上。'
-      });
-    }
-    if (
-      typeof options.maxTokens === 'number' &&
-      options.anthropicThinking.budgetTokens >= options.maxTokens
-    ) {
-      throw new RocDomainError({
-        code: 'provider_invalid',
-        message: 'Anthropic thinking budget tokens 必须小于 Max tokens。',
-        category: 'validation',
-        retryable: false,
-        userAction: '请在设置页调大 Max tokens，或调小 Anthropic thinking budget tokens。'
-      });
-    }
-    return {
-      type: 'enabled',
-      budget_tokens: options.anthropicThinking.budgetTokens
-    };
-  }
-  return undefined;
+): { type: 'disabled' } | { type: 'adaptive' } | undefined {
+  const thinking = options.anthropicThinking;
+  return thinking === undefined ? undefined : { type: thinking.mode };
 }
 
 export function resolveOpenAiCompatibleDefaultOptions(

@@ -39,16 +39,16 @@ import {
 } from './middleware-stack';
 import { isPlanModeModelVisibleToolName } from './model-tool-exposure';
 import type { AgentToolEffectStore } from './tool-effect-store';
-import type { RunBudgetLedger } from './run-budget-ledger';
-import type { RunBudgetObserver } from './run-budget-observer';
+import type { RunUsageLedger } from './run-usage-ledger';
+import type { RunUsageObserver } from './run-usage-observer';
 import type { ToolAdmissionObserver } from './tool-resource-coordinator';
 import { DEEP_AGENT_BUILT_IN_TOOLS, type RuntimeSubagent } from './types';
 import type {ResearchTaskContext} from '../../../shared/schemas/research-task-facts';
 
 export type DeepAgentBuildInput = {
   snapshot: RunExecutionSnapshot;
-  budgetLedger: RunBudgetLedger;
-  budgetObserver: RunBudgetObserver;
+  usageLedger: RunUsageLedger;
+  usageObserver: RunUsageObserver;
   model: BaseChatModel;
   systemPrompt: string;
   backend: RocCompositeBackend;
@@ -169,7 +169,7 @@ export function buildDeepAgent(input: DeepAgentBuildInput): { agent: ReturnType<
   const subagents = createDeepAgentSubagents(input, policy, tools);
 
   const middleware = resolveMiddlewareStack(createMiddlewareStackContext(input, policy, 'main', knownToolCandidates));
-  const revision = input.budgetLedger.freezeRevision(input.snapshot.runId, {
+  const revision = input.usageLedger.freezeRevision(input.snapshot.runId, {
     schemaVersion: 1, implementation: harnessImplementationHash, adapterVersion: 1, frameworkVersions: dependencies, model: input.snapshot.model,
     manifest: input.snapshot.capabilityManifest, contextPolicyVersion: 2,
     promptHash: hashToolInput(input.systemPrompt),
@@ -208,9 +208,9 @@ function createMiddlewareStackContext(
 ): MiddlewareStackContext {
   return {
     backend: input.backend,
-    budgetLedger: input.budgetLedger,
-    budgetLimits: input.snapshot.budget,
-    budgetObserver: input.budgetObserver,
+    usageLedger: input.usageLedger,
+    modelConfig: input.snapshot.modelConfig,
+    usageObserver: input.usageObserver,
     contextCompaction: input.contextCompaction,
     executionScope,
     hookMiddleware: input.hookMiddleware,

@@ -20,8 +20,6 @@ export const researchTaskSchema = z.object({
   rootAgentRunId: id.nullable(),
   status: researchTaskStatusSchema,
   statusReason: z.string().min(1).max(256).nullable(),
-  deadlineClock: z.literal('continuous'),
-  budgetPolicyVersion: z.literal(1),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime()
 }).strict();

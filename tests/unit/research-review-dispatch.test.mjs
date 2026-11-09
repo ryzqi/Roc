@@ -24,12 +24,12 @@ function fixture() {
   }).manifest;
   const snapshot = api.createRunExecutionSnapshot({
     runId, threadId, inputMessageId: 'review-owner-message', snapshot: {
-      schemaVersion: 10, submissionHash: 'a'.repeat(64),
+      schemaVersion: 11, submissionHash: 'a'.repeat(64),
       taskContract: {contractVersion: 1, objective: 'Execute frozen review query', constraints: [], kind: 'reply',
         criteria: [{id: 'query', description: 'Read the query receipt', check: {kind: 'response'}}]},
       runOrigin: 'chat', model: {providerId: 'fixture', modelId: 'fixture'}, mode: 'run', workspace: null,
       capabilityManifest: manifest, workflowHint: null, explicitSkillIds: [], dispatchKey: null,
-      researchProjectId: f.project.id, budget: api.createRunBudget({contextBudgetTokens: null})
+      researchProjectId: f.project.id, modelConfig: api.createRunModelConfig({contextWindowTokens: null})
     }
   });
   f.agentDb.prepare(`INSERT INTO agent_threads
@@ -37,7 +37,7 @@ function fixture() {
     VALUES (?,'chat','Review','Review','active',?,?,?)`).run(threadId, f.project.id, timestamp, timestamp);
   f.agentDb.prepare(`INSERT INTO agent_runs
     (id,thread_id,run_number,user_input,status,started_at,enabled_capabilities_json,run_origin,snapshot_json,snapshot_version)
-    VALUES (?,?,1,'Review','running',?,'{}','chat',?,10)`).run(runId, threadId, timestamp, JSON.stringify(snapshot));
+    VALUES (?,?,1,'Review','running',?,'{}','chat',?,11)`).run(runId, threadId, timestamp, JSON.stringify(snapshot));
   let now = new Date(timestamp);
   const broker = new api.ExecutionGrantBroker(f.agentDb, () => now);
   const request = {projectId: f.project.id, requestId: 'owned-query-request', versionId: 'frozen-protocol',

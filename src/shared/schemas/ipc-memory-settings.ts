@@ -349,8 +349,7 @@ export const providerModelSchema = z
         anthropicThinking: z
           .discriminatedUnion('mode', [
             z.object({ mode: z.literal('disabled') }).strict(),
-            z.object({ mode: z.literal('adaptive') }).strict(),
-            z.object({ mode: z.literal('enabled'), budgetTokens: z.number().int().min(1024) }).strict()
+            z.object({ mode: z.literal('adaptive') }).strict()
           ])
           .optional(),
         toolChoice: z
@@ -363,7 +362,7 @@ export const providerModelSchema = z
         guidedRegex: z.string().min(1).optional(),
         guidedChoice: z.array(z.string().min(1)).min(1).optional(),
         guidedGrammar: z.string().min(1).optional(),
-        contextBudgetTokens: z.number().int().positive().optional(),
+        contextWindowTokens: z.number().int().positive().optional(),
         samplingProfileOverrides: z
           .object({
             temperature: z.number().finite().optional(),
@@ -380,13 +379,6 @@ export const providerModelSchema = z
       .superRefine((options, context) => {
         if (options.reasoning !== undefined && options.reasoning.effort === undefined && options.reasoning.summary === undefined) {
           context.addIssue({ code: 'custom', path: ['reasoning'], message: 'reasoning requires effort or summary' });
-        }
-        if (
-          options.anthropicThinking?.mode === 'enabled' &&
-          options.maxTokens !== undefined &&
-          options.anthropicThinking.budgetTokens >= options.maxTokens
-        ) {
-          context.addIssue({ code: 'custom', path: ['anthropicThinking', 'budgetTokens'], message: 'thinking budget must be less than max tokens' });
         }
       })
       .optional()

@@ -3,7 +3,6 @@ import type {ResearchTaskExecutionDiagnostics} from '../../../shared/schemas/res
 import {useAsyncResource} from '../../app/use-async-resource';
 import {formSecondaryButtonClass} from '../../shared/form-ui';
 import type {RocClient} from '../../shared/roc-client';
-const cost = (value: number|null) => value === null ? '未知' : `$${(value / 1_000_000).toFixed(6)}`;
 const operations = {run:'运行', agent_model:'模型执行', summary_model:'摘要模型', context_compaction:'上下文压缩',
   context_summary:'上下文摘要', tool_effect:'工具执行', tool_admission:'工具资源排队', approval_wait:'等待审批',
   subagent:'子任务', recovery:'恢复', checkpoint_resume:'检查点恢复'};
@@ -37,15 +36,15 @@ function Observations({client, execution}: {client: RocClient; execution: Resear
       {telemetry.trace.droppedSpanCount === 0 ? null : <p className="text-[var(--st-warn)]">时间线已省略 {telemetry.trace.droppedSpanCount} 项。</p>}
     </>}
     {data === null ? null : <>
-      <p className="text-subtle">模型调用耗时来自实际调用；未记录的耗时与费用显示未知。</p>
-      <ol className="grid gap-2" aria-label="预算调用">
+      <p className="text-subtle">模型调用耗时来自实际调用；未记录的耗时显示未知。</p>
+      <ol className="grid gap-2" aria-label="调用记录">
         {data.calls.calls.map(call => <li key={call.sequence} className="grid gap-1" data-testid="mgmt-task-call">
           <p className="break-all font-mono">调用 {call.callId}</p>
           <p className="text-subtle">{call.kind} / {call.state} / {call.invocation === null ? '耗时未知' : `${call.invocation.durationMs} ms / ${call.invocation.status}`}</p>
-          <p className="text-subtle">已结算 {cost(call.actualCostMicrousd)} / 预留 {cost(call.reservedCostMicrousd)} / Tokens {call.actualTokens ?? '未知'}</p>
+          <p className="text-subtle">Tokens {call.actualTokens ?? '未知'}</p>
         </li>)}
       </ol>
-      {data.calls.calls.length === 0 ? <p className="text-subtle">当前页没有预算调用。</p> : null}
+      {data.calls.calls.length === 0 ? <p className="text-subtle">当前页没有调用记录。</p> : null}
       {data.calls.hasMore ? <button type="button" className={`${formSecondaryButtonClass} justify-self-start`} disabled={resource.status === 'loading'}
         onClick={() => setAfterCallSequence(data.calls.nextSequence)}>下一页调用</button> : null}
       {data.replay === null ? <p className="text-subtle">此执行没有主助手重放日志。</p> : <>

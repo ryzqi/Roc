@@ -2,12 +2,12 @@ import { createAgent, toolStrategy } from 'langchain';
 import type { StructuredToolInterface } from '@langchain/core/tools';
 
 import { researchStageOutputSchema } from '../../../shared/schemas/research-runs';
-import type { ResearchModelSelection, ResearchStageRun, RunBudgetStatus } from '../../../shared/types';
+import type { ResearchModelSelection, ResearchStageRun, RunUsageStatus } from '../../../shared/types';
 import type { AgentModelFactoryAdapter } from '../agent/model-factory-adapter';
 import type { ResearchExecutionContext } from './run-repository';
-import type { RunBudgetLedger, RunLimits } from '../../services/deep-agent/run-budget-ledger';
-import { RunBudgetObserver } from '../../services/deep-agent/run-budget-observer';
-import { createRunBudgetMiddleware } from '../../services/deep-agent/run-budget-middleware';
+import type { RunUsageLedger, RunModelConfig } from '../../services/deep-agent/run-usage-ledger';
+import { RunUsageObserver } from '../../services/deep-agent/run-usage-observer';
+import { createRunUsageMiddleware } from '../../services/deep-agent/run-usage-middleware';
 import type {ResearchTaskContext} from '../../../shared/schemas/research-task-facts';
 import {createResearchTaskContextMiddleware} from '../../services/deep-agent/research-task-context-middleware';
 import {scientificReviewHash} from './verification/scientific-review';
@@ -19,7 +19,7 @@ export type ResearchRoleExecution = {
   loadTaskContext: () => ResearchTaskContext;
   tools: StructuredToolInterface[];
   signal: AbortSignal;
-  onBudgetStatus?: (status: RunBudgetStatus) => void;
+  onUsageStatus?: (status: RunUsageStatus) => void;
 };
 
 export type PreparedResearchRole = {
@@ -29,15 +29,15 @@ export type PreparedResearchRole = {
 };
 
 export type ResearchRoleExecutor = {
-  prepare(model: ResearchModelSelection, budget: RunLimits): Promise<PreparedResearchRole>;
+  prepare(model: ResearchModelSelection, modelConfig: RunModelConfig): Promise<PreparedResearchRole>;
 };
 
-export function createResearchRoleExecutor(factory: AgentModelFactoryAdapter, ledger: RunBudgetLedger): ResearchRoleExecutor {
+export function createResearchRoleExecutor(factory: AgentModelFactoryAdapter, ledger: RunUsageLedger): ResearchRoleExecutor {
   return {
-    async prepare(selection, budget) {
+    async prepare(selection, modelConfig) {
       const handle = selection.kind === 'app_default'
-        ? await factory.createDefaultModelHandle({ maxOutputTokens: budget.maxOutputTokens })
-        : await factory.createModelHandleByProviderAndModel({ ...selection, maxOutputTokens: budget.maxOutputTokens });
+        ? await factory.createDefaultModelHandle({ maxOutputTokens: modelConfig.maxOutputTokens })
+        : await factory.createModelHandleByProviderAndModel({ ...selection, maxOutputTokens: modelConfig.maxOutputTokens });
       const model = handle.langChainHandle?.model;
       if (model === undefined) throw new Error('research_model_handle_missing');
       return {
@@ -45,9 +45,9 @@ export function createResearchRoleExecutor(factory: AgentModelFactoryAdapter, le
         modelId: handle.modelId,
         async execute(input) {
           input.signal.throwIfAborted();
-          const limits = { ...budget, maxModelCalls: Math.min(budget.maxModelCalls, input.run.policy.maxSteps) };
-          const observer = new RunBudgetObserver(ledger, input.run.id, limits, input.run.skillHash, {
-            providerId: handle.providerId, modelId: handle.modelId, onStatus: input.onBudgetStatus
+          const limits = modelConfig;
+          const observer = new RunUsageObserver(ledger, input.run.id, limits, input.run.skillHash, {
+            providerId: handle.providerId, modelId: handle.modelId, onStatus: input.onUsageStatus
           });
           const agent = createAgent({
             model,
@@ -56,7 +56,7 @@ export function createResearchRoleExecutor(factory: AgentModelFactoryAdapter, le
               const context = input.loadTaskContext();
               return input.run.stage === 'review' && input.run.parentRunId !== null ? null : context;
             }),
-              createRunBudgetMiddleware(ledger, input.run.id, limits, observer)],
+              createRunUsageMiddleware(ledger, input.run.id, limits, observer)],
             systemPrompt: [
               `你是 Roc 科研工作流的 ${input.run.role}，只负责 ${input.run.stage} 阶段。`,
               `当前项目工作语言为 ${input.context.project.language === 'en' ? 'English' : '中文'}。输出、主张和 Idea Canvas 使用该语言。`,
@@ -88,7 +88,7 @@ export function createResearchRoleExecutor(factory: AgentModelFactoryAdapter, le
                   : 'scientificReview.kind=reviewer；coveredClaimIds 覆盖冻结稿件。findings 分别给出 severity、category、claimIds、原始 references、observation、action 和 acceptance。无意见须说明 noFindingsRationale。finding 驱动人工修订，不代替证据 verdict 或人工批准。'
               ]),
               ...(input.run.stage === 'discovery' ? [
-                '必须输出 searchPlan。researchQuestion 逐字复制本次 instruction；refinedQuestion、keywords、synonyms、domain、excludedTerms 是模型建议。queries 给出最多3组明确查询、来源、limit、maxPages 和需要的 yearFrom/yearTo。原始问题与建议不得混写；用户批准此工件后检索只执行这些固定查询。'
+                '必须输出 searchPlan。researchQuestion 逐字复制本次 instruction；refinedQuestion、keywords、synonyms、domain、excludedTerms 是模型建议。queries 给出明确查询、来源、limit、maxPages 和需要的 yearFrom/yearTo。原始问题与建议不得混写；用户批准此工件后检索只执行这些固定查询。'
               ] : []),
               ...(input.run.outputKind === 'idea_canvas' ? [
                 '构思阶段必须同时输出 ideaCanvas。分别填写 problem、hypothesis、novelty、supportingEvidence、counterevidence、experiment、risks、priority、rationale 和对应 fields。支持性字段引用真实 evidenceIds；假设或待验证字段不得标成 supported。'
@@ -112,7 +112,7 @@ export function createResearchRoleExecutor(factory: AgentModelFactoryAdapter, le
               })),
               revisionRound: input.run.revisionRound
             }) }]
-          }, { signal: input.signal, recursionLimit: input.run.policy.maxSteps });
+          }, { signal: input.signal, recursionLimit: 10000 });
           let modelVersion: string | null = null;
           for (let index = result.messages.length - 1; index >= 0; index -= 1) {
             const metadata: unknown = result.messages[index].response_metadata;

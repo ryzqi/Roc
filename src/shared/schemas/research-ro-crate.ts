@@ -58,10 +58,6 @@ export const researchCrateActivitySchema = z.strictObject({
     packages: z.array(property).max(10000)
   }),
   parameters: z.array(property).max(1000), seed: z.number().int().nonnegative().nullable(),
-  cost: z.discriminatedUnion('kind', [
-    z.strictObject({kind: z.literal('known'), microusd: z.number().int().nonnegative()}),
-    z.strictObject({kind: z.literal('unknown'), reason: researchPublicTextSchema})
-  ])
 });
 export const researchCrateInputSchema = z.strictObject({
   publication: researchCratePublicationSchema,

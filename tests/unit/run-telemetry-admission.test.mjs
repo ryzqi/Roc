@@ -27,8 +27,7 @@ function legacyTelemetry() {
       totalTokens: null,
       cacheReadTokens: null,
       cacheCreationTokens: null,
-      reportedCostUsd: null
-    },
+      },
     tool: { callCount: 0, errorCount: 0 },
     subagent: { count: 0, failedCount: 0, maxDepth: 0 },
     context: {
@@ -38,7 +37,7 @@ function legacyTelemetry() {
       failureCount: 0,
       estimatedCount: 0,
       inputTokens: null,
-      budgetTokens: null,
+      capacityTokens: null,
       removedChars: 0,
       persistedChars: 0
     },

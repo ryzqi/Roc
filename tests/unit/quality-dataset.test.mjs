@@ -39,11 +39,11 @@ function independentRecord(count = 10, split = 'dev') {
 }
 
 function lockInput(mode) {
-  return { executionMode: mode, authorizationLevel: 'L2', providerId: 'contract-provider', pricingVersion: 'contract-v1',
+  return { executionMode: mode, authorizationLevel: 'L2', providerId: 'contract-provider',
     baselineModelId: 'same-model', candidateModelId: 'same-model', baselineCommitSha: 'a'.repeat(40), candidateCommitSha: 'b'.repeat(40),
     toolManifestHash: 'c'.repeat(64), environmentHash: 'd'.repeat(64), promptSetHash: 'e'.repeat(64), isolationHash: 'f'.repeat(64),
-    maxRequestsPerTask: 2, maxRequestCostMicrousd: 10, temperature: 0, taskTimeoutMs: 1000,
-    maxTotalCostUsd: 1, maxPerTaskCostUsd: 0.01, userAuthorized: true, approvalReference: 'contract-only' };
+      temperature: 0, taskTimeoutMs: 1000,
+      userAuthorized: true, approvalReference: 'contract-only' };
 }
 
 test('dataset rejects absent license/review fields and content or input hash drift', () => {
@@ -144,8 +144,8 @@ test('full readiness is derived from holdout family and cluster quotas', () => {
   // Exercise the statistical gate with schema doubles, never report these as model evidence.
   const trials = full.tasks.flatMap(task => Array.from({ length: 3 }, (_, repeatIndex) => ({
     taskId: task.id, family: task.family, clusterId: task.clusterId, repeatIndex,
-    baseline: { status: 'success', score: 0.5, latencyMs: 100, costUsd: 0 },
-    candidate: { status: 'success', score: 0.8, latencyMs: 90, costUsd: 0 }
+    baseline: { status: 'success', score: 0.5, latencyMs: 100, },
+    candidate: { status: 'success', score: 0.8, latencyMs: 90, }
   })));
   const options = { dataset: full, evidence: 'live-model', bootstrapIterations: 200 };
   const gain = api.summarizePairedQualityTrials(trials, options);

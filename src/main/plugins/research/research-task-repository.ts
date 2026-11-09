@@ -12,9 +12,8 @@ import { ExecutionGrantBroker, assertResearchDispatchGrant, assertReviewSearchDi
 import { researchDispatchRequestHash } from '../../services/research-dispatch-context';
 import {reviewSearchDispatchRequestHash} from '../../services/research-review-dispatch-context';
 import type {ResearchReviewSearchSnapshot, ResearchReviewSearchOwnership} from '../../../shared/schemas/research-review-search';
-import { runBudgetSchema } from '../../../shared/schemas/agent';
-import { createRunBudget, parseRunExecutionSnapshot } from '../agent/run-execution-snapshot';
-import type { RunLimits } from '../../services/deep-agent/run-budget-ledger';
+import { createRunModelConfig, parseRunExecutionSnapshot } from '../agent/run-execution-snapshot';
+import type { RunModelConfig } from '../../services/deep-agent/run-usage-ledger';
 import {ResearchTaskObservabilityStore} from './task-observability-store';
 import {ResearchTaskFactsStore} from './task-facts-store';
 
@@ -106,16 +105,16 @@ export class ResearchTaskRepository {
     this.graph.assertLease(lease);
   }
 
-  budgetForExecution(kind: 'chat' | 'stage', executionId: string, projectId: string): RunLimits {
+  modelConfigForExecution(kind: 'chat' | 'stage', executionId: string, projectId: string): RunModelConfig {
     const execution = this.requireExecution(kind, executionId, projectId);
     if (execution.associationState !== 'confirmed' || execution.frozenInputs === null) {
       throw new Error('research_task_execution_not_confirmed');
     }
     if (this.get(execution.taskId, projectId).status !== 'active') throw new Error('research_task_not_active');
-    const row = this.db.prepare('SELECT limits_json FROM research_task_budgets WHERE task_id = ?')
-      .get(execution.taskId) as { limits_json: string } | undefined;
-    if (row === undefined) throw new Error('research_task_budget_missing');
-    return runBudgetSchema.parse(JSON.parse(row.limits_json));
+    const task = this.get(execution.taskId, projectId);
+    return task.rootAgentRunId === null
+      ? createRunModelConfig({contextWindowTokens: null})
+      : this.rootChatModelConfig(task.rootAgentRunId);
   }
 
   executions(taskId: string, projectId: string): ResearchTaskExecution[] {
@@ -300,6 +299,22 @@ export class ResearchTaskRepository {
     }
   }
 
+  /** Complete the other half of a restart-safe cross-database schema migration. */
+  migrateExecutionInputs(executionId: string, previousJson: string, currentJson: string): void {
+    this.db.transaction(() => {
+      const row = this.db.prepare("SELECT snapshot_json FROM research_task_executions WHERE kind='stage' AND execution_id=?")
+        .get(executionId) as {snapshot_json: string} | undefined;
+      if (row === undefined) throw new Error('research_task_execution_conflict');
+      const execution = JSON.parse(row.snapshot_json);
+      const actual = JSON.stringify(execution.frozenInputs);
+      if (actual === currentJson) return;
+      if (actual !== previousJson) throw new Error('research_task_execution_conflict');
+      execution.frozenInputs = JSON.parse(currentJson);
+      this.db.prepare("UPDATE research_task_executions SET snapshot_json=? WHERE kind='stage' AND execution_id=?")
+        .run(JSON.stringify(execution), executionId);
+    }).immediate();
+  }
+
   confirmExecution(kind: ResearchTaskExecution['kind'], executionId: string, projectId: string, frozenInputs: ResearchTaskExecution['frozenInputs']): ResearchTaskExecution {
     return this.db.transaction(() => {
       const execution = this.requireExecution(kind, executionId, projectId);
@@ -418,15 +433,7 @@ export class ResearchTaskRepository {
     if (execution.taskId !== parent.taskId || execution.parentKind !== 'chat' || execution.parentExecutionId !== owner.runId ||
         parent.manifestHash !== owner.manifestHash || execution.manifestHash !== expectedExecutionHash) throw new Error('research_review_owner_mismatch');
     if (this.get(execution.taskId, owner.projectId).status !== 'active') throw new Error('research_task_not_active');
-    const run = this.requireReviewSearchParent(owner);
-    const budget = this.db.prepare('SELECT limits_json,stop_reason FROM research_task_budgets WHERE task_id=?')
-      .get(execution.taskId) as {limits_json: string; stop_reason: string | null} | undefined;
-    if (budget === undefined) throw new Error('research_task_budget_missing');
-    const reason = budget.stop_reason ?? run.budget_stop_reason;
-    if (reason !== null) throw new Error(reason);
-    if (Date.parse(runBudgetSchema.parse(JSON.parse(budget.limits_json)).deadlineAt) <= Date.parse(this.now())) {
-      throw new Error('run_deadline_exhausted');
-    }
+    this.requireReviewSearchParent(owner);
   }
 
   assertReviewSearchParent(owner: Pick<ResearchReviewSearchOwnership, 'runId' | 'threadId' | 'projectId' | 'manifestHash'>): void {
@@ -434,17 +441,17 @@ export class ResearchTaskRepository {
   }
 
   private requireReviewSearchParent(owner: Pick<ResearchReviewSearchOwnership, 'runId' | 'threadId' | 'projectId' | 'manifestHash'>) {
-    const run = this.db.prepare(`SELECT r.status,r.thread_id,r.snapshot_json,r.snapshot_version,r.budget_stop_reason,t.research_project_id
+    const run = this.db.prepare(`SELECT r.status,r.thread_id,r.snapshot_json,r.snapshot_version,t.research_project_id
       FROM agent_runs r JOIN agent_threads t ON t.id=r.thread_id WHERE r.id=?`)
       .get(owner.runId) as {status: string; thread_id: string; snapshot_json: string; snapshot_version: number;
-        budget_stop_reason: string | null; research_project_id: string | null} | undefined;
+        research_project_id: string | null} | undefined;
     if (run === undefined || run.status !== 'running' || run.thread_id !== owner.threadId) throw new Error('research_dispatch_parent_not_active');
     if (this.db.prepare('SELECT 1 FROM agent_execution_run_fences WHERE run_id=?').get(owner.runId) !== undefined) {
       throw new Error('research_dispatch_parent_revoked');
     }
     const snapshot = parseChatSnapshot(run.snapshot_json);
     const {manifestHash, ...manifest} = snapshot.capabilityManifest;
-    if (run.snapshot_version !== 10 || run.research_project_id !== owner.projectId ||
+    if (run.snapshot_version !== 11 || run.research_project_id !== owner.projectId ||
         snapshot.runId !== owner.runId || snapshot.threadId !== owner.threadId || snapshot.researchProjectId !== owner.projectId ||
         manifestHash !== owner.manifestHash || digest(manifest) !== owner.manifestHash) throw new Error('research_dispatch_parent_binding_invalid');
     return run;
@@ -453,24 +460,18 @@ export class ResearchTaskRepository {
   private createTask(projectId: string, goal: string, rootAgentRunId: string | null): ResearchTask {
     const task = researchTaskSchema.parse({
       schemaVersion: 3, id: `research_task_${randomUUID()}`, projectId, goal, rootAgentRunId,
-      status: 'active', statusReason: null, deadlineClock: 'continuous',
-      budgetPolicyVersion: 1, createdAt: this.now(), updatedAt: this.now()
+      status: 'active', statusReason: null, createdAt: this.now(), updatedAt: this.now()
     });
     this.db.prepare('INSERT INTO research_tasks (id, project_id, status, snapshot_json, created_at) VALUES (?, ?, ?, ?, ?)')
       .run(task.id, task.projectId, task.status, JSON.stringify(task), task.createdAt);
-    const limits = rootAgentRunId === null
-      ? createRunBudget({ contextBudgetTokens: null, startedAt: task.createdAt })
-      : this.rootChatBudget(rootAgentRunId);
-    this.db.prepare('INSERT INTO research_task_budgets (task_id, limits_json, stop_reason, created_at) VALUES (?, ?, NULL, ?)')
-      .run(task.id, JSON.stringify(limits), task.createdAt);
     return task;
   }
 
-  private rootChatBudget(runId: string): RunLimits {
+  private rootChatModelConfig(runId: string): RunModelConfig {
     const row = this.db.prepare('SELECT snapshot_json FROM agent_runs WHERE id = ?')
       .get(runId) as { snapshot_json: string | null } | undefined;
     if (row === undefined || row.snapshot_json === null) throw new Error('research_task_parent_snapshot_missing');
-    return parseChatSnapshot(row.snapshot_json).budget;
+    return parseChatSnapshot(row.snapshot_json).modelConfig;
   }
 
   private link(input: ExecutionInput): ResearchTaskExecution {
@@ -496,10 +497,10 @@ export class ResearchTaskRepository {
     this.db.prepare('INSERT INTO research_task_executions (kind, execution_id, task_id, project_id, snapshot_json, created_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(execution.kind, execution.executionId, execution.taskId, execution.projectId, JSON.stringify(execution), execution.createdAt);
     if (execution.kind === 'chat' || execution.kind === 'stage') {
-      const drift = this.db.prepare('SELECT 1 FROM agent_budget_calls WHERE run_id = ? AND task_id IS NOT NULL AND task_id != ?')
+      const drift = this.db.prepare('SELECT 1 FROM agent_calls WHERE run_id = ? AND task_id IS NOT NULL AND task_id != ?')
         .get(execution.executionId, execution.taskId);
-      if (drift !== undefined) throw new Error('research_task_budget_association_conflict');
-      this.db.prepare('UPDATE agent_budget_calls SET task_id = ? WHERE run_id = ? AND execution_kind = ?')
+      if (drift !== undefined) throw new Error('research_task_call_association_conflict');
+      this.db.prepare('UPDATE agent_calls SET task_id = ? WHERE run_id = ? AND execution_kind = ?')
         .run(execution.taskId, execution.executionId, execution.kind);
     }
     return execution;

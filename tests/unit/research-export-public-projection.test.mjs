@@ -15,7 +15,7 @@ test('public projection retains scientific values, source identities and histori
       executable: '/usr/bin/python3', prefix: '/opt/python', basePrefix: '/opt/python',
       hash: 'a'.repeat(64), version: 'CPython 3.14.7', packages: [{name: 'test', version: null}]}},
     receipt: {verification: 'stored_receipt', snapshotHash: 'b'.repeat(64), result: -4, unit: 'seconds'},
-    seed: 42, cost: {kind: 'unknown', reason: 'No trusted price receipt'}, history: [{version: 1}, {version: 2}]};
+    seed: 42,  history: [{version: 1}, {version: 2}]};
   const before = structuredClone(source);
   const publicReceipt = api.projectResearchPublicValue(source);
   assert.deepEqual(source, before);
@@ -26,7 +26,6 @@ test('public projection retains scientific values, source identities and histori
   assert.deepEqual(publicReceipt.value.receipt, {...source.receipt, verification: 'private_source_receipt'});
   assert.deepEqual(publicReceipt.value.history, source.history);
   assert.equal(publicReceipt.value.seed, 42);
-  assert.deepEqual(publicReceipt.value.cost, source.cost);
   assert.equal(publicReceipt.value.experiment.environment.version, 'CPython 3.14.7');
   assert.equal(publicReceipt.value.project.workspacePath, undefined);
   assert.equal(publicReceipt.value.experiment.environment.executable, undefined);

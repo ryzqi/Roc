@@ -18,9 +18,9 @@ function fixture(overrides = {}) {
     baselineModelId: 'same-model', candidateModelId: 'same-model',
     baselineCommitSha: 'a'.repeat(40), candidateCommitSha: 'b'.repeat(40),
     toolManifestHash: 'c'.repeat(64), environmentHash: 'd'.repeat(64), promptSetHash: api.qualityPromptSetHash(dataset, 'fixture'),
-    pricingVersion: 'fixture-v1', maxRequestsPerTask: 1, maxRequestCostMicrousd: 1,
+
     temperature: 0, isolationHash: 'f'.repeat(64),
-    taskTimeoutMs: 1000, maxPerTaskCostUsd: 0.01, maxTotalCostUsd: 1,
+    taskTimeoutMs: 1000,
     userAuthorized: true, approvalReference: 'fixture-only', ...overrides
   };
   const protocol = protocolApi.lockQualityProtocol(dataset, protocolApi.createQualityProtocolDraft(dataset, 'unit-quality-runner'), lock);
@@ -30,13 +30,12 @@ function fixture(overrides = {}) {
     binding: { evidence: 'fixture', providerId: lock.providerId,
       baselineModelId: lock.baselineModelId, candidateModelId: lock.candidateModelId,
       baselineCommitSha: lock.baselineCommitSha, candidateCommitSha: lock.candidateCommitSha,
-      toolManifestHash: lock.toolManifestHash, environmentHash: lock.environmentHash, pricingVersion: lock.pricingVersion,
+      toolManifestHash: lock.toolManifestHash, environmentHash: lock.environmentHash,
       temperature: lock.temperature, isolationHash: lock.isolationHash, isolation: 'fixture-object',
-      maxRequestsPerTask: lock.maxRequestsPerTask, maxRequestCostMicrousd: lock.maxRequestCostMicrousd },
-    quote: () => 10,
+       },
     async execute(view, context) {
       calls.push({ view, context });
-      return { output: null, costMicrousd: 2 };
+      return { output: null, };
     }
   };
   const signal = new AbortController().signal;
@@ -74,8 +73,7 @@ test('independent validator accepts a visible-input answer without passing hidde
   f.executor.execute = async (view) => ({
     output: view.id === 'permission-injection-untrusted-document'
       ? JSON.stringify({ decision: 'blocked', blockedAction: 'upload_secret', executedActions: ['read_evidence_bundle'] }) : null,
-    costMicrousd: 1
-  });
+    });
   const result = await f.run();
   assert.equal(result.statistics.baselinePassRate, 1 / 16);
   assert.equal(result.statistics.candidatePassRate, 1 / 16);
@@ -91,8 +89,6 @@ test('runner preserves fixed paired denominator, counterbalances order and hides
   assert.equal(result.trials.length, 48);
   assert.equal(result.statistics.taskCount, 16);
   assert.equal(result.statistics.conclusion, 'uncertain');
-  assert.equal(result.unknownCalls, 0);
-  assert.equal(result.heldCostMicrousd, 192);
   assert.ok(new Set(f.calls.map((call) => call.context.arm)).size === 2);
   for (let i = 0; i < f.calls.length; i += 2) assert.notEqual(f.calls[i].context.arm, f.calls[i + 1].context.arm);
   for (const { view } of f.calls) {
@@ -106,23 +102,13 @@ test('runner preserves fixed paired denominator, counterbalances order and hides
   assert.ok(result.trials.every((trial) => trial.baseline.failureClass === 'agent' && trial.candidate.failureClass === 'agent'));
 });
 
-test('unknown costs remain reserved; total/per-task/unknown-price admission denies before executor calls', async () => {
-  const f = fixture({ maxPerTaskCostUsd: 0.00002, maxTotalCostUsd: 0.00002 });
-  f.executor.execute = async () => ({ output: '{}', costMicrousd: null });
+test('all paired trials dispatch without financial metadata or cumulative quotas', async () => {
+  const f = fixture();
   const result = await f.run();
-  assert.equal(result.dispatches, 2);
-  assert.equal(result.unknownCalls, 2);
-  assert.equal(result.heldCostMicrousd, 20);
-  assert.equal(result.statistics.costStatus, 'unknown');
+  assert.equal(result.dispatches, 96);
+  assert.equal(f.calls.length, 96);
+  assert.equal(result.stopReason, null);
   assert.equal(result.trials.length, 48);
-  assert.equal(result.trials[1].baseline.failureClass, 'policy');
-  assert.equal(result.trials[1].baseline.costUsd, 0);
-  const unknown = fixture();
-  unknown.executor.quote = () => null;
-  assert.equal((await unknown.run()).dispatches, 0);
-  assert.equal(unknown.calls.length, 0);
-  const over = fixture({ maxPerTaskCostUsd: 0.000005 });
-  assert.equal((await over.run()).dispatches, 0);
 });
 
 test('runner rejects binding and prompt drift or missing authorization before execution', async () => {
@@ -137,26 +123,20 @@ test('runner rejects binding and prompt drift or missing authorization before ex
   await assert.rejects(f.run({ protocol: draft }), /quality_eval_authorization_required/);
 });
 
-test('quote failures remain classified and a caller cannot change the active protocol after dispatch', async () => {
-  const quotes = fixture();
-  quotes.executor.quote = () => { throw new Error('price_lookup_unavailable'); };
-  const blocked = await quotes.run();
-  assert.equal(blocked.dispatches, 0);
-  assert.equal(blocked.statistics.failureCounts.baseline.infra, 48);
+test('a caller cannot change the active protocol after dispatch', async () => {
   const f = fixture();
   let tampered = false;
   f.executor.execute = async () => {
     if (!tampered) {
-      f.protocol.lock.maxTotalCostUsd = 0;
+      f.protocol.lock.temperature = 0.7;
       f.protocol.repeatsPerTask = 100;
       tampered = true;
     }
-    return { output: null, costMicrousd: 1 };
+    return { output: null, };
   };
   const result = await f.run();
   assert.equal(result.trials.length, 48);
   assert.equal(result.dispatches, 96);
-  assert.equal(result.heldCostMicrousd, 96);
 });
 
 test('journal failure blocks dispatch; provider errors and unsafe outputs stay in denominator', async () => {
@@ -171,25 +151,14 @@ test('journal failure blocks dispatch; provider errors and unsafe outputs stay i
   const failed = await errors.run();
   assert.equal(failed.dispatches, 96);
   assert.equal(failed.statistics.failureCounts.baseline.provider, 48);
-  assert.equal(failed.unknownCalls, 96);
   const invalid = fixture();
-  invalid.executor.execute = async () => ({ output: 'x'.repeat(65 * 1024), costMicrousd: 1 });
+  invalid.executor.execute = async () => ({ output: 'x'.repeat(65 * 1024), });
   const bad = await invalid.run();
   assert.equal(bad.validations[0].validation.passed, false);
   assert.deepEqual(bad.validations[0].validation.failures, ['output_too_large']);
   assert.equal(bad.trials[0].baseline.failureClass, 'agent');
 });
 
-test('cost ceiling violation stops further calls and preserves unknown consumption', async () => {
-  const f = fixture();
-  f.executor.execute = async () => ({ output: '{}', costMicrousd: 11 });
-  const result = await f.run();
-  assert.equal(result.dispatches, 1);
-  assert.equal(result.unknownCalls, 1);
-  assert.equal(result.heldCostMicrousd, 10);
-  assert.equal(result.stopReason, 'executor_cost_ceiling_violated');
-  assert.deepEqual([result.trials[0].baseline.failureClass, result.trials[0].candidate.failureClass].sort(), ['effect', 'policy']);
-});
 
 test('timeout aborts executor and prevents any later dispatch when cleanup is unconfirmed', async () => {
   const f = fixture();
@@ -206,23 +175,23 @@ test('timeout aborts executor and prevents any later dispatch when cleanup is un
   assert.equal(result.trials.length, 48);
 });
 
-test('request admission rejects changed ceilings and journal failures before transport work', async () => {
+test('request admission rejects malformed hashes and journal failures before transport work', async () => {
   const over = fixture();
   let transportCalls = 0;
   over.executor.execute = async (_view, context) => {
-    await context.recordRequest({ requestHash: 'a'.repeat(64), maximumCostMicrousd: 2 });
+    await context.recordRequest({ requestHash: 'invalid' });
     transportCalls++;
-    return { output: null, costMicrousd: 1 };
+    return { output: null, };
   };
   const denied = await over.run();
   assert.equal(transportCalls, 0);
   assert.equal(denied.dispatches, 1);
-  assert.equal(denied.stopReason, 'executor_request_policy_violated');
+  assert.equal(denied.stopReason, 'executor_request_invalid');
   const journal = fixture();
   journal.executor.execute = async (_view, context) => {
-    await context.recordRequest({ requestHash: 'a'.repeat(64), maximumCostMicrousd: 1 });
+    await context.recordRequest({ requestHash: 'a'.repeat(64), });
     transportCalls++;
-    return { output: null, costMicrousd: 1 };
+    return { output: null, };
   };
   const failed = await journal.run({ writeEvent: async event => {
     if (event.type === 'request') throw new Error('disk unavailable');
@@ -230,5 +199,4 @@ test('request admission rejects changed ceilings and journal failures before tra
   assert.equal(transportCalls, 0);
   assert.equal(failed.dispatches, 1);
   assert.equal(failed.stopReason, 'executor_journal_failed');
-  assert.equal(failed.unknownCalls, 1);
 });

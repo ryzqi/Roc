@@ -23,7 +23,7 @@ after(() => {
   if (directory !== undefined) rmSync(directory, { recursive: true, force: true });
 });
 
-function createFixture({ taskSource = null, runOrigin = 'chat', schemaVersion = 10 } = {}) {
+function createFixture({ taskSource = null, runOrigin = 'chat', schemaVersion = 11 } = {}) {
   const db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
   api.applyDatabaseMigrations(db, { dbName: 'agent', migrations: api.agentMigrations, allowOffline: true });
@@ -54,7 +54,7 @@ function createFixture({ taskSource = null, runOrigin = 'chat', schemaVersion = 
     threadId,
     inputMessageId: 'message-1',
     snapshot: {
-      schemaVersion: 10,
+      schemaVersion: 11,
       submissionHash: 'f'.repeat(64),
       taskContract: {
         contractVersion: 1,
@@ -72,25 +72,11 @@ function createFixture({ taskSource = null, runOrigin = 'chat', schemaVersion = 
       explicitSkillIds: [],
       dispatchKey: null,
       researchProjectId: null,
-      budget: api.createRunBudget({ contextBudgetTokens: null })
+      modelConfig: api.createRunModelConfig({ contextWindowTokens: null })
     }
   });
   let snapshot = currentSnapshot;
-  if (schemaVersion === 7 || schemaVersion === 8 || schemaVersion === 9) {
-    const legacyBudget = { ...currentSnapshot.budget };
-    const maxCostUsd = legacyBudget.maxCostMicrousd === null ? null : legacyBudget.maxCostMicrousd / 1_000_000;
-    delete legacyBudget.policyVersion;
-    delete legacyBudget.maxOutputTokens;
-    delete legacyBudget.maxCallTokens;
-    delete legacyBudget.maxCostMicrousd;
-    delete legacyBudget.pricingCatalogVersion;
-    legacyBudget.maxCostUsd = maxCostUsd;
-    const legacySnapshot = { ...currentSnapshot, schemaVersion, budget: schemaVersion === 9 ? currentSnapshot.budget : legacyBudget };
-    delete legacySnapshot.frozenInputs;
-    delete legacySnapshot.nodeBinding;
-    if (schemaVersion === 7) delete legacySnapshot.workspaceIdentity;
-    snapshot = legacySnapshot;
-  }
+  if (schemaVersion !== 11) snapshot = { ...currentSnapshot, schemaVersion };
   db.prepare(`
     INSERT INTO agent_runs (
       id, thread_id, run_number, user_input, status, started_at, enabled_capabilities_json,
@@ -123,17 +109,17 @@ function binding(fixture, overrides = {}) {
   };
 }
 
-test('v10 pins workspace and frozen inputs; all historical versions reject grants without online conversion', () => {
+test('v11 pins workspace and frozen inputs; all historical versions reject grants without online conversion', () => {
   const fixture = createFixture();
   const identity = fixture.snapshot.workspaceIdentity;
   const stat = statSync(realpathSync(fixture.workspacePath));
-  assert.equal(fixture.snapshot.schemaVersion, 10);
+  assert.equal(fixture.snapshot.schemaVersion, 11);
   assert.equal(identity.path, realpathSync(fixture.workspacePath));
   assert.equal(identity.dev, String(stat.dev));
   assert.equal(identity.ino, String(stat.ino));
 
   assert.equal(fixture.snapshot.frozenInputs.manifestHash, fixture.manifest.manifestHash);
-  for (const schemaVersion of [7, 8, 9]) {
+  for (const schemaVersion of [7, 8, 9, 10]) {
     const historical = createFixture({ schemaVersion });
     const before = historical.db.prepare('SELECT snapshot_json FROM agent_runs').pluck().get();
     assert.throws(() => historical.broker.issue(binding(historical)), /execution_grant_run_snapshot_invalid/u);
@@ -141,7 +127,7 @@ test('v10 pins workspace and frozen inputs; all historical versions reject grant
     historical.db.close();
   }
   const changed = structuredClone(fixture.snapshot);
-  changed.budget.maxTotalTokens += 1;
+  changed.modelConfig.contextWindowTokens += 1;
   assert.throws(() => api.parseRunExecutionSnapshot(changed), /run_execution_snapshot_inputs_invalid/u);
   fixture.db.close();
 });
@@ -394,7 +380,7 @@ for (const scenario of [
   { name: 'grant expiry', mutate: f => f.advance(), error: /execution_grant_expired/ },
   { name: 'frozen input mutation', mutate: f => {
     const snapshot = JSON.parse(f.db.prepare('SELECT snapshot_json FROM agent_runs').pluck().get());
-    snapshot.budget.maxTotalTokens += 1;
+    snapshot.modelConfig.maxTotalTokens += 1;
     f.db.prepare('UPDATE agent_runs SET snapshot_json = ?').run(JSON.stringify(snapshot));
   }, error: /execution_grant_run_snapshot_invalid/ },
   { name: 'approval revocation', mutate: f => f.db.prepare("UPDATE agent_execution_approvals SET status = 'revoked'").run(), error: /execution_grant_approval_not_current/ },

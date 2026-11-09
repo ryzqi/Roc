@@ -12,7 +12,7 @@ import {
   type RunTraceSpan
 } from '../../../shared/schemas/run-diagnostics';
 import { tokenUsageSchema } from '../../../shared/schemas/token-usage';
-import type { ModelInvocationObservation } from '../../services/deep-agent/run-budget-observer';
+import type { ModelInvocationObservation } from '../../services/deep-agent/run-usage-observer';
 import {
   TOOL_ADMISSION_RESOURCE_KINDS,
   type ToolAdmissionObservation,
@@ -67,7 +67,6 @@ const runTelemetrySchema = z
         callCount: z.number().int().nonnegative(),
         unknownUsageCallCount: telemetryCountSchema.default(0),
         ...tokenUsageSchema.shape,
-        reportedCostUsd: z.number().nonnegative().nullable()
       })
       .strict(),
     tool: z
@@ -91,7 +90,7 @@ const runTelemetrySchema = z
         failureCount: z.number().int().nonnegative(),
         estimatedCount: z.number().int().nonnegative(),
         inputTokens: nullableCountSchema,
-        budgetTokens: nullableCountSchema,
+        capacityTokens: nullableCountSchema,
         lastInputEstimated: z.boolean().nullable().default(null),
         contractAudit: contextContractAuditSchema.default(createEmptyContextContractAudit),
         removedChars: z.number().int().nonnegative(),
@@ -516,8 +515,8 @@ export class AgentRunTelemetryAccumulator {
       this.telemetry.context.inputTokens = event.inputTokens;
       this.telemetry.context.lastInputEstimated = event.estimated ?? null;
     }
-    if (event.budgetTokens !== undefined) {
-      this.telemetry.context.budgetTokens = event.budgetTokens;
+    if (event.capacityTokens !== undefined) {
+      this.telemetry.context.capacityTokens = event.capacityTokens;
     }
     if (event.removedChars !== undefined) {
       this.telemetry.context.removedChars += event.removedChars;
@@ -613,7 +612,6 @@ function createEmptyTelemetry(run: TaskRun, snapshot: RunExecutionSnapshot): Age
       totalTokens: null,
       cacheReadTokens: null,
       cacheCreationTokens: null,
-      reportedCostUsd: null
     },
     tool: {
       callCount: 0,
@@ -631,7 +629,7 @@ function createEmptyTelemetry(run: TaskRun, snapshot: RunExecutionSnapshot): Age
       failureCount: 0,
       estimatedCount: 0,
       inputTokens: null,
-      budgetTokens: null,
+      capacityTokens: null,
       lastInputEstimated: null,
       contractAudit: createEmptyContextContractAudit(),
       removedChars: 0,

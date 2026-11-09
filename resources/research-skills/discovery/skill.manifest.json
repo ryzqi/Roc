@@ -6,7 +6,7 @@
   "description": "将研究目标转为可执行且可验证的研究问题与检索策略。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "5ebc3ff69610b59907c530711d601f76f1d291cdd817919aec085fa44bff5100"
+    "hash": "c716ad00a3a0c9186b001cb56259b18020d6a51c6d5a9fa80fa4cd4aa5c62b89"
   },
   "references": [],
   "license": {
@@ -20,7 +20,7 @@
     "kind": "project",
     "origin": "Roc/resources/research-skills/discovery",
     "revision": "s05-1.2.0",
-    "hash": "5ebc3ff69610b59907c530711d601f76f1d291cdd817919aec085fa44bff5100"
+    "hash": "c716ad00a3a0c9186b001cb56259b18020d6a51c6d5a9fa80fa4cd4aa5c62b89"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
@@ -28,7 +28,7 @@
   },
   "outputs": {
     "schema": "researchStageOutput/v4",
-    "hash": "632dc56d8e1396241f746ab068906ffc07afb2439fd07bc771466bc31aaf13ec",
+    "hash": "2702ae8cf34eeadbaecbe226e349193a45cca66830cd6008d71e7f696e8970ca",
     "artifactKind": "search_strategy"
   },
   "requiredCapabilities": [

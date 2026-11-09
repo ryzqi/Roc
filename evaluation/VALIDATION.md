@@ -29,7 +29,7 @@ CLI 生命周期使用真实 Roc worker 和固定模型响应完成两轮运行�
 
 工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。macOS ARM64，Node 26.13.0、pnpm 12.5.1、Electron 45、Python 3.14.7。全部手动触发，无付费推理请求、提交或远程写入。目录名使用 UTC，因此本地 11 月 8 日对应部分目录的 11 月 7 日时间。
 
-## 工具合同与预算修复验证（本轮）
+## 历史工具合同与预算修复验证（预算功能现已删除）
 
 **Verified passing**：模型请求按 manifest 和 main/subagent scope 过滤；public benchmark 宿主在转发前核对固定工具集合并保留实际 schema；比较器拒绝工具、权限、schema 漂移，缺少实际 schema 的旧记录只能给出不足证据；最低请求预算不可行时在打开模型宿主前失败。执行授权硬守卫保持有效。
 
@@ -99,7 +99,7 @@ pnpm harness:bench environment cli-stdlib --python python3
 ```sh
 node evaluation/lib/cli.mjs doctor
 node evaluation/lib/cli.mjs doctor --provider-id nvidia --model-id nvidia/nemotron-3.5-lightning-30b-a3b
-pnpm harness:bench run --suite qasper --dataset evaluation/datasets/qasper-6be4b447c84046b689e019c551f3e331e962ff2837462d2cd6d6ff099a7df3d0 --profile smoke --budget evaluation/budget.example.json
+pnpm harness:bench run --suite qasper --dataset evaluation/datasets/qasper-6be4b447c84046b689e019c551f3e331e962ff2837462d2cd6d6ff099a7df3d0 --profile smoke --provider-options evaluation/provider-options.example.json
 pnpm harness:bench inspect evaluation/runs/qasper-2026-11-07T18-18-32.387Z-ac8f76af
 ```
 

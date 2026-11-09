@@ -92,9 +92,9 @@ test('provider stream termination selects checkpoint recovery', () => {
 });
 
 test('context budget exhaustion fails without retry', () => {
-  const decision = decide(runFailure('context_budget_exhausted', 'over budget', false));
+  const decision = decide(runFailure('context_window_exceeded', 'over budget', false));
   assert.equal(decision.action, 'fail');
-  assert.equal(decision.finalFailure.code, 'context_budget_exhausted');
+  assert.equal(decision.finalFailure.code, 'context_window_exceeded');
   assert.equal(decision.finalFailure.retryable, false);
 });
 

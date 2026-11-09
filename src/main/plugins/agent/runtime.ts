@@ -30,8 +30,8 @@ import type {
   McpToolContractV1
 } from '../../../shared/types';
 import {
-  DEFAULT_RUN_MODEL_OUTPUT_TOKENS
-} from '../../../shared/run-budget-policy';
+  DEFAULT_MODEL_OUTPUT_TOKENS
+} from '../../../shared/model-context';
 import type { RocEventBus } from '../../kernel/types';
 import type { ExecutionGrantBroker } from '../../services/deep-agent/execution-grant-broker';
 import { hashToolInput } from '../../services/deep-agent/tool-effect-store';
@@ -44,7 +44,7 @@ import type { RunFailure } from '../../services/deep-agent/types';
 import type { PilotRunCoordinator } from '../../services/deep-agent/pilot-run';
 import type { PilotDecision } from '../../services/deep-agent/pilot-gate';
 import type { ToolAdmissionObservation } from '../../services/deep-agent/tool-resource-coordinator';
-import type { ModelInvocationObservation } from '../../services/deep-agent/run-budget-observer';
+import type { ModelInvocationObservation } from '../../services/deep-agent/run-usage-observer';
 import { runDiagnosticsSchema, type RunDiagnostics, type RunDiagnosticsRequest } from '../../../shared/schemas/run-diagnostics';
 import type { PilotOptInRequest, PilotStatus } from '../../../shared/schemas/harness-pilot';
 import { derivePilotRequest, restrictManifestForPilot } from './pilot-profile';
@@ -58,7 +58,7 @@ import type { AgentRunEventLog } from './run-event-log';
 import { bindMcpToolContracts, compileRunCapabilityManifest } from './run-capability-manifest';
 import {
   createChatStartRunRequestFromSnapshot,
-  createRunBudget,
+  createRunModelConfig,
   readWorkflowHintFromSnapshot,
   toRunExecutionMode
 } from './run-execution-snapshot';
@@ -321,7 +321,7 @@ export class AgentPluginRuntime {
       }
     }
     const modelHandle = await this.options.modelFactory.createDefaultModelHandle({
-      maxOutputTokens: DEFAULT_RUN_MODEL_OUTPUT_TOKENS
+      maxOutputTokens: DEFAULT_MODEL_OUTPUT_TOKENS
     });
     const shellAllowedCommands = parseShellAllowedCommands({
       commands: request.shellAllowedCommands,
@@ -388,8 +388,8 @@ export class AgentPluginRuntime {
     const snapshot = this.options.repository.getRunExecutionSnapshot(run.id);
     this.options.repository.taskContracts.assertMatchesSnapshot(run.id, snapshot.taskContract);
     if (pilot !== null && pilot.decision.start) {
-      // Pilot bookkeeping is best-effort: if the grant cannot be written, the run continues on its
-      // base budget instead of being left stranded in dispatch_pending without an event.
+      // Pilot bookkeeping is best-effort: an enrollment write failure must not strand the run
+      // in dispatch_pending without an event.
       try {
         this.options.pilot?.attach({ runId: run.id, taskId: submissionHash, decision: pilot.decision });
       } catch (error) {
@@ -618,7 +618,7 @@ export class AgentPluginRuntime {
     const modelHandle = await this.options.modelFactory.createModelHandleByProviderAndModel({
       providerId: snapshot.model.providerId,
       modelId: snapshot.model.modelId,
-      maxOutputTokens: snapshot.budget.maxOutputTokens
+      maxOutputTokens: snapshot.modelConfig.maxOutputTokens
     });
     if (modelHandle.providerId !== snapshot.model.providerId || modelHandle.modelId !== snapshot.model.modelId) {
       throw new Error('run_execution_snapshot_model_mismatch');
@@ -756,7 +756,7 @@ export class AgentPluginRuntime {
     const modelHandle = await this.options.modelFactory.createModelHandleByProviderAndModel({
       providerId: snapshot.model.providerId,
       modelId: snapshot.model.modelId,
-      maxOutputTokens: snapshot.budget.maxOutputTokens
+      maxOutputTokens: snapshot.modelConfig.maxOutputTokens
     });
     if (modelHandle.providerId !== snapshot.model.providerId || modelHandle.modelId !== snapshot.model.modelId) {
       throw new Error('run_execution_snapshot_model_mismatch');
@@ -872,7 +872,7 @@ export class AgentPluginRuntime {
     const telemetry = this.runTelemetry.get(run.id)?.snapshot() ?? this.options.repository.getRunTelemetry(run.id);
     if (telemetry === null) return null;
     assertAgentRunTelemetryIdentity(telemetry, run, this.options.repository.getRunExecutionSnapshot(run.id));
-    const { reportedCostUsd: _cost, ...model } = telemetry.model;
+    const model = telemetry.model;
     return runDiagnosticsSchema.parse({
       runId: run.id, threadId: run.threadId,
       providerId: telemetry.correlation.providerId, modelId: telemetry.correlation.modelId,
@@ -1703,7 +1703,7 @@ function createRunExecutionSnapshotSeed(input: {
 }): RunExecutionSnapshotSeed {
   const mode = toRunExecutionMode(input.request.mode);
   return {
-    schemaVersion: 10,
+    schemaVersion: 11,
     submissionHash: hashToolInput(input.request),
     taskContract: createTaskContract(input.request),
     runOrigin: resolveRunOrigin(input.request),
@@ -1715,9 +1715,9 @@ function createRunExecutionSnapshotSeed(input: {
     workspace: input.workspace === null ? null : resolveRuntimeWorkspaceIdentity(input.workspace.path),
     capabilityManifest: input.capabilityPreview.manifest,
     shellAllowedCommands: input.shellAllowedCommands === undefined ? undefined : [...input.shellAllowedCommands],
-    budget: createRunBudget({
-      contextBudgetTokens: input.modelHandle.langChainHandle?.runtime.contextBudgetTokens ?? null,
-      maxOutputTokens: input.modelHandle.langChainHandle?.runtime.maxOutputTokens ?? DEFAULT_RUN_MODEL_OUTPUT_TOKENS
+    modelConfig: createRunModelConfig({
+      contextWindowTokens: input.modelHandle.langChainHandle?.runtime.contextWindowTokens ?? null,
+      maxOutputTokens: input.modelHandle.langChainHandle?.runtime.maxOutputTokens ?? DEFAULT_MODEL_OUTPUT_TOKENS
     }),
     workflowHint: input.request.workflowHint === undefined ? null : input.request.workflowHint,
     explicitSkillIds: input.explicitSkillIds,

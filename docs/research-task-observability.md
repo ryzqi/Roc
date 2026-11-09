@@ -4,13 +4,13 @@
 
 ## Authoritative records
 
-Agent DB migration 19 adds immutable `agent_budget_call_observations`, keyed by the existing `(run_id, call_id)` budget reservation. `RunBudgetObserver.invoke()` records an ISO start time, measured duration and `completed`/`failed` outcome after a successfully reserved invocation. A rejected reservation neither dispatches the provider nor creates an observation.
+Agent DB migration 25 removes financial columns and quota tables. Calls and immutable model observations live in `agent_calls` and `agent_call_observations`, keyed by `(run_id, call_id)`. `RunUsageObserver.invoke()` records token measurements, ISO start time, measured duration and `completed`/`failed` outcome. Invalid receipts or inactive tasks prevent dispatch.
 
-Duration measures the invocation boundary, including serialization, reservation, dispatch and settlement work. It is not an isolated provider service time. A process that exits before the final observation has no duration receipt; diagnostics return `invocation: null`. Unknown usage/cost still retains the existing budget occupancy. Invocation success and known billing are separate states.
+Duration covers serialization, dispatch and completion recording. A process that exits before recording the observation has no duration receipt; diagnostics return `invocation: null`. Missing token usage remains explicitly unknown and never stops later calls.
 
-Model admission is governed by the frozen run and shared task budgets. Projects require no separate model budget configuration. Agent DB migration 24 removes retired project policy/state tables and project-only call columns while preserving call usage, measured observations, task limits and historical events.
+Runs and tasks have no cumulative token, monetary, call, child-task or duration quotas. Snapshot v11 retains only model context/output capacity. Migration rewrites old snapshots and replay records, verifies old hashes and recomputes hashes after deleting obsolete fields. Research migration 71 removes search-plan request quotas; an in-flight stage whose approved input hash changes must restart with fresh inputs. Cancellation, ownership, provider context capacity and resource queuing remain effective.
 
-Call rows are read from the existing budget ledger. Creation and settlement timestamps come from the reservation and real `call_settled`/`call_unknown` task events. Task cost remains the existing authoritative aggregate; the UI/export does not add execution summaries to call totals. External service cost remains `unknown`.
+Call creation and completion times come from the ledger and `call_settled`/`call_unknown` events. Diagnostics and exports report token and call counts, with no prices, monetary totals or financial estimates.
 
 Chat observations project the existing `AgentRunTelemetryRepository`: first output, tool calls/errors, resource acquisition/cancellation and measured wait/hold time, plus at most 256 sanitized trace spans and their dropped count. Span identities are local sequence identifiers defined by the existing trace schema. Arbitrary tool names, arguments, results and provider/model labels are omitted.
 
@@ -35,7 +35,7 @@ The export capability requires the existing main-process human context for the e
 
 The exporter reads at most 500 executions, the first 100 calls and replay events per execution, and the first 100 task events. Cursor/`hasMore`, replay gap and trace dropped counts remain in the package. This is bounded diagnostic coverage, not a complete event archive.
 
-Project/task/execution/call/tool-call/artifact identifiers and pricing-version labels are consistently pseudonymized with SHA256. Goals, fact text, actors, provider/model names, prompts, tool arguments/results, error text, absolute paths and replay snapshot state are structurally removed. Errors retain presence/status. Pseudonymization permits correlation and does not make the package anonymous: exact times, hashes and measurements remain.
+Project/task/execution/call/tool-call/artifact identifiers are consistently pseudonymized with SHA256. Goals, fact text, actors, provider/model names, prompts, tool arguments/results, error text, absolute paths and replay snapshot state are structurally removed. Errors retain presence/status. Pseudonymization permits correlation and does not make the package anonymous: exact times, hashes and measurements remain.
 
 After asynchronous source reads, the exporter rereads the task summary and rejects changes. A package larger than 2 MiB fails before file creation. The required diagnostics root comes from the main bootstrap's managed path; no fallback or caller-controlled directory is used. A random local JSON file is created exclusively with `wx` and mode `0600`. The receipt includes its path, exact byte size and SHA256, `redacted: true` and `externalTrace: not_exported`.
 
@@ -43,7 +43,7 @@ The export operation has no network path. External Trace export and real scienti
 
 ## Desktop behavior
 
-The existing task execution tree uses native, initially closed `<details>` for observations. Opening or refreshing reads current persisted telemetry. Calls and replay have independent 50-row pages that replace the displayed page. Loading, failure, missing observations, unknown usage/cost and replay gaps are visible states. The export action prevents duplicate dispatch while pending and displays the real local receipt; late replies cannot populate another project/task panel.
+The existing task execution tree uses native, initially closed `<details>` for observations. Opening or refreshing reads current persisted telemetry. Calls and replay have independent 50-row pages that replace the displayed page. Loading, failure, missing observations, unknown token usage and replay gaps are visible states. The export action prevents duplicate dispatch while pending and displays the real local receipt; late replies cannot populate another project/task panel.
 
 ## Task facts and context
 
@@ -55,4 +55,4 @@ Limits are 100 entries, 2,000 characters per content, eight references per entry
 
 Artifact references bind the inspector version. Documents bind the source SHA256 and committed parse identity. Execution references bind a task-owned execution and its manifest hash. Reads compare each reference to current state and explicitly report changed, unlinked or deleted sources without rewriting history. Active entries with expired references cannot be saved; completing or replacing them preserves their old reference. Storage corruption and scope mismatches fail.
 
-Stage execution and retries reconstruct the task goal and latest facts from durable storage. The main assistant harness uses the read-only scoped `research.task.facts.forChat` capability before each model call, including checkpoint continuation and compaction. A transient `HumanMessage` carries the task context; it does not accumulate in checkpoint state or modify the system message. It wraps the budget observer, so the injected data contributes to the model reservation. The same task context accompanies harness subagent model calls.
+Stage execution and retries reconstruct the task goal and latest facts from durable storage. The main assistant harness uses the read-only scoped `research.task.facts.forChat` capability before each model call, including checkpoint continuation and compaction. A transient `HumanMessage` carries the task context; it does not accumulate in checkpoint state or modify the system message. It wraps the usage observer, so the injected data contributes to model usage accounting. The same task context accompanies harness subagent model calls.

@@ -18,9 +18,8 @@ const createSchema = z.object(createFields).strict();
 const pageSchema = z.object({pageId: id, offset: z.number().int().min(0).max(100).default(0)}).strict();
 const clip = (value: string, max: number): string => value.length > max ? `${value.slice(0, max)}… [截断]` : value;
 
-/** Per-run bounded navigation over derived drafts; all factual citations still target original evidence. */
+/** Paginated navigation over derived drafts; all factual citations still target original evidence. */
 export function createWikiTools(input: {projectId: string; signal: AbortSignal; capabilities: RocCapabilityRegistry}): StructuredToolInterface[] {
-  let reads = 0, chars = 0;
   const visited = new Set<string>();
   const invoke = async <T>(name: string, request: object): Promise<T> => {
     input.signal.throwIfAborted();
@@ -28,10 +27,7 @@ export function createWikiTools(input: {projectId: string; signal: AbortSignal; 
     input.signal.throwIfAborted();return result;
   };
   const read = async <T>(action: () => Promise<T>): Promise<T> => {
-    if (++reads > 12 || chars >= 48000) throw new Error('wiki_navigation_budget_exhausted: use original-source retrieval or answer from verified citations');
-    const result = await action(), size = JSON.stringify(result).length;
-    if (size > 12000 || chars + size > 48000) throw new Error('wiki_output_budget_exhausted: narrow the page or offset');
-    chars += size;return result;
+    return await action();
   };
   const projectPage = (page: WikiPage, offset: number): unknown => {
     const key = `${page.page.id}:${page.page.revision}:${offset}`;
@@ -55,7 +51,7 @@ export function createWikiTools(input: {projectId: string; signal: AbortSignal; 
       const pages = await invoke<WikiSummary[]>('search', {query, offset});
       return {derived: true, pages: pages.slice(0, 10), nextOffset: pages.length > 10 ? offset + 10 : null,
         fallback: '无命中时使用 research_search_knowledge 检索原文。'};
-    }), {name: 'research_wiki_search', description: '搜索当前项目的持久 Wiki 草稿标题与正文，供综述导航。事实和原句问题仍先检索原文。每轮 Wiki 导航最多 12 次、48000 字符。',
+    }), {name: 'research_wiki_search', description: '搜索当前项目的持久 Wiki 草稿标题与正文，供综述导航。事实和原句问题仍先检索原文。',
       schema: z.object({query: z.string().trim().max(300), offset: z.number().int().min(0).default(0)}).strict()}),
     tool(({pageId, offset}) => read(async () => projectPage(await invoke<WikiPage>('read', {pageId}), offset)), {
       name: 'research_wiki_read', description: '分页读取派生草稿、修订和依据摘要。每次 3 节，按 nextOffset 继续；检查 lint 和原始 evidenceId。相同修订/页码不可重复访问。', schema: pageSchema}),

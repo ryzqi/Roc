@@ -48,7 +48,7 @@ import {
 import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
 import { ContextArtifactStore } from '../../services/deep-agent/context/context-artifact-store';
 import { RocSqliteCheckpointer } from '../../services/deep-agent/sqlite-checkpointer';
-import { RunBudgetLedger } from '../../services/deep-agent/run-budget-ledger';
+import { RunUsageLedger } from '../../services/deep-agent/run-usage-ledger';
 import { PilotStateStore } from '../../services/deep-agent/pilot-gate';
 import { PilotRunCoordinator } from '../../services/deep-agent/pilot-run';
 import { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
@@ -147,11 +147,11 @@ export function createAgentPlugin(options: AgentPluginOptions): RocPlugin {
       const repository = new AgentSessionRepository(db, { runEventLog });
       repository.reconcileStartupRuns();
       options.researchTasks.reconcileInterruptedChats();
-      const budgetLedger = new RunBudgetLedger(db);
-      budgetLedger.reconcileStartup();
+      const usageLedger = new RunUsageLedger(db);
+      usageLedger.reconcileStartup();
       // P6-04: absent paths mean no place to persist the opt-in, so the pilot stays unwired and the
       // capability reports that instead of pretending a gate exists.
-      const pilot = createPilotCoordinator(options, budgetLedger);
+      const pilot = createPilotCoordinator(options, usageLedger);
       runtime = new AgentPluginRuntime({
         capabilityPreviewProvider: createCapabilityPreviewProvider(context, options),
         mcpContractDiscoveryProvider: createMcpContractDiscoveryProvider(context),
@@ -299,7 +299,7 @@ function resolveDeepAgentExecutor(
     store: option.memoryStore,
     selfConfigService: option.selfConfigService,
     executionGrantBroker,
-    budgetLedger: new RunBudgetLedger(agentDb),
+    usageLedger: new RunUsageLedger(agentDb),
     toolEffectStore: new AgentToolEffectStore(agentDb),
     onWorkspacePathStructureChanged: (workspacePath, reason) => {
       void context.eventBus.publish({
@@ -325,7 +325,7 @@ function resolveDeepAgentExecutor(
  */
 function createPilotCoordinator(
   options: AgentPluginOptions,
-  ledger: RunBudgetLedger
+  ledger: RunUsageLedger
 ): PilotRunCoordinator | null {
   const executor = options.deepAgentExecutor;
   if (executor === undefined || 'execute' in executor) {
@@ -429,7 +429,7 @@ function registerAgentCapabilities(
   });
   context.capabilities.register(pluginId, baseDescriptor('agent.run.correct'), async input => {
     const request = chatCorrectRunRequestSchema.parse(input);
-    const sequence = new RunBudgetLedger(context.database.getConnection())
+    const sequence = new RunUsageLedger(context.database.getConnection())
       .enqueueCorrection(request.runId, request.submissionId, request.content);
     return { sequence };
   });

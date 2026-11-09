@@ -107,7 +107,7 @@ function createFixture({
     artifactStore,
     readControlState: () => controlState,
     artifactRecoveryEnabled,
-    budgetProfile: {
+    capacityProfile: {
       contextWindowTokens: 1000,
       modelInputTokens: 100,
       summaryInputTokens,
@@ -351,7 +351,7 @@ test('protected context that alone exceeds the hard budget fails explicitly', as
       pendingCorrections: []
     }
   });
-  await assert.rejects(api.runContextCompaction(fixture.input), /context_budget_exhausted/u);
+  await assert.rejects(api.runContextCompaction(fixture.input), /context_window_exceeded/u);
   assert.equal(hasEvent(fixture.events, 'context_compaction_failed'), true);
   assert.equal(hasEvent(fixture.events, 'context_summary_completed'), false);
 });
