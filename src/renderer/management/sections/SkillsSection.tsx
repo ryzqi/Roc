@@ -52,6 +52,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
 
   const builtin = skills.builtin;
   const builtinSnapshot = builtin.snapshot;
+  const builtinBusy = builtin.restore.pending || builtin.check.pending || builtinSnapshot?.updating === true;
 
   return (
     <div className="flex min-h-0 flex-col gap-3" data-testid="mgmt-skills">
@@ -70,7 +71,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
           <button
             type="button"
             data-testid="mgmt-skills-builtin-check"
-            disabled={builtin.check.pending || builtinSnapshot?.updating === true}
+            disabled={builtinBusy}
             onClick={() => {
               void builtin.check.run(true);
             }}
@@ -107,6 +108,13 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
         {builtin.check.lastChanged === true ? (
           <FormNote testId="mgmt-skills-builtin-changed">已从上游同步到新版本。</FormNote>
         ) : null}
+        {builtin.restore.lastResult === null ? null : (
+          <div role="status" aria-live="polite">
+            <FormNote testId="mgmt-skills-builtin-restored">
+              已完成 {builtin.restore.lastResult.sourceName} 内置版本安装，共 {builtin.restore.lastResult.skillCount} 个技能。
+            </FormNote>
+          </div>
+        )}
 
         {builtinSnapshot === null ? null : (
           <ul className="flex flex-col gap-1" data-testid="mgmt-skills-builtin-rows">
@@ -128,7 +136,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
                   <button
                     type="button"
                     data-testid={`mgmt-skills-builtin-restore-${source.id}`}
-                    disabled={builtin.restore.pending}
+                    disabled={builtinBusy}
                     onClick={() => {
                       void builtin.restore.run(source.id);
                     }}

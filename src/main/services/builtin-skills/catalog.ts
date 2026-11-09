@@ -29,7 +29,7 @@ export type BuiltinSkillSourceSpec = {
   homepage: string | null;
   /** Repository-relative directory holding the skill directories (`''` = repository root). */
   skillRoot: string;
-  /** Repository-root directories copied to `_bundles/<id>/` and referenced by the skills. */
+  /** Shared skill resources copied to `_bundles/<id>/`; excludes repository integrations. */
   supportDirs: readonly string[];
   /**
    * Whether the license allows shipping the content enabled-by-default inside Roc.
@@ -76,7 +76,7 @@ export const defaultBuiltinSkillSources: readonly BuiltinSkillSourceSpec[] = [
     license: 'CC-BY-NC-4.0',
     homepage: 'https://github.com/Imbad0202/academic-research-skills',
     skillRoot: '',
-    supportDirs: ['shared', 'tools', 'commands', 'agents', 'scripts', 'docs'],
+    supportDirs: ['shared'],
     autoInstall: false,
     excludedDirectoryNames: [...commonExcludedDirectoryNames, 'audits', 'examples'],
     commit: '',

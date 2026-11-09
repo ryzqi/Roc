@@ -190,6 +190,9 @@ function installedPathForRepo(repoRelativePath: string, context: RewriteContext)
     }
   }
   const firstSegment = repoRelativePath.split('/')[0];
+  if (root.length === 0 && firstSegment !== undefined && context.skillIds.has(firstSegment)) {
+    return repoRelativePath;
+  }
   if (firstSegment !== undefined && context.spec.supportDirs.includes(firstSegment)) {
     return [installedBundlesDir, context.spec.id, repoRelativePath].join('/');
   }

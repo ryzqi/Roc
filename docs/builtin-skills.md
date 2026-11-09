@@ -18,11 +18,20 @@ Roc 把两个上游 Skill 仓库**随安装包内置**，并在运行时按上�
 | `resources/builtin-skills/catalog.json` | 单一真理源：仓库、ref、许可证、`skillRoot`、`supportDirs`、内置提交号与快照 sha256 |
 | `resources/builtin-skills/<sourceId>.tar.gz` | 内置快照。压缩存放，避免把上游自带的 Python/JS 工具链当成 Roc 源码扫描 |
 | `~/.roc/skills/<skillId>/` | 安装后的技能（Deep Agents 只认这一层） |
-| `~/.roc/skills/_bundles/<sourceId>/<dir>/` | 上游仓库根部的支撑目录（`shared/`、`scripts/`、`tools/` 等） |
+| `~/.roc/skills/_bundles/academic-research-skills/shared/` | Academic 技能引用的共用参考资源 |
 | `~/.roc/config/builtin-skills.json` | 同步状态：已安装提交、上次检查、ETag、许可接受时间、上次错误 |
 
 `~/.roc/skills/<skillId>/roc.skill.json` 归技能自己：`enabled` 是用户的开关，`origin/sourceId/upstreamRepo/upstreamCommit`
 是来源。更新只改来源字段，**不会**把用户关掉的技能重新打开。
+
+安装范围按上游的技能安装方式收窄：
+
+- [Nature 安装说明](https://github.com/Yuan1z0825/nature-skills#5-安装)：复制 `skills/` 下包含 `SKILL.md` 的技能目录，保留 `nature-shared` 共享技能。
+- [Academic 安装说明](https://github.com/Imbad0202/academic-research-skills/blob/main/docs/SETUP.md)：复制 `academic-paper`、`academic-paper-reviewer`、`academic-pipeline`、`deep-research`、`sr-screener` 五个技能目录；其引用的 `shared/` 资源也保存在 Roc 的技能目录内。
+- 保留技能自身的 `references/`、`scripts/`、`agents/`、资产等内容，不执行其中的安装脚本。不复制仓库根部的 `agents/`、`commands/`、`hooks/`、`tools/`、`scripts/`、`docs/`，也不注册插件、MCP 或安装 Python/Node 依赖。
+
+除 Roc 自身的同步状态外，安装文件都位于 `~/.roc/skills`（设置 `ROC_DATA_ROOT` 时为对应根目录下的 `skills/`）。
+旧快照重装也使用当前 `supportDirs` 白名单；替换该来源的 `_bundles` 时，会移除旧版本带入的额外支撑目录。
 
 ## 为什么安装是「压平 + 改链接」
 
@@ -43,6 +52,7 @@ Deep Agents 的技能发现只扫 `skillsDir` 的一层子目录，所以每个�
 - **每 24 小时**：用 GitHub commits API 比对 `main` 的提交，带 ETag；变了就下载 `codeload` tar.gz、
   解包、发现 `SKILL.md`、按同一套压平/改写规则安装。只更新已经安装的来源。
 - **手动**：「管理 → 技能 → 立即检查更新」调用 `skills.builtin.check`（`force:true` 忽略 ETag）。
+- **重新安装内置版本**：校验并安装随应用打包的快照，完成后显示来源名称和技能数，并刷新列表、文件树及当前预览。同一提交也会重新写入文件，保留用户的启停开关；安装失败会显示错误，不显示成功提示。
 - 自动检查可在同一面板关闭（`skills.builtin.autoUpdate`）。
 
 安装是逐技能原子替换：先写 `~/.roc/skills/.builtin-staging-*`，再 `rename` 到目标；失败时保留旧版本。
@@ -58,6 +68,21 @@ pnpm sync:builtin-skills --from-dir=/path/to/checkout --commit=<sha>
 
 脚本会更新 `catalog.json` 的提交号与 sha256，并重写两个 `.tar.gz`。**改了内置快照就要提交这两个文件**，
 否则打包出的 app 里内置版本与实际快照不一致。运行时 `BuiltinSkillsService` 会在安装前校验 sha256。
+空快照会被拒绝，不会据此清除已安装技能。
+
+## 验证安装
+
+在仓库根目录执行：
+
+```bash
+node --test tests/unit/builtin-skills.test.mjs tests/unit/renderer-management.test.mjs
+pnpm build
+node --test tests/renderer/builtin-skills.test.mjs tests/integration/builtin-skills-electron.test.mjs
+pnpm check:renderer-chunks
+```
+
+Electron 集成测试使用独立的临时 `ROC_DATA_ROOT`，通过管理面板安装真实内置包，验证成功提示、技能可识别、
+同版本重装恢复文件、用户开关及自建技能保留、安装目录范围；不会修改现有 `~/.roc`。
 
 ## 数据与安全
 

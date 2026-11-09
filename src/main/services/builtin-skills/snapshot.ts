@@ -119,6 +119,9 @@ export function installBuiltinSnapshot(input: {
         .map((entry) => entry.name)
         .sort((left, right) => left.localeCompare(right))
     : [];
+  if (skillIds.length === 0) {
+    throw new Error(`builtin_skills_snapshot_empty:${input.spec.id}`);
+  }
 
   const stagingRoot = join(input.skillsDir, `.builtin-staging-${input.spec.id}-${process.pid}-${Date.now()}`);
   rmSync(stagingRoot, { recursive: true, force: true });
@@ -138,9 +141,13 @@ export function installBuiltinSnapshot(input: {
     }
 
     const supportTarget = join(stagingRoot, '_bundles', input.spec.id);
-    if (existsSync(snapshotSupportDir)) {
-      mkdirSync(dirname(supportTarget), { recursive: true });
-      cpSync(snapshotSupportDir, supportTarget, { recursive: true });
+    // Older snapshots contain repository integrations as well as skill resources. The current
+    // catalog is the allowlist even when reinstalling one of those older bundled archives.
+    for (const supportDir of input.spec.supportDirs) {
+      const source = join(snapshotSupportDir, supportDir);
+      if (existsSync(source)) {
+        copyTree(source, join(supportTarget, supportDir), input.spec);
+      }
     }
 
     const links = rewriteInstalledLinks(stagingRoot, input.spec, skillIds);

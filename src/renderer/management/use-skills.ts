@@ -70,6 +70,7 @@ type BuiltinSkillsStore = {
     pending: boolean;
     error: string | null;
     sourceId: string | null;
+    lastResult: { sourceName: string; skillCount: number } | null;
     run: (sourceId: string) => Promise<boolean>;
   };
 };
@@ -135,6 +136,7 @@ export function useSkills(client: RocClient): SkillsStore {
   const [preview, setPreview] = useState<SkillFilePreviewResult | null>(null);
   const [previewStatus, setPreviewStatus] = useState<AsyncStatus>('idle');
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [filesRevision, setFilesRevision] = useState(0);
 
   // Keep `clearFlags` stable for the list-snapshot effect; list data changes clear flags without
   // tying the effect to the whole flags object.
@@ -155,8 +157,10 @@ export function useSkills(client: RocClient): SkillsStore {
   const [builtinActionError, setBuiltinActionError] = useState<string | null>(null);
   const [builtinLastChanged, setBuiltinLastChanged] = useState<boolean | null>(null);
   const [builtinRestoreSourceId, setBuiltinRestoreSourceId] = useState<string | null>(null);
+  const [builtinRestoreResult, setBuiltinRestoreResult] = useState<BuiltinSkillsStore['restore']['lastResult']>(null);
 
   const reload = useCallback(() => {
+    setFilesRevision((current) => current + 1);
     void skillsResource.mutate().catch(() => undefined);
   }, [skillsResource.mutate]);
 
@@ -214,7 +218,7 @@ export function useSkills(client: RocClient): SkillsStore {
     return () => {
       cancelled = true;
     };
-  }, [client, selectedId, dirPath]);
+  }, [client, selectedId, dirPath, filesRevision]);
 
   useEffect(() => {
     if (selectedId === null || previewPath === null) {
@@ -224,6 +228,7 @@ export function useSkills(client: RocClient): SkillsStore {
       return;
     }
     let cancelled = false;
+    setPreview(null);
     setPreviewStatus('loading');
     void (async () => {
       try {
@@ -250,7 +255,7 @@ export function useSkills(client: RocClient): SkillsStore {
     return () => {
       cancelled = true;
     };
-  }, [client, selectedId, previewPath]);
+  }, [client, selectedId, previewPath, filesRevision]);
 
   const select = useCallback((id: string | null) => {
     setSelectedId(id);
@@ -325,6 +330,7 @@ export function useSkills(client: RocClient): SkillsStore {
       setBuiltinCheckPending(true);
       setBuiltinActionError(null);
       setBuiltinLastChanged(null);
+      setBuiltinRestoreResult(null);
       try {
         const result = await checkBuiltinSkills(client, { force });
         if (!result.ok) {
@@ -382,6 +388,8 @@ export function useSkills(client: RocClient): SkillsStore {
       setBuiltinRestorePending(true);
       setBuiltinRestoreSourceId(sourceId);
       setBuiltinActionError(null);
+      setBuiltinRestoreResult(null);
+      setBuiltinLastChanged(null);
       try {
         const result = await restoreBuiltinSkillSource(client, { sourceId });
         if (!result.ok) {
@@ -389,6 +397,10 @@ export function useSkills(client: RocClient): SkillsStore {
           return false;
         }
         setBuiltinSnapshot(result.data);
+        const restored = result.data.sources.find((source) => source.id === sourceId);
+        if (restored !== undefined) {
+          setBuiltinRestoreResult({ sourceName: restored.displayName, skillCount: restored.skillIds.length });
+        }
         reload();
         notifySettingsChanged();
         return true;
@@ -411,7 +423,7 @@ export function useSkills(client: RocClient): SkillsStore {
       reload: reloadBuiltin,
       check: { pending: builtinCheckPending, error: builtinActionError, lastChanged: builtinLastChanged, run: checkBuiltin },
       autoUpdate: { pending: builtinAutoUpdatePending, error: builtinActionError, run: setBuiltinAutoUpdate },
-      restore: { pending: builtinRestorePending, error: builtinActionError, sourceId: builtinRestoreSourceId, run: restoreBuiltin }
+      restore: { pending: builtinRestorePending, error: builtinActionError, sourceId: builtinRestoreSourceId, lastResult: builtinRestoreResult, run: restoreBuiltin }
     }),
     [
       builtinStatus,
@@ -425,6 +437,7 @@ export function useSkills(client: RocClient): SkillsStore {
       setBuiltinAutoUpdate,
       builtinRestorePending,
       builtinRestoreSourceId,
+      builtinRestoreResult,
       restoreBuiltin
     ]
   );

@@ -140,6 +140,43 @@ test('long archive paths survive the tar writer and reader', async () => {
   assert.equal(readFileSync(join(out, ...Array.from({ length: 8 }, (_, index) => `segment-${index}`), 'file.md'), 'utf8'), '# deep\n');
 });
 
+test('root-level skills retain sibling links and install only allowed shared resources from older bundles', () => {
+  const root = join(tempRoot, 'skills-only');
+  const snapshotDir = join(root, 'snapshot');
+  const skillsDir = join(root, 'roc', 'skills');
+  const rootSpec = { ...spec, skillRoot: '', supportDirs: ['shared'] };
+  write(join(snapshotDir, 'skills', 'demo-writing', 'SKILL.md'),
+    '---\nname: demo-writing\ndescription: Writing.\n---\nRead `demo-shared/core.md` and `shared/protocol.md`.\n');
+  write(join(snapshotDir, 'skills', 'demo-writing', 'agents', 'writer.md'), '# Skill-owned agent prompt\n');
+  write(join(snapshotDir, 'skills', 'demo-shared', 'SKILL.md'), '---\nname: demo-shared\ndescription: Shared.\n---\n');
+  write(join(snapshotDir, 'skills', 'demo-shared', 'core.md'), '# Core\n');
+  write(join(snapshotDir, 'support', 'shared', 'protocol.md'), 'Read `demo-shared/core.md`.\n');
+  for (const dir of ['agents', 'commands', 'hooks', 'tools', 'scripts', 'docs']) {
+    write(join(snapshotDir, 'support', dir, 'unrelated.txt'), 'Repository integration\n');
+    write(join(skillsDir, '_bundles', spec.id, dir, 'old.txt'), 'Previous installation\n');
+  }
+  modules.snapshot.installBuiltinSnapshot({ skillsDir, snapshotDir, spec: rootSpec, commit: spec.commit });
+  for (const dir of ['agents', 'commands', 'hooks', 'tools', 'scripts', 'docs']) {
+    assert.equal(existsSync(join(skillsDir, '_bundles', spec.id, dir)), false, `${dir} must not be installed`);
+  }
+  assert.equal(existsSync(join(skillsDir, 'demo-writing', 'agents', 'writer.md')), true);
+  assert.match(readFileSync(join(skillsDir, 'demo-writing', 'SKILL.md'), 'utf8'), /`\.\.\/demo-shared\/core\.md`/u);
+  assert.match(readFileSync(join(skillsDir, '_bundles', spec.id, 'shared', 'protocol.md'), 'utf8'), /`\.\.\/\.\.\/\.\.\/demo-shared\/core\.md`/u);
+});
+
+test('empty snapshots fail without deleting installed skills', () => {
+  const root = join(tempRoot, 'empty-snapshot');
+  const skillsDir = join(root, 'skills');
+  write(join(skillsDir, 'demo-writing', 'SKILL.md'), '# Keep installed content\n');
+  modules.skillState.writeSkillState(join(skillsDir, 'demo-writing'), {
+    ...modules.skillState.createDefaultSkillState('builtin'), sourceId: spec.id
+  });
+  assert.throws(() => modules.snapshot.installBuiltinSnapshot({
+    skillsDir, snapshotDir: join(root, 'empty'), spec, commit: spec.commit
+  }), /builtin_skills_snapshot_empty/u);
+  assert.equal(readFileSync(join(skillsDir, 'demo-writing', 'SKILL.md'), 'utf8'), '# Keep installed content\n');
+});
+
 function bundledFixture(root) {
   const skillsDirSource = join(root, 'source');
   write(join(skillsDirSource, 'skills', 'demo-writing', 'SKILL.md'), '---\nname: demo-writing\ndescription: Demo.\n---\n');
