@@ -109,8 +109,8 @@ export function LiteratureHubView(): React.JSX.Element {
     );
 
   return (
-    <div ref={hubRef} className="literature-hub-container flex h-full min-h-0 flex-col" data-testid="literature-hub" data-sub-view={subView}>
-      <div className="no-scrollbar flex h-11 shrink-0 items-center justify-between gap-2 overflow-x-auto border-b-[0.5px] border-line px-3">
+    <div ref={hubRef} className="literature-hub-container flex h-full min-h-0 min-w-0 flex-col" data-testid="literature-hub" data-sub-view={subView}>
+      <div className="literature-toolbar grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 border-b-[0.5px] border-line px-3 py-1.5">
         <button type="button" onClick={() => setNavigationOverride(!navigationOpen)}
           aria-label={navigationOpen ? '收起文献列表' : '展开文献列表'} aria-expanded={navigationOpen}
           aria-controls="literature-navigation" data-testid="literature-toggle-navigation"
@@ -131,7 +131,7 @@ export function LiteratureHubView(): React.JSX.Element {
             selectSubView(id);
             event.currentTarget.querySelector<HTMLButtonElement>(`[data-testid="literature-subview-${id}"]`)?.focus();
           }}
-          className="flex shrink-0 items-center gap-1 rounded-control border-[0.5px] border-line bg-surface p-0.5"
+          className="literature-tabs no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto rounded-control border-[0.5px] border-line bg-surface p-1"
         >
           {SUB_VIEWS.map((entry) => {
             const selected = entry.id === subView;
@@ -161,7 +161,7 @@ export function LiteratureHubView(): React.JSX.Element {
           })}
         </div>
 
-        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        <div className="literature-actions ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1.5">
           <button type="button" data-testid="literature-review-inspect" disabled={scope.projectId === null}
             className="h-7 rounded-control px-2 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-50"
             onClick={() => {

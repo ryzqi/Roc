@@ -220,7 +220,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
               </div>
             </Field>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="form-grid">
               <PatternsArea
                 label="包含模式（每行一条）"
                 patterns={index.include}
@@ -347,7 +347,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
 
         {form === null ? null : (
           <div className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2" data-testid="settings-embedding-editor">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="form-grid">
               <TextField
                 label="标识"
                 value={form.id}

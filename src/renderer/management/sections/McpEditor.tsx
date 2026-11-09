@@ -155,7 +155,7 @@ export function McpEditor({
           </div>
         </details>
       </fieldset>
-      <div className="sticky bottom-0 flex items-center gap-2 border-t-[0.5px] border-line bg-surface py-3">
+      <div className="flex flex-wrap items-center gap-2 border-t-[0.5px] border-line py-3">
         <button
           type="submit"
           disabled={mcp.save.pending || mcp.issues.length > 0}

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type InputHTMLAttributes, type ReactNode } from 'react';
 import { AlertTriangle, Info } from 'lucide-react';
 
 /**
@@ -24,12 +24,12 @@ import { AlertTriangle, Info } from 'lucide-react';
  */
 
 export const formInputClass =
-  'h-[var(--control-height)] w-full rounded-control border-[0.5px] border-line bg-bg px-2.5 text-ink transition-colors hover:border-line-strong disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+  'h-[var(--control-height)] min-w-0 w-full rounded-control border-[0.5px] border-line bg-bg px-2.5 text-ink transition-colors hover:border-line-strong disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
 export const formSelectClass = formInputClass;
 export const formTextAreaClass =
-  'w-full min-h-[72px] resize-y rounded-control border-[0.5px] border-line bg-bg px-2 py-1 font-mono text-[length:var(--font-code-size)] text-ink disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+  'w-full min-w-0 min-h-[72px] resize-y rounded-control border-[0.5px] border-line bg-bg px-2 py-1 font-mono text-[length:var(--font-code-size)] text-ink disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
 export const formSecondaryButtonClass =
-  'h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-muted text-[length:var(--font-meta-size)] hover:text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+  'inline-flex min-h-[var(--control-height-compact)] shrink-0 items-center justify-center gap-1.5 rounded-control border-[0.5px] border-line px-2 text-muted text-[length:var(--font-meta-size)] hover:text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
 /**
  * 与输入框同高的按钮（P10）。
  *
@@ -38,10 +38,10 @@ export const formSecondaryButtonClass =
  * 高度不一致也让 hover 区域与输入框不是同一条水平带。所以凡是与输入框同排的动作按钮用这个。
  */
 export const formButtonClass =
-  'h-[var(--control-height)] rounded-control border-[0.5px] border-line px-2.5 text-muted text-[length:var(--font-meta-size)] hover:text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+  'inline-flex min-h-[var(--control-height)] shrink-0 items-center justify-center gap-1.5 rounded-control border-[0.5px] border-line px-2.5 text-muted text-[length:var(--font-meta-size)] hover:text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
 /** 与输入框同高的主按钮（保存/确认）。 */
 export const formPrimaryButtonClass =
-  'h-[var(--control-height)] rounded-control border-[0.5px] border-transparent bg-[var(--fill-strong)] px-3 font-medium text-[var(--fill-strong-text)] text-[length:var(--font-meta-size)] hover:bg-[var(--fill-strong-hover)] active:opacity-90 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+  'inline-flex min-h-[var(--control-height)] shrink-0 items-center justify-center gap-1.5 rounded-control border-[0.5px] border-transparent bg-[var(--fill-strong)] px-3 font-medium text-[var(--fill-strong-text)] text-[length:var(--font-meta-size)] hover:bg-[var(--fill-strong-hover)] active:opacity-90 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
 
 export function FormSection({
   title,
@@ -55,7 +55,7 @@ export function FormSection({
   testId: string;
 }): React.JSX.Element {
   return (
-    <section className="flex flex-col gap-4" data-testid={testId}>
+    <section className="form-section flex flex-col gap-4" data-testid={testId}>
       <header className="flex flex-wrap items-baseline gap-2 border-b-[0.5px] border-line pb-2.5">
         <h3 className="font-medium text-ink text-[length:var(--font-h3-size)]">{title}</h3>
         {readOnly ? (
@@ -83,7 +83,7 @@ export function Field({
   inline?: boolean;
 }): React.JSX.Element {
   return (
-    <div className={inline ? 'flex items-center gap-2' : 'flex flex-col gap-1.5'} data-testid={testId}>
+    <div className={inline ? 'flex min-w-0 flex-wrap items-center gap-2' : 'flex min-w-0 flex-col gap-1.5'} data-testid={testId}>
       <span className="text-muted text-[length:var(--font-meta-size)]">{label}</span>
       <div className={inline ? 'flex min-w-0 flex-1 items-center gap-2' : 'flex min-w-0 flex-col gap-1'}>
         {children}
@@ -106,6 +106,8 @@ export function TextField({
   placeholder,
   issue,
   testId,
+  description,
+  inputMode,
   type = 'text'
 }: {
   label: string;
@@ -115,13 +117,21 @@ export function TextField({
   placeholder?: string;
   issue?: string | null;
   testId: string;
+  description?: string;
+  inputMode?: InputHTMLAttributes<HTMLInputElement>['inputMode'];
   type?: 'text' | 'password';
 }): React.JSX.Element {
+  const id = useId();
+  const hasIssue = issue !== undefined && issue !== null;
   return (
-    <label className="flex flex-col gap-1.5" data-testid={`${testId}-field`}>
-      <span className="text-muted text-[length:var(--font-meta-size)]">{label}</span>
+    <label className="flex min-w-0 flex-col gap-1.5" data-testid={`${testId}-field`}>
+      <span id={`${id}-label`} className="text-muted text-[length:var(--font-meta-size)]">{label}</span>
       <input
         type={type}
+        inputMode={inputMode}
+        aria-labelledby={`${id}-label`}
+        aria-invalid={hasIssue || undefined}
+        aria-describedby={[description === undefined ? '' : `${id}-description`, hasIssue ? `${id}-issue` : ''].filter(Boolean).join(' ') || undefined}
         value={value}
         disabled={disabled}
         placeholder={placeholder}
@@ -129,8 +139,11 @@ export function TextField({
         data-testid={testId}
         className={formInputClass}
       />
-      {issue === undefined || issue === null ? null : (
-        <span className="flex items-start gap-1 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" role="alert">
+      {description === undefined ? null : (
+        <span id={`${id}-description`} className="text-subtle text-[length:var(--font-meta-size)]">{description}</span>
+      )}
+      {!hasIssue ? null : (
+        <span id={`${id}-issue`} className="flex items-start gap-1 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" role="alert">
           <AlertTriangle size={11} aria-hidden="true" className="mt-0.5 shrink-0" />
           {issue}
         </span>
@@ -172,6 +185,8 @@ export function NumberField({
   issue?: string | null;
   testId: string;
 }): React.JSX.Element {
+  const id = useId();
+  const hasIssue = issue !== undefined && issue !== null;
   const [text, setText] = useState(() => (value === null || value === undefined ? '' : String(value)));
   useEffect(() => {
     setText(value === null || value === undefined ? '' : String(value));
@@ -196,11 +211,14 @@ export function NumberField({
   };
 
   return (
-    <label className="flex flex-col gap-1.5" data-testid={`${testId}-field`}>
-      <span className="text-muted text-[length:var(--font-meta-size)]">{label}</span>
+    <label className="flex min-w-0 flex-col gap-1.5" data-testid={`${testId}-field`}>
+      <span id={`${id}-label`} className="text-muted text-[length:var(--font-meta-size)]">{label}</span>
       <input
         type="number"
         inputMode="decimal"
+        aria-labelledby={`${id}-label`}
+        aria-invalid={hasIssue || undefined}
+        aria-describedby={hasIssue ? `${id}-issue` : undefined}
         value={text}
         disabled={disabled}
         min={min}
@@ -216,8 +234,8 @@ export function NumberField({
         data-testid={testId}
         className={formInputClass}
       />
-      {issue === undefined || issue === null ? null : (
-        <span className="flex items-start gap-1 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" role="alert">
+      {!hasIssue ? null : (
+        <span id={`${id}-issue`} className="flex items-start gap-1 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" role="alert">
           <AlertTriangle size={11} aria-hidden="true" className="mt-0.5 shrink-0" />
           {issue}
         </span>
@@ -242,7 +260,7 @@ export function CheckboxField({
   testId: string;
 }): React.JSX.Element {
   return (
-    <label className="flex items-start gap-2" data-testid={`${testId}-field`}>
+    <label className="flex min-w-0 items-start gap-2" data-testid={`${testId}-field`}>
       <input
         type="checkbox"
         checked={checked}
@@ -277,7 +295,7 @@ export function SelectField<T extends string>({
   testId: string;
 }): React.JSX.Element {
   return (
-    <label className="flex flex-col gap-1.5" data-testid={`${testId}-field`}>
+    <label className="flex min-w-0 flex-col gap-1.5" data-testid={`${testId}-field`}>
       <span className="text-muted text-[length:var(--font-meta-size)]">{label}</span>
       <select
         value={value}

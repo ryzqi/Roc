@@ -164,7 +164,7 @@ export function ManagementSectionBody({
       id={`${idPrefix}-panel-${tab}`}
       aria-labelledby={`${idPrefix}-tab-${tab}`}
       tabIndex={-1}
-      className="min-h-0 flex-1 overflow-y-auto"
+      className="ui-scroll-region flex-1 p-1"
       data-testid={`${testIdPrefix}-panel-${tab}`}
     >
       {section}
@@ -190,9 +190,9 @@ function McpSectionContent({ scope }: { scope: ManagementScope }): ReactNode {
 function TasksSectionContent({ scope }: { scope: ManagementScope }): ReactNode {
   const store = useManagementStores((stores) => stores.tasks);
   return (
-    <div className="grid gap-4">
+    <div className="grid min-w-0 gap-6">
       {scope.projectId === null ? null : (
-        <div key={scope.projectId} className="grid gap-4">
+        <div key={scope.projectId} className="grid min-w-0 gap-6">
           <ProjectBudgetSection client={scope.client} projectId={scope.projectId} />
           <PythonEnvironmentSection client={scope.client} projectId={scope.projectId} />
           <ResearchTasksSection client={scope.client} projectId={scope.projectId}

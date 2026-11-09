@@ -72,10 +72,12 @@ export function ManagementPanel({
       kind="drawer"
       onClose={onClose}
       beforeClose={beforeClose}
+      closeOnBackdrop={false}
+      bodyPadding="none"
       widthClassName="w-[min(720px,92vw)]"
       testId="management-panel"
     >
-      <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-3">
         <ManagementTabStrip
           activeTab={tab}
           onTabChange={onTabChange}

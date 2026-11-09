@@ -14,6 +14,44 @@
   container-type: inline-size;
 }
 
+.literature-hub-container {
+  container: literature-hub / inline-size;
+}
+
+.skill-files-container {
+  container: skill-files / inline-size;
+}
+
+@container literature-hub (max-width: 960px) {
+  .literature-toolbar {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .literature-tabs {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .literature-actions {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
+@container skill-files (max-width: 540px) {
+  .skill-files-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 2fr);
+  }
+
+  .skill-files-preview {
+    border-left-width: 0;
+    border-top-width: 0.5px;
+    padding-left: var(--space-1);
+    padding-top: var(--space-3);
+  }
+}
+
 @container workspace-canvas (max-width: 1023px) {
   .literature-paper-picker {
     display: flex;
@@ -138,6 +176,16 @@
     user-select: text;
   }
 
+  input, textarea, select {
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
+
+  button, input, textarea, select, summary, [tabindex] {
+    scroll-margin-block: var(--space-2);
+    scroll-margin-inline: var(--space-1);
+  }
+
   h1, h2, h3 {
     text-wrap: balance;
   }
@@ -214,6 +262,48 @@
 }
 
 @layer utilities {
+  /* Each pane owns its scrolling. Padding belongs inside this boundary so
+     focus outlines survive both clipping and keyboard-driven scrolling. */
+  .ui-scroll-region {
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    scroll-padding-block: var(--space-2);
+    scroll-padding-inline: var(--space-1);
+  }
+
+  /* Respond to available pane width, including a narrow canvas in a wide window. */
+  .form-grid {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+    gap: var(--space-3);
+    align-items: start;
+  }
+
+  .form-grid > * {
+    min-width: 0;
+  }
+
+  .form-action-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: var(--space-2);
+  }
+
+  .form-action-row > :first-child {
+    flex: 1 1 220px;
+    min-width: 0;
+  }
+
+  .form-section {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
   .font-medium {
     font-weight: var(--font-weight-medium);
   }

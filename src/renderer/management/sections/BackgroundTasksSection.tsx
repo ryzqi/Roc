@@ -310,7 +310,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
               className={formTextAreaClass}
             />
           </label>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="form-grid">
             <label className="flex flex-col gap-0.5">
               <span className="text-subtle text-[length:var(--font-micro-size)]">触发方式</span>
               <select
@@ -361,7 +361,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
               </label>
             ) : null}
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="form-grid">
             <label className="flex flex-col gap-0.5">
               <span className="text-subtle text-[length:var(--font-micro-size)]">允许的动作（每行一个；空表示未限制）</span>
               <textarea

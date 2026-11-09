@@ -84,7 +84,7 @@ export function GuardrailSection({ store }: { store: SettingsStore }): React.JSX
       </div>
 
       <h4 className="text-ink text-[length:var(--font-meta-size)]">记忆容量与会话保留</h4>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="form-grid">
         <NumberField
           label="USER.md 字符上限"
           value={memory.charLimits.user}
@@ -162,7 +162,7 @@ export function MemorySection({ store }: { store: SettingsStore }): React.JSX.El
         testId="settings-auto-memory-enabled"
       />
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="form-grid">
         <NumberField
           label="低置信度记忆保留天数"
           value={autoMemory.lowConfidenceTtlDays}

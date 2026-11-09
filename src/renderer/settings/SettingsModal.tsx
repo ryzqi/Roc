@@ -420,7 +420,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
               id={`settings-panel-${activeSection}`}
               aria-labelledby={`settings-tab-${activeSection}`}
               tabIndex={-1}
-              className="min-h-0 flex-1 overflow-y-auto pt-5 pb-3"
+              className="ui-scroll-region -mx-1 flex-1 px-1 pt-5 pb-3"
               data-testid="settings-panel"
             >
               {renderPanel(activeSection, store, props)}

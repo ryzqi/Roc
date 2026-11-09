@@ -177,7 +177,7 @@ export function TasksSection({ store }: { store: SettingsStore }): React.JSX.Ele
       testId="settings-section-tasks-body"
     >
       <h4 className="text-ink text-[length:var(--font-meta-size)]">长任务判定阈值</h4>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="form-grid">
         <NumberField
           label="运行秒数"
           value={tasks.longRunningThresholds.runningSeconds}

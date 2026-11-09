@@ -55,33 +55,34 @@ export function SkillFilesModal({
       onClose={onClose}
       widthClassName="w-[min(680px,92vw)] h-[min(78vh,680px)]"
       testId="mgmt-skill-files"
+      bodyPadding="none"
     >
       {selected === null ? null : (
-        <div className="flex h-full min-h-0 flex-col gap-2" data-testid="mgmt-skills-files">
-          <dl className="flex shrink-0 flex-col gap-0.5">
+        <div className="skill-files-container flex h-full min-h-0 min-w-0 flex-col gap-2 p-3" data-testid="mgmt-skills-files">
+          <dl className="ui-scroll-region max-h-28 shrink-0 flex flex-col gap-0.5">
             <KeyValueRow label="根目录" value={skills.rootPath ?? selected.path} testId="mgmt-skill-root" />
             <KeyValueRow label="描述" value={selected.description} testId="mgmt-skill-description" />
           </dl>
 
-          <div className="flex shrink-0 flex-wrap items-center gap-1" data-testid="mgmt-skill-breadcrumb">
+          <div className="flex min-w-0 shrink-0 items-center gap-1 overflow-x-auto p-1" data-testid="mgmt-skill-breadcrumb">
             <button
               type="button"
               onClick={() => skills.setDirPath('')}
               data-testid="mgmt-skill-crumb-root"
-              className="rounded-control px-1 text-muted text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+              className="shrink-0 rounded-control px-1 text-muted text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
             >
               {selected.name}
             </button>
             {segments.map((segment, index) => {
               const path = segments.slice(0, index + 1).join('/');
               return (
-                <span key={path} className="flex items-center gap-1">
+                <span key={path} className="flex shrink-0 items-center gap-1">
                   <ChevronRight size={10} aria-hidden="true" className="text-subtle" />
                   <button
                     type="button"
                     onClick={() => skills.setDirPath(path)}
                     data-testid={`mgmt-skill-crumb-${path}`}
-                    className="rounded-control px-1 text-muted text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                    className="shrink-0 rounded-control px-1 text-muted text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
                   >
                     {segment}
                   </button>
@@ -96,10 +97,9 @@ export function SkillFilesModal({
             </FormNote>
           )}
 
-          {/* 两栏：左边是当前目录，右边是预览。抽屉能放下 680px，所以文件和内容可以同时看，
-              不再像内联版本那样上下堆叠、还要各自滚动。 */}
-          <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,200px)_minmax(0,1fr)] gap-2">
-            <div className="flex min-h-0 flex-col gap-1 overflow-y-auto">
+          {/* Follow the dialog width: side by side on desktop, stacked in narrow windows. */}
+          <div className="skill-files-layout grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,180px)_minmax(0,1fr)] gap-2">
+            <div className="ui-scroll-region flex flex-col gap-1 p-1">
               {skills.entries.length === 0 ? (
                 <FormNote testId="mgmt-skill-tree-empty">
                   {skills.treeStatus === 'loading' ? '读取目录中…' : '这个目录是空的。'}
@@ -161,9 +161,9 @@ export function SkillFilesModal({
               ) : null}
             </div>
 
-            <div className="flex min-h-0 min-w-0 flex-col gap-1 overflow-y-auto border-l-[0.5px] border-line-soft pl-2">
+            <div className="skill-files-preview ui-scroll-region flex flex-col gap-1 border-l-[0.5px] border-line-soft p-1 pl-3">
               {skills.previewPath === null ? (
-                <FormNote testId="mgmt-skill-preview-empty">从左边选一个文件查看内容。</FormNote>
+                <FormNote testId="mgmt-skill-preview-empty">选择一个文件查看内容。</FormNote>
               ) : (
                 <div className="flex flex-col gap-1" data-testid="mgmt-skill-preview">
                   <div className="flex flex-wrap items-center gap-2">
@@ -218,7 +218,7 @@ export function SkillFilesModal({
                         </Suspense>
                       ) : (
                         <pre
-                          className="whitespace-pre-wrap rounded-card border-[0.5px] border-line bg-bg-soft px-2 py-1.5 font-mono text-[length:var(--font-code-size)] text-muted"
+                          className="whitespace-pre-wrap break-words rounded-card border-[0.5px] border-line bg-bg-soft px-2 py-1.5 font-mono text-[length:var(--font-code-size)] text-muted"
                           data-testid="mgmt-skill-preview-text"
                         >
                           {skills.preview.content}

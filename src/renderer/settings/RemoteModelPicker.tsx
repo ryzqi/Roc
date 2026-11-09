@@ -143,7 +143,7 @@ export function RemoteModelPicker({
       }
     >
       <div className="flex min-w-0 flex-col gap-2">
-        <div className="flex flex-wrap items-end gap-2">
+        <div className="form-action-row">
           <div className="min-w-0 flex-1">
             <TextField
               label="接入地址"
@@ -178,7 +178,7 @@ export function RemoteModelPicker({
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="form-grid">
           <TextField
             label="API Key（可留空）"
             type="password"
@@ -207,7 +207,7 @@ export function RemoteModelPicker({
           </p>
         ) : (
           <>
-            <div className="flex items-end gap-2">
+            <div className="form-action-row">
               <label className="flex h-[var(--control-height)] min-w-0 flex-1 items-center gap-1.5 rounded-control border-[0.5px] border-line bg-bg px-2 focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-accent">
                 <Search size={11} aria-hidden="true" className="shrink-0 text-subtle" />
                 <input

@@ -28,7 +28,7 @@ export function ConsistencyRuleFields({fields, onChange}: {fields: ConsistencyRu
     </>}
     {select('rounding', '舍入规则', {none: '不舍入', decimal_places: '十进制位数，半数远离零'})}
     {fields.rounding !== 'decimal_places' ? null : text('places', '小数位数', true)}
-    <div className="grid min-w-0 grid-cols-2 gap-3">{text('absolute', '绝对容差', true)}{text('relative', '相对容差', true)}</div>
+    <div className="form-grid">{text('absolute', '绝对容差', true)}{text('relative', '相对容差', true)}</div>
     {text('toleranceReason', '容差理由')}
   </>;
 }

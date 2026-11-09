@@ -35,8 +35,7 @@ import type { McpStore } from '../use-mcp';
 import { McpEditor } from './McpEditor';
 
 const actionClass = `${formSecondaryButtonClass} inline-flex shrink-0 items-center justify-center gap-1.5`;
-const menuActionClass =
-  'block w-full rounded-control px-3 py-2 text-left text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-accent';
+const menuActionClass = formSecondaryButtonClass;
 type Filter = 'all' | 'enabled' | 'disabled' | 'issues';
 
 /** Configuration checks are not connection checks. Tool names come only from the run preview. */
@@ -149,13 +148,14 @@ export function McpSection({
   );
   const more = (server: McpServerConfig): React.JSX.Element => (
     <details
-      className="relative shrink-0"
+      className="min-w-0 shrink-0 open:basis-full"
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null))
           event.currentTarget.open = false;
       }}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
+          event.stopPropagation();
           event.currentTarget.open = false;
           event.currentTarget.querySelector('summary')?.focus();
         }
@@ -163,12 +163,12 @@ export function McpSection({
     >
       <summary
         aria-label={`${server.name} 的更多操作`}
-        className={`${actionClass} list-none cursor-pointer [&::-webkit-details-marker]:hidden`}
+        className={`${actionClass} ml-auto flex w-fit list-none cursor-pointer [&::-webkit-details-marker]:hidden`}
       >
         <MoreHorizontal size={16} aria-hidden="true" />
       </summary>
       <div
-        className="absolute right-0 top-full z-10 mt-1 w-36 rounded-card border-[0.5px] border-line bg-surface p-1 shadow-[var(--shadow-popover)]"
+        className="mt-2 flex flex-wrap justify-end gap-2 border-t-[0.5px] border-line pt-2"
         onClick={(event) => {
           const details = event.currentTarget.closest('details');
           if (details) details.open = false;
@@ -330,7 +330,7 @@ export function McpSection({
                 return (
                   <li
                     key={server.id}
-                    className="flex items-center gap-1 py-1"
+                    className="flex flex-wrap items-center gap-1 py-1"
                     data-testid={`mgmt-mcp-server-${server.id}`}
                   >
                     <button
@@ -522,7 +522,7 @@ export function McpSection({
                 {mcpTransportLabels[selected.server.transport]}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               {toggle(selected.server)}
               <button
                 type="button"

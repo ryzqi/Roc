@@ -191,7 +191,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="form-grid">
         <TextField
           label="名称"
           value={provider.name}
@@ -252,7 +252,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
             {stored ? '已配置（系统钥匙串）' : '未配置'}
           </span>
         </header>
-        <div className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+        <div className="form-action-row">
           <TextField
             label="新密钥"
             type="password"
@@ -332,7 +332,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
               className="flex flex-col gap-2 rounded-card border-[0.5px] border-line bg-surface px-3 py-2"
               data-testid={`settings-model-${modelIndex}`}
             >
-              <div className="grid grid-cols-2 gap-2">
+              <div className="form-grid">
                 <TextField
                   label="模型标识"
                   value={model.id}
@@ -346,7 +346,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
                   testId={`settings-model-name-${modelIndex}`}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="form-grid">
                 <NumberField
                   label="温度"
                   value={model.options?.temperature}
@@ -447,7 +447,7 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
 
       <section className="flex flex-col gap-2 rounded-card border-[0.5px] border-line bg-bg-soft px-3 py-2">
         <h4 className="text-ink text-[length:var(--font-meta-size)]">测速</h4>
-        <div className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="form-action-row">
           <label className="flex flex-col gap-0.5">
             <span className="text-subtle text-[length:var(--font-micro-size)]">用于测试的模型</span>
             <select

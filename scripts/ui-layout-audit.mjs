@@ -38,13 +38,16 @@ const clipSource = readFileSync('.agents/skills/desktop-agent-ui/scripts/clip-au
 let failure = null;
 let nativeMinimum;
 let currentTheme;
+let importedSkill = false;
+let controlsChecked = 0;
 
 const VIEWPORTS = [
   { id: 'wide', width: 1440, height: 900 },
   { id: 'columns-edge', width: 1100, height: 820 },
   { id: 'drawers-edge', width: 1099, height: 820 },
   { id: 'narrow', width: 720, height: 760 },
-  { id: 'small', width: 380, height: 760 }
+  { id: 'small', width: 380, height: 760 },
+  { id: 'short', width: 1100, height: 540 }
 ];
 
 async function capture(page, id) {
@@ -60,6 +63,7 @@ async function capture(page, id) {
   assert.deepEqual(audit.viewportOverflow, [], `${id}: viewport overflow`);
   assert.deepEqual(audit.fontSizeViolations, [], `${id}: UI text below 12px`);
   assert.equal(audit.clip.cut, 0, `${id}: clipped shadows`);
+  console.log(`[layout] ${currentTheme}-${id}: passed`);
   return audit;
 }
 
@@ -75,6 +79,61 @@ async function navigate(page, search) {
     window.history.pushState({}, '', url);
     window.dispatchEvent(new PopStateEvent('popstate'));
   }, search);
+}
+
+async function assertControlVisible(control) {
+  // Native textarea focus only reveals its caret. Scroll the full control into
+  // view first, as a user can, then measure its focus outline against each pane.
+  await control.scrollIntoViewIfNeeded();
+  await control.focus();
+  const clipped = await control.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    const ring = style.outlineStyle === 'none' ? 0 : Math.max(0,
+      parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset));
+    const cuts = [];
+    for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+      const css = getComputedStyle(parent);
+      const box = parent.getBoundingClientRect();
+      const left = box.left + parent.clientLeft;
+      const top = box.top + parent.clientTop;
+      if (/(hidden|auto|scroll|clip)/u.test(css.overflowX) &&
+        (rect.left - ring < left - 1 || rect.right + ring > left + parent.clientWidth + 1)) {
+        cuts.push({axis: 'x', parent: parent.dataset.testid ?? parent.className,
+          control: [rect.left - ring, rect.right + ring], boundary: [left, left + parent.clientWidth]});
+      }
+      if (/(hidden|auto|scroll|clip)/u.test(css.overflowY) &&
+        (rect.top - ring < top - 1 || rect.bottom + ring > top + parent.clientHeight + 1)) {
+        cuts.push({axis: 'y', parent: parent.dataset.testid ?? parent.className,
+          control: [rect.top - ring, rect.bottom + ring], boundary: [top, top + parent.clientHeight]});
+      }
+    }
+    return cuts;
+  });
+  assert.deepEqual(clipped, [], `${await control.getAttribute('data-testid')}: control and focus ring stay visible`);
+  const covered = await control.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    const insetX = Math.min(4, rect.width / 4);
+    const insetY = Math.min(4, rect.height / 4);
+    const x = (rect.left + rect.right) / 2;
+    const y = (rect.top + rect.bottom) / 2;
+    return [[x, y], [x, rect.top + insetY], [x, rect.bottom - insetY],
+      [rect.left + insetX, y], [rect.right - insetX, y]].flatMap(([left, top]) => {
+      const hit = document.elementFromPoint(left, top);
+      return hit !== null && element.contains(hit) ? [] : [{
+        point: [left, top], covering: hit?.getAttribute('data-testid') ?? hit?.className ?? null
+      }];
+    });
+  });
+  assert.deepEqual(covered, [], `${await control.getAttribute('data-testid')}: control is not covered by another surface`);
+  controlsChecked += 1;
+}
+
+async function assertFormLayout(panel) {
+  const width = await panel.evaluate(element => ({client: element.clientWidth, scroll: element.scrollWidth}));
+  assert.ok(width.scroll <= width.client + 1, `${await panel.getAttribute('data-testid')}: no horizontal form overflow (${JSON.stringify(width)})`);
+  const controls = panel.locator('input:visible:not(:disabled), select:visible:not(:disabled), textarea:visible:not(:disabled)');
+  for (const control of await controls.all()) await assertControlVisible(control);
 }
 
 try {
@@ -154,6 +213,12 @@ try {
     await navigate(page, 'page=research');
     await page.waitForSelector(`[data-testid="portal-card-${project.id}"]`, { timeout: 15_000 });
     await capture(page, `portal-${viewport.id}`);
+    await page.getByTestId('portal-new-project').click();
+    await page.getByTestId('portal-create-dialog-panel').waitFor();
+    await assertFormLayout(page.getByTestId('portal-create-dialog-panel'));
+    await capture(page, `project-form-${viewport.id}`);
+    await page.getByTestId('project-form-cancel').click();
+    await page.getByTestId('portal-create-dialog-panel').waitFor({state: 'detached'});
 
     await navigate(page, `${projectQuery}&view=latex`);
     await page.waitForSelector('[data-testid="canvas"]', { timeout: 15_000 });
@@ -167,6 +232,63 @@ try {
     await page.getByTestId('mgmt-tab-tasks').focus();
     await page.keyboard.press('Enter');
     await page.getByTestId('mgmt-panel-tasks').waitFor({state: 'visible'});
+    await page.getByTestId('mgmt-project-budget-edit').click();
+    await capture(page, `budget-edit-${viewport.id}`);
+    for (const field of ['tokens', 'models', 'concurrency', 'cost']) {
+      await assertControlVisible(page.getByTestId(`mgmt-project-budget-${field}`));
+    }
+    await capture(page, `budget-focus-${viewport.id}`);
+    await page.getByTestId('mgmt-project-budget-tokens').fill('1000000');
+    await page.getByTestId('mgmt-project-budget-models').fill('100');
+    await page.getByTestId('mgmt-project-budget-concurrency').fill('4');
+    await page.getByTestId('mgmt-project-budget-cost').fill('5000000');
+    await page.getByTestId('mgmt-project-budget-save').click();
+    await page.getByTestId('mgmt-project-budget-edit').waitFor();
+    await page.getByTestId('mgmt-project-budget-data').waitFor();
+    await capture(page, `budget-saved-${viewport.id}`);
+    for (const tab of ['memory', 'skills', 'mcp', 'tasks']) {
+      await page.getByTestId(`mgmt-tab-${tab}`).click();
+      const panel = page.getByTestId(`mgmt-panel-${tab}`);
+      await panel.waitFor({state: 'visible'});
+      await assertFormLayout(panel);
+      await capture(page, `management-${tab}-${viewport.id}`);
+      if (tab === 'mcp') {
+        const more = panel.locator('summary[aria-label$="的更多操作"]').first();
+        await more.click();
+        for (const action of await panel.locator('details[open] button').all()) await assertControlVisible(action);
+        await capture(page, `management-mcp-actions-${viewport.id}`);
+        await page.keyboard.press('Escape');
+        assert.equal(await management.isVisible(), true, 'MCP action Escape keeps management open');
+        await panel.getByTestId('mgmt-mcp-create').click();
+        await panel.getByTestId('mgmt-mcp-custom').click();
+        await assertFormLayout(panel.getByTestId('mgmt-mcp-editor'));
+        await capture(page, `management-mcp-editor-${viewport.id}`);
+        await panel.getByTestId('mgmt-mcp-cancel').click();
+      }
+      if (tab === 'tasks') {
+        await panel.getByTestId('mgmt-tasks-create').click();
+        await assertFormLayout(panel.getByTestId('mgmt-task-editor'));
+        await capture(page, `management-task-editor-${viewport.id}`);
+        await panel.getByTestId('mgmt-task-editor-cancel').click();
+      }
+      if (tab === 'skills') {
+        if (!importedSkill) {
+          await panel.getByTestId('mgmt-skills-import-path').fill(skillSourceRoot);
+          await panel.getByTestId('mgmt-skills-import-run').click();
+          await panel.getByTestId('mgmt-skills-import-result').waitFor();
+          importedSkill = true;
+        }
+        await panel.locator('[data-testid^="mgmt-skill-select-"]').filter({hasText: 'smoke-skill'}).click();
+        const files = page.getByTestId('mgmt-skill-files-panel');
+        await files.waitFor();
+        await page.getByTestId('mgmt-skill-entry-SKILL.md').click();
+        await page.getByTestId('mgmt-skill-preview-markdown').waitFor();
+        await assertControlVisible(page.getByTestId('mgmt-skill-preview-close'));
+        await capture(page, `skill-files-${viewport.id}`);
+        await page.keyboard.press('Escape');
+        await files.waitFor({state: 'detached'});
+      }
+    }
     for (let index = 0; index < 24; index += 1) {
       await page.keyboard.press(index < 12 ? 'Tab' : 'Shift+Tab');
       assert.equal(await management.evaluate(panel => panel.contains(document.activeElement)), true,
@@ -178,6 +300,33 @@ try {
     assert.equal(await managementOpener.evaluate(button => button === document.activeElement), true,
       'management drawer returns keyboard focus');
 
+    // Close the ambient sidebar before interacting with the canvas beneath it.
+    // Restore it below to audit both drawers together with the assistant.
+    const sidebarDrawer = page.getByTestId('sidebar-drawer');
+    const sidebarWasOpen = await sidebarDrawer.count() > 0;
+    if (sidebarWasOpen) {
+      await page.getByTestId('sidebar-drawer-close').click();
+      await sidebarDrawer.waitFor({state: 'detached'});
+    }
+    for (const view of ['memory', 'skills', 'mcp', 'terminal', 'literature']) {
+      await navigate(page, `${projectQuery}&view=${view}`);
+      await page.getByTestId(view === 'literature' ? 'literature-hub' : view === 'terminal' ? 'terminal-view' : `mgmt-view-panel-${view}`).waitFor({state: 'visible'});
+      await capture(page, `view-${view}-${viewport.id}`);
+    }
+    for (const tab of ['reader', 'notes', 'radar', 'rag', 'wiki', 'graph', 'monitors']) {
+      await page.getByTestId(`literature-subview-${tab}`).click();
+      await page.getByTestId(`literature-panel-${tab}`).waitFor({state: 'visible'});
+      await assertControlVisible(page.getByTestId('literature-hub-import'));
+      await capture(page, `literature-${tab}-${viewport.id}`);
+    }
+    await page.getByTestId('literature-hub-import').click();
+    await page.getByTestId('literature-import-dialog-panel').waitFor();
+    await page.getByTestId('literature-import-tab-manual').click();
+    await assertFormLayout(page.getByTestId('literature-import-dialog-panel'));
+    await capture(page, `literature-import-${viewport.id}`);
+    await page.keyboard.press('Escape');
+    await page.getByTestId('literature-import-dialog-panel').waitFor({state: 'detached'});
+    if (sidebarWasOpen) await page.getByTestId('titlebar-toggle-sidebar').click();
 
     // 助手在宽窗是**中列**（左栏 | 助手 | 画布，见 ADR 0023），在窄窗是抽屉；
     // 两种形态都要审。
@@ -248,12 +397,20 @@ try {
     assert.ok(settingsBody.width >= 240, 'settings form retains a usable column');
     assert.ok(settingsBody.scrollWidth <= settingsBody.width + 1, 'settings form has no horizontal clipping');
     await capture(page, `settings-${viewport.id}`);
+    for (const section of ['models', 'default-model', 'rag', 'literature', 'sandbox', 'guardrail',
+      'app', 'tasks', 'authorization', 'hooks', 'memory', 'pilot', 'backup']) {
+      await page.getByTestId(`settings-section-${section}`).click();
+      const panel = page.getByTestId('settings-panel');
+      await assertFormLayout(panel);
+      await capture(page, `settings-${section}-${viewport.id}`);
+    }
     await page.getByTestId('settings-modal-scrim').click({position: {x: 4, y: 4}});
     assert.equal(await page.getByTestId('settings-modal-panel').count(), 1, 'form backdrop does not dismiss settings');
     await page.getByTestId('settings-section-models').click();
     const remoteModelOpener = page.getByTestId('settings-model-pull');
     await remoteModelOpener.click();
     await page.getByTestId('settings-provider-models-pull-panel').waitFor();
+    await assertFormLayout(page.getByTestId('settings-provider-models-pull-panel'));
     await capture(page, `settings-remote-models-${viewport.id}`);
     await page.getByTestId('settings-provider-models-pull-endpoint').fill(smokeProvider.endpoint);
     await page.keyboard.press('Escape');
@@ -291,6 +448,7 @@ try {
 }
 
 writeLayoutAudit(artifactDir, {passed: failure === null, error: failure, nativeMinimum,
+  controlsChecked,
   target: smokeTarget, reducedMotion: 'reduce',
   narrowScope: 'emulated renderer viewport in disposable Electron window; native minimum and display correction remain enforced',
   audits, viewports: VIEWPORTS});

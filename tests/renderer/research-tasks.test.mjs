@@ -405,8 +405,15 @@ test('project budget draft keeps its original revision through live updates and 
   await page.getByTestId('mgmt-project-budget-edit').click();
   await page.getByTestId('mgmt-project-budget-tokens').fill('1.5');
   assert.equal(await page.getByTestId('mgmt-project-budget-save').isDisabled(), true);
+  await expect(page.getByRole('textbox', {name: '项目 Token 总额', exact: true})).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByTestId('mgmt-project-budget-tokens')).toHaveAccessibleDescription('请输入有效的正整数');
   await page.getByTestId('mgmt-project-budget-tokens').fill('300');
+  await expect(page.getByTestId('mgmt-project-budget-tokens')).not.toHaveAttribute('aria-invalid', 'true');
+  await page.getByTestId('mgmt-project-budget-cost').fill('-1');
+  await expect(page.getByTestId('mgmt-project-budget-cost')).toHaveAttribute('aria-invalid', 'true');
+  assert.equal(await page.getByTestId('mgmt-project-budget-save').isDisabled(), true);
   await page.getByTestId('mgmt-project-budget-cost').fill('100000');
+  await expect(page.getByRole('textbox', {name: '费用上限', exact: true})).toHaveAccessibleDescription('单位：微美元；留空表示未设置。');
   await page.evaluate(() => {
     budgetResponse = {ok: true, data: makeProjectBudget('project-a', 2)};
     budgetActionResponse = {ok: false, error: {message: 'research_project_budget_revision_conflict'}};

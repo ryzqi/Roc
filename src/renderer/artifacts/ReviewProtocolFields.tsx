@@ -32,7 +32,7 @@ export function ReviewProtocolFields({body, onChange, disabled}: {
       <input type="checkbox" checked={body.pico !== null} onChange={event => set('pico', event.target.checked ?
         {population: '', intervention: '', comparator: '', outcome: ''} : null)} />使用 PICO
     </label>
-    {body.pico === null ? null : <div className="grid grid-cols-2 gap-2">
+    {body.pico === null ? null : <div className="form-grid">
       {([['population', '研究人群'], ['intervention', '干预'], ['comparator', '对照'], ['outcome', '结局']] as const).map(([key, label]) =>
         <Text key={key} label={label} value={body.pico![key]} onChange={value => set('pico', {...body.pico!, [key]: value})} />)}
     </div>}
@@ -48,7 +48,7 @@ export function ReviewProtocolFields({body, onChange, disabled}: {
         <button type="button" className={`${button} self-start`} disabled={body[key].length >= 50}
           onClick={() => set(key, [...body[key], {id: crypto.randomUUID(), text: ''}])}>添加{label}</button>
       </section>)}
-    <div className="grid grid-cols-2 gap-2">
+    <div className="form-grid">
       {([['from', '发表起始年'], ['to', '发表截止年']] as const).map(([key, label]) => <label key={key} className="flex flex-col gap-1 text-muted">
         {label}<input type="number" className={input} min={1000} max={9999} step={1} value={body.publicationYears[key] ?? ''}
           onChange={event => set('publicationYears', {...body.publicationYears, [key]: event.target.value === '' ? null : Number(event.target.value)})} />
@@ -73,7 +73,7 @@ export function ReviewProtocolFields({body, onChange, disabled}: {
             <button type="button" className={button} disabled={database.queries.length === 1} aria-label={`移除检索式 ${queryIndex + 1}`}
               onClick={() => update({...database, queries: database.queries.filter((_, at) => at !== queryIndex)})}>移除</button>
           </div>)}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="form-grid">
             {([['pageSize', '每页记录数', 30], ['maxPages', '最多页数', 3]] as const).map(([key, label, max]) =>
               <label key={key} className="flex flex-col gap-1 text-muted">{label}
                 <input type="number" required min={1} max={max} step={1} className={input} value={database[key]}
@@ -96,7 +96,7 @@ export function ReviewProtocolFields({body, onChange, disabled}: {
     </section>
     <section className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2" aria-label="人工筛选策略">
       <h3 className="font-medium">人工筛选策略</h3>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="form-grid">
         {([['titleAbstractReviewers', '标题摘要审核人数'], ['fullTextReviewers', '全文审核人数']] as const).map(([key, label]) =>
           <label key={key} className="flex flex-col gap-1 text-muted">{label}
             <select aria-label={label} className={input} value={body.screening[key]} onChange={event => set('screening',
@@ -125,7 +125,7 @@ export function ReviewProtocolFields({body, onChange, disabled}: {
     <section className="flex flex-col gap-3 border-t-[0.5px] border-line pt-2" aria-label="提取字段">
       <h3 className="font-medium">提取字段</h3>
       {body.extractionFields.map((field, index) => <div key={field.id} className="flex flex-col gap-2">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="form-grid">
           <Text label={`字段名称 ${index + 1}`} value={field.label} maxLength={300} onChange={value => set('extractionFields',
             body.extractionFields.map((item, at) => at === index ? {...item, label: value} : item))} />
           <Text label={`字段单位 ${index + 1}`} value={field.unit ?? ''} required={false} maxLength={300} onChange={value => set('extractionFields',

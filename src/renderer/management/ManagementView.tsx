@@ -28,7 +28,7 @@ export function ManagementView({ view }: ViewProps): React.JSX.Element {
   const [tab, setTab] = useState<ManagementTabId>(() => viewForInitialTab(view));
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 p-4" data-testid="management-view" data-view={view}>
+    <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-3" data-testid="management-view" data-view={view}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-ink text-[length:var(--font-h3-size)]">管理</span>
       </div>
