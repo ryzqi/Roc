@@ -164,11 +164,20 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow: hidden;
+    user-select: text;
+  }
+
+  /* Read-only content supports native selection and copy by default. Keep
+     action controls non-selectable so clicks do not start text selections. */
+  button,
+  select,
+  summary,
+  [role='button'],
+  [role='tab'],
+  [role='menuitem'] {
     user-select: none;
   }
 
-  /* Text surfaces opt back in explicitly; chrome stays non-selectable like a
-     native app. */
   input,
   textarea,
   [contenteditable='true'],
@@ -335,6 +344,7 @@
 
   .drag-region {
     -webkit-app-region: drag;
+    user-select: none;
   }
 }
 

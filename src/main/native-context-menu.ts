@@ -33,7 +33,7 @@ export function buildNativeContextMenuTemplate(
     ];
   }
 
-  const selectedText = params.selectionText.trim();
+  const selectedText = params.selectionText;
   if (selectedText.length === 0) {
     return null;
   }
