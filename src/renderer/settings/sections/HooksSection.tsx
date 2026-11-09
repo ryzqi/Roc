@@ -258,7 +258,6 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
           >
             还原为草稿值
           </button>
-          <span className="text-subtle text-[length:var(--font-micro-size)]">改动由顶部「保存设置」写入。</span>
         </div>
         {jsonError === null ? null : (
           <FormNote tone="warn" testId="settings-hooks-json-error">

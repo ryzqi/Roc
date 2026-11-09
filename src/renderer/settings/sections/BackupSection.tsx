@@ -46,6 +46,7 @@ export function BackupSection({
   const [importError, setImportError] = useState<string | null>(null);
   const [imported, setImported] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  const [written, setWritten] = useState(false);
 
   const writeSnapshot = useAsyncAction(
     (input: { relativePath: string; content: string; source: string }) => writeTextFile(store.client, input),
@@ -64,17 +65,20 @@ export function BackupSection({
       title="偏好与备份"
       testId="settings-section-backup-body"
     >
-      <div className="flex flex-col gap-1">
+      <section className="flex flex-col gap-3" aria-label="导出设置">
+        <h4 className="font-medium">导出设置</h4>
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             data-testid="settings-export-generate"
+            disabled={writeSnapshot.pending}
             onClick={() => {
               setExportText(serializeSettingsExport(draft, new Date().toISOString()));
+              setWritten(false);
             }}
             className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
           >
-            <Download size={11} aria-hidden="true" />
+            <Download size={14} aria-hidden="true" />
             生成快照
           </button>
           <button
@@ -85,52 +89,53 @@ export function BackupSection({
               if (exportText === null) {
                 return;
               }
-              void writeSnapshot.run({ relativePath: exportFileName, content: exportText, source: 'settings-export' });
+              setWritten(false);
+              void writeSnapshot.run({ relativePath: exportFileName, content: exportText, source: 'settings-export' })
+                .then((result) => { if (result.ok) setWritten(true); });
             }}
             className={formSecondaryButtonClass}
           >
-            写入工作目录（{exportFileName}）
+            {writeSnapshot.pending ? '写入中…' : '写入工作目录'}
           </button>
-          <span className="text-subtle text-[length:var(--font-micro-size)]">
-            {workspacePath === null ? '未绑定工作目录，只能查看快照文本' : `工作目录：${workspacePath}`}
-          </span>
         </div>
+        {written ? <p role="status" data-testid="settings-export-written" className="text-muted">已写入 {exportFileName}</p> : null}
         {writeSnapshot.error === null ? null : (
           <FormNote tone="warn" testId="settings-export-write-error">
             {writeSnapshot.error}
           </FormNote>
         )}
-        {/* Not hidden while writing: the sentence describes the snapshot's contents, and hiding it
-            exactly when the write happens reads like a state change. */}
-        <p className="text-subtle text-[length:var(--font-micro-size)]" data-testid="settings-export-note">
-          快照只含 settings / providers / defaultModelId / permissions / hooks；密钥正文不在其中，只保留凭据引用与「已配置」状态。
+        <p className="text-muted text-[length:var(--font-meta-size)]" data-testid="settings-export-note">不含密钥</p>
+        {exportText === null ? null : (
+          <label className="flex flex-col gap-1.5">
+            <span className="text-muted text-[length:var(--font-meta-size)]">{exportFileName}</span>
+            <textarea value={exportText} readOnly rows={5} spellCheck={false}
+              data-testid="settings-export-text" className={formTextAreaClass} />
+          </label>
+        )}
+        <p className="text-muted text-[length:var(--font-meta-size)] break-all" data-testid="settings-export-destination">
+          {workspacePath === null ? '未打开工作目录' : workspacePath}
         </p>
-        <textarea
-          value={exportText ?? ''}
-          readOnly
-          rows={8}
-          spellCheck={false}
-          data-testid="settings-export-text"
-          className={formTextAreaClass}
-        />
-      </div>
+      </section>
 
-      <div className="flex flex-col gap-1 border-t-[0.5px] border-line pt-2">
-        <span className="text-subtle text-[length:var(--font-micro-size)]">从 JSON 导入</span>
-        <textarea
-          value={importText}
-          rows={6}
-          spellCheck={false}
-          placeholder='{"schemaVersion":1,…}'
-          onChange={(event) => {
-            setImportText(event.target.value);
-            setImportError(null);
-            setImported(false);
-          }}
-          data-testid="settings-import-text"
-          className={formTextAreaClass}
-        />
-        <div className="flex items-center gap-2">
+      <section className="flex flex-col gap-3 border-t-[0.5px] border-line pt-4" aria-label="导入设置">
+        <h4 className="font-medium">导入设置</h4>
+        <label className="flex flex-col gap-1.5">
+          <span className="sr-only">设置 JSON</span>
+          <textarea
+            value={importText}
+            rows={5}
+            spellCheck={false}
+            placeholder='{"schemaVersion":1,…}'
+            onChange={(event) => {
+              setImportText(event.target.value);
+              setImportError(null);
+              setImported(false);
+            }}
+            data-testid="settings-import-text"
+            className={formTextAreaClass}
+          />
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             data-testid="settings-import-apply"
@@ -156,12 +161,12 @@ export function BackupSection({
             }}
             className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
           >
-            <Upload size={11} aria-hidden="true" />
+            <Upload size={14} aria-hidden="true" />
             导入到草稿
           </button>
           {imported ? (
             <span className="text-[length:var(--font-micro-size)] text-muted" data-testid="settings-import-ok">
-              已导入草稿；顶部「保存设置」才会写入（可先「放弃修改」撤销）。
+              已导入，待保存
             </span>
           ) : null}
         </div>
@@ -170,9 +175,9 @@ export function BackupSection({
             {importError}
           </FormNote>
         )}
-      </div>
+      </section>
 
-      <div className="flex flex-col gap-1 border-t-[0.5px] border-line pt-2">
+      <div className="flex flex-col gap-1 border-t-[0.5px] border-line pt-4">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"

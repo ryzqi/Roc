@@ -1,4 +1,5 @@
 import { ContentPreferences } from './ContentPreferences';
+import { PreferenceRow } from '../PreferenceRow';
 import { useAsyncAction, useAsyncResource } from '../../app/use-async-resource';
 import type { ThemeOverride } from '../../app/ui-state';
 import { themeOverrideLabel } from '../../shell/appearance';
@@ -67,29 +68,22 @@ export function AppSection({
           value={status === null ? '读取中…' : `${status.appName} ${status.version}`}
           testId="settings-app-status"
         />
-        <KeyValueRow
-          label="默认模型"
-          value={status === null ? '读取中…' : status.defaultModelConfigured ? '已配置' : '未配置'}
-          testId="settings-app-default-model"
-        />
       </dl>
 
-      <div className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2">
+      <div className="flex flex-col gap-2 border-t-[0.5px] border-line pt-4">
         <CheckboxField
           label="开机时启动 Roc"
           checked={draft.settings.startup.openAtLogin}
           onChange={(openAtLogin) =>
             store.update((next) => void (next.settings.startup.openAtLogin = openAtLogin))
           }
-          description={
-            host === null
-              ? undefined
-              : `系统实际状态：${host.startup.effectiveOpenAtLogin ? '已启用' : '未启用'}${
-                  host.startup.syncError === null ? '' : `，同步错误：${host.startup.syncError}`
-                }`
-          }
           testId="settings-open-at-login"
         />
+        {host !== null && host.startup.effectiveOpenAtLogin !== store.base?.settings.startup.openAtLogin ? (
+          <FormNote tone="warn" testId="settings-open-at-login-mismatch">
+            系统登录项{host.startup.effectiveOpenAtLogin ? '已启用' : '未启用'}
+          </FormNote>
+        ) : null}
         {host !== null && host.startup.syncError !== null ? (
           <FormNote tone="warn" testId="settings-open-at-login-error">
             写入系统登录项失败：{host.startup.syncError}
@@ -100,9 +94,9 @@ export function AppSection({
       <div className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2">
         <div className="max-w-[320px]">
           <TextField
-            label="全局热键（留空表示不注册）"
+            label="全局快捷键"
             value={draft.settings.globalHotkey ?? ''}
-            placeholder="例如 CommandOrControl+Shift+R"
+            placeholder="未设置，例如 CommandOrControl+Shift+R"
             onChange={(value) =>
               store.update((next) => void (next.settings.globalHotkey = value.trim().length === 0 ? null : value))
             }
@@ -129,27 +123,12 @@ export function AppSection({
         ) : null}
       </div>
 
-      <div className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2">
-        <div className="flex flex-wrap gap-2">
-          {(['system', 'light', 'dark'] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              aria-pressed={themeOverride === option}
-              data-testid={`settings-theme-${option}`}
-              onClick={() => onThemeOverrideChange(option)}
-              className={
-                themeOverride === option
-                  ? 'h-[var(--control-height)] rounded-control bg-accent-soft px-3 text-ink'
-                  : `${formSecondaryButtonClass} h-[var(--control-height)] px-3`
-              }
-            >
-              {themeOverrideLabel(option)}
-            </button>
-          ))}
-        </div>
-      </div>
-      <ContentPreferences />
+      <section className="flex flex-col gap-4 border-t-[0.5px] border-line pt-4" aria-label="外观">
+        <PreferenceRow label="外观" value={themeOverride}
+          options={(['system', 'light', 'dark'] as const).map((value) => ({ value, label: themeOverrideLabel(value) }))}
+          onChange={onThemeOverrideChange} testId="settings-theme" />
+        <ContentPreferences />
+      </section>
     </FormSection>
   );
 }

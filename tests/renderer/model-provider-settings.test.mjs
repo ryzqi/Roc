@@ -28,7 +28,16 @@ before(async () => {
           const [draft, setDraft] = useState(seed);
           window.currentDraft = draft;
           const store = {
-            draft, snapshot: { providerSecretStatus: [] }, client: {}, reload() {},
+            draft, base: seed, snapshot: { providerSecretStatus: [] },
+            client: { api: { settings: {
+              setProviderSecret: input => new Promise(resolve => {
+                window.secretProvider = input.providerId;
+                window.finishSecret = () => resolve({ok: true, data: {providerId: input.providerId, stored: true}});
+              }),
+              testProvider: input => new Promise(resolve => {
+                window.finishTest = () => resolve({ok: true, data: {status: 'ready', latencyMs: 12, checked: [], error: null}});
+              })
+            }}}, reload() {},
             update(mutator) {
               setDraft(previous => {
                 const next = structuredClone(previous);
@@ -126,4 +135,61 @@ test('empty state fits light and dark desktop layouts', async () => {
     }
     await page.screenshot({ path: join(artifacts, `empty-${theme}.png`) });
   }
+});
+
+function seededProviders() {
+  const model = { id: 'm1', displayName: 'Model One', enabled: true,
+    supportsStreaming: true, supportsToolCalls: true, supportsImages: false };
+  return { providers: ['first', 'second'].map(id => ({ id, type: 'custom', name: id,
+    endpoint: 'https://models.example/v1', credentialRef: null, enabled: true,
+    models: [model, {...model, id: 'm2', displayName: 'Model Two'}] })), defaultModelId: 'first:m1' };
+}
+
+test('provider switches clear sensitive inputs and pending writes follow provider identity after removal', async () => {
+  await page.evaluate(seed => window.mount(seed), seededProviders());
+  await page.getByTestId('settings-provider-secret-input').fill('temporary-key');
+  await page.getByTestId('settings-provider-select').selectOption('second');
+  assert.equal(await page.getByTestId('settings-provider-secret-input').inputValue(), '');
+  await page.getByTestId('settings-provider-secret-input').fill('second-temporary-key');
+  await page.getByTestId('settings-provider-secret-save').click();
+  await page.waitForFunction(() => window.secretProvider === 'second');
+  await page.getByTestId('settings-provider-select').selectOption('first');
+  assert.equal(await page.getByTestId('settings-provider-secret-input').inputValue(), '');
+  await page.getByTestId('settings-provider-remove').click();
+  await page.getByTestId('settings-provider-remove-confirm-confirm').click();
+  await page.evaluate(() => window.finishSecret());
+  await page.waitForFunction(() => window.currentDraft.providers[0]?.credentialRef === 'secret:second');
+  assert.equal(await page.evaluate(() => window.currentDraft.providers[0].id), 'second');
+  assert.equal(await page.getByTestId('settings-provider-secret-input').inputValue(), '');
+});
+
+test('advanced options remain keyboard accessible and removing a model confirms and clears the default', async () => {
+  await page.evaluate(seed => window.mount(seed), seededProviders());
+  const summary = page.getByTestId('settings-model-advanced-0').locator('summary');
+  assert.equal(await page.getByTestId('settings-model-temperature-0').isVisible(), false);
+  await summary.focus();
+  await page.keyboard.press('Enter');
+  await page.getByTestId('settings-model-temperature-0').fill('0.7');
+  await page.getByTestId('settings-model-temperature-0').blur();
+  assert.equal(await page.evaluate(() => window.currentDraft.providers[0].models[0].options.temperature), 0.7);
+  await page.getByTestId('settings-model-remove-0').click();
+  await page.keyboard.press('Escape');
+  await page.getByTestId('settings-model-remove-confirm-panel').waitFor({state: 'detached'});
+  assert.equal(await page.evaluate(() => window.currentDraft.providers[0].models.length), 2);
+  await page.getByTestId('settings-model-remove-0').click();
+  await page.getByTestId('settings-model-remove-confirm-confirm').click();
+  assert.equal(await page.evaluate(() => window.currentDraft.providers[0].models.length), 1);
+  assert.equal(await page.evaluate(() => window.currentDraft.defaultModelId), null);
+});
+
+test('connectivity never reports a previous provider or tests an unsaved endpoint', async () => {
+  await page.evaluate(seed => window.mount(seed), seededProviders());
+  assert.equal(await page.getByTestId('settings-test-provider').isEnabled(), true);
+  await page.getByTestId('settings-test-provider').click();
+  await page.waitForFunction(() => typeof window.finishTest === 'function');
+  await page.getByTestId('settings-provider-select').selectOption('second');
+  await page.evaluate(() => window.finishTest());
+  assert.equal(await page.getByTestId('settings-test-result').count(), 0);
+  await page.getByTestId('settings-provider-endpoint').fill('https://edited.example/v1');
+  assert.equal(await page.getByTestId('settings-test-provider').isEnabled(), false);
 });

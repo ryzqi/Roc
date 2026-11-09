@@ -607,7 +607,7 @@ try {
   await page.selectOption('[data-testid="settings-provider-select"]', smokeProviderId);
   const secretStatusText = await text('settings-provider-secret-status');
   assertCheck('2 密钥', 'UI 只显示「已配置」，不显示密钥内容', secretStatusText.includes('已配置') && !secretStatusText.includes(smokeSecret), secretStatusText);
-  const secretRef = await text('settings-provider-credential-ref');
+  const secretRef = JSON.parse(exportText).providers.find((provider) => provider.id === smokeProviderId)?.credentialRef;
   assertCheck('2 密钥', '凭据引用形如 secret:<providerId>', secretRef === `secret:${smokeProviderId}`, secretRef);
 
   const storageLeak = await page.evaluate((secret) => {
@@ -771,9 +771,10 @@ try {
   assertCheck('4 关闭确认', '选择继续编辑后未保存项仍在', (await dirtyCount()) === dirtyBeforeClose, `dirty=${await dirtyCount()}`);
 
   await page.click('[data-testid="settings-discard-draft"]');
+  await page.click('[data-testid="settings-discard-confirm"]');
   await page.waitForFunction(() => {
-    const status = document.querySelector('[data-testid="settings-dirty-bar"]')?.textContent;
-    return status === '没有未保存的改动' || status === '所有修改已保存';
+    return document.querySelector('[data-testid="settings-save"]')?.disabled === true
+      && !document.querySelector('[data-testid="settings-dirty-bar"]')?.textContent?.includes('未保存');
   }, undefined, { timeout: 10_000 });
   await page.fill('[data-testid="settings-char-limit-agents"]', '27000');
   await page.locator('[data-testid="settings-char-limit-agents"]').blur();

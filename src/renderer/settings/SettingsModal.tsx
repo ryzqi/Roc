@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArchiveRestore,
@@ -17,7 +17,7 @@ import {
   type LucideIcon
 } from 'lucide-react';
 import { RadixSettingsConfirmDialog, RadixSettingsDialogShell } from './radix-dialog-pilot';
-import { formPrimaryButtonClass } from '../shared/form-ui';
+import { formInputClass, formPrimaryButtonClass } from '../shared/form-ui';
 import { EmptyState } from '../shell/EmptyState';
 import type { ThemeOverride } from '../app/ui-state';
 import type { RocClient } from '../shared/roc-client';
@@ -68,8 +68,8 @@ const SECTION_ICONS: Readonly<Record<SettingsSectionId, LucideIcon>> = {
  *
  * ## Fixed shape
  *
- * `min(1100px, 92vw)` × `min(86vh, 760px)`, a 220px section list with 40px rows, a dirty bar
- * pinned above the scrolling form, and the thirteen sections in their normative order. The height is passed through `widthClassName` because `ModalShell` only caps its panel; a
+ * `min(1100px, 92vw)` × `min(86vh, 760px)`, a 200px section list with 36px rows, an action footer
+ * pinned below the scrolling form, and the thirteen sections in their normative order. The height is passed through `widthClassName` because `ModalShell` only caps its panel; a
  * settings window that scrolls the whole modal (header and section list included) loses the
  * dirty bar exactly when it matters.
  *
@@ -188,17 +188,43 @@ function dirtyBarText(dirty: boolean, dirtyCount: number, savedOnce: boolean): s
   if (dirty) {
     return `未保存 ${dirtyCount} 项`;
   }
-  return savedOnce ? '所有修改已保存' : '没有未保存的改动';
+  return savedOnce ? '所有修改已保存' : '';
 }
 
 export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
   const store = useSettingsStore(props.client, props.projectId);
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('models');
-  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+  const [discardIntent, setDiscardIntent] = useState<'close' | 'reset' | null>(null);
   const [impactOpen, setImpactOpen] = useState(false);
   const [saveAttempted, setSaveAttempted] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
-  const activeTabRef = useRef<HTMLButtonElement>(null);
+  const activeNavigationRef = useRef<HTMLButtonElement | HTMLSelectElement>(null);
+  const restoreNavigationFocus = useRef(false);
+  const [compactNavigation, setCompactNavigation] = useState(() => window.matchMedia('(max-width: 719px)').matches);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [focusIssue, setFocusIssue] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 719px)');
+    const update = (): void => {
+      restoreNavigationFocus.current = document.activeElement === activeNavigationRef.current
+        || listRef.current?.contains(document.activeElement) === true;
+      setCompactNavigation(media.matches);
+    };
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  useEffect(() => {
+    if (restoreNavigationFocus.current) {
+      activeNavigationRef.current?.focus();
+      restoreNavigationFocus.current = false;
+    }
+  }, [compactNavigation]);
+  useEffect(() => {
+    if (focusIssue) {
+      panelRef.current?.focus();
+      setFocusIssue(false);
+    }
+  }, [activeSection, focusIssue]);
 
   const dirtyCount = store.diff.count;
   const dirty = dirtyCount > 0;
@@ -207,10 +233,13 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
   // Unsaved drafts are never discarded silently: the veto opens a confirmation instead of
   // closing, and Escape cancels it.
   const requestClose = (): boolean => {
+    if (store.save.pending) {
+      return false;
+    }
     if (!dirty) {
       return true;
     }
-    setCloseConfirmOpen(true);
+    setDiscardIntent('close');
     return false;
   };
 
@@ -283,95 +312,87 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
         closeOnBackdrop={false}
         widthClassName="w-[min(1100px,92vw)] h-[min(86vh,760px)]"
         testId="settings-modal"
-        initialFocusRef={activeTabRef}
+        initialFocusRef={activeNavigationRef}
         returnFocusSelector='[data-testid="titlebar-settings"]'
         // The left rail brings its own columns; see `bodyPadding` in `ModalShell`.
         bodyPadding="none"
       >
         <div className="flex h-full flex-col min-[720px]:flex-row">
-          <div
-            ref={listRef}
-            role="tablist"
-            aria-orientation="vertical"
-            aria-label="设置分区"
-            onKeyDown={onListKeyDown}
-            className="flex max-h-[128px] w-full shrink-0 flex-col gap-1 overflow-y-auto border-b-[0.5px] border-line bg-[var(--material-sidebar)] p-3 min-[720px]:max-h-none min-[720px]:w-[200px] min-[720px]:border-r-[0.5px] min-[720px]:border-b-0"
-            data-testid="settings-sections"
-          >
-            {SETTINGS_SECTIONS.map((section) => {
-              const selected = section.id === activeSection;
-              const sectionDirty = store.dirtySections.has(section.id);
-              const Icon = SECTION_ICONS[section.id];
-              return (
-                <button
-                  key={section.id}
-                  type="button"
-                  ref={selected ? activeTabRef : undefined}
-                  role="tab"
-                  id={`settings-tab-${section.id}`}
-                  data-section={section.id}
-                  data-dirty={sectionDirty ? 'true' : 'false'}
-                  aria-selected={selected}
-                  aria-controls={`settings-panel-${section.id}`}
-                  tabIndex={selected ? 0 : -1}
-                  onClick={() => selectSection(section.id)}
-                  title={sectionDirty ? `${section.label}：有未保存的修改` : section.label}
-                  data-testid={`settings-section-${section.id}`}
-                  className={
-                    selected
-                      ? 'flex h-9 shrink-0 items-center gap-2.5 rounded-control bg-[var(--overlay-active)] px-2.5 text-left font-medium text-ink'
-                      : 'flex h-9 shrink-0 items-center gap-2.5 rounded-control px-2.5 text-left text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]'
-                  }
-                >
-                  <Icon
-                    size={13}
-                    aria-hidden="true"
-                    className={selected ? 'shrink-0 text-ink' : 'shrink-0 text-subtle'}
-                  />
-                  <span className="text-[length:var(--font-meta-size)]">{section.label}</span>
-                  {sectionDirty ? (
-                    <>
-                      <span
-                        aria-hidden="true"
-                        className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--st-warn)] ring-1 ring-[var(--st-warn-line)]"
-                        data-testid={`settings-dirty-dot-${section.id}`}
-                      />
-                      <span className="sr-only">（有未保存的修改）</span>
-                    </>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
+          {compactNavigation ? (
+            <div className="shrink-0 border-b-[0.5px] border-line bg-[var(--material-sidebar)] px-4 py-2">
+              <select
+                ref={(element) => { activeNavigationRef.current = element; }}
+                aria-label="设置分区"
+                value={activeSection}
+                onChange={(event) => setActiveSection(event.target.value as SettingsSectionId)}
+                className={`${formInputClass} w-full`}
+                data-testid="settings-section-select"
+              >
+                {SETTINGS_SECTIONS.map((section) => (
+                  <option key={section.id} value={section.id}>
+                    {section.label}{store.dirtySections.has(section.id) ? '（未保存）' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div
+              ref={listRef}
+              role="tablist"
+              aria-orientation="vertical"
+              aria-label="设置分区"
+              onKeyDown={onListKeyDown}
+              className="flex w-[200px] shrink-0 flex-col gap-1 overflow-y-auto border-r-[0.5px] border-line bg-[var(--material-sidebar)] p-3"
+              data-testid="settings-sections"
+            >
+              {SETTINGS_SECTIONS.map((section) => {
+                const selected = section.id === activeSection;
+                const sectionDirty = store.dirtySections.has(section.id);
+                const Icon = SECTION_ICONS[section.id];
+                return (
+                  <button
+                    key={section.id}
+                    type="button"
+                    ref={selected ? (element) => { activeNavigationRef.current = element; } : undefined}
+                    role="tab"
+                    id={`settings-tab-${section.id}`}
+                    data-section={section.id}
+                    data-dirty={sectionDirty ? 'true' : 'false'}
+                    aria-selected={selected}
+                    aria-controls={`settings-panel-${section.id}`}
+                    tabIndex={selected ? 0 : -1}
+                    onClick={() => selectSection(section.id)}
+                    title={sectionDirty ? `${section.label}：有未保存的修改` : section.label}
+                    data-testid={`settings-section-${section.id}`}
+                    className={
+                      selected
+                        ? 'flex h-9 shrink-0 items-center gap-2.5 rounded-control bg-[var(--overlay-active)] px-2.5 text-left font-medium text-ink'
+                        : 'flex h-9 shrink-0 items-center gap-2.5 rounded-control px-2.5 text-left text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]'
+                    }
+                  >
+                    <Icon
+                      size={13}
+                      aria-hidden="true"
+                      className={selected ? 'shrink-0 text-ink' : 'shrink-0 text-subtle'}
+                    />
+                    <span className="text-[length:var(--font-meta-size)]">{section.label}</span>
+                    {sectionDirty ? (
+                      <>
+                        <span
+                          aria-hidden="true"
+                          className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--st-warn)] ring-1 ring-[var(--st-warn-line)]"
+                          data-testid={`settings-dirty-dot-${section.id}`}
+                        />
+                        <span className="sr-only">（有未保存的修改）</span>
+                      </>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col px-4 py-3 min-[720px]:px-6">
-            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b-[0.5px] border-line pb-3">
-              <span className="min-w-0 flex-1 basis-full text-muted text-[length:var(--font-meta-size)] min-[720px]:basis-0" data-testid="settings-dirty-bar">
-                {dirtyBarText(dirty, dirtyCount, store.savedAt !== null)}
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  store.discard();
-                  setSaveAttempted(false);
-                }}
-                disabled={!dirty}
-                data-testid="settings-discard-draft"
-                className="h-[var(--control-height-compact)] rounded-control px-2 text-muted hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
-              >
-                放弃修改
-              </button>
-              <button
-                type="button"
-                onClick={requestSave}
-                disabled={!dirty || store.save.pending}
-                data-testid="settings-save"
-                className={formPrimaryButtonClass}
-              >
-                {store.save.pending ? '保存中…' : '保存设置'}
-              </button>
-            </div>
-
             {store.save.error === null ? null : (
               <p
                 role="alert"
@@ -401,7 +422,10 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
                       ) : (
                         <button
                           type="button"
-                          onClick={() => setActiveSection(section)}
+                          onClick={() => {
+                            setActiveSection(section);
+                            setFocusIssue(true);
+                          }}
                           className="mr-1 underline decoration-dotted"
                           data-testid={`settings-issue-jump-${section}`}
                         >
@@ -416,33 +440,61 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
             ) : null}
 
             <div
-              role="tabpanel"
+              key={activeSection}
+              ref={panelRef}
+              role={compactNavigation ? 'region' : 'tabpanel'}
               id={`settings-panel-${activeSection}`}
-              aria-labelledby={`settings-tab-${activeSection}`}
+              aria-labelledby={compactNavigation ? undefined : `settings-tab-${activeSection}`}
+              aria-label={compactNavigation ? SETTINGS_SECTIONS.find((section) => section.id === activeSection)?.label : undefined}
               tabIndex={-1}
-              className="ui-scroll-region -mx-1 flex-1 px-1 pt-5 pb-3"
+              className="ui-scroll-region -mx-1 flex-1 px-1 pt-2 pb-5 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
               data-testid="settings-panel"
             >
               {renderPanel(activeSection, store, props)}
+            </div>
+
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-t-[0.5px] border-line pt-3">
+              <span className="min-w-0 flex-1 text-muted text-[length:var(--font-meta-size)] tabular-nums" role="status" data-testid="settings-dirty-bar">
+                {dirtyBarText(dirty, dirtyCount, store.savedAt !== null)}
+              </span>
+              <button
+                type="button"
+                onClick={() => setDiscardIntent('reset')}
+                disabled={!dirty || store.save.pending}
+                data-testid="settings-discard-draft"
+                className="h-[var(--control-height-compact)] rounded-control px-2 text-muted hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
+              >
+                放弃修改
+              </button>
+              <button
+                type="button"
+                onClick={requestSave}
+                disabled={!dirty || store.save.pending}
+                data-testid="settings-save"
+                className={formPrimaryButtonClass}
+              >
+                {store.save.pending ? '保存中…' : '保存设置'}
+              </button>
             </div>
           </div>
         </div>
 
         <RadixSettingsConfirmDialog
-          open={closeConfirmOpen}
+          open={discardIntent !== null}
           title="放弃未保存的设置？"
           message={`有 ${dirtyCount} 项设置尚未保存。`}
-          detail="放弃后改动不会保存。"
           confirmLabel="放弃修改"
           cancelLabel="继续编辑"
           tone="destructive"
           testId="settings-discard"
-          onCancel={() => setCloseConfirmOpen(false)}
+          onCancel={() => setDiscardIntent(null)}
           onConfirm={() => {
-            setCloseConfirmOpen(false);
+            setDiscardIntent(null);
             store.discard();
             setSaveAttempted(false);
-            props.onClose();
+            if (discardIntent === 'close') {
+              props.onClose();
+            }
           }}
         />
 

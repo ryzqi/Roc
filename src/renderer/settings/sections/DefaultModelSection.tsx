@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import { parseProviderModelKey } from '../../../shared/provider-model-key';
 import { modelOptions } from '../settings-rules';
 import type { SettingsStore } from '../settings-scope';
 import { FormNote, FormSection, formInputClass } from '../../shared/form-ui';
@@ -19,7 +18,6 @@ export function DefaultModelSection({ store }: { store: SettingsStore }): React.
   const options = useMemo(() => modelOptions(draft?.providers ?? []), [draft]);
   const enabledOptions = useMemo(() => options.filter((option) => option.enabled), [options]);
   const current = draft?.defaultModelId ?? null;
-  const parsed = current === null ? null : parseProviderModelKey(current);
   const resolvable = useMemo(
     () => (current === null ? true : enabledOptions.some((option) => option.key === current)),
     [current, enabledOptions]
@@ -54,10 +52,6 @@ export function DefaultModelSection({ store }: { store: SettingsStore }): React.
             </option>
           ))}
         </select>
-        <span className="text-subtle text-[length:var(--font-micro-size)]">
-          格式为 <span className="font-mono">provider:model</span>
-          {parsed === null ? null : `（当前：${parsed.providerId} / ${parsed.modelId}）`}
-        </span>
       </label>
 
       {resolvable ? null : (
@@ -65,8 +59,6 @@ export function DefaultModelSection({ store }: { store: SettingsStore }): React.
           默认模型 {current} 未启用；保存后会变成「未配置」。请改选一个，或到「模型与服务」启用它。
         </FormNote>
       )}
-
-
     </FormSection>
   );
 }

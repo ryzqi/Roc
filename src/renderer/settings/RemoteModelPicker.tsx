@@ -178,22 +178,8 @@ export function RemoteModelPicker({
           </button>
         </div>
 
-        <div className="form-grid">
-          <TextField
-            label="API Key（可留空）"
-            type="password"
-            value={apiKey}
-            onChange={setApiKey}
-            placeholder="留空则使用已保存的密钥"
-            testId={`${testId}-key`}
-          />
-          <div className="flex flex-col gap-0.5">
-            <span className="text-subtle text-[length:var(--font-micro-size)]">说明</span>
-            <p className="flex h-[var(--control-height)] items-center text-subtle text-[length:var(--font-micro-size)] leading-tight">
-              本机推理服务通常不需要密钥。
-            </p>
-          </div>
-        </div>
+        <TextField label="API Key" type="password" value={apiKey} onChange={setApiKey}
+          placeholder={providerId === null ? '可留空' : '留空使用已保存的密钥'} testId={`${testId}-key`} />
 
         {fetchModels.error === null ? null : (
           <FormNote tone="warn" testId={`${testId}-error`}>
@@ -201,11 +187,7 @@ export function RemoteModelPicker({
           </FormNote>
         )}
 
-        {entries === null ? (
-          <p className="text-subtle text-[length:var(--font-micro-size)]" data-testid={`${testId}-hint`}>
-            填好端点后点「拉取」，这里会列出该端点声明的模型。
-          </p>
-        ) : (
+        {entries === null ? null : (
           <>
             <div className="form-action-row">
               <label className="flex h-[var(--control-height)] min-w-0 flex-1 items-center gap-1.5 rounded-control border-[0.5px] border-line bg-bg px-2 focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-accent">
@@ -264,9 +246,7 @@ export function RemoteModelPicker({
                         <span className="min-w-0 flex-1 truncate font-mono text-[length:var(--font-meta-size)]">{entry.id}</span>
                         {added ? (
                           <span className="shrink-0 text-subtle text-[length:var(--font-micro-size)]">已添加</span>
-                        ) : entry.ownedBy === null ? null : (
-                          <span className="shrink-0 truncate text-subtle text-[length:var(--font-micro-size)]">{entry.ownedBy}</span>
-                        )}
+                        ) : null}
                       </label>
                     </div>
                   );

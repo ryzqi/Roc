@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import { KeyRound, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ChevronRight, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import type { ProviderConfig, ProviderTestResult, RemoteModelEntry } from '../../../shared/types';
-import { parseProviderModelKey } from '../../../shared/provider-model-key';
+import { buildProviderModelKey, parseProviderModelKey } from '../../../shared/provider-model-key';
 import { useAsyncAction } from '../../app/use-async-resource';
-import { ConfirmDialog } from '../../shell/ConfirmDialog';
+import { RadixSettingsConfirmDialog } from '../radix-dialog-pilot';
 import {
   CREATABLE_PROVIDER_TYPES,
   PROVIDER_TYPE_LABELS,
@@ -18,7 +18,6 @@ import { RemoteModelPicker } from '../RemoteModelPicker';
 import { clearProviderSecret, setProviderSecret, testProvider } from '../settings-store';
 import {
   CheckboxField,
-  Field,
   NumberField,
   SelectField,
   FormNote,
@@ -29,535 +28,272 @@ import {
   formSecondaryButtonClass
 } from '../../shared/form-ui';
 
-/**
- * 模型与服务 (T8.3).
- *
- * Two facts from the main process shape this section, and each one is why a naive
- * "just edit the JSON" form would be wrong:
- *
- *  1. **A stored secret is unusable until the provider references it**: the model factory
- *     reads `provider.credentialRef`, requires `secret:<providerId>` and matches it to
- *     the provider id. So 「保存密钥」 does two things — `settings.setProviderSecret`
- *     (safeStorage) *and* setting `credentialRef` on that provider in the draft, which is
- *     then written by the next 保存设置. The key itself never enters the draft: it lives in
- *     component state only and is cleared on success.
- *  2. **`settings.testProvider` requires a concrete model** (`providerId` + `modelId`,
- *     both `min(1)`), so the button is bound to a model selection rather than to the
- *     provider alone.
- */
-
 export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.Element {
-  const draft = store.draft;
-  const providers = useMemo(() => draft?.providers ?? [], [draft]);
+  const providers = store.draft?.providers ?? [];
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const provider = providers.find((entry) => entry.id === selectedId) ?? providers[0] ?? null;
 
-  // The selected provider is derived with a fallback so a removed provider cannot leave the
-  // form pointing at nothing; the effect keeps the select's value in sync with it.
-  const provider = providers.find((entry: ProviderConfig) => entry.id === selectedId) ?? providers[0] ?? null;
-  useEffect(() => {
-    if (provider !== null && selectedId !== provider.id) {
-      setSelectedId(provider.id);
-    }
-  }, [provider, selectedId]);
-
-  const providerIndex = provider === null ? -1 : providers.findIndex((entry: ProviderConfig) => entry.id === provider.id);
-  const patchProvider = (mutator: (entry: ProviderConfig) => void): void => {
-    store.update((next) => {
-      const target = next.providers[providerIndex];
-      if (target !== undefined) {
-        mutator(target);
-      }
-    });
-  };
-
-  const [secretInput, setSecretInput] = useState('');
-  const [clearSecretOpen, setClearSecretOpen] = useState(false);
-  const [removeProviderOpen, setRemoveProviderOpen] = useState(false);
-  const [testModelId, setTestModelId] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<ProviderTestResult | null>(null);
-  const [pullModelsOpen, setPullModelsOpen] = useState(false);
-
-  // The same helper the unit test pins: only *enabled* models may be tested, because
-  // `settings.testProvider` refuses a model that is missing or disabled.
-  const testModelOptions = useMemo(
-    () => testableModelOptions(providers, provider?.id ?? null),
-    [providers, provider]
-  );
-  const firstTestModelId = testModelOptions[0]?.key ?? null;
-  useEffect(() => {
-    if (testModelId === null || !testModelOptions.some((model) => model.key === testModelId)) {
-      setTestModelId(firstTestModelId);
-    }
-  }, [testModelOptions, testModelId, firstTestModelId]);
-
-  const stored = useMemo(() => {
-    if (provider === null) {
-      return false;
-    }
-    return store.snapshot?.providerSecretStatus.find((entry) => entry.providerId === provider.id)?.stored ?? false;
-  }, [provider, store.snapshot]);
-
-  const setSecret = useAsyncAction(
-    (input: { providerId: string; plaintext: string }) => setProviderSecret(store.client, input),
-    { label: '保存 Provider 密钥' }
-  );
-  const clearSecret = useAsyncAction((providerId: string) => clearProviderSecret(store.client, providerId), {
-    label: '清除 Provider 密钥'
-  });
-  const test = useAsyncAction(
-    (input: { providerId: string; modelId: string }) => testProvider(store.client, input),
-    { label: '测试 Provider 连通' }
-  );
-
-  if (draft === null) {
+  if (store.draft === null) {
     return <FormNote testId="settings-models-unavailable">设置尚未读取完成。</FormNote>;
   }
 
-  const addProviderButton = (
-    <button
-      type="button"
-      data-testid="settings-provider-add"
-      onClick={() => {
-        const created = createProviderDraft(
-          CREATABLE_PROVIDER_TYPES[0] ?? 'custom',
-          providers.map((entry: ProviderConfig) => entry.id)
-        );
-        store.update((next) => {
-          next.providers.push(created);
-        });
-        setSelectedId(created.id);
-      }}
-      className={`${formButtonClass} inline-flex items-center gap-1`}
-    >
-      <Plus size={11} aria-hidden="true" />
-      新增供应商
-    </button>
-  );
-
-  if (provider === null) {
-    return (
-      <FormSection title="模型与服务" testId="settings-section-models-body">
-        <FormNote testId="settings-models-empty">尚未配置模型供应商。请新增供应商，填写接入地址并添加模型。</FormNote>
-        <div className="form-action-row">{addProviderButton}</div>
-      </FormSection>
-    );
-  }
-
-  const reload = store.reload;
-  const patchModel = (modelIndex: number, mutator: (model: ProviderConfig['models'][number]) => void): void => {
-    patchProvider((entry) => {
-      const target = entry.models[modelIndex];
-      if (target !== undefined) {
-        mutator(target);
-      }
-    });
-  };
-
   return (
-    <FormSection
-      title="模型与服务"
-      testId="settings-section-models-body"
-    >
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="flex w-[260px] max-w-full flex-col gap-0.5">
-          <span className="text-subtle text-[length:var(--font-micro-size)]">供应商</span>
-          <select
-            value={provider.id}
-            onChange={(event) => {
-              setSelectedId(event.target.value);
-              setTestResult(null);
-            }}
-            data-testid="settings-provider-select"
-            className={formInputClass}
-          >
-            {providers.map((entry: ProviderConfig) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.name || entry.id}
-                {entry.enabled ? '' : '（已停用）'}
-              </option>
-            ))}
-          </select>
-        </label>
-        {addProviderButton}
-        <button
-          type="button"
-          data-testid="settings-provider-remove"
-          onClick={() => setRemoveProviderOpen(true)}
-          className={`${formButtonClass} inline-flex items-center gap-1`}
-        >
-          <Trash2 size={11} aria-hidden="true" />
-          移除供应商
+    <FormSection title="模型与服务" testId="settings-section-models-body">
+      {provider === null ? <p className="text-muted" data-testid="settings-models-empty">尚未添加供应商</p> : null}
+      <div className="form-action-row">
+        {provider === null ? null : (
+          <label className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-muted text-[length:var(--font-meta-size)]">供应商</span>
+            <select value={provider.id} onChange={(event) => setSelectedId(event.target.value)}
+              data-testid="settings-provider-select" className={formInputClass}>
+              {providers.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  {entry.name || entry.id}{entry.enabled ? '' : '（已停用）'}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <button type="button" data-testid="settings-provider-add" className={formButtonClass}
+          onClick={() => {
+            const created = createProviderDraft(CREATABLE_PROVIDER_TYPES[0] ?? 'custom', providers.map((entry) => entry.id));
+            store.update((next) => { next.providers.push(created); });
+            setSelectedId(created.id);
+          }}>
+          <Plus size={14} aria-hidden="true" />新增供应商
         </button>
       </div>
+      {/* Provider identity owns sensitive inputs and async feedback. Switching providers
+          unmounts this editor; async writes still target an ID, never a mutable array index. */}
+      {provider === null ? null : <ProviderEditor key={provider.id} provider={provider} store={store} />}
+    </FormSection>
+  );
+}
 
+function ProviderEditor({ provider, store }: { provider: ProviderConfig; store: SettingsStore }): React.JSX.Element {
+  const [secretInput, setSecretInput] = useState('');
+  const [clearSecretOpen, setClearSecretOpen] = useState(false);
+  const [removeProviderOpen, setRemoveProviderOpen] = useState(false);
+  const [removeModelIndex, setRemoveModelIndex] = useState<number | null>(null);
+  const [selectedTestModel, setSelectedTestModel] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ modelId: string; config: string; result: ProviderTestResult } | null>(null);
+  const [pullModelsOpen, setPullModelsOpen] = useState(false);
+  const patchProvider = (mutator: (entry: ProviderConfig) => void): void => {
+    store.update((next) => {
+      const target = next.providers.find((entry) => entry.id === provider.id);
+      if (target !== undefined) mutator(target);
+    });
+  };
+  const patchModel = (index: number, mutator: (model: ProviderConfig['models'][number]) => void): void => {
+    patchProvider((entry) => {
+      const model = entry.models[index];
+      if (model !== undefined) mutator(model);
+    });
+  };
+  const testModelOptions = useMemo(() => testableModelOptions([provider], provider.id), [provider]);
+  const testModelId = testModelOptions.find((model) => model.key === selectedTestModel)?.key ?? testModelOptions[0]?.key ?? null;
+  const stored = store.snapshot?.providerSecretStatus.find((entry) => entry.providerId === provider.id)?.stored ?? false;
+  const config = JSON.stringify(provider);
+  const savedProvider = store.base?.providers.find((entry) => entry.id === provider.id);
+  // Connectivity uses persisted backend settings, so never present a test of stale settings
+  // as a verdict on the currently edited endpoint/model.
+  const saved = config === JSON.stringify(savedProvider);
+  const visibleTestResult = testResult?.modelId === testModelId && testResult.config === config ? testResult.result : null;
+  const setSecret = useAsyncAction(
+    (input: { providerId: string; plaintext: string }) => setProviderSecret(store.client, input), { label: '保存供应商密钥' }
+  );
+  const clearSecret = useAsyncAction((providerId: string) => clearProviderSecret(store.client, providerId), { label: '清除供应商密钥' });
+  const test = useAsyncAction(
+    (input: { providerId: string; modelId: string }) => testProvider(store.client, input), { label: '测试供应商连通' }
+  );
+
+  return (
+    <>
       <div className="form-grid">
-        <TextField
-          label="名称"
-          value={provider.name}
-          onChange={(name) => patchProvider((entry) => void (entry.name = name))}
-          testId="settings-provider-name"
-        />
-        <SelectField
-          label="类型"
-          value={provider.type}
-          options={CREATABLE_PROVIDER_TYPES.map((type) => ({
-            value: type,
-            label: PROVIDER_TYPE_LABELS[type]
-          }))}
-          onChange={(type) => patchProvider((entry) => void (entry.type = type))}
-          testId="settings-provider-type"
-        />
-        <TextField
-          label="接入地址"
-          value={provider.endpoint}
-          onChange={(endpoint) => patchProvider((entry) => void (entry.endpoint = endpoint))}
-          testId="settings-provider-endpoint"
-        />
-        <Field
-          label="凭据引用"
-          testId="settings-provider-credential"
-        >
-          {/* 与输入框同高同框：这里是只读值，但不是「没有控件」—— 高度不一致会让这一行
-              的两个单元格看起来不在同一条基线上。 */}
-          <span
-            className="flex h-[var(--control-height)] items-center truncate rounded-control border-[0.5px] border-line bg-bg-soft px-2 font-mono text-muted text-[length:var(--font-meta-size)]"
-            title={provider.credentialRef ?? '未引用'}
-            data-testid="settings-provider-credential-ref"
-          >
-            {provider.credentialRef ?? '未引用'}
-          </span>
-        </Field>
+        <TextField label="名称" value={provider.name} onChange={(name) => patchProvider((entry) => void (entry.name = name))}
+          testId="settings-provider-name" />
+        <SelectField label="类型" value={provider.type}
+          options={CREATABLE_PROVIDER_TYPES.map((type) => ({ value: type, label: PROVIDER_TYPE_LABELS[type] }))}
+          onChange={(type) => patchProvider((entry) => void (entry.type = type))} testId="settings-provider-type" />
       </div>
+      <TextField label="接入地址" value={provider.endpoint}
+        onChange={(endpoint) => patchProvider((entry) => void (entry.endpoint = endpoint))} testId="settings-provider-endpoint" />
+      <CheckboxField label="启用供应商" checked={provider.enabled}
+        onChange={(enabled) => patchProvider((entry) => void (entry.enabled = enabled))} testId="settings-provider-enabled" />
 
-      <CheckboxField
-        label="启用该供应商"
-        checked={provider.enabled}
-        onChange={(enabled) => patchProvider((entry) => void (entry.enabled = enabled))}
-        testId="settings-provider-enabled"
-      />
-
-      <section className="flex flex-col gap-2 rounded-card border-[0.5px] border-line bg-bg-soft px-3 py-2">
-        <header className="flex items-center gap-2">
-          <KeyRound size={12} aria-hidden="true" className="text-muted" />
-          <h4 className="text-ink text-[length:var(--font-meta-size)]">API Key</h4>
-          <span
-            className="rounded-control border-[0.5px] border-line px-1.5 text-[length:var(--font-micro-size)]"
-            data-testid="settings-provider-secret-status"
-            data-stored={String(stored)}
-          >
-            {stored ? '已配置（系统钥匙串）' : '未配置'}
-          </span>
-        </header>
+      <div className="flex flex-col gap-2 border-t-[0.5px] border-line pt-4">
         <div className="form-action-row">
-          <TextField
-            label="新密钥"
-            type="password"
-            value={secretInput}
-            onChange={setSecretInput}
-            testId="settings-provider-secret-input"
-          />
-          <button
-            type="button"
-            data-testid="settings-provider-secret-save"
-            disabled={setSecret.pending || secretInput.trim().length === 0}
+          <TextField label="API Key" type="password" value={secretInput} onChange={setSecretInput}
+            placeholder={stored ? '输入新密钥以替换' : '输入密钥'} testId="settings-provider-secret-input" />
+          <button type="button" data-testid="settings-provider-secret-save" className={formButtonClass}
+            disabled={setSecret.pending || clearSecret.pending || secretInput.trim().length === 0}
             onClick={() => {
               void setSecret.run({ providerId: provider.id, plaintext: secretInput }).then((result) => {
-                if (!result.ok) {
-                  return;
-                }
+                if (!result.ok) return;
                 setSecretInput('');
-                // The key is stored, but the provider only becomes usable once it references
-                // the stored secret — mark that in the draft; the next 保存设置 writes it.
+                // safeStorage owns plaintext; only its reference enters the shared draft.
                 patchProvider((entry) => void (entry.credentialRef = credentialRefFor(provider.id)));
-                reload();
+                store.reload();
               });
-            }}
-            className={formButtonClass}
-          >
-            保存密钥
+            }}>
+            {setSecret.pending ? '保存中…' : '保存密钥'}
           </button>
-          <button
-            type="button"
-            data-testid="settings-provider-secret-clear"
-            disabled={clearSecret.pending || !stored}
-            onClick={() => setClearSecretOpen(true)}
-            className={formButtonClass}
-          >
+          <button type="button" data-testid="settings-provider-secret-clear" className={formButtonClass}
+            disabled={clearSecret.pending || setSecret.pending || !stored} onClick={() => setClearSecretOpen(true)}>
             清除密钥
           </button>
         </div>
-        {setSecret.error === null ? null : (
-          <FormNote tone="warn" testId="settings-provider-secret-error">
-            {setSecret.error}
-          </FormNote>
-        )}
-        {clearSecret.error === null ? null : (
-          <FormNote tone="warn" testId="settings-provider-secret-clear-error">
-            {clearSecret.error}
-          </FormNote>
-        )}
-      </section>
+        <span className="text-muted text-[length:var(--font-meta-size)]" role="status"
+          data-testid="settings-provider-secret-status" data-stored={String(stored)}>{stored ? '已配置' : '未配置'}</span>
+        {setSecret.error === null ? null : <FormNote tone="warn" testId="settings-provider-secret-error">{setSecret.error}</FormNote>}
+        {clearSecret.error === null ? null : <FormNote tone="warn" testId="settings-provider-secret-clear-error">{clearSecret.error}</FormNote>}
+      </div>
 
-      <section className="flex flex-col gap-2">
+      <section className="flex flex-col gap-3 border-t-[0.5px] border-line pt-4" aria-label="模型">
         <header className="flex flex-wrap items-center gap-2">
-          <h4 className="text-ink text-[length:var(--font-meta-size)]">模型（{provider.models.length}）</h4>
-          <button
-            type="button"
-            data-testid="settings-model-pull"
-            onClick={() => setPullModelsOpen(true)}
-            className={`${formButtonClass} inline-flex items-center gap-1`}
-          >
-            <RefreshCw size={11} aria-hidden="true" />
-            拉取模型
+          <h4 className="mr-auto font-medium text-ink">模型</h4>
+          <button type="button" data-testid="settings-model-pull" onClick={() => setPullModelsOpen(true)} className={formSecondaryButtonClass}>
+            <RefreshCw size={14} aria-hidden="true" />拉取模型
           </button>
-          <button
-            type="button"
-            data-testid="settings-model-add"
-            onClick={() => patchProvider((entry) => void entry.models.push(createModelDraft()))}
-            className={`${formButtonClass} inline-flex items-center gap-1`}
-          >
-            <Plus size={11} aria-hidden="true" />
-            手动添加模型
+          <button type="button" data-testid="settings-model-add" className={formSecondaryButtonClass}
+            onClick={() => patchProvider((entry) => void entry.models.push(createModelDraft()))}>
+            <Plus size={14} aria-hidden="true" />手动添加
           </button>
         </header>
-
-        <ul className="flex flex-col gap-2">
+        {provider.models.length === 0 ? <p className="text-muted" data-testid="settings-models-list-empty">尚未添加模型</p> : null}
+        <ul className="flex flex-col divide-y-[0.5px] divide-line">
           {provider.models.map((model, modelIndex) => (
-            <li
-              key={`${provider.id}:${modelIndex}`}
-              className="flex flex-col gap-2 rounded-card border-[0.5px] border-line bg-surface px-3 py-2"
-              data-testid={`settings-model-${modelIndex}`}
-            >
+            <li key={`${provider.id}:${modelIndex}`} className="flex flex-col gap-3 py-4 first:pt-0" data-testid={`settings-model-${modelIndex}`}>
               <div className="form-grid">
-                <TextField
-                  label="模型标识"
-                  value={model.id}
-                  onChange={(id) => patchModel(modelIndex, (target) => void (target.id = id))}
-                  testId={`settings-model-id-${modelIndex}`}
-                />
-                <TextField
-                  label="显示名"
-                  value={model.displayName}
-                  onChange={(displayName) => patchModel(modelIndex, (target) => void (target.displayName = displayName))}
-                  testId={`settings-model-name-${modelIndex}`}
-                />
+                <TextField label="模型标识" value={model.id}
+                  onChange={(id) => patchModel(modelIndex, (target) => void (target.id = id))} testId={`settings-model-id-${modelIndex}`} />
+                <TextField label="显示名称" value={model.displayName}
+                  onChange={(displayName) => patchModel(modelIndex, (target) => void (target.displayName = displayName))} testId={`settings-model-name-${modelIndex}`} />
               </div>
-              <div className="form-grid">
-                <NumberField
-                  label="温度"
-                  value={model.options?.temperature}
-                  allowEmpty
-                  step={0.1}
-                  min={0}
-                  onChange={(temperature) =>
-                    patchModel(modelIndex, (target) => {
-                      target.options = { ...(target.options ?? {}) };
-                      if (typeof temperature !== 'number') {
-                        delete target.options.temperature;
-                      } else {
-                        target.options.temperature = temperature;
-                      }
-                    })
-                  }
-                  testId={`settings-model-temperature-${modelIndex}`}
-                />
-                <NumberField
-                  label="最大 token"
-                  value={model.options?.maxTokens}
-                  allowEmpty
-                  min={1}
-                  onChange={(maxTokens) =>
-                    patchModel(modelIndex, (target) => {
-                      target.options = { ...(target.options ?? {}) };
-                      if (typeof maxTokens !== 'number') {
-                        delete target.options.maxTokens;
-                      } else {
-                        target.options.maxTokens = maxTokens;
-                      }
-                    })
-                  }
-                  testId={`settings-model-maxtokens-${modelIndex}`}
-                />
-              </div>
-              <div className="flex flex-wrap gap-4">
-                <CheckboxField
-                  label="启用"
-                  checked={model.enabled}
-                  onChange={(enabled) => patchModel(modelIndex, (target) => void (target.enabled = enabled))}
-                  testId={`settings-model-enabled-${modelIndex}`}
-                />
-                <CheckboxField
-                  label="流式"
-                  checked={model.supportsStreaming}
-                  onChange={(supportsStreaming) =>
-                    patchModel(modelIndex, (target) => void (target.supportsStreaming = supportsStreaming))
-                  }
-                  testId={`settings-model-streaming-${modelIndex}`}
-                />
-                <CheckboxField
-                  label="工具调用"
-                  checked={model.supportsToolCalls}
-                  onChange={(supportsToolCalls) =>
-                    patchModel(modelIndex, (target) => void (target.supportsToolCalls = supportsToolCalls))
-                  }
-                  testId={`settings-model-tools-${modelIndex}`}
-                />
-                <CheckboxField
-                  label="图片输入"
-                  checked={model.supportsImages}
-                  onChange={(supportsImages) =>
-                    patchModel(modelIndex, (target) => void (target.supportsImages = supportsImages))
-                  }
-                  testId={`settings-model-images-${modelIndex}`}
-                />
-                <CheckboxField
-                  label="思考"
-                  checked={model.options?.thinking === true}
-                  onChange={(thinking) =>
-                    patchModel(modelIndex, (target) => {
-                      target.options = { ...(target.options ?? {}), thinking };
-                    })
-                  }
-                  testId={`settings-model-thinking-${modelIndex}`}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  data-testid={`settings-model-remove-${modelIndex}`}
-                  onClick={() =>
-                    patchProvider((entry) => {
-                      entry.models.splice(modelIndex, 1);
-                    })
-                  }
-                  className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
-                >
-                  <Trash2 size={11} aria-hidden="true" />
-                  移除模型
+              <div className="flex items-center justify-between gap-3">
+                <CheckboxField label="启用模型" checked={model.enabled}
+                  onChange={(enabled) => patchModel(modelIndex, (target) => void (target.enabled = enabled))} testId={`settings-model-enabled-${modelIndex}`} />
+                <button type="button" data-testid={`settings-model-remove-${modelIndex}`} onClick={() => setRemoveModelIndex(modelIndex)}
+                  className={formSecondaryButtonClass} aria-label={`移除模型 ${model.displayName || model.id}`}>
+                  <Trash2 size={14} aria-hidden="true" />移除模型
                 </button>
               </div>
+              <details className="group" data-testid={`settings-model-advanced-${modelIndex}`}>
+                <summary className="flex w-fit cursor-pointer list-none items-center gap-1 rounded-control py-1 text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent">
+                  <ChevronRight size={14} aria-hidden="true" className="group-open:rotate-90" />参数与能力
+                </summary>
+                <div className="flex flex-col gap-3 p-1 pt-3">
+                  <div className="form-grid">
+                    <NumberField label="温度" value={model.options?.temperature} allowEmpty step={0.1} min={0}
+                      onChange={(temperature) => patchModel(modelIndex, (target) => {
+                        target.options = { ...(target.options ?? {}) };
+                        if (typeof temperature !== 'number') delete target.options.temperature;
+                        else target.options.temperature = temperature;
+                      })} testId={`settings-model-temperature-${modelIndex}`} />
+                    <NumberField label="最大 token" value={model.options?.maxTokens} allowEmpty min={1}
+                      onChange={(maxTokens) => patchModel(modelIndex, (target) => {
+                        target.options = { ...(target.options ?? {}) };
+                        if (typeof maxTokens !== 'number') delete target.options.maxTokens;
+                        else target.options.maxTokens = maxTokens;
+                      })} testId={`settings-model-maxtokens-${modelIndex}`} />
+                  </div>
+                  <div className="flex flex-wrap gap-x-5 gap-y-3">
+                    <CheckboxField label="流式输出" checked={model.supportsStreaming}
+                      onChange={(value) => patchModel(modelIndex, (target) => void (target.supportsStreaming = value))} testId={`settings-model-streaming-${modelIndex}`} />
+                    <CheckboxField label="工具调用" checked={model.supportsToolCalls}
+                      onChange={(value) => patchModel(modelIndex, (target) => void (target.supportsToolCalls = value))} testId={`settings-model-tools-${modelIndex}`} />
+                    <CheckboxField label="图片输入" checked={model.supportsImages}
+                      onChange={(value) => patchModel(modelIndex, (target) => void (target.supportsImages = value))} testId={`settings-model-images-${modelIndex}`} />
+                    <CheckboxField label="思考" checked={model.options?.thinking === true}
+                      onChange={(thinking) => patchModel(modelIndex, (target) => { target.options = { ...(target.options ?? {}), thinking }; })} testId={`settings-model-thinking-${modelIndex}`} />
+                  </div>
+                </div>
+              </details>
             </li>
           ))}
         </ul>
       </section>
 
-      <section className="flex flex-col gap-2 rounded-card border-[0.5px] border-line bg-bg-soft px-3 py-2">
-        <h4 className="text-ink text-[length:var(--font-meta-size)]">测速</h4>
+      <section className="flex flex-col gap-2 border-t-[0.5px] border-line pt-4" aria-label="连接测试">
         <div className="form-action-row">
-          <label className="flex flex-col gap-0.5">
-            <span className="text-subtle text-[length:var(--font-micro-size)]">用于测试的模型</span>
-            <select
-              value={testModelId ?? ''}
-              onChange={(event) => {
-                setTestModelId(event.target.value);
-                setTestResult(null);
-              }}
-              data-testid="settings-test-model"
-              className={formInputClass}
-            >
-              {testModelOptions.map((model) => (
-                <option key={model.key} value={model.key}>
-                  {model.label}
-                </option>
-              ))}
+          <label className="flex min-w-0 flex-col gap-1.5">
+            <span className="text-muted text-[length:var(--font-meta-size)]">测试模型</span>
+            <select value={testModelId ?? ''} data-testid="settings-test-model" className={formInputClass}
+              onChange={(event) => { setSelectedTestModel(event.target.value); setTestResult(null); test.reset(); }}>
+              {testModelOptions.length === 0 ? <option value="">无可测试模型</option> : null}
+              {testModelOptions.map((model) => <option key={model.key} value={model.key}>{model.label}</option>)}
             </select>
           </label>
-          <button
-            type="button"
-            data-testid="settings-test-provider"
-            disabled={test.pending || testModelId === null}
+          <button type="button" data-testid="settings-test-provider" className={formButtonClass}
+            disabled={test.pending || testModelId === null || !saved} aria-describedby={!saved ? 'settings-test-save-required' : undefined}
             onClick={() => {
-              if (testModelId === null) {
-                return;
-              }
+              if (testModelId === null || !saved) return;
               setTestResult(null);
-              void test.run({ providerId: provider.id, modelId: testModelId }).then((result) => {
-                if (result.ok) {
-                  setTestResult(result.data);
-                }
+              void test.run({ providerId: provider.id, modelId: testModelId }).then((outcome) => {
+                if (outcome.ok) setTestResult({ modelId: testModelId, config, result: outcome.data });
               });
-            }}
-            className={formButtonClass}
-          >
-            {test.pending ? '测试中…' : '测试连通'}
-          </button>
+            }}>{test.pending ? '测试中…' : '测试连通'}</button>
         </div>
-        {test.error === null ? null : (
-          <FormNote tone="warn" testId="settings-test-error">
-            {test.error}
-          </FormNote>
-        )}
-        {testResult === null ? null : (
-          <FormNote testId="settings-test-result">
-            {testResult.status === 'ready'
-              ? `连通：${testResult.latencyMs === null ? '未返回延迟' : `${testResult.latencyMs} ms`}（检查项 ${testResult.checked.length}）`
-              : `不连通：${testResult.error ?? '未知原因'}`}
+        {saved ? null : <p id="settings-test-save-required" className="text-muted text-[length:var(--font-meta-size)]">保存设置后可测试此供应商</p>}
+        {test.error === null ? null : <FormNote tone="warn" testId="settings-test-error">{test.error}</FormNote>}
+        {visibleTestResult === null ? null : (
+          <FormNote tone={visibleTestResult.status === 'ready' ? 'default' : 'warn'} testId="settings-test-result">
+            {visibleTestResult.status === 'ready'
+              ? `连通：${visibleTestResult.latencyMs === null ? '未返回延迟' : `${visibleTestResult.latencyMs} ms`}`
+              : `不连通：${visibleTestResult.error ?? '未知原因'}`}
           </FormNote>
         )}
       </section>
+      <div className="border-t-[0.5px] border-line pt-4">
+        <button type="button" data-testid="settings-provider-remove" onClick={() => setRemoveProviderOpen(true)}
+          disabled={setSecret.pending || clearSecret.pending} className={formSecondaryButtonClass}>
+          <Trash2 size={14} aria-hidden="true" />移除供应商
+        </button>
+      </div>
 
-      <RemoteModelPicker
-        open={pullModelsOpen}
-        client={store.client}
-        endpoint={provider.endpoint}
-        providerId={provider.id}
-        existingIds={provider.models.map((model) => model.id)}
-        testId="settings-provider-models-pull"
-        onClose={() => setPullModelsOpen(false)}
+      <RemoteModelPicker open={pullModelsOpen} client={store.client} endpoint={provider.endpoint} providerId={provider.id}
+        existingIds={provider.models.map((model) => model.id)} testId="settings-provider-models-pull" onClose={() => setPullModelsOpen(false)}
         onConfirm={(entries: RemoteModelEntry[]) => {
           patchProvider((entry) => {
             for (const picked of entries) {
-              // 只补上缺的那几个：用户在浮层里已经看到「已添加」被禁用了，这里再防一次
-              // 是因为两次拉取之间列表可能被别处改过（比如默认模型页新增）。
-              if (entry.models.some((model) => model.id === picked.id)) {
-                continue;
-              }
-              entry.models.push(createModelDraftFromRemote(picked.id));
+              if (!entry.models.some((model) => model.id === picked.id)) entry.models.push(createModelDraftFromRemote(picked.id));
             }
           });
           setPullModelsOpen(false);
-        }}
-      />
-
-      <ConfirmDialog
-        open={clearSecretOpen}
-        title="清除该供应商的密钥？"
-        message={`将从系统钥匙串删除 ${provider.name || provider.id} 的 API Key。`}
-        detail="凭据引用会保留；下次调用前需要重新录入密钥。"
-        confirmLabel="清除密钥"
-        tone="destructive"
-        testId="settings-secret-clear-confirm"
-        onCancel={() => setClearSecretOpen(false)}
+        }} />
+      <RadixSettingsConfirmDialog open={clearSecretOpen} title="清除供应商密钥？"
+        message={`将立即删除 ${provider.name || provider.id} 已保存的 API Key。`} detail="下次调用前需要重新录入密钥。"
+        confirmLabel="清除密钥" tone="destructive" testId="settings-secret-clear-confirm" onCancel={() => setClearSecretOpen(false)}
         onConfirm={() => {
           setClearSecretOpen(false);
-          void clearSecret.run(provider.id).then((result) => {
-            if (result.ok) {
-              reload();
-            }
-          });
-        }}
-      />
-
-      <ConfirmDialog
-        open={removeProviderOpen}
-        title="移除该供应商？"
-        message={`将从设置中删除 ${provider.name || provider.id} 及其模型。`}
-        detail="保存后生效；已存的密钥不会被删除。"
-        confirmLabel="移除"
-        tone="destructive"
-        testId="settings-provider-remove-confirm"
-        onCancel={() => setRemoveProviderOpen(false)}
+          void clearSecret.run(provider.id).then((result) => { if (result.ok) store.reload(); });
+        }} />
+      <RadixSettingsConfirmDialog open={removeProviderOpen} title="移除供应商？"
+        message={`将移除 ${provider.name || provider.id} 及其模型。`} detail="保存设置后生效；已存密钥会保留。"
+        confirmLabel="移除供应商" tone="destructive" testId="settings-provider-remove-confirm" onCancel={() => setRemoveProviderOpen(false)}
         onConfirm={() => {
           setRemoveProviderOpen(false);
           store.update((next) => {
             next.providers = next.providers.filter((entry) => entry.id !== provider.id);
-            if (next.defaultModelId !== null && parseProviderModelKey(next.defaultModelId)?.providerId === provider.id) {
-              next.defaultModelId = null;
-            }
+            if (next.defaultModelId !== null && parseProviderModelKey(next.defaultModelId)?.providerId === provider.id) next.defaultModelId = null;
           });
-          setSelectedId(null);
-        }}
-      />
-    </FormSection>
+        }} />
+      <RadixSettingsConfirmDialog open={removeModelIndex !== null} title="移除模型？"
+        message={`将移除 ${provider.models[removeModelIndex ?? -1]?.displayName || provider.models[removeModelIndex ?? -1]?.id || '此模型'}。`}
+        detail="保存设置后生效；若为默认模型，将同时清除默认选择。" confirmLabel="移除模型" tone="destructive"
+        testId="settings-model-remove-confirm" onCancel={() => setRemoveModelIndex(null)}
+        onConfirm={() => {
+          const index = removeModelIndex;
+          setRemoveModelIndex(null);
+          if (index === null) return;
+          store.update((next) => {
+            const target = next.providers.find((entry) => entry.id === provider.id);
+            const model = target?.models[index];
+            if (target === undefined || model === undefined) return;
+            if (next.defaultModelId === buildProviderModelKey(provider.id, model.id)) next.defaultModelId = null;
+            target.models.splice(index, 1);
+          });
+        }} />
+    </>
   );
 }

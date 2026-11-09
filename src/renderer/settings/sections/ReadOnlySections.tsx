@@ -259,9 +259,6 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
       {cancelAction.error === null ? null : (
         <FormNote tone="warn" testId="settings-models-cancel-error">{cancelAction.error}</FormNote>
       )}
-      <FormNote tone="default" testId="settings-models-offline-note">
-        模型就绪后，扫描件与版面/表格/公式识别全程离线；HTML 和含文本层 PDF 不需要模型。缺少模型时不会自动联网下载。
-      </FormNote>
     </FormSection>
   );
 }

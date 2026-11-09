@@ -191,7 +191,9 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
           )}
         </header>
 
-        {store.projectId === null ? null : store.indexError !== null ? (
+        {store.projectId === null ? (
+          <p className="text-muted" data-testid="settings-index-no-project">未打开项目</p>
+        ) : store.indexError !== null ? (
           <FormNote tone="warn" testId="settings-index-error">
             {store.indexError}
           </FormNote>
@@ -428,10 +430,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
               >
                 保存嵌入配置
               </button>
-              <span className="text-subtle text-[length:var(--font-micro-size)]">
-                {selectedConfig === null ? '新增' : `编辑 ${selectedConfig.id}`}
-                {form.dimensions === null ? '，保存时探测维度' : ''}
-              </span>
+
             </div>
             {saveEmbedding.error === null ? null : (
               <FormNote tone="warn" testId="settings-embedding-save-error">
