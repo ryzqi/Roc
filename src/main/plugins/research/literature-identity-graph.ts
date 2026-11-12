@@ -1,4 +1,4 @@
-import { literatureIdentity, literatureSourceIdentity } from './literature-identity';
+import { literatureIdentity, literatureIdentityAliases, literatureSourceIdentity } from './literature-identity';
 import type {LiteratureIdentifierObservation} from '../../../shared/schemas/literature-identifiers';
 
 type IdentityRecord = {doi: string | null; source: string; externalId: string};
@@ -21,7 +21,7 @@ export function groupLiteratureIdentities(observations: readonly ObservedIdentit
     const dois = new Set(identifiers.filter(value => value.kind === 'doi').map(value => value.identity));
     if (record.doi !== null) dois.add(literatureIdentity(record));
     const anchor = record.doi !== null ? literatureIdentity(record) : dois.size === 1 ? [...dois][0] : null;
-    const aliases = [...new Set([source, ...(anchor === null ? [] : [anchor]),
+    const aliases = [...new Set([source, ...(anchor === null ? [] : literatureIdentityAliases(anchor)),
       ...(dois.size > 1 ? [] : identifiers.filter(value => value.kind !== 'doi').map(value => value.identity))])].sort(compare);
     return {source, dois, anchor, aliases};
   });

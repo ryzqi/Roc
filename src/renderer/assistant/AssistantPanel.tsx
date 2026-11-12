@@ -409,7 +409,7 @@ export function AssistantPanel({
             loadOlder={session.history.loadOlder}
             onJumpToLatest={session.history.reloadLatest}
             scrollContainerRef={scrollContainerRef}
-            onApprovalDecision={onApprovalDecision}
+            onApprovalDecision={session.runState.runId !== null && waitingUser ? onApprovalDecision : undefined}
             onOpenArtifact={onOpenArtifact}
             onReadGateContext={onReadGateContext}
           />

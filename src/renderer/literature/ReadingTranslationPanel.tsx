@@ -32,7 +32,7 @@ export default function ReadingTranslationPanel({client,projectId,segments,label
       if(!result.ok)throw new Error(result.error.message);setApiKey('');setConfigured(result.data.keyConfigured);setSettings(false);
     }catch(error){setError(String(error));}finally{setBusy(false);}
   };
-  return <section className="max-h-[55vh] shrink-0 overflow-auto border-b-[0.5px] border-line" data-testid="reader-translation" aria-label="阅读翻译">
+  return <section className="max-h-[55%] min-h-0 overflow-auto border-b-[0.5px] border-line" data-testid="reader-translation" aria-label="阅读翻译">
     <div className="reading-toolbar"><strong>{label}</strong><select aria-label="翻译目标语言" value={target} disabled={busy} onChange={event=>setTarget(event.target.value)}>
       <option value="zh-CN">简体中文</option><option value="en">English</option><option value="ja">日本語</option><option value="de">Deutsch</option><option value="fr">Français</option></select>
       <button type="button" disabled={busy} onClick={()=>void translate()}>开始翻译</button><button type="button" disabled={busy} onClick={()=>setSettings(!settings)}>翻译设置</button>

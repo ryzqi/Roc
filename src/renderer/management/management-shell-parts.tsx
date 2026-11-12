@@ -194,7 +194,7 @@ function TasksSectionContent({ scope }: { scope: ManagementScope }): ReactNode {
         <div key={scope.projectId} className="grid min-w-0 gap-6">
           <PythonEnvironmentSection client={scope.client} projectId={scope.projectId} />
           <ResearchTasksSection client={scope.client} projectId={scope.projectId}
-            selectedTaskId={scope.researchTaskId} onSelectTask={scope.onSelectResearchTask} />
+            selectedTaskId={scope.researchTaskId} onSelectTask={scope.onSelectResearchTask} onOpenArtifact={scope.onOpenArtifact} />
         </div>
       )}
       {store === null ? <ManagementSectionLoading /> : <BackgroundTasksSection store={store} />}

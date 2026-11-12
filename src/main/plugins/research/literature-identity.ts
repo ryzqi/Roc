@@ -76,6 +76,22 @@ export function literatureIdentity(record: { doi: string | null; source: string;
   return record.doi === null ? sourceIdentity : `doi:${normalizeResearchDoi(record.doi)}`;
 }
 
+/** arXiv's registered DOI namespace encodes its identifier, including legacy IDs. */
+export function literatureIdentityAliases(identity: string): string[] {
+  if (identity.startsWith('arxiv:')) {
+    const {id} = normalizeResearchArxiv(identity.slice(6));
+    return [identity, `doi:10.48550/arxiv.${id.toLowerCase()}`];
+  }
+  const prefix = 'doi:10.48550/arxiv.';
+  if (!identity.toLowerCase().startsWith(prefix)) return [identity];
+  try {
+    return [identity, `arxiv:${normalizeResearchArxiv(identity.slice(prefix.length)).id}`];
+  } catch {
+    // A syntactically valid DOI need not contain a valid arXiv identifier.
+    return [identity];
+  }
+}
+
 export function referenceKey(identity: string): string {
   return `roc_${createHash('sha256').update(identity).digest('hex').slice(0, 16)}`;
 }

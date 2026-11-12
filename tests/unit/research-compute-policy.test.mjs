@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { before, after, test } from 'node:test';
 import {createResearchTestRoleTools,  loadResearchTestApi, createResearchFixture } from './fixtures/research-test-kit.mjs';
 
@@ -33,7 +36,9 @@ test('the computation sandbox refuses unused network grants before resolving any
 });
 
 test('actual role SDK refuses a model networking request before invoking effects or creating an execution', async () => {
-  const f = createResearchFixture(api, 'experiment');
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'roc-compute-policy-')));
+  await writeFile(join(directory, 'analysis.mts'), 'export function run() {}');
+  const f = createResearchFixture(api, 'experiment', directory);
   let starts = 0;
   const service = {
     async start(input) {
@@ -54,7 +59,7 @@ test('actual role SDK refuses a model networking request before invoking effects
     await start.invoke({ type: 'tool_call', id: 'offline-approved', name: start.name, args: request('disabled') });
     assert.equal(starts, 1);
     assert.equal(f.repository.experiments.list(f.project.id, 20)[0].request.network, 'disabled');
-  } finally { f.close(); }
+  } finally { f.close(); await rm(directory, { recursive: true, force: true }); }
 });
 
 test('actual main experiment capability refuses networking before its handler and accepts the explicit offline contract', async () => {

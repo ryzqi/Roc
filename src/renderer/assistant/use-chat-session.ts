@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { errorMessage } from '../app/loaded-state';
 import type { ChatImageAttachment, ChatResumeDecision, ChatRunMode } from '../../shared/types';
 import type { RocClient } from '../shared/roc-client';
+import { getMcpConfig } from '../shared/mcp-store';
 import { createChatTranscriptProjector, type ChatTranscriptMessage } from './transcript';
 import { useChatRun } from './use-chat-run';
 import { usePersistedThreadHistory, type PersistedThreadHistory } from './use-persisted-thread-history';
@@ -93,11 +94,20 @@ export function useChatSession(input: {
       setPendingUserInput(text);
       run.setError(null);
       try {
+        const mcpConfig = await getMcpConfig(client);
+        if (scopeRef.current !== scope || !scope.active) return false;
+        if (!mcpConfig.ok) {
+          run.setError(mcpConfig.error.message);
+          return false;
+        }
         const result = await startRun(client, {
           input: text,
           mode: sendInput.mode,
           threadId,
-          enabledCapabilities: { mcpServers: [], skills: sendInput.skillIds },
+          enabledCapabilities: {
+            mcpServers: mcpConfig.data.servers.filter(server => server.enabled).map(server => server.id),
+            skills: sendInput.skillIds
+          },
           ...(projectId === null ? {} : { researchProjectId: projectId }),
           ...(sendInput.attachments.length === 0 ? {} : { attachments: sendInput.attachments }),
           ...(sendInput.skillIds.length === 0 ? {} : { explicitSkillIds: sendInput.skillIds })
@@ -141,6 +151,7 @@ export function useChatSession(input: {
       const runId = run.state.runId;
       const activeThreadId = run.state.threadId ?? threadId;
       if (runId === null || activeThreadId === null) {
+        run.setError('此审批已不在当前待恢复运行中。请查看任务状态，重新请求现有阶段的审核。');
         return false;
       }
       const scope = scopeRef.current;

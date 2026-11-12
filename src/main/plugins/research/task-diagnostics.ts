@@ -22,11 +22,7 @@ export class ResearchTaskDiagnosticsService {
   get(request: { projectId: string; taskId: string }): ResearchTaskDiagnostics {
     const task = this.repository.tasks.get(request.taskId, request.projectId);
     const executions = this.repository.tasks.executions(task.id, task.projectId).map(execution => this.execution(execution));
-    let continuation: ResearchTaskExecutionDiagnostics | undefined;
-    for (const execution of executions) {
-      if (execution.association.kind === 'stage' && execution.association.associationSource !== 'review' &&
-        ['failed', 'cancelled', 'interrupted'].includes(execution.status)) continuation = execution;
-    }
+    const continuation = this.repository.runs.continuationForTask(task.id, task.projectId);
     const workflow = this.repository.getWorkflow(task.projectId);
     const current = workflow.stages.find(stage => stage.stage === workflow.currentStage);
     if (current === undefined) throw new Error('research_stage_not_found');
@@ -35,14 +31,14 @@ export class ResearchTaskDiagnosticsService {
     const cleanupConfirmed = task.statusReason !== 'research_task_cleanup_pending' &&
       task.statusReason !== 'research_task_cleanup_failed';
     const recoveryIssues: ResearchTaskDiagnostics['recoveryIssues'] = this.repository.tasks.recoveryIssues(task.id, task.projectId);
-    const recoveryExecution = continuation ?? (waiting ? [...executions].reverse().find(execution =>
+    const recoveryExecution = executions.find(execution => execution.association.executionId === continuation?.id) ?? (waiting ? [...executions].reverse().find(execution =>
       execution.association.kind === 'stage' && execution.association.associationSource !== 'review' &&
       execution.stage === current.stage && execution.status === 'completed') : undefined);
     if (recoveryExecution?.association.associationState === 'confirmed') {
       try {
         this.repository.runs.assertInputsCurrent(this.repository.runs.get(recoveryExecution.association.executionId, task.projectId));
       } catch (error) {
-        if (error instanceof Error && (error.message === 'research_stage_inputs_stale' || error.message === 'research_stage_snapshot_invalid')) {
+        if (error instanceof Error && (error.message === 'research_stage_inputs_stale' || error.message === 'research_stage_snapshot_invalid' || error.message === 'research_scientific_review_stale')) {
           recoveryIssues.push(error.message);
         } else { throw error; }
       }
@@ -53,7 +49,7 @@ export class ResearchTaskDiagnosticsService {
     return researchTaskDiagnosticsSchema.parse({
       task, usage: this.ledger.readTaskUsageStatus(task.id, task.projectId), executions,
       graph: this.repository.tasks.graph.read(task.id, task.projectId),
-      continuationRunId: canContinue ? continuation?.association.executionId ?? null : null,
+      continuationRunId: canContinue ? continuation?.id ?? null : null,
       canRestoreApproval: cleanupConfirmed && effectsResolved && task.status === 'paused' && waiting && workflow.projectStatus !== 'archived',
       recoveryIssues, eventDelivery: this.repository.runs.flushTaskEvents(task.id)
     });

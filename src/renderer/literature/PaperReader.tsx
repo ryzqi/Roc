@@ -40,6 +40,8 @@ export type PaperReaderProps = {
   focusParseId?: string | null;
   /** Deep link from a retrieval hit: the locator to scroll to. */
   focusLocator?: string | null;
+  /** Exact retrieved text, preserved to distinguish blocks sharing a page locator. */
+  focusText?: string | null;
 };
 
 const STATUS_LABELS: Readonly<Record<ResearchDocument['status'], string>> = {
@@ -63,7 +65,8 @@ export function PaperReader({
   openInFilesView,
   onClearFocus,
   focusParseId = null,
-  focusLocator = null
+  focusLocator = null,
+  focusText = null
 }: PaperReaderProps): React.JSX.Element {
   const selected = literature.selected;
   const documents = literature.documents;
@@ -175,9 +178,14 @@ export function PaperReader({
       return null;
     }
     const blocks = parseDocumentBlocks(content);
-    const matches = blocks.filter(block => block.locator === focusLocator);
+    // Search only the resolved parse. A retrieval child may carry a substring and a
+    // character-span locator; never fall back to an arbitrary block on that page.
+    const exact = focusText ? blocks.filter(block => block.text === focusText) : [];
+    const matches = focusText
+      ? exact.length > 0 ? exact : blocks.filter(block => block.text.includes(focusText))
+      : blocks.filter(block => block.locator === focusLocator);
     return matches.length === 1 ? matches[0].id : null;
-  }, [content, focusLocator]);
+  }, [content, focusLocator, focusText]);
   const selectedPdfBlock = pdfSelection !== null && pdfSelection.parseId === reader.parsed?.run.id ? pdfSelection.blockId : matchedBlockId;
   const selectedPdfLocation = pdfSelection !== null && pdfSelection.parseId === reader.parsed?.run.id ? pdfSelection.locationIndex : 0;
 
@@ -185,7 +193,7 @@ export function PaperReader({
     if (matchedBlockId === null || activeDocumentId === null) {
       return;
     }
-    const key = `${activeDocumentId}:${reader.parsed?.run.id}:${focusLocator ?? ''}`;
+    const key = `${activeDocumentId}:${reader.parsed?.run.id}:${focusLocator ?? ''}:${matchedBlockId}`;
     if (jumpHandledFor.current === key) {
       return;
     }
@@ -543,6 +551,7 @@ export function PaperReader({
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
+          <div className="reading-document-controls" data-testid="reader-controls">
           <div role="tablist" aria-label="文档" className="flex shrink-0 flex-wrap items-center gap-1 border-b-[0.5px] border-line px-2 py-1.5">
             {documents.map((document) => (
               <button
@@ -757,6 +766,7 @@ export function PaperReader({
               ) : null}
             </div>
           ) : null}
+          </div>
           <div className="flex min-h-0 flex-1">
           {!reader.loading && (comparePdf || reader.parsed===null) && activeDocument?.mediaType === 'application/pdf' && literature.projectId !== null ? (
             <div className={`${reader.parsed===null?'w-full':'w-1/2'} min-h-0 min-w-0 border-r-[0.5px] border-line`}>

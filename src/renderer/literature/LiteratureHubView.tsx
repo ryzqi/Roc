@@ -68,7 +68,7 @@ export function LiteratureHubView(): React.JSX.Element {
   }, []);
   const [importOpen, setImportOpen] = useState(false);
   const [importTab, setImportTab] = useState<ImportTabRequest>('document');
-  const [focus, setFocus] = useState<{ parseId: string | null; locator: string | null }>({
+  const [focus, setFocus] = useState<{ parseId: string | null; locator: string | null; text?: string | null }>({
     parseId: null,
     locator: null
   });
@@ -225,6 +225,7 @@ export function LiteratureHubView(): React.JSX.Element {
               openInFilesView={scope.openFileInCanvas}
               focusParseId={focus.parseId}
               focusLocator={focus.locator}
+              focusText={focus.text}
             />
             </div>
             </div></ViewActivity>
@@ -238,7 +239,7 @@ export function LiteratureHubView(): React.JSX.Element {
               openInFilesView={scope.openFileInCanvas}
               onOpenInReader={(target) => {
                 setReturnToSearch(true);
-                setFocus({ parseId: target.parseId, locator: target.locator });
+                setFocus({ parseId: target.parseId, locator: target.locator, text: target.text });
                 if (target.libraryItemId !== null) {
                   store.select(target.libraryItemId);
                 }

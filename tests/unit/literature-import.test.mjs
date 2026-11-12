@@ -264,6 +264,43 @@ test('library-only then project add links; archived matches never restore; concu
   } finally { f.close(); }
 });
 
+test('arXiv DOI and arXiv search imports reuse the same item in either order', async () => {
+  const doi = {...record('arxiv-doi', '10.48550/ARXIV.2410.07283'), source: 'doi',
+    externalId: '10.48550/arxiv.2410.07283'};
+  const arxiv = {...doi, id: 'arxiv:2410.07283v1', source: 'arxiv',
+    externalId: 'http://arxiv.org/abs/2410.07283v1', doi: null};
+  for (const records of [[doi, arxiv], [arxiv, doi]]) {
+    const f = setup();
+    try {
+      const first = f.repo.library.import([{metadata: records[0],
+        bibliography: api.bibliographyFromRecord(records[0], new Set())}], f.project.id);
+      f.db.prepare('DELETE FROM research_library_aliases WHERE item_id=? AND identity<>?')
+        .run(first.items[0].id, api.literatureIdentity(records[0]));
+      const second = f.repo.library.import([{metadata: records[1],
+        bibliography: api.bibliographyFromRecord(records[1], new Set())}], f.project.id);
+      assert.equal(second.createdCount, 0, `duplicate created after ${records[0].source}`);
+      assert.equal(second.items[0].id, first.items[0].id);
+      assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 1);
+      assert.equal(second.items[0].sources.length, 2, 'retain both source records');
+      assert.deepEqual(second.items[0].sources.map(source => source.metadata.doi), records.map(value => value.doi?.toLowerCase() ?? null));
+    } finally { f.close(); }
+  }
+});
+
+test('arXiv DOI equivalence fuses explicit identifiers without merging other DOI namespaces or titles', () => {
+  for (const id of ['2410.07283', 'hep-th/9901001']) {
+    const arxiv = {...record('arxiv', null), source: 'arxiv', externalId: `${id}v2`};
+    const doi = record('registered', `10.48550/ARXIV.${id.toUpperCase()}`);
+    const fused = api.fuseLiterature(rankedRecords([arxiv, doi]));
+    assert.equal(fused.length, 1);
+    assert.equal(fused[0].origins.length, 2);
+    assert.equal(fused[0].identity, `doi:10.48550/arxiv.${id}`);
+    const unrelated = [record('other', `10.9999/arxiv.${id}`),
+      record('malformed', '10.48550/arxiv.not-an-id'), record('suffix', `10.48550/arxiv.${id}.extra`)];
+    assert.equal(api.fuseLiterature(rankedRecords([arxiv, ...unrelated])).length, 4);
+  }
+});
+
 test('partial failures retain successes and generated citation keys remain unique', async () => {
   const f = setup({ prepare: async (metadata) => {
     if (metadata.doi.endsWith('/bad')) throw new Error('secret provider response');
@@ -1527,6 +1564,28 @@ test('distinct library DOIs keep their own rows and make shared DOI-free aliases
     assert.throws(() => f.repo.library.import([{metadata, bibliography: api.bibliographyFromRecord(metadata, new Set())}], f.project.id),
       /research_literature_identity_ambiguous/u);
     assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_library').pluck().get(), 2);
+  } finally { f.close(); }
+});
+
+test('ambiguous library matching retains the actual raw search pool without choosing or mutating a library item', async () => {
+  const metadata = {...record('raw-ambiguous', null), source: 'pubmed', externalId: '123'};
+  const f = setup({records: [metadata]});
+  try {
+    for (const suffix of ['a', 'b']) {
+      const stored = {...metadata, doi: `10.1234/${suffix}`};
+      f.repo.library.import([{metadata: stored, bibliography: api.bibliographyFromRecord(stored, new Set())}], f.project.id);
+    }
+    const before = f.db.prepare('SELECT * FROM research_library ORDER BY id').all();
+    await assert.rejects(candidate(f), /research_literature_identity_ambiguous/u);
+    const execution = f.db.prepare('SELECT * FROM research_literature_search_executions').get();
+    assert.equal(execution.status, 'failed');
+    const pool = f.run(() => f.service.readPool({executionId: execution.id, offset: 0, limit: 10}));
+    assert.equal(pool.total, 1, 'a preview conflict must not erase retrieved source records');
+    assert.deepEqual(pool.records[0].record, metadata);
+    assert.equal(pool.sources.length, 1);
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_library ORDER BY id').all(), before);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_literature_searches').pluck().get(), 0);
+    assert.throws(() => f.repo.library.findByIdentity('pmid:123'), /research_literature_identity_ambiguous/u);
   } finally { f.close(); }
 });
 

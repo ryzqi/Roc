@@ -1,4 +1,5 @@
 import {ResearchWikiRepository} from './wiki-repository';
+import {recordCapabilityOperationReceipt} from '../../kernel/capability-operation-context';
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { Database as DatabaseConnection } from 'better-sqlite3';
@@ -747,6 +748,7 @@ export class ResearchRepository {
           for (const artifactId of current.artifactIds) {
             this.evidence.assertReviewedSupportForArtifact(this.getArtifact(artifactId));
           }
+          recordCapabilityOperationReceipt();
           current.artifactIds.forEach((artifactId) => {
             this.db.prepare("UPDATE research_artifacts SET status = 'approved', updated_at = ? WHERE id = ?").run(timestamp, artifactId);
           });
@@ -760,6 +762,7 @@ export class ResearchRepository {
         case 'reject':
           this.requireStatus(current, ['waiting_approval'], 'research_stage_not_waiting_approval');
           this.assertArtifactReview(request);
+          recordCapabilityOperationReceipt();
           this.updateStage(request.projectId, current.stage, { status: 'running', gateApproved: false, lastError: request.note ?? '用户要求修改。' });
           this.appendEvent(request.projectId, current.stage, 'approval_rejected', request.note ?? '用户要求修改。', request, timestamp);
           break;

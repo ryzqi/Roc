@@ -1,4 +1,5 @@
 export { ResearchRepository } from '../../../src/main/plugins/research/repository';
+export { RocDomainError } from '../../../src/main/services/errors';
 export { ResearchProductionEffectService } from '../../../src/main/plugins/research/production-effects';
 export { createResearchRoleTools } from '../../../src/main/plugins/research/role-tools';
 export { createResearchTools } from '../../../src/main/plugins/agent/research-tools';

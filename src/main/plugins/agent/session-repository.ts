@@ -359,6 +359,14 @@ export class AgentSessionRepository {
     return mapTaskRun(row);
   }
 
+  findWaitingUserRun(threadId: string): TaskRun | null {
+    const row = this.db.prepare(
+      `SELECT * FROM agent_runs WHERE thread_id = ? AND status = 'waiting_user'
+       ORDER BY run_number DESC LIMIT 1`
+    ).get(threadId) as TaskRunRow | undefined;
+    return row === undefined ? null : mapTaskRun(row);
+  }
+
   getRunTelemetry(runId: string): AgentRunTelemetryV1 | null {
     this.runTelemetryRepository.pruneExpired(new Date().toISOString());
     const telemetry = this.runTelemetryRepository.get(runId);

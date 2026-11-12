@@ -94,6 +94,41 @@ test('human approval freezes visible plan content and retrieval tools select onl
   } finally { await search.shutdown(); f.close(); }
 });
 
+test('retrieval retry replays fixed searches and can read the original candidate snapshot', async () => {
+  const f = createResearchFixture(api, 'discovery');
+  let calls = 0;
+  const {service, search} = importer(f, async () => {
+    calls++;
+    return Response.json({message: {items: [{DOI: `10.1234/retry-${calls}`, title: ['Retry paper'],
+      published: {'date-parts': [[2024]]}}]}});
+  });
+  const toolsFor = run => createResearchTestRoleTools(api, {run, context: f.repository.runs.getContext(run.id),
+    repository: f.repository, signal: new AbortController().signal, capabilities: {invoke: (name, request) => {
+      if (name === 'research.literature.search') return service.search(request);
+      assert.equal(name, 'research.literature.getSearch');
+      return service.readSearch(request);
+    }}});
+  try {
+    const {run} = await confirm(f);
+    const first = await toolsFor(run).find(tool => tool.name === 'search_literature').invoke({queryId: 'query-1'});
+    const originalCalls = calls;
+    assert.ok(originalCalls > 0);
+    f.repository.runs.terminate(run.id, f.project.id, 'failed', 'publication_failed');
+    const next = f.repository.runs.retry({projectId: f.project.id, runId: run.id, requestId: 'retry-candidates'});
+    const running = withResearchTestWorker(api, f.repository, next.id, f.project.id, id =>
+      f.repository.runs.markRunning(id, f.project.id, {providerId: 'fixture', modelId: 'fixture'}));
+    const retried = toolsFor(running);
+    const replay = await retried.find(tool => tool.name === 'search_literature').invoke({queryId: 'query-1'});
+    assert.deepEqual(replay, first);
+    assert.equal(calls, originalCalls, 'retry must not redispatch approved pages');
+    const saved = await retried.find(tool => tool.name === 'read_literature_search')
+      .invoke({searchId: first.searchId, offset: 0, limit: 1});
+    assert.equal(saved.candidates[0].candidateId, first.candidates[0].candidateId);
+    assert.throws(() => api.withLiteratureContext({owner: 'stage:unrelated', projectId: f.project.id}, () =>
+      service.readSearch({searchId: first.searchId, offset: 0, limit: 1})), /literature_search_not_found/);
+  } finally {await search.shutdown(); f.close();}
+});
+
 test('perspective references and stable IDs must agree before creating any artifact', () => {
   const f = createResearchFixture(api, 'discovery');
   try {

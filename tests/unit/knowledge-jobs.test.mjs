@@ -7,6 +7,39 @@ before(async()=>{api=await loadResearchTestApi();});
 after(()=>api?.dispose());
 const input = {id:'durable',projectId:null,sourceType:'literature',sourceId:'fixture',title:'Fixture',content:'old',
   chunks:[{content:'old',locator:null}],embeddingPolicy:'none'};
+
+test('unreadable embedding credentials stay editable and replacement is atomic', async () => {
+  const {ResearchEmbeddingService}=await importTypeScriptModule('src/main/plugins/research/embedding-service.ts',{platform:'node'});
+  const f=createResearchFixture(api,'reading');let service;
+  try {
+    const knowledge=f.repository.knowledge;
+    const config={id:'test',name:'Existing config',baseUrl:'https://fixture.invalid',model:'fixture',dimensions:2,enabled:true};
+    knowledge.saveEmbeddingConfig(config,'unreadable-old-key');
+    const savedSecrets=new Map(),warnings=[];let failWrite=true,providerCalls=0;
+    service=new ResearchEmbeddingService(knowledge,{embed:async()=>{providerCalls++;return [[1,0]];}},{secrets:{
+      get:async key=>{if(key==='unreadable-old-key') throw new Error('private decrypt failure');return savedSecrets.get(key)??null;},
+      set:async(key,value)=>{if(failWrite) throw new Error('encryption unavailable');savedSecrets.set(key,value);},
+      clear:key=>savedSecrets.delete(key)
+    },logger:{warn:(...args)=>warnings.push(args)}});
+    const listed=await service.listConfigs();
+    assert.equal(listed.length,1);assert.equal(listed[0].keyConfigured,false);
+    assert.doesNotMatch(JSON.stringify(warnings),/private decrypt failure/);
+    await assert.rejects(()=>service.search({query:'old',projectId:null,limit:10,embeddingConfigId:null}),
+      error=>error.code==='research_embedding_key_unavailable' && /重新.*密钥/.test(error.message));
+    assert.equal(providerCalls,0,'an unreadable key must never yield a successful vector search');
+    await assert.rejects(()=>service.saveConfig({...config,apiKey:'replacement-test-key'}),/encryption unavailable/);
+    assert.equal(knowledge.listEmbeddingConfigRows()[0].api_key_secret_key,'unreadable-old-key');
+    failWrite=false;
+    const replaced=await service.saveConfig({...config,apiKey:'replacement-test-key'});
+    assert.equal(replaced.keyConfigured,true);
+    const row=knowledge.listEmbeddingConfigRows()[0];
+    assert.notEqual(row.api_key_secret_key,'unreadable-old-key');
+    assert.equal(row.revision,2);
+    assert.equal(savedSecrets.get(row.api_key_secret_key),'replacement-test-key');
+    await service.saveConfig({...config,apiKey:'replacement-test-key'});
+    assert.equal(knowledge.listEmbeddingConfigRows()[0].revision,2,'unchanged usable key retains the embedding space');
+  } finally {await service?.shutdown();f.close();}
+});
 test('source embedding jobs survive absent workers, expose failures and retry without replaying source content',async()=>{
   const f=createResearchFixture(api,'reading');
   try {

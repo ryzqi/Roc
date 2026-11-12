@@ -38,14 +38,27 @@ export const scientificSuggestionSchema = z.strictObject({
   const required: readonly string[] = scientificCriteria[value.claimKind];
   if (new Set(value.conditions.map(item => item.criterion)).size !== value.conditions.length ||
       required.some(criterion => !value.conditions.some(item => item.criterion === criterion))) {
-    ctx.addIssue({code: 'custom', message: 'research_scientific_conditions_required'});
+    ctx.addIssue({code: 'custom', path: ['conditions'], message:
+      `research_scientific_conditions_required: ${value.claimKind} requires these exact criterion names, each once: ${required.join(', ')}. Preserve additional nonduplicate conditions; use missing or uncertain when a required condition is not established.`});
   }
-  if (value.conditions.some(item => item.status === 'met' && item.references.length === 0) ||
-      (value.verdict === 'supports' && (value.supporting.length === 0 || value.claimKind === 'hypothesis' ||
-        required.some(criterion => value.conditions.find(item => item.criterion === criterion)?.status !== 'met'))) ||
-      (value.verdict === 'contradicts' && value.counterevidence.length === 0) ||
-      (value.verdict === 'qualifies' && value.limitations.length === 0)) {
-    ctx.addIssue({code: 'custom', message: 'research_scientific_evidence_conditions_missing'});
+  for (const [index, condition] of value.conditions.entries()) {
+    if (condition.status === 'met' && condition.references.length === 0) {
+      ctx.addIssue({code: 'custom', path: ['conditions', index, 'references'], message:
+        `research_scientific_evidence_conditions_missing: criterion ${condition.criterion} is met but has no references. Copy an inspected excerptPage.reference that establishes this condition, or report missing or uncertain. A supporting reference elsewhere does not fill this condition's references.`});
+    }
+  }
+  if (value.verdict === 'supports' && (value.supporting.length === 0 || value.claimKind === 'hypothesis' ||
+      required.some(criterion => value.conditions.find(item => item.criterion === criterion)?.status !== 'met'))) {
+    ctx.addIssue({code: 'custom', path: ['verdict'], message:
+      `research_scientific_evidence_conditions_missing: supports requires supporting references and all required ${value.claimKind} conditions (${required.join(', ')}) met; hypothesis cannot receive supports. Report a verdict consistent with the available evidence without inventing references.`});
+  }
+  if (value.verdict === 'contradicts' && value.counterevidence.length === 0) {
+    ctx.addIssue({code: 'custom', path: ['counterevidence'], message:
+      'research_scientific_evidence_conditions_missing: contradicts requires counterevidence references. Report a verdict consistent with the available evidence without inventing references.'});
+  }
+  if (value.verdict === 'qualifies' && value.limitations.length === 0) {
+    ctx.addIssue({code: 'custom', path: ['limitations'], message:
+      'research_scientific_evidence_conditions_missing: qualifies requires explicit limitations supported by the inspected material.'});
   }
 });
 export const scientificFindingSchema = z.strictObject({

@@ -54,6 +54,34 @@ async function fixture(options = {}) {
     async cleanup() { await service.shutdown(); f.close(); } };
 }
 
+test('missing or invalid Python lock explains the prerequisite before opening a picker or executing Python', async () => {
+  const f = await fixture();
+  try {
+    const lockPath = join(f.workspace, 'roc-python.lock.json');
+    await rm(lockPath);
+    await assert.rejects(f.select(), error => {
+      assert.equal(error.code, 'research_python_lock_required');
+      assert.equal(error.category, 'validation');
+      assert.match(error.message, /roc-python\.lock\.json/u);
+      return true;
+    });
+    for (const contents of ['', '{}']) {
+      await writeFile(lockPath, contents);
+      await assert.rejects(f.select(), error => {
+        assert.equal(error.code, 'research_python_lock_invalid');
+        assert.equal(error.category, 'validation');
+        assert.match(error.message, /roc-python\.lock\.json/u);
+        return true;
+      });
+    }
+    assert.deepEqual(f.counts, { picks: 0, dispatches: 0 });
+    assert.deepEqual(f.repository.pythonEnvironments.list({ projectId: f.project.id }), []);
+    await writeFile(lockPath, JSON.stringify(f.lock));
+    assert.ok(await f.select());
+    assert.deepEqual(f.counts, { picks: 1, dispatches: 1 });
+  } finally { await f.cleanup(); }
+});
+
 test('main user selection binds actual isolated CPython identity and exact project; replay is readonly and resolve rechecks bytes', async () => {
   const f = await fixture();
   try {
@@ -75,6 +103,25 @@ test('main user selection binds actual isolated CPython identity and exact proje
     assert.equal(observed.length, 1); assert.equal(observed[0].outcome, 'returned'); assert.equal(observed[0].exitCode, 0);
     const actual = receipts.at(-1).result;
     assert.deepEqual(observed[0].usage, actual.resourceUsage); assert.deepEqual(observed[0].admission, actual.admission);
+  } finally { await f.cleanup(); }
+});
+
+test('unsupported direct dependency explains how to choose a compatible environment without saving a selection', async () => {
+  const f = await fixture();
+  try {
+    const metadata = join(f.packagePath, 'local_pkg-1.0.dist-info');
+    await mkdir(metadata);
+    await writeFile(join(metadata, 'METADATA'), 'Metadata-Version: 2.4\nName: local-pkg\nVersion: 1.0\n');
+    await writeFile(join(metadata, 'direct_url.json'), '{"url":"file:///private/tmp/local-pkg"}');
+    await assert.rejects(f.select(), error => {
+      assert.equal(error.code, 'research_python_direct_dependency_unsupported');
+      assert.equal(error.category, 'validation');
+      assert.match(error.message, /direct_url\.json/u);
+      assert.match(error.userAction, /独立.*环境/u);
+      return true;
+    });
+    assert.deepEqual(f.repository.pythonEnvironments.list({ projectId: f.project.id }), []);
+    assert.deepEqual(f.counts, { picks: 1, dispatches: 1 });
   } finally { await f.cleanup(); }
 });
 

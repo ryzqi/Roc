@@ -192,7 +192,7 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
                 </button>
               ) : null}
               {handler.lastRun === null ? (
-                <span className="text-subtle text-[length:var(--font-micro-size)]">还没有运行记录</span>
+                <span className="text-subtle text-[length:var(--font-micro-size)]">运行记录请在对应会话中查看</span>
               ) : (
                 <span className="text-subtle text-[length:var(--font-micro-size)]">
                   最近运行：{handler.lastRun.status}

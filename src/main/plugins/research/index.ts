@@ -1,4 +1,5 @@
 import {researchWikiCapabilities, registerResearchWikiCapabilities} from './wiki-capabilities';
+import {recordCapabilityOperationReceipt} from '../../kernel/capability-operation-context';
 import {knowledgeJobSchema, knowledgeJobsListSchema, knowledgeJobRetrySchema} from '../../../shared/schemas/research-knowledge-jobs';
 import {ResearchDiagramService} from './diagram-service';
 import {researchDiagramCapability, registerResearchDiagramCapability} from './diagram-capabilities';
@@ -199,7 +200,8 @@ const workbenchCapabilities = {
   updateProject: descriptor('research.projects.update', researchProjectUpdateRequestSchema, researchProjectSchema),
   deleteProject: descriptor('research.projects.delete', researchProjectIdRequestSchema, z.object({ id: z.string(), deleted: z.literal(true) }).strict()),
   getWorkflow: descriptor('research.workflow.get', researchProjectIdRequestSchema, researchWorkflowSnapshotSchema),
-  transitionWorkflow: descriptor('research.workflow.transition', researchWorkflowTransitionRequestSchema, researchWorkflowSnapshotSchema),
+  transitionWorkflow: {...descriptor('research.workflow.transition', researchWorkflowTransitionRequestSchema, researchWorkflowSnapshotSchema),
+    effectReceipt: 'handler' as const},
   verifyStageArtifacts: descriptor(
     'research.workflow.verifyStageArtifacts',
     z.object({ projectId: z.string().min(1), stage: researchStageSchema }).strict(),
@@ -593,6 +595,8 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       });
       context.capabilities.register(pluginId, workbenchCapabilities.transitionWorkflow, async input => {
         const request = researchWorkflowTransitionRequestSchema.parse(input);
+        // Approve/reject publish inside the synchronous repository transaction after validation.
+        if (request.action !== 'approve' && request.action !== 'reject') recordCapabilityOperationReceipt();
         const snapshot = await applyResearchWorkflowTransition({ request, gate: humanGate, runtime, exports: researchExports });
         if (['complete', 'approve', 'reject'].includes(request.action)) {
           for (const taskId of researchRepository.runs.taskIdsForStage(request.projectId, request.expectedStage)) {

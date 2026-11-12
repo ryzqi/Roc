@@ -1,7 +1,9 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {Annotation, Command, END, MemorySaver, START, StateGraph} from '@langchain/langgraph';
+import {Annotation, Command, END, MemorySaver, START, StateGraph, interrupt} from '@langchain/langgraph';
+import {ToolMessage} from '@langchain/core/messages';
+import {z} from 'zod';
 import {withResearchTestWorker, createResearchFixture, loadResearchTestApi, captureResearchArtifactVersions} from './fixtures/research-test-kit.mjs';
 import {createPublishedFigureFixture} from './fixtures/research-production-test-kit.mjs';
 
@@ -18,6 +20,168 @@ function waiting(stage='planning') {
 const request=(f,action='approve')=>({projectId:f.project.id,expectedStage:f.repository.getProject(f.project.id).currentStage,
   action,expectedArtifactVersions:captureResearchArtifactVersions(f.repository,f.project.id)});
 const changes=f=>f.db.prepare('SELECT total_changes()').pluck().get();
+
+test('rejecting completed reading permits a replacement run while unreviewed outputs stay fenced',()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const complete=id=>withResearchTestWorker(api,f.repository,id,f.project.id,workerId=>
+      f.repository.runs.complete(workerId,f.project.id,output));
+    const original=complete(f.run.id);
+    const begin=requestId=>f.repository.runs.begin({projectId:f.project.id,expectedStage:'reading',
+      instruction:'Correct the rejected reading notes',requestId});
+    assert.throws(()=>begin('before-review'),/research_stage_awaiting_gate/u);
+    f.repository.transitionWorkflow({projectId:f.project.id,expectedStage:'reading',action:'complete'});
+    f.repository.transitionWorkflow(request(f,'reject'));
+    const rejected=f.repository.getWorkflow(f.project.id).stages.find(stage=>stage.stage==='reading');
+    assert.equal(rejected.status,'running');
+    assert.equal(rejected.activeRunId,null);
+    const replacement=begin('after-reject');
+    assert.notEqual(replacement.id,original.id);
+    assert.equal(f.repository.runs.get(original.id,f.project.id).status,'completed');
+    assert.deepEqual(f.repository.runs.get(original.id,f.project.id).outputArtifactIds,original.outputArtifactIds);
+    assert.equal(f.repository.getArtifact(original.outputArtifactIds[0]).status,'superseded');
+    assert.deepEqual(f.repository.getWorkflow(f.project.id).stages.find(stage=>stage.stage==='reading').artifactIds,[]);
+    f.tasks.linkStage(replacement,null);
+    f.repository.runs.bindTask(replacement.id,f.project.id);
+    withResearchTestWorker(api,f.repository,replacement.id,f.project.id,id=>
+      f.repository.runs.markRunning(id,f.project.id,{providerId:'fixture-provider',modelId:'fixture-model'}));
+    const revised=complete(replacement.id);
+    assert.throws(()=>begin('before-revised-review'),/research_stage_awaiting_gate/u);
+    f.repository.transitionWorkflow({projectId:f.project.id,expectedStage:'reading',action:'complete'});
+    assert.deepEqual(captureResearchArtifactVersions(f.repository,f.project.id).map(entry=>entry.artifactId),revised.outputArtifactIds);
+    f.repository.transitionWorkflow(request(f));
+    assert.equal(f.repository.getProject(f.project.id).currentStage,'ideation');
+  }finally{f.close();}
+});
+
+function effectMiddleware(f, name='research_approve_gate') {
+  const store=new api.AgentToolEffectStore(f.agentDb);
+  const request={toolCall:{id:'gate-call',name,args:{}},runtime:{configurable:{
+    checkpoint_ns:'tools:gate',checkpoint_map:{'':'gate-checkpoint'},ls_agent_type:'root'
+  }}};
+  const middleware=api.createToolEffectIdempotencyMiddleware({runId:f.run.id,threadId:'effect-gate',store,
+    capabilityManifest:{manifestHash:'gate-test',tools:[{modelVisibleName:name,canonicalIdentity:`research.${name}`,
+      toolVersion:'1',effectClass:'external_call',idempotencyStrategy:'operation_key',reconcileStrategy:'manual_confirmation'}]}});
+  return {store,request,middleware,status:()=>f.agentDb.prepare('SELECT status FROM agent_tool_effects WHERE run_id=?').pluck().get(f.run.id)};
+}
+
+test('real nested gate can suspend before effects, resume with reviewed versions, and replay once',async()=>{
+  const f=waiting();
+  try {
+    const registry=new api.CapabilityRegistry();
+    let transitions=0;
+    for(const [name,handler] of [
+      ['research.workflow.get',()=>f.repository.getWorkflow(f.project.id)],
+      ['research.workflow.gateReview',input=>f.repository.readGateReviewContext(input)],
+      ['research.workflow.transition',input=>{transitions++;return f.repository.transitionWorkflow(input);}]
+    ]) {
+      const descriptor={name,version:'1.0.0',inputSchema:z.unknown(),outputSchema:z.unknown()};
+      registry.declare('research',descriptor);registry.register('research',descriptor,async input=>handler(input));
+    }
+    const tools=api.createResearchTools({projectId:f.project.id,signal:new AbortController().signal,capabilities:registry,
+      dispatchStage:async()=>assert.fail('gate cannot run a model'),dispatchReviewQuery:async()=>assert.fail('unexpected search')});
+    const gate=tools.find(tool=>tool.name==='research_approve_gate');
+    const e=effectMiddleware(f);
+    const handler=async()=>new ToolMessage({name:e.request.toolCall.name,tool_call_id:e.request.toolCall.id,
+      content:JSON.stringify(await gate.invoke({}))});
+    const graph=new StateGraph(Annotation.Root({done:Annotation()})).addNode('tool',async()=>{
+      await e.middleware.wrapToolCall(e.request,handler);return {done:true};
+    }).addEdge(START,'tool').addEdge('tool',END).compile({checkpointer:new MemorySaver()});
+    const config={configurable:{thread_id:'effect-gate'}};
+    const pending=await graph.invoke({done:false},config);
+    assert.equal(transitions,0);
+    assert.equal(pending.__interrupt__.length,1);
+    assert.equal(e.status(),'failed_retryable','a graph suspension without a write must not require effect reconciliation');
+    assert.equal(e.store.hasUnknown(f.run.id),false);
+    e.store.markRestartedUnknown(f.run.id);
+    assert.equal(e.status(),'failed_retryable','restarting a pre-effect suspension must preserve the pending gate');
+    assert.equal(e.store.hasUnknown(f.run.id),false);
+    const versions=pending.__interrupt__[0].value.request.actionRequests[0].args.artifactLinks
+      .map(link=>({artifactId:link.artifactId,version:link.expectedVersion}));
+    const result=await graph.invoke(new Command({resume:{decisions:[{type:'approve',reviewedArtifactVersions:versions}]}}),config);
+    assert.equal(result.done,true);assert.equal(transitions,1);assert.equal(e.status(),'succeeded');
+    await e.middleware.wrapToolCall(e.request,async()=>assert.fail('completed approval must replay'));
+    assert.equal(transitions,1);
+  }finally{f.close();}
+});
+
+test('interrupt after publishing an effect remains unknown and cannot repeat the handler',async()=>{
+  const f=waiting();
+  try {
+    const registry=new api.CapabilityRegistry();
+    const descriptor={name:'test.write',version:'1',inputSchema:z.unknown(),outputSchema:z.unknown()};
+    registry.declare('test',descriptor);registry.register('test',descriptor,async()=>({written:true}));
+    const e=effectMiddleware(f,'write_then_interrupt');
+    let writes=0;
+    const graph=new StateGraph(Annotation.Root({done:Annotation()})).addNode('tool',async()=>{
+      await e.middleware.wrapToolCall(e.request,async()=>{
+        await registry.invoke('test.write',{});writes++;
+        interrupt({question:'unsafe to restart write'});
+        return new ToolMessage({name:'write_then_interrupt',tool_call_id:'gate-call',content:'done'});
+      });return {done:true};
+    }).addEdge(START,'tool').addEdge('tool',END).compile({checkpointer:new MemorySaver()});
+    const config={configurable:{thread_id:'published-effect'}};
+    const pending=await graph.invoke({done:false},config);
+    assert.equal(pending.__interrupt__.length,1);assert.equal(e.status(),'unknown');assert.equal(writes,1);
+    await assert.rejects(graph.invoke(new Command({resume:true}),config),/agent_tool_effect_unknown_manual_confirmation/);
+    assert.equal(writes,1);
+  }finally{f.close();}
+});
+
+test('semantic gate validation can reinterrupt before a receipt, then approve exactly once after source review',async()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    f.repository.knowledge.upsertFromSource({id:'gate-source',projectId:f.project.id,sourceType:'file',sourceId:'gate.md',
+      title:'Gate source',content:'Measured result.',chunks:[{content:'Measured result.',locator:'block:0'}],embeddingPolicy:'none'});
+    const source=f.repository.evidence.capture({projectId:f.project.id,chunkId:'gate-source:chunk:0'});
+    const completed=withResearchTestWorker(api,f.repository,f.run.id,f.project.id,id=>f.repository.runs.complete(id,f.project.id,{
+      ...output,claims:[{subjectType:'claim',content:'Measured result.',status:'supported',evidenceIds:[source.id]}]}));
+    f.repository.transitionWorkflow({projectId:f.project.id,expectedStage:'reading',action:'complete'});
+    const registry=new api.CapabilityRegistry();
+    const humanGate=api.createResearchHumanGate({repository:f.repository});
+    let transitions=0;
+    for(const [name,handler] of [
+      ['research.workflow.get',()=>f.repository.getWorkflow(f.project.id)],
+      ['research.workflow.gateReview',input=>f.repository.readGateReviewContext(input)],
+      ['research.workflow.transition',input=>{transitions++;return humanGate.approve(input);}]
+    ]) {
+      const descriptor={name,version:'1',inputSchema:z.unknown(),outputSchema:z.unknown(),
+        ...(name==='research.workflow.transition'?{effectReceipt:'handler'}:{})};
+      registry.declare('research',descriptor);registry.register('research',descriptor,async input=>handler(input));
+    }
+    const gate=api.createResearchTools({projectId:f.project.id,signal:new AbortController().signal,capabilities:registry,
+      dispatchStage:async()=>assert.fail('gate cannot run a model'),dispatchReviewQuery:async()=>assert.fail('unexpected search')})
+      .find(tool=>tool.name==='research_approve_gate');
+    const e=effectMiddleware(f);
+    const graph=new StateGraph(Annotation.Root({done:Annotation()})).addNode('tool',async()=>{
+      await e.middleware.wrapToolCall(e.request,async()=>new ToolMessage({name:'research_approve_gate',tool_call_id:'gate-call',
+        content:JSON.stringify(await gate.invoke({}))}));return {done:true};
+    }).addEdge(START,'tool').addEdge('tool',END).compile({checkpointer:new MemorySaver()});
+    const config={configurable:{thread_id:'semantic-gate'}};
+    const pending=await graph.invoke({done:false},config);
+    const versions=value=>value.__interrupt__[0].value.request.actionRequests[0].args.artifactLinks
+      .map(link=>({artifactId:link.artifactId,version:link.expectedVersion}));
+    const before=changes(f);
+    const retry=await graph.invoke(new Command({resume:{decisions:[{type:'approve',reviewedArtifactVersions:versions(pending)}]}}),config);
+    assert.match(retry.__interrupt__[0].value.request.actionRequests[0].args.reviewError,/人工支持确认/);
+    assert.equal(changes(f),before,'semantic failure must not write research data');
+    assert.equal(e.status(),'failed_retryable','validation before any write must remain resumable');
+    assert.equal(f.agentDb.prepare('SELECT receipt_sequence FROM agent_tool_effects').pluck().get(),0);
+    e.store.markRestartedUnknown(f.run.id);
+    assert.equal(e.status(),'failed_retryable');
+    const claim=f.repository.evidence.listClaims({projectId:f.project.id,artifactId:completed.outputArtifactIds[0]})[0];
+    const relation=f.repository.evidence.relations.list({projectId:f.project.id,claimId:claim.id})[0];
+    f.repository.evidence.relations.review({projectId:f.project.id,relationId:relation.id,expectedVersion:relation.version,
+      expectedClaimVersion:relation.claimVersion,expectedSourceDigest:relation.sourceDigest,decision:'confirm',note:'Reviewed fixed source.'},
+      {kind:'user',id:'test-reviewer'});
+    const reviewed=captureResearchArtifactVersions(f.repository,f.project.id);
+    const result=await graph.invoke(new Command({resume:{decisions:[{type:'approve',reviewedArtifactVersions:reviewed}]}}),config);
+    assert.equal(result.done,true);assert.equal(e.status(),'succeeded');assert.equal(transitions,2);
+    assert.equal(f.agentDb.prepare('SELECT receipt_sequence FROM agent_tool_effects').pluck().get(),1);
+    assert.equal(f.repository.getWorkflow(f.project.id).currentStage,'ideation');
+    await e.middleware.wrapToolCall(e.request,async()=>assert.fail('committed approval must replay'));
+  }finally{f.close();}
+});
 
 test('approve and reject require unique complete current versions at wire and repository boundaries',()=>{
   for(const action of ['approve','reject']) {

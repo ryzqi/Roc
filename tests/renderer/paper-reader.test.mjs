@@ -55,7 +55,7 @@ before(async () => {
         workspaceStatus:'ready',workspaceError:null,openFileInCanvas:()=>{}};
       return <WorkspaceScopeProvider value={scope}><PaperReader literature={store}
         onClearFocus={()=>setFocus({parseId:null,locator:null})}
-        openInFilesView={()=>{}} focusParseId={focus.parseId} focusLocator={focus.locator}/></WorkspaceScopeProvider>;
+        openInFilesView={()=>{}} focusParseId={focus.parseId} focusLocator={focus.locator} focusText={focus.text}/></WorkspaceScopeProvider>;
     }
     let generation=0;
     window.mountReader=(snapshot,focus)=>flushSync(()=>root.render(<Harness key={++generation} initial={snapshot} initialFocus={focus}/>));
@@ -322,6 +322,25 @@ test('locator prefixes and ambiguous exact locations remain unmatched in the sel
   await textEquals('Ambiguous paragraph.');
   assert.equal(await page.locator('[data-focused="true"]').count(), 0);
   await page.getByTestId('reader-jump-missed').waitFor();
+});
+
+test('retrieved text disambiguates blocks on the same page without guessing an unmatched or repeated passage', async () => {
+  const f = scene();
+  f.publish(f.first, 'retrieved-parse', 'Retrieved paragraph.', ['page:1', 'page:1']);
+  const focus = {parseId: 'retrieved-parse', locator: 'page:1', text: 'Retrieved paragraph. repeated block'};
+  await mount(f, focus); await textEquals('Retrieved paragraph.');
+  assert.equal(await page.locator('[data-block-id="retrieved-parse-block-1"]').getAttribute('data-focused'), 'true');
+  // Retrieval children carry only a substring, and their locator includes a character span.
+  await mount(f, {...focus, locator: 'page:1 · chars 10–20', text: 'repeated block'});
+  await textEquals('Retrieved paragraph.');
+  assert.equal(await page.locator('[data-block-id="retrieved-parse-block-1"]').getAttribute('data-focused'), 'true');
+  for (const text of ['Retrieved paragraph.', 'No such source passage.']) {
+    // The full first block is unique, while this substring occurs in both blocks.
+    await mount(f, {...focus, text: text === 'Retrieved paragraph.' ? 'paragraph.' : text});
+    await textEquals('Retrieved paragraph.');
+    await page.getByTestId('reader-jump-missed').waitFor();
+    assert.equal(await page.locator('[data-focused="true"]').count(), 0);
+  }
 });
 
 test('native document-tab keys clear historical focus and choose the target current version', async () => {

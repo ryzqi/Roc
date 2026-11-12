@@ -50,19 +50,37 @@ test('status preserves unusual NUL-delimited names and runs porcelain status onc
     assert.deepEqual(status.changes.map((change) => change.relativePath).sort(), [...names].sort());
     assert.deepEqual(status.porcelain, status.changes.map((change) => change.porcelain));
     assert.equal(readFileSync(statusLog, 'utf8').trim().split('\n').length, 1);
-    assert.equal(readFileSync(statusLog, 'utf8').trim(), 'status --porcelain=v1 -z');
+    assert.equal(readFileSync(statusLog, 'utf8').trim(), 'status --porcelain=v1 -z --untracked-files=all');
 
     const staged = await service.stageFiles(names);
     assert.equal(staged.changedFiles, names.length);
     assert.deepEqual(staged.changes.map((change) => change.relativePath).sort(), [...names].sort());
     assert.deepEqual(readFileSync(statusLog, 'utf8').trim().split('\n'), [
-      'status --porcelain=v1 -z',
-      'status --porcelain=v1 -z'
+      'status --porcelain=v1 -z --untracked-files=all',
+      'status --porcelain=v1 -z --untracked-files=all'
     ]);
   } finally {
     restoreEnv('ROC_GIT_TEST_STATUS_LOG', previousLog);
     restoreEnv('ROC_GIT_TEST_REAL', previousReal);
   }
+});
+
+test('untracked nested files can be diffed, staged and unstaged individually in an unborn repository', async () => {
+  const repository = makeRepository('nested-untracked');
+  mkdirSync(join(repository, 'literature', 'nested'), { recursive: true });
+  const names = ['literature/nested/source.md', 'literature/sibling.md'];
+  for (const name of names) writeFileSync(join(repository, name), `content for ${name}\n`);
+  const service = serviceFor(repository);
+  const status = await service.getStatus();
+  assert.deepEqual(status.changes.map((change) => change.relativePath).sort(), [...names].sort());
+  const diff = await service.getFileDiff(names[0]);
+  assert.match(diff.patch, /content for literature\/nested\/source\.md/);
+  const staged = await service.stageFile(names[0]);
+  assert.equal(staged.changes.find((change) => change.relativePath === names[0])?.index, 'A');
+  assert.equal(staged.changes.find((change) => change.relativePath === names[1])?.index, '?');
+  const unstaged = await service.unstageFile(names[0]);
+  assert.deepEqual(unstaged.changes.map((change) => change.relativePath).sort(), [...names].sort());
+  assert.equal(unstaged.changes.every((change) => change.index === '?'), true);
 });
 
 test('status parses renames and accepts linked worktrees whose .git entry is a file', async () => {

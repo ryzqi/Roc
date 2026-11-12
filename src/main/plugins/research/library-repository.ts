@@ -8,7 +8,7 @@ import {
 } from '../../../shared/schemas/research-library';
 import type { ResearchLiterature } from '../../../shared/types';
 import { citationKeySet } from './cite-key';
-import { bibliographyIdentity, literatureIdentity, normalizeResearchDoi } from './literature-identity';
+import { bibliographyIdentity, literatureIdentity, literatureIdentityAliases, normalizeResearchDoi } from './literature-identity';
 import { groupLiteratureIdentities } from './literature-identity-graph';
 import {providerIdentifierObservations} from './literature-provider-identifiers';
 import {literatureReadIdentifiersSchema, literatureProviderIdentifierRecordSchema,
@@ -42,7 +42,7 @@ export class ResearchLibraryRepository {
   constructor(private readonly db: Database, private readonly research: ResearchRepository, private readonly now: () => string) {}
 
   findByIdentity(identity: string, aliases: readonly string[] = []): LibraryItem | null {
-    const keys = [...new Set([identity, ...aliases])];
+    const keys = [...new Set([identity, ...aliases].flatMap(literatureIdentityAliases))];
     const rows = this.db.prepare(`SELECT DISTINCT l.id,l.identity_key FROM research_library_aliases a
       JOIN research_library l ON l.id=a.item_id WHERE a.identity IN (${keys.map(() => '?').join(',')})
       ORDER BY (l.identity_key=?) DESC,(l.identity_key NOT LIKE 'doi:%') DESC,l.id LIMIT 3`)

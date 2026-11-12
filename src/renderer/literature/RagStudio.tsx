@@ -47,7 +47,7 @@ export type RagStudioProps = {
    * (so an item with several documents opens the right one); `null` means "the
    * selected item's first document".
    */
-  onOpenInReader: (target: { parseId: string | null; libraryItemId: string | null; locator: string | null }) => void;
+  onOpenInReader: (target: { parseId: string | null; libraryItemId: string | null; locator: string | null; text: string | null }) => void;
 };
 
 const PHASE_LABELS: Readonly<Record<ResearchIndexStatus['phase'], string>> = {
@@ -237,13 +237,14 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
       onOpenInReader({
         parseId: hit.documentId.slice('document:'.length),
         libraryItemId: hit.sourceId,
-        locator: hit.locator
+        locator: hit.locator,
+        text: hit.content
       });
       return;
     }
     if (hit.documentId.startsWith('library:')) {
       literature.select(hit.sourceId);
-      onOpenInReader({ parseId: null, libraryItemId: hit.sourceId, locator: null });
+      onOpenInReader({ parseId: null, libraryItemId: hit.sourceId, locator: null, text: null });
       return;
     }
     if (hit.documentId.startsWith('project-index:')) {

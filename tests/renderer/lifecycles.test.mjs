@@ -462,6 +462,57 @@ async function chatFixture() {
   await page.waitForFunction(() => typeof live === 'function');
 }
 
+async function chatSendFixture() {
+  await chatFixture();
+  await page.evaluate(() => {
+    window.sendCalls = [];
+    window.mcpConfig = {schemaVersion: 1, approvalMode: 'default', servers: [
+      {id: 'enabled-exa', enabled: true}, {id: 'disabled-server', enabled: false}
+    ]};
+    client.api.mcp = {getConfig: async () => ok(structuredClone(mcpConfig))};
+    client.api.chat.startRun = async request => {
+      sendCalls.push(structuredClone(request));
+      return ok({runId: 'send-run', threadId: request.threadId});
+    };
+    window.sendInput = {text: ' Search once ', mode: 'chat', skillIds: ['reader'], attachments: []};
+    window.selected = null;
+  });
+}
+
+test('chat send includes currently enabled MCP servers and rereads changes for the next run', async () => {
+  await chatSendFixture();
+  assert.equal(await page.evaluate(() => latest.send(sendInput)), true);
+  assert.deepEqual(await page.evaluate(() => sendCalls[0].enabledCapabilities), {
+    mcpServers: ['enabled-exa'], skills: ['reader']
+  });
+  await page.evaluate(() => { mcpConfig.servers[0].enabled = false; mcpConfig.servers[1].enabled = true; });
+  assert.equal(await page.evaluate(() => latest.send(sendInput)), true);
+  assert.deepEqual(await page.evaluate(() => sendCalls[1].enabledCapabilities.mcpServers), ['disabled-server']);
+});
+
+test('chat send keeps the prompt and exposes MCP config lookup failure without starting a run', async () => {
+  await chatSendFixture();
+  await page.evaluate(() => { client.api.mcp.getConfig = async () => fail('MCP config unavailable'); });
+  assert.equal(await page.evaluate(() => latest.send(sendInput)), false);
+  await page.waitForFunction(() => latest.sending === false);
+  assert.deepEqual(await page.evaluate(() => ({
+    calls: sendCalls.length, pending: latest.pendingUserInput, error: latest.errorMessage
+  })), {calls: 0, pending: 'Search once', error: 'MCP config unavailable'});
+});
+
+test('chat send stops before starting a run if its scope changes during MCP config lookup', async () => {
+  await chatSendFixture();
+  await page.evaluate(() => {
+    window.mcpLookup = deferred();
+    client.api.mcp.getConfig = () => mcpLookup.promise;
+    window.sendingPromise = latest.send(sendInput);
+  });
+  await page.evaluate(() => mount('chat', {...props, threadId: 'b'}));
+  await page.evaluate(() => mcpLookup.resolve(ok(mcpConfig)));
+  assert.equal(await page.evaluate(() => sendingPromise), false);
+  assert.deepEqual(await page.evaluate(() => ({calls: sendCalls.length, selected})), {calls: 0, selected: null});
+});
+
 async function persistedHistoryFixture({
   threadId = 'history-a',
   initialPage,
@@ -824,6 +875,87 @@ test('rendered transcript keeps the same visible message anchored across prepend
   }, {props, retainedWindow});
   const afterTrimTop = await readAnchorTop();
   assert.ok(Math.abs(afterTrimTop - afterTop) <= 2, `visible message moved from ${afterTop}px to ${afterTrimTop}px after trim`);
+});
+
+test('transcript follows a live review gate after opening a message taller than its viewport', async () => {
+  await page.evaluate(() => {
+    window.gateMessages = [{
+      key: 'long-history', source: 'persisted', role: 'user',
+      content: 'Review the formal manuscript and retain the evidence boundaries. '.repeat(80),
+      reasoning: null, blocks: [], interrupts: [], isStreaming: false
+    }];
+    window.renderGateTranscript = messages => mountTranscript({
+      threadId: 'long-review-gate', messages, prependRevision: 0, trimRevision: 0,
+      windowEpoch: 0, tailTrimmed: false, hasMoreBefore: false, loadingOlder: false,
+      loadOlder: async () => {}, onJumpToLatest: async () => {},
+      onOpenArtifact: () => {}, onReadGateContext: async () => null,
+      onApprovalDecision: () => {}
+    });
+    renderGateTranscript(gateMessages);
+  });
+  await page.waitForFunction(() => {
+    const parent = document.getElementById('transcript-scroll-parent');
+    return parent.scrollHeight > parent.clientHeight &&
+      parent.scrollHeight - parent.clientHeight - parent.scrollTop <= 2;
+  });
+  await page.evaluate(() => {
+    window.liveGateMessage = {
+      key: 'live-review', source: 'live', role: 'assistant', content: '', reasoning: null,
+      blocks: [{id: 'gate-tool', kind: 'tool_call', callId: 'gate-tool',
+        name: 'research_approve_gate', input: {}, output: null, error: null, status: 'end'}],
+      interrupts: [], isStreaming: true
+    };
+    renderGateTranscript([...gateMessages, liveGateMessage]);
+  });
+  await page.waitForFunction(() => document.querySelectorAll('[data-testid="assistant-message-assistant"]').length === 1);
+  await page.evaluate(() => {
+    renderGateTranscript([...gateMessages, {...liveGateMessage, isStreaming: false, interrupts: [{
+      kind: 'approval', interruptId: 'live-gate',
+      actionRequests: [{name: 'research_approve_gate', description: 'Review decision',
+        args: {projectId: 'project-review', stage: 'review', artifactLinks: [],
+          reviewError: null, summary: 'Review is ready for a human decision.'}}],
+      reviewConfigs: [{actionName: 'research_approve_gate', allowedDecisions: ['approve', 'revise', 'reject']}]
+    }]}]);
+  });
+  await page.getByTestId('assistant-gate-stage').waitFor();
+  await page.waitForFunction(() => {
+    const parent = document.getElementById('transcript-scroll-parent').getBoundingClientRect();
+    const gate = document.querySelector('[data-testid="assistant-gate-card"]').getBoundingClientRect();
+    return gate.top < parent.bottom && gate.bottom > parent.top;
+  });
+});
+
+test('transcript preserves an intentional scroll away from the bottom when new output arrives', async () => {
+  await page.evaluate(() => {
+    window.readingMessages = Array.from({length: 80}, (_, index) => ({
+      key: `reading-${index}`, source: 'persisted', role: 'user', content: `Reading message ${index}`,
+      reasoning: null, blocks: [], interrupts: [], isStreaming: false
+    }));
+    window.renderReadingTranscript = messages => mountTranscript({
+      threadId: 'reading-history', messages, prependRevision: 0, trimRevision: 0,
+      windowEpoch: 0, tailTrimmed: false, hasMoreBefore: false, loadingOlder: false,
+      loadOlder: async () => {}, onJumpToLatest: async () => {},
+      onOpenArtifact: () => {}, onReadGateContext: async () => null
+    });
+    renderReadingTranscript(readingMessages);
+  });
+  await page.waitForFunction(() => {
+    const parent = document.getElementById('transcript-scroll-parent');
+    return parent.scrollTop > 0 && parent.scrollHeight - parent.clientHeight - parent.scrollTop <= 2;
+  });
+  await page.evaluate(() => {
+    const parent = document.getElementById('transcript-scroll-parent');
+    parent.scrollTop = Math.floor(parent.scrollTop / 2);
+    parent.dispatchEvent(new Event('scroll'));
+  });
+  await page.getByTestId('assistant-scroll-bottom').waitFor();
+  const beforeTop = await page.evaluate(() => document.getElementById('transcript-scroll-parent').scrollTop);
+  await page.evaluate(() => renderReadingTranscript([...readingMessages, {
+    ...readingMessages[0], key: 'new-output', role: 'assistant', source: 'live', content: 'New output'
+  }]));
+  await page.waitForTimeout(200);
+  const afterTop = await page.evaluate(() => document.getElementById('transcript-scroll-parent').scrollTop);
+  assert.ok(Math.abs(afterTop - beforeTop) <= 2, `reading position moved from ${beforeTop}px to ${afterTop}px`);
 });
 
 test('switching conversations ignores replay already in flight', async () => {

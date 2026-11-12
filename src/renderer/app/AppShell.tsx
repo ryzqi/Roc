@@ -394,6 +394,10 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
         if (projectId === null) throw new Error('research_task_project_required');
         setResearchTaskSelection({ projectId, taskId });
       },
+      onOpenArtifact: (request, onReviewContext) => {
+        setManagementOpen(false);
+        openArtifact(request, onReviewContext);
+      },
       onOpenThread: (threadId) => {
         setAssistantThreadId(threadId);
         setManagementOpen(false);
@@ -412,7 +416,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
         navigate({ ...routeRef.current, page: 'settings' });
       }
     }),
-    [client, route.projectId, boundWorkspace.path, navigate, openManagementSection, researchTaskSelection]
+    [client, route.projectId, boundWorkspace.path, navigate, openManagementSection, researchTaskSelection, openArtifact]
   );
   const managementStoresScopeKey = JSON.stringify([managementScope.projectId, managementScope.workspacePath]);
   const managementStoresEnabled =

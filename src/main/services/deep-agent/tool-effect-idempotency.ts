@@ -1,5 +1,6 @@
 import { ToolMessage } from '@langchain/core/messages';
 import type { ClientTool } from '@langchain/core/tools';
+import {isGraphInterrupt} from '@langchain/langgraph';
 import { createMiddleware } from 'langchain';
 
 import type {
@@ -122,7 +123,11 @@ export function createToolEffectIdempotencyMiddleware(options: ToolEffectIdempot
         return result;
       } catch (error) {
         const toolError = unwrapMiddlewareError(error);
-        if (operationContext.hasPublishedSideEffect() || effectPolicy.reconcileStrategy === 'manual_confirmation') {
+        if (isGraphInterrupt(toolError) && !operationContext.hasPublishedSideEffect()) {
+          // Graph control flow, not an uncertain failure: resume re-enters the
+          // tool under a fresh fenced lease. Published effects remain unknown.
+          options.store.finishSuspended(lease, toolError);
+        } else if (operationContext.hasPublishedSideEffect() || effectPolicy.reconcileStrategy === 'manual_confirmation') {
           options.store.finishUnknown(lease, toolError);
         } else {
           options.store.finishError(

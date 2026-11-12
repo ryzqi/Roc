@@ -425,8 +425,19 @@ export class AgentToolEffectStore {
         `UPDATE agent_tool_effects
          SET status = 'unknown', attempt_id = NULL, lease_generation = lease_generation + 1,
              error_json = COALESCE(error_json, ?), updated_at = ?
-         WHERE run_id = ? AND (status = 'in_progress' OR (status = 'failed_retryable' AND reconcile_strategy = 'manual_confirmation'))`
+         WHERE run_id = ? AND status = 'in_progress'`
       ).run(JSON.stringify({ code: 'agent_tool_effect_interrupted_at_restart' }), now, runId);
+      const retries = this.db.prepare(
+        "SELECT * FROM agent_tool_effects WHERE run_id = ? AND status = 'failed_retryable' AND reconcile_strategy = 'manual_confirmation'"
+      ).all(runId) as ToolEffectRow[];
+      const updateRetry = this.db.prepare(
+        `UPDATE agent_tool_effects SET status = ?, attempt_id = NULL,
+         lease_generation = lease_generation + 1, updated_at = ?
+         WHERE run_id = ? AND execution_path = ? AND checkpoint_id = ? AND tool_call_id = ?`
+      );
+      for (const row of retries) {
+        updateRetry.run(normalizeRestoredStatus(row), now, row.run_id, row.execution_path, row.checkpoint_id, row.tool_call_id);
+      }
       this.db.prepare(
         `UPDATE agent_tool_effects
          SET status = 'failed_retryable', attempt_id = NULL, lease_generation = lease_generation + 1,
@@ -472,7 +483,7 @@ export class AgentToolEffectStore {
       );
       for (const row of effectRows) {
         if (row.identity_version !== 1) throw new Error('agent_tool_effect_legacy_identity_unverified');
-        const status = normalizeRestoredStatus(row.status, row.reconcile_strategy);
+        const status = normalizeRestoredStatus(row);
         const leaseGeneration = row.status === 'succeeded' ? row.lease_generation : row.lease_generation + 1;
         const attemptId = null;
         const errorJson = status === row.status ? row.error_json : JSON.stringify({ code: 'agent_tool_effect_restored_unresolved' });
@@ -601,6 +612,16 @@ export class AgentToolEffectStore {
 
   finishUnknown(lease: ToolEffectLease, error: unknown): void {
     this.finish(lease, 'unknown', null, stableStringify(serializeError(error)));
+  }
+
+  /** Release a graph suspension before any effect; manual-confirmation failures still use unknown. */
+  finishSuspended(lease: ToolEffectLease, interrupt: unknown): void {
+    if (this.readRow(lease).receipt_json !== null) {
+      throw new Error('agent_tool_effect_suspension_has_receipt');
+    }
+    this.finish(lease, 'failed_retryable', null, stableStringify({
+      code: 'agent_tool_effect_suspended_before_effect', interrupt: serializeError(interrupt)
+    }));
   }
 
   private finish(
@@ -865,11 +886,18 @@ function isSha256(value: unknown): value is string {
   return typeof value === 'string' && HEX_SHA256_PATTERN.test(value);
 }
 
-function normalizeRestoredStatus(status: string, reconcileStrategy: string): ToolEffectRow['status'] {
+function normalizeRestoredStatus(row: ToolEffectRow): ToolEffectRow['status'] {
+  const {status, reconcile_strategy: reconcileStrategy} = row;
   if (status === 'reserved') {
     return 'failed_retryable';
   }
   if (status === 'in_progress' || (status === 'failed_retryable' && reconcileStrategy === 'manual_confirmation')) {
+    if (status === 'failed_retryable' && row.receipt_sequence === 0 && row.receipt_json === null &&
+        row.receipt_hash === null && row.result_json === null && row.error_json !== null) {
+      const error: unknown = JSON.parse(row.error_json);
+      if (error !== null && typeof error === 'object' && 'code' in error &&
+          error.code === 'agent_tool_effect_suspended_before_effect') return 'failed_retryable';
+    }
     return 'unknown';
   }
   if (['succeeded', 'failed_retryable', 'failed_final', 'unknown'].includes(status)) {

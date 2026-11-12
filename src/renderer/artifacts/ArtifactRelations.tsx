@@ -39,6 +39,8 @@ export function ArtifactRelations({client, snapshot, current, onChanged}: {
     (filter === 'conflict' && row.conflict) || (filter === 'pending' && row.pending));
   return <section aria-label="主张与证据关系" data-testid="artifact-relations" className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2">
     <h2 className="font-medium">主张与证据关系</h2>
+    {canReview && snapshot.artifact.stage === 'figure' && !snapshot.claims.some(claim => claim.subjectType === 'figure') ?
+      <FigureCaptionClaim client={client} snapshot={snapshot} onChanged={onChanged}/> : null}
     <label className="flex items-center gap-2 text-muted"><span className="shrink-0">查看</span>
       <select value={filter} onChange={event => setFilter(event.target.value)} data-testid="artifact-relations-filter"
         data-reading-key="relations-filter" className={inputClass}>
@@ -84,6 +86,62 @@ export function ArtifactRelations({client, snapshot, current, onChanged}: {
       </details>)}
     </>}
   </section>;
+}
+
+function FigureCaptionClaim({client, snapshot, onChanged}: {
+  client: RocClient; snapshot: Snapshot; onChanged: () => void
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  return <details onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary className="cursor-pointer">补充图注声明</summary>
+    {open ? <FigureCaptionForm client={client} snapshot={snapshot} onChanged={onChanged}/> : null}
+  </details>;
+}
+
+function FigureCaptionForm({client, snapshot, onChanged}: {
+  client: RocClient; snapshot: Snapshot; onChanged: () => void
+}): React.JSX.Element {
+  const projectId = snapshot.artifact.projectId;
+  const [content, setContent] = useState('');
+  const [evidenceId, setEvidenceId] = useState('');
+  const changed = useChangedAfterAction(onChanged);
+  const evidence = useAsyncResource(`caption-evidence:${projectId}`, () => client.api.research.listEvidence({projectId}), {label: '读取图注证据'});
+  const source = useAsyncResource(evidenceId === '' ? null : `caption-source:${projectId}:${evidenceId}`,
+    () => client.api.research.inspectEvidence({projectId, evidenceId}), {label: '读取图注来源'});
+  const selected = source.status === 'ready' && source.data?.source.evidence.id === evidenceId ? source.data.source : null;
+  const valid = content.trim() !== '' && selected?.referenceStatus === 'recorded';
+  const save = useAsyncAction(async () => {
+    if (!valid) throw new Error('research_relation_source_required');
+    const current = await client.api.research.inspectArtifact({projectId, artifactId: snapshot.artifact.id, expectedVersion: snapshot.version});
+    if (!current.ok) return current;
+    if (current.data.status !== 'current') throw new Error('research_artifact_review_changed');
+    return client.api.research.createClaim({projectId, artifactId: snapshot.artifact.id,
+      subjectType: 'figure', content: content.trim(), status: 'supported', evidenceIds: [evidenceId]});
+  }, {label: '保存图注声明'});
+  return <div className="mt-2 flex flex-col gap-2" data-testid="artifact-caption-form">
+    <label className="flex flex-col gap-1 text-muted">图注声明
+      <textarea className={`${inputClass} min-h-24 resize-y`} value={content} maxLength={20000} disabled={save.pending}
+        data-testid="artifact-caption-content" onChange={event => setContent(event.target.value)}/>
+    </label>
+    <label className="flex flex-col gap-1 text-muted">证据来源
+      <select className={inputClass} value={evidenceId} disabled={save.pending || evidence.status !== 'ready'}
+        data-testid="artifact-caption-source" onChange={event => setEvidenceId(event.target.value)}>
+        <option value="">选择已保存证据</option>
+        {evidence.data?.map(item => <option key={item.id} value={item.id}>{item.title}，{item.locator}</option>)}
+      </select>
+    </label>
+    {evidence.status === 'loading' || source.status === 'loading' ? <p role="status">正在读取来源…</p> : null}
+    {evidence.error === null ? null : <div><p role="alert">{evidence.error}</p><button type="button" className={button} onClick={evidence.reload}>重读证据</button></div>}
+    {source.error === null ? null : <div><p role="alert">{source.error}</p><button type="button" className={button} onClick={source.reload}>重读来源</button></div>}
+    {selected === null ? null : <>
+      <blockquote className="whitespace-pre-wrap break-words">{selected.evidence.excerpt}</blockquote>
+      {selected.referenceStatus === 'recorded' ? null : <p role="alert">此来源已失效。</p>}
+    </>}
+    <button type="button" className={`${button} self-start`} disabled={!valid || save.pending}
+      data-testid="artifact-caption-save" onClick={async () => {const outcome = await save.run(); if (outcome.ok) changed();}}>
+      {save.pending ? '正在保存…' : '保存图注声明'}</button>
+    {save.error === null ? null : <p role="alert" className="text-[var(--st-warn)]">{save.error}</p>}
+  </div>;
 }
 
 function useChangedAfterAction(onChanged: () => void): () => void {

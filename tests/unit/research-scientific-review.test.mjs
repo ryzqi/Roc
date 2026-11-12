@@ -27,6 +27,24 @@ test('typed scientific output rejects unsupported causal, numerical, novelty and
   } finally {f.close();}
 });
 
+test('search coverage correction identifies the exact claim and referenced evidence omitted from the examined list', () => {
+  const f = scene();
+  try {
+    const child = f.children.find(child => child.role === 'evidence-reviewer');
+    const output = f.output(child);
+    output.suggestions[0].coverage.examinedEvidenceIds = [];
+    output.suggestions[0].coverage.unexaminedReason = 'Other sources were not examined.';
+    const before = f.repository.listArtifacts(f.project.id).length;
+    assert.throws(() => f.worker(child.id, id => f.repository.runs.complete(id, f.project.id, {...plain, scientificReview: output})), error => {
+      assert.equal(error.message, 'research_scientific_search_coverage_required');
+      assert.ok(error.correction.includes(f.claim.id));
+      assert.ok(error.correction.includes(`missingReferencedEvidenceIds=${JSON.stringify([f.evidence.id])}`));
+      return true;
+    });
+    assert.equal(f.repository.listArtifacts(f.project.id).length, before);
+  } finally {f.close();}
+});
+
 test('frozen original locators, claim versions and read-only reviewer output are enforced before any artifact writes', () => {
   const f = scene();
   try {
@@ -55,11 +73,11 @@ test('frozen original locators, claim versions and read-only reviewer output are
 test('review tools expose only frozen material and deny cross-claim, cross-report and global retrieval', async () => {
   const f = scene();
   try {
-    const child = f.children[0], context = f.repository.runs.getContext(child.id);
+    const child = f.children[0], context = f.repository.runs.getContext(child.id), controller = new AbortController();
     assert.ok(context.inputs.every(entry => entry.output === null && entry.ideaCanvas === null));
     assert.deepEqual(context.reviewReports, []);
     const tools = f.worker(child.id, () => api.createResearchRoleTools({run: f.repository.runs.get(child.id, f.project.id), context, repository: f.repository,
-      capabilities: {invoke: async () => assert.fail('No global retrieval allowed')}, signal: new AbortController().signal}));
+      capabilities: {invoke: async () => assert.fail('No global retrieval allowed')}, signal: controller.signal}));
     const call = (name, args) => f.worker(child.id, () => tools.find(tool => tool.name === name).invoke(args));
     assert.ok(!tools.some(tool => ['read_review_report', 'capture_evidence', 'read_source_migrations', 'save_workspace_file'].includes(tool.name)));
     await assert.rejects(call('read_artifact', {artifactId: 'other-report', offset: 0, limit: 100}), /not_in_run_inputs/);
@@ -67,6 +85,12 @@ test('review tools expose only frozen material and deny cross-claim, cross-repor
     await assert.rejects(call('list_evidence_relations', {claimId: 'other-claim', offset: 0, limit: 10}), /not_in_run_inputs/);
     const result = await call('search_knowledge', {query: 'negative', limit: 10});
     assert.equal(result.scope, 'frozen_review_evidence'); assert.equal(result.hits[0].evidenceId, f.evidence.id);
+    const inputs = context.inputs;
+    context.inputs = [];
+    await assert.rejects(call('inspect_evidence_source', {evidenceId: 'other-evidence', offset: 0, limit: 100}), /research_role_tool_binding_invalid/);
+    context.inputs = inputs;
+    controller.abort(new Error('review_cancelled'));
+    await assert.rejects(call('inspect_evidence_source', {evidenceId: 'other-evidence', offset: 0, limit: 100}), /review_cancelled/);
   } finally {f.close();}
 });
 

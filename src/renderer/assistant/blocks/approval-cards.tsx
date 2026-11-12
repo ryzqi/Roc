@@ -224,7 +224,7 @@ export function ResearchGateApprovalCard({
   const plan = isDiscovery ? researchSearchPlanSchema.safeParse(context === null ? args?.searchPlan : context.searchPlan) : null;
   const planHash = context === null ? readString(args, 'searchPlanHash') : context.searchPlanHash ?? '';
   const links = researchArtifactLinksSchema.safeParse(context === null ? args?.artifactLinks : context.artifactLinks);
-  const canDecide = links.success && gateRequest.success &&
+  const canDecide = onApprovalDecision !== undefined && links.success && gateRequest.success &&
     links.data.every(link => link.projectId === gateRequest.data.projectId) && refreshNonce === 0;
   const canApprovePlan = canDecide && (!isDiscovery || plan?.success === true && /^[a-f0-9]{64}$/u.test(planHash));
   const approveLabel = decisionLabel === '' ? defaultApproveLabel(isReview) : decisionLabel;
@@ -257,8 +257,11 @@ export function ResearchGateApprovalCard({
       <p className="text-muted text-[length:var(--font-meta-size)]" data-testid="assistant-gate-summary">
         {summary === '' ? '确认通过本阶段产物并进入下一阶段。' : summary}
       </p>
+      {onApprovalDecision === undefined ? <p role="status" className="mt-2 text-muted" data-testid="assistant-gate-inactive">
+        此审批已不在当前待恢复运行中。可查看工件，或在助手中重新请求本阶段审核。
+      </p> : null}
       {reviewError === '' ? null : <p role="alert" className="mt-2 text-[var(--st-bad)]" data-testid="assistant-gate-review-error">
-        上次决定未执行：核对版本缺失或已变化。请核对下面的完整阶段上下文，再重新确认。
+        上次决定未执行：{reviewError} 请核对下面的完整阶段上下文，再重新确认。
       </p>}
       {links.success ? <ul className="mt-1.5 flex flex-col gap-1" data-testid="assistant-gate-artifacts">
         {links.data.map(link => <li key={link.artifactId}>
@@ -268,7 +271,7 @@ export function ResearchGateApprovalCard({
           </button>
         </li>)}
       </ul> : <p role="alert" className="mt-2 text-[var(--st-bad)]">真实工件标识缺失或无效，闸门决定已禁用。请重新读取本阶段审核上下文。</p>}
-      {isDiscovery ? plan?.success && canApprovePlan ? (
+      {isDiscovery ? plan?.success && /^[a-f0-9]{64}$/u.test(planHash) ? (
         <div className="mt-2 max-h-[320px] overflow-auto break-words text-ink text-[length:var(--font-meta-size)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
           tabIndex={0} aria-label="待确认检索计划" data-testid="assistant-gate-search-plan">
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">

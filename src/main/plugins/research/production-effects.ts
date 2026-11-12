@@ -9,6 +9,8 @@ import type { ResearchFigureService } from './figure-service';
 import type { ResearchRepository } from './repository';
 import type { ResearchTemplateService } from './template-service';
 import type { ResearchWorkspaceFileService } from './workspace-files';
+import { experimentFileLimit, experimentInputTotalLimit } from './experiment-files';
+import { readResearchFile, researchContentHash, researchWorkspace } from './research-files';
 
 type TemplateSave = Parameters<ResearchTemplateService['saveFile']>[0];
 type TemplateRead = Parameters<ResearchTemplateService['readFile']>[0];
@@ -73,6 +75,27 @@ export class ResearchProductionEffectService {
     }
   }
 
+  async readStartInputIdentity(ownerRunId: string, projectId: string,
+    request: ExperimentStartInput | Omit<ResearchFigureStart, 'projectId' | 'ownerRunId'>) {
+    this.requireOwner(ownerRunId, projectId);
+    const workspace = await researchWorkspace(this.repository.getProject(projectId).workspacePath);
+    // Notebook identity already includes its frozen expectedHash; its generated source is not a workspace file.
+    const sourcePaths = request.engine === 'python'
+      ? request.source.kind === 'file' ? [request.source.path] : [] : [request.sourcePath];
+    const paths = [...new Set([...sourcePaths, ...request.inputPaths])].sort();
+    const files = [];
+    let total = 0;
+    for (const path of paths) {
+      this.requireOwner(ownerRunId, projectId);
+      const bytes = await readResearchFile(workspace, path, experimentFileLimit);
+      total += bytes.length;
+      if (total > experimentInputTotalLimit) throw new Error('research_experiment_input_limit');
+      files.push({path, size: bytes.length, sha256: researchContentHash(bytes)});
+    }
+    this.requireOwner(ownerRunId, projectId);
+    return files;
+  }
+
   async startFigure(ownerRunId: string, projectId: string, request: Omit<ResearchFigureStart, 'projectId' | 'ownerRunId'>): Promise<ResearchFigureRun> {
     this.requireOwner(ownerRunId, projectId);
     const started = await this.figures.start({ ...request, projectId, ownerRunId });
@@ -83,8 +106,23 @@ export class ResearchProductionEffectService {
     }
   }
 
+  async inspectFigureEnvironment(ownerRunId: string, projectId: string) {
+    this.requireOwner(ownerRunId, projectId);
+    const environment = await this.figures.inspect(projectId);
+    this.requireOwner(ownerRunId, projectId);
+    return environment;
+  }
+
   getExperiment(ownerRunId: string, projectId: string, experimentId: string): ResearchExperimentExecution {
     return this.requireOwnedExperiment(ownerRunId, projectId, experimentId);
+  }
+
+  async readExperimentFile(ownerRunId: string, projectId: string, experimentId: string,
+    file: Pick<ResearchExperimentExecution['files'][number], 'area' | 'path'>): ReturnType<ResearchExperimentService['read']> {
+    this.requireOwnedExperiment(ownerRunId, projectId, experimentId);
+    const result = await this.experiments.read({ projectId, runId: experimentId, ...file });
+    this.requireOwnedExperiment(ownerRunId, projectId, experimentId);
+    return result;
   }
 
   getFigure(ownerRunId: string, projectId: string, runId: string): ResearchFigureRun {

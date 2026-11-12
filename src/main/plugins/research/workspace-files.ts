@@ -10,7 +10,7 @@ import { createResearchDirectory, readResearchFile, researchAbsolutePath, resear
 import type { ResearchRepository } from './repository';
 import type { WorkspacePathStructureChangeNotifier } from '../../services/workspace-path-structure-event';
 
-const editable = new Set(['.py', '.r', '.jl', '.csv', '.tsv', '.txt', '.md', '.json']);
+const editable = new Set(['.mts', '.py', '.r', '.jl', '.csv', '.tsv', '.txt', '.md', '.json']);
 const blocked = new Set(['.roc-research', '.roc-build', '.git', '.venv', 'node_modules', '__MACOSX']);
 
 type Row = { path: string; sha256: string; size: number; revision: number; owner_run_id: string | null; updated_at: string };

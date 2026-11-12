@@ -12,6 +12,7 @@ export function nodeInputHash(inputs: FrozenExecutionInputs): string {
 }
 type NodeRow = {id: string; task_id: string; project_id: string; execution_id: string; status: string; snapshot_json: string};
 type Owner = {get(taskId: string, projectId: string): ResearchTask;
+  hasUnresolvedEffects(taskId: string, projectId: string): boolean;
   requireExecution(kind: 'stage', executionId: string, projectId: string): ResearchTaskExecution};
 
 /** Shares the Task database and lifecycle owner. All mutations commit before worker dispatch. */
@@ -226,7 +227,11 @@ export class ResearchTaskGraphRepository {
   private assertDecision(decision: {nodeId: string; projectId: string; hash: string; revision: number; accepted: boolean}): ResearchTaskNode {
     const node = this.get(decision.nodeId, decision.projectId);
     const task = this.owner.get(node.taskId, decision.projectId);
-    if (!['active','waiting_approval'].includes(task.status)) throw new Error('research_task_not_active');
+    // A fresh human decision can review saved output after input revalidation failed.
+    // Keep the failed task fenced: this accepts no worker lease and never resumes it.
+    const savedOutputReview = task.status === 'failed' && task.statusReason === 'research_stage_inputs_stale';
+    if (!['active','waiting_approval'].includes(task.status) && !savedOutputReview) throw new Error('research_task_not_active');
+    if (savedOutputReview && this.owner.hasUnresolvedEffects(task.id, task.projectId)) throw new Error('research_task_effect_unresolved');
     const repeatedRejection = !decision.accepted && node.status === 'blocked' && node.reason === 'research_node_human_rejected';
     if ((!repeatedRejection && node.status !== 'pending_review') || node.output?.hash !== decision.hash || node.output.revision !== decision.revision) {
       throw new Error('research_node_output_changed');

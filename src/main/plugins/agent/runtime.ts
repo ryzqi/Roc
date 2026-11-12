@@ -1,4 +1,3 @@
-import type { HITLResponse } from 'langchain';
 import type { ChatResumeDecision } from '../../../shared/types';
 
 import type {
@@ -101,60 +100,11 @@ export type AgentMcpContractDiscoveryProvider = (input: {
   manifest: RunCapabilityManifestV1;
 }) => Promise<readonly McpToolContractV1[]>;
 
-type AgentResumeValue = HITLResponse | { answer: string };
+// LangGraph routes these values to the interrupt owner. Research gates also
+// consume revise decisions and the artifact/search-plan bindings they carry.
+type AgentResumeValue = { decisions: ChatResumeDecision[] } | { answer: string };
 
 type AgentResumePayload = Record<string, AgentResumeValue>;
-type HitlDecision = HITLResponse['decisions'][number];
-
-/**
- * Roc 的 resume 决定多出科研闸门的第三态 'revise'，而 langchain 的 HITLResponse
- * 只认 approve/edit/reject/respond。两者在运行期是同一份 payload（闸门工具自己解析 'revise'），
- * 所以只在进入 langchain API 的边界上收敛类型，不在共享 schema 里删掉这一态。
- *
- * 这里逐项映射而不做类型谓词过滤：langchain 1.5.18 给 Decision 加了 'respond'，
- * 谓词的返回类型因此比 Roc 的 ChatResumeDecision 更宽，收窄检查会在编译期失败。
- */
-function toHitlResumeValue(decisions: ChatResumeDecision[]): AgentResumeValue {
-  const hitlDecisions: HitlDecision[] = [];
-  for (const decision of decisions) {
-    switch (decision.type) {
-      case 'revise':
-        break;
-      case 'approve':
-        hitlDecisions.push({ type: 'approve' });
-        break;
-      case 'reject':
-        hitlDecisions.push(
-          decision.message === undefined
-            ? { type: 'reject' }
-            : { type: 'reject', message: decision.message }
-        );
-        break;
-      case 'edit':
-        hitlDecisions.push({ type: 'edit', editedAction: decision.editedAction });
-        break;
-      default: {
-        const exhaustive: never = decision;
-        throw new Error(`未处理的 resume 决定类型: ${JSON.stringify(exhaustive)}`);
-      }
-    }
-  }
-  if (hitlDecisions.length === 0) {
-    return { answer: decisions.map((decision) => ('message' in decision && decision.message !== undefined ? decision.message : decision.type)).join('\n') };
-  }
-  return { decisions: hitlDecisions };
-}
-
-/** 已落库的 resume 记录同样只可能是 'revise' 在 langchain 边界上不合法，重新过一道同一个收敛函数。 */
-function toAgentResumePayload(
-  recorded: Record<string, { decisions: ChatResumeDecision[] } | { answer: string }>
-): AgentResumePayload {
-  const payload: AgentResumePayload = {};
-  for (const [interruptId, value] of Object.entries(recorded)) {
-    payload[interruptId] = 'answer' in value ? { answer: value.answer } : toHitlResumeValue(value.decisions);
-  }
-  return payload;
-}
 
 export type AgentDeepAgentExecutor = {
   execute(input: {
@@ -629,9 +579,9 @@ export class AgentPluginRuntime {
     const deepAgentExecutor = this.options.deepAgentExecutor;
     const telemetry = this.getOrCreateRunTelemetry(run, snapshot);
     const resumeValue: AgentResumeValue =
-      request.kind === 'approval' ? toHitlResumeValue(request.decisions) : { answer: request.answer };
+      request.kind === 'approval' ? { decisions: request.decisions } : { answer: request.answer };
     const resumePayload: AgentResumePayload = {
-      ...toAgentResumePayload(this.options.repository.getRecordedResumePayload(run.id)),
+      ...this.options.repository.getRecordedResumePayload(run.id),
       [request.interruptId]: resumeValue
     };
     const resumeAudit: ResumeDispatchAudit =
@@ -883,7 +833,15 @@ export class AgentPluginRuntime {
   }
 
   getActiveRun(input: { threadId: string }): ActiveChatRun | null {
-    return this.activeRunLifecycle.findActiveRun(input.threadId);
+    const live = this.activeRunLifecycle.findActiveRun(input.threadId);
+    if (live !== null) return live;
+    // Startup reconciliation preserves checkpoint-backed approvals without a live executor.
+    const waiting = this.options.repository.findWaitingUserRun(input.threadId);
+    if (waiting === null) return null;
+    if (this.options.repository.interruptProjection.readPending({
+      runId: waiting.id, threadId: waiting.threadId
+    }).interrupts.length === 0) return null;
+    return { runId: waiting.id, threadId: waiting.threadId, status: 'waiting_user' };
   }
 
   async shutdown(): Promise<void> {
@@ -1112,8 +1070,10 @@ export class AgentPluginRuntime {
     let attempt = 0;
     let firstFailureAtMs: number | null = null;
     let executionStream = input.executionStream;
-    let resumePayload = input.resumePayload;
-    let resumeFromCheckpoint = input.resumeFromCheckpoint === true;
+    // Keep human decisions across retries, including failures before the graph
+    // consumes them. Replaying the resume map continues the saved checkpoint.
+    const resumePayload = input.resumePayload;
+    let resumeFromCheckpoint = input.resumeFromCheckpoint === true || resumePayload !== undefined;
     while (this.activeRunLifecycle.isActive(input.runId)) {
       try {
         if (this.options.deepAgentExecutor === undefined) {
@@ -1121,13 +1081,11 @@ export class AgentPluginRuntime {
         }
         const currentExecutionStream = executionStream;
         executionStream = undefined;
-        const currentResumePayload = resumePayload;
-        resumePayload = undefined;
         const execution = await this.executeDeepAgentRun({
           abortSignal: input.abortSignal,
           executionStream: currentExecutionStream,
           modelHandle: input.modelHandle,
-          resumePayload: currentResumePayload,
+          resumePayload,
           resumeFromCheckpoint,
           run: input.run,
           runStartedAtMs,

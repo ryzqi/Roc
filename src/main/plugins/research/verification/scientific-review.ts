@@ -12,6 +12,99 @@ import {researchSkills} from '../research-skills';
 
 export const scientificReviewHash = (value: unknown): string => researchContentHash(JSON.stringify(value));
 
+/** Deterministic output errors can be returned to the model without weakening persistence checks. */
+export class ScientificReviewOutputError extends Error {
+  constructor(code: string, readonly correction: string) { super(code); }
+}
+
+/** Shared by generation and durable save; reads only the frozen review input. */
+export function validateScientificReviewOutput(run: ResearchStageRun, input: ScientificReviewInput, output: ScientificReviewOutput): void {
+  validateReviewCoverage(run, input, output, input.claims.map(claim => claim.id));
+}
+
+/** Generation may partition evidence review; durable save always requires the entire frozen input. */
+export function validateScientificReviewBatch(run: ResearchStageRun, input: ScientificReviewInput,
+  output: ScientificReviewOutput, claimIds: string[]): void {
+  if (run.role !== 'evidence-reviewer' || output.kind !== 'verifier' || claimIds.length === 0 ||
+      new Set(claimIds).size !== claimIds.length || claimIds.some(id => !input.claims.some(claim => claim.id === id))) {
+    throw new Error('research_scientific_review_batch_invalid');
+  }
+  validateReviewCoverage(run, input, output, claimIds);
+}
+
+function validateReviewCoverage(run: ResearchStageRun, input: ScientificReviewInput, output: ScientificReviewOutput,
+  claimIds: string[]): void {
+  if (run.stage !== 'review' || run.parentRunId === null || input.projectId !== run.projectId) {
+    throw new Error('research_scientific_review_binding_invalid');
+  }
+  if (output.inputHash !== scientificReviewHash(input) ||
+      (run.role === 'evidence-reviewer' ? output.kind !== 'verifier' : output.kind !== 'reviewer')) {
+    throw new ScientificReviewOutputError('research_scientific_review_binding_invalid',
+      'Copy scientificInputHash exactly and use the scientificReview kind required by the reviewer role.');
+  }
+  const assertClaimCoverage = (covered: string[], code: string) => {
+    const counts = new Map<string, number>();
+    for (const id of covered) counts.set(id, (counts.get(id) ?? 0) + 1);
+    const missing = claimIds.filter(id => !counts.has(id));
+    const duplicates = [...counts].filter(([, count]) => count > 1).map(([id]) => id);
+    const unknown = [...counts.keys()].filter(id => !claimIds.includes(id));
+    if (missing.length > 0 || duplicates.length > 0 || unknown.length > 0) {
+      throw new ScientificReviewOutputError(code,
+        `Cover all ${claimIds.length} frozen claims exactly once. missingClaimIds=${JSON.stringify(missing)}; duplicateClaimIds=${JSON.stringify(duplicates)}; unknownClaimIds=${JSON.stringify(unknown)}. Use frozenClaims or read_artifact for exact identities. Return the complete report, not only the corrected subset.`);
+    }
+  };
+  const assertReferences = (references: ScientificEvidenceReference[]) => {
+    for (const reference of references) {
+      const source = input.evidence.find(source => source.evidence.id === reference.evidenceId);
+      if (source === undefined || source.referenceStatus !== 'recorded' ||
+          reference.sourceDigest !== relationSourceDigest(source) || reference.end > source.evidence.excerpt.length ||
+          source.evidence.excerpt.slice(reference.start, reference.end) !== reference.quote) {
+        throw new ScientificReviewOutputError('research_scientific_locator_invalid', `Use list_evidence and inspect_evidence_source for this frozen evidenceId. To cite a shorter passage, pass its exact verbatim text as quote to inspect_evidence_source, then copy the returned excerptPage.reference exactly, including sourceDigest, start, end and quote. These are UTF-16 offsets within evidence.excerpt, not JSON or source-file offsets. Never shorten quote while retaining the whole-page start/end. Check referenceStatus is recorded. Do not guess or repair offsets. Invalid evidenceId: ${reference.evidenceId}.`);
+      }
+    }
+  };
+  if (output.kind === 'verifier') {
+    assertClaimCoverage(output.suggestions.map(item => item.claimId), 'research_scientific_claim_coverage_required');
+    for (const suggestion of output.suggestions) {
+      const claim = input.claims.find(claim => claim.id === suggestion.claimId);
+      if (claim === undefined || claim.version !== suggestion.claimVersion || relationClaimHash(claim) !== suggestion.claimHash) {
+        throw new ScientificReviewOutputError('research_scientific_claim_changed', 'Copy the frozen claim ID, version and claimHash from read_artifact, without abbreviating or changing them.');
+      }
+      const examined = suggestion.coverage.examinedEvidenceIds;
+      const duplicates = examined.filter((id, index) => examined.indexOf(id) !== index);
+      const unknown = examined.filter(id => !input.evidence.some(source => source.evidence.id === id));
+      const missingReason = examined.length !== input.evidence.length && suggestion.coverage.unexaminedReason === null;
+      if (duplicates.length > 0 || unknown.length > 0 || missingReason) {
+        throw new ScientificReviewOutputError('research_scientific_search_coverage_required',
+          `claimId=${suggestion.claimId}; duplicateExaminedEvidenceIds=${JSON.stringify([...new Set(duplicates)])}; unknownExaminedEvidenceIds=${JSON.stringify(unknown)}; unexaminedReasonRequired=${missingReason}. List only frozen evidence IDs actually examined, without duplicates, and explain unexamined evidence. Return the complete report.`);
+      }
+      const references = [...suggestion.supporting, ...suggestion.counterevidence, ...suggestion.negativeResults,
+        ...suggestion.conditions.flatMap(item => item.references), ...suggestion.alternativeExplanations.flatMap(item => item.references)];
+      assertReferences(references);
+      const missingReferenced = [...new Set(references.map(reference => reference.evidenceId).filter(id => !examined.includes(id)))];
+      if (missingReferenced.length > 0) throw new ScientificReviewOutputError('research_scientific_search_coverage_required',
+        `claimId=${suggestion.claimId}; missingReferencedEvidenceIds=${JSON.stringify(missingReferenced)}. These cited sources are absent from this suggestion's coverage.examinedEvidenceIds. Inspect them before including them in the examined list, or remove the unsupported references. Keep unexaminedReason for other unexamined evidence. Return the complete report.`);
+      const contradictions = input.relations.filter(relation => relation.claimId === claim.id && relation.kind === 'contradicts' &&
+        ['proposed', 'confirmed'].includes(relation.status) && relation.source.referenceStatus === 'recorded');
+      if (contradictions.some(relation => !suggestion.counterevidence.some(reference => reference.evidenceId === relation.evidenceId))) {
+        throw new ScientificReviewOutputError('research_scientific_counterevidence_required', 'Include the recorded proposed or confirmed contradicting evidence in counterevidence; inspect the frozen relations.');
+      }
+    }
+  } else {
+    assertClaimCoverage(output.coveredClaimIds, 'research_scientific_finding_coverage_required');
+    if ((output.findings.length === 0 && output.noFindingsRationale === null) ||
+        new Set(output.findings.map(finding => finding.id)).size !== output.findings.length) {
+      throw new ScientificReviewOutputError('research_scientific_finding_coverage_required', 'Cover every frozen claim exactly once, use unique finding IDs, and explain no findings when the list is empty.');
+    }
+    for (const finding of output.findings) {
+      if (new Set(finding.claimIds).size !== finding.claimIds.length || finding.claimIds.some(id => !claimIds.includes(id))) {
+        throw new ScientificReviewOutputError('research_scientific_claim_changed', 'Copy the frozen claim ID, version and claimHash from read_artifact, without abbreviating or changing them.');
+      }
+      assertReferences(finding.references);
+    }
+  }
+}
+
 /** Review records live in the existing immutable role output and frozen execution context. */
 export class ResearchScientificReviewService {
   constructor(private readonly repository: ResearchRepository) {}
@@ -119,60 +212,7 @@ export class ResearchScientificReviewService {
   }
 
   validate(run: ResearchStageRun, input: ScientificReviewInput, output: ScientificReviewOutput): void {
-    if (run.stage !== 'review' || run.parentRunId === null || input.projectId !== run.projectId ||
-        output.inputHash !== scientificReviewHash(input) ||
-        (run.role === 'evidence-reviewer' ? output.kind !== 'verifier' : output.kind !== 'reviewer')) {
-      throw new Error('research_scientific_review_binding_invalid');
-    }
-    const claimIds = input.claims.map(claim => claim.id);
-    const assertReferences = (references: ScientificEvidenceReference[]) => {
-      for (const reference of references) {
-        const source = input.evidence.find(source => source.evidence.id === reference.evidenceId);
-        if (source === undefined || source.referenceStatus !== 'recorded' ||
-            reference.sourceDigest !== relationSourceDigest(source) || reference.end > source.evidence.excerpt.length ||
-            source.evidence.excerpt.slice(reference.start, reference.end) !== reference.quote) {
-          throw new Error('research_scientific_locator_invalid');
-        }
-      }
-    };
-    if (output.kind === 'verifier') {
-      if (output.suggestions.length !== claimIds.length || new Set(output.suggestions.map(item => item.claimId)).size !== claimIds.length) {
-        throw new Error('research_scientific_claim_coverage_required');
-      }
-      for (const suggestion of output.suggestions) {
-        const claim = input.claims.find(claim => claim.id === suggestion.claimId);
-        if (claim === undefined || claim.version !== suggestion.claimVersion || relationClaimHash(claim) !== suggestion.claimHash) {
-          throw new Error('research_scientific_claim_changed');
-        }
-        const examined = suggestion.coverage.examinedEvidenceIds;
-        if (new Set(examined).size !== examined.length || examined.some(id => !input.evidence.some(source => source.evidence.id === id)) ||
-            (examined.length !== input.evidence.length && suggestion.coverage.unexaminedReason === null)) {
-          throw new Error('research_scientific_search_coverage_required');
-        }
-        const references = [...suggestion.supporting, ...suggestion.counterevidence, ...suggestion.negativeResults,
-          ...suggestion.conditions.flatMap(item => item.references), ...suggestion.alternativeExplanations.flatMap(item => item.references)];
-        assertReferences(references);
-        if (references.some(reference => !examined.includes(reference.evidenceId))) throw new Error('research_scientific_search_coverage_required');
-        const contradictions = input.relations.filter(relation => relation.claimId === claim.id && relation.kind === 'contradicts' &&
-          ['proposed', 'confirmed'].includes(relation.status) && relation.source.referenceStatus === 'recorded');
-        if (contradictions.some(relation => !suggestion.counterevidence.some(reference => reference.evidenceId === relation.evidenceId))) {
-          throw new Error('research_scientific_counterevidence_required');
-        }
-      }
-    } else {
-      if (new Set(output.coveredClaimIds).size !== claimIds.length || output.coveredClaimIds.length !== claimIds.length ||
-          output.coveredClaimIds.some(id => !claimIds.includes(id)) ||
-          (output.findings.length === 0 && output.noFindingsRationale === null) ||
-          new Set(output.findings.map(finding => finding.id)).size !== output.findings.length) {
-        throw new Error('research_scientific_finding_coverage_required');
-      }
-      for (const finding of output.findings) {
-        if (new Set(finding.claimIds).size !== finding.claimIds.length || finding.claimIds.some(id => !claimIds.includes(id))) {
-          throw new Error('research_scientific_claim_changed');
-        }
-        assertReferences(finding.references);
-      }
-    }
+    validateScientificReviewOutput(run, input, output);
   }
 
   inspect(projectId: string, artifactId: string): ScientificReviewInspection {

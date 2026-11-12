@@ -31,7 +31,7 @@ export function PythonEnvironmentSection({ client, projectId }: {
   return (
     <FormSection title="项目 Python 环境" testId="mgmt-python-environment">
       <p className="text-muted text-[length:var(--font-meta-size)]">
-        选择已有 CPython 3.14 环境。运行前重新核验，环境变化后需重新选择。
+        请先在项目根目录准备 roc-python.lock.json，记录 Python 版本与完整依赖，再选择已有 CPython 3.14 环境。运行前重新核验，环境变化后需重新选择。
       </p>
       {resource.status === 'error' ? (
         <div className="grid gap-2">

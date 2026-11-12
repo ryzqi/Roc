@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import {withResearchTestWorker,  createResearchFixture, loadResearchTestApi } from './fixtures/research-test-kit.mjs';
 
+import {createScientificReviewFixture} from './fixtures/scientific-review.mjs';
+
 let api;
 before(async () => { api = await loadResearchTestApi(); });
 after(() => api.dispose());
@@ -109,4 +111,96 @@ test('pausing approval and restoring it keeps the completed execution and origin
     assert.equal(f.repository.runs.get(f.run.id, f.project.id).status, 'completed');
     assert.throws(() => controller.restoreApproval({ taskId: f.run.taskId, projectId: f.project.id }), /research_task_status_conflict/);
   } finally { await runtime.shutdown(); f.close(); }
+});
+
+function savedOutputAfterRetry(f) {
+  f.repository.runs.terminate(f.run.id, f.project.id, 'failed', 'first_attempt_failed');
+  const next = f.repository.runs.retry({projectId: f.project.id, runId: f.run.id, requestId: 'saved-output'});
+  return withResearchTestWorker(api, f.repository, next.id, f.project.id, id => {
+    f.repository.runs.markRunning(id, f.project.id, {providerId: 'fixture', modelId: 'fixture'});
+    return f.repository.runs.complete(id, f.project.id, {
+      title: 'Saved plan', markdown: 'Review the saved output', claims: [], sections: [], verdict: 'ready'
+    });
+  });
+}
+
+test('continuation prefers the current saved output over a superseded failed attempt', async () => {
+  const f = createResearchFixture(api, 'planning');
+  let failGate = true;
+  const actualGate = api.createResearchHumanGate({repository: f.repository});
+  const runtime = new api.ResearchStageRuntime(f.repository, {}, {prepare: async () => {throw new Error('unexpected_model');}}, {
+    complete: async (...args) => {
+      if (failGate) throw new Error('research_fixture_annotation_required');
+      return actualGate.complete(...args);
+    }
+  }, {cancelOwned: async () => {}});
+  try {
+    const saved = savedOutputAfterRetry(f);
+    f.tasks.setStatus(f.run.taskId, f.project.id, 'failed', 'research_fixture_annotation_required', ['active']);
+    const request = {taskId: f.run.taskId, projectId: f.project.id};
+    const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, new api.RunUsageLedger(f.agentDb), null, {source: async () => {throw new Error('unused');}});
+    assert.equal(diagnostics.get(request).continuationRunId, saved.id);
+    assert.throws(() => runtime.continueTask({...request, runId: f.run.id, requestId: 'obsolete-attempt'}), /research_run_not_current/);
+    await assert.rejects(async () => runtime.continueTask({...request, runId: saved.id, requestId: 'revalidate-1'}), /research_fixture_annotation_required/);
+    assert.equal(f.tasks.get(request.taskId, request.projectId).status, 'failed');
+    assert.equal(f.repository.runs.get(saved.id, f.project.id).status, 'completed');
+    failGate = false;
+    const resumed = await runtime.continueTask({...request, runId: saved.id, requestId: 'revalidate-2'});
+    assert.equal(resumed.id, saved.id);
+    assert.equal(f.tasks.get(request.taskId, request.projectId).status, 'waiting_approval');
+    assert.equal(f.repository.runs.list({projectId: f.project.id, limit: 100}).length, 2);
+    assert.deepEqual(resumed.outputArtifactIds, saved.outputArtifactIds);
+    assert.equal(f.repository.runs.get(f.run.id, f.project.id).status, 'failed');
+    assert.equal(diagnostics.get(request).continuationRunId, null);
+  } finally {await runtime.shutdown(); f.close();}
+});
+
+test('saved-output continuation is cancelled before its asynchronous gate can commit', async () => {
+  const f = createResearchFixture(api, 'planning');
+  let entered;
+  const started = new Promise(resolve => {entered = resolve;});
+  let release;
+  const barrier = new Promise(resolve => {release = resolve;});
+  const actualGate = api.createResearchHumanGate({repository: f.repository});
+  const runtime = new api.ResearchStageRuntime(f.repository, {}, {prepare: async () => {throw new Error('unexpected_model');}}, {
+    complete: async (request, signal) => {entered(); await barrier; return actualGate.complete(request, signal);}
+  }, {cancelOwned: async () => {}});
+  const controller = new api.ResearchTaskController(f.tasks, {stages: runtime, cancelChat: async () => {}, cancelJob: async () => {}});
+  try {
+    const saved = savedOutputAfterRetry(f);
+    f.tasks.setStatus(f.run.taskId, f.project.id, 'failed', 'research_fixture_annotation_required', ['active']);
+    const request = {taskId: f.run.taskId, projectId: f.project.id};
+    const pending = Promise.resolve().then(() => runtime.continueTask({...request, runId: saved.id, requestId: 'cancel-check'}));
+    const rejected = assert.rejects(pending, /research_task_cancelled/);
+    await started;
+    const cancelled = controller.cancel(request);
+    release();
+    await Promise.all([cancelled, rejected]);
+    assert.equal(f.tasks.get(request.taskId, request.projectId).status, 'cancelled');
+    assert.equal(f.repository.getWorkflow(f.project.id).stages.find(stage => stage.stage === 'planning').status, 'running');
+    assert.equal(f.repository.runs.get(saved.id, f.project.id).status, 'completed');
+  } finally {release(); await runtime.shutdown(); f.close();}
+});
+
+
+test('stale scientific input keeps task diagnostics readable and blocks continuation without losing history', () => {
+  const f = createScientificReviewFixture(api);
+  try {
+    f.repository.runs.terminate(f.parent.id, f.project.id, 'interrupted', 'fixture_restart');
+    f.tasks.setStatus(f.parent.taskId, f.project.id, 'interrupted', 'fixture_restart', ['active']);
+    const request = {projectId: f.project.id, taskId: f.parent.taskId};
+    const diagnostics = new api.ResearchTaskDiagnosticsService(f.repository, new api.RunUsageLedger(f.agentDb), null,
+      {source: async () => {throw new Error('unused');}});
+    const before = diagnostics.get(request);
+    assert.equal(before.continuationRunId, f.parent.id);
+    f.repository.evidence.invalidateChunksOf(f.evidence.documentId);
+    assert.throws(() => f.repository.runs.assertInputsCurrent(f.repository.runs.get(f.parent.id, f.project.id)), /research_scientific_review_stale/);
+    const after = diagnostics.get(request);
+    assert.deepEqual(after.recoveryIssues, ['research_scientific_review_stale']);
+    assert.equal(after.continuationRunId, null);
+    assert.equal(after.canRestoreApproval, false);
+    assert.deepEqual(after.executions, before.executions);
+    assert.deepEqual(after.graph, before.graph);
+    assert.equal(f.repository.runs.getContext(f.parent.id).scientificInput.evidence[0].referenceStatus, 'recorded');
+  } finally {f.close();}
 });

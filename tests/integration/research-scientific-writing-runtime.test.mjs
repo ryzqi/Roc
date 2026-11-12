@@ -35,6 +35,34 @@ before(async()=>{
 });
 after(async()=>{await rm(bundle,{force:true});});
 async function directory(name){const path=join(root,name);await mkdir(path);return path;}
+test('real offline Tectonic compiles standard article 11pt and 12pt sizes',async(t)=>{
+ for(const size of [11,12]) await t.test(`${size}pt`,async()=>{
+  const jobDir=await directory(`article-${size}pt`),outputDir=join(jobDir,'compiled');
+  await mkdir(outputDir);
+  await writeFile(join(jobDir,'main.tex'),`\\documentclass[${size}pt]{article}\n\\begin{document}\nStandard article ${size}pt regression.\n\\end{document}\n`);
+  const result=await tools.compile({rootPath:jobDir,entryPath:'main.tex',outputDir,jobDir,admission:{projectId:'article-size-regression',priority:'user'}});
+  assert.equal(result.exitCode,0,JSON.stringify(result));
+  assert.match(await pdfText(await readFile(join(outputDir,'main.pdf'))),new RegExp(`Standard article ${size}pt regression`));
+ });
+});
+test('real offline Tectonic compiles manuscript layout, hyperlinks and text symbols',async()=>{
+ const jobDir=await directory('manuscript-packages'),outputDir=join(jobDir,'compiled');
+ await mkdir(outputDir);
+ await writeFile(join(jobDir,'main.tex'),String.raw`\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,graphicx,booktabs,hyperref,textcomp}
+\begin{document}
+\section{Manuscript package regression}
+\href{https://example.org/reference}{Reference link} and \textcopyright{}.
+\begin{equation}4 \times 2 + 4 \times 1 = 12\end{equation}
+\begin{tabular}{lr}\toprule Endpoint & Count\\\midrule Contrasts & 12\\\bottomrule\end{tabular}
+\end{document}
+`);
+ const result=await tools.compile({rootPath:jobDir,entryPath:'main.tex',outputDir,jobDir,admission:{projectId:'manuscript-package-regression',priority:'user'}});
+ assert.equal(result.exitCode,0,JSON.stringify(result));
+ const text=await pdfText(await readFile(join(outputDir,'main.pdf')));
+ assert.match(text,/Manuscript package regression/);assert.match(text,/Reference link/);assert.match(text,/Contrasts/);
+});
 async function pdfText(bytes){
  const loadingTask=getDocument({data:new Uint8Array(bytes),useSystemFonts:true});
  try {const doc=await loadingTask.promise;let text='';for(let i=1;i<=doc.numPages;i++) text+=(await (await doc.getPage(i)).getTextContent()).items.map(item=>item.str).join(' ');return text;} finally{await loadingTask.destroy();}

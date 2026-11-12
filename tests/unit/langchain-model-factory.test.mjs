@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+import { tool } from '@langchain/core/tools';
+import { z } from 'zod';
 import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 
 const { LangChainModelFactory } = await importTypeScriptModule('src/main/services/langchain-model-factory.ts', {
@@ -8,6 +12,69 @@ const { LangChainModelFactory } = await importTypeScriptModule('src/main/service
   tempDir: '.runtime/test-bundles'
 });
 const factory = new LangChainModelFactory({}, { getProviderSecret: async () => 'fixture-key' });
+
+test('compatible SDK requests preserve required nullable tool inputs in streaming and nonstreaming calls', async () => {
+  const requests = [];
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    const request = JSON.parse(body);
+    requests.push(request);
+    if (request.stream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.end('data: ' + JSON.stringify({ id: 'fixture', object: 'chat.completion.chunk', model: 'fixture-model',
+        choices: [{ index: 0, delta: { role: 'assistant', content: 'done' }, finish_reason: 'stop' }] }) + '\n\ndata: [DONE]\n\n');
+    } else {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ id: 'fixture', object: 'chat.completion', model: 'fixture-model',
+        choices: [{ index: 0, message: { role: 'assistant', content: 'done' }, finish_reason: 'stop' }] }));
+    }
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    const schema = z.strictObject({ runId: z.string().min(1), replacesFigureId: z.string().min(1).nullable(),
+      nested: z.strictObject({ claimId: z.string().nullable(), count: z.number().nullable() }),
+      optional: z.string().optional() });
+    const entry = tool(() => 'unused', { name: 'publish_figure', description: 'Publish a completed figure.', schema });
+    for (const streaming of [false, true]) {
+      const config = provider('openai_compatible');
+      config.endpoint = `http://127.0.0.1:${server.address().port}/v1`;
+      const { model } = await factory.createModelForProvider(config, 'fixture-model', { streaming });
+      await model.bindTools([entry]).invoke('Inspect the schema.');
+    }
+    assert.equal(requests.length, 2);
+    for (const request of requests) {
+      const parameters = request.tools[0].function.parameters;
+      assert.deepEqual(parameters.required, ['runId', 'replacesFigureId', 'nested']);
+      assert.deepEqual(parameters.properties.replacesFigureId.anyOf, [{ type: 'string', minLength: 1 }, { type: 'null' }]);
+      assert.deepEqual(parameters.properties.nested.required, ['claimId', 'count']);
+      assert.deepEqual(parameters.properties.nested.properties.claimId.type, ['string', 'null']);
+      assert.deepEqual(parameters.properties.nested.properties.count.type, ['number', 'null']);
+    }
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('DeepSeek compatible thinking switch reaches requests without changing tool choice or other models', async () => {
+  const modelId = 'kedaya-2/deepseek-v4.1-flash-1017';
+  for (const thinking of [false, true]) {
+    const { model } = await factory.createModelForProvider(provider('openai_compatible', { thinking }, modelId), modelId);
+    const params = model.invocationParams({ tool_choice: 'required' });
+    assert.deepEqual(params.thinking, { type: thinking ? 'enabled' : 'disabled' });
+    assert.equal(params.tool_choice, 'required');
+  }
+  const automatic = await factory.createModelForProvider(provider('openai_compatible', {}, modelId), modelId);
+  assert.equal(automatic.model.invocationParams({}).thinking, undefined);
+  const override = await factory.createModelForProvider(provider('openai_compatible', {
+    thinking: false, modelKwargs: { thinking: { type: 'enabled' }, custom_field: 0 }
+  }, modelId), modelId);
+  assert.deepEqual(override.model.invocationParams({}).thinking, { type: 'enabled' });
+  assert.equal(override.model.invocationParams({}).custom_field, 0);
+  const unrelated = await factory.createModelForProvider(provider('openai_compatible', { thinking: false }), 'fixture-model');
+  assert.equal(unrelated.model.invocationParams({}).thinking, undefined);
+});
 
 function provider(type, options = {}, modelId = 'fixture-model') {
   return {

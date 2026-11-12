@@ -80,6 +80,44 @@ test('absent fields remain unknown, reported empty relations remain empty and so
   assert.throws(() => api.readDataCiteMetadata(doi, payload({doi: '10.1234/wrong'})), /literature_provider_response_invalid/);
 });
 
+test('DataCite empty optional strings are unknown and valid software metadata is saved successfully', async () => {
+  const f = scene(async () => Response.json(payload({
+    types: {resourceTypeGeneral: 'Software', resourceType: ''}, version: '', schemaVersion: '', url: '',
+    titles: [{title: 'Software with optional blanks', titleType: '', lang: ''}],
+    rightsList: [{rights: '', rightsUri: '', rightsIdentifier: '', rightsIdentifierScheme: '', schemeUri: '', lang: ''}],
+    relatedIdentifiers: [{relatedIdentifier: '10.1234/article', relatedIdentifierType: 'DOI', relationType: 'IsSupplementTo',
+      resourceTypeGeneral: '', relationTypeInformation: '', relatedMetadataScheme: '', schemeUri: '', schemeType: ''}]
+  })));
+  try {
+    const saved = await f.service.capture(f.request);
+    assert.equal(saved.status, 'ok'); assert.equal(saved.metadata.kind, 'software');
+    assert.equal(saved.metadata.resourceType, null); assert.equal(saved.metadata.version, null);
+    assert.equal(saved.metadata.reportedSchemaVersion, null); assert.equal(saved.metadata.landingPage, null);
+    assert.deepEqual(saved.metadata.titles, [{title: 'Software with optional blanks', titleType: null, lang: null}]);
+    assert.deepEqual(saved.metadata.rights, [{rights: null, rightsUri: null, rightsIdentifier: null,
+      rightsIdentifierScheme: null, schemeUri: null, lang: null}]);
+    assert.deepEqual(f.read(saved).relatedIdentifiers, [{relatedIdentifier: '10.1234/article', relatedIdentifierType: 'DOI',
+      relationType: 'IsSupplementTo', resourceTypeGeneral: null, relationTypeInformation: null,
+      relatedMetadataScheme: null, schemeUri: null, schemeType: null}]);
+    const cached = await f.service.capture({...f.request, requestId: 'optional-blanks-cached'});
+    assert.equal(cached.status, 'ok'); assert.equal(cached.cache, 'hit'); assert.equal(f.calls.length, 1);
+  } finally {await f.dispose();}
+});
+
+test('optional blank normalization retains exact nonempty strings and rejects invalid required DataCite fields', () => {
+  assert.equal(api.readDataCiteMetadata(doi, payload({version: ' v2.1 '})).version, ' v2.1 ');
+  for (const invalid of [
+    payload({doi: ''}), payload({doi: undefined}), payload({state: ''}),
+    payload({types: {resourceTypeGeneral: '', resourceType: ''}}),
+    payload({types: {resourceType: ''}}), payload({titles: [{title: ''}]}), payload({titles: [{}]}),
+    payload({relatedIdentifiers: [{relatedIdentifier: '', relatedIdentifierType: 'DOI', relationType: 'References'}]}),
+    payload({version: 1}), payload({version: 'x'.repeat(8193)})
+  ]) assert.throws(() => api.readDataCiteMetadata(doi, invalid));
+  const wrongIdentity = payload({types: {resourceTypeGeneral: 'Software', resourceType: ''}});
+  wrongIdentity.data.id = '10.1234/other';
+  assert.throws(() => api.readDataCiteMetadata(doi, wrongIdentity), /literature_provider_response_invalid/);
+});
+
 test('schema or identity failure is saved as failure and cannot contaminate validated cache', async () => {
   let valid = false;
   const f = scene(async () => Response.json(valid ? payload() : payload({titles: []})));

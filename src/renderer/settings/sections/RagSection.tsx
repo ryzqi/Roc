@@ -340,7 +340,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
               <span className="font-mono text-subtle text-[length:var(--font-micro-size)]">{config.model}</span>
               <span className="text-subtle text-[length:var(--font-micro-size)]">
                 {config.dimensions} 维，{config.enabled ? '启用' : '停用'}，{' '}
-                {config.keyConfigured ? '密钥已配置' : '缺少密钥'}
+                {config.keyConfigured ? '密钥已配置' : '需重新配置密钥'}
               </span>
             </li>
           ))}

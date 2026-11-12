@@ -135,7 +135,7 @@ export class GitService {
     const normalizedPath = normalizeGitPath(relativePath);
     this.workspaceService.resolveInsideWorkspace(normalizedPath);
     return await this.withRepositoryWriteLock(workspace.path, options.signal, async () => {
-      await this.runGit(workspace.path, ['--literal-pathspecs', 'restore', '--staged', '--', normalizedPath], { signal: options.signal });
+      await this.runGit(workspace.path, ['--literal-pathspecs', 'reset', '--', normalizedPath], { signal: options.signal });
       return await this.getStatusAt(workspace.path, options.signal);
     });
   }
@@ -411,7 +411,7 @@ export class GitService {
   }
 
   private async getStatusChanges(cwd: string, signal?: AbortSignal): Promise<GitStatusChange[]> {
-    const rawStatus = await this.runGit(cwd, ['status', '--porcelain=v1', '-z'], { signal });
+    const rawStatus = await this.runGit(cwd, ['status', '--porcelain=v1', '-z', '--untracked-files=all'], { signal });
     return parseGitStatusChanges(rawStatus);
   }
 

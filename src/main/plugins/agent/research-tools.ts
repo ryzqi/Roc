@@ -26,6 +26,7 @@ import type {
   ResearchWorkflowSnapshot
 } from '../../../shared/types';
 import type { RocCapabilityRegistry } from '../../kernel/types';
+import {runWithoutCapabilityOperationContext} from '../../kernel/capability-operation-context';
 import {RocDomainError} from '../../services/errors';
 
 /**
@@ -98,16 +99,18 @@ export function createResearchTools(input: {
   });
   const gateGraph = new StateGraph(gateState).addNode('review', async (state) => {
     const {note} = state;
-    const snapshot = await workflow();
+    // These two calls only read review state. They must not publish the gate tool's
+    // effect before interrupt(); the transition below retains its operation context.
+    const snapshot = await runWithoutCapabilityOperationContext(workflow);
     const current = snapshot.stages.find((entry) => entry.stage === snapshot.currentStage);
     if (current === undefined) throw new Error('research_stage_not_found');
     if (current.status !== 'waiting_approval') {
       throw new Error(`research_gate_not_waiting_approval:${current.status}`);
     }
     const isReview = current.stage === 'review';
-    const review = await invoke<ResearchGateReviewContext>('research.workflow.gateReview', {
+    const review = await runWithoutCapabilityOperationContext(() => invoke<ResearchGateReviewContext>('research.workflow.gateReview', {
       projectId, expectedStage: current.stage, artifactId: null
-    });
+    }));
     const artifactLinks = review.artifactLinks;
     const searchPlanReview = review.searchPlan === null ? null : {
       searchPlan: review.searchPlan, searchPlanHash: review.searchPlanHash
@@ -166,9 +169,9 @@ export function createResearchTools(input: {
         });
         return {outcome: summarizeGateOutcome('approve', transitioned), reviewError: null};
       }
-      // 要求修订与退回都走 approve+reviewDecision:'revise'：这样审稿周期进入 revision_required、
-      // 回到修订阶段，而不是把审稿阶段整体重跑（重跑会丢掉审稿意见）。
-      if (isReview && (type === 'revise' || type === 'reject')) {
+      // 要求修订批准本轮审稿结论并进入正文修订；退回则重做审稿报告，
+      // 不能要求用户先确认有误报告的证据关系，也不能将退回变成批准。
+      if (isReview && type === 'revise') {
         const transitioned = await invoke<ResearchWorkflowSnapshot>('research.workflow.transition', {
           projectId,
           expectedStage: current.stage,

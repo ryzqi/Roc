@@ -10,6 +10,41 @@ after(() => api.dispose());
 const plain = {title: 'Review', markdown: 'Controlled engineering fixture.', claims: [], sections: [], verdict: 'uncertain'};
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
+for (const [label, failure, reason] of [
+  ['provider reply loop', new Error('magpie ended this reply: the model\'s text was stuck in a loop, its last 256 lines repeated. (502: you can retry your request)'), 'research_provider_reply_loop'],
+  ['wrapped provider reply loop', new Error('Model middleware failed', {cause: new Error('Stream failed', {
+    cause: new Error('magpie ended this reply: the model\'s text was stuck in a loop, its last 256 lines repeated.')
+  })}), 'research_provider_reply_loop'],
+  ['unrelated loop wording', new Error('Tool loop failed with private request details'), 'research_role_execution_failed'],
+  ['existing research code', new Error('research_stage_inputs_stale'), 'research_stage_inputs_stale'],
+  ['cyclic error cause', (() => {const error = new Error('Unknown failure'); error.cause = error; return error;})(), 'research_role_execution_failed']
+]) {
+  test(`review failure preserves a safe reason for ${label} without approving output`, async () => {
+    const f = createScientificReviewFixture(api);
+    let calls = 0;
+    const runtime = new api.ResearchStageRuntime(f.repository, {}, {async prepare() {
+      return {providerId: 'fixture', modelId: 'fixture', async execute() {calls += 1; throw failure;}};
+    }}, api.createResearchHumanGate({repository: f.repository}), {cancelOwned: async () => {}}, undefined, 1);
+    try {
+      await runtime.stopTask(f.parent.taskId, f.project.id, 'interrupted', 'fixture_restart');
+      const run = runtime.retry({projectId: f.project.id, runId: f.parent.id, requestId: label});
+      await runtime.waitForIdle();
+      const task = f.tasks.get(run.taskId, f.project.id);
+      assert.equal(task.status, 'failed');
+      assert.equal(task.statusReason, reason);
+      assert.equal(calls, 1, 'a provider failure must not automatically retry');
+      const child = f.repository.runs.list({projectId: f.project.id, limit: 100})
+        .find(item => item.parentRunId === run.id && item.status === 'failed');
+      assert.ok(child);
+      assert.equal(child.error, reason);
+      assert.deepEqual(child.outputArtifactIds, []);
+      const review = f.repository.getWorkflow(f.project.id).stages.find(stage => stage.stage === 'review');
+      assert.equal(review.status, 'paused');
+      assert.equal(f.repository.listArtifacts(f.project.id).filter(artifact => artifact.status === 'draft').length, 0);
+    } finally {await runtime.shutdown(); f.close();}
+  });
+}
+
 test('dispatch-validation cleanup wakes the next same-project root', async () => {
   const f = createResearchFixture(api, 'planning');
   let release, invalid;

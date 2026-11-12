@@ -23,7 +23,8 @@ export default function ReadingNotesPanel({client,projectId,items,writable,itemI
     const {draft:current,baseline:previous}=latest.current;
     if(!current || saving.current || !writable)return false;
     saving.current=true;setBusy(true);setError(null);
-    try{const result=await client.api.research.saveReadingNote({...current,projectId,expectedRevision:previous?.revision??0});
+    try{const {id,title,markdown,itemId,archived}=current;
+      const result=await client.api.research.saveReadingNote({id,title,markdown,itemId,archived,projectId,expectedRevision:previous?.revision??0});
       if(!mounted.current)return result.ok;
       if(!result.ok){setError(result.error.message);setConflict(true);return false;}
       latest.current.baseline=result.data;setBaseline(result.data);setConflict(false);list.reload();return true;

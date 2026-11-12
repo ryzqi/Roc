@@ -32,7 +32,7 @@ export function TaskSummary({ data, details = false }: {
 }): React.JSX.Element {
   const completed = data.executions.filter(execution => execution.status === 'completed' || execution.status === 'complete').length;
   return (
-    <div className="grid min-w-0 gap-1">
+    <div className="grid min-w-0 grid-cols-1 gap-1">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="min-w-0 flex-1 truncate font-medium text-ink" title={data.task.goal}>{data.task.goal}</p>
         <span data-testid="task-status" data-status={data.task.status} className="text-muted">
@@ -44,7 +44,11 @@ export function TaskSummary({ data, details = false }: {
       </p>
       <TaskUsage usage={data.usage} />
       {data.task.statusReason === null ? null : (
-        <p className="break-words text-[var(--st-warn)]" data-testid="task-reason">任务停止原因：{data.task.statusReason}</p>
+        <p className="break-words text-[var(--st-warn)]" data-testid="task-reason">
+          任务停止原因：{data.task.statusReason === 'research_provider_reply_loop'
+            ? '模型服务检测到循环回复并终止生成。请在模型设置中更换模型后继续当前任务。'
+            : data.task.statusReason}
+        </p>
       )}
       {details ? (
         <div className="grid gap-1 text-subtle text-[length:var(--font-meta-size)]">

@@ -54,3 +54,23 @@ test('research workspace atomic saves notify after creation and same-path update
     { path: workspacePath, reason: 'research.workspace-file.atomic-save' }
   ]);
 });
+
+test('TypeScript experiment sources support save and read without bypassing workspace guards', async () => {
+  const workspacePath = join(tempDir, 'typescript-workspace');
+  mkdirSync(workspacePath);
+  const service = new ResearchWorkspaceFileService(
+    createDatabase(), { getProject: (id) => ({ id, status: 'active', workspacePath }) },
+    () => '2026-11-10T00:00:00.000Z'
+  );
+  const request = { projectId: 'project-1', path: 'fixture/safety-pipeline.mts',
+    content: 'export async function run(context) { await context.files.writeText("result.txt", "fixture"); }', expectedHash: null };
+  const saved = await service.save(request);
+  assert.equal((await service.read(request.projectId, request.path)).content, request.content);
+  await assert.rejects(service.save(request), /research_workspace_file_exists/);
+  await assert.rejects(service.save({ ...request, expectedHash: '0'.repeat(64) }), /research_workspace_file_conflict/);
+  const updated = await service.save({ ...request, content: request.content + '\n', expectedHash: saved.sha256 });
+  assert.equal(updated.revision, 2);
+  for (const path of ['.roc-research/run.mts', 'node_modules/run.mts', 'fixture/.hidden/run.mts', 'fixture/run.exe']) {
+    await assert.rejects(service.save({ ...request, path }), /research_workspace_file_not_editable/);
+  }
+});

@@ -242,8 +242,9 @@ export class RunUsageLedger {
     })();
   }
 
-  recordProgress(runId: string, toolName: string, args: unknown, result: unknown): void {
-    const fingerprint = hashToolInput({ toolName, args, result });
+  recordProgress(runId: string, toolName: string, args: unknown, result: unknown, progressScope?: string): void {
+    const fingerprint = hashToolInput(progressScope === undefined
+      ? { toolName, args, result } : { progressScope, toolName, args, result });
     this.db.prepare('INSERT INTO agent_tool_progress (run_id, fingerprint) VALUES (?, ?)').run(runId, fingerprint);
     const rows = this.db.prepare(`SELECT fingerprint FROM agent_tool_progress WHERE run_id = ?
       ORDER BY sequence DESC LIMIT 10`).all(runId) as { fingerprint: string }[];

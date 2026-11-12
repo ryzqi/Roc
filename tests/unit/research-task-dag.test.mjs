@@ -5,6 +5,9 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {Worker} from 'node:worker_threads';
 import Database from 'better-sqlite3';
+import {z} from 'zod';
+import {Annotation, StateGraph, START, END} from '@langchain/langgraph';
+import {AsyncLocalStorageProviderSingleton} from '@langchain/core/singletons';
 import {createResearchFixture, loadResearchTestApi, withResearchTestWorker, createResearchTestRoleTools} from './fixtures/research-test-kit.mjs';
 
 let api;
@@ -22,6 +25,93 @@ function claim(tasks, node, workerId = 'worker') {
   return tasks.graph.claim({nodeId: node.id, projectId: node.projectId, workerId, expectedRevision: node.revision,
     ttlMs: 1000, concurrency: 2});
 }
+
+test('detached worker graph outlives parent cancellation without inheriting its runnable state', async () => {
+  const f = createResearchFixture(api, 'discovery');
+  const parentController = new AbortController(), workerController = new AbortController();
+  let release, pending, inherited;
+  const ready = new Promise(resolve => {release = resolve;});
+  const state = Annotation.Root({value: Annotation()});
+  const child = new StateGraph(state).addNode('work', (_input, config) => {
+    assert.equal(config.configurable?.parentOnly, undefined);
+    assert.equal(config.configurable?.thread_id, undefined);
+    return {value: 'worker completed'};
+  }).addEdge(START, 'work').addEdge('work', END).compile();
+  const parent = new StateGraph(state).addNode('launch', () => {
+    const caller = AsyncLocalStorageProviderSingleton.getRunnableConfig();
+    assert.ok(caller.configurable.__pregel_task_id);
+    pending = f.withWorker(async () => {
+      await ready;
+      inherited = AsyncLocalStorageProviderSingleton.getRunnableConfig();
+      return child.invoke({value: ''}, {signal: workerController.signal});
+    });
+    assert.equal(AsyncLocalStorageProviderSingleton.getRunnableConfig(), caller);
+    return {value: 'launched'};
+  }).addEdge(START, 'launch').addEdge('launch', END).compile();
+  try {
+    assert.equal((await parent.invoke({value: ''}, {signal: parentController.signal,
+      configurable: {thread_id: 'parent-thread', parentOnly: true}})).value, 'launched');
+    parentController.abort(new Error('chat_run_event_consumer_stopped'));
+    release();
+    assert.equal((await pending).value, 'worker completed');
+    assert.equal(inherited, undefined);
+
+    // Detaching the parent must preserve explicit cancellation owned by the worker.
+    workerController.abort(new Error('worker_cancelled'));
+    await assert.rejects(f.withWorker(() => child.invoke({value: ''}, {signal: workerController.signal})),
+      /worker_cancelled|Abort/);
+  } finally {release(); await pending?.catch(() => {}); f.close();}
+});
+
+test('background worker reads outlive the parent tool lease and writes keep their own receipts', async () => {
+  const f = createResearchFixture(api, 'discovery');
+  try {
+    const store = new api.AgentToolEffectStore(f.agentDb);
+    const parent = {runId: 'parent-run', threadId: 'parent-thread', executionPath: 'main',
+      checkpointId: 'parent-checkpoint', toolCallId: 'launch-stage', toolName: 'research_run_stage',
+      canonicalToolIdentity: 'research.run_stage', toolVersion: '1', args: {projectId: f.project.id},
+      effectClass: 'external_call', reconcileStrategy: 'retry_safe'};
+    const started = store.beginOperation(parent);
+    assert.equal(started.kind, 'execute');
+    store.markStarted(started.lease);
+    const parentContext = api.createCapabilityOperationContext({...started.lease,
+      recordReceipt: receipt => store.recordReceipt(started.lease, receipt)});
+    const registry = new api.CapabilityRegistry();
+    const descriptor = {name: 'research.knowledge.search', version: '1',
+      inputSchema: z.object({query: z.string()}), outputSchema: z.array(z.string())};
+    const operationIds = [];
+    registry.declare('research', descriptor);
+    registry.register('research', descriptor, async (_input, context) => {
+      operationIds.push(context?.operationId);
+      return ['evidence'];
+    });
+    let release;
+    const ready = new Promise(resolve => {release = resolve;});
+    const pending = api.runWithCapabilityOperationContext(parentContext, async () => {
+      const worker = f.withWorker(async () => {
+        await ready;
+        assert.deepEqual(await registry.invoke(descriptor.name, {query: 'multi agent safety'}), ['evidence']);
+        await f.tasks.workerEffects.execute('save_workspace_file', {path: 'notes.md', content: 'evidence'},
+          'workspace_mutation', () => registry.invoke(descriptor.name, {query: 'child effect'}));
+      });
+      // Launching a background worker must restore the caller's context immediately.
+      assert.equal(parentContext.hasPublishedSideEffect(), false);
+      await registry.invoke(descriptor.name, {query: 'parent still active'});
+      assert.equal(operationIds[0], started.lease.operationId);
+      store.finishSuccess(started.lease, {runId: f.run.id});
+      release();
+      return worker;
+    });
+    await pending;
+    assert.equal(operationIds[1], undefined, 'read must not inherit the completed parent operation');
+    assert.equal(typeof operationIds[2], 'string', 'worker effects still establish their own operation');
+    assert.notEqual(operationIds[2], started.lease.operationId);
+    assert.equal(f.agentDb.prepare('SELECT receipt_sequence FROM agent_tool_effects WHERE operation_id = ?').pluck().get(started.lease.operationId), 1);
+    const child = f.agentDb.prepare('SELECT status, receipt_sequence FROM agent_tool_effects WHERE operation_id = ?').get(operationIds[2]);
+    assert.equal(child.status, 'succeeded');
+    assert.equal(child.receipt_sequence, 1);
+  } finally {f.close();}
+});
 
 test('simultaneous SQLite claims from separate workers commit exactly one generation', async () => {
   const f = createResearchFixture(api, 'discovery');

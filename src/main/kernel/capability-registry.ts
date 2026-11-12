@@ -1,6 +1,8 @@
 import {
   bindCapabilityOperationContext,
   getCapabilityOperationContext,
+  recordCapabilityOperationReceipt,
+  runWithCapabilityOperationContext,
   type CapabilityOperationContext
 } from './capability-operation-context';
 import type { CapabilityDescriptor, RocCapabilityRegistry } from './types';
@@ -62,20 +64,15 @@ export class CapabilityRegistry implements RocCapabilityRegistry {
       name,
       record.descriptor.version
     );
-    if (operationContext !== undefined) {
-      operationContext.recordReceipt({
-        schemaVersion: 1,
-        kind: 'capability',
-        phase: 'request_sent',
-        capabilityName: name,
-        capabilityVersion: record.descriptor.version,
-        idempotencyKey: operationContext.idempotencyKey,
-        providerReceiptId: null,
-        evidenceHash: null
-      });
-      operationContext.markSideEffectPublished();
+    if (operationContext !== undefined && record.descriptor.effectReceipt !== 'handler') {
+      recordCapabilityOperationReceipt(operationContext);
     }
-    const output = await record.handler(parsedInput, operationContext);
+    const handler = record.handler;
+    const output = operationContext === undefined ? await handler(parsedInput) :
+      await runWithCapabilityOperationContext(operationContext, () => handler(parsedInput, operationContext));
+    if (operationContext !== undefined && !operationContext.hasPublishedSideEffect()) {
+      throw new Error('capability_effect_receipt_required');
+    }
     return record.descriptor.outputSchema.parse(output) as TOutput;
   }
 
@@ -88,6 +85,7 @@ function descriptorsMatch(left: CapabilityDescriptor, right: CapabilityDescripto
   return (
     left.name === right.name &&
     left.version === right.version &&
+    left.effectReceipt === right.effectReceipt &&
     left.inputSchema === right.inputSchema &&
     left.outputSchema === right.outputSchema
   );

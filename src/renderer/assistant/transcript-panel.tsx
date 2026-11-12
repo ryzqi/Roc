@@ -138,7 +138,10 @@ export function ChatTranscriptPanel({
         alignToBottom
         data={messages}
         firstItemIndex={virtualIndex}
-        initialTopMostItemIndex={initialWindowRef.current.initialTopMostItemIndex}
+        // A last message can exceed the viewport; start at its end so live output follows.
+        initialTopMostItemIndex={initialWindowRef.current.initialTopMostItemIndex === undefined
+          ? undefined
+          : {index: initialWindowRef.current.initialTopMostItemIndex, align: 'end'}}
         computeItemKey={(_index, message) => message.key}
         increaseViewportBy={240}
         followOutput={isAtBottom ? 'auto' : false}

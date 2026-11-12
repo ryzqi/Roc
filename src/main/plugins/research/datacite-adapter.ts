@@ -3,7 +3,7 @@ import {normalizeResearchDoi} from './literature-identity';
 import {resourceMetadataSchema, type ResourceMetadata} from '../../../shared/schemas/research-resources';
 
 const text = z.string().min(1).max(8192);
-const optionalText = text.nullish();
+const optionalText = z.preprocess(value => value === '' ? null : value, text.nullish());
 const payloadSchema = z.object({data: z.object({
   id: text, type: z.literal('dois'), attributes: z.object({
     doi: text, state: z.literal('findable'),

@@ -116,7 +116,15 @@ async function summarizeWithStructuredOutput(
         });
     const structuredResponse = readStructuredModelResponse(response);
     summary = structuredResponse === null ? response : structuredResponse.parsed;
+    if (summary === null && structuredResponse !== null && structuredResponse.raw !== null) {
+      // Some compatible providers return valid JSON text blocks instead of a
+      // parsed structured result. Validate that same response without another call.
+      summary = parseContextSummary(structuredResponse.raw.text);
+    }
   } catch (error) {
+    if (error instanceof Error && error.message === 'context_summary_invalid') {
+      throw new Error('context_summary_failed');
+    }
     if (isStructuredOutputUnavailable(error)) {
       return null;
     }

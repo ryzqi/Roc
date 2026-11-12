@@ -13,6 +13,7 @@ import { useTaskDiagnostics } from '../../research/tasks/use-task-diagnostics';
 import { FormSection, formSecondaryButtonClass, formSelectClass } from '../../shared/form-ui';
 import { formatBeijingDateTime } from '../../shared/format';
 import type { RocClient } from '../../shared/roc-client';
+import type {OpenResearchArtifact} from '../../artifacts/artifact-interactions';
 
 const executionLabels = {
   chat: '主助手', stage: '科研阶段', experiment: '实验', figure: '图稿', export: '导出', review_search: '综述查询'
@@ -32,7 +33,7 @@ const eventLabels: Record<ResearchTaskEvent['eventType'], string> = {
   node_output: '节点结果已保存', node_accepted: '节点结果审核'
 };
 
-function ExecutionTree({ executions, client }: { executions: ResearchTaskExecutionDiagnostics[]; client: RocClient }): React.JSX.Element {
+function ExecutionTree({ executions, client, onOpenArtifact }: { executions: ResearchTaskExecutionDiagnostics[]; client: RocClient; onOpenArtifact: OpenResearchArtifact | undefined }): React.JSX.Element {
   const children = new Map<string | null, ResearchTaskExecutionDiagnostics[]>();
   for (const execution of executions) {
     const association = execution.association;
@@ -64,7 +65,11 @@ function ExecutionTree({ executions, client }: { executions: ResearchTaskExecuti
             {execution.artifacts.length === 0 ? null : (
               <ul className="grid gap-1 text-subtle" aria-label="工件">
                 {execution.artifacts.map(artifact => <li key={artifact.id} className="grid gap-1 break-all font-mono">
-                  <span>工件 {artifact.id}</span><span className="text-subtle">{artifact.state === 'missing' ? '工件已缺失' : `当前版本 ${artifact.version}`} / 执行时版本未知</span>
+                  {artifact.state === 'present' && onOpenArtifact !== undefined ? <button type="button"
+                    className="text-left underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-accent"
+                    data-testid={`mgmt-task-artifact-${artifact.id}`} onClick={() => onOpenArtifact({projectId: association.projectId,
+                      artifactId: artifact.id, expectedVersion: artifact.version}, () => undefined)}>工件 {artifact.id}</button> : <span>工件 {artifact.id}</span>}
+                  <span className="text-subtle">{artifact.state === 'missing' ? '工件已缺失' : `当前版本 ${artifact.version}`} / 执行时版本未知</span>
                 </li>)}
               </ul>
             )}
@@ -78,8 +83,8 @@ function ExecutionTree({ executions, client }: { executions: ResearchTaskExecuti
   return <div data-testid="mgmt-task-tree">{render(null)}</div>;
 }
 
-function TaskDetail({ client, projectId, taskId }: {
-  client: RocClient; projectId: string; taskId: string;
+function TaskDetail({ client, projectId, taskId, onOpenArtifact }: {
+  client: RocClient; projectId: string; taskId: string; onOpenArtifact: OpenResearchArtifact | undefined;
 }): React.JSX.Element {
   const resource = useTaskDiagnostics(client, { projectId, taskId });
   const [afterSequence, setAfterSequence] = useState(0);
@@ -109,6 +114,7 @@ function TaskDetail({ client, projectId, taskId }: {
                 research_execution_intent_uncommitted: '执行关联尚未完成，无法继续。',
                 research_stage_inputs_stale: '执行输入或审批已变更，请重新确认后新建任务。',
                 research_stage_snapshot_invalid: '执行快照校验失败，无法继续。',
+                research_scientific_review_stale: '审稿来源或人工判断已变更，请基于当前稿件新建审稿任务。',
                 agent_tool_effect_receipt_missing: '操作回执缺失，无法验证执行结果。'
               })[issue]}</li>)}
             </ul>}
@@ -118,7 +124,7 @@ function TaskDetail({ client, projectId, taskId }: {
             <TaskControls client={client} data={resource.data} onChanged={refresh} />
             <TaskGraph graph={resource.data.graph} />
             <FormSection title="执行树与工件" testId="mgmt-task-executions">
-              <ExecutionTree client={client} executions={resource.data.executions} />
+              <ExecutionTree client={client} executions={resource.data.executions} onOpenArtifact={onOpenArtifact}/>
             </FormSection>
           </>
         )}
@@ -161,8 +167,9 @@ function TaskDetail({ client, projectId, taskId }: {
   );
 }
 
-export function ResearchTasksSection({ client, projectId, selectedTaskId, onSelectTask }: {
+export function ResearchTasksSection({ client, projectId, selectedTaskId, onSelectTask, onOpenArtifact }: {
   client: RocClient; projectId: string; selectedTaskId: string | null; onSelectTask: (taskId: string) => void;
+  onOpenArtifact?: OpenResearchArtifact | undefined;
 }): React.JSX.Element {
   const [afterTaskId, setAfterTaskId] = useState<string | null>(null);
   const [previousTasks, setPreviousTasks] = useState<ResearchTask[]>([]);
@@ -208,7 +215,7 @@ export function ResearchTasksSection({ client, projectId, selectedTaskId, onSele
           }}>加载更多任务</button>
       ) : null}
       {selectedTaskId === null ? null :
-        <TaskDetail key={`${projectId}:${selectedTaskId}`} client={client} projectId={projectId} taskId={selectedTaskId} />}
+        <TaskDetail key={`${projectId}:${selectedTaskId}`} client={client} projectId={projectId} taskId={selectedTaskId} onOpenArtifact={onOpenArtifact}/>}
     </FormSection>
   );
 }

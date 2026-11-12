@@ -316,6 +316,12 @@ export class LangChainModelFactory {
 
     const modelKwargs: Record<string, unknown> = {};
     if (provider.type === 'openai_compatible') {
+      // Recent DeepSeek models default to thinking, which rejects forced tool
+      // choice. Honor the user's explicit switch while leaving other compatible
+      // APIs and provider-specific modelKwargs in control of their own protocol.
+      if (typeof modelOptions.thinking === 'boolean' && /(?:^|[/:])deepseek-(?:v3\.2|v4(?:\.\d+)?|flash)(?:$|[-/])/iu.test(modelId)) {
+        modelKwargs.thinking = { type: modelOptions.thinking ? 'enabled' : 'disabled' };
+      }
       Object.assign(modelKwargs, modelOptions.modelKwargs);
     }
     if (provider.type === 'nvidia') {

@@ -8,9 +8,10 @@ import {
 } from '../../../shared/schemas/research-python-environments';
 import type { ResearchEnvironmentProbeResource } from '../../../shared/schemas/research-process-resources';
 import { requireResearchHuman } from '../../services/research-human-context';
-import { inspectPythonExperimentEnvironment, type InspectedPythonEnvironment } from './experiment-python-probe';
+import { RocDomainError } from '../../services/errors';
+import { inspectPythonExperimentEnvironment, readPythonEnvironmentLock, type InspectedPythonEnvironment } from './experiment-python-probe';
 import { pickPythonEnvironment, type PythonEnvironmentPicker } from './python-environment-dialog';
-import { runResearchProcess, type ResearchProcessRequest, type ResearchProcessResult } from './process-runner';
+import { ResearchProcessError, runResearchProcess, type ResearchProcessRequest, type ResearchProcessResult } from './process-runner';
 import { researchContentHash } from './research-files';
 import type { ResearchRepository } from './repository';
 import type { ResearchProcessScope } from './toolchain';
@@ -82,6 +83,8 @@ export class ResearchPythonEnvironmentService {
     return workspace;
   }
   private async choose(request: ResearchPythonEnvironmentSelect, owner: string, signal: AbortSignal): Promise<ResearchPythonEnvironmentSelection | null> {
+    await readPythonEnvironmentLock(this.requireWorkspace(request.projectId));
+    signal.throwIfAborted();
     const selectedExecutable = await this.picker(owner, signal);
     signal.throwIfAborted();
     if (selectedExecutable === null) return null;
@@ -92,6 +95,16 @@ export class ResearchPythonEnvironmentService {
       const inspected = await inspectPythonExperimentEnvironment({
         workspace: workspacePath, selectedExecutable, jobDir, run: this.run, signal,
         admission: { projectId: request.projectId, priority: 'user' }, onProbe: () => undefined
+      }).catch(error => {
+        if (error instanceof ResearchProcessError && error.code === 'research_python_environment_probe_failed'
+          && /(?:^|\n)RuntimeError: research_python_direct_dependency_unsupported\s*$/u.test(error.stderr)) {
+          throw new RocDomainError({
+            code: 'research_python_direct_dependency_unsupported', category: 'validation', retryable: false,
+            message: '所选 Python 环境包含带 direct_url.json 的直接来源依赖，当前研究运行器不支持此类环境。',
+            userAction: '请选择与 roc-python.lock.json 一致的独立 Python 环境；无第三方依赖的项目可用 python -m venv --without-pip 创建环境。'
+          });
+        }
+        throw error;
       });
       signal.throwIfAborted();
       this.requireWritable(request.projectId);

@@ -123,7 +123,7 @@ export class ResearchRunRepository {
       const stage = workflow.stages.find((state) => state.stage === request.expectedStage);
       if (stage === undefined) throw new Error('research_stage_not_found');
       if (stage.activeRunId !== null) throw new Error('research_stage_run_active');
-      if (stage.status === 'running' && this.hasCompletedParent(request.projectId, stage.stage)) {
+      if (stage.status === 'running' && this.hasUnreviewedParent(request.projectId, stage.stage)) {
         throw new Error('research_stage_awaiting_gate');
       }
       if (!['ready', 'running', 'paused', 'failed', 'blocked'].includes(stage.status)) throw new Error('research_stage_not_runnable');
@@ -132,7 +132,6 @@ export class ResearchRunRepository {
       if (retryOf !== undefined && (retryOf.reviewCycleId !== (cycle?.originArtifactId ?? null) || retryOf.revisionRound !== revisionRound)) {
         throw new Error('research_review_cycle_changed');
       }
-      this.retireDraftRunOutputs(request.projectId, stage.stage, stage.artifactIds);
       const profile = getResearchStageRoleProfile(stage.stage);
       const policy = retryOf?.policy ?? this.listPolicies(request.projectId).find((entry) => entry.stage === stage.stage);
       if (policy === undefined) throw new Error('research_stage_policy_missing');
@@ -140,6 +139,13 @@ export class ResearchRunRepository {
       if (retryOf !== undefined) this.assertInputsCurrent(retryOf);
       if (stage.stage === 'retrieval') requireConfirmedSearchStrategy(this.research, context);
       this.verifyCurrentInputs(request.projectId, context);
+      const preservedReports = retryOf?.stage === 'review' && context.reviewReports.length > 0
+        ? this.validateReviewReports(retryOf, context.reviewReports.map(report => this.get(report.runId, request.projectId))) : [];
+      if (preservedReports.length > 0 && JSON.stringify(preservedReports) !== JSON.stringify(context.reviewReports)) {
+        throw new Error('research_review_report_changed');
+      }
+      this.retireDraftRunOutputs(request.projectId, stage.stage, stage.artifactIds,
+        new Set(preservedReports.map(report => report.artifactId)));
       const timestamp = this.now();
       const run: ResearchStageRun = {
         id: `research_run_${randomUUID()}`, projectId: request.projectId, stage: stage.stage, requestId: request.requestId,
@@ -271,6 +277,11 @@ export class ResearchRunRepository {
         return existing.map(row => this.get(row.id, projectId));
       }
       const context = this.getContext(parent.id);
+      if (context.reviewReports.length > 0) {
+        const reports = this.validateReviewReports(parent, context.reviewReports.map(report => this.get(report.runId, projectId)));
+        if (JSON.stringify(reports) !== JSON.stringify(context.reviewReports)) throw new Error('research_review_report_changed');
+        return reports.map(report => this.get(report.runId, projectId));
+      }
       const cycle = this.research.reviews.requireForStage(projectId, 'review');
       if (cycle === null) throw new Error('research_review_cycle_missing');
       const inputs = context.inputs.filter(({ artifact }) =>
@@ -298,11 +309,31 @@ export class ResearchRunRepository {
 
   setReviewReports(id: string, projectId: string, children: ResearchStageRun[]): void {
     const parent = this.requireActive(id, projectId);
+    const reviewReports = this.validateReviewReports(parent, children);
+    const previous = this.getContext(parent.id);
+    if (previous.reviewReports.length > 0 && JSON.stringify(previous.reviewReports) !== JSON.stringify(reviewReports)) {
+      throw new Error('research_review_report_changed');
+    }
+    const context = { ...previous, reviewReports };
+    this.db.prepare('UPDATE research_stage_runs SET context_json = ? WHERE id = ?').run(JSON.stringify(context), parent.id);
+  }
+
+  private validateReviewReports(parent: ResearchStageRun, children: ResearchStageRun[]): ResearchExecutionContext['reviewReports'] {
+    if (parent.stage !== 'review' || parent.parentRunId !== null) throw new Error('research_review_parent_required');
     if (children.length !== researchReviewRoles.length) throw new Error('research_review_panel_incomplete');
-    const reviewReports = children.map((child) => {
+    const projectId = parent.projectId;
+    const lineage = this.lineageRunIds(parent);
+    const scientificInput = this.getContext(parent.id).scientificInput;
+    const reports = children.map((child) => {
       const saved = this.get(child.id, projectId);
-      if (saved.parentRunId !== parent.id || saved.status !== 'completed' || saved.outputArtifactIds.length !== 1) {
+      if (saved.parentRunId === null || !lineage.has(saved.parentRunId) || saved.taskId !== parent.taskId ||
+          saved.stage !== 'review' || saved.reviewCycleId !== parent.reviewCycleId || saved.revisionRound !== parent.revisionRound ||
+          saved.status !== 'completed' || saved.outputArtifactIds.length !== 1) {
         throw new Error('research_review_panel_incomplete');
+      }
+      this.verifyFrozenInputs(saved);
+      if (scientificInput === undefined || hashStageValue(scientificInput) !== hashStageValue(this.getContext(saved.id).scientificInput)) {
+        throw new Error('research_scientific_review_stale');
       }
       const binding = this.research.tasks.requireExecution('stage', saved.id, projectId).nodeBinding;
       if (binding.kind !== 'dag') throw new Error('research_node_binding_invalid');
@@ -312,11 +343,17 @@ export class ResearchRunRepository {
       }
       const artifactId = saved.outputArtifactIds[0];
       const content = this.getArtifactContent(projectId, artifactId);
-      if (content === null) throw new Error('research_review_report_missing');
+      if (content === null || content.runId !== saved.id) throw new Error('research_review_report_missing');
+      if (!['draft', 'approved'].includes(this.research.getArtifact(artifactId).status) ||
+          this.research.scientificReviews.inspect(projectId, artifactId).status !== 'current') {
+        throw new Error('research_scientific_review_stale');
+      }
       return { role: saved.role, runId: saved.id, artifactId, output: content.output };
     });
-    const context = { ...this.getContext(parent.id), reviewReports };
-    this.db.prepare('UPDATE research_stage_runs SET context_json = ? WHERE id = ?').run(JSON.stringify(context), parent.id);
+    if (researchReviewRoles.some(({role}) => reports.filter(report => report.role === role).length !== 1)) {
+      throw new Error('research_review_panel_incomplete');
+    }
+    return reports;
   }
 
   requireReviewPanel(projectId: string, artifactIds: string[]): void {
@@ -328,16 +365,12 @@ export class ResearchRunRepository {
     if (summary === undefined) throw new Error('research_review_synthesis_required');
     const parent = this.get(summary.runId, projectId);
     const reports = this.getContext(parent.id).reviewReports;
-    if (reports.length !== researchReviewRoles.length || researchReviewRoles.some(({ role }) => !reports.some((report) => report.role === role))) {
-      throw new Error('research_review_panel_incomplete');
-    }
+    const validated = this.validateReviewReports(parent, reports.map(report => this.get(report.runId, projectId)));
+    if (JSON.stringify(validated) !== JSON.stringify(reports)) throw new Error('research_review_report_changed');
     for (const report of reports) {
-      const child = this.get(report.runId, projectId);
-      if (child.parentRunId !== parent.id || child.status !== 'completed' || !artifactIds.includes(report.artifactId)) {
+      if (!artifactIds.includes(report.artifactId)) {
         throw new Error('research_review_panel_incomplete');
       }
-      const inspection = this.research.scientificReviews.inspect(projectId, report.artifactId);
-      if (inspection.status !== 'current') throw new Error('research_scientific_review_stale');
     }
   }
 
@@ -483,8 +516,29 @@ export class ResearchRunRepository {
     return (this.db.prepare("SELECT r.id,r.project_id FROM research_stage_runs r JOIN research_stage_states s ON s.project_id=r.project_id AND s.stage=r.stage WHERE r.status='completed' AND r.parent_run_id IS NULL AND s.status IN ('running','waiting_approval') AND s.active_run_id IS NULL")
       .all() as {id: string; project_id: string}[]).map(row => this.get(row.id, row.project_id)).filter(run => {
         const binding = this.research.tasks.requireExecution('stage', run.id, run.projectId).nodeBinding;
-        return binding.kind === 'dag' && this.research.tasks.graph.get(binding.nodeId, run.projectId).status === 'pending_review';
+        if (binding.kind !== 'dag') return false;
+        const node = this.research.tasks.graph.get(binding.nodeId, run.projectId);
+        return node.status === 'pending_review' && node.executionId === run.id;
       });
+  }
+
+  /** Only the latest root of the current stage can be continued. */
+  continuationForTask(taskId: string, projectId: string): ResearchStageRun | null {
+    const workflow = this.research.getWorkflow(projectId);
+    const executions = this.research.tasks.executions(taskId, projectId);
+    for (const execution of [...executions].reverse()) {
+      if (execution.kind !== 'stage' || execution.associationSource === 'review' || execution.associationState !== 'confirmed') continue;
+      const run = this.get(execution.executionId, projectId);
+      if (run.parentRunId !== null || run.stage !== workflow.currentStage) continue;
+      if (execution.nodeBinding.kind !== 'dag') return null;
+      const node = this.research.tasks.graph.get(execution.nodeBinding.nodeId, projectId);
+      if (node.executionId !== run.id) return null;
+      if (['failed', 'cancelled', 'interrupted'].includes(run.status)) return run;
+      const stage = workflow.stages.find(stage => stage.stage === run.stage);
+      return run.status === 'completed' && node.status === 'pending_review' &&
+        stage?.status === 'running' && stage.activeRunId === null ? run : null;
+    }
+    return null;
   }
 
   taskIdsForStage(projectId: string, stage: ResearchStageRun['stage']): string[] {
@@ -542,9 +596,15 @@ export class ResearchRunRepository {
     this.verifyCurrentInputs(run.projectId, context);
   }
 
-  private hasCompletedParent(projectId: string, stage: ResearchStageRun['stage']): boolean {
-    return this.db.prepare("SELECT 1 FROM research_stage_runs WHERE project_id = ? AND stage = ? AND parent_run_id IS NULL AND status = 'completed' LIMIT 1")
-      .get(projectId, stage) !== undefined;
+  private hasUnreviewedParent(projectId: string, stage: ResearchStageRun['stage']): boolean {
+    const rows = this.db.prepare("SELECT id FROM research_stage_runs WHERE project_id = ? AND stage = ? AND parent_run_id IS NULL AND status = 'completed'")
+      .all(projectId, stage) as {id: string}[];
+    return rows.some(({id}) => {
+      const binding = this.research.tasks.requireExecution('stage', id, projectId).nodeBinding;
+      if (binding.kind !== 'dag') throw new Error('research_node_binding_invalid');
+      // Completed runs remain in the audit after rejection; only pending outputs fence a new run.
+      return this.research.tasks.graph.get(binding.nodeId, projectId).status === 'pending_review';
+    });
   }
 
   private captureContext(projectId: string, stage: ResearchStageRun['stage']): ResearchExecutionContext {
@@ -682,9 +742,10 @@ export class ResearchRunRepository {
     }
   }
 
-  private retireDraftRunOutputs(projectId: string, stage: ResearchStageRun['stage'], artifactIds: string[]): void {
+  private retireDraftRunOutputs(projectId: string, stage: ResearchStageRun['stage'], artifactIds: string[], preserved = new Set<string>()): void {
     const retired = new Set<string>();
     for (const id of artifactIds) {
+      if (preserved.has(id)) continue;
       const generated = this.db.prepare('SELECT artifact_id FROM research_artifact_contents WHERE project_id = ? AND artifact_id = ?').get(projectId, id);
       if (generated === undefined || this.research.getArtifact(id).status !== 'draft') continue;
       if (this.research.experiments.hasArtifact(id) || this.research.figures.hasArtifact(id) || this.research.exports.hasArtifact(id)) continue;

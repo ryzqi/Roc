@@ -199,12 +199,53 @@ export class ResearchStageRuntime {
     if (errors.length > 0) throw new AggregateError(errors, 'research_task_stage_cleanup_failed');
   }
 
-  continueTask(request: { taskId: string; projectId: string; runId: string; requestId: string }): ResearchStageRun {
+  continueTask(request: { taskId: string; projectId: string; runId: string; requestId: string }): ResearchStageRun | Promise<ResearchStageRun> {
+    if (this.closed) throw new Error('research_scheduler_closed');
     const execution = this.repository.tasks.requireExecution('stage', request.runId, request.projectId);
     if (execution.taskId !== request.taskId) throw new Error('research_task_execution_conflict');
+    const run = this.repository.runs.continuationForTask(request.taskId, request.projectId);
+    if (run?.id !== request.runId) throw new Error('research_run_not_current');
+    if (this.repository.getProject(request.projectId).status === 'archived') throw new Error('research_project_archived');
+    this.repository.runs.assertInputsCurrent(run);
+    if (run.status === 'completed') {
+      return this.repository.tasks.continueWith(request.taskId, request.projectId, () => this.resumeOutputReview(run));
+    }
     return this.repository.tasks.continueWith(request.taskId, request.projectId, () => this.retry({
       projectId: request.projectId, runId: request.runId, requestId: request.requestId
     }));
+  }
+
+  private resumeOutputReview(run: ResearchStageRun): Promise<ResearchStageRun> {
+    if (run.taskId === null || this.active.has(run.id)) throw new Error('research_run_not_current');
+    const taskId = run.taskId;
+    const controller = new AbortController();
+    const pending = Promise.resolve().then(async () => {
+      controller.signal.throwIfAborted();
+      this.repository.runs.assertInputsCurrent(run);
+      const binding = this.repository.tasks.requireExecution('stage', run.id, run.projectId).nodeBinding;
+      if (binding.kind !== 'dag') throw new Error('research_stage_snapshot_invalid');
+      const node = this.repository.tasks.graph.get(binding.nodeId, run.projectId);
+      if (node.executionId !== run.id || node.status !== 'pending_review' ||
+        JSON.stringify(node.output) !== JSON.stringify(this.repository.runs.nodeOutput(run))) {
+        throw new Error('research_node_output_changed');
+      }
+      await this.gate.complete({projectId: run.projectId, expectedStage: run.stage, action: 'complete'}, controller.signal);
+      controller.signal.throwIfAborted();
+      this.synchronizeTaskState(taskId, run.projectId);
+      return this.repository.runs.get(run.id, run.projectId);
+    }).catch(error => {
+      const task = this.repository.tasks.get(taskId, run.projectId);
+      if (task.status === 'active') this.repository.tasks.setStatus(taskId, run.projectId, 'failed', executionErrorCode(error), ['active']);
+      throw error;
+    }).finally(() => {
+      this.active.delete(run.id);
+      this.notify(run);
+      this.pump();
+    });
+    // Cancellation awaits settlement without treating an expected abort as a cleanup failure.
+    const cleanup = pending.then(() => undefined, () => undefined);
+    this.active.set(run.id, {controller, pending: cleanup, cleanup, projectId: run.projectId, taskId});
+    return pending;
   }
 
   restoreTaskApproval(request: { taskId: string; projectId: string }) {
@@ -351,9 +392,7 @@ export class ResearchStageRuntime {
   private async execute(queued: ResearchStageRun, controller: AbortController): Promise<void> {
     try {
       if (queued.stage === 'review' && queued.parentRunId === null) {
-        const children = this.repository.tasks.executions(queued.taskId!, queued.projectId)
-          .filter(execution => execution.kind === 'stage' && execution.parentExecutionId === queued.id)
-          .map(execution => this.repository.runs.get(execution.executionId, queued.projectId));
+        const children = this.repository.runs.createReviewChildren(queued.id, queued.projectId);
         this.repository.runs.setReviewReports(queued.id, queued.projectId, children);
       }
       const { prepared, run } = await this.prepareRole(queued, controller.signal);
@@ -454,5 +493,12 @@ function withAbort<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
 function executionErrorCode(error: unknown): string {
   if (error instanceof ZodError) return 'research_role_output_invalid';
   if (error instanceof Error && /^(?:research|run)_[a-z0-9_]+(?::[a-z0-9_.-]+)*$/iu.test(error.message)) return error.message.slice(0, 256);
+  // Model middleware may wrap the provider error. Persist only a stable code,
+  // never the provider's response text or request details.
+  for (let cause: unknown = error, depth = 0; cause instanceof Error && depth < 8; cause = cause.cause, depth += 1) {
+    if (/ended this reply: the model['’]s text was stuck in a loop\b/iu.test(cause.message.slice(0, 8192))) {
+      return 'research_provider_reply_loop';
+    }
+  }
   return 'research_role_execution_failed';
 }

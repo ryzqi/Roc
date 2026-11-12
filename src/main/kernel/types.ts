@@ -12,6 +12,8 @@ export type CapabilityDescriptor<TInput = unknown, TOutput = unknown> = {
   readonly version: string;
   readonly inputSchema: z.ZodType<TInput>;
   readonly outputSchema: z.ZodType<TOutput>;
+  /** Handler records its receipt immediately before its first effect, after readonly validation. */
+  readonly effectReceipt?: 'handler';
 };
 
 export type RocPluginManifest = {

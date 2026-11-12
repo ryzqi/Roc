@@ -211,6 +211,43 @@ test('restore rejects incompatible effect schemas without changing the target', 
   source.close(); target.close();
 });
 
+test('pre-effect suspension survives SQLite reopen and restore while unmarked manual retries remain unknown', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'roc-effect-suspension-'));
+  const databasePath = join(directory, 'agent.sqlite');
+  let source = createDatabase(databasePath);
+  let store = new AgentToolEffectStore(source);
+  const suspended = operation({runId:'suspended', reconcileStrategy:'manual_confirmation'});
+  const legacy = operation({runId:'legacy', reconcileStrategy:'manual_confirmation'});
+  const lease = store.beginOperation(suspended).lease;
+  store.markStarted(lease); store.finishSuspended(lease, new Error('GraphInterrupt'));
+  const legacyLease = store.beginOperation(legacy).lease;
+  store.markStarted(legacyLease); store.finishError(legacyLease, new Error('old retry'), true);
+  // Old persisted retries have no proof that execution stopped before effects.
+  source.prepare("UPDATE agent_tool_effects SET status='failed_retryable' WHERE run_id=?").run(legacy.runId);
+  source.close(); source = createDatabase(databasePath);
+  store = new AgentToolEffectStore(source);
+  const target = createDatabase(); const restored = new AgentToolEffectStore(target);
+  try {
+    restored.restoreFrom(source);
+    assert.equal(restored.readState(suspended).status,'failed_retryable');
+    assert.equal(restored.readState(legacy).status,'unknown');
+    store.markRestartedUnknown(suspended.runId); store.markRestartedUnknown(legacy.runId);
+    assert.equal(store.readState(suspended).status,'failed_retryable');
+    assert.equal(store.hasUnknown(suspended.runId),false);
+    assert.equal(store.readState(suspended).leaseGeneration,lease.leaseGeneration+1);
+    assert.equal(store.readState(legacy).status,'unknown');
+    for (const current of [store,restored]) {
+      assert.throws(()=>current.finishSuccess(lease,{late:true}),/agent_tool_effect_lease_lost/);
+      const resumed=current.beginOperation(suspended);
+      assert.equal(resumed.kind,'execute'); current.markStarted(resumed.lease);
+      current.finishSuccess(resumed.lease,{approved:true});
+      assert.deepEqual(current.beginOperation(suspended).result,{approved:true});
+    }
+  } finally {
+    source.close(); target.close(); rmSync(directory,{recursive:true,force:true});
+  }
+});
+
 test('current restore preserves successful receipts and fences unfinished attempts', async () => {
   const directory = mkdtempSync(join(tmpdir(),'roc-effect-restore-'));
   const sourcePath = join(directory,'source.db');

@@ -456,7 +456,16 @@ export class LiteratureImportService {
           && (request.yearTo === undefined || candidate.record.publishedYear <= request.yearTo);
       });
       const candidates: LiteratureCandidate[] = grouped.slice(0, request.limit).map(candidate => {
-        const match = this.library.findByIdentity(candidate.identity, candidate.aliases);
+        let match;
+        try { match = this.library.findByIdentity(candidate.identity, candidate.aliases); }
+        catch (error) {
+          // Preserve provider observations when local matching fails. The failed
+          // pool agrees with the execution ledger; no ambiguous match is chosen.
+          const failedPool = {...pool, status: 'failed' as const};
+          this.db.prepare('INSERT INTO research_literature_search_pools(execution_id,pool_json) VALUES (?,?)')
+            .run(executionId, JSON.stringify({...failedPool, contentHash: hash(failedPool)}));
+          throw error;
+        }
         return {...candidate, matchedLibraryItemId: match?.id ?? null, archived: match?.archived ?? false,
           missingFields: ['doi', 'abstract', 'publishedYear'].filter(field => candidate.record[field as 'doi' | 'abstract' | 'publishedYear'] === null)};
       });

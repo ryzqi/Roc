@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { createCanvas, loadImage } from '@napi-rs/canvas';
+import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { AIMessage } from '@langchain/core/messages';
 import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -27,7 +30,11 @@ async function setup(renderer) {
   );
   const tools = createResearchTestRoleTools(api, {
     repository: fixture.repository, run: fixture.run,
-    context: fixture.repository.runs.getContext(fixture.run.id), capabilities: {},
+    context: fixture.repository.runs.getContext(fixture.run.id), capabilities: {invoke: async (name, input) => {
+      assert.equal(name, 'research.figure.environment');
+      assert.deepEqual(input, {projectId: fixture.project.id});
+      return service.inspect(input.projectId);
+    }},
     effects, signal: new AbortController().signal
   });
   return { ...fixture, service, effects, tools, async dispose() {
@@ -91,6 +98,82 @@ test('real figure rendering is polled with runId and published into a persisted 
     assert.equal(repeated.id, published.figureId);
     assert.equal(effects.getFigure(run.id, project.id, started.runId).artifactId, published.artifactId);
       });
+  } finally { await fixture.dispose(); }
+});
+
+test('faceted figures with long titles keep all data inside the requested physical output sizes', async () => {
+  const fixture = await setup(realRenderer());
+  try {
+    await fixture.withWorker(async () => {
+      const values = Array.from({length: 16}, (_, index) => ({
+        endpoint: `endpoint_${Math.floor(index / 4)}`, condition: `B${index % 4}`, value: index / 15
+      }));
+      await writeFile(join(fixture.project.workspacePath, 'figure.vl.json'), JSON.stringify({
+        title: {text: 'Engineering fixture — not safety findings; real LLM safety samples = 0',
+          subtitle: 'All four endpoints and conditions must remain visible, including labels, axes, and this long explanatory subtitle.'},
+        data: {values}, facet: {row: {field: 'endpoint', type: 'nominal'}},
+        spec: {width: 380, height: 78, mark: 'point', encoding: {
+          x: {field: 'condition', type: 'nominal'}, y: {field: 'value', type: 'quantitative'}
+        }}
+      }));
+      const started = await fixture.service.start(figureRequest(fixture.project.id, fixture.run.id, {
+        timeoutMs: 10_000, figure: {widthInches: 10, heightInches: 7, dpi: 150, seed: 42}
+      }));
+      await waitFor(() => !['preparing', 'running'].includes(fixture.repository.figureRuns.get(fixture.project.id, started.id).status));
+      const completed = fixture.repository.figureRuns.get(fixture.project.id, started.id);
+      const output = async path => (await fixture.service.readRunFile({projectId: fixture.project.id,
+        runId: started.id, area: 'output', path})).bytes;
+      const stderr = (await fixture.service.readRunFile({projectId: fixture.project.id,
+        runId: started.id, area: 'log', path: 'stderr.txt'})).bytes.toString('utf8');
+      assert.equal(completed.status, 'completed', `${completed.error}: ${stderr}`);
+      const report = JSON.parse((await output('figure-validation.json')).toString('utf8'));
+      assert.deepEqual([report.widthPixels, report.heightPixels], [1500, 1050]);
+      assert.deepEqual([report.widthPoints, report.heightPoints], [720, 504]);
+      const svg = (await output('figure.svg')).toString('utf8');
+      assert.match(svg, /real LLM safety samples = 0/u);
+      for (const endpoint of ['endpoint_0', 'endpoint_1', 'endpoint_2', 'endpoint_3']) assert.ok(svg.includes(endpoint));
+      const trace = JSON.parse((await output('figure-data.json')).toString('utf8'));
+      const plotted = trace.marks.flatMap(mark => mark.items.map(item => item.numericFields.value)).filter(value => value !== undefined);
+      assert.deepEqual(plotted.toSorted((a, b) => a - b), values.map(value => value.value));
+      const published = await fixture.service.publish(fixture.project.id, started.id, null);
+      assert.equal((await fixture.service.verify(fixture.project.id, published.id)).id, published.id);
+    });
+  } finally { await fixture.dispose(); }
+});
+
+test('fitted page margins preserve the resolved Vega background and explicit transparency', async () => {
+  const fixture = await setup(realRenderer());
+  try {
+    await fixture.withWorker(async () => {
+      for (const [requestId, background, expected] of [
+        ['default-background', {}, [255, 255, 255, 255]],
+        ['configured-background', {config: {background: '#123456'}}, [18, 52, 86, 255]],
+        ['transparent-background', {background: null}, [0, 0, 0, 0]]
+      ]) {
+        await writeFile(join(fixture.project.workspacePath, 'figure.vl.json'), JSON.stringify({
+          ...background, data: {values: [{group: 'A', value: 1}]},
+          facet: {field: 'group', type: 'nominal'},
+          spec: {width: 400, height: 40, mark: 'point', encoding: {
+            x: {field: 'value', type: 'quantitative'}
+          }}
+        }));
+        const started = await fixture.service.start(figureRequest(fixture.project.id, fixture.run.id, {
+          requestId, timeoutMs: 10_000, figure: {widthInches: 10, heightInches: 7, dpi: 72, seed: 42}
+        }));
+        await waitFor(() => !['preparing', 'running'].includes(fixture.repository.figureRuns.get(fixture.project.id, started.id).status));
+        const completed = fixture.repository.figureRuns.get(fixture.project.id, started.id);
+        assert.equal(completed.status, 'completed', completed.error);
+        for (const path of ['figure.png', 'figure.svg']) {
+          const bytes = (await fixture.service.readRunFile({projectId: fixture.project.id,
+            runId: started.id, area: 'output', path})).bytes;
+          const image = await loadImage(bytes);
+          const canvas = createCanvas(image.width, image.height);
+          const context = canvas.getContext('2d');
+          context.drawImage(image, 0, 0);
+          assert.deepEqual([...context.getImageData(0, 0, 1, 1).data], expected, `${requestId} ${path} page margin`);
+        }
+      }
+    });
   } finally { await fixture.dispose(); }
 });
 
@@ -179,12 +262,14 @@ test('association persistence failure prevents renderer dispatch and records fai
   } finally { await fixture.dispose(); }
 });
 
-test('high-DPI fractional figure sizes preserve physical SVG/PDF dimensions and exact PNG pixel bounds', async () => {
+for (const options of [
+  { widthInches: 2.125, heightInches: 1.625, dpi: 300, seed: 42 },
+  { widthInches: 10.003, heightInches: 7.007, dpi: 150, seed: 42 },
+]) test(`high-DPI fractional figure sizes preserve physical SVG/PDF dimensions and exact PNG pixel bounds (${options.widthInches} × ${options.heightInches} in at ${options.dpi} DPI)`, async () => {
   const fixture = await setup(realRenderer());
   try {
     await fixture.withWorker(async () => {
     const { project, run, effects, service } = fixture;
-    const options = { widthInches: 2.125, heightInches: 1.625, dpi: 300, seed: 42 };
     const request = figureRequest(project.id, run.id, { figure: options, timeoutMs: 10_000 });
     const started = await effects.startFigure(run.id, project.id, request);
     await waitFor(() => !['preparing', 'running'].includes(effects.getFigure(run.id, project.id, started.id).status));
@@ -194,8 +279,8 @@ test('high-DPI fractional figure sizes preserve physical SVG/PDF dimensions and 
     const verified = await service.verify(project.id, publication.id);
     assert.equal(verified.validation.widthPixels, Math.trunc(options.widthInches * options.dpi));
     assert.equal(verified.validation.heightPixels, Math.trunc(options.heightInches * options.dpi));
-    assert.equal(verified.validation.widthPoints, options.widthInches * 72);
-    assert.equal(verified.validation.heightPoints, options.heightInches * 72);
+    assert.ok(Math.abs(verified.validation.widthPoints - options.widthInches * 72) < 1e-9);
+    assert.ok(Math.abs(verified.validation.heightPoints - options.heightInches * 72) < 1e-9);
       });
   } finally { await fixture.dispose(); }
 });
@@ -221,4 +306,117 @@ test('rendering cancellation persists terminal state and rejects late publicatio
     assert.equal(repository.figures.list(project.id, 10).length, 0);
       });
   } finally { await fixture.dispose(); }
+});
+
+
+test('actual figure agent corrects a stale environment before any host effect and renders once', async () => {
+  const f = await setup(realRenderer());
+  const output = {title: 'Environment corrected', markdown: 'Actual renderer run started.', claims: [], sections: [], verdict: 'uncertain'};
+  const {projectId, ownerRunId, ...request} = figureRequest(f.project.id, f.run.id, {timeoutMs: 10_000});
+  let requests = 0, responseToolName, startedId;
+  class Model extends BaseChatModel {
+    _llmType() { return 'figure-environment-recovery-fixture'; }
+    bindTools(tools) {
+      const response = tools.find(tool => !['start_figure', 'inspect_figure_environment'].includes(tool.function?.name ?? tool.name));
+      responseToolName = response.function?.name ?? response.name;
+      return this;
+    }
+    async _generate(messages) {
+      requests++;
+      assert.ok(requests <= 4);
+      let call;
+      if (requests === 1) call = {id: 'stale', name: 'start_figure', args: {...request, expectedEnvironmentHash: '0'.repeat(64)}};
+      else if (requests === 2) {
+        const rejected = messages.find(message => message.tool_call_id === 'stale');
+        assert.equal(rejected?.status, 'error');
+        assert.match(String(rejected.content), /research_figure_environment_changed/);
+        assert.match(String(rejected.content), /inspect_figure_environment/);
+        assert.equal(f.agentDb.prepare('SELECT COUNT(*) FROM agent_tool_effects').pluck().get(), 0);
+        assert.equal(f.service.list(f.project.id, 10).length, 0);
+        call = {id: 'preview', name: 'inspect_figure_environment', args: {}};
+      } else if (requests === 3) {
+        const preview = JSON.parse(messages.find(message => message.tool_call_id === 'preview').content);
+        const environment = await f.service.inspect(f.project.id);
+        assert.equal(preview.expectedEnvironmentHash, environment.hash);
+        call = {id: 'corrected', name: 'start_figure', args: {...request, expectedEnvironmentHash: preview.expectedEnvironmentHash}};
+      } else {
+        startedId = JSON.parse(messages.find(message => message.tool_call_id === 'corrected').content).runId;
+        assert.ok(startedId.startsWith('figure_run_'));
+        call = {id: 'done', name: responseToolName, args: output};
+      }
+      return {generations: [{text: '', message: new AIMessage({content: '', tool_calls: [{...call, type: 'tool_call'}]})}]};
+    }
+  }
+  try {
+    const prepared = await api.createResearchRoleExecutor({async createDefaultModelHandle() {
+      return {providerId: 'fixture-provider', modelId: 'fixture-model', langChainHandle: {model: new Model({maxRetries: 0})}};
+    }}, new api.RunUsageLedger(f.agentDb)).prepare({kind: 'app_default'}, api.createRunModelConfig({contextWindowTokens: 20_000, maxOutputTokens: 1000}));
+    const result = await f.withWorker(() => prepared.execute({run: f.run, context: f.repository.runs.getContext(f.run.id),
+      tools: f.tools.filter(tool => ['start_figure', 'inspect_figure_environment'].includes(tool.name)), signal: new AbortController().signal,
+      loadTaskContext: () => ({task: f.tasks.get(f.run.taskId, f.project.id), facts: new api.ResearchTaskFactsService(f.repository).get({taskId: f.run.taskId, projectId: f.project.id})})}));
+    assert.deepEqual(result.output, output);
+    assert.equal(requests, 4);
+    assert.equal(f.agentDb.prepare("SELECT COUNT(*) FROM agent_tool_effects WHERE status='unknown'").pluck().get(), 0);
+    assert.equal(f.service.list(f.project.id, 10).length, 1);
+    await waitFor(() => !['preparing', 'running'].includes(f.service.getRun(f.project.id, startedId).status));
+    assert.equal(f.service.getRun(f.project.id, startedId).status, 'completed');
+  } finally {await f.dispose();}
+});
+
+test('actual figure agent corrects replacement IDs before any publication effect and reuses the completed render', async () => {
+  const f = await setup(realRenderer());
+  const output = {title: 'Publication corrected', markdown: 'Existing completed render published.', claims: [], sections: [], verdict: 'uncertain'};
+  let requests = 0, responseToolName, startedId;
+  class Model extends BaseChatModel {
+    _llmType() { return 'figure-publication-recovery-fixture'; }
+    bindTools(tools) {
+      const response = tools.find(tool => (tool.function?.name ?? tool.name) !== 'publish_figure');
+      responseToolName = response.function?.name ?? response.name;
+      return this;
+    }
+    async _generate(messages) {
+      requests++;
+      assert.ok(requests <= 5);
+      let call;
+      if (requests === 1) call = {id: 'missing', name: 'publish_figure', args: {runId: startedId}};
+      else if (requests <= 4) {
+        const previousId = ['missing', 'sentinel', 'unknown'][requests - 2];
+        const rejected = messages.find(message => message.tool_call_id === previousId);
+        assert.equal(rejected?.status, 'error');
+        if (requests >= 3) assert.match(String(rejected.content), /replacesFigureId.*JSON null/u);
+        assert.equal(f.agentDb.prepare('SELECT COUNT(*) FROM agent_tool_effects').pluck().get(), 0);
+        assert.equal(f.repository.figures.list(f.project.id, 10).length, 0);
+        call = requests === 2 ? {id: 'sentinel', name: 'publish_figure', args: {runId: startedId, replacesFigureId: 'null'}}
+          : requests === 3 ? {id: 'unknown', name: 'publish_figure', args: {runId: startedId, replacesFigureId: 'figure_00000000-0000-0000-0000-000000000000'}}
+          : {id: 'corrected', name: 'publish_figure', args: {runId: startedId, replacesFigureId: null}};
+      } else {
+        const published = JSON.parse(messages.find(message => message.tool_call_id === 'corrected').content);
+        assert.equal(published.runId, startedId);
+        assert.equal(published.replacesFigureId, null);
+        assert.equal(published.status, 'rendered');
+        call = {id: 'done', name: responseToolName, args: output};
+      }
+      return {generations: [{text: '', message: new AIMessage({content: '', tool_calls: [{...call, type: 'tool_call'}]})}]};
+    }
+  }
+  try {
+    const started = await f.withWorker(() => f.service.start(figureRequest(f.project.id, f.run.id, {timeoutMs: 10_000})));
+    startedId = started.id;
+    await waitFor(() => !['preparing', 'running'].includes(f.service.getRun(f.project.id, startedId).status));
+    assert.equal(f.service.getRun(f.project.id, startedId).status, 'completed');
+    const prepared = await api.createResearchRoleExecutor({async createDefaultModelHandle() {
+      return {providerId: 'fixture-provider', modelId: 'fixture-model', langChainHandle: {model: new Model({maxRetries: 0})}};
+    }}, new api.RunUsageLedger(f.agentDb)).prepare({kind: 'app_default'}, api.createRunModelConfig({contextWindowTokens: 20_000, maxOutputTokens: 1000}));
+    const result = await f.withWorker(() => prepared.execute({run: f.run, context: f.repository.runs.getContext(f.run.id),
+      tools: f.tools.filter(tool => tool.name === 'publish_figure'), signal: new AbortController().signal,
+      loadTaskContext: () => ({task: f.tasks.get(f.run.taskId, f.project.id), facts: new api.ResearchTaskFactsService(f.repository).get({taskId: f.run.taskId, projectId: f.project.id})})}));
+    assert.deepEqual(result.output, output);
+    assert.equal(requests, 5);
+    assert.equal(f.agentDb.prepare("SELECT COUNT(*) FROM agent_tool_effects WHERE status='unknown'").pluck().get(), 0);
+    assert.equal(f.agentDb.prepare('SELECT COUNT(*) FROM agent_tool_effects').pluck().get(), 1);
+    assert.equal(f.service.list(f.project.id, 10).length, 1);
+    const publications = f.repository.figures.list(f.project.id, 10);
+    assert.equal(publications.length, 1);
+    assert.equal((await f.service.verify(f.project.id, publications[0].id)).runId, startedId);
+  } finally {await f.dispose();}
 });

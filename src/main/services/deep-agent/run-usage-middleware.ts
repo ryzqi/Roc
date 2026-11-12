@@ -16,7 +16,8 @@ export function createRunUsageMiddleware(
   usageObserver: RunUsageObserver,
   effects?: AgentToolEffectStore,
   taskContract?: TaskContract,
-  tokenCounter?: ContextTokenCounter
+  tokenCounter?: ContextTokenCounter,
+  toolProgressScope?: string
 ) {
   return createMiddleware({
     name: 'RocRunUsageMiddleware',
@@ -103,7 +104,7 @@ export function createRunUsageMiddleware(
           ...(childFailed ? { failureCode: 'child_task_reported_error' } : {})
         } : {});
       if (ToolMessage.isInstance(result)) ledger.recordProgress(runId, request.toolCall.name,
-        request.toolCall.args, { content: result.content, status: result.status });
+        request.toolCall.args, { content: result.content, status: result.status }, toolProgressScope);
       return result;
     }
   });

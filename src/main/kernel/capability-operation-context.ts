@@ -65,6 +65,22 @@ export function getCapabilityOperationContext(): CapabilityOperationContext | un
   return operationContextStorage.getStore();
 }
 
+export function recordCapabilityOperationReceipt(context = getCapabilityOperationContext()): void {
+  if (context === undefined) return;
+  if (context.capabilityName === undefined || context.capabilityVersion === undefined) {
+    throw new Error('capability_operation_binding_required');
+  }
+  context.recordReceipt({schemaVersion: 1, kind: 'capability', phase: 'request_sent',
+    capabilityName: context.capabilityName, capabilityVersion: context.capabilityVersion,
+    idempotencyKey: context.idempotencyKey, providerReceiptId: null, evidenceHash: null});
+  context.markSideEffectPublished();
+}
+
+/** Detached work owns its effects; it must not retain the launching tool's lease. */
+export function runWithoutCapabilityOperationContext<TResult>(operation: () => TResult): TResult {
+  return operationContextStorage.exit(operation);
+}
+
 export function bindCapabilityOperationContext(
   context: CapabilityOperationContext | undefined,
   capabilityName: string,

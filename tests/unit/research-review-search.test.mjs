@@ -74,6 +74,29 @@ test('provider failure preserves actual failed request receipts and cannot be ca
   }finally{await f.dispose();}
 });
 
+test('local identity ambiguity retains review query source receipts and raw pool while remaining failed',async()=>{
+  const f=scene({fetch:async()=>Response.json({meta:{count:1,per_page:2,page:1},results:[{
+    id:'https://openalex.org/W1',title:'Controlled ambiguous paper',publication_year:2023,authorships:[]
+  }]})});
+  try {
+    for(const suffix of ['a','b']) {
+      const metadata={id:'openalex:W1',source:'openalex',externalId:'https://openalex.org/W1',
+        doi:`10.1234/${suffix}`,title:'Controlled ambiguous paper',authors:[],abstract:null,publishedYear:2023,
+        citationCount:0,url:null,openAccessUrl:null,importedAt:f.time,updatedAt:f.time};
+      f.repository.library.import([{metadata,bibliography:api.bibliographyFromRecord(metadata,new Set())}],f.project.id);
+    }
+    const before=f.db.prepare('SELECT * FROM research_library ORDER BY id').all();
+    const done=await terminal(f,f.reviews.start(f.request,actor));
+    assert.equal(done.status,'failed');assert.equal(done.receipt.errorCode,'research_literature_identity_ambiguous');
+    assert.equal(done.coverageComplete,false);assert.equal(done.rawRecordCount,1);
+    assert.equal(done.sources[0].requests.length,1);assert.ok(done.receipt.poolHash);
+    const raw=f.reviews.readPool({projectId:f.project.id,reviewSearchId:done.snapshot.id,offset:0,limit:10});
+    assert.equal(raw.pool.records[0].record.title,'Controlled ambiguous paper');
+    assert.deepEqual(f.db.prepare('SELECT * FROM research_library ORDER BY id').all(),before);
+    assert.equal(f.calls.length,1);assert.equal(f.errors.length,0);
+  }finally{await f.dispose();}
+});
+
 test('unknown provider coverage stays partial even when its single page executes successfully',async()=>{
   const f=scene({fetch:async()=>Response.json({results:[payload(1,2).results[0]]})});
   try {

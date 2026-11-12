@@ -9,6 +9,7 @@ import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 import electronPath from 'electron';
 import {_electron} from '@playwright/test';
 import {createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
+import {createPublishedFigureFixture} from '../unit/fixtures/research-production-test-kit.mjs';
 
 let directory, app, page, api, active, windowId;
 const fixtures=[],errors=[],reads=[];
@@ -28,6 +29,7 @@ before(async()=>{
     const root=createRoot(document.getElementById('root'));
     const client={api:{research:{inspectArtifact:input=>window.inspectFromMain(input),getGateReviewContext:input=>window.readGateFromMain(input),
       inspectEvidence:input=>window.relationFromMain('inspectEvidence',input),
+      createClaim:input=>window.relationFromMain('createClaim',input),
       proposeEvidenceRelation:input=>window.relationFromMain('proposeEvidenceRelation',input),
       reviewEvidenceRelation:input=>window.relationFromMain('reviewEvidenceRelation',input),
       evidenceRelationHistory:input=>window.relationFromMain('evidenceRelationHistory',input),
@@ -46,9 +48,11 @@ before(async()=>{
       window.selectArtifact=value=>flushSync(()=>setRequest(value));
       const [approval,setApproval]=useState(initialApproval);
       window.replaceApproval=value=>flushSync(()=>setApproval(value));
+      const [inactive,setInactive]=useState(false);
+      window.setGateInactive=value=>flushSync(()=>setInactive(value));
       return <main className="p-4"><ResearchGateApprovalCard key={approval.interruptId} approval={approval} onReadGateContext={client.api.research.getGateReviewContext}
         onOpenArtifact={(request,callback)=>{setReviewCallback(()=>callback);setRequest(request);}}
-        onApprovalDecision={(id,decisions)=>{
+        onApprovalDecision={inactive ? undefined : (id,decisions)=>{
           window.decisions.push({id,decisions});
           window.submitGateFromMain(id,decisions).then(result=>{
             window.resumeResult=result;
@@ -56,7 +60,7 @@ before(async()=>{
           }).catch(error=>window.resumeError=error.message);
         }}/>
         {request===null ? null : <ArtifactInspector key={JSON.stringify(request)} client={client}
-          selection={{kind:'stage',request,onReviewContext:context=>reviewCallback(context)}} writable={true}
+          selection={{kind:'stage',request,onReviewContext:context=>reviewCallback?.(context)}} writable={true}
           readingLocations={readingLocations} reviewDrafts={reviewDrafts}
           onClose={()=>setRequest(null)} onOpenTask={taskId=>{window.tasks.push(taskId);setRequest(null);}}/>}</main>;
     }
@@ -93,7 +97,7 @@ before(async()=>{
   await page.exposeFunction('relationFromMain',async(method,input)=>{
     const f=active;
     reads.push({relation:method,input});
-    const channel={inspectEvidence:'roc:research:evidence-inspect',proposeEvidenceRelation:'roc:research:relations-propose',
+    const channel={createClaim:'roc:research:claims-create',inspectEvidence:'roc:research:evidence-inspect',proposeEvidenceRelation:'roc:research:relations-propose',
       reviewEvidenceRelation:'roc:research:relations-review',evidenceRelationHistory:'roc:research:relations-history',
       listSourceMigrations:'roc:research:source-migrations-list',captureSourceMigration:'roc:research:source-migrations-capture',
       rejectSourceMigration:'roc:research:source-migrations-reject',
@@ -532,6 +536,7 @@ test('old card approval refuses stale data and displays a new real interrupt bef
   const before=f.db.prepare('SELECT total_changes()').pluck().get();
   await page.getByTestId('assistant-gate-approve').click();
   await page.getByTestId('assistant-gate-review-error').waitFor();
+  assert.match(await page.getByTestId('assistant-gate-review-error').innerText(),/research_artifact_review_changed/);
   assert.notEqual(f.approval.interruptId,original);
   assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
   assert.equal(f.repository.getArtifact(f.link.artifactId).status,'draft');
@@ -544,6 +549,17 @@ test('old card approval refuses stale data and displays a new real interrupt bef
   assert.equal(await page.evaluate(()=>window.resumeError),null);
   assert.equal(f.repository.getWorkflow(f.project.id).currentStage,'reading');
   assert.equal(f.repository.getWorkflow(f.project.id).stages.find(value=>value.stage==='reading').status,'running');
+});
+
+test('inactive historical gate keeps source inspection but disables decisions',async()=>{
+  await scene();
+  await page.evaluate(()=>setGateInactive(true));
+  await page.getByTestId('assistant-gate-inactive').waitFor();
+  assert.equal(await page.getByTestId('assistant-gate-approve').isDisabled(),true);
+  assert.equal(await page.getByTestId('assistant-gate-reject').isDisabled(),true);
+  await openArtifact();
+  await page.getByTestId('artifact-inspector').waitFor();
+  assert.equal((await page.evaluate(()=>decisions)).length,0);
 });
 
 test('human rereading cannot approve a tampered immutable worker result',async()=>{
@@ -1094,4 +1110,42 @@ test('migration inspector renders and captures the exact child span of a long pa
   const decision=f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:f.source.id})[0].decision;
   assert.equal(decision.capturedSource.evidence.excerpt,excerpt);
   assert.deepEqual(decision.capturedSource.sourceLocator.textSpan,target.textSpan);
+});
+
+
+test('a missing figure caption is saved through real IPC and still requires human evidence review', async()=>{
+  await scene();
+  const f=await createPublishedFigureFixture(api,{omitCaption:true});
+  try {
+  active=f;
+  const handlers=new Map();
+  const context={pluginId:'fixture',capabilities:{register(pluginId,descriptor,handler){handlers.set(descriptor.name,handler);}}};
+  api.registerResearchArtifactInspectorCapability(context,f.repository);
+  api.registerResearchEvidenceCapabilities(context,f.repository.evidence);
+  f.bridge=api.createPluginCapabilityAdapter({invokeCapability(name,input){return handlers.get(name)(input);}});
+  const artifact=f.repository.getArtifact(f.artifactId);
+  const evidence=f.repository.evidence.list(f.project.id)[0];
+  const snapshot=f.repository.inspectArtifact({projectId:f.project.id,artifactId:artifact.id,expectedVersion:null}).snapshot;
+  await page.evaluate(request=>selectArtifact(request),{projectId:f.project.id,artifactId:artifact.id,expectedVersion:snapshot.version});
+  await page.waitForFunction(()=>{
+    const panel=document.querySelector('[data-testid="artifact-inspector-panel"]');
+    return panel&&getComputedStyle(panel).transform==='none'&&getComputedStyle(panel).opacity==='1';
+  });
+  await page.getByTestId('artifact-relations').waitFor();
+  await activateRendered(page.getByText('补充图注声明',{exact:true}));
+  assert.equal(await page.getByTestId('artifact-caption-save').isDisabled(),true);
+  await page.getByTestId('artifact-caption-content').fill('A descriptive engineering fixture caption; no efficacy claim.');
+  await page.getByTestId('artifact-caption-source').selectOption(evidence.id);
+  await page.waitForFunction(()=>!document.querySelector('[data-testid="artifact-caption-save"]').disabled);
+  await activateRendered(page.getByTestId('artifact-caption-save'));
+  await page.getByTestId('artifact-inspector-recapture').waitFor();
+  const claims=f.repository.evidence.listClaims({projectId:f.project.id,artifactId:artifact.id});
+  assert.equal(claims.length,1);
+  assert.equal(claims[0].subjectType,'figure');
+  assert.deepEqual(claims[0].evidenceIds,[evidence.id]);
+  assert.equal(f.repository.evidence.relations.list({projectId:f.project.id,claimId:claims[0].id}).length,0);
+  assert.throws(()=>f.repository.evidence.assertReviewedSupport(claims[0]),error=>error.code==='research_relation_review_required');
+  assert.ok(reads.some(read=>read.relation==='createClaim'));
+  await audit('figure-caption-recovery');
+  } finally {await f.dispose();}
 });

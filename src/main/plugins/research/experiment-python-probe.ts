@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { z } from 'zod';
 import type { ResearchExperimentEnvironment } from '../../../shared/schemas/research-experiments';
 import type { ResearchEnvironmentProbeResource } from '../../../shared/schemas/research-process-resources';
+import { RocDomainError } from '../../services/errors';
 import { captureNativeCode } from './experiment-native-code';
 import type { NativeCodeSnapshot } from './experiment-native-code-schema';
 import { discoverPythonEnvironmentControls } from './experiment-python-controls';
@@ -64,13 +65,34 @@ export type InspectedPythonEnvironment = {
   metadataHash: string;
 };
 
+export async function readPythonEnvironmentLock(workspace: string): Promise<{
+  bytes: Buffer; lock: z.infer<typeof pythonEnvironmentLockSchema>;
+}> {
+  let bytes: Buffer;
+  try { bytes = await readResearchFile(workspace, 'roc-python.lock.json', 4 * 1024 ** 2); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    throw new RocDomainError({
+      code: 'research_python_lock_required', category: 'validation', retryable: false,
+      message: '项目缺少 roc-python.lock.json。请先在项目根目录创建与所选 Python 版本和已安装依赖一致的环境锁文件，再选择解释器。'
+    });
+  }
+  try { return { bytes, lock: pythonEnvironmentLockSchema.parse(JSON.parse(bytes.toString('utf8'))) }; }
+  catch (error) {
+    if (!(error instanceof SyntaxError) && !(error instanceof Error && error.name === 'ZodError')) throw error;
+    throw new RocDomainError({
+      code: 'research_python_lock_invalid', category: 'validation', retryable: false,
+      message: 'roc-python.lock.json 格式无效。请检查 schemaVersion、Python 版本与平台信息，以及完整的已安装依赖名称和版本后重试。'
+    });
+  }
+}
+
 /** Environment inspection does not grant permission to select or execute this runtime. */
 export async function inspectPythonExperimentEnvironment({
   workspace, selectedExecutable, jobDir, run, signal, admission, onProbe
 }: PythonEnvironmentInspectionInput): Promise<InspectedPythonEnvironment> {
   const controls = await discoverPythonEnvironmentControls(selectedExecutable, signal);
-  const lockBytes = await readResearchFile(workspace, 'roc-python.lock.json', 4 * 1024 ** 2);
-  const lock = pythonEnvironmentLockSchema.parse(JSON.parse(lockBytes.toString('utf8')));
+  const { bytes: lockBytes, lock } = await readPythonEnvironmentLock(workspace);
   const lockFile: PythonCodeReceipt['metadataIdentity']['lockFile'] = {
     path: 'roc-python.lock.json', size: lockBytes.length, sha256: researchContentHash(lockBytes)
   };

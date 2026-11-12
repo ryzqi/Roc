@@ -6,7 +6,7 @@ import {setTimeout as wait} from 'node:timers/promises';
 import {createResearchFixture, figureRequest} from './research-test-kit.mjs';
 
 /** Actual local renderer, persisted publication and waiting human gate; no model or network. */
-export async function createPublishedFigureFixture(api, {figureSource} = {}) {
+export async function createPublishedFigureFixture(api, {figureSource, omitCaption = false} = {}) {
   const temporary=await mkdtemp(join(tmpdir(),'roc-production-review-'));
   const root=await realpath(temporary),workspace=join(root,'workspace');
   await mkdir(workspace);
@@ -39,9 +39,9 @@ export async function createPublishedFigureFixture(api, {figureSource} = {}) {
     const chunkId=f.db.prepare('SELECT id FROM research_knowledge_chunks WHERE document_id=?').pluck().get(source.id);
     const evidence=f.repository.evidence.capture({projectId:f.project.id,chunkId});
     f.repository.runs.complete(f.run.id,f.project.id,{title:'Recorded figure',markdown:'Original figure review body',
-      claims:[{subjectType:'figure',content:'Fixed synthetic rendering uses the recorded input.',status:'supported',evidenceIds:[evidence.id]}],
+      claims:omitCaption ? [] : [{subjectType:'figure',content:'Fixed synthetic rendering uses the recorded input.',status:'supported',evidenceIds:[evidence.id]}],
       sections:[],verdict:'uncertain'});
-    f.repository.transitionWorkflow({projectId:f.project.id,expectedStage:'figure',action:'complete'});
+    if (!omitCaption) f.repository.transitionWorkflow({projectId:f.project.id,expectedStage:'figure',action:'complete'});
     return {...f,figureService,figureId:publication.id,artifactId:publication.artifactId,productionRun:completed,dispose};
     });
   }catch(error){await dispose();throw error;}

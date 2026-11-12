@@ -262,7 +262,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
               onChanged={() => {reading.save(); read.reload();}}/>)}
         </section>
         <Suspense fallback={<p role="status">正在加载证据关系…</p>}>
-          <Relations key={snapshot.version} client={client} snapshot={snapshot} current={!planLocked && result?.status === 'current'}
+          <Relations key={snapshot.version} client={client} snapshot={snapshot} current={writable && !planLocked && result?.status === 'current'}
             onChanged={() => {reading.save(); setRelationSaved(true); read.reload();}}/>
         </Suspense>
         <details data-reading-key="raw-snapshot" className="text-muted"><summary data-reading-key="raw-snapshot-summary" className="cursor-pointer">工件与来源快照原文</summary>

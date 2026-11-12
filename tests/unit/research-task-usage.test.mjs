@@ -6,7 +6,8 @@ import Database from 'better-sqlite3';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createResearchFixture, loadResearchTestApi } from './fixtures/research-test-kit.mjs';
+import { createResearchFixture, loadResearchTestApi, researchSearchPlanFixture } from './fixtures/research-test-kit.mjs';
+import { ideaCanvasContentFixture } from './fixtures/research-idea-plan.mjs';
 
 let api;
 before(async () => { api = await loadResearchTestApi(); });
@@ -217,5 +218,360 @@ test('actual stage createAgent settles successful usage without requiring a chat
     assert.equal(events.filter(event => event.eventType === 'call_reserved').length, 1);
     assert.equal(events.filter(event => event.eventType === 'call_settled').length, 1);
     assert.throws(() => f.ledger.settle(f.run.id, call.call_id, 1, 'settled'), /run_call_settlement_invalid/);
+  } finally { f.close(); }
+});
+
+
+test('actual stage createAgent returns unsupported claim validation to the model before publication', async () => {
+  const f = setup({}, false);
+  const claim = {subjectType: 'claim', content: 'An unverified interpretation.', status: 'supported', evidenceIds: []};
+  const output = {title: 'Evidence boundary', markdown: 'Unverified interpretation.', claims: [claim], sections: [], verdict: 'uncertain'};
+  let responseToolName, attempts = 0;
+  class Model extends BaseChatModel {
+    _llmType() { return 'claim-validation-fixture'; }
+    bindTools(tools) {
+      responseToolName = tools[0].function?.name ?? tools[0].name;
+      return this;
+    }
+    async _generate(messages) {
+      attempts++;
+      if (attempts > 1) {
+        assert.ok(messages.some(message => message.getType() === 'tool' &&
+          JSON.stringify(message.content).includes('evidenceIds')),
+        'the model must receive the evidence validation failure');
+      }
+      assert.ok(attempts <= 2, 'one correction should finish this response');
+      return {generations: [{text: '', message: new AIMessage({content: '',
+        tool_calls: [{id: `claim-output-${attempts}`, name: responseToolName, type: 'tool_call',
+          args: attempts === 1 ? output : {...output, claims: [{...claim, status: 'pending'}]}}],
+        usage_metadata: {input_tokens: 12, output_tokens: 8, total_tokens: 20}})}]};
+    }
+  }
+  try {
+    const model = new Model({maxRetries: 0});
+    const executor = api.createResearchRoleExecutor({async createDefaultModelHandle() {
+      return {providerId: 'fixture', modelId: 'fixture', langChainHandle: {model}};
+    }}, f.ledger);
+    const prepared = await executor.prepare({kind: 'app_default'}, f.modelConfig);
+    const result = await prepared.execute({run: f.run, context: f.repository.runs.getContext(f.run.id),
+      tools: [], signal: new AbortController().signal,
+      loadTaskContext: () => ({task: f.tasks.get(f.run.taskId, f.project.id), facts:
+        new api.ResearchTaskFactsService(f.repository).get({taskId: f.run.taskId, projectId: f.project.id})})});
+    assert.equal(attempts, 2);
+    assert.equal(result.output.claims[0].status, 'pending');
+    assert.deepEqual(result.output.claims[0].evidenceIds, []);
+    assert.deepEqual(f.repository.listArtifacts(f.project.id), []);
+  } finally { f.close(); }
+});
+
+test('actual ideation createAgent publishes one canonical text per Canvas field', async () => {
+  const f = createResearchFixture(api, 'ideation');
+  const ledger = new api.RunUsageLedger(f.agentDb);
+  const canvas = ideaCanvasContentFixture();
+  const {fields, ...sections} = canvas;
+  const corrected = {...sections, fieldAssessments: Object.fromEntries(fields.map(({key, status, evidenceIds}) =>
+    [key, {status, evidenceIds}]))};
+  const output = {title: 'Canonical Canvas', markdown: 'Unverified design.', claims: [], sections: [], verdict: 'uncertain'};
+  let responseToolName, attempts = 0;
+  class Model extends BaseChatModel {
+    _llmType() { return 'canvas-contract-fixture'; }
+    bindTools(tools) {
+      responseToolName = tools[0].function?.name ?? tools[0].name;
+      return this;
+    }
+    async _generate(messages) {
+      attempts++;
+      if (attempts === 2) assert.ok(messages.some(message => message.getType() === 'tool' &&
+        String(message.content).includes('fieldAssessments')), 'the model must receive the missing assessment validation');
+      assert.ok(attempts <= 2, 'the incompatible duplicated representation must be rejected once');
+      return {generations: [{text: '', message: new AIMessage({content: '', tool_calls: [{
+        id: `canvas-${attempts}`, name: responseToolName, type: 'tool_call', args: {...output,
+          ideaCanvas: attempts === 1 ? {...canvas, fields: fields.map(field => ({...field, content: 'A different summary.'}))} : corrected}
+      }]})}]};
+    }
+  }
+  try {
+    const modelConfig = api.createRunModelConfig({contextWindowTokens: 1000, maxOutputTokens: 250});
+    const prepared = await api.createResearchRoleExecutor({async createDefaultModelHandle() {
+      return {providerId: 'fixture', modelId: 'fixture', langChainHandle: {model: new Model({maxRetries: 0})}};
+    }}, ledger).prepare({kind: 'app_default'}, modelConfig);
+    const result = await f.withWorker(() => prepared.execute({run: f.run, context: f.repository.runs.getContext(f.run.id),
+      tools: [], signal: new AbortController().signal,
+      loadTaskContext: () => ({task: f.tasks.get(f.run.taskId, f.project.id), facts:
+        new api.ResearchTaskFactsService(f.repository).get({taskId: f.run.taskId, projectId: f.project.id})})}));
+    const completed = f.withWorker(() => f.repository.runs.complete(f.run.id, f.project.id, result.output));
+    assert.equal(attempts, 2);
+    const saved = f.repository.ideas.get(completed.outputArtifactIds[0]);
+    assert.deepEqual(saved.fields, canvas.fields);
+    for (const field of saved.fields) assert.equal(field.content, saved[field.key]);
+  } finally {f.close();}
+});
+
+test('actual ideation createAgent corrects a discovery-only searchPlan before publication', async () => {
+  const f = createResearchFixture(api, 'ideation');
+  const ledger = new api.RunUsageLedger(f.agentDb);
+  const {fields, ...sections} = ideaCanvasContentFixture();
+  const output = {title: 'Stage-scoped Canvas', markdown: 'Unverified design.', claims: [], sections: [], verdict: 'uncertain',
+    ideaCanvas: {...sections, fieldAssessments: Object.fromEntries(fields.map(({key, status, evidenceIds}) =>
+      [key, {status, evidenceIds}]))}};
+  let responseToolName, attempts = 0;
+  class Model extends BaseChatModel {
+    _llmType() { return 'stage-output-contract-fixture'; }
+    bindTools(tools) {
+      responseToolName = tools[0].function?.name ?? tools[0].name;
+      return this;
+    }
+    async _generate(messages) {
+      attempts++;
+      if (attempts === 2) assert.ok(messages.some(message => message.getType() === 'tool' &&
+        String(message.content).includes('searchPlan')), 'the model must receive the stage validation error');
+      assert.ok(attempts <= 2, 'the model can correct the stage-incompatible field once');
+      assert.deepEqual(f.repository.listArtifacts(f.project.id), []);
+      return {generations: [{text: '', message: new AIMessage({content: '', tool_calls: [{
+        id: `stage-output-${attempts}`, name: responseToolName, type: 'tool_call',
+        args: attempts === 1 ? {...output, searchPlan: researchSearchPlanFixture(f.run.instruction)} : output
+      }]})}]};
+    }
+  }
+  try {
+    const modelConfig = api.createRunModelConfig({contextWindowTokens: 1000, maxOutputTokens: 250});
+    const prepared = await api.createResearchRoleExecutor({async createDefaultModelHandle() {
+      return {providerId: 'fixture', modelId: 'fixture', langChainHandle: {model: new Model({maxRetries: 0})}};
+    }}, ledger).prepare({kind: 'app_default'}, modelConfig);
+    const result = await f.withWorker(() => prepared.execute({run: f.run, context: f.repository.runs.getContext(f.run.id),
+      tools: [], signal: new AbortController().signal,
+      loadTaskContext: () => ({task: f.tasks.get(f.run.taskId, f.project.id), facts:
+        new api.ResearchTaskFactsService(f.repository).get({taskId: f.run.taskId, projectId: f.project.id})})}));
+    const completed = f.withWorker(() => f.repository.runs.complete(f.run.id, f.project.id, result.output));
+    assert.equal(attempts, 2);
+    assert.equal(completed.status, 'completed');
+    assert.equal(result.output.searchPlan, undefined);
+    assert.deepEqual(f.repository.ideas.get(completed.outputArtifactIds[0]).fields, fields);
+  } finally {f.close();}
+});
+
+test('actual stage createAgent corrects an unapproved artifact reference without reading it', async () => {
+  const f = setup({}, false);
+  const output = {title: 'No approved inputs', markdown: 'Metadata only; no artifact was read.', claims: [], sections: [], verdict: 'uncertain'};
+  let responseToolName, requests = 0;
+  class Model extends BaseChatModel {
+    _llmType() { return 'invalid-artifact-reference-fixture'; }
+    bindTools(tools) {
+      const responseTool = tools.find(tool => (tool.function?.name ?? tool.name) !== 'read_artifact');
+      responseToolName = responseTool.function?.name ?? responseTool.name;
+      return this;
+    }
+    async _generate(messages) {
+      requests++;
+      if (requests === 2) {
+        const error = messages.find(message => message.tool_call_id === 'invalid-reference');
+        assert.equal(error?.status, 'error');
+        assert.match(String(error.content), /research_artifact_not_in_run_inputs/);
+        assert.match(String(error.content), /approved.*\[\]/i);
+      }
+      assert.ok(requests <= 2, 'The model must receive the rejection and correct its next response');
+      return {generations: [{text: '', message: new AIMessage({content: '', tool_calls: [requests === 1
+        ? {id: 'invalid-reference', name: 'read_artifact', args: {artifactId: 'paper-is-not-an-artifact', offset: 0, limit: 100}, type: 'tool_call'}
+        : {id: 'output-corrected', name: responseToolName, args: output, type: 'tool_call'}]})}]};
+    }
+  }
+  try {
+    const context = f.repository.runs.getContext(f.run.id);
+    assert.deepEqual(context.inputs, []);
+    const tools = f.withWorker(() => api.createResearchRoleTools({run: f.run, context, repository: f.repository,
+      capabilities: {invoke: async () => assert.fail('Invalid reference must never read a capability')},
+      signal: new AbortController().signal})).filter(tool => tool.name === 'read_artifact');
+    const executor = api.createResearchRoleExecutor({async createDefaultModelHandle() {
+      return {providerId: 'fixture-provider', modelId: 'fixture-model', langChainHandle: {model: new Model({maxRetries: 0})}};
+    }}, f.ledger);
+    const prepared = await executor.prepare({kind: 'app_default'}, f.modelConfig);
+    const result = await f.withWorker(() => prepared.execute({run: f.run, context, tools, signal: new AbortController().signal,
+      loadTaskContext: () => ({task: f.tasks.get(f.run.taskId, f.project.id), facts: new api.ResearchTaskFactsService(f.repository).get({taskId: f.run.taskId, projectId: f.project.id})})}));
+    assert.deepEqual(result.output, output);
+    assert.equal(requests, 2);
+    assert.equal(f.repository.listArtifacts(f.project.id).length, 0);
+  } finally {f.close();}
+});
+
+
+test('actual stage createAgent corrects an evidence ID passed as a claim and continues the stage', async () => {
+  const f = setup({}, false);
+  const output = {title: 'Claim references corrected', markdown: 'No relations were available.', claims: [], sections: [], verdict: 'uncertain'};
+  let responseToolName, requests = 0;
+  class Model extends BaseChatModel {
+    _llmType() { return 'invalid-claim-reference-fixture'; }
+    bindTools(tools) {
+      const responseTool = tools.find(tool => (tool.function?.name ?? tool.name) !== 'list_evidence_relations');
+      responseToolName = responseTool.function?.name ?? responseTool.name;
+      return this;
+    }
+    async _generate(messages) {
+      requests++;
+      if (requests === 2) {
+        const error = messages.find(message => message.tool_call_id === 'invalid-reference');
+        assert.equal(error?.status, 'error');
+        assert.match(String(error.content), /research_claim_not_found/);
+        assert.match(String(error.content), /claimId.*null/i);
+      }
+      if (requests === 3) {
+        const corrected = messages.find(message => message.tool_call_id === 'relations-corrected');
+        assert.notEqual(corrected?.status, 'error');
+        assert.deepEqual(JSON.parse(String(corrected.content)), {total: 0, items: []});
+      }
+      assert.ok(requests <= 3, 'The model must correct the ID and finish after reading valid relations');
+      return {generations: [{text: '', message: new AIMessage({content: '', tool_calls: [requests === 1
+        ? {id: 'invalid-reference', name: 'list_evidence_relations', args: {claimId: 'evidence_6558788c-e6cc-400a-b615-5fd0f197943f', offset: 0, limit: 20}, type: 'tool_call'}
+        : requests === 2 ? {id: 'relations-corrected', name: 'list_evidence_relations', args: {claimId: null, offset: 0, limit: 20}, type: 'tool_call'}
+        : {id: 'output-corrected', name: responseToolName, args: output, type: 'tool_call'}]})}]};
+    }
+  }
+  try {
+    const context = f.repository.runs.getContext(f.run.id);
+    assert.deepEqual(context.inputs, []);
+    const tools = f.withWorker(() => api.createResearchRoleTools({run: f.run, context, repository: f.repository,
+      capabilities: {invoke: async () => assert.fail('Invalid reference must never read a capability')},
+      signal: new AbortController().signal})).filter(tool => tool.name === 'list_evidence_relations');
+    const executor = api.createResearchRoleExecutor({async createDefaultModelHandle() {
+      return {providerId: 'fixture-provider', modelId: 'fixture-model', langChainHandle: {model: new Model({maxRetries: 0})}};
+    }}, f.ledger);
+    const prepared = await executor.prepare({kind: 'app_default'}, f.modelConfig);
+    const result = await f.withWorker(() => prepared.execute({run: f.run, context, tools, signal: new AbortController().signal,
+      loadTaskContext: () => ({task: f.tasks.get(f.run.taskId, f.project.id), facts: new api.ResearchTaskFactsService(f.repository).get({taskId: f.run.taskId, projectId: f.project.id})})}));
+    assert.deepEqual(result.output, output);
+    assert.equal(requests, 3);
+    assert.equal(f.repository.listArtifacts(f.project.id).length, 0);
+  } finally {f.close();}
+});
+
+
+for (const failure of ['binding', 'cancelled']) {
+  test(`actual stage createAgent keeps ${failure} fatal for artifact reads`, async () => {
+    const f = setup({}, false), controller = new AbortController();
+    let requests = 0;
+    const context = f.repository.runs.getContext(f.run.id);
+    class Model extends BaseChatModel {
+      _llmType() { return 'hard-artifact-boundary-fixture'; }
+      bindTools() { return this; }
+      async _generate() {
+        requests++;
+        if (failure === 'binding') context.project.title = 'Changed after binding';
+        else controller.abort(new Error('fixture_cancelled'));
+        return {generations: [{text: '', message: new AIMessage({content: '', tool_calls: [{
+          id: 'invalid-reference', name: 'read_artifact', args: {artifactId: 'unapproved', offset: 0, limit: 100}, type: 'tool_call'
+        }]})}]};
+      }
+    }
+    try {
+      const tools = f.withWorker(() => api.createResearchRoleTools({run: f.run, context, repository: f.repository,
+        capabilities: {invoke: async () => assert.fail('Fatal boundary must not invoke a capability')},
+        signal: controller.signal})).filter(tool => tool.name === 'read_artifact');
+      const prepared = await api.createResearchRoleExecutor({async createDefaultModelHandle() {
+        return {providerId: 'fixture-provider', modelId: 'fixture-model', langChainHandle: {model: new Model({maxRetries: 0})}};
+      }}, f.ledger).prepare({kind: 'app_default'}, f.modelConfig);
+      await assert.rejects(f.withWorker(() => prepared.execute({run: f.run, context, tools, signal: controller.signal,
+        loadTaskContext: () => ({task: f.tasks.get(f.run.taskId, f.project.id), facts: new api.ResearchTaskFactsService(f.repository).get({taskId: f.run.taskId, projectId: f.project.id})})})),
+      failure === 'binding' ? /research_role_tool_binding_invalid/ : /fixture_cancelled|Abort/);
+      assert.equal(requests, 1);
+    } finally {f.close();}
+  });
+}
+
+
+test('actual writing createAgent corrects a one-based out-of-range claim index before saving', async () => {
+  const f = createResearchFixture(api, 'writing');
+  f.repository.knowledge.upsertFromSource({id: 'writing-index-source', projectId: f.project.id,
+    sourceType: 'file', sourceId: 'limitations.md', title: 'Engineering limitations',
+    content: 'Safety evaluation remains pending.',
+    chunks: [{content: 'Safety evaluation remains pending.', locator: 'block:0'}], embeddingPolicy: 'none'});
+  const source = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'writing-index-source:chunk:0'});
+  const output = {title: 'Engineering limitations', markdown: 'No safety result.',
+    claims: [{subjectType: 'paragraph', content: 'Safety evaluation remains pending.', status: 'supported', evidenceIds: [source.id]}],
+    sections: [{title: 'Limitations', claimIndexes: [0]}], verdict: 'uncertain'};
+  let responseToolName, requests = 0;
+  class Model extends BaseChatModel {
+    _llmType() { return 'writing-index-recovery-fixture'; }
+    bindTools(tools) { responseToolName = tools[0].function?.name ?? tools[0].name; return this; }
+    async _generate(messages) {
+      requests++;
+      assert.ok(requests <= 2);
+      if (requests === 2) assert.ok(messages.some(message => message.getType() === 'tool' &&
+        String(message.content).includes('research_output_claim_index_invalid')), 'the model must receive the exact index validation');
+      assert.equal(f.repository.listArtifacts(f.project.id).length, 0);
+      return {generations: [{text: '', message: new AIMessage({content: '', tool_calls: [{
+        id: `writing-${requests}`, name: responseToolName, type: 'tool_call',
+        args: requests === 1 ? {...output, sections: [{title: 'Limitations', claimIndexes: [1]}]} : output
+      }]})}]};
+    }
+  }
+  try {
+    const prepared = await api.createResearchRoleExecutor({async createDefaultModelHandle() {
+      return {providerId: 'fixture', modelId: 'fixture', langChainHandle: {model: new Model({maxRetries: 0})}};
+    }}, new api.RunUsageLedger(f.agentDb)).prepare({kind: 'app_default'},
+      api.createRunModelConfig({contextWindowTokens: 1000, maxOutputTokens: 250}));
+    const result = await f.withWorker(() => prepared.execute({run: f.run, context: f.repository.runs.getContext(f.run.id),
+      tools: [], signal: new AbortController().signal, loadTaskContext: () => ({
+        task: f.tasks.get(f.run.taskId, f.project.id), facts: new api.ResearchTaskFactsService(f.repository).get({taskId: f.run.taskId, projectId: f.project.id})})}));
+    assert.equal(requests, 2);
+    assert.deepEqual(result.output, output);
+    const completed = f.withWorker(() => f.repository.runs.complete(f.run.id, f.project.id, result.output));
+    const manuscript = f.repository.manuscripts.getManuscript(completed.outputArtifactIds[0]);
+    assert.equal(manuscript.sections.length, 1);
+    assert.equal(manuscript.sections[0].claimIds.length, 1);
+    assert.equal(f.repository.evidence.getClaim(manuscript.sections[0].claimIds[0]).content, output.claims[0].content);
+  } finally {f.close();}
+});
+
+for (const [label, invalidSections] of [
+  ['within a section', [{title: 'Introduction', claimIndexes: [0, 0]}]],
+  ['across sections', [{title: 'Introduction', claimIndexes: [0]}, {title: 'Limitations', claimIndexes: [0]}]],
+  ['with no sections', []]
+]) test(`actual writing createAgent corrects the manuscript contract ${label} before saving`, async () => {
+  const f = createResearchFixture(api, 'writing');
+  f.repository.knowledge.upsertFromSource({id: 'writing-contract-source', projectId: f.project.id,
+    sourceType: 'file', sourceId: 'limitations.md', title: 'Engineering limitations',
+    content: 'Only fixture execution is verified. Safety evaluation remains pending.',
+    chunks: [{content: 'Only fixture execution is verified. Safety evaluation remains pending.', locator: 'block:0'}], embeddingPolicy: 'none'});
+  const source = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'writing-contract-source:chunk:0'});
+  const output = {title: 'Engineering limitations', markdown: 'No safety result.',
+    claims: ['Only fixture execution is verified.', 'Safety evaluation remains pending.'].map(content => ({
+      subjectType: 'paragraph', content, status: 'supported', evidenceIds: [source.id]})),
+    sections: [{title: 'Introduction', claimIndexes: [0]}, {title: 'Limitations', claimIndexes: [1]}], verdict: 'uncertain'};
+  let responseToolName, requests = 0;
+  class Model extends BaseChatModel {
+    _llmType() { return 'writing-contract-recovery-fixture'; }
+    bindTools(tools) { responseToolName = tools[0].function?.name ?? tools[0].name; return this; }
+    async _generate(messages) {
+      requests++;
+      assert.ok(requests <= 2);
+      if (requests === 2) assert.ok(messages.some(message => message.getType() === 'tool' &&
+        String(message.content).includes('research_output_manuscript_invalid')), 'return manuscript validation to the model');
+      assert.equal(f.repository.listArtifacts(f.project.id).length, 0);
+      return {generations: [{text: '', message: new AIMessage({content: '', tool_calls: [{
+        id: `writing-contract-${requests}`, name: responseToolName, type: 'tool_call',
+        args: requests === 1 ? {...output, sections: invalidSections} : output
+      }]})}]};
+    }
+  }
+  try {
+    // The durable save boundary must keep rejecting the invalid output.
+    assert.throws(() => f.withWorker(() => f.repository.runs.complete(f.run.id, f.project.id,
+      {...output, sections: invalidSections})), error => error.name === 'ZodError');
+    assert.equal(f.repository.listArtifacts(f.project.id).length, 0);
+    const prepared = await api.createResearchRoleExecutor({async createDefaultModelHandle() {
+      return {providerId: 'fixture', modelId: 'fixture', langChainHandle: {model: new Model({maxRetries: 0})}};
+    }}, new api.RunUsageLedger(f.agentDb)).prepare({kind: 'app_default'},
+      api.createRunModelConfig({contextWindowTokens: 1000, maxOutputTokens: 250}));
+    const result = await f.withWorker(() => prepared.execute({run: f.run, context: f.repository.runs.getContext(f.run.id),
+      tools: [], signal: new AbortController().signal, loadTaskContext: () => ({
+        task: f.tasks.get(f.run.taskId, f.project.id), facts: new api.ResearchTaskFactsService(f.repository).get({taskId: f.run.taskId, projectId: f.project.id})})}));
+    assert.equal(requests, 2);
+    assert.deepEqual(result.output, output);
+    const completed = f.withWorker(() => f.repository.runs.complete(f.run.id, f.project.id, result.output));
+    const manuscript = f.repository.manuscripts.getManuscript(completed.outputArtifactIds[0]);
+    assert.deepEqual(manuscript.sections.map(section => ({title: section.title,
+      content: section.claimIds.map(id => f.repository.evidence.getClaim(id).content)})), [
+      {title: 'Introduction', content: [output.claims[0].content]},
+      {title: 'Limitations', content: [output.claims[1].content]}
+    ]);
   } finally { f.close(); }
 });

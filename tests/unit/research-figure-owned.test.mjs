@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { copyFile, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import {withResearchTestWorker, createResearchTestRoleTools,  loadResearchTestApi, createResearchFixture, figureRequest } from './fixtures/research-test-kit.mjs';
 
@@ -6,8 +9,8 @@ let api;
 before(async () => { api = await loadResearchTestApi(); });
 after(() => api.dispose());
 
-function setup() {
-  const fixture = createResearchFixture(api);
+function setup(workspacePath) {
+  const fixture = createResearchFixture(api, 'figure', workspacePath);
   const { repository, project, run } = fixture;
   const figures = {
     async start(request) {
@@ -28,7 +31,11 @@ function setup() {
 }
 
 test('figure role polls its own repository with runId from start_figure', async () => {
-  const fixture = setup();
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'roc-figure-owned-')));
+  for (const name of ['figure.vl.json', 'measurements.csv']) {
+    await copyFile(`tests/fixtures/research-workflow/${name}`, join(directory, name));
+  }
+  const fixture = setup(directory);
   try {
     await fixture.withWorker(async () => {
     const { tools, repository, run, project } = fixture;
@@ -43,7 +50,7 @@ test('figure role polls its own repository with runId from start_figure', async 
     assert.equal(result.fileCount, 0);
     assert.throws(() => repository.experiments.get(project.id, started.runId), /research_experiment_not_found/);
       });
-  } finally { fixture.close(); }
+  } finally { fixture.close(); await rm(directory, { recursive: true, force: true }); }
 });
 
 test('figure query returns persisted failures, cancellation and restart interruption without fabricated success', async () => {

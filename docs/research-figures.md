@@ -43,11 +43,11 @@
 
 `inspectFigureEnvironment` 返回 Vega、Vega-Lite、Canvas 和 Node 环境及其 hash。可以将 `hash` 传给 `startFigure.expectedEnvironmentHash`，在已检查环境变化时拒绝启动。UI 不必传 hash；主进程使用当前环境并将其记录在运行快照中。
 
-`startFigure` 返回可轮询的运行记录。使用 `getFigureRun` 查看状态，使用 `cancelFigure` 取消。每次重绘使用新的 `requestId`；修改 spec、数据、参数或选项都会产生独立运行。成功运行生成 `figure.png`、`figure.svg`、单页 `figure.pdf`、`figure-data.json` 和 `figure-validation.json`。PDF 使用现有 `@napi-rs/canvas` PDF 后端，页面尺寸和输出 DPI 来自 `figure` 选项。主进程独立校验三种格式的尺寸、页数及 SHA-256；验证失败时运行标记为失败，并保留已收集的日志和产物供诊断。
+`startFigure` 返回可轮询的运行记录。使用 `getFigureRun` 查看状态，使用 `cancelFigure` 取消。每次重绘使用新的 `requestId`；修改 spec、数据、参数或选项都会产生独立运行。成功运行生成 `figure.png`、`figure.svg`、单页 `figure.pdf`、`figure-data.json` 和 `figure-validation.json`。PDF 使用 `pdf-lib@1.17.1` 创建精确 point 尺寸的页面并嵌入同一 PNG，页面尺寸和输出 DPI 来自 `figure` 选项，避免原生 PDF 后端将页面取整。主进程独立校验三种格式的尺寸、页数及 SHA-256；验证失败时运行标记为失败，并保留已收集的日志和产物供诊断。
 
 阶段角色使用 `start_figure → get_figure → publish_figure`，三个工具统一采用真实图稿运行 `runId`。`get_figure` 只读取当前项目、当前有效阶段所拥有的图稿，返回状态、错误、文件数和 `artifactId`，不返回二进制。`failed`、`cancelled`、`interrupted` 是终态，不能继续轮询或发布。`get_experiment` 只查询脚本实验；图稿工具不接受 `experimentId` 别名。
 
-渲染 pipeline `/3` 在作业入口将 spec 相对路径解析到冻结项目目录，并使用 Vega-Lite `autosize: { type: "fit", contains: "padding" }`，按指定物理尺寸容纳坐标轴和留白。SVG/PDF 保持英寸换算后的 point 尺寸，PNG 使用 `Math.trunc(inches * dpi)` 像素尺寸。单图和 layered 图适用 fit；复杂组合或显式 step 不能满足固定尺寸时，输出校验失败，不改变请求尺寸或放宽验证。发布与运行的 `artifactId` 在同一数据库事务中关联。
+渲染 pipeline `/6` 在作业入口将 spec 相对路径解析到冻结项目目录，先生成包含标题、坐标轴与分面的完整 SVG，再将其自然布局等比缩放并居中放入指定物理画布。该适配也支持 facet、concat、repeat 等不服从 Vega-Lite 顶层 fit 的组合布局；源码布局仍决定内容密度与留白，发布前需要视觉检查。SVG/PDF 保持英寸换算后的 point 尺寸，PNG 使用 `Math.trunc(inches * dpi)` 像素尺寸，三个格式使用同一适配后的 SVG，完整画布沿用 Vega 解析后的背景色（显式透明保留透明）；严格尺寸和数据验证保持不变。发布与运行的 `artifactId` 在同一数据库事务中关联。
 
 `figure-data.json` 保存实际 Vega scenegraph 的 post-transform datum、场景路径、完整编译编码、直接字段编码及常量/暂不支持的编码通道，绑定源 spec、渲染环境和编译 spec 的 SHA-256。filter、aggregate、formula 和 stack 之后的数据来自实际绘制项；默认柱图的 y 字段可能是 stack 生成的 `mean_end`，而非输入的 `mean`。条件、表达式及嵌套字段编码保留完整原文并标为 unsupported；不推断科学含义或自动关联实验指标。回执最多 1000 个 mark，场景遍历最多 100,000 项；超限拒绝，不截断。
 

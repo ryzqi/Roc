@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import type { TokenUsage } from '../../../shared/types';
 import * as recordUtils from './record-utils';
 import { redact, redactUnknown } from './redaction';
@@ -791,7 +793,18 @@ function readRunInterrupts(run: Record<string, unknown>): readonly DeepAgentInte
   if (!Array.isArray(interrupts)) {
     throw contractError('deep_agents_v3_run_interrupts_array_missing');
   }
-  return interrupts.map((interrupt) => adaptInterrupt(interrupt));
+  // v3 collects a nested interrupt at each graph boundary as it propagates.
+  // These are repeated observations of one decision, not separate approvals.
+  const unique = new Map<string, DeepAgentInterrupt>();
+  for (const value of interrupts) {
+    const interrupt = adaptInterrupt(value);
+    const existing = unique.get(interrupt.interruptId);
+    if (existing !== undefined && !isDeepStrictEqual(existing.payload, interrupt.payload)) {
+      throw contractError('deep_agents_v3_run_interrupt_conflict');
+    }
+    if (existing === undefined) unique.set(interrupt.interruptId, interrupt);
+  }
+  return [...unique.values()];
 }
 
 function adaptStringStream(values: AsyncIterable<unknown>, errorCode: string): AsyncIterable<string> {

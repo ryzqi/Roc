@@ -3,6 +3,19 @@ export type JsonObject = Record<string, unknown>;
 const SCHEMA_COMPOSITION_KEYS = ['anyOf', 'oneOf', 'allOf'] as const;
 
 export function sanitizeProviderToolJsonSchema(schema: JsonObject): JsonObject {
+  // Nullability and presence are separate parts of the runtime contract. Keep
+  // nullable branches before the compatibility resolver flattens compositions.
+  for (const key of ['anyOf', 'oneOf'] as const) {
+    const variants = schema[key];
+    if (Array.isArray(variants) && variants.every(isRecord) && variants.some(isNullSchema)) {
+      const { [key]: _composition, ...parent } = schema;
+      return { ...sanitizeProviderToolJsonSchema(parent), [key]: variants.map(sanitizeProviderToolJsonSchema) };
+    }
+  }
+  if (Array.isArray(schema.type) && schema.type.includes('null') && schema.type.every(type => typeof type === 'string')) {
+    return { ...sanitizeProviderToolJsonSchema({ ...schema, type: schema.type.find(type => type !== 'null') ?? 'null' }),
+      type: [...schema.type] };
+  }
   const resolved = resolveSchemaComposition(schema);
   const sanitized: JsonObject = {};
   const type = sanitizeSchemaType(resolved.type) ?? sanitizeSchemaTypeFromCompositions(resolved);
@@ -29,13 +42,7 @@ export function sanitizeProviderToolJsonSchema(schema: JsonObject): JsonObject {
     sanitized.const = resolved.const;
   }
   if (Array.isArray(resolved.required) && resolved.required.every((item) => typeof item === 'string')) {
-    const required = resolved.required.filter((item) => {
-      const property = isRecord(resolved.properties) ? resolved.properties[item] : undefined;
-      return !isOptionalSchema(property);
-    });
-    if (required.length > 0) {
-      sanitized.required = required;
-    }
+    sanitized.required = [...resolved.required];
   }
   if (isRecord(resolved.properties)) {
     sanitized.properties = Object.fromEntries(
@@ -172,7 +179,7 @@ function mergeResolvedSchema(parent: JsonObject, resolved: JsonObject): JsonObje
 
 function sanitizeSchemaType(type: unknown): string | undefined {
   if (typeof type === 'string') {
-    return type === 'null' ? undefined : type;
+    return type;
   }
   if (Array.isArray(type)) {
     const firstType = type.find((item) => typeof item === 'string' && item !== 'null');
@@ -204,38 +211,8 @@ function isNullSchema(schema: JsonObject): boolean {
   return schema.type === 'null';
 }
 
-function isOptionalSchema(schema: unknown): boolean {
-  if (!isRecord(schema)) {
-    return false;
-  }
-  if (schema.default !== undefined) {
-    return true;
-  }
-  if (Array.isArray(schema.type) && schema.type.includes('null')) {
-    return true;
-  }
-  if (Array.isArray(schema.anyOf) && schema.anyOf.some((item) => isRecord(item) && isNullSchema(item))) {
-    return true;
-  }
-  if (Array.isArray(schema.oneOf) && schema.oneOf.some((item) => isRecord(item) && isNullSchema(item))) {
-    return true;
-  }
-  return isAnyTypeSchema(schema);
-}
-
 function isEmptyNotSchema(schema: JsonObject): boolean {
   return isRecord(schema.not) && Object.keys(schema.not).length === 0;
-}
-
-function isAnyTypeSchema(schema: JsonObject): boolean {
-  if (isEmptyNotSchema(schema)) {
-    return true;
-  }
-  if (Array.isArray(schema.anyOf)) {
-    const variants = schema.anyOf.filter((item): item is JsonObject => isRecord(item));
-    return variants.length > 0 && variants.every((item) => isNullSchema(item) || isAnyTypeSchema(item));
-  }
-  return false;
 }
 
 function copyStringField(source: JsonObject, target: JsonObject, key: string): void {

@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { extname, isAbsolute, relative, resolve, sep } from 'node:path';
-import { createCanvas, loadImage, PDFDocument } from '@napi-rs/canvas';
+import { createCanvas, loadImage } from '@napi-rs/canvas';
+import { PDFDocument } from 'pdf-lib';
 import * as vega from 'vega';
 import { loader, parse, read, View, type Format, type FormatDSV, type FormatJSON, type FormatSV } from 'vega';
 import { compile, type TopLevelSpec } from 'vega-lite';
@@ -215,7 +216,7 @@ function svgDimensions(svg: string): { width: number; height: number } {
     const value = root.match(new RegExp(`\\b${name}=["']([^"']+)["']`, 'iu'))?.[1];
     if (value === undefined) return null;
     const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) && parsed >= 1 ? Math.trunc(parsed) : null;
+    return Number.isFinite(parsed) && parsed >= 1 ? parsed : null;
   };
   let width = attribute('width');
   let height = attribute('height');
@@ -227,6 +228,21 @@ function svgDimensions(svg: string): { width: number; height: number } {
   }
   if (width === null || height === null || width < 1 || height < 1) return fail('research_figure_svg_dimensions_invalid');
   return { width, height };
+}
+
+function fitSvgToPage(svg: string, widthPoints: number, heightPoints: number, widthPixels: number, heightPixels: number, background: string | null): string {
+  const natural = svgDimensions(svg);
+  const scale = Math.min(widthPoints / natural.width, heightPoints / natural.height);
+  const x = (widthPoints - natural.width * scale) / 2;
+  const y = (heightPoints - natural.height * scale) / 2;
+  // Composite views ignore Vega-Lite's fit autosize. Fit the complete layout,
+  // including titles and axes, uniformly into the same physical page in all formats.
+  const fill = background?.replace(/[&<>"']/gu, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;',
+  }[character]!));
+  const pageBackground = fill === undefined ? '' : `<rect width="${widthPoints}" height="${heightPoints}" fill="${fill}"/>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${widthPixels}" height="${heightPixels}" viewBox="0 0 ${widthPoints} ${heightPoints}">` +
+    pageBackground + `<g transform="translate(${x},${y}) scale(${scale})">${svg}</g></svg>`;
 }
 
 async function writeOutput<P extends 'figure.png' | 'figure.svg' | 'figure.pdf' | typeof researchFigureDataPath>(
@@ -272,13 +288,15 @@ export async function renderResearchFigure(input: ResearchFigureRenderJob, signa
     const spec = { ...inlineSpec, width: baseWidth, height: baseHeight,
       autosize: { type: 'fit', contains: 'padding' } } as TopLevelSpec;
     let svg: string;
+    let background: string | null;
     let trace: ResearchFigureDataTrace;
     const environment = getResearchFigureRendererEnvironment();
     const compiled = compile(spec).spec;
     const view = new View(parse(compiled), { renderer: 'none', loader: loader() });
     try {
       await view.runAsync();
-      svg = await view.toSVG(request.figure.dpi / 72);
+      background = view.background() ?? null;
+      svg = await view.toSVG();
       trace = collectFigureDataTrace(compiled, view.scenegraph(), createHash('sha256').update(specBytes).digest('hex'), environment.hash);
     } catch (error) {
       if (error instanceof ResearchProcessError) throw error;
@@ -287,8 +305,10 @@ export async function renderResearchFigure(input: ResearchFigureRenderJob, signa
       view.finalize();
     }
 
-    const dimensions = svgDimensions(svg);
+    const dimensions = { width: Math.trunc(request.figure.widthInches * request.figure.dpi),
+      height: Math.trunc(request.figure.heightInches * request.figure.dpi) };
     if (dimensions.width * dimensions.height > MAX_FIGURE_PIXELS) return fail('research_figure_pixel_limit');
+    svg = fitSvgToPage(svg, baseWidth, baseHeight, dimensions.width, dimensions.height, background);
     const svgBytes = Buffer.from(svg, 'utf8');
     if (svgBytes.byteLength > MAX_FIGURE_OUTPUT_BYTES) return fail('research_figure_output_too_large');
     const image = await loadImage(svgBytes);
@@ -299,12 +319,17 @@ export async function renderResearchFigure(input: ResearchFigureRenderJob, signa
 
     const widthPoints = baseWidth;
     const heightPoints = baseHeight;
-    const pdf = new PDFDocument({ title: request.label, creator: 'Roc', producer: '@napi-rs/canvas', rasterDPI: request.figure.dpi });
-    const pdfContext = pdf.beginPage(widthPoints, heightPoints);
-    // SAFETY: `PDFDocument.beginPage()` returns Skia's drawing context at runtime, although the declaration exposes the DOM base type.
-    (pdfContext as import('@napi-rs/canvas').SKRSContext2D).drawImage(image, 0, 0, widthPoints, heightPoints);
-    pdf.endPage();
-    const pdfBytes = pdf.close();
+    // Skia's PDF backend rounds page bounds to integer points. Embed the same
+    // DPI-sized PNG on an exact physical page so fractional inch sizes survive.
+    const pdf = await PDFDocument.create();
+    pdf.setTitle(request.label);
+    pdf.setCreator('Roc');
+    pdf.setProducer('pdf-lib');
+    const pdfImage = await pdf.embedPng(pngBytes);
+    pdf.addPage([widthPoints, heightPoints]).drawImage(pdfImage, {
+      x: 0, y: 0, width: widthPoints, height: heightPoints,
+    });
+    const pdfBytes = Buffer.from(await pdf.save());
 
     await mkdir(paths.output, { recursive: true });
     const outputs = [

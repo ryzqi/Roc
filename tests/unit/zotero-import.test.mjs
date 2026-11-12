@@ -1052,7 +1052,7 @@ test('cancelled CSL work cannot create a paper or object mapping when the worker
       return entries;
     }
   }, join(directory, `cancel-jobs-${crypto.randomUUID()}`));
-  const service = new api.LiteratureImportService(f.db, f.repository.library, {}, lateLibrary, async () => {});
+  const service = new api.LiteratureImportService(f.db, f.repository.library, {}, lateLibrary, async () => {}, () => timestamp);
   try {
     const preview = await f.preview();
     const pending = f.run(() => service.add({requestId: 'cancelled-csl',

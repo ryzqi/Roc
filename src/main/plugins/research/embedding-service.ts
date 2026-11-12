@@ -40,7 +40,7 @@ export class ResearchEmbeddingService {
       parsed.dimensions === null ? await this.probeDimensions(parsed) : parsed.dimensions;
     const normalized = researchEmbeddingConfigSaveRequestSchema.parse({ ...parsed, dimensions });
     const previous = this.knowledge.listEmbeddingConfigRows().find((row) => row.id === normalized.id);
-    const reuse = previous !== undefined && (await this.context.secrets.get(previous.api_key_secret_key)) === normalized.apiKey;
+    const reuse = previous !== undefined && (await this.readRecoverableKey(previous)) === normalized.apiKey;
     const key = reuse ? previous.api_key_secret_key : `research.embedding.${randomUUID()}`;
     try {
       if (!reuse) await this.context.secrets.set(key, normalized.apiKey);
@@ -212,14 +212,30 @@ export class ResearchEmbeddingService {
   }
 
   private async apiKey(row: EmbeddingConfigRow): Promise<string> {
-    const key = await this.context.secrets.get(row.api_key_secret_key);
+    let key: string | null;
+    try { key = await this.context.secrets.get(row.api_key_secret_key); }
+    catch {
+      throw new RocDomainError({code: 'research_embedding_key_unavailable',
+        message: '无法读取嵌入模型密钥，请在「设置 → 向量与 RAG」重新录入密钥并保存。',
+        category: 'validation', retryable: false,
+        userAction: '重新录入嵌入模型 API Key 并保存后重试。'});
+    }
     if (key === null) throw new Error('research_embedding_key_missing');
     return key;
   }
 
+  /** Configuration recovery must remain available when an old ciphertext cannot be read. */
+  private async readRecoverableKey(row: EmbeddingConfigRow): Promise<string | null> {
+    try { return await this.context.secrets.get(row.api_key_secret_key); }
+    catch {
+      this.context.logger.warn('Research embedding credential is unavailable; re-enter it in settings.', {configId: row.id});
+      return null;
+    }
+  }
+
   private async config(row: EmbeddingConfigRow): Promise<ResearchEmbeddingConfig> {
     return { id: row.id, name: row.name, baseUrl: row.base_url, model: row.model, dimensions: row.dimensions,
-      keyConfigured: (await this.context.secrets.get(row.api_key_secret_key)) !== null, enabled: row.enabled === 1, updatedAt: row.updated_at };
+      keyConfigured: (await this.readRecoverableKey(row)) !== null, enabled: row.enabled === 1, updatedAt: row.updated_at };
   }
 
   /**

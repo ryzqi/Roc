@@ -25,6 +25,7 @@ export const researchCapabilityToolNames: Readonly<Record<string, string>> = {
   'research.experiment.getOwned': 'get_experiment',
   'research.experiment.publishOwned': 'publish_experiment',
   'research.figure.startOwned': 'start_figure',
+  'research.figure.environment': 'inspect_figure_environment',
   'research.figure.getOwned': 'get_figure',
   'research.figure.publishOwned': 'publish_figure',
   'research.template.readOwned': 'read_template_file',
@@ -42,7 +43,7 @@ const productionInputs = ['research.artifacts.inspectProduction', 'research.arti
 const workspaceFiles = ['research.workspace.readFile', 'research.workspace.saveFile'];
 const experimentEffects = [...workspaceFiles, 'research.pythonEnvironments.list', 'research.experiment.environment',
   'research.experiment.startOwned', 'research.experiment.getOwned', 'research.experiment.publishOwned'];
-const figureEffects = [...workspaceFiles, 'research.figure.startOwned', 'research.figure.getOwned', 'research.figure.publishOwned'];
+const figureEffects = [...workspaceFiles, 'research.figure.environment', 'research.figure.startOwned', 'research.figure.getOwned', 'research.figure.publishOwned'];
 const exportEffects = ['research.template.readOwned', 'research.template.saveOwned', 'research.template.compileOwned',
   'research.export.prepareOwned', 'research.export.getOwned', 'research.export.publishOwned'];
 

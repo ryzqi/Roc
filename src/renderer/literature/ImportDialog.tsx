@@ -151,9 +151,9 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
 
   const titleRef = useRef<HTMLInputElement>(null);
   const initialTab = props.initialTab ?? 'document';
+  const selectedItemId = props.selectedItem?.id ?? null;
 
-  // Every tab starts clean: a leftover path or message from the previous opening
-  // would look like it belonged to the new import.
+  // Reset on a new import or selection, not a refreshed object for the same item.
   useEffect(() => {
     if (!open) {
       return;
@@ -176,8 +176,8 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
     setSearchResult(null);
     setSearchError(null);
     setTab(initialTab);
-    setDocumentTarget(props.selectedItem === null ? 'new-item' : 'library-item');
-  }, [initialTab, open, props.selectedItem]);
+    setDocumentTarget(selectedItemId === null ? 'new-item' : 'library-item');
+  }, [initialTab, open, selectedItemId]);
 
   const manualAuthorsParsed = useMemo(() => parseAuthorsInput(manualAuthors), [manualAuthors]);
   const manualYearParsed = useMemo(() => parseYearInput(manualYear), [manualYear]);

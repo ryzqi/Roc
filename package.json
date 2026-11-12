@@ -84,6 +84,7 @@
     "onnxruntime-node": "1.22.0-rev",
     "p-retry": "7.1.1",
     "paddleocr": "1.2.0",
+    "pdf-lib": "1.17.1",
     "pdfjs-dist": "6.4.299",
     "pino": "10.4.0",
     "shell-env": "4.0.3",
