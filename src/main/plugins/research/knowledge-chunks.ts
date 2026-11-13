@@ -1,7 +1,8 @@
 import {Tiktoken} from 'js-tiktoken/lite';
 import ranks from 'js-tiktoken/ranks/cl100k_base';
+import {paperHeading} from './paper-ir';
 
-export const knowledgeChunkVersion = 'roc-structure-cl100k-1';
+export const knowledgeChunkVersion = 'roc-paper-cl100k-2';
 export const knowledgeChunkTokens = 512;
 let tokenizer: Tiktoken | undefined;
 export function chunkTokenCount(text: string): number {
@@ -15,15 +16,26 @@ export type TextSpan = {start: number; end: number; section: string | null};
 export function structuredSpans(text: string, inheritedSection: string | null = null): TextSpan[] {
   const boundaries = new Set<number>([text.length]);
   const headings = new Map<number, string>();
-  const hierarchy: string[] = [];
+  const hierarchy: string[] = inheritedSection?.split(' / ') ?? [];
+  const descriptors = new Map<number, {level: number; title: string}>();
   for (const match of text.matchAll(/^([ \t]*#{1,6})[ \t]+([^\r\n]+)|\\(subsubsection|subsection|section)\{([^}]+)\}|(?:\r?\n|\r)[ \t]*(?:\r?\n|\r)/gmu)) {
     if (match[1] || match[3]) {
       const level = match[1] ? match[1].trim().length : ({section: 1, subsection: 2, subsubsection: 3}[match[3]!] ?? 1);
-      hierarchy.length = level - 1;
-      hierarchy[level - 1] = (match[2] ?? match[4]!).trim();
-      headings.set(match.index, hierarchy.filter(Boolean).join(' / ').slice(0, 2000));
+      descriptors.set(match.index, {level, title: (match[2] ?? match[4]!).trim()});
       boundaries.add(match.index);
     } else boundaries.add(match.index + match[0].length);
+  }
+  // Native PDF pages retain one original block; headings define retrieval spans only.
+  for (const match of text.matchAll(/^[^\r\n]+/gmu)) {
+    const heading = paperHeading(match[0]);
+    if (!heading) continue;
+    descriptors.set(match.index, {level: heading.level, title: match[0].trim()});
+    boundaries.add(match.index);
+  }
+  for (const [index, heading] of [...descriptors].sort(([a],[b]) => a-b)) {
+    hierarchy.length = Math.min(hierarchy.length, heading.level - 1);
+    hierarchy[heading.level - 1] = heading.title;
+    headings.set(index, hierarchy.filter(Boolean).join(' / ').slice(0, 2000));
   }
   const points = [...boundaries].sort((a, b) => a - b);
   const spans: TextSpan[] = [];

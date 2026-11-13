@@ -28,7 +28,7 @@ test('indexText keeps short text grouped by source lines', async () => {
   try {
     const result = files.indexText(Buffer.from('title\n\nbody text', 'utf8'));
 
-    assert.equal(result.parserVersion, 'roc-structure-cl100k-1');
+    assert.equal(result.parserVersion, 'roc-paper-cl100k-2');
     assert.equal(result.content, 'title\n\nbody text');
     assert.deepEqual(result.chunks, [{ content: 'title\n\nbody text', locator: 'text; UTF-16 1-16', section: null }]);
   } finally {
@@ -98,10 +98,22 @@ test('structured text preserves CRLF, headings, paragraphs, literal tokens and m
 test('parsed headings apply to following paragraph and table parents without changing their original text',async()=>{
   const {dir,files}=await loadIndexFiles();
   try {
-    const chunks=files.indexDocumentBlocks([{kind:'heading',text:'Results',locator:'p1'},
-      {kind:'paragraph',text:'exact  original\nparagraph',locator:'p2'},{kind:'table',text:'a,b\n1,2',locator:'p3'}]);
+    const chunks=files.indexDocumentBlocks([{id:'h',kind:'heading',text:'Results',locator:'p1'},
+      {id:'p',kind:'paragraph',text:'exact  original\nparagraph',locator:'p2'},{id:'t',kind:'table',text:'a,b\n1,2',locator:'p3'}], {paperId:'paper',parseId:'parse',sourceHash:'a'.repeat(64)});
     assert.deepEqual(chunks.map(c=>c.section),['Results','Results','Results']);
     assert.equal(chunks[1].content,'exact  original\nparagraph');
     assert.equal(chunks[2].locator,'p3');
+    assert.equal(chunks[1].semantic.semanticRole,'results');
+    assert.deepEqual(chunks[1].semantic.relatedBlockIds,['t']);
+    assert.equal(chunks[2].semantic.blockId,'t');
+    const page='2 Method\nExact method.\n2.1 Architecture\nOriginal formula.';
+    const pages=files.indexDocumentBlocks([{id:'page1',kind:'paragraph',text:page,locator:'PDF page 1'},
+      {id:'page2',kind:'paragraph',text:'The architecture continues.',locator:'PDF page 2'}],
+      {paperId:'paper',parseId:'parse',sourceHash:'a'.repeat(64)});
+    assert.equal(pages[0].content,page);
+    assert.equal(pages[0].semantic.blockId,'page1');
+    assert.equal(pages[0].locator,'PDF page 1');
+    assert.deepEqual(pages[1].semantic.sectionPath,['2 Method','2.1 Architecture']);
+    assert.equal(pages[1].semantic.semanticRole,'method');
   }finally{rmSync(dir,{recursive:true,force:true});}
 });

@@ -1,3 +1,5 @@
+import {paperChunkSchema, type PaperChunk} from '../../../shared/schemas/research-paper-ir';
+import {scientificRole} from './paper-ir';
 import {routeScientificQuery, selectDiverse} from './query-routing';
 import type {RerankerReceipt} from '../../../shared/schemas/research-reranker';
 import {structuredSpans, spanLocator, knowledgeChunkVersion, chunkTokenCount} from './knowledge-chunks';
@@ -26,7 +28,7 @@ export type KnowledgeSourceWrite = {
   sourceId: string;
   title: string;
   content: string;
-  chunks: Array<{ content: string; locator: string | null; section?: string | null }>;
+  chunks: Array<{ content: string; locator: string | null; section?: string | null; semantic?: PaperChunk }>;
   embeddingPolicy: KnowledgeEmbeddingPolicy;
 };
 
@@ -150,8 +152,8 @@ export class ResearchKnowledgeRepository {
       );
       const keywordIndex = this.db.prepare("SELECT 1 FROM sqlite_master WHERE name='research_knowledge_keywords'").get()
         ? this.db.prepare('INSERT INTO research_knowledge_keywords(rowid,content,title) VALUES (?,?,?)') : null;
-      const structured = this.db.prepare("SELECT 1 FROM sqlite_master WHERE name='research_knowledge_chunk_structure'").get();
-      const structure = structured ? this.db.prepare('INSERT INTO research_knowledge_chunk_structure VALUES (?,?,?,?,?)') : null;
+      const structure = this.db.prepare('INSERT INTO research_knowledge_chunk_structure VALUES (?,?,?,?,?)');
+      const semantics = this.db.prepare('INSERT INTO research_knowledge_chunk_semantics VALUES (?,?)');
       const insert = (index: number, content: string, locator: string | null): string => {
         const id = `${request.id}:chunk:${index}`;
         const inserted = insertChunk.run(id, request.id, request.projectId, index, content, locator, hashText(content), timestamp);
@@ -161,15 +163,24 @@ export class ResearchKnowledgeRepository {
       // Preserve original parent IDs for annotation and historical evidence; only children are retrieved.
       request.chunks.forEach((chunk, index) => insert(index, chunk.content, chunk.locator));
       let childIndex = request.chunks.length;
-      if (structure) request.chunks.forEach((chunk, index) => {
+      request.chunks.forEach((chunk, index) => {
         const parentId = `${request.id}:chunk:${index}`;
         const spans = structuredSpans(chunk.content, chunk.section ?? null);
-        structure.run(parentId, null, 0, chunk.content.length, chunk.section ?? spans[0]?.section ?? null);
+        const section = chunk.section ?? spans[0]?.section ?? null;
+        const semantic = paperChunkSchema.parse(chunk.semantic ?? {paperId: request.id,
+          parseId: typeof sourceMetadata.parseId === 'string' ? sourceMetadata.parseId : null,
+          sourceHash: typeof sourceMetadata.sourceHash === 'string' ? sourceMetadata.sourceHash : hashText(request.content),
+          blockId: parentId, sectionPath: section?.split(' / ') ?? [], semanticRole: scientificRole(section),
+          blockKind: 'paragraph', relatedBlockIds: []});
+        structure.run(parentId, null, 0, chunk.content.length, section);
+        semantics.run(parentId, JSON.stringify(semantic));
         if (spans.length > 1) for (const span of spans) {
           const content = chunk.content.slice(span.start, span.end);
           if (!content.trim()) continue;
           const id = insert(childIndex++, content, spanLocator(chunk.locator, span));
           structure.run(id, parentId, span.start, span.end, span.section);
+          semantics.run(id, JSON.stringify({...semantic, sectionPath: span.section?.split(' / ') ?? semantic.sectionPath,
+            semanticRole: scientificRole(span.section) === 'unknown' ? semantic.semanticRole : scientificRole(span.section)}));
         }
       });
     });
@@ -198,7 +209,7 @@ export class ResearchKnowledgeRepository {
       return value;
     };
     return rows.map(({title, section, ...chunk}) => ({...chunk, inputVersion: knowledgeChunkVersion,
-      embeddingInput: `Document: ${budget(title)}\n${section ? `Section: ${budget(section)}\n` : ''}Text:\n${chunk.content}`}));
+      embeddingInput: `Document: ${budget(title)}\nRole: ${this.chunkSemantic(chunk.id)?.semanticRole ?? 'unknown'}\n${section ? `Section: ${budget(section)}\n` : ''}Text:\n${chunk.content}`}));
   }
 
   /** Read bounded original parent context. Partial text is not a new evidence identity. */
@@ -324,7 +335,8 @@ export class ResearchKnowledgeRepository {
         existing.rrfScore += vectorScore;
       }
     });
-    const ordered = Array.from(merged.values()).sort((left, right) => right.rrfScore - left.rrfScore);
+    const ordered = Array.from(merged.values()).map(hit => ({...hit, semantic: this.chunkSemantic(hit.chunkId)})).sort((left, right) => right.rrfScore - left.rrfScore);
+    this.preferScientificSections(ordered, route.intent);
     const hits = selectDiverse(ordered, input.request.limit, route.diversify);
     const documents=new Map<string,KnowledgeVersionDocument>();
     const candidates = ordered.map(hit => ({
@@ -351,6 +363,17 @@ export class ResearchKnowledgeRepository {
     };
   }
 
+  chunkSemantic(chunkId: string): PaperChunk | null {
+    const json = this.db.prepare('SELECT metadata_json FROM research_knowledge_chunk_semantics WHERE chunk_id=?').pluck().get(chunkId);
+    return typeof json === 'string' ? paperChunkSchema.parse(JSON.parse(json)) : null;
+  }
+
+  private preferScientificSections(hits: ResearchKnowledgeSearchHit[], intent: string): void {
+    const roles = intent === 'method' || intent === 'comparison' ? ['method'] : intent === 'results'
+      ? ['experimental_setup', 'results', 'ablation'] : intent === 'overview' ? ['abstract', 'problem', 'contribution'] : [];
+    if (roles.length) hits.sort((a,b) => Number(roles.includes(b.semantic?.semanticRole ?? 'unknown')) - Number(roles.includes(a.semantic?.semanticRole ?? 'unknown')));
+  }
+
   private queryDocument(request: ResearchKnowledgeSearchRequest): string | null {
     const rows = this.db.prepare(`SELECT id,title,metadata_json FROM research_knowledge_documents
       WHERE (? IS NULL OR project_id=? OR project_id IS NULL)`).all(request.projectId, request.projectId) as Array<{id: string; title: string; metadata_json: string}>;
@@ -370,7 +393,7 @@ export class ResearchKnowledgeRepository {
       const row = this.db.prepare(`SELECT c.id AS chunk_id,c.document_id,d.title,c.content,c.locator,d.source_type,d.source_id
         FROM research_knowledge_chunks c JOIN research_knowledge_documents d ON d.id=c.document_id WHERE c.id=?`)
         .get(candidate.chunkId) as KnowledgeHitRow;
-      return {...toKnowledgeHit(row), keywordRank: candidate.keywordRank, vectorRank: candidate.vectorRank, rrfScore: candidate.score};
+      return {...toKnowledgeHit(row), semantic: this.chunkSemantic(candidate.chunkId), keywordRank: candidate.keywordRank, vectorRank: candidate.vectorRank, rrfScore: candidate.score};
     });
   }
 
@@ -426,7 +449,7 @@ export class ResearchKnowledgeRepository {
     if (hashText(chunk.content)!==chunk.content_hash) throw new Error('research_knowledge_source_corrupt');
     const {content:_content,...fields}=chunk;
     return {chunkId,documentId:chunk.document_id,locator:chunk.locator,chunkHash:chunk.content_hash,
-      indexedVersion:hashText(JSON.stringify({...fields,...document}))};
+      indexedVersion:hashText(JSON.stringify({...fields,...document, semantic: this.chunkSemantic(chunkId)}))};
   }
 
   private keywordSearch(query: string, projectId: string | null, limit: number, documentId: string | null = null): ResearchKnowledgeSearchHit[] {
@@ -556,6 +579,7 @@ function toKnowledgeHit(row: KnowledgeHitRow): ResearchKnowledgeSearchHit {
     locator: row.locator,
     sourceType: row.source_type,
     sourceId: row.source_id,
+    semantic: null,
     keywordRank: null,
     vectorRank: null,
     rrfScore: 0

@@ -168,7 +168,7 @@ test('current schema preserves parent chunks and contextual inputs for short and
     applyResearchDatabaseSchema(db);
     for(const row of original) assert.deepEqual(db.prepare('SELECT * FROM research_knowledge_chunks WHERE id=?').get(row.id),row);
     assert.ok(repo.knowledgeChunks('long').length>1);
-    assert.equal(repo.knowledgeChunks('short')[0].embeddingInput,'Document: short\nText:\nshort evidence');
+    assert.equal(repo.knowledgeChunks('short')[0].embeddingInput,'Document: short\nRole: unknown\nText:\nshort evidence');
     assert.equal(db.prepare('SELECT count(*) FROM research_knowledge_embeddings').pluck().get(),0);
     const before=db.prepare('SELECT total_changes()').pluck().get();applyResearchDatabaseSchema(db);
     assert.equal(db.prepare('SELECT total_changes()').pluck().get(),before);

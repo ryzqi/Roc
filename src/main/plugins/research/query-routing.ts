@@ -9,12 +9,13 @@ export function routeScientificQuery(query: string, documentId: string | null): 
   return {intent, documentId, diversify: documentId === null && ['comparison', 'dispute', 'overview'].includes(intent)};
 }
 
-export function selectDiverse<T extends {documentId: string}>(ordered: T[], limit: number, diversify: boolean): T[] {
+export function selectDiverse<T extends {documentId: string; semantic?: {paperId: string} | null}>(ordered: T[], limit: number, diversify: boolean): T[] {
   if (!diversify) return ordered.slice(0, limit);
   const selected: T[] = [], counts = new Map<string, number>();
   for (const item of ordered) {
-    if ((counts.get(item.documentId) ?? 0) >= 2) continue;
-    selected.push(item); counts.set(item.documentId, (counts.get(item.documentId) ?? 0) + 1);
+    const paperId = item.semantic?.paperId ?? item.documentId;
+    if ((counts.get(paperId) ?? 0) >= 2) continue;
+    selected.push(item); counts.set(paperId, (counts.get(paperId) ?? 0) + 1);
     if (selected.length === limit) return selected;
   }
   return [...selected, ...ordered.filter(item => !selected.includes(item))].slice(0, limit);

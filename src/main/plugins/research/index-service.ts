@@ -317,9 +317,10 @@ export class ResearchIndexService {
           admission: { projectId: job.projectId, priority: 'background' },
           options: this.tools.defaultParseOptions(job.input.kind === 'html' ? 'text/html' : 'application/pdf') });
         if (parsed.sourceHash !== source.sourceHash) throw new Error('research_index_source_changed');
-        const chunks = indexDocumentBlocks(parsed.blocks);
+        const artifact = await this.publishArtifact(storage, source.sourceHash, parsed, work);
+        const chunks = indexDocumentBlocks(parsed.blocks, {paperId: knowledgeId(job.fileId), parseId: artifact.parseArtifactId, sourceHash: source.sourceHash});
         payload = { content: chunks.map((chunk) => chunk.content).join('\n\n'), chunks, parserVersion: parsed.parserVersion, sourceHash: source.sourceHash, parserKey: job.input.parserKey,
-          ...await this.publishArtifact(storage, source.sourceHash, parsed, work) };
+          ...artifact };
       }
       await this.verifyJob(job, signal);
       const replacedText = this.repository.indexing.publishText(job, payload, source.relativePath);

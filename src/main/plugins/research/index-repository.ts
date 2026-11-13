@@ -1,3 +1,4 @@
+import {paperChunkSchema} from '../../../shared/schemas/research-paper-ir';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Database } from 'better-sqlite3';
 import { z } from 'zod';
@@ -22,7 +23,7 @@ const jobInputSchema = z.object({ path: z.string(), kind: researchIndexedFileSch
   root: z.string(), force: z.boolean(), parserKey: z.string().min(1), embeddingConfigId: z.string().nullable(),
   embedding: z.object({ configId: z.string(), revision: z.number().int().positive() }).strict().nullable() }).strict();
 export type IndexJob = z.infer<typeof researchIndexJobSchema> & { input: z.infer<typeof jobInputSchema> };
-const indexPayloadSchema = z.object({ content: z.string(), chunks: z.array(z.object({ content: z.string().min(1), locator: z.string().min(1), section: z.string().max(2000).nullable().optional() }).strict()),
+const indexPayloadSchema = z.object({ content: z.string(), chunks: z.array(z.object({ content: z.string().min(1), locator: z.string().min(1), section: z.string().max(2000).nullable().optional(), semantic: paperChunkSchema.optional() }).strict()),
   sourceHash: z.string().regex(/^[a-f0-9]{64}$/u), parserKey: z.string().min(1), parserVersion: z.string().min(1),
   // 解析工件（提案 §8「工件发布与恢复」）：索引链取完文本**不能**删掉中间产物，
   // 否则阅读器与索引就不再共享同一份不可变工件。非文档输入（纯文本）为 null。
@@ -205,7 +206,7 @@ export class ResearchIndexRepository {
     if (payload.parserKey !== job.input.parserKey) throw new Error('research_index_parser_changed');
     return this.db.transaction(() => {
       this.requireJob(job, 'running');
-      const metadata = { type: 'project-index', fileId: job.fileId, sourceHash: payload.sourceHash, parserKey: payload.parserKey };
+      const metadata = { type: 'project-index', fileId: job.fileId, sourceHash: payload.sourceHash, parserKey: payload.parserKey, parseId: payload.parseArtifactId };
       const current = this.fileRow(job.fileId);
       const changed = job.input.force || current.indexed_hash !== payload.sourceHash || current.parser_key !== payload.parserKey || current.payload_json !== JSON.stringify(payload) || !this.hasPublishedText(current);
       if (changed) {

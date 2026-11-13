@@ -13,7 +13,7 @@ export function knowledgeSearchView(result: ResearchKnowledgeSearchResult, maxCh
       return {
       chunkId: hit.chunkId, documentId: hit.documentId, title: hit.title,
       content: hit.content.slice(0, maxChars), contentChars: hit.content.length,
-      locator: hit.locator, sourceType: hit.sourceType, sourceId: hit.sourceId,
+      semantic: hit.semantic, locator: hit.locator, sourceType: hit.sourceType, sourceId: hit.sourceId,
       indexedVersion, score: hit.rrfScore
     };})
   };

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import {paperChunkSchema} from './research-paper-ir';
 import {queryRouteSchema, rerankerReceiptSchema} from './research-reranker';
 import {researchArtifactVersionsSchema} from './research-artifact-version';
 
@@ -293,7 +294,7 @@ export const researchKnowledgeDocumentUpsertRequestSchema = z
     sourceId: z.string().min(1),
     title: z.string().trim().min(1),
     content: z.string().min(1),
-    chunks: z.array(z.object({ content: z.string().min(1), locator: z.string().nullable(), section: z.string().max(2000).nullable().optional() }).strict()).min(1),
+    chunks: z.array(z.object({ content: z.string().min(1), locator: z.string().nullable(), section: z.string().max(2000).nullable().optional(), semantic: paperChunkSchema.optional() }).strict()).min(1),
     embeddingConfigId: z.string().min(1).nullable()
   })
   .strict();
@@ -319,6 +320,7 @@ export const researchKnowledgeSearchHitSchema = z
     locator: z.string().nullable(),
     sourceType: z.string(),
     sourceId: z.string(),
+    semantic: paperChunkSchema.nullable(),
     keywordRank: z.number().int().nullable(),
     vectorRank: z.number().int().nullable(),
     rrfScore: z.number()

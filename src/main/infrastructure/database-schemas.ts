@@ -1142,6 +1142,10 @@ CREATE TABLE research_knowledge_chunk_structure (
  start_utf16 INTEGER NOT NULL, end_utf16 INTEGER NOT NULL, section TEXT,
  CHECK(start_utf16 >= 0 AND end_utf16 > start_utf16)
 );
+CREATE TABLE research_knowledge_chunk_semantics (
+ chunk_id TEXT PRIMARY KEY REFERENCES research_knowledge_chunks(id) ON DELETE CASCADE,
+ metadata_json TEXT NOT NULL
+);
 CREATE TABLE research_knowledge_chunks (
         id TEXT PRIMARY KEY,
         document_id TEXT NOT NULL,

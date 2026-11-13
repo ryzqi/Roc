@@ -1,4 +1,6 @@
 import {knowledgeChunkVersion, structuredSpans, spanLocator} from './knowledge-chunks';
+import {paperBlocks, type PaperIdentity, type PaperBlock} from './paper-ir';
+import type {PaperChunk} from '../../../shared/schemas/research-paper-ir';
 import { lstat, readdir, realpath } from 'node:fs/promises';
 import { extname, isAbsolute, join, matchesGlob, relative, sep } from 'node:path';
 import type { z } from 'zod';
@@ -7,7 +9,7 @@ import { assertResearchDescendant, readResearchFile, researchContentHash, resear
 
 export type IndexFileKind = z.infer<typeof researchIndexKindSchema>;
 export type ScannedIndexFile = { path: string; kind: IndexFileKind; size: number; signature: string };
-export type IndexedText = { content: string; chunks: Array<{ content: string; locator: string; section?: string | null }>; parserVersion: string };
+export type IndexedText = { content: string; chunks: Array<{ content: string; locator: string; section?: string | null; semantic?: PaperChunk }>; parserVersion: string };
 const textExtensions: Readonly<Record<string, IndexFileKind>> = { '.md': 'markdown', '.tex': 'latex', '.bib': 'bibliography', '.csv': 'csv', '.pdf': 'pdf', '.html': 'html', '.htm': 'html',
   '.png': 'image', '.jpg': 'image', '.jpeg': 'image', '.tif': 'image', '.tiff': 'image', '.bmp': 'image', '.webp': 'image' };
 
@@ -107,10 +109,6 @@ export function indexLocatedText(text: string, locator: string, section: string 
 }
 
 /** Keep parser block identities stable; retrieval children are created by the repository. */
-export function indexDocumentBlocks(blocks: readonly {text: string; locator: string; kind: string}[]): IndexedText['chunks'] {
-  let section: string | null = null;
-  return blocks.filter(block => block.text.trim()).map(block => {
-    if (block.kind === 'heading') section = block.text.trim().slice(0, 2000);
-    return {content: block.text, locator: block.locator, section};
-  });
+export function indexDocumentBlocks(blocks: readonly PaperBlock[], identity: PaperIdentity): IndexedText['chunks'] {
+  return paperBlocks(blocks, identity);
 }

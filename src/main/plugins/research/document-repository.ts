@@ -230,10 +230,10 @@ export class ResearchDocumentRepository {
   }
 
   private index(document: ResearchDocument, parseId: string, data: StoredDocumentContent) {
-    const chunks = indexDocumentBlocks(data.content.blocks);
+    const chunks = indexDocumentBlocks(data.content.blocks, {paperId: document.libraryItemId, parseId, sourceHash: document.sourceHash});
     const input = { id: `document:${parseId}`, projectId: null as string | null, sourceType: 'file' as const, sourceId: document.libraryItemId,
       title: `${this.research.library.get(document.libraryItemId).metadata.title} — ${document.filename}`, content: data.content.content, chunks, embeddingPolicy: 'none' as const };
-    this.research.knowledge.upsertFromSource(input);
+    this.research.knowledge.upsertFromSource(input, {paperId: document.libraryItemId, documentId: document.id, parseId, sourceHash: document.sourceHash});
     return input;
   }
 }
