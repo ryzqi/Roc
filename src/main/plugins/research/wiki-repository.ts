@@ -2,12 +2,15 @@ import {createHash, randomUUID} from 'node:crypto';
 import type {Database} from 'better-sqlite3';
 import type {z} from 'zod';
 import {
-  wikiCreateSchema, wikiSaveSchema, wikiRollbackSchema, wikiRevisionSchema, wikiSummarySchema,
+  wikiCreateSchema, wikiSaveSchema, wikiRollbackSchema, wikiRevisionSchema, wikiSummarySchema, wikiSectionSchema, wikiSectionReadSchema, wikiResynthesizeSchema,
   type WikiSection, type WikiDependency, type WikiRevision, type WikiPage, type WikiSummary
 } from '../../../shared/schemas/research-wiki-pages';
 import {requireResearchHuman} from '../../services/research-human-context';
 import type {ResearchEvidenceRepository} from './evidence-repository';
 import {relationSourceDigest, relationClaimHash} from './evidence-relation-repository';
+import type {ResearchKnowledgeRepository} from './knowledge-repository';
+import type {PaperSource} from '../../../shared/schemas/research-paper-card';
+import type {WikiSynthesizer} from './wiki-synthesis';
 
 const hash = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 type PageRow = {id: string; project_id: string; kind: WikiSummary['kind']; title: string; source_document_id: string | null;
@@ -19,8 +22,27 @@ export class ResearchWikiRepository {
   private timer: ReturnType<typeof setInterval> | null = null;
   private stopped = false;
   private running: Promise<void> | null = null;
+  private synthesizer: WikiSynthesizer | null = null;
+  private readonly synthesisController = new AbortController();
   constructor(private readonly db: Database, private readonly evidence: ResearchEvidenceRepository,
-    private readonly requireProject: (id: string) => void, private readonly now: () => string) {}
+    private readonly requireProject: (id: string) => void, private readonly now: () => string,
+    private readonly knowledge: ResearchKnowledgeRepository) {}
+
+  configureSynthesis(synthesizer: WikiSynthesizer): void {this.synthesizer = synthesizer;}
+  ensurePaperPage(projectId: string, documentId: string, title: string): void {
+    this.requireProject(projectId);
+    this.db.prepare(`INSERT INTO research_wiki_pages(id,project_id,kind,title,source_document_id,selection_json,updated_at)
+      VALUES (?,?,'source',?,?,'{"evidenceIds":[],"claimIds":[]}',?)
+      ON CONFLICT(project_id,source_document_id) DO UPDATE SET title=excluded.title`).run(`wiki_${randomUUID()}`, projectId, title.slice(0, 300), documentId, this.now());
+    this.paperChanged(documentId);
+  }
+  paperChanged(documentId: string): void {
+    const pages = this.db.prepare(`SELECT id FROM research_wiki_pages WHERE source_document_id=?
+      OR id IN (SELECT page_id FROM research_wiki_dependencies WHERE kind='paper' AND dependency_id=?)`)
+      .all(documentId, documentId) as Array<{id: string}>;
+    for (const page of pages) this.enqueue(page.id);
+    this.wake();
+  }
 
   search(projectId: string, query = '', offset = 0): WikiSummary[] {
     this.requireProject(projectId);
@@ -52,7 +74,8 @@ export class ResearchWikiRepository {
       const sections = current?.sections.map(section => ({...section})) ?? [];
       const dependencyStates = new Map<string, string | null>();
       for (const section of sections) {
-        if (section.evidenceIds.length === 0) lint.push({code: 'uncited', sectionId: section.id, message: '此章节没有原始证据引用；不能据此确认科学支持。'});
+        if (section.evidenceIds.length === 0) lint.push({code: 'uncited', sectionId: section.id, message: section.paperSources?.length
+          ? '论文卡片是未审核派生理解；请回到原文并捕获 Evidence 后核查科学支持。' : '此章节没有原始证据引用；不能据此确认科学支持。'});
         for (const dep of section.dependencies) {
           const key = `${dep.kind}:${dep.id}`;
           if (!dependencyStates.has(key)) dependencyStates.set(key, this.currentDigest(projectId, dep));
@@ -91,6 +114,7 @@ export class ResearchWikiRepository {
       if (row.kind === 'source' && this.sourceCount(row) > 50) lint.push({code: 'source_limit', sectionId: null,
         message: '此来源超过 50 条捕获证据，本页仅编译最近的 50 条；其余证据请通过原始检索读取。'});
       return {page: this.summary(row), current: current ? {...current, sections} : null,
+        paperJob: row.source_document_id ? this.db.prepare('SELECT generation,status,error FROM research_paper_cards WHERE document_id=?').get(row.source_document_id) as WikiPage['paperJob'] ?? null : null,
         basisDigest: hash([...dependencyStates].sort()), lint, sources, links};
     })();
   }
@@ -131,11 +155,18 @@ export class ResearchWikiRepository {
       if (owner === 'assistant' && previous?.owner === 'human') throw new Error('wiki_human_section_protected');
       // Assistant synthesis may use only this page's read, current source set; new sources need a new page selection.
       const allowed = new Set(page.sources.filter(source => source.status === 'recorded').map(source => source.evidenceId));
-      if (owner === 'assistant' && (request.section.evidenceIds.length === 0 || request.section.evidenceIds.some(id => !allowed.has(id)) ||
+      const paperSources = request.section.paperSources ?? [];
+      for (const source of paperSources) {
+        if (!sections.some(section => section.paperSources?.some(item => JSON.stringify(item) === JSON.stringify(source)))) throw new Error('wiki_current_sources_required');
+        if (owner === 'assistant' && this.knowledge.chunkVersion(source.chunkId, request.projectId).indexedVersion !== source.indexedVersion) throw new Error('wiki_current_sources_required');
+      }
+      if (owner === 'assistant' && (request.section.evidenceIds.length + paperSources.length === 0 || request.section.evidenceIds.some(id => !allowed.has(id)) ||
         request.section.claimIds.some(id => !sections.some(section => section.claimIds.includes(id))))) throw new Error('wiki_current_sources_required');
       for (const link of request.section.links) this.row(request.projectId, link);
       const section: WikiSection = {...request.section, owner, status: 'current',
-        dependencies: this.dependencies(request.projectId, request.section.evidenceIds, request.section.claimIds)};
+        dependencies: [...this.dependencies(request.projectId, request.section.evidenceIds, request.section.claimIds),
+          ...(owner === 'human' ? sections.filter(item => item.paperSources?.some(source => paperSources.some(ref => ref.chunkId === source.chunkId)))
+            .flatMap(item => item.dependencies.filter(dep => dep.kind === 'paper')) : this.paperDependencies(request.projectId, paperSources))]};
       this.publish(row, [...sections.filter(item => item.id !== section.id), section], owner === 'human' ? 'human' : 'assistant');
       return this.read(request.projectId, request.pageId);
     })();
@@ -159,6 +190,44 @@ export class ResearchWikiRepository {
     this.enqueue(pageId); this.wake(); return this.summary(row);
   }
 
+  readSection(input: z.infer<typeof wikiSectionReadSchema>): {page: WikiSummary; basisDigest: string; section: WikiSection; nextOffset: number | null} {
+    const request = wikiSectionReadSchema.parse(input), page = this.read(request.projectId, request.pageId);
+    if (page.page.revision !== request.expectedRevision) throw new Error('wiki_revision_conflict');
+    const section = page.current?.sections.find(item => item.id === request.sectionId);
+    if (!section) throw new Error('wiki_section_not_found');
+    const end = request.offset + request.maxChars;
+    return {page: page.page, basisDigest: page.basisDigest, section: {...section, body: section.body.slice(request.offset, end)},
+      nextOffset: section.body.length > end ? end : null};
+  }
+
+  async resynthesize(input: z.infer<typeof wikiResynthesizeSchema>): Promise<WikiPage> {
+    const request = wikiResynthesizeSchema.parse(input), page = this.read(request.projectId, request.pageId);
+    if (page.page.revision !== request.expectedRevision) throw new Error('wiki_revision_conflict');
+    if (page.basisDigest !== request.expectedBasisDigest) throw new Error('wiki_basis_changed');
+    const sections = request.sectionIds.map(id => page.current?.sections.find(section => section.id === id));
+    if (sections.some(section => !section || section.owner !== 'assistant' || section.status !== 'stale')) throw new Error('wiki_stale_assistant_required');
+    if (!this.synthesizer) throw new Error('wiki_model_unavailable');
+    const sources = page.sources.filter(source => source.status === 'recorded').slice(0, 12);
+    const paperSources = [...new Map(page.current!.sections.filter(section => section.status === 'current')
+      .flatMap(section => section.paperSources ?? []).map(source => [source.chunkId, source])).values()].slice(0, 12);
+    const originals = paperSources.map(source => ({source, text: this.knowledge.chunkContext(request.projectId, source.chunkId, 1200).content}));
+    const signal = AbortSignal.any([this.synthesisController.signal, AbortSignal.timeout(60000)]);
+    const proposals = await this.synthesizer({sections: sections as WikiSection[],
+      evidence: sources.map(source => ({...source, excerpt: source.excerpt.slice(0, 1200)})), originals},
+    signal);
+    signal.throwIfAborted();
+    if (proposals.length !== sections.length || new Set(proposals.map(section => section.id)).size !== sections.length ||
+        proposals.some(section => !request.sectionIds.includes(section.id))) throw new Error('wiki_section_selection_changed');
+    return this.db.transaction(() => {
+      let current = this.read(request.projectId, request.pageId);
+      if (current.page.revision !== request.expectedRevision || current.basisDigest !== request.expectedBasisDigest) throw new Error('wiki_basis_changed');
+      for (const section of proposals) current = this.save({
+        projectId: request.projectId, pageId: request.pageId, expectedRevision: current.page.revision,
+        expectedBasisDigest: current.basisDigest, section}, 'assistant');
+      return current;
+    })();
+  }
+
   start(): void {
     this.db.prepare("UPDATE research_wiki_jobs SET status='queued',error=NULL WHERE status='running'").run();
     this.stopped = false;
@@ -172,7 +241,7 @@ export class ResearchWikiRepository {
     }).finally(() => {this.running = null;});
   }
   async idle(): Promise<void> {await this.running;}
-  async shutdown(): Promise<void> {this.stopped = true; if (this.timer !== null) clearInterval(this.timer); this.timer = null; await this.running;}
+  async shutdown(): Promise<void> {this.stopped = true; this.synthesisController.abort(); if (this.timer !== null) clearInterval(this.timer); this.timer = null; await this.running;}
 
   /** Each compilation publishes a complete snapshot within one SQLite transaction. */
   compileNext(): boolean {
@@ -187,6 +256,8 @@ export class ResearchWikiRepository {
         const selection = JSON.parse(row.selection_json) as Selection;
         const evidenceIds = new Set(row.kind === 'source' ? this.sourceIds(row) : selection.evidenceIds);
         const generated: WikiSection[] = [];
+        const card = this.db.prepare('SELECT snapshot_json FROM research_paper_cards WHERE document_id=?').pluck().get(row.source_document_id);
+        if (typeof card === 'string') generated.push(...(JSON.parse(card) as unknown[]).map(section => wikiSectionSchema.parse(section)));
         for (const claimId of selection.claimIds) {
           if (!this.exists('research_claims', claimId, row.project_id)) continue;
           const claim = this.evidence.getClaim(claimId);
@@ -200,8 +271,10 @@ export class ResearchWikiRepository {
         for (const evidenceId of evidenceIds) {
           if (!this.exists('research_evidence', evidenceId, row.project_id)) continue;
           const source = this.evidence.inspectEvidence(evidenceId, row.project_id);
-          const target = this.db.prepare('SELECT id FROM research_wiki_pages WHERE project_id=? AND source_document_id=? AND id<>?')
-            .get(row.project_id, source.evidence.documentId, row.id) as {id: string} | undefined;
+          const target = this.db.prepare(`SELECT id FROM research_wiki_pages WHERE project_id=? AND id<>? AND source_document_id IN
+            (?,json_extract((SELECT metadata_json FROM research_evidence_source_metadata WHERE evidence_id=?),'$.documentId'),
+            json_extract((SELECT metadata_json FROM research_evidence_source_metadata WHERE evidence_id=?),'$.fileId'))`)
+            .get(row.project_id, row.id, source.evidence.documentId, evidenceId, evidenceId) as {id: string} | undefined;
           generated.push({id: `evidence:${evidenceId}`, title: source.evidence.title.slice(0, 300),
             body: `${source.referenceStatus === 'superseded' ? '【历史来源，已失效】\n' : ''}${source.evidence.excerpt.slice(0, 5800)}`,
             owner: 'system', status: source.referenceStatus === 'superseded' ? 'stale' : 'current',
@@ -251,9 +324,21 @@ export class ResearchWikiRepository {
     return dependencies;
   }
   private currentDigest(projectId: string, dependency: WikiDependency): string | null {
+    if (dependency.kind === 'paper') return this.db.prepare(`SELECT p.version FROM research_paper_cards p
+      JOIN research_knowledge_documents d ON d.id=p.knowledge_id WHERE p.document_id=?
+      AND (d.project_id=? OR (d.project_id IS NULL AND EXISTS
+      (SELECT 1 FROM research_library_projects WHERE item_id=d.source_id AND project_id=?)))`)
+      .pluck().get(dependency.id, projectId, projectId) as string | undefined ?? null;
     if (!this.exists(dependency.kind === 'evidence' ? 'research_evidence' : 'research_claims', dependency.id, projectId)) return null;
     return this.dependencies(projectId, dependency.kind === 'evidence' ? [dependency.id] : [], dependency.kind !== 'evidence' ? [dependency.id] : [])
       .find(item => item.kind === dependency.kind)!.digest;
+  }
+  private paperDependencies(projectId: string, sources: PaperSource[]): WikiDependency[] {
+    return [...new Set(sources.map(source => source.documentId))].map(id => {
+      const digest = this.currentDigest(projectId, {kind: 'paper', id, digest: ''});
+      if (!digest) throw new Error('wiki_current_sources_required');
+      return {kind: 'paper', id, digest};
+    });
   }
   private exists(table: 'research_evidence' | 'research_claims', id: string, projectId: string): boolean {
     return this.db.prepare(`SELECT 1 FROM ${table} WHERE id=? AND project_id=?`).get(id, projectId) !== undefined;
@@ -277,10 +362,14 @@ export class ResearchWikiRepository {
       revision: row.revision, updatedAt: row.updated_at, job});
   }
   private sourceIds(row: PageRow): string[] {
-    return (this.db.prepare('SELECT id FROM research_evidence WHERE project_id=? AND document_id=? ORDER BY invalidated_at IS NOT NULL,rowid DESC LIMIT 50')
-      .all(row.project_id, row.source_document_id) as Array<{id: string}>).map(item => item.id);
+    return (this.db.prepare(`SELECT e.id FROM research_evidence e LEFT JOIN research_evidence_source_metadata m ON m.evidence_id=e.id
+      WHERE e.project_id=? AND (e.document_id=? OR json_extract(m.metadata_json,'$.documentId')=? OR json_extract(m.metadata_json,'$.fileId')=?)
+      ORDER BY e.invalidated_at IS NOT NULL,e.rowid DESC LIMIT 50`)
+      .all(row.project_id, row.source_document_id, row.source_document_id, row.source_document_id) as Array<{id: string}>).map(item => item.id);
   }
   private sourceCount(row: PageRow): number {
-    return this.db.prepare('SELECT COUNT(*) FROM research_evidence WHERE project_id=? AND document_id=?').pluck().get(row.project_id, row.source_document_id) as number;
+    return this.db.prepare(`SELECT COUNT(*) FROM research_evidence e LEFT JOIN research_evidence_source_metadata m ON m.evidence_id=e.id
+      WHERE e.project_id=? AND (e.document_id=? OR json_extract(m.metadata_json,'$.documentId')=? OR json_extract(m.metadata_json,'$.fileId')=?)`)
+      .pluck().get(row.project_id, row.source_document_id, row.source_document_id, row.source_document_id) as number;
   }
 }

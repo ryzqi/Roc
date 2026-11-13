@@ -1,4 +1,5 @@
 import {ResearchWikiRepository} from './wiki-repository';
+import {ResearchPaperCards} from './paper-card-service';
 import {recordCapabilityOperationReceipt} from '../../kernel/capability-operation-context';
 import { createHash, randomUUID } from 'node:crypto';
 
@@ -112,6 +113,7 @@ export class ResearchRepository {
   readonly scientificReviews: ResearchScientificReviewService;
   readonly knowledge: ResearchKnowledgeRepository;
   readonly wiki: ResearchWikiRepository;
+  readonly paperCards: ResearchPaperCards;
   readonly knowledgeJobs: ResearchKnowledgeJobs;
   private readonly projectLanguageReady: boolean;
 
@@ -155,14 +157,16 @@ export class ResearchRepository {
     this.scientificReviews = new ResearchScientificReviewService(this);
     this.knowledgeJobs = new ResearchKnowledgeJobs(db, now);
     this.knowledge = new ResearchKnowledgeRepository(db, (id) => { this.getProject(id); }, now);
-    this.wiki = new ResearchWikiRepository(db, this.evidence, id => {this.getProject(id);}, now);
+    this.wiki = new ResearchWikiRepository(db, this.evidence, id => {this.getProject(id);}, now, this.knowledge);
+    this.paperCards = new ResearchPaperCards(db, this.knowledge, this.wiki);
   }
 
   queueKnowledgeFromSource(input: KnowledgeSourceWrite, _sourceMetadata: Record<string, unknown> = {}): void {
     this.knowledgeJobs.enqueue(input.id);
+    this.paperCards.enqueue(input.id);
   }
 
-  flushKnowledgeFromSource(): void { this.knowledgeJobs.wake(); }
+  flushKnowledgeFromSource(): void { this.knowledgeJobs.wake(); this.paperCards.wake(); }
 
   listProjects(): ResearchProject[] {
     const rows = this.db

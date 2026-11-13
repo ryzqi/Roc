@@ -3,6 +3,7 @@ import * as s from '../../../shared/schemas/research-wiki-pages';
 import type {CapabilityDescriptor, RocPluginContext} from '../../kernel/types';
 import {RocDomainError} from '../../services/errors';
 import type {ResearchWikiRepository} from './wiki-repository';
+import type {ResearchPaperCards} from './paper-card-service';
 
 const descriptor = <I, O>(name: string, inputSchema: z.ZodType<I>, outputSchema: z.ZodType<O>): CapabilityDescriptor<I, O> =>
   ({name: `research.wiki.${name}`, version: '1.0.0', inputSchema, outputSchema});
@@ -16,13 +17,16 @@ const capabilities = {
   rollback: descriptor('rollback', s.wikiRollbackSchema, s.wikiPageSchema),
   history: descriptor('history', s.wikiHistorySchema, s.wikiRevisionSchema.omit({sections: true}).array()),
   revision: descriptor('revision', s.wikiRevisionReadSchema, s.wikiRevisionSchema),
-  follow: descriptor('follow', s.wikiFollowSchema, s.wikiPageSchema)
+  follow: descriptor('follow', s.wikiFollowSchema, s.wikiPageSchema),
+  section: descriptor('section', s.wikiSectionReadSchema, s.wikiSectionDetailSchema),
+  resynthesize: descriptor('resynthesize', s.wikiResynthesizeSchema, s.wikiPageSchema),
+  retryPaper: descriptor('paper.retry', s.wikiPageRequestSchema, s.wikiPageSchema)
 };
 export const researchWikiCapabilities = Object.values(capabilities);
-export function registerResearchWikiCapabilities(context: RocPluginContext, wiki: ResearchWikiRepository): void {
-  function register<I, O>(capability: CapabilityDescriptor<I, O>, run: (input: I) => O): void {
+export function registerResearchWikiCapabilities(context: RocPluginContext, wiki: ResearchWikiRepository, papers: ResearchPaperCards): void {
+  function register<I, O>(capability: CapabilityDescriptor<I, O>, run: (input: I) => O | Promise<O>): void {
     context.capabilities.register(context.pluginId, capability, async input => {
-      try {return run(capability.inputSchema.parse(input));} catch (error) {
+      try {return await run(capability.inputSchema.parse(input));} catch (error) {
         if (error instanceof Error && error.message.startsWith('wiki_')) {
           const messages: Record<string, string> = {
             wiki_revision_conflict: '页面已更新，请刷新后重试。', wiki_basis_changed: '原始依据已改变，请重新读取页面。',
@@ -47,4 +51,9 @@ export function registerResearchWikiCapabilities(context: RocPluginContext, wiki
   register(capabilities.history, q => wiki.history(q.projectId, q.pageId, q.offset));
   register(capabilities.revision, q => wiki.revision(q.projectId, q.pageId, q.revision));
   register(capabilities.follow, q => wiki.follow(q.projectId, q.pageId, q.expectedRevision, q.targetPageId));
+  register(capabilities.section, q => wiki.readSection(q));
+  register(capabilities.resynthesize, q => wiki.resynthesize(q));
+  register(capabilities.retryPaper, q => {
+    papers.retry(q.projectId, q.pageId); return wiki.read(q.projectId, q.pageId);
+  });
 }

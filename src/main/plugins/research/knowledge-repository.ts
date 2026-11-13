@@ -414,6 +414,10 @@ export class ResearchKnowledgeRepository {
   }
 
   /** A receipt describes the indexed snapshot, never a claim about an unindexed external file. */
+  chunkVersion(chunkId: string, projectId: string | null) {
+    return this.indexedVersion(chunkId, projectId, new Map());
+  }
+
   assertSearchCurrent(result: ResearchKnowledgeSearchResult): void {
     const {inputHash, ranker: _ranker, coverage: _coverage, ...snapshot} = result.ranking;
     const {projectId, embedding, candidates} = snapshot;

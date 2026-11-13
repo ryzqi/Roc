@@ -130,7 +130,7 @@ test('compile publication is atomic, failure visible, restart recovers a running
 test('trusted IPC binds human authority and project; generated drafts cannot be promoted to human content',async()=>{
   const f=await scene();try {
     const registry=new api.CapabilityRegistry();for(const descriptor of api.researchWikiCapabilities)registry.declare('research',descriptor);
-    api.registerResearchWikiCapabilities({pluginId:'research',capabilities:registry},f.wiki);
+    api.registerResearchWikiCapabilities({pluginId:'research',capabilities:registry},f.wiki,f.repository.paperCards);
     const adapter=api.createPluginCapabilityAdapter({invokeCapability:(...args)=>registry.invoke(...args)});
     const input=saveInput(f);input.section.body='Edited through real IPC';
     const rejected=await adapter.invoke('research.saveWiki',[input],0);assert.equal(rejected.ok,false);
@@ -164,4 +164,56 @@ test('source ingestion transaction rolls back its Wiki outbox and repeated captu
     f.repository.wiki.start();await f.repository.wiki.idle();
     assert.equal(f.repository.wiki.search(f.project.id)[0].revision,1);
   }finally{await f.repository.wiki.shutdown();f.close();}
+});
+
+test('parse outbox generates derived cards, reparse retains prose, and bounded incremental synthesis uses current original blocks',async()=>{
+  const f=createResearchFixture(api,'reading'),wiki=f.repository.wiki,cards=f.repository.paperCards;
+  const roles=['problem','contribution','method','experimental_setup','results','limitations'];
+  const publish=(parse,hash)=>{
+    const input={id:`paper:${parse}`,projectId:f.project.id,sourceType:'file',sourceId:'paper.pdf',title:'Paper card fixture',
+      content:`Original result ${parse}.`,chunks:[{content:`Original result ${parse}.`,locator:'PDF page 1',
+        semantic:{paperId:'paper',parseId:parse,sourceHash:hash,blockId:'original-page',sectionPath:['Results'],
+          semanticRole:'results',blockKind:'paragraph',relatedBlockIds:[]}}],embeddingPolicy:'none'};
+    f.repository.knowledge.upsertFromSource(input,{fileId:'stable-paper',parseId:parse,sourceHash:hash});
+    f.repository.queueKnowledgeFromSource(input);f.repository.flushKnowledgeFromSource();
+  };
+  try {
+    cards.start(async(_title,blocks)=>({sections:roles.map(role=>({role,body:`Derived ${role}.`,chunkIds:[blocks[0].source.chunkId]}))}));
+    publish('parse1','a'.repeat(64));await cards.idle();await wiki.idle();
+    let page=wiki.read(f.project.id,wiki.search(f.project.id)[0].id);
+    assert.equal(page.paperJob.status,'ready');assert.equal(page.current.sections.length,6);
+    assert.equal(page.current.sections[0].paperSources[0].blockId,'original-page');
+    assert.equal(f.repository.evidence.list(f.project.id).length,0);
+    assert.throws(()=>f.repository.evidence.capture({projectId:f.project.id,chunkId:`${page.page.id}:paper:results`}),/chunk_not_found/);
+    const card=page.current.sections[0];
+    page=wiki.save({projectId:f.project.id,pageId:page.page.id,expectedRevision:page.page.revision,
+      expectedBasisDigest:page.basisDigest,section:{id:'synthesis',title:'Assistant synthesis',body:'Retained interpretation.',
+        evidenceIds:[],claimIds:[],links:[],paperSources:card.paperSources}},'assistant');
+    const oldRevision=page.page.revision,old=page.current;
+    api.withResearchHumanContext({capability:'research.wiki.save',projectId:f.project.id,windowId:7},()=>wiki.save({
+      projectId:f.project.id,pageId:page.page.id,expectedRevision:page.page.revision,expectedBasisDigest:page.basisDigest,
+      section:{id:'note',title:'Human note',body:'Keep human prose.',evidenceIds:[],claimIds:[],links:[]}},'human'));
+    publish('parse2','b'.repeat(64));await cards.idle();await wiki.idle();
+    page=wiki.read(f.project.id,page.page.id);
+    assert.equal(wiki.search(f.project.id).length,1);
+    assert.equal(page.current.sections.find(s=>s.id==='synthesis').status,'stale');
+    assert.equal(page.current.sections.find(s=>s.id==='synthesis').body,'Retained interpretation.');
+    assert.equal(page.current.sections.find(s=>s.id==='note').body,'Keep human prose.');
+    assert.deepEqual(wiki.revision(f.project.id,page.page.id,oldRevision),old);
+    const detail=wiki.readSection({projectId:f.project.id,pageId:page.page.id,expectedRevision:page.page.revision,
+      sectionId:'synthesis',offset:0,maxChars:100});
+    assert.ok(detail.section.body.length<=100);
+    wiki.configureSynthesis(async basis=>basis.sections.map(s=>({id:s.id,title:s.title,body:'Updated from parse2.',
+      evidenceIds:[],claimIds:[],links:[],paperSources:[basis.originals[0].source]})));
+    page=await wiki.resynthesize({projectId:f.project.id,pageId:page.page.id,expectedRevision:page.page.revision,
+      expectedBasisDigest:page.basisDigest,sectionIds:['synthesis']});
+    assert.equal(page.current.sections.find(s=>s.id==='synthesis').status,'current');
+    assert.equal(page.current.sections.find(s=>s.id==='synthesis').paperSources[0].parseId,'parse2');
+    f.repository.evidence.capture({projectId:f.project.id,chunkId:'paper:parse2:chunk:0'});await wiki.idle();
+    assert.equal(wiki.search(f.project.id).length,1);
+    cards.start(async()=>({sections:roles.map(role=>({role,body:'Invented reference.',chunkIds:['invented']}))}));
+    cards.retry(f.project.id,page.page.id);await cards.idle();
+    assert.equal(wiki.read(f.project.id,page.page.id).paperJob.status,'failed');
+    assert.equal(f.repository.evidence.list(f.project.id).length,1);
+  }finally{await cards.shutdown();await wiki.shutdown();f.close();}
 });

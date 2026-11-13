@@ -7,10 +7,13 @@ import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '
 import type {ResearchWikiSnapshot} from '../../shared/schemas/research-wiki';
 import type {WikiPage, WikiSection} from '../../shared/schemas/research-wiki-pages';
 import {useLiteratureEditor} from './literature-editor-guard';
+import type {PaperSource} from '../../shared/schemas/research-paper-card';
+import type {z} from 'zod';
+import type {knowledgeContextResultSchema} from '../../shared/schemas/research-knowledge-context';
 
 const button = formSecondaryButtonClass;
 const field = formInputClass;
-const kinds = {source: '来源摘录', topic: '主题', comparison: '比较', dispute: '争议'};
+const kinds = {source: '论文与来源', topic: '主题', comparison: '比较', dispute: '争议'};
 const jobs = {queued: '排队中', running: '编译中', ready: '已编译', failed: '编译失败'};
 const reasons = {compile: '来源编译', human: '人工编辑', assistant: '助手草稿', rollback: '历史恢复'};
 type Props = {client: RocClient; projectId: string; snapshot?: ResearchWikiSnapshot; writable: boolean;
@@ -33,12 +36,12 @@ export function WikiPages({client, projectId, snapshot, writable, onAskAssistant
       <button className={button} disabled={locked || !writable} onClick={() => {onLock(true); setCreating(true);}}>新建主题页</button>
       <button className={button} onClick={pages.reload}>刷新列表</button>
     </div>
-    <p className="px-3 py-2 text-xs text-subtle">捕获证据后自动生成来源摘录；主题综合为草稿，科学支持仍以原始关系的人工审核为准。</p>
+    <p className="px-3 py-2 text-xs text-subtle">解析论文后生成未审核知识卡片；捕获证据后保留原文摘录。科学支持以原始关系的人工审核为准。</p>
     {pages.error && <p role="alert" className="p-3">{pages.error}</p>}
     <div className="wiki-pages-layout ui-scroll-region flex flex-1 flex-wrap">
       <aside className="wiki-page-list w-52 shrink-0 border-r-[0.5px] border-line p-2" aria-label="持久页面列表">
         {pages.data === null && !pages.error && <p role="status" className="p-2 text-xs text-subtle">正在读取页面…</p>}
-        {pages.data?.length === 0 && <p className="p-2 text-xs text-subtle">暂无页面。先在检索或阅读中捕获原始证据。</p>}
+        {pages.data?.length === 0 && <p className="p-2 text-xs text-subtle">暂无页面。先解析论文或捕获原始证据。</p>}
         {pages.data?.map(page => <button key={page.id} disabled={locked} aria-current={selected === page.id ? 'page' : undefined}
           data-testid="wiki-page-row" className="mb-1 block w-full rounded-control p-2 text-left hover:bg-[var(--overlay-hover)] aria-[current=page]:bg-[var(--overlay-active)] disabled:opacity-50"
           onClick={() => setSelected(page.id)}>
@@ -139,20 +142,24 @@ function PageDetail({client, projectId, pageId, writable, onAskAssistant, onEdit
   const [historyOpen, setHistoryOpen] = useState(false), [historyPending, setHistoryPending] = useState(false);
   const compiling = useRef(false), historyBusy = useRef(false), mounted = useRef(true);
   const compile = useAsyncAction((expectedRevision: number) => client.api.research.compileWiki({projectId, pageId, expectedRevision}), {label: '重新编译 Wiki'});
+  const retryPaper = useAsyncAction(() => client.api.research.retryWikiPaper({projectId, pageId}), {label: '生成论文卡片'});
+  const synthesize = useAsyncAction((data: WikiPage, sectionId: string) => client.api.research.resynthesizeWiki({
+    projectId, pageId, expectedRevision: data.page.revision, expectedBasisDigest: data.basisDigest, sectionIds: [sectionId]
+  }), {label: '更新助手章节'});
   const editor = useLiteratureEditor({label: 'Wiki 修订操作', dirty: () => false,
     busy: () => compiling.current || historyBusy.current, discard: () => {}});
-  const pending = compile.pending || historyPending, locked = edit !== null || pending;
+  const pending = compile.pending || retryPaper.pending || synthesize.pending || historyPending, locked = edit !== null || pending;
   useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
   useEffect(() => {onEditing(locked); return () => onEditing(false);}, [locked, onEditing]);
   const onHistoryPending = useCallback((value: boolean): void => {
     historyBusy.current = value; setHistoryPending(value);
     onEditing(edit !== null || compiling.current || value); editor.notify();
   }, [edit, editor, onEditing]);
-  const recompile = async (expectedRevision: number): Promise<void> => {
+  const mutate = async (work: () => Promise<{ok: boolean}>): Promise<void> => {
     if (!writable || edit !== null || editor.busy()) return;
     compiling.current = true; onEditing(true); editor.notify();
     try {
-      const result = await compile.run(expectedRevision);
+      const result = await work();
       if (!mounted.current || !result.ok) return;
       page.reload(); onChanged();
     } finally {
@@ -168,17 +175,21 @@ function PageDetail({client, projectId, pageId, writable, onAskAssistant, onEdit
     <p className="flex flex-wrap gap-x-2 text-xs text-subtle" data-testid="wiki-page-status">
       <span>{kinds[data.page.kind]}</span><span className="tabular-nums">草稿 r{data.page.revision}</span>
       <span>{data.page.job ? jobs[data.page.job.status] : '待编译'}</span>
+      {data.paperJob && <span>论文卡片：{data.paperJob.status === 'ready' ? '未审核草稿' : data.paperJob.status === 'failed' ? '生成失败' : '生成中'}</span>}
       {data.current && <span>{reasons[data.current.reason]}</span>}
     </p>
     <div className="flex flex-wrap gap-2">
       <button className={button} disabled={locked} onClick={page.reload}>刷新页面</button>
       <button className={button} disabled={!writable || locked || ['running', 'queued'].includes(data.page.job?.status ?? '')}
-        onClick={() => {void recompile(data.page.revision);}}>重新编译</button>
+        onClick={() => {void mutate(() => compile.run(data.page.revision));}}>重新编译</button>
+      {data.paperJob && <button className={button} disabled={!writable || locked || ['running', 'queued'].includes(data.paperJob.status)}
+        onClick={() => {void mutate(() => retryPaper.run());}}>重新生成论文卡片</button>}
       <button className={button} disabled={locked} aria-expanded={historyOpen} onClick={() => setHistoryOpen(value => !value)}>修订历史</button>
       {onAskAssistant && <button className={button} disabled={locked} onClick={() => onAskAssistant(
         `请用 research_wiki_read 读取当前项目的 Wiki 页面 ${pageId}（${data.page.title}），核对 lint 与原始证据后综合主题草稿。每个事实注明原始 evidenceId；过期依据先回原文检索。可用 research_wiki_draft 保存生成章节，保留人工章节，不确认科学支持。`)}>交给助手综合</button>}
     </div>
-    {(page.error || compile.error || data.page.job?.error) && <p role="alert">{page.error ?? compile.error ?? data.page.job?.error}</p>}
+    {(page.error || compile.error || retryPaper.error || synthesize.error || data.page.job?.error || data.paperJob?.error) &&
+      <p role="alert">{page.error ?? compile.error ?? retryPaper.error ?? synthesize.error ?? data.page.job?.error ?? data.paperJob?.error}</p>}
     {historyOpen && <History key={data.page.revision} client={client} projectId={projectId} pageId={pageId} currentRevision={data.page.revision}
       writable={writable && !locked} onPending={onHistoryPending} onChanged={() => {page.reload(); onChanged();}}/>}
     <details open data-testid="wiki-page-lint"><summary className="cursor-pointer">
@@ -197,9 +208,13 @@ function PageDetail({client, projectId, pageId, writable, onAskAssistant, onEdit
           }}>编辑章节</button></div>
         <p className="flex flex-wrap gap-x-2 text-xs text-subtle">
           <span>{section.owner === 'human' ? '人工维护' : '生成草稿'}</span>
-          <span>{section.owner === 'human' ? '自动编译保留' : '待核查'}</span>
+          <span>{section.status === 'stale' ? '依据已改变，待更新' : section.owner === 'human' ? '自动编译保留' : '待核查'}</span>
         </p>
+        {section.owner === 'assistant' && section.status === 'stale' && <button className={button} disabled={!writable || pending}
+          onClick={() => {void mutate(() => synthesize.run(data, section.id));}}>更新此助手章节</button>}
         <p className="whitespace-pre-wrap break-words" data-testid="wiki-section-body">{section.body}</p>
+        {section.paperSources?.map(source => <PaperOriginal key={`${source.chunkId}:${source.indexedVersion}`}
+          client={client} projectId={projectId} source={source}/>)}
         {section.evidenceIds.map(id => {const source = data.sources.find(item => item.evidenceId === id); return <details key={id}>
           <summary className="cursor-pointer break-words text-xs">
             <span className="inline-flex flex-wrap gap-x-2"><span>原始证据：{source?.title ?? id}</span>
@@ -226,7 +241,7 @@ function SectionEditor({client, projectId, data, section, writable, onClose, onS
   const {title, body} = draft;
   const save = useAsyncAction((value: typeof draft) => client.api.research.saveWiki({projectId, pageId: data.page.id, expectedRevision: data.page.revision,
     expectedBasisDigest: data.basisDigest, section: {id: section.id, ...value, evidenceIds: section.evidenceIds,
-      claimIds: section.claimIds, links: section.links}}), {label: '保存人工章节'});
+      claimIds: section.claimIds, links: section.links, paperSources: section.paperSources}}), {label: '保存人工章节'});
   const editor = useLiteratureEditor({label: 'Wiki 人工章节', dirty: () => current.current.title !== baseline.current.title ||
     current.current.body !== baseline.current.body, busy: () => submitting.current, discard: () => {
       current.current = baseline.current; setDraft(current.current); save.reset(); editor.notify();
@@ -258,6 +273,22 @@ function SectionEditor({client, projectId, data, section, writable, onClose, onS
     <div className="flex flex-wrap gap-2"><button type="submit" className={formPrimaryButtonClass} disabled={disabled || !body.trim() || !title.trim()}>保存人工章节</button>
       <button type="button" className={button} disabled={save.pending} onClick={() => editor.request(onClose, '继续将放弃尚未保存的 Wiki 人工章节。')}>取消编辑</button></div>
   </form>;
+}
+
+function PaperOriginal({client, projectId, source}: {client: RocClient; projectId: string; source: PaperSource}): React.JSX.Element {
+  const [original, setOriginal] = useState<z.infer<typeof knowledgeContextResultSchema> | null>(null);
+  const read = useAsyncAction(() => client.api.research.readKnowledgeContext({
+    projectId, chunkId: source.chunkId, expectedIndexedVersion: source.indexedVersion, maxChars: 4000, neighbors: true
+  }), {label: '读取论文原文'});
+  return <details>
+    <summary className="cursor-pointer break-words text-xs">论文原文：{source.sectionPath.join(' / ') || source.locator}</summary>
+    <p className="text-xs text-subtle">{source.locator}</p>
+    <button className={button} disabled={read.pending} onClick={() => {void read.run().then(result => {if (result.ok) setOriginal(result.data);});}}>读取原文上下文</button>
+    {read.error && <p role="alert" className="text-xs">{read.error}</p>}
+    {original && <blockquote className="ui-scroll-region max-h-60 whitespace-pre-wrap break-words border-l-[0.5px] border-line pl-3 text-xs">
+      {original.context.content}{original.neighbors.map(context => `\n\n${context.locator ?? ''}\n${context.content}`).join('')}
+    </blockquote>}
+  </details>;
 }
 
 function History({client, projectId, pageId, currentRevision, writable, onPending, onChanged}: {

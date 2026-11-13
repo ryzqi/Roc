@@ -1,4 +1,7 @@
 import {researchWikiCapabilities, registerResearchWikiCapabilities} from './wiki-capabilities';
+import {createPaperCardGenerator} from './paper-card-service';
+import {createWikiSynthesizer} from './wiki-synthesis';
+import type {LangChainModelFactory} from '../../services/langchain-model-factory';
 import {ResearchRerankerService} from './reranker-service';
 import {rerankerConfigSchema, rerankerSaveSchema} from '../../../shared/schemas/research-reranker';
 import {knowledgeContextRequestSchema, knowledgeContextResultSchema} from '../../../shared/schemas/research-knowledge-context';
@@ -260,6 +263,7 @@ export type ResearchPluginOptions = {
   toolchainRoot?: string;
   modelsRoot?: string;
   roleExecutor: ResearchRoleExecutor;
+  modelFactory: Pick<LangChainModelFactory, 'createDefaultChatModel'>;
   literatureFetch?: ConstructorParameters<typeof LiteratureSearchService>[0];
   zoteroFetch?: ConstructorParameters<typeof ZoteroAdapter>[0];
   embeddingFetch?: ConstructorParameters<typeof OpenAICompatibleEmbeddingClient>[0];
@@ -508,7 +512,9 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       registerResearchRunCapabilities(context, researchRepository.runs, runtime, researchRepository.reviews, options.executionGrantBroker);
       registerResearchArtifactInspectorCapability(context, researchRepository);
       registerResearchEvidenceCapabilities(context, researchRepository.evidence);
-      registerResearchWikiCapabilities(context, researchRepository.wiki);
+      registerResearchWikiCapabilities(context, researchRepository.wiki, researchRepository.paperCards);
+      researchRepository.wiki.configureSynthesis(createWikiSynthesizer(options.modelFactory));
+      researchRepository.paperCards.start(createPaperCardGenerator(options.modelFactory));
       researchRepository.wiki.start();
       registerResearchManuscriptCapabilities(context, researchRepository.manuscripts);
       registerResearchIdeaCapabilities(context, researchRepository.ideas);
@@ -642,6 +648,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       researchIndexer.start();
     },
     shutdown: async () => {
+      await repository?.paperCards.shutdown();
       await repository?.wiki.shutdown();
       await repository?.knowledgeJobs.shutdown();
       await readingDiscovery?.shutdown();

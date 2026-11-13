@@ -285,6 +285,11 @@ export class ResearchLibraryRepository {
     if (linked && item.archived) throw new Error('research_library_item_archived');
     if (linked) this.db.prepare('INSERT INTO research_library_projects (item_id,project_id) VALUES (?,?) ON CONFLICT DO NOTHING').run(id, projectId);
     else this.db.prepare('DELETE FROM research_library_projects WHERE item_id = ? AND project_id = ?').run(id, projectId);
+    if (linked) {
+      const sources = this.db.prepare('SELECT id FROM research_knowledge_documents WHERE source_id=?').all(id) as Array<{id: string}>;
+      for (const source of sources) this.research.paperCards.enqueue(source.id);
+      this.research.flushKnowledgeFromSource();
+    }
     const linkedItem = this.get(id);
     if (options.notify) this.onChanged?.([{ ...linkedItem, projectIds: [...new Set([...item.projectIds, projectId])] }], 'link');
     return linkedItem;

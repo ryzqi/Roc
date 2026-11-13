@@ -286,6 +286,7 @@ function createDefaultMainKernelPlugins(input: {
     }),
     createWorkspacePlugin({ rootDir: input.paths.root, workspaceService }),
     createResearchPlugin({
+      modelFactory: input.modelFactory,
       diagnosticsRoot: input.paths.diagnosticsDir,
       resourceRoot: join(input.paths.root, 'research-resources'),
       tasks: researchTasks,

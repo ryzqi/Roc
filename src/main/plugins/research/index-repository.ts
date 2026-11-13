@@ -217,6 +217,7 @@ export class ResearchIndexRepository {
         ON CONFLICT(file_id,source_hash) DO NOTHING`).run(job.fileId, payload.sourceHash, cachePath, job.input.size, job.input.kind, this.now());
       this.db.prepare('UPDATE research_index_files SET source_hash = ?,indexed_hash = ?,indexed_chunks = ?,parser_key = ?,payload_json = ?,updated_at = ? WHERE id = ?')
         .run(payload.sourceHash, payload.sourceHash, payload.chunks.length, payload.parserKey, JSON.stringify(payload), this.now(), job.fileId);
+      if (changed) {this.research.paperCards.enqueue(knowledgeId(job.fileId)); this.research.paperCards.wake();}
       return changed;
     })();
   }

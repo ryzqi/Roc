@@ -3,13 +3,13 @@ import {z} from 'zod';
 import type {StructuredToolInterface} from '@langchain/core/tools';
 import type {RocCapabilityRegistry} from '../../kernel/types';
 import type {ResearchToolDescriptor} from './research-tools';
-import {wikiCreateSchema, wikiSaveSchema, type WikiPage, type WikiSummary} from '../../../shared/schemas/research-wiki-pages';
+import {wikiCreateSchema, wikiSaveSchema, wikiSectionReadSchema, wikiResynthesizeSchema, type WikiPage, type WikiSummary} from '../../../shared/schemas/research-wiki-pages';
 
-const readNames = ['research_wiki_search', 'research_wiki_read', 'research_wiki_follow', 'research_wiki_lint'];
+const readNames = ['research_wiki_search', 'research_wiki_read', 'research_wiki_follow', 'research_wiki_lint', 'research_wiki_read_section'];
 export const WIKI_TOOL_DESCRIPTORS: readonly ResearchToolDescriptor[] = [
   ...readNames.map(name => ({name, scope: 'app' as const, effectClass: 'none' as const, riskLevel: 'low' as const,
     executionScopes: ['main', 'subagent'] as ResearchToolDescriptor['executionScopes']})),
-  ...['research_wiki_create', 'research_wiki_draft'].map(name => ({name, scope: 'app' as const,
+  ...['research_wiki_create', 'research_wiki_draft', 'research_wiki_resynthesize', 'research_wiki_retry_paper'].map(name => ({name, scope: 'app' as const,
     effectClass: 'external_call' as const, riskLevel: 'low' as const, executionScopes: ['main'] as ResearchToolDescriptor['executionScopes']}))
 ];
 const id = z.string().trim().min(1).max(300);
@@ -36,7 +36,7 @@ export function createWikiTools(input: {projectId: string; signal: AbortSignal; 
     const sections = page.current?.sections.slice(offset, offset + 3) ?? [];
     const evidenceIds = new Set(sections.flatMap(section => section.evidenceIds));
     return {derived: true, scientificReview: 'Wiki 草稿不代表人工科学审核；事实必须引用下列原始 evidenceId，并核查原文。',
-      page: page.page, basisDigest: page.basisDigest,
+      page: page.page, basisDigest: page.basisDigest, paperJob: page.paperJob,
       sections: sections.map(({dependencies: _dependencies, ...section}) => ({...section, body: clip(section.body, 1200),
         evidenceIds: section.evidenceIds.slice(0, 10), claimIds: section.claimIds.slice(0, 10), links: section.links.slice(0, 10)})),
       nextOffset: (page.current?.sections.length ?? 0) > offset + 3 ? offset + 3 : null,
@@ -55,6 +55,19 @@ export function createWikiTools(input: {projectId: string; signal: AbortSignal; 
       schema: z.object({query: z.string().trim().max(300), offset: z.number().int().min(0).default(0)}).strict()}),
     tool(({pageId, offset}) => read(async () => projectPage(await invoke<WikiPage>('read', {pageId}), offset)), {
       name: 'research_wiki_read', description: '分页读取派生草稿、修订和依据摘要。每次 3 节，按 nextOffset 继续；检查 lint 和原始 evidenceId。相同修订/页码不可重复访问。', schema: pageSchema}),
+    tool(request => invoke('section', request), {name: 'research_wiki_read_section',
+      description: '按准确修订深入读取一节草稿，字符预算最多 6000。paperSources 是原文定位，使用 research_read_knowledge_context 核验；摘要不能捕获为 Evidence。',
+      schema: wikiSectionReadSchema.omit({projectId: true})}),
+    tool(async request => {
+      const result = await invoke<WikiPage>('resynthesize', request);
+      return {page: result.page, basisDigest: result.basisDigest, lint: result.lint.slice(0, 10)};
+    }, {name: 'research_wiki_resynthesize', description: '对最多 3 节 stale 助手正文执行增量重新综合。先读最新修订和 basisDigest；只用当前原始依据，保留人工内容，结果仍未审核。',
+      schema: wikiResynthesizeSchema.omit({projectId: true})}),
+    tool(async request => {
+      const result = await invoke<WikiPage>('paper.retry', request);
+      return {page: result.page, paperJob: result.paperJob};
+    }, {name: 'research_wiki_retry_paper', description: '默认模型配置修复后，重试当前来源页的自动 Paper Card。不会改写人工或助手正文。',
+      schema: z.object({pageId: id}).strict()}),
     tool(request => read(async () => projectPage(await invoke<WikiPage>('follow', request), 0)), {
       name: 'research_wiki_follow', description: '沿已读取修订中的真实页面链接跳转；传原页的准确 revision。无法沿不存在的链接或其他项目导航。',
       schema: z.object({pageId: id, expectedRevision: z.number().int().positive(), targetPageId: id}).strict()}),
