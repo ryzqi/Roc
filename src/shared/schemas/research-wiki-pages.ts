@@ -14,7 +14,8 @@ export const wikiCreateSchema = wikiScopeSchema.extend({title: z.string().trim()
 export const wikiSectionInputSchema = z.object({id, title: z.string().trim().min(1).max(300),
   body: z.string().trim().min(1).max(6000), evidenceIds: ids, claimIds: ids, links: ids}).strict();
 export const wikiDependencySchema = z.object({kind: z.enum(['evidence', 'claim', 'relations']), id, digest}).strict();
-export const wikiSectionSchema = wikiSectionInputSchema.extend({owner: z.enum(['human', 'generated']),
+export const wikiSectionSchema = wikiSectionInputSchema.extend({owner: z.enum(['system', 'assistant', 'human']),
+  status: z.enum(['current', 'stale']),
   dependencies: z.array(wikiDependencySchema).max(200)}).strict();
 export const wikiRevisionSchema = z.object({pageId: id, revision: revision.positive(),
   sections: z.array(wikiSectionSchema).max(100), reason: z.enum(['compile', 'human', 'assistant', 'rollback']),

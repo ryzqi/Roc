@@ -23,6 +23,22 @@ const saveInput=(f,section=f.page.current.sections[0])=>({projectId:f.project.id
   section:{id:section.id,title:section.title,body:section.body,evidenceIds:section.evidenceIds,claimIds:section.claimIds,links:section.links}});
 const human=(f,cap,fn)=>api.withResearchHumanContext({capability:`research.wiki.${cap}`,projectId:f.project.id,windowId:7},fn);
 
+test('recompile retains assistant synthesis with old dependencies after source invalidation',async()=>{
+  const f=await scene();try {
+    const input=saveInput(f,{...f.page.current.sections[0],id:'synthesis'});
+    input.section.body='Assistant interpretation from original evidence.';
+    f.page=f.wiki.save(input,'assistant');
+    const saved=f.page.current.sections.find(section=>section.id==='synthesis');
+    f.repository.evidence.invalidateEvidence(f.evidence.id,f.project.id);
+    while(f.wiki.compileNext()){}
+    const current=f.wiki.read(f.project.id,f.page.page.id);
+    assert.equal(current.current.sections.find(section=>section.id==='synthesis')?.body,saved.body);
+    assert.deepEqual(current.current.sections.find(section=>section.id==='synthesis')?.dependencies,saved.dependencies);
+    assert.equal(current.current.sections.find(section=>section.id==='synthesis').status,'stale');
+    assert.ok(current.lint.some(issue=>issue.sectionId==='synthesis'&&issue.code==='stale'));
+  }finally{await f.wiki.shutdown();f.close();}
+});
+
 test('capture → durable source page → compiled topic → bounded navigation returns original evidence, with no invented review',async()=>{
   const f=await scene();try {
     assert.equal(f.page.page.kind,'comparison');assert.equal(f.page.page.job.status,'ready');
@@ -43,11 +59,11 @@ test('CAS and source digest fences protect human sections and reject stale assis
     const original=f.page.current, input=saveInput(f);input.section.body='Human maintained interpretation.';
     assert.throws(()=>f.wiki.save(input,'human'),/human_required/);
     f.page=human(f,'save',()=>f.wiki.save(input,'human'));
-    assert.throws(()=>f.wiki.save(input,'generated'),/revision_conflict/);
-    assert.throws(()=>f.wiki.save(saveInput(f,f.page.current.sections.find(s=>s.owner==='human')),'generated'),/human_section_protected/);
+    assert.throws(()=>f.wiki.save(input,'assistant'),/revision_conflict/);
+    assert.throws(()=>f.wiki.save(saveInput(f,f.page.current.sections.find(s=>s.owner==='human')),'assistant'),/human_section_protected/);
     const staleInput=saveInput(f,{...f.page.current.sections[0],id:'synthesis'});
     f.repository.evidence.updateClaim({id:f.claim.id,content:'Changed claim',status:'hypothesis',evidenceIds:[f.evidence.id],expectedVersion:1});
-    assert.throws(()=>f.wiki.save(staleInput,'generated'),/basis_changed/);
+    assert.throws(()=>f.wiki.save(staleInput,'assistant'),/basis_changed/);
     assert.deepEqual(f.wiki.revision(f.project.id,f.page.page.id,1),original);
   }finally{await f.wiki.shutdown();f.close();}
 });
@@ -62,7 +78,7 @@ test('source invalidation recompiles affected drafts, retains human sections and
     const unrelated=f.wiki.search(f.project.id).find(p=>p.title==='Source unrelated');
     f.repository.evidence.invalidateEvidence(f.evidence.id,f.project.id);
     assert.equal(f.wiki.read(f.project.id,f.page.page.id).page.job.status,'queued');
-    assert.throws(()=>f.wiki.save(staleSave,'generated'),/basis_changed/);
+    assert.throws(()=>f.wiki.save(staleSave,'assistant'),/basis_changed/);
     while(f.wiki.compileNext()){}
     f.page=f.wiki.read(f.project.id,f.page.page.id);
     assert.equal(f.page.current.sections.find(s=>s.owner==='human').body,'Human interpretation');
@@ -82,7 +98,7 @@ test('relations and claim changes invalidate only dependents; conflict candidate
     f.repository.evidence.relations.propose({projectId:f.project.id,claimId:f.claim.id,expectedClaimVersion:1,
       evidenceId:f.evidence.id,expectedSourceDigest:api.relationSourceDigest(f.repository.evidence.inspectEvidence(f.evidence.id,f.project.id)),
       kind:'contradicts',condition:null,supersedesRelationId:null},{kind:'agent',id:f.run.id});
-    assert.throws(()=>f.wiki.save(old,'generated'),/basis_changed/);
+    assert.throws(()=>f.wiki.save(old,'assistant'),/basis_changed/);
     assert.ok(f.wiki.read(f.project.id,f.page.page.id).lint.some(issue=>issue.code==='conflict_candidate'));
     while(f.wiki.compileNext()){}
     assert.equal(f.wiki.read(f.project.id,source.id).page.revision,source.revision);
@@ -128,8 +144,8 @@ test('trusted IPC binds human authority and project; generated drafts cannot be 
 test('assistant revision remains a draft with original references; structural lint reports uncited sections and broken links',async()=>{
   const f=await scene();try {
     const input=saveInput(f,{...f.page.current.sections[0],id:'synthesis'});input.section.body='A synthesis requiring verification.';
-    f.page=f.wiki.save(input,'generated');assert.equal(f.page.current.reason,'assistant');
-    assert.equal(f.page.current.sections.find(s=>s.id==='synthesis').owner,'generated');
+    f.page=f.wiki.save(input,'assistant');assert.equal(f.page.current.reason,'assistant');
+    assert.equal(f.page.current.sections.find(s=>s.id==='synthesis').owner,'assistant');
     const note=saveInput(f,{...input.section,id:'human-note',evidenceIds:[],claimIds:[],links:[]});
     f.page=human(f,'save',()=>f.wiki.save(note,'human'));
     assert.ok(f.page.lint.some(issue=>issue.code==='uncited'&&issue.sectionId==='human-note'));

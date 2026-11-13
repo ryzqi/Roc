@@ -41,7 +41,7 @@ export function registerResearchWikiCapabilities(context: RocPluginContext, wiki
   register(capabilities.read, q => wiki.read(q.projectId, q.pageId));
   register(capabilities.create, q => wiki.create(q));
   register(capabilities.save, q => wiki.save(q, 'human'));
-  register(capabilities.draft, q => wiki.save(q, 'generated'));
+  register(capabilities.draft, q => wiki.save(q, 'assistant'));
   register(capabilities.compile, q => wiki.recompile(q.projectId, q.pageId, q.expectedRevision));
   register(capabilities.rollback, q => wiki.rollback(q));
   register(capabilities.history, q => wiki.history(q.projectId, q.pageId, q.offset));

@@ -49,7 +49,7 @@ export class ResearchWikiRepository {
     return this.db.transaction(() => {
       const row = this.row(projectId, pageId), current = row.revision === 0 ? null : this.revision(projectId, pageId, row.revision);
       const lint: WikiPage['lint'] = [], sources: WikiPage['sources'] = [], links: WikiSummary[] = [];
-      const sections = current?.sections ?? [];
+      const sections = current?.sections.map(section => ({...section})) ?? [];
       const dependencyStates = new Map<string, string | null>();
       for (const section of sections) {
         if (section.evidenceIds.length === 0) lint.push({code: 'uncited', sectionId: section.id, message: '此章节没有原始证据引用；不能据此确认科学支持。'});
@@ -57,16 +57,22 @@ export class ResearchWikiRepository {
           const key = `${dep.kind}:${dep.id}`;
           if (!dependencyStates.has(key)) dependencyStates.set(key, this.currentDigest(projectId, dep));
           const actual = dependencyStates.get(key);
-          if (actual !== dep.digest) lint.push({code: actual === null ? 'missing' : 'stale', sectionId: section.id,
-            message: actual === null ? `依据已缺失：${dep.id}` : `依据版本已改变：${dep.id}`});
+          if (actual !== dep.digest) {
+            section.status = 'stale';
+            lint.push({code: actual === null ? 'missing' : 'stale', sectionId: section.id,
+              message: actual === null ? `依据已缺失：${dep.id}` : `依据版本已改变：${dep.id}`});
+          }
         }
         for (const evidenceId of section.evidenceIds) {
           if (sources.some(source => source.evidenceId === evidenceId)) continue;
-          if (!this.exists('research_evidence', evidenceId, projectId)) continue;
+          if (!this.exists('research_evidence', evidenceId, projectId)) {section.status = 'stale'; continue;}
           const source = this.evidence.inspectEvidence(evidenceId, projectId);
           sources.push({evidenceId, title: source.evidence.title, locator: source.evidence.locator,
             excerpt: source.evidence.excerpt, sourceDigest: relationSourceDigest(source), status: source.referenceStatus});
-          if (source.referenceStatus === 'superseded') lint.push({code: 'stale', sectionId: section.id, message: `原始证据已失效：${evidenceId}`});
+          if (source.referenceStatus === 'superseded') {
+            section.status = 'stale';
+            lint.push({code: 'stale', sectionId: section.id, message: `原始证据已失效：${evidenceId}`});
+          }
         }
         for (const link of section.links) {
           if (links.some(page => page.id === link)) continue;
@@ -84,7 +90,8 @@ export class ResearchWikiRepository {
       if (links.length === 0) lint.push({code: 'isolated', sectionId: null, message: '此页尚无到其他 Wiki 页面的链接。'});
       if (row.kind === 'source' && this.sourceCount(row) > 50) lint.push({code: 'source_limit', sectionId: null,
         message: '此来源超过 50 条捕获证据，本页仅编译最近的 50 条；其余证据请通过原始检索读取。'});
-      return {page: this.summary(row), current, basisDigest: hash([...dependencyStates].sort()), lint, sources, links};
+      return {page: this.summary(row), current: current ? {...current, sections} : null,
+        basisDigest: hash([...dependencyStates].sort()), lint, sources, links};
     })();
   }
 
@@ -113,7 +120,7 @@ export class ResearchWikiRepository {
     })();
   }
 
-  save(input: z.infer<typeof wikiSaveSchema>, owner: WikiSection['owner']): WikiPage {
+  save(input: z.infer<typeof wikiSaveSchema>, owner: 'human' | 'assistant'): WikiPage {
     const request = wikiSaveSchema.parse(input);
     if (owner === 'human') requireResearchHuman('research.wiki.save', request.projectId);
     return this.db.transaction(() => {
@@ -121,14 +128,13 @@ export class ResearchWikiRepository {
       if (row.revision !== request.expectedRevision) throw new Error('wiki_revision_conflict');
       if (page.basisDigest !== request.expectedBasisDigest) throw new Error('wiki_basis_changed');
       const sections = page.current!.sections, previous = sections.find(section => section.id === request.section.id);
-      if (owner === 'generated' && previous?.owner === 'human') throw new Error('wiki_human_section_protected');
+      if (owner === 'assistant' && previous?.owner === 'human') throw new Error('wiki_human_section_protected');
       // Assistant synthesis may use only this page's read, current source set; new sources need a new page selection.
       const allowed = new Set(page.sources.filter(source => source.status === 'recorded').map(source => source.evidenceId));
-      if (owner === 'generated' && (page.lint.some(issue => ['stale', 'missing'].includes(issue.code)) ||
-        request.section.evidenceIds.length === 0 || request.section.evidenceIds.some(id => !allowed.has(id)) ||
+      if (owner === 'assistant' && (request.section.evidenceIds.length === 0 || request.section.evidenceIds.some(id => !allowed.has(id)) ||
         request.section.claimIds.some(id => !sections.some(section => section.claimIds.includes(id))))) throw new Error('wiki_current_sources_required');
       for (const link of request.section.links) this.row(request.projectId, link);
-      const section: WikiSection = {...request.section, owner,
+      const section: WikiSection = {...request.section, owner, status: 'current',
         dependencies: this.dependencies(request.projectId, request.section.evidenceIds, request.section.claimIds)};
       this.publish(row, [...sections.filter(item => item.id !== section.id), section], owner === 'human' ? 'human' : 'assistant');
       return this.read(request.projectId, request.pageId);
@@ -176,34 +182,37 @@ export class ResearchWikiRepository {
     try {
       this.db.transaction(() => {
         const row = this.db.prepare('SELECT * FROM research_wiki_pages WHERE id=?').get(job.page_id) as PageRow;
-        const previous = row.revision === 0 ? [] : this.revision(row.project_id, row.id, row.revision).sections;
-        const human = previous.filter(section => section.owner === 'human');
+        const previous = this.read(row.project_id, row.id).current?.sections ?? [];
+        const retained = previous.filter(section => section.owner !== 'system');
         const selection = JSON.parse(row.selection_json) as Selection;
         const evidenceIds = new Set(row.kind === 'source' ? this.sourceIds(row) : selection.evidenceIds);
         const generated: WikiSection[] = [];
         for (const claimId of selection.claimIds) {
+          if (!this.exists('research_claims', claimId, row.project_id)) continue;
           const claim = this.evidence.getClaim(claimId);
           if (claim.projectId !== row.project_id) throw new Error('wiki_project_mismatch');
           for (const id of claim.evidenceIds) evidenceIds.add(id);
           generated.push({id: `claim:${claimId}`, title: '主张摘录 · 科学支持请查看人工审核', body: claim.content.slice(0, 6000),
-            owner: 'generated', evidenceIds: claim.evidenceIds, claimIds: [claimId], links: [],
+            owner: 'system', status: 'current', evidenceIds: claim.evidenceIds, claimIds: [claimId], links: [],
             dependencies: this.dependencies(row.project_id, claim.evidenceIds, [claimId])});
         }
         if (evidenceIds.size > 50) throw new Error('wiki_source_limit');
         for (const evidenceId of evidenceIds) {
+          if (!this.exists('research_evidence', evidenceId, row.project_id)) continue;
           const source = this.evidence.inspectEvidence(evidenceId, row.project_id);
           const target = this.db.prepare('SELECT id FROM research_wiki_pages WHERE project_id=? AND source_document_id=? AND id<>?')
             .get(row.project_id, source.evidence.documentId, row.id) as {id: string} | undefined;
           generated.push({id: `evidence:${evidenceId}`, title: source.evidence.title.slice(0, 300),
             body: `${source.referenceStatus === 'superseded' ? '【历史来源，已失效】\n' : ''}${source.evidence.excerpt.slice(0, 5800)}`,
-            owner: 'generated', evidenceIds: [evidenceId], claimIds: [], links: target ? [target.id] : [],
+            owner: 'system', status: source.referenceStatus === 'superseded' ? 'stale' : 'current',
+            evidenceIds: [evidenceId], claimIds: [], links: target ? [target.id] : [],
             dependencies: this.dependencies(row.project_id, [evidenceId], [])});
         }
-        const refreshed = generated.filter(section => !human.some(saved => saved.id === section.id));
-        const remaining = 100000 - human.reduce((size, section) => size + section.body.length, 0);
+        const refreshed = generated.filter(section => !retained.some(saved => saved.id === section.id));
+        const remaining = 100000 - retained.reduce((size, section) => size + section.body.length, 0);
         const perSection = Math.floor(remaining / Math.max(1, refreshed.length));
         if (refreshed.length > 0 && perSection < 100) throw new Error('wiki_page_too_large');
-        this.publish(row, [...refreshed.map(section => ({...section, body: section.body.slice(0, perSection)})), ...human], 'compile');
+        this.publish(row, [...refreshed.map(section => ({...section, body: section.body.slice(0, perSection)})), ...retained], 'compile');
         this.db.prepare("UPDATE research_wiki_jobs SET status='ready',error=NULL WHERE page_id=? AND generation=?")
           .run(row.id, job.generation);
       })();
