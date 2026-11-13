@@ -276,8 +276,16 @@ export class ResearchRepository {
   }
 
   deleteProject(id: string): { id: string; deleted: true } {
-    this.getProject(id);
-    this.db.prepare('DELETE FROM research_projects WHERE id = ?').run(id);
+    this.db.transaction(() => {
+      this.getProject(id);
+      // Recovery receipts do not cascade with their project or stage execution.
+      this.db.prepare('DELETE FROM research_node_decision_receipts WHERE project_id = ?').run(id);
+      this.db.prepare(
+        `DELETE FROM research_node_output_receipts
+         WHERE execution_id IN (SELECT id FROM research_stage_runs WHERE project_id = ?)`
+      ).run(id);
+      this.db.prepare('DELETE FROM research_projects WHERE id = ?').run(id);
+    })();
     return { id, deleted: true };
   }
 
