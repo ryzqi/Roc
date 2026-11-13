@@ -3,13 +3,42 @@ import { test } from 'node:test';
 import { createServer } from 'node:http';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { spawn } from 'node:child_process';
+import { createInterface } from 'node:readline';
+import { build } from 'esbuild';
+import electron from 'electron';
 import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 import { directory, EVAL_ROOT, fileInventory, hash } from '../lib/common.mjs';
 import { openRocModel } from '../lib/roc-model.mjs';
+import { testArtifacts } from './test-artifacts.mjs';
 
-const root = directory(join(EVAL_ROOT, '.runtime/tests'), 'model');
+const root = testArtifacts('model');
 const { readModelSelection, createConfiguredModel, completeConfigured } = await importTypeScriptModule(join(EVAL_ROOT, 'runtime/configured-model.ts'), {
   platform: 'node', external: ['@langchain/*', 'zod'], tempDir: join(root, 'imports')
+});
+const { terminateProcessTreeWithRetry } = await importTypeScriptModule('src/main/services/process-tree.ts', { platform: 'node' });
+test('Electron model host selects application safe-storage identity before app readiness', async () => {
+  const path = join(root, 'identity'), entry = join(path, 'host.mjs');
+  mkdirSync(path, { recursive: true });
+  await build({ entryPoints: [join(EVAL_ROOT, 'runtime/model-host.ts')], outfile: entry,
+    bundle: true, packages: 'external', platform: 'node', format: 'esm', logLevel: 'silent' });
+  const child = spawn(electron, [entry, path, 'roc'], { detached: true, stdio: ['pipe', 'pipe', 'ignore'] });
+  const lines = createInterface({ input: child.stdout });
+  try {
+    const first = await Promise.race([
+      lines[Symbol.asyncIterator]().next(),
+      new Promise((_, reject) => {
+        const timeout = setTimeout(() => reject(new Error('model_host_identity_timeout')), 5000);
+        timeout.unref();
+      })
+    ]);
+    assert.equal(first.done, false);
+    assert.deepEqual(JSON.parse(first.value), { type: 'stage', stage: 'startup', applicationName: 'roc' });
+  } finally {
+    child.stdin.end();
+    await terminateProcessTreeWithRetry(child);
+    lines.close();
+  }
 });
 function settings(path, endpoint, type = 'openai_compatible', credentialRef = 'secret:custom') {
   const id = type === 'llama_cpp' ? 'llama_cpp' : 'custom';
@@ -52,7 +81,8 @@ test('Roc configured model uses production parameters and leaves config/rotated 
 test('Electron model host reports missing credentials promptly without mutating the Roc source', async () => {
   const path = join(root, 'missing'); settings(path, 'http://127.0.0.1:9/v1', 'openai_compatible', null);
   const before = hash(fileInventory(path));
-  await assert.rejects(openRocModel({ rocRoot: path }), /provider_credential_missing/);
+  // Synthetic providers use Electron's namespace, without opening the user's Roc keychain.
+  await assert.rejects(openRocModel({ rocRoot: path, appName: 'Electron' }), /provider_credential_missing/);
   assert.equal(hash(fileInventory(path)), before);
 });
 test('Electron model host completes through an existing local provider without loading Roc state', async () => {
@@ -75,6 +105,7 @@ test('Electron model host completes through an existing local provider without l
     const before = hash(fileInventory(path));
     model = await openRocModel({ rocRoot: path });
     assert.equal(requests, 0);
+    assert.equal(model.identity.applicationName, 'roc');
     const reply = await model.complete({ model: 'test-model', messages: [{ role: 'user', content: '6*7' }] }, AbortSignal.timeout(10000));
     assert.equal(reply.choices[0].message.content, '42'); assert.equal(requests, 1);
     assert.equal(hash(fileInventory(path)), before);

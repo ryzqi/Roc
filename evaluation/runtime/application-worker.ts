@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { openExecutionGrantBroker } from '../../src/main/services/deep-agent/execution-grant-broker';
 import { ChatOpenAI } from '@langchain/openai';
+import { completionDelta } from './completion-delta';
 import { applyAgentDatabaseSchema, applyMemoryDatabaseSchema } from '../../src/main/infrastructure/database-schemas';
 import { CapabilityRegistry } from '../../src/main/kernel/capability-registry';
 import { EventBus } from '../../src/main/kernel/event-bus';
@@ -125,7 +126,7 @@ const model = new ChatOpenAI({
         choices: Array<{ index: number; message: unknown; finish_reason: string }> };
       const chunk = { id: completion.id, object: 'chat.completion.chunk', created: completion.created,
         model: completion.model, choices: completion.choices.map(choice => ({
-          index: choice.index, delta: choice.message, finish_reason: choice.finish_reason
+          index: choice.index, delta: completionDelta(choice.message), finish_reason: choice.finish_reason
         })) };
       const usage = { ...chunk, choices: [], usage: completion.usage };
       return new Response(`data: ${JSON.stringify(chunk)}\n\ndata: ${JSON.stringify(usage)}\n\ndata: [DONE]\n\n`,

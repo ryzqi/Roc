@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { prepareApplication, executeApplication } from '../lib/application.mjs';
 import { fixtureConfig, fixtureCompletion } from '../lib/fixture.mjs';
 import { fileInventory, hash, sha256, ROOT } from '../lib/common.mjs';
 import { scienceFixture } from './science-fixture.mjs';
 import { sciencePreflight, stageScience, executeScience, gradeScience } from '../lib/science.mjs';
+import { testArtifacts } from './test-artifacts.mjs';
 
-mkdirSync('evaluation/.runtime/tests', { recursive: true });
-const root = mkdtempSync(join(ROOT, 'evaluation/.runtime/tests/application-'));
+const root = testArtifacts('application');
 const artifact = await prepareApplication(root), hidden = join(root, 'hidden-gold.txt');
 writeFileSync(hidden, 'hidden-evaluation-truth');
 const input = { kind: 'qasper', prompt: 'Read /workspace/paper.json using read_file and answer JSON.', files: { 'paper.json': '{"title":"Visible paper","paragraphs":[{"id":"p0","text":"visible-paper-sentinel"}]}' } };

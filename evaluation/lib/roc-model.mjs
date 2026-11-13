@@ -2,22 +2,32 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
+import { readFileSync, rmSync } from 'node:fs';
 import { build } from 'esbuild';
 import electron from 'electron';
 import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 import { directory, EVAL_ROOT, ROOT, fail } from './common.mjs';
 
-export async function openRocModel({ rocRoot = process.env.ROC_DATA_ROOT ?? join(homedir(), '.roc'), providerId, modelId } = {}) {
+const applicationPackage = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+const applicationName = applicationPackage.productName ?? applicationPackage.name;
+
+export async function openRocModel({ rocRoot = process.env.ROC_DATA_ROOT ?? join(homedir(), '.roc'), providerId, modelId, appName = applicationName } = {}) {
   if (Boolean(providerId) !== Boolean(modelId)) fail('policy', 'provider_id_and_model_id_required_together');
+  if (typeof appName !== 'string' || !appName.trim() || appName.length > 80) fail('policy', 'app_name_invalid');
   const root = directory(join(EVAL_ROOT, '.runtime/model-hosts'), 'host'), path = join(root, 'host.mjs');
-  await build({ entryPoints: [join(EVAL_ROOT, 'runtime/model-host.ts')], outfile: path,
-    bundle: true, packages: 'external', platform: 'node', format: 'esm', logLevel: 'silent' });
+  try {
+    await build({ entryPoints: [join(EVAL_ROOT, 'runtime/model-host.ts')], outfile: path,
+      bundle: true, packages: 'external', platform: 'node', format: 'esm', logLevel: 'silent' });
+  } catch (error) { rmSync(root, { recursive: true, force: true }); throw error; }
   const { terminateProcessTreeWithRetry } = await importTypeScriptModule(join(ROOT, 'src/main/services/process-tree.ts'), { platform: 'node' });
-  const child = spawn(electron, [path, root], { cwd: root, detached: true, stdio: ['pipe', 'pipe', 'ignore'],
+  const child = spawn(electron, [path, root, appName], { cwd: root, detached: true, stdio: ['pipe', 'pipe', 'ignore'],
     env: { PATH: '/usr/bin:/bin', HOME: homedir(), TMPDIR: root, LANG: 'en_US.UTF-8',
       LANGSMITH_TRACING: 'false', LANGCHAIN_TRACING_V2: 'false' } });
   let pending = null, closed = false, closing, stage = 'startup';
-  const close = () => closing ??= (async () => { child.stdin.end(); await terminateProcessTreeWithRetry(child); lines.close(); })();
+  const close = () => closing ??= (async () => {
+    child.stdin.end(); await terminateProcessTreeWithRetry(child); lines.close();
+    rmSync(root, { recursive: true, force: true });
+  })();
   const reject = (code = `roc_model_host_unavailable_${stage}`) => { closed = true; pending?.reject(new Error(code)); pending = null; };
   child.once('error', () => reject()); child.once('close', () => reject()); child.stdin.on('error', () => reject());
   const lines = createInterface({ input: child.stdout });
@@ -26,7 +36,7 @@ export async function openRocModel({ rocRoot = process.env.ROC_DATA_ROOT ?? join
   lines.on('line', line => {
     try {
       const message = JSON.parse(line);
-      if (message.type === 'stage' && ['ready', 'configuration', 'credential_availability', 'credential_decryption', 'inference'].includes(message.stage)) {
+      if (message.type === 'stage' && ['startup', 'ready', 'configuration', 'credential_availability', 'credential_decryption', 'inference'].includes(message.stage)) {
         stage = message.stage; return;
       }
       if (message.type === 'error' && pending) {

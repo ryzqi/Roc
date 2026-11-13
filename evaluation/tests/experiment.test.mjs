@@ -1,16 +1,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { captureIncident, createExperiment, claimExperiment, assertExperimentManifest, assertExperimentToolSchema,
+import { captureIncident as captureIncidentRecord, createExperiment as createExperimentRecord, claimExperiment, assertExperimentManifest, assertExperimentToolSchema,
   assessExperiment, inspectExperiment, recordExperimentDecision } from '../lib/experiment.mjs';
 import { ROOT, directory, fileInventory, hash, readJson, sourceIdentity, writeJson } from '../lib/common.mjs';
 import { inspectRun, sealRun, summarize } from '../lib/report.mjs';
 import { importQasper } from '../lib/qasper.mjs';
+import { testArtifacts } from './test-artifacts.mjs';
 
-mkdirSync(join(ROOT, 'evaluation/.runtime/tests'), { recursive: true });
-const root = mkdtempSync(join(ROOT, 'evaluation/.runtime/tests/experiment-'));
+const root = testArtifacts('experiment');
+const captureIncident = options => captureIncidentRecord({ ...options, outputRoot: join(root, 'incidents') });
+const createExperiment = options => createExperimentRecord({ ...options, outputRoot: join(root, 'experiments') });
 const analysis = { category: 'agent', observation: 'The answer omits supporting evidence.', hypothesis: 'The retrieval instruction may be incomplete.',
   proposedChange: 'Clarify evidence retrieval in the prompt.', expectedOutcome: 'Improve grounded answers without breaking existing tasks.' };
 const acceptance = { nonInferiorityMargin: .05, absoluteFloors: { answerF1: .7, citationValidity: 1 }, trialFloors: { citationValidity: 1 } };
@@ -190,15 +192,16 @@ test('CLI executes the full incident/experiment/review lifecycle through the rea
     assert.equal(result.status, expected, `${result.stdout}\n${result.stderr}`);
     return JSON.parse(expected === 0 || result.stdout.trim() ? result.stdout : result.stderr);
   };
-  const options = ['--suite', suite, '--profile', 'smoke', '--dataset', dataset, '--fixture'];
+  const options = ['--suite', suite, '--profile', 'smoke', '--dataset', dataset, '--fixture', '--output-root', join(root, 'runs')];
   const baseline = cli(['run', ...options]);
   const analysisPath = join(root, 'analysis.json'); writeJson(analysisPath, analysis);
-  const incident = cli(['incident', baseline.directory, '--task', tasks[0].id, '--repeat', '0', '--analysis', analysisPath]);
+  const incident = cli(['incident', baseline.directory, '--task', tasks[0].id, '--repeat', '0', '--analysis', analysisPath,
+    '--output-root', join(root, 'incidents')]);
   const specPath = join(root, 'experiment.json');
   writeJson(specPath, { schemaVersion: 1, title: 'Fixture CLI lifecycle', hypothesis: 'Checks wiring only.',
     incidents: [incident.directory], allowedChanges: [], acceptance: { nonInferiorityMargin: .05,
       absoluteFloors: { answerF1: 0, evidenceF1: 0, citationValidity: 1 }, trialFloors: { citationValidity: 1 } } });
-  const experiment = cli(['experiment', 'create', baseline.directory, '--spec', specPath]);
+  const experiment = cli(['experiment', 'create', baseline.directory, '--spec', specPath, '--output-root', join(root, 'experiments')]);
   // A fixture protocol cannot be switched to paid/live execution. This rejects
   // before opening any real model host or accessing configured credentials.
   const switched = cli(['run', ...options.filter(o => o !== '--fixture'), '--experiment', experiment.directory], 2);

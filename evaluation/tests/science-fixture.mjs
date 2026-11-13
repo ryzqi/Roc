@@ -2,7 +2,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { preparePython } from '../lib/local-python.mjs';
 import { loadDataset, prepareScience } from '../lib/data.mjs';
-import { sha256, writeJson } from '../lib/common.mjs';
+import { EVAL_ROOT, sha256, writeJson } from '../lib/common.mjs';
+import { testArtifacts } from './test-artifacts.mjs';
 
 export async function scienceFixture(root) {
   const source = join(root, 'science-source'); mkdirSync(source);
@@ -21,7 +22,8 @@ print(json.dumps(dict(success=ok,evidence='independent numeric comparison')))
   for (const [kind, text] of Object.entries({ oracle: '42', alternative: '42.0', 'incorrect-output': '41', 'corrupt-output': 'broken', shortcut: '{"success":true}' })) {
     const path = join(source, 'calibration', kind); mkdirSync(path); writeFileSync(join(path, 'pred.csv'), text);
   }
-  const environment = await preparePython('test-stdlib');
+  const environments = testArtifacts('test-stdlib', join(EVAL_ROOT, 'environments'));
+  const environment = await preparePython('stdlib', undefined, undefined, { outputRoot: environments });
   const metadataPath = join(source, 'verified.json');
   writeJson(metadataPath, [{ instance_id: 1, task_inst: 'Compute twice the value in input.csv. Save pred.csv.', output_fname: 'pred.csv', github_name: 'synthetic-fixture' }]);
   const bundle = join(source, 'benchmark_verified.zip'); writeFileSync(bundle, 'synthetic test only; not official benchmark data');
@@ -29,6 +31,6 @@ print(json.dumps(dict(success=ok,evidence='independent numeric comparison')))
     tasks: [{ id: '1', publicDir: 'public', hiddenDir: 'hidden', verifierDir: 'verifier', calibrationDir: 'calibration',
       pythonEnvironment: environment, verifierEnvironment: environment, outputFiles: ['pred.csv'], license: 'synthetic-test' }] };
   const recipePath = join(source, 'recipe.json'); writeJson(recipePath, recipe);
-  const path = prepareScience(metadataPath, recipePath, bundle);
+  const path = prepareScience(metadataPath, recipePath, bundle, { cacheRoot: join(source, 'cache') });
   return { source, recipe, path, dataset: loadDataset(path) };
 }

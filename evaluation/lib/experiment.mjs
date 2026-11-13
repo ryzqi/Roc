@@ -51,12 +51,12 @@ function findTrial(run, ref) {
   if (matches.length !== 1) fail('policy', 'incident_trial_not_found');
   return matches[0];
 }
-export function captureIncident({ runPath, trial = null, analysis }) {
+export function captureIncident({ runPath, trial = null, analysis, outputRoot = join(EVAL_ROOT, 'local/incidents') }) {
   const run = inspectRun(realpathSync(runPath));
   if (run.manifest.split === 'holdout') fail('policy', 'holdout_not_for_optimization');
   const note = analysisSchema.parse(analysis), ref = trial === null ? null : taskRef.parse(trial);
   const observed = ref ? findTrial(run, ref) : run.summary;
-  const path = directory(join(EVAL_ROOT, 'local/incidents'), 'incident');
+  const path = directory(outputRoot, 'incident');
   const record = writeRecord(join(path, 'incident.json'), 'incident', {
     createdAt: new Date().toISOString(), source: runReference(run), trial: ref,
     observed, analysis: note, diagnosisStatus: 'operator-hypothesis'
@@ -84,7 +84,7 @@ function changedFiles(baseline, candidate) {
   const after = new Map(candidate.files.map(f => [f.path, f.sha256]));
   return [...new Set([...before.keys(), ...after.keys()])].filter(p => before.get(p) !== after.get(p)).sort();
 }
-export function createExperiment({ baselinePath, spec, specDirectory = process.cwd() }) {
+export function createExperiment({ baselinePath, spec, specDirectory = process.cwd(), outputRoot = join(EVAL_ROOT, 'local/experiments') }) {
   spec = experimentSpecSchema.parse(spec);
   const baseline = inspectRun(realpathSync(baselinePath)), a = baseline.manifest;
   if (baseline.summary.status !== 'complete') fail('policy', 'experiment_requires_complete_baseline');
@@ -99,7 +99,7 @@ export function createExperiment({ baselinePath, spec, specDirectory = process.c
     const path = realpathSync(resolve(specDirectory, p)), record = inspectIncident(path);
     return { path, recordHash: record.recordHash };
   });
-  const path = directory(join(EVAL_ROOT, 'local/experiments'), 'experiment');
+  const path = directory(outputRoot, 'experiment');
   const record = writeRecord(join(path, 'protocol.json'), 'protocol', {
     createdAt: new Date().toISOString(), spec: { ...spec, incidents: incidents.map(i => i.path) }, incidents,
     baseline: runReference(baseline), candidateSource: source, changedFiles: changes, toolSchemaHash: [...schemas][0]

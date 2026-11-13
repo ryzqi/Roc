@@ -23,7 +23,7 @@ Real AgentPluginRuntime and DeepAgent executor in chat mode, fresh thread/databa
 
 ## Environment
 
-macOS sandbox-exec allows runtime dependencies and private trial files, denies host user files, child process-group escape and network. Paper workspace is read-only. Setup freezes source bytes/lockfile, actual tool manifest, data identities, model config and scorer. Isolation probes must pass before a result can be accepted. Reset is a new worker/workspace/SQLite per task/repeat; kill the process group and retain cleanup evidence. Task, request, input, output, transcript and run-budget limits are explicit in config/code. External provider transport is the only permitted host network during live execution.
+macOS sandbox-exec allows runtime dependencies and private trial files, denies host user files, child process-group escape and network. Paper workspace is read-only. Setup freezes source bytes/lockfile, actual tool manifest, data identities, model config and scorer. Isolation probes must pass before a result can be accepted. Reset is a new worker/workspace/SQLite per task/repeat; kill the process group and retain cleanup evidence. Request/task timeouts, request input bytes, output tokens and transcript limits are explicit in config/code. There is no cumulative request/token quota or pricing table. External provider transport is the only permitted host network during live execution.
 
 ## Verification
 
@@ -43,4 +43,4 @@ Each supported question has visible textual source evidence; tools can page thro
 
 ## Open decisions
 
-The Roc default model is used unless an existing provider/model pair is selected. Optional versioned pricing and explicit request/time budgets are evaluator-only. Profiles: smoke=1x1, fast=5x1, full=50x3 development; release=all supported holdout x3, paper-level hash partition. No paid judge. Non-inferiority margin 0.05 and minimum cluster count are initial engineering settings requiring human calibration before use as a production gate. User approves manual triggering; exact spec remains Draft.
+The Roc default model is used unless an existing provider/model pair is selected. Request size and time limits are evaluator-only. Profiles: smoke=1x1, fast=5x1, full=50x3 development; release=all supported holdout x3, paper-level hash partition. No paid judge. Non-inferiority margin 0.05 and minimum cluster count are initial engineering settings requiring human calibration before use as a production gate. User approves manual triggering; exact spec remains Draft.

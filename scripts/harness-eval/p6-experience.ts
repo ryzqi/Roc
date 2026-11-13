@@ -413,24 +413,30 @@ function verifyPilotGate(directory: string): Record<string, unknown> {
   assert.equal(store.decide({ taskId: 'task-1', grants: ['network.read'], effectClasses: [] }).start, false);
 
   store.enable({ profile: 'read-only', rolloutPercent: 100 });
-  for (const { breakerReason, failureStreak, maxFailureStreak, expectedFailures, canStart } of [
-    { breakerReason: 'pilot_budget_exhausted', failureStreak: 0, maxFailureStreak: 2, expectedFailures: 0, canStart: true },
-    { breakerReason: 'pilot_allowance_exhausted', failureStreak: 1, maxFailureStreak: 1, expectedFailures: 0, canStart: true },
-    { breakerReason: 'pilot_allowance_exhausted', failureStreak: 2, maxFailureStreak: 2, expectedFailures: 1, canStart: true },
-    { breakerReason: 'pilot_budget_exhausted', failureStreak: 2, maxFailureStreak: 2, expectedFailures: 2, canStart: false }
+  for (const { breakerReason, failureStreak, maxFailureStreak, circuitOpen, canStart } of [
+    { breakerReason: null, failureStreak: 0, maxFailureStreak: 2, circuitOpen: false, canStart: true },
+    { breakerReason: null, failureStreak: 1, maxFailureStreak: 2, circuitOpen: false, canStart: true },
+    { breakerReason: 'pilot_failure_streak', failureStreak: 2, maxFailureStreak: 2, circuitOpen: true, canStart: false },
+    { breakerReason: 'user_rollback', failureStreak: 0, maxFailureStreak: 2, circuitOpen: true, canStart: false }
   ]) {
     writeFileSync(join(directory, 'pilot-state.json'), JSON.stringify({
-      ...store.read(), circuitOpen: true, breakerReason, failureStreak, maxFailureStreak,
-      extraBudgetMicrousd: 1, spentMicrousd: 2,
-      allowance: { modelCalls: 1, toolCalls: 1, tokens: 1 }
+      ...store.read(), circuitOpen, breakerReason, failureStreak, maxFailureStreak
     }));
     const reopened = new PilotStateStore({ directory });
     assert.equal(reopened.decide({ taskId: 'task-1', grants: ['workspace.read'], effectClasses: [] }).start, canStart);
-    assert.equal(reopened.read().failureStreak, expectedFailures);
-    assert.equal(reopened.read().breakerReason, null);
-    assert.equal('extraBudgetMicrousd' in reopened.read(), false);
-    assert.equal('allowance' in reopened.read(), false);
+    assert.equal(reopened.read().failureStreak, failureStreak);
+    assert.equal(reopened.read().breakerReason, breakerReason);
   }
+  const validState = store.read();
+  for (const corrupt of [
+    { ...validState, extraBudgetMicrousd: 1, spentMicrousd: 2 },
+    { ...validState, allowance: { modelCalls: 1, toolCalls: 1, tokens: 1 } },
+    { ...validState, failureStreak: -1 }
+  ]) {
+    writeFileSync(join(directory, 'pilot-state.json'), JSON.stringify(corrupt));
+    assert.throws(() => new PilotStateStore({ directory }).read(), /pilot_state_corrupt/);
+  }
+  writeFileSync(join(directory, 'pilot-state.json'), JSON.stringify(validState));
   store.enable({ profile: 'read-only', rolloutPercent: 100 });
   store.recordFailure();
   store.recordFailure();

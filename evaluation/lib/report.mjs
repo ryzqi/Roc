@@ -18,7 +18,19 @@ export function summarize(manifest, trials, fatal = null) {
 }
 export function sealRun(path, summary) {
   writeJson(join(path, 'summary.json'), summary);
-  writeFileSync(join(path, 'report.md'), `# Roc harness evaluation\n\n- Status: ${summary.status}\n- Suite: ${summary.suite}\n- Evidence: ${summary.evidence} (${summary.qualityConclusion})\n- Trials: ${summary.scored}/${summary.expected} scored, ${summary.invalid} invalid, ${summary.unattempted} unattempted\n\n## Metrics\n\n${Object.entries(summary.metrics).map(([k,v]) => `- ${k}: ${v ?? 'unavailable'}`).join('\n')}\n\n## Diagnostics and resource use\n\n\`\`\`json\n${JSON.stringify({ fatal: summary.fatal, failures: summary.failureCounts, exclusions: summary.exclusions, latencyMs: summary.latencyMs, usage: summary.usage }, null, 2)}\n\`\`\`\n\nSee manifest.json for frozen selection and exclusions, trials.json for per-task results, events.jsonl for dispatch history, and trial directories for full application traces. Partial metrics never establish a passing run.\n`, { flag: 'wx', mode: 0o600 });
+  let acceptance = '', dimensions = '';
+  if (summary.suite === 'roc-harness') {
+    acceptance = `- Harness gate: ${summary.assessment}\n- Coverage: ${summary.coverage}\n- Passed: ${summary.passed}/${summary.expected}; failed: ${summary.failed}\n`;
+    dimensions = `## Harness dimensions\n\n| Dimension | Passed | Scored | Expected |\n|---|---:|---:|---:|\n${Object.entries(summary.dimensions).map(([name, result]) =>
+      `| ${name} | ${result.passed} | ${result.scored} | ${result.expected} |`).join('\n')}\n\n`;
+    const failures = readJson(join(path, 'trials.json')).filter(trial => trial.status !== 'passed');
+    if (failures.length) {
+      const cell = value => String(value ?? '').replaceAll('|', '\\|').replace(/[\r\n]/g, ' ');
+      dimensions += `## Failed or invalid cases\n\n| Case | Repeat | Status | Failed criteria or invalid reason |\n|---|---:|---|---|\n${failures.map(trial =>
+        `| ${cell(trial.taskId)} | ${trial.repeat} | ${cell(trial.status)} | ${cell(trial.reason)} |`).join('\n')}\n\n`;
+    }
+  }
+  writeFileSync(join(path, 'report.md'), `# Roc harness evaluation\n\n- Status: ${summary.status}\n- Suite: ${summary.suite}\n- Evidence: ${summary.evidence} (${summary.qualityConclusion})\n${acceptance}- Trials: ${summary.scored}/${summary.expected} scored, ${summary.invalid} invalid, ${summary.unattempted} unattempted\n\n${dimensions}## Metrics\n\n${Object.entries(summary.metrics).map(([k,v]) => `- ${k}: ${v ?? 'unavailable'}`).join('\n')}\n\n## Diagnostics and resource use\n\n\`\`\`json\n${JSON.stringify({ fatal: summary.fatal, failures: summary.failureCounts, exclusions: summary.exclusions, latencyMs: summary.latencyMs, usage: summary.usage }, null, 2)}\n\`\`\`\n\nSee manifest.json for frozen selection and exclusions, trials.json for per-task results, events.jsonl for dispatch history, and trial directories for full application traces. Partial metrics never establish a passing run.\n`, { flag: 'wx', mode: 0o600 });
   const inventory = fileInventory(path);
   writeJson(join(path, 'seal.json'), { schemaVersion: 1, inventory, sha256: hash(inventory) });
 }

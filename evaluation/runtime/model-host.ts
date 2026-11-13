@@ -8,6 +8,9 @@ import { completeConfigured, createConfiguredModel } from './configured-model';
 // Console and provider errors may contain credentials: expose only fixed protocol errors.
 for (const method of ['log', 'info', 'warn', 'error', 'debug'] as const) console[method] = () => {};
 const root = resolve(process.argv[2]!);
+// macOS safeStorage selects its keychain namespace from the application name.
+// A standalone entry otherwise inherits "Electron" instead of the package name.
+app.setName(process.argv[3]!);
 for (const name of ['userData', 'sessionData', 'logs', 'crashDumps']) {
   const path = join(root, name); mkdirSync(path, { recursive: true, mode: 0o700 });
   app.setPath(name as 'userData', path);
@@ -20,6 +23,7 @@ const controller = new AbortController();
 process.on('SIGTERM', () => { controller.abort(); app.exit(0); });
 async function main() {
 try {
+  send({ type: 'stage', stage: 'startup', applicationName: app.getName() });
   await app.whenReady(); app.dock?.hide(); send({ type: 'stage', stage: 'ready' });
   let model: Awaited<ReturnType<typeof createConfiguredModel>> | undefined;
   for await (const line of iterator) {
@@ -31,7 +35,7 @@ try {
         encryptString: async () => { throw new Error('readonly'); },
         decryptString: async bytes => { send({ type: 'stage', stage: 'credential_decryption' }); const value = await safeStorage.decryptStringAsync(bytes); return { plaintext: value.result, shouldReEncrypt: false }; }
       }, request.selection);
-      send({ type: 'ready', identity: model.identity });
+      send({ type: 'ready', identity: { ...model.identity, applicationName: app.getName() } });
     } else if (request.type === 'complete' && model) {
       send({ type: 'stage', stage: 'inference' });
       send({ type: 'response', body: await completeConfigured(model, request.body, controller.signal) });

@@ -19,9 +19,9 @@ function environmentInventory(root) {
   visit(root); return files;
 }
 const runtimeProbe = 'import json,sys,sysconfig; print(json.dumps(dict(version=sys.version,basePrefix=sys.base_prefix,stdlib=sysconfig.get_path("stdlib"),executable=sys.executable)))';
-export async function preparePython(name, python = 'python3', requirements) {
+export async function preparePython(name, python = 'python3', requirements, { outputRoot = join(EVAL_ROOT, 'environments') } = {}) {
   if (!/^[a-z0-9][a-z0-9_-]*$/.test(name)) fail('policy', 'environment_name_invalid');
-  const root = directory(join(EVAL_ROOT, 'environments'), name);
+  const root = directory(outputRoot, name);
   const probe = await command(python, ['-I', '-B', '-c', 'import os,sys; print(os.path.realpath(sys.executable))']);
   if (probe.exitCode !== 0) fail('environment', 'python_interpreter_unavailable');
   let result = await command(probe.stdout.trim(), ['-m', 'venv', '--copies', root], { timeoutMs: 120000 });

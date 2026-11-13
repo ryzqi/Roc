@@ -11,6 +11,7 @@ import { fixtureConfig, fixtureCompletion } from './fixture.mjs';
 import { sealRun, summarize } from './report.mjs';
 import { command } from './process.mjs';
 import { claimExperiment, assertExperimentManifest, assertExperimentToolSchema, assertExperimentUnchanged } from './experiment.mjs';
+import { runHarness } from './harness.mjs';
 
 export const profiles = { smoke: { limit: 1, repeats: 1, split: 'development' }, fast: { limit: 5, repeats: 1, split: 'development' }, full: { limit: 50, repeats: 3, split: 'development' }, release: { limit: null, repeats: 3, split: 'holdout' } };
 export function selectTasks(tasks, profile) {
@@ -30,7 +31,8 @@ function scorerHash(suite) {
   return hash(names.map(name => [name, sha256(readFileSync(new URL(name, import.meta.url)))]));
 }
 export async function runBenchmark(options) {
-  const root = directory(RUNS, options.suite), events = journal(join(root, 'events.jsonl'));
+  if (options.suite === 'roc-harness') return runHarness(options);
+  const root = directory(options.outputRoot ?? RUNS, options.suite), events = journal(join(root, 'events.jsonl'));
   const controller = new AbortController(), cancel = () => controller.abort(new Error('operator_interrupt'));
   process.on('SIGINT', cancel); process.on('SIGTERM', cancel);
   const trials = []; let provider = null, fatal = null, artifact, modelHost, runToolSchemaHash = null, experiment;
@@ -42,6 +44,7 @@ export async function runBenchmark(options) {
   events.append({ type: 'run_started', suite: options.suite, profile: options.profile });
   try {
     if (!profile) fail('policy', 'unknown_profile');
+    if (options.task !== undefined) fail('policy', 'task_filter_requires_harness_suite');
     const registry = readJson(new URL('./registry.json', import.meta.url));
     const suite = registry.suites.find(s => s.id === options.suite);
     if (!suite || !['available', 'requires-verified-environment'].includes(suite.status)) fail('environment', 'suite_not_implemented');

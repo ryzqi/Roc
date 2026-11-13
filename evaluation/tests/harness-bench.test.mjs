@@ -1,7 +1,7 @@
 import { scienceFixture } from './science-fixture.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { cpSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, symlinkSync } from 'node:fs';
+import { cpSync, mkdirSync, writeFileSync, readFileSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { answerF1, evidenceF1, importQasper, qasperInput, gradeQasper } from '../lib/qasper.mjs';
 import { hash, sha256, writeJson, fileInventory, snapshotNativeEvidence, ROOT } from '../lib/common.mjs';
@@ -10,9 +10,9 @@ import { compareRuns, summarize, sealRun, inspectRun } from '../lib/report.mjs';
 import { createProvider, validateProviderOptions } from '../lib/provider.mjs';
 import { runBenchmark, selectTasks, profiles } from '../lib/runner.mjs';
 import { parseScienceGrade, gradeScience } from '../lib/science.mjs';
+import { testArtifacts } from './test-artifacts.mjs';
 
-mkdirSync('evaluation/.runtime/tests', { recursive: true });
-const root = mkdtempSync(join(ROOT, 'evaluation/.runtime/tests/protocol-'));
+const root = testArtifacts('protocol');
 const paragraph = 'The experiment measured a 25% increase.';
 const annotation = (overrides = {}) => ({ answer: { unanswerable: false, extractive_spans: ['25%'], free_form_answer: '', yes_no: null, evidence: [paragraph], ...overrides } });
 const paper = (id, annotations = [annotation()]) => ({ title: 'Test paper', abstract: 'Abstract text', full_text: [{ section_name: 'Results', paragraphs: [paragraph] }],
@@ -98,7 +98,7 @@ test('fixture runner seals actual tool schemas across independent task workspace
   writeJson(join(dataset, 'tasks.json'), tasks);
   const suite = 'qasper', provenance = { kind: 'synthetic-schema-test' }, inventory = fileInventory(dataset);
   writeJson(join(dataset, 'dataset.json'), { suite, provenance, inventory, identity: hash({ suite, provenance, inventory }) });
-  const result = await runBenchmark({ suite, profile: 'fast', dataset, fixture: true });
+  const result = await runBenchmark({ suite, profile: 'fast', dataset, fixture: true, outputRoot: join(root, 'runs') });
   assert.equal(result.status, 'complete', JSON.stringify(result.fatal));
   assert.equal(result.usage.requests, 4);
   const sealed = inspectRun(result.directory);

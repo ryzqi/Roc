@@ -19,13 +19,13 @@ export const scienceRecipeSchema = z.strictObject({
     license: z.string().min(1)
   })).min(1)
 });
-function sealDataset(dir, suite, provenance, tasks) {
+function sealDataset(dir, suite, provenance, tasks, cacheRoot = CACHE) {
   writeJson(join(dir, 'tasks.json'), tasks);
   const inventory = fileInventory(dir);
   const identity = hash({ suite, provenance, inventory });
   writeJson(join(dir, 'dataset.json'), { schemaVersion: 1, suite, identity, provenance, inventory,
     total: tasks.length, supported: tasks.filter(t => !t.unsupported).length });
-  const target = join(CACHE, `${suite}-${identity}`);
+  const target = join(cacheRoot, `${suite}-${identity}`);
   if (existsSync(target)) { loadDataset(target); rmSync(dir, { recursive: true }); }
   else renameSync(dir, target);
   return target;
@@ -58,12 +58,12 @@ export async function prepareQasper(archivePath) {
     return sealDataset(dir, 'qasper', { ...source, adaptation: 'roc-adapted-text-v1', split: 'paper-hash-80-20-v1' }, importQasper(JSON.parse(bytes)));
   } catch (error) { writeJson(join(dir, 'prepare-error.json'), { error: error.message }); throw error; }
 }
-export function prepareScience(metadataPath, recipePath, bundlePath) {
+export function prepareScience(metadataPath, recipePath, bundlePath, { cacheRoot = CACHE } = {}) {
   const metadataBytes = readFileSync(metadataPath), recipe = scienceRecipeSchema.parse(readJson(recipePath));
   if (sha256(metadataBytes) !== recipe.metadataSha256 || sha256(readFileSync(bundlePath)) !== recipe.bundleSha256) fail('data', 'science_source_hash_mismatch');
   const metadata = JSON.parse(metadataBytes);
   if (!Array.isArray(metadata) || new Set(metadata.map(r => String(r.instance_id))).size !== metadata.length) fail('data', 'science_metadata_invalid');
-  const dir = directory(CACHE, 'preparing-science'), ids = new Set();
+  const dir = directory(cacheRoot, 'preparing-science'), ids = new Set();
   const tasks = recipe.tasks.map(item => {
     if (ids.has(item.id)) fail('data', 'science_duplicate_task'); ids.add(item.id);
     const row = metadata.find(r => String(r.instance_id) === item.id);
@@ -87,5 +87,5 @@ export function prepareScience(metadataPath, recipePath, bundlePath) {
   writeJson(join(dir, 'recipe.json'), recipe);
   return sealDataset(dir, 'scienceagentbench', { split: 'verified', sourceRevision: recipe.sourceRevision,
     metadataSha256: recipe.metadataSha256, bundleSha256: recipe.bundleSha256, adaptation: 'roc-local-output-verifier-v2',
-    metadataTasks: metadata.length, selectedTasks: tasks.length, omittedIds: metadata.filter(r => !ids.has(String(r.instance_id))).map(r => String(r.instance_id)) }, tasks);
+    metadataTasks: metadata.length, selectedTasks: tasks.length, omittedIds: metadata.filter(r => !ids.has(String(r.instance_id))).map(r => String(r.instance_id)) }, tasks, cacheRoot);
 }

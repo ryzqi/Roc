@@ -1,120 +1,69 @@
-# 本地实验闭环验证 — 2026-11-09
+# Roc harness 重设计与清理验证 — 2026-11-13
 
-**Verified passing（本地实验流程）**：已接通 `sealed run → incident → 冻结 experiment → run --experiment → assess → 人工 decide`。流程要求固定实验条件、声明候选改动、一次候选登记、独立比较、绝对与逐题质量底线；fixture、未完成、证据不足不能被采纳。使用方法见 [EXPERIMENTS.md](EXPERIMENTS.md)。
+**Verified passing**：默认入口已改为真实生产运行的 `roc-harness`，10 个案例覆盖 7 个维度。完整运行 30/30 通过，failed / invalid / unattempted 均为 0；评测器和补充轨道回归通过。任务定义与 Roc world knowledge 保持 Draft / unreviewed。
 
-在 `/Users/Apple_501/Desktop/Roc/Roc` 执行：
+## 命令与结果
 
-```sh
-node --test evaluation/tests/experiment.test.mjs evaluation/tests/harness-bench.test.mjs evaluation/tests/harness-bench-application.test.mjs evaluation/tests/roc-model.test.mjs tests/unit/quality-application-adapter.test.mjs tests/unit/quality-runner.test.mjs tests/unit/quality-evaluation.test.mjs tests/unit/quality-dataset.test.mjs
-pnpm typecheck
-pnpm harness:quality:check
-```
+工作目录均为 `/Users/Apple_501/Desktop/Roc/Roc`，macOS ARM64。全部本机手动触发。
 
-64/64 测试通过，无失败或跳过；类型检查通过，以上命令均退出 0。S01 检查仍为 16 个 fixture、独立数据 0/200、`scientificStatus=insufficient`、modelCalls=0、externalCalls=0，退出 0 不代表真实质量通过。另已检查 CLI 帮助、示例与新增文档链接，并执行 `git diff --check`。本轮未重复全量 native 94 项。
+| 命令 | 结果 | 退出码 |
+|---|---|---:|
+| `node --test evaluation/tests/roc-harness.test.mjs evaluation/tests/harness-bench.test.mjs evaluation/tests/harness-bench-application.test.mjs evaluation/tests/roc-model.test.mjs evaluation/tests/experiment.test.mjs tests/unit/quality-application-adapter.test.mjs` | 51/51，通过，无跳过 | 0 |
+| `pnpm harness:bench run --profile fast` | 10/10，通过，invalid 0，控制请求 18，推理请求 0 | 0 |
+| `pnpm harness:bench run --profile full` | 30/30，通过，invalid 0，控制请求 54，推理请求 0 | 0 |
+| `pnpm harness:bench inspect /Users/Apple_501/Desktop/Roc/Roc/evaluation/runs/roc-harness-2026-11-13T06-24-40.254Z-3f6587f1` | 完整 seal 校验通过，gate pass | 0 |
+| `python3 .planning/2026-11-13-roc-harness-redesign/review-evidence.py` | 独立读取原始证据；30 个不同 run/thread、42 个进程组已退出、54 次请求与 journal 一致 | 0 |
+| `node .planning/2026-11-13-roc-harness-redesign/finish-checks.mjs` | 七轮 seal 有效；CLI 参数拒绝路径、无泄漏产物、35 个本地文档链接和 diff 校验通过 | 0 |
+| `pnpm harness:bench run --suite roc-native` | 94/94 合同通过，模型请求 0 | 0 |
+| `pnpm typecheck` | 通过 | 0 |
 
-测试覆盖 incident 的原始观察与人工假设分离、禁止 holdout 优化、未声明源码改动、数据/模型/预算/工具合同漂移、实际 schema 变化、重复候选登记、低分非劣仍不满足绝对底线、逐题失败不能被均分掩盖、冻结更严格非劣界限、人工决定与证据绑定，以及证据改写拒绝。尚未封存的候选明确显示等待状态；fixture 切换到真实模型会在打开模型宿主前失败。
+[Full 报告](runs/roc-harness-2026-11-13T06-24-40.254Z-3f6587f1/report.md)逐维度通过：恢复 3/3、工具副作用 9/9、审批 6/6、取消 3/3、并发 3/3、权限 3/3、循环 3/3。[Fast 报告](runs/roc-harness-2026-11-13T05-52-59.001Z-160cbaf3/report.md)和[native 报告](runs/roc-native-2026-11-13T06-00-56.588Z-9ccbac06/report.md)也保留完整原始证据。Fast 原始证据已用加强后的独立 verifier 重新校验，十个案例均通过；没有改写原 run 的 grade 或 seal。
 
-CLI 生命周期使用真实 Roc worker 和固定模型响应完成两轮运行，每轮真实执行一次 `read_file`，两次模型请求均为 fixture。工具读到答案 `25%`，固定响应却为 `Unanswerable`；独立 grader 正确给出答案与证据 F1 为 0。已核对完整 transcript、请求响应、工具结果、输出、grade、进程退出和清理；数据库文件保留，但没有查询 checkpoint 行。验收正确返回 `blocked / insufficient`，最终记录 `reject`，不构成模型效果改善的证据。
+最终回归日志保留在 [evaluation-tests-final.log](../.planning/2026-11-13-roc-harness-redesign/verification/evaluation-tests-final.log)，完整运行与校验见 [harness-full.log](../.planning/2026-11-13-roc-harness-redesign/verification/harness-full.log)、[harness-full-inspect.log](../.planning/2026-11-13-roc-harness-redesign/verification/harness-full-inspect.log)和 [typecheck-final.log](../.planning/2026-11-13-roc-harness-redesign/verification/typecheck-final.log)。检查涵盖真实运行、工具结果回放、审批前数据库与文件备份、删除恢复点、取消信号、两次同文件编辑、manifest 拒绝和循环终止。
 
-- [精确命令、退出码与日志索引](../.artifacts/harness-eval-loop-2026-11-09/verification-hatlhi93/verification.json)
-- [完整轨迹核对记录](../.artifacts/harness-eval-loop-2026-11-09/verification-hatlhi93/trace-review.md)
-- [基线报告](runs/qasper-2026-11-09T10-56-34.832Z-b6a3a855/report.md) 与 [候选报告](runs/qasper-2026-11-09T10-56-38.082Z-9d8f60ca/report.md)
-- [冻结协议](local/experiments/experiment-2026-11-09T10-56-37.614Z-95ab6ef4/protocol.json)、[验收](local/experiments/experiment-2026-11-09T10-56-37.614Z-95ab6ef4/assessment.json) 与 [人工决定记录](local/experiments/experiment-2026-11-09T10-56-37.614Z-95ab6ef4/decision.json)
+[原始证据复核](../.planning/2026-11-13-roc-harness-redesign/verification/harness-evidence-review.json)直接读取 SQLite 和完整阶段轨迹，没有导入生产实现或 verifier。复核了全部 trial 的请求哈希、独立 run/thread、进程退出和依赖链接清理，并逐一检查十个代表案例的状态：dispatch 前的 reserved 操作恢复后仅一次发布；已存结果恢复后不重复 dispatch；未知副作用阻断恢复；批准删除保留原始恢复字节；取消传播模型 abort；两个编辑都保留。运行封存时 1,300 个源码条目与 manifest 一致，worker 与 scorer 哈希匹配。文档结果在封存后补充，未重写运行证据。
 
-真实模型质量基线、S01 独立留出集、MCP 故障任务环境、官方 Science 任务审计与生产发布集成仍待完成。示例阈值不是已校准产品标准，人工采纳仅是本地开发决定。本轮无付费推理、真实凭据检查、部署、提交或远程写入。本文在运行封存后补写，已封存源码身份对应执行时文件，没有改写历史证据。
+评测器审计在原证据的副本上进行，验证替代助手措辞可通过，错误文件字节、额外文件、重复操作/dispatch、缺失结果回执、错误工具参数哈希、伪造未知副作用的成功、损坏的删除恢复字节、错误用量回执、缺失/损坏的数据库和请求响应均不能得分。重复或缺失 trial 身份使 gate incomplete。
 
-以下保留先前验证历史。
+## 清理结果
 
-# 本机隔离评测验证 — 2026-11-08
+先生成并核对精确清单，再执行；确认无活动评测进程，目标均为 `evaluation/` 下未跟踪的生成目录，删除不跟随符号链接。
 
-工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。macOS ARM64，Node 26.13.0、pnpm 12.5.1、Electron 45、Python 3.14.7。全部手动触发，无付费推理请求、提交或远程写入。目录名使用 UTC，因此本地 11 月 8 日对应部分目录的 11 月 7 日时间。
+| 产物 | 删除数量 | 原因 |
+|---|---:|---|
+| runs | 41 | 重复 fixture、已过时的零请求预检失败、本次评测器调试 run |
+| experiments | 74 | 69 个测试目录记录、5 个明确的 fixture CLI 生命周期记录 |
+| incidents | 89 | 84 个测试目录记录、5 个 fixture CLI 记录 |
+| Science 数据缓存 | 21 | provenance 全部为 `synthetic-test-only` |
+| Python 环境 | 24 | 22 个测试 venv、2 个无保留消费者的标准库演示/未完成环境 |
+| comparison | 1 | fixture 对比，结论为 insufficient |
+| .runtime | 1 | 无活动进程的 build、模型宿主、native scratch 与泄漏测试状态 |
 
-## 历史工具合同与预算修复验证（预算功能现已删除）
+合计 **251 个目录、31,676 个文件、2,863,280,128 分配字节（约 2.67 GiB）**。[清单](local/cleanup/2026-11-13/manifest.json)记录路径、删除理由、大小和证明文件哈希；[执行结果](local/cleanup/2026-11-13/result.json)确认删除及保留证据哈希未变。没有删除用户配置、凭据、生产数据库、正式外部输入或 `evaluation/` 之外的 S01/历史证据。
 
-**Verified passing**：模型请求按 manifest 和 main/subagent scope 过滤；public benchmark 宿主在转发前核对固定工具集合并保留实际 schema；比较器拒绝工具、权限、schema 漂移，缺少实际 schema 的旧记录只能给出不足证据；最低请求预算不可行时在打开模型宿主前失败。执行授权硬守卫保持有效。
+测试现在拥有独立 output root，并在失败时也回收 run、experiment、incident、Science 缓存和 venv。模型宿主在确认进程清理后删除临时 build/state，包括初始化失败路径。
 
-先加入回归测试，旧代码按预期出现 5 项失败（QASPER/Science 额外工具、比较遗漏、缺失证据、预算预检），修改后通过。随后在本文顶部工作目录执行：
+[最终产物检查](../.planning/2026-11-13-roc-harness-redesign/verification/final-checks.json)确认只保留七轮有用运行和官方 QASPER 数据缓存，environment / incident / experiment / comparison 根目录为空，无活动评测 worker。复测重新创建的四个空 `.runtime` 目录已逐个 `rmdir`，没有删除额外文件。公共套件误传 harness 专用 `--task` 的真实 CLI 检查返回 2 / `task_filter_requires_harness_suite`，模型请求 0，临时测试运行已清理。
 
-```sh
-node --test evaluation/tests/harness-bench.test.mjs evaluation/tests/harness-bench-application.test.mjs evaluation/tests/roc-model.test.mjs tests/unit/quality-application-adapter.test.mjs tests/unit/quality-runner.test.mjs tests/unit/quality-evaluation.test.mjs tests/unit/quality-dataset.test.mjs tests/unit/run-capability-manifest.test.mjs tests/unit/wiki-tools.test.mjs
-pnpm typecheck
-pnpm harness:eval
-pnpm harness:quality:check
-```
+## 保留的历史真实质量证据
 
-结果：78/78 相关测试、94/94 原生场景和类型检查通过，命令均退出 0。覆盖实际 worker 两类工具集合、宿主拒绝缺失/额外/重复/畸形工具及后续 schema 漂移、子代理 scope 与 Plan 限制、固定工具比较、150 次最低请求与默认 60 次预算的预检失败，以及两个全新工作区经 runner 执行后的 schema 证据封存。S01 仍为 16 个 fixture、独立数据 0/200、`insufficient`，没有质量通过结论。模型宿主测试仅用临时合成配置和本机回环服务，无付费调用，也未检查用户真实凭据。
+以下报告在本次清理后全部重新通过 `inspectRun` 的完整 seal 校验；它们早于本次重设计，未重新发送推理请求。
 
-完整命令与日志在 [verification.json](../.artifacts/agent-harness-evaluation-fixes-2026-11-08/verification.json)。实际模型质量、官方 Science 与独立 S01 评测仍未运行。本轮修复工程评测可信度，不证明模型质量提高。
+| 记录 | 实际结果 | 保留用途 |
+|---|---|---|
+| [QASPER full](runs/qasper-2026-11-13T04-42-44.960Z-4d519e26/report.md) | 150/150 scored，invalid 0，agent failure 122，模型请求 578 | 真实模型任务质量基线 |
+| [QASPER 中断](runs/qasper-2026-11-13T03-38-03.267Z-586b6df4/report.md) | attempted 86，scored 85，provider transport failure，unattempted 64 | 传输故障与未完成分母证据 |
+| [QASPER smoke](runs/qasper-2026-11-13T03-30-57.226Z-fa4723be/report.md) | 1/1 scored，agent failure 1，模型请求 10 | 模型接通的历史证据 |
+| [Native 修复前](runs/roc-native-2026-11-13T03-38-12.150Z-42d5ba6e/report.md) | incomplete / native_contracts_failed | 过时 pilot fixture 的故障证据 |
 
-以下保留工具合同修复前的验证历史；对应 run 与 seal 没有改写，不能作为修复后实际 schema 的证据。
+真实 full 的 answerF1 为 **0.0397542761**，evidenceF1 为 **0.0957753358**，citationValidity 为 **0.1866666667**。这些是固定文本适配子集的历史测量，不是官方榜单成绩，也不证明本次模型质量改善。官方锁定 QASPER 数据缓存继续保留。
 
-## 状态
+Native 的 pilot fixture 已改为检查当前 breaker 原因与 failure streak 的持久化，并拒绝已废弃或损坏字段；生产实现未改动。旧 budget/allowance 迁移断言与当前严格 schema 不一致，是 fixture 失效。
 
-- **Verified passing**：独立目录、Roc 只读模型工厂桥接、本机 Python 沙箱、五类自动评分校准、真实工具/授权链路、native/QASPER fixture、封存与比较。
-- **Blocked, not run**：真实默认模型质量基线。默认模型缺少 credentialRef；另一已配置模型在系统凭据可用性检查超时，尚未发生推理调用。
-- **Blocked, not run**：Science 官方任务质量评测。尚未提供和审计官方任务目录、依赖与本地 grader；合成测试只证明实现链路。
-- 精确 Task Specs / World Skill 保持 Draft / unreviewed；S01 独立 holdout 仍为 0/200、insufficient。
+## 验证边界
 
-## 测试与静态检查
+新套件使用真实 AgentPluginRuntime、DeepAgent executor/graph、文件工具、审批、用量账本、原子写入后端、工具副作用存储和 SQLite checkpointer。模型响应受控，故障在指定边界触发；通过表示这些条件下的运行行为符合验收。
 
-```sh
-node --test evaluation/tests/harness-bench.test.mjs evaluation/tests/harness-bench-application.test.mjs evaluation/tests/roc-model.test.mjs tests/unit/quality-application-adapter.test.mjs tests/unit/database-schema.test.mjs tests/unit/tool-effect-store.test.mjs tests/unit/execution-grant-broker.test.mjs
-pnpm typecheck
-pnpm harness:quality:check
-```
+尚未覆盖模型自主工具选择质量、context compaction、子代理协作、跨会话记忆、外部 MCP 副作用、注入抵抗、官方 Science 环境或生产 Electron UI。没有付费推理、真实凭据预检、部署、提交或远程写入。本机隔离依赖 `sandbox-exec`；无总内存/总磁盘硬配额，系统库未完整镜像冻结。Seal 是文件哈希清单，不是数字签名或不可改写存储。
 
-67/67 通过，TypeScript 通过。组成：评测协议 12、真实 benchmark runtime 4、模型桥接 3、既有 S01 adapter 6、数据库/副作用/执行授权 42。S01 命令退出 0，但明确报告 16 个 fixture、fullDatasetReady=false、scientificStatus=insufficient，没有质量通过结论。
-
-覆盖：真实 read/write 工具和 consumed ExecutionGrant；Python 执行和独立数值评分；隐藏文件、网络、子进程拒绝；超时与取消清理；oracle/alternative 接受与 incorrect/corrupt/shortcut 拒绝；数据及证据篡改；配对统计和预算；配置/轮转凭据保持字节不变。模型宿主成功路径通过临时本地 llama.cpp 协议服务验证；真实工厂的温度、请求头、工具 schema、输出上限通过受控服务验证，不表示实际云端模型可用。
-
-## 手动命令与证据
-
-```sh
-pnpm harness:bench run --suite roc-native
-pnpm harness:bench run --suite qasper --dataset evaluation/datasets/qasper-6be4b447c84046b689e019c551f3e331e962ff2837462d2cd6d6ff099a7df3d0 --profile fast --fixture
-```
-
-native 94/94，QASPER 两轮各 5/5 trial，均退出 0。QASPER 每题实际 read_file，固定 Unanswerable fixture 的答案和证据 F1 均为 0.2，引用合法性为 1；这些是接线检查数字，不是模型质量。已检查两次请求、tool call、输出、grade、退出码和清理记录，均完整。
-
-- [native 报告](runs/roc-native-2026-11-07T18-17-49.815Z-36c66ae0/report.md)
-- [QASPER 第一轮](runs/qasper-2026-11-07T18-17-49.807Z-5397e9bb/report.md)
-- [QASPER 第二轮](runs/qasper-2026-11-07T18-18-32.389Z-5fa97993/report.md)
-
-```sh
-pnpm harness:bench inspect evaluation/runs/roc-native-2026-11-07T18-17-49.815Z-36c66ae0
-pnpm harness:bench inspect evaluation/runs/qasper-2026-11-07T18-17-49.807Z-5397e9bb
-pnpm harness:bench compare evaluation/runs/qasper-2026-11-07T18-17-49.807Z-5397e9bb evaluation/runs/qasper-2026-11-07T18-18-32.389Z-5fa97993
-```
-
-inspect 均退出 0。compare 对两轮都重新验 seal 后按预期退出 2，conclusion=insufficient，所有 confidence95=null，避免 fixture/单次重复被判为质量通过。[comparison.json](comparisons/comparison-2026-11-07T18-19-05.591Z-05f0d35f/comparison.json)。
-
-```sh
-pnpm harness:bench environment cli-stdlib --python python3
-```
-
-退出 0，创建并冻结 [environment.json](environments/cli-stdlib-2026-11-07T18-18-32.394Z-a050fd6e/environment.json)。真实科学链路使用单测准备的标准库环境与合成输入，不冒充 Science 官方数据。
-
-## 实际模型配置阻塞的可观测性
-
-```sh
-node evaluation/lib/cli.mjs doctor
-node evaluation/lib/cli.mjs doctor --provider-id nvidia --model-id nvidia/nemotron-3.5-lightning-30b-a3b
-pnpm harness:bench run --suite qasper --dataset evaluation/datasets/qasper-6be4b447c84046b689e019c551f3e331e962ff2837462d2cd6d6ff099a7df3d0 --profile smoke --provider-options evaluation/provider-options.example.json
-pnpm harness:bench inspect evaluation/runs/qasper-2026-11-07T18-18-32.387Z-ac8f76af
-```
-
-默认 doctor 返回 provider_credential_missing。指定 NVIDIA 的 doctor 返回 roc_model_host_timeout_credential_availability（30 秒启动限时），可确认停在 safeStorage 可用性阶段，不能据此断言根因就是权限或 app identity。二者均无推理请求，退出 2。
-
-默认模型 smoke 封存 [失败报告](runs/qasper-2026-11-07T18-18-32.387Z-ac8f76af/report.md)：expected=1、attempted=0、unattempted=1、environment/provider_credential_missing、costBasis=not-dispatched。inspect 校验封存成功，同时因运行 incomplete 返回 2；不会变成 agent 错误或通过报告。
-
-## 必要的生产兼容修复
-
-`src/main/infrastructure/database-schemas.ts` 追加 agent migration 22，使既有工具副作用表接受生产 broker 使用的 isolated_execution。旧 migration checksum 不变；回归验证历史行/receipt/lease、四个索引、唯一约束及 result trigger。此次运行仅在评测/测试数据库应用，未初始化或迁移用户 Roc 数据库。
-
-原有 S01 worker 已恢复，不依赖新 benchmark worker。native runner 只增加可选 --output-root，旧默认入口不变。评测源码、任务、数据、状态和结果归入 evaluation/。
-
-## 剩余边界
-
-本机隔离依赖 macOS sandbox-exec；无容器式总内存/总磁盘配额，外部系统库未完整冻结。官方 Science 环境整理和 verifier 来源仍需逐题审计。公开数据 holdout 不保证无训练污染，bootstrap 判据尚未做功效校准。seal 为可核验文件哈希，不是签名或不可改写存储。原始轨迹保存本地，无自动上传。
-
-[改造前验证历史](validation-history/2026-11-08-before-local-isolation.md) 与原 `.artifacts/harness-bench/` 全部保留。本文在运行封存后补写，已封存 manifest 对应执行时源码；补充文档不改写旧证据。
+[更早的验证历史](validation-history/2026-11-08-before-local-isolation.md)仅描述当时实现。当前入口、限制和覆盖以 [README](README.md)及 [Task Spec](tasks/roc-harness/Task.md)为准。文档在运行完成后可以补充结果，已封存 manifest 仍对应实际执行时的源码。

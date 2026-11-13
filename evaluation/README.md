@@ -1,6 +1,43 @@
-# Roc 本机手动评测
+# Roc agent harness 评测
 
-所有评测由人运行命令触发。触发后自动完成配置预检、数据与源码冻结、真实 harness 执行、独立评分、证据封存及版本比较。使用当前仓库的 Roc 实现和已配置模型；不需要 Docker，也不启动 Roc 界面或生产数据库。
+默认套件 `roc-harness` 评测当前 Roc 的真实运行编排、checkpoint 恢复、工具副作用、审批、取消、并发编辑、权限和循环控制。模型响应由本地控制器提供，经过真实 LangChain 模型适配器；不需要配置模型或凭据，不发送推理请求。评分以持久化状态、文件字节和完整事件证据为准。
+
+所有评测由手动命令触发，使用隔离工作区和数据库，不启动 Roc 界面或生产数据库。QASPER、ScienceAgentBench 保留为模型任务质量补充轨道；native 保留为服务合同回归。精确任务定义见 [harness Task Spec](tasks/roc-harness/Task.md)，当前结果见 [VALIDATION.md](VALIDATION.md)。
+
+在仓库根目录执行，使用已安装的 pnpm 依赖和 macOS `sandbox-exec`：
+
+```sh
+pnpm harness:bench run                              # 默认 fast：10 个案例
+pnpm harness:bench run --profile full               # 10 个案例各重复 3 次
+pnpm harness:bench run --task tool-result-replay      # 单独诊断一个案例
+pnpm harness:bench inspect /absolute/run-directory
+```
+
+| Harness profile | 案例与重复 | 用途 |
+|---|---|---|
+| smoke | 结果回放、未知副作用阻断、审批拒绝，各 1 次 | 快速检查关键恢复边界 |
+| fast | 全部 10 个案例，各 1 次 | 本地开发检查，默认 |
+| full | 全部 10 个案例，各 3 次 | 完整 harness 回归 |
+
+`--task CASE_ID` 缩小诊断范围，通过只代表所选案例。控制模型没有质量 holdout 或 `release` profile；它不接受真实 provider、`--fixture` 或质量 experiment 参数。
+
+## Harness 验收
+
+| 维度 | 真实运行中验证的条件 |
+|---|---|
+| 恢复 | 模型请求未结算时进程退出，原 run/thread/checkpoint 和冻结输入可恢复 |
+| 工具副作用 | dispatch 前退出只发布一次；结果存储后退出只回放；持久化 receipt 后结果未知时阻断无人值守恢复 |
+| 审批 | 真实 interrupt 在副作用之前；拒绝保留文件，批准删除保留可恢复原始字节；重复决策被拒绝 |
+| 取消 | 模型信号收到 abort；run 为 cancelled，用量保持 unknown，后续工作停止 |
+| 并发 | 同文件的两个编辑均保留，各有独立操作和有效回执 |
+| 权限 | 只读 manifest 拒绝模型提出的写入，不创建副作用 |
+| 循环 | 无进展的重复工具调用被生产 harness 在有限请求内终止 |
+
+故障注入在真实副作用存储边界执行进程退出（code 73），恢复使用新进程和原数据库。审批决策由控制器在备份审批前的数据库与文件后释放。每个案例有独立目录、原生沙箱及清理记录。
+
+[Verifier](lib/harness-verifier.mjs) 不导入生产验证函数，只读 SQLite、原始文件和请求响应。它核对操作身份、参数哈希、租约、尝试次数、用量与结果回执，以及事件顺序。助手声称成功不能得分。任一条件失败即失败，维度均值不能抵消它；缺失或损坏证据、环境、传输、超时、源码漂移和清理失败返回 incomplete。
+
+这些案例测量指定条件下的 harness 行为。模型选择工具的质量、context compaction、子代理协作、跨会话记忆、外部 MCP 副作用和注入抵抗仍需独立任务环境与验收定义。
 
 ## 目录与隔离
 
@@ -18,23 +55,24 @@ evaluation/
   .runtime/     构建、模型宿主与 native 临时状态
 ```
 
-生成目录均被 Git 忽略。每轮、每题、每次重复使用新目录和数据库，不续写历史 run。`src/` 中的真实 AgentPluginRuntime、DeepAgent executor、文件工具和执行授权被复用；评测任务、隐藏真值与评分器在 worker 之外。原有 S01 评测保持独立，旧 `.artifacts/harness-bench/` 证据保留。
+生成目录均被 Git 忽略。每轮、每题、每次重复使用新目录和数据库，不续写历史 run；同一恢复案例在自己的目录中重启。`src/` 中的真实 AgentPluginRuntime、DeepAgent executor、文件工具和执行授权被复用；评测任务、隐藏真值与评分器在 worker 之外。原有 S01 评测保持独立，旧 `.artifacts/harness-bench/` 证据保留。
 
-模型宿主只读 Roc 的 `config/settings.json` 和加密凭据。默认根目录是 `ROC_DATA_ROOT` 或 `~/.roc`，可传 `--roc-root`。不初始化配置迁移，不轮转或回写凭据，Electron 的 userData/sessionData/logs/crashDumps 全部指向评测临时目录。明文凭据只在可信模型宿主内存中使用；worker 不接触密钥、模型端点或隐藏答案。
+公共质量套件的模型宿主只读 Roc 的 `config/settings.json` 和加密凭据。默认根目录是 `ROC_DATA_ROOT` 或 `~/.roc`，可传 `--roc-root`。不初始化配置迁移，不轮转或回写凭据，Electron 的 userData/sessionData/logs/crashDumps 全部指向评测临时目录。明文凭据只在可信模型宿主内存中使用；worker 不接触密钥、模型端点或隐藏答案。
 
 ## 当前覆盖
 
 | 套件 | 当前能力 | 证据边界 |
 |---|---|---|
-| roc-native | 94 项执行、权限、恢复、工具副作用等确定性检查 | harness 可靠性，非模型质量 |
+| roc-harness（默认） | 10 个真实运行案例，7 个维度，独立证据验收 | 控制模型下的运行行为，非模型质量 |
+| roc-native | 94 项执行、权限、恢复、工具副作用等确定性合同检查 | 含合成 pilot 任务；补充回归 |
 | qasper | 官方 v0.3 dev 文本数据、真实文件工具、答案/证据 F1 | Roc 文本适配子集，非官方全量榜单 |
 | scienceagentbench | verified 数据导入、本机 Python、真实执行授权、独立 grader 与五类自动校准 | 本地合成任务链路已验证；官方任务环境尚未导入 |
 
-BEIR-SciFact、LongMemEval、BFCL V4、AgentDojo 为 planned；RULER、GAIA、CORE-Bench 为 deferred，没有可运行适配器。详见 [registry](lib/registry.json)。[QASPER](tasks/qasper/Task.md)、[Science](tasks/scienceagentbench/Task.md)、[native](tasks/roc-native/Task.md) 的精确任务定义均为 Draft / unreviewed，不能视为已经批准的发布门槛。沿用项目原生 runner，未引入 Harbor。
+[Registry](lib/registry.json) 只列可运行或需要 verified 环境的适配器，已移除七个未实现的占位套件。[Harness](tasks/roc-harness/Task.md)、[QASPER](tasks/qasper/Task.md)、[Science](tasks/scienceagentbench/Task.md)、[native](tasks/roc-native/Task.md) 的精确任务定义均为 Draft / unreviewed，不能视为已经批准的发布门槛。沿用项目原生 runner，未引入 Harbor。
 
-## 首次运行
+## 公共质量套件
 
-在仓库根目录执行，使用项目已安装的 pnpm 依赖。真实 worker 与 Python 隔离当前需要 macOS `sandbox-exec`。
+以下命令用于补充质量轨道。`doctor` 无推理请求；不带 `--fixture` 的公共套件会使用 Roc 已配置模型。
 
 ```sh
 pnpm harness:bench list
@@ -44,6 +82,8 @@ pnpm harness:bench prepare qasper
 ```
 
 `doctor` 只检查所选模型配置与凭据可用性，不发送推理请求。它使用 Roc 的默认模型；可用 `--provider-id ID --model-id ID` 选择已配置且启用的模型。两个参数必须一起传。不会在失败时自动切换模型。
+
+模型宿主在 `app.whenReady()` 前按项目 `package.json` 的 `productName` / `name` 设置应用名，复用应用的 macOS safeStorage 钥匙串身份。当前身份是小写 `roc`，与应用显示名 `Roc` 不同；直接启动独立脚本会继承 `Electron`，导致已有凭据无法解密。`doctor` 和 `run` 均支持 `--app-name NAME` 显式覆盖，不自动尝试其他名称。就绪后的报告记录 `applicationName`，配置、凭据和应用数据目录仍保持只读。
 
 `prepare qasper` 下载锁定归档并校验归档及成员 SHA-256；可用 `--archive /path/qasper-train-dev-v0.3.tgz` 导入本地副本。把输出的实际目录作为后续 `--dataset` 参数：
 
@@ -55,13 +95,15 @@ pnpm harness:bench run --suite qasper --dataset "$ROC_EVAL_DATASET" --profile fa
 pnpm harness:bench run --suite qasper --dataset "$ROC_EVAL_DATASET" --profile smoke --provider-options evaluation/provider-options.example.json
 ```
 
-未传 `--fixture` 的公共套件会调用所选模型。模型配置或钥匙串失败会封存 incomplete 报告，未完成题目保留在分母中。11 月 8 日记录曾出现默认模型缺少 credentialRef、另一模型在钥匙串可用性检查阶段超时；这是历史结果，当前可用性以重新运行 `doctor` 为准，无需在评测中复制密钥或配置第二套 provider。
+模型配置或钥匙串失败会封存 incomplete 报告，未完成题目保留在分母中。已保留 11 月 13 日的真实 QASPER smoke、完整 150-trial 基线和一次 provider 中断记录，见 [VALIDATION.md](VALIDATION.md)。它们是历史测量，不能替代当前配置预检或证明本次模型质量改善。
 
 ## 每次更新的流程
 
-针对有明确失败假设的优化，使用[实验闭环](EXPERIMENTS.md)：从 sealed run 记录 incident，运行前冻结候选源码和验收阈值，使用 `run --experiment` 登记唯一候选，独立比较后记录人工采纳或拒绝。除非劣检查外，还要求绝对质量底线和可选逐题底线；fixture、未完成或证据不足不能被采纳。所有记录位于本地，不自动发布。
+Harness 改动先跑 `fast`，完成后跑 `full` 并 `inspect`；检查逐案例失败条件、原始状态和完整恢复轨迹。故障假设应对应具体边界，补充案例需更新 Task Spec 和独立 verifier。控制模型报告不产生统计模型质量结论。
 
-下面的独立 run/compare 入口保留，用于首次基线、一般诊断与 release 留出集复核：
+针对公共质量轨道的明确失败假设，使用[实验闭环](EXPERIMENTS.md)：从 sealed run 记录 incident，运行前冻结候选源码和验收阈值，使用 `run --experiment` 登记唯一候选，独立比较后记录人工采纳或拒绝。除非劣检查外，还要求绝对质量底线和可选逐题底线；fixture、未完成或证据不足不能被采纳。所有记录位于本地，不自动发布。
+
+公共套件的 run/compare 入口用于首次基线、一般诊断与 release 留出集复核：
 
 1. 更新前手动跑 native 和所需公共套件，保存输出目录作为 baseline。
 2. 更新后用相同数据、模型配置、请求配置、环境、profile 再跑，得到 candidate。
@@ -77,7 +119,7 @@ pnpm harness:bench compare /absolute/baseline-run /absolute/candidate-run
 
 `provider-options.json` 可按任务所需的输入大小和超时配置。
 
-| Profile | 分区与题数 | 重复 | 用途 |
+| 公共套件 profile | 分区与题数 | 重复 | 用途 |
 |---|---|---|---|
 | smoke | development 1 题 | 1 | 模型接通与小额试跑 |
 | fast | development 最多 5 题 | 1 | 快速诊断 |
@@ -130,11 +172,13 @@ pnpm harness:bench run --suite scienceagentbench --dataset /path/from-prepare --
 
 ## 报告与故障定位
 
-每轮有 `manifest.json`（源码/数据/选择/模型/环境）、`events.jsonl`（请求/任务事件）、`trials.json`、`summary.json`、`report.md` 和 `seal.json`。每题保留请求响应、工具事件、`tool-schema.json`（实际工具定义及哈希）、checkpoint、SQLite、最终输出、独立 grade、进程退出与清理记录。模型请求在运行时按当前 scope 的 manifest 过滤；宿主在转发前再次检查固定工具集合、重复项与 schema 结构，并拒绝 trial 内 schema 漂移。runner 拒绝不同 trial 之间的 schema 漂移；已发出请求的 agent 失败也保留 schema 哈希。native 原始普通文件归档；隔离测试故意产生的符号链接仅记录路径/目标，不跟随目标。
+每轮有 `manifest.json`（源码/数据/选择/模型/环境）、`events.jsonl`（请求/任务事件）、`trials.json`、`summary.json`、`report.md` 和 `seal.json`。Harness 每题保留阶段请求响应、审批决策、工具事件、崩溃前/最终 SQLite、文件字节、逐条件 grade、进程退出与清理记录。请求正文保留实际工具 schema。
+
+公共套件另保留 `tool-schema.json`（实际工具定义及哈希）、checkpoint 和最终答案。模型请求在运行时按当前 scope 的 manifest 过滤；宿主在转发前再次检查固定工具集合、重复项与 schema 结构，并拒绝 trial 内 schema 漂移。runner 拒绝不同 trial 之间的 schema 漂移；已发出请求的 agent 失败也保留 schema 哈希。native 原始普通文件归档；隔离测试故意产生的符号链接仅记录路径/目标，不跟随目标。
 
 证据文件独占创建，事件 fsync，seal 保存文件清单哈希，`inspect`/`compare` 重新核验。seal 能检测修改，不是数字签名或不可改写存储。worker 轨迹超 32 MiB 显式 invalid；不会静默截断后通过。原始数据/轨迹可能含任务内容，保存在本地且不自动上传。
 
-| 失败类别 | 处理 |
+| 公共质量套件失败类别 | 处理 |
 |---|---|
 | agent：错误答案、无效引用、缺产物、任务超时 | 留在质量分母中 |
 | harness/state：运行合同失败、源码变化 | incomplete |
@@ -145,13 +189,20 @@ pnpm harness:bench run --suite scienceagentbench --dataset /path/from-prepare --
 
 模型预检给出固定错误码；例如 `provider_credential_missing`、`roc_model_host_timeout_credential_availability`。不记录可能包含密钥的原始 provider 错误。执行期间不要修改 src/scripts/resources/evaluation 源码或依赖，结束时会复核身份。
 
-退出码：0 = 完整 run / 有效完整 inspect / 非劣比较；2 = incomplete、incompatible、insufficient 或参数错误；3 = regression 或 inconclusive。`run=0` 只表示评测完整，不能单独证明更新质量通过。
+退出码：Harness 的 `run/inspect` 返回 0 表示所选范围完整且全部通过，3 表示完整但有 harness 条件失败，2 表示 incomplete 或参数错误。公共套件的 `run=0` 只表示评测完整；compare 的 0 表示非劣，2 表示 incompatible/insufficient，3 表示 regression/inconclusive，不能单凭 run 退出码证明质量改善。
+
+## 产物保留与清理
+
+保留可复核的近期真实质量基线、重要中断证据和当前 harness/native 验证。重复 fixture、已解决的零请求预检失败、合成测试缓存和无消费者的测试 venv 可清理；正式 Science 环境与外部导入数据需先核对消费者。删除 run 时一起检查关联 comparison、incident 和 experiment，不留下指向已删目录的记录。
+
+11 月 13 日按审计清单删除了 251 个生成目录，释放约 2.67 GiB；[清单](local/cleanup/2026-11-13/manifest.json)与[执行结果](local/cleanup/2026-11-13/result.json)记录路径、理由、大小和保留证据哈希。没有修改已保留 run 的内容或 seal。S01 与 `evaluation/` 之外的旧证据不在本次清理范围。
+
+测试使用各自拥有的输出根目录，在失败时也运行清理 hook，回收 run、incident、experiment、Science 缓存和 venv。模型宿主在确认进程退出后删除临时状态。`--output-root PATH` 可为 run、compare、incident 和 experiment 指定独立输出父目录。`.runtime/` 是可重建状态，清理前必须确认没有评测进程。
 
 ## 验证
 
 ```sh
-node --test evaluation/tests/harness-bench.test.mjs evaluation/tests/harness-bench-application.test.mjs evaluation/tests/roc-model.test.mjs tests/unit/quality-application-adapter.test.mjs
-node --test evaluation/tests/experiment.test.mjs
+node --test evaluation/tests/roc-harness.test.mjs evaluation/tests/harness-bench.test.mjs evaluation/tests/harness-bench-application.test.mjs evaluation/tests/roc-model.test.mjs evaluation/tests/experiment.test.mjs tests/unit/quality-application-adapter.test.mjs
 node --test tests/unit/database-schema.test.mjs tests/unit/tool-effect-store.test.mjs tests/unit/execution-grant-broker.test.mjs
 pnpm typecheck
 pnpm harness:quality:check
