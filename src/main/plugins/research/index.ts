@@ -329,6 +329,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       context.capabilities.register(pluginId, knowledgeCapabilities.saveReranker, input => reranker.saveConfig(rerankerSaveSchema.parse(input)));
       const researchEmbeddings = new ResearchEmbeddingService(researchRepository.knowledge, embeddingClient, context, reranker);
       embeddings = researchEmbeddings;
+      researchRepository.wiki.configureSearch(researchEmbeddings);
       researchRepository.knowledgeJobs.start((id, signal) => researchEmbeddings.embedDocument(id, null, signal));
       const researchIndexer = new ResearchIndexService(researchRepository, toolchain, researchEmbeddings, options.indexRoot ?? null, context.logger, options.indexWatch);
       indexer = researchIndexer;

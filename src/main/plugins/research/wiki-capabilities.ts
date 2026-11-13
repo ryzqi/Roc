@@ -8,7 +8,7 @@ import type {ResearchPaperCards} from './paper-card-service';
 const descriptor = <I, O>(name: string, inputSchema: z.ZodType<I>, outputSchema: z.ZodType<O>): CapabilityDescriptor<I, O> =>
   ({name: `research.wiki.${name}`, version: '1.0.0', inputSchema, outputSchema});
 const capabilities = {
-  search: descriptor('search', s.wikiSearchSchema, s.wikiSummarySchema.array()),
+  search: descriptor('search', s.wikiSearchSchema, s.wikiSearchResultSchema),
   read: descriptor('read', s.wikiPageRequestSchema, s.wikiPageSchema),
   create: descriptor('create', s.wikiCreateSchema, s.wikiPageSchema),
   save: descriptor('save', s.wikiSaveSchema, s.wikiPageSchema),

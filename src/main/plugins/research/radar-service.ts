@@ -109,7 +109,7 @@ export class RadarService {
     const corpus = this.reading.research.library.list({projectId,includeArchived:false,query:'',limit:500}).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
     if (!corpus.length) throw new Error('项目文献库为空，先导入论文以建立兴趣画像。');
     // Probe even on cache hits: a broken current endpoint must not appear to work from old results.
-    const probe = await this.embeddings.embedReadingTexts(['academic recommendation endpoint probe'],this.controller.signal);
+    const probe = await this.embeddings.embedTexts(['academic recommendation endpoint probe'],null,this.controller.signal);
     const date = this.reading.now().slice(0,10), sorted = [...new Set(categories)].sort();
     const cacheKey = createHash('sha256').update(JSON.stringify([date,sorted,probe.configId,probe.revision,corpus.map(item=>[item.id,item.revision])])).digest('hex');
     const cached = this.reading.db.prepare('SELECT snapshot_json FROM research_radar_recommendations WHERE project_id=? AND cache_key=?').get(projectId,cacheKey) as {snapshot_json:string}|undefined;
@@ -124,8 +124,8 @@ export class RadarService {
     }
     if (!candidates.size) throw new Error('所选分类本期没有尚未入库的 arXiv 论文。');
     const papers = [...candidates.values()].slice(0,200);
-    const embedded = await this.embeddings.embedReadingTexts([...corpus.map(item=>`${item.metadata.title}\n${item.metadata.abstract ?? ''}`.slice(0,8000)),
-      ...papers.map(article=>`${article.title}\n${article.summary}`.slice(0,8000))],this.controller.signal);
+    const embedded = await this.embeddings.embedTexts([...corpus.map(item=>`${item.metadata.title}\n${item.metadata.abstract ?? ''}`.slice(0,8000)),
+      ...papers.map(article=>`${article.title}\n${article.summary}`.slice(0,8000))],'reading-discovery-v1',this.controller.signal);
     if (embedded.configId !== probe.configId || embedded.revision !== probe.revision) throw new Error('推荐期间嵌入配置改变，请重试。');
     const profile = embedded.vectors.slice(0,corpus.length);
     const weights = profile.map((_,index)=>1/(1+Math.log10(index+1)));

@@ -1,10 +1,10 @@
 import {tool} from 'langchain';
-import {claimComparisonRequestSchema} from '../../../shared/schemas/research-claim-comparison';
+import {claimComparisonToolSchema} from '../../../shared/schemas/research-claim-comparison';
 import {z} from 'zod';
 import type {StructuredToolInterface} from '@langchain/core/tools';
 import type {RocCapabilityRegistry} from '../../kernel/types';
 import type {ResearchToolDescriptor} from './research-tools';
-import {wikiCreateSchema, wikiSaveSchema, wikiSectionReadSchema, wikiResynthesizeSchema, type WikiPage, type WikiSummary} from '../../../shared/schemas/research-wiki-pages';
+import {wikiCreateSchema, wikiSaveSchema, wikiSectionReadSchema, wikiResynthesizeSchema, type WikiPage, type WikiSearchResult} from '../../../shared/schemas/research-wiki-pages';
 
 const readNames = ['research_wiki_search', 'research_wiki_read', 'research_wiki_follow', 'research_wiki_lint', 'research_wiki_read_section', 'research_compare_claims'];
 export const WIKI_TOOL_DESCRIPTORS: readonly ResearchToolDescriptor[] = [
@@ -52,10 +52,12 @@ export function createWikiTools(input: {projectId: string; signal: AbortSignal; 
       input.signal.throwIfAborted();
       return input.capabilities.invoke('research.claims.compare', {...request, projectId: input.projectId});
     }, {name: 'research_compare_claims', description: '比较两个准确主张版本的实验条件。条件差异不能认定矛盾，unknown 返回不可判定；可比的相反结论只产生未审核冲突候选，不确认任何科学关系。引用原始 evidenceIds。',
-      schema: claimComparisonRequestSchema.omit({projectId: true})}),
+      schema: claimComparisonToolSchema}),
     tool(({query, offset}) => read(async () => {
-      const pages = await invoke<WikiSummary[]>('search', {query, offset});
-      return {derived: true, pages: pages.slice(0, 10), nextOffset: pages.length > 10 ? offset + 10 : null,
+      const result = await invoke<WikiSearchResult>('search', {query, offset});
+      return {...result, derived: true, pages: result.pages.slice(0, 10),
+        nextOffset: result.pages.length > 10 ? offset + 10 : result.nextOffset,
+        scientificReview: '章节命中只用于导航；通过 research_wiki_read_section 深入读取，再核查原始 Evidence。',
         fallback: '无命中时使用 research_search_knowledge 检索原文。'};
     }), {name: 'research_wiki_search', description: '搜索当前项目的持久 Wiki 草稿标题与正文，供综述导航。事实和原句问题仍先检索原文。',
       schema: z.object({query: z.string().trim().max(300), offset: z.number().int().min(0).default(0)}).strict()}),

@@ -13,10 +13,11 @@ export const unknownExperiment: z.infer<typeof scientificExperimentSchema> = {
   unit: 'unknown', baseline: 'unknown', conditions: 'unknown', finding: 'unknown'
 };
 const id = z.string().trim().min(1);
-export const claimComparisonRequestSchema = z.object({
-  projectId: id, leftClaimId: id, rightClaimId: id,
+export const claimComparisonToolSchema = z.object({
+  leftClaimId: id, rightClaimId: id,
   expectedLeftVersion: z.number().int().positive(), expectedRightVersion: z.number().int().positive()
 }).strict().refine(value => value.leftClaimId !== value.rightClaimId, 'Two distinct claims required');
+export const claimComparisonRequestSchema = claimComparisonToolSchema.safeExtend({projectId: id});
 const boundClaim = z.object({
   claimId: id, version: z.number().int().positive(), claimHash: z.string(),
   evidenceIds: id.array(), experiment: scientificExperimentSchema

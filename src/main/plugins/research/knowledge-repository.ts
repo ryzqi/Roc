@@ -309,6 +309,17 @@ export class ResearchKnowledgeRepository {
     return row ? normalizeEmbeddingBlob(row.vector_blob,config.dimensions) : null;
   }
 
+  cacheEmbeddings(configId: string, revision: number, version: string, hashes: string[], vectors: Buffer[]): void {
+    if (hashes.length !== vectors.length) throw new Error('research_embedding_cache_count_mismatch');
+    this.db.transaction(() => {
+      const config = this.requireEmbeddingConfig(configId, revision);
+      const write = this.db.prepare('INSERT OR REPLACE INTO research_embedding_cache VALUES (?,?,?,?,?,?)');
+      hashes.forEach((hash, index) => write.run(configId, revision, version, hash,
+        normalizeEmbeddingBlob(vectors[index]!, config.dimensions), this.now()));
+      this.db.prepare('DELETE FROM research_embedding_cache WHERE config_id=? AND revision<>?').run(configId, revision);
+    })();
+  }
+
   searchKnowledge(input: {
     request: ResearchKnowledgeSearchRequest;
     vector: { configId: string; configRevision: number; blob: Buffer } | null;

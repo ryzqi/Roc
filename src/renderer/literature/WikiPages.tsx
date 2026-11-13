@@ -32,17 +32,23 @@ export function WikiPages({client, projectId, snapshot, writable, onAskAssistant
   return <div className="wiki-pages-container flex min-h-0 min-w-0 flex-1 flex-col" data-testid="wiki-pages">
     <div className="flex flex-wrap items-center gap-2 border-b-[0.5px] border-line p-3">
       <input type="search" aria-label="搜索持久页面" className={`${field} flex-1 basis-48`} value={query} disabled={locked}
-        onChange={event => {setQuery(event.target.value); setOffset(0);}} placeholder="搜索页面标题与正文"/>
+        onChange={event => {setQuery(event.target.value); setOffset(0);}} placeholder="搜索主题、实验条件或论文章节"/>
       <button className={button} disabled={locked || !writable} onClick={() => {onLock(true); setCreating(true);}}>新建主题页</button>
       <button className={button} onClick={pages.reload}>刷新列表</button>
     </div>
     <p className="px-3 py-2 text-xs text-subtle">解析论文后生成未审核知识卡片；捕获证据后保留原文摘录。科学支持以原始关系的人工审核为准。</p>
     {pages.error && <p role="alert" className="p-3">{pages.error}</p>}
+    {pages.data && searchQuery && <p role="status" className="px-3 pb-2 text-xs text-subtle" data-testid="wiki-search-status">
+      {pages.data.mode === 'hybrid' ? '关键词与语义混合检索' : '关键词检索'}
+      {pages.data.degradation === 'config_missing' ? ' · 配置嵌入模型后启用语义检索' :
+        pages.data.degradation === 'embedding_failed' ? ' · 语义服务失败，已降级' :
+          pages.data.degradation === 'index_pending' ? ` · 语义索引生成中 ${pages.data.indexedSections}/${pages.data.totalSections}` : ''}
+    </p>}
     <div className="wiki-pages-layout ui-scroll-region flex flex-1 flex-wrap">
       <aside className="wiki-page-list w-52 shrink-0 border-r-[0.5px] border-line p-2" aria-label="持久页面列表">
         {pages.data === null && !pages.error && <p role="status" className="p-2 text-xs text-subtle">正在读取页面…</p>}
-        {pages.data?.length === 0 && <p className="p-2 text-xs text-subtle">暂无页面。先解析论文或捕获原始证据。</p>}
-        {pages.data?.map(page => <button key={page.id} disabled={locked} aria-current={selected === page.id ? 'page' : undefined}
+        {pages.data?.pages.length === 0 && <p className="p-2 text-xs text-subtle">{searchQuery ? '没有命中。可尝试原始文献检索。' : '暂无页面。先解析论文或捕获原始证据。'}</p>}
+        {pages.data?.pages.map(page => <button key={page.id} disabled={locked} aria-current={selected === page.id ? 'page' : undefined}
           data-testid="wiki-page-row" className="mb-1 block w-full rounded-control p-2 text-left hover:bg-[var(--overlay-hover)] aria-[current=page]:bg-[var(--overlay-active)] disabled:opacity-50"
           onClick={() => setSelected(page.id)}>
           <span className="block break-words">{page.title}</span>
@@ -50,10 +56,12 @@ export function WikiPages({client, projectId, snapshot, writable, onAskAssistant
             <span>{kinds[page.kind]}</span><span className="tabular-nums">r{page.revision}</span>
             <span>{page.job ? jobs[page.job.status] : '待编译'}</span>
           </span>
+          {page.matches[0] && <span className="mt-1 block text-xs text-subtle">{page.matches[0].title} · {page.matches[0].snippet.slice(0, 100)}</span>}
         </button>)}
         <div className="flex flex-wrap gap-2 py-2"><button className={button} disabled={locked || offset === 0}
           onClick={() => setOffset(value => Math.max(0, value - 50))}>上一页</button>
-          <button className={button} disabled={locked || pages.data?.length !== 50} onClick={() => setOffset(value => value + 50)}>下一页</button></div>
+          <button className={button} disabled={locked || pages.data?.nextOffset == null}
+            onClick={() => setOffset(pages.data?.nextOffset ?? offset)}>下一页</button></div>
       </aside>
       <div className="min-w-0 flex-1 basis-72 p-3">
         {creating ? <CreatePage client={client} projectId={projectId} snapshot={snapshot} writable={writable}

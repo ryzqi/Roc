@@ -26,6 +26,7 @@
 | [原 PDF 与解析定位](research-pdf-navigation.md) | 原文/解析导航、坐标、批注与证据定位 |
 | [结构化阅读、笔记与学术雷达](research-reading-radar.md) | 结构化阅读、笔记、翻译与学术雷达 |
 | [证据来源与关系审核](research-evidence-relations.md) | 固定来源、主张关系、人工审核与来源替代 |
+| [科研 RAG 与持久 Wiki](research-rag-wiki.md) | 论文语义结构、精排、卡片、修订与章节导航 |
 | [学术关系来源快照](research-scholarly-relations.md) | 引文网络、来源关系与数据边界 |
 | [系统性综述](research-systematic-review.md) | 协议、筛选、提取、质量评价与综述报告 |
 | [文献持续监控](research-monitors.md) | 保存检索、增量监控与用户确认 |

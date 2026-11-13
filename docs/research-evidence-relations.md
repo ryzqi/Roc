@@ -19,6 +19,20 @@ null，原始来源文字仍可核对；这不表示它已具备托管文档预�
 
 ## 关系快照与人工审核
 
+Claim 必须包含 `experiment`：method、dataset、metric、value、unit、baseline、
+conditions 与 finding。文本缺失显式填 `unknown`；value 只接受有限数值或
+`unknown`，finding 为 improves/no_improvement/worsens/unknown。阶段产出使用
+`researchStageOutput/v5`，不会给缺少结构的旧产出补默认值。
+
+`research.compareClaims` 绑定同项目的两个 Claim 精确版本，并检查全部原始证据。
+方法、数据、指标、单位、基线或条件不同返回 condition_difference；条件可比但
+缺失事实或原始证据返回 undetermined；完整条件下 finding 不同只返回
+conflict_candidate/unreviewed。数值高低不自动认定矛盾，也不确认任何关系。
+比较页面和角色工具使用同一合同，审核仍通过原关系入口。
+
+实验条件参与 Claim hash 和不可变历史。修改条件生成新版本，使旧关系失效；
+waiting_approval 仅允许关系审核，实验条件编辑沿用正文的阶段权限。
+
 `research_evidence_relations` 保存 supports、contradicts、qualifies、
 depends_on、supersedes 及 historical。提议绑定真实 claim/evidence/project、
 claim version/hash、完整来源快照/digest、原文、定位、适用条件和提出者。

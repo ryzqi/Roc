@@ -3,7 +3,7 @@ import type {Database} from 'better-sqlite3';
 import type {z} from 'zod';
 import {
   wikiCreateSchema, wikiSaveSchema, wikiRollbackSchema, wikiRevisionSchema, wikiSummarySchema, wikiSectionSchema, wikiSectionReadSchema, wikiResynthesizeSchema,
-  type WikiSection, type WikiDependency, type WikiRevision, type WikiPage, type WikiSummary
+  type WikiSection, type WikiDependency, type WikiRevision, type WikiPage, type WikiSummary, type WikiSearchResult
 } from '../../../shared/schemas/research-wiki-pages';
 import {requireResearchHuman} from '../../services/research-human-context';
 import type {ResearchEvidenceRepository} from './evidence-repository';
@@ -11,6 +11,8 @@ import {relationSourceDigest, relationClaimHash} from './evidence-relation-repos
 import type {ResearchKnowledgeRepository} from './knowledge-repository';
 import type {PaperSource} from '../../../shared/schemas/research-paper-card';
 import type {WikiSynthesizer} from './wiki-synthesis';
+import {ResearchWikiSearch} from './wiki-search';
+import type {ResearchEmbeddingService} from './embedding-service';
 
 const hash = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 type PageRow = {id: string; project_id: string; kind: WikiSummary['kind']; title: string; source_document_id: string | null;
@@ -24,11 +26,13 @@ export class ResearchWikiRepository {
   private running: Promise<void> | null = null;
   private synthesizer: WikiSynthesizer | null = null;
   private readonly synthesisController = new AbortController();
+  readonly navigation: ResearchWikiSearch;
   constructor(private readonly db: Database, private readonly evidence: ResearchEvidenceRepository,
     private readonly requireProject: (id: string) => void, private readonly now: () => string,
-    private readonly knowledge: ResearchKnowledgeRepository) {}
+    private readonly knowledge: ResearchKnowledgeRepository) {this.navigation = new ResearchWikiSearch(db);}
 
   configureSynthesis(synthesizer: WikiSynthesizer): void {this.synthesizer = synthesizer;}
+  configureSearch(embeddings: ResearchEmbeddingService): void {this.navigation.configure(embeddings);}
   ensurePaperPage(projectId: string, documentId: string, title: string): void {
     this.requireProject(projectId);
     this.db.prepare(`INSERT INTO research_wiki_pages(id,project_id,kind,title,source_document_id,selection_json,updated_at)
@@ -44,11 +48,19 @@ export class ResearchWikiRepository {
     this.wake();
   }
 
-  search(projectId: string, query = '', offset = 0): WikiSummary[] {
+  async search(projectId: string, query = '', offset = 0): Promise<WikiSearchResult> {
     this.requireProject(projectId);
-    return (this.db.prepare(`SELECT * FROM research_wiki_pages WHERE project_id=?
-      AND (?='' OR instr(lower(title||char(10)||search_text),lower(?))>0)
-      ORDER BY updated_at DESC,id LIMIT 50 OFFSET ?`).all(projectId, query, query, offset) as PageRow[]).map(row => this.summary(row));
+    if (!query.trim()) {
+      const rows = this.db.prepare('SELECT * FROM research_wiki_pages WHERE project_id=? ORDER BY updated_at DESC,id LIMIT 51 OFFSET ?')
+        .all(projectId, offset) as PageRow[];
+      return {pages: rows.slice(0, 50).map(row => ({...this.summary(row), matches: []})), mode: 'list', degradation: null,
+        indexedSections: 0, totalSections: 0, nextOffset: rows.length > 50 ? offset + 50 : null};
+    }
+    const {hits, ...receipt} = await this.navigation.search(projectId, query, offset);
+    return {...receipt, pages: hits.flatMap(hit => {
+      const row = this.row(projectId, hit.pageId);
+      return row.revision === hit.revision ? [{...this.summary(row), matches: hit.matches}] : [];
+    })};
   }
 
   create(input: z.infer<typeof wikiCreateSchema>): WikiPage {
@@ -240,8 +252,12 @@ export class ResearchWikiRepository {
       while (!this.stopped && this.compileNext()) await new Promise<void>(resolve => setImmediate(resolve));
     }).finally(() => {this.running = null;});
   }
-  async idle(): Promise<void> {await this.running;}
-  async shutdown(): Promise<void> {this.stopped = true; this.synthesisController.abort(); if (this.timer !== null) clearInterval(this.timer); this.timer = null; await this.running;}
+  async idle(): Promise<void> {await this.running; await this.navigation.idle();}
+  async shutdown(): Promise<void> {
+    this.stopped = true; this.synthesisController.abort();
+    if (this.timer !== null) clearInterval(this.timer);
+    this.timer = null; await this.running; await this.navigation.shutdown();
+  }
 
   /** Each compilation publishes a complete snapshot within one SQLite transaction. */
   compileNext(): boolean {
@@ -302,9 +318,10 @@ export class ResearchWikiRepository {
     if (sections.reduce((size, section) => size + section.body.length, 0) > 100000) throw new Error('wiki_page_too_large');
     this.db.prepare('INSERT INTO research_wiki_revisions(page_id,revision,snapshot_json) VALUES (?,?,?)')
       .run(row.id, snapshot.revision, JSON.stringify(snapshot));
-    const update = this.db.prepare('UPDATE research_wiki_pages SET revision=?,search_text=?,updated_at=? WHERE id=? AND revision=?')
-      .run(snapshot.revision, sections.map(section => `${section.title}\n${section.body}`).join('\n'), snapshot.createdAt, row.id, row.revision);
+    const update = this.db.prepare('UPDATE research_wiki_pages SET revision=?,updated_at=? WHERE id=? AND revision=?')
+      .run(snapshot.revision, snapshot.createdAt, row.id, row.revision);
     if (update.changes !== 1) throw new Error('wiki_revision_conflict');
+    this.navigation.replace(row.id, snapshot.revision, row.title, sections);
     this.db.prepare('DELETE FROM research_wiki_dependencies WHERE page_id=?').run(row.id);
     this.indexDependencies(row.id, sections.flatMap(section => section.dependencies));
     // Retain selection dependencies even when a human override removes the generated section.

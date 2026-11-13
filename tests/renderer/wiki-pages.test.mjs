@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import electronPath from 'electron';
 import {_electron} from '@playwright/test';
 import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
-import {createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
+import {unknownExperiment, createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
 let directory,app,page,api,active,windowId;
 const fixtures=[],errors=[],holds=[],artifacts=join(process.cwd(),'.artifacts/knowledge-wiki');
 function deferred() {
@@ -22,7 +22,8 @@ before(async()=>{
     import {WikiWorkspace} from './src/renderer/literature/WikiWorkspace';
     import {requestNavigation} from './src/renderer/app/navigation-guard';
     const root=createRoot(document.getElementById('root'));
-    const methods=['searchWiki','readWiki','createWiki','saveWiki','compileWiki','rollbackWiki','wikiHistory','wikiRevision'];
+    const methods=['searchWiki','readWiki','createWiki','saveWiki','compileWiki','rollbackWiki','wikiHistory','wikiRevision',
+      'listClaims','compareClaims','readWikiSection','resynthesizeWiki','retryWikiPaper'];
     const client={api:{research:Object.fromEntries(methods.map(method=>[method,input=>{
       window.wikiCalls.push({method,input});return window.fromMain(method,input);
     }]))}};
@@ -63,7 +64,9 @@ async function scene() {
     content:'Original exact synthetic evidence.',chunks:[{content:'Original exact synthetic evidence.',locator:'results.csv:row:1'}],embeddingPolicy:'none'});
   f.evidence=f.repository.evidence.capture({projectId:f.project.id,chunkId:'source:chunk:0'});
   const registry=new api.CapabilityRegistry();for(const c of api.researchWikiCapabilities)registry.declare('research',c);
-  api.registerResearchWikiCapabilities({pluginId:'research',capabilities:registry},f.repository.wiki);
+  for(const c of api.researchEvidenceCapabilities)registry.declare('research',c);
+  api.registerResearchWikiCapabilities({pluginId:'research',capabilities:registry},f.repository.wiki,f.repository.paperCards);
+  api.registerResearchEvidenceCapabilities({pluginId:'research',capabilities:registry},f.repository.evidence);
   f.bridge=api.createPluginCapabilityAdapter({invokeCapability:(...args)=>registry.invoke(...args)});
   f.repository.wiki.start();await f.repository.wiki.idle();
   await page.evaluate(({projectId,snapshot})=>window.mount(projectId,snapshot),{projectId:f.project.id,snapshot:f.repository.evidence.wikiSnapshot(f.project.id)});
@@ -84,7 +87,7 @@ test('real Electron/IPC: capture → create theme → edit human section → inv
   assert.equal(await page.getByRole('button',{name:'主张与证据',exact:true}).isDisabled(),true);
   await page.getByRole('button',{name:'保存人工章节',exact:true}).click();await detail.getByText('人工维护',{exact:true}).waitFor();
   await detail.getByText('自动编译保留',{exact:true}).waitFor();
-  const topic=f.repository.wiki.search(f.project.id).find(p=>p.kind==='comparison');
+  const topic=(await f.repository.wiki.search(f.project.id)).pages.find(p=>p.kind==='comparison');
   assert.equal(f.repository.wiki.read(f.project.id,topic.id).current.reason,'human');
   await detail.getByRole('button',{name:'交给助手综合',exact:true}).click();assert.match(await page.evaluate(()=>window.promptForAssistant),/research_wiki_draft/);
   f.repository.evidence.invalidateEvidence(f.evidence.id,f.project.id);
@@ -102,6 +105,30 @@ test('real Electron/IPC: capture → create theme → edit human section → inv
   assert.match(await status.innerText(),/比较\s+草稿 r\d+\s+已编译\s+历史恢复/);
   assert.match(await detail.getByTestId('wiki-page-lint').innerText(),/失效/);
   assert.equal(f.repository.wiki.read(f.project.id,topic.id).current.reason,'rollback');
+  const search = page.getByLabel('搜索持久页面');
+  await search.fill('跨文献比较');
+  await page.getByTestId('wiki-search-status').getByText(/关键词检索/).waitFor();
+  assert.equal(await page.getByTestId('wiki-page-row').count(),1);
+  await search.fill('');
+  const artifact=f.repository.createArtifact({projectId:f.project.id,stage:'reading',kind:'reading_notes',title:'Conditions',path:null});
+  const experiment={...unknownExperiment,method:'Method A',dataset:'Dataset X',metric:'F1',value:91.2,unit:'percent',
+    baseline:'Baseline A',conditions:'Full training set',finding:'improves'};
+  f.repository.knowledge.upsertFromSource({id:'comparison-original',projectId:f.project.id,sourceType:'experiment',sourceId:'comparison-original',
+    title:'Comparison original',content:'Current original comparison.',chunks:[{content:'Current original comparison.',locator:'row:1'}],embeddingPolicy:'none'});
+  const current=f.repository.evidence.capture({projectId:f.project.id,chunkId:'comparison-original:chunk:0'});
+  const left=f.repository.evidence.createClaim({projectId:f.project.id,artifactId:artifact.id,subjectType:'claim',content:'Paper A',
+    status:'hypothesis',evidenceIds:[current.id],experiment});
+  const right=f.repository.evidence.createClaim({projectId:f.project.id,artifactId:artifact.id,subjectType:'claim',content:'Paper B',
+    status:'hypothesis',evidenceIds:[current.id],experiment:{...experiment,dataset:'Dataset Y'}});
+  const comparison=page.getByTestId('wiki-claim-comparison');
+  await comparison.locator('summary').click();
+  await comparison.getByLabel('主张 A',{exact:true}).selectOption(left.id);
+  await comparison.getByLabel('主张 B',{exact:true}).selectOption(right.id);
+  await comparison.getByRole('button',{name:'比较条件',exact:true}).click();
+  await comparison.getByRole('status').getByText(/条件差异/).waitFor();
+  assert.match(await comparison.innerText(),/Dataset X/);
+  assert.match(await comparison.innerText(),/Dataset Y/);
+  assert.equal(f.db.prepare("SELECT COUNT(*) FROM research_evidence_relations WHERE status='confirmed'").pluck().get(),0);
   const auditSource=readFileSync('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8');
   for(const theme of ['light','dark'])for(const width of [380,560,800,1100]){
     await page.setViewportSize({width,height:800});await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);

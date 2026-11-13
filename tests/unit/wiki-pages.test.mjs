@@ -43,7 +43,7 @@ test('capture → durable source page → compiled topic → bounded navigation 
   const f=await scene();try {
     assert.equal(f.page.page.kind,'comparison');assert.equal(f.page.page.job.status,'ready');
     assert.equal(f.page.current.reason,'compile');assert.equal(f.page.sources[0].excerpt,f.evidence.excerpt);
-    assert.equal(f.page.links.length,1);assert.equal(f.wiki.search(f.project.id,'Synthetic').length,2);
+    assert.equal(f.page.links.length,1);assert.equal((await f.wiki.search(f.project.id,'Synthetic')).pages.length,2);
     const source=f.wiki.follow(f.project.id,f.page.page.id,f.page.page.revision,f.page.links[0].id);
     assert.equal(source.page.kind,'source');assert.equal(source.sources[0].evidenceId,f.evidence.id);
     assert.throws(()=>f.wiki.follow(f.project.id,source.page.id,source.page.revision,f.page.page.id),/link_not_found/);
@@ -75,7 +75,7 @@ test('source invalidation recompiles affected drafts, retains human sections and
     f.page=human(f,'save',()=>f.wiki.save(input,'human'));
     const before=f.page, staleSave=saveInput(f,{...sourceSection,id:'new-synthesis'});
     addSource(f,'unrelated');while(f.wiki.compileNext()){}
-    const unrelated=f.wiki.search(f.project.id).find(p=>p.title==='Source unrelated');
+    const unrelated=(await f.wiki.search(f.project.id)).pages.find(p=>p.title==='Source unrelated');
     f.repository.evidence.invalidateEvidence(f.evidence.id,f.project.id);
     assert.equal(f.wiki.read(f.project.id,f.page.page.id).page.job.status,'queued');
     assert.throws(()=>f.wiki.save(staleSave,'assistant'),/basis_changed/);
@@ -158,11 +158,11 @@ test('assistant revision remains a draft with original references; structural li
 test('source ingestion transaction rolls back its Wiki outbox and repeated captures do not duplicate pages',async()=>{
   const f=createResearchFixture(api,'reading');try {
     assert.throws(()=>f.db.transaction(()=>{addSource(f);throw new Error('rollback');})(),/rollback/);
-    assert.equal(f.repository.wiki.search(f.project.id).length,0);
+    assert.equal((await f.repository.wiki.search(f.project.id)).pages.length,0);
     const evidence=addSource(f);f.repository.evidence.capture({projectId:f.project.id,chunkId:evidence.chunkId});
-    assert.equal(f.repository.wiki.search(f.project.id).length,1);
+    assert.equal((await f.repository.wiki.search(f.project.id)).pages.length,1);
     f.repository.wiki.start();await f.repository.wiki.idle();
-    assert.equal(f.repository.wiki.search(f.project.id)[0].revision,1);
+    assert.equal((await f.repository.wiki.search(f.project.id)).pages[0].revision,1);
   }finally{await f.repository.wiki.shutdown();f.close();}
 });
 
@@ -180,7 +180,7 @@ test('parse outbox generates derived cards, reparse retains prose, and bounded i
   try {
     cards.start(async(_title,blocks)=>({sections:roles.map(role=>({role,body:`Derived ${role}.`,chunkIds:[blocks[0].source.chunkId]}))}));
     publish('parse1','a'.repeat(64));await cards.idle();await wiki.idle();
-    let page=wiki.read(f.project.id,wiki.search(f.project.id)[0].id);
+    let page=wiki.read(f.project.id,(await wiki.search(f.project.id)).pages[0].id);
     assert.equal(page.paperJob.status,'ready');assert.equal(page.current.sections.length,6);
     assert.equal(page.current.sections[0].paperSources[0].blockId,'original-page');
     assert.equal(f.repository.evidence.list(f.project.id).length,0);
@@ -195,7 +195,7 @@ test('parse outbox generates derived cards, reparse retains prose, and bounded i
       section:{id:'note',title:'Human note',body:'Keep human prose.',evidenceIds:[],claimIds:[],links:[]}},'human'));
     publish('parse2','b'.repeat(64));await cards.idle();await wiki.idle();
     page=wiki.read(f.project.id,page.page.id);
-    assert.equal(wiki.search(f.project.id).length,1);
+    assert.equal((await wiki.search(f.project.id)).pages.length,1);
     assert.equal(page.current.sections.find(s=>s.id==='synthesis').status,'stale');
     assert.equal(page.current.sections.find(s=>s.id==='synthesis').body,'Retained interpretation.');
     assert.equal(page.current.sections.find(s=>s.id==='note').body,'Keep human prose.');
@@ -210,7 +210,7 @@ test('parse outbox generates derived cards, reparse retains prose, and bounded i
     assert.equal(page.current.sections.find(s=>s.id==='synthesis').status,'current');
     assert.equal(page.current.sections.find(s=>s.id==='synthesis').paperSources[0].parseId,'parse2');
     f.repository.evidence.capture({projectId:f.project.id,chunkId:'paper:parse2:chunk:0'});await wiki.idle();
-    assert.equal(wiki.search(f.project.id).length,1);
+    assert.equal((await wiki.search(f.project.id)).pages.length,1);
     cards.start(async()=>({sections:roles.map(role=>({role,body:'Invented reference.',chunkIds:['invented']}))}));
     cards.retry(f.project.id,page.page.id);await cards.idle();
     assert.equal(wiki.read(f.project.id,page.page.id).paperJob.status,'failed');

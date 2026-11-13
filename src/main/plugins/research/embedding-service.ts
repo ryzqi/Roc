@@ -99,21 +99,35 @@ export class ResearchEmbeddingService {
     return row === null ? null : { configId: row.id, revision: row.revision };
   }
 
-  /** Reuses the selected provider and its revision/secret boundary for daily discovery. */
-  async embedReadingTexts(texts: string[], signal?: AbortSignal): Promise<{configId: string; revision: number; vectors: number[][]}> {
+  /** Derived consumers share the provider, versioned cache and credential boundary without becoming raw evidence. */
+  async embedTexts(texts: string[], inputVersion: string | null, signal?: AbortSignal): Promise<{configId: string; revision: number; vectors: number[][]}> {
     this.requireOpen();
     const row = this.select(null);
     if (row === null) throw new Error('请先在检索设置中配置并启用嵌入模型。');
     return await this.task(row.id, signal, async active => {
-      const vectors: number[][] = [];
-      for (let offset = 0; offset < texts.length; offset += 16) {
+      const hashes = texts.map(text => createHash('sha256').update(text).digest('hex'));
+      const blobs = new Map<string, Buffer>(), missing = new Map<string, string>();
+      texts.forEach((text, index) => {
+        const cached = inputVersion === null ? null : this.knowledge.cachedEmbedding(row.id, row.revision, inputVersion, hashes[index]!);
+        if (cached) blobs.set(hashes[index]!, cached); else missing.set(hashes[index]!, text);
+      });
+      const inputs = [...missing];
+      for (let offset = 0; offset < inputs.length; offset += 16) {
         this.requireActive(active);
         this.knowledge.requireEmbeddingConfig(row.id, row.revision);
-        vectors.push(...await this.client.embed({config: await this.config(row), apiKey: await this.apiKey(row),
-          texts: texts.slice(offset,offset+16), signal: active}));
+        const batch = inputs.slice(offset, offset + 16);
+        const values = await this.client.embed({config: await this.config(row), apiKey: await this.apiKey(row),
+          texts: batch.map(([,text]) => text), signal: active});
+        if (values.length !== batch.length) throw new Error('embedding_provider_count_mismatch');
+        batch.forEach(([hash], index) => blobs.set(hash, vectorToBlob(values[index]!)));
       }
       this.requireActive(active);
       this.knowledge.requireEmbeddingConfig(row.id, row.revision);
+      if (inputVersion !== null) this.knowledge.cacheEmbeddings(row.id, row.revision, inputVersion, [...missing.keys()], [...missing.keys()].map(hash => blobs.get(hash)!));
+      const vectors = hashes.map(hash => {
+        const blob = blobs.get(hash)!;
+        return Array.from({length: blob.length / 4}, (_, index) => blob.readFloatLE(index * 4));
+      });
       return {configId: row.id, revision: row.revision, vectors};
     });
   }

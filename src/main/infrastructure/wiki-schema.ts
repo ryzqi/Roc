@@ -14,7 +14,7 @@ CREATE TABLE research_wiki_pages (
  id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
  kind TEXT NOT NULL CHECK(kind IN ('source','topic','comparison','dispute')), title TEXT NOT NULL,
  source_document_id TEXT, selection_json TEXT NOT NULL CHECK(json_valid(selection_json)),
- revision INTEGER NOT NULL DEFAULT 0, search_text TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL,
+ revision INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
  UNIQUE(project_id,source_document_id)
 );
 CREATE INDEX research_wiki_project ON research_wiki_pages(project_id,updated_at);
@@ -22,6 +22,20 @@ CREATE TABLE research_wiki_revisions (
  page_id TEXT NOT NULL REFERENCES research_wiki_pages(id) ON DELETE CASCADE, revision INTEGER NOT NULL,
  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)), PRIMARY KEY(page_id,revision)
 );
+CREATE TABLE research_wiki_sections (
+ id INTEGER PRIMARY KEY, page_id TEXT NOT NULL REFERENCES research_wiki_pages(id) ON DELETE CASCADE,
+ revision INTEGER NOT NULL, section_id TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL,
+ input_text TEXT NOT NULL, input_hash TEXT NOT NULL, UNIQUE(page_id,section_id)
+);
+CREATE VIRTUAL TABLE research_wiki_fts USING fts5(
+ title,body,content='research_wiki_sections',content_rowid='id',tokenize='unicode61'
+);
+CREATE TRIGGER research_wiki_section_insert AFTER INSERT ON research_wiki_sections BEGIN
+ INSERT INTO research_wiki_fts(rowid,title,body) VALUES(new.id,new.title,new.body);
+END;
+CREATE TRIGGER research_wiki_section_delete AFTER DELETE ON research_wiki_sections BEGIN
+ INSERT INTO research_wiki_fts(research_wiki_fts,rowid,title,body) VALUES('delete',old.id,old.title,old.body);
+END;
 CREATE TABLE research_wiki_dependencies (
  page_id TEXT NOT NULL REFERENCES research_wiki_pages(id) ON DELETE CASCADE,
  kind TEXT NOT NULL, dependency_id TEXT NOT NULL, PRIMARY KEY(page_id,kind,dependency_id)

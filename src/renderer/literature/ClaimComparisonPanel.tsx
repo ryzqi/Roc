@@ -24,7 +24,8 @@ export function ClaimComparisonPanel({client, projectId}: {client: RocClient; pr
     <div className="flex flex-wrap gap-2">
       {(['left', 'right'] as const).map(side => <label key={side} className="flex min-w-0 flex-1 flex-col gap-1">
         {side === 'left' ? '主张 A' : '主张 B'}
-        <select className={formInputClass} value={side === 'left' ? leftId : rightId} disabled={compare.pending}
+        <select aria-label={side === 'left' ? '主张 A' : '主张 B'} className={formInputClass}
+          value={side === 'left' ? leftId : rightId} disabled={compare.pending}
           onChange={event => {setResult(null); (side === 'left' ? setLeft : setRight)(event.target.value);}}>
           <option value="">选择主张</option>{claims.data?.map(claim => <option key={claim.id} value={claim.id}>{claim.content.slice(0, 100)}</option>)}
         </select>

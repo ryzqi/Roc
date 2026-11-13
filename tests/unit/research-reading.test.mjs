@@ -73,7 +73,7 @@ test('network rejects nonpublic addresses and unsafe URLs before a request',asyn
 test('daily recommendations rank corpus similarity, cache identities and preserve read state',async()=>{
  const f=scene();paper(f);let fetched=0,embedded=0,revision=1,drift=false,broken=false;
  const feed=`<rss><channel>${[['2611.00001','Related'],['2611.00002','Unrelated']].map(([id,title])=>`<item><guid>${id}</guid><title>${title}</title><link>https://arxiv.org/abs/${id}</link><description>Source abstract</description></item>`).join('')}</channel></rss>`;
- const embeddings={embedReadingTexts:async texts=>{embedded++;if(broken)throw new Error('Embedding unavailable');return {configId:'embedding-fixture',revision:revision+(drift&&texts.length>1?1:0),vectors:texts.map(text=>text.startsWith('Unrelated')?[0,1]:[1,0])};}};
+ const embeddings={embedTexts:async texts=>{embedded++;if(broken)throw new Error('Embedding unavailable');return {configId:'embedding-fixture',revision:revision+(drift&&texts.length>1?1:0),vectors:texts.map(text=>text.startsWith('Unrelated')?[0,1]:[1,0])};}};
  const radar=new api.RadarService(f.reading,embeddings,{},async()=>{fetched++;return feed;});
  try{
    const first=await radar.recommend(f.project.id,['cs.AI'],false);

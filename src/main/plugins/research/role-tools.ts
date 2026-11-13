@@ -7,6 +7,7 @@ import { researchOwnedExperimentStartSchema, researchExperimentEnvironmentReques
   researchExperimentEnvironmentSchema, researchExperimentFileRequestSchema } from '../../../shared/schemas/research-experiments';
 import { researchOwnedFigureStartSchema, researchFigureRendererEnvironmentSchema } from '../../../shared/schemas/research-figures';
 import { researchOwnedExportPrepareSchema } from '../../../shared/schemas/research-exports';
+import {claimComparisonToolSchema} from '../../../shared/schemas/research-claim-comparison';
 import { researchProductionInputContentSchema, researchProductionInputReadSchema, researchProductionInputSchema,
   type ResearchProductionInput } from '../../../shared/schemas/research-production-inputs';
 import type { ResearchKnowledgeSearchRequest, ResearchKnowledgeSearchResult, ResearchStageRun } from '../../../shared/types';
@@ -119,7 +120,7 @@ export function createResearchRoleTools(input: {
       }
       return input.repository.evidence.compare({...request, projectId: input.run.projectId});
     }, {name: 'compare_claims', description: '按两个准确主张版本比较实验条件；不同条件不能判为矛盾，unknown 不可判定。相反结论只返回未审核冲突候选，不确认科学关系。',
-      schema: claimComparisonRequestSchema.omit({projectId: true})}),
+      schema: claimComparisonToolSchema}),
     list_evidence_relations: () => tool(async ({claimId, offset, limit}) => {
       assertActive();
       if (scientificInput !== undefined && claimId !== null && !scientificInput.claims.some(claim => claim.id === claimId)) {
@@ -469,4 +470,3 @@ function productionSection(input: ResearchProductionInput, section: 'summary' | 
     inputHash: source.execution.inputHash, status: source.execution.status, startedAt: source.execution.startedAt, endedAt: source.execution.endedAt,
     ...(source.kind === 'figure' ? { figureId: source.figure.id, validation: source.figure.validation } : {}) };
 }
-import {claimComparisonRequestSchema} from '../../../shared/schemas/research-claim-comparison';

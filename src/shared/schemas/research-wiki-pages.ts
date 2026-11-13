@@ -26,6 +26,15 @@ export const wikiJobSchema = z.object({generation: id, status: z.enum(['queued',
   error: z.string().nullable()}).strict();
 export const wikiSummarySchema = z.object({id, projectId: id, title: z.string(), kind: z.enum(['source', 'topic', 'comparison', 'dispute']),
   revision, updatedAt: id, job: wikiJobSchema.nullable()}).strict();
+export const wikiSearchResultSchema = z.object({
+  pages: z.array(wikiSummarySchema.extend({matches: z.array(z.object({
+    sectionId: id, title: z.string(), snippet: z.string().max(320)
+  }).strict()).max(3)}).strict()).max(50),
+  mode: z.enum(['list', 'bm25', 'hybrid']),
+  degradation: z.enum(['config_missing', 'index_pending', 'embedding_failed']).nullable(),
+  indexedSections: z.number().int().nonnegative(), totalSections: z.number().int().nonnegative(),
+  nextOffset: z.number().int().nonnegative().nullable()
+}).strict();
 export const wikiLintSchema = z.object({code: z.enum(['stale', 'missing', 'uncited', 'broken_link', 'conflict_candidate', 'isolated', 'source_limit']),
   sectionId: id.nullable(), message: z.string()}).strict();
 export const wikiPageSchema = z.object({page: wikiSummarySchema, current: wikiRevisionSchema.nullable(), basisDigest: digest,
@@ -54,3 +63,4 @@ export type WikiDependency = z.infer<typeof wikiDependencySchema>;
 export type WikiRevision = z.infer<typeof wikiRevisionSchema>;
 export type WikiPage = z.infer<typeof wikiPageSchema>;
 export type WikiSummary = z.infer<typeof wikiSummarySchema>;
+export type WikiSearchResult = z.infer<typeof wikiSearchResultSchema>;
