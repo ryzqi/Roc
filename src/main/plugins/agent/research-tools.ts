@@ -1,4 +1,7 @@
 import {createWikiTools, WIKI_TOOL_DESCRIPTORS} from './wiki-tools';
+import {knowledgeSearchView} from '../research/knowledge-consumption';
+import {knowledgeContextRequestSchema} from '../../../shared/schemas/research-knowledge-context';
+import type {ResearchKnowledgeSearchResult} from '../../../shared/types';
 import {researchDiagramRequestSchema, researchDiagramResultSchema} from '../../../shared/schemas/research-diagrams';
 import {withResearchDiagramSignal} from '../research/diagram-service';
 import type {ResearchGateReviewContext} from '../../../shared/schemas/research-gate-review';
@@ -59,6 +62,7 @@ export const RESEARCH_TOOL_DESCRIPTORS: readonly ResearchToolDescriptor[] = [
   { name: 'research_list_evidence', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
   { name: 'research_stage_runs', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
   { name: 'research_search_knowledge', scope: 'memory', effectClass: 'network_read', riskLevel: 'low', executionScopes: readScopes },
+  { name: 'research_read_knowledge_context', scope: 'memory', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
   { name: 'research_search_literature', scope: 'network', effectClass: 'network_read', riskLevel: 'low', executionScopes: readScopes },
   { name: 'research_read_literature_search', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: ['main'] },
   { name: 'research_add_literature', scope: 'app', effectClass: 'external_call', riskLevel: 'low', executionScopes: ['main'] },
@@ -318,20 +322,21 @@ export function createResearchTools(input: {
       schema: z.object({ runId: z.string().trim().min(1).optional(), limit: z.number().int().min(1).max(50).optional() }).strict()
     }),
     tool(async ({ query, limit }) => {
-      const result = await invoke<{ hits: unknown[]; keywordCount: number; vectorCount: number; embeddingModel: string | null }>(
+      const result = await invoke<ResearchKnowledgeSearchResult>(
         'research.knowledge.search',
         { query, projectId, limit: limit ?? 6, embeddingConfigId: null }
       );
-      return {
-        ...result,
-        hits: (result.hits as Array<{ chunkId: string; title: string; content: string; locator: string | null }>).map((hit) => ({
-          ...hit, content: clip(hit.content, 2000)
-        }))
-      };
+      return [knowledgeSearchView(result), result.ranking];
     }, {
       name: 'research_search_knowledge',
-      description: '先用它检索本项目与全局文献材料，返回真实 chunkId 和定位。拿到 chunkId 后可用 research_capture_evidence 存成证据。',
+      responseFormat: 'content_and_artifact',
+      description: '检索本项目与全局文献原文，返回真实 chunkId、indexedVersion 和定位。需要实验设置或邻接原文时用 research_read_knowledge_context；捕获用 research_capture_evidence。',
       schema: z.object({ query: z.string().trim().min(1), limit: z.number().int().min(1).max(20).optional() }).strict()
+    }),
+    tool(request => invoke('research.knowledge.context', {...request, projectId}), {
+      name: 'research_read_knowledge_context',
+      description: '用检索返回的 chunkId 和 indexedVersion 锁定原文版本，读取父块及相邻设置/结果。总字符预算最多 8000；返回文本不是新的证据身份。',
+      schema: knowledgeContextRequestSchema.omit({projectId: true})
     }),
     ...createLiteratureTools(input.capabilities, { owner: `thread:${input.threadId ?? projectId}`, projectId,
       runId: input.runId, signal: input.signal }, {

@@ -14,6 +14,7 @@ import type {
   ResearchKnowledgeSearchResult
 } from '../../../shared/types';
 import { normalizeEmbeddingBlob } from './embedding-vectors';
+import {knowledgeContextRequestSchema, type KnowledgeContextRequest} from '../../../shared/schemas/research-knowledge-context';
 
 export type KnowledgeEmbeddingPolicy = 'selected' | 'none';
 export type KnowledgeSourceWrite = {
@@ -225,6 +226,22 @@ export class ResearchKnowledgeRepository {
     if (end < parent.content.length && /[\uD800-\uDBFF]/u.test(parent.content[end - 1]!)) end--;
     return {chunkId, parentChunkId, content: parent.content.slice(start, end), locator: parent.locator, start, end,
       totalChars: parent.content.length, indexedVersion: version.indexedVersion};
+  }
+
+  readContext(input: KnowledgeContextRequest) {
+    const request = knowledgeContextRequestSchema.parse(input);
+    this.requireProject(request.projectId);
+    const version = this.indexedVersion(request.chunkId, request.projectId, new Map());
+    if (version.indexedVersion !== request.expectedIndexedVersion) throw new Error('research_knowledge_source_changed');
+    const main = this.chunkContext(request.projectId, request.chunkId, request.neighbors ? Math.floor(request.maxChars * 0.6) : request.maxChars);
+    const adjacent = request.neighbors ? this.db.prepare(`SELECT c.id FROM research_knowledge_chunks c
+      JOIN research_knowledge_chunk_structure s ON s.chunk_id=c.id
+      WHERE c.document_id=? AND s.parent_chunk_id IS NULL AND c.id<>?
+      AND ABS(c.chunk_index-(SELECT chunk_index FROM research_knowledge_chunks WHERE id=?))=1
+      ORDER BY c.chunk_index`).all(version.documentId, main.parentChunkId, main.parentChunkId) as Array<{id: string}> : [];
+    const budget = Math.floor((request.maxChars - main.content.length) / Math.max(1, adjacent.length));
+    return {derived: false as const, context: main,
+      neighbors: adjacent.map(row => this.chunkContext(request.projectId, row.id, budget))};
   }
 
   knowledgeDocument(id: string): ResearchKnowledgeDocument {

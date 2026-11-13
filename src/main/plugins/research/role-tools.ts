@@ -17,6 +17,7 @@ import type { ResearchRepository } from './repository';
 import type { ResearchExecutionContext } from './run-repository';
 import { requireConfirmedSearchStrategy } from './search-strategy';
 import {relationClaimHash, relationSourceDigest} from './evidence-relation-repository';
+import {knowledgeSearchView} from './knowledge-consumption';
 
 export function createResearchRoleTools(input: {
   run: ResearchStageRun;
@@ -197,10 +198,10 @@ export function createResearchRoleTools(input: {
       if (scientificInput !== undefined) {
         const terms = query.toLocaleLowerCase().split(/\s+/u);
         const matches = scientificInput.evidence.filter(source => terms.some(term => source.evidence.excerpt.toLocaleLowerCase().includes(term)));
-        return {scope: 'frozen_review_evidence', total: matches.length, hits: matches.slice(0, limit).map(source => ({
+        return [{scope: 'frozen_review_evidence', total: matches.length, hits: matches.slice(0, limit).map(source => ({
           evidenceId: source.evidence.id, sourceDigest: relationSourceDigest(source),
           excerpt: source.evidence.excerpt.slice(0, 8000), excerptChars: source.evidence.excerpt.length
-        }))};
+        }))}, null];
       }
       const result = await input.capabilities.invoke<ResearchKnowledgeSearchRequest, ResearchKnowledgeSearchResult>('research.knowledge.search', {
         projectId: input.run.projectId, query, limit, embeddingConfigId: null
@@ -212,9 +213,12 @@ export function createResearchRoleTools(input: {
         throw error;
       });
       assertActive();
-      return { ...result, hits: result.hits.map((hit) => ({ ...hit, content: hit.content.slice(0, 8000), contentChars: hit.content.length,
-        ...(withContext ? {context: input.repository.knowledge.chunkContext(input.run.projectId, hit.chunkId, Math.floor(8000 / limit))} : {}) })) };
-    }, { name: 'search_knowledge', description: '检索本项目与全局文献材料，返回真实 chunkId 和来源定位。withContext 可读取命中父段的原文上下文，总预算 8000 字符；上下文不能冒充新的证据，捕获仍使用 chunkId。冻结评审仅返回固定输入。',
+      const view = knowledgeSearchView(result);
+      return [{...view, hits: view.hits.map(hit => ({...hit,
+        ...(withContext ? {context: input.repository.knowledge.readContext({projectId: input.run.projectId,
+          chunkId: hit.chunkId, expectedIndexedVersion: hit.indexedVersion, maxChars: Math.floor(8000 / limit), neighbors: true})} : {})
+      }))}, result.ranking];
+    }, { name: 'search_knowledge', responseFormat: 'content_and_artifact', description: '检索本项目与全局文献材料，返回真实 chunkId 和来源定位。withContext 可读取命中父段的原文上下文，总预算 8000 字符；上下文不能冒充新的证据，捕获仍使用 chunkId。冻结评审仅返回固定输入。',
       schema: z.object({ query: z.string().trim().min(1).max(1000), limit: z.number().int().min(1).max(10), withContext: z.boolean().optional() }).strict() }),
     capture_evidence: () => tool(async ({ chunkId }) => {
       assertActive();

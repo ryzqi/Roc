@@ -1,4 +1,5 @@
 import {researchWikiCapabilities, registerResearchWikiCapabilities} from './wiki-capabilities';
+import {knowledgeContextRequestSchema, knowledgeContextResultSchema} from '../../../shared/schemas/research-knowledge-context';
 import {recordCapabilityOperationReceipt} from '../../kernel/capability-operation-context';
 import {knowledgeJobSchema, knowledgeJobsListSchema, knowledgeJobRetrySchema} from '../../../shared/schemas/research-knowledge-jobs';
 import {ResearchDiagramService} from './diagram-service';
@@ -215,7 +216,8 @@ const knowledgeCapabilities = {
   listEmbedding: descriptor('research.embedding.list', emptyInputSchema, researchEmbeddingConfigSchema.array()),
   saveEmbedding: descriptor('research.embedding.save', researchEmbeddingConfigSaveRequestSchema, researchEmbeddingConfigSchema),
   upsertDocument: descriptor('research.knowledge.upsert', researchKnowledgeDocumentUpsertRequestSchema, researchKnowledgeDocumentSchema),
-  search: descriptor('research.knowledge.search', researchKnowledgeSearchRequestSchema, researchKnowledgeSearchResultSchema)
+  search: descriptor('research.knowledge.search', researchKnowledgeSearchRequestSchema, researchKnowledgeSearchResultSchema),
+  context: descriptor('research.knowledge.context', knowledgeContextRequestSchema, knowledgeContextResultSchema)
 };
 const provenanceCapabilities = {
   add: descriptor('research.provenance.add', researchProvenanceCreateRequestSchema, researchProvenanceSchema),
@@ -627,6 +629,7 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
       });
       context.capabilities.register(pluginId, knowledgeCapabilities.upsertDocument, async (input) => await researchEmbeddings.upsertDocument(input as ResearchKnowledgeDocumentUpsertRequest));
       context.capabilities.register(pluginId, knowledgeCapabilities.search, async (input) => await researchEmbeddings.search(input as ResearchKnowledgeSearchRequest));
+      context.capabilities.register(pluginId, knowledgeCapabilities.context, async input => researchRepository.knowledge.readContext(knowledgeContextRequestSchema.parse(input)));
       context.capabilities.register(pluginId, provenanceCapabilities.add, async (input) => repository!.addProvenance(input as ResearchProvenanceCreateRequest));
       context.capabilities.register(pluginId, provenanceCapabilities.list, async (input) => repository!.listProvenance(input as ResearchProvenanceListRequest));
       researchIndexer.start();
