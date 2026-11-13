@@ -5,6 +5,7 @@ import { loadDataset } from './data.mjs';
 import { prepareApplication, executeApplication } from './application.mjs';
 import { applicationContract } from './application-verifier.mjs';
 import { qasperInput, gradeQasper } from './qasper.mjs';
+import { withQasperResponseContract } from './response-contract.mjs';
 import { scienceInput, sciencePreflight, stageScience, executeScience, gradeScience } from './science.mjs';
 import { createProvider, validateProviderOptions } from './provider.mjs';
 import { openRocModel } from './roc-model.mjs';
@@ -30,6 +31,7 @@ const errorRecord = error => ({ failureClass: error.failureClass ?? 'infrastruct
 function scorerHash(suite) {
   const names = ['report.mjs', 'data.mjs', suite === 'qasper' ? 'qasper.mjs' : suite === 'scienceagentbench' ? 'science.mjs' : '../../scripts/harness-eval/run.mjs'];
   if (suite === 'qasper' || suite === 'scienceagentbench') names.push('application-verifier.mjs', 'application.mjs');
+  if (suite === 'qasper') names.push('response-contract.mjs');
   return hash(names.map(name => [name, sha256(readFileSync(new URL(name, import.meta.url)))]));
 }
 export async function runBenchmark(options) {
@@ -118,7 +120,7 @@ export async function runBenchmark(options) {
         record({ type: 'trial_started' });
         let grade;
         try {
-          const result = await executeApplication({ artifact, input: options.suite === 'qasper' ? qasperInput(task) : scienceInput(task), directory: trialDir,
+          const result = await executeApplication({ artifact, input: options.suite === 'qasper' ? withQasperResponseContract(qasperInput(task)) : scienceInput(task), directory: trialDir,
             config, signal: controller.signal, record, complete: options.fixture ? fixtureCompletion : (body, signal) => provider.complete(body, signal),
             stage: options.suite === 'scienceagentbench' ? workspace => stageScience(dataset, task, workspace) : undefined,
             execute: options.suite === 'scienceagentbench' ? (workspace, signal, limits) => executeScience(task, workspace, signal, limits) : undefined });

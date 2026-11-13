@@ -7,6 +7,7 @@ import type {
 } from '../chat-run-state';
 import { chatImageAttachmentMediaTypes } from '../constants/chat';
 import { taskCriterionSchema, taskAcceptanceSchema } from './task-acceptance';
+import { responseContractSchema } from './response-contract';
 import { contextContractAuditSchema, contextCompactionRecordSchema } from './run-diagnostics';
 
 import {
@@ -447,6 +448,7 @@ export const chatStartRunRequestSchema = z
   .object({
     input: z.string(),
     acceptanceCriteria: z.array(taskCriterionSchema).min(1).max(20).optional(),
+    responseContract: responseContractSchema.optional(),
     mode: chatRunModeSchema,
     enabledCapabilities: enabledCapabilitiesSchema,
     threadId: z.string().nullable().optional(),

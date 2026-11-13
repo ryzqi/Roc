@@ -13,6 +13,7 @@ import {
   type TaskHandoff
 } from '../../../shared/schemas/task-acceptance';
 import type { ResearchStage } from '../../../shared/types';
+import { createResponseValidator, type ResponseContract } from '../../../shared/schemas/response-contract';
 import { hashToolInput } from './tool-effect-store';
 
 export type ResearchProof = { passed: boolean; detail: string; refs: { path: string; sha256: string }[] };
@@ -62,16 +63,17 @@ export class TaskContractStore {
 
   async evaluate(runId: string, context: TaskVerificationContext, blockedBy: string[] = []): Promise<TaskAcceptance> {
     const contract = this.readContract(runId);
-    const criteria = await Promise.all(contract.criteria.map((criterion) => this.verifyCriterion(criterion, context)));
+    const criteria = await Promise.all(verificationCriteria(contract).map((criterion) => this.verifyCriterion(criterion, context, contract.responseContract)));
     return buildAcceptanceReport({ runId, criteria, blockedBy, stale: false });
   }
 
   createUnverifiedReport(runId: string, reason: string): TaskAcceptance {
-    const criteria = this.readContract(runId).criteria.map((criterion) => ({
+    const contract = this.readContract(runId);
+    const criteria = verificationCriteria(contract).map((criterion) => ({
       id: criterion.id,
       description: criterion.description,
       verdict: 'unverified' as const,
-      verifier: criterion.check.kind,
+      verifier: criterion.check.kind === 'response' && contract.responseContract !== undefined ? 'response_json_schema' : criterion.check.kind,
       artifactRefs: [],
       checkedAt: new Date().toISOString(),
       detail: 'Execution stopped before this criterion could be checked.'
@@ -88,10 +90,12 @@ export class TaskContractStore {
     const contract = this.readContract(runId);
     const previousById = new Map(previous.criteria.map((criterion) => [criterion.id, criterion]));
     let stale = false;
-    const criteria = await Promise.all(contract.criteria.map(async (criterion) => {
+    const criteria = await Promise.all(verificationCriteria(contract).map(async (criterion) => {
       const prior = previousById.get(criterion.id);
-      if (criterion.check.kind === 'response' && prior?.verdict === 'passed') return prior;
-      const current = await this.verifyCriterion(criterion, context);
+      // Terminal responses are immutable. Replayed session prose may also contain tool narration.
+      if (criterion.check.kind === 'response' && prior !== undefined &&
+          (prior.verdict === 'passed' || contract.responseContract !== undefined)) return prior;
+      const current = await this.verifyCriterion(criterion, context, contract.responseContract);
       if (prior !== undefined && prior.verdict === current.verdict && prior.detail === current.detail &&
           sameRefs(prior.artifactRefs, current.artifactRefs)) {
         current.checkedAt = prior.checkedAt;
@@ -267,17 +271,23 @@ export class TaskContractStore {
     return updated;
   }
 
-  private async verifyCriterion(criterion: TaskCriterion, context: TaskVerificationContext): Promise<TaskAcceptance['criteria'][number]> {
+  private async verifyCriterion(criterion: TaskCriterion, context: TaskVerificationContext, responseContract?: ResponseContract): Promise<TaskAcceptance['criteria'][number]> {
     const checkedAt = new Date().toISOString();
     let verdict: 'passed' | 'failed' | 'unverified' = 'unverified';
     let detail = 'No automatic verifier was declared for this objective.';
     let artifactRefs: ResearchProof['refs'] = [];
     try {
       if (criterion.check.kind === 'response') {
-        verdict = context.response !== null && context.response.trim().length > 0 ? 'passed' : 'unverified';
-        detail = verdict === 'passed' ? 'A visible response was produced.' : 'Response pending.';
-        if (verdict === 'passed') {
-          const sha256 = createHash('sha256').update(context.response!.trim(), 'utf8').digest('hex');
+        if (responseContract === undefined) {
+          verdict = context.response !== null && context.response.trim().length > 0 ? 'passed' : 'unverified';
+          detail = verdict === 'passed' ? 'A visible response was produced.' : 'Response pending.';
+        } else {
+          const result = createResponseValidator(responseContract)(context.response);
+          verdict = result.passed ? 'passed' : 'failed';
+          detail = result.detail;
+        }
+        if (context.response !== null && (verdict === 'passed' || responseContract !== undefined)) {
+          const sha256 = createHash('sha256').update(responseContract === undefined ? context.response.trim() : context.response, 'utf8').digest('hex');
           artifactRefs = [{ path: `assistant-response:${sha256}`, sha256 }];
         }
       } else if (criterion.check.kind === 'artifact_sha256') {
@@ -300,8 +310,18 @@ export class TaskContractStore {
       detail = error instanceof Error ? error.message : String(error);
       verdict = 'unverified';
     }
-    return { id: criterion.id, description: criterion.description, verdict, verifier: criterion.check.kind, artifactRefs, checkedAt, detail };
+    return { id: criterion.id, description: criterion.description, verdict,
+      verifier: criterion.check.kind === 'response' && responseContract !== undefined ? 'response_json_schema' : criterion.check.kind,
+      artifactRefs, checkedAt, detail };
   }
+}
+
+function verificationCriteria(contract: TaskContract): TaskCriterion[] {
+  if (contract.responseContract === undefined || contract.criteria.some(criterion => criterion.check.kind === 'response')) return contract.criteria;
+  const ids = new Set(contract.criteria.map(criterion => criterion.id));
+  let id = 'response-json';
+  for (let suffix = 1; ids.has(id); suffix++) id = `response-json-${suffix}`;
+  return [...contract.criteria, { id, description: 'Return a final response that satisfies the requested JSON schema.', check: { kind: 'response' } }];
 }
 
 function buildAcceptanceReport(input: {

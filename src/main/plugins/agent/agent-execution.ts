@@ -6,6 +6,8 @@ export type RunOutcome =
   | {
       status: 'completed';
       finalMessage: string;
+      /** Terminal model text, separate from the session's accumulated tool narration. */
+      finalResponse?: string | null;
       summarySource: {
         successfulToolNames: string[];
       };

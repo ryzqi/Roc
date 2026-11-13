@@ -125,11 +125,11 @@ function buildStaticPrompt(): string {
     'Run direct verification after code or config changes. Report results and blockers plainly.',
     '',
     'Follow the requested final-response format exactly. When the user requests only JSON, return only the requested JSON value: no Markdown fences, preface, or trailing explanation. Use valid JSON syntax and only the requested keys.',
-    'For factual questions, give the shortest sufficient answer. Prefer the requested names, values, or a brief description of the necessary relationship; omit background and examples unless requested.',
+    'For factual questions, give the shortest sufficient answer. Identify the requested answer unit first: a label, names, values, or a necessary relationship. Include every requested part, but omit question restatement, background, and examples unless requested.',
     "For a yes/no question without a request for explanation, the answer itself is only the requested labels or a yes/no response in the question's language, inside the requested output format. Use the requested unanswerable form only when the inspected material cannot decide the question; evidence of a negative result supports a negative answer.",
-    'Resolve the exact question scope before answering, including only, all, not, and which result is being measured. Distinguish what the authors actually use, propose, or evaluate from related work they merely discuss.',
-    'Cite the smallest set of inspected passages that directly supports the answer. Keep source identifiers exact; avoid optional claims that need additional evidence.',
-    'Before submitting, check the requested format, answer scope, and whether the cited material supports every part of the answer.',
+    'Resolve the exact question scope before answering, including only, all, not, and which result is being measured. Distinguish what the authors actually use, propose, or evaluate from related work they merely discuss. Check that lists cover the requested scope and that values refer to the requested experiment.',
+    'Fix the answer before selecting evidence. Cite the smallest set of inspected passages that directly supports every part of that answer. A passage that merely mentions the same topic is insufficient. Keep source identifiers exact and unique; avoid optional claims that need additional evidence.',
+    'Before submitting, remove unnecessary explanation from the answer and redundant citations, then check format, completeness, and direct support. Lack of a positive statement alone does not establish a negative answer.',
     '',
     'Read SKILL.md silently; never quote, paraphrase, or summarize it.'
   ].join('\n');

@@ -44,7 +44,9 @@ export function inspectRun(path) {
 export const comparisonFields = ['suite', 'evidence', 'datasetIdentity', 'selection', 'repeats', 'metrics', 'scorerHash', 'provider', 'environment', 'split', 'toolManifest', 'applicationContract'];
 export function hasApplicationRuntimeEvidence(run) {
   const contract = run.manifest.applicationContract;
-  return contract?.schemaVersion === 1 && typeof contract.answerBoundary === 'string' && run.trials.length > 0
+  const supportedVersion = contract?.schemaVersion === 1 || (contract?.schemaVersion === 2
+    && contract.responseRequirements === 'optional-json-schema-bound-to-frozen-task-inputs');
+  return supportedVersion && typeof contract.answerBoundary === 'string' && run.trials.length > 0
     && run.trials.every(t => t.runtimeVerification?.status === 'verified' && t.runtimeVerification.contractHash === hash(contract)
       && /^[a-f0-9]{64}$/.test(t.runtimeVerification.finalAnswerHash ?? '')
       && /^[a-f0-9]{64}$/.test(t.runtimeVerification.evidenceHash ?? ''));

@@ -98,6 +98,9 @@ export function createChatStartRunRequestFromSnapshot(
     acceptanceCriteria: snapshot.taskContract.criteria
   };
   const workflowHint = readWorkflowHintFromSnapshot(snapshot.workflowHint);
+  if (snapshot.taskContract.responseContract !== undefined) {
+    request.responseContract = snapshot.taskContract.responseContract;
+  }
   if (workflowHint !== null) {
     request.workflowHint = workflowHint;
   }

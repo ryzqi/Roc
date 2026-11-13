@@ -4,10 +4,11 @@ import Database from 'better-sqlite3';
 import { fileInventory, hash, sha256 } from './common.mjs';
 
 export const applicationContract = Object.freeze({
-  schemaVersion: 1,
+  schemaVersion: 2,
   runtime: 'roc-agent-plugin-deep-agent',
   answerBoundary: 'final-checkpoint-assistant-bound-to-terminal-model-response',
-  verification: 'sqlite-transport-workspace-process-v1'
+  responseRequirements: 'optional-json-schema-bound-to-frozen-task-inputs',
+  verification: 'sqlite-transport-workspace-process-v2'
 });
 
 function bytes(path) {
@@ -93,6 +94,7 @@ export function verifyApplicationEvidence({ artifact, input, directory, config, 
     ['worker/agent.sqlite'], { status: run.status, rootCheckpoints: state.checkpoints.length });
     const identity = statSync(workspace);
     check('frozen-inputs', run.user_input === input.prompt && snapshot.taskContract?.objective === input.prompt
+      && hash(snapshot.taskContract?.responseContract ?? null) === hash(input.responseContract ?? null)
       && run.provider_id === model.providerId && run.model_id === model.modelId && hash(snapshot.model) === hash(model)
       && snapshot.modelConfig?.contextWindowTokens === limits.contextWindowTokens && snapshot.modelConfig?.maxOutputTokens === limits.maxOutputTokens
       && realpathSync(run.workspace_path) === realpathSync(workspace) && realpathSync(snapshot.workspace?.path) === realpathSync(workspace)

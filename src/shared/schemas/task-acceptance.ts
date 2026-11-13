@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { researchStageSchema } from './research';
+import { responseContractSchema } from './response-contract';
 
 export const taskCriterionSchema = z.object({
   id: z.string().trim().min(1).max(80),
@@ -15,6 +16,7 @@ export const taskContractSchema = z.object({
   contractVersion: z.literal(1),
   objective: z.string(),
   constraints: z.array(z.string()),
+  responseContract: responseContractSchema.optional(),
   kind: z.enum(['reply', 'task']),
   criteria: z.array(taskCriterionSchema).min(1).max(20)
 }).strict().superRefine((contract, context) => {

@@ -1,5 +1,5 @@
 import { createDeepAgent } from 'deepagents';
-import { toolRetryMiddleware, todoListMiddleware } from 'langchain';
+import { toolRetryMiddleware } from 'langchain';
 
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { RunCapabilityExecutionScopeV1, RunCapabilityManifestV1, RunExecutionMode, RunExecutionSnapshot } from '../../../shared/types';
@@ -40,6 +40,9 @@ import type { RunUsageLedger, RunModelConfig } from './run-usage-ledger';
 import type { TaskContract } from '../../../shared/schemas/task-acceptance';
 import type { RunUsageObserver } from './run-usage-observer';
 import { createRunUsageMiddleware, createRunCorrectionMiddleware } from './run-usage-middleware';
+import { createResponseContractMiddleware } from './response-contract-middleware';
+import { createCapabilityFilesystemMiddleware, createCapabilityMemoryMiddleware, createCapabilityTodoMiddleware } from './framework-capability-middleware';
+import type { FilesystemPermission } from 'deepagents';
 import { createToolProtocolMiddleware } from './tool-protocol';
 
 import { createPreparedToolEffectMiddleware, createFinalToolGuardMiddleware, createToolAdmissionMiddleware } from './prepared-tool-effect';
@@ -66,6 +69,7 @@ export type ContextCompactionWiring = {
 export type MiddlewareStackPolicy = {
   boundToolNames: readonly string[];
   capabilityManifest: RunCapabilityManifestV1;
+  filesystemPermissions: FilesystemPermission[];
   mode: RunExecutionMode;
   runId: string;
   threadId: string;
@@ -116,10 +120,20 @@ const ALL_MODES: readonly RunExecutionMode[] = ['plan', 'run', 'task'];
  * 所以"谁在谁前面"是 interface 事实，不是排版偏好 —— 从前它散在 main / plan subagent / run subagent
  * 三个手写数组里，读者要同时对齐三处才能回答一个顺序问题。现在改一格顺序只有一处可改。
  *
- * 这个数组只描述 Roc 追加的部分。deepagents 会把它整体接在内部 PatchToolCallsMiddleware 之后，
- * 那个相对位置由 createDeepAgent 拥有，不在这里表达。
+ * 同名条目会在 deepagents 默认段或模型 profile 尾段的原位置替换框架条目；
+ * 新增条目按这里的顺序接在默认段之后、profile 尾段之前。框架段的位置由 createDeepAgent 拥有。
  */
 const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
+  {
+    name: 'FilesystemMiddleware', scopes: ['main'], modes: ALL_MODES,
+    create: context => createCapabilityFilesystemMiddleware(context.backend, context.policy.filesystemPermissions,
+      context.policy.capabilityManifest, 'main')
+  },
+  {
+    name: 'MemoryMiddleware', scopes: ['main'], modes: ['run', 'task'],
+    create: context => context.memorySources.length === 0 ? null
+      : createCapabilityMemoryMiddleware(context.backend, context.memorySources, context.policy.capabilityManifest)
+  },
   {name: 'RocResearchTaskContextMiddleware', scopes: ALL_SCOPES, modes: ALL_MODES,
     create: context => context.loadResearchTaskContext === undefined ? null
       : createResearchTaskContextMiddleware(context.loadResearchTaskContext)},
@@ -131,10 +145,17 @@ const MIDDLEWARE_STACK_SPEC: readonly MiddlewareStackEntry[] = [
     create: context => createRunCorrectionMiddleware(context.usageLedger, context.policy.runId)
   },
   {
-    name: 'todoListMiddleware',
+    name: 'RocResponseContractMiddleware',
     scopes: ['main'],
     modes: ALL_MODES,
-    create: () => todoListMiddleware()
+    create: context => context.taskContract.responseContract === undefined ? null
+      : createResponseContractMiddleware(context.policy.runId, context.taskContract.responseContract)
+  },
+  {
+    name: 'todoListMiddleware',
+    scopes: ALL_SCOPES,
+    modes: ALL_MODES,
+    create: context => createCapabilityTodoMiddleware(context.policy.capabilityManifest, context.executionScope)
   },
   {
     // main scope 收 run 级 hook 事件，subagent scope 只收 tool 级：子代理不产生 run 生命周期。

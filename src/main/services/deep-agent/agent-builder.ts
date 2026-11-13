@@ -1,7 +1,6 @@
 import {
   GENERAL_PURPOSE_SUBAGENT,
   createDeepAgent,
-  createFilesystemMiddleware,
   createPatchToolCallsMiddleware,
   createSkillsMiddleware,
   createSubAgent,
@@ -14,7 +13,6 @@ import type { BaseCheckpointSaver, BaseStore } from '@langchain/langgraph';
 import {
   anthropicPromptCachingMiddleware,
   createMiddleware,
-  todoListMiddleware
 } from 'langchain';
 import { SystemMessage } from '@langchain/core/messages';
 import { z } from 'zod';
@@ -38,6 +36,7 @@ import {
   readMiddlewareName
 } from './middleware-stack';
 import { isPlanModeModelVisibleToolName } from './model-tool-exposure';
+import { createCapabilityFilesystemMiddleware } from './framework-capability-middleware';
 import type { AgentToolEffectStore } from './tool-effect-store';
 import type { RunUsageLedger } from './run-usage-ledger';
 import type { RunUsageObserver } from './run-usage-observer';
@@ -286,11 +285,8 @@ function compileRocSubagent(input: DeepAgentBuildInput, policy: DeepAgentBuildPo
   const tools = spec.tools === undefined ? [] : spec.tools;
   const model = spec.model === undefined ? input.model : spec.model;
   const middleware = [
-    todoListMiddleware(),
-    createFilesystemMiddleware({
-      backend: input.backend,
-      permissions: spec.permissions === undefined ? policy.filesystemPermissions : spec.permissions
-    }),
+    createCapabilityFilesystemMiddleware(input.backend,
+      spec.permissions === undefined ? policy.filesystemPermissions : spec.permissions, policy.capabilityManifest, 'subagent'),
     createPatchToolCallsMiddleware(),
     ...(spec.skills === undefined || spec.skills.length === 0
       ? []

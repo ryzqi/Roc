@@ -101,11 +101,13 @@ pnpm harness:bench run --suite qasper --dataset "$ROC_EVAL_DATASET" --profile sm
 
 `run --suite qasper` 把冻结的论文与问题送入独立 worker，创建真实 `AgentPluginRuntime`、`DeepAgent` graph、会话、SQLite checkpointer、用量账本和生产文件工具。worker 的模型请求经宿主桥接到 Roc 的 `LangChainModelFactory` 与所选已配置模型；官方答案和证据标注只留在宿主评分器。每题只开放 `ls` / `read_file`，可以分页读取完整论文。
 
+adapter 从公开 `paper.json` 的段落 ID 生成显式 [responseContract](../docs/agent-response-contract.md)，冻结答案/证据字段、类型、ID 枚举与唯一性。生产模型循环检查完整终轮文本，首次失败最多追加一次错误反馈；纠正计数随 checkpoint 恢复，超过一次保留失败原文。该反馈继续使用相同工具集合和模型调用链，不新增 schema 工具。答案范围和证据支持仍由模型判断，JSON 校验不能证明语义正确。
+
 生产完成事件会聚合多个工具轮次的助手文本。评测保留该原始文本在 `output.json`，由宿主侧[独立 verifier](lib/application-verifier.mjs)读取最后一个 root checkpoint 的无工具助手消息，并与最后一次模型响应逐字核对；验证通过后才写入 `final-answer.json` 供 QASPER 评分。最终消息仍必须是严格 JSON；Markdown 围栏、额外叙述、无效引用和错误答案按原评分规则处理。
 
-`runtime-verification.json` 核对完成的 run/thread、冻结问题/模型/限制/manifest、顺序请求响应、实际工具 schema、持久化事件、会话聚合输出、用量回执、工具参数、论文原始字节、进程退出与清理。缺失或损坏证据使 trial invalid、run incomplete。provider 未提供 usage 时保留 unknown 用量，不能假定为零。
+`runtime-verification.json` 核对完成的 run/thread、冻结问题/响应合同/模型/限制/manifest、顺序请求响应、实际工具 schema、持久化事件、会话聚合输出、用量回执、工具参数、论文原始字节、进程退出与清理。缺失或损坏证据使 trial invalid、run incomplete。provider 未提供 usage 时保留 unknown 用量，不能假定为零。纠正耗尽后 run 可为 completed、生产响应验收为 failed；独立运行证据通过后仍按原生错误回答评分。
 
-当前 adapter 为 `qasper-roc-runtime-v2`，manifest 冻结最终答案边界，逐题 grade 绑定 runtime evidence 和最终答案哈希。这证明所测答案经过当前 Roc 文本工具流程；PDF、检索、界面交互和子代理需要单独任务环境。
+当前 adapter 为 `qasper-roc-runtime-v3`，application contract schemaVersion 为 2；manifest 冻结最终答案边界与响应要求，逐题 grade 绑定 runtime evidence 和最终答案哈希。框架提示按能力清单装配，已知文件可直接读，未授权的 todo/记忆写入指导不再追加；原始记忆内容保留。响应合同和工具描述与 v2 不兼容，历史结果保留，需要另建同合同真实模型基线。原生 QASPER grader 和质量下限保持原样。这证明所测答案经过当前 Roc 文本工具流程；PDF、检索、界面交互和子代理需要单独任务环境。
 
 ## 每次更新的流程
 

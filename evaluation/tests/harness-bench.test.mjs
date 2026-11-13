@@ -101,6 +101,31 @@ test('legacy aggregate-answer runs and partial runtime evidence cannot establish
   const drift = run(); drift.manifest.applicationContract = { ...applicationContract, answerBoundary: 'aggregate-output' };
   assert.deepEqual(compareRuns(run(), drift).mismatches, ['applicationContract']);
 });
+test('versioned response requirements preserve legacy comparisons and reject missing, unknown or mixed contracts', () => {
+  const withContract = contract => {
+    const result = run();
+    result.manifest.applicationContract = contract;
+    result.trials.forEach(trial => { trial.runtimeVerification.contractHash = hash(contract); });
+    return result;
+  };
+  const legacy = { schemaVersion: 1, runtime: 'roc-agent-plugin-deep-agent',
+    answerBoundary: 'final-checkpoint-assistant-bound-to-terminal-model-response',
+    verification: 'sqlite-transport-workspace-process-v1' };
+  assert.equal(compareRuns(withContract(legacy), withContract(legacy)).conclusion, 'non-inferior');
+  assert.deepEqual(compareRuns(withContract(legacy), run()).mismatches, ['applicationContract']);
+  const { responseRequirements, ...missingRequirements } = applicationContract;
+  for (const contract of [
+    missingRequirements, { ...applicationContract, responseRequirements: 'unrecognized-requirements' },
+    { ...applicationContract, schemaVersion: 3 }
+  ]) {
+    assert.deepEqual(compareRuns(withContract(contract), withContract(contract)),
+      { conclusion: 'insufficient', reason: 'application_runtime_evidence_missing' });
+  }
+  const mismatchedReceipt = run();
+  mismatchedReceipt.trials[0].runtimeVerification.contractHash = hash(legacy);
+  assert.deepEqual(compareRuns(run(), mismatchedReceipt),
+    { conclusion: 'insufficient', reason: 'application_runtime_evidence_missing' });
+});
 test('fixture runner seals actual tool schemas across independent task workspaces without a live provider', async () => {
   const dataset = join(root, 'schema-dataset'); mkdirSync(dataset);
   const tasks = importQasper(Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`p${i}`, paper(`q${i}`)])))

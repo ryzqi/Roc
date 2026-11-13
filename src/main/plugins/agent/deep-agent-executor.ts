@@ -243,6 +243,7 @@ export function createAgentDeepAgentExecutor(options: AgentDeepAgentExecutorOpti
             resolveOutcome({
               status: 'completed',
               finalMessage,
+              finalResponse: finalAssistantText,
               summarySource: {
                 successfulToolNames: [...successfulToolNamesByBlockId.values()]
               },

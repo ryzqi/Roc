@@ -79,7 +79,8 @@ export async function executeApplication({ artifact, input, directory, config, c
   child.stdout.on('data', chunk => { stdoutBytes += chunk.length; if (stdoutBytes > 32 * 1024 * 1024) { truncated = true; controller.abort(); } });
   try {
     taskSignal.throwIfAborted();
-    send({ view: { id: 'benchmark-task', family: input.kind === 'qasper' ? 'literature-verification' : 'experiment-script', difficulty: 'hard', prompt: input.prompt, outputFormat: 'json' },
+    send({ view: { id: 'benchmark-task', family: input.kind === 'qasper' ? 'literature-verification' : 'experiment-script', difficulty: 'hard', prompt: input.prompt, outputFormat: 'json',
+      ...(input.responseContract === undefined ? {} : { responseContract: input.responseContract }) },
       benchmark: input.kind, providerId: config.providerId ?? 'evaluation-host', modelId: config.model, temperature: config.temperature,
       contextWindowTokens: config.contextWindowTokens ?? 65536, maxOutputTokens: config.maxOutputTokens ?? 4096,
       isolationProbePaths: protectedPaths, isolationProbePort: null });

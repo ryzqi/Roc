@@ -179,6 +179,7 @@ try {
   const prompt = view.conversationTurns === undefined ? view.prompt
     : `${view.conversationTurns.map((turn, index) => `Prior user turn ${index + 1}:\n${turn}`).join('\n\n')}\n\nCurrent user turn:\n${view.prompt}`;
   const started = await runtime.startRun({ input: prompt, mode: benchmark === 'scienceagentbench' ? 'task' : 'chat', enabledCapabilities: { mcpServers: [], skills: [] },
+    ...(view.responseContract === undefined ? {} : { responseContract: view.responseContract }),
     ...(benchmark === 'scienceagentbench' ? { taskSource: 'workbench' as const, shellAllowedCommands: ['python solution.py'] } : {}) });
   const run = repository.getRun(started.runId);
   if (run === null) throw new Error('quality_worker_run_missing');

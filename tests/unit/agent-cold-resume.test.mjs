@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
 import {test, after} from 'node:test';
 import {mkdtempSync, rmSync} from 'node:fs';
 import {join, resolve} from 'node:path';
@@ -104,6 +105,113 @@ test('cold resume preserves frozen inputs and unknown usage', {timeout:20000}, a
     if(first.db.open) await first.close();
     if(reopened) await reopened.close();
   }
+});
+
+const responseContract = {
+  format:'json', schema:{type:'object',properties:{answer:{type:'string',minLength:1}},
+    required:['answer'],additionalProperties:false}
+};
+function streamedResponse(text) {
+  // Provider IDs identify graph messages; separate completions must not overwrite one another.
+  const chunk={id:`response-contract-${randomUUID()}`,object:'chat.completion.chunk',created:0,model:'resume-fixture',
+    choices:[{index:0,delta:{role:'assistant',content:text},finish_reason:'stop'}]};
+  const usage={...chunk,choices:[],usage:{prompt_tokens:10,completion_tokens:2,total_tokens:12}};
+  return new Response(`data: ${JSON.stringify(chunk)}\n\ndata: ${JSON.stringify(usage)}\n\ndata: [DONE]\n\n`,
+    {headers:{'content-type':'text/event-stream'}});
+}
+function waitForCompletion(fixture) {
+  const terminal=Promise.withResolvers();
+  fixture.eventBus.subscribe('agent.run.completed',event=>terminal.resolve(event.payload));
+  fixture.eventBus.subscribe('agent.run.failed',event=>terminal.reject(new Error(JSON.stringify(event.payload))));
+  return terminal.promise;
+}
+function readRootCheckpoint(db) {
+  const row=db.prepare("SELECT checkpoint_blob FROM langgraph_checkpoints WHERE checkpoint_ns='' ORDER BY checkpoint_id DESC LIMIT 1").get();
+  return JSON.parse(row.checkpoint_blob.toString()).channel_values;
+}
+
+test('response correction survives a crash and a new run on the same thread gets its own single correction', {timeout:20000}, async()=>{
+  const requested=Promise.withResolvers(), beforeRequests=[];
+  const first=open(join(directory,'response-before.db'),async(_url,init)=>{
+    beforeRequests.push(JSON.parse(init.body));
+    if(beforeRequests.length===1) return streamedResponse('Preface. {"answer":"first"}');
+    requested.resolve();
+    return await new Promise((_resolve,reject)=>{
+      init.signal.addEventListener('abort',()=>reject(init.signal.reason),{once:true});
+    });
+  });
+  let reopened;
+  try {
+    const started=await first.runtime.startRun({input:'Return only JSON with answer.',mode:'chat',
+      enabledCapabilities:{mcpServers:[],skills:[]},responseContract});
+    await requested.promise;
+    const snapshot=first.repository.getRunExecutionSnapshot(started.runId);
+    assert.deepEqual(snapshot.taskContract.responseContract,responseContract);
+    assert.equal(beforeRequests.length,2);
+    assert.deepEqual(readRootCheckpoint(first.db).rocResponseCorrection,{runId:started.runId,attempts:1});
+    const beforeCalls=first.db.prepare("SELECT state FROM agent_calls WHERE kind='model' ORDER BY rowid").all();
+    assert.deepEqual(beforeCalls.map(call=>call.state),['settled','reserved']);
+    await first.db.backup(join(directory,'response-reopened.db'));
+    await first.close();
+    const afterRequests=[];
+    reopened=open(join(directory,'response-reopened.db'),async(_url,init)=>{
+      afterRequests.push(JSON.parse(init.body));
+      return streamedResponse(afterRequests.length<3 ? 'Still invalid. {"answer":"next"}' : '{"answer":"valid"}');
+    });
+    reopened.repository.reconcileStartupRuns();reopened.ledger.reconcileStartup();
+    assert.deepEqual(reopened.repository.getRunExecutionSnapshot(started.runId),snapshot);
+    const resumed=waitForCompletion(reopened);
+    await reopened.runtime.resumeRun({kind:'checkpoint',runId:started.runId,threadId:started.threadId});
+    await resumed;
+    assert.equal(afterRequests.length,1,'restart cannot replenish the consumed correction');
+    assert.equal(reopened.repository.getRun(started.runId).status,'completed');
+    const failed=reopened.repository.taskContracts.readReport(started.runId);
+    assert.equal(failed.criteria[0].verdict,'failed');
+    assert.equal(failed.criteria[0].verifier,'response_json_schema');
+    assert.equal(readRootCheckpoint(reopened.db).messages.filter(message=>
+      message.kwargs.id===`roc-response-correction:${started.runId}`).length,1);
+    await reopened.runtime.replayRunEvents({runId:started.runId,afterSequence:0});
+    assert.equal(reopened.repository.taskContracts.readReport(started.runId).criteria[0].verdict,'failed');
+    const newDone=waitForCompletion(reopened);
+    const next=await reopened.runtime.startRun({threadId:started.threadId,input:'Return only JSON with answer.',
+      mode:'chat',enabledCapabilities:{mcpServers:[],skills:[]},responseContract});
+    await newDone;
+    assert.notEqual(next.runId,started.runId);assert.equal(next.threadId,started.threadId);
+    assert.equal(afterRequests.length,3,'new run gets one correction and then succeeds');
+    assert.equal(reopened.repository.taskContracts.readReport(next.runId).status,'satisfied');
+    const checkpoint=readRootCheckpoint(reopened.db);
+    assert.deepEqual(checkpoint.rocResponseCorrection,{runId:next.runId,attempts:1});
+    assert.equal(checkpoint.messages.filter(message=>message.kwargs.id===`roc-response-correction:${next.runId}`).length,1);
+    const usage=reopened.db.prepare("SELECT state FROM agent_calls WHERE kind='model' ORDER BY rowid").all();
+    assert.deepEqual(usage.map(call=>call.state),['settled','unknown','settled','settled','settled']);
+  } finally {
+    if(first.db.open) await first.close();
+    if(reopened) await reopened.close();
+  }
+});
+
+for(const scenario of [
+  {name:'missing terminal response',finalMessage:'{"answer":"aggregate"}',verdict:'failed'},
+  {name:'invalid terminal response',finalMessage:'{"answer":"aggregate"}',finalResponse:'Preface. {"answer":"bad"}',verdict:'failed'},
+  {name:'valid terminal response with narration',finalMessage:'Reading. {"answer":"terminal"}',finalResponse:'{"answer":"terminal"}',verdict:'passed'}
+]) test(`runtime acceptance uses ${scenario.name} independently of aggregate session text`,{timeout:10000},async()=>{
+  const usage={callCount:0,inputTokens:0,outputTokens:0,totalTokens:0,cacheReadTokens:0,cacheCreationTokens:0};
+  const fixture=open(':memory:',async()=>assert.fail('boundary fixture must not dispatch a model'),{
+    execute(){return {events:(async function*(){})(),outcome:Promise.resolve({
+      status:'completed',finalMessage:scenario.finalMessage,
+      ...(Object.hasOwn(scenario,'finalResponse') ? {finalResponse:scenario.finalResponse} : {}),
+      summarySource:{successfulToolNames:[]},usage
+    })};}
+  });
+  try {
+    const done=waitForCompletion(fixture);
+    const started=await fixture.runtime.startRun({input:'Return JSON with answer.',mode:'chat',
+      enabledCapabilities:{mcpServers:[],skills:[]},responseContract});
+    assert.equal((await done).assistantMessage,scenario.finalMessage);
+    const report=fixture.repository.taskContracts.readReport(started.runId);
+    assert.equal(report.criteria[0].verdict,scenario.verdict);
+    assert.equal(report.criteria[0].verifier,'response_json_schema');
+  } finally {await fixture.close();}
 });
 
 for (const decision of [

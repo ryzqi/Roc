@@ -851,6 +851,7 @@ export class AgentPluginRuntime {
   async completeRun(input: {
     runId: string;
     assistantMessage: string;
+    finalResponse?: string | null;
     summary: string;
     durationMs: number;
     endedAt: string;
@@ -864,7 +865,7 @@ export class AgentPluginRuntime {
     const snapshot = this.options.repository.getRunExecutionSnapshot(input.runId);
     this.options.repository.taskContracts.assertMatchesSnapshot(input.runId, snapshot.taskContract);
     const taskAcceptance = await this.options.repository.taskContracts.evaluate(input.runId, this.createTaskVerificationContext({
-      response: input.assistantMessage,
+      response: snapshot.taskContract.responseContract === undefined ? input.assistantMessage : input.finalResponse ?? null,
       workspacePath: snapshot.workspace?.path ?? (input.workspacePath === undefined ? null : input.workspacePath),
       researchProjectId: snapshot.researchProjectId ?? null
     }));
@@ -1159,6 +1160,7 @@ export class AgentPluginRuntime {
         await this.completeRun({
           runId: input.runId,
           assistantMessage: execution.finalMessage,
+          finalResponse: execution.finalResponse,
           summary: buildCompletionSummary({
             assistantMessage: execution.finalMessage,
             successfulToolNames: execution.summarySource.successfulToolNames,
@@ -1690,6 +1692,7 @@ function createTaskContract(request: ChatStartRunRequest): RunExecutionSnapshot[
     contractVersion: 1,
     objective: request.input.trim(),
     constraints: [],
+    ...(request.responseContract === undefined ? {} : { responseContract: request.responseContract }),
     kind: isReply ? 'reply' : 'task',
     criteria: request.acceptanceCriteria ?? [{
       id: 'A-01',

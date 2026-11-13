@@ -15,6 +15,7 @@
 | [实验指标、审核与比较](research-experiment-results.md) | 结构化结果、指标 Evidence 与可比性 |
 | [科研执行资源治理](research-execution-resources.md) | 计算准入、资源采样、原生隔离与崩溃清理 |
 | [ResearchTask：任务事实、执行观测与离线诊断](research-task-observability.md) | 任务上下文、用量、日志、Trace 与诊断 |
+| [Agent 最终响应合同](agent-response-contract.md) | 显式 JSON 要求、一次纠正、终轮验收与能力提示 |
 
 ## 文献、阅读与综述
 
