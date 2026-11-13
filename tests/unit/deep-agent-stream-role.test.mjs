@@ -5,7 +5,7 @@ import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 
 const { adaptDeepAgentRun } = await importTypeScriptModule(
   'src/main/services/deep-agent/deep-agent-stream-adapter.ts',
-  { platform: 'node', tempDir: '.artifacts/research-harness/S01/stream-role' }
+  { platform: 'node', tempDir: '.runtime/tmp' }
 );
 
 async function* values(items) { yield* items; }

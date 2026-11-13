@@ -37,7 +37,6 @@ export const wikiRevisionReadSchema = wikiPageRequestSchema.extend({revision: re
 export const wikiCompileSchema = wikiPageRequestSchema.extend({expectedRevision: revision}).strict();
 export const wikiFollowSchema = wikiPageRequestSchema.extend({targetPageId: id, expectedRevision: revision.positive()}).strict();
 export type WikiSection = z.infer<typeof wikiSectionSchema>;
-export type WikiSectionInput = z.infer<typeof wikiSectionInputSchema>;
 export type WikiDependency = z.infer<typeof wikiDependencySchema>;
 export type WikiRevision = z.infer<typeof wikiRevisionSchema>;
 export type WikiPage = z.infer<typeof wikiPageSchema>;

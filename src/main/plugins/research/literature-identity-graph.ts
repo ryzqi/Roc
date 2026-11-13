@@ -10,10 +10,6 @@ export type LiteratureIdentityGroup = {
 const compare = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
 const priority = (key: string): number => key.startsWith('pmid:') ? 0 : key.startsWith('arxiv:') ? 1 : 2;
 
-export function literatureStrongIdentities(record: IdentityRecord): string[] {
-  return [...new Set([literatureIdentity(record), literatureSourceIdentity(record)])].sort(compare);
-}
-
 /** Only uniquely anchored DOI-free components join a DOI; competing DOIs remain separate. */
 export function groupLiteratureIdentities(observations: readonly ObservedIdentity[]): LiteratureIdentityGroup[] {
   const states = observations.map(({record, identifiers}) => {

@@ -5,11 +5,11 @@ import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
 
 const {adaptDeepAgentRun} = await importTypeScriptModule(
   'src/main/services/deep-agent/deep-agent-stream-adapter.ts',
-  {platform:'node',tempDir:'.artifacts/research-harness/interrupt-stream'}
+  {platform:'node',tempDir:'.runtime/tmp'}
 );
 const {projectDeepAgentInterrupts} = await importTypeScriptModule(
   'src/main/plugins/agent/interrupt-projection.ts',
-  {platform:'node',tempDir:'.artifacts/research-harness/interrupt-stream'}
+  {platform:'node',tempDir:'.runtime/tmp'}
 );
 const payload = {kind:'approval',request:{
   actionRequests:[{name:'research_approve_gate',args:{stage:'discovery'}}],

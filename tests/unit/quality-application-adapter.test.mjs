@@ -3,12 +3,13 @@ import { test, after } from 'node:test';
 import { createServer } from 'node:net';
 import { build } from 'esbuild';
 import { createHash } from 'node:crypto';
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-mkdirSync('.artifacts/research-harness/S01', { recursive: true });
-const root = realpathSync(mkdtempSync('.artifacts/research-harness/S01/adapter-'));
+mkdirSync('.runtime/tmp', { recursive: true });
+const root = realpathSync(mkdtempSync('.runtime/tmp/quality-application-adapter-'));
+after(() => rmSync(root, { recursive: true, force: true }));
 const workerPath = join(root, 'application-worker.mjs');
 const adapterPath = join(root, 'adapter.mjs');
 await build({ entryPoints: ['scripts/harness-eval/quality-evaluation/application-worker.ts'], outfile: workerPath,
