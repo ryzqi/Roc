@@ -11,6 +11,7 @@ export const researchCapabilityToolNames: Readonly<Record<string, string>> = {
   'research.evidence.list': 'list_evidence',
   'research.evidence.inspect': 'inspect_evidence_source',
   'research.relations.list': 'list_evidence_relations',
+  'research.claims.compare': 'compare_claims',
   'research.sourceMigrations.list': 'read_source_migrations',
   'research.sourceReplacements.list': 'read_source_replacements',
   'research.artifacts.get': 'read_artifact',
@@ -37,7 +38,7 @@ export const researchCapabilityToolNames: Readonly<Record<string, string>> = {
 };
 
 const readCapabilities = ['research.knowledge.search', 'research.evidence.list', 'research.evidence.inspect',
-  'research.relations.list', 'research.sourceMigrations.list', 'research.sourceReplacements.list', 'research.artifacts.get'];
+  'research.relations.list', 'research.claims.compare', 'research.sourceMigrations.list', 'research.sourceReplacements.list', 'research.artifacts.get'];
 const evidenceCapabilities = [...readCapabilities, 'research.evidence.capture'];
 const productionInputs = ['research.artifacts.inspectProduction', 'research.artifacts.readProductionFile'];
 const workspaceFiles = ['research.workspace.readFile', 'research.workspace.saveFile'];

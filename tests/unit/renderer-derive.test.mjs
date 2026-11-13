@@ -1,3 +1,4 @@
+import {unknownExperiment} from './fixtures/research-test-kit.mjs';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -61,7 +62,7 @@ function evidenceRecord(overrides) {
 }
 
 function claimRecord(overrides) {
-  return {
+  return {experiment: {...unknownExperiment},
     id: 'cl-1',
     projectId: 'p1',
     artifactId: 'art-1',

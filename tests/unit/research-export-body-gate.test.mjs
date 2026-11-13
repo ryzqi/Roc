@@ -1,3 +1,4 @@
+import {unknownExperiment} from './fixtures/research-test-kit.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -107,7 +108,7 @@ function setup({ claims = [], evidence = [] } = {}) {
   const claimIds = claims.map((claim) => {
     // Through the repository: `createClaim` validates that the evidence ids resolve, so a fixture
     // mistake surfaces here rather than as a puzzling failure further down.
-    const created = repo.evidence.createClaim({ projectId: project.id, artifactId: manuscriptId,
+    const created = repo.evidence.createClaim({experiment: {...unknownExperiment},  projectId: project.id, artifactId: manuscriptId,
       subjectType: claim.subjectType ?? 'claim', content: claim.content ?? 'A sentence.',
       status: claim.status ?? 'supported', evidenceIds: claim.evidenceIds ?? [] });
     return created.id;
@@ -180,7 +181,7 @@ test('a figure claim in a body section survives writing — that is the gap', ()
   // `assertSupported()` checks status and evidence, not `subjectType`, so this is accepted. If it
   // ever starts failing, the one rule this step adds becomes unnecessary and should be deleted
   // rather than left as a second name for the same defect.
-  const seeded = setup({ evidence: [{ id: 'ev-1' }], claims: [{ subjectType: 'figure', evidenceIds: ['ev-1'] }] });
+  const seeded = setup({ evidence: [{ id: 'ev-1' }], claims: [{experiment: {...unknownExperiment},  subjectType: 'figure', evidenceIds: ['ev-1'] }] });
   finalize(seeded);
   const manuscript = seeded.repo.manuscripts.getManuscript(seeded.manuscriptId);
   assert.deepEqual(manuscript.sections, [{ title: 'Introduction', claimIds: seeded.claimIds }]);
@@ -188,7 +189,7 @@ test('a figure claim in a body section survives writing — that is the gap', ()
 });
 
 test('the export path refuses the body with the figure claim in it, and names the claim', () => {
-  const seeded = setup({ evidence: [{ id: 'ev-1' }], claims: [{ subjectType: 'figure', evidenceIds: ['ev-1'] }] });
+  const seeded = setup({ evidence: [{ id: 'ev-1' }], claims: [{experiment: {...unknownExperiment},  subjectType: 'figure', evidenceIds: ['ev-1'] }] });
   finalize(seeded);
   assert.throws(attempt(seeded), (error) => {
     assert.equal(error.message, `research_export_figure_claim_in_body:${seeded.claimIds[0]}`);

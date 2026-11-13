@@ -3,7 +3,7 @@ import {before, after, test} from 'node:test';
 import {createHash} from 'node:crypto';
 import {readFile, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
-import {loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {unknownExperiment, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 import {createPublishedFigureFixture} from './fixtures/research-production-test-kit.mjs';
 
 let api;
@@ -40,7 +40,7 @@ async function scene() {
     f.result = f.repository.experimentResults.save({snapshot, snapshotHash: hash(snapshot)});
     f.evidence = f.repository.experimentResults.captureMetric(f.result, 'mean');
     const claim = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: f.artifactId})[0];
-    f.claim = f.repository.evidence.updateClaim({id: claim.id, expectedVersion: claim.version,
+    f.claim = f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id: claim.id, expectedVersion: claim.version,
       content: 'Synthetic figure maps an actual post-transform bar datum to a stored metric.',
       status: 'supported', evidenceIds: [f.evidence.id]});
     f.repository.transitionWorkflow({projectId: f.project.id, expectedStage: 'figure', action: 'complete'});
@@ -146,7 +146,7 @@ test('claim drift is visible while stored history survives invalidated evidence 
   try {
     const saved = await f.save();
     f.openRevision();
-    f.claim = f.repository.evidence.updateClaim({id: f.claim.id, expectedVersion: f.claim.version,
+    f.claim = f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id: f.claim.id, expectedVersion: f.claim.version,
       content: 'Revised scientific meaning requires new mapping.', status: 'supported', evidenceIds: [f.evidence.id]});
     assert.throws(() => f.repository.transitionWorkflow({projectId: f.project.id, expectedStage: 'figure', action: 'complete'}),
       /research_consistency_claim_changed/u);
@@ -198,7 +198,7 @@ test('inspection refuses a whole-artifact change during the asynchronous result 
     const saved = await f.save();
     f.service = new api.ResearchFigureConsistencyService(f.repository, f.figureService, {evidence: async () => {
       f.openRevision();
-      f.claim = f.repository.evidence.updateClaim({id: f.claim.id, expectedVersion: f.claim.version,
+      f.claim = f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id: f.claim.id, expectedVersion: f.claim.version,
         content: 'Changed during result read.', status: 'supported', evidenceIds: [f.evidence.id]});
       return {receipt: f.result, metricId: 'mean'};
     }});
@@ -297,7 +297,7 @@ test('a later figure await cannot invalidate an earlier response manuscript afte
     f.db.prepare("UPDATE research_stage_states SET status='ready' WHERE project_id=? AND stage='writing'").run(f.project.id);
     const manuscript = f.repository.createArtifact({projectId: f.project.id, stage: 'writing', kind: 'manuscript',
       title: 'Earlier response manuscript', path: null});
-    const claim = f.repository.evidence.createClaim({projectId: f.project.id, artifactId: manuscript.id,
+    const claim = f.repository.evidence.createClaim({experiment: {...unknownExperiment}, projectId: f.project.id, artifactId: manuscript.id,
       subjectType: 'paragraph', content: 'The synthetic result is 2 ms.', status: 'supported', evidenceIds: [f.evidence.id]});
     f.repository.manuscripts.saveManuscript({artifactId: manuscript.id, sections: [{title: 'Discussion', claimIds: [claim.id]}]});
     const response = api.withResearchHumanContext({capability: 'research.responseMatrix.save', projectId: f.project.id, windowId: 90},

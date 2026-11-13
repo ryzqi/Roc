@@ -3,7 +3,7 @@ import {copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile} from 'node:
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {setTimeout as wait} from 'node:timers/promises';
-import {createResearchFixture, figureRequest} from './research-test-kit.mjs';
+import {unknownExperiment, createResearchFixture, figureRequest} from './research-test-kit.mjs';
 
 /** Actual local renderer, persisted publication and waiting human gate; no model or network. */
 export async function createPublishedFigureFixture(api, {figureSource, omitCaption = false} = {}) {
@@ -39,7 +39,7 @@ export async function createPublishedFigureFixture(api, {figureSource, omitCapti
     const chunkId=f.db.prepare('SELECT id FROM research_knowledge_chunks WHERE document_id=?').pluck().get(source.id);
     const evidence=f.repository.evidence.capture({projectId:f.project.id,chunkId});
     f.repository.runs.complete(f.run.id,f.project.id,{title:'Recorded figure',markdown:'Original figure review body',
-      claims:omitCaption ? [] : [{subjectType:'figure',content:'Fixed synthetic rendering uses the recorded input.',status:'supported',evidenceIds:[evidence.id]}],
+      claims:omitCaption ? [] : [{experiment: {...unknownExperiment}, subjectType:'figure',content:'Fixed synthetic rendering uses the recorded input.',status:'supported',evidenceIds:[evidence.id]}],
       sections:[],verdict:'uncertain'});
     if (!omitCaption) f.repository.transitionWorkflow({projectId:f.project.id,expectedStage:'figure',action:'complete'});
     return {...f,figureService,figureId:publication.id,artifactId:publication.artifactId,productionRun:completed,dispose};

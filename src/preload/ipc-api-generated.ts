@@ -246,6 +246,7 @@ export const rocApi: RocPreloadApi = {
     listEvidence: (...args) => ipcRenderer.invoke(ipcChannels.researchEvidenceList, ...args),
     createClaim: (...args) => ipcRenderer.invoke(ipcChannels.researchClaimsCreate, ...args),
     updateClaim: (...args) => ipcRenderer.invoke(ipcChannels.researchClaimsUpdate, ...args),
+    compareClaims: (...args) => ipcRenderer.invoke(ipcChannels.researchClaimsCompare, ...args),
     listClaims: (...args) => ipcRenderer.invoke(ipcChannels.researchClaimsList, ...args),
     getClaimHistory: (...args) => ipcRenderer.invoke(ipcChannels.researchClaimsHistory, ...args),
     saveManuscript: (...args) => ipcRenderer.invoke(ipcChannels.researchManuscriptSave, ...args),

@@ -8,7 +8,7 @@ import {tmpdir} from 'node:os';
 import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 import electronPath from 'electron';
 import {_electron} from '@playwright/test';
-import {createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
+import {unknownExperiment, createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
 import {createPublishedFigureFixture} from '../unit/fixtures/research-production-test-kit.mjs';
 
 let directory, app, page, api, active, windowId;
@@ -171,7 +171,7 @@ async function scene({long=false,managed=false,experiment=false,child=false}={})
     'file','synthetic-source','parse-v1','Original synthetic source','page:2',excerpt,hash(excerpt),'2026-11-04T00:00:00.000Z');
   const empty=f.repository.createArtifact({projectId:f.project.id,stage:'reading',kind:'reading_notes',title:'Empty real artifact',path:null});
   const completed=f.withWorker(() => f.repository.runs.complete(f.run.id,f.project.id,{title:'真实保存的阅读产物',markdown:'# Saved result\n\nActual **persisted** markdown.',
-    claims:[{subjectType:'claim',content:'A working hypothesis',status:'hypothesis',evidenceIds:[evidenceId]}],sections:[],verdict:'uncertain'}));
+    claims:[{experiment: {...unknownExperiment}, subjectType:'claim',content:'A working hypothesis',status:'hypothesis',evidenceIds:[evidenceId]}],sections:[],verdict:'uncertain'}));
   const artifactId=completed.outputArtifactIds[0];
   await api.createResearchHumanGate({repository:f.repository}).complete({projectId:f.project.id,expectedStage:'reading',action:'complete'});
   const snapshot=f.repository.inspectArtifact({projectId:f.project.id,artifactId,expectedVersion:null}).snapshot;

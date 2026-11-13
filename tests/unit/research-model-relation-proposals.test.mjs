@@ -1,6 +1,6 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createResearchTestRoleTools, withResearchTestWorker, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {unknownExperiment, createResearchTestRoleTools, withResearchTestWorker, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => {api = await loadResearchTestApi();});
@@ -14,7 +14,7 @@ function scene() {
     embeddingPolicy: 'none'});
   f.evidence = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'model-relation-source:chunk:0'});
   f.output = {title: 'Synthetic model interpretation', markdown: 'The model proposes a supported statement.',
-    claims: ['supported', 'hypothesis', 'pending'].map(status => ({subjectType: 'claim',
+    claims: ['supported', 'hypothesis', 'pending'].map(status => ({experiment: {...unknownExperiment}, subjectType: 'claim',
       content: `A synthetic ${status} statement.`, status, evidenceIds: [f.evidence.id]})),
     sections: [], verdict: 'uncertain'};
   f.proposeInput = claim => ({projectId: f.project.id, claimId: claim.id, expectedClaimVersion: claim.version,
@@ -76,7 +76,7 @@ test('role tools expose paginated fixed source and relation facts with bound pro
   try {
     const artifact = f.repository.createArtifact({projectId: f.project.id, stage: 'reading', kind: 'reading_notes',
       title: 'Synthetic draft target', path: null});
-    const claim = f.repository.evidence.createClaim({projectId: f.project.id, artifactId: artifact.id, subjectType: 'claim',
+    const claim = f.repository.evidence.createClaim({experiment: {...unknownExperiment}, projectId: f.project.id, artifactId: artifact.id, subjectType: 'claim',
       content: 'A pending synthetic relation.', status: 'hypothesis', evidenceIds: [f.evidence.id]});
     const proposed = f.repository.evidence.relations.propose(f.proposeInput(claim), {kind: 'agent', id: f.run.id});
     const tools = createResearchTestRoleTools(api, {run: f.run, context: f.repository.runs.getContext(f.run.id),

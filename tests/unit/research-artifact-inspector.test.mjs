@@ -1,7 +1,7 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {withResearchTestWorker, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {unknownExperiment, withResearchTestWorker, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async()=>{api=await loadResearchTestApi();});
@@ -35,7 +35,7 @@ test('owned artifact inspection retains actual empty content, origin and scoped 
     assert.deepEqual(f.repository.inspectArtifact(readInput(f,empty,first.snapshot.version)),first);
     assert.equal(totalChanges(f),before);
     const completed=withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {title:'Recorded notes',markdown:'Actual saved markdown',
-      claims:[{subjectType:'claim',content:'Synthetic working hypothesis',status:'hypothesis',evidenceIds:[]}],
+      claims:[{experiment: {...unknownExperiment}, subjectType:'claim',content:'Synthetic working hypothesis',status:'hypothesis',evidenceIds:[]}],
       sections:[],verdict:'uncertain'}));
     const artifact=f.repository.getArtifact(completed.outputArtifactIds[0]);
     f.repository.addProvenance({projectId:f.project.id,artifactId:artifact.id,subjectType:'artifact',subjectId:artifact.id,
@@ -66,11 +66,11 @@ test('content and source changes at the same clock produce stale inspection vers
     assert.equal(stale.status,'stale');
     assert.notEqual(stale.snapshot.version,first.snapshot.version);
     assert.equal(stale.snapshot.artifact.title,'Revised notes');
-    const claim=f.repository.evidence.createClaim({projectId:f.project.id,artifactId:artifact.id,subjectType:'claim',
+    const claim=f.repository.evidence.createClaim({experiment: {...unknownExperiment}, projectId:f.project.id,artifactId:artifact.id,subjectType:'claim',
       content:'A hypothesis without semantic review',status:'hypothesis',evidenceIds:[]});
     const withClaim=f.repository.inspectArtifact(readInput(f,artifact,stale.snapshot.version));
     assert.equal(withClaim.status,'stale');
-    f.repository.evidence.updateClaim({id:claim.id,expectedVersion:claim.version,content:'Changed hypothesis',status:'pending',evidenceIds:[]});
+    f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id:claim.id,expectedVersion:claim.version,content:'Changed hypothesis',status:'pending',evidenceIds:[]});
     const changed=f.repository.inspectArtifact(readInput(f,artifact,withClaim.snapshot.version));
     assert.equal(changed.status,'stale');
     assert.equal(changed.snapshot.claims[0].status,'pending');
@@ -86,7 +86,7 @@ test('superseded evidence remains inspectable with its original excerpt while pu
   const f=createResearchFixture(api,'reading');
   try {
     const artifact=manual(f),id=evidence(f);
-    f.repository.evidence.createClaim({projectId:f.project.id,artifactId:artifact.id,subjectType:'claim',
+    f.repository.evidence.createClaim({experiment: {...unknownExperiment}, projectId:f.project.id,artifactId:artifact.id,subjectType:'claim',
       content:'A retained source association',status:'pending',evidenceIds:[id]});
     const first=f.repository.inspectArtifact(readInput(f,artifact));
     assert.equal(first.snapshot.evidence[0].referenceStatus,'recorded');
@@ -137,7 +137,7 @@ test('actual artifact inspection bridge enforces explicit project and version co
     assert.equal(missingProject.error.code,'research_project_not_found');
     assert.equal(missingProject.error.category,'not_found');
     const id=evidence(f);
-    f.repository.evidence.createClaim({projectId:f.project.id,artifactId:artifact.id,subjectType:'claim',
+    f.repository.evidence.createClaim({experiment: {...unknownExperiment}, projectId:f.project.id,artifactId:artifact.id,subjectType:'claim',
       content:'Synthetic source',status:'pending',evidenceIds:[id]});
     f.db.prepare('UPDATE research_evidence SET project_id=? WHERE id=?').run(other.id,id);
     const badSource=await bridge.invoke('research.inspectArtifact',[input],21);

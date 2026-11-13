@@ -7,7 +7,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import electronPath from 'electron';
 import {_electron} from '@playwright/test';
-import {loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
+import {unknownExperiment, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
 import {createPublishedFigureFixture} from '../unit/fixtures/research-production-test-kit.mjs';
 import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 
@@ -104,7 +104,7 @@ async function scene({long = false, many = false} = {}) {
     f.result = f.repository.experimentResults.save({snapshot, snapshotHash: hash(snapshot)});
     f.evidence = f.repository.experimentResults.captureMetric(f.result, 'mean');
     const claim = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: f.artifactId})[0];
-    f.claim = f.repository.evidence.updateClaim({id: claim.id, expectedVersion: claim.version,
+    f.claim = f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id: claim.id, expectedVersion: claim.version,
       content: long ? '图稿指标、单位、来源与场景位置逐项核对。'.repeat(35) : 'Synthetic figure maps an actual post-transform bar datum to a stored metric.',
       status: 'supported', evidenceIds: [f.evidence.id]});
     f.repository.transitionWorkflow({projectId: f.project.id, expectedStage: 'figure', action: 'complete'});

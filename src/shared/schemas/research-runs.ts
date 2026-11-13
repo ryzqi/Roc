@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import {researchClaimCreateRequestSchema} from './research-evidence';
 import { researchArtifactKindSchema, researchStageSchema } from './research';
 import { researchIdeaCanvasContentSchema } from './research-ideas';
 import { researchSearchPlanSchema } from './research-search-plan';
@@ -41,12 +42,7 @@ export const researchStageRunsRequestSchema = z.object({ projectId: id, limit: z
 export const researchStageOutputSchema = z.object({
   title: z.string().trim().min(1).max(300),
   markdown: z.string().trim().min(1).max(60000),
-  claims: z.array(z.object({
-    subjectType: z.enum(['claim', 'paragraph', 'figure']),
-    content: z.string().trim().min(1).max(20000),
-    status: z.enum(['supported', 'hypothesis', 'pending']),
-    evidenceIds: z.array(id).max(100)
-  }).strict()).max(200),
+  claims: researchClaimCreateRequestSchema.omit({projectId: true, artifactId: true}).array().max(200),
   sections: z.array(z.object({
     title: z.string().trim().min(1).max(300),
     claimIndexes: z.array(z.number().int().nonnegative()).min(1).max(200)

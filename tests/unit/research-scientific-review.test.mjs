@@ -1,6 +1,6 @@
 import {before, after, test} from 'node:test';
 import assert from 'node:assert/strict';
-import {withResearchTestWorker, loadResearchTestApi, captureResearchArtifactVersions} from './fixtures/research-test-kit.mjs';
+import {unknownExperiment, withResearchTestWorker, loadResearchTestApi, captureResearchArtifactVersions} from './fixtures/research-test-kit.mjs';
 
 import {createScientificReviewFixture} from './fixtures/scientific-review.mjs';
 
@@ -59,7 +59,7 @@ test('frozen original locators, claim versions and read-only reviewer output are
       assert.equal(f.repository.listArtifacts(f.project.id).length, before);
     }
     assert.throws(() => f.worker(child.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {...plain, scientificReview: f.output(child),
-      claims: [{subjectType: 'paragraph', content: 'Unauthorized rewrite', status: 'pending', evidenceIds: []}]})), /reviewer_readonly/);
+      claims: [{experiment: {...unknownExperiment}, subjectType: 'paragraph', content: 'Unauthorized rewrite', status: 'pending', evidenceIds: []}]})), /reviewer_readonly/);
     f.complete();
     const reports = f.repository.scientificReviews.reportsForManuscript(f.project.id, f.artifactId);
     assert.equal(reports.length, 3);
@@ -160,7 +160,7 @@ test('revision lineage retains old findings and requires a verifier bound to the
     const revision = f.repository.runs.begin({projectId: f.project.id, expectedStage: 'revision', instruction: 'Qualify results', requestId: 'revision-1'});
     withResearchTestWorker(api, f.repository, revision.id, f.project.id, workerRunId => f.repository.runs.markRunning(workerRunId, f.project.id, {providerId: 'fixture', modelId: 'fixture'}));
     const revisedId = withResearchTestWorker(api, f.repository, revision.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {...plain, title: 'Revised manuscript',
-      claims: [{subjectType: 'paragraph', content: 'A limited negative result with uncertainty.', status: 'supported', evidenceIds: [f.evidence.id]}],
+      claims: [{experiment: {...unknownExperiment}, subjectType: 'paragraph', content: 'A limited negative result with uncertainty.', status: 'supported', evidenceIds: [f.evidence.id]}],
       sections: [{title: 'Results', claimIndexes: [0]}]})).outputArtifactIds[0];
     const claim = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: revisedId})[0];
     const relation = f.repository.evidence.relations.list({projectId: f.project.id, claimId: claim.id})[0];

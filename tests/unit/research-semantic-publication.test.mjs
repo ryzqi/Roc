@@ -2,7 +2,7 @@ import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {Annotation, Command, END, MemorySaver, START, StateGraph} from '@langchain/langgraph';
-import {withResearchTestWorker, captureResearchArtifactVersions, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {unknownExperiment, withResearchTestWorker, captureResearchArtifactVersions, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => {api = await loadResearchTestApi();});
@@ -21,7 +21,7 @@ function scene(stage = 'reading', count = 1) {
   }
   const completed = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {
     title: 'Synthetic publication claim', markdown: 'A model declares support but has not obtained human review.',
-    claims: [{subjectType: stage === 'writing' ? 'paragraph' : 'claim', content: 'The synthetic result is supported.',
+    claims: [{experiment: {...unknownExperiment}, subjectType: stage === 'writing' ? 'paragraph' : 'claim', content: 'The synthetic result is supported.',
       status: 'supported', evidenceIds: f.sources.map(source => source.id)}],
     sections: stage === 'writing' ? [{title: 'Result', claimIndexes: [0]}] : [], verdict: 'ready'
   }));
@@ -126,7 +126,7 @@ test('editing a claim revokes its old review while draft inspection remains avai
   const f = scene();
   try {
     const confirmed = f.review(f.relations()[0]);
-    f.claim = f.repository.evidence.updateClaim({id: f.claim.id, expectedVersion: f.claim.version,
+    f.claim = f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id: f.claim.id, expectedVersion: f.claim.version,
       content: 'A changed synthetic claim.', status: 'supported', evidenceIds: f.claim.evidenceIds});
     assert.equal(f.repository.evidence.relations.get(confirmed.id, f.project.id).status, 'invalidated');
     const before = f.changes();

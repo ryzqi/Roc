@@ -5,7 +5,7 @@ import {mkdtempSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import Database from 'better-sqlite3';
-import {withResearchTestWorker, captureResearchArtifactVersions, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {unknownExperiment, withResearchTestWorker, captureResearchArtifactVersions, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => {api = await loadResearchTestApi();});
@@ -20,7 +20,7 @@ function scene() {
     embeddingPolicy: 'none'});
   f.source = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'response-source:chunk:0'});
   f.artifactId = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {title: 'Synthetic manuscript', markdown: 'Saved manuscript',
-    claims: [{subjectType: 'paragraph', content: 'The measured difference was -4 ms.', status: 'supported', evidenceIds: [f.source.id]}],
+    claims: [{experiment: {...unknownExperiment}, subjectType: 'paragraph', content: 'The measured difference was -4 ms.', status: 'supported', evidenceIds: [f.source.id]}],
     sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'})).outputArtifactIds[0];
   f.claim = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: f.artifactId})[0];
   f.inspect = (expectedHash = null) => f.repository.responseMatrix.inspect({projectId: f.project.id, artifactId: f.artifactId, expectedHash});
@@ -146,7 +146,7 @@ test('failed append leaves the original parent and exact request reusable withou
 test('exact UTF-16 locations preserve selected whitespace and supplementary characters', () => {
   const f = scene();
   try {
-    f.claim = f.repository.evidence.updateClaim({id: f.claim.id, expectedVersion: f.claim.version,
+    f.claim = f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id: f.claim.id, expectedVersion: f.claim.version,
       content: 'The measured difference was -4 ms. 𝛥 verified.', status: 'supported', evidenceIds: [f.source.id]});
     f.repository.manuscripts.saveManuscript({artifactId: f.artifactId, sections: [{title: 'Results', claimIds: [f.claim.id]}]});
     const start = f.claim.content.indexOf(' 𝛥'), end = start + ' 𝛥 '.length;
@@ -165,7 +165,7 @@ test('revised manuscript makes saved mapping stale until explicit rebinding whil
   try {
     const first = f.save(f.request({rows: [f.row({status: 'addressed', response: 'Exact initial location.',
       locations: [f.location()], evidenceIds: [f.source.id]})]}));
-    f.claim = f.repository.evidence.updateClaim({id: f.claim.id, expectedVersion: f.claim.version,
+    f.claim = f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id: f.claim.id, expectedVersion: f.claim.version,
       content: 'Revised text still reports the -4 ms negative difference.', status: 'supported', evidenceIds: [f.source.id]});
     assert.throws(() => f.inspect(), /research_manuscript_stale/u);
     f.repository.manuscripts.saveManuscript({artifactId: f.artifactId, sections: [{title: 'Revised Results', claimIds: [f.claim.id]}]});
@@ -291,7 +291,7 @@ test('shared currentness refuses a changed manuscript while preserving the origi
   const f = scene();
   try {
     const first = f.save(f.request({rows: [f.row({status: 'addressed', response: 'Verified exact text.', locations: [f.location()]})]}));
-    f.claim = f.repository.evidence.updateClaim({id: f.claim.id, expectedVersion: f.claim.version,
+    f.claim = f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id: f.claim.id, expectedVersion: f.claim.version,
       content: 'The revised negative result differs.', status: 'supported', evidenceIds: [f.source.id]});
     assert.throws(() => api.currentArtifactScientificReviews(f.repository, f.project.id, f.artifactId), /research_manuscript_stale/u);
     f.repository.manuscripts.saveManuscript({artifactId: f.artifactId, sections: [{title: 'Results', claimIds: [f.claim.id]}]});

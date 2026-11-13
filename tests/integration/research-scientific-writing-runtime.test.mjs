@@ -1,3 +1,4 @@
+import {unknownExperiment} from '../unit/fixtures/research-test-kit.mjs';
 import test, {before, after} from 'node:test';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
@@ -12,7 +13,7 @@ const hash=value=>createHash('sha256').update(value).digest('hex');
 const bibliography='@article{Smith2024, author={Smith, Jane}, title={Synthetic scientific finding}, journal={Test Journal}, year={2024}, volume={7}, pages={1--8}, doi={10.1234/test}}';
 const sources={project:{title:'Synthetic study',description:'Reproducible output fixture'},manuscript:{sections:[{title:'Results',claimIds:['c']}]},
  claims:[{id:'c',content:'Literal $x$ and <script> text.',evidenceIds:['e'],status:'supported'},
- {id:'caption',content:'Synthetic figure caption',evidenceIds:['e'],artifactId:'fa',subjectType:'figure',status:'supported'}],
+ {experiment: {...unknownExperiment}, id:'caption',content:'Synthetic figure caption',evidenceIds:['e'],artifactId:'fa',subjectType:'figure',status:'supported'}],
  citationKeys:{e:'Smith2024'},bibliography:[{citationKey:'Smith2024'}],evidence:[{id:'e',title:'Source',locator:'p. 1'}],
  figures:[{id:'fig',artifactId:'fa',title:'Synthetic figure',manifestHash:'a'.repeat(64)}],review:{}};
 let api, tools, root, bundle;

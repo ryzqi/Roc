@@ -1,4 +1,4 @@
-import {captureResearchArtifactVersions} from '../unit/fixtures/research-test-kit.mjs';
+import {unknownExperiment, captureResearchArtifactVersions} from '../unit/fixtures/research-test-kit.mjs';
 import {syntheticExportPublicationReview} from '../fixtures/research-export-publication.mjs';
 import {zenodoProviderFixture} from '../fixtures/zenodo-provider.mjs';
 import assert from 'node:assert/strict';
@@ -811,16 +811,16 @@ ${source.replace('  const rows =', `
       queries: [{id: 'primary', query: 'Synthetic reproducibility fixture', sources: ['openalex'], limit: 5, maxPages: 1}],
       perspectives: [{id: 'primary', label: 'Primary', rationale: 'Answer the fixed question', expectedEvidence: 'Synthetic results', queryIds: ['primary']}],
     };
-    if (stage === 'figure') output.claims.push({
+    if (stage === 'figure') output.claims.push({experiment: {...unknownExperiment},
       subjectType: 'figure', content: 'The fixed data means are A=2 and B=4.',
       status: 'supported', evidenceIds: fault === 'stale_approval' ?
         [produced.evidence.id, produced.paperEvidence.id] : [produced.evidence.id]
     });
     if (stage === 'writing') {
       output.claims.push(
-        {subjectType: 'paragraph', content: 'The original fixture reports synthetic group means A=2 and B=4.',
+        {experiment: {...unknownExperiment}, subjectType: 'paragraph', content: 'The original fixture reports synthetic group means A=2 and B=4.',
           status: 'supported', evidenceIds: [produced.paperEvidence.id]},
-        {subjectType: 'paragraph', content: 'The frozen experiment reproduces synthetic group means A=2 and B=4.',
+        {experiment: {...unknownExperiment}, subjectType: 'paragraph', content: 'The frozen experiment reproduces synthetic group means A=2 and B=4.',
           status: 'supported', evidenceIds: [produced.evidence.id]}
       );
       output.sections.push({title: 'Fixed data results', claimIndexes: [0, 1]});

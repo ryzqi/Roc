@@ -192,6 +192,7 @@ function PageDetail({client, projectId, pageId, writable, onAskAssistant, onEdit
       <p role="alert">{page.error ?? compile.error ?? retryPaper.error ?? synthesize.error ?? data.page.job?.error ?? data.paperJob?.error}</p>}
     {historyOpen && <History key={data.page.revision} client={client} projectId={projectId} pageId={pageId} currentRevision={data.page.revision}
       writable={writable && !locked} onPending={onHistoryPending} onChanged={() => {page.reload(); onChanged();}}/>}
+    {(data.page.kind === 'comparison' || data.page.kind === 'dispute') && <ClaimComparisonPanel client={client} projectId={projectId}/>}
     <details open data-testid="wiki-page-lint"><summary className="cursor-pointer">
       <span className="inline-flex flex-wrap gap-x-2"><span>页面检查</span><span className="tabular-nums text-subtle">{data.lint.length} 项</span></span>
     </summary>
@@ -335,3 +336,4 @@ function History({client, projectId, pageId, currentRevision, writable, onPendin
       onClick={() => {void restore();}}>恢复 r{selected} 为新修订</button>}
   </section>;
 }
+import {ClaimComparisonPanel} from './ClaimComparisonPanel';

@@ -4,7 +4,7 @@ import {mkdtempSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import Database from 'better-sqlite3';
-import {withResearchTestWorker, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {unknownExperiment, withResearchTestWorker, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => {api = await loadResearchTestApi();});
@@ -17,7 +17,7 @@ function scene() {
     embeddingPolicy: 'none'});
   f.source = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'directness-source:chunk:0'});
   f.artifactId = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {title: 'Synthetic manuscript', markdown: 'Saved manuscript',
-    claims: [{subjectType: 'paragraph', content: 'The measured difference was -4 ms.', status: 'supported', evidenceIds: [f.source.id]}],
+    claims: [{experiment: {...unknownExperiment}, subjectType: 'paragraph', content: 'The measured difference was -4 ms.', status: 'supported', evidenceIds: [f.source.id]}],
     sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'})).outputArtifactIds[0];
   f.claim = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: f.artifactId})[0];
   f.coverage = () => new api.ResearchCitationCoverageService(f.repository).inspect({
@@ -151,7 +151,7 @@ test('claim revision marks prior directness stale and source invalidation preser
   const f = scene();
   try {
     const request = f.request(), first = f.save(request);
-    f.claim = f.repository.evidence.updateClaim({id: f.claim.id, expectedVersion: f.claim.version,
+    f.claim = f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id: f.claim.id, expectedVersion: f.claim.version,
       content: 'The measurement implies a broader synthetic inference.', status: 'supported', evidenceIds: [f.source.id]});
     f.repository.manuscripts.saveManuscript({artifactId: f.artifactId, sections: [{title: 'Results', claimIds: [f.claim.id]}]});
     const coverage = f.coverage();
@@ -206,7 +206,7 @@ test('removed citation pairs remain historical without blocking a manuscript tha
       sourceId: 'replacement.md', title: 'Replacement synthetic source', content: 'Replacement measurement.',
       chunks: [{content: 'Replacement measurement.', locator: 'block:1'}], embeddingPolicy: 'none'});
     const replacement = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'replacement-source:chunk:0'});
-    f.claim = f.repository.evidence.updateClaim({id: f.claim.id, expectedVersion: f.claim.version,
+    f.claim = f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id: f.claim.id, expectedVersion: f.claim.version,
       content: 'Replacement measurement.', status: 'supported', evidenceIds: [replacement.id]});
     f.repository.manuscripts.saveManuscript({artifactId: f.artifactId, sections: [{title: 'Results', claimIds: [f.claim.id]}]});
     const exported = api.captureExportArtifactReviews(f.repository, f.project.id, [f.artifactId]);

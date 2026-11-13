@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import electronPath from 'electron';
 import {_electron} from '@playwright/test';
-import {createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
+import {unknownExperiment, createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
 import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 
 let api, directory, app, page, active;
@@ -103,7 +103,7 @@ async function scene({long = false, bibliography = false, waiting = false} = {})
     f.source = f.repository.evidence.capture({projectId: f.project.id, chunkId: `library:${f.item.id}:chunk:0`});
   }
   const completed = f.withWorker(() => f.repository.runs.complete(f.run.id, f.project.id, {title: '当前正文工件', markdown: 'Actual saved manuscript.',
-    claims: [{subjectType: 'paragraph', content: long ? '当前段落与完整来源对照。'.repeat(40) : 'The measured synthetic difference is -4 ms.',
+    claims: [{experiment: {...unknownExperiment}, subjectType: 'paragraph', content: long ? '当前段落与完整来源对照。'.repeat(40) : 'The measured synthetic difference is -4 ms.',
       status: 'supported', evidenceIds: [f.source.id]}],
     sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'}));
   f.artifactId = completed.outputArtifactIds[0];

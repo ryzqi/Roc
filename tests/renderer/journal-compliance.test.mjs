@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import electronPath from 'electron';
 import {_electron} from '@playwright/test';
-import {createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
+import {unknownExperiment, createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
 import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 
 let api, directory, app, page, active;
@@ -75,7 +75,7 @@ async function scene() {
     chunks: [{content: 'Measured difference was -4 ms.', locator: 'block:0'}], embeddingPolicy: 'none'});
   f.evidence = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'journal-ui-source:chunk:0'});
   f.artifactId = f.withWorker(() => f.repository.runs.complete(f.run.id, f.project.id, {title: '合成投稿规则验收', markdown: 'Synthetic manuscript',
-    claims: [{subjectType: 'paragraph', content: 'Measured difference was -4 ms.', status: 'supported', evidenceIds: [f.evidence.id]}],
+    claims: [{experiment: {...unknownExperiment}, subjectType: 'paragraph', content: 'Measured difference was -4 ms.', status: 'supported', evidenceIds: [f.evidence.id]}],
     sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'})).outputArtifactIds[0];
   f.service = new api.ResearchJournalComplianceService(f.repository, {verify: async () => assert.fail('no figure selected')});
   const handlers = new Map(), context = {pluginId: 'fixture', capabilities: {

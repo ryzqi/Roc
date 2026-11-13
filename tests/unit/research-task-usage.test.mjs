@@ -6,7 +6,7 @@ import Database from 'better-sqlite3';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createResearchFixture, loadResearchTestApi, researchSearchPlanFixture } from './fixtures/research-test-kit.mjs';
+import { unknownExperiment, createResearchFixture, loadResearchTestApi, researchSearchPlanFixture } from './fixtures/research-test-kit.mjs';
 import { ideaCanvasContentFixture } from './fixtures/research-idea-plan.mjs';
 
 let api;
@@ -17,7 +17,7 @@ function setup(overrides = {}, includeChild = true) {
   const f = createResearchFixture(api, 'discovery');
   const modelConfig = {
     ...api.createRunModelConfig({ contextWindowTokens: 1000, maxOutputTokens: 250 }),
-       
+
      ...overrides
   };
   const child = { ...f.run, executionSnapshot: {...f.run.executionSnapshot, nodeBinding: {kind: 'none'}}, id: 'child-stage', parentRunId: f.run.id, retryOfRunId: null, role: 'reviewer' };
@@ -224,7 +224,7 @@ test('actual stage createAgent settles successful usage without requiring a chat
 
 test('actual stage createAgent returns unsupported claim validation to the model before publication', async () => {
   const f = setup({}, false);
-  const claim = {subjectType: 'claim', content: 'An unverified interpretation.', status: 'supported', evidenceIds: []};
+  const claim = {experiment: {...unknownExperiment}, subjectType: 'claim', content: 'An unverified interpretation.', status: 'supported', evidenceIds: []};
   const output = {title: 'Evidence boundary', markdown: 'Unverified interpretation.', claims: [claim], sections: [], verdict: 'uncertain'};
   let responseToolName, attempts = 0;
   class Model extends BaseChatModel {
@@ -485,7 +485,7 @@ test('actual writing createAgent corrects a one-based out-of-range claim index b
     chunks: [{content: 'Safety evaluation remains pending.', locator: 'block:0'}], embeddingPolicy: 'none'});
   const source = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'writing-index-source:chunk:0'});
   const output = {title: 'Engineering limitations', markdown: 'No safety result.',
-    claims: [{subjectType: 'paragraph', content: 'Safety evaluation remains pending.', status: 'supported', evidenceIds: [source.id]}],
+    claims: [{experiment: {...unknownExperiment}, subjectType: 'paragraph', content: 'Safety evaluation remains pending.', status: 'supported', evidenceIds: [source.id]}],
     sections: [{title: 'Limitations', claimIndexes: [0]}], verdict: 'uncertain'};
   let responseToolName, requests = 0;
   class Model extends BaseChatModel {
@@ -533,7 +533,7 @@ for (const [label, invalidSections] of [
     chunks: [{content: 'Only fixture execution is verified. Safety evaluation remains pending.', locator: 'block:0'}], embeddingPolicy: 'none'});
   const source = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'writing-contract-source:chunk:0'});
   const output = {title: 'Engineering limitations', markdown: 'No safety result.',
-    claims: ['Only fixture execution is verified.', 'Safety evaluation remains pending.'].map(content => ({
+    claims: ['Only fixture execution is verified.', 'Safety evaluation remains pending.'].map(content => ({experiment: {...unknownExperiment},
       subjectType: 'paragraph', content, status: 'supported', evidenceIds: [source.id]})),
     sections: [{title: 'Introduction', claimIndexes: [0]}, {title: 'Limitations', claimIndexes: [1]}], verdict: 'uncertain'};
   let responseToolName, requests = 0;

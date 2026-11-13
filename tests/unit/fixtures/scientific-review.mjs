@@ -1,4 +1,4 @@
-import {withResearchTestWorker, createResearchFixture, captureResearchArtifactVersions} from './research-test-kit.mjs';
+import {unknownExperiment, withResearchTestWorker, createResearchFixture, captureResearchArtifactVersions} from './research-test-kit.mjs';
 
 const plain = {title: 'Review', markdown: 'Controlled engineering fixture.', claims: [], sections: [], verdict: 'uncertain'};
 export function createScientificReviewFixture(api, {contradiction = false, verifierVerdict = 'qualifies',
@@ -9,7 +9,7 @@ export function createScientificReviewFixture(api, {contradiction = false, verif
     chunks: [{content: sourceText, locator: 'block:0'}], embeddingPolicy: 'none'});
   f.evidence = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'scientific-source:chunk:0'});
   f.artifactId = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {...plain,
-    claims: claimContents.map(content => ({subjectType: 'paragraph', content, status: 'supported', evidenceIds: [f.evidence.id]})),
+    claims: claimContents.map(content => ({experiment: {...unknownExperiment}, subjectType: 'paragraph', content, status: 'supported', evidenceIds: [f.evidence.id]})),
     sections: [{title: 'Results', claimIndexes: claimContents.map((_, index) => index)}]})).outputArtifactIds[0];
   f.claims = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: f.artifactId});
   f.claim = f.claims[0];

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {after, test} from 'node:test';
 import {BaseChatModel} from '@langchain/core/language_models/chat_models';
 import {AIMessage} from '@langchain/core/messages';
-import {loadResearchTestApi, createResearchFixture} from './fixtures/research-test-kit.mjs';
+import {unknownExperiment, loadResearchTestApi, createResearchFixture} from './fixtures/research-test-kit.mjs';
 
 const api = await loadResearchTestApi();
 after(() => api.dispose());
@@ -16,7 +16,7 @@ function unavailableKey() {
 test('author receives an explicit failed knowledge search and can report the limitation', async () => {
   const f = createResearchFixture(api, 'writing');
   const output = {title: 'Limited engineering draft', markdown: 'Knowledge search was unavailable; no new sources were examined.',
-    claims: [{subjectType: 'paragraph', content: 'Additional knowledge search was unavailable.', status: 'pending', evidenceIds: []}],
+    claims: [{experiment: {...unknownExperiment}, subjectType: 'paragraph', content: 'Additional knowledge search was unavailable.', status: 'pending', evidenceIds: []}],
     sections: [{title: 'Limitations', claimIndexes: [0]}], verdict: 'uncertain'};
   let responseName, calls = 0, searches = 0;
   class Model extends BaseChatModel {

@@ -263,7 +263,8 @@ export class ResearchWikiRepository {
           const claim = this.evidence.getClaim(claimId);
           if (claim.projectId !== row.project_id) throw new Error('wiki_project_mismatch');
           for (const id of claim.evidenceIds) evidenceIds.add(id);
-          generated.push({id: `claim:${claimId}`, title: '主张摘录 · 科学支持请查看人工审核', body: claim.content.slice(0, 6000),
+          generated.push({id: `claim:${claimId}`, title: '主张摘录 · 科学支持请查看人工审核',
+            body: `实验条件（unknown 表示原文未记录）：\n${JSON.stringify(claim.experiment, null, 2)}\n\n${claim.content}`.slice(0, 6000),
             owner: 'system', status: 'current', evidenceIds: claim.evidenceIds, claimIds: [claimId], links: [],
             dependencies: this.dependencies(row.project_id, claim.evidenceIds, [claimId])});
         }

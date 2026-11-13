@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import {scientificExperimentSchema} from './research-claim-comparison';
 
 const identifier = z.string().trim().min(1);
 const evidenceIds = z.array(identifier).max(100).refine((ids) => new Set(ids).size === ids.length, 'Evidence IDs must be unique.');
@@ -29,13 +30,14 @@ export const researchClaimSchema = z.object({
   content: z.string().trim().min(1).max(20000),
   status: z.enum(['supported', 'hypothesis', 'pending']),
   evidenceIds,
+  experiment: scientificExperimentSchema,
   version: z.number().int().positive(),
   createdAt: identifier,
   updatedAt: identifier
 }).strict();
 
 export const researchClaimCreateRequestSchema = researchClaimSchema.omit({ id: true, version: true, createdAt: true, updatedAt: true }).strict();
-export const researchClaimUpdateRequestSchema = researchClaimSchema.pick({ id: true, content: true, status: true, evidenceIds: true })
+export const researchClaimUpdateRequestSchema = researchClaimSchema.pick({ id: true, content: true, status: true, evidenceIds: true, experiment: true })
   .extend({ expectedVersion: z.number().int().positive() }).strict();
 export const researchClaimHistoryRequestSchema = z.object({ id: identifier }).strict();
 export const researchClaimListRequestSchema = z.object({ projectId: identifier, artifactId: identifier.optional() }).strict();

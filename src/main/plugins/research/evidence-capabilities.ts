@@ -1,4 +1,5 @@
 import {researchWikiReadSchema, researchWikiSnapshotSchema} from '../../../shared/schemas/research-wiki';
+import {claimComparisonRequestSchema, claimComparisonSchema} from '../../../shared/schemas/research-claim-comparison';
 import type { z } from 'zod';
 
 import {
@@ -39,6 +40,7 @@ const capabilities = {
   updateClaim: descriptor('research.claims.update', researchClaimUpdateRequestSchema, researchClaimSchema),
   listClaims: descriptor('research.claims.list', researchClaimListRequestSchema, researchClaimSchema.array()),
   claimHistory: descriptor('research.claims.history', researchClaimHistoryRequestSchema, researchClaimSchema.array()),
+  compareClaims: descriptor('research.claims.compare', claimComparisonRequestSchema, claimComparisonSchema),
   inspectEvidence: descriptor('research.evidence.inspect', researchEvidenceInspectRequestSchema, researchEvidenceInspectionSchema),
   proposeRelation: descriptor('research.relations.propose', researchEvidenceRelationProposalSchema, researchEvidenceRelationSchema),
   reviewRelation: descriptor('research.relations.review', researchEvidenceRelationReviewSchema, researchEvidenceRelationSchema),
@@ -83,6 +85,7 @@ export function registerResearchEvidenceCapabilities(context: RocPluginContext, 
   register(capabilities.updateClaim, (request) => repository.updateClaim(request));
   register(capabilities.listClaims, (request) => repository.listClaims(request));
   register(capabilities.claimHistory, (request) => repository.claimHistory(request.id));
+  register(capabilities.compareClaims, request => repository.compare(request));
   register(capabilities.inspectEvidence, request => {
     const source = repository.inspectEvidence(request.evidenceId, request.projectId);
     return {source, sourceDigest: relationSourceDigest(source)};

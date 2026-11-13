@@ -1,7 +1,7 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {withResearchTestWorker, captureResearchArtifactVersions, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {unknownExperiment, withResearchTestWorker, captureResearchArtifactVersions, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => {api = await loadResearchTestApi();});
@@ -42,7 +42,7 @@ function scene(count = 1, imported = false) {
   }
   const completed = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {
     title: 'Citation inspection fixture', markdown: 'Synthetic claim awaiting human verification.',
-    claims: [{subjectType: 'paragraph', content: 'A measured synthetic result.', status: 'supported', evidenceIds: f.sources.map(s => s.id)}],
+    claims: [{experiment: {...unknownExperiment}, subjectType: 'paragraph', content: 'A measured synthetic result.', status: 'supported', evidenceIds: f.sources.map(s => s.id)}],
     sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'
   }));
   f.artifactId = completed.outputArtifactIds[0];
@@ -139,7 +139,7 @@ test('source and manuscript changes refuse stale citation content, then resaved 
   try {
     const first = f.inspect();
     f.review(f.relations()[0]);
-    f.claim = f.repository.evidence.updateClaim({id: f.claim.id, expectedVersion: f.claim.version, content: 'A revised measurement.',
+    f.claim = f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id: f.claim.id, expectedVersion: f.claim.version, content: 'A revised measurement.',
       status: 'supported', evidenceIds: f.claim.evidenceIds});
     let before = f.changes();
     assert.throws(() => f.inspect(), /research_manuscript_stale/u);

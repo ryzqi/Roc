@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {after, before, test} from 'node:test';
 import {Annotation, Command, END, MemorySaver, START, StateGraph} from '@langchain/langgraph';
-import {loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {unknownExperiment, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 import {createScientificReviewFixture} from './fixtures/scientific-review.mjs';
 
 let api;
@@ -17,7 +17,7 @@ function waitingReviewWithUnreviewedSummary() {
   f.worker(f.parent.id, id => f.repository.runs.setReviewReports(id, f.project.id, reports));
   f.worker(f.parent.id, id => f.repository.runs.complete(id, f.project.id, {
     title: 'Summary requiring correction', markdown: 'The summary source has not been confirmed.',
-    claims: [{subjectType: 'paragraph', content: 'Unreviewed summary assertion.', status: 'supported',
+    claims: [{experiment: {...unknownExperiment}, subjectType: 'paragraph', content: 'Unreviewed summary assertion.', status: 'supported',
       evidenceIds: [f.evidence.id]}], sections: [], verdict: 'uncertain'
   }));
   f.repository.transitionWorkflow({projectId: f.project.id, expectedStage: 'review', action: 'complete'});

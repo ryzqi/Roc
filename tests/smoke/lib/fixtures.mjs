@@ -1,3 +1,4 @@
+import {unknownExperiment} from '../../unit/fixtures/research-test-kit.mjs';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
@@ -792,7 +793,7 @@ function writeP6StageOutput(response, parsedBody) {
     // No `claims` with status 'supported': a supported claim would need real evidence ids,
     // and inventing them is the one thing the fixture must not do.
     claims: [
-      {
+      {experiment: {...unknownExperiment},
         subjectType: 'paragraph',
         content: `夹具主张 ${tag}（待验证，不引用证据）`,
         status: 'pending',

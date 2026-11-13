@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import electronPath from 'electron';
 import {_electron} from '@playwright/test';
-import {createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
+import {unknownExperiment, createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
 import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 
 let api, directory, app, page, active;
@@ -95,7 +95,7 @@ async function scene({long = false, waiting = false} = {}) {
   f.evidence = f.repository.experimentResults.captureMetric(f.result, 'mean');
   f.artifactId = f.withWorker(() => f.repository.runs.complete(f.run.id, f.project.id, {title: '数值来源与规则',
     markdown: 'Synthetic measured report', claims: [
-      {subjectType: 'paragraph', content: `${long ? '长主张、单位与指标来源逐项核对。'.repeat(25) : 'Mean '}-2.35 ms and comparison 17 ms.`,
+      {experiment: {...unknownExperiment}, subjectType: 'paragraph', content: `${long ? '长主张、单位与指标来源逐项核对。'.repeat(25) : 'Mean '}-2.35 ms and comparison 17 ms.`,
         status: 'supported', evidenceIds: [f.evidence.id]}],
     sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'})).outputArtifactIds[0];
   f.claim = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: f.artifactId})[0];

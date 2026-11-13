@@ -2,7 +2,7 @@ import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import Database from 'better-sqlite3';
-import {createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {unknownExperiment, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async()=>{api=await loadResearchTestApi();});
@@ -18,7 +18,7 @@ function scene() {
   f.evidence=f.repository.evidence.capture({projectId:f.project.id,chunkId:'relation-source:chunk:0'});
   f.artifact=f.repository.createArtifact({projectId:f.project.id,stage:'reading',kind:'reading_notes',
     title:'Relation hypothesis',path:null});
-  f.claim=f.repository.evidence.createClaim({projectId:f.project.id,artifactId:f.artifact.id,
+  f.claim=f.repository.evidence.createClaim({experiment: {...unknownExperiment}, projectId:f.project.id,artifactId:f.artifact.id,
     subjectType:'claim',content:'A synthetic claim about the group.',status:'hypothesis',evidenceIds:[f.evidence.id]});
   f.relations=f.repository.evidence.relations;
   f.request={projectId:f.project.id,claimId:f.claim.id,expectedClaimVersion:f.claim.version,
@@ -111,7 +111,7 @@ test('waiting at the original gate permits only human relation metadata, keeps b
   const f=scene();
   try {
     f.db.prepare("UPDATE research_stage_states SET status='waiting_approval' WHERE project_id=? AND stage='reading'").run(f.project.id);
-    assert.throws(()=>f.repository.evidence.updateClaim({id:f.claim.id,expectedVersion:1,content:'Should remain locked.',
+    assert.throws(()=>f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id:f.claim.id,expectedVersion:1,content:'Should remain locked.',
       status:'hypothesis',evidenceIds:[f.evidence.id]}),/research_stage_not_editable/u);
     assert.throws(()=>f.propose(),/research_stage_not_editable/u);
     const proposed=f.relations.propose(f.request,user);
@@ -152,7 +152,7 @@ test('claim edit invalidates active relation decisions transactionally and prese
   try {
     const confirmed=f.review(f.propose());
     const rejected=f.review(f.propose({kind:'contradicts'}),{decision:'reject'});
-    const updated=f.repository.evidence.updateClaim({id:f.claim.id,expectedVersion:1,content:'A revised scientific hypothesis.',
+    const updated=f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id:f.claim.id,expectedVersion:1,content:'A revised scientific hypothesis.',
       status:'hypothesis',evidenceIds:[f.evidence.id]});
     assert.equal(updated.version,2);
     const invalid=f.relations.get(confirmed.id,f.project.id);
@@ -220,7 +220,7 @@ test('history insertion failure rolls back the decision and a claim/source inval
       WHEN NEW.version>1 BEGIN SELECT RAISE(ABORT,'synthetic_relation_history_failure'); END`);
     assert.throws(()=>f.review(proposal),/synthetic_relation_history_failure/u);
     assert.equal(f.relations.get(proposal.id,f.project.id).status,'proposed');
-    assert.throws(()=>f.repository.evidence.updateClaim({id:f.claim.id,expectedVersion:1,
+    assert.throws(()=>f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id:f.claim.id,expectedVersion:1,
       content:'Would fail to preserve history.',status:'hypothesis',evidenceIds:[f.evidence.id]}),/synthetic_relation_history_failure/u);
     assert.equal(f.repository.evidence.getClaim(f.claim.id).version,1);
     assert.throws(()=>f.repository.evidence.invalidateChunksOf('relation-source'),/synthetic_relation_history_failure/u);
@@ -232,7 +232,7 @@ test('history insertion failure rolls back the decision and a claim/source inval
 test('Wiki snapshot carries current source and relation review without promoting a claim or writing on read',()=>{
   const f=scene();
   try {
-    const supported=f.repository.evidence.updateClaim({id:f.claim.id,expectedVersion:1,content:f.claim.content,
+    const supported=f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id:f.claim.id,expectedVersion:1,content:f.claim.content,
       status:'supported',evidenceIds:[f.evidence.id]});
     f.request.expectedClaimVersion=supported.version;
     const snapshot=()=>f.repository.evidence.wikiSnapshot(f.project.id);

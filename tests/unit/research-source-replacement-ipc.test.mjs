@@ -1,7 +1,7 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {createResearchTestRoleTools, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {unknownExperiment, createResearchTestRoleTools, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => {api = await loadResearchTestApi();});
@@ -41,7 +41,7 @@ function document(f, id, {libraryItemId = null, text = 'Original synthetic scien
 }
 function scientificClaim(f, evidence) {
   f.artifact = f.repository.createArtifact({projectId: f.project.id, stage: 'reading', kind: 'reading_notes', title: 'Original claim', path: null});
-  f.claim = f.repository.evidence.createClaim({projectId: f.project.id, artifactId: f.artifact.id,
+  f.claim = f.repository.evidence.createClaim({experiment: {...unknownExperiment}, projectId: f.project.id, artifactId: f.artifact.id,
     subjectType: 'claim', content: 'An originally reviewed synthetic claim.', status: 'supported', evidenceIds: [evidence.id]});
   const proposal = f.repository.evidence.relations.propose({projectId: f.project.id, claimId: f.claim.id,
     expectedClaimVersion: f.claim.version, evidenceId: evidence.id,

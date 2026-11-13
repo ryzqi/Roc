@@ -5,7 +5,7 @@ import {mkdtemp, writeFile, rm, symlink, mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import Database from 'better-sqlite3';
-import {withResearchTestWorker, createResearchFixture, loadResearchTestApi, captureResearchArtifactVersions} from './fixtures/research-test-kit.mjs';
+import {unknownExperiment, withResearchTestWorker, createResearchFixture, loadResearchTestApi, captureResearchArtifactVersions} from './fixtures/research-test-kit.mjs';
 import {createPublishedFigureFixture} from './fixtures/research-production-test-kit.mjs';
 
 let api;
@@ -43,7 +43,7 @@ async function scene(withBibliography = false) {
     chunks: [{content: 'Measured difference was -4 ms.', locator: 'block:0'}], embeddingPolicy: 'none'});
   f.source = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'journal-source:chunk:0'});
   f.artifactId = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {title: 'Synthetic manuscript', markdown: 'Synthetic draft',
-    claims: [{subjectType: 'paragraph', content: 'Measured difference was -4 ms.', status: 'supported', evidenceIds: [f.source.id]}],
+    claims: [{experiment: {...unknownExperiment}, subjectType: 'paragraph', content: 'Measured difference was -4 ms.', status: 'supported', evidenceIds: [f.source.id]}],
     sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'})).outputArtifactIds[0];
   f.service = new api.ResearchJournalComplianceService(f.repository, {verify: async () => assert.fail('no figure selected')});
   f.inspect = (selected = null, expectedHash = null) => f.service.inspect({
@@ -297,7 +297,7 @@ test('the final synchronous review pass catches a first manuscript changed while
     const first = await f.save(await f.request());
     const second = f.repository.createArtifact({projectId: f.project.id, stage: 'writing', kind: 'manuscript',
       title: 'Second manuscript', path: null});
-    const claim = f.repository.evidence.createClaim({projectId: f.project.id, artifactId: second.id, subjectType: 'paragraph',
+    const claim = f.repository.evidence.createClaim({experiment: {...unknownExperiment}, projectId: f.project.id, artifactId: second.id, subjectType: 'paragraph',
       content: 'Another synthetic observation', status: 'supported', evidenceIds: [f.source.id]});
     f.repository.manuscripts.saveManuscript({artifactId: second.id, sections: [{title: 'Results', claimIds: [claim.id]}]});
     const preview = await f.service.inspect({projectId: f.project.id, artifactId: second.id, selection: selection(), expectedHash: null});
@@ -361,7 +361,7 @@ test('actual figure file dimensions and bytes obey explicit raster rules; vector
     f.db.prepare("UPDATE research_stage_states SET status='ready' WHERE project_id=? AND stage='writing'").run(f.project.id);
     const artifact = f.repository.createArtifact({projectId: f.project.id, stage: 'writing', kind: 'manuscript',
       title: 'Synthetic figure companion', path: null});
-    f.repository.evidence.createClaim({projectId: f.project.id, artifactId: artifact.id, subjectType: 'paragraph',
+    f.repository.evidence.createClaim({experiment: {...unknownExperiment}, projectId: f.project.id, artifactId: artifact.id, subjectType: 'paragraph',
       content: claim.content, status: 'supported', evidenceIds: claim.evidenceIds});
     const manuscriptClaim = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: artifact.id})[0];
     f.repository.manuscripts.saveManuscript({artifactId: artifact.id,

@@ -1,4 +1,5 @@
 import * as wikiPages from './schemas/research-wiki-pages';
+import {claimComparisonRequestSchema, claimComparisonSchema} from './schemas/research-claim-comparison';
 import {knowledgeContextRequestSchema, knowledgeContextResultSchema} from './schemas/research-knowledge-context';
 import {knowledgeJobSchema, knowledgeJobsListSchema, knowledgeJobRetrySchema} from './schemas/research-knowledge-jobs';
 import {researchWikiReadSchema, researchWikiSnapshotSchema} from './schemas/research-wiki';
@@ -681,6 +682,7 @@ export const ipcRegistry = {
     request({ key: 'researchEvidenceList', channel: 'roc:research:evidence-list', domain: 'research', method: 'listEvidence', kind: 'plugin', capabilityName: 'research.evidence.list', inputTransform: first, contract: methodContract(oneArg(researchEvidenceListRequestSchema), researchEvidenceSchema.array()) }),
     request({ key: 'researchClaimsCreate', channel: 'roc:research:claims-create', domain: 'research', method: 'createClaim', kind: 'plugin', capabilityName: 'research.claims.create', inputTransform: first, contract: methodContract(oneArg(researchClaimCreateRequestSchema), researchClaimSchema) }),
     request({ key: 'researchClaimsUpdate', channel: 'roc:research:claims-update', domain: 'research', method: 'updateClaim', kind: 'plugin', capabilityName: 'research.claims.update', inputTransform: first, contract: methodContract(oneArg(researchClaimUpdateRequestSchema), researchClaimSchema) }),
+    request({ key: 'researchClaimsCompare', channel: 'roc:research:claims-compare', domain: 'research', method: 'compareClaims', kind: 'plugin', capabilityName: 'research.claims.compare', inputTransform: first, contract: methodContract(oneArg(claimComparisonRequestSchema), claimComparisonSchema) }),
     request({ key: 'researchClaimsList', channel: 'roc:research:claims-list', domain: 'research', method: 'listClaims', kind: 'plugin', capabilityName: 'research.claims.list', inputTransform: first, contract: methodContract(oneArg(researchClaimListRequestSchema), researchClaimSchema.array()) }),
     request({ key: 'researchClaimsHistory', channel: 'roc:research:claims-history', domain: 'research', method: 'getClaimHistory', kind: 'plugin', capabilityName: 'research.claims.history', inputTransform: first, contract: methodContract(oneArg(researchClaimHistoryRequestSchema), researchClaimSchema.array()) }),
     request({ key: 'researchManuscriptSave', channel: 'roc:research:manuscript-save', domain: 'research', method: 'saveManuscript', kind: 'plugin', capabilityName: 'research.manuscript.save', inputTransform: first, contract: methodContract(oneArg(researchManuscriptSaveRequestSchema), researchManuscriptSchema) }),

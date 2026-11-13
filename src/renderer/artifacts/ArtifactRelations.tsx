@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import {unknownExperiment} from '../../shared/schemas/research-claim-comparison';
+import {ClaimExperimentEditor} from './ClaimExperimentEditor';
 import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
 import type {z} from 'zod';
 import type {researchArtifactInspectionSchema} from '../../shared/schemas/research-artifact-inspector';
@@ -83,6 +85,8 @@ export function ArtifactRelations({client, snapshot, current, onChanged}: {
         <summary data-reading-key={`relation-claim-summary:${claim.id}`} className="cursor-pointer break-words">{claim.content}</summary>
         <div className="mt-2 flex flex-col gap-3">
           <p className="text-muted">{claimStatuses[claim.status]}，版本 {claim.version}</p>
+          <ClaimExperimentEditor key={claim.version} client={client} claim={claim}
+            writable={canReview && snapshot.stage.status !== 'waiting_approval'} onChanged={onChanged}/>
           {relations.length === 0 ? <p className="text-muted">尚无关系提议。</p> : relations.map(relation =>
             <RelationRecord key={relation.id} client={client} relation={relation}
               canReview={canReview && isCurrent(relation, snapshot, claim)} onChanged={onChanged}/>)}
@@ -123,7 +127,7 @@ function FigureCaptionForm({client, snapshot, onChanged}: {
     if (!current.ok) return current;
     if (current.data.status !== 'current') throw new Error('research_artifact_review_changed');
     return client.api.research.createClaim({projectId, artifactId: snapshot.artifact.id,
-      subjectType: 'figure', content: content.trim(), status: 'supported', evidenceIds: [evidenceId]});
+      subjectType: 'figure', content: content.trim(), status: 'supported', evidenceIds: [evidenceId], experiment: unknownExperiment});
   }, {label: '保存图注声明'});
   return <div className="mt-2 flex flex-col gap-2" data-testid="artifact-caption-form">
     <label className="flex flex-col gap-1 text-muted">图注声明

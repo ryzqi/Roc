@@ -1,7 +1,7 @@
 import {before, after, test} from 'node:test';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
-import {createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {unknownExperiment, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 let api;
 before(async()=>{api=await loadResearchTestApi();});
 after(()=>api?.dispose());
@@ -13,7 +13,7 @@ function addSource(f,id='source',text='Synthetic observed result.') {
 async function scene() {
   const f=createResearchFixture(api,'reading'); f.wiki=f.repository.wiki; f.evidence=addSource(f);
   const artifact=f.repository.createArtifact({projectId:f.project.id,stage:'reading',kind:'reading_notes',title:'Wiki fixture',path:null});
-  f.claim=f.repository.evidence.createClaim({projectId:f.project.id,artifactId:artifact.id,subjectType:'claim',
+  f.claim=f.repository.evidence.createClaim({experiment: {...unknownExperiment}, projectId:f.project.id,artifactId:artifact.id,subjectType:'claim',
     content:'Synthetic unreviewed claim.',status:'hypothesis',evidenceIds:[f.evidence.id]});
   f.page=f.wiki.create({projectId:f.project.id,kind:'comparison',title:'Across sources',evidenceIds:[f.evidence.id],claimIds:[f.claim.id]});
   await f.wiki.idle();f.page=f.wiki.read(f.project.id,f.page.page.id);return f;
@@ -62,7 +62,7 @@ test('CAS and source digest fences protect human sections and reject stale assis
     assert.throws(()=>f.wiki.save(input,'assistant'),/revision_conflict/);
     assert.throws(()=>f.wiki.save(saveInput(f,f.page.current.sections.find(s=>s.owner==='human')),'assistant'),/human_section_protected/);
     const staleInput=saveInput(f,{...f.page.current.sections[0],id:'synthesis'});
-    f.repository.evidence.updateClaim({id:f.claim.id,content:'Changed claim',status:'hypothesis',evidenceIds:[f.evidence.id],expectedVersion:1});
+    f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id:f.claim.id,content:'Changed claim',status:'hypothesis',evidenceIds:[f.evidence.id],expectedVersion:1});
     assert.throws(()=>f.wiki.save(staleInput,'assistant'),/basis_changed/);
     assert.deepEqual(f.wiki.revision(f.project.id,f.page.page.id,1),original);
   }finally{await f.wiki.shutdown();f.close();}
@@ -103,7 +103,7 @@ test('relations and claim changes invalidate only dependents; conflict candidate
     while(f.wiki.compileNext()){}
     assert.equal(f.wiki.read(f.project.id,source.id).page.revision,source.revision);
     const prior=f.wiki.read(f.project.id,f.page.page.id).page.revision;
-    f.repository.evidence.updateClaim({id:f.claim.id,content:'Revised unreviewed claim',status:'hypothesis',evidenceIds:[f.evidence.id],expectedVersion:1});
+    f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id:f.claim.id,content:'Revised unreviewed claim',status:'hypothesis',evidenceIds:[f.evidence.id],expectedVersion:1});
     assert.equal(f.wiki.read(f.project.id,f.page.page.id).page.job.status,'queued');while(f.wiki.compileNext()){}
     assert.equal(f.wiki.read(f.project.id,f.page.page.id).page.revision,prior+1);
     assert.equal(f.repository.evidence.relations.list({projectId:f.project.id,claimId:f.claim.id})[0].status,'invalidated');

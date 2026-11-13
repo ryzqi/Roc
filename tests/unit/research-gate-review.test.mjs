@@ -4,7 +4,7 @@ import {createHash} from 'node:crypto';
 import {Annotation, Command, END, MemorySaver, START, StateGraph, interrupt} from '@langchain/langgraph';
 import {ToolMessage} from '@langchain/core/messages';
 import {z} from 'zod';
-import {withResearchTestWorker, createResearchFixture, loadResearchTestApi, captureResearchArtifactVersions} from './fixtures/research-test-kit.mjs';
+import {unknownExperiment, withResearchTestWorker, createResearchFixture, loadResearchTestApi, captureResearchArtifactVersions} from './fixtures/research-test-kit.mjs';
 import {createPublishedFigureFixture} from './fixtures/research-production-test-kit.mjs';
 
 let api;
@@ -135,7 +135,7 @@ test('semantic gate validation can reinterrupt before a receipt, then approve ex
       title:'Gate source',content:'Measured result.',chunks:[{content:'Measured result.',locator:'block:0'}],embeddingPolicy:'none'});
     const source=f.repository.evidence.capture({projectId:f.project.id,chunkId:'gate-source:chunk:0'});
     const completed=withResearchTestWorker(api,f.repository,f.run.id,f.project.id,id=>f.repository.runs.complete(id,f.project.id,{
-      ...output,claims:[{subjectType:'claim',content:'Measured result.',status:'supported',evidenceIds:[source.id]}]}));
+      ...output,claims:[{experiment: {...unknownExperiment}, subjectType:'claim',content:'Measured result.',status:'supported',evidenceIds:[source.id]}]}));
     f.repository.transitionWorkflow({projectId:f.project.id,expectedStage:'reading',action:'complete'});
     const registry=new api.CapabilityRegistry();
     const humanGate=api.createResearchHumanGate({repository:f.repository});
@@ -220,7 +220,7 @@ test('same-clock content, source invalidation and stage-set changes refuse every
           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run('evidence',f.project.id,'document','document:chunk:0','file','source','parse-1',
           'Source','page:2',excerpt,createHash('sha256').update(excerpt).digest('hex'),f.project.createdAt);
         f.db.prepare("UPDATE research_stage_states SET status='running' WHERE project_id=? AND stage='planning'").run(f.project.id);
-        f.repository.evidence.createClaim({projectId:f.project.id,artifactId:f.artifactId,
+        f.repository.evidence.createClaim({experiment: {...unknownExperiment}, projectId:f.project.id,artifactId:f.artifactId,
           subjectType:'claim',content:'Recorded claim',status:'pending',evidenceIds:['evidence']});
         f.db.prepare("UPDATE research_stage_states SET status='waiting_approval' WHERE project_id=? AND stage='planning'").run(f.project.id);
       }

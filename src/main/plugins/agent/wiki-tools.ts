@@ -1,11 +1,12 @@
 import {tool} from 'langchain';
+import {claimComparisonRequestSchema} from '../../../shared/schemas/research-claim-comparison';
 import {z} from 'zod';
 import type {StructuredToolInterface} from '@langchain/core/tools';
 import type {RocCapabilityRegistry} from '../../kernel/types';
 import type {ResearchToolDescriptor} from './research-tools';
 import {wikiCreateSchema, wikiSaveSchema, wikiSectionReadSchema, wikiResynthesizeSchema, type WikiPage, type WikiSummary} from '../../../shared/schemas/research-wiki-pages';
 
-const readNames = ['research_wiki_search', 'research_wiki_read', 'research_wiki_follow', 'research_wiki_lint', 'research_wiki_read_section'];
+const readNames = ['research_wiki_search', 'research_wiki_read', 'research_wiki_follow', 'research_wiki_lint', 'research_wiki_read_section', 'research_compare_claims'];
 export const WIKI_TOOL_DESCRIPTORS: readonly ResearchToolDescriptor[] = [
   ...readNames.map(name => ({name, scope: 'app' as const, effectClass: 'none' as const, riskLevel: 'low' as const,
     executionScopes: ['main', 'subagent'] as ResearchToolDescriptor['executionScopes']})),
@@ -47,6 +48,11 @@ export function createWikiTools(input: {projectId: string; signal: AbortSignal; 
       fallback: '证据不足、来源失效或原句问题：使用 research_search_knowledge，再通过 research_capture_evidence 捕获准确原文；不要把 Wiki 文字当成新证据。'};
   };
   return [
+    tool(async request => {
+      input.signal.throwIfAborted();
+      return input.capabilities.invoke('research.claims.compare', {...request, projectId: input.projectId});
+    }, {name: 'research_compare_claims', description: '比较两个准确主张版本的实验条件。条件差异不能认定矛盾，unknown 返回不可判定；可比的相反结论只产生未审核冲突候选，不确认任何科学关系。引用原始 evidenceIds。',
+      schema: claimComparisonRequestSchema.omit({projectId: true})}),
     tool(({query, offset}) => read(async () => {
       const pages = await invoke<WikiSummary[]>('search', {query, offset});
       return {derived: true, pages: pages.slice(0, 10), nextOffset: pages.length > 10 ? offset + 10 : null,

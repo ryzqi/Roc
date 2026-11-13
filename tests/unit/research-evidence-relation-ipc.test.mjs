@@ -1,6 +1,6 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {unknownExperiment, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => {api = await loadResearchTestApi();});
@@ -15,7 +15,7 @@ function scene() {
   f.evidence = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'relation-ipc-source:chunk:0'});
   f.artifact = f.repository.createArtifact({projectId: f.project.id, stage: 'reading', kind: 'reading_notes',
     title: 'Synthetic claim under review', path: null});
-  f.claim = f.repository.evidence.createClaim({projectId: f.project.id, artifactId: f.artifact.id,
+  f.claim = f.repository.evidence.createClaim({experiment: {...unknownExperiment}, projectId: f.project.id, artifactId: f.artifact.id,
     subjectType: 'claim', content: 'A synthetic mean claim.', status: 'hypothesis', evidenceIds: [f.evidence.id]});
   f.registry = new api.CapabilityRegistry();
   for (const descriptor of api.researchEvidenceCapabilities) f.registry.declare('research', descriptor);

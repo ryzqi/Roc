@@ -112,6 +112,14 @@ export function createResearchRoleTools(input: {
       schema: z.object({evidenceId: z.string().min(1), offset: z.number().int().nonnegative(),
         limit: z.number().int().min(1).max(8000),
         quote: z.string().min(1).max(8000).nullable().optional()}).strict()}),
+    compare_claims: () => tool(async request => {
+      assertActive();
+      if (scientificInput && [request.leftClaimId, request.rightClaimId].some(id => !scientificInput.claims.some(claim => claim.id === id))) {
+        throw new ToolInputParsingException('research_claim_not_in_run_inputs');
+      }
+      return input.repository.evidence.compare({...request, projectId: input.run.projectId});
+    }, {name: 'compare_claims', description: '按两个准确主张版本比较实验条件；不同条件不能判为矛盾，unknown 不可判定。相反结论只返回未审核冲突候选，不确认科学关系。',
+      schema: claimComparisonRequestSchema.omit({projectId: true})}),
     list_evidence_relations: () => tool(async ({claimId, offset, limit}) => {
       assertActive();
       if (scientificInput !== undefined && claimId !== null && !scientificInput.claims.some(claim => claim.id === claimId)) {
@@ -461,3 +469,4 @@ function productionSection(input: ResearchProductionInput, section: 'summary' | 
     inputHash: source.execution.inputHash, status: source.execution.status, startedAt: source.execution.startedAt, endedAt: source.execution.endedAt,
     ...(source.kind === 'figure' ? { figureId: source.figure.id, validation: source.figure.validation } : {}) };
 }
+import {claimComparisonRequestSchema} from '../../../shared/schemas/research-claim-comparison';

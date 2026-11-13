@@ -1,7 +1,7 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {createResearchTestRoleTools, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {unknownExperiment, createResearchTestRoleTools, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => {api = await loadResearchTestApi();});
@@ -37,7 +37,7 @@ function scene({targets = [block('first', 1), block('second', 3)]} = {}) {
   f.publish('decision-old', [block('old', 2)]);
   f.old = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'document:decision-old:chunk:0'});
   f.artifact = f.repository.createArtifact({projectId: f.project.id, stage: 'reading', kind: 'reading_notes', title: 'Claim', path: null});
-  f.claim = f.repository.evidence.createClaim({projectId: f.project.id, artifactId: f.artifact.id,
+  f.claim = f.repository.evidence.createClaim({experiment: {...unknownExperiment}, projectId: f.project.id, artifactId: f.artifact.id,
     subjectType: 'claim', content: 'An explicitly synthetic claim.', status: 'supported', evidenceIds: [f.old.id]});
   const proposed = f.repository.evidence.relations.propose({projectId: f.project.id, claimId: f.claim.id,
     expectedClaimVersion: f.claim.version, evidenceId: f.old.id,

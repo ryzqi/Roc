@@ -816,6 +816,7 @@ CREATE TABLE research_claims (
         content TEXT NOT NULL,
         status TEXT NOT NULL CHECK(status IN ('supported','hypothesis','pending')),
         evidence_ids_json TEXT NOT NULL,
+        experiment_json TEXT NOT NULL CHECK(json_valid(experiment_json)),
         version INTEGER NOT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL

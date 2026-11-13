@@ -1,3 +1,5 @@
+export const unknownExperiment = {method: 'unknown', dataset: 'unknown', metric: 'unknown', value: 'unknown',
+  unit: 'unknown', baseline: 'unknown', conditions: 'unknown', finding: 'unknown'};
 import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

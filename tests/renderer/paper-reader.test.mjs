@@ -8,7 +8,7 @@ import {build} from 'esbuild';
 import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 import electronPath from 'electron';
 import {_electron} from '@playwright/test';
-import {createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
+import {unknownExperiment, createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
 import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
 import {createCanvas, loadImage} from '@napi-rs/canvas';
 import {createPerformancePdf, performancePdfPageCount} from '../../scripts/lib/research-pdf-performance-fixture.mjs';
@@ -852,7 +852,7 @@ test('captured cross-page source preserves its selected location through origina
 test('Claim relation opens its retained original source after reparse without changing scientific state or disclosure geometry',async()=>{
   const f=await realPdfScene(), source=captureOriginalSource(f);
   const artifact=f.repository.createArtifact({projectId:f.project.id,stage:'reading',kind:'reading_notes',title:'Synthetic source-linked claim',path:null});
-  const claim=f.repository.evidence.createClaim({projectId:f.project.id,artifactId:artifact.id,subjectType:'claim',
+  const claim=f.repository.evidence.createClaim({experiment: {...unknownExperiment}, projectId:f.project.id,artifactId:artifact.id,subjectType:'claim',
     content:'Explicit synthetic hypothesis remains unconfirmed.',status:'hypothesis',evidenceIds:[source.evidence.id]});
   const proposed=f.repository.evidence.relations.propose({projectId:f.project.id,claimId:claim.id,expectedClaimVersion:claim.version,
     evidenceId:source.evidence.id,expectedSourceDigest:api.relationSourceDigest(source),kind:'supports',condition:null,supersedesRelationId:null},

@@ -1,4 +1,6 @@
 import type {ResearchWikiSnapshot} from '../../../shared/schemas/research-wiki';
+import {claimComparisonRequestSchema, type ClaimComparison} from '../../../shared/schemas/research-claim-comparison';
+import {compareClaims} from './claim-comparison';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Database } from 'better-sqlite3';
 import type {ResearchInspectedEvidence} from '../../../shared/schemas/research-evidence-source';
@@ -33,7 +35,7 @@ const evidenceColumns = `id, project_id AS projectId, document_id AS documentId,
   source_type AS sourceType, source_id AS sourceId, source_version AS sourceVersion, title,
   locator, excerpt, content_hash AS contentHash, created_at AS createdAt`;
 const claimColumns = `id, project_id AS projectId, artifact_id AS artifactId, subject_type AS subjectType,
-  content, status, evidence_ids_json, version, created_at AS createdAt, updated_at AS updatedAt`;
+  content, status, evidence_ids_json, experiment_json, version, created_at AS createdAt, updated_at AS updatedAt`;
 
 export class ResearchEvidenceRepository {
   readonly relations: ResearchEvidenceRelationRepository;
@@ -149,10 +151,10 @@ export class ResearchEvidenceRepository {
     const claim: ResearchClaim = { ...request, id: `claim_${randomUUID()}`, version: 1, createdAt: timestamp, updatedAt: timestamp };
     this.db.transaction(() => {
       this.db.prepare(
-        `INSERT INTO research_claims (id, project_id, artifact_id, subject_type, content, status, evidence_ids_json, version, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO research_claims (id, project_id, artifact_id, subject_type, content, status, evidence_ids_json, experiment_json, version, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(claim.id, claim.projectId, claim.artifactId, claim.subjectType, claim.content, claim.status,
-        JSON.stringify(claim.evidenceIds), claim.version, timestamp, timestamp);
+        JSON.stringify(claim.evidenceIds), JSON.stringify(claim.experiment), claim.version, timestamp, timestamp);
       this.recordClaimRevision(claim);
       this.recordClaimProvenance(claim);
       this.recordChange(artifact, claim.id, 'claim_created', timestamp);
@@ -169,8 +171,8 @@ export class ResearchEvidenceRepository {
     const claim = { ...current, ...fields, version: expectedVersion + 1, updatedAt: this.now() };
     this.validateSupport(claim);
     this.db.transaction(() => {
-      this.db.prepare('UPDATE research_claims SET content = ?, status = ?, evidence_ids_json = ?, version = ?, updated_at = ? WHERE id = ?')
-        .run(claim.content, claim.status, JSON.stringify(claim.evidenceIds), claim.version, claim.updatedAt, claim.id);
+      this.db.prepare('UPDATE research_claims SET content = ?, status = ?, evidence_ids_json = ?, experiment_json = ?, version = ?, updated_at = ? WHERE id = ?')
+        .run(claim.content, claim.status, JSON.stringify(claim.evidenceIds), JSON.stringify(claim.experiment), claim.version, claim.updatedAt, claim.id);
       this.relations.invalidateClaim(claim.id);
       this.recordClaimRevision(claim);
       this.recordClaimProvenance(claim);
@@ -183,6 +185,18 @@ export class ResearchEvidenceRepository {
     const row = this.db.prepare(`SELECT ${claimColumns} FROM research_claims WHERE id = ?`).get(id);
     if (row === undefined) throw new Error('research_claim_not_found');
     return parseClaimRow(row);
+  }
+
+  compare(input: import('zod').z.infer<typeof claimComparisonRequestSchema>): ClaimComparison {
+    const request = claimComparisonRequestSchema.parse(input);
+    return this.db.transaction(() => {
+      this.requireProject(request.projectId);
+      const left = this.getClaim(request.leftClaimId), right = this.getClaim(request.rightClaimId);
+      if ([left, right].some(claim => claim.projectId !== request.projectId)) throw new Error('research_claim_project_mismatch');
+      if (left.version !== request.expectedLeftVersion || right.version !== request.expectedRightVersion) throw new Error('research_claim_version_conflict');
+      for (const claim of [left, right]) for (const id of claim.evidenceIds) this.getEvidence(id, request.projectId);
+      return compareClaims(left, right);
+    })();
   }
 
   claimHistory(id: string): ResearchClaim[] {
@@ -367,9 +381,9 @@ function parseSnapshot(value: string): Record<string, unknown> {
 }
 
 function parseClaimRow(value: unknown): ResearchClaim {
-  const row = value as { evidence_ids_json: string };
-  const { evidence_ids_json, ...fields } = row;
-  return researchClaimSchema.parse({ ...fields, evidenceIds: parseEvidenceIds(evidence_ids_json) });
+  const row = value as { evidence_ids_json: string; experiment_json: string };
+  const { evidence_ids_json, experiment_json, ...fields } = row;
+  return researchClaimSchema.parse({ ...fields, evidenceIds: parseEvidenceIds(evidence_ids_json), experiment: JSON.parse(experiment_json) });
 }
 
 /**

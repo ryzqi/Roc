@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {before, after, test} from 'node:test';
 import {createHash} from 'node:crypto';
 import Database from 'better-sqlite3';
-import {withResearchTestWorker, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {unknownExperiment, withResearchTestWorker, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => {api = await loadResearchTestApi();});
@@ -41,7 +41,7 @@ function scene() {
   f.evidence = f.repository.experimentResults.captureMetric(f.result, 'mean');
   f.artifactId = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {title: 'Measured values',
     markdown: 'Synthetic measured value report', claims: [
-      {subjectType: 'paragraph', content: 'Mean -2.35 ms and comparison 17 ms.', status: 'supported', evidenceIds: [f.evidence.id]}],
+      {experiment: {...unknownExperiment}, subjectType: 'paragraph', content: 'Mean -2.35 ms and comparison 17 ms.', status: 'supported', evidenceIds: [f.evidence.id]}],
     sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'})).outputArtifactIds[0];
   f.claim = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: f.artifactId})[0];
   f.service = new api.ResearchConsistencyService(f.repository, {evidence: async () => ({receipt: f.result, metricId: 'mean'})});
@@ -129,7 +129,7 @@ test('changed claims are stale while original history survives source invalidati
   const f = scene();
   try {
     const saved = await f.save();
-    f.claim = f.repository.evidence.updateClaim({id: f.claim.id, expectedVersion: f.claim.version,
+    f.claim = f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id: f.claim.id, expectedVersion: f.claim.version,
       content: 'Changed mean -2.35 ms.', status: 'supported', evidenceIds: [f.evidence.id]});
     const inspected = await f.inspect();
     assert.equal(inspected.report.locations[0].current, false);
@@ -204,7 +204,7 @@ test('direct storage cannot map a claim omitted from the saved manuscript', asyn
   const f = scene();
   try {
     const saved = await f.save();
-    const omitted = f.repository.evidence.createClaim({projectId: f.project.id, artifactId: f.artifactId,
+    const omitted = f.repository.evidence.createClaim({experiment: {...unknownExperiment}, projectId: f.project.id, artifactId: f.artifactId,
       subjectType: 'paragraph', content: f.claim.content, status: 'supported', evidenceIds: [f.evidence.id]});
     const request = f.request({requestId: 'storage-omitted',
       parent: {reviewId: saved.snapshot.id, reviewHash: saved.snapshotHash},

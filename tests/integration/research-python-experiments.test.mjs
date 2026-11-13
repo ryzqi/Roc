@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, realpath, writeFile, readFile, symlink, rm, chmod, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import Database from 'better-sqlite3';
-import { loadResearchTestApi, createResearchFixture, figureRequest } from '../unit/fixtures/research-test-kit.mjs';
+import { unknownExperiment, loadResearchTestApi, createResearchFixture, figureRequest } from '../unit/fixtures/research-test-kit.mjs';
 import {ideaCanvasContentFixture, ideaPlanBodyFixture} from '../unit/fixtures/research-idea-plan.mjs';
 
 const python = JSON.parse(execFileSync('python3', ['-I', '-S', '-c',
@@ -70,7 +70,7 @@ test('scientific consistency binds actual CPython result evidence to abstract bo
       title: 'Actual measured report', path: null});
     const claims = [
       ['abstract', 'Mean -0.004 s.'], ['body', 'Measured mean -4 ms.'], ['table', '| Mean | -5 | ms |']
-    ].map(([surface, content]) => ({surface, claim: f.repository.evidence.createClaim({
+    ].map(([surface, content]) => ({surface, claim: f.repository.evidence.createClaim({experiment: {...unknownExperiment},
       projectId: f.project.id, artifactId: artifact.id, subjectType: 'paragraph', content,
       status: 'supported', evidenceIds: [evidence.id]})}));
     f.repository.manuscripts.saveManuscript({artifactId: artifact.id,
@@ -412,9 +412,9 @@ test('actual result metric evidence traces claims, figures and Idea history to a
       } else {
         artifact=f.repository.createArtifact({projectId:f.project.id,stage,kind,title:`Metric ${kind}`,path:null});
       }
-      const claim=f.repository.evidence.createClaim({projectId:f.project.id,artifactId:artifact.id,subjectType,
+      const claim=f.repository.evidence.createClaim({experiment: {...unknownExperiment}, projectId:f.project.id,artifactId:artifact.id,subjectType,
         content:'The measured mean is -4 ms.',status:'hypothesis',evidenceIds:[evidence.id]});
-      const revised=f.repository.evidence.updateClaim({id:claim.id,expectedVersion:claim.version,
+      const revised=f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id:claim.id,expectedVersion:claim.version,
         content:'The negative mean remains -4 ms.',status:subjectType==='claim'?'hypothesis':'supported',evidenceIds:[evidence.id]});
       assert.deepEqual(f.repository.evidence.claimHistory(claim.id).map(value=>value.evidenceIds),[[evidence.id],[evidence.id]]);
       assert.equal(revised.status,subjectType==='claim'?'hypothesis':'supported');

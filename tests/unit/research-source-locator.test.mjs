@@ -2,7 +2,7 @@ import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import Database from 'better-sqlite3';
-import {createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {unknownExperiment, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async()=>{api=await loadResearchTestApi();});
@@ -57,7 +57,7 @@ test('capture preserves exact imported document parse source and ordered block c
     assert.equal(capture(f,'locator-parse',1).id,evidence.id);
     assert.equal(f.db.prepare('SELECT count(*) FROM research_evidence_source_locators').pluck().get(),1);
     const artifact=f.repository.createArtifact({projectId:f.project.id,stage:'reading',kind:'reading_notes',title:'Locator view',path:null});
-    f.repository.evidence.createClaim({projectId:f.project.id,artifactId:artifact.id,subjectType:'claim',
+    f.repository.evidence.createClaim({experiment: {...unknownExperiment}, projectId:f.project.id,artifactId:artifact.id,subjectType:'claim',
       content:'Synthetic unreviewed hypothesis',status:'hypothesis',evidenceIds:[evidence.id]});
     const result=f.repository.inspectArtifact({projectId:f.project.id,artifactId:artifact.id,expectedVersion:null});
     assert.deepEqual(result.snapshot.evidence[0].sourceLocator,inspected.sourceLocator);
@@ -107,7 +107,7 @@ test('same-document reparse proposes exact raw block targets without replacing e
     publishParse(f,document,'migration-old',[block('old-block',{page:1})]);
     const old=capture(f,'migration-old');
     const artifact=f.repository.createArtifact({projectId:f.project.id,stage:'reading',kind:'reading_notes',title:'Migration hypothesis',path:null});
-    const claim=f.repository.evidence.createClaim({projectId:f.project.id,artifactId:artifact.id,subjectType:'claim',
+    const claim=f.repository.evidence.createClaim({experiment: {...unknownExperiment}, projectId:f.project.id,artifactId:artifact.id,subjectType:'claim',
       content:'An unreviewed inference.',status:'hypothesis',evidenceIds:[old.id]});
     const originalSource=f.repository.evidence.inspectEvidence(old.id,f.project.id);
     const target=block('new-block',{page:4});

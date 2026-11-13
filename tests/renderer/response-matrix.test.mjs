@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import electronPath from 'electron';
 import {_electron} from '@playwright/test';
-import {createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
+import {unknownExperiment, createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
 import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 
 import {createScientificReviewFixture} from '../unit/fixtures/scientific-review.mjs';
@@ -83,7 +83,7 @@ async function scene({long = false, waiting = false, scientific = false, verifie
   f.evidence = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'response-source:chunk:0'});
   f.artifactId = f.withWorker(() => f.repository.runs.complete(f.run.id, f.project.id, {title: '审稿意见与当前修改稿',
     markdown: 'Synthetic response manuscript', claims: [
-      {subjectType: 'paragraph', content: `${long ? '逐项核对原始意见、修改稿与测量来源。'.repeat(20) : ''}The measured difference was -4 ms. 𝛥 verified.`,
+      {experiment: {...unknownExperiment}, subjectType: 'paragraph', content: `${long ? '逐项核对原始意见、修改稿与测量来源。'.repeat(20) : ''}The measured difference was -4 ms. 𝛥 verified.`,
         status: 'supported', evidenceIds: [f.evidence.id]}],
     sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'})).outputArtifactIds[0];
   f.claim = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: f.artifactId})[0];
@@ -240,7 +240,7 @@ test('current source failure hides old successful report while paged complete st
 
 test('revised manuscript shows historical dispositions and parent/source conflicts preserve the draft', async () => {
   const f = await scene(); await declare(f, 1, {status: 'addressed'});
-  f.claim = f.repository.evidence.updateClaim({id: f.claim.id, expectedVersion: f.claim.version,
+  f.claim = f.repository.evidence.updateClaim({experiment: {...unknownExperiment}, id: f.claim.id, expectedVersion: f.claim.version,
     content: 'The revised Results text preserves -4 ms.', status: 'supported', evidenceIds: [f.evidence.id]});
   f.repository.manuscripts.saveManuscript({artifactId: f.artifactId, sections: [{title: 'Revised Results', claimIds: [f.claim.id]}]});
   await page.evaluate(request => mount(request), f.request); await openReport();
