@@ -62,6 +62,8 @@ export type MemoryFilesStore = {
   setDraft: (next: string) => void;
   dirty: (slot: MemorySlot) => boolean;
   dirtyCount: number;
+  /** Read the synchronous operation lock before React commits its pending state. */
+  isBusy: () => boolean;
   save: { pending: boolean; outcome: WriteOutcomeDescription | null; error: string | null; run: () => Promise<boolean> };
   discard: () => void;
   discardAll: () => void;
@@ -79,6 +81,7 @@ export function useMemoryFiles(client: RocClient): MemoryFilesStore {
   const [pending, setPending] = useState(false);
   const [outcome, setOutcome] = useState<WriteOutcomeDescription | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const saving = useRef(false);
 
   const selected = useMemo(() => {
     const slot = MEMORY_SLOTS.find((candidate) => memorySlotKey(candidate.scope, candidate.kind) === selectedKey);
@@ -156,6 +159,7 @@ export function useMemoryFiles(client: RocClient): MemoryFilesStore {
   );
 
   const discard = useCallback(() => {
+    if (saving.current) return;
     setDrafts((current) => {
       const next = { ...current };
       delete next[key];
@@ -166,6 +170,7 @@ export function useMemoryFiles(client: RocClient): MemoryFilesStore {
   }, [key]);
 
   const discardAll = useCallback(() => {
+    if (saving.current) return;
     setDrafts({});
     setOutcome(null);
     setSaveError(null);
@@ -174,6 +179,8 @@ export function useMemoryFiles(client: RocClient): MemoryFilesStore {
   const reloadStatus = resource.reload;
 
   const run = useCallback(async (): Promise<boolean> => {
+    if (saving.current) return false;
+    saving.current = true;
     const slot = selected;
     const slotKey = memorySlotKey(slot.scope, slot.kind);
     const text = drafts[slotKey] ?? contents[slotKey] ?? '';
@@ -192,7 +199,7 @@ export function useMemoryFiles(client: RocClient): MemoryFilesStore {
         setContents((current) => ({ ...current, [slotKey]: text }));
         setDrafts((current) => {
           const next = { ...current };
-          delete next[slotKey];
+          if (next[slotKey] === text) delete next[slotKey];
           return next;
         });
         reloadStatus();
@@ -202,6 +209,7 @@ export function useMemoryFiles(client: RocClient): MemoryFilesStore {
       setSaveError(caught instanceof Error ? caught.message : String(caught));
       return false;
     } finally {
+      saving.current = false;
       setPending(false);
     }
   }, [client, contents, drafts, reloadStatus, selected]);
@@ -234,6 +242,7 @@ export function useMemoryFiles(client: RocClient): MemoryFilesStore {
       setDraft,
       dirty,
       dirtyCount,
+      isBusy: () => saving.current,
       save: { pending, outcome, error: saveError, run },
       discard,
       discardAll
@@ -308,8 +317,23 @@ export function useSessionSearch(
   const [status, setStatus] = useState<AsyncStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SessionMessageSearchResult | null>(null);
+  const revision = useRef(0);
+  const inFlight = useRef(false);
+
+  const invalidate = useCallback(() => {
+    revision.current++;
+    inFlight.current = false;
+    setStatus('idle');
+    setResult(null);
+    setError(null);
+  }, []);
+  useEffect(() => { invalidate(); return () => { revision.current++; }; }, [client, workspaceHash, limit, invalidate]);
+  const updateQuery = useCallback((next: string) => { invalidate(); setQuery(next); }, [invalidate]);
+  const updateScope = useCallback((next: 'current' | 'all') => { invalidate(); setWorkspaceScope(next); }, [invalidate]);
 
   const run = useCallback(() => {
+    if (inFlight.current) return;
+    const requestRevision = ++revision.current;
     const trimmed = query.trim();
     if (trimmed.length === 0) {
       setStatus('idle');
@@ -317,6 +341,8 @@ export function useSessionSearch(
       return;
     }
     setStatus('loading');
+    inFlight.current = true;
+    setResult(null);
     setError(null);
     // `workspaceHash` is only meaningful with `workspaceScope: 'current'`; sending it with `'all'`
     // would be an argument the backend has no use for. The explicit object keeps that visible
@@ -325,8 +351,10 @@ export function useSessionSearch(
     if (workspaceScope === 'current' && workspaceHash !== null) {
       request.workspaceHash = workspaceHash;
     }
-    void searchSessionMessages(client, request)
+    void Promise.resolve().then(() => searchSessionMessages(client, request))
       .then((outcome) => {
+        if (revision.current !== requestRevision) return;
+        inFlight.current = false;
         if (!outcome.ok) {
           setStatus('error');
           setError(outcome.error.message);
@@ -337,17 +365,17 @@ export function useSessionSearch(
         setResult(outcome.data);
       })
       .catch((caught: unknown) => {
+        if (revision.current !== requestRevision) return;
+        inFlight.current = false;
         setStatus('error');
         setError(caught instanceof Error ? caught.message : String(caught));
       });
   }, [client, limit, query, workspaceHash, workspaceScope]);
 
   const reset = useCallback(() => {
+    invalidate();
     setQuery('');
-    setStatus('idle');
-    setResult(null);
-    setError(null);
-  }, []);
+  }, [invalidate]);
 
-  return { query, setQuery, workspaceScope, setWorkspaceScope, status, error, result, run, reset };
+  return { query, setQuery: updateQuery, workspaceScope, setWorkspaceScope: updateScope, status, error, result, run, reset };
 }

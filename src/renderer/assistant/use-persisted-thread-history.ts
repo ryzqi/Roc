@@ -40,6 +40,7 @@ export type PersistedThreadHistory = {
   windowEpoch: number;
   loadingInitial: boolean;
   loadingOlder: boolean;
+  loadingLatest: boolean;
   error: string | null;
   loadOlder(): Promise<void>;
   reloadLatest(): Promise<void>;
@@ -70,7 +71,7 @@ export function usePersistedThreadHistory(input: {
     const threadId = input.threadId;
     if (threadId === null) {
       replaceState(emptyHistoryState(null));
-      return;
+      return () => { generationRef.current += 1; };
     }
     replaceState({ ...emptyHistoryState(threadId), loadingInitial: true });
     void requestPage(input.client, { threadId, limit: historyPageLimit, cursor: null })
@@ -89,6 +90,7 @@ export function usePersistedThreadHistory(input: {
           windowEpoch: 0,
           loadingInitial: false,
           loadingOlder: false,
+          loadingLatest: false,
           error: null
         });
         if (latestSignalRef.current !== initialSignal) {
@@ -111,6 +113,7 @@ export function usePersistedThreadHistory(input: {
           error: errorMessage(error)
         });
       });
+    return () => { generationRef.current += 1; };
   }, [input.client, input.threadId, replaceState]);
 
   useEffect(() => {
@@ -119,7 +122,7 @@ export function usePersistedThreadHistory(input: {
     }
     latestSignalRef.current = input.latestPersistedThreadEventId;
     const threadId = input.threadId;
-    if (threadId === null || stateRef.current.threadId !== threadId || stateRef.current.loadingInitial) {
+    if (threadId === null || stateRef.current.threadId !== threadId || stateRef.current.loadingInitial || stateRef.current.loadingLatest) {
       return;
     }
     const generation = generationRef.current;
@@ -139,6 +142,7 @@ export function usePersistedThreadHistory(input: {
       current.threadId === null ||
       current.loadingInitial ||
       current.loadingOlder ||
+      current.loadingLatest ||
       !current.hasMoreBefore
     ) {
       return;
@@ -184,11 +188,14 @@ export function usePersistedThreadHistory(input: {
 
   const reloadLatest = useCallback(async (): Promise<void> => {
     const current = stateRef.current;
-    if (current.threadId === null || !current.tailTrimmed || current.loadingInitial) {
+    if (current.threadId === null || (!current.tailTrimmed && current.error === null) || current.loadingInitial || current.loadingLatest) {
       return;
     }
-    const generation = generationRef.current;
+    // A new window invalidates older-page and catch-up responses from the previous one.
+    const generation = ++generationRef.current;
     const threadId = current.threadId;
+    const initialSignal = latestSignalRef.current;
+    replaceState({...current, loadingInitial: current.events.length === 0, loadingOlder: false, loadingLatest: true, error: null});
     try {
       const page = await requestPage(input.client, { threadId, limit: historyPageLimit, cursor: null });
       if (generationRef.current !== generation) {
@@ -202,14 +209,19 @@ export function usePersistedThreadHistory(input: {
         hasMoreBefore: page.hasMoreBefore,
         tailTrimmed: false,
         windowEpoch: stateRef.current.windowEpoch + 1,
+        loadingInitial: false,
         loadingOlder: false,
+        loadingLatest: false,
         error: null
       });
+      if (latestSignalRef.current !== initialSignal) {
+        await loadAfterPages(input.client, threadId, generation, generationRef, stateRef, replaceState);
+      }
     } catch (error) {
       if (generationRef.current !== generation) {
         return;
       }
-      replaceState({ ...stateRef.current, error: errorMessage(error) });
+      replaceState({ ...stateRef.current, loadingInitial: false, loadingLatest: false, error: errorMessage(error) });
     }
   }, [input.client, replaceState]);
 
@@ -332,6 +344,7 @@ function emptyHistoryState(threadId: string | null): HistoryState {
     windowEpoch: 0,
     loadingInitial: false,
     loadingOlder: false,
+    loadingLatest: false,
     error: null
   };
 }

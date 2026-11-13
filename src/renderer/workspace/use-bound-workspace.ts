@@ -84,7 +84,12 @@ export function useBoundWorkspace(client: RocClient, project: ResearchProject | 
       }
       setPath(selected.data.path);
       setStatus('bound');
-    })();
+    })().catch((cause: unknown) => {
+      if (cancelled) return;
+      setPath(null);
+      setStatus('error');
+      setError(cause instanceof Error ? cause.message : '绑定工作区失败');
+    });
 
     return () => {
       cancelled = true;

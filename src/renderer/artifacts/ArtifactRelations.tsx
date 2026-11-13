@@ -1,4 +1,5 @@
-import {lazy, Suspense, useEffect, useMemo, useRef, useState} from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
 import type {z} from 'zod';
 import type {researchArtifactInspectionSchema} from '../../shared/schemas/research-artifact-inspector';
 import type {ResearchEvidenceRelation} from '../../shared/schemas/research-evidence-relations';
@@ -6,11 +7,12 @@ import type {ResearchClaim} from '../../shared/types';
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {formInputClass, formSecondaryButtonClass} from '../shared/form-ui';
+import {ArtifactDraftDiscard, useArtifactDraft, useArtifactEditorGuard} from './artifact-editor-guard';
 
 type Snapshot = z.infer<typeof researchArtifactInspectionSchema>;
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 const inputClass = `${formInputClass} min-w-0 border-[0.5px]`;
-const DocumentSource = lazy(async () => ({default: (await import('./ArtifactDocumentSource')).ArtifactDocumentSource}));
+const DocumentSource = retryableLazy(async () => ({default: (await import('./ArtifactDocumentSource')).ArtifactDocumentSource}));
 const kinds = {supports: '支持', contradicts: '反对', qualifies: '限定', depends_on: '依赖', supersedes: '替代', historical: '历史关联'};
 const statuses = {proposed: '待审核', confirmed: '已确认', rejected: '已拒绝', invalidated: '已失效', historical: '未经语义审核'};
 const reasons = {claim_changed: '主张版本已改变', evidence_invalidated: '来源已失效', superseded: '已由新关系替代'};
@@ -24,6 +26,7 @@ export function ArtifactRelations({client, snapshot, current, onChanged}: {
   client: RocClient; snapshot: Snapshot; current: boolean; onChanged: () => void
 }): React.JSX.Element {
   const [filter, setFilter] = useState('all');
+  const guard = useArtifactEditorGuard();
   const canReview = current && snapshot.artifact.status === 'draft' && snapshot.projectStatus !== 'archived' &&
     snapshot.currentStage === snapshot.artifact.stage && snapshot.stage.artifactIds.includes(snapshot.artifact.id) &&
     ['ready', 'running', 'paused', 'blocked', 'failed', 'waiting_approval'].includes(snapshot.stage.status);
@@ -42,7 +45,9 @@ export function ArtifactRelations({client, snapshot, current, onChanged}: {
     {canReview && snapshot.artifact.stage === 'figure' && !snapshot.claims.some(claim => claim.subjectType === 'figure') ?
       <FigureCaptionClaim client={client} snapshot={snapshot} onChanged={onChanged}/> : null}
     <label className="flex items-center gap-2 text-muted"><span className="shrink-0">查看</span>
-      <select value={filter} onChange={event => setFilter(event.target.value)} data-testid="artifact-relations-filter"
+      <select value={filter} disabled={guard.locked()} onChange={event => {
+        if (!guard.locked()) setFilter(event.target.value);
+      }} data-testid="artifact-relations-filter"
         data-reading-key="relations-filter" className={inputClass}>
         <option value="all">全部主张</option><option value="weak">未确认支持</option>
         <option value="conflict">已确认反对</option><option value="pending">存在待审核提议</option>
@@ -66,7 +71,7 @@ export function ArtifactRelations({client, snapshot, current, onChanged}: {
                 details.open = true; details.focus();
               }}>{claim.content}</button>
           </th>
-          {(['supports', 'contradicts', 'qualifies'] as const).map(kind => <td key={kind} className="py-2 align-top">
+          {(['supports', 'contradicts', 'qualifies'] as const).map(kind => <td key={kind} className="py-2 align-top tabular-nums">
             <span className="block">确认 {active.filter(relation => relation.kind === kind && relation.status === 'confirmed').length}</span>
             <span className="block text-muted">提议 {active.filter(relation => relation.kind === kind && relation.status === 'proposed').length}</span>
           </td>)}
@@ -91,10 +96,10 @@ export function ArtifactRelations({client, snapshot, current, onChanged}: {
 function FigureCaptionClaim({client, snapshot, onChanged}: {
   client: RocClient; snapshot: Snapshot; onChanged: () => void
 }): React.JSX.Element {
-  const [open, setOpen] = useState(false);
-  return <details onToggle={event => setOpen(event.currentTarget.open)}>
+  const [revealed, setRevealed] = useState(false);
+  return <details onToggle={event => {if (event.currentTarget.open) setRevealed(true);}}>
     <summary className="cursor-pointer">补充图注声明</summary>
-    {open ? <FigureCaptionForm client={client} snapshot={snapshot} onChanged={onChanged}/> : null}
+    {revealed ? <FigureCaptionForm client={client} snapshot={snapshot} onChanged={onChanged}/> : null}
   </details>;
 }
 
@@ -104,6 +109,8 @@ function FigureCaptionForm({client, snapshot, onChanged}: {
   const projectId = snapshot.artifact.projectId;
   const [content, setContent] = useState('');
   const [evidenceId, setEvidenceId] = useState('');
+  const busy = useRef(false);
+  const draft = useArtifactDraft('图注声明', {content, evidenceId}, busy);
   const changed = useChangedAfterAction(onChanged);
   const evidence = useAsyncResource(`caption-evidence:${projectId}`, () => client.api.research.listEvidence({projectId}), {label: '读取图注证据'});
   const source = useAsyncResource(evidenceId === '' ? null : `caption-source:${projectId}:${evidenceId}`,
@@ -120,11 +127,11 @@ function FigureCaptionForm({client, snapshot, onChanged}: {
   }, {label: '保存图注声明'});
   return <div className="mt-2 flex flex-col gap-2" data-testid="artifact-caption-form">
     <label className="flex flex-col gap-1 text-muted">图注声明
-      <textarea className={`${inputClass} min-h-24 resize-y`} value={content} maxLength={20000} disabled={save.pending}
+      <textarea className={`${inputClass} min-h-24 resize-y`} value={content} maxLength={20000} disabled={save.pending || draft.locked}
         data-testid="artifact-caption-content" onChange={event => setContent(event.target.value)}/>
     </label>
     <label className="flex flex-col gap-1 text-muted">证据来源
-      <select className={inputClass} value={evidenceId} disabled={save.pending || evidence.status !== 'ready'}
+      <select className={inputClass} value={evidenceId} disabled={save.pending || draft.locked || evidence.status !== 'ready'}
         data-testid="artifact-caption-source" onChange={event => setEvidenceId(event.target.value)}>
         <option value="">选择已保存证据</option>
         {evidence.data?.map(item => <option key={item.id} value={item.id}>{item.title}，{item.locator}</option>)}
@@ -137,23 +144,33 @@ function FigureCaptionForm({client, snapshot, onChanged}: {
       <blockquote className="whitespace-pre-wrap break-words">{selected.evidence.excerpt}</blockquote>
       {selected.referenceStatus === 'recorded' ? null : <p role="alert">此来源已失效。</p>}
     </>}
-    <button type="button" className={`${button} self-start`} disabled={!valid || save.pending}
-      data-testid="artifact-caption-save" onClick={async () => {const outcome = await save.run(); if (outcome.ok) changed();}}>
+    <button type="button" className={`${button} self-start`} disabled={!valid || save.pending || draft.locked}
+      data-testid="artifact-caption-save" onClick={async () => {
+        if (busy.current || draft.isLocked() || !valid) return;
+        busy.current = true;
+        const outcome = await save.run(); busy.current = false;
+        if (outcome.ok) changed(draft.saved);
+      }}>
       {save.pending ? '正在保存…' : '保存图注声明'}</button>
+    <ArtifactDraftDiscard dirty={draft.dirty} testId="artifact-caption-discard" onDiscard={() => {
+      setContent(''); setEvidenceId(''); draft.reset({content: '', evidenceId: ''}); save.reset();
+    }}/>
     {save.error === null ? null : <p role="alert" className="text-[var(--st-warn)]">{save.error}</p>}
   </div>;
 }
 
-function useChangedAfterAction(onChanged: () => void): () => void {
+function useChangedAfterAction(onChanged: () => void): (saved?: () => void) => void {
   const mounted = useRef(true);
   useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
-  return () => {if (mounted.current) onChanged();};
+  return saved => {if (mounted.current) {saved?.(); onChanged();}};
 }
 
 function RelationRecord({client, relation, canReview, onChanged}: {
   client: RocClient; relation: ResearchEvidenceRelation; canReview: boolean; onChanged: () => void
 }): React.JSX.Element {
   const [note, setNote] = useState('');
+  const busy = useRef(false);
+  const draft = useArtifactDraft('关系审核说明', {note}, busy);
   const [historyNonce, setHistoryNonce] = useState(0);
   const [showDocument, setShowDocument] = useState(false);
   const changed = useChangedAfterAction(onChanged);
@@ -194,21 +211,27 @@ function RelationRecord({client, relation, canReview, onChanged}: {
           data-reading-key={`relation-document-source-toggle:${relation.id}`} onClick={() => setShowDocument(open => !open)}>
           {showDocument ? '收起关系原文固定版本' : '查看关系原文固定版本'}
         </button>
-        {!showDocument ? null : <Suspense fallback={<p role="status">加载关系原文阅读器…</p>}>
+        {!showDocument ? null : <LazyBoundary fallback={<p role="status">加载关系原文阅读器…</p>}>
           <DocumentSource client={client} evidence={source.evidence} locator={source.sourceLocator}/>
-        </Suspense>}
+        </LazyBoundary>}
       </>}
     </details>
     {relation.status !== 'proposed' ? null : canReview ? <div className="mt-1 flex flex-col gap-2">
       <label className="flex flex-col gap-1 text-muted">审核说明（可空）
-        <textarea value={note} maxLength={10000} disabled={review.pending} onChange={event => setNote(event.target.value)}
+        <textarea value={note} maxLength={10000} disabled={review.pending || draft.locked} onChange={event => setNote(event.target.value)}
           data-testid={`artifact-relation-note-${relation.id}`} className={`${inputClass} min-h-16 resize-y`}/>
       </label>
       <div className="flex flex-wrap gap-2">{(['confirm', 'reject'] as const).map(decision =>
-        <button key={decision} type="button" className={button} disabled={review.pending}
+        <button key={decision} type="button" className={button} disabled={review.pending || draft.locked}
           data-testid={`artifact-relation-${decision}-${relation.id}`} onClick={async () => {
-            const outcome = await review.run(decision); if (outcome.ok) changed();
+            if (busy.current || draft.isLocked() || !canReview) return;
+            busy.current = true;
+            const outcome = await review.run(decision); busy.current = false;
+            if (outcome.ok) changed(draft.saved);
           }}>{decision === 'confirm' ? '确认此关系' : '拒绝此关系'}</button>)}</div>
+      <ArtifactDraftDiscard dirty={draft.dirty} testId={`artifact-relation-discard-${relation.id}`} onDiscard={() => {
+        setNote(''); draft.reset({note: ''}); review.reset();
+      }}/>
       {review.pending ? <p role="status">正在保存审核…</p> : null}
       {review.error === null ? null : <p role="alert" className="break-words text-[var(--st-warn)]">{review.error}</p>}
     </div> : <p className="text-muted">此工件或来源需要重新核对，当前不能审核。</p>}
@@ -232,6 +255,8 @@ function RelationProposal({client, snapshot, claim, onChanged}: {
   const [kind, setKind] = useState<'supports' | 'contradicts' | 'qualifies' | 'depends_on' | 'supersedes'>('supports');
   const [condition, setCondition] = useState('');
   const [previousId, setPreviousId] = useState('');
+  const busy = useRef(false);
+  const draft = useArtifactDraft('关系提议', {evidenceId, kind, condition, previousId}, busy);
   const changed = useChangedAfterAction(onChanged);
   const source = useAsyncResource(evidenceId === '' ? null : `proposal-source:${snapshot.artifact.projectId}:${evidenceId}`,
     () => client.api.research.inspectEvidence({projectId: snapshot.artifact.projectId, evidenceId}), {label: '读取提议来源'});
@@ -248,7 +273,7 @@ function RelationProposal({client, snapshot, claim, onChanged}: {
     <summary data-reading-key={`relation-proposal-summary:${claim.id}`} className="cursor-pointer">新增关系提议</summary>
     <div className="mt-2 flex flex-col gap-2">
       <label className="flex flex-col gap-1 text-muted">证据来源
-        <select className={inputClass} value={evidenceId} disabled={proposal.pending}
+        <select className={inputClass} value={evidenceId} disabled={proposal.pending || draft.locked}
           data-testid={`artifact-relation-source-${claim.id}`} onChange={event => setEvidenceId(event.target.value)}>
           <option value="">选择已保存证据</option>
           {snapshot.evidence.map(item => <option key={item.evidence.id} value={item.evidence.id}>{item.evidence.title}
@@ -264,17 +289,17 @@ function RelationProposal({client, snapshot, claim, onChanged}: {
         {source.data.source.referenceStatus === 'recorded' ? null : <p role="alert" className="text-[var(--st-warn)]">此来源已失效，不能提议新关系。</p>}
       </>}
       <label className="flex flex-col gap-1 text-muted">关系类型
-        <select value={kind} disabled={proposal.pending} className={inputClass}
+        <select value={kind} disabled={proposal.pending || draft.locked} className={inputClass}
           data-testid={`artifact-relation-kind-${claim.id}`} onChange={event => setKind(event.target.value as typeof kind)}>
           {(['supports', 'contradicts', 'qualifies', 'depends_on', 'supersedes'] as const).map(value => <option key={value} value={value}>{kinds[value]}</option>)}
         </select>
       </label>
       <label className="flex flex-col gap-1 text-muted">{kind === 'qualifies' ? '适用条件（必填）' : '适用条件（可空）'}
-        <textarea value={condition} maxLength={10000} disabled={proposal.pending} className={`${inputClass} min-h-16 resize-y`}
+        <textarea value={condition} maxLength={10000} disabled={proposal.pending || draft.locked} className={`${inputClass} min-h-16 resize-y`}
           data-testid={`artifact-relation-condition-${claim.id}`} onChange={event => setCondition(event.target.value)}/>
       </label>
       {kind !== 'supersedes' ? null : <label className="flex flex-col gap-1 text-muted">替代的旧关系
-        <select value={previousId} disabled={proposal.pending} className={inputClass}
+        <select value={previousId} disabled={proposal.pending || draft.locked} className={inputClass}
           data-testid={`artifact-relation-previous-${claim.id}`} onChange={event => setPreviousId(event.target.value)}>
           <option value="">选择旧关系</option>
           {snapshot.relations.filter(relation => relation.claimId === claim.id && relation.claimVersion === claim.version &&
@@ -282,10 +307,17 @@ function RelationProposal({client, snapshot, claim, onChanged}: {
             {kinds[relation.kind]}：{relation.source.evidence.title}</option>)}
         </select>
       </label>}
-      <button type="button" className={`${button} self-start`} disabled={!valid || proposal.pending}
+      <button type="button" className={`${button} self-start`} disabled={!valid || proposal.pending || draft.locked}
         data-testid={`artifact-relation-propose-${claim.id}`} onClick={async () => {
-          const outcome = await proposal.run(); if (outcome.ok) changed();
+          if (busy.current || draft.isLocked() || !valid) return;
+          busy.current = true;
+          const outcome = await proposal.run(); busy.current = false;
+          if (outcome.ok) changed(draft.saved);
         }}>保存提议，待人工审核</button>
+      <ArtifactDraftDiscard dirty={draft.dirty} testId={`artifact-relation-proposal-discard-${claim.id}`} onDiscard={() => {
+        setEvidenceId(''); setKind('supports'); setCondition(''); setPreviousId('');
+        draft.reset({evidenceId: '', kind: 'supports', condition: '', previousId: ''}); proposal.reset();
+      }}/>
       {proposal.pending ? <p role="status">正在保存提议…</p> : null}
       {proposal.error === null ? null : <p role="alert" className="text-[var(--st-warn)]">{proposal.error}</p>}
     </div>

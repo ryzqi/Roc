@@ -10,6 +10,7 @@ import { getRtkStatus, getToolchainStatus } from '../settings-store';
 import { KeyValueRow, FormNote, FormSection, SelectField, TextField, formSecondaryButtonClass } from '../../shared/form-ui';
 import { formatBytes } from '../../shared/format';
 import {ZoteroSection} from './ZoteroSection';
+import { RadixSettingsConfirmDialog } from '../radix-dialog-pilot';
 
 /**
  * 文献与解析 · 编译与沙箱 — the two sections with **no writer** (T8.3).
@@ -55,6 +56,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
     label: '读取解析模型状态'
   });
   const [importPath, setImportPath] = useState('');
+  const [removePack, setRemovePack] = useState<ResearchModelsStatus['selectedPack'] | null>(null);
   const download = useAsyncAction(
     (input: { pack: ResearchModelsStatus['selectedPack'] }) => downloadModels(store.client, input),
     { label: '下载解析模型' }
@@ -202,7 +204,7 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
           disabled={removeAction.pending || downloading || status === null || selected?.installedBytes === 0}
           onClick={() => {
             if (status === null) return;
-            void removeAction.run(status.selectedPack).then(refresh);
+            setRemovePack(status.selectedPack);
           }}
           className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
         >
@@ -259,6 +261,23 @@ export function LiteratureSection({ store }: { store: SettingsStore }): React.JS
       {cancelAction.error === null ? null : (
         <FormNote tone="warn" testId="settings-models-cancel-error">{cancelAction.error}</FormNote>
       )}
+      <RadixSettingsConfirmDialog
+        open={removePack !== null}
+        title="卸载解析模型？"
+        message={`将删除「${removePack === null ? '' : PACK_LABELS[removePack].label}」在本机的模型文件。`}
+        detail="相关解析需要重新下载或导入模型后才能使用，已有文献和解析结果会保留。"
+        confirmLabel="卸载模型"
+        tone="destructive"
+        testId="settings-models-remove-confirm"
+        confirmDisabled={removeAction.pending || downloading}
+        onCancel={() => setRemovePack(null)}
+        onConfirm={() => {
+          if (removePack === null || removeAction.pending || downloading) return;
+          const pack = removePack;
+          setRemovePack(null);
+          void removeAction.run(pack).then(refresh);
+        }}
+      />
     </FormSection>
   );
 }

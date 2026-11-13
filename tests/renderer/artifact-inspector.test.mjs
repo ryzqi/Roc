@@ -26,7 +26,9 @@ before(async()=>{
     import {LazyMotion,MotionConfig,domAnimation} from 'motion/react';
     import {ResearchGateApprovalCard} from './src/renderer/assistant/blocks/approval-cards';
     import {ArtifactInspector} from './src/renderer/artifacts/ArtifactInspector';
+    import {requestNavigation} from './src/renderer/app/navigation-guard';
     const root=createRoot(document.getElementById('root'));
+    window.disposeHarness=()=>flushSync(()=>root.render(null));
     const client={api:{research:{inspectArtifact:input=>window.inspectFromMain(input),getGateReviewContext:input=>window.readGateFromMain(input),
       inspectEvidence:input=>window.relationFromMain('inspectEvidence',input),
       createClaim:input=>window.relationFromMain('createClaim',input),
@@ -46,6 +48,7 @@ before(async()=>{
       const [reviewDrafts]=useState(()=>new Map());
       const [reviewCallback,setReviewCallback]=useState(null);
       window.selectArtifact=value=>flushSync(()=>setRequest(value));
+      window.navigateAway=()=>requestNavigation({page:'project',projectId:'another-project'},()=>window.navigations++);
       const [approval,setApproval]=useState(initialApproval);
       window.replaceApproval=value=>flushSync(()=>setApproval(value));
       const [inactive,setInactive]=useState(false);
@@ -65,7 +68,7 @@ before(async()=>{
           onClose={()=>setRequest(null)} onOpenTask={taskId=>{window.tasks.push(taskId);setRequest(null);}}/>}</main>;
     }
     let generation=0;
-    window.mount=(link,approval)=>{window.decisions=[];window.tasks=[];window.resumeResult=null;window.resumeError=null;flushSync(()=>root.render(
+     window.mount=(link,approval)=>{window.decisions=[];window.tasks=[];window.navigations=0;window.resumeResult=null;window.resumeError=null;flushSync(()=>root.render(
       <MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
         <Harness key={++generation} link={link} initialApproval={approval}/></LazyMotion></MotionConfig>));};
   `,style:`
@@ -120,7 +123,10 @@ before(async()=>{
   await page.waitForFunction(()=>typeof mount==='function');
 });
 after(async()=>{
-  try {await app?.close();} finally {fixtures.forEach(f=>f.close());api?.dispose();if(directory)rmSync(directory,{recursive:true,force:true});}
+  try {
+    await page?.evaluate(()=>window.disposeHarness());
+    await app?.close();
+  } finally {fixtures.forEach(f=>f.close());api?.dispose();if(directory)rmSync(directory,{recursive:true,force:true});}
   assert.deepEqual(errors,[]);
 });
 async function scene({long=false,managed=false,experiment=false,child=false}={}) {
@@ -734,6 +740,11 @@ test('migration inspector refuses an obsolete selected target, rereads fixed his
   assert.match(await candidate.getByRole('alert').innerText(),/候选、请求或来源已改变/u);
   assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
   assert.equal(f.repository.evidence.list(f.project.id).length,1);
+  assert.equal(await page.getByTestId('artifact-source-migrations-refresh').isDisabled(),true);
+  await candidate.getByTestId('artifact-source-migration-discard').click();
+  await page.getByTestId('artifact-draft-discard-panel').waitFor();
+  await page.getByTestId('artifact-draft-discard-confirm').click();
+  await page.getByTestId('artifact-draft-discard-panel').waitFor({state:'detached'});
   await activateRendered(page.getByTestId('artifact-source-migrations-refresh'));
   candidate=await openMigrationCandidate(f,oldProposal.id);
   assert.match(await candidate.innerText(),/旧目标已被新解析替换/u);
@@ -1135,6 +1146,10 @@ test('a missing figure caption is saved through real IPC and still requires huma
   await activateRendered(page.getByText('补充图注声明',{exact:true}));
   assert.equal(await page.getByTestId('artifact-caption-save').isDisabled(),true);
   await page.getByTestId('artifact-caption-content').fill('A descriptive engineering fixture caption; no efficacy claim.');
+   await activateRendered(page.getByText('补充图注声明',{exact:true}));
+   await activateRendered(page.getByText('补充图注声明',{exact:true}));
+   assert.equal(await page.getByTestId('artifact-caption-content').inputValue(),
+     'A descriptive engineering fixture caption; no efficacy claim.', 'collapsing a caption must preserve authored text');
   await page.getByTestId('artifact-caption-source').selectOption(evidence.id);
   await page.waitForFunction(()=>!document.querySelector('[data-testid="artifact-caption-save"]').disabled);
   await activateRendered(page.getByTestId('artifact-caption-save'));
@@ -1148,4 +1163,81 @@ test('a missing figure caption is saved through real IPC and still requires huma
   assert.ok(reads.some(read=>read.relation==='createClaim'));
   await audit('figure-caption-recovery');
   } finally {await f.dispose();}
+});
+
+async function draftRelation() {
+  const f=await scene();
+  await openArtifact();
+  const claim=await openRelationClaim(f);
+  await activateRendered(page.locator(`[data-reading-key="relation-proposal-summary:${claim.id}"]`));
+  await page.getByTestId(`artifact-relation-condition-${claim.id}`).fill('Retain this authored qualification.');
+  return {f,claim};
+}
+
+test('artifact draft protection retains relation inputs when the drawer is closed',async()=>{
+  const {claim}=await draftRelation();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  assert.equal(await page.getByTestId('artifact-inspector-panel').count(),1);
+  assert.equal(await page.getByTestId(`artifact-relation-condition-${claim.id}`).inputValue(),'Retain this authored qualification.');
+});
+
+test('artifact draft protection covers real navigation and native unload',async()=>{
+  await draftRelation();
+  const prevented=await page.evaluate(()=>{
+    const event=new Event('beforeunload',{cancelable:true});
+    window.dispatchEvent(event); return event.defaultPrevented;
+  });
+  assert.equal(prevented,true);
+  await page.evaluate(()=>window.navigateAway());
+  assert.equal(await page.evaluate(()=>window.navigations),0);
+});
+
+test('artifact draft protection freezes filters that would remove the active relation editor',async()=>{
+  const {claim}=await draftRelation();
+  assert.equal(await page.getByTestId('artifact-relations-filter').isDisabled(),true);
+  assert.equal(await page.getByTestId('artifact-inspector-refresh').isDisabled(),true);
+  assert.equal(await page.getByTestId(`artifact-relation-condition-${claim.id}`).isDisabled(),false,
+    'the editor owning the draft remains editable');
+});
+
+test('artifact draft protection serializes a pending real relation decision',async()=>{
+  const f=await scene();
+  await openArtifact();
+  const proposed=await proposeRelation(f);
+  f.deferRelation='reviewEvidenceRelation';
+  reads.length=0;
+  await page.evaluate(id=>{
+    const button=document.querySelector(`[data-testid="artifact-relation-confirm-${id}"]`);
+    button.click(); button.click();
+  },proposed.id);
+  await page.waitForFunction(()=>document.querySelector('[data-testid="artifact-inspector-panel"]').textContent.includes('正在保存审核'));
+  assert.equal(reads.filter(read=>read.relation==='reviewEvidenceRelation').length,1);
+  assert.equal(await page.getByTestId('artifact-inspector-refresh').isDisabled(),true);
+  await page.evaluate(()=>window.navigateAway());
+  assert.equal(await page.evaluate(()=>window.navigations),0);
+  f.finishRelation();
+  await page.getByTestId('artifact-inspector-recapture').waitFor();
+});
+
+test('artifact draft protection preserves a migration note and its owning editor',async()=>{
+  const f=await scene({managed:true});f.reparse('inspector-new');
+  await openMigrationSource(f);
+  const candidate=await openMigrationCandidate(f);
+  await candidate.getByTestId('artifact-source-migration-note').fill('Keep this relocation rationale.');
+  assert.equal(await page.getByTestId('artifact-source-migrations-refresh').isDisabled(),true);
+  assert.equal(await page.getByTestId(`artifact-source-migrations-toggle-${f.source.id}`).isDisabled(),true);
+  assert.equal(await page.getByTestId('artifact-inspector-refresh').isDisabled(),true);
+  assert.equal(await candidate.getByTestId('artifact-source-migration-note').isDisabled(),false);
+});
+
+test('artifact draft protection freezes replacement selection while retaining its note',async()=>{
+  const f=await scene({managed:true}),target=replacementUiDocument(f);
+  await openArtifact();await expandReplacementSource(f);
+  const selection=await chooseReplacement(target.evidence.id);
+  await selection.getByTestId('artifact-source-replacement-note').fill('Keep this explicit replacement rationale.');
+  assert.equal(await page.getByTestId('artifact-source-replacement-target').isDisabled(),true);
+  assert.equal(await page.getByTestId(`artifact-source-replacements-toggle-${f.source.id}`).isDisabled(),true);
+  assert.equal(await page.getByTestId('artifact-inspector-refresh').isDisabled(),true);
+  assert.equal(await selection.getByTestId('artifact-source-replacement-note').isDisabled(),false);
 });

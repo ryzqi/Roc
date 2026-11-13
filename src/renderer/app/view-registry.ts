@@ -1,5 +1,6 @@
-import { lazy, useEffect, useState, type ComponentType } from 'react';
+import { lazy, useSyncExternalStore, type ComponentType } from 'react';
 import type { AppViewId } from './routes';
+import { errorMessage } from './loaded-state';
 
 /**
  * View module registry: lazy loading plus *resolution tracking*.
@@ -60,34 +61,62 @@ const viewLoaders: Record<AppViewId, () => Promise<ViewModule>> = {
 const resolvedViews = new Set<AppViewId>();
 const resolutionListeners = new Set<() => void>();
 const viewCache = new Map<AppViewId, ComponentType<ViewProps>>();
+const moduleRequests = new Map<AppViewId, Promise<ViewModule>>();
+const loadErrors = new Map<AppViewId, string>();
+let resolutionVersion = 0;
+
+function notifyResolution(): void {
+  resolutionVersion += 1;
+  for (const listener of resolutionListeners) listener();
+}
 
 function markResolved(view: AppViewId): void {
   if (resolvedViews.has(view)) {
     return;
   }
   resolvedViews.add(view);
-  for (const listener of resolutionListeners) {
-    listener();
-  }
+  loadErrors.delete(view);
+  notifyResolution();
 }
 
 export function isViewResolved(view: AppViewId): boolean {
   return resolvedViews.has(view);
 }
 
-/** Re-renders the caller whenever any view module finishes loading. */
+export function viewLoadError(view: AppViewId): string | null {
+  return loadErrors.get(view) ?? null;
+}
+
+/** Re-renders the caller whenever a view import resolves, fails or is retried. */
 export function useViewResolution(): number {
-  const [version, setVersion] = useState(0);
-  useEffect(() => {
-    const listener = (): void => {
-      setVersion((current) => current + 1);
-    };
-    resolutionListeners.add(listener);
-    return () => {
-      resolutionListeners.delete(listener);
-    };
-  }, []);
-  return version;
+  return useSyncExternalStore(subscribeToResolution, getResolutionVersion, getResolutionVersion);
+}
+
+function subscribeToResolution(listener: () => void): () => void {
+  resolutionListeners.add(listener);
+  return () => { resolutionListeners.delete(listener); };
+}
+
+function getResolutionVersion(): number {
+  return resolutionVersion;
+}
+
+function requestViewModule(view: AppViewId): Promise<ViewModule> {
+  const cached = moduleRequests.get(view);
+  if (cached !== undefined) return cached;
+  const request = Promise.resolve().then(() => viewLoaders[view]()).then(
+    module => {
+      markResolved(view);
+      return module;
+    },
+    (error: unknown) => {
+      loadErrors.set(view, errorMessage(error));
+      notifyResolution();
+      throw error;
+    }
+  );
+  moduleRequests.set(view, request);
+  return request;
 }
 
 export function loadView(view: AppViewId): ComponentType<ViewProps> {
@@ -95,11 +124,7 @@ export function loadView(view: AppViewId): ComponentType<ViewProps> {
   if (cached !== undefined) {
     return cached;
   }
-  const component = lazy(async () => {
-    const module = await viewLoaders[view]();
-    markResolved(view);
-    return module;
-  });
+  const component = lazy(() => requestViewModule(view));
   viewCache.set(view, component);
   return component;
 }
@@ -116,13 +141,16 @@ export function preloadView(view: AppViewId): void {
   if (resolvedViews.has(view)) {
     return;
   }
-  void viewLoaders[view]().then(
-    () => {
-      markResolved(view);
-    },
-    () => {
-      // A failed chunk load surfaces when the view is actually rendered, where
-      // the error boundary can present it; preloading stays silent.
-    }
-  );
+  // The host reads loadErrors without mounting a rejected lazy component.
+  void requestViewModule(view).catch(() => {});
+}
+
+export function retryView(view: AppViewId): void {
+  // A nested module can fail after the view importer has already resolved.
+  resolvedViews.delete(view);
+  loadErrors.delete(view);
+  moduleRequests.delete(view);
+  viewCache.delete(view);
+  notifyResolution();
+  preloadView(view);
 }

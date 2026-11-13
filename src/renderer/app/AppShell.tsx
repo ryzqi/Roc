@@ -1,7 +1,11 @@
 import type {ArtifactInspectorSelection, OpenResearchArtifact, OpenReviewInspector} from '../artifacts/artifact-interactions';
+import {requestArtifactInspectorChange} from '../artifacts/artifact-interactions';
 import type {ArtifactReadingLocations} from '../artifacts/artifact-reading-location';
-import type {ReviewProtocolDrafts} from '../artifacts/review-protocol-draft';
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {useReviewProtocolDraftGuard, type ReviewProtocolDrafts} from '../artifacts/review-protocol-draft';
+import {useGitCommitDraftGuard, type GitCommitDrafts} from '../canvas/git/git-commit-draft';
+import {BEFORE_NAVIGATE, type NavigationRequest} from './navigation-guard';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
 import type { AppStatus } from '../../shared/types';
 import { canvasViewForDrawerSection, isCanvasTabId, isDrawerSectionId, type DrawerSectionId, type MenuIntent } from '../../shared/surfaces';
 import { errorMessage } from './loaded-state';
@@ -19,6 +23,7 @@ import { clearAssistantComposerDraft } from '../assistant/composer-draft';
 import type { ManagementTabId } from '../management/use-management-stores';
 import { ManagementScopeProvider, type ManagementScope } from '../management/management-scope';
 import { ManagementStoresProvider } from '../management/management-stores-provider';
+import { requestManagementEditorChange } from '../management/management-interactions';
 import { ProjectPortalView } from '../project/ProjectPortalView';
 import { useCurrentProject } from '../project/use-projects';
 import { useProjectWorkspace } from '../project/use-project-workspace';
@@ -35,7 +40,7 @@ import { StartupFailure, StartupLoading } from '../shell/StartupSurface';
 import { WindowChrome } from '../shell/WindowChrome';
 import { useAppearanceOverride, useAppearanceSync } from '../shell/appearance';
 import { useTraySummaryLabel } from '../shell/use-tray-summary';
-import { useWindowState, type WindowShellState } from '../shell/use-window-state';
+import { useWindowState, type WindowStateResource } from '../shell/use-window-state';
 import { useBoundWorkspace } from '../workspace/use-bound-workspace';
 import { LiteratureScopeProvider } from '../literature/literature-scope';
 import { useLiteratureStore } from '../literature/use-literature-store';
@@ -98,17 +103,17 @@ function canvasTabForView(view: AppViewId): CanvasTabId | null {
  * The manifest also only inspects *static* imports, so a stray eager import here
  * would pass the check while defeating it. Keeping these lazy is a discipline.
  */
-const AssistantPanel = lazy(async () => ({ default: (await import('../assistant/AssistantPanel')).AssistantPanel }));
-const SettingsModal = lazy(async () => ({ default: (await import('../settings/SettingsModal')).SettingsModal }));
-const ManagementPanel = lazy(async () => ({ default: (await import('../management/ManagementPanel')).ManagementPanel }));
+const AssistantPanel = retryableLazy(async () => ({ default: (await import('../assistant/AssistantPanel')).AssistantPanel }));
+const SettingsModal = retryableLazy(async () => ({ default: (await import('../settings/SettingsModal')).SettingsModal }));
+const ManagementPanel = retryableLazy(async () => ({ default: (await import('../management/ManagementPanel')).ManagementPanel }));
 /**
  * The Git drawer pulls in `react-diff-view` (a manual chunk, ~50 KB). It is lazy
  * for the same reason as the panels above, and it needs no mount latch: the
  * drawer's `ModalShell` renders `null` while closed, so the module is only
  * fetched when the drawer actually opens.
  */
-const GitPanel = lazy(async () => ({ default: (await import('../canvas/git/GitPanel')).GitPanel }));
-const ArtifactInspector = lazy(async () => ({default: (await import('../artifacts/ArtifactInspector')).ArtifactInspector}));
+const GitPanel = retryableLazy(async () => ({ default: (await import('../canvas/git/GitPanel')).GitPanel }));
+const ArtifactInspector = retryableLazy(async () => ({default: (await import('../artifacts/ArtifactInspector')).ArtifactInspector}));
 
 export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   const windowState = useWindowState(client);
@@ -118,7 +123,7 @@ export function AppShell({ client }: { client: RocClient }): React.JSX.Element {
   </ViewActivity>;
 }
 
-function AppShellContent({ client, windowState }: { client: RocClient; windowState: WindowShellState }): React.JSX.Element {
+function AppShellContent({ client, windowState }: { client: RocClient; windowState: WindowStateResource }): React.JSX.Element {
   const [boot, setBoot] = useState<BootState>({ status: 'loading' });
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -134,6 +139,11 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
   const [artifactSelection, setArtifactSelection] = useState<ArtifactInspectorSelection | null>(null);
   const [artifactReadingLocations] = useState<ArtifactReadingLocations>(() => new Map());
   const [reviewProtocolDrafts] = useState<ReviewProtocolDrafts>(() => new Map());
+  useReviewProtocolDraftGuard(reviewProtocolDrafts);
+  const [gitCommitDrafts] = useState<GitCommitDrafts>(() => new Map());
+  useGitCommitDraftGuard(gitCommitDrafts);
+  const gitBusy = useRef<(() => boolean) | null>(null);
+  const registerGitBusy = useCallback((read: (() => boolean) | null): void => {gitBusy.current = read;}, []);
   const [managementOpen, setManagementOpen] = useState(false);
   const [managementTab, setManagementTab] = useState<ManagementTabId>('memory');
   const [researchTaskSelection, setResearchTaskSelection] = useState<{ projectId: string; taskId: string } | null>(null);
@@ -159,14 +169,33 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
 
   const { override, setOverride, cycle: cycleTheme } = useAppearanceOverride();
   const { route, navigate } = useAppRoute();
+  useEffect(() => {
+    const guardGit = (event: Event): void => {
+      if (!gitBusy.current?.()) return;
+      const next = (event as CustomEvent<NavigationRequest>).detail.next;
+      const current = routeRef.current;
+      if (next.projectId !== current.projectId || next.tool !== 'git' || next.view !== current.view) {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener(BEFORE_NAVIGATE, guardGit);
+    return () => window.removeEventListener(BEFORE_NAVIGATE, guardGit);
+  }, []);
+  const showArtifactSelection = useCallback((selection: ArtifactInspectorSelection, onOpened?: () => void): void => {
+    if (selection.request.projectId !== route.projectId) throw new Error(
+      selection.kind === 'stage' ? 'research_artifact_project_mismatch' : 'research_review_project_mismatch');
+    requestArtifactInspectorChange(() => {
+      if (selection.request.projectId !== routeRef.current.projectId) return;
+      setArtifactSelection(selection);
+      onOpened?.();
+    });
+  }, [route.projectId]);
   const openArtifact = useCallback<OpenResearchArtifact>((request, onReviewContext): void => {
-    if (request.projectId !== route.projectId) throw new Error('research_artifact_project_mismatch');
-    setArtifactSelection({kind: 'stage', request, onReviewContext});
-  }, [route.projectId]);
+    showArtifactSelection({kind: 'stage', request, onReviewContext});
+  }, [showArtifactSelection]);
   const openReviewInspector = useCallback<OpenReviewInspector>((request): void => {
-    if (request.projectId !== route.projectId) throw new Error('research_review_project_mismatch');
-    setArtifactSelection({kind: 'review', request});
-  }, [route.projectId]);
+    showArtifactSelection({kind: 'review', request});
+  }, [showArtifactSelection]);
   const layout = useLayoutState();
   useContentPreferenceSync();
 
@@ -205,7 +234,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
 
   useAppearanceSync(client, boot.status === 'ready' ? boot.appStatus.appearance : null, override);
 
-  const backgroundRunLabel = useTraySummaryLabel(client, windowState.hidden);
+  const backgroundRun = useTraySummaryLabel(client, windowState.hidden);
 
   const inProject = route.projectId !== null;
   const settingsOpen = route.page === 'settings';
@@ -295,19 +324,38 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
    */
   const openManagementSection = useCallback(
     (section: DrawerSectionId): void => {
-      const canvasView = canvasViewForDrawerSection(section);
-      if (canvasView === null) {
-        setManagementTab(section);
-        setManagementOpen(true);
-        return;
-      }
-      // Closing the drawer is part of the jump: both are `fixed inset-0 z-50` portals, and the
-      // drawer's width would cover the canvas view it just asked for.
-      setManagementOpen(false);
-      navigate({ ...routeRef.current, view: canvasView });
+      requestManagementEditorChange(() => {
+        const canvasView = canvasViewForDrawerSection(section);
+        if (canvasView === null) {
+          setManagementTab(section);
+          setManagementOpen(true);
+          return;
+        }
+        navigate({ ...routeRef.current, view: canvasView }, {onNavigated: () => setManagementOpen(false)});
+      });
     },
     [navigate]
   );
+  const openManagementDrawer = useCallback((): void => {
+    requestManagementEditorChange(() => {
+      setManagementTab('memory');
+      setManagementOpen(true);
+    });
+  }, []);
+  const openTask = useCallback((projectId: string, taskId: string, closeArtifact = false): void => {
+    requestManagementEditorChange(() => {
+      if (routeRef.current.projectId !== projectId) return;
+      setResearchTaskSelection({projectId, taskId});
+      if (closeArtifact) setArtifactSelection(null);
+      setManagementTab('tasks');
+      setManagementOpen(true);
+    });
+  }, []);
+  const openSettings = useCallback((): void => {
+    requestManagementEditorChange(() => {
+      navigate({...routeRef.current, page: 'settings'}, {onNavigated: () => setManagementOpen(false)});
+    });
+  }, [navigate]);
 
   /**
    * The shell's handling of the four things the native menu, the tray and the global hotkey can ask
@@ -351,12 +399,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
       rebindWorkspace: boundWorkspace.rebind,
       openFile: route.openFile,
       openFileInCanvas,
-      // Closing the drawer is part of the jump: both are `fixed inset-0 z-50` portals, and the
-      // drawer's width would cover the settings panel it just asked for.
-      openSettings: () => {
-        setManagementOpen(false);
-        navigate({ ...routeRef.current, page: 'settings' });
-      },
+      openSettings,
       openView: (view) => navigate({ ...routeRef.current, view }),
       openReviewInspector
     }),
@@ -371,6 +414,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
       boundWorkspace.status,
       boundWorkspace.error,
       boundWorkspace.rebind,
+      openSettings,
       openReviewInspector
     ]
   );
@@ -392,31 +436,34 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
       onSelectResearchTask: (taskId) => {
         const projectId = routeRef.current.projectId;
         if (projectId === null) throw new Error('research_task_project_required');
-        setResearchTaskSelection({ projectId, taskId });
+        requestManagementEditorChange(() => {
+          if (routeRef.current.projectId === projectId) setResearchTaskSelection({projectId, taskId});
+        });
       },
       onOpenArtifact: (request, onReviewContext) => {
-        setManagementOpen(false);
-        openArtifact(request, onReviewContext);
+        requestManagementEditorChange(() => showArtifactSelection(
+          {kind: 'stage', request, onReviewContext}, () => setManagementOpen(false)));
       },
       onOpenThread: (threadId) => {
-        setAssistantThreadId(threadId);
-        setManagementOpen(false);
-        navigate({ ...routeRef.current, assistantOpen: true });
+        requestManagementEditorChange(() => {
+          navigate({...routeRef.current, assistantOpen: true}, {onNavigated: () => {
+            setAssistantThreadId(threadId);
+            setManagementOpen(false);
+          }});
+        });
       },
       onAskAssistant: (prompt) => {
-        assistantSeedNonceRef.current += 1;
-        setAssistantSeed({ text: prompt, nonce: assistantSeedNonceRef.current });
-        setManagementOpen(false);
-        navigate({ ...routeRef.current, assistantOpen: true });
+        requestManagementEditorChange(() => {
+          navigate({...routeRef.current, assistantOpen: true}, {onNavigated: () => {
+            assistantSeedNonceRef.current += 1;
+            setAssistantSeed({text: prompt, nonce: assistantSeedNonceRef.current});
+            setManagementOpen(false);
+          }});
+        });
       },
-      // Closing the drawer is part of the jump: both are `fixed inset-0 z-50` portals, and the
-      // drawer's width would cover the settings panel it just asked for.
-      openSettings: () => {
-        setManagementOpen(false);
-        navigate({ ...routeRef.current, page: 'settings' });
-      }
+      openSettings
     }),
-    [client, route.projectId, boundWorkspace.path, navigate, openManagementSection, researchTaskSelection, openArtifact]
+    [client, route.projectId, boundWorkspace.path, navigate, researchTaskSelection, showArtifactSelection, openSettings]
   );
   const managementStoresScopeKey = JSON.stringify([managementScope.projectId, managementScope.workspacePath]);
   const managementStoresEnabled =
@@ -603,13 +650,21 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
         assistantOpen={route.assistantOpen && layout.preset !== 'focus'}
         onToggleAssistant={toggleAssistant}
         onOpenGit={() => navigate({ ...route, tool: 'git' })}
-        onOpenManagement={() => {
-          setManagementTab('memory');
-          setManagementOpen(true);
-        }}
-        onOpenSettings={() => navigate({ ...route, page: 'settings' })}
-        backgroundRunLabel={backgroundRunLabel}
+        onOpenManagement={openManagementDrawer}
+        onOpenSettings={openSettings}
+        backgroundRunLabel={backgroundRun.label}
       />
+
+      {windowState.error === null ? null : (
+        <div className="shrink-0 px-4 pt-2" data-testid="shell-window-state-error">
+          <ErrorBar error={{level: 'page', message: `读取窗口状态失败：${windowState.error}`, retry: windowState.reload}} />
+        </div>
+      )}
+      {backgroundRun.error === null ? null : (
+        <div className="shrink-0 px-4 pt-2" data-testid="shell-tray-state-error">
+          <ErrorBar error={{level: 'page', message: `读取后台状态失败：${backgroundRun.error}`, retry: backgroundRun.reload}} />
+        </div>
+      )}
 
       {projectLoadFailed ? (
         <main id="roc-main" className="flex min-h-0 flex-1 flex-col p-4" data-testid="project-load-error" tabIndex={-1}>
@@ -682,10 +737,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
               }}
               themeOverride={override}
               onCycleTheme={cycleTheme}
-              onOpenManagement={() => {
-                setManagementTab('memory');
-                setManagementOpen(true);
-              }}
+               onOpenManagement={openManagementDrawer}
             />
           }
           canvas={
@@ -731,7 +783,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
           }
           assistant={
             assistantMounted ? (
-              <Suspense fallback={<DelayedFallback label="正在加载助手…" />}>
+              <LazyBoundary label="助手加载失败" fallback={<DelayedFallback label="正在加载助手…" />}>
                 <AssistantPanel
                   client={client}
                   projectId={route.projectId}
@@ -741,20 +793,19 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
                   onOpenReviewInspector={openReviewInspector}
                   onOpenTask={(taskId) => {
                     if (route.projectId === null) throw new Error('research_task_project_required');
-                    setResearchTaskSelection({ projectId: route.projectId, taskId });
-                    openManagementSection('tasks');
+                     openTask(route.projectId, taskId);
                   }}
                   workspacePath={boundWorkspace.path}
                   projectName={projectName}
                   composerSeed={assistantSeed}
                   onComposerSeedConsumed={() => setAssistantSeed(null)}
-                  onOpenSettings={() => navigate({ ...route, page: 'settings' })}
+                   onOpenSettings={openSettings}
                   // Same handler the divider's double-click and Home key use, so the
                   // header button cannot drift from the drag handle (the shell previously had it
                   // only on the divider).
                   onResetWidth={layout.resetAssistant}
                 />
-              </Suspense>
+              </LazyBoundary>
             ) : null
           }
           />
@@ -771,7 +822,9 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
       )}
 
       {settingsMounted ? (
-        <Suspense fallback={<DelayedFallback label="正在加载设置…" />}>
+        <LazyBoundary active={settingsOpen} label="设置加载失败" fallback={<DelayedFallback label="正在加载设置…" />}
+          renderError={content => <ModalShell open={settingsOpen} title="设置" testId="settings-load"
+            onClose={() => navigate({ ...route, page: 'research' })}>{content}</ModalShell>}>
           <SettingsModal
             open={settingsOpen}
             client={client}
@@ -789,7 +842,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
             }}
             onClose={() => navigate({ ...route, page: 'research' })}
           />
-        </Suspense>
+        </LazyBoundary>
       ) : null}
 
       <SearchPaletteModal
@@ -801,45 +854,52 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
       />
 
       {artifactSelection === null || artifactSelection.request.projectId !== route.projectId ? null : (
-        <Suspense fallback={<DelayedFallback label="正在加载工件检查器…" />}>
+        <LazyBoundary label="工件检查器加载失败" resetKey={JSON.stringify(artifactSelection.request)}
+          fallback={<DelayedFallback label="正在加载工件检查器…" />}
+          renderError={content => <ModalShell open kind="drawer" title="工件检查器" testId="artifact-load"
+            onClose={() => setArtifactSelection(null)}>{content}</ModalShell>}>
           <ArtifactInspector key={JSON.stringify(artifactSelection.request)} client={client} selection={artifactSelection} writable={projectWritable}
             readingLocations={artifactReadingLocations}
             reviewDrafts={reviewProtocolDrafts}
             onClose={() => setArtifactSelection(null)} onOpenTask={(taskId) => {
-              setResearchTaskSelection({projectId: artifactSelection.request.projectId, taskId});
-              setArtifactSelection(null);
-              openManagementSection('tasks');
+               openTask(artifactSelection.request.projectId, taskId, true);
             }} />
-        </Suspense>
+        </LazyBoundary>
       )}
 
       {managementMounted ? (
-        <Suspense fallback={<DelayedFallback label="正在加载管理面板…" />}>
+        <LazyBoundary active={managementOpen} label="管理面板加载失败" fallback={<DelayedFallback label="正在加载管理面板…" />}
+          renderError={content => <ModalShell open={managementOpen} kind="drawer" title="管理" testId="mgmt-load"
+            onClose={() => setManagementOpen(false)}>{content}</ModalShell>}>
           <ManagementPanel
             open={managementOpen}
             onClose={() => setManagementOpen(false)}
             activeTab={managementTab}
             onTabChange={setManagementTab}
           />
-        </Suspense>
+        </LazyBoundary>
       ) : null}
 
       <ModalShell
         open={gitDrawerOpen}
         kind="drawer"
         title="Git"
+        beforeClose={() => !gitBusy.current?.()}
+        closeOnBackdrop={false}
         onClose={() => navigate({ ...route, tool: null })}
         widthClassName="w-[520px]"
         testId="git-drawer"
       >
-        <Suspense fallback={<DelayedFallback label="正在加载 Git 面板…" />}>
+        <LazyBoundary label="Git 面板加载失败" resetKey={boundWorkspace.path ?? ''} fallback={<DelayedFallback label="正在加载 Git 面板…" />}>
           <GitPanel
             client={client}
             workspacePath={boundWorkspace.path}
             writable={projectWritable}
+            commitDrafts={gitCommitDrafts}
+            onBusyChange={registerGitBusy}
             layout="drawer"
           />
-        </Suspense>
+        </LazyBoundary>
       </ModalShell>
     </div>
       </ManagementStoresProvider>

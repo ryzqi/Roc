@@ -1,7 +1,8 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { LazyBoundary, retryableLazy } from '../../shell/LazyBoundary';
 import { Copy, FileWarning, Loader2, Save, X } from 'lucide-react';
 import type { RocClient } from '../../shared/roc-client';
-import { useAsyncResource } from '../../app/use-async-resource';
+import { useAsyncAction, useAsyncResource } from '../../app/use-async-resource';
 import { ErrorBar } from '../../shell/ErrorBar';
 import { EmptyState } from '../../shell/EmptyState';
 import { useCopyFeedback } from '../../shared/hooks/use-copy-feedback';
@@ -53,30 +54,32 @@ export type FilePreviewProps = {
   writable: boolean;
   /** Reports unsaved state so the shell can warn before closing. */
   onDirtyChange?: (dirty: boolean) => void;
+  /** The owner blocks every close path while a write is in flight. */
+  onSavingChange?: (saving: boolean) => void;
   /**
    * Renders a close control at the end of the header row.
    *
-   * The preview opens as a modal (`FilePreviewModal`), and Escape is handled by
-   * a window listener there — but the PDF branch renders a `<iframe>`, and once the iframe has
-   * focus the key events never reach that listener. A visible close button is the affordance
+   * The PDF branch renders an `<iframe>`, and once the iframe has focus key events
+   * cannot reach the parent overlay. A visible close button is the affordance
    * that does not depend on where focus happens to be.
    */
   onClose?: () => void;
 };
 
 const WRITE_SOURCE = 'renderer:file-preview';
-const NotebookPreview = lazy(() => import('./NotebookPreview'));
+const NotebookPreview = retryableLazy(() => import('./NotebookPreview'));
 
 export function FilePreview(props: FilePreviewProps): React.JSX.Element {
   if (previewKindFor(props.relativePath) === 'notebook') {
     return (
-      <Suspense fallback={<p role="status" className="p-3 text-muted">读取 Notebook 中…</p>}>
+      <LazyBoundary resetKey={JSON.stringify([props.workspacePath, props.relativePath])}
+        fallback={<p role="status" className="p-3 text-muted">读取 Notebook 中…</p>}>
         <NotebookPreview client={props.client} projectId={props.projectId} workspacePath={props.workspacePath}
           relativePath={props.relativePath} writable={props.writable} onClose={props.onClose} />
-      </Suspense>
+      </LazyBoundary>
     );
   }
-  return <OrdinaryFilePreview {...props} />;
+  return <OrdinaryFilePreview key={JSON.stringify([props.workspacePath, props.relativePath])} {...props} />;
 }
 
 function OrdinaryFilePreview({
@@ -85,6 +88,7 @@ function OrdinaryFilePreview({
   workspacePath,
   writable,
   onDirtyChange,
+  onSavingChange,
   onClose
 }: FilePreviewProps): React.JSX.Element {
   const kind = previewKindFor(relativePath);
@@ -101,44 +105,62 @@ function OrdinaryFilePreview({
   });
 
   const [draft, setDraft] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const saveAction = useAsyncAction(
+    (content: string) => writeTextFile(client, { relativePath, content, source: WRITE_SOURCE }),
+    { label: '保存文件' }
+  );
+  const saving = saveAction.pending;
+  const savingRef = useRef(false);
+  const mountedRef = useRef(true);
+  const reportingRef = useRef({ onDirtyChange, onSavingChange });
+  reportingRef.current = { onDirtyChange, onSavingChange };
+  const [savedContent, setSavedContent] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [imageFailed, setImageFailed] = useState(false);
   const copy = useCopyFeedback();
 
   const resource = isPdf ? pdfResource : textResource;
   const loaded = textResource.data;
-  const editable = !isPdf && writable && isEditablePreviewKind(kind) && loaded?.kind !== 'binary';
-  const dirty = draft !== null && draft !== loaded?.content;
+  const editable = !isPdf && writable && loaded !== null && !loaded.truncated &&
+    isEditablePreviewKind(kind) && loaded.kind !== 'binary';
+  const content = savedContent ?? loaded?.content ?? '';
+  const dirty = draft !== null && draft !== content;
 
-  // A new file must not inherit the previous file's draft.
+  // The keyed instance owns one workspace/file, including any pending completion.
   useEffect(() => {
-    setDraft(null);
-    setSaveError(null);
-    setSavedAt(null);
-    setImageFailed(false);
-  }, [relativePath]);
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      reportingRef.current.onDirtyChange?.(false);
+      reportingRef.current.onSavingChange?.(false);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (savedContent !== null && loaded?.content === savedContent) setSavedContent(null);
+  }, [loaded, savedContent]);
 
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
 
   const save = useCallback(async () => {
-    if (draft === null || !editable) {
+    if (savingRef.current || draft === null || !dirty || !editable) {
       return;
     }
-    setSaving(true);
-    setSaveError(null);
-    const result = await writeTextFile(client, { relativePath, content: draft, source: WRITE_SOURCE });
-    setSaving(false);
+    savingRef.current = true;
+    onSavingChange?.(true);
+    const result = await saveAction.run(draft);
+    savingRef.current = false;
+    if (!mountedRef.current) return;
+    onSavingChange?.(false);
     if (!result.ok) {
-      setSaveError(result.error.message);
       return;
     }
+    setSavedContent(draft);
     setSavedAt(result.data.recoveryPoint.createdAt);
     textResource.reload();
-  }, [client, draft, editable, relativePath, textResource]);
+  }, [draft, dirty, editable, onSavingChange, saveAction, textResource]);
 
   const body = useMemo(() => {
     if (resource.status === 'loading' && resource.data === null) {
@@ -211,6 +233,7 @@ function OrdinaryFilePreview({
       return (
         <textarea
           value={draft}
+          disabled={saving}
           onChange={(event) => setDraft(event.target.value)}
           spellCheck={false}
           aria-label={`编辑 ${relativePath}`}
@@ -225,10 +248,10 @@ function OrdinaryFilePreview({
         data-testid="file-preview-text"
         className="h-full overflow-auto bg-code-surface p-3 font-mono text-[length:var(--font-code-size)] text-[var(--code-text)]"
       >
-        {loaded.content}
+        {content}
       </pre>
     );
-  }, [resource, isPdf, pdfResource.data, loaded, editable, draft, imageFailed, relativePath]);
+  }, [resource, isPdf, pdfResource.data, loaded, content, editable, draft, saving, imageFailed, relativePath]);
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="file-preview" data-kind={kind}>
@@ -257,6 +280,7 @@ function OrdinaryFilePreview({
           <button
             type="button"
             onClick={onClose}
+            disabled={saving}
             aria-label={`关闭 ${relativePath} 的预览`}
             data-testid="file-preview-close"
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded-control text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
@@ -267,7 +291,7 @@ function OrdinaryFilePreview({
 
         <button
           type="button"
-          onClick={() => copy.copy(loaded?.content ?? '')}
+          onClick={() => copy.copy(draft ?? content)}
           disabled={loaded === null}
           data-testid="file-preview-copy"
           className="flex h-6 items-center gap-1 rounded-control border-[0.5px] border-line px-1.5 text-muted hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
@@ -279,7 +303,7 @@ function OrdinaryFilePreview({
         {!editable ? null : draft === null ? (
           <button
             type="button"
-            onClick={() => setDraft(loaded?.content ?? '')}
+            onClick={() => setDraft(content)}
             data-testid="file-preview-edit"
             className="h-6 rounded-control border-[0.5px] border-line px-2 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
           >
@@ -289,7 +313,12 @@ function OrdinaryFilePreview({
           <>
             <button
               type="button"
-              onClick={() => setDraft(null)}
+              onClick={() => {
+                if (savingRef.current) return;
+                setDraft(null);
+                saveAction.reset();
+              }}
+              disabled={saving}
               data-testid="file-preview-discard"
               className="h-6 rounded-control px-2 text-muted hover:text-ink active:bg-[var(--overlay-active)]"
             >
@@ -315,9 +344,15 @@ function OrdinaryFilePreview({
         </p>
       ) : null}
 
-      {saveError === null ? null : (
+      {loaded?.truncated && isEditablePreviewKind(kind) ? (
+        <p role="note" className="shrink-0 border-b-[0.5px] border-line bg-bg-soft px-3 py-1 text-muted text-[length:var(--font-micro-size)]" data-testid="file-preview-truncated-readonly">
+          预览仅包含文件的部分内容，无法编辑。
+        </p>
+      ) : null}
+
+      {saveAction.error === null ? null : (
         <div className="shrink-0 p-2">
-          <ErrorBar error={{ level: 'page', message: saveError }} onDismiss={() => setSaveError(null)} />
+          <ErrorBar error={{ level: 'page', message: saveAction.error }} onDismiss={saveAction.reset} />
         </div>
       )}
 

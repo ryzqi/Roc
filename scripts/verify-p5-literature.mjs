@@ -548,7 +548,19 @@ try {
     .catch(() => '');
   assertCheck('1 导入 UI', '手工录入真的写入文献库（importRecord）', importMessage.includes('已导入'), importMessage.trim());
   await page.click('[data-testid="literature-import-dialog-close"]');
-  await page.waitForTimeout(500);
+  await page.waitForSelector('[data-testid="literature-import-discard"]', {timeout: 10_000});
+  assertCheck('1 导入 UI', '成功录入不会丢弃其他导入路径的未提交草稿',
+    await page.locator('[data-testid="literature-import-discard"]').isVisible());
+  await page.click('[data-testid="literature-import-discard-cancel"]');
+  await page.locator('[data-testid="literature-import-discard"]').waitFor({state: 'hidden'});
+  await page.click('[data-testid="literature-import-tab-document"]');
+  assertCheck('1 导入 UI', '取消弃稿后文档题名与已选择文件保持',
+    await page.locator('[data-testid="literature-import-document-title"]').inputValue() === `${paperTitleMarker} 手工派生的题名` &&
+      ((await page.textContent('[data-testid="literature-import-document-path"]')) ?? '').includes('smoke-image.png'));
+  await page.click('[data-testid="literature-import-dialog-close"]');
+  await page.click('[data-testid="literature-import-discard-confirm"]');
+  await page.locator('[data-testid="literature-import-dialog"]').waitFor({state: 'hidden'});
+  await page.locator('[data-testid="literature-import-discard"]').waitFor({state: 'hidden'});
   const manualId = await page.evaluate(async () => {
     const listed = await window.roc.research.listLibrary({
       projectId: null,
@@ -711,11 +723,27 @@ try {
   const emptyProjectId = emptyProject.data.id;
   await openLiteratureHub(page, emptyProjectId);
   await page.click('[data-testid="literature-subview-wiki"]');
+  await page.waitForSelector('[data-testid="wiki-pages"]', { timeout: 30_000 });
+  const persistedList = page.getByRole('complementary', { name: '持久页面列表' });
+  const persistedEmpty = await persistedList.getByText('暂无页面。先在检索或阅读中捕获原始证据。', { exact: true })
+    .waitFor({ state: 'visible', timeout: 30_000 }).then(() => true).catch(() => false);
+  const persistedPageCount = await page.locator('[data-testid="wiki-page-row"]').count();
+  assertCheck('4 空数据', '空项目的持久 Wiki 显示真实空列表和捕获证据说明', persistedEmpty && persistedPageCount === 0,
+    `empty=${persistedEmpty} pages=${persistedPageCount}`);
+  const createPage = page.getByRole('button', { name: '新建主题页', exact: true });
+  assertCheck('4 空数据', '持久 Wiki 空态保留可用的创建入口', await createPage.isEnabled(), '');
+  await createPage.click();
+  await page.waitForSelector('[data-testid="wiki-create"]', { timeout: 15_000 });
+  assertCheck('4 空数据', '没有原始依据时不能创建空的主题草稿',
+    await page.locator('[data-testid="wiki-create"]').getByRole('button', { name: '创建草稿', exact: true }).isDisabled(), '');
+  await page.locator('[data-testid="wiki-create"]').getByRole('button', { name: '取消', exact: true }).click();
+  await page.waitForSelector('[data-testid="wiki-create"]', { state: 'detached', timeout: 15_000 });
+  await page.getByRole('button', { name: '主张与证据', exact: true }).click();
   const wikiEmpty = await appears(page, '[data-testid="wiki-empty"]', 30_000);
   const wikiViewCount = await page.locator('[data-testid="wiki-view"]').count();
-  assertCheck('4 空数据', '空项目的知识库显示空态（没有示意概念页）', wikiEmpty && wikiViewCount === 0, `empty=${wikiEmpty} view=${wikiViewCount}`);
+  assertCheck('4 空数据', '空项目的主张与证据显示空态（没有示意概念页）', wikiEmpty && wikiViewCount === 0, `empty=${wikiEmpty} view=${wikiViewCount}`);
   const wikiText = (await page.textContent('[data-testid="wiki-empty"]')) ?? '';
-  assertCheck('4 空数据', '空态文案说明先导入文献/捕获证据', wikiText.includes('先导入文献'), wikiText.trim().slice(0, 60));
+  assertCheck('4 空数据', '主张投影明确显示尚无概念页', wikiText.includes('尚无概念页'), wikiText.trim().slice(0, 60));
   await page.click('[data-testid="literature-subview-graph"]');
   const graphEmpty = await appears(page, '[data-testid="graph-empty"]', 30_000);
   const graphCount = await page.locator('[data-testid="knowledge-graph"]').count();
@@ -1137,23 +1165,22 @@ async function runScriptedSession(page, { projectId, tag, prompt }) {
     window.__p5FinishedRuns = [];
   });
   const started = await page.evaluate(
-    async ({ project, workspacePath, tag: runTag, prefix }) => {
+    async ({ project, tag: runTag, prefix }) => {
       const result = await window.roc.chat.startRun({
         input: `${prefix} ROC-P4-RUN:${runTag} ROC-P4-MODE:slow ROC-P4-SLOW:4x50 ROC-P4-SLOW-TAG:${runTag}`,
         mode: 'chat',
         threadId: null,
         researchProjectId: project,
-        workspacePath,
         enabledCapabilities: { mcpServers: [], skills: [] }
       });
       return result.ok
         ? { runId: result.data.runId, threadId: result.data.threadId }
-        : { error: result.error.message };
+        : { error: `${result.error.code}: ${result.error.message}` };
     },
-    { project: projectId, workspacePath: workspaceRoot, tag, prefix: prompt }
+    { project: projectId, tag, prefix: prompt }
   );
   if (started.error !== undefined) {
-    return { ok: false, events: [`startRun failed: ${started.error}`], providerRequests: 0 };
+    throw new Error(`P5 chat.startRun rejected: ${started.error}`);
   }
   const finished = await page
     .waitForFunction((runId) => window.__p5FinishedRuns.includes(runId), started.runId, { timeout: 120_000, polling: 100 })

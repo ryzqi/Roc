@@ -29,12 +29,15 @@ before(async () => {
   await buildViteRenderer({directory, script: `
     import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {flushSync} from 'react-dom';
     import {LazyMotion,MotionConfig,domAnimation} from 'motion/react';
+    import {requestNavigation} from ${JSON.stringify(join(process.cwd(), 'src/renderer/app/navigation-guard'))};
     import {LiteratureHubView} from ${JSON.stringify(join(process.cwd(), 'src/renderer/literature/LiteratureHubView'))};
     import {LiteratureScopeProvider} from ${JSON.stringify(join(process.cwd(), 'src/renderer/literature/literature-scope'))};
     import {WorkspaceScopeProvider} from ${JSON.stringify(join(process.cwd(), 'src/renderer/app/workspace-scope'))};
     const client={api:{research:Object.fromEntries(${JSON.stringify(Object.keys(channels))}.map(method=>[method,input=>window.callMain(method,input)]))}};
     client.api.research.getModelsStatus=async()=>({ok:true,data:{ready:false,error:null,models:[],downloading:false,selectedPack:'compact'}});
     const root=createRoot(document.getElementById('root'));let generation=0;
+    window.unmountHarness=()=>flushSync(()=>root.unmount());
+    window.navigateAway=()=>requestNavigation({page:'project',projectId:'another-project'},()=>window.navigations++);
     function Harness({initial}){const [state,setState]=useState(initial);window.updateHub=state=>flushSync(()=>setState(state));
       const store={client,...state,selected:null,selectedId:null,status:'ready',query:'',includeArchived:false,documents:[],
         action:{pending:false,error:null},assistant:{pending:false,error:null},parseInFlight:null,importRequestId:0,
@@ -43,8 +46,8 @@ before(async () => {
       return <WorkspaceScopeProvider value={scope}><LiteratureScopeProvider value={store}>
         <LiteratureHubView/></LiteratureScopeProvider></WorkspaceScopeProvider>;
     }
-    window.mountHub=initial=>flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
-      <Harness key={++generation} initial={initial}/></LazyMotion></MotionConfig>));
+    window.mountHub=initial=>{window.navigations=0;flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
+      <Harness key={++generation} initial={initial}/></LazyMotion></MotionConfig>));};
   `, style: 'html,body,#root{height:100%;margin:0}body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}'});
   await writeFile(join(directory, 'main.cjs'), `const {app,BrowserWindow}=require('electron');app.setPath('userData',${JSON.stringify(join(directory, 'data'))});
     app.whenReady().then(()=>new BrowserWindow({show:false,width:1000,height:900}).loadFile(${JSON.stringify(join(directory, 'index.html'))}));`);
@@ -65,7 +68,9 @@ before(async () => {
   await page.waitForFunction(() => typeof window.mountHub === 'function');
 });
 after(async () => {
-  for (const hold of holds) hold.release(); await app?.close();
+  for (const hold of holds) hold.release();
+  if (page && !page.isClosed()) await page.evaluate(() => window.unmountHarness());
+  await app?.close();
   for (const f of scenes) await f.dispose(); api?.dispose();
   if (directory) await rm(directory, {recursive: true, force: true});
   assert.deepEqual(errors, []);
@@ -162,6 +167,61 @@ async function retrySame(f, method) {
   const requests = calls.filter(call => call.projectId === f.project.id && call.method === method).slice(-2);
   assert.equal(requests.length, 2); assert.deepEqual(requests[0].input, requests[1].input);
 }
+
+test('monitor submission freezes its actual parent selection in the same event and sends one durable command', async () => {
+  const f = scene(); f.save('Existing monitor');
+  await mount(f); await open(); await page.getByRole('button', {name: '新建监控', exact: true}).click();
+  await page.getByRole('textbox', {name: '监控名称', exact: true}).fill('One new monitor');
+  await page.getByRole('textbox', {name: '检索式', exact: true}).fill('Synthetic fixture');
+  f.holdReply = 'saveMonitor'; f.replyStarted = deferred(); f.replyHold = deferred();
+  await page.evaluate(() => {
+    const save = [...document.querySelectorAll('button')].find(button => button.textContent === '保存查询版本');
+    const existing = document.querySelector('[data-testid="literature-monitor-list"] button');
+    save.click(); save.click(); existing.click();
+  });
+  await f.replyStarted.promise;
+  assert.equal(calls.filter(call => call.projectId === f.project.id && call.method === 'saveMonitor').length, 1);
+  await expect(page.getByRole('textbox', {name: '监控名称', exact: true})).toHaveValue('One new monitor');
+  await expect(page.getByRole('textbox', {name: '监控名称', exact: true})).toBeDisabled();
+  f.holdReply = null; f.replyHold.release();
+  await expect(page.getByRole('button', {name: '立即检查', exact: true})).toBeEnabled();
+  assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_monitors').pluck().get(), 2);
+});
+
+test('monitor cancellation has an independent synchronous boundary while the real check is still running', async () => {
+  const f = scene(); f.save(); await mount(f); await open(); await select();
+  f.waitNetwork = true; f.networkStarted = deferred(); f.abortObserved = deferred(); f.abortFinish = deferred();
+  await page.getByRole('button', {name: '立即检查', exact: true}).click(); await f.networkStarted.promise;
+  f.holdReply = 'cancelMonitorCheck'; f.replyStarted = deferred(); f.replyHold = deferred();
+  await page.getByRole('button', {name: '取消当前检查', exact: true}).waitFor();
+  await page.evaluate(() => {
+    const cancel = [...document.querySelectorAll('button')].find(button => button.textContent === '取消当前检查');
+    cancel.click(); cancel.click();
+  });
+  await f.replyStarted.promise;
+  assert.equal(calls.filter(call => call.projectId === f.project.id && call.method === 'cancelMonitorCheck').length, 1);
+  assert.equal(f.db.prepare("SELECT COUNT(*) FROM research_monitor_checks WHERE status='running'").pluck().get(), 1);
+  f.holdReply = null; f.replyHold.release();
+  await page.getByText('主进程已接收取消信号；等待检查终态。', {exact: true}).waitFor();
+  f.abortFinish.release(); await page.getByText('已取消', {exact: true}).waitFor();
+});
+
+test('monitor drafts protect native unload and project navigation and explicit discard requires a decision', async () => {
+  const f = scene(); await mount(f); await open(); await page.getByRole('button', {name: '新建监控', exact: true}).click();
+  await page.getByRole('textbox', {name: '监控名称', exact: true}).fill('未保存的监控');
+  assert.equal(await page.evaluate(() => !window.dispatchEvent(new Event('beforeunload', {cancelable: true}))), true);
+  await page.getByRole('button', {name: '放弃监控修改', exact: true}).click();
+  await page.getByTestId('literature-editor-discard').waitFor();
+  await page.getByTestId('literature-editor-discard-cancel').click();
+  await expect(page.getByRole('textbox', {name: '监控名称', exact: true})).toHaveValue('未保存的监控');
+  await expect(page.getByTestId('literature-editor-discard')).toHaveCount(0);
+  await page.evaluate(() => window.navigateAway());
+  await page.getByTestId('literature-editor-discard').waitFor();
+  assert.equal(await page.evaluate(() => window.navigations), 0);
+  await page.getByTestId('literature-editor-discard-confirm').click();
+  await expect(page.getByRole('textbox', {name: '监控名称', exact: true})).toHaveValue('');
+  assert.equal(await page.evaluate(() => window.navigations), 1);
+});
 
 test('existing hub loads monitor reads only on first visit and creates real search baseline and new-paper alerts', async () => {
   const f = scene(), workflow = f.repository.getWorkflow(f.project.id);
@@ -284,6 +344,7 @@ test('dirty and uncertain editors lock selection/tabs and retain drafts when pro
   await expect(page.getByRole('textbox', {name: '监控名称', exact: true})).toHaveValue('Retained draft');
   await expect(page.getByRole('button', {name: '保存查询版本', exact: true})).toBeDisabled();
   await page.getByRole('button', {name: '放弃监控修改', exact: true}).click();
+  await page.getByTestId('literature-editor-discard-confirm').click();
   await expect(page.getByTestId('literature-subview-reader')).toBeEnabled();
   await expect(page.getByRole('textbox', {name: '监控名称', exact: true})).toHaveValue('Synthetic monitor');
   await page.getByTestId('literature-subview-monitors').focus(); await page.keyboard.press('Home');

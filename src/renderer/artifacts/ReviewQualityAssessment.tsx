@@ -6,6 +6,7 @@ import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
 import {ReviewQualityJudgement, qualityJudgementDraft, qualityJudgementValue} from './ReviewQualityJudgement';
+import {ArtifactDraftDiscard, useArtifactDraft, useArtifactEditorGuard} from './artifact-editor-guard';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 type Props = {
@@ -20,12 +21,14 @@ export function ReviewQualityAssessment({client, phase, extraction, plan, writab
   const history = useAsyncResource(`review:quality-assessment-history:${projectId}:${corpusId}:${qualityPlanId}:${read.data?.snapshotHash ?? 'unread'}`,
     () => client.api.research.getReviewQualityAssessmentHistory(selection), {label: '读取质量评价历史'});
   const [pending, setPending] = useState(false);
+  const guard = useArtifactEditorGuard();
+  const selectionLocked = guard.locked();
   const editable = writable && plan.currentExtraction && plan.currentProtocol && plan.referenceStatus === 'current' &&
     extraction.isLatest && extraction.currentProtocol && extraction.referenceStatus === 'current' && phase.sourcesCurrent && read.status === 'ready';
   return <section className="flex min-w-0 flex-col gap-3 border-t-[0.5px] border-line pt-2" data-testid="artifact-review-quality-assessment">
     <h2 className="font-medium">逐域人工质量评价</h2>
-    <button type="button" className={`${button} self-start`} disabled={pending || read.status === 'loading'}
-      data-testid="artifact-review-quality-assessment-refresh" onClick={() => {read.reload(); history.reload();}}>重读质量评价</button>
+    <button type="button" className={`${button} self-start`} disabled={pending || selectionLocked || read.status === 'loading'}
+      data-testid="artifact-review-quality-assessment-refresh" onClick={() => {if (!guard.locked()) {read.reload(); history.reload();}}}>重读质量评价</button>
     {read.status !== 'loading' ? null : <p role="status">正在读取准确人工质量评价…</p>}
     {read.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{read.error}</p>}
     {read.data === null || read.status === 'ready' ? null : <p className="text-muted">以下为上次成功读取的质量评价回执。</p>}
@@ -61,6 +64,7 @@ function ReviewQualityAssessmentEditor({client, phase, extraction, plan, parent,
   const save = useAsyncAction((request: ResearchReviewQualityAssessmentSave) => client.api.research.saveReviewQualityAssessment(request),
     {label: '保存逐域人工质量评价'});
   const busy = useRef(false), requests = useRef(new Map<string, string>());
+  const draft = useArtifactDraft('逐域人工质量评价', {reviewerId, reviewNote, revisionReason, domains, overall}, busy);
   const judgements = [...Object.values(domains), overall];
   const complete = judgements.every(value => value.kind !== '' && value.evidence.length > 0 && value.reason.trim() !== '' &&
     (value.kind !== 'judged' || value.judgement !== '')) && reviewerId !== '' && reviewNote.trim() !== '' &&
@@ -78,11 +82,11 @@ function ReviewQualityAssessmentEditor({client, phase, extraction, plan, parent,
         <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(parent.snapshot, null, 2)}</pre>
       </details>
       {!writable || editing ? null : <button type="button" className={`${button} self-start`} data-testid="artifact-review-quality-assessment-revise"
-        onClick={() => setEditing(true)}>修订人工质量评价</button>}
+        disabled={draft.locked} onClick={() => {if (!draft.isLocked()) setEditing(true);}}>修订人工质量评价</button>}
     </section>}
     {!writable || !editing ? null : <form className="flex flex-col gap-3" data-testid="artifact-review-quality-assessment-form" onSubmit={event => {
       event.preventDefault();
-      if (busy.current || !writable || !complete) return;
+      if (busy.current || !writable || draft.isLocked() || !complete) return;
       const body = {projectId, corpusId, extractionId, qualityPlanId, expectedPlanHash: plan.snapshotHash,
         expectedExtractionHash: extraction.snapshotHash, domains: definition.domains.map(domain => ({
           domainId: domain.id, value: qualityJudgementValue(domains[domain.id]!), evidence: domains[domain.id]!.evidence
@@ -93,9 +97,11 @@ function ReviewQualityAssessmentEditor({client, phase, extraction, plan, parent,
       let requestId = requests.current.get(signature);
       if (requestId === undefined) {requestId = crypto.randomUUID(); requests.current.set(signature, requestId);}
       busy.current = true; onPending(true);
-      void save.run({...body, requestId}).then(result => {busy.current = false; onPending(false); if (result.ok) onSaved();});
+      void save.run({...body, requestId}).then(result => {
+        busy.current = false; onPending(false); if (result.ok) {draft.saved(); onSaved();}
+      });
     }}>
-      <fieldset disabled={save.pending} className="flex flex-col gap-3">
+      <fieldset disabled={save.pending || draft.locked} className="flex flex-col gap-3">
         {definition.domains.map(domain => <ReviewQualityJudgement key={domain.id} label={domain.label} question={domain.question}
           choices={domain.judgements} sources={extraction.snapshot.sources} value={domains[domain.id]!}
           onChange={value => {setDomains({...domains, [domain.id]: value}); save.reset();}} />)}
@@ -120,6 +126,15 @@ function ReviewQualityAssessmentEditor({client, phase, extraction, plan, parent,
         <button type="submit" className={`${formPrimaryButtonClass} border-[0.5px] self-start`} disabled={!complete}
           data-testid="artifact-review-quality-assessment-save">保存人工质量评价</button>
       </fieldset>
+      <ArtifactDraftDiscard dirty={draft.dirty} testId="artifact-review-quality-assessment-discard" onDiscard={() => {
+        const next = {reviewerId: parent?.snapshot.request.reviewerId ?? '', reviewNote: parent?.snapshot.request.reviewNote ?? '', revisionReason: '',
+          domains: Object.fromEntries(definition.domains.map(domain => {
+            const saved = parent?.snapshot.request.domains.find(item => item.domainId === domain.id);
+            return [domain.id, qualityJudgementDraft(saved?.value ?? null, saved?.evidence ?? [])];
+          })), overall: qualityJudgementDraft(parent?.snapshot.request.overall.value ?? null, parent?.snapshot.request.overall.evidence ?? [])};
+        setReviewerId(next.reviewerId); setReviewNote(next.reviewNote); setRevisionReason(''); setDomains(next.domains); setOverall(next.overall);
+        setEditing(parent === null); save.reset(); draft.reset(next);
+      }} />
     </form>}
     {save.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{save.error}</p>}
   </section>;

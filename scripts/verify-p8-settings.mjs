@@ -772,6 +772,9 @@ try {
 
   await page.click('[data-testid="settings-discard-draft"]');
   await page.click('[data-testid="settings-discard-confirm"]');
+  // Radix keeps the exiting confirmation modal until Motion removes it.
+  // Wait for that user-visible boundary before filling the background settings.
+  await page.waitForSelector('[data-testid="settings-discard-panel"]', { state: 'detached', timeout: 10_000 });
   await page.waitForFunction(() => {
     return document.querySelector('[data-testid="settings-save"]')?.disabled === true
       && !document.querySelector('[data-testid="settings-dirty-bar"]')?.textContent?.includes('未保存');

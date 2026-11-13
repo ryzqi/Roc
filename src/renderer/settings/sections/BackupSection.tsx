@@ -3,7 +3,8 @@ import { Download, Upload } from 'lucide-react';
 import { useAsyncAction } from '../../app/use-async-resource';
 import { RadixSettingsConfirmDialog } from '../radix-dialog-pilot';
 import { writeTextFile } from '../../workspace/workspace-store';
-import { applyImport, parseSettingsImport, serializeSettingsExport } from '../settings-rules';
+import { applyImport, serializeSettingsExport } from '../settings-rules';
+import { parseSettingsImport } from '../settings-validation';
 import type { SettingsStore } from '../settings-scope';
 import {
   FormNote,
@@ -23,8 +24,8 @@ import {
  *     `research.embedding.save`. The security test in `tests/unit` seeds a fake key, exports, and
  *     asserts the string does not contain it.
  *  2. **Import is validation-first**: `parseSettingsImport` checks that the text is a document
- *     *this* surface produced (schemaVersion, the required objects, the two approval modes) and
- *     the imported document replaces the draft. Nothing is written until 「保存设置」 — an
+ *     *this* surface produced, including every nested field, before it replaces the draft.
+ *     Nothing is written until 「保存设置」 — an
  *     import is a draft operation, not a write, so a bad import is discarded by 「放弃修改」.
  *
  * 外观 lives in 应用基础 (it is the same `ui-state` preference, and two controls for one value

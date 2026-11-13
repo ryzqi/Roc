@@ -58,6 +58,9 @@ export type BackgroundTasksStore = {
   reloadRuns: () => void;
   mode: 'create' | 'edit' | null;
   draft: TaskDraft | null;
+  dirty: boolean;
+  busy: boolean;
+  isBusy: () => boolean;
   issues: TaskDraftIssue[];
   startCreate: () => void;
   startEdit: (task: BackgroundTask) => void;
@@ -86,6 +89,7 @@ export function useBackgroundTasks(client: RocClient, workspacePath: string | nu
   const [runsNonce, setRunsNonce] = useState(0);
 
   const [mode, setMode] = useState<'create' | 'edit' | null>(null);
+  const editingId = useRef<string | null>(null);
   const [draft, setDraftState] = useState<TaskDraft | null>(null);
   const [preview, setPreview] = useState<BackgroundTaskPreview | null>(null);
   const [previewPending, setPreviewPending] = useState(false);
@@ -94,14 +98,17 @@ export function useBackgroundTasks(client: RocClient, workspacePath: string | nu
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [actionPending, setActionPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const operationLock = useRef(false);
+  const baseline = useRef<TaskDraft | null>(null);
+  const previewInput = useRef<ReturnType<typeof toPreviewRequest> | null>(null);
+  const busy = pending || previewPending || actionPending;
+  const dirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(baseline.current);
 
   const mountedRef = useRef(true);
-  useEffect(
-    () => () => {
-      mountedRef.current = false;
-    },
-    []
-  );
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const reload = useCallback(() => {
     setNonce((current) => current + 1);
@@ -196,32 +203,48 @@ export function useBackgroundTasks(client: RocClient, workspacePath: string | nu
   const issues = useMemo(() => (draft === null ? [] : validateTaskDraft(draft, workspacePath)), [draft, workspacePath]);
 
   const setDraft = useCallback((next: TaskDraft) => {
+    if (operationLock.current) return;
     setDraftState(next);
+    previewInput.current = null;
     setPreview(null);
     setPreviewError(null);
     setMutationError(null);
   }, []);
 
   const startCreate = useCallback(() => {
+    if (operationLock.current) return;
+    editingId.current = null;
     setMode('create');
     setSelectedId(null);
-    setDraftState(emptyTaskDraft());
+    const next = emptyTaskDraft();
+    baseline.current = next;
+    setDraftState(next);
+    previewInput.current = null;
     setPreview(null);
     setPreviewError(null);
     setMutationError(null);
   }, []);
 
   const startEdit = useCallback((task: BackgroundTask) => {
+    if (operationLock.current) return;
+    editingId.current = task.id;
     setMode('edit');
     setSelectedId(task.id);
-    setDraftState(draftFromTask(task));
+    const next = draftFromTask(task);
+    baseline.current = next;
+    setDraftState(next);
+    previewInput.current = null;
     setPreview(null);
     setPreviewError(null);
     setMutationError(null);
   }, []);
 
   const cancelEdit = useCallback(() => {
+    if (operationLock.current) return;
+    editingId.current = null;
     setMode(null);
+    baseline.current = null;
+    previewInput.current = null;
     setDraftState(null);
     setPreview(null);
     setPreviewError(null);
@@ -229,91 +252,119 @@ export function useBackgroundTasks(client: RocClient, workspacePath: string | nu
   }, []);
 
   const runPreview = useCallback(async (): Promise<boolean> => {
-    if (draft === null || workspacePath === null || issues.length > 0) {
+    if (operationLock.current || draft === null || workspacePath === null || issues.length > 0) {
       return false;
     }
+    operationLock.current = true;
+    const input = toPreviewRequest(draft, workspacePath);
+    previewInput.current = null;
+    setPreview(null);
     setPreviewPending(true);
     setPreviewError(null);
     try {
-      const result = await previewBackgroundTask(client, toPreviewRequest(draft, workspacePath));
+      const result = await previewBackgroundTask(client, input);
+      if (!mountedRef.current) return false;
       if (!result.ok) {
         setPreviewError(result.error.message);
         return false;
       }
       setPreview(result.data);
+      previewInput.current = input;
       return true;
     } catch (caught) {
-      setPreviewError(errorMessage(caught));
+      if (mountedRef.current) setPreviewError(errorMessage(caught));
       return false;
     } finally {
-      setPreviewPending(false);
+      operationLock.current = false;
+      if (mountedRef.current) setPreviewPending(false);
     }
   }, [client, draft, issues.length, workspacePath]);
 
   const create = useCallback(async (): Promise<boolean> => {
-    if (draft === null || workspacePath === null || issues.length > 0) {
+    const input = previewInput.current;
+    if (operationLock.current || input === null || draft === null || workspacePath === null || issues.length > 0) {
       return false;
     }
+    operationLock.current = true;
     setPending(true);
     setMutationError(null);
     try {
-      const result = await createBackgroundTask(client, toPreviewRequest(draft, workspacePath));
+      const result = await createBackgroundTask(client, input);
+      if (!mountedRef.current) return false;
       if (!result.ok) {
         setMutationError(result.error.message);
         return false;
       }
       setMode(null);
+      baseline.current = null;
+      previewInput.current = null;
       setDraftState(null);
       setPreview(null);
       setSelectedId(result.data.id);
       reload();
       return true;
     } catch (caught) {
-      setMutationError(errorMessage(caught));
+      if (mountedRef.current) setMutationError(errorMessage(caught));
       return false;
     } finally {
-      setPending(false);
+      operationLock.current = false;
+      if (mountedRef.current) setPending(false);
     }
   }, [client, draft, issues.length, reload, workspacePath]);
 
   const update = useCallback(async (): Promise<boolean> => {
-    if (draft === null || workspacePath === null || selectedId === null || issues.length > 0) {
+    const taskId = editingId.current;
+    if (operationLock.current || draft === null || workspacePath === null || taskId === null || issues.length > 0) {
       return false;
     }
     if (draft.reason.trim().length === 0) {
       setMutationError('修改后台任务必须填写原因。');
       return false;
     }
+    operationLock.current = true;
     setPending(true);
     setMutationError(null);
     try {
       const result = await updateBackgroundTask(client, {
-        taskId: selectedId,
+        taskId,
         patch: toUpdatePatch(draft, workspacePath),
         reason: draft.reason.trim()
       });
+      if (!mountedRef.current) return false;
       if (!result.ok) {
         setMutationError(result.error.message);
         return false;
       }
       setMode(null);
+      editingId.current = null;
+      baseline.current = null;
+      previewInput.current = null;
       setDraftState(null);
       reload();
       return true;
     } catch (caught) {
-      setMutationError(errorMessage(caught));
+      if (mountedRef.current) setMutationError(errorMessage(caught));
       return false;
     } finally {
-      setPending(false);
+      operationLock.current = false;
+      if (mountedRef.current) setPending(false);
     }
-  }, [client, draft, issues.length, reload, selectedId, workspacePath]);
+  }, [client, draft, issues.length, reload, workspacePath]);
+
+  const select = useCallback((taskId: string | null) => {
+    if (operationLock.current) return;
+    setSelectedId(taskId);
+  }, []);
 
   const runAction = useCallback(
     async (action: TaskListAction, taskId: string): Promise<boolean> => {
+      if (operationLock.current) return false;
+      operationLock.current = true;
       setActionPending(true);
       setActionError(null);
       try {
         const result = await dispatchTaskAction(client, action, taskId);
+        if (!mountedRef.current) return false;
         if (!result.ok) {
           setActionError(result.error.message);
           return false;
@@ -325,10 +376,11 @@ export function useBackgroundTasks(client: RocClient, workspacePath: string | nu
         reloadRuns();
         return true;
       } catch (caught) {
-        setActionError(errorMessage(caught));
+        if (mountedRef.current) setActionError(errorMessage(caught));
         return false;
       } finally {
-        setActionPending(false);
+        operationLock.current = false;
+        if (mountedRef.current) setActionPending(false);
       }
     },
     [client, reload, reloadRuns, selectedId]
@@ -342,7 +394,7 @@ export function useBackgroundTasks(client: RocClient, workspacePath: string | nu
       scheduler,
       reload,
       selectedId,
-      select: setSelectedId,
+      select,
       selected,
       runs,
       runsStatus,
@@ -350,6 +402,9 @@ export function useBackgroundTasks(client: RocClient, workspacePath: string | nu
       reloadRuns,
       mode,
       draft,
+      dirty,
+      busy,
+      isBusy: () => operationLock.current,
       issues,
       startCreate,
       startEdit,
@@ -370,6 +425,7 @@ export function useBackgroundTasks(client: RocClient, workspacePath: string | nu
       scheduler,
       reload,
       selectedId,
+      select,
       selected,
       runs,
       runsStatus,
@@ -377,6 +433,8 @@ export function useBackgroundTasks(client: RocClient, workspacePath: string | nu
       reloadRuns,
       mode,
       draft,
+      dirty,
+      busy,
       issues,
       startCreate,
       startEdit,

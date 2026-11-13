@@ -20,10 +20,19 @@ before(async () => {
         import React from 'react';
         import { createRoot } from 'react-dom/client';
         import { flushSync } from 'react-dom';
+        import { LazyMotion, domMax, MotionConfig } from 'motion/react';
         import { ResearchTaskProgress } from './src/renderer/assistant/ResearchTaskProgress';
         import { ResearchTasksSection } from './src/renderer/management/sections/ResearchTasksSection';
         import { ManagementSectionBody } from './src/renderer/management/management-shell-parts';
+        import { ManagementPanel } from './src/renderer/management/ManagementPanel';
+        import { ManagementView } from './src/renderer/management/ManagementView';
+        import { ManagementScopeProvider } from './src/renderer/management/management-scope';
+        import { TaskControls } from './src/renderer/research/tasks/TaskControls';
+        import { PilotSection } from './src/renderer/settings/sections/PilotSection';
+        import { BEFORE_NAVIGATE, requestNavigation } from './src/renderer/app/navigation-guard';
         const root = createRoot(document.getElementById('root'));
+        const render = child => root.render(React.createElement(MotionConfig, {reducedMotion: 'always'},
+          React.createElement(LazyMotion, {features: domMax, strict: true}, child)));
         window.listeners = new Set();
         window.chatListeners = new Set();
         window.calls = [];
@@ -69,7 +78,11 @@ before(async () => {
           for (const listener of [...listeners]) listener({taskId, projectId});
         };
         const record = (method, request, response) => { calls.push({method, request}); return Promise.resolve(response); };
-        window.client = {api: {chat: {onRunEvent: listener => {
+        window.client = {api: {agent: {
+          getPilotStatus: () => record('pilot-status', null, window.pilotResponse),
+          enablePilot: request => record('pilot-enable', request, window.pilotActionResponse),
+          rollbackPilot: () => record('pilot-rollback', null, window.pilotActionResponse)
+        }, chat: {onRunEvent: listener => {
           chatListeners.add(listener); return () => chatListeners.delete(listener);
         }}, research: {
           getProject: request => record('project', request, {ok: true, data: {id: request.id, status: 'active', workspacePath: '/workspace'}}),
@@ -121,19 +134,23 @@ before(async () => {
           continueTask: request => record('continue', request, window.actionResponse),
           restoreTaskApproval: request => record('restore', request, window.actionResponse)
         }}};
-        window.mount = (projectId = 'project-a', threadId = 'thread-a', runId = 'chat-a', runStatus = 'running') => flushSync(() => root.render(
+        window.mount = (projectId = 'project-a', threadId = 'thread-a', runId = 'chat-a', runStatus = 'running') => flushSync(() => render(
           React.createElement(React.StrictMode, null, React.createElement(ResearchTaskProgress, {
             key: projectId + ':' + threadId + ':' + runId, client, projectId, threadId, runId, runStatus,
             onOpenTask: taskId => opened.push(taskId)
           }))
         ));
-        window.mountDrawer = (taskId = 'task-a', projectId = 'project-a') => flushSync(() => root.render(
+        window.mountDrawer = (taskId = 'task-a', projectId = 'project-a') => flushSync(() => render(
           React.createElement(React.StrictMode, null, React.createElement(ResearchTasksSection, {
             key: projectId, client, projectId, selectedTaskId: taskId,
-            onSelectTask: taskId => mountDrawer(taskId, projectId)
+            onSelectTask: taskId => {
+              opened.push(taskId);
+              response = {ok: true, data: makeData(projectId, taskId)};
+              mountDrawer(taskId, projectId);
+            }
           }))
         ));
-        window.mountManagementTasks = (projectId = 'project-a') => flushSync(() => root.render(
+        window.mountManagementTasks = (projectId = 'project-a') => flushSync(() => render(
           React.createElement(React.StrictMode, null, React.createElement(ManagementSectionBody, {
             tab: 'tasks', idPrefix: 'mgmt', testIdPrefix: 'mgmt',
             scope: {client, projectId, workspacePath: '/workspace', researchTaskId: 'task-a',
@@ -141,12 +158,50 @@ before(async () => {
               onAskAssistant: () => {}, openSettings: () => {}}
           }))
         ));
+        function ManagementHost({surface, projectId}) {
+          const [open, setOpen] = React.useState(true);
+          const [tab, setTab] = React.useState('tasks');
+          const [taskId, setTaskId] = React.useState('task-a');
+          const scope = {client, projectId, workspacePath: '/workspace', researchTaskId: taskId,
+            onSelectResearchTask: next => {
+              response = {ok: true, data: makeData(projectId, next)}; setTaskId(next);
+            }, onOpenThread: () => {}, onAskAssistant: () => {}, openSettings: () => {}};
+          return React.createElement(ManagementScopeProvider, {value: scope},
+            surface === 'drawer'
+              ? React.createElement(ManagementPanel, {open, activeTab: tab, onTabChange: setTab,
+                  onClose: () => {opened.push('closed'); setOpen(false);}})
+              : React.createElement(ManagementView, {view: 'memory', projectId}));
+        }
+        window.mountManagementHost = (surface = 'drawer', projectId = 'project-a') => flushSync(() => render(
+          React.createElement(React.StrictMode, null, React.createElement(ManagementHost, {
+            key: surface + ':' + projectId, surface, projectId
+          }))
+        ));
+        window.mountControls = () => flushSync(() => render(
+          React.createElement(React.StrictMode, null, React.createElement(TaskControls, {
+            client, data: response.data, onChanged: () => calls.push({method: 'changed'})
+          }))
+        ));
+        window.mountPilot = () => flushSync(() => render(
+          React.createElement(React.StrictMode, null, React.createElement(PilotSection, {client}))
+        ));
+        window.navigateProject = () => requestNavigation({
+          page: 'chat', projectId: 'project-b', view: 'literature', tool: null,
+          openFile: null, assistantOpen: true
+        }, () => opened.push('project-b'));
+        window.navigationVeto = event => event.preventDefault();
+        window.setNavigationVeto = enabled => window[enabled ? 'addEventListener' : 'removeEventListener'](
+          BEFORE_NAVIGATE, navigationVeto);
         window.clear = () => flushSync(() => root.render(null));
         window.reset = () => {
           clear();
+          setNavigationVeto(false);
           calls = []; opened = [];
           response = {ok: true, data: makeData()};
           actionResponse = {ok: true, data: makeData().task};
+          pilotResponse = {ok: true, data: {settings: {enabled: true, profile: 'read-only',
+            circuitOpen: false, breakerReason: null, failureStreak: 0, maxFailureStreak: 3}, lastRun: null}};
+          pilotActionResponse = {ok: true, data: pilotResponse.data};
           factSaveError = null; factSaveDeferred = null; factHistory = [];
           observationResponse = null; observationTelemetry = null;
           exportResponse = {ok: true, data: {path: '/local/diagnostics/task.json', size: 512, sha256: 'c'.repeat(64),
@@ -198,17 +253,181 @@ before(async () => {
 });
 
 after(async () => {
-  try { await app?.close(); }
+  try {
+    if (page && !page.isClosed()) await page.evaluate(() => clear());
+    await app?.close();
+  }
   finally { if (directory) rmSync(directory, {recursive: true, force: true}); }
   assert.deepEqual(rendererErrors, []);
 });
 
 const ready = () => page.getByTestId('task-status').waitFor();
 
+test('task controls serialize same-event opposing actions and ignore completion after unmount', async () => {
+  for (const [button, status, restore] of [
+    ['task-pause', 'active', false], ['task-cancel', 'active', false],
+    ['task-continue', 'interrupted', false], ['task-restore-approval', 'paused', true]
+  ]) {
+    await page.evaluate(({status, restore}) => {
+      reset(); window.actionGate = deferred(); actionResponse = actionGate.promise;
+      response.data.task.status = status; response.data.continuationRunId = 'stage-a';
+      response.data.canRestoreApproval = restore; mountControls();
+    }, {status, restore});
+    await page.getByTestId(button).waitFor();
+    await page.evaluate(button => {
+      const selected = document.querySelector('[data-testid="' + button + '"]');
+      selected.click(); selected.click();
+      document.querySelector('[data-testid="task-cancel"]')?.click();
+    }, button);
+    await page.getByTestId('task-action-pending').waitFor();
+    assert.equal(await page.evaluate(() => calls.filter(row =>
+      ['pause', 'cancel', 'continue', 'restore'].includes(row.method)).length), 1);
+    await page.evaluate(() => {clear(); actionGate.resolve({ok: true, data: makeData().task});});
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await page.evaluate(() => calls.filter(row => row.method === 'changed').length), 0);
+  }
+});
+
+test('facts submit and state changes lock synchronously and failed saves retain the authored fields', async () => {
+  await page.evaluate(() => {
+    reset(); factSaveDeferred = deferred();
+    listResponse.data.tasks.push(makeData('project-a', 'task-b').task); mountDrawer();
+  });
+  await page.getByTestId('mgmt-task-fact-kind').selectOption('correction');
+  await page.getByTestId('mgmt-task-fact-content').fill('保持这份纠正的原文');
+  await page.evaluate(() => {
+    const form = document.querySelector('[data-testid="mgmt-task-fact-save"]').form;
+    form.requestSubmit(); form.requestSubmit();
+    const select = document.querySelector('[data-testid="mgmt-task-select"]');
+    select.value = 'task-b'; select.dispatchEvent(new Event('change', {bubbles: true}));
+  });
+  await page.waitForFunction(() => calls.some(row => row.method === 'facts-save'));
+  assert.equal(await page.evaluate(() => calls.filter(row => row.method === 'facts-save').length), 1);
+  assert.deepEqual(await page.evaluate(() => opened), []);
+  await page.evaluate(() => factSaveDeferred.resolve({ok: false, error: {message: 'revision changed'}}));
+  await page.getByRole('alert').filter({hasText: 'revision changed'}).waitFor();
+  assert.equal(await page.getByTestId('mgmt-task-fact-content').inputValue(), '保持这份纠正的原文');
+  assert.equal(await page.getByTestId('mgmt-task-fact-kind').inputValue(), 'correction');
+  await page.evaluate(() => {
+    reset(); factSaveDeferred = deferred();
+    factsResponse.data.snapshot = {revision: 1, entries: [{
+      id: 'fact-a', kind: 'constraint', content: '已保存约束', state: 'active',
+      sources: [{kind: 'user', locator: '实际录入'}]
+    }]}; mountDrawer();
+  });
+  await page.getByRole('button', {name: '标记完成', exact: true}).waitFor();
+  await page.evaluate(() => {
+    const buttons = [...document.querySelectorAll('button')].filter(button =>
+      ['标记完成', '标记已替代'].includes(button.textContent));
+    buttons[0].click(); buttons[1].click();
+  });
+  await page.waitForFunction(() => calls.some(row => row.method === 'facts-save'));
+  assert.equal(await page.evaluate(() => calls.filter(row => row.method === 'facts-save').length), 1);
+  await page.evaluate(() => factSaveDeferred.resolve({ok: false, error: {message: 'state write failed'}}));
+  await page.getByRole('alert').filter({hasText: 'state write failed'}).waitFor();
+});
+
+test('facts draft protects task selection, native unload and composed project navigation', async () => {
+  await page.evaluate(() => {
+    reset(); listResponse.data.tasks.push(makeData('project-a', 'task-b').task); mountDrawer();
+  });
+  await page.getByTestId('mgmt-task-fact-content').fill('切换前保留的任务事实');
+  assert.equal(await page.evaluate(() => {
+    const event = new Event('beforeunload', {cancelable: true});
+    return !window.dispatchEvent(event);
+  }), true);
+  await page.getByTestId('mgmt-task-select').selectOption('task-b');
+  const discard = page.getByTestId('mgmt-editor-discard');
+  await discard.waitFor();
+  assert.deepEqual(await page.evaluate(() => opened), []);
+  await discard.getByRole('button', {name: '继续编辑', exact: true}).click();
+  assert.equal(await page.getByTestId('mgmt-task-fact-content').inputValue(), '切换前保留的任务事实');
+  assert.equal(await page.getByTestId('mgmt-task-select').inputValue(), 'task-a');
+  await page.evaluate(() => {setNavigationVeto(true); navigateProject();});
+  await discard.waitFor();
+  await discard.getByRole('button', {name: '放弃修改并继续', exact: true}).click();
+  assert.deepEqual(await page.evaluate(() => opened), []);
+  await page.evaluate(() => {setNavigationVeto(false); navigateProject();});
+  assert.deepEqual(await page.evaluate(() => opened), ['project-b']);
+  assert.equal(await page.getByTestId('mgmt-task-fact-content').inputValue(), '');
+});
+
+test('actual management drawer and canvas tabs preserve facts until an explicit discard', async () => {
+  for (const surface of ['drawer', 'canvas']) {
+    await page.evaluate(surface => {reset(); mountManagementHost(surface);}, surface);
+    if (surface === 'canvas') await page.getByTestId('mgmt-view-tab-tasks').click();
+    await page.getByTestId('mgmt-task-fact-content').fill('管理分区内的任务事实');
+    const tab = page.getByTestId(surface === 'drawer' ? 'mgmt-tab-memory' : 'mgmt-view-tab-memory');
+    await tab.focus();
+    await page.keyboard.press('Home');
+    const discard = page.getByTestId('mgmt-editor-discard');
+    await discard.waitFor();
+    await discard.getByRole('button', {name: '继续编辑', exact: true}).click();
+    assert.equal(await page.getByTestId('mgmt-task-fact-content').inputValue(), '管理分区内的任务事实');
+    if (surface === 'drawer') {
+      await page.keyboard.press('Escape');
+      await discard.waitFor();
+      assert.deepEqual(await page.evaluate(() => opened), []);
+      await discard.getByRole('button', {name: '继续编辑', exact: true}).click();
+    }
+    await tab.click();
+    await discard.waitFor();
+    await discard.getByRole('button', {name: '放弃修改并继续', exact: true}).click();
+    await page.waitForFunction(() => !document.querySelector('[data-testid="mgmt-task-fact-content"]'));
+    await page.getByTestId(surface === 'drawer' ? 'mgmt-tab-tasks' : 'mgmt-view-tab-tasks').click();
+    assert.equal(await page.getByTestId('mgmt-task-fact-content').inputValue(), '');
+  }
+});
+
+test('task and event cursor pages reject repeated same-event loads and manual refresh starts from the first page', async () => {
+  await page.evaluate(() => {reset(); listResponse.data.hasMore = true; mountDrawer();});
+  await page.getByTestId('mgmt-task-events-more').waitFor();
+  await page.evaluate(() => {
+    listResponse = {ok: true, data: {tasks: [makeData('project-a', 'task-b').task], nextTaskId: 'task-b', hasMore: false}};
+    const moreTasks = document.querySelector('[data-testid="mgmt-task-list-more"]');
+    const moreEvents = document.querySelector('[data-testid="mgmt-task-events-more"]');
+    moreTasks.click(); moreTasks.click(); moreEvents.click(); moreEvents.click();
+  });
+  await page.waitForFunction(() => !document.querySelector('[data-testid="mgmt-task-events-more"]') &&
+    !document.querySelector('[data-testid="mgmt-task-list-more"]'));
+  assert.equal(await page.getByTestId('mgmt-task-event').count(), 51);
+  assert.equal(await page.getByTestId('mgmt-task-select').locator('option[value="task-a"]').count(), 1);
+  assert.equal(await page.getByTestId('mgmt-task-select').locator('option[value="task-b"]').count(), 1);
+  await page.getByTestId('mgmt-task-refresh').click();
+  await page.waitForFunction(() => calls.filter(row => row.method === 'events').at(-1).request.afterSequence === 0);
+  await page.getByTestId('mgmt-task-events-more').waitFor();
+  assert.equal(await page.getByTestId('mgmt-task-event').count(), 50);
+});
+
+test('pilot enable and rollback share a synchronous lock and settled replies cannot refresh an unmounted section', async () => {
+  await page.evaluate(() => {reset(); window.pilotGate = deferred(); pilotActionResponse = pilotGate.promise; mountPilot();});
+  await page.getByTestId('settings-pilot-enable').waitFor();
+  await page.evaluate(() => {
+    const enable = document.querySelector('[data-testid="settings-pilot-enable"]');
+    enable.click(); enable.click(); document.querySelector('[data-testid="settings-pilot-rollback"]').click();
+  });
+  await page.waitForFunction(() => calls.some(row => row.method === 'pilot-enable'));
+  assert.equal(await page.evaluate(() => calls.filter(row => ['pilot-enable', 'pilot-rollback'].includes(row.method)).length), 1);
+  await page.evaluate(() => pilotGate.resolve({ok: false, error: {message: 'pilot operation failed'}}));
+  await page.getByTestId('settings-pilot-action-error').waitFor();
+  assert.equal(await page.getByTestId('settings-pilot-profile').isDisabled(), false);
+  await page.evaluate(() => {
+    window.pilotGate = deferred(); pilotActionResponse = pilotGate.promise;
+    document.querySelector('[data-testid="settings-pilot-rollback"]').click();
+    document.querySelector('[data-testid="settings-pilot-enable"]').click();
+  });
+  await page.waitForFunction(() => calls.some(row => row.method === 'pilot-rollback'));
+  assert.equal(await page.evaluate(() => calls.filter(row => ['pilot-enable', 'pilot-rollback'].includes(row.method)).length), 2);
+  const reads = await page.evaluate(() => calls.filter(row => row.method === 'pilot-status').length);
+  await page.evaluate(() => {clear(); pilotGate.resolve({ok: true, data: pilotResponse.data});});
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await page.evaluate(() => calls.filter(row => row.method === 'pilot-status').length), reads);
+});
+
 test('assistant reads authoritative usage and progress, handles keyboard detail entry and scoped notifications', async () => {
   await page.evaluate(() => { reset(); mount(); });
   await ready();
-  assert.equal(await page.getByTestId('task-progress').innerText(), '执行已完成 2/3');
+  assert.equal(await page.getByTestId('task-progress').innerText(), '执行已完成 2 / 3 次');
   const text = await page.getByTestId('task-usage').innerText();
   for (const expected of ['已知 80', '未知 100', '预留 50', '模型 3']) assert.ok(text.includes(expected));
   const details = page.getByTestId('assistant-task-details');
@@ -223,7 +442,7 @@ test('assistant reads authoritative usage and progress, handles keyboard detail 
       tokens: {...makeData().usage.tokens, settled: 95}}}};
     emit();
   });
-  await page.getByText('已知 95', {exact: true}).waitFor();
+  await page.getByText('已知 95 tokens', {exact: true}).waitFor();
   await page.evaluate(() => clear());
   assert.equal(await page.evaluate(() => listeners.size), 0);
 });
@@ -306,7 +525,7 @@ test('management renders parent execution tree, artifact IDs and cursor event re
   const tree = await page.getByTestId('mgmt-task-tree').innerText();
   assert.ok(tree.includes('fixture-provider / fixture-model'));
   assert.ok(tree.includes('artifact-figure'));
-  assert.ok(tree.includes('耗时 1000 ms'));
+  assert.ok(tree.includes('耗时 1,000 ms'));
   assert.equal(await page.getByTestId('mgmt-task-tree').locator('ol ol ol').count(), 1);
   await page.getByTestId('mgmt-task-events-more').focus();
   await page.keyboard.press('Enter');
@@ -425,7 +644,7 @@ test('review queries show truthful task execution status and only complete cover
     const execution = page.getByText('actual-query-id', {exact: true}).locator('..');
     await execution.getByText('综述查询', {exact: true}).waitFor();
     assert.ok((await execution.innerText()).includes(label));
-    assert.ok((await page.getByTestId('task-progress').innerText()).includes(`${completed}/3`));
+    assert.ok((await page.getByTestId('task-progress').innerText()).includes(`${completed} / 3 次`));
     assert.equal(await execution.getByRole('list', {name: '工件'}).count(), 0);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   }

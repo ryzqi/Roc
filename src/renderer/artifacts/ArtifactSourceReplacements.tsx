@@ -7,6 +7,8 @@ import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {formInputClass, formSecondaryButtonClass} from '../shared/form-ui';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
+import {ArtifactDraftDiscard, useArtifactDraft, useArtifactEditorGuard} from './artifact-editor-guard';
+
 const input = `${formInputClass} min-w-0 border-[0.5px]`;
 
 export function ArtifactSourceReplacements({client, source, canDecide, onChanged}: {
@@ -19,11 +21,14 @@ export function ArtifactSourceReplacements({client, source, canDecide, onChanged
     () => client.api.research.listEvidence({projectId}), {label: '读取本项目证据'});
   const [targetId, setTargetId] = useState('');
   const [pending, setPending] = useState(false);
+  const guard = useArtifactEditorGuard();
   return <section aria-label="来源替代" data-testid="artifact-source-replacements" className="mt-3 flex min-w-0 flex-col gap-2">
     <div className="flex flex-wrap items-center gap-2">
       <h3 className="font-medium">来源替代</h3>
-      <button type="button" className={button} disabled={history.status === 'loading' || pending}
-        data-testid="artifact-source-replacements-refresh" onClick={history.reload}>刷新历史</button>
+      <button type="button" className={button} disabled={history.status === 'loading' || pending || guard.locked()}
+        data-testid="artifact-source-replacements-refresh" onClick={() => {
+          if (!guard.locked()) history.reload();
+        }}>刷新历史</button>
     </div>
     <p className="text-muted">明确选择前后来源会撤销旧引用的有效审核。新证据仍需另行审核主张关系。</p>
     {history.status === 'loading' ? <p role="status">正在读取来源替代历史…</p> : null}
@@ -37,8 +42,10 @@ export function ArtifactSourceReplacements({client, source, canDecide, onChanged
         <button type="button" className={`${button} ml-2`} onClick={choices.reload}>重试读取证据</button></p>}
       {choices.status !== 'ready' || choices.data === null ? null : <>
         <label className="flex min-w-0 flex-col gap-1 text-muted">选择新来源证据
-          <select className={input} value={targetId} disabled={pending} data-testid="artifact-source-replacement-target"
-            data-reading-key={`source-replacement-target:${evidenceId}`} onChange={event => setTargetId(event.target.value)}>
+          <select className={input} value={targetId} disabled={pending || guard.locked()} data-testid="artifact-source-replacement-target"
+            data-reading-key={`source-replacement-target:${evidenceId}`} onChange={event => {
+              if (!guard.locked()) setTargetId(event.target.value);
+            }}>
             <option value="">请选择证据</option>
             {choices.data.filter(evidence => evidence.id !== evidenceId).map(evidence =>
               <option key={evidence.id} value={evidence.id}>{evidence.title}，{evidence.locator}，{evidence.id}</option>)}
@@ -67,6 +74,8 @@ function ReplacementSelection({client, projectId, evidenceId, targetId, onChange
   const currentRun = useAsyncResource(rerun ? `replacement-run:${projectId}:${destination.evidence.sourceId}` : null,
     () => client.api.research.getExperiment({projectId, runId: destination!.evidence.sourceId}), {label: '核对重跑实验'});
   const [note, setNote] = useState('');
+  const busy = useRef(false);
+  const draft = useArtifactDraft('来源替代说明', {note}, busy);
   const requests = useRef(new Map<string, string>());
   const mounted = useRef(true);
   useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
@@ -82,6 +91,7 @@ function ReplacementSelection({client, projectId, evidenceId, targetId, onChange
   const valid = original.status === 'ready' && target.status === 'ready' && destination?.referenceStatus === 'recorded' &&
     (documents || validRerun);
   const submit = async (): Promise<void> => {
+    if (busy.current || draft.isLocked() || !valid) return;
     const fields = {projectId, evidenceId, targetEvidenceId: targetId,
       kind: rerun ? 'experiment_rerun' as const : 'document_replacement' as const,
       expectedSourceDigest: original.data!.sourceDigest, expectedTargetDigest: target.data!.sourceDigest,
@@ -89,15 +99,15 @@ function ReplacementSelection({client, projectId, evidenceId, targetId, onChange
     const key = JSON.stringify(fields);
     let requestId = requests.current.get(key);
     if (requestId === undefined) {requestId = crypto.randomUUID(); requests.current.set(key, requestId);}
-    onPending(true);
+    busy.current = true; onPending(true);
     const result = await action.run({...fields, requestId});
     if (mounted.current) {
-      onPending(false);
-      if (result.ok) onChanged();
+      busy.current = false; onPending(false);
+      if (result.ok) {draft.saved(); onChanged();}
     }
   };
   return <div data-testid="artifact-source-replacement-selection" className="flex min-w-0 flex-col gap-2">
-    <button type="button" className={`${button} self-start`} disabled={action.pending || original.status === 'loading' || target.status === 'loading'}
+    <button type="button" className={`${button} self-start`} disabled={action.pending || draft.dirty || draft.locked || original.status === 'loading' || target.status === 'loading'}
       data-testid="artifact-source-replacement-reread" onClick={() => {original.reload(); target.reload(); previousRun.reload(); currentRun.reload();}}>
       重新核对两端
     </button>
@@ -116,14 +126,17 @@ function ReplacementSelection({client, projectId, evidenceId, targetId, onChange
     {source === undefined || destination === undefined || documents || rerun || sameDocument ? null :
       <p role="alert">需要两个托管文档，或两个已完成实验的证据。</p>}
     <label className="flex min-w-0 flex-col gap-1 text-muted">替代说明
-      <textarea rows={2} maxLength={10000} className={input} value={note} disabled={action.pending}
+      <textarea rows={2} maxLength={10000} className={input} value={note} disabled={action.pending || draft.locked}
         data-testid="artifact-source-replacement-note" data-reading-key={`source-replacement-note:${evidenceId}:${targetId}`}
         onChange={event => setNote(event.target.value)}/>
     </label>
-    <button type="button" className={`${button} self-start`} disabled={!valid || action.pending}
+    <button type="button" className={`${button} self-start`} disabled={!valid || action.pending || draft.locked}
       data-testid="artifact-source-replacement-save" onClick={() => {void submit();}}>
       {rerun ? '确认重跑前后关联' : '确认替代旧来源'}
     </button>
+    <ArtifactDraftDiscard dirty={draft.dirty} testId="artifact-source-replacement-discard" onDiscard={() => {
+      setNote(''); draft.reset({note: ''}); action.reset();
+    }}/>
     {action.pending ? <p role="status">正在保存来源替代…</p> : null}
     {action.error === null ? null : <p role="alert" className="text-[var(--st-error)]">{action.error}</p>}
   </div>;

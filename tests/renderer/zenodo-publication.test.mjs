@@ -20,6 +20,7 @@ before(async()=>{
     import {ZenodoPanel} from './src/renderer/artifacts/ZenodoPanel';
     import {ArtifactExportReview} from './src/renderer/artifacts/ArtifactExportReview';
     const root=createRoot(document.getElementById('root'));
+    window.unmount=()=>flushSync(()=>root.unmount());
     const methods=${JSON.stringify(methods)};
     const client={api:{research:Object.fromEntries(methods.map(method=>[method,input=>window.fromMain(method,input)]))}};
     function Harness({record,surface}){const [writable,setWritable]=useState(true),[dirty,setDirty]=useState(false),[pending,setPending]=useState(false);
@@ -45,7 +46,7 @@ before(async()=>{
     return result;
   });await page.waitForFunction(()=>typeof mount==='function');
 });
-after(async()=>{try{await app?.close();}finally{for(const f of fixtures){await f.service.shutdown();f.close();}api?.dispose();if(directory)rmSync(directory,{recursive:true,force:true});}assert.deepEqual(errors,[]);});
+after(async()=>{try{await page?.evaluate(()=>window.unmount?.());await app?.close();}finally{for(const f of fixtures){await f.service.shutdown();f.close();}api?.dispose();if(directory)rmSync(directory,{recursive:true,force:true});}assert.deepEqual(errors,[]);});
 const hash=(value,algorithm='sha256')=>createHash(algorithm).update(value).digest('hex');
 async function scene(surface){
   const f=createResearchFixture(api,'reading');fixtures.push(f);active=f;calls.length=0;f.source='original';f.bytes=Buffer.from('task-created-synthetic-bytes');f.holds=new Map();
@@ -175,6 +176,55 @@ test('cancelling an in-flight upload stops the transport and preserves its uncer
   await button('取消正在进行的请求').click();await page.getByText('上传结果待查询',{exact:true}).waitFor();
   await expect(button('关闭工件')).toBeEnabled();assert.equal(f.provider.uploads.length,0);assert.equal(f.provider.records.size,1);
   assert.equal(f.provider.calls.filter(call=>call.pathname.endsWith('/actions/publish')).length,0);
+});
+test('Zenodo cancellation rejects repeated clicks in one event while retaining the upload result',async()=>{
+  const f=await scene();await prepare();const reached=Promise.withResolvers();
+  f.provider.override=(url,init,respond)=>{
+    if(init.method!=='PUT')return respond();
+    reached.resolve();return new Promise((_,reject)=>init.signal.addEventListener('abort',()=>reject(init.signal.reason),{once:true}));
+  };
+  await button('创建草稿并上传文件').click();await reached.promise;
+  const held=f.hold('cancelZenodoOperation');
+  await button('取消正在进行的请求').evaluate(element=>{element.click();element.click();});
+  await held.ready.promise;
+  assert.equal(calls.filter(value=>value.method==='cancelZenodoOperation').length,1);
+  held.release();
+  await page.getByText('上传结果待查询',{exact:true}).waitFor();
+  await expect(button('关闭工件')).toBeEnabled();
+  assert.equal(f.provider.uploads.length,0);
+  assert.equal(f.provider.calls.filter(call=>call.pathname.endsWith('/actions/publish')).length,0);
+});
+test('Zenodo cancellation acknowledgement keeps the shell locked after the transport has already stopped',async()=>{
+  const f=await scene();await prepare();const reached=Promise.withResolvers();
+  f.provider.override=(url,init,respond)=>{
+    if(init.method!=='PUT')return respond();
+    reached.resolve();return new Promise((_,reject)=>init.signal.addEventListener('abort',()=>reject(init.signal.reason),{once:true}));
+  };
+  await button('创建草稿并上传文件').click();await reached.promise;
+  const held=f.hold('cancelZenodoOperation');
+  await button('取消正在进行的请求').click();await held.ready.promise;
+  await page.getByText('上传结果待查询',{exact:true}).waitFor();
+  await expect(button('关闭工件')).toBeDisabled();
+  await expect(button('审查新的 Zenodo 准备')).toBeDisabled();
+  held.release();
+  await expect(button('关闭工件')).toBeEnabled();
+  assert.equal(f.provider.records.size,1);
+  assert.equal(f.provider.uploads.length,0);
+});
+test('Zenodo operation history rejects repeated selection in the same event and restores the exact preparation',async()=>{
+  const f=await scene();await prepare();await start();await button('读取 Zenodo 历史').click();
+  const history=page.getByRole('region',{name:'远端操作历史',exact:true});
+  const entry=history.getByRole('button',{name:/文件已核对/});
+  await entry.waitFor();
+  const held=f.hold('getZenodoPreparation');
+  await entry.evaluate(element=>{element.click();element.click();});
+  await held.ready.promise;
+  assert.equal(calls.filter(value=>value.method==='getZenodoPreparation').length,1);
+  await expect(button('关闭工件')).toBeDisabled();
+  held.release();
+  await expect(button('查询远端实际状态')).toBeEnabled();
+  await expect(button('关闭工件')).toBeEnabled();
+  assert.equal(f.provider.records.size,1);
 });
 test('650px light and dark complete review remains readable with keyboard focus and no clipped action states',async()=>{
   const f=await scene();await prepare();await start();await page.setViewportSize({width:650,height:800});

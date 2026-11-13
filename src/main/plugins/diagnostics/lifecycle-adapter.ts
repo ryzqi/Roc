@@ -20,6 +20,7 @@ export function createDiagnosticsLifecycleAdapter(
   options: DiagnosticsLifecycleAdapterOptions
 ): DiagnosticsLifecycleAdapter {
   let backgroundPaused = false;
+  let pendingMutation: Promise<TraySummary> | null = null;
 
   function getTraySummary(): TraySummary | Promise<TraySummary> {
     const backgroundTasks = options.getBackgroundTaskSummary();
@@ -29,23 +30,33 @@ export function createDiagnosticsLifecycleAdapter(
     return createTraySummary(backgroundTasks, backgroundPaused);
   }
 
+  function mutate(paused: boolean): TraySummary | Promise<TraySummary> {
+    const run = (): TraySummary | Promise<TraySummary> => {
+      const settled = (): TraySummary | Promise<TraySummary> => {
+        backgroundPaused = paused;
+        return getTraySummary();
+      };
+      const result = paused ? options.scheduler.suspendAll() : options.scheduler.resumeAll();
+      return result instanceof Promise ? result.then(settled) : settled();
+    };
+    // Tray and settings share this scheduler. Opposing requests must settle in order.
+    const result = pendingMutation === null ? run() : pendingMutation.catch(() => undefined).then(run);
+    if (!(result instanceof Promise)) return result;
+    const tracked = result.then(
+      summary => {if (pendingMutation === tracked) pendingMutation = null; return summary;},
+      (error: unknown) => {if (pendingMutation === tracked) pendingMutation = null; throw error;}
+    );
+    pendingMutation = tracked;
+    return tracked;
+  }
+
   return {
     getTraySummary,
     pauseBackgroundExecution() {
-      backgroundPaused = true;
-      const result = options.scheduler.suspendAll();
-      if (result instanceof Promise) {
-        return result.then(() => getTraySummary());
-      }
-      return getTraySummary();
+      return mutate(true);
     },
     resumeBackgroundExecution() {
-      backgroundPaused = false;
-      const result = options.scheduler.resumeAll();
-      if (result instanceof Promise) {
-        return result.then(() => getTraySummary());
-      }
-      return getTraySummary();
+      return mutate(false);
     }
   };
 }

@@ -32,12 +32,15 @@ before(async () => {
     import {flushSync} from 'react-dom';
     import {LazyMotion,MotionConfig,domAnimation} from 'motion/react';
     import {ArtifactInspector} from './src/renderer/artifacts/ArtifactInspector';
+    import {useReviewProtocolDraftGuard} from './src/renderer/artifacts/review-protocol-draft';
     const root=createRoot(document.getElementById('root'));
+    window.disposeHarness=()=>flushSync(()=>root.render(null));
     const client={api:{research:Object.fromEntries(${JSON.stringify(Object.keys(methods))}.map(method=>[method,input=>window.callMain(method,input)]))}};
     function Harness({initialRequest,writable}) {
       const [request,setRequest]=useState(initialRequest);
       const [open,setOpen]=useState(true);
       const [reviewDrafts]=useState(()=>new Map());
+      useReviewProtocolDraftGuard(reviewDrafts);
       const [readingLocations]=useState(()=>new Map());
       window.selectReview=next=>flushSync(()=>{setRequest(next);setOpen(true);});
       return <main><button data-testid="literature-review-inspect" onClick={()=>setOpen(true)}>综述核查</button>
@@ -81,7 +84,7 @@ before(async () => {
   await page.waitForFunction(() => typeof window.mount === 'function');
 });
 after(async () => {
-  try {await app?.close();} finally {
+  try {await page?.evaluate(()=>window.disposeHarness()); await app?.close();} finally {
     fixtures.forEach(f => f.close()); api?.dispose();
     if (directory) rmSync(directory, {recursive: true, force: true});
   }
@@ -210,6 +213,7 @@ test('window-local draft survives close/reopen; invalid years refuse before any 
   assert.equal(f.db.prepare('SELECT count(*) FROM research_review_protocol_versions').pluck().get(), 0);
   await page.keyboard.press('Escape');
   await tid('artifact-review').waitFor({state: 'hidden'});
+  assert.equal(await page.evaluate(()=>!window.dispatchEvent(new Event('beforeunload',{cancelable:true}))),true);
   await tid('literature-review-inspect').focus();
   await page.keyboard.press('Enter');
   await tid('artifact-review-new').click();
@@ -218,6 +222,7 @@ test('window-local draft survives close/reopen; invalid years refuse before any 
   await page.keyboard.press('Escape');
   await tid('artifact-review').waitFor({state: 'hidden'});
   assert.equal(await tid('literature-review-inspect').evaluate(element => element === document.activeElement), true);
+  assert.equal(await page.evaluate(()=>!window.dispatchEvent(new Event('beforeunload',{cancelable:true}))),true);
 });
 
 test('revision creates an immutable successor and old frozen scope remains readonly in history', async () => {

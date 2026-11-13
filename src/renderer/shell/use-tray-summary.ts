@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { TraySummary } from '../../shared/types';
+import { errorMessage } from '../app/loaded-state';
 import type { RocClient } from '../shared/roc-client';
 
 /**
@@ -32,16 +33,34 @@ export function traySummaryLabel(summary: TraySummary | null): string | null {
   return null;
 }
 
-export function useTraySummaryLabel(client: RocClient, windowHidden: boolean): string | null {
-  const [summary, setSummary] = useState<TraySummary | null>(null);
+export type TraySummaryResource = {label: string | null; error: string | null; reload: () => void};
+
+export function useTraySummaryLabel(client: RocClient, windowHidden: boolean): TraySummaryResource {
+  const [snapshot, setSnapshot] = useState<{client: RocClient; summary: TraySummary | null; error: string | null}>({
+    client, summary: null, error: null
+  });
+  const [nonce, setNonce] = useState(0);
+  const reload = useCallback(() => setNonce(current => current + 1), []);
 
   useEffect(() => {
     let cancelled = false;
+    let revision = 0;
 
     const refresh = async (): Promise<void> => {
-      const result = await client.api.lifecycle.getTraySummary();
-      if (!cancelled && result.ok) {
-        setSummary(result.data);
+      const request = ++revision;
+      try {
+        const result = await client.api.lifecycle.getTraySummary();
+        if (cancelled || request !== revision) return;
+        if (result.ok) setSnapshot({client, summary: result.data, error: null});
+        else setSnapshot(current => ({
+          client, summary: current.client === client ? current.summary : null, error: result.error.message
+        }));
+      } catch (error) {
+        if (!cancelled && request === revision) {
+          setSnapshot(current => ({
+            client, summary: current.client === client ? current.summary : null, error: errorMessage(error)
+          }));
+        }
       }
     };
 
@@ -60,7 +79,11 @@ export function useTraySummaryLabel(client: RocClient, windowHidden: boolean): s
       cancelled = true;
       window.clearInterval(handle);
     };
-  }, [client, windowHidden]);
+  }, [client, windowHidden, nonce]);
 
-  return traySummaryLabel(summary);
+  return {
+    label: traySummaryLabel(snapshot.client === client ? snapshot.summary : null),
+    error: snapshot.client === client ? snapshot.error : null,
+    reload
+  };
 }

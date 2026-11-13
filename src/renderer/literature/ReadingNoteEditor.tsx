@@ -5,6 +5,7 @@ import {Markdown} from '@tiptap/markdown';
 import {Mathematics} from '@tiptap/extension-mathematics';
 import {TableKit} from '@tiptap/extension-table';
 import Placeholder from '@tiptap/extension-placeholder';
+import {useImeGuard} from '../shared/hooks/use-ime-guard';
 import 'katex/dist/katex.min.css';
 import './reading.css';
 
@@ -36,6 +37,7 @@ export default function ReadingNoteEditor({markdown,editable,titles,onChange,onL
 }):React.JSX.Element {
   const [slash,setSlash]=useState(false),[source,setSource]=useState(false),[formula,setFormula]=useState('');
   const [mathPosition,setMathPosition]=useState<{pos:number;block:boolean}|null>(null);
+  const formulaIme=useImeGuard();
   const editor=useEditor({extensions:[StarterKit.configure({link:{openOnClick:false}}),Markdown,WikiLink,TableKit,
     Placeholder.configure({placeholder:'写下问题、方法与发现。输入 / 插入内容，[[标题]] 链接笔记。'}),
     Mathematics.configure({katexOptions:{throwOnError:false,trust:false},
@@ -69,7 +71,9 @@ export default function ReadingNoteEditor({markdown,editable,titles,onChange,onL
       <button type="button" disabled={!editable||source} aria-label="重做" onClick={()=>editor.chain().focus().redo().run()}>重做</button>
     </div>
     {slash&&!source?<div className="reading-toolbar" aria-label="插入块">{actions.map(action=><button type="button" key={action.label} disabled={!editable} onClick={()=>{action.run(editor);setSlash(false);}}>{action.label}</button>)}</div>:null}
-    <form className="reading-toolbar" onSubmit={event=>{event.preventDefault();if(!formula.trim())return;
+    <form className="reading-toolbar" onCompositionStart={formulaIme.onCompositionStart} onCompositionEnd={formulaIme.onCompositionEnd}
+      onKeyDown={event=>{if(event.key==='Enter'&&formulaIme.shouldIgnoreKeyDown(event))event.preventDefault();}}
+      onSubmit={event=>{event.preventDefault();if(!editable||source||!formula.trim())return;
       if(mathPosition){editor.chain().focus().setNodeSelection(mathPosition.pos).updateAttributes(mathPosition.block?'blockMath':'inlineMath',{latex:formula}).run();}
       else editor.chain().focus().insertInlineMath({latex:formula}).run();setFormula('');setMathPosition(null);}}>
       <input aria-label="LaTeX 公式" placeholder="LaTeX 公式，如 E=mc^2" value={formula} disabled={!editable||source} onChange={event=>setFormula(event.target.value)}/>

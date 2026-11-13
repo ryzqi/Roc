@@ -7,6 +7,7 @@ import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
 import {ReviewScreeningOutcome, screeningOutcome, screeningOutcomeDraft, screeningDecisions} from './ReviewScreeningOutcome';
+import {ArtifactDraftDiscard, useArtifactDraft} from './artifact-editor-guard';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 export function ReviewTitleDecision({client, protocol, plan, hitId, reviewerId, parent, writable, onPending, onSaved}: {
@@ -32,6 +33,7 @@ export function ReviewTitleDecision({client, protocol, plan, hitId, reviewerId, 
   const save = useAsyncAction((request: ResearchReviewScreeningDecisionSave) => client.api.research.saveReviewScreeningDecision(request),
     {label: '保存人工标题摘要决定'});
   const busy = useRef(false), requests = useRef(new Map<string, string>());
+  const editor = useArtifactDraft('标题摘要人工决定', {draft, revisionReason, considered}, busy);
   const canEdit = writable && editing;
   return <section className="flex min-w-0 flex-col gap-3" data-testid="artifact-review-title-decision">
     {parent === null ? null : <section className="flex flex-col gap-1" data-testid="artifact-review-title-current">
@@ -45,7 +47,7 @@ export function ReviewTitleDecision({client, protocol, plan, hitId, reviewerId, 
         </pre>
       </details>
       {!writable || editing ? null : <button type="button" className={`${button} self-start`}
-        data-testid="artifact-review-title-revise" onClick={() => setEditing(true)}>修订此审核人决定</button>}
+        disabled={editor.locked} data-testid="artifact-review-title-revise" onClick={() => {if (!editor.isLocked()) setEditing(true);}}>修订此审核人决定</button>}
     </section>}
     <section className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2" data-testid="artifact-review-title-suggestions">
       <h4 className="font-medium">独立模型建议</h4>
@@ -63,8 +65,9 @@ export function ReviewTitleDecision({client, protocol, plan, hitId, reviewerId, 
               {JSON.stringify({outcome: item.snapshot.request.outcome, origin: item.snapshot.origin, recordedAt: item.snapshot.recordedAt}, null, 2)}
             </pre>
           </details>
-          {!canEdit ? null : <button type="button" className={`${button} self-start`} disabled={save.pending}
+          {!canEdit ? null : <button type="button" className={`${button} self-start`} disabled={save.pending || editor.locked}
             data-testid="artifact-review-title-consider" onClick={() => {
+              if (busy.current || editor.isLocked()) return;
               setConsidered({id: item.snapshot.id, expectedHash: item.snapshotHash}); save.reset();
             }}>记录已参考此建议</button>}
         </li>)}</ul>}
@@ -78,12 +81,12 @@ export function ReviewTitleDecision({client, protocol, plan, hitId, reviewerId, 
     </section>
     {considered === null ? null : <div className="flex flex-col gap-1">
       <p className="text-muted break-all">已参考建议 {considered.id}</p>
-      {!canEdit ? null : <button type="button" className={`${button} self-start`} disabled={save.pending}
-        onClick={() => {setConsidered(null); save.reset();}}>清除建议引用</button>}
+      {!canEdit ? null : <button type="button" className={`${button} self-start`} disabled={save.pending || editor.locked}
+        onClick={() => {if (!busy.current && !editor.isLocked()) {setConsidered(null); save.reset();}}}>清除建议引用</button>}
     </div>}
     {!canEdit ? null : <form className="flex flex-col gap-2" data-testid="artifact-review-title-form" onSubmit={event => {
       event.preventDefault();
-      if (busy.current || !canEdit || draft.decision === '') return;
+      if (busy.current || editor.isLocked() || !canEdit || draft.decision === '') return;
       const body = {projectId, corpusId, expectedPlanHash: plan.snapshotHash, hitId, phase: 'title_abstract' as const,
         reviewerId, outcome: screeningOutcome(draft.decision, draft), consideredSuggestion: considered,
         parentDecisionId: parent === null ? null : parent.snapshot.id,
@@ -92,9 +95,11 @@ export function ReviewTitleDecision({client, protocol, plan, hitId, reviewerId, 
       let requestId = requests.current.get(signature);
       if (requestId === undefined) {requestId = crypto.randomUUID(); requests.current.set(signature, requestId);}
       busy.current = true; onPending(true);
-      void save.run({...body, requestId}).then(result => {busy.current = false; onPending(false); if (result.ok) onSaved();});
+      void save.run({...body, requestId}).then(result => {
+        busy.current = false; onPending(false); if (result.ok) {editor.saved(); onSaved();}
+      });
     }}>
-      <fieldset disabled={save.pending} className="flex flex-col gap-2">
+      <fieldset disabled={save.pending || editor.locked} className="flex flex-col gap-2">
         <ReviewScreeningOutcome protocol={protocol} value={draft} allowUncertain onChange={value => {setDraft(value); save.reset();}} />
         {parent === null ? null : <label className="flex flex-col gap-1 text-muted">筛选修订原因
           <textarea required aria-label="筛选修订原因" maxLength={10000} rows={3}
@@ -105,6 +110,12 @@ export function ReviewTitleDecision({client, protocol, plan, hitId, reviewerId, 
           disabled={draft.decision === '' || (draft.decision === 'include' && draft.inclusionCriterionIds.length === 0)}
           data-testid="artifact-review-title-save">保存标题摘要人工决定</button>
       </fieldset>
+      <ArtifactDraftDiscard dirty={editor.dirty} testId="artifact-review-title-decision-discard" onDiscard={() => {
+        const next = {draft: screeningOutcomeDraft(parent?.snapshot.request.outcome ?? null), revisionReason: '',
+          considered: parent?.snapshot.request.consideredSuggestion ?? null};
+        setDraft(next.draft); setRevisionReason(''); setConsidered(next.considered);
+        setEditing(parent === null); save.reset(); editor.reset(next);
+      }} />
     </form>}
     {save.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{save.error}</p>}
     {history.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{history.error}</p>}

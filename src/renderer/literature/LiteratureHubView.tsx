@@ -1,4 +1,5 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
 import { AlertCircle, NotebookPen, Radar, Bell, BookOpen, Database, Layers, Loader2, PanelLeft, Plus, Share2 } from 'lucide-react';
 import { ViewActivity, useViewActive } from '../shared/view-activity';
 import { useWorkspaceScope } from '../app/workspace-scope';
@@ -22,9 +23,9 @@ import { libraryItemTitle } from './format';
  */
 
 type SubViewId = LiteratureSubView;
-const ReadingNotesPanel = lazy(() => import('./ReadingNotesPanel'));
-const AcademicRadarPanel = lazy(() => import('./AcademicRadarPanel'));
-const MonitorsPanel = lazy(() => import('./MonitorsPanel'));
+const ReadingNotesPanel = retryableLazy(() => import('./ReadingNotesPanel'));
+const AcademicRadarPanel = retryableLazy(() => import('./AcademicRadarPanel'));
+const MonitorsPanel = retryableLazy(() => import('./MonitorsPanel'));
 
 const SUB_VIEWS: Array<{ id: SubViewId; label: string; icon: typeof BookOpen; iconClass: string }> = [
   { id: 'reader', label: '阅读', icon: BookOpen, iconClass: 'text-[var(--icon-literature)]' },
@@ -49,11 +50,12 @@ export function LiteratureHubView(): React.JSX.Element {
   const [navigationOverride, setNavigationOverride] = useState<boolean | null>(null);
   const [narrow, setNarrow] = useState(false);
   const [monitorLock, setMonitorLock] = useState(false);
-  const onMonitorLock = useCallback((locked: boolean) => setMonitorLock(locked), []);
+  const monitorLockRef = useRef(false);
+  const onMonitorLock = useCallback((locked: boolean) => {monitorLockRef.current = locked; setMonitorLock(locked);}, []);
   const hubRef = useRef<HTMLDivElement>(null);
   const navigationOpen = navigationOverride ?? !narrow;
   const selectSubView = (id: SubViewId): void => {
-    if (subView === 'monitors' && monitorLock && id !== 'monitors') return;
+    if (monitorLockRef.current && id !== 'monitors') return;
     setVisited(current => current.has(id) ? current : new Set([...current, id]));
     setSubView(id);
   };
@@ -125,7 +127,7 @@ export function LiteratureHubView(): React.JSX.Element {
             const next = event.key === 'Home' ? 0 : event.key === 'End' ? SUB_VIEWS.length - 1
               : event.key === 'ArrowRight' ? (index + 1) % SUB_VIEWS.length
               : event.key === 'ArrowLeft' ? (index + SUB_VIEWS.length - 1) % SUB_VIEWS.length : null;
-            if (next === null || monitorLock) return;
+            if (next === null || monitorLockRef.current) return;
             event.preventDefault();
             const id = SUB_VIEWS[next]!.id;
             selectSubView(id);
@@ -150,7 +152,7 @@ export function LiteratureHubView(): React.JSX.Element {
                 data-testid={`literature-subview-${entry.id}`}
                 className={
                   selected
-                    ? `${SUB_TAB_BASE} bg-[var(--surface-card-hover)] font-semibold text-ink shadow-[var(--shadow-card)]`
+                    ? `${SUB_TAB_BASE} bg-[var(--surface-card-hover)] font-semibold text-ink`
                     : `${SUB_TAB_BASE} text-muted hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-50`
                 }
               >
@@ -176,7 +178,7 @@ export function LiteratureHubView(): React.JSX.Element {
             type="button"
             onClick={() => openImport('document')}
             data-testid="literature-hub-import"
-            className="flex h-7 items-center gap-1.5 rounded-control bg-accent px-3 font-medium text-on-accent text-[length:var(--font-meta-size)] shadow-[var(--shadow-card)] transition-colors duration-[var(--duration-fast)] hover:bg-accent-deep active:opacity-90"
+            className="flex h-7 items-center gap-1.5 rounded-control bg-accent px-3 font-medium text-on-accent text-[length:var(--font-meta-size)] transition-colors duration-[var(--duration-fast)] hover:bg-accent-deep active:opacity-90"
           >
             <Plus size={13} aria-hidden="true" />
             导入
@@ -304,22 +306,22 @@ export function LiteratureHubView(): React.JSX.Element {
             </div></ViewActivity>
           ) : null}
           {visited.has('notes') ? <ViewActivity active={subView === 'notes'}><div style={{display:subView==='notes'?'contents':'none'}}>
-            <Suspense fallback={<p role="status" className="p-3">加载笔记…</p>}>
+            <LazyBoundary fallback={<p role="status" className="p-3">加载笔记…</p>}>
               {scope.projectId===null?<p className="p-3 text-muted">选择项目后使用阅读笔记</p>:<ReadingNotesPanel key={scope.projectId}
                 client={scope.client} projectId={scope.projectId} items={store.items} writable={scope.writable}/>}
-            </Suspense></div></ViewActivity>:null}
+            </LazyBoundary></div></ViewActivity>:null}
           {visited.has('radar') ? <ViewActivity active={subView === 'radar'}><div style={{display:subView==='radar'?'contents':'none'}}>
-            <Suspense fallback={<p role="status" className="p-3">加载学术雷达…</p>}>
+            <LazyBoundary fallback={<p role="status" className="p-3">加载学术雷达…</p>}>
               {scope.projectId===null?<p className="p-3 text-muted">选择项目后使用学术雷达</p>:<AcademicRadarPanel key={scope.projectId}
                 client={scope.client} projectId={scope.projectId} writable={scope.writable} active={hubActive && subView==='radar'} onImported={store.reload}/>}
-            </Suspense></div></ViewActivity>:null}
+            </LazyBoundary></div></ViewActivity>:null}
           {visited.has('monitors') ? (
             <ViewActivity active={subView === 'monitors'}><div style={{display: subView === 'monitors' ? 'contents' : 'none'}}>
-              <Suspense fallback={<p role="status" className="p-3 text-muted">加载监控界面中</p>}>
+              <LazyBoundary fallback={<p role="status" className="p-3 text-muted">加载监控界面中</p>}>
                 {scope.projectId === null ? <p className="p-3 text-muted">选择项目后查看文献监控</p> :
                   <MonitorsPanel key={scope.projectId} client={scope.client} projectId={scope.projectId}
                     items={store.items} writable={scope.writable} active={hubActive && subView === 'monitors'} onLockChange={onMonitorLock}/>}
-              </Suspense>
+              </LazyBoundary>
             </div></ViewActivity>
           ) : null}
         </div>
@@ -362,11 +364,6 @@ export function LiteratureHubView(): React.JSX.Element {
         addDocumentToNewItem={store.addPdfToNewItem}
         addDocumentToItem={store.addPdfToItem}
       />
-      {actions.pickError === null ? null : (
-        <p role="alert" className="px-3 pb-1 text-[var(--st-bad)] text-[length:var(--font-meta-size)]">
-          选择文件失败：{actions.pickError}
-        </p>
-      )}
     </div>
   );
 }

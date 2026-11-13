@@ -1,4 +1,5 @@
-import {lazy, Suspense, useRef, useState} from 'react';
+import { useRef, useState } from 'react';
+import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
 import type {ResearchReviewProtocolInspection} from '../../shared/schemas/research-systematic-review';
 import type {ResearchReviewFullTextFrozenPhase} from '../../shared/schemas/research-review-fulltext-screening';
 import type {ResearchReviewExtractionInspection} from '../../shared/schemas/research-review-extraction';
@@ -7,9 +8,10 @@ import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
 import {blankQualityDomain, ReviewQualityDefinition} from './ReviewQualityDefinition';
+import {ArtifactDraftDiscard, useArtifactDraft, useArtifactEditorGuard} from './artifact-editor-guard';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
-const ReviewQualityAssessment = lazy(async () => ({default: (await import('./ReviewQualityAssessment')).ReviewQualityAssessment}));
+const ReviewQualityAssessment = retryableLazy(async () => ({default: (await import('./ReviewQualityAssessment')).ReviewQualityAssessment}));
 export function ReviewQualityPlan({client, protocol, phase, extraction, writable, onPending}: {
   client: RocClient; protocol: ResearchReviewProtocolInspection; phase: ResearchReviewFullTextFrozenPhase;
   extraction: ResearchReviewExtractionInspection; writable: boolean; onPending: (pending: boolean) => void
@@ -24,6 +26,9 @@ export function ReviewQualityPlan({client, protocol, phase, extraction, writable
   const [domains, setDomains] = useState(() => [blankQualityDomain()]), [overall, setOverall] = useState(['', '']);
   const [assessmentOpen, setAssessmentOpen] = useState(false), [assessmentPending, setAssessmentPending] = useState(false);
   const busy = useRef(false), requests = useRef(new Map<string, string>());
+  const draft = useArtifactDraft('质量框架声明', {frameworkIndex, reviewerId, reviewNote, documentationNote, domains, overall}, busy);
+  const guard = useArtifactEditorGuard();
+  const selectionLocked = guard.locked();
   const design = extraction.snapshot.request.studyDesign.value;
   const frameworks = protocol.version.body.qualityAssessment.filter(framework => design.kind === 'text' && framework.studyDesign === design.text);
   const selected = frameworkIndex === '' ? undefined : frameworks[Number(frameworkIndex)];
@@ -38,8 +43,8 @@ export function ReviewQualityPlan({client, protocol, phase, extraction, writable
   return <section className="flex min-w-0 flex-col gap-3 border-t-[0.5px] border-line pt-2" data-testid="artifact-review-quality-plan">
     <h2 className="font-medium">研究设计与质量框架</h2>
     <p className="text-muted break-words">提取版本 {extraction.snapshot.version} 研究设计 {design.kind === 'text' ? design.text : design.kind === 'missing' ? '原文未报告' : '无法判断'}</p>
-    <button type="button" className={`${button} self-start`} disabled={create.pending || assessmentPending || read.status === 'loading'}
-      data-testid="artifact-review-quality-plan-refresh" onClick={read.reload}>重读质量框架</button>
+    <button type="button" className={`${button} self-start`} disabled={create.pending || assessmentPending || selectionLocked || read.status === 'loading'}
+      data-testid="artifact-review-quality-plan-refresh" onClick={() => {if (!guard.locked()) read.reload();}}>重读质量框架</button>
     {read.status !== 'loading' ? null : <p role="status">正在读取准确质量框架…</p>}
     {read.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{read.error}</p>}
     {read.data === null || read.status === 'ready' ? null : <p className="text-muted">以下为上次成功读取的质量框架回执。</p>}
@@ -57,17 +62,18 @@ export function ReviewQualityPlan({client, protocol, phase, extraction, writable
       <details><summary className="cursor-pointer text-muted">冻结的逐域定义与准确版本</summary>
         <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(read.data.snapshot, null, 2)}</pre>
       </details>
-      <button type="button" className={`${button} self-start`} disabled={create.pending || assessmentPending}
-        data-testid="artifact-review-quality-assessment-inspect" onClick={() => setAssessmentOpen(true)}>核查逐域人工质量评价</button>
-      {!assessmentOpen ? null : <Suspense fallback={<p role="status">正在加载质量评价…</p>}>
+      <button type="button" className={`${button} self-start`} disabled={create.pending || assessmentPending || selectionLocked}
+        data-testid="artifact-review-quality-assessment-inspect"
+        onClick={() => {if (!guard.locked()) setAssessmentOpen(true);}}>核查逐域人工质量评价</button>
+      {!assessmentOpen ? null : <LazyBoundary fallback={<p role="status">正在加载质量评价…</p>}>
         <ReviewQualityAssessment key={`assessment:${read.data.snapshot.id}:${read.data.snapshotHash}`} client={client}
           phase={phase} extraction={extraction} plan={read.data} writable={writable && read.status === 'ready' && !create.pending}
           onPending={value => {setAssessmentPending(value); onPending(value);}} />
-      </Suspense>}
+      </LazyBoundary>}
     </section>}
     {!editable ? null : <form className="flex flex-col gap-3" data-testid="artifact-review-quality-plan-form" onSubmit={event => {
       event.preventDefault();
-      if (busy.current || !editable || !complete || selected === undefined) return;
+      if (busy.current || !editable || draft.isLocked() || !complete || selected === undefined) return;
       const body = {projectId, corpusId, hitId, extractionId, expectedExtractionHash: extraction.snapshotHash, framework: selected,
         definition: {origin: 'user_declared' as const, documentationNote, domains: domains.map(({key: _key, ...domain}) => domain), overallJudgements: overall},
         reviewerId, reviewNote};
@@ -75,9 +81,11 @@ export function ReviewQualityPlan({client, protocol, phase, extraction, writable
       let requestId = requests.current.get(signature);
       if (requestId === undefined) {requestId = crypto.randomUUID(); requests.current.set(signature, requestId);}
       busy.current = true; onPending(true);
-      void create.run({...body, requestId}).then(result => {busy.current = false; onPending(false); if (result.ok) read.reload();});
+      void create.run({...body, requestId}).then(result => {
+        busy.current = false; onPending(false); if (result.ok) {draft.saved(); read.reload();}
+      });
     }}>
-      <fieldset disabled={create.pending} className="flex flex-col gap-3">
+      <fieldset disabled={create.pending || draft.locked} className="flex flex-col gap-3">
         <label className="flex flex-col gap-1 text-muted">协议声明的质量框架
           <select required aria-label="协议声明的质量框架" className={`${formInputClass} border-[0.5px]`} value={frameworkIndex}
             onChange={event => {setFrameworkIndex(event.target.value); create.reset();}}>
@@ -103,6 +111,11 @@ export function ReviewQualityPlan({client, protocol, phase, extraction, writable
         <button type="submit" className={`${formPrimaryButtonClass} border-[0.5px] self-start`} disabled={!complete}
           data-testid="artifact-review-quality-plan-create">确认并冻结质量框架</button>
       </fieldset>
+      <ArtifactDraftDiscard dirty={draft.dirty} testId="artifact-review-quality-plan-discard" onDiscard={() => {
+        const next = {frameworkIndex: '', reviewerId: '', reviewNote: '', documentationNote: '', domains: [blankQualityDomain()], overall: ['', '']};
+        setFrameworkIndex(''); setReviewerId(''); setReviewNote(''); setDocumentationNote(''); setDomains(next.domains); setOverall(next.overall);
+        create.reset(); draft.reset(next);
+      }} />
     </form>}
     {create.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{create.error}</p>}
   </section>;

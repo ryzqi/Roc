@@ -1,4 +1,5 @@
-import {lazy, Suspense, useRef, useState} from 'react';
+import { useRef, useState } from 'react';
+import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
 import type {ResearchEvidence} from '../../shared/types';
 import type {ResearchSourceLocator} from '../../shared/schemas/research-source-locator';
 import type {RocClient} from '../shared/roc-client';
@@ -6,8 +7,8 @@ import {useAsyncResource} from '../app/use-async-resource';
 import {ErrorBar} from '../shell/ErrorBar';
 import {documentContentHash} from '../literature/document-content-hash';
 
-const PaperPdfView = lazy(() => import('../literature/PaperPdfView'));
-const PaperBlockAsset = lazy(() => import('../literature/PaperBlockAsset'));
+const PaperPdfView = retryableLazy(() => import('../literature/PaperPdfView'));
+const PaperBlockAsset = retryableLazy(() => import('../literature/PaperBlockAsset'));
 
 /** Read the captured source version, including its context; never replace it with the current parse. */
 export function ArtifactDocumentSource({client, evidence, locator}: {
@@ -63,7 +64,7 @@ export function ArtifactDocumentSource({client, evidence, locator}: {
       </label>}
       {loaded.document.mediaType !== 'application/pdf' ? <p role="note" className="text-muted">此来源没有 PDF 原文，以下为保存版本的解析块。</p> :
         <div className="h-[480px] min-h-0 min-w-0 border-[0.5px] border-line">
-          <Suspense fallback={<p role="status" className="p-2 text-muted">加载原文阅读器…</p>}>
+          <LazyBoundary fallback={<p role="status" className="p-2 text-muted">加载原文阅读器…</p>}>
             <PaperPdfView client={client} projectId={evidence.projectId} document={loaded.document} parsed={loaded.parsed}
               canAnnotate={false}
               selection={{blockId: selected.blockId, locationIndex: selected.locationIndex}}
@@ -72,16 +73,16 @@ export function ArtifactDocumentSource({client, evidence, locator}: {
                 blockRef.current?.focus({preventScroll: true});
                 blockRef.current?.scrollIntoView({block: 'center'});
               }}/>
-          </Suspense>
+          </LazyBoundary>
         </div>}
       <div ref={blockRef} tabIndex={-1} data-testid="artifact-document-source-block"
         className="min-w-0 focus-visible:outline-2 focus-visible:outline-accent">
         <p className="break-words text-muted">{block.label}，{block.locator}</p>
         <div className={comparingAsset ? 'grid grid-cols-2 items-start gap-2' : undefined}>
         <p className="whitespace-pre-wrap break-words text-ink">{block.text}</p>
-        {!comparingAsset ? null : <Suspense fallback={<p role="status" className="text-muted">加载固定解析图像…</p>}>
+        {!comparingAsset ? null : <LazyBoundary fallback={<p role="status" className="text-muted">加载固定解析图像…</p>}>
           <PaperBlockAsset client={client} projectId={evidence.projectId} document={loaded.document} parsed={loaded.parsed} block={block}/>
-        </Suspense>}
+        </LazyBoundary>}
         </div>
         {block.imageAssetId !== null ?
           <button type="button" aria-expanded={comparingAsset} data-testid="artifact-document-source-asset-toggle"

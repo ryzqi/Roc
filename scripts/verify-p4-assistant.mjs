@@ -257,12 +257,16 @@ async function verifyCrashCheckpointResume(threadId, projectId) {
   await page.click('[data-testid="sidebar-tab-sessions"]');
   await waitForSessionRow(page, threadId, '5 恢复');
   await page.click(`[data-testid="session-row-${threadId}"]`);
-  await page.waitForSelector('[data-testid="assistant-activity-task-acceptance"]', { timeout: 30_000 });
-  const latestAcceptance = page.locator('[data-testid="assistant-activity-task-acceptance"]').last();
-  if ((await latestAcceptance.getAttribute('open')) === null) await latestAcceptance.locator('summary').click();
   const checkpointResume = page.locator('[data-testid="assistant-task-resume-checkpoint"]');
   await checkpointResume.waitFor({ state: 'visible', timeout: 30_000 });
-  assertCheck('5 恢复', '重启后的持久验收卡允许检查点续跑', true, restartRunId);
+  const restartAcceptance = await page.evaluate(async (runId) => {
+    const replay = await window.roc.chat.getRunEvents({runId, afterSequence: 0});
+    if (!replay.ok) throw new Error(replay.error.message);
+    return replay.data.events.map(entry => entry.event)
+      .filter(event => event.type === 'task_acceptance').at(-1)?.report ?? null;
+  }, restartRunId);
+  assertCheck('5 恢复', '重启后的持久回执允许检查点续跑',
+    restartAcceptance?.runId === restartRunId && restartAcceptance.checkpointResumeAvailable, restartRunId);
   await checkpointResume.click();
   await page.waitForTimeout(1_000);
   const checkpointDispatch = await page.evaluate(async ({ activeThreadId, runId }) => {
@@ -465,8 +469,17 @@ try {
   const toolDone = await waitForTranscript(page, 'P4-TOOL-DONE', 30_000);
   assertCheck('1 真跑一轮', '结束态为 completed', (await currentStatus(page)) === 'completed', '');
   assertCheck('1 真跑一轮', '文本流式渲染出结束段', toolDone.includes('P4-TOOL-DONE'), '');
-  const acceptanceVisible = await page.locator('[data-testid="assistant-activity-task-acceptance"]').textContent();
-  assertCheck('1 真跑一轮', '轻量问答验收进入助手时间线', acceptanceVisible?.includes('已满足') === true, acceptanceVisible ?? '');
+  const firstAcceptance = await page.evaluate(async () => {
+    const runId = window.__p4FinishedRuns.at(-1);
+    if (typeof runId !== 'string') throw new Error('The first P4 run has no completion receipt.');
+    const replay = await window.roc.chat.getRunEvents({runId, afterSequence: 0});
+    if (!replay.ok) throw new Error(replay.error.message);
+    return replay.data.events.map(entry => entry.event)
+      .filter(event => event.type === 'task_acceptance').at(-1)?.report ?? null;
+  });
+  assertCheck('1 真跑一轮', '轻量问答持久验收满足，助手显示真实完成态',
+    firstAcceptance?.status === 'satisfied' && (await currentStatus(page)) === 'completed',
+    `acceptance=${firstAcceptance?.status ?? 'missing'}`);
 
   await expandBlock(page, 'assistant-activity-tool');
   const toolBody = (await page.locator('[data-testid="assistant-tool-body"]').textContent()) ?? '';

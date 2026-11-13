@@ -62,6 +62,9 @@ export type McpStore = {
   reload: () => void;
   editingId: string | null;
   draft: McpDraft | null;
+  dirty: boolean;
+  busy: boolean;
+  isBusy: () => boolean;
   issues: McpDraftIssue[];
   startCreate: () => void;
   startEdit: (server: McpServerConfig) => void;
@@ -152,6 +155,21 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
   const [testPending, setTestPending] = useState(false);
   const [presetPending, setPresetPending] = useState(false);
   const [testResults, setTestResults] = useState<Record<string, McpServerTestResult>>({});
+  const mutationLock = useRef(false);
+  const baseline = useRef<McpDraft | null>(null);
+  const lifecycle = useRef({ client, active: true });
+  if (lifecycle.current.client !== client) {
+    lifecycle.current.active = false;
+    lifecycle.current = { client, active: true };
+    mutationLock.current = false;
+  }
+  useEffect(() => {
+    const session = lifecycle.current;
+    session.active = true;
+    return () => { session.active = false; };
+  }, [client]);
+  const busy = pending || togglePending || removePending || testPending || presetPending || approvalPending;
+  const dirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(baseline.current);
 
   const refreshResource = useCallback(() => {
     void resource.mutate().catch(() => undefined);
@@ -250,30 +268,39 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
   const issues = useMemo(() => (draft === null ? [] : validateMcpDraft(draft)), [draft]);
 
   const setDraft = useCallback((next: McpDraft) => {
+    if (mutationLock.current) return;
     setDraftState(next);
     setMutationError(null);
   }, []);
 
   const startCreate = useCallback(() => {
+    if (mutationLock.current) return;
     setEditingId(null);
-    setDraftState(emptyMcpDraft());
+    const next = emptyMcpDraft();
+    baseline.current = next;
+    setDraftState(next);
     setMutationError(null);
   }, []);
 
   const startEdit = useCallback((server: McpServerConfig) => {
+    if (mutationLock.current) return;
     setEditingId(server.id);
-    setDraftState(draftFromServer(server));
+    const next = draftFromServer(server);
+    baseline.current = next;
+    setDraftState(next);
     setMutationError(null);
   }, []);
 
   const cancelEdit = useCallback(() => {
+    if (mutationLock.current) return;
     setEditingId(null);
+    baseline.current = null;
     setDraftState(null);
     setMutationError(null);
   }, []);
 
   const save = useCallback(async (): Promise<boolean> => {
-    if (draft === null || issues.length > 0) {
+    if (mutationLock.current || draft === null || issues.length > 0) {
       return false;
     }
     const existing = (config?.servers ?? []).find((server) => server.id === draft.id.trim()) ?? null;
@@ -282,17 +309,23 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
       setMutationError(`id ${draft.id.trim()} 已被占用；换成别的 id，或先选中它再编辑。`);
       return false;
     }
+    mutationLock.current = true;
+    const session = lifecycle.current;
     setPending(true);
     setMutationError(null);
     try {
       const result = await upsertMcpServer(client, toServerConfig(draft, existing));
+      if (!session.active) return false;
       if (!result.ok) {
         setMutationError(result.error.message);
         return false;
       }
       await resource.mutate((current) => upsertServerInMcpSnapshot(current, result.data), { revalidate: false });
+      if (!session.active) return false;
       setEditingId(result.data.id);
-      setDraftState(draftFromServer(result.data));
+      const next = draftFromServer(result.data);
+      baseline.current = next;
+      setDraftState(next);
       setTestResults((current) => {
         const next = { ...current };
         delete next[result.data.id];
@@ -303,34 +336,45 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
       notifySettingsChanged();
       return true;
     } catch (caught) {
-      setMutationError(errorMessage(caught));
+      if (session.active) setMutationError(errorMessage(caught));
       return false;
     } finally {
-      setPending(false);
+      if (session.active) {
+        mutationLock.current = false;
+        setPending(false);
+      }
     }
   }, [client, config, draft, editingId, issues.length, reloadPreview, resource.mutate]);
 
   const remove = useCallback(
     async (serverId: string): Promise<boolean> => {
+      if (mutationLock.current) return false;
+      mutationLock.current = true;
+      const session = lifecycle.current;
       setRemovePending(true);
       setMutationError(null);
       try {
         const result = await deleteMcpServer(client, serverId);
+        if (!session.active) return false;
         if (!result.ok) {
           setMutationError(result.error.message);
           return false;
         }
         if (editingId === serverId) {
+          baseline.current = null;
           setEditingId(null);
           setDraftState(null);
         }
         notifySettingsChanged();
         return true;
       } catch (caught) {
-        setMutationError(errorMessage(caught));
+        if (session.active) setMutationError(errorMessage(caught));
         return false;
       } finally {
-        setRemovePending(false);
+        if (session.active) {
+          mutationLock.current = false;
+          setRemovePending(false);
+        }
       }
     },
     [client, editingId]
@@ -338,12 +382,16 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
 
   const toggle = useCallback(
     async (serverId: string, enabled: boolean): Promise<boolean> => {
+      if (mutationLock.current) return false;
+      mutationLock.current = true;
+      const session = lifecycle.current;
       setTogglePending(true);
       setMutationError(null);
       // Move the box now; the config read below makes the backend the authority again.
       setFlag(serverId, enabled);
       try {
         const result = await setMcpServerEnabled(client, { id: serverId, enabled });
+        if (!session.active) return false;
         if (!result.ok) {
           setMutationError(result.error.message);
           // The toggle moved optimistically; a refusal must put it back to the snapshot's value.
@@ -354,11 +402,16 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
         notifySettingsChanged();
         return true;
       } catch (caught) {
-        clearFlags();
-        setMutationError(errorMessage(caught));
+        if (session.active) {
+          clearFlags();
+          setMutationError(errorMessage(caught));
+        }
         return false;
       } finally {
-        setTogglePending(false);
+        if (session.active) {
+          mutationLock.current = false;
+          setTogglePending(false);
+        }
       }
     },
     [client, setFlag, clearFlags, reloadPreview]
@@ -366,10 +419,14 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
 
   const test = useCallback(
     async (serverId: string): Promise<boolean> => {
+      if (mutationLock.current) return false;
+      mutationLock.current = true;
+      const session = lifecycle.current;
       setTestPending(true);
       setMutationError(null);
       try {
         const result = await testMcpServer(client, serverId);
+        if (!session.active) return false;
         if (!result.ok) {
           setMutationError(result.error.message);
           return false;
@@ -378,49 +435,70 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
         reload();
         return true;
       } catch (caught) {
-        setMutationError(errorMessage(caught));
+        if (session.active) setMutationError(errorMessage(caught));
         return false;
       } finally {
-        setTestPending(false);
+        if (session.active) {
+          mutationLock.current = false;
+          setTestPending(false);
+        }
       }
     },
     [client, reload]
   );
 
   const preset = useCallback(async (): Promise<boolean> => {
+    if (mutationLock.current || dirty) return false;
+    mutationLock.current = true;
+    const session = lifecycle.current;
     setPresetPending(true);
     setMutationError(null);
     try {
       const result = await ensureExaPreset(client);
+      if (!session.active) return false;
       if (!result.ok) {
         setMutationError(result.error.message);
         return false;
       }
       setEditingId(result.data.id);
-      setDraftState(draftFromServer(result.data));
+      const next = draftFromServer(result.data);
+      baseline.current = next;
+      setDraftState(next);
       // `settings.get()` carries `mcpServers`, so a consumer's cached configuration is stale now.
       notifySettingsChanged();
       return true;
     } catch (caught) {
-      setMutationError(errorMessage(caught));
+      if (session.active) setMutationError(errorMessage(caught));
       return false;
     } finally {
-      setPresetPending(false);
+      if (session.active) {
+        mutationLock.current = false;
+        setPresetPending(false);
+      }
     }
-  }, [client]);
+  }, [client, dirty]);
 
   const approvalMode = useCallback(async (mode: McpServersConfig['approvalMode']): Promise<boolean> => {
+    if (mutationLock.current) return false;
+    mutationLock.current = true;
+    const session = lifecycle.current;
     setApprovalPending(true);
     setMutationError(null);
     try {
       const result = await setMcpApprovalMode(client, mode);
+      if (!session.active) return false;
       if (!result.ok) { setMutationError(result.error.message); return false; }
       notifySettingsChanged();
       return true;
     } catch (caught) {
-      setMutationError(errorMessage(caught));
+      if (session.active) setMutationError(errorMessage(caught));
       return false;
-    } finally { setApprovalPending(false); }
+    } finally {
+      if (session.active) {
+        mutationLock.current = false;
+        setApprovalPending(false);
+      }
+    }
   }, [client]);
 
   const previewCurrent = status === 'ready' && previewDataKey === previewKey
@@ -446,6 +524,9 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
       reload,
       editingId,
       draft,
+      dirty,
+      busy,
+      isBusy: () => mutationLock.current,
       issues,
       startCreate,
       startEdit,
@@ -474,6 +555,8 @@ export function useMcp(client: RocClient, enabledSkillIds: readonly string[] | n
       reload,
       editingId,
       draft,
+      dirty,
+      busy,
       issues,
       startCreate,
       startEdit,

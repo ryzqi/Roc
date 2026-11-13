@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { LazyBoundary, retryableLazy } from '../../shell/LazyBoundary';
 import { CheckCircle2, CirclePlay, LoaderCircle, XCircle } from 'lucide-react';
 import type { ChatTranscriptActivityBlock, ChatTranscriptSubagentBlock } from '../transcript';
 import { ActivityBlockShell, type ActivityTone } from './activity-shell';
@@ -25,7 +25,7 @@ import { ToolCallBlock } from './tool-call-block';
  * shared `ActivityBlockShell`, and nesting is expressed by a left border + indent
  * instead of a `--nested` modifier class.
  */
-const StreamingMarkdownView = lazy(async () => ({
+const StreamingMarkdownView = retryableLazy(async () => ({
   default: (await import('./streaming-markdown-view')).StreamingMarkdownView
 }));
 
@@ -69,9 +69,9 @@ function buildMetaChips(block: SubagentBlockModel): string[] {
 function renderSubagentBlock(block: ChatTranscriptSubagentBlock, isStreaming: boolean): React.JSX.Element {
   if (block.kind === 'text') {
     return (
-      <Suspense key={block.id} fallback={null}>
+      <LazyBoundary key={block.id} fallback={null}>
         <StreamingMarkdownView text={block.content} isStreaming={isStreaming} />
-      </Suspense>
+      </LazyBoundary>
     );
   }
   if (block.kind === 'reasoning') {

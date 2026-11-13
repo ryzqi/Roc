@@ -1,4 +1,5 @@
 import * as motion from 'motion/react-m';
+import { useRef } from 'react';
 import { BookOpen, FileText, Terminal } from 'lucide-react';
 import { canvasTabIds, surfaceFor, type CanvasTabId } from '../../shared/surfaces';
 import { tabIndicatorTransition } from '../shared/motion';
@@ -57,7 +58,7 @@ const TABS: ReadonlyArray<{ id: CanvasTabId; label: string; icon: typeof BookOpe
   canvasTabIds.map((id) => ({ id, label: surfaceFor(id).label, ...TAB_APPEARANCE[id] }));
 
 const TAB_BASE =
-  'relative flex h-[30px] shrink-0 items-center gap-1.5 rounded-control border px-3 whitespace-nowrap text-[length:var(--font-meta-size)] transition-colors duration-[var(--duration-fast)]';
+  'relative flex h-[30px] shrink-0 items-center gap-1.5 rounded-control border-[0.5px] px-3 whitespace-nowrap text-[length:var(--font-meta-size)] transition-colors duration-[var(--duration-fast)]';
 
 export function WorkspaceCanvas({
   activeTab,
@@ -65,25 +66,25 @@ export function WorkspaceCanvas({
   children,
   actions
 }: WorkspaceCanvasProps): React.JSX.Element {
+  const tabRefs = useRef<Partial<Record<CanvasTabId, HTMLButtonElement | null>>>({});
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
       return;
     }
+    const index = TABS.findIndex((tab) => tabRefs.current[tab.id]?.contains(event.target as Node));
+    if (index < 0) return;
     event.preventDefault();
-    const index = TABS.findIndex((tab) => tab.id === activeTab);
-    const base = index < 0 ? 0 : index;
-    const next = event.key === 'ArrowLeft' ? (base + TABS.length - 1) % TABS.length : (base + 1) % TABS.length;
-    onTabChange(TABS[next]!.id);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? TABS.length - 1
+      : event.key === 'ArrowLeft' ? (index + TABS.length - 1) % TABS.length : (index + 1) % TABS.length;
+    const nextTab = TABS[next]!.id;
+    onTabChange(nextTab);
+    tabRefs.current[nextTab]?.focus();
   };
 
   return (
     <div className="workspace-canvas-container flex h-full min-h-0 flex-col" data-testid="canvas">
-      <div
-        role="tablist"
-        aria-label="画布"
-        onKeyDown={onKeyDown}
-        className="no-scrollbar flex h-10 shrink-0 items-center gap-1 overflow-x-auto border-b-[0.5px] border-line px-3"
-      >
+      <div className="no-scrollbar flex h-10 shrink-0 items-center gap-1 overflow-x-auto border-b-[0.5px] border-line px-3">
+        <div role="tablist" aria-label="画布" onKeyDown={onKeyDown} className="flex items-center gap-1">
         {TABS.map((tab, index) => {
           const selected = tab.id === activeTab;
           const Icon = tab.icon;
@@ -95,6 +96,7 @@ export function WorkspaceCanvas({
           return (
             <button
               key={tab.id}
+              ref={(element) => { tabRefs.current[tab.id] = element; }}
               type="button"
               role="tab"
               aria-selected={selected}
@@ -103,7 +105,7 @@ export function WorkspaceCanvas({
               data-testid={`canvas-tab-${tab.id}`}
               className={
                 selected
-                  ? `${TAB_BASE} border-line-strong bg-surface font-semibold text-ink shadow-[var(--shadow-card)]`
+                  ? `${TAB_BASE} border-line-strong bg-surface font-semibold text-ink`
                   : `${TAB_BASE} border-transparent text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]`
               }
             >
@@ -128,6 +130,7 @@ export function WorkspaceCanvas({
             </button>
           );
         })}
+        </div>
         {actions === undefined ? null : <div className="ml-auto flex shrink-0 items-center gap-1 py-1">{actions}</div>}
       </div>
 

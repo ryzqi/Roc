@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {AlertTriangle} from 'lucide-react';
 import type {ZoteroReview} from '../../shared/schemas/research-zotero';
 import type {ZoteroSourceState} from '../../shared/schemas/research-zotero-source-state';
@@ -17,6 +17,8 @@ export function ZoteroSourceStatePanel({client, projectId, collectionKey, origin
     () => client.api.research.readZoteroSourceState(request), {label: '读取来源状态观察'});
   const observe = useAsyncAction(client.api.research.observeZoteroSource, {label: '检查当前来源'});
   const [observed, setObserved] = useState<ZoteroSourceState | null>(null);
+  const pending = useRef(false), mounted = useRef(true);
+  useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
   const state = observed ?? stored.data;
   const availability = {present: '来源存在', trashed: '来源在回收站', not_found: '来源未找到'};
   const membership = {not_requested: '未核对集合', listed: '仍在所选集合', not_listed: '已不在所选集合', unknown: '集合成员状态未知'};
@@ -24,8 +26,12 @@ export function ZoteroSourceStatePanel({client, projectId, collectionKey, origin
     newer: '对象版本已更新', version_conflict: '同版本内容不同'};
 
   async function check(): Promise<void> {
-    const result = await observe.run(request);
-    if (result.ok) setObserved(result.data);
+    if (!mounted.current || pending.current || stored.status === 'loading') return;
+    pending.current = true;
+    try {
+      const result = await observe.run(request);
+      if (mounted.current && result.ok) setObserved(result.data);
+    } finally {pending.current = false;}
   }
 
   return <section className="mt-2 flex flex-col gap-2 text-muted" aria-label="当前来源状态" data-testid="literature-zotero-source-state">

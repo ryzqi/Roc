@@ -64,6 +64,7 @@ export function ZenodoPanel({client,record,writable,onDirty,onPending}:{client:R
     </section>}
     {operations.status!=='ready'?null:<section className="flex min-w-0 flex-col gap-2" aria-label="远端操作历史"><h3>项目远端操作，共 {operations.data!.total} 项</h3>
       <ul>{operations.data!.records.map(value=><li key={value.id}><button type="button" className={`${button} h-auto max-w-full py-1 text-left break-words`} disabled={locked} onClick={()=>{
+        if(busy.current||locked)return;
         busy.current=true;reportPending(true);void choose.run(value).then(result=>{busy.current=false;if(!mounted.current)return;reportPending(false);if(!result.ok)return;setEditing(false);setPrepared(result.data);setSelected(value);});
       }}>{value.environment}，{zenodoStatusLabels[value.status]}，{value.id}</button></li>)}</ul>
       <div className="flex flex-wrap gap-2"><button type="button" className={button} disabled={locked||operationOffset===0} onClick={()=>setOperationOffset(Math.max(0,operationOffset-20))}>上一页操作</button><button type="button" className={button} disabled={locked||operations.data!.nextOffset===null} onClick={()=>setOperationOffset(operations.data!.nextOffset!)}>下一页操作</button></div>

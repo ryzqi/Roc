@@ -8,6 +8,7 @@ import type {ReviewProtocolDrafts} from './review-protocol-draft';
 import {ReviewProtocolEditor} from './ReviewProtocolEditor';
 import {ReviewSearchCorpus} from './ReviewSearchCorpus';
 import {ReviewReadonlyContent} from './ReviewReadonlyContent';
+import {useArtifactEditorGuard} from './artifact-editor-guard';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 type Selection = {kind: 'new'} | {kind: 'version'; versionId: string} | null;
@@ -20,6 +21,9 @@ export function ReviewInspector({client, request, writable, drafts, onClose}: {
   const [protocolPending, setProtocolPending] = useState(false);
   const [searchPending, setSearchPending] = useState(false);
   const pending = protocolPending || searchPending;
+  const guard = useArtifactEditorGuard();
+  const locked = guard.locked();
+  const select = (next: Selection): void => {if (!guard.locked()) setSelection(next);};
   const protocols = useAsyncResource(request.mode === 'readonly' ? null : `review:protocols:${request.projectId}`,
     () => client.api.research.listReviewProtocols({projectId: request.projectId, limit: 100}), {label: '读取综述协议'});
   const versionId = selection?.kind === 'version' ? selection.versionId : null;
@@ -35,15 +39,15 @@ export function ReviewInspector({client, request, writable, drafts, onClose}: {
       if (current === null) throw new Error('research_review_protocol_required');
       return client.api.research.getReviewProtocolHistory({projectId: request.projectId, protocolId: current.version.protocolId});
     }, {label: '读取协议修订历史'});
-  return <ModalShell open kind="drawer" title="综述核查" onClose={onClose} beforeClose={() => !pending}
+  return <ModalShell open kind="drawer" title="综述核查" onClose={onClose} beforeClose={() => !guard.busy()}
     widthClassName="w-[560px]" testId="artifact-inspector">
     <div className="flex min-w-0 flex-col gap-3 text-[length:var(--font-body-size)]" data-testid="artifact-review">
       {request.mode === 'readonly' ? <ReviewReadonlyContent client={client} link={request} /> : <>
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={button} disabled={pending || protocols.status === 'loading' || protocol.status === 'loading'}
-          data-testid="artifact-review-refresh" onClick={() => {protocols.reload(); protocol.reload();}}>刷新综述</button>
-        <button type="button" className={button} disabled={!writable || pending} data-testid="artifact-review-new"
-          onClick={() => setSelection({kind: 'new'})}>新建协议</button>
+        <button type="button" className={button} disabled={pending || locked || protocols.status === 'loading' || protocol.status === 'loading'}
+          data-testid="artifact-review-refresh" onClick={() => {if (!guard.locked()) {protocols.reload(); protocol.reload();}}}>刷新综述</button>
+        <button type="button" className={button} disabled={!writable || pending || locked} data-testid="artifact-review-new"
+          onClick={() => select({kind: 'new'})}>新建协议</button>
       </div>
       {!writable ? <p role="note">项目已归档，综述仅可阅读。</p> : null}
       {pending ? <p role="status">正在保存人工操作…</p> : null}
@@ -53,8 +57,8 @@ export function ReviewInspector({client, request, writable, drafts, onClose}: {
         {protocols.data!.length === 0 ? <p className="text-muted">尚无综述协议。</p> :
           <ul className="flex flex-col gap-1">{protocols.data!.map(item => <li key={item.version.protocolId}>
             <button type="button" className={`${button} h-auto w-full py-1 text-left break-words`}
-              disabled={pending} aria-pressed={item.version.id === versionId}
-              data-testid="artifact-review-protocol" onClick={() => setSelection({kind: 'version', versionId: item.version.id})}>
+              disabled={pending || locked} aria-pressed={item.version.id === versionId}
+              data-testid="artifact-review-protocol" onClick={() => select({kind: 'version', versionId: item.version.id})}>
               {item.version.body.question}<span className="ml-2 text-subtle">版本 {item.version.version}
                 {item.freeze === null ? ' 草稿' : ' 已冻结'}</span>
             </button>
@@ -68,8 +72,8 @@ export function ReviewInspector({client, request, writable, drafts, onClose}: {
         {history.error === null ? null : <p role="alert" className="break-words text-[var(--st-warn)]">{history.error}</p>}
         {history.status !== 'ready' ? null : <ul className="flex flex-col gap-1">
           {history.data!.map(item => <li key={item.version.id}>
-            <button type="button" className={button} disabled={pending} aria-pressed={item.version.id === versionId}
-              data-testid="artifact-review-history-version" onClick={() => setSelection({kind: 'version', versionId: item.version.id})}>
+            <button type="button" className={button} disabled={pending || locked} aria-pressed={item.version.id === versionId}
+              data-testid="artifact-review-history-version" onClick={() => select({kind: 'version', versionId: item.version.id})}>
               版本 {item.version.version}{item.freeze === null ? ' 草稿' : ' 已冻结'}{item.isLatest ? ' 当前' : ''}
             </button>
             <span className="ml-2 break-words text-muted">{item.version.deviationReason}</span>

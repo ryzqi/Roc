@@ -16,7 +16,11 @@ import { appRouteToSearch, normalizeAppRoute, readAppRoute, sameAppRoute, writeA
  * for the few transitions a user would expect Back to undo (entering a project).
  */
 
-export type NavigateOptions = { mode?: 'replace' | 'push' };
+export type NavigateOptions = {
+  mode?: 'replace' | 'push';
+  /** Related shell changes belong to the accepted navigation, after every guard releases it. */
+  onNavigated?: () => void;
+};
 
 export type AppRouteController = {
   route: AppRoute;
@@ -58,12 +62,14 @@ export function useAppRoute(): AppRouteController {
   const navigate = useCallback((next: AppRoute, options?: NavigateOptions) => {
     const normalized = normalizeAppRoute(next);
     if (sameAppRoute(routeRef.current, normalized)) {
+      options?.onNavigated?.();
       return;
     }
     requestNavigation(normalized, () => {
       writeAppRoute(normalized, options?.mode ?? 'replace');
       routeRef.current = normalized;
       setRoute(normalized);
+      options?.onNavigated?.();
     });
   }, []);
 

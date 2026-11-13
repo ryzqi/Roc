@@ -61,14 +61,16 @@ export function ModelPicker({
    * `pending === false && error === null` 这个初始状态会把浮层瞬间关掉。
    */
   const [submitted, setSubmitted] = useState(false);
+  const selectionPendingRef = useRef(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const manageRef = useRef<HTMLButtonElement | null>(null);
   const listId = useId();
 
   const close = useCallback((returnFocus: boolean) => {
     setOpen(false);
-    setSubmitted(false);
+    if (!selectionPendingRef.current) setSubmitted(false);
     if (returnFocus) {
       triggerRef.current?.focus();
     }
@@ -76,7 +78,12 @@ export function ModelPicker({
 
   // 写成功就关浮层并把焦点还给触发按钮；写失败就留在原地显示原因。
   useEffect(() => {
-    if (!open || !submitted || pending) {
+    if (!submitted || pending) {
+      return;
+    }
+    selectionPendingRef.current = false;
+    if (!open) {
+      setSubmitted(false);
       return;
     }
     if (error === null) {
@@ -113,9 +120,9 @@ export function ModelPicker({
     if (list === null) {
       return;
     }
-    const options = [...list.querySelectorAll<HTMLButtonElement>('[role="option"]')];
+    const options = [...list.querySelectorAll<HTMLButtonElement>('[role="option"]:not(:disabled)')];
     const selected = options.find((option) => option.getAttribute('aria-selected') === 'true');
-    (selected ?? options[0])?.focus();
+    (selected ?? options[0] ?? manageRef.current)?.focus();
   }, [open]);
 
   const moveFocus = (direction: -1 | 1): void => {
@@ -150,7 +157,7 @@ export function ModelPicker({
         onClick={() => {
           // 写入中不打开：`disabled` 会让焦点从触发按钮上掉下去（切换后刚把焦点还回来），
           // 所以这里只是忽略点击，按钮本身仍可聚焦。
-          if (pending) {
+          if (pending || selectionPendingRef.current) {
             return;
           }
           setOpen((current) => !current);
@@ -166,6 +173,7 @@ export function ModelPicker({
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
         aria-busy={pending}
+        aria-disabled={pending || submitted}
         aria-label={`默认模型：${label}`}
         title="切换默认模型"
         data-testid="assistant-model-settings"
@@ -222,6 +230,7 @@ export function ModelPicker({
           <div className="flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-2 py-1.5">
             <span className="text-subtle text-[length:var(--font-micro-size)]">默认模型</span>
             <button
+              ref={manageRef}
               type="button"
               onClick={() => {
                 close(false);
@@ -253,7 +262,9 @@ export function ModelPicker({
                         role="option"
                         aria-selected={selected}
                         disabled={!choice.enabled}
+                         aria-disabled={!choice.enabled || pending || submitted}
                         onClick={() => {
+                           if (pending || selectionPendingRef.current || !choice.enabled) return;
                           if (selected) {
                             close(true);
                             return;
@@ -261,7 +272,8 @@ export function ModelPicker({
                           // 选中**不**立即关浮层：写后端需要一次往返，失败原因要留在
                           // 发起写入的地方（关掉浮层再弹错误，等于让用户重新打开才知道
                           // 为什么没换成）。写完成后由下面的 effect 决定关还是不关。
-                          setSubmitted(true);
+                           selectionPendingRef.current = true;
+                           setSubmitted(true);
                           onSelect(choice.key);
                         }}
                         data-testid={`assistant-model-picker-option-${choice.key}`}

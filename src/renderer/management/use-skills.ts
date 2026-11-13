@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   BuiltinSkillsStatus,
   SkillFileEntry,
@@ -79,6 +79,8 @@ export type SkillsStore = {
   status: AsyncStatus;
   error: string | null;
   skills: SkillSnapshot[];
+  busy: boolean;
+  isBusy: () => boolean;
   reload: () => void;
   enabledIds: string[];
   /** `checked` for the row toggle: the pending intent, else the snapshot. */
@@ -106,6 +108,12 @@ export type SkillsStore = {
 };
 
 export function useSkills(client: RocClient): SkillsStore {
+  const operationLock = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
   const skillsResource = useSWR<SkillSnapshot[], IpcResourceError>(
     SKILLS_LIST_RESOURCE_KEY,
     () => loadSkillsList(client),
@@ -160,9 +168,13 @@ export function useSkills(client: RocClient): SkillsStore {
   const [builtinRestoreResult, setBuiltinRestoreResult] = useState<BuiltinSkillsStore['restore']['lastResult']>(null);
 
   const reload = useCallback(() => {
-    setFilesRevision((current) => current + 1);
-    void skillsResource.mutate().catch(() => undefined);
-  }, [skillsResource.mutate]);
+    if (mountedRef.current) setFilesRevision((current) => current + 1);
+    // Revalidate the shared list even if the initiating panel has closed. A fresh read also
+    // clears intent when SWR keeps the same data object because the snapshot is unchanged.
+    void skillsResource.mutate().then(() => {
+      if (mountedRef.current) clearFlags();
+    }).catch(() => undefined);
+  }, [skillsResource.mutate, clearFlags]);
 
   useEffect(() => {
     if (skillsResource.data !== undefined) {
@@ -327,6 +339,8 @@ export function useSkills(client: RocClient): SkillsStore {
 
   const checkBuiltin = useCallback(
     async (force = false): Promise<boolean> => {
+      if (!mountedRef.current || operationLock.current) return false;
+      operationLock.current = true;
       setBuiltinCheckPending(true);
       setBuiltinActionError(null);
       setBuiltinLastChanged(null);
@@ -334,9 +348,12 @@ export function useSkills(client: RocClient): SkillsStore {
       try {
         const result = await checkBuiltinSkills(client, { force });
         if (!result.ok) {
-          setBuiltinActionError(result.error.message);
+          if (mountedRef.current) setBuiltinActionError(result.error.message);
           return false;
         }
+        reload();
+        notifySettingsChanged();
+        if (!mountedRef.current) return false;
         setBuiltinSnapshot({
           schemaVersion: result.data.schemaVersion,
           autoUpdate: result.data.autoUpdate,
@@ -348,14 +365,13 @@ export function useSkills(client: RocClient): SkillsStore {
         if (result.data.errors.length > 0) {
           setBuiltinActionError(result.data.errors.join('；'));
         }
-        reload();
-        notifySettingsChanged();
         return result.data.errors.length === 0;
       } catch (caught) {
-        setBuiltinActionError(errorMessage(caught));
+        if (mountedRef.current) setBuiltinActionError(errorMessage(caught));
         return false;
       } finally {
-        setBuiltinCheckPending(false);
+        operationLock.current = false;
+        if (mountedRef.current) setBuiltinCheckPending(false);
       }
     },
     [client, reload]
@@ -363,10 +379,13 @@ export function useSkills(client: RocClient): SkillsStore {
 
   const setBuiltinAutoUpdate = useCallback(
     async (autoUpdate: boolean): Promise<boolean> => {
+      if (!mountedRef.current || operationLock.current) return false;
+      operationLock.current = true;
       setBuiltinAutoUpdatePending(true);
       setBuiltinActionError(null);
       try {
         const result = await setBuiltinSkillsAutoUpdate(client, { autoUpdate });
+        if (!mountedRef.current) return false;
         if (!result.ok) {
           setBuiltinActionError(result.error.message);
           return false;
@@ -374,10 +393,11 @@ export function useSkills(client: RocClient): SkillsStore {
         setBuiltinSnapshot(result.data);
         return true;
       } catch (caught) {
-        setBuiltinActionError(errorMessage(caught));
+        if (mountedRef.current) setBuiltinActionError(errorMessage(caught));
         return false;
       } finally {
-        setBuiltinAutoUpdatePending(false);
+        operationLock.current = false;
+        if (mountedRef.current) setBuiltinAutoUpdatePending(false);
       }
     },
     [client]
@@ -385,6 +405,8 @@ export function useSkills(client: RocClient): SkillsStore {
 
   const restoreBuiltin = useCallback(
     async (sourceId: string): Promise<boolean> => {
+      if (!mountedRef.current || operationLock.current) return false;
+      operationLock.current = true;
       setBuiltinRestorePending(true);
       setBuiltinRestoreSourceId(sourceId);
       setBuiltinActionError(null);
@@ -393,23 +415,27 @@ export function useSkills(client: RocClient): SkillsStore {
       try {
         const result = await restoreBuiltinSkillSource(client, { sourceId });
         if (!result.ok) {
-          setBuiltinActionError(result.error.message);
+          if (mountedRef.current) setBuiltinActionError(result.error.message);
           return false;
         }
+        reload();
+        notifySettingsChanged();
+        if (!mountedRef.current) return false;
         setBuiltinSnapshot(result.data);
         const restored = result.data.sources.find((source) => source.id === sourceId);
         if (restored !== undefined) {
           setBuiltinRestoreResult({ sourceName: restored.displayName, skillCount: restored.skillIds.length });
         }
-        reload();
-        notifySettingsChanged();
         return true;
       } catch (caught) {
-        setBuiltinActionError(errorMessage(caught));
+        if (mountedRef.current) setBuiltinActionError(errorMessage(caught));
         return false;
       } finally {
-        setBuiltinRestorePending(false);
-        setBuiltinRestoreSourceId(null);
+        operationLock.current = false;
+        if (mountedRef.current) {
+          setBuiltinRestorePending(false);
+          setBuiltinRestoreSourceId(null);
+        }
       }
     },
     [client, reload]
@@ -428,6 +454,7 @@ export function useSkills(client: RocClient): SkillsStore {
     [
       builtinStatus,
       builtinError,
+      builtinActionError,
       builtinSnapshot,
       reloadBuiltin,
       builtinCheckPending,
@@ -444,6 +471,8 @@ export function useSkills(client: RocClient): SkillsStore {
 
   const toggleEnabled = useCallback(
     async (skill: SkillSnapshot, enabled: boolean): Promise<boolean> => {
+      if (!mountedRef.current || operationLock.current) return false;
+      operationLock.current = true;
       setTogglePending(true);
       setMutationError(null);
       // Move the box now; the list read below makes the backend the authority again.
@@ -451,9 +480,11 @@ export function useSkills(client: RocClient): SkillsStore {
       try {
         const result = await setSkillEnabled(client, { id: skill.id, enabled });
         if (!result.ok) {
-          setMutationError(result.error.message);
           // The checkbox moved optimistically; a refusal must put it back to the snapshot's value.
-          clearFlags();
+          if (mountedRef.current) {
+            setMutationError(result.error.message);
+            clearFlags();
+          }
           return false;
         }
         reload();
@@ -461,39 +492,47 @@ export function useSkills(client: RocClient): SkillsStore {
         // settings save used to bump the revision — a toggle here would otherwise be invisible
         // until the next save (the P9 gate caught exactly that).
         notifySettingsChanged();
-        return true;
+        return mountedRef.current;
       } catch (caught) {
-        setMutationError(errorMessage(caught));
+        if (mountedRef.current) {
+          setMutationError(errorMessage(caught));
+          clearFlags();
+        }
         return false;
       } finally {
-        setTogglePending(false);
+        operationLock.current = false;
+        if (mountedRef.current) setTogglePending(false);
       }
     },
-    [client, setFlag, reload]
+    [client, setFlag, clearFlags, reload]
   );
 
   const importFrom = useCallback(
     async (sourcePath: string): Promise<boolean> => {
+      if (!mountedRef.current || operationLock.current) return false;
+      operationLock.current = true;
       setImportPending(true);
       setMutationError(null);
       try {
         const result = await importSkill(client, { sourcePath: sourcePath.trim() });
         if (!result.ok) {
-          setMutationError(result.error.message);
+          if (mountedRef.current) setMutationError(result.error.message);
           return false;
         }
+        reload();
+        notifySettingsChanged();
+        if (!mountedRef.current) return false;
         setLastImported(result.data);
         setSelectedId(result.data.id);
         setDirPathState('');
         setPreviewPath(null);
-        reload();
-        notifySettingsChanged();
         return true;
       } catch (caught) {
-        setMutationError(errorMessage(caught));
+        if (mountedRef.current) setMutationError(errorMessage(caught));
         return false;
       } finally {
-        setImportPending(false);
+        operationLock.current = false;
+        if (mountedRef.current) setImportPending(false);
       }
     },
     [client, reload]
@@ -501,32 +540,40 @@ export function useSkills(client: RocClient): SkillsStore {
 
   const remove = useCallback(
     async (skillId: string): Promise<boolean> => {
+      if (!mountedRef.current || operationLock.current) return false;
+      operationLock.current = true;
       setRemovePending(true);
       setMutationError(null);
       try {
         const result = await deleteSkill(client, skillId);
         if (!result.ok) {
-          setMutationError(result.error.message);
+          if (mountedRef.current) setMutationError(result.error.message);
           return false;
         }
         reload();
         notifySettingsChanged();
-        return true;
+        return mountedRef.current;
       } catch (caught) {
-        setMutationError(errorMessage(caught));
+        if (mountedRef.current) setMutationError(errorMessage(caught));
         return false;
       } finally {
-        setRemovePending(false);
+        operationLock.current = false;
+        if (mountedRef.current) setRemovePending(false);
       }
     },
     [client, reload]
   );
+
+  const busy = togglePending || importPending || removePending || builtinCheckPending
+    || builtinAutoUpdatePending || builtinRestorePending;
 
   return useMemo(
     () => ({
       status,
       error,
       skills,
+      busy,
+      isBusy: () => operationLock.current,
       reload,
       enabledIds,
       skillEnabled: (skill: SkillSnapshot) => flagValueFor(skill.id, skill.enabled),
@@ -555,6 +602,8 @@ export function useSkills(client: RocClient): SkillsStore {
       status,
       error,
       skills,
+      busy,
+      flagValueFor,
       reload,
       enabledIds,
       selectedId,

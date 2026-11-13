@@ -39,6 +39,7 @@ before(async () => {
     let generation=0;
     window.mount=input=>flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
       <Harness key={++generation} initial={input}/></LazyMotion></MotionConfig>));
+    window.unmount=()=>flushSync(()=>root.render(null));
   `, style: 'body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}'});
   writeFileSync(join(directory, 'main.cjs'), `const {app,BrowserWindow}=require('electron');
     app.setPath('userData',${JSON.stringify(join(directory, 'data'))});
@@ -64,6 +65,7 @@ before(async () => {
   await page.waitForFunction(() => typeof mount === 'function');
 });
 after(async () => {
+  if (page !== undefined && !page.isClosed()) await page.evaluate(() => window.unmount?.());
   try {await app?.close();} finally {
     for (const f of fixtures) await f.dispose(); api?.dispose();
     if (directory) rmSync(directory, {recursive: true, force: true});
@@ -198,8 +200,18 @@ test('opt-in actual figure drawer preserves mappings across pages and retries ex
     assert.equal(await page.getByTestId(id).isDisabled(), true, id);
   }
   assert.equal(await page.getByRole('combobox', {name: '场景标记', exact: true}).isDisabled(), true);
-  await page.getByTestId('artifact-inspector-close').click(); await page.keyboard.press('Escape');
+  await page.getByTestId('artifact-inspector-close').click();
+  await page.getByTestId('artifact-draft-discard-panel').waitFor();
+  await page.getByTestId('artifact-draft-discard-cancel').click();
+  await page.getByTestId('artifact-draft-discard-panel').waitFor({state:'detached'});
+  await page.keyboard.press('Escape');
+  await page.getByTestId('artifact-draft-discard-panel').waitFor();
+  await page.getByTestId('artifact-draft-discard-cancel').click();
+  await page.getByTestId('artifact-draft-discard-panel').waitFor({state:'detached'});
   await page.getByTestId('artifact-inspector-scrim').click({position: {x: 5, y: 5}});
+  await page.getByTestId('artifact-draft-discard-panel').waitFor();
+  await page.getByTestId('artifact-draft-discard-cancel').click();
+  await page.getByTestId('artifact-draft-discard-panel').waitFor({state:'detached'});
   assert.equal(await fields().count(), 1);
   await fields().getByRole('spinbutton', {name: '绝对容差', exact: true}).fill('');
   await page.getByTestId('artifact-figure-consistency-add').click();

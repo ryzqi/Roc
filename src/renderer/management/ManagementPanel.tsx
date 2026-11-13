@@ -5,6 +5,8 @@ import { useManagement } from './management-scope';
 import { MANAGEMENT_LOADING_SUMMARIES, MANAGEMENT_TABS, ManagementSectionBody, ManagementTabStrip, managementSummary } from './management-shell-parts';
 import type { ManagementTabId } from './use-management-stores';
 import { useManagementStores } from './management-stores-provider';
+import { discardManagementDrafts, managementDraftState } from './management-draft-state';
+import { requestManagementEditorChange } from './management-interactions';
 
 /**
  * Management drawer (P1 shell, P9 content).
@@ -45,22 +47,25 @@ export function ManagementPanel({
 }: ManagementPanelProps): React.JSX.Element {
   const scope = useManagement();
   const summaries = useManagementStores((stores) => stores.summaries);
-  const memory = useManagementStores((stores) => stores.memory);
+  const stores = useManagementStores((stores) => stores);
+  const drafts = managementDraftState(stores);
   const visibleSummaries = summaries ?? MANAGEMENT_LOADING_SUMMARIES;
   const tab = MANAGEMENT_TABS.some((entry) => entry.id === activeTab) ? activeTab : 'memory';
   const [discardOpen, setDiscardOpen] = useState(false);
 
   /**
-   * Unsaved memory drafts are never dropped silently.
+   * Unsaved management drafts are never dropped silently.
    *
-   * The drawer and canvas now share one scope-owned memory draft store. Leaving the drawer with
+   * The drawer and canvas share one scope-owned draft store. Leaving the drawer with
    * edits still asks first, and discarding clears the same draft both surfaces display.
    */
   const beforeClose = (): boolean => {
-    if (memory === null || memory.dirtyCount === 0) {
-      return true;
-    }
-    setDiscardOpen(true);
+    requestManagementEditorChange(() => {
+      const current = managementDraftState(stores);
+      if (current.busy) return;
+      if (current.sections.length === 0) onClose();
+      else setDiscardOpen(true);
+    });
     return false;
   };
 
@@ -95,18 +100,20 @@ export function ManagementPanel({
     </ModalShell>
 
     <ConfirmDialog
-      open={discardOpen}
-      title="放弃未保存的记忆改动？"
-      message={`有 ${memory?.dirtyCount ?? 0} 份记忆文件尚未保存。`}
+      open={open && discardOpen}
+      title="放弃未保存的管理改动？"
+      message={`${drafts.sections.join('、')} 尚未保存。`}
       detail="放弃后改动不会保存。"
       confirmLabel="放弃修改"
       cancelLabel="继续编辑"
       tone="destructive"
+      confirmDisabled={drafts.busy}
       testId="mgmt-discard"
       onCancel={() => setDiscardOpen(false)}
       onConfirm={() => {
+        if (managementDraftState(stores).busy) return;
         setDiscardOpen(false);
-        memory?.discardAll();
+        discardManagementDrafts(stores);
         onClose();
       }}
     />

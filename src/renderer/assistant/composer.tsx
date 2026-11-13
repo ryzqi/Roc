@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUp, Image as ImageIcon, Loader2, Paperclip, Square, X } from 'lucide-react';
+import { errorMessage } from '../app/loaded-state';
 import type { ChatImageAttachment, ChatRunMode } from '../../shared/types';
 import type { AssistantComposerDraft, AssistantComposerDraftUpdater } from './composer-draft';
 import {
@@ -94,6 +95,7 @@ export type AssistantComposerProps = {
   /** False when the current default model cannot take images (or no model is configured). */
   imageInputSupported: boolean;
   sending: boolean;
+  stopping?: boolean;
   running: boolean;
   /**
    * The run is suspended on an **approval** interrupt: the decision belongs to the card, so the
@@ -146,6 +148,16 @@ const MODES: Array<{ id: ChatRunMode; label: string }> = [
 
 const MAX_TEXTAREA_HEIGHT = 200;
 
+function attachmentErrorMessage(caught: unknown): string {
+  const message = errorMessage(caught);
+  switch (message) {
+    case 'chat_image_too_many': return '最多添加 4 张图片。';
+    case 'chat_image_too_large': return '每张图片不能超过 5 MB。';
+    case 'chat_image_unsupported_type': return '支持 PNG、JPEG 和 WebP 图片。';
+    default: return message;
+  }
+}
+
 export function AssistantComposer({
   mode,
   onModeChange,
@@ -155,6 +167,7 @@ export function AssistantComposer({
   onDraftChange,
   imageInputSupported,
   sending,
+  stopping = false,
   running,
   suspended = false,
   replyMode,
@@ -172,6 +185,14 @@ export function AssistantComposer({
   const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
   const [draggingFiles, setDraggingFiles] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [readingAttachments, setReadingAttachments] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const scopeRef = useRef({ onDraftChange, active: true, reading: false, submitting: false });
+  if (scopeRef.current.onDraftChange !== onDraftChange) {
+    scopeRef.current = { onDraftChange, active: true, reading: false, submitting: false };
+  }
+  const scope = scopeRef.current;
+  const sendPending = sending || submitting;
   const seedNonceRef = useRef<number | null>(null);
   const compositionRef = useRef(false);
   const compositionEndedAt = useRef(Number.NEGATIVE_INFINITY);
@@ -184,6 +205,14 @@ export function AssistantComposer({
     () => parseSlashSkillCommand(text, skills.map((skill) => skill.id)),
     [skills, text]
   );
+
+  useEffect(() => {
+    scope.active = true;
+    setReadingAttachments(false);
+    setSubmitting(false);
+    setAttachmentError(null);
+    return () => { scope.active = false; };
+  }, [scope]);
 
   // A hand-off from another surface replaces the draft once per nonce.
   useEffect(() => {
@@ -230,7 +259,8 @@ export function AssistantComposer({
 
   const addFiles = useCallback(
     async (files: readonly File[], source: 'clipboard' | 'drop'): Promise<void> => {
-      if (inputLocked || sending) return;
+      const isCurrent = (): boolean => scopeRef.current === scope && scope.active;
+      if (!isCurrent() || inputLocked || sending || scope.submitting || scope.reading) return;
       if (!imageInputSupported) {
         setAttachmentError('当前模型不支持图片输入，请在设置里选择支持图片的模型。');
         return;
@@ -239,41 +269,63 @@ export function AssistantComposer({
       if (candidates.length === 0) {
         return;
       }
+      scope.reading = true;
+      setReadingAttachments(true);
       try {
         validateImageAttachmentSelection([...attachments, ...candidates]);
         const created: RendererImageAttachment[] = [];
         for (const file of candidates) {
           created.push(await createFileImageAttachment(file, source));
+          if (!isCurrent()) return;
         }
-        onDraftChange((current) => ({ ...current, attachments: [...current.attachments, ...created] }));
+        onDraftChange((current) => {
+          const nextAttachments = [...current.attachments, ...created];
+          validateImageAttachmentSelection(nextAttachments);
+          return { ...current, attachments: nextAttachments };
+        });
         setAttachmentError(null);
-      } catch (error) {
-        setAttachmentError(error instanceof Error ? error.message : '图片附件无法读取。');
+      } catch (caught) {
+        if (isCurrent()) setAttachmentError(attachmentErrorMessage(caught));
+      } finally {
+        scope.reading = false;
+        if (isCurrent()) setReadingAttachments(false);
       }
     },
-    [attachments, imageInputSupported, inputLocked, onDraftChange, sending]
+    [attachments, imageInputSupported, inputLocked, onDraftChange, scope, sending]
   );
 
   const submit = useCallback(async (): Promise<void> => {
-    if (sending || inputLocked) {
+    const isCurrent = (): boolean => scopeRef.current === scope && scope.active;
+    if (!isCurrent() || sending || inputLocked || scope.submitting || scope.reading) {
       return;
     }
     const parsed = parseSlashSkillCommand(text, skills.map((skill) => skill.id));
     const payload = parsed.kind === 'ok' ? parsed.input : text;
-    if (payload.trim().length === 0 && attachments.length === 0) {
+    if (payload.trim().length === 0) {
       return;
     }
-    const ok = await onSend({
-      text: payload,
-      attachments: attachments.map(({ previewUrl: _previewUrl, ...attachment }) => attachment),
-      explicitSkillIds: parsed.kind === 'ok' ? parsed.explicitSkillIds : []
-    });
-    if (ok) {
-      onDraftChange(() => ({ text: '', attachments: [] }));
-      setCaret(0);
-      setAttachmentError(null);
+    const submittedDraft = draft;
+    scope.submitting = true;
+    setSubmitting(true);
+    setAttachmentError(null);
+    try {
+      const ok = await onSend({
+        text: payload,
+        attachments: attachments.map(({ previewUrl: _previewUrl, ...attachment }) => attachment),
+        explicitSkillIds: parsed.kind === 'ok' ? parsed.explicitSkillIds : []
+      });
+      if (!isCurrent()) return;
+      if (ok) {
+        onDraftChange((current) => current === submittedDraft ? { text: '', attachments: [] } : current);
+        setAttachmentError(null);
+      }
+    } catch (caught) {
+      if (isCurrent()) setAttachmentError(errorMessage(caught));
+    } finally {
+      scope.submitting = false;
+      if (isCurrent()) setSubmitting(false);
     }
-  }, [attachments, inputLocked, onDraftChange, onSend, sending, skills, text]);
+  }, [attachments, draft, inputLocked, onDraftChange, onSend, scope, sending, skills, text]);
 
   const suggestionItems =
     suggestionsDismissed || trigger === null
@@ -346,7 +398,7 @@ export function AssistantComposer({
               <span className="max-w-[140px] truncate">{attachment.name}</span>
               <button
                 type="button"
-                disabled={inputLocked || sending}
+                disabled={inputLocked || sendPending || readingAttachments}
                 aria-label={`移除附件 ${attachment.name}`}
                 onClick={() =>
                   onDraftChange((current) => ({
@@ -362,6 +414,13 @@ export function AssistantComposer({
           ))}
         </div>
       )}
+
+      {readingAttachments ? (
+        <p role="status" className="mb-1 flex items-center gap-1 text-muted text-[length:var(--font-micro-size)]">
+          <Loader2 size={11} aria-hidden="true" className="animate-spin" />
+          正在读取图片…
+        </p>
+      ) : null}
 
       {attachmentError === null ? null : (
         <p role="alert" className="mb-1 text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
@@ -415,7 +474,7 @@ export function AssistantComposer({
             ref={textareaRef}
             rows={2}
             value={text}
-            disabled={inputLocked || sending}
+            disabled={inputLocked || sendPending}
             role="combobox"
             aria-label="给助手的指令"
             aria-describedby="assistant-composer-hint"
@@ -513,7 +572,7 @@ export function AssistantComposer({
               className="flex shrink-0 items-center gap-0.5"
               data-testid="assistant-composer-mode"
               onKeyDown={(event) => {
-                if (inputLocked || sending) return;
+                if (inputLocked || sendPending) return;
                 if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
                 event.preventDefault();
                 const currentIndex = MODES.findIndex((item) => item.id === mode);
@@ -534,7 +593,7 @@ export function AssistantComposer({
                     role="radio"
                     aria-checked={selected}
                     tabIndex={selected ? 0 : -1}
-                    disabled={inputLocked || sending}
+                    disabled={inputLocked || sendPending}
                     onClick={() => onModeChange(item.id)}
                     data-testid={`assistant-composer-mode-${item.id}`}
                     className={
@@ -555,7 +614,7 @@ export function AssistantComposer({
                   aria-label="添加图片"
                   title={imageInputSupported ? '添加图片（也可直接粘贴）' : '当前模型不支持图片输入'}
                   data-testid="assistant-composer-attach"
-                  disabled={inputLocked || sending || !imageInputSupported}
+                  disabled={inputLocked || sendPending || readingAttachments || !imageInputSupported}
                   onClick={() => {
                     const input = document.createElement('input');
                     input.type = 'file';
@@ -582,23 +641,26 @@ export function AssistantComposer({
                 ) : (
                   <button
                     type="button"
-                    onClick={onStop}
+                    onClick={() => { if (!stopping) onStop(); }}
+                    aria-disabled={stopping}
+                    aria-busy={stopping}
                     data-testid="assistant-composer-stop"
                     className="flex h-[var(--control-height)] items-center gap-1 rounded-control border-[0.5px] border-line px-3 text-[var(--st-warn)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
                   >
-                    <Square size={11} aria-hidden="true" />
-                    停止
+                    {stopping ? <Loader2 size={11} aria-hidden="true" className="animate-spin" /> : <Square size={11} aria-hidden="true" />}
+                    {stopping ? '正在请求停止' : '停止'}
                   </button>
                 )
               ) : (
                 <button
                   type="button"
                   onClick={() => void submit()}
-                  disabled={sending || (text.trim().length === 0 && attachments.length === 0)}
+                  disabled={sendPending || readingAttachments || text.trim().length === 0}
+                  aria-busy={sendPending}
                   data-testid="assistant-composer-send"
                   className="flex h-[var(--control-height)] items-center gap-1 rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] hover:bg-[var(--fill-strong-hover)] active:opacity-90 disabled:opacity-40"
                 >
-                  {sending ? (
+                  {sendPending ? (
                     <Loader2 size={11} aria-hidden="true" className="animate-spin" />
                   ) : (
                     <ArrowUp size={11} aria-hidden="true" />

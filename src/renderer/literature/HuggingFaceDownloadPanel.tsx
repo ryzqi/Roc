@@ -1,9 +1,10 @@
-import {useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react';
 import type {HfSummary} from '../../shared/schemas/research-huggingface';
 import {hfDownloadStartSchema, type HfDownloadStart, type HfDownloadReceipt} from '../../shared/schemas/research-huggingface-downloads';
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {scholarlyButton} from './ScholarlySnapshotView';
+import {useLiteratureEditor} from './literature-editor-guard';
 
 const field = 'w-full min-w-0 rounded-control border-[0.5px] border-line bg-surface px-2 py-1 text-ink';
 const states: Record<HfDownloadReceipt['state'], string> = {
@@ -13,9 +14,9 @@ export function HuggingFaceDownloadReceiptView({receipt}: {receipt: HfDownloadRe
   return <section aria-label="下载回执" className="space-y-2" data-testid="reader-hf-download-receipt">
     <p role="status">{states[receipt.state]}</p>
     <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-muted tabular-nums">
-      <dt>最后记录的传输量</dt><dd>{receipt.lastRecordedTransferredBytes} 字节</dd>
-      <dt>已验证内容</dt><dd>{receipt.verifiedBytes} 字节（{receipt.files.length}/{receipt.selectedFiles.length} 个文件）</dd>
-      <dt>授权上限</dt><dd>{receipt.request.maxBytes} 字节</dd>
+      <dt>最后记录的传输量</dt><dd>{receipt.lastRecordedTransferredBytes.toLocaleString('zh-CN')} 字节</dd>
+      <dt>已验证内容</dt><dd>{receipt.verifiedBytes.toLocaleString('zh-CN')} 字节（{receipt.files.length.toLocaleString('zh-CN')} / {receipt.selectedFiles.length.toLocaleString('zh-CN')} 个文件）</dd>
+      <dt>授权上限</dt><dd>{receipt.request.maxBytes.toLocaleString('zh-CN')} 字节</dd>
       <dt>超时</dt><dd>{receipt.request.timeoutMs / 1000} 秒</dd>
       <dt>创建时间</dt><dd>{receipt.createdAt}</dd><dt>更新时间</dt><dd>{receipt.updatedAt}</dd>
       <dt>结束时间</dt><dd>{receipt.finishedAt ?? '尚未结束'}</dd>
@@ -23,7 +24,7 @@ export function HuggingFaceDownloadReceiptView({receipt}: {receipt: HfDownloadRe
     </dl>
     {receipt.files.length === 0 ? <p className="text-muted">尚无已验证文件</p> : <ul className="space-y-1" data-testid="reader-hf-verified-files">
       {receipt.files.map(file => <li key={file.storageName} className="break-all">
-        <p>{file.source.path}（{file.source.size} 字节）</p><p className="font-mono text-muted">SHA-256 {file.sha256}</p>
+        <p className="tabular-nums">{file.source.path}（{file.source.size.toLocaleString('zh-CN')} 字节）</p><p className="font-mono text-muted">SHA-256 {file.sha256}</p>
       </li>)}
     </ul>}
     <details data-testid="reader-hf-download-authorization"><summary className="cursor-pointer text-muted">固定授权与请求回执</summary>
@@ -55,6 +56,11 @@ export default function HuggingFaceDownloadPanel({client, observation, paths, se
   const [validation, setValidation] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const mounted = useRef(true);
+  const submitting = useRef(false), cancelling = useRef(false);
+  const requestRef = useRef<HfDownloadStart | null>(null);
+  const draft = useRef({limit, timeout, review, paths}); draft.current = {limit, timeout, review, paths};
+  const isDirty = useCallback(() => draft.current.paths.length > 0 || draft.current.review !== '' ||
+    draft.current.limit !== '64' || draft.current.timeout !== '120', []);
   useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
   const start = useAsyncAction((input: HfDownloadStart) => client.api.research.startHuggingFaceDownload(input), {label: '开始审核下载'});
   const cancel = useAsyncAction((receipt: HfDownloadReceipt) => client.api.research.cancelHuggingFaceDownload({
@@ -66,10 +72,19 @@ export default function HuggingFaceDownloadPanel({client, observation, paths, se
     () => client.api.research.getHuggingFaceDownloads({projectId: observation.projectId, observationId: observation.id,
       offset: historyOffset, limit: 20}), {label: '读取下载历史'});
   const receipt = read.data ?? initial;
+  const receiptRef = useRef(receipt); receiptRef.current = receipt;
   const busy = start.pending || cancel.pending;
-  const dirty = paths.length > 0 || review !== '' || limit !== '64' || timeout !== '120';
+  const dirty = isDirty();
   const locked = busy || request !== null || dirty;
-  useEffect(() => {onLockChange(locked); return () => onLockChange(false);}, [locked, onLockChange]);
+  const editor = useLiteratureEditor({label: 'Hub 下载审核', dirty: () => isDirty() || requestRef.current !== null,
+    busy: () => submitting.current || cancelling.current, discard: () => clear()});
+  const reportLock = useCallback(() => {
+    const frozen = submitting.current || cancelling.current || requestRef.current !== null;
+    onSelectionLockChange(frozen); onLockChange(frozen || isDirty()); editor.notify();
+  }, [editor, isDirty, onLockChange, onSelectionLockChange]);
+  useLayoutEffect(() => {onLockChange(locked); onSelectionLockChange(busy || request !== null);},
+    [locked, busy, request, onLockChange, onSelectionLockChange]);
+  useEffect(() => () => {onLockChange(false); onSelectionLockChange(false);}, [onLockChange, onSelectionLockChange]);
   // Refresh only actual persisted state. Stop after a failed read or terminal receipt.
   useEffect(() => {
     if (read.status !== 'ready' || read.data?.state !== 'running') return;
@@ -77,13 +92,21 @@ export default function HuggingFaceDownloadPanel({client, observation, paths, se
     return () => clearTimeout(timer);
   }, [read.status, read.data, read.reload]);
   const submit = async (input: HfDownloadStart): Promise<void> => {
+    if (!writable || submitting.current || cancelling.current || (requestRef.current !== null && requestRef.current !== input)) return;
+    submitting.current = true; requestRef.current = input; reportLock();
     setRequest(input); setNote(null); setValidation(null); cancel.reset();
-    const result = await start.run(input);
-    if (!mounted.current || !result.ok) return;
-    setRequest(null); setInitial(result.data); setReview(''); setLimit('64'); setTimeoutSeconds('120'); onClear();
-    setHistoryOffset(0); history.reload(); read.reload();
+    try {
+      const result = await start.run(input);
+      if (!mounted.current || !result.ok) return;
+      requestRef.current = null; draft.current = {limit: '64', timeout: '120', review: '', paths: []};
+      setRequest(null); setInitial(result.data); setReview(''); setLimit('64'); setTimeoutSeconds('120'); onClear();
+      setHistoryOffset(0); history.reload(); read.reload();
+    } finally {
+      submitting.current = false; if (mounted.current) reportLock();
+    }
   };
   const create = (): void => {
+    if (!writable || !sourceReady || submitting.current || cancelling.current || requestRef.current !== null) return;
     if (limit.trim() === '' || timeout.trim() === '') {setValidation('填写下载字节上限和超时。'); return;}
     const parsed = hfDownloadStartSchema.safeParse({projectId: observation.projectId, requestId: crypto.randomUUID(),
       observationId: observation.id, expectedContentHash: observation.contentHash, paths,
@@ -93,36 +116,55 @@ export default function HuggingFaceDownloadPanel({client, observation, paths, se
     }
     void submit(parsed.data);
   };
-  const clear = (): void => {setRequest(null); setReview(''); setLimit('64'); setTimeoutSeconds('120');
-    setValidation(null); start.reset(); cancel.reset(); setNote(null); onClear(); history.reload();};
+  const clear = (): void => {
+    requestRef.current = null; draft.current = {limit: '64', timeout: '120', review: '', paths: []};
+    setRequest(null); setReview(''); setLimit('64'); setTimeoutSeconds('120');
+    setValidation(null); start.reset(); cancel.reset(); setNote(null); onClear(); history.reload(); reportLock();};
   const stop = async (): Promise<void> => {
-    const result = await cancel.run(receipt!);
-    if (!mounted.current || !result.ok) return;
-    setNote(result.data.cancelled ? '主进程已接收取消下载信号' : '没有进行中的下载，请刷新回执');
-    read.reload(); history.reload();
+    if (cancelling.current || receiptRef.current?.state !== 'running') return;
+    cancelling.current = true; reportLock();
+    try {
+      const result = await cancel.run(receiptRef.current);
+      if (!mounted.current || !result.ok) return;
+      setNote(result.data.cancelled ? '主进程已接收取消信号；等待下载回执确认。' : '没有进行中的下载，请刷新回执');
+      read.reload(); history.reload();
+    } finally {
+      cancelling.current = false; if (mounted.current) reportLock();
+    }
   };
   const metadata = observation.metadata;
   const allowed = observation.status === 'ok' && metadata !== null && metadata.private === false && metadata.gated === false && metadata.disabled !== true;
   const frozen = busy || request !== null;
-  useEffect(() => {onSelectionLockChange(frozen); return () => onSelectionLockChange(false);}, [frozen, onSelectionLockChange]);
+  const changeDraft = (patch: Partial<Omit<typeof draft.current, 'paths'>>): void => {
+    if (!writable || submitting.current || cancelling.current || requestRef.current !== null) return;
+    draft.current = {...draft.current, ...patch};
+    if (patch.limit !== undefined) setLimit(patch.limit);
+    if (patch.timeout !== undefined) setTimeoutSeconds(patch.timeout);
+    if (patch.review !== undefined) setReview(patch.review);
+    reportLock();
+  };
+  const changeReceipt = (run: () => void): void => {
+    if (submitting.current || cancelling.current || requestRef.current !== null || isDirty()) return;
+    run();
+  };
   return <section aria-label="审核下载" className="space-y-2 border-t-[0.5px] border-line pt-2" data-testid="reader-hf-download-panel">
     {allowed ? <>
-      <p className="tabular-nums">已选 {paths.length} 个文件，{selectedBytes} 字节</p>
+      <p className="tabular-nums">已选 {paths.length.toLocaleString('zh-CN')} 个文件，{selectedBytes.toLocaleString('zh-CN')} 字节</p>
       <div className="grid grid-cols-2 gap-2">
         <label>下载上限（MiB）<input type="number" min="0" max="512" step="1" value={limit} className={field}
-          disabled={!writable || frozen} onChange={event => setLimit(event.target.value)}/></label>
+          disabled={!writable || frozen} onChange={event => changeDraft({limit: event.target.value})}/></label>
         <label>超时（秒）<input type="number" min="1" max="120" step="1" value={timeout} className={field}
-          disabled={!writable || frozen} onChange={event => setTimeoutSeconds(event.target.value)}/></label>
+          disabled={!writable || frozen} onChange={event => changeDraft({timeout: event.target.value})}/></label>
       </div>
       <label className="block">许可与文件审核<textarea value={review} className={field} rows={2} maxLength={8192}
-        disabled={!writable || frozen} onChange={event => setReview(event.target.value)}/></label>
+        disabled={!writable || frozen} onChange={event => changeDraft({review: event.target.value})}/></label>
       <div className="flex flex-wrap gap-2">
         <button type="button" className={scholarlyButton} disabled={!writable || !sourceReady || frozen || paths.length === 0 || review.trim() === ''}
           onClick={create}>{start.pending ? '提交下载中' : '批准并下载所选文件'}</button>
         {!busy && request !== null ? <button type="button" className={scholarlyButton} disabled={!writable}
           onClick={() => void submit(request)}>重试原下载请求</button> : null}
         {dirty || request !== null ? <button type="button" className={scholarlyButton} disabled={busy}
-          onClick={clear}>放弃下载审核</button> : null}
+          onClick={() => editor.request(clear, '所选文件、下载上限、超时、许可审核和原下载请求将被放弃。')}>放弃下载审核</button> : null}
       </div>
     </> : <p className="text-muted">访问条件不允许匿名下载</p>}
     {validation === null ? null : <p role="alert">{validation}</p>}
@@ -139,22 +181,23 @@ export default function HuggingFaceDownloadPanel({client, observation, paths, se
       </div>
     </>}
     <details open={initial === null} data-testid="reader-hf-download-history">
-      <summary className="cursor-pointer text-muted">下载历史{history.data === null ? '' : `（${history.data.total}）`}</summary>
+      <summary className="cursor-pointer text-muted tabular-nums">下载历史{history.data === null ? '' : `（${history.data.total.toLocaleString('zh-CN')} 条）`}</summary>
       {history.status === 'loading' ? <p role="status">读取下载历史中</p> : null}
       {history.error === null ? null : <div role="alert"><p>{history.error}</p>
         <button type="button" className={scholarlyButton} onClick={history.reload}>重试下载历史</button></div>}
       {history.data === null ? null : <>
         {history.data.records.length === 0 ? <p className="text-muted">尚无下载记录</p> : <ul className="space-y-1 py-1">
           {history.data.records.map(record => <li key={record.id}><button type="button" className={`${scholarlyButton} max-w-full text-left`}
-            disabled={locked} aria-pressed={initial?.id === record.id} onClick={() => {setInitial(record); setNote(null); read.reload();}}>
+            disabled={locked || history.status === 'loading'} aria-pressed={initial?.id === record.id}
+            onClick={() => changeReceipt(() => {setInitial(record); setNote(null); read.reload();})}>
             <span>{states[record.state]}</span><span>{record.createdAt}</span><span className="break-all">{record.id}</span>
           </button></li>)}
         </ul>}
         <div className="flex flex-wrap gap-2">
-          <button type="button" className={scholarlyButton} disabled={locked || historyOffset === 0}
-            onClick={() => setHistoryOffset(value => Math.max(0, value - 20))}>下载历史上一页</button>
-          <button type="button" className={scholarlyButton} disabled={locked || history.data.nextOffset === null}
-            onClick={() => setHistoryOffset(history.data!.nextOffset!)}>下载历史下一页</button>
+          <button type="button" className={scholarlyButton} disabled={locked || history.status === 'loading' || historyOffset === 0}
+            onClick={() => changeReceipt(() => setHistoryOffset(value => Math.max(0, value - 20)))}>下载历史上一页</button>
+          <button type="button" className={scholarlyButton} disabled={locked || history.status === 'loading' || history.data.nextOffset === null}
+            onClick={() => changeReceipt(() => setHistoryOffset(history.data!.nextOffset!))}>下载历史下一页</button>
           <button type="button" className={scholarlyButton} disabled={busy} onClick={history.reload}>刷新下载历史</button>
         </div>
       </>}

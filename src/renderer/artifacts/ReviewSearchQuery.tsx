@@ -4,6 +4,7 @@ import type {ResearchReviewSearchInspection, ResearchReviewSearchStart, Research
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction} from '../app/use-async-resource';
 import {formInputClass, formSecondaryButtonClass} from '../shared/form-ui';
+import {ArtifactDraftDiscard, useArtifactDraft} from './artifact-editor-guard';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 export const reviewSearchStatuses: Record<ResearchReviewSearchInspection['status'], string> = {
@@ -25,6 +26,7 @@ export function ReviewSearchQuery({client, protocol, databaseIndex, queryIndex, 
   const [cancelNote, setCancelNote] = useState('');
   const requests = useRef(new Map<string, string>());
   const busy = useRef(false);
+  const draft = useArtifactDraft('检索取消原因', cancelNote, busy);
   const start = useAsyncAction((request: ResearchReviewSearchStart) => client.api.research.startReviewSearch(request), {label: '启动冻结协议检索'});
   const cancel = useAsyncAction((request: ResearchReviewSearchCancel) => client.api.research.cancelReviewSearch(request), {label: '取消冻结协议检索'});
   const pending = start.pending || cancel.pending;
@@ -36,7 +38,7 @@ export function ReviewSearchQuery({client, protocol, databaseIndex, queryIndex, 
     const id = crypto.randomUUID(); requests.current.set(key, id); return id;
   };
   const begin = (): void => {busy.current = true; onPending(true);};
-  const finish = (ok: boolean): void => {busy.current = false; onPending(false); if (ok) onChanged();};
+  const finish = (ok: boolean): void => {busy.current = false; onPending(false); if (ok) {draft.saved(); onChanged();}};
   return <section className="flex min-w-0 flex-col gap-2 border-t-[0.5px] border-line pt-2" data-testid="artifact-review-query">
     <h3 className="font-medium">{database.source} 检索式 {queryIndex + 1}</h3>
     <p className="whitespace-pre-wrap break-words">{database.queries[queryIndex]}</p>
@@ -47,9 +49,9 @@ export function ReviewSearchQuery({client, protocol, databaseIndex, queryIndex, 
         `，原始记录 ${latest.rawRecordCount} 条，${latest.coverageComplete ? '查询范围已到报告终点' : '检索覆盖不完整'}`}
     </p>}
     {!editable || active || latest?.coverageComplete || (latest === undefined && !historyComplete) ? null :
-      <button type="button" className={`${button} self-start`} disabled={pending}
+      <button type="button" className={`${button} self-start`} disabled={pending || draft.locked}
       data-testid="artifact-review-query-start" onClick={() => {
-        if (busy.current || protocol.freezeHash === null) return;
+        if (busy.current || draft.isLocked() || protocol.freezeHash === null) return;
         const request: ResearchReviewSearchStart = {
           projectId: protocol.version.projectId, versionId: protocol.version.id, expectedFreezeHash: protocol.freezeHash,
           requestId: requestId(`start:${latest?.snapshotHash ?? 'first'}`), databaseIndex, queryIndex,
@@ -59,7 +61,7 @@ export function ReviewSearchQuery({client, protocol, databaseIndex, queryIndex, 
       }}>{latest === undefined ? '执行此查询' : '按原查询新建重试'}</button>}
     {!editable || latest?.status !== 'running' ? null : <form className="flex flex-col gap-2" onSubmit={event => {
       event.preventDefault();
-      if (busy.current) return;
+      if (busy.current || draft.isLocked()) return;
       const request: ResearchReviewSearchCancel = {
         projectId: protocol.version.projectId, reviewSearchId: latest.snapshot.id,
         requestId: requestId(`cancel:${latest.snapshot.id}:${latest.revision}:${cancelNote}`),
@@ -68,12 +70,15 @@ export function ReviewSearchQuery({client, protocol, databaseIndex, queryIndex, 
       begin(); void cancel.run(request).then(result => finish(result.ok));
     }}>
       <label className="flex flex-col gap-1 text-muted">取消原因
-        <input required maxLength={10000} className={`${formInputClass} border-[0.5px]`} disabled={pending}
+        <input required maxLength={10000} className={`${formInputClass} border-[0.5px]`} disabled={pending || draft.locked}
           value={cancelNote} onChange={event => {setCancelNote(event.target.value); cancel.reset();}} />
       </label>
-      <button type="submit" className={`${button} self-start`} disabled={pending || cancelNote.trim() === ''}
+      <button type="submit" className={`${button} self-start`} disabled={pending || draft.locked || cancelNote.trim() === ''}
         data-testid="artifact-review-query-cancel">取消此查询</button>
     </form>}
+    <ArtifactDraftDiscard dirty={draft.dirty} testId={`artifact-review-query-discard-${databaseIndex}-${queryIndex}`} onDiscard={() => {
+      setCancelNote(''); cancel.reset(); draft.reset('');
+    }} />
     {start.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{start.error}</p>}
     {cancel.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{cancel.error}</p>}
     {searches.length === 0 ? null : <details>

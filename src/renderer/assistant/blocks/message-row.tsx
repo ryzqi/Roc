@@ -4,6 +4,7 @@ import { Check, Copy } from 'lucide-react';
 import type { ChatPendingInterrupt, ChatResumeDecision } from '../../../shared/types';
 import type { ChatTranscriptActivityBlock, ChatTranscriptMessage } from '../transcript';
 import { useCopyFeedback } from '../../shared/hooks/use-copy-feedback';
+import { LazyBoundary, retryableLazy } from '../../shell/LazyBoundary';
 import {
   ChatApprovalCard,
   ResearchGateApprovalCard,
@@ -17,6 +18,10 @@ import { QuestionInterruptCard } from './question-card';
 import { ReasoningBlock } from './reasoning-block';
 import { SubagentActivityCard } from './subagent-card';
 import { ToolCallBlock } from './tool-call-block';
+
+const StreamingMarkdown = retryableLazy<{ text: string; isStreaming: boolean }>(async () =>
+  ({ default: (await import('./streaming-markdown-view')).StreamingMarkdownView })
+);
 
 /**
  * One transcript row (T4.3/T4.4), ported from `chat/chat-message-row.tsx`.
@@ -54,6 +59,7 @@ export type ChatMessageRowProps = {
   onOpenArtifact: OpenResearchArtifact;
   onReadGateContext: ReadResearchGateContext;
   onApprovalDecision?: (approvalId: string, decisions: ChatResumeDecision[]) => void;
+  approvalPending?: boolean;
 };
 
 const finishedEnterKeys = new Set<string>();
@@ -120,7 +126,7 @@ function resolveActivityBlocks(
   ];
 }
 
-function ChatMessageRowImpl({ message, onApprovalDecision, onOpenArtifact, onReadGateContext }: ChatMessageRowProps): React.JSX.Element {
+function ChatMessageRowImpl({ message, onApprovalDecision, approvalPending, onOpenArtifact, onReadGateContext }: ChatMessageRowProps): React.JSX.Element {
   const isAssistant = message.role === 'assistant';
   const attachments = message.attachments ?? [];
   const activityBlocks = resolveActivityBlocks(message, message.blocks);
@@ -149,6 +155,7 @@ function ChatMessageRowImpl({ message, onApprovalDecision, onOpenArtifact, onRea
               interrupt={interrupt}
               key={interrupt.interruptId}
               onApprovalDecision={onApprovalDecision}
+              approvalPending={approvalPending}
               onOpenArtifact={onOpenArtifact}
               onReadGateContext={onReadGateContext}
               source={message.source}
@@ -166,7 +173,7 @@ function ChatMessageRowImpl({ message, onApprovalDecision, onOpenArtifact, onRea
           ) : null}
         </article>
       ) : (
-        <article className="flex max-w-[85%] flex-col gap-1.5 rounded-window rounded-br-control border-[0.5px] border-line-strong bg-[var(--surface-card-hover)] px-4 py-3 shadow-[var(--shadow-card)]">
+        <article className="flex max-w-[85%] flex-col gap-1.5 rounded-window rounded-br-control border-[0.5px] border-line-strong bg-[var(--surface-card-hover)] px-4 py-3">
           <p className="whitespace-pre-wrap text-ink text-[length:var(--font-body-size)] leading-relaxed">
             {message.content}
           </p>
@@ -201,6 +208,7 @@ export const ChatMessageRow = memo(
     prev.message.blocks === next.message.blocks &&
     prev.message.interrupts === next.message.interrupts &&
     prev.message.isStreaming === next.message.isStreaming &&
+    prev.approvalPending === next.approvalPending &&
     prev.onApprovalDecision === next.onApprovalDecision &&
     prev.onOpenArtifact === next.onOpenArtifact &&
     prev.onReadGateContext === next.onReadGateContext
@@ -211,24 +219,17 @@ export const ChatMessageRow = memo(
  * import (the eager-graph guard denies it at the entry).
  */
 function StreamingText({ text, isStreaming }: { text: string; isStreaming: boolean }): React.JSX.Element {
-  const [View, setView] = useState<React.ComponentType<{ text: string; isStreaming: boolean }> | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    void import('./streaming-markdown-view').then((module) => {
-      if (!cancelled) {
-        setView(() => module.StreamingMarkdownView);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  if (View === null) {
-    // First paint before the Markdown chunk lands: show the raw text rather than a
-    // spinner, so the answer never appears to stall.
-    return <p className="whitespace-pre-wrap text-[length:var(--font-read-size)]">{text}</p>;
-  }
-  return <View text={text} isStreaming={isStreaming} />;
+  const plainText = <p className="whitespace-pre-wrap text-[length:var(--font-read-size)]">{text}</p>;
+  return (
+    <LazyBoundary
+      fallback={plainText}
+      label="回答格式化失败"
+      testId="assistant-answer-load-error"
+      renderError={(content) => <>{plainText}{content}</>}
+    >
+      <StreamingMarkdown text={text} isStreaming={isStreaming} />
+    </LazyBoundary>
+  );
 }
 
 function CopyAnswerButton({ content }: { content: string }): React.JSX.Element {
@@ -257,6 +258,7 @@ function ChatInterruptView(input: {
   onOpenArtifact: OpenResearchArtifact;
   onReadGateContext: ReadResearchGateContext;
   onApprovalDecision?: (approvalId: string, decisions: ChatResumeDecision[]) => void;
+  approvalPending?: boolean;
   source: ChatTranscriptMessage['source'];
 }): React.JSX.Element {
   const { interrupt } = input;
@@ -276,20 +278,20 @@ function ChatInterruptView(input: {
   if (isTaskApproval(interrupt)) {
     return (
       <div className={motionClass}>
-        <TaskApprovalCard approval={interrupt} onApprovalDecision={input.onApprovalDecision} />
+        <TaskApprovalCard approval={interrupt} onApprovalDecision={input.onApprovalDecision} approvalPending={input.approvalPending} />
       </div>
     );
   }
   if (isResearchGateApproval(interrupt)) {
     return (
       <div className={motionClass}>
-        <ResearchGateApprovalCard approval={interrupt} onApprovalDecision={input.onApprovalDecision} onOpenArtifact={input.onOpenArtifact} onReadGateContext={input.onReadGateContext} />
+        <ResearchGateApprovalCard approval={interrupt} onApprovalDecision={input.onApprovalDecision} approvalPending={input.approvalPending} onOpenArtifact={input.onOpenArtifact} onReadGateContext={input.onReadGateContext} />
       </div>
     );
   }
   return (
     <div className={motionClass}>
-      <ChatApprovalCard approval={interrupt} onApprovalDecision={input.onApprovalDecision} />
+      <ChatApprovalCard approval={interrupt} onApprovalDecision={input.onApprovalDecision} approvalPending={input.approvalPending} />
     </div>
   );
 }

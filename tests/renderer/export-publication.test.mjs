@@ -35,6 +35,7 @@ before(async () => {
     let generation=0;
     window.mount=input=>flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
       <Harness key={++generation} initial={input}/></LazyMotion></MotionConfig>));
+    window.unmount=()=>flushSync(()=>root.render(null));
   `, style: 'body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}'});
   writeFileSync(join(directory, 'main.cjs'), `const {app,BrowserWindow}=require('electron');
     app.setPath('userData',${JSON.stringify(join(directory, 'data'))});
@@ -59,6 +60,7 @@ before(async () => {
   await page.waitForFunction(() => typeof mount === 'function');
 });
 after(async () => {
+  if (page !== undefined && !page.isClosed()) await page.evaluate(() => window.unmount?.());
   try {await app?.close();} finally {
     for (const f of fixtures) {await f.service?.shutdown(); await f.templateService?.shutdown(); f.close(); rmSync(f.root, {recursive: true, force: true});} api?.dispose();
     if (directory) rmSync(directory, {recursive: true, force: true});
@@ -174,7 +176,10 @@ test('approved manuscript uses lazy explicit publication review and exact replay
   for(const id of ['artifact-inspector-refresh','artifact-citation-coverage-toggle','artifact-consistency-toggle',
     'artifact-response-toggle','artifact-journal-toggle','artifact-export-toggle','artifact-export-history-load'])
     assert.equal(await page.getByTestId(id).isDisabled(),true,id);
-  await page.keyboard.press('Escape'); assert.equal(await page.getByTestId('artifact-inspector-panel').count(),1);
+  await page.keyboard.press('Escape'); await page.getByTestId('artifact-draft-discard-panel').waitFor();
+  await page.getByTestId('artifact-draft-discard-cancel').click();
+  await page.getByTestId('artifact-draft-discard-panel').waitFor({state:'detached'});
+  assert.equal(await page.getByTestId('artifact-inspector-panel').count(),1);
   await preview(); await text('出版说明','Changed publication description.');
   assert.equal(await page.getByTestId('artifact-export-preview').count(),0);
   assert.equal(await page.getByTestId('artifact-export-prepare').isDisabled(),true); await preview();

@@ -170,8 +170,11 @@ export function LatexPanel(): React.JSX.Element {
       const request = event as CustomEvent<NavigationRequest>;
       if (request.detail.next.projectId === scope.projectId && request.detail.next.view === 'latex') return;
       if (!dirtyRef.current && !savingRef.current) return;
-      event.preventDefault();
-      if (!savingRef.current) setPendingLeave((current) => current ?? { proceed: request.detail.proceed });
+      if (savingRef.current) {
+        event.preventDefault();
+        return;
+      }
+      setPendingLeave({ proceed: request.detail.defer() });
     };
     const beforeUnload = (event: BeforeUnloadEvent): void => {
       if (!dirtyRef.current && !savingRef.current) return;

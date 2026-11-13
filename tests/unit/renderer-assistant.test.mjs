@@ -72,6 +72,36 @@ test('run event snapshots reject a state from a different run', () => {
   );
 });
 
+test('checkpoint availability follows the latest valid acceptance and survives snapshot replay', () => {
+  const initial = {...chatState.createEmptyChatRunState(), runId: 'run-1', status: 'failed',
+    activityBlocks: [{id: 'reasoning', kind: 'reasoning', content: 'Existing work'}]};
+  const acceptance = chatSchemas.chatRunEventSchema.parse({
+    type: 'task_acceptance', runId: 'run-1',
+    report: {taskId: 'task-1', runId: 'run-1', contractVersion: 1, status: 'partial',
+      checkpointResumeAvailable: true, criteria: [], remainingItems: ['Remaining work'],
+      blockedBy: [], nextSafeAction: 'Resume'}
+  });
+  const available = chatState.applyChatRunEvent(initial, acceptance);
+  const latest = {...acceptance, report: {...acceptance.report, status: 'satisfied',
+    checkpointResumeAvailable: false, remainingItems: [], nextSafeAction: ''}};
+  const completed = chatState.applyChatRunEvent(available, latest);
+  assert.equal(available.activityBlocks.at(-1).report.checkpointResumeAvailable, true);
+  assert.deepEqual(completed.activityBlocks, [
+    initial.activityBlocks[0],
+    {id: 'task-acceptance:task-1', kind: 'task_acceptance', report: latest.report}
+  ]);
+  const replayed = chatSchemas.chatRunEventsSnapshotSchema.parse({
+    version: 1, runId: 'run-1', throughSequence: 2, historyComplete: true, state: completed
+  });
+  assert.deepEqual(replayed.state, completed);
+  assert.strictEqual(chatState.applyChatRunEvent(completed, {
+    ...acceptance, runId: 'run-old', report: {...acceptance.report, runId: 'run-old'}
+  }), completed, 'a late receipt from a different run must not restore checkpoint availability');
+  assert.throws(() => chatState.applyChatRunEvent(completed, {
+    ...acceptance, report: {...acceptance.report, runId: 'run-other'}
+  }), /chat_task_acceptance_run_mismatch/u);
+});
+
 /* ------------------------------------------------------------------ */
 /* Live vs wrapped run events                                          */
 /* ------------------------------------------------------------------ */

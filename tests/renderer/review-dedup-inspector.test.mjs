@@ -33,6 +33,7 @@ before(async () => {
     import {LazyMotion,MotionConfig,domAnimation} from 'motion/react';
     import {ArtifactInspector} from './src/renderer/artifacts/ArtifactInspector';
     const root=createRoot(document.getElementById('root'));
+    window.disposeHarness=()=>flushSync(()=>root.render(null));
     const client={api:{research:Object.fromEntries(${JSON.stringify(Object.keys(channels))}.map(method=>[method,input=>window.callMain(method,input)]))}};
     function Harness({initialRequest,writable}) {
       const [request,setRequest]=useState(initialRequest),[open,setOpen]=useState(true);
@@ -73,7 +74,7 @@ before(async () => {
   await page.waitForFunction(() => typeof window.mount === 'function');
 });
 after(async () => {
-  try {await app?.close();} finally {
+  try {await page?.evaluate(()=>window.disposeHarness()); await app?.close();} finally {
     for (const f of fixtures) await f.dispose();
     api?.dispose(); if (directory) rmSync(directory, {recursive: true, force: true});
   }
@@ -125,6 +126,30 @@ async function freeze(note = 'Synthetic human reviewed all original records and 
   await tid('artifact-review-dedup-frozen').waitFor();
 }
 const audit = label => auditReviewInspector(page, artifacts, label);
+
+test('review draft protection keeps authored pair decisions through close and freezes replacement entries', async () => {
+  const f = await fixture(); await mount(f); await select(f);
+  await fill('duplicate', 'Keep this authored pair review.');
+  assert.equal(await tid('artifact-review-dedup').getByLabel('记录 A', {exact: true}).isDisabled(), true);
+  assert.equal(await tid('artifact-review-dedup-refresh').isDisabled(), true);
+  assert.equal(await tid('artifact-review-refresh').isDisabled(), true);
+  assert.equal(await tid('artifact-review-duplicate-editor').getByLabel('核查理由', {exact: true}).isDisabled(), false);
+  await page.keyboard.press('Escape');
+  assert.equal(await tid('artifact-inspector-panel').count(), 1);
+  assert.equal(await tid('artifact-review-duplicate-editor').getByLabel('核查理由', {exact: true}).inputValue(), 'Keep this authored pair review.');
+});
+
+test('review draft protection covers whole-round notes and native unload', async () => {
+  const f = await fixture(); await mount(f);
+  await page.getByLabel('整轮去重审核说明', {exact: true}).fill('Retain this whole-round explanation.');
+  const prevented = await page.evaluate(() => {
+    const event = new Event('beforeunload', {cancelable: true});
+    window.dispatchEvent(event); return event.defaultPrevented;
+  });
+  assert.equal(prevented, true);
+  assert.equal(await tid('artifact-review-dedup-refresh').isDisabled(), true);
+  assert.equal(await page.getByLabel('整轮去重审核说明', {exact: true}).isDisabled(), false);
+});
 
 test('actual corpus entry inspects exact raw endpoints and freezes explicit left removal with conserved counts and window authority', async () => {
   const f = await fixture(); await mount(f);
@@ -198,6 +223,15 @@ test('the same hit cannot be declared a pair; empty human decision set freezes o
   assert.equal(await tid('artifact-review-duplicate-save').isDisabled(), true);
   assert.equal(f.dedup.get(f.get).decisions.length, 0);
   assert.equal(await tid('artifact-review-dedup-freeze').isDisabled(), true);
+  assert.equal(await page.getByLabel('整轮去重审核说明', {exact: true}).isDisabled(), true);
+  await tid('artifact-review-duplicate-discard').click();
+  await page.getByRole('button', {name: '取消', exact: true}).click();
+  assert.equal(await tid('artifact-review-duplicate-editor').getByLabel('核查理由', {exact: true}).inputValue(),
+    'Synthetic human compared both original metadata reports');
+  await tid('artifact-review-duplicate-discard').click();
+  await page.getByRole('button', {name: '放弃修改并继续', exact: true}).click();
+  assert.equal(await page.getByLabel('整轮去重审核说明', {exact: true}).isDisabled(), false);
+  assert.equal(f.dedup.get(f.get).decisions.length, 0);
   await freeze('Synthetic human explicitly retained every original return without duplicate removals');
   assert.equal(f.dedup.get(f.get).freeze.recordsToScreen, 8);
   assert.equal(f.dedup.get(f.get).freeze.removedDuplicates, 0);

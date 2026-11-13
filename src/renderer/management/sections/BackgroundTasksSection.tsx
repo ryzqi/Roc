@@ -44,6 +44,12 @@ function draftField(draft: TaskDraft, key: keyof TaskDraft, value: string): Task
 
 export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTasksStore }): React.JSX.Element {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [pendingEditorAction, setPendingEditorAction] = useState<(() => void) | null>(null);
+  const changeEditor = (action: () => void): void => {
+    if (tasks.isBusy()) return;
+    if (tasks.dirty) setPendingEditorAction(() => action);
+    else action();
+  };
 
   // Same rule as the MCP section: only "nothing to show yet" is a loading state; a refresh keeps the
   // list on screen (and keeps the buttons attached).
@@ -84,7 +90,8 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
           <button
             type="button"
             data-testid="mgmt-tasks-create"
-            onClick={() => tasks.startCreate()}
+            disabled={tasks.busy}
+            onClick={() => changeEditor(tasks.startCreate)}
             className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
           >
             <Plus size={11} aria-hidden="true" />
@@ -129,6 +136,8 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
                 >
                   <button
                     type="button"
+                    disabled={tasks.busy}
+                    aria-pressed={selected}
                     onClick={() => tasks.select(task.id)}
                     data-testid={`mgmt-task-select-${task.id}`}
                     className="flex min-w-0 flex-col gap-0.5 text-left"
@@ -147,7 +156,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
                       <button
                         type="button"
                         data-testid={`mgmt-task-run-now-${task.id}`}
-                        disabled={tasks.action.pending}
+                        disabled={tasks.busy}
                         onClick={() => {
                           void tasks.action.run('runNow', task.id);
                         }}
@@ -161,7 +170,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
                       <button
                         type="button"
                         data-testid={`mgmt-task-pause-${task.id}`}
-                        disabled={tasks.action.pending}
+                        disabled={tasks.busy}
                         onClick={() => {
                           void tasks.action.run('pause', task.id);
                         }}
@@ -174,7 +183,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
                       <button
                         type="button"
                         data-testid={`mgmt-task-resume-${task.id}`}
-                        disabled={tasks.action.pending}
+                        disabled={tasks.busy}
                         onClick={() => {
                           void tasks.action.run('resume', task.id);
                         }}
@@ -187,7 +196,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
                       <button
                         type="button"
                         data-testid={`mgmt-task-cancel-${task.id}`}
-                        disabled={tasks.action.pending}
+                        disabled={tasks.busy}
                         onClick={() => {
                           void tasks.action.run('cancel', task.id);
                         }}
@@ -199,7 +208,8 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
                     <button
                       type="button"
                       data-testid={`mgmt-task-edit-${task.id}`}
-                      onClick={() => tasks.startEdit(task)}
+                      disabled={tasks.busy}
+                      onClick={() => changeEditor(() => tasks.startEdit(task))}
                       className={formSecondaryButtonClass}
                     >
                       编辑
@@ -208,7 +218,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
                       <button
                         type="button"
                         data-testid={`mgmt-task-delete-${task.id}`}
-                        disabled={tasks.action.pending}
+                        disabled={tasks.busy}
                         onClick={() => setDeleteTarget(task.id)}
                         className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
                       >
@@ -300,6 +310,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
           title={tasks.mode === 'edit' ? '编辑任务' : '新建任务'}
           testId="mgmt-task-editor"
         >
+          <fieldset disabled={tasks.busy} className="flex min-w-0 flex-col gap-3 disabled:opacity-50">
           <label className="flex flex-col gap-0.5">
             <span className="text-subtle text-[length:var(--font-micro-size)]">目标（会作为这一轮任务的目标）</span>
             <textarea
@@ -409,7 +420,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
               <button
                 type="button"
                 data-testid="mgmt-task-update"
-                disabled={tasks.update.pending || tasks.issues.length > 0}
+                disabled={tasks.busy || tasks.issues.length > 0}
                 onClick={() => {
                   void tasks.update.run();
                 }}
@@ -422,7 +433,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
                 <button
                   type="button"
                   data-testid="mgmt-task-preview"
-                  disabled={tasks.previewPending || tasks.issues.length > 0}
+                  disabled={tasks.busy || tasks.issues.length > 0}
                   onClick={() => {
                     void tasks.runPreview();
                   }}
@@ -434,7 +445,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
                 <button
                   type="button"
                   data-testid="mgmt-task-create-run"
-                  disabled={tasks.create.pending || tasks.preview === null}
+                  disabled={tasks.busy || tasks.preview === null}
                   onClick={() => {
                     void tasks.create.run();
                   }}
@@ -447,7 +458,8 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
             <button
               type="button"
               data-testid="mgmt-task-editor-cancel"
-              onClick={() => tasks.cancelEdit()}
+              disabled={tasks.busy}
+              onClick={() => changeEditor(tasks.cancelEdit)}
               className={formSecondaryButtonClass}
             >
               取消
@@ -485,9 +497,28 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
               {tasks.update.error}
             </FormNote>
           )}
+          </fieldset>
         </FormSection>
       )}
 
+      <ConfirmDialog
+        open={pendingEditorAction !== null}
+        title="放弃未保存的后台任务？"
+        message="任务改动尚未保存，放弃后需要重新填写。"
+        confirmLabel="放弃修改"
+        cancelLabel="继续编辑"
+        tone="destructive"
+        confirmDisabled={tasks.busy}
+        testId="mgmt-task-discard"
+        onCancel={() => setPendingEditorAction(null)}
+        onConfirm={() => {
+          if (tasks.busy) return;
+          const action = pendingEditorAction;
+          setPendingEditorAction(null);
+          tasks.cancelEdit();
+          action?.();
+        }}
+      />
       <ConfirmDialog
         open={deleteTarget !== null}
         title="删除这个后台任务？"
@@ -496,8 +527,10 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
         confirmLabel="删除"
         tone="destructive"
         testId="mgmt-task-delete-confirm"
+        confirmDisabled={tasks.busy}
         onCancel={() => setDeleteTarget(null)}
         onConfirm={() => {
+          if (tasks.busy) return;
           const target = deleteTarget;
           setDeleteTarget(null);
           if (target !== null) {

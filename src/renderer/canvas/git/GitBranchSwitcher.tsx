@@ -1,8 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, GitBranch, Loader2, Plus, X } from 'lucide-react';
 import type { GitBranchListResult } from '../../../shared/types';
 import type { RocClient } from '../../shared/roc-client';
 import { filterGitBranches } from '../../workspace/git-store';
+import { useAsyncAction } from '../../app/use-async-resource';
+import { useImeGuard } from '../../shared/hooks/use-ime-guard';
+import { ErrorBar } from '../../shell/ErrorBar';
 
 /**
  * Branch switching and creation (P3/T3.5), reusing the legacy
@@ -33,7 +36,15 @@ export type GitBranchSwitcherProps = {
   onClose: () => void;
 };
 
-export function GitBranchSwitcher({
+export function GitBranchSwitcher(props: GitBranchSwitcherProps): React.JSX.Element {
+  return <BranchControls key={props.workspacePath} {...props} />;
+}
+
+type BranchIntent =
+  | { kind: 'checkout'; name: string }
+  | { kind: 'create'; name: string; checkoutAfterCreate: boolean };
+
+function BranchControls({
   client,
   workspacePath,
   branchInfo,
@@ -47,6 +58,11 @@ export function GitBranchSwitcher({
   const [search, setSearch] = useState('');
   const [draft, setDraft] = useState('');
   const [checkoutAfterCreate, setCheckoutAfterCreate] = useState(true);
+  const inFlight = useRef(false);
+  const mounted = useRef(true);
+  const writableRef = useRef(writable);
+  writableRef.current = writable;
+  const ime = useImeGuard();
   // One name for the gate, so no read path can forget it.
   const readOnly = !writable;
 
@@ -55,59 +71,47 @@ export function GitBranchSwitcher({
     [branchInfo, search]
   );
 
-  const confirm = async (request: { title: string; message: string; confirmLabel: string; cancelLabel: string }): Promise<boolean> => {
-    const result = await client.api.shell.confirm(request);
-    if (!result.ok) {
-      return false;
-    }
-    return result.data.confirmed;
-  };
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
-  const checkout = async (name: string): Promise<void> => {
-    if (name === currentBranch || !writable) {
-      return;
-    }
-    const confirmed = await confirm({
-      title: '切换分支',
-      message: `确认在工作区 ${workspacePath} 切换到分支 ${name} 吗？未提交的改动会随之带入。`,
-      confirmLabel: '切换',
+  const action = useAsyncAction(async (intent: BranchIntent) => {
+    const result = await client.api.shell.confirm({
+      title: intent.kind === 'checkout' ? '切换分支' : '创建分支',
+      message: intent.kind === 'checkout'
+        ? `确认在工作区 ${workspacePath} 切换到分支 ${intent.name} 吗？未提交的改动会随之带入。`
+        : intent.checkoutAfterCreate
+          ? `确认在工作区 ${workspacePath} 创建并切换到分支 ${intent.name} 吗？`
+          : `确认在工作区 ${workspacePath} 创建分支 ${intent.name} 吗？`,
+      confirmLabel: intent.kind === 'checkout' ? '切换分支' : '创建分支',
       cancelLabel: '取消'
     });
-    if (!confirmed) {
-      return;
-    }
-    const ok = await onCheckoutBranch(name);
-    if (ok) {
-      onClose();
-    }
-  };
+    if (!result.ok) return result;
+    if (!result.data.confirmed || !mounted.current || !writableRef.current) return { ok: true as const, data: false };
+    const changed = intent.kind === 'checkout'
+      ? await onCheckoutBranch(intent.name)
+      : await onCreateBranch(intent.name, intent.checkoutAfterCreate);
+    return { ok: true as const, data: changed };
+  }, { label: '操作 Git 分支' });
+  const locked = busy || action.pending;
 
-  const create = async (): Promise<void> => {
-    const name = draft.trim();
-    if (name.length === 0 || !writable) {
-      return;
-    }
-    const confirmed = await confirm({
-      title: '创建分支',
-      message: checkoutAfterCreate
-        ? `确认在工作区 ${workspacePath} 创建并切换到分支 ${name} 吗？`
-        : `确认在工作区 ${workspacePath} 创建分支 ${name} 吗？`,
-      confirmLabel: '创建',
-      cancelLabel: '取消'
-    });
-    if (!confirmed) {
-      return;
-    }
-    const ok = await onCreateBranch(name, checkoutAfterCreate);
-    if (ok) {
-      setDraft('');
-      onClose();
-    }
+  const run = async (intent: BranchIntent): Promise<void> => {
+    if (inFlight.current || busy || !writable || intent.name.length === 0 ||
+      intent.kind === 'checkout' && intent.name === currentBranch) return;
+    inFlight.current = true;
+    const result = await action.run(intent);
+    inFlight.current = false;
+    if (!mounted.current || !result.ok || !result.data) return;
+    if (intent.kind === 'create') setDraft('');
+    onClose();
   };
+  const create = (): Promise<void> => run({ kind: 'create', name: draft.trim(), checkoutAfterCreate });
 
   return (
     <section
       aria-label="分支切换"
+      aria-busy={locked}
       data-testid="git-branch-controls"
       className="flex flex-col gap-2 rounded-card border-[0.5px] border-line bg-surface-strong p-2"
     >
@@ -118,7 +122,8 @@ export function GitBranchSwitcher({
         </span>
         <button
           type="button"
-          onClick={onClose}
+          onClick={() => { if (!inFlight.current && !busy) onClose(); }}
+          disabled={locked}
           aria-label="关闭分支切换"
           data-testid="git-branch-close"
           className="flex h-6 w-6 items-center justify-center rounded-control text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
@@ -130,7 +135,7 @@ export function GitBranchSwitcher({
       <input
         value={search}
         onChange={(event) => setSearch(event.target.value)}
-        disabled={busy}
+        disabled={locked}
         placeholder="搜索分支…"
         aria-label="搜索分支"
         data-testid="git-branch-search"
@@ -143,6 +148,10 @@ export function GitBranchSwitcher({
         </p>
       ) : null}
 
+      {action.error === null ? null : (
+        <ErrorBar error={{ level: 'page', message: action.error }} onDismiss={action.reset} />
+      )}
+
       <ul className="max-h-52 min-h-0 overflow-y-auto" data-testid="git-branch-list">
         {visibleBranches.length === 0 ? (
           <li className="px-1 py-2 text-muted text-[length:var(--font-meta-size)]">
@@ -153,12 +162,12 @@ export function GitBranchSwitcher({
             <li key={branch.name}>
               <button
                 type="button"
-                disabled={busy || readOnly || branch.current}
-                onClick={() => void checkout(branch.name)}
+                disabled={locked || readOnly || branch.current}
+                onClick={() => void run({ kind: 'checkout', name: branch.name })}
                 data-testid={`git-branch-option-${branch.name}`}
                 className="flex h-[var(--control-height-compact)] w-full items-center gap-2 rounded-control px-2 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-60"
               >
-                {busy ? (
+                {locked ? (
                   <Loader2 size={12} aria-hidden="true" className="animate-spin text-muted" />
                 ) : branch.current ? (
                   <Check size={12} aria-hidden="true" className="text-[var(--st-ok)]" />
@@ -177,13 +186,16 @@ export function GitBranchSwitcher({
         <input
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
+          onCompositionStart={ime.onCompositionStart}
+          onCompositionEnd={ime.onCompositionEnd}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' && draft.trim().length > 0 && !busy && !readOnly) {
+            if (ime.shouldIgnoreKeyDown(event)) return;
+            if (event.key === 'Enter' && draft.trim().length > 0 && !locked && !readOnly) {
               event.preventDefault();
               void create();
             }
           }}
-          disabled={busy || readOnly}
+          disabled={locked || readOnly}
           placeholder="新分支名称"
           aria-label="新分支名称"
           data-testid="git-branch-create-input"
@@ -193,7 +205,7 @@ export function GitBranchSwitcher({
           <input
             type="checkbox"
             checked={checkoutAfterCreate}
-            disabled={busy}
+            disabled={locked || readOnly}
             onChange={(event) => setCheckoutAfterCreate(event.target.checked)}
             data-testid="git-branch-create-checkout"
           />
@@ -201,7 +213,7 @@ export function GitBranchSwitcher({
         </label>
         <button
           type="button"
-          disabled={busy || readOnly || draft.trim().length === 0}
+          disabled={locked || readOnly || draft.trim().length === 0}
           onClick={() => void create()}
           data-testid="git-branch-create"
           className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40"

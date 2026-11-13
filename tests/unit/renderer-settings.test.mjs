@@ -309,10 +309,10 @@ test('export → import round-trips the document into an equal draft', () => {
   const next = rules.cloneDraft(base);
   next.providers[0].models[0].options = { temperature: 0.2, maxTokens: 4096 };
   next.permissions.mode = 'fully_automatic';
-  next.hooks = { schemaVersion: 1, hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'echo hi' }] }] } };
+  next.hooks = { schemaVersion: 1, hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'echo hi', timeoutSeconds: 30, enabled: true, failureMode: 'continue' }] }] } };
 
   const text = rules.serializeSettingsExport(next, '2026-10-15T00:00:00.000Z');
-  const parsed = rules.parseSettingsImport(text);
+  const parsed = validation.parseSettingsImport(text);
   assert.equal(parsed.ok, true);
   const applied = rules.applyImport(parsed.document, next);
 
@@ -337,30 +337,30 @@ test('applyImport keeps the live per-project index options (they are not in the 
     }
   });
   const exported = draft({ index: null });
-  const parsed = rules.parseSettingsImport(rules.serializeSettingsExport(exported, 'now'));
+  const parsed = validation.parseSettingsImport(rules.serializeSettingsExport(exported, 'now'));
   assert.equal(parsed.ok, true);
   const applied = rules.applyImport(parsed.document, current);
   assert.deepEqual(applied.index, current.index);
 });
 
 test('import refuses text that is not this surface’s document, naming the field', () => {
-  assert.match(rules.parseSettingsImport('not json').error, /JSON/);
-  assert.match(rules.parseSettingsImport('[]').error, /对象/);
-  assert.match(rules.parseSettingsImport('{"schemaVersion":2}').error, /schemaVersion/);
+  assert.match(validation.parseSettingsImport('not json').error, /JSON/);
+  assert.match(validation.parseSettingsImport('[]').error, /对象/);
+  assert.match(validation.parseSettingsImport('{"schemaVersion":2}').error, /schemaVersion/);
 
   const base = JSON.parse(rules.serializeSettingsExport(draft(), 'now'));
-  assert.match(rules.parseSettingsImport(JSON.stringify({ ...base, settings: null })).error, /settings/);
-  assert.match(rules.parseSettingsImport(JSON.stringify({ ...base, providers: {} })).error, /providers/);
+  assert.match(validation.parseSettingsImport(JSON.stringify({ ...base, settings: null })).error, /settings/);
+  assert.match(validation.parseSettingsImport(JSON.stringify({ ...base, providers: {} })).error, /providers/);
   assert.match(
-    rules.parseSettingsImport(JSON.stringify({ ...base, providers: [{ id: 'x' }] })).error,
+    validation.parseSettingsImport(JSON.stringify({ ...base, providers: [{ id: 'x' }] })).error,
     /providers\[0\]/
   );
-  assert.match(rules.parseSettingsImport(JSON.stringify({ ...base, defaultModelId: 5 })).error, /defaultModelId/);
+  assert.match(validation.parseSettingsImport(JSON.stringify({ ...base, defaultModelId: 5 })).error, /defaultModelId/);
   assert.match(
-    rules.parseSettingsImport(JSON.stringify({ ...base, permissions: { mode: 'anything' } })).error,
+    validation.parseSettingsImport(JSON.stringify({ ...base, permissions: { ...base.permissions, mode: 'anything' } })).error,
     /permissions\.mode/
   );
-  assert.match(rules.parseSettingsImport(JSON.stringify({ ...base, hooks: undefined })).error, /hooks/);
+  assert.match(validation.parseSettingsImport(JSON.stringify({ ...base, hooks: undefined })).error, /hooks/);
 });
 
 /* ------------------------------------------------------------------ */

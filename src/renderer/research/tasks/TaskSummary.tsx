@@ -10,18 +10,18 @@ const number = new Intl.NumberFormat('zh-CN');
 
 export function TaskUsage({ usage }: { usage: RunUsageStatus }): React.JSX.Element {
   return (
-    <dl className="grid gap-1 text-subtle text-[length:var(--font-meta-size)]" data-testid="task-usage">
+    <dl className="grid gap-1 tabular-nums text-subtle text-[length:var(--font-meta-size)]" data-testid="task-usage">
       <div className="flex flex-wrap gap-x-3 gap-y-1">
         <dt>Tokens</dt>
-        <dd>已知 {number.format(usage.tokens.settled)}</dd>
-        <dd>未知 {number.format(usage.tokens.unknown)}</dd>
-        <dd>预留 {number.format(usage.tokens.reserved)}</dd>
+        <dd>已知 {number.format(usage.tokens.settled)} tokens</dd>
+        <dd>未知 {number.format(usage.tokens.unknown)} tokens</dd>
+        <dd>预留 {number.format(usage.tokens.reserved)} tokens</dd>
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1">
         <dt>调用</dt>
-        <dd>模型 {usage.calls.models.total}</dd>
-        <dd>工具 {usage.calls.tools.total}</dd>
-        <dd>子任务 {usage.calls.children.total}</dd>
+        <dd>模型 {number.format(usage.calls.models.total)} 次</dd>
+        <dd>工具 {number.format(usage.calls.tools.total)} 次</dd>
+        <dd>子任务 {number.format(usage.calls.children.total)} 次</dd>
       </div>
     </dl>
   );
@@ -39,8 +39,8 @@ export function TaskSummary({ data, details = false }: {
           {researchTaskStatusLabels[data.task.status]}
         </span>
       </div>
-      <p className="text-subtle text-[length:var(--font-meta-size)]" data-testid="task-progress">
-        执行已完成 {completed}/{data.executions.length}
+      <p className="tabular-nums text-subtle text-[length:var(--font-meta-size)]" data-testid="task-progress">
+        执行已完成 {number.format(completed)} / {number.format(data.executions.length)} 次
       </p>
       <TaskUsage usage={data.usage} />
       {data.task.statusReason === null ? null : (

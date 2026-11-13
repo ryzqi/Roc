@@ -44,7 +44,7 @@ export function ManagementView({ view }: ViewProps): React.JSX.Element {
       <p className="shrink-0 text-muted text-[length:var(--font-meta-size)]" data-testid="mgmt-view-summary">
         {managementSummary(tab, visibleSummaries)}
       </p>
-      <ManagementSectionBody tab={tab} scope={scope} idPrefix="mgmt-view" testIdPrefix="mgmt-view" />
+      <ManagementSectionBody tab={tab} scope={scope} canvasView={view} idPrefix="mgmt-view" testIdPrefix="mgmt-view" />
     </div>
   );
 }

@@ -29,6 +29,7 @@ before(async()=>{
     import {LazyMotion,MotionConfig,domAnimation} from 'motion/react';
     import {ArtifactInspector} from './src/renderer/artifacts/ArtifactInspector';
     import {ArtifactProductionView} from './src/renderer/artifacts/ArtifactProductionView';
+    import {ArtifactEditorBoundary} from './src/renderer/artifacts/artifact-editor-guard';
     const client={api:{research:Object.fromEntries(['inspectArtifact','inspectProductionReview','readProductionReviewFile','getGateReviewContext']
       .map(method=>[method,input=>window.callMain(method,input)]))}};
     const root=createRoot(document.getElementById('root'));
@@ -40,13 +41,16 @@ before(async()=>{
       return <main className="p-4"><button data-testid="artifact-reopen" onClick={()=>setOpen(true)}>重新打开工件</button>
         {!open?null:inspector?<ArtifactInspector client={client} selection={{kind:'stage',request,onReviewContext:()=>{}}} writable={true}
           readingLocations={readingLocations} reviewDrafts={reviewDrafts} onClose={()=>setOpen(false)} onOpenTask={()=>{}}/>:
-          <ArtifactProductionView client={client} request={request} writable={true} initialLocation={null} onLocationChange={()=>{}}/>}
+          <ArtifactEditorBoundary projectId={request.projectId}>
+            <ArtifactProductionView client={client} request={request} writable={true} initialLocation={null} onLocationChange={()=>{}}/>
+          </ArtifactEditorBoundary>}
       </main>;
     }
     let generation=0;
     window.mount=(request,inspector=true)=>flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
       <Harness key={++generation} request={request} inspector={inspector}/>
     </LazyMotion></MotionConfig>));
+    window.unmount=()=>flushSync(()=>root.render(null));
   `,style:`
     body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}main{max-width:560px}
   `});
@@ -79,6 +83,7 @@ before(async()=>{
   await page.waitForFunction(()=>typeof mount==='function');
 });
 after(async()=>{
+  if (page !== undefined && !page.isClosed()) await page.evaluate(() => window.unmount?.());
   try{await app?.close();}finally{
     for(const f of fixtures){await f.inputs.shutdown();await f.dispose();}
     api?.dispose();if(directory)rmSync(directory,{recursive:true,force:true});

@@ -28,14 +28,15 @@ before(async () => {
   await buildViteRenderer({directory, script: `
     import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {flushSync} from 'react-dom';
     import {LazyMotion,MotionConfig,domAnimation} from 'motion/react';
-    import {StageArtifactInspector} from './src/renderer/artifacts/StageArtifactInspector';
+    import {ArtifactInspector} from './src/renderer/artifacts/ArtifactInspector';
     const root=createRoot(document.getElementById('root'));
     const client={api:{research:Object.fromEntries(${JSON.stringify(Object.keys(routes))}.map(method=>[method,input=>window.callMain(method,input)]))}};
     function Harness({request,writable}) {
-      const [open,setOpen]=useState(true),[locations]=useState(()=>new Map());
+      const [open,setOpen]=useState(true),[locations]=useState(()=>new Map()),[drafts]=useState(()=>new Map());
       return <main><button id="opener" onClick={()=>setOpen(true)}>打开构思工件</button>
-        {open?<StageArtifactInspector client={client} request={request} writable={writable} readingLocations={locations}
-          onClose={()=>setOpen(false)} onOpenTask={()=>setOpen(false)} onReviewContext={value=>window.returnedReview=value}/>:null}</main>;
+        {open?<ArtifactInspector client={client} selection={{kind:'stage',request,onReviewContext:value=>window.returnedReview=value}}
+          writable={writable} readingLocations={locations} reviewDrafts={drafts}
+          onClose={()=>setOpen(false)} onOpenTask={()=>setOpen(false)}/>:null}</main>;
     }
     let generation=0;
     window.mount=(request,writable=true)=>flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
@@ -62,6 +63,7 @@ before(async () => {
   await page.waitForFunction(() => typeof mount === 'function');
 });
 after(async () => {
+  if (page !== undefined && !page.isClosed()) await page.evaluate(() => window.clear?.());
   try {await app?.close(); for (const f of fixtures) f.close(); api?.dispose();}
   finally {if (directory) await rm(directory, {recursive: true, force: true});}
   assert.deepEqual(errors, []);
@@ -118,7 +120,10 @@ test('keyboard plan editing locks real drawer, preserves lost save/freeze replie
   const gate = f.repository.readGateReviewContext({projectId: f.project.id, expectedStage: 'ideation', artifactId: f.artifactId});
   await fillPlan();
   assert.equal(await page.getByTestId('artifact-inspector-refresh').isDisabled(), true);
-  await page.keyboard.press('Escape'); await expect(page.getByTestId('artifact-inspector')).toBeVisible();
+  await page.keyboard.press('Escape'); await page.getByTestId('artifact-draft-discard-panel').waitFor();
+  await page.getByTestId('artifact-draft-discard-cancel').click();
+  await page.getByTestId('artifact-draft-discard-panel').waitFor({state:'detached'});
+  await expect(page.getByTestId('artifact-inspector')).toBeVisible();
   f.loseReply = 'saveIdeaPlan';
   await enter('artifact-idea-plan-save');
   await page.getByRole('alert').filter({hasText: '连接中断'}).waitFor();

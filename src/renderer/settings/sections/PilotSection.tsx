@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FlaskConical, RotateCcw } from 'lucide-react';
 import type { PilotProfile } from '../../../shared/schemas/harness-pilot';
 import { useAsyncAction, useAsyncResource } from '../../app/use-async-resource';
@@ -22,6 +22,12 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
   const status = useAsyncResource('pilot', () => client.api.agent.getPilotStatus(), { label: '读取受限试点' });
   const [profile, setProfile] = useState<PilotProfile>('read-only');
   const [rolloutPercent, setRolloutPercent] = useState(10);
+  const running = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   const enable = useAsyncAction(
     (request: { profile: PilotProfile; rolloutPercent: number }) =>
@@ -34,17 +40,20 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
   const busy = enable.pending || rollback.pending;
 
   const runAction = (action: 'enable' | 'rollback'): void => {
+    if (running.current || status.status !== 'ready') return;
+    if (action === 'rollback' && !data?.settings.enabled && !data?.settings.circuitOpen) return;
+    running.current = true;
+    enable.reset();
+    rollback.reset();
     void (async () => {
-      if (action === 'rollback') {
-        const result = await rollback.run();
-        if (result.ok) status.reload();
-        return;
+      try {
+        const result = action === 'rollback'
+          ? await rollback.run()
+          : await enable.run({ profile, rolloutPercent });
+        if (mounted.current && result.ok) status.reload();
+      } finally {
+        running.current = false;
       }
-      const result = await enable.run({
-        profile,
-        rolloutPercent
-      });
-      if (result.ok) status.reload();
     })();
   };
 
@@ -79,8 +88,8 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
             熔断中{settings.breakerReason === null ? '' : `，${settings.breakerReason}`}
           </span>
         ) : null}
-        <span className="text-subtle">
-          失败连击 {settings.failureStreak}/{settings.maxFailureStreak}
+        <span className="text-subtle tabular-nums">
+          连续失败 {settings.failureStreak.toLocaleString('zh-CN')}/{settings.maxFailureStreak.toLocaleString('zh-CN')} 次
         </span>
       </div>
 
@@ -148,7 +157,7 @@ export function PilotSection({ client }: { client: RocClient }): React.JSX.Eleme
           <span className="text-subtle text-[length:var(--font-micro-size)]">最近一次试点运行</span>
           <span>
             <span className="font-mono">{data.lastRun.runId}</span>，{data.lastRun.profile ?? '无配置'}，分桶{' '}
-            {data.lastRun.bucket}，{data.lastRun.state}
+            <span className="tabular-nums">{data.lastRun.bucket.toLocaleString('zh-CN')}</span>，{data.lastRun.state}
           </span>
           <span className="text-subtle">当次披露：{data.lastRun.disclosure}</span>
         </div>

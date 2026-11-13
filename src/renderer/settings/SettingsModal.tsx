@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArchiveRestore,
@@ -23,6 +23,8 @@ import type { ThemeOverride } from '../app/ui-state';
 import type { RocClient } from '../shared/roc-client';
 import { SETTINGS_SECTIONS, highImpactChanges, sectionForDraftPath, type SettingsSectionId } from './settings-rules';
 import { useSettingsStore, type SettingsStore } from './settings-scope';
+import { BEFORE_NAVIGATE, type NavigationRequest } from '../app/navigation-guard';
+import { SettingsEditorGuardContext, useSettingsEditorGuards } from './settings-editor-guard';
 import { AppSection, TasksSection } from './sections/AppSections';
 import { AuthorizationSection } from './sections/AuthorizationSection';
 import { BackupSection } from './sections/BackupSection';
@@ -79,9 +81,8 @@ const SECTION_ICONS: Readonly<Record<SettingsSectionId, LucideIcon>> = {
  * shows `store.diff.count`, the section dots come from `store.diff.sections`, and 「保存设置」
  * writes everything. Two consequences are deliberate:
  *
- *  - **Switching sections never asks for confirmation** because it cannot lose anything — the
- *    draft is shared and kept, so a per-section prompt would be noise. The prompt exists where
- *    the risk does: closing the modal, and discarding the draft.
+ *  - Shared document edits survive section changes. Independent secret and embedding editors
+ *    guard their own transient drafts before a section change can unmount them.
  *  - **A discard is explicit and its own button**; closing with unsaved edits opens a
  *    confirmation that offers 继续编辑 first and focuses cancel (MASTER §11).
  *
@@ -194,7 +195,12 @@ function dirtyBarText(dirty: boolean, dirtyCount: number, savedOnce: boolean): s
 export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
   const store = useSettingsStore(props.client, props.projectId);
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('models');
-  const [discardIntent, setDiscardIntent] = useState<'close' | 'reset' | null>(null);
+  const [discardIntent, setDiscardIntent] = useState<'close' | 'reset' | 'navigate' | null>(null);
+  const [closeAfterDiscard, setCloseAfterDiscard] = useState(false);
+  const editorGuard = useSettingsEditorGuards();
+  const navigationContinuation = useRef<(() => void) | null>(null);
+  const current = useRef({ open: props.open, store });
+  current.current = { open: props.open, store };
   const [impactOpen, setImpactOpen] = useState(false);
   const [saveAttempted, setSaveAttempted] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
@@ -228,15 +234,51 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
 
   const dirtyCount = store.diff.count;
   const dirty = dirtyCount > 0;
+
+  // The shell closes settings through the guarded route. Dispatch only after
+  // discarded drafts commit, so this surface no longer defers its own close.
+  useLayoutEffect(() => {
+    if (!closeAfterDiscard) return;
+    setCloseAfterDiscard(false);
+    if (props.open) props.onClose();
+  }, [closeAfterDiscard, props.open, props.onClose]);
   const impacts = highImpactChanges(store.base, store.draft);
+  const transientDirty = editorGuard.dirty();
+  const busy = store.save.pending || editorGuard.busy();
+
+  useEffect(() => {
+    const navigate = (event: Event): void => {
+      const state = current.current;
+      if (!state.open) return;
+      if (state.store.save.pending || editorGuard.busy()) {
+        event.preventDefault();
+      } else if (state.store.diff.count > 0 || editorGuard.dirty()) {
+        navigationContinuation.current = (event as CustomEvent<NavigationRequest>).detail.defer();
+        setDiscardIntent('navigate');
+      }
+    };
+    const unload = (event: BeforeUnloadEvent): void => {
+      const state = current.current;
+      if (state.open && (state.store.save.pending || state.store.diff.count > 0 || editorGuard.busy() || editorGuard.dirty())) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    };
+    window.addEventListener(BEFORE_NAVIGATE, navigate);
+    window.addEventListener('beforeunload', unload);
+    return () => {
+      window.removeEventListener(BEFORE_NAVIGATE, navigate);
+      window.removeEventListener('beforeunload', unload);
+    };
+  }, [editorGuard.busy, editorGuard.dirty]);
 
   // Unsaved drafts are never discarded silently: the veto opens a confirmation instead of
   // closing, and Escape cancels it.
   const requestClose = (): boolean => {
-    if (store.save.pending) {
+    if (store.save.pending || editorGuard.busy()) {
       return false;
     }
-    if (!dirty) {
+    if (!dirty && !editorGuard.dirty()) {
       return true;
     }
     setDiscardIntent('close');
@@ -247,9 +289,14 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
    * Vertical tablist keyboard support: ↑/↓ step, Home/End jump to the ends (the WAI-ARIA
    * convention for `role="tablist"`, and what every macOS settings window does).
    */
-  const selectSection = (id: SettingsSectionId): void => {
-    setActiveSection(id);
-    listRef.current?.querySelector<HTMLButtonElement>(`[data-section="${id}"]`)?.focus();
+  const selectSection = (id: SettingsSectionId, focusPanel = false): void => {
+    const select = (): void => {
+      setActiveSection(id);
+      if (focusPanel) setFocusIssue(true);
+      else listRef.current?.querySelector<HTMLButtonElement>(`[data-section="${id}"]`)?.focus({ preventScroll: true });
+    };
+    if (id === activeSection) select();
+    else editorGuard.context.request(select);
   };
 
   const onListKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
@@ -303,7 +350,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
   const issueEntries = store.issues.map((issue) => ({ issue, section: sectionForDraftPath(issue.path) }));
 
   return (
-    <>
+    <SettingsEditorGuardContext.Provider value={editorGuard.context}>
       <RadixSettingsDialogShell
         open={props.open}
         title="设置"
@@ -324,7 +371,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
                 ref={(element) => { activeNavigationRef.current = element; }}
                 aria-label="设置分区"
                 value={activeSection}
-                onChange={(event) => setActiveSection(event.target.value as SettingsSectionId)}
+                onChange={(event) => selectSection(event.target.value as SettingsSectionId)}
                 className={`${formInputClass} w-full`}
                 data-testid="settings-section-select"
               >
@@ -423,8 +470,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
                         <button
                           type="button"
                           onClick={() => {
-                            setActiveSection(section);
-                            setFocusIssue(true);
+                            selectSection(section, true);
                           }}
                           className="mr-1 underline decoration-dotted"
                           data-testid={`settings-issue-jump-${section}`}
@@ -456,11 +502,12 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
             <div className="flex shrink-0 flex-wrap items-center gap-2 border-t-[0.5px] border-line pt-3">
               <span className="min-w-0 flex-1 text-muted text-[length:var(--font-meta-size)] tabular-nums" role="status" data-testid="settings-dirty-bar">
                 {dirtyBarText(dirty, dirtyCount, store.savedAt !== null)}
+                {transientDirty ? `${dirty ? '，' : ''}${editorGuard.labels.join('、')}尚未保存` : ''}
               </span>
               <button
                 type="button"
                 onClick={() => setDiscardIntent('reset')}
-                disabled={!dirty || store.save.pending}
+                disabled={(!dirty && !transientDirty) || busy}
                 data-testid="settings-discard-draft"
                 className="h-[var(--control-height-compact)] rounded-control px-2 text-muted hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
               >
@@ -469,7 +516,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
               <button
                 type="button"
                 onClick={requestSave}
-                disabled={!dirty || store.save.pending}
+                disabled={!dirty || busy}
                 data-testid="settings-save"
                 className={formPrimaryButtonClass}
               >
@@ -482,20 +529,45 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
         <RadixSettingsConfirmDialog
           open={discardIntent !== null}
           title="放弃未保存的设置？"
-          message={`有 ${dirtyCount} 项设置尚未保存。`}
+          message={transientDirty
+            ? `${editorGuard.labels.join('、')}尚未保存${dirty ? `，另有 ${dirtyCount} 项设置修改` : ''}。放弃后需要重新填写。`
+            : `有 ${dirtyCount} 项设置尚未保存。`}
           confirmLabel="放弃修改"
           cancelLabel="继续编辑"
           tone="destructive"
           testId="settings-discard"
-          onCancel={() => setDiscardIntent(null)}
+          confirmDisabled={busy}
+          onCancel={() => {
+            setDiscardIntent(null);
+            navigationContinuation.current = null;
+          }}
           onConfirm={() => {
+            if (store.save.pending || editorGuard.busy()) return;
+            const resume = navigationContinuation.current;
+            navigationContinuation.current = null;
             setDiscardIntent(null);
             store.discard();
+            editorGuard.discard();
             setSaveAttempted(false);
             if (discardIntent === 'close') {
-              props.onClose();
+              setCloseAfterDiscard(true);
+            } else if (discardIntent === 'navigate') {
+              resume?.();
             }
           }}
+        />
+
+        <RadixSettingsConfirmDialog
+          open={editorGuard.transition !== null}
+          title="放弃未保存的编辑内容？"
+          message={`${editorGuard.labels.join('、')}尚未保存，放弃后需要重新填写。`}
+          confirmLabel="放弃修改"
+          cancelLabel="继续编辑"
+          tone="destructive"
+          confirmDisabled={busy}
+          testId="settings-editor-discard"
+          onCancel={editorGuard.cancel}
+          onConfirm={editorGuard.confirm}
         />
 
         <RadixSettingsConfirmDialog
@@ -512,6 +584,6 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
           }}
         />
       </RadixSettingsDialogShell>
-    </>
+    </SettingsEditorGuardContext.Provider>
   );
 }

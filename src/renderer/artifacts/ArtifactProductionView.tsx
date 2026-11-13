@@ -1,4 +1,4 @@
-import {lazy, Suspense} from 'react';
+import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
 import type {ResearchArtifactInspectRequest} from '../../shared/schemas/research-artifact-inspector';
 import type {ResearchProductionInput} from '../../shared/schemas/research-production-inputs';
 import {useAsyncResource} from '../app/use-async-resource';
@@ -7,9 +7,9 @@ import {formSecondaryButtonClass} from '../shared/form-ui';
 import {ProductionFiles} from './production/ProductionFiles';
 import type {ProductionFileLocation} from './artifact-reading-location';
 
-const ExperimentSourceView=lazy(async()=>({default:(await import('./production/ExperimentSourceView')).ExperimentSourceView}));
-const FigureSourceView=lazy(async()=>({default:(await import('./production/FigureSourceView')).FigureSourceView}));
-const ExportSourceView=lazy(async()=>({default:(await import('./production/ExportSourceView')).ExportSourceView}));
+const ExperimentSourceView=retryableLazy(async()=>({default:(await import('./production/ExperimentSourceView')).ExperimentSourceView}));
+const FigureSourceView=retryableLazy(async()=>({default:(await import('./production/FigureSourceView')).FigureSourceView}));
+const ExportSourceView=retryableLazy(async()=>({default:(await import('./production/ExportSourceView')).ExportSourceView}));
 
 function SourceView({input,client,request,writable}: {
   input: ResearchProductionInput;client: RocClient;request: ResearchArtifactInspectRequest;writable: boolean
@@ -39,7 +39,7 @@ export function ArtifactProductionView({client,request,writable,initialLocation,
     </div>}
     {input===null?null:<>
       <p className="text-muted">已校验保存的文件版本。工件{input.artifact.status==='approved'?'已批准':'仍等待人工决定'}。</p>
-      <Suspense fallback={<p role="status">正在加载生产来源…</p>}><SourceView input={input} client={client} request={request} writable={writable}/></Suspense>
+      <LazyBoundary resetKey={input.source.kind} fallback={<p role="status">正在加载生产来源…</p>}><SourceView input={input} client={client} request={request} writable={writable}/></LazyBoundary>
       <ProductionFiles client={client} input={input} request={request} initialLocation={initialLocation} onLocationChange={onLocationChange}/>
     </>}
   </section>;

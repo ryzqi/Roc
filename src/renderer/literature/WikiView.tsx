@@ -185,9 +185,9 @@ export function WikiView({
                     onClick={() => selectConcept(page.claimId)}
                     aria-current={active ? 'true' : undefined}
                     data-testid={`wiki-concept-${page.claimId}`}
-                    className={`flex w-full flex-col gap-0.5 rounded-card border px-2 py-1.5 text-left transition-colors duration-[var(--duration-fast)] ${
+                    className={`flex w-full flex-col gap-0.5 rounded-card border-[0.5px] px-2 py-1.5 text-left transition-colors duration-[var(--duration-fast)] ${
                       active
-                        ? 'border-line-strong bg-[var(--surface-card-hover)] shadow-[var(--shadow-card)]'
+                        ? 'border-line-strong bg-[var(--surface-card-hover)]'
                         : 'border-transparent hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]'
                     }`}
                   >

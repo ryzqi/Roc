@@ -8,7 +8,7 @@ import type {RocClient} from '../shared/roc-client';
 import {projectParsedRegionToPdf} from '../../shared/research-document-coordinates';
 import {ErrorBar} from '../shell/ErrorBar';
 import {documentContentHash} from './document-content-hash';
-import PaperAnnotations, {type AnnotationDraft} from './PaperAnnotations';
+import PaperAnnotations, {type AnnotationDraft, type AnnotationTransitionGuard} from './PaperAnnotations';
 import PdfTextLayer, {type PdfTextSelection} from './PdfTextLayer';
 import PdfReadingTools, {type TranslationSegment} from './PdfReadingTools';
 import type {ReadingHighlight} from '../../shared/schemas/research-reading';
@@ -57,6 +57,7 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
   const [regionMode, setRegionMode] = useState<string | null>(null);
   const [regionError, setRegionError] = useState<{key: string; message: string} | null>(null);
   const annotationButtonRef = useRef<HTMLButtonElement>(null);
+  const annotationGuard = useRef<AnnotationTransitionGuard | null>(null);
   const dragOverlayRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{paintKey: string; pointerId: number; x: number; y: number} | null>(null);
   const skipClick = useRef(false);
@@ -187,18 +188,24 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
   const currentPaint = painted?.key === paintKey ? painted : null;
   const failure = error?.key === key ? error.message : null;
   const candidates = failure === null && candidateRequest?.key === candidateKey ? candidateRequest : null;
-  const navigate = (page: number): void => {setPageSelection({key: pageKey, page});};
+  const changeAnnotation = (proceed: () => void): void => {
+    if (annotationGuard.current) annotationGuard.current.request(proceed); else proceed();
+  };
+  const navigate = (page: number): void => {
+    if (page === pageNumber) return;
+    changeAnnotation(() => setPageSelection({key: pageKey, page}));
+  };
   const showAnnotations = current?.preview != null && parsed!==null && annotationsOpen?.key === key && annotationsOpen.open;
   const draft = annotationDraft?.key === candidateKey ? annotationDraft.draft : null;
   const selecting = canAnnotate && parsed!==null && regionMode === paintKey;
   const frame = current?.preview?.coordinates?.pages.find(value => value.page === pageNumber)?.frame;
-  const beginDraft = (location: ResearchDocumentAnnotationTarget['location']): void => {
+  const beginDraft = (location: ResearchDocumentAnnotationTarget['location']): void => changeAnnotation(() => {
     setRegionMode(null);
     setRegionError(null);
     setAnnotationsOpen({key, open: true});
     setAnnotationDraft({key: candidateKey, draft: {id: crypto.randomUUID(), page: pageNumber, location}});
     setAnnotationLocation(null);
-  };
+  });
   const selectedAnnotation = annotationLocation?.key === key && annotationLocation.target.page === pageNumber ? annotationLocation.target : null;
   const shownLocation = draft?.location ?? selectedAnnotation?.location;
   const annotationRegion = currentPaint !== null && shownLocation?.kind === 'pdf-region' ?
@@ -246,7 +253,7 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
             pageOnly: currentPaint!.locations.some(location => location.region === null), fromPoint: false} : null)}
           className="rounded-control px-1 hover:bg-[var(--overlay-hover)] disabled:opacity-40">本页解析块</button>
         <button ref={annotationButtonRef} type="button" aria-expanded={showAnnotations} disabled={current?.preview == null || parsed===null || failure !== null}
-          data-testid="reader-annotations-toggle" onClick={() => setAnnotationsOpen({key, open: !showAnnotations})}
+          data-testid="reader-annotations-toggle" onClick={() => changeAnnotation(() => setAnnotationsOpen({key, open: !showAnnotations}))}
           className="rounded-control px-1 hover:bg-[var(--overlay-hover)] disabled:opacity-40">批注</button>
         {canAnnotate ? <button type="button" aria-label="框选 PDF 批注区域" aria-pressed={selecting}
           disabled={currentPaint === null || frame?.kind !== 'pdf' || failure !== null}
@@ -263,6 +270,7 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
         {selecting ? <p role="status" className="mb-2 text-muted">拖动框选批注区域，Escape 取消。</p> : null}
         {!showAnnotations || current?.preview == null || parsed===null ? null : <PaperAnnotations key={key} client={client} projectId={projectId}
           document={document} parsed={parsed} preview={current.preview} canAnnotate={canAnnotate} draft={draft}
+          transitionGuardRef={annotationGuard}
           onCreatePage={() => beginDraft({kind: 'page'})}
           onCloseDraft={() => {setAnnotationDraft(null); annotationButtonRef.current?.focus({preventScroll: true});}}
           onSelect={target => {

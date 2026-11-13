@@ -37,6 +37,7 @@ import {
   bindWindowHiddenBroadcast,
   buildMainWindowOptions,
   getWindowBounds,
+  getWindowHiddenState,
   resolveMainWindowBounds,
   type HiddenBroadcastWindow
 } from './window-shell';
@@ -97,6 +98,10 @@ const hostService = new MacOSHostService({
     on: (event, listener) => {
       if (event === 'before-quit') {
         app.on('before-quit', listener);
+        return;
+      }
+      if (event === 'will-quit') {
+        app.on('will-quit', listener);
         return;
       }
       app.on('second-instance', listener);
@@ -176,12 +181,14 @@ const hostService = new MacOSHostService({
   openMainPage: showMainPage,
   broadcastTaskUpdated: () => {
     broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, null);
-  }
+  },
+  broadcastWindowHidden: broadcastMainWindowHidden
 });
 
 const ownsSingleInstanceLock = hostService.initializeProcessIdentity();
 
-app.on('before-quit', (event) => {
+// The renderer may veto beforeunload. Retain the kernel until all windows close.
+app.on('will-quit', (event) => {
   if (appShutdownComplete) {
     return;
   }
@@ -209,7 +216,8 @@ app.on('before-quit', (event) => {
     .finally(() => {
       appShutdownComplete = true;
       appShutdownInProgress = null;
-      app.quit();
+      // will-quit already confirmed every window closed; finish the pending exit.
+      app.exit(0);
     });
 });
 
@@ -225,8 +233,14 @@ function showMainPage(page: MenuPage): void {
     mainWindow.restore();
   }
   mainWindow.show();
+  broadcastMainWindowHidden();
   mainWindow.focus();
   sendToWindow(mainWindow, ipcChannels.navigate, page);
+}
+
+function broadcastMainWindowHidden(): void {
+  if (mainWindow === null || mainWindow.isDestroyed()) return;
+  sendToWindow(mainWindow, ipcChannels.windowHidden, getWindowHiddenState(mainWindow));
 }
 
 function requireActiveKernel(): MainKernelBootstrap {
@@ -340,6 +354,7 @@ async function createWindow(): Promise<void> {
       }
     });
     mainWindow?.show();
+    broadcastMainWindowHidden();
   }
 
   mainWindow.once('ready-to-show', () => {
@@ -531,6 +546,7 @@ app.on('activate', () => {
       mainWindow.restore();
     }
     mainWindow.show();
+    broadcastMainWindowHidden();
     mainWindow.focus();
   }
 });

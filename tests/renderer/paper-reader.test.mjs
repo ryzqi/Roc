@@ -1,4 +1,4 @@
-import {before, after, test} from 'node:test';
+import {before, after, afterEach, test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {mkdtemp, mkdir, readFile, realpath, rm, writeFile} from 'node:fs/promises';
@@ -31,9 +31,16 @@ before(async () => {
     import {WorkspaceScopeProvider} from ${JSON.stringify(join(process.cwd(),'src/renderer/app/workspace-scope'))};
     import {ArtifactEvidenceSource} from ${JSON.stringify(join(process.cwd(),'src/renderer/artifacts/ArtifactEvidenceSource'))};
     import {ArtifactRelations} from ${JSON.stringify(join(process.cwd(),'src/renderer/artifacts/ArtifactRelations'))};
+    import {ArtifactEditorBoundary} from ${JSON.stringify(join(process.cwd(),'src/renderer/artifacts/artifact-editor-guard'))};
     import {ModalShell} from ${JSON.stringify(join(process.cwd(),'src/renderer/shell/ModalShell'))};
+    import {requestNavigation} from ${JSON.stringify(join(process.cwd(),'src/renderer/app/navigation-guard'))};
+    import {parseAppRoute} from ${JSON.stringify(join(process.cwd(),'src/renderer/app/routes'))};
     import {LazyMotion,MotionConfig,domAnimation} from 'motion/react';
     const root=createRoot(document.getElementById('root'));
+    window.unmountReader=()=>flushSync(()=>root.render(null));
+    window.readerNavigationCount=0;
+    window.navigateReader=projectId=>requestNavigation(parseAppRoute(new URLSearchParams({project:projectId,view:'literature'})),
+      ()=>{window.readerNavigationCount++;});
     const client={api:{research:{
       resolveDocumentParse:input=>window.readFromHost('resolveDocumentParse',input),
       previewDocument:input=>window.readFromHost('previewDocument',input),
@@ -63,11 +70,13 @@ before(async () => {
       const [source,setSource]=useState(initial),[open,setOpen]=useState(true);
       window.updateSource=source=>flushSync(()=>setSource(source));
       return <MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
+        <ArtifactEditorBoundary projectId={source?.evidence.projectId??relationSnapshot.projectId}>
         <ModalShell open={open} kind="drawer" title="固定来源验证" testId="source-inspector"
           widthClassName="w-[560px]" onClose={()=>setOpen(false)}>
           {relationSnapshot===null ? <ArtifactEvidenceSource client={client} source={source} canDecide={false} onChanged={()=>{}}/> :
             <ArtifactRelations client={client} snapshot={relationSnapshot} current={true} onChanged={()=>{}}/>}
         </ModalShell>
+        </ArtifactEditorBoundary>
       </LazyMotion></MotionConfig>;
     }
     window.mountSource=source=>flushSync(()=>root.render(<SourceHarness key={++generation} initial={source}/>));
@@ -119,11 +128,20 @@ before(async () => {
     api.parseIpcRequestArgs(channel, [input]);
     const result = await f.bridge.invoke(`research.${method}`, [input], 98);
     if (f.mismatchedResult && result.ok && method === 'getDocumentContent') result.data.run.id = 'wrong-returned-parse';
-    if (f.defer === method) return new Promise(resolve => {f.finish = () => resolve(result); f.deferReady();});
+    if (f.defer === method) return new Promise(resolve => {
+      (f.deferredFinishes ??= []).push(() => resolve(result));
+      f.finish = () => {for (const finish of f.deferredFinishes.splice(0)) finish();};
+      f.deferReady();
+    });
     return result;
   });
 });
+afterEach(async () => {
+  for (const fixture of fixtures) fixture.finish?.();
+  await page?.evaluate(() => window.unmountReader());
+});
 after(async () => {
+  await page?.evaluate(() => window.unmountReader());
   await app?.close();
   for (const fixture of fixtures) fixture.close();
   for (const fixture of fixtures) if (fixture.root) await rm(fixture.root, {recursive: true, force: true});
@@ -903,6 +921,173 @@ function scientificRows(f) {
   return ['research_claims','research_evidence_relations','research_evidence_relation_revisions']
     .map(table=>f.db.prepare(`SELECT * FROM ${table}`).all());
 }
+
+for (const action of ['page', 'collapse', 'replace', 'compare', 'document', 'saved-location']) {
+  test(`annotation draft protects the actual ${action} transition until explicit discard`, async () => {
+    const f = await realPdfScene({pdfOptions: {pageCount: 2}, pageRange: '1-2'});
+    if (action === 'document') {
+      const snapshot = f.snapshot;
+      f.snapshot = () => ({...snapshot(), documents: [...snapshot().documents, f.repository.documents.get(f.second.id)]});
+    }
+    await openAnnotationReader(f);
+    await pageNote();
+    if (action === 'saved-location') {
+      await page.getByRole('textbox', {name: '批注说明', exact: true}).fill('Saved exact location');
+      await page.getByRole('button', {name: '保存批注', exact: true}).click();
+      await page.getByTestId('reader-annotation-saved').waitFor();
+      await page.getByRole('button', {name: '本页批注', exact: true}).click();
+    }
+    const note = page.getByRole('textbox', {name: '批注说明', exact: true});
+    await note.fill('Unsaved exact annotation text');
+    const before = f.changes();
+    const perform = async () => {
+      if (action === 'page') await page.getByRole('button', {name: '下一页', exact: true}).click();
+      if (action === 'collapse') await page.getByTestId('reader-annotations-toggle').click();
+      if (action === 'replace') await page.getByRole('button', {name: '本页批注', exact: true}).click();
+      if (action === 'compare') await page.getByTestId('reader-compare-pdf').click();
+      if (action === 'document') await page.getByTestId(`reader-document-tab-${f.second.id}`).click();
+      if (action === 'saved-location') await page.getByRole('button', {name: '回到批注位置', exact: true}).click();
+    };
+    await perform();
+    const dialog = page.getByTestId('annotation-draft-discard');
+    await dialog.waitFor();
+    await page.getByTestId('annotation-draft-discard-cancel').click();
+    assert.equal(await note.inputValue(), 'Unsaved exact annotation text');
+    assert.equal(await page.getByRole('spinbutton', {name: 'PDF 页码'}).inputValue(), '1');
+    assert.equal(f.changes(), before);
+    await perform();
+    await dialog.waitFor();
+    await page.getByTestId('annotation-draft-discard-confirm').click();
+    if (action === 'page') {
+      await page.waitForFunction(() => document.querySelector('[aria-label="PDF 页码"]')?.value === '2');
+    } else if (action === 'replace') {
+      await page.waitForFunction(() => document.querySelector('[aria-label="批注说明"]')?.value === '');
+    } else if (action === 'document') {
+      await page.waitForFunction(id => document.querySelector(`[data-testid="reader-document-tab-${id}"]`)?.getAttribute('aria-selected') === 'true', f.second.id);
+    } else if (action === 'saved-location') {
+      await page.getByTestId('reader-annotation-form').waitFor({state: 'detached'});
+    } else {
+      await page.getByTestId(action === 'compare' ? 'reader-pdf' : 'reader-annotations').waitFor({state: 'detached'});
+    }
+    assert.equal(f.changes(), before);
+  });
+}
+
+test('annotation draft protects project navigation and native unload with a composable continuation', async () => {
+  const f = await realPdfScene();
+  await openAnnotationReader(f); await pageNote();
+  await page.getByRole('textbox', {name: '批注说明', exact: true}).fill('Unsaved project annotation');
+  const unload = await page.evaluate(() => {
+    const event = new Event('beforeunload', {cancelable: true});
+    return !window.dispatchEvent(event);
+  });
+  assert.equal(unload, true);
+  const count = await page.evaluate(() => window.readerNavigationCount);
+  await page.evaluate(() => {
+    window.otherReaderGuard = event => {window.resumeOtherReaderGuard = event.detail.defer();};
+    window.addEventListener('roc:before-navigate', window.otherReaderGuard);
+    window.navigateReader('other-project');
+  });
+  await page.getByTestId('annotation-draft-discard').waitFor();
+  await page.getByTestId('annotation-draft-discard-confirm').click();
+  assert.equal(await page.evaluate(() => window.readerNavigationCount), count);
+  await page.evaluate(() => {
+    window.resumeOtherReaderGuard();
+    window.removeEventListener('roc:before-navigate', window.otherReaderGuard);
+  });
+  await page.waitForFunction(count => window.readerNavigationCount === count + 1, count);
+  assert.equal(await page.getByTestId('reader-annotation-form').count(), 0);
+});
+
+test('annotation save serializes synchronous form submissions and blocks transitions until the actual receipt', async () => {
+  const f = await realPdfScene();
+  await openAnnotationReader(f); await pageNote();
+  await page.getByRole('textbox', {name: '批注说明', exact: true}).fill('One exact annotation request');
+  const ready = new Promise(resolve => {f.deferReady = resolve;});
+  f.defer = 'createDocumentAnnotation';
+  await page.getByTestId('reader-annotation-form').evaluate(form => {
+    form.requestSubmit(); form.requestSubmit();
+    window.navigateReader('other-project');
+  });
+  await ready;
+  await page.getByRole('button', {name: '保存中…', exact: true}).waitFor();
+  assert.equal(calls.filter(call => call.method === 'createDocumentAnnotation').length, 1);
+  assert.equal(await page.getByRole('button', {name: '重读批注', exact: true}).isDisabled(), true);
+  assert.equal(await page.getByRole('button', {name: '本页批注', exact: true}).isDisabled(), true);
+  assert.equal(await page.getByTestId('annotation-draft-discard').count(), 0);
+  await page.getByTestId('reader-annotations-toggle').click();
+  assert.equal(await page.getByTestId('reader-annotation-form').isVisible(), true);
+  assert.equal(await page.evaluate(() => {
+    const event = new Event('beforeunload', {cancelable: true});
+    return !window.dispatchEvent(event);
+  }), true);
+  f.defer = null; f.finish();
+  await page.getByTestId('reader-annotation-saved').waitFor();
+  assert.equal(f.repository.documentAnnotations.list({projectId: f.project.id, documentId: f.actual.id, parseId: 'actual-original-parse'}).length, 1);
+});
+
+test('annotation capture serializes synchronous clicks and keeps its pending source mounted through reread', async () => {
+  const f = await realPdfScene();
+  await openAnnotationReader(f); await pageNote();
+  await page.getByRole('combobox', {name: '批注解析块', exact: true}).selectOption(f.collected.data.content.blocks[0].id);
+  await page.getByRole('textbox', {name: '批注说明', exact: true}).fill('Exact capture source');
+  await page.getByRole('button', {name: '保存批注', exact: true}).click();
+  await page.getByTestId('reader-annotation-saved').waitFor();
+  const ready = new Promise(resolve => {f.deferReady = resolve;});
+  f.defer = 'captureDocumentAnnotation';
+  await page.getByRole('button', {name: '捕获所选块为证据', exact: true}).evaluate(button => {
+    button.click(); button.click();
+  });
+  await ready;
+  await page.getByRole('button', {name: '捕获中…', exact: true}).waitFor();
+  assert.equal(calls.filter(call => call.method === 'captureDocumentAnnotation').length, 1);
+  const beforeReads = calls.filter(call => call.method === 'listDocumentAnnotations').length;
+  await page.getByRole('button', {name: '重读批注', exact: true}).evaluate(button => button.click());
+  assert.equal(calls.filter(call => call.method === 'listDocumentAnnotations').length, beforeReads);
+  await page.getByTestId('reader-annotations-toggle').click();
+  assert.equal(await page.getByRole('button', {name: '捕获中…', exact: true}).count(), 1);
+  f.defer = null; f.finish();
+  await page.getByText('已捕获证据，科学结论待审核', {exact: true}).waitFor();
+});
+
+test('annotation draft survives a background reparse and switches only after explicit discard', async () => {
+  const f = await realPdfScene();
+  await openAnnotationReader(f); await pageNote();
+  const note = page.getByRole('textbox', {name: '批注说明', exact: true});
+  await note.fill('Unsaved note on the retained original parse');
+  f.publish(f.repository.documents.get(f.actual.id), 'background-reparse', 'Updated explicit original parse.');
+  calls.length = 0;
+  await page.evaluate(snapshot => window.updateReader(snapshot, {parseId: null, locator: null}), f.snapshot());
+  await page.getByTestId('annotation-draft-discard').waitFor();
+  await page.getByTestId('annotation-draft-discard-cancel').click();
+  assert.equal(await note.inputValue(), 'Unsaved note on the retained original parse');
+  assert.equal(calls.some(call => call.method === 'getDocumentContent'), false);
+  assert.equal(await page.getByTestId('reader-blocks').innerText().then(text => text.includes('Updated explicit original parse.')), false);
+  await page.getByTestId('reader-source-update').getByRole('button').click();
+  await page.getByTestId('annotation-draft-discard-confirm').click();
+  await textEquals('Updated explicit original parse.');
+  assert.equal(await page.getByTestId('reader-annotation-form').count(), 0);
+  assert.deepEqual(calls.filter(call => call.method === 'getDocumentContent').map(call => call.input.parseId), ['background-reparse']);
+});
+
+test('annotation save holds the exact source during background reparse until the pending receipt settles', async () => {
+  const f = await realPdfScene();
+  await openAnnotationReader(f); await pageNote();
+  await page.getByRole('textbox', {name: '批注说明', exact: true}).fill('Saving note retains its source');
+  const ready = new Promise(resolve => {f.deferReady = resolve;});
+  f.defer = 'createDocumentAnnotation';
+  await page.getByRole('button', {name: '保存批注', exact: true}).click();
+  await ready;
+  f.publish(f.repository.documents.get(f.actual.id), 'background-reparse', 'Updated while saving.');
+  await page.evaluate(snapshot => window.updateReader(snapshot, {parseId: null, locator: null}), f.snapshot());
+  assert.equal(await page.getByTestId('reader-annotation-form').isVisible(), true);
+  assert.equal(await page.getByTestId('annotation-draft-discard').count(), 0);
+  f.defer = null; f.finish();
+  await page.getByTestId('reader-annotation-saved').waitFor();
+  await page.getByTestId('reader-source-update').getByRole('button').click();
+  await textEquals('Updated while saving.');
+  assert.equal(calls.find(call => call.method === 'createDocumentAnnotation').input.target.parseId, 'actual-original-parse');
+});
 
 test('actual rotated PDF pointer selection saves its measured region and explicit block then reuses Evidence without science writes', async () => {
   const f=await realPdfScene({pdfOptions:{rotation:90,userUnit:2,crop:[20,30,500,700]}}),science=scientificRows(f);

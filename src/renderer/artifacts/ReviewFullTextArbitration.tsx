@@ -6,6 +6,7 @@ import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
 import {ReviewScreeningOutcome, screeningFinalOutcome, screeningOutcomeDraft, screeningDecisions} from './ReviewScreeningOutcome';
+import {ArtifactDraftDiscard, useArtifactDraft} from './artifact-editor-guard';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 export function ReviewFullTextArbitration({client, protocol, phase, item, binding, writable, onPending, onSaved}: {
@@ -26,6 +27,7 @@ export function ReviewFullTextArbitration({client, protocol, phase, item, bindin
       return client.api.research.getReviewFullTextArbitrationHistory({projectId, corpusId, arbitrationId: parent.snapshot.id});
     }, {label: '读取人工仲裁修订历史'});
   const busy = useRef(false), requests = useRef(new Map<string, string>());
+  const editor = useArtifactDraft('全文资格人工仲裁', {draft, reviewerId, revisionReason}, busy);
   const eligible = item.status === 'conflict' || item.status === 'uncertain' || parent?.currentDecisionSet === true;
   const canEdit = writable && binding.referenceStatus === 'current' && item.decisions.every(decision => decision.sourceCurrent) && eligible && editing;
   return <section className="flex min-w-0 flex-col gap-3 border-t-[0.5px] border-line pt-2" data-testid="artifact-review-full-arbitration">
@@ -47,11 +49,12 @@ export function ReviewFullTextArbitration({client, protocol, phase, item, bindin
       <p className="text-muted break-words">仲裁人 {parent.snapshot.adjudicator.name} {parent.snapshot.adjudicator.id}</p>
       <p className="text-muted break-all">记录人 {parent.snapshot.actor.id} {parent.snapshot.recordedAt}</p>
       {!writable || !eligible || editing ? null : <button type="button" className={`${button} self-start`}
-        data-testid="artifact-review-full-arbitration-revise" onClick={() => setEditing(true)}>修订当前集合仲裁</button>}
+        disabled={editor.locked} data-testid="artifact-review-full-arbitration-revise"
+        onClick={() => {if (!editor.isLocked()) setEditing(true);}}>修订当前集合仲裁</button>}
     </section>}
     {!canEdit ? null : <form className="flex flex-col gap-2" data-testid="artifact-review-full-arbitration-form" onSubmit={event => {
       event.preventDefault();
-      if (busy.current || !canEdit || reviewerId !== adjudicator.id || draft.decision === '' || draft.decision === 'uncertain') return;
+      if (busy.current || !canEdit || editor.isLocked() || reviewerId !== adjudicator.id || draft.decision === '' || draft.decision === 'uncertain') return;
       const body = {projectId, corpusId, expectedPlanHash: phase.plan.snapshotHash, expectedTitleFreezeHash: phase.titleFreezeHash,
         bindingId: binding.snapshot.id, expectedBindingHash: binding.snapshotHash, phase: 'full_text' as const, hitId: item.hit.id,
         reviewerId, outcome: screeningFinalOutcome(draft.decision, draft),
@@ -62,9 +65,11 @@ export function ReviewFullTextArbitration({client, protocol, phase, item, bindin
       let requestId = requests.current.get(signature);
       if (requestId === undefined) {requestId = crypto.randomUUID(); requests.current.set(signature, requestId);}
       busy.current = true; onPending(true);
-      void save.run({...body, requestId}).then(result => {busy.current = false; onPending(false); if (result.ok) onSaved();});
+      void save.run({...body, requestId}).then(result => {
+        busy.current = false; onPending(false); if (result.ok) {editor.saved(); onSaved();}
+      });
     }}>
-      <fieldset disabled={save.pending} className="flex flex-col gap-2">
+      <fieldset disabled={save.pending || editor.locked} className="flex flex-col gap-2">
         <label className="flex flex-col gap-1 text-muted">全文资格仲裁人
           <select required aria-label="全文资格仲裁人" className={`${formInputClass} border-[0.5px]`} value={reviewerId}
             onChange={event => {setReviewerId(event.target.value); save.reset();}}>
@@ -83,6 +88,11 @@ export function ReviewFullTextArbitration({client, protocol, phase, item, bindin
           disabled={reviewerId === '' || draft.decision === '' || (draft.decision === 'include' && draft.inclusionCriterionIds.length === 0)}
           data-testid="artifact-review-full-arbitration-save">保存当前审核集合仲裁</button>
       </fieldset>
+      <ArtifactDraftDiscard dirty={editor.dirty} testId="artifact-review-full-arbitration-discard" onDiscard={() => {
+        const next = {draft: screeningOutcomeDraft(parent?.snapshot.request.outcome ?? null), reviewerId: '', revisionReason: ''};
+        setDraft(next.draft); setReviewerId(''); setRevisionReason(''); setEditing(parent === null);
+        save.reset(); editor.reset(next);
+      }} />
     </form>}
     {save.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{save.error}</p>}
     {history.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{history.error}</p>}

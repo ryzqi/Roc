@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ResearchTaskExecutionDiagnostics } from '../../../shared/schemas/research-task-diagnostics';
 import type { ResearchTask, ResearchTaskEvent } from '../../../shared/schemas/research-tasks';
 import { useAsyncResource } from '../../app/use-async-resource';
+import type {AppViewId} from '../../app/routes';
 import { STAGE_LABELS } from '../../project/project-store';
 import { TaskSummary, researchTaskStatusLabels } from '../../research/tasks/TaskSummary';
 import { TaskControls } from '../../research/tasks/TaskControls';
@@ -14,6 +15,8 @@ import { FormSection, formSecondaryButtonClass, formSelectClass } from '../../sh
 import { formatBeijingDateTime } from '../../shared/format';
 import type { RocClient } from '../../shared/roc-client';
 import type {OpenResearchArtifact} from '../../artifacts/artifact-interactions';
+import {ManagementEditorBoundary, useManagementEditor} from '../management-editor-guard';
+import {requestManagementEditorChange} from '../management-interactions';
 
 const executionLabels = {
   chat: '主助手', stage: '科研阶段', experiment: '实验', figure: '图稿', export: '导出', review_search: '综述查询'
@@ -32,6 +35,7 @@ const eventLabels: Record<ResearchTaskEvent['eventType'], string> = {
   quality_gate: '质量检查', effect_committed: '操作已确认', node_claimed: '节点已领取', lease_expired: '租约已过期',
   node_output: '节点结果已保存', node_accepted: '节点结果审核'
 };
+const number = new Intl.NumberFormat('zh-CN');
 
 function ExecutionTree({ executions, client, onOpenArtifact }: { executions: ResearchTaskExecutionDiagnostics[]; client: RocClient; onOpenArtifact: OpenResearchArtifact | undefined }): React.JSX.Element {
   const children = new Map<string | null, ResearchTaskExecutionDiagnostics[]>();
@@ -55,11 +59,11 @@ function ExecutionTree({ executions, client, onOpenArtifact }: { executions: Res
             </div>
             <p className="break-all font-mono text-subtle text-[length:var(--font-meta-size)]">{association.executionId}</p>
             {execution.modelId === null ? null : <p className="text-subtle">{execution.providerId} / {execution.modelId}</p>}
-            <p className="text-subtle text-[length:var(--font-meta-size)]">
+            <p className="tabular-nums text-subtle text-[length:var(--font-meta-size)]">
               开始 {execution.startedAt === null ? '未开始' : formatBeijingDateTime(execution.startedAt)}
               {' / 结束 '}{execution.endedAt === null ? '未结束' : formatBeijingDateTime(execution.endedAt)}
               {execution.startedAt === null || execution.endedAt === null ? '' :
-                ` / 耗时 ${new Date(execution.endedAt).getTime() - new Date(execution.startedAt).getTime()} ms`}
+                ` / 耗时 ${number.format(new Date(execution.endedAt).getTime() - new Date(execution.startedAt).getTime())} ms`}
             </p>
             {execution.error === null ? null : <p className="break-words text-[var(--st-bad)]">{execution.error}</p>}
             {execution.artifacts.length === 0 ? null : (
@@ -94,12 +98,19 @@ function TaskDetail({ client, projectId, taskId, onOpenArtifact }: {
     () => client.api.research.getTaskEvents({ projectId, taskId, afterSequence, limit: 50 }),
     { label: '读取任务事件' }
   );
+  const consumedEvents = useRef<object | null>(null);
   const reloadEvents = events.reload;
   useEffect(() => client.api.research.onTaskUpdated(event => {
     if (event.projectId === projectId && event.taskId === taskId) reloadEvents();
   }), [client, projectId, taskId, reloadEvents]);
 
-  const refresh = (): void => { resource.reload(); events.reload(); };
+  const refresh = (): void => {
+    consumedEvents.current = events.data;
+    setPreviousEvents([]);
+    setAfterSequence(0);
+    resource.reload();
+    events.reload();
+  };
   return (
     <div className="grid gap-3" data-testid="mgmt-task-detail">
       <button type="button" className={`${formSecondaryButtonClass} justify-self-start`}
@@ -118,8 +129,8 @@ function TaskDetail({ client, projectId, taskId, onOpenArtifact }: {
                 agent_tool_effect_receipt_missing: '操作回执缺失，无法验证执行结果。'
               })[issue]}</li>)}
             </ul>}
-            {resource.data.eventDelivery.pending === 0 ? null : <p role="status" className="text-subtle">
-              {resource.data.eventDelivery.pending} 条事件等待同步，其中 {resource.data.eventDelivery.failed} 条投递失败。刷新详情可重试。
+            {resource.data.eventDelivery.pending === 0 ? null : <p role="status" className="tabular-nums text-subtle">
+              {number.format(resource.data.eventDelivery.pending)} 条事件等待同步，其中 {number.format(resource.data.eventDelivery.failed)} 条投递失败。刷新详情可重试。
             </p>}
             <TaskControls client={client} data={resource.data} onChanged={refresh} />
             <TaskGraph graph={resource.data.graph} />
@@ -137,8 +148,8 @@ function TaskDetail({ client, projectId, taskId, onOpenArtifact }: {
               {[...previousEvents, ...(events.data?.events ?? [])].map(event => (
                 <li key={event.sequence} className="grid gap-1" data-testid="mgmt-task-event">
                   <div className="flex flex-wrap justify-between gap-2">
-                    <span className="text-ink">#{event.sequence} {eventLabels[event.eventType]}</span>
-                    <span className="text-subtle">{formatBeijingDateTime(event.createdAt)}</span>
+                    <span className="tabular-nums text-ink">#{number.format(event.sequence)} {eventLabels[event.eventType]}</span>
+                    <span className="tabular-nums text-subtle">{formatBeijingDateTime(event.createdAt)}</span>
                   </div>
                   <p className="break-all font-mono text-subtle text-[length:var(--font-meta-size)]">
                     {event.payload.executionId === null ? '' : `执行 ${event.payload.executionKind} / ${event.payload.executionId}`}
@@ -155,7 +166,9 @@ function TaskDetail({ client, projectId, taskId, onOpenArtifact }: {
               <button type="button" className={`${formSecondaryButtonClass} justify-self-start`}
                 data-testid="mgmt-task-events-more" disabled={events.status === 'loading'} onClick={() => {
                   const page = events.data;
-                  if (page === null) return;
+                  if (events.status !== 'ready' || page === null || consumedEvents.current === page ||
+                    page.nextSequence <= afterSequence) return;
+                  consumedEvents.current = page;
                   setPreviousEvents(current => [...current, ...page.events]);
                   setAfterSequence(page.nextSequence);
                 }}>加载更多事件</button>
@@ -167,19 +180,33 @@ function TaskDetail({ client, projectId, taskId, onOpenArtifact }: {
   );
 }
 
-export function ResearchTasksSection({ client, projectId, selectedTaskId, onSelectTask, onOpenArtifact }: {
+type ResearchTasksSectionProps = {
   client: RocClient; projectId: string; selectedTaskId: string | null; onSelectTask: (taskId: string) => void;
+  canvasView?: AppViewId | undefined;
   onOpenArtifact?: OpenResearchArtifact | undefined;
-}): React.JSX.Element {
+};
+
+export function ResearchTasksSection(props: ResearchTasksSectionProps): React.JSX.Element {
+  return <ManagementEditorBoundary key={props.projectId} projectId={props.projectId} canvasView={props.canvasView}>
+    <ResearchTasksContent {...props} />
+  </ManagementEditorBoundary>;
+}
+
+function ResearchTasksContent({ client, projectId, selectedTaskId, onSelectTask, onOpenArtifact }: ResearchTasksSectionProps): React.JSX.Element {
+  const guard = useManagementEditor();
   const [afterTaskId, setAfterTaskId] = useState<string | null>(null);
   const [previousTasks, setPreviousTasks] = useState<ResearchTask[]>([]);
   const resource = useAsyncResource(
     JSON.stringify(['task-list', projectId, afterTaskId]),
     () => client.api.research.listTasks({ projectId, afterTaskId, limit: 25 }), { label: '读取科研任务列表' }
   );
+  const consumedTasks = useRef<object | null>(null);
+  const currentPage = useRef(resource.data);
+  currentPage.current = resource.data;
   const reload = resource.reload;
   useEffect(() => client.api.research.onTaskUpdated(event => {
     if (event.projectId === projectId) {
+      consumedTasks.current = currentPage.current;
       setPreviousTasks([]);
       setAfterTaskId(null);
       reload();
@@ -191,7 +218,11 @@ export function ResearchTasksSection({ client, projectId, selectedTaskId, onSele
       <label className="grid gap-1">
         <span className="text-subtle">选择任务</span>
         <select className={formSelectClass} value={selectedTaskId ?? ''} data-testid="mgmt-task-select"
-          onChange={event => onSelectTask(event.target.value)}>
+          disabled={guard.busy()} onChange={event => {
+            const next = event.target.value;
+            if (next === selectedTaskId) return;
+            requestManagementEditorChange(() => onSelectTask(next));
+          }}>
           <option value="" disabled>选择科研任务</option>
           {selectedTaskId !== null && !tasks.some(task => task.id === selectedTaskId) ?
             <option value={selectedTaskId}>当前任务 {selectedTaskId}</option> : null}
@@ -209,7 +240,9 @@ export function ResearchTasksSection({ client, projectId, selectedTaskId, onSele
         <button type="button" className={`${formSecondaryButtonClass} justify-self-start`}
           data-testid="mgmt-task-list-more" disabled={resource.status === 'loading'} onClick={() => {
             const page = resource.data;
-            if (page === null) return;
+            if (resource.status !== 'ready' || page === null || consumedTasks.current === page ||
+              page.nextTaskId === afterTaskId) return;
+            consumedTasks.current = page;
             setPreviousTasks(current => [...current, ...page.tasks]);
             setAfterTaskId(page.nextTaskId);
           }}>加载更多任务</button>

@@ -32,17 +32,25 @@ before(async () => {
   api = await loadResearchTestApi(); directory = await mkdtemp(join(tmpdir(), 'roc-hf-ui-')); await mkdir(artifacts, {recursive: true});
   await buildViteRenderer({directory, script: `
     import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {flushSync} from 'react-dom';
+    import {LazyMotion,MotionConfig,domAnimation} from 'motion/react';
+    import {requestReadingChange} from ${JSON.stringify(join(process.cwd(), 'src/renderer/literature/reading-interactions'))};
+    import {requestNavigation} from ${JSON.stringify(join(process.cwd(), 'src/renderer/app/navigation-guard'))};
     import {PaperReader} from ${JSON.stringify(join(process.cwd(), 'src/renderer/literature/PaperReader'))};
     import {WorkspaceScopeProvider} from ${JSON.stringify(join(process.cwd(), 'src/renderer/app/workspace-scope'))};
     const client={api:{research:Object.fromEntries(${JSON.stringify(Object.keys(channels))}.map(method=>[method,input=>window.callMain(method,input)]))}};
     client.api.research.getModelsStatus=async()=>({ok:true,data:{ready:false,error:null,models:[],downloading:false,selectedPack:'compact'}});
     const root=createRoot(document.getElementById('root'));let generation=0;
+    window.unmountHarness=()=>flushSync(()=>root.unmount());
+    window.navigations=0;
+    window.navigateAway=()=>requestNavigation({page:'project',projectId:'another-project'},()=>window.navigations++);
     function Harness({initial}){const [state,setState]=useState(initial);window.updateReader=state=>flushSync(()=>setState(state));
+      window.requestReaderChange=next=>requestReadingChange(state.projectId,()=>flushSync(()=>setState(next)));
       const store={client,...state,documents:[],action:{pending:false,error:null},assistant:{pending:false,error:null},parseInFlight:null};
       const scope={client,projectId:state.projectId,writable:state.writable,workspacePath:'/synthetic',workspaceStatus:'ready',workspaceError:null};
       return <WorkspaceScopeProvider value={scope}><PaperReader literature={store} openInFilesView={()=>{}} onClearFocus={()=>{}}/></WorkspaceScopeProvider>;
     }
-    window.mountReader=initial=>flushSync(()=>root.render(<Harness key={++generation} initial={initial}/>));
+    window.mountReader=initial=>flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
+      <Harness key={++generation} initial={initial}/></LazyMotion></MotionConfig>));
   `, style: 'html,body,#root{height:100%;margin:0}body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}'});
   await writeFile(join(directory, 'main.cjs'), `const {app,BrowserWindow}=require('electron');app.setPath('userData',${JSON.stringify(join(directory, 'data'))});
     app.whenReady().then(()=>new BrowserWindow({show:false,width:1000,height:900}).loadFile(${JSON.stringify(join(directory, 'index.html'))}));`);
@@ -62,7 +70,9 @@ before(async () => {
   });
 });
 after(async () => {
-  for (const hold of holds) hold.release(); await app?.close();
+  for (const hold of holds) hold.release();
+  if (page && !page.isClosed()) await page.evaluate(() => window.unmountHarness());
+  await app?.close();
   for (const f of scenes) await f.dispose(); api?.dispose(); await rm(directory, {recursive: true, force: true});
   assert.deepEqual(errors, []);
 });
@@ -82,7 +92,11 @@ async function scene(metadataFields = {}) {
   f.transport = new api.LiteratureSearchService(async (url, init) => {
     f.network.push(url);
     if (f.waitNetwork) {f.networkStarted.release(); await new Promise((_resolve, reject) => {
-      init.signal.throwIfAborted(); init.signal.addEventListener('abort', () => reject(init.signal.reason), {once: true});
+      init.signal.throwIfAborted(); init.signal.addEventListener('abort', () => {
+        f.abortObserved?.release();
+        if (f.abortFinish) f.abortFinish.promise.then(() => reject(init.signal.reason));
+        else reject(init.signal.reason);
+      }, {once: true});
     });}
     if (f.errorStatus) return new Response('', {status: f.errorStatus});
     return Response.json({id: identity.repo, sha: identity.revision, private: false, gated: false, disabled: false,
@@ -132,6 +146,102 @@ async function select() {
 }
 async function saved() {await page.getByTestId('reader-hf-history').getByRole('button', {name: /元数据已保存/}).first().click(); await page.getByTestId('reader-hf-observation').waitFor();}
 
+test('Hub capture synchronously freezes its actual reader toggle and sends one request', async () => {
+  const f = await scene(); await mount(f); await open();
+  await page.getByLabel('Hub 仓库', {exact: true}).fill(identity.repo);
+  await page.getByLabel('提交 SHA', {exact: true}).fill(identity.revision);
+  f.holdReply = 'captureHuggingFace'; f.replyStarted = deferred(); f.replyHold = deferred();
+  await page.evaluate(() => {
+    const submit = [...document.querySelectorAll('button')].find(button => button.textContent === '查询并保存 Hub 元数据');
+    submit.click(); submit.click(); document.querySelector('[data-testid="reader-hf-toggle"]').click();
+  });
+  await f.replyStarted.promise;
+  assert.equal(calls.filter(call => call.projectId === f.project.id && call.method === 'captureHuggingFace').length, 1);
+  await expect(page.getByTestId('reader-hf-panel')).toBeVisible();
+  await expect(page.getByLabel('Hub 仓库', {exact: true})).toBeDisabled();
+  f.holdReply = null; f.replyHold.release();
+  await page.getByTestId('reader-hf-observation').waitFor();
+});
+
+test('Hub capture cancellation is independent and keeps the original request until the actual abort finishes', async () => {
+  const f = await scene(); f.waitNetwork = true; f.networkStarted = deferred(); f.abortObserved = deferred(); f.abortFinish = deferred();
+  await mount(f); await open(); await page.getByLabel('Hub 仓库', {exact: true}).fill(identity.repo);
+  await page.getByLabel('提交 SHA', {exact: true}).fill(identity.revision);
+  await page.getByRole('button', {name: '查询并保存 Hub 元数据', exact: true}).click(); await f.networkStarted.promise;
+  f.holdReply = 'cancelHuggingFaceCapture'; f.replyStarted = deferred(); f.replyHold = deferred();
+  await page.evaluate(() => {
+    const cancel = [...document.querySelectorAll('button')].find(button => button.textContent === '取消 Hub 查询');
+    cancel.click(); cancel.click();
+  });
+  await f.replyStarted.promise;
+  assert.equal(calls.filter(call => call.projectId === f.project.id && call.method === 'cancelHuggingFaceCapture').length, 1);
+  f.holdReply = null; f.replyHold.release();
+  await page.getByText('主进程已接收取消信号；等待查询结束。', {exact: true}).waitFor();
+  await expect(page.getByLabel('Hub 仓库', {exact: true})).toBeDisabled();
+  await expect(page.getByRole('button', {name: '取消 Hub 查询', exact: true})).toBeVisible();
+  f.abortFinish.release(); await page.getByRole('button', {name: '重试原 Hub 请求', exact: true}).waitFor();
+  assert.equal(f.observations.history({projectId: f.project.id, identity: null, offset: 0, limit: 20}).total, 0);
+});
+
+test('reviewed Hub download start synchronously freezes file selection and its parent capture', async () => {
+  const f = await scene(); await mount(f); await open(); await capture(); await select();
+  f.holdReply = 'startHuggingFaceDownload'; f.replyStarted = deferred(); f.replyHold = deferred();
+  await page.evaluate(() => {
+    const submit = [...document.querySelectorAll('button')].find(button => button.textContent === '批准并下载所选文件');
+    submit.click(); submit.click();
+    document.querySelector('[data-testid="reader-hf-files"] input').click();
+    [...document.querySelectorAll('button')].find(button => button.textContent === '查询并保存 Hub 元数据').click();
+    document.querySelector('[data-testid="reader-hf-toggle"]').click();
+  });
+  await f.replyStarted.promise;
+  assert.equal(calls.filter(call => call.projectId === f.project.id && call.method === 'startHuggingFaceDownload').length, 1);
+  assert.equal(calls.filter(call => call.projectId === f.project.id && call.method === 'captureHuggingFace').length, 1);
+  await expect(page.getByRole('checkbox', {name: /data\/one.csv/})).toBeChecked();
+  await expect(page.getByTestId('reader-hf-panel')).toBeVisible();
+  f.holdReply = null; f.replyHold.release();
+  await page.getByTestId('reader-hf-download-receipt').getByText('下载完成', {exact: true}).waitFor();
+});
+
+test('Hub download cancel has its own synchronous lock while the real receipt reaches a terminal state', async () => {
+  const f = await scene(); f.holdDownloadIndex = 1; f.downloadStarted = deferred();
+  await mount(f); await open(); await capture(); await select();
+  await page.getByRole('button', {name: '批准并下载所选文件', exact: true}).click(); await f.downloadStarted.promise;
+  f.holdReply = 'cancelHuggingFaceDownload'; f.replyStarted = deferred(); f.replyHold = deferred();
+  await page.evaluate(() => {
+    const cancel = [...document.querySelectorAll('button')].find(button => button.textContent === '取消 Hub 下载');
+    cancel.click(); cancel.click();
+  });
+  await f.replyStarted.promise;
+  assert.equal(calls.filter(call => call.projectId === f.project.id && call.method === 'cancelHuggingFaceDownload').length, 1);
+  f.holdReply = null; f.replyHold.release();
+  await page.getByTestId('reader-hf-download-receipt').getByText('下载已取消', {exact: true}).waitFor();
+  assert.equal(f.service.history({projectId: f.project.id, observationId: null, offset: 0, limit: 20}).records[0].files.length, 1);
+});
+
+test('Hub query and reviewed file drafts protect unload and reading changes with independent navigation vetoes', async () => {
+  const f = await scene(); await mount(f); await open(); await page.getByLabel('Hub 仓库', {exact: true}).fill(identity.repo);
+  assert.equal(await page.evaluate(() => !window.dispatchEvent(new Event('beforeunload', {cancelable: true}))), true);
+  const next = state(f, {selected: {...f.item, id: 'another-source'}});
+  await page.evaluate(value => window.requestReaderChange(value), next);
+  await page.getByTestId('literature-editor-discard-cancel').click();
+  await expect(page.getByLabel('Hub 仓库', {exact: true})).toHaveValue(identity.repo);
+  await expect(page.getByTestId('literature-editor-discard')).toHaveCount(0);
+  await capture(); await select();
+  assert.equal(await page.evaluate(() => !window.dispatchEvent(new Event('beforeunload', {cancelable: true}))), true);
+  await page.getByRole('button', {name: '放弃下载审核', exact: true}).click();
+  await page.getByTestId('literature-editor-discard-cancel').click();
+  await expect(page.getByRole('checkbox', {name: /data\/one.csv/})).toBeChecked();
+  await expect(page.getByTestId('literature-editor-discard')).toHaveCount(0);
+  await page.evaluate(() => {
+    window.otherVeto = event => event.preventDefault(); window.addEventListener('roc:before-navigate', window.otherVeto);
+    window.navigateAway();
+  });
+  await page.getByTestId('literature-editor-discard-confirm').click();
+  assert.equal(await page.evaluate(() => window.navigations), 0);
+  await page.evaluate(() => window.removeEventListener('roc:before-navigate', window.otherVeto));
+  await expect(page.getByTestId('reader-hf-toggle')).toBeEnabled();
+});
+
 test('reader lazy capture preserves immutable revision, unknown and explicit access fields and never downloads metadata', async () => {
   const f = await scene(); await mount(f); assert.equal(calls.filter(call => call.projectId === f.project.id).length, 0);
   await open(); await page.getByText('尚无 Hub 观察', {exact: true}).waitFor(); await capture();
@@ -175,7 +285,10 @@ test('uncertain metadata reply retains the exact request and scope lock through 
   await page.getByRole('button', {name: '重试原 Hub 请求', exact: true}).waitFor();
   await page.evaluate(value => window.updateReader(value), state(f, {writable: false}));
   assert.equal(await page.getByRole('button', {name: '重试原 Hub 请求', exact: true}).isEnabled(), false);
-  await page.getByRole('button', {name: '放弃原 Hub 请求', exact: true}).click(); await expect(page.getByTestId('reader-hf-toggle')).toBeEnabled();
+  await page.getByRole('button', {name: '放弃原 Hub 请求', exact: true}).click();
+  await page.getByTestId('literature-editor-discard-confirm').click();
+  await expect(page.getByTestId('literature-editor-discard')).toHaveCount(0);
+  await expect(page.getByTestId('reader-hf-toggle')).toBeEnabled();
 });
 
 test('paged file selection survives pages, enforces20 files and dirty review cannot be discarded by history or collapse', async () => {
@@ -192,6 +305,8 @@ test('paged file selection survives pages, enforces20 files and dirty review can
   for (let index = 1; index <= 18; index++) await page.getByRole('checkbox', {name: new RegExp(`data/file-${index}\\.csv`)}).check();
   assert.equal(await page.getByRole('checkbox', {name: /data\/file-19.csv/}).isEnabled(), false);
   await page.getByRole('button', {name: '放弃下载审核', exact: true}).click();
+  await page.getByTestId('literature-editor-discard-confirm').click();
+  await expect(page.getByTestId('literature-editor-discard')).toHaveCount(0);
   await expect(page.getByTestId('reader-hf-toggle')).toBeEnabled();
 });
 
@@ -240,6 +355,8 @@ test('late scoped reads cannot show another project and metadata cancel uses the
   await page.getByRole('button', {name: '放弃原 Hub 请求', exact: true}).waitFor();
   assert.equal(held.observations.history({projectId: held.project.id, identity: null, offset: 0, limit: 20}).total, 0);
   await page.getByRole('button', {name: '放弃原 Hub 请求', exact: true}).click();
+  await page.getByTestId('literature-editor-discard-confirm').click();
+  await expect(page.getByTestId('literature-editor-discard')).toHaveCount(0);
 });
 
 test('650px light/dark keyboard focus and8 clip states pass inside the shared bounded reader scroller', async () => {

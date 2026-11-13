@@ -31,7 +31,14 @@ before(async () => {
       window.projectChatTranscript = projectChatTranscript;
       window.createEmptyChatRunState = createEmptyChatRunState;
       import { useGitWorkspace } from './src/renderer/workspace/use-git-workspace';
+      import { useBoundWorkspace } from './src/renderer/workspace/use-bound-workspace';
+      import { useFileNameSearch } from './src/renderer/workspace/use-file-search';
+      import { useFileTree } from './src/renderer/workspace/use-file-tree';
+      import { useRtkStatus } from './src/renderer/workspace/use-rtk-status';
       import { useLiteratureImportActions } from './src/renderer/literature/use-literature-import-actions';
+      import { useLiteratureStore } from './src/renderer/literature/use-literature-store';
+      import { BEFORE_READING_CHANGE } from './src/renderer/literature/reading-interactions';
+      window.BEFORE_READING_CHANGE = BEFORE_READING_CHANGE;
       import { researchIndexSettingsSaveSchema } from './src/shared/schemas/research-index';
       window.validateIndexWrite = request => researchIndexSettingsSaveSchema.parse(request);
       const actionContainer = document.createElement('div');
@@ -76,7 +83,12 @@ before(async () => {
         chat: p => useChatSession(p),
         transcriptIndex: p => useTranscriptFirstItemIndex(p),
         git: p => useGitWorkspace(p.client, p.workspacePath),
-        literatureImport: p => useLiteratureImportActions(p)
+        workspaceBinding: p => useBoundWorkspace(p.client, p.project),
+        fileNames: p => useFileNameSearch(p.client, p.workspacePath, p.query),
+        fileTree: p => useFileTree(p.client, {workspacePathKey: p.workspacePath, projectId: null}),
+        rtk: p => useRtkStatus(p.client, p.enabled),
+        literatureImport: p => useLiteratureImportActions(p),
+        literature: p => useLiteratureStore(p.client, p.projectId)
       };
       window.buildTranscriptVirtuosoWindow = buildTranscriptVirtuosoWindow;
       function TranscriptHarness(props) {
@@ -87,6 +99,7 @@ before(async () => {
         }, React.createElement(ChatTranscriptPanel, {...props, scrollContainerRef: scrollRef}));
       }
       window.mountTranscript = props => flushSync(() => root.render(React.createElement(TranscriptHarness, props)));
+      window.clearHook = () => flushSync(() => root.render(null));
       let serial = 0;
       window.mount = (kind, props, fresh = false) => {
         if (fresh) serial++;
@@ -132,6 +145,163 @@ after(async () => {
   }
   assert.deepEqual(rendererErrors, [], 'renderer must not throw during lifecycle tests');
 });
+
+async function mountLiteratureSelection() {
+  await page.evaluate(() => {
+    clearHook();
+    window.literatureProps = {projectId: 'project-a', client: {api: {research: {
+      listLibrary: () => Promise.resolve(ok([])),
+      getLibraryItem: ({id}) => Promise.resolve(ok({id})),
+      listDocuments: () => Promise.resolve(ok([])),
+      wikiSnapshot: () => Promise.resolve(ok({sources: [], claims: []})),
+      onLibraryChanged: () => () => {}
+    }}}};
+    mount('literature', literatureProps, true);
+    latest.select('paper-a');
+  });
+  await page.waitForFunction(() => latest.selectedId === 'paper-a');
+}
+
+test('literature selection honors the last request within one event before React commits', async () => {
+  await mountLiteratureSelection();
+  await page.evaluate(() => {
+    latest.select('paper-b');
+    latest.select('paper-a');
+  });
+  await page.waitForFunction(() => latest.selectedId === 'paper-a', null, {timeout: 1200});
+});
+
+test('literature selection cannot resume a discarded project continuation', async () => {
+  await mountLiteratureSelection();
+  await page.evaluate(() => {
+    window.selectionGuard = event => {window.resumeLiterature = event.detail.defer();};
+    window.addEventListener(BEFORE_READING_CHANGE, selectionGuard);
+    latest.select('paper-b');
+    mount('literature', {...literatureProps, projectId: 'project-b'});
+    window.removeEventListener(BEFORE_READING_CHANGE, selectionGuard);
+  });
+  await page.waitForFunction(() => latest.selectedId === null);
+  await page.evaluate(() => {
+    resumeLiterature();
+    window.afterSelectionTurn = new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  await page.evaluate(() => afterSelectionTurn);
+  assert.equal(await page.evaluate(() => latest.selectedId), null);
+});
+
+test('literature choosing the current paper cancels its earlier deferred selection', async () => {
+  await mountLiteratureSelection();
+  await page.evaluate(() => {
+    window.selectionGuard = event => {window.resumeLiterature = event.detail.defer();};
+    window.addEventListener(BEFORE_READING_CHANGE, selectionGuard);
+    latest.select('paper-b');
+    latest.select('paper-a');
+    window.removeEventListener(BEFORE_READING_CHANGE, selectionGuard);
+    resumeLiterature();
+    window.afterSelectionTurn = new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  await page.evaluate(() => afterSelectionTurn);
+  assert.equal(await page.evaluate(() => latest.selectedId), 'paper-a');
+});
+
+for (const reader of ['current workspace', 'workspace selection', 'file search', 'file tree', 'RTK status']) {
+  for (const transport of ['throw', 'reject']) {
+    test(`workspace reader ${reader} reports a transport ${transport} and can recover`, async () => {
+      await page.evaluate(({reader, transport}) => {
+        clearHook();
+        window.readerFailed = true;
+        const failure = () => {
+          if (!readerFailed) return null;
+          if (transport === 'throw') throw new Error('reader transport failed');
+          return Promise.reject(new Error('reader transport failed'));
+        };
+        const workspace = {path: '/workspace-a'};
+        const names = {query: 'draft', matches: [], truncated: false};
+        const tree = {workspacePath: workspace.path, relativePath: '', entries: [], truncated: false};
+        const status = {enabledForAgentCommands: true, binaryPath: '/rtk', configPath: '/rtk.toml',
+          teeDir: '', resourceState: 'ready'};
+        window.readerProps = {workspacePath: workspace.path, project: {workspacePath: workspace.path},
+          query: 'draft', enabled: true, client: {api: {
+            workspace: {
+              getCurrent: () => reader === 'current workspace' ? failure() ?? Promise.resolve(ok(workspace)) : Promise.resolve(ok(null)),
+              select: () => reader === 'workspace selection' ? failure() ?? Promise.resolve(ok(workspace)) : Promise.resolve(ok(workspace)),
+              onChanged: () => () => {}
+            },
+            files: {
+              searchByName: () => failure() ?? Promise.resolve(ok(names)),
+              listTree: () => failure() ?? Promise.resolve(ok(tree))
+            },
+            rtk: {status: () => failure() ?? Promise.resolve(ok(status))}
+          }}};
+        window.readerKind = reader === 'current workspace' || reader === 'workspace selection' ? 'workspaceBinding' :
+          reader === 'file search' ? 'fileNames' : reader === 'file tree' ? 'fileTree' : 'rtk';
+        mount(readerKind, readerProps, true);
+      }, {reader, transport});
+      await page.waitForFunction(() => readerKind === 'fileTree' ? latest.rootError !== null : latest.status === 'error', null, {timeout: 1200});
+      assert.equal(await page.evaluate(() => readerKind === 'fileTree' ? latest.rootError : latest.error), 'reader transport failed');
+      assert.equal(await page.evaluate(() => readerKind === 'fileTree' ? latest.loadingRoot : false), false);
+      await page.evaluate(() => {
+        readerFailed = false;
+        if (readerKind === 'workspaceBinding') latest.rebind();
+        else if (readerKind === 'rtk') {
+          mount(readerKind, {...readerProps, enabled: false});
+          mount(readerKind, readerProps);
+        } else latest.reload();
+      });
+      await page.waitForFunction(() => readerKind === 'fileTree' ?
+        !latest.loadingRoot && latest.rootError === null : latest.status === (readerKind === 'workspaceBinding' ? 'bound' : 'ready'));
+    });
+  }
+}
+
+test('workspace file search clears the old workspace results while the new request is pending', async () => {
+  await page.evaluate(() => {
+    clearHook();
+    window.searchNewWorkspace = deferred();
+    window.searchProps = {workspacePath: '/workspace-a', query: 'draft', client: {api: {files: {
+      searchByName: () => Promise.resolve(ok({query: 'draft', matches: [{relativePath: 'old-draft.txt'}], truncated: false}))
+    }}}};
+    mount('fileNames', searchProps, true);
+  });
+  await page.waitForFunction(() => latest.status === 'ready');
+  await page.evaluate(() => mount('fileNames', {...searchProps, workspacePath: '/workspace-b',
+    client: {api: {files: {searchByName: () => searchNewWorkspace.promise}}}}));
+  assert.deepEqual(await page.evaluate(() => ({status: latest.status, data: latest.data})), {status: 'loading', data: null});
+  await page.evaluate(() => searchNewWorkspace.resolve(ok({query: 'draft', matches: [], truncated: false})));
+  await page.waitForFunction(() => latest.status === 'ready');
+});
+
+for (const olderFirst of [true, false]) {
+  test(`workspace file tree keeps the newest directory read when the ${olderFirst ? 'older' : 'newer'} response arrives first`, async () => {
+    await page.evaluate(() => {
+      clearHook();
+      window.treeReads = [];
+      window.treeChanged = null;
+      const client = {api: {
+        files: {listTree: () => {const read = deferred(); treeReads.push(read); return read.promise;}},
+        workspace: {onChanged: listener => {treeChanged = listener; return () => {treeChanged = null;};}}
+      }};
+      window.treeResult = name => ok({workspacePath: '/workspace-a', relativePath: '',
+        entries: [{name, relativePath: name, type: 'file', size: 1, updatedAt: '2026-11-12T00:00:00Z'}], truncated: false});
+      mount('fileTree', {client, workspacePath: '/workspace-a'}, true);
+      treeChanged({workspacePath: '/workspace-a', relativePath: 'draft.txt', eventType: 'change'});
+    });
+    assert.equal(await page.evaluate(() => treeReads.length), 2);
+    if (olderFirst) {
+      await page.evaluate(async () => {treeReads[0].resolve(treeResult('old.txt')); await treeReads[0].promise;});
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+      assert.equal(await page.evaluate(() => latest.loadingRoot), true);
+      await page.evaluate(() => treeReads[1].resolve(treeResult('new.txt')));
+    } else {
+      await page.evaluate(() => treeReads[1].resolve(treeResult('new.txt')));
+      await page.waitForFunction(() => latest.rows[0]?.entry.name === 'new.txt');
+      await page.evaluate(async () => {treeReads[0].resolve(treeResult('old.txt')); await treeReads[0].promise;});
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+    }
+    await page.waitForFunction(() => !latest.loadingRoot);
+    assert.deepEqual(await page.evaluate(() => latest.rows.map(row => row.entry.name)), ['new.txt']);
+  });
+}
 
 test('literature search action keeps page failures visible and sends a bounded project-scoped request', async () => {
   const outcome = await page.evaluate(async () => {
@@ -513,6 +683,100 @@ test('chat send stops before starting a run if its scope changes during MCP conf
   assert.deepEqual(await page.evaluate(() => ({calls: sendCalls.length, selected})), {calls: 0, selected: null});
 });
 
+test('chat dispatch serializes same-event sends before creating distinct dispatch keys', async () => {
+  await chatSendFixture();
+  await page.evaluate(() => {
+    window.pendingDispatch = deferred();
+    client.api.chat.startRun = request => {sendCalls.push(request); return pendingDispatch.promise;};
+    window.dispatchResults = Promise.all([latest.send(sendInput), latest.send(sendInput)]);
+  });
+  await page.waitForFunction(() => sendCalls.length > 0);
+  const count = await page.evaluate(() => sendCalls.length);
+  await page.evaluate(() => pendingDispatch.resolve(ok({runId: 'send-run', threadId: 'a'})));
+  assert.deepEqual(await page.evaluate(() => dispatchResults), [true, false]);
+  assert.equal(count, 1);
+});
+
+async function chatControlFixture() {
+  await chatSendFixture();
+  await page.evaluate(() => live({
+    type: 'run_started', runId: 'ra', threadId: 'a', providerId: 'p', modelId: 'm', mode: 'chat', createdAt: 'now'
+  }));
+  await page.waitForFunction(() => latest.runState.runId === 'ra');
+}
+
+for (const kind of ['question', 'approval', 'checkpoint']) {
+  test(`chat resume serializes ${kind} with visible pending state`, async () => {
+    await chatControlFixture();
+    await page.evaluate(kind => {
+      window.resumeCalls = [];
+      window.pendingResume = deferred();
+      client.api.chat.resumeRun = request => {resumeCalls.push(request); return pendingResume.promise;};
+      client.api.chat.replayRunEvents = async () => ok({kind: 'events', runId: 'ra', events: []});
+      const resume = () => kind === 'question' ? latest.resumeQuestion('q1', '保留回答') :
+        kind === 'approval' ? latest.resumeApproval('a1', [{type: 'approve'}]) : latest.resumeCheckpoint('ra');
+      window.resumeResults = Promise.all([resume(), resume()]);
+    }, kind);
+    const pending = await page.evaluate(() => ({count: resumeCalls.length, sending: latest.sending}));
+    await page.evaluate(() => pendingResume.resolve(ok({runId: 'ra', threadId: 'a', resumedAt: 'now'})));
+    const results = await page.evaluate(() => resumeResults);
+    assert.deepEqual(pending, {count: 1, sending: true}, kind);
+    assert.deepEqual(results, [true, false], kind);
+    await page.waitForFunction(() => latest.sending === false);
+  });
+
+  test(`chat resume catches ${kind} bridge errors and unlocks a retry`, async () => {
+    await chatControlFixture();
+    const result = await page.evaluate(async kind => {
+      const resume = () => kind === 'question' ? latest.resumeQuestion('q1', '保留回答') :
+        kind === 'approval' ? latest.resumeApproval('a1', [{type: 'approve'}]) : latest.resumeCheckpoint('ra');
+      client.api.chat.resumeRun = () => {throw new Error('bridge unavailable');};
+      const sync = await Promise.allSettled([resume()]);
+      client.api.chat.resumeRun = () => Promise.reject(new Error('transport disconnected'));
+      const rejected = await Promise.allSettled([resume()]);
+      client.api.chat.resumeRun = async () => ok({runId: 'ra', threadId: 'a', resumedAt: 'now'});
+      client.api.chat.replayRunEvents = async () => ok({kind: 'events', runId: 'ra', events: []});
+      return {sync: sync[0], rejected: rejected[0], retry: await resume()};
+    }, kind);
+    assert.deepEqual(result, {
+      sync: {status: 'fulfilled', value: false}, rejected: {status: 'fulfilled', value: false}, retry: true
+    }, kind);
+    await page.waitForFunction(() => !latest.sending);
+  });
+}
+
+test('chat stop sends one signal, catches bridge failures and retains the real run state', async () => {
+  await chatControlFixture();
+  await page.evaluate(() => {
+    window.cancelCalls = 0; window.pendingCancel = deferred();
+    client.api.chat.cancelRun = () => {cancelCalls++; return pendingCancel.promise;};
+    window.cancelResults = Promise.all([latest.cancel(), latest.cancel()]);
+  });
+  const count = await page.evaluate(() => cancelCalls);
+  await page.evaluate(() => pendingCancel.resolve(ok({runId: 'ra', cancelled: true})));
+  await page.evaluate(() => cancelResults);
+  assert.equal(count, 1);
+});
+
+test('chat stop retains the real run state after the request is accepted', async () => {
+  await chatControlFixture();
+  await page.evaluate(() => {
+    client.api.chat.cancelRun = async () => ok({runId: 'ra', cancelled: true});
+    return latest.cancel();
+  });
+  assert.equal(await page.evaluate(() => latest.runState.status), 'running');
+});
+
+test('chat stop catches bridge failures and unlocks a retry', async () => {
+  await chatControlFixture();
+  const failure = await page.evaluate(async () => {
+    client.api.chat.cancelRun = () => {throw new Error('stop unavailable');};
+    return (await Promise.allSettled([latest.cancel()]))[0].status;
+  });
+  assert.equal(failure, 'fulfilled');
+  await page.waitForFunction(() => latest.errorMessage === 'stop unavailable');
+});
+
 async function persistedHistoryFixture({
   threadId = 'history-a',
   initialPage,
@@ -683,6 +947,69 @@ test('older-page prepend trims the tail, and reloadLatest starts a new window', 
     last: 500,
     count: 100,
     hasMoreBefore: true
+  });
+});
+
+test('latest history reload has one visible pending request and permits retry after failure', async () => {
+  await persistedHistoryFixture({
+    initialPage: persistedPage('history-a', 101, 500, {hasMoreBefore: true}),
+    beforePages: [persistedPage('history-a', 1, 100)]
+  });
+  await page.evaluate(() => latest.history.loadOlder());
+  await page.waitForFunction(() => latest.history.tailTrimmed);
+  const requestCount = await page.evaluate(() => {
+    window.latestPageDeferred = deferred();
+    client.api.tasks.getThreadMessages = request => {
+      historyCalls.push(request);
+      return latestPageDeferred.promise;
+    };
+    window.reloadResults = Promise.all([latest.history.reloadLatest(), latest.history.reloadLatest()]);
+    return historyCalls.length - 2;
+  });
+  const pending = {count: requestCount, pending: await page.evaluate(() => latest.history.loadingLatest === true)};
+  await page.evaluate(() => latestPageDeferred.reject(new Error('history bridge unavailable')));
+  await page.evaluate(() => reloadResults);
+  await page.waitForFunction(() => latest.history.error === 'history bridge unavailable');
+  await page.evaluate(async latestPage => {
+    client.api.tasks.getThreadMessages = async request => {
+      historyCalls.push(request);
+      return ok(latestPage);
+    };
+    await latest.history.reloadLatest();
+  }, persistedPage('history-a', 401, 500, {hasMoreBefore: true}));
+  await page.waitForFunction(() => latest.history.windowEpoch === 1 && !latest.history.loadingLatest);
+  const result = await page.evaluate(() => ({count: historyCalls.length - 2,
+    first: latest.history.events[0].sequence, epoch: latest.history.windowEpoch, error: latest.history.error}));
+  assert.deepEqual(pending, {count: 1, pending: true});
+  assert.deepEqual(result, {count: 2, first: 401, epoch: 1, error: null});
+});
+
+test('unmounting initial history prevents its delayed catch-up request', async () => {
+  await persistedHistoryFixture({
+    initialPage: persistedPage('history-a', 1, 2),
+    afterPages: [persistedPage('history-a', 3, 4)],
+    deferredInitial: true
+  });
+  await page.evaluate(() => live({
+    type: 'run_started', runId: 'run-history-a', threadId: 'history-a',
+    providerId: 'p', modelId: 'm', mode: 'chat', createdAt: 'now'
+  }));
+  await page.evaluate(async initialPage => {
+    clearHook();
+    initialPageDeferred.resolve(ok(initialPage));
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }, persistedPage('history-a', 1, 2));
+  assert.equal(await page.evaluate(() => historyCalls.length), 1);
+});
+
+test('failed initial history can retry without requiring a trimmed tail', async () => {
+  await persistedHistoryFixture({initialPage: persistedPage('history-a', 1, 2), deferredInitial: true});
+  await page.evaluate(() => initialPageDeferred.resolve(fail('initial history unavailable')));
+  await page.waitForFunction(() => latest.history.error === 'initial history unavailable');
+  await page.evaluate(() => latest.history.reloadLatest());
+  assert.deepEqual(await page.evaluate(() => ({count: historyCalls.length,
+    ids: latest.history.events.map(event => event.id), error: latest.history.error})), {
+    count: 2, ids: ['history-a-event-1', 'history-a-event-2'], error: null
   });
 });
 
@@ -1157,6 +1484,149 @@ test('file actions from an old workspace ignore late success and skip stale erro
   assert.deepEqual(await page.evaluate(() => ({workspacePath: latest.snapshot.workspacePath, actionError: latest.actionError, pending: latest.pending})), {
     workspacePath: '/third', actionError: null, pending: null
   });
+});
+
+for (const action of ['stage', 'unstage', 'discard', 'commit', 'createBranch', 'checkoutBranch', 'push', 'refresh']) {
+  test(`Git ${action} rejects a second operation in the same event`, async () => {
+    await page.evaluate(action => {
+      window.heldGit = deferred();
+      window.gitCalls = [];
+      window.gitSnapshot = {workspacePath: '/git', isRepository: true, branch: 'main', porcelain: [], changes: [], changedFiles: 0};
+      window.client = {api: {
+        workspace: {onChanged: () => () => {}},
+        git: {
+          status: async () => ok(gitSnapshot),
+          diffStat: async () => ok({workspacePath: '/git', stat: ''}),
+          listBranches: async () => ok({workspacePath: '/git', currentBranch: 'main', branches: []}),
+          stageFile: async request => {gitCalls.push(request); return ok(gitSnapshot);},
+          cancel: async () => ok(true)
+        }
+      }};
+      const method = {stage: 'stageFile', unstage: 'unstageFile', discard: 'discardFile',
+        commit: 'commit', createBranch: 'createBranch', checkoutBranch: 'checkoutBranch', push: 'push', refresh: 'status'}[action];
+      window.installOperation = () => {
+        client.api.git[method] = request => {gitCalls.push(request); return heldGit.promise;};
+      };
+      mount('git', {client, workspacePath: '/git'}, true);
+    }, action);
+    await page.waitForFunction(() => latest.phase === 'ready');
+    await page.evaluate(action => {
+      installOperation();
+      const args = action === 'stage' ? [['file.txt']] : action === 'refresh' || action === 'push' ? [] : ['file.txt', false];
+      window.firstGit = latest[action](...args);
+      window.secondGit = latest[action](...args);
+      window.overlappingGit = latest.stage(['another.txt']);
+    }, action);
+    const count = await page.evaluate(() => gitCalls.length);
+    await page.evaluate(async action => {
+      const data = action === 'push' ? {workspacePath: '/git', remoteName: 'origin', branch: 'main', output: '', status: gitSnapshot}
+        : action === 'commit' ? {workspacePath: '/git', commitMessage: 'file.txt', status: gitSnapshot}
+        : action.endsWith('Branch') ? {branchInfo: {workspacePath: '/git', currentBranch: 'main', branches: []}, status: gitSnapshot}
+        : gitSnapshot;
+      heldGit.resolve(ok(data));
+      await Promise.all([firstGit, secondGit, overlappingGit]);
+    }, action);
+    assert.equal(count, 1, `${action} must hold a synchronous workspace operation lock`);
+    await page.waitForFunction(() => latest.pending === null);
+  });
+
+  if (action !== 'refresh') {
+    test(`Git ${action} reports transport errors, releases pending and permits retry`, async () => {
+      await page.evaluate(action => {
+        window.gitSnapshot = {workspacePath: '/git', isRepository: true, branch: 'main', porcelain: [], changes: [], changedFiles: 0};
+        const method = {stage: 'stageFile', unstage: 'unstageFile', discard: 'discardFile',
+          commit: 'commit', createBranch: 'createBranch', checkoutBranch: 'checkoutBranch', push: 'push'}[action];
+        window.client = {api: {workspace: {onChanged: () => () => {}}, git: {
+          status: async () => ok(gitSnapshot), diffStat: async () => ok({workspacePath: '/git', stat: ''}),
+          listBranches: async () => ok({workspacePath: '/git', currentBranch: 'main', branches: []}),
+          cancel: async () => ok(true),
+          [method]: () => {throw new Error('Git bridge unavailable');}
+        }}};
+        mount('git', {client, workspacePath: '/git'}, true);
+      }, action);
+      await page.waitForFunction(() => latest.phase === 'ready');
+      const escaped = await page.evaluate(async action => {
+        const args = action === 'stage' ? [['file.txt']] : action === 'push' ? [] : ['file.txt', false];
+        try {await latest[action](...args); return null;} catch (error) {return error.message;}
+      }, action);
+      assert.equal(escaped, null, 'the UI action boundary must handle bridge rejection');
+      await page.waitForFunction(() => latest.pending === null);
+      assert.match(await page.evaluate(() => latest.actionError), /Git bridge unavailable/u);
+      await page.evaluate(async () => {await latest.refresh();});
+      await page.waitForFunction(() => latest.phase === 'ready' && latest.pending === null);
+    });
+  }
+}
+
+test('Git cancels once and holds pending until both push and cancellation settle', async () => {
+  await page.evaluate(() => {
+    window.heldPush = deferred(); window.heldCancel = deferred(); window.cancelCalls = [];
+    window.gitSnapshot = {workspacePath: '/git', isRepository: true, branch: 'main', porcelain: [], changes: [], changedFiles: 0};
+    window.client = {api: {workspace: {onChanged: () => () => {}}, git: {
+      status: async () => ok(gitSnapshot), diffStat: async () => ok({workspacePath: '/git', stat: ''}),
+      listBranches: async () => ok({workspacePath: '/git', currentBranch: 'main', branches: []}),
+      push: () => heldPush.promise,
+      cancel: request => {cancelCalls.push(request); return heldCancel.promise;}
+    }}};
+    mount('git', {client, workspacePath: '/git'}, true);
+  });
+  await page.waitForFunction(() => latest.phase === 'ready');
+  await page.evaluate(() => {
+    window.pushPromise = latest.push();
+    window.cancelPromise = latest.cancelPush();
+    window.secondCancel = latest.cancelPush();
+  });
+  const cancelCount = await page.evaluate(() => cancelCalls.length);
+  await page.evaluate(async () => {heldPush.resolve(fail('Push cancelled')); await pushPromise;});
+  const pending = await page.evaluate(() => latest.pending);
+  await page.evaluate(async () => {heldCancel.resolve(ok(true)); await Promise.all([cancelPromise, secondCancel]);});
+  await page.waitForFunction(() => latest.pending === null);
+  assert.deepEqual({cancelCount, pending}, {cancelCount: 1, pending: 'push'},
+    'cancellation is singular and remains an operation until it settles');
+});
+
+test('Git does not let an old watcher snapshot overwrite a completed mutation', async () => {
+  await page.evaluate(() => {
+    window.heldWatch = deferred();
+    window.gitSnapshot = {workspacePath: '/git', isRepository: true, branch: 'main', porcelain: [],
+      changes: [{porcelain: ' M file.txt', index: ' ', worktree: 'M', relativePath: 'file.txt'}], changedFiles: 1};
+    window.client = {api: {workspace: {onChanged: callback => {window.gitWatcher = callback; return () => {};}},
+      git: {
+        status: async () => ok(gitSnapshot), diffStat: async () => ok({workspacePath: '/git', stat: ''}),
+        listBranches: async () => ok({workspacePath: '/git', currentBranch: 'main', branches: []}),
+        stageFile: async () => ok({...gitSnapshot, changes: [{porcelain: 'M  file.txt', index: 'M', worktree: ' ', relativePath: 'file.txt'}]})
+      }}};
+    mount('git', {client, workspacePath: '/git'}, true);
+  });
+  await page.waitForFunction(() => latest.phase === 'ready');
+  await page.evaluate(() => {
+    client.api.git.status = () => heldWatch.promise;
+    gitWatcher({workspacePath: '/git'});
+  });
+  await page.evaluate(async () => {await latest.stage(['file.txt']);});
+  await page.waitForFunction(() => latest.snapshot?.changes[0]?.index === 'M');
+  await page.evaluate(async () => {heldWatch.resolve(ok(gitSnapshot)); await heldWatch.promise;});
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await page.evaluate(() => latest.snapshot.changes[0].index), 'M');
+});
+
+test('Git skips late mutation follow-up reads after its renderer consumer unmounts', async () => {
+  await page.evaluate(() => {
+    window.heldStage = deferred(); window.statCalls = 0;
+    window.gitSnapshot = {workspacePath: '/git', isRepository: true, branch: 'main', porcelain: [], changes: [], changedFiles: 0};
+    window.client = {api: {workspace: {onChanged: () => () => {}}, git: {
+      status: async () => ok(gitSnapshot),
+      diffStat: async () => {statCalls++; return ok({workspacePath: '/git', stat: ''});},
+      listBranches: async () => ok({workspacePath: '/git', currentBranch: 'main', branches: []}),
+      stageFile: () => heldStage.promise
+    }}};
+    mount('git', {client, workspacePath: '/git'}, true);
+  });
+  await page.waitForFunction(() => latest.phase === 'ready');
+  await page.evaluate(() => {window.stagePromise = latest.stage(['file.txt']); clearHook();});
+  const before = await page.evaluate(() => statCalls);
+  await page.evaluate(async () => {heldStage.resolve(ok(gitSnapshot)); await stagePromise;});
+  assert.equal(await page.evaluate(() => statCalls), before);
 });
 
 test('conversation renders its answer without historical or live task acceptance cards', async () => {

@@ -7,6 +7,8 @@ import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {formInputClass, formSecondaryButtonClass} from '../shared/form-ui';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
+import {ArtifactDraftDiscard, useArtifactDraft, useArtifactEditorGuard} from './artifact-editor-guard';
+
 const input = `${formInputClass} min-w-0 border-[0.5px]`;
 const matches = {exact_text: '完整原文匹配', normalized_text: '仅规范空白后匹配', ambiguous: '多个匹配，需选择', no_match: '没有匹配目标'};
 
@@ -15,10 +17,13 @@ export function ArtifactSourceMigrations({client, projectId, evidenceId, canDeci
 }): React.JSX.Element {
   const read = useAsyncResource(`source-migrations:${projectId}:${evidenceId}`,
     () => client.api.research.listSourceMigrations({projectId, evidenceId}), {label: '读取定位候选'});
+  const guard = useArtifactEditorGuard();
   return <section aria-label="来源定位候选" data-testid="artifact-source-migrations" className="mt-3 flex min-w-0 flex-col gap-2">
     <div className="flex flex-wrap items-center gap-2"><h3 className="font-medium">定位候选</h3>
-      <button type="button" className={button} data-testid="artifact-source-migrations-refresh" disabled={read.status === 'loading'}
-        data-reading-key={`source-migrations-refresh:${evidenceId}`} onClick={read.reload}>刷新候选</button>
+      <button type="button" className={button} data-testid="artifact-source-migrations-refresh" disabled={read.status === 'loading' || guard.locked()}
+        data-reading-key={`source-migrations-refresh:${evidenceId}`} onClick={() => {
+          if (!guard.locked()) read.reload();
+        }}>刷新候选</button>
     </div>
     <p className="text-muted">按解析时间和原始块顺序排列。位置捕获只保存新证据；主张与科学审核仍需另行重建。</p>
     {read.status === 'loading' ? <p role="status">正在读取定位候选…</p> : null}
@@ -35,6 +40,8 @@ function MigrationCandidate({client, inspection, canDecide, onChanged}: {
   const {proposal, decision} = inspection;
   const [chunkId, setChunkId] = useState<string | null>(null);
   const [note, setNote] = useState('');
+  const busy = useRef(false);
+  const draft = useArtifactDraft('来源定位决定', {chunkId, note}, busy);
   const requestIds = useRef(new Map<string, string>());
   const mounted = useRef(true);
   useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
@@ -42,22 +49,25 @@ function MigrationCandidate({client, inspection, canDecide, onChanged}: {
     client.api.research.captureSourceMigration(request) : client.api.research.rejectSourceMigration(request),
   {label: '决定来源定位候选'});
   const submit = async (choice: 'capture' | 'reject'): Promise<void> => {
+    if (busy.current || draft.isLocked() || !canDecide || decision !== null ||
+      (choice === 'capture' && (chunkId === null || inspection.targetStatus !== 'current'))) return;
     const fields = {projectId: proposal.projectId, proposalId: proposal.id, expectedProposalHash: inspection.proposalHash,
       expectedSourceDigest: proposal.sourceDigest, expectedTargetParseHash: proposal.targetParseHash,
       note: note.trim() === '' ? null : note.trim()};
     let selection: {action: 'capture'; chunkId: string} | {action: 'reject'};
     if (choice === 'capture') {
-      if (chunkId === null) throw new Error('research_source_migration_selection_required');
+      if (chunkId === null) return;
       selection = {action: 'capture', chunkId};
     } else selection = {action: 'reject'};
     const key = JSON.stringify({...fields, ...selection});
     let requestId = requestIds.current.get(key);
     if (requestId === undefined) {requestId = crypto.randomUUID(); requestIds.current.set(key, requestId);}
     const request: ResearchSourceMigrationDecisionRequest = {...fields, requestId, ...selection};
-    const result = await action.run(request);
-    if (result.ok && mounted.current) onChanged();
+    busy.current = true;
+    const result = await action.run(request); busy.current = false;
+    if (result.ok && mounted.current) {draft.saved(); onChanged();}
   };
-  const canCapture = canDecide && inspection.targetStatus === 'current' && decision === null && !action.pending;
+  const canCapture = canDecide && !draft.locked && inspection.targetStatus === 'current' && decision === null && !action.pending;
   return <details data-testid={`artifact-source-migration-${proposal.id}`} data-reading-key={`source-migration:${proposal.id}`}
     className="min-w-0 border-t-[0.5px] border-line py-2 [&::details-content]:overflow-clip!">
     <summary data-reading-key={`source-migration-summary:${proposal.id}`} className="cursor-pointer break-words">
@@ -97,16 +107,19 @@ function MigrationCandidate({client, inspection, canDecide, onChanged}: {
       {decision === null ? <>
         {!canDecide ? <p className="text-muted">重新核对当前工件后再决定；归档项目只读。</p> : null}
         <label className="flex min-w-0 flex-col gap-1 text-muted">决定说明
-          <textarea rows={2} maxLength={10000} className={input} value={note} disabled={!canDecide || action.pending}
+          <textarea rows={2} maxLength={10000} className={input} value={note} disabled={!canDecide || action.pending || draft.locked}
             onChange={event => setNote(event.target.value)} data-testid="artifact-source-migration-note"
             data-reading-key={`source-migration-note:${proposal.id}`}/>
         </label>
         <div className="flex flex-wrap gap-2">
           <button type="button" className={button} disabled={!canCapture || chunkId === null}
             data-testid="artifact-source-migration-capture" onClick={() => {void submit('capture');}}>捕获选中块</button>
-          <button type="button" className={button} disabled={!canDecide || action.pending}
+          <button type="button" className={button} disabled={!canDecide || action.pending || draft.locked}
             data-testid="artifact-source-migration-reject" onClick={() => {void submit('reject');}}>拒绝此候选</button>
         </div>
+        <ArtifactDraftDiscard dirty={draft.dirty} testId="artifact-source-migration-discard" onDiscard={() => {
+          setChunkId(null); setNote(''); draft.reset({chunkId: null, note: ''}); action.reset();
+        }}/>
         {action.pending ? <p role="status">正在保存决定…</p> : null}
         {action.error === null ? null : <p role="alert" className="text-[var(--st-error)]">{action.error}</p>}
       </> : <MigrationDecision decision={decision} currentStatus={inspection.capturedReferenceStatus}/>}

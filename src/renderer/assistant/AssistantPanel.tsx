@@ -2,10 +2,11 @@ import type {OpenResearchArtifact, OpenReviewInspector, ReadResearchGateContext}
 import {ReviewLinkActionsProvider} from './blocks/review-link-actions';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Bot, Loader2, Minimize2, Settings2 } from 'lucide-react';
-import type { ChatRunMode, SettingsSnapshot } from '../../shared/types';
+import type { ChatRunMode, SettingsSnapshot, TaskAcceptance } from '../../shared/types';
 import { buildProviderModelKey } from '../../shared/provider-model-key';
 import { useAsyncAction, useAsyncResource } from '../app/use-async-resource';
 import { useSettingsRevision, notifySettingsChanged } from '../shared/settings-events';
+import { formSecondaryButtonClass } from '../shared/form-ui';
 import type { RocClient } from '../shared/roc-client';
 import { setDefaultModel } from '../settings/settings-store';
 import { ErrorBar } from '../shell/ErrorBar';
@@ -252,6 +253,21 @@ export function AssistantPanel({
       ? session.runState.runId
       : latestHistoryEvent?.threadId === threadId ? latestHistoryEvent.runId : null;
   const activeRun = runStatus === 'running' || runStatus === 'recovering';
+  const checkpointReport = useMemo(() => {
+    if (diagnosticsRunId === null || threadId === null) return null;
+    let report: TaskAcceptance | null = session.runState.activityBlocks
+      .filter(block => block.kind === 'task_acceptance').at(-1)?.report ?? null;
+    if (report === null) {
+      for (let index = session.history.events.length - 1; index >= 0; index--) {
+        const event = session.history.events[index];
+        if (event?.runId === diagnosticsRunId && event.threadId === threadId && event.type === 'task_acceptance') {
+          report = event.payload;
+          break;
+        }
+      }
+    }
+    return report?.runId === diagnosticsRunId && report.checkpointResumeAvailable ? report : null;
+  }, [diagnosticsRunId, session.history.events, session.runState.activityBlocks, threadId]);
   const pendingQuestion = session.runState.pendingInterrupts.find((interrupt) => interrupt.kind === 'question') ?? null;
   const replyMode = pendingQuestion !== null;
   const waitingUser = session.runState.pendingInterrupts.length > 0;
@@ -352,11 +368,13 @@ export function AssistantPanel({
     </div>
   );
 
-  const errorMessages = [
-    session.errorMessage,
-    session.history.error,
-    settings.status === 'error' ? (settings.error ?? '读取模型设置失败') : null
-  ].filter((message): message is string => message !== null && message.length > 0);
+  const pageError = session.errorMessage
+    ? {message: session.errorMessage, retry: session.retryRecovery}
+    : session.history.error
+      ? {message: session.history.error, retry: () => void session.history.reloadLatest()}
+      : settings.status === 'error'
+        ? {message: settings.error ?? '读取模型设置失败', retry: settings.reload}
+        : null;
 
   return (
     // `bg-bg`, not `--bg-soft`: all three columns share one colour and are separated by
@@ -375,9 +393,21 @@ export function AssistantPanel({
         </div>
       ) : null}
 
-      {errorMessages.length === 0 ? null : (
+      {pageError === null ? null : (
         <div className="shrink-0 px-2 pt-2" data-testid="assistant-errors">
-          <ErrorBar error={{ level: 'page', message: errorMessages[0] ?? '', retry: session.retryRecovery }} />
+          <ErrorBar error={{level: 'page', ...pageError}} />
+        </div>
+      )}
+
+      {checkpointReport === null || activeRun || waitingUser ? null : (
+        <div className="shrink-0 px-3 py-2">
+          <button type="button" className={formSecondaryButtonClass}
+            data-testid="assistant-task-resume-checkpoint"
+            disabled={session.sending || session.cancelling || session.runState.resumeBusy}
+            aria-busy={session.sending}
+            onClick={() => {void session.resumeCheckpoint(checkpointReport.runId);}}>
+            从检查点继续
+          </button>
         </div>
       )}
 
@@ -406,10 +436,12 @@ export function AssistantPanel({
             tailTrimmed={session.history.tailTrimmed}
             hasMoreBefore={session.history.hasMoreBefore}
             loadingOlder={session.history.loadingOlder}
+            loadingLatest={session.history.loadingLatest}
             loadOlder={session.history.loadOlder}
             onJumpToLatest={session.history.reloadLatest}
             scrollContainerRef={scrollContainerRef}
             onApprovalDecision={session.runState.runId !== null && waitingUser ? onApprovalDecision : undefined}
+            approvalPending={session.sending || session.cancelling}
             onOpenArtifact={onOpenArtifact}
             onReadGateContext={onReadGateContext}
           />
@@ -441,12 +473,14 @@ export function AssistantPanel({
         onDraftChange={updateComposerDraft}
         imageInputSupported={imageSupport === null ? false : isImageInputSupported(imageSupport)}
         sending={session.sending}
+        stopping={session.cancelling}
         running={activeRun}
         suspended={suspendedOnApproval}
         replyMode={replyMode}
         seed={composerSeed}
         onSeedConsumed={onComposerSeedConsumed}
         onSend={async (input) => {
+          const submittedDraft = composerDraft;
           // A suspended question takes the text as its answer; everything else starts a new run.
           const sent =
             pendingQuestion !== null
@@ -458,8 +492,8 @@ export function AssistantPanel({
                   attachments: input.attachments
                 });
           if (sent) {
-            clearAssistantComposerDraft(projectId, threadId);
-            clearAssistantComposerDraft(projectId, currentThreadIdRef.current);
+            clearAssistantComposerDraft(projectId, threadId, submittedDraft);
+            clearAssistantComposerDraft(projectId, currentThreadIdRef.current, submittedDraft);
           }
           return sent;
         }}

@@ -22,6 +22,25 @@
   container: skill-files / inline-size;
 }
 
+.wiki-pages-container {
+  container: wiki-pages / inline-size;
+}
+
+@container wiki-pages (max-width: 560px) {
+  .wiki-pages-layout {
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+
+  .wiki-page-list {
+    width: 100%;
+    max-height: 220px;
+    overflow-y: auto;
+    border-right-width: 0;
+    border-bottom-width: 0.5px;
+  }
+}
+
 @container literature-hub (max-width: 960px) {
   .literature-toolbar {
     grid-template-columns: auto minmax(0, 1fr);
@@ -271,6 +290,14 @@
 }
 
 @layer utilities {
+  /* Bias spare space above/below a modal while keeping its full shadow inside
+     short windows. Both overlay implementations use the same geometry. */
+  .ui-modal-layout {
+    display: grid;
+    grid-template-rows: minmax(0, 0.382fr) auto minmax(0, 0.618fr);
+    padding-block: var(--shadow-modal-gutter-block);
+  }
+
   /* Each pane owns its scrolling. Padding belongs inside this boundary so
      focus outlines survive both clipping and keyboard-driven scrolling. */
   .ui-scroll-region {

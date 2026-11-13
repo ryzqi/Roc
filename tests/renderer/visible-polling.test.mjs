@@ -21,7 +21,9 @@ before(async () => {
     import {KnowledgeJobs} from './src/renderer/literature/KnowledgeJobs';
     const root=createRoot(document.getElementById('root'));
     window.calls=[];window.ticks=[];
-    const client={api:{window:window.nativeWindow,research:{knowledgeJobs:async ({projectId})=>{window.calls.push(projectId);return {ok:true,data:[]};}}}};
+    const client={api:{window:window.nativeWindow,research:{
+      knowledgeJobs:async ({projectId})=>{window.calls.push(projectId);return {ok:true,data:[]};}
+    }}};
     function Probe({enabled,project}) {
       useVisiblePolling(()=>window.ticks.push(project),3000,enabled);
       return <input aria-label="Retained draft" defaultValue="draft"/>;
@@ -43,18 +45,36 @@ before(async () => {
   writeFileSync(join(directory, 'preload.cjs'), `const {contextBridge,ipcRenderer}=require('electron');
     contextBridge.exposeInMainWorld('nativeWindow',{
       getState:()=>ipcRenderer.invoke('window-state'),
+      hide:()=>ipcRenderer.invoke('native-hide'),
+      show:()=>ipcRenderer.invoke('native-show'),
       onHidden:callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('window-hidden',listener);
         return ()=>ipcRenderer.off('window-hidden',listener);}
     });`);
-  await build({entryPoints:['src/main/window-shell.ts'],outfile:join(directory,'window-shell.cjs'),
-    bundle:true,platform:'node',format:'cjs',logLevel:'silent'});
+  await build({entryPoints:{'window-shell':'src/main/window-shell.ts','macos-host-service':'src/main/macos-host-service.ts'},
+    outdir:directory,outExtension:{'.js':'.cjs'},bundle:true,platform:'node',format:'cjs',logLevel:'silent'});
   writeFileSync(join(directory, 'main.cjs'), `const {app,BrowserWindow,ipcMain}=require('electron');
-    const {bindWindowHiddenBroadcast}=require('./window-shell.cjs');
+    const {bindWindowHiddenBroadcast,getWindowHiddenState}=require('./window-shell.cjs');
+    const {MacOSHostService}=require('./macos-host-service.cjs');
     app.setPath('userData',${JSON.stringify(join(directory, 'data'))});
     app.whenReady().then(()=>{
       const window=new BrowserWindow({show:true,width:900,height:700,webPreferences:{preload:${JSON.stringify(join(directory, 'preload.cjs'))}}});
       ipcMain.handle('window-state',()=>({ok:true,data:{maximized:window.isMaximized(),minimized:window.isMinimized(),fullscreen:window.isFullScreen()}}));
-      bindWindowHiddenBroadcast(window,value=>window.webContents.send('window-hidden',value));
+      const publishHidden=()=>window.webContents.send('window-hidden',getWindowHiddenState(window));
+      const host=new MacOSHostService({
+        isPackaged:false,app,
+        globalShortcut:{register:()=>true,unregister(){},unregisterAll(){}},
+        lifecycleService:{getTraySummary(){throw new Error('unused tray');},
+          pauseBackgroundExecution(){throw new Error('unused tray');},
+          resumeBackgroundExecution(){throw new Error('unused tray');}},
+        logService:{info(){},warn(){},error(){}},menu:{buildFromTemplate:items=>items},
+        trayIconPath:'',createTray(){throw new Error('unused tray');},
+        openMainPage(){},broadcastTaskUpdated(){},broadcastWindowHidden:publishHidden
+      });
+      host.initializeProcessIdentity();
+      host.bindMainWindow(window);
+      ipcMain.handle('native-hide',()=>window.close());
+      ipcMain.handle('native-show',()=>app.emit('second-instance',{},['roc']));
+      bindWindowHiddenBroadcast(window,publishHidden);
       window.loadFile(${JSON.stringify(join(directory, 'index.html'))});
     });`);
   app = await _electron.launch({executablePath: electronPath, args: [join(directory, 'main.cjs')]});
@@ -96,12 +116,12 @@ test('retained panels stop polling at either inactive ancestor, resume once, and
 });
 
 test('native macOS window hide releases polling and show refreshes; disabled jobs and unmount remain quiet', async () => {
-  await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].hide());
+  await page.evaluate(() => window.nativeWindow.hide());
   await expect.poll(() => page.evaluate(() => window.nativeHidden)).toBe(true);
   const hidden = await counts();
   await page.clock.runFor(9000);
   assert.deepEqual(await counts(), hidden);
-  await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].show());
+  await page.evaluate(() => window.nativeWindow.show());
   await expect.poll(() => page.evaluate(() => window.nativeHidden)).toBe(false);
   assert.deepEqual(await counts(), {jobs:hidden.jobs+1,ticks:hidden.ticks+1});
   await change({enabled:false});

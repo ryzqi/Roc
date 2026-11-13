@@ -28,18 +28,23 @@ before(async () => {
   await mkdir(artifacts, {recursive: true});
   await buildViteRenderer({directory, script: `
     import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {flushSync} from 'react-dom';
+    import {LazyMotion,MotionConfig,domAnimation} from 'motion/react';
+    import {requestReadingChange} from ${JSON.stringify(join(process.cwd(), 'src/renderer/literature/reading-interactions'))};
     import {PaperReader} from ${JSON.stringify(join(process.cwd(), 'src/renderer/literature/PaperReader'))};
     import {WorkspaceScopeProvider} from ${JSON.stringify(join(process.cwd(), 'src/renderer/app/workspace-scope'))};
     const client={api:{research:Object.fromEntries(${JSON.stringify(Object.keys(channels))}.map(method=>[method,input=>window.callMain(method,input)]))}};
     client.api.research.getModelsStatus=async()=>({ok:true,data:{ready:false,error:null,models:[],downloading:false,selectedPack:'compact'}});
     const root=createRoot(document.getElementById('root'));let generation=0;
+    window.unmountHarness=()=>flushSync(()=>root.unmount());
     function Harness({initial}){const [state,setState]=useState(initial);
       window.updateReader=state=>flushSync(()=>setState(state));
+      window.requestReaderChange=next=>requestReadingChange(state.projectId,()=>flushSync(()=>setState(next)));
       const store={client,...state,documents:[],action:{pending:false,error:null},assistant:{pending:false,error:null},parseInFlight:null};
       const scope={client,projectId:state.projectId,writable:state.writable,workspacePath:'/synthetic',workspaceStatus:'ready',workspaceError:null};
       return <WorkspaceScopeProvider value={scope}><PaperReader literature={store} openInFilesView={()=>{}} onClearFocus={()=>{}}/></WorkspaceScopeProvider>;
     }
-    window.mountReader=initial=>flushSync(()=>root.render(<Harness key={++generation} initial={initial}/>));
+    window.mountReader=initial=>flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
+      <Harness key={++generation} initial={initial}/></LazyMotion></MotionConfig>));
   `, style: 'html,body,#root{height:100%;margin:0}body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}'});
   await writeFile(join(directory, 'main.cjs'), `const {app,BrowserWindow}=require('electron');
     app.setPath('userData',${JSON.stringify(join(directory, 'data'))});
@@ -64,6 +69,7 @@ before(async () => {
 });
 after(async () => {
   for (const hold of holds) hold.release();
+  if (page && !page.isClosed()) await page.evaluate(() => window.unmountHarness());
   await app?.close();
   for (const f of scenes) await f.dispose();
   api?.dispose();
@@ -88,7 +94,11 @@ function scene() {
     if (f.waitNetwork) {
       f.networkStarted.release();
       await new Promise((_resolve, reject) => {
-        init.signal.throwIfAborted(); init.signal.addEventListener('abort', () => reject(init.signal.reason), {once: true});
+        init.signal.throwIfAborted(); init.signal.addEventListener('abort', () => {
+          f.abortObserved?.release();
+          if (f.abortFinish) f.abortFinish.promise.then(() => reject(init.signal.reason));
+          else reject(init.signal.reason);
+        }, {once: true});
       });
     }
     if (f.errorStatus) return new Response('', {status: f.errorStatus});
@@ -141,6 +151,80 @@ async function fillLink() {
   await page.getByRole('combobox', {name: '目标版本', exact: true}).selectOption({label: 'Synthetic resource article 论文版本 1'});
   await page.getByRole('textbox', {name: '关联依据', exact: true}).fill('人工确认该资源与本论文相关');
 }
+
+test('resource capture is synchronous and its actual reader toggle cannot unmount the pending request', async () => {
+  const f = scene(); await mount(f); await open();
+  await page.getByLabel('资源 DOI', {exact: true}).fill(doi);
+  f.holdReply = 'captureResource'; f.replyStarted = deferred(); f.replyHold = deferred();
+  await page.evaluate(() => {
+    const capture = [...document.querySelectorAll('button')].find(button => button.textContent === '查询并保存资源');
+    capture.click(); capture.click(); document.querySelector('[data-testid="reader-resources-toggle"]').click();
+  });
+  await f.replyStarted.promise;
+  assert.equal(calls.filter(call => call.projectId === f.project.id && call.method === 'captureResource').length, 1);
+  await expect(page.getByTestId('reader-resources-panel')).toBeVisible();
+  await expect(page.getByLabel('资源 DOI', {exact: true})).toBeDisabled();
+  f.holdReply = null; f.replyHold.release();
+  await page.getByTestId('reader-resource-observation').waitFor();
+});
+
+test('resource cancellation stays independent and preserves the request until the capture actually exits', async () => {
+  const f = scene(); f.waitNetwork = true; f.networkStarted = deferred(); f.abortObserved = deferred(); f.abortFinish = deferred();
+  await mount(f); await open(); await page.getByLabel('资源 DOI', {exact: true}).fill(doi);
+  await page.getByRole('button', {name: '查询并保存资源', exact: true}).click(); await f.networkStarted.promise;
+  f.holdReply = 'cancelResourceCapture'; f.replyStarted = deferred(); f.replyHold = deferred();
+  await page.evaluate(() => {
+    const cancel = [...document.querySelectorAll('button')].find(button => button.textContent === '取消资源查询');
+    cancel.click(); cancel.click();
+  });
+  await f.replyStarted.promise;
+  assert.equal(calls.filter(call => call.projectId === f.project.id && call.method === 'cancelResourceCapture').length, 1);
+  f.holdReply = null; f.replyHold.release();
+  await page.getByText('主进程已接收取消信号；等待查询结束。', {exact: true}).waitFor();
+  await expect(page.getByRole('button', {name: '取消资源查询', exact: true})).toBeVisible();
+  await expect(page.getByLabel('资源 DOI', {exact: true})).toBeDisabled();
+  f.abortFinish.release(); await page.getByRole('button', {name: '重试原资源请求', exact: true}).waitFor();
+});
+
+test('association writes synchronously freeze source selection and keep their exact failed request for retry', async () => {
+  const f = scene(); await f.capture('other-observation'); await mount(f); await open(); await capture(); await fillLink();
+  await page.getByTestId('reader-resource-history').locator('summary').click();
+  f.holdReply = 'associateResource'; f.replyStarted = deferred(); f.replyHold = deferred(); f.dropReply = 'associateResource';
+  await page.evaluate(() => {
+    const save = [...document.querySelectorAll('button')].find(button => button.textContent === '保存人工关联');
+    save.click(); save.click(); document.querySelector('[data-testid="reader-resource-history"] button').click();
+  });
+  await f.replyStarted.promise;
+  assert.equal(calls.filter(call => call.projectId === f.project.id && call.method === 'associateResource').length, 1);
+  await expect(page.getByRole('textbox', {name: '关联依据', exact: true})).toHaveValue('人工确认该资源与本论文相关');
+  f.holdReply = null; f.replyHold.release();
+  await page.getByRole('button', {name: '重试原关联请求', exact: true}).click();
+  await page.getByText('关联已保存：目标版本一致', {exact: true}).waitFor();
+  const requests = calls.filter(call => call.projectId === f.project.id && call.method === 'associateResource');
+  assert.deepEqual(requests[0].input, requests[1].input);
+  assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_resource_associations').pluck().get(), 1);
+});
+
+test('resource DOI and association drafts survive native unload and reading changes until confirmed', async () => {
+  const f = scene(); await mount(f); await open(); await page.getByLabel('资源 DOI', {exact: true}).fill(doi);
+  assert.equal(await page.evaluate(() => !window.dispatchEvent(new Event('beforeunload', {cancelable: true}))), true);
+  const next = state(f, {selected: {...f.item, id: 'another-source'}});
+  await page.evaluate(value => window.requestReaderChange(value), next);
+  await page.getByTestId('literature-editor-discard').waitFor();
+  assert.equal(await page.getByTestId('paper-reader').getAttribute('data-library-item'), f.item.id);
+  await page.getByTestId('literature-editor-discard-cancel').click();
+  await expect(page.getByLabel('资源 DOI', {exact: true})).toHaveValue(doi);
+  await expect(page.getByTestId('literature-editor-discard')).toHaveCount(0);
+  await capture(); await fillLink();
+  await page.getByRole('button', {name: '放弃关联草稿并刷新', exact: true}).click();
+  await page.getByTestId('literature-editor-discard').waitFor();
+  await page.getByTestId('literature-editor-discard-cancel').click();
+  await expect(page.getByRole('textbox', {name: '关联依据', exact: true})).toHaveValue('人工确认该资源与本论文相关');
+  await expect(page.getByTestId('literature-editor-discard')).toHaveCount(0);
+  await page.evaluate(value => window.requestReaderChange(value), next);
+  await page.getByTestId('literature-editor-discard-confirm').click();
+  await expect(page.getByTestId('paper-reader')).toHaveAttribute('data-library-item', 'another-source');
+});
 
 test('reader lazily queries real metadata and preserves version, rights and paged relation direction without downloading', async () => {
   const f = scene(); await mount(f);
@@ -201,6 +285,7 @@ test('an uncertain capture fixes request identity until exact retry or explicit 
   await page.evaluate(value => window.updateReader(value), state(f, {writable: false}));
   assert.equal(await page.getByRole('button', {name: '重试原资源请求', exact: true}).isEnabled(), false);
   await page.getByRole('button', {name: '开始新资源请求', exact: true}).click();
+  await page.getByTestId('literature-editor-discard-confirm').click();
   await expect(page.getByTestId('reader-resources-toggle')).toBeEnabled();
   assert.equal(f.resources.history({projectId: f.project.id, doi: null, offset: 0, limit: 20}).total, 2);
 });
@@ -233,6 +318,7 @@ test('target drift refuses new association, discard recaptures candidates and sa
   await page.getByRole('alert').filter({hasText: '版本已变化'}).waitFor();
   assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_resource_associations').pluck().get(), 0);
   await page.getByRole('button', {name: '放弃关联草稿并刷新', exact: true}).click();
+  await page.getByTestId('literature-editor-discard-confirm').click();
   await page.getByRole('combobox', {name: '目标版本', exact: true}).selectOption({label: 'Synthetic resource article 论文版本 2'});
   await page.getByRole('textbox', {name: '关联依据', exact: true}).fill('明确选择新的论文版本');
   await page.getByRole('button', {name: '保存人工关联', exact: true}).click();
@@ -259,6 +345,7 @@ test('readonly keeps observations and associations accessible, and a readonly un
   assert.equal(await page.getByRole('button', {name: '重试原关联请求', exact: true}).isEnabled(), false);
   assert.equal(await page.getByRole('button', {name: '放弃关联草稿并刷新', exact: true}).isEnabled(), true);
   await page.getByRole('button', {name: '放弃关联草稿并刷新', exact: true}).click();
+  await page.getByTestId('literature-editor-discard-confirm').click();
   assert.equal(f.db.prepare('SELECT COUNT(*) FROM research_resource_associations').pluck().get(), 2);
 });
 
@@ -267,9 +354,10 @@ test('cancel reaches the real service; late capture and history cannot cross pro
   await mount(f); await open(); await page.getByLabel('资源 DOI', {exact: true}).fill(doi);
   await page.getByRole('button', {name: '查询并保存资源', exact: true}).click(); await f.networkStarted.promise;
   await page.getByRole('button', {name: '取消资源查询', exact: true}).click();
-  await page.getByText('主进程已接收取消信号', {exact: true}).waitFor();
+  await page.getByText('主进程已接收取消信号；等待查询结束。', {exact: true}).waitFor();
   assert.equal(f.resources.history({projectId: f.project.id, doi: null, offset: 0, limit: 20}).total, 0);
-  assert.equal(await page.getByRole('button', {name: '重试原资源请求', exact: true}).count(), 0);
+  await page.getByRole('button', {name: '重试原资源请求', exact: true}).waitFor();
+  await expect(page.getByLabel('资源 DOI', {exact: true})).toBeDisabled();
   const held = scene(), next = scene(); held.holdReply = 'captureResource'; held.replyStarted = deferred(); held.replyHold = deferred();
   await mount(held); await open(); await page.getByLabel('资源 DOI', {exact: true}).fill(doi);
   await page.getByRole('button', {name: '查询并保存资源', exact: true}).click(); await held.replyStarted.promise;

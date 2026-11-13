@@ -51,6 +51,7 @@ export function McpSection({
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [discardTarget, setDiscardTarget] = useState<'back' | 'cancel' | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const listScroll = useRef(0);
@@ -94,11 +95,19 @@ export function McpSection({
       root.current?.closest('[role="tabpanel"]')?.scrollTop ?? 0;
     returnFocus.current = id;
   };
-  const back = (): void => {
+  const leaveEditor = (target: 'back' | 'cancel'): void => {
+    if (mcp.busy) return;
+    if (mcp.dirty) {
+      setDiscardTarget(target);
+      return;
+    }
     mcp.cancelEdit();
-    setAdding(false);
-    setSelectedId(null);
+    if (target === 'back') {
+      setAdding(false);
+      setSelectedId(null);
+    }
   };
+  const back = (): void => leaveEditor('back');
   const issueForServer = (server: McpServerConfig): string | null =>
     mcp.rows.find((row) => row.server.id === server.id)?.issue ?? null;
   const toolSummary = (server: McpServerConfig): string =>
@@ -130,7 +139,7 @@ export function McpSection({
       role="switch"
       aria-checked={mcp.serverEnabled(server)}
       aria-label={`启用 ${server.name}`}
-      disabled={mcp.toggle.pending || mcp.status === 'loading'}
+      disabled={mcp.busy || mcp.status === 'loading'}
       onClick={() => {
         void mcp.toggle.run(server.id, !mcp.serverEnabled(server));
       }}
@@ -178,6 +187,7 @@ export function McpSection({
           type="button"
           className={menuActionClass}
           data-testid={`mgmt-mcp-edit-${server.id}`}
+          disabled={mcp.busy}
           onClick={() => {
             if (page === 'list') rememberList(server.id);
             setSelectedId(server.id);
@@ -190,7 +200,7 @@ export function McpSection({
           type="button"
           className={menuActionClass}
           data-testid={`mgmt-mcp-test-${server.id}`}
-          disabled={mcp.test.pending}
+          disabled={mcp.busy}
           onClick={() => {
             void mcp.test.run(server.id);
           }}
@@ -201,7 +211,7 @@ export function McpSection({
           type="button"
           className={menuActionClass}
           data-testid={`mgmt-mcp-delete-${server.id}`}
-          disabled={mcp.remove.pending}
+          disabled={mcp.busy}
           onClick={() => setDeleteTarget(server.id)}
         >
           删除服务…
@@ -250,6 +260,7 @@ export function McpSection({
               type="button"
               className={`${formPrimaryButtonClass} inline-flex items-center gap-1.5`}
               data-testid="mgmt-mcp-create"
+              disabled={mcp.busy}
               onClick={() => {
                 rememberList(null);
                 setAdding(true);
@@ -431,7 +442,7 @@ export function McpSection({
         <button
           type="button"
           className={`${actionClass} self-start`}
-          disabled={mcp.save.pending || mcp.preset.pending}
+          disabled={mcp.busy}
           data-testid="mgmt-mcp-back"
           onClick={back}
         >
@@ -470,7 +481,7 @@ export function McpSection({
             type="button"
             className={`${actionClass} self-start`}
             data-testid="mgmt-mcp-preset"
-            disabled={mcp.preset.pending}
+            disabled={mcp.busy}
             onClick={() => {
               void mcp.preset.run();
             }}
@@ -482,6 +493,7 @@ export function McpSection({
             type="button"
             className={`${actionClass} self-start`}
             data-testid="mgmt-mcp-custom"
+            disabled={mcp.busy}
             onClick={() => mcp.startCreate()}
           >
             <Plus size={14} aria-hidden="true" />
@@ -499,7 +511,7 @@ export function McpSection({
             setAdding(false);
             setSelectedId(id);
           }}
-          onCancel={() => mcp.cancelEdit()}
+          onCancel={() => leaveEditor('cancel')}
         />
       )}
 
@@ -529,6 +541,7 @@ export function McpSection({
                 className={actionClass}
                 onClick={() => mcp.startEdit(selected.server)}
                 data-testid="mgmt-mcp-edit-config"
+                disabled={mcp.busy}
               >
                 编辑配置
               </button>
@@ -625,7 +638,7 @@ export function McpSection({
               <button
                 type="button"
                 className={actionClass}
-                disabled={mcp.test.pending}
+                disabled={mcp.busy}
                 onClick={() => {
                   void mcp.test.run(selected.server.id);
                 }}
@@ -715,6 +728,27 @@ export function McpSection({
         </details>
       )}
       <ConfirmDialog
+        open={discardTarget !== null}
+        title="放弃未保存的 MCP 配置？"
+        message="配置尚未保存，放弃后需要重新填写。"
+        confirmLabel="放弃修改"
+        cancelLabel="继续编辑"
+        tone="destructive"
+        confirmDisabled={mcp.busy}
+        testId="mgmt-mcp-discard"
+        onCancel={() => setDiscardTarget(null)}
+        onConfirm={() => {
+          if (mcp.busy) return;
+          const target = discardTarget;
+          setDiscardTarget(null);
+          mcp.cancelEdit();
+          if (target === 'back') {
+            setAdding(false);
+            setSelectedId(null);
+          }
+        }}
+      />
+      <ConfirmDialog
         open={deleteTarget !== null}
         title="删除这个 MCP 服务？"
         message={`将删除 ${deleteRecord?.name ?? deleteTarget ?? ''} 的配置。`}
@@ -722,8 +756,10 @@ export function McpSection({
         confirmLabel="删除"
         tone="destructive"
         testId="mgmt-mcp-delete-confirm"
+        confirmDisabled={mcp.busy}
         onCancel={() => setDeleteTarget(null)}
         onConfirm={() => {
+          if (mcp.busy) return;
           const target = deleteTarget;
           setDeleteTarget(null);
           if (target !== null)

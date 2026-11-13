@@ -48,14 +48,16 @@ test('history and thread switches invalidate the cache and match uncached projec
 
 
 test('task acceptance reports never appear in historical or live conversations', () => {
-  const acceptance = { ...event(), id: 'acceptance', type: 'task_acceptance', payload: { status: 'passed' } };
+  const report = {taskId: 'task', runId: 'live', contractVersion: 1, status: 'partial',
+    checkpointResumeAvailable: true, criteria: [], remainingItems: ['Continue from checkpoint'],
+    blockedBy: [], nextSafeAction: 'Resume'};
+  const acceptance = { ...event(), id: 'acceptance', type: 'task_acceptance', payload: {...report, runId: 'past'} };
   const started = { ...runState.createEmptyChatRunState(), threadId: 'thread', runId: 'live', status: 'completed' };
-  const updated = runState.applyChatRunEvent(started, { type: 'task_acceptance', runId: 'live', report: acceptance.payload });
-  assert.deepEqual(updated.activityBlocks, []);
+  const updated = runState.applyChatRunEvent(started, { type: 'task_acceptance', runId: 'live', report });
+  assert.deepEqual(updated.activityBlocks, [{id: 'task-acceptance:task', kind: 'task_acceptance', report}]);
   const input = { events: [acceptance], pendingUserInput: null, threadId: 'thread', liveRun: null };
   assert.deepEqual(transcript.projectChatTranscript(input), []);
-  const messages = transcript.projectChatTranscript({ ...input, liveRun: { ...started, assistantMessage: 'Answer',
-    activityBlocks: [{ id: 'old-acceptance', kind: 'task_acceptance', report: acceptance.payload }] } });
+  const messages = transcript.projectChatTranscript({ ...input, liveRun: { ...updated, assistantMessage: 'Answer' } });
   assert.equal(messages.length, 1);
   assert.equal(messages[0].content, 'Answer');
   assert.deepEqual(messages[0].blocks, []);

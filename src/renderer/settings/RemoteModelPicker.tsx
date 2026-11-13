@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Search } from 'lucide-react';
 import type { RemoteModelEntry } from '../../shared/types';
-import { useAsyncAction } from '../app/use-async-resource';
+import { useAsyncResource } from '../app/use-async-resource';
 import { FormNote, TextField, formButtonClass, formPrimaryButtonClass } from '../shared/form-ui';
 import type { RocClient } from '../shared/roc-client';
 import { listRemoteModels } from './settings-store';
@@ -55,26 +55,43 @@ export function RemoteModelPicker({
 }: RemoteModelPickerProps): React.JSX.Element {
   const [endpointText, setEndpointText] = useState(endpoint);
   const [apiKey, setApiKey] = useState('');
-  const [entries, setEntries] = useState<RemoteModelEntry[] | null>(null);
+  const [request, setRequest] = useState<{
+    id: number;
+    ownerEndpoint: string;
+    endpoint: string;
+    apiKey: string | null;
+    providerId: string | null;
+  } | null>(null);
+  const requestSequenceRef = useRef(0);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [filter, setFilter] = useState('');
 
   // 每次打开都从当前端点和空选择开始：上一次的勾选不该跟着用户跑到另一个供应商身上。
   useEffect(() => {
-    if (!open) {
-      return;
-    }
     setEndpointText(endpoint);
     setApiKey('');
-    setEntries(null);
+    setRequest(null);
     setSelected(new Set());
     setFilter('');
-  }, [open, endpoint]);
+  }, [open, endpoint, providerId]);
 
-  const fetchModels = useAsyncAction(
-    (input: { endpoint: string; apiKey: string | null; providerId: string | null }) => listRemoteModels(client, input),
+  const requestKey = open && request !== null && request.ownerEndpoint === endpoint && request.providerId === providerId
+    ? `remote-models:${request.id}`
+    : null;
+  const fetchModels = useAsyncResource(
+    requestKey,
+    () => {
+      if (request === null) throw new Error('model_fetch_request_missing');
+      return listRemoteModels(client, {
+        endpoint: request.endpoint,
+        apiKey: request.apiKey,
+        providerId: request.providerId
+      });
+    },
     { label: '拉取模型列表' }
   );
+  const pending = fetchModels.status === 'loading';
+  const entries = fetchModels.data?.models ?? null;
 
   const existing = useMemo(() => new Set(existingIds), [existingIds]);
   const visible = useMemo(() => {
@@ -103,13 +120,13 @@ export function RemoteModelPicker({
 
   const confirm = (): void => {
     const picked = (entries ?? []).filter((entry) => selected.has(entry.id));
-    if (picked.length === 0) {
+    if (pending || picked.length === 0) {
       return;
     }
     onConfirm(picked);
   };
 
-  const canFetch = fetchModels.pending === false && endpointText.trim().length > 0;
+  const canFetch = !pending && endpointText.trim().length > 0;
   const confirmLabel = multiple ? `添加所选（${selected.size}）` : '使用该模型';
 
   return (
@@ -133,7 +150,7 @@ export function RemoteModelPicker({
           <button
             type="button"
             onClick={confirm}
-            disabled={selected.size === 0}
+            disabled={pending || selected.size === 0}
             data-testid={`${testId}-confirm`}
             className={formPrimaryButtonClass}
           >
@@ -148,7 +165,12 @@ export function RemoteModelPicker({
             <TextField
               label="接入地址"
               value={endpointText}
-              onChange={setEndpointText}
+              disabled={pending}
+              onChange={(value) => {
+                setEndpointText(value);
+                setRequest(null);
+                setSelected(new Set());
+              }}
               placeholder="https://api.openai.com/v1"
               testId={`${testId}-endpoint`}
             />
@@ -158,27 +180,29 @@ export function RemoteModelPicker({
             data-testid={`${testId}-fetch`}
             disabled={!canFetch}
             onClick={() => {
+              if (!canFetch) return;
               setSelected(new Set());
-              void fetchModels
-                .run({
-                  endpoint: endpointText.trim(),
-                  apiKey: apiKey.trim().length === 0 ? null : apiKey.trim(),
-                  providerId
-                })
-                .then((result) => {
-                  if (result.ok) {
-                    setEntries(result.data.models);
-                  }
-                });
+              setRequest({
+                id: ++requestSequenceRef.current,
+                ownerEndpoint: endpoint,
+                endpoint: endpointText.trim(),
+                apiKey: apiKey.trim().length === 0 ? null : apiKey.trim(),
+                providerId
+              });
             }}
             className={`${formButtonClass} inline-flex items-center gap-1`}
           >
             <Download size={11} aria-hidden="true" />
-            {fetchModels.pending ? '拉取中…' : '拉取'}
+            {pending ? '拉取中…' : '拉取'}
           </button>
         </div>
 
-        <TextField label="API Key" type="password" value={apiKey} onChange={setApiKey}
+        <TextField label="API Key" type="password" value={apiKey} disabled={pending}
+          onChange={(value) => {
+            setApiKey(value);
+            setRequest(null);
+            setSelected(new Set());
+          }}
           placeholder={providerId === null ? '可留空' : '留空使用已保存的密钥'} testId={`${testId}-key`} />
 
         {fetchModels.error === null ? null : (
@@ -202,7 +226,7 @@ export function RemoteModelPicker({
                 />
               </label>
               <span
-                className="flex h-[var(--control-height)] shrink-0 items-center text-subtle text-[length:var(--font-micro-size)]"
+                className="flex h-[var(--control-height)] shrink-0 items-center tabular-nums text-subtle text-[length:var(--font-micro-size)]"
                 data-testid={`${testId}-count`}
               >
                 {visible.length}/{entries.length} 个
@@ -212,6 +236,10 @@ export function RemoteModelPicker({
             {entries.length === 0 ? (
               <p className="text-subtle text-[length:var(--font-micro-size)]" data-testid={`${testId}-empty`}>
                 端点没有返回任何模型。确认地址包含版本前缀（如 /v1），或先在该服务里下载模型。
+              </p>
+            ) : visible.length === 0 ? (
+              <p className="text-subtle text-[length:var(--font-micro-size)]" data-testid={`${testId}-filter-empty`}>
+                没有匹配的模型
               </p>
             ) : (
               <div

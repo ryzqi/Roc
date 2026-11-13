@@ -1,7 +1,6 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ResearchProject } from '../../shared/types';
-import { errorMessage } from '../app/loaded-state';
-import { useAsyncAction } from '../app/use-async-resource';
+import { errorMessage, runIpcAction } from '../app/loaded-state';
 import type { RocClient } from '../shared/roc-client';
 import { updateProject } from './project-store';
 import { useInvalidateProjectList } from './use-project-list';
@@ -32,56 +31,57 @@ export function useProjectWorkspace(
   project: ResearchProject | null,
   onBound: () => void
 ): ProjectWorkspaceBinding {
-  const update = useAsyncAction<[{ id: string; workspacePath: string }], ResearchProject>(
-    (input) => updateProject(client, input),
-    { label: '绑定工作目录' }
-  );
-  const [pickError, setPickError] = useState<string | null>(null);
+  const scope = useMemo(() => ({}), [client, project?.id]);
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {mountedRef.current = false;};
+  }, []);
+  const [pickError, setPickError] = useState<{scope: object; message: string} | null>(null);
   const [picking, setPicking] = useState(false);
   const pickingRef = useRef(false);
   const invalidateProjectList = useInvalidateProjectList();
 
   const bind = useCallback(() => {
-    if (project === null || pickingRef.current || update.pending) {
+    if (project === null || !mountedRef.current || scopeRef.current !== scope || pickingRef.current) {
       return;
     }
     pickingRef.current = true;
     setPicking(true);
     setPickError(null);
-    update.reset();
+    const current = (): boolean => mountedRef.current && scopeRef.current === scope;
     void (async () => {
       try {
-        const selection = await client.api.workspace.selectFromDialog().catch((error: unknown) => {
-          setPickError(errorMessage(error));
-          return null;
-        });
-        if (selection === null) {
-          return;
-        }
+        const selection = await client.api.workspace.selectFromDialog();
+        if (!current()) return;
         if (!selection.ok) {
-          setPickError(selection.error.message);
+          setPickError({scope, message: selection.error.message});
           return;
         }
         if (selection.data === null) {
           // Genuine cancel: say nothing.
           return;
         }
-        const updated = await update.run({ id: project.id, workspacePath: selection.data.path });
+        const workspacePath = selection.data.path;
+        const updated = await runIpcAction(() => updateProject(client, { id: project.id, workspacePath }));
         if (updated.ok) {
           invalidateProjectList();
-          onBound();
-        }
+          if (current()) onBound();
+        } else if (current()) setPickError({scope, message: updated.error});
+      } catch (error) {
+        if (current()) setPickError({scope, message: errorMessage(error)});
       } finally {
         pickingRef.current = false;
-        setPicking(false);
+        if (mountedRef.current) setPicking(false);
       }
     })();
-  }, [client, invalidateProjectList, onBound, project, update]);
+  }, [client, invalidateProjectList, onBound, project, scope]);
 
   const clearError = useCallback(() => {
     setPickError(null);
-    update.reset();
-  }, [update]);
+  }, []);
 
-  return { bind, pending: picking || update.pending, error: pickError ?? update.error, clearError };
+  return { bind, pending: picking, error: pickError?.scope === scope ? pickError.message : null, clearError };
 }

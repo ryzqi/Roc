@@ -1,4 +1,5 @@
-import { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { LazyBoundary, retryableLazy } from '../../shell/LazyBoundary';
 import { useContentPreferences } from '../../app/use-content-preferences';
 import { ChevronDown, ChevronRight, FileText, Folder, FolderOpen, Loader2, RefreshCw } from 'lucide-react';
 import type { VirtuosoHandle } from 'react-virtuoso';
@@ -44,7 +45,7 @@ const VIRTUALISE_THRESHOLD = 200;
 /** Typing this long after the previous character starts a new search prefix. */
 const TYPE_AHEAD_RESET_MS = 700;
 
-const LazyFileTreeVirtualizedRows = lazy(async () => {
+const LazyFileTreeVirtualizedRows = retryableLazy(async () => {
   const module = await import('./FileTreeVirtualizedRows');
   return { default: module.FileTreeVirtualizedRows };
 });
@@ -496,7 +497,7 @@ export function FileTreeView({
               正在准备大型文件树…
             </p>
           ) : (
-            <Suspense fallback={
+            <LazyBoundary fallback={
               <p className="flex items-center gap-2 px-3 py-2 text-muted" role="status" data-testid="file-tree-virtualizer-loading">
                 <Loader2 size={13} aria-hidden="true" className="animate-spin" />
                 正在准备大型文件树…
@@ -510,7 +511,7 @@ export function FileTreeView({
                 overscan={OVERSCAN}
                 renderRow={renderRow}
               />
-            </Suspense>
+            </LazyBoundary>
           )
         ) : (
           <div role="group">{tree.rows.map((row, index) => renderRow(index, row))}</div>

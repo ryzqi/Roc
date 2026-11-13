@@ -37,6 +37,7 @@ import {
   writeWorkspaceText
 } from './library-store';
 import { buildLiteratureAssistantPrompt, libraryItemTitle } from './format';
+import {requestReadingChange} from './reading-interactions';
 
 /**
  * The one literature store, created once in `AppShell` and shared by the sidebar's
@@ -223,7 +224,19 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
   const [query, setQuery] = useState('');
   const [includeArchived, setIncludeArchived] = useState(false);
   const debouncedQuery = useDebouncedValue(query, LIBRARY_QUERY_DEBOUNCE_MS);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<{projectId: string | null; id: string | null}>({projectId, id: null});
+  const selectedId = selection.projectId === projectId ? selection.id : null;
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
+  const selectionRequest = useRef(0);
+  const scopeRef = useRef({client, projectId});
+  if (scopeRef.current.client !== client || scopeRef.current.projectId !== projectId) scopeRef.current = {client, projectId};
+  const scope = scopeRef.current;
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {mounted.current = false; selectionRequest.current++;};
+  }, []);
   const [pending, setPending] = useState(false);
   const [parseInFlight, setParseInFlight] = useState<string | null>(null);
   const [importRequestId, setImportRequestId] = useState(0);
@@ -249,11 +262,16 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
   );
   const items = useMemo(() => list.data ?? [], [list.data]);
 
-  // A different project is a different library: drop the selection rather than
-  // showing an item that the new project may not even contain.
-  useEffect(() => {
-    setSelectedId(null);
-  }, [projectId]);
+  const select = useCallback((id: string | null): void => {
+    if (!mounted.current || scopeRef.current !== scope) return;
+    const revision = ++selectionRequest.current;
+    if (id === selectedIdRef.current) return;
+    requestReadingChange(projectId ?? '', () => {
+      if (!mounted.current || scopeRef.current !== scope || revision !== selectionRequest.current) return;
+      selectedIdRef.current = id;
+      setSelection({projectId, id});
+    });
+  }, [projectId, scope]);
 
   const listedSelection = useMemo(() => items.find(item => item.id === selectedId) ?? null, [items, selectedId]);
   const selectedResource = useAsyncResource(
@@ -262,7 +280,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     {label: '读取选中文献'}
   );
   const selected = listedSelection ?? selectedResource.data;
-  const documentsKey = selectedId === null ? null : `literature-docs:${selectedId}`;
+  const documentsKey = projectId === null || selectedId === null ? null : `literature-docs:${projectId}:${selectedId}`;
   const documents = useAsyncResource(
     documentsKey,
     () => listDocuments(client, selectedId ?? ''),
@@ -710,7 +728,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     selectedStatus: listedSelection !== null ? 'ready' : selectedResource.status,
     selectedError: selectedResource.error,
     reloadSelected: selectedResource.reload,
-    select: setSelectedId,
+    select,
     action: { pending, error: actionError },
     clearActionError: () => setActionError(null),
     archiveItem,

@@ -5,6 +5,7 @@ import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
 import { formatAuthorList, formatCitationCount, formatYear, libraryItemTitle, readVenue } from './format';
 import { useLiterature } from './literature-scope';
+import { useCopyFeedback } from '../shared/hooks/use-copy-feedback';
 
 /**
  * The library list (P5/T5.1–T5.2), rendered by **both** the sidebar's 文献 tab and
@@ -51,14 +52,6 @@ const SOURCE_LABELS: Readonly<Record<ResearchLibraryItem['metadata']['source'], 
 export function LibraryList({ compact = false, onOpenItem, onRequestImport }: LibraryListProps): React.JSX.Element {
   const literature = useLiterature();
   const [searchDraft, setSearchDraft] = useState(literature.query);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  // 复制反馈只活 1.5 秒：它是“刚才那一下成功了”的确认，不是持久状态。
-  useEffect(() => {
-    if (copiedId === null) return undefined;
-    const timer = setTimeout(() => setCopiedId(null), 1500);
-    return () => clearTimeout(timer);
-  }, [copiedId]);
 
   // Keep the box in sync when something else changes the query (e.g. clearing it
   // from a view switch) without fighting the user's typing.
@@ -124,8 +117,8 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
             />
             显示已归档
           </label>
-          <span className="text-subtle text-[length:var(--font-micro-size)]" data-testid="literature-count">
-            {literature.status === 'ready' ? `${literature.items.length} 条` : ''}
+          <span className="tabular-nums text-subtle text-[length:var(--font-micro-size)]" data-testid="literature-count">
+            {literature.status === 'ready' ? `${literature.items.length.toLocaleString('zh-CN')} 条` : ''}
           </span>
         </div>
       </div>
@@ -149,7 +142,9 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
           compact
           icon={BookOpen}
           title={literature.query.trim().length > 0 ? '没有匹配的文献' : '尚无文献'}
-          action={{ label: '导入文献', onClick: onRequestImport }}
+          action={literature.query.trim().length > 0
+            ? {label: '清除搜索', onClick: () => literature.setQuery('')}
+            : {label: '导入文献', onClick: onRequestImport}}
           testId="literature-empty"
         />
       ) : (
@@ -159,7 +154,6 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
             const venue = readVenue(item.bibliography);
             const linked = literature.projectId !== null && item.projectIds.includes(literature.projectId);
             const copyKey = item.bibliography.citationKey;
-            const copied = copiedId === item.id;
             return (
               <li key={item.id} className="relative">
                 <button
@@ -189,7 +183,7 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
                     <span className="min-w-0 break-all font-mono text-subtle text-[length:var(--font-micro-size)]" data-testid={`literature-citekey-${item.id}`}>
                       {copyKey}
                     </span>
-                    <span className="text-subtle text-[length:var(--font-micro-size)]">
+                    <span className="tabular-nums text-subtle text-[length:var(--font-micro-size)]">
                       {formatCitationCount(item.metadata.citationCount)}
                     </span>
                     {linked ? (
@@ -206,18 +200,7 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
                     ) : null}
                   </span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(copyKey).then(() => setCopiedId(item.id), () => setCopiedId(null));
-                  }}
-                  aria-label={copied ? `已复制引用键 ${copyKey}` : `复制引用键 ${copyKey}`}
-                  title={copied ? '已复制' : '复制引用键'}
-                  data-testid={`literature-citekey-copy-${item.id}`}
-                  className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-control text-subtle hover:bg-[var(--overlay-hover)] hover:text-ink focus-visible:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
-                >
-                  {copied ? <Check size={11} aria-hidden="true" /> : <Copy size={11} aria-hidden="true" />}
-                </button>
+                <CitationKeyCopy key={copyKey} itemId={item.id} citationKey={copyKey}/>
               </li>
             );
           })}
@@ -244,4 +227,17 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
       )}
     </div>
   );
+}
+
+function CitationKeyCopy({itemId, citationKey}: {itemId: string; citationKey: string}): React.JSX.Element {
+  const {copied, error, copy} = useCopyFeedback();
+  return <>
+    <button type="button" onClick={() => copy(citationKey)}
+      aria-label={`${copied ? '已复制引用键' : '复制引用键'} ${citationKey}`}
+      title={copied ? '已复制' : '复制引用键'} data-testid={`literature-citekey-copy-${itemId}`}
+      className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-control text-subtle hover:bg-[var(--overlay-hover)] hover:text-ink focus-visible:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]">
+      {copied ? <Check size={11} aria-hidden="true"/> : <Copy size={11} aria-hidden="true"/>}
+    </button>
+    {error ? <p role="alert" className="px-2 py-1 text-[var(--st-bad)] text-[length:var(--font-meta-size)]">{error}</p> : null}
+  </>;
 }

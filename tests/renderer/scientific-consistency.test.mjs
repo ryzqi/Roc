@@ -37,6 +37,7 @@ before(async () => {
     let generation=0;
     window.mount=input=>flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
       <Harness key={++generation} initial={input}/></LazyMotion></MotionConfig>));
+    window.unmount=()=>flushSync(()=>root.render(null));
   `, style: 'body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}'});
   writeFileSync(join(directory, 'main.cjs'), `const {app,BrowserWindow}=require('electron');
     app.setPath('userData',${JSON.stringify(join(directory, 'data'))});
@@ -62,6 +63,7 @@ before(async () => {
   await page.waitForFunction(() => typeof mount === 'function');
 });
 after(async () => {
+  if (page !== undefined && !page.isClosed()) await page.evaluate(() => window.unmount?.());
   try {await app?.close();} finally {
     fixtures.forEach(f => f.close()); api?.dispose();
     if (directory) rmSync(directory, {recursive: true, force: true});
@@ -179,8 +181,18 @@ test('opt-in real drawer maps a negative tie with keyboard and immutable exact r
     'artifact-consistency-toggle', 'artifact-consistency-refresh', 'artifact-consistency-history-open']) {
     assert.equal(await page.getByTestId(id).isDisabled(), true);
   }
-  await page.getByTestId('artifact-inspector-close').click(); await page.keyboard.press('Escape');
+  await page.getByTestId('artifact-inspector-close').click();
+  await page.getByTestId('artifact-draft-discard-panel').waitFor();
+  await page.getByTestId('artifact-draft-discard-cancel').click();
+  await page.getByTestId('artifact-draft-discard-panel').waitFor({state:'detached'});
+  await page.keyboard.press('Escape');
+  await page.getByTestId('artifact-draft-discard-panel').waitFor();
+  await page.getByTestId('artifact-draft-discard-cancel').click();
+  await page.getByTestId('artifact-draft-discard-panel').waitFor({state:'detached'});
   await page.getByTestId('artifact-inspector-scrim').click({position: {x: 5, y: 5}});
+  await page.getByTestId('artifact-draft-discard-panel').waitFor();
+  await page.getByTestId('artifact-draft-discard-cancel').click();
+  await page.getByTestId('artifact-draft-discard-panel').waitFor({state:'detached'});
   assert.equal(await editor().count(), 1);
   await page.getByTestId('artifact-consistency-discard').click();
   await fillMapping(f);

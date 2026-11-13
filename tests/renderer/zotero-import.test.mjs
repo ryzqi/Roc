@@ -69,8 +69,13 @@ before(async () => {
           membership:options.membership || (input.collectionKey===null ? 'not_requested' : status==='present' ? 'listed' : 'unknown'),
           versionState:options.versionState || (status==='not_found' ? 'missing' : 'newer'),recordedAt:at,contentHash:'b'.repeat(64)};
       }
-      let sync = null;
-      const call = (method,input,work) => {window.calls.push({method,input});return work();};
+      let sync = null, syncSequence = 0;
+      const call = (method,input,work) => {
+        window.calls.push({method,input});
+        const result=work();
+        if(!scenario.heldMethods?.includes(method)) return result;
+        return Promise.resolve(result).then(reply=>new Promise(resolve=>window.pendingActions.push({method,input,reply,resolve})));
+      };
       const client = {api:{research:{
         getZoteroChildren: input => call('children',input,async()=>{
           if(scenario.childrenError) return fail('Synthetic child source disconnected');
@@ -149,12 +154,15 @@ before(async () => {
         }),
         readZoteroSync: input => call('syncReadState',input,async()=>ok(sync)),
         startZoteroSync: input => call('syncStart',input,async()=>{
-          sync={syncId:'synthetic-sync',scope:{serverId:input.serverId,library:input.library},collectionKey:input.collectionKey,
+          sync={syncId:'synthetic-sync-'+(++syncSequence),scope:{serverId:input.serverId,library:input.library},collectionKey:input.collectionKey,
             mode:input.mode,limit:input.limit,revision:0,status:'active',checkpointVersion:null,since:null,
             targetVersion:null,total:null,nextOffset:0,pendingPreviewId:null,errorCode:null,createdAt:at,updatedAt:at};
           return ok(sync);
         }),
         captureZoteroSyncPage: input => call('syncPage',input,async()=>{
+          if(scenario.syncSourceDeferred) await new Promise(resolve=>window.finishSyncSource=resolve);
+          if(scenario.syncSourceDeferred && (sync.status!=='active' || input.expectedRevision!==sync.revision))
+            return fail('Synthetic source read conflicted with the paused checkpoint');
           if(scenario.syncPageError) {
             if(scenario.syncPageError==='reset') sync={...sync,revision:sync.revision+1,status:'reset_required',errorCode:'zotero_library_version_changed'};
             return fail('Synthetic interrupted source read');
@@ -251,14 +259,17 @@ before(async () => {
         addLiterature: input => call('add',input,async()=>{
           window.lastAdd = input;
           if(scenario.failOnce && window.calls.filter(call=>call.method==='add').length===1) return fail('Synthetic bridge response lost');
-          if(scenario.defer) return new Promise(resolve=>window.finishAdd = mode=>resolve(ok(result(input,mode))));
-          const completed=result(input,scenario.partial && input.entries.length>1 ? 'partial' : 'completed');
-          completed.items.filter(item=>['created','linked','already_present'].includes(item.disposition)).forEach(item=>{
-            const entry=input.entries[item.inputPositions[0]];
-            if(!imported.has(entry.previewId)) imported.set(entry.previewId,new Set());
-            imported.get(entry.previewId).add(entry.itemKey);
-          });
-          return ok(completed);
+          const complete=mode=>{
+            const completed=result(input,mode);
+            completed.items.filter(item=>['created','linked','already_present'].includes(item.disposition)).forEach(item=>{
+              const entry=input.entries[item.inputPositions[0]];
+              if(!imported.has(entry.previewId)) imported.set(entry.previewId,new Set());
+              imported.get(entry.previewId).add(entry.itemKey);
+            });
+            return ok(completed);
+          };
+          if(scenario.defer) return new Promise(resolve=>window.finishAdd = mode=>resolve(complete(mode || 'completed')));
+          return complete(scenario.partial && input.entries.length>1 ? 'partial' : 'completed');
         }),
         getLiteratureImport: input => call('getImport',input,async()=>ok({...result(window.lastAdd,'completed'),status:'running'})),
         cancelLiteratureImport: input => call('cancel',input,async()=>ok({...result(window.lastAdd,'completed'),status:'running'}))
@@ -280,9 +291,15 @@ before(async () => {
       </>;
     }
     window.mount = scenario=>{
-      window.calls=[];window.reloads=0;
+      window.calls=[];window.reloads=0;window.pendingActions=[];
       flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
         <Harness key={++generation} scenario={scenario}/></LazyMotion></MotionConfig>));
+    };
+    window.clear=()=>flushSync(()=>root.render(null));
+    window.resolveAction=method=>{
+      const index=pendingActions.findIndex(entry=>entry.method===method);
+      if(index<0) throw new Error('No pending action '+method);
+      const entry=pendingActions.splice(index,1)[0];entry.resolve(entry.reply);
     };
   `, resolveDir: process.cwd(), loader: 'tsx'}, outfile: join(directory, 'app.js'),
     bundle: true, platform: 'browser', format: 'iife', logLevel: 'silent'});
@@ -304,6 +321,7 @@ before(async () => {
   await page.waitForFunction(()=>typeof window.mount==='function');
 });
 after(async()=>{
+  await page?.evaluate(()=>clear()).catch(()=>{});
   try {await app?.close();} finally {if(directory) rmSync(directory,{recursive:true,force:true});}
   assert.deepEqual(errors,[]);
 });
@@ -313,13 +331,14 @@ async function open(scenario = {}) {
 }
 async function reopen() {
   await page.locator('#open').click();
-  await page.getByTestId('literature-import-tab-document').focus();
-  await page.keyboard.press('End');
-  await page.getByTestId('literature-import-panel-zotero').waitFor();
   await page.waitForFunction(()=>{
     const panel=document.querySelector('[data-testid="literature-import-dialog-panel"]');
     return panel && getComputedStyle(panel).opacity==='1' && getComputedStyle(panel).transform==='none';
   });
+  await page.waitForFunction(()=>document.querySelector('[data-testid="literature-import-tab-document"]')?.getAttribute('aria-selected')==='true');
+  await page.getByTestId('literature-import-tab-document').focus();
+  await page.keyboard.press('End');
+  await page.getByTestId('literature-import-panel-zotero').waitFor();
 }
 async function connect() {
   await page.getByTestId('literature-zotero-connect').click();
@@ -341,6 +360,196 @@ async function inspect(label) {
   assert.equal(audit.hidden,0);
   await page.screenshot({path:join(artifacts,`${label}.png`)});
 }
+test('Zotero preview serializes same-event requests and freezes the source while reading',async()=>{
+  await open({heldMethods:['preview']});await connect();
+  await page.evaluate(()=>{
+    const button=document.querySelector('[data-testid="literature-zotero-preview"]');button.click();button.click();
+  });
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='preview').length),1);
+  assert.equal(await page.getByTestId('literature-zotero-collection').isDisabled(),true);
+  assert.equal(await page.getByTestId('literature-zotero-limit').isDisabled(),true);
+  await page.waitForFunction(()=>pendingActions.some(entry=>entry.method==='preview'));
+  await page.evaluate(()=>resolveAction('preview'));await row('ITEM0000').waitFor();
+  assert.equal(await page.getByTestId('literature-zotero-preview').isDisabled(),false);
+});
+
+test('Zotero saved-preview pagination consumes a page once before React disables the button',async()=>{
+  await open({heldMethods:['readPreview']});await preview('50');
+  await page.evaluate(()=>{
+    const button=document.querySelector('[data-testid="literature-zotero-more-preview"]');button.click();button.click();
+  });
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='readPreview').length),1);
+  await page.waitForFunction(()=>pendingActions.some(entry=>entry.method==='readPreview'));
+  await page.evaluate(()=>resolveAction('readPreview'));await row('ITEM0039').waitFor();
+  assert.equal(await page.getByTestId('literature-zotero-object').count(),40);
+});
+
+test('Zotero sync establishment shares one synchronous boundary with source changes',async()=>{
+  await open({heldMethods:['syncStart']});await connect();
+  await page.evaluate(()=>{
+    const button=document.querySelector('[data-testid="literature-zotero-sync-start"]');button.click();button.click();
+  });
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='syncStart').length),1);
+  assert.equal(await page.getByTestId('literature-zotero-limit').isDisabled(),true);
+  await page.waitForFunction(()=>pendingActions.some(entry=>entry.method==='syncStart'));
+  await page.evaluate(()=>resolveAction('syncStart'));
+  await page.getByTestId('literature-zotero-sync-pause').waitFor();
+});
+
+test('Zotero checkpoint confirmation cannot reenter and late failure cannot refresh a closed preview',async()=>{
+  await open({heldMethods:['syncAck'],syncAckError:true});await connect();
+  await page.getByTestId('literature-zotero-sync-start').click();
+  await page.getByTestId('literature-zotero-sync-pause').waitFor();
+  await page.getByTestId('literature-zotero-preview').click();await row('ITEM0000').waitFor();
+  await page.getByTestId('literature-zotero-sync-skip-reason').fill('Explicitly excluded source objects');
+  await page.evaluate(()=>{
+    const button=document.querySelector('[data-testid="literature-zotero-sync-confirm"]');button.click();button.click();
+  });
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='syncAck').length),1);
+  await page.waitForFunction(()=>pendingActions.some(entry=>entry.method==='syncAck'));
+  await page.getByTestId('literature-import-dialog-close').click();
+  await page.getByTestId('literature-import-discard-panel').waitFor();
+  await page.getByTestId('literature-import-discard-confirm').click();
+  await page.getByTestId('literature-import-dialog-panel').waitFor({state:'detached'});
+  await page.evaluate(()=>resolveAction('syncAck'));
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='syncReadState').length),0);
+});
+
+test('Zotero current-source observations serialize same-event checks',async()=>{
+  await open({reviewDifference:true,heldMethods:['sourceObserve']});await preview();await originalSource();
+  await page.getByText('尚无来源状态观察。',{exact:true}).waitFor();
+  await page.evaluate(()=>{
+    const button=document.querySelector('[data-testid="literature-zotero-source-check"]');button.click();button.click();
+  });
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='sourceObserve').length),1);
+  await page.waitForFunction(()=>pendingActions.some(entry=>entry.method==='sourceObserve'));
+  await page.evaluate(()=>resolveAction('sourceObserve'));
+  await page.getByTestId('literature-zotero-source-observation').waitFor();
+});
+
+test('Zotero child discovery consumes one source page per action',async()=>{
+  await open({reviewDifference:true,heldMethods:['children']});await preview();await originalSource();
+  await page.getByTestId('literature-zotero-attachments').locator(':scope > summary').click();
+  await page.evaluate(()=>{
+    const button=document.querySelector('[data-testid="literature-zotero-children-read"]');button.click();button.click();
+  });
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='children').length),1);
+  await page.waitForFunction(()=>pendingActions.some(entry=>entry.method==='children'));
+  await page.evaluate(()=>resolveAction('children'));
+  await page.getByTestId('literature-zotero-children-next').waitFor();
+  await page.evaluate(()=>{
+    const button=document.querySelector('[data-testid="literature-zotero-children-next"]');button.click();button.click();
+  });
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='children').length),2);
+  await page.waitForFunction(()=>pendingActions.some(entry=>entry.method==='children'));
+  await page.evaluate(()=>resolveAction('children'));
+  assert.equal(await page.getByTestId('literature-zotero-child').count(),3);
+});
+
+test('Zotero bibliography submit and cancel have separate synchronous locks and preserve the active request',async()=>{
+  await open({defer:true,heldMethods:['cancel']});await preview();
+  await row('ITEM0000').locator('input').check();
+  await page.waitForFunction(()=>!document.querySelector('[data-testid="literature-zotero-import"]').disabled);
+  await page.evaluate(()=>{
+    const button=document.querySelector('[data-testid="literature-zotero-import"]');button.click();button.click();
+  });
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='add').length),1);
+  await page.getByTestId('literature-zotero-import-running').waitFor();
+  await page.evaluate(()=>{
+    const button=document.querySelector('[data-testid="literature-zotero-cancel-import"]');button.click();button.click();
+  });
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='getImport').length),1);
+  await page.waitForFunction(()=>pendingActions.some(entry=>entry.method==='cancel'));
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='cancel').length),1);
+  await page.evaluate(()=>resolveAction('cancel'));
+  await page.getByText('已请求取消',{exact:true}).waitFor();
+  await page.evaluate(()=>finishAdd('cancelled'));
+  await page.getByTestId('literature-zotero-import-result').waitFor();
+});
+
+test('Zotero pauses a pending source read and keeps the accepted paused checkpoint after the read fails',async()=>{
+  await open({syncSourceDeferred:true});await connect();
+  await page.getByTestId('literature-zotero-sync-start').click();
+  await page.getByTestId('literature-zotero-sync-pause').waitFor();
+  await page.getByTestId('literature-zotero-preview').click();
+  await page.waitForFunction(()=>typeof finishSyncSource==='function');
+  assert.equal(await page.getByTestId('literature-zotero-sync-pause').isDisabled(),false);
+  await page.evaluate(()=>{
+    const button=document.querySelector('[data-testid="literature-zotero-sync-pause"]');button.click();button.click();
+  });
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='syncControl').length),1);
+  await page.getByTestId('literature-zotero-sync-resume').waitFor();
+  await page.evaluate(()=>finishSyncSource());
+  await page.getByText('Synthetic source read conflicted with the paused checkpoint',{exact:true}).waitFor();
+  assert.match(await page.getByTestId('literature-zotero-sync').innerText(),/已暂停/u);
+  assert.equal(await page.getByTestId('literature-zotero-object').count(),0);
+  assert.equal(await page.getByTestId('literature-zotero-sync-resume').isDisabled(),false);
+});
+
+test('Zotero bibliography import keeps checkpoint pause and import cancellation independently available',async()=>{
+  await open({defer:true});await connect();
+  await page.getByTestId('literature-zotero-sync-start').click();
+  await page.getByTestId('literature-zotero-sync-pause').waitFor();
+  await page.getByTestId('literature-zotero-preview').click();await row('ITEM0000').waitFor();
+  await row('ITEM0000').locator('input').check();
+  await page.waitForFunction(()=>!document.querySelector('[data-testid="literature-zotero-import"]').disabled);
+  await page.getByTestId('literature-zotero-import').click();
+  await page.getByTestId('literature-zotero-import-running').waitFor();
+  assert.equal(await page.getByTestId('literature-zotero-sync-pause').isDisabled(),false);
+  await page.getByTestId('literature-zotero-sync-pause').click();
+  await page.getByTestId('literature-zotero-sync-resume').waitFor();
+  assert.equal(await page.getByTestId('literature-zotero-cancel-import').isDisabled(),false);
+  await page.getByTestId('literature-zotero-cancel-import').click();
+  await page.getByText('已请求取消',{exact:true}).waitFor();
+  await page.evaluate(()=>finishAdd('cancelled'));
+  await page.getByTestId('literature-zotero-import-result').waitFor();
+  assert.match(await page.getByTestId('literature-zotero-sync').innerText(),/已暂停/u);
+});
+
+test('Zotero checkpoint draft guards native unload, dialog close and tab changes',async()=>{
+  await open();await connect();
+  await page.getByTestId('literature-zotero-sync-start').click();
+  await page.getByTestId('literature-zotero-sync-pause').waitFor();
+  await page.getByTestId('literature-zotero-preview').click();await row('ITEM0000').waitFor();
+  await page.getByTestId('literature-zotero-sync-skip-reason').fill('Reviewed exclusion reason');
+  assert.equal(await page.evaluate(()=>{
+    const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;
+  }),true);
+  await page.getByTestId('literature-import-dialog-close').click();
+  await page.getByTestId('literature-import-discard-panel').waitFor();
+  await page.getByTestId('literature-import-discard-cancel').click();
+  assert.equal(await page.getByTestId('literature-zotero-sync-skip-reason').inputValue(),'Reviewed exclusion reason');
+  await page.getByTestId('literature-import-tab-zotero').focus();await page.keyboard.press('Home');
+  await page.getByTestId('literature-import-discard-panel').waitFor();
+  await page.getByTestId('literature-import-discard-cancel').click();
+  assert.equal(await page.getByTestId('literature-import-tab-zotero').getAttribute('aria-selected'),'true');
+  await page.getByTestId('literature-import-tab-document').click();
+  await page.getByTestId('literature-import-discard-panel').waitFor();
+  await page.getByTestId('literature-import-discard-confirm').click();
+  await page.getByTestId('literature-import-panel-document').waitFor();
+  assert.equal(await page.getByTestId('literature-import-dialog-panel').isVisible(),true);
+});
+
+test('Zotero receipt restoration preserves the authored checkpoint reason and rereading requires explicit discard',async()=>{
+  await open({defer:true});await connect();
+  await page.getByTestId('literature-zotero-sync-start').click();
+  await page.getByTestId('literature-zotero-sync-pause').waitFor();
+  await page.getByTestId('literature-zotero-preview').click();await row('ITEM0000').waitFor();
+  await page.getByTestId('literature-zotero-sync-skip-reason').fill('Reviewed exclusion reason');
+  await row('ITEM0000').locator('input').check();
+  await page.waitForFunction(()=>!document.querySelector('[data-testid="literature-zotero-import"]').disabled);
+  await page.getByTestId('literature-zotero-import').click();await page.waitForFunction(()=>typeof finishAdd==='function');
+  await page.evaluate(()=>finishAdd());
+  await page.waitForFunction(()=>document.querySelector('[data-item-key="ITEM0000"]').textContent.includes('本页已收录'));
+  assert.equal(await page.getByTestId('literature-zotero-sync-skip-reason').inputValue(),'Reviewed exclusion reason');
+  await page.getByTestId('literature-zotero-preview').click();
+  await page.getByTestId('literature-import-discard-panel').waitFor();
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='syncPage').length),1);
+  await page.getByTestId('literature-import-discard-cancel').click();
+  assert.equal(await page.getByTestId('literature-zotero-sync-skip-reason').inputValue(),'Reviewed exclusion reason');
+});
+
 test('Zotero import keyboard path reviews paginated groups collections and source objects before selected import and partial retry',async()=>{
   await open({partial:true});
   assert.deepEqual(await page.evaluate(()=>calls),[]);
@@ -654,6 +863,8 @@ test('sync cannot acknowledge undisplayed objects or failed reads and checkpoint
       }else{
         await page.getByTestId('literature-zotero-sync-pause').click();
         await page.getByTestId('literature-zotero-sync-abandon').click();
+        await page.getByTestId('literature-import-discard-panel').waitFor();
+        await page.getByTestId('literature-import-discard-confirm').click();
         await page.waitForFunction(()=>document.querySelector('[data-testid="literature-zotero-sync"]').textContent.includes('需要重新建立核对'));
         assert.equal(await page.getByTestId('literature-zotero-object').count(),0);
       }

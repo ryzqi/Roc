@@ -81,18 +81,19 @@ with open(os.path.join(roc.output_dir, "metrics.json"), "w") as output:
   await buildViteRenderer({directory, script: `
     import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {flushSync} from 'react-dom';
     import {LazyMotion,MotionConfig,domAnimation} from 'motion/react';
-    import {StageArtifactInspector} from './src/renderer/artifacts/StageArtifactInspector';
+    import {ArtifactInspector} from './src/renderer/artifacts/ArtifactInspector';
     const root=createRoot(document.getElementById('root'));
     const client={api:{research:Object.fromEntries(${JSON.stringify(Object.keys(routes))}.map(method=>[method,input=>window.callMain(method,input)]))}};
     function Harness({request,writable}) {
-      const [open,setOpen]=useState(true),[locations]=useState(()=>new Map());
-      return <main><button onClick={()=>setOpen(true)}>打开工件</button>{open?<StageArtifactInspector client={client}
-        request={request} writable={writable} readingLocations={locations} onClose={()=>setOpen(false)}
-        onOpenTask={()=>setOpen(false)} onReviewContext={()=>{}}/>:null}</main>;
+      const [open,setOpen]=useState(true),[locations]=useState(()=>new Map()),[drafts]=useState(()=>new Map());
+      return <main><button onClick={()=>setOpen(true)}>打开工件</button>{open?<ArtifactInspector client={client}
+        selection={{kind:'stage',request,onReviewContext:()=>{}}} writable={writable} readingLocations={locations}
+        reviewDrafts={drafts} onClose={()=>setOpen(false)} onOpenTask={()=>setOpen(false)}/>:null}</main>;
     }
     let generation=0;
     window.mount=(request,writable=true)=>flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
       <Harness key={++generation} request={request} writable={writable}/></LazyMotion></MotionConfig>));
+    window.unmount=()=>flushSync(()=>root.render(null));
   `, style: 'body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}'});
   await writeFile(join(directory, 'main.cjs'), `const {app,BrowserWindow}=require('electron');
     app.setPath('userData',${JSON.stringify(join(root, 'userData'))});
@@ -123,6 +124,7 @@ with open(os.path.join(roc.output_dir, "metrics.json"), "w") as output:
   await page.waitForFunction(() => typeof mount === 'function');
 });
 after(async () => {
+  if (page !== undefined && !page.isClosed()) await page.evaluate(() => window.unmount?.());
   try {await app?.close(); await service?.shutdown(); f?.close(); api?.dispose();}
   finally {if (root) await rm(root, {recursive: true, force: true});}
   assert.deepEqual(errors, []);
@@ -173,7 +175,10 @@ test('keyboard outcome selection has no implicit result reads or verdict and sav
   await fill();
   assert.equal(await page.getByTestId('artifact-inspector-refresh').isDisabled(), true);
   assert.equal(await page.getByTestId('artifact-idea-plan-revise').isDisabled(), true);
-  await page.keyboard.press('Escape'); await expect(page.getByTestId('artifact-inspector-panel')).toBeVisible();
+  await page.keyboard.press('Escape'); await page.getByTestId('artifact-draft-discard-panel').waitFor();
+  await page.getByTestId('artifact-draft-discard-cancel').click();
+  await page.getByTestId('artifact-draft-discard-panel').waitFor({state:'detached'});
+  await expect(page.getByTestId('artifact-inspector-panel')).toBeVisible();
   await page.getByTestId('artifact-idea-outcome-save').focus(); await page.keyboard.press('Enter');
   await page.getByText('反驳假设 评估版本 1', {exact: false}).waitFor();
   const receipt = history(c).items[0];
@@ -291,8 +296,11 @@ test('late result and save replies cannot restore an earlier Canvas or clear a n
   assert.equal(await page.getByTestId('artifact-inspector-refresh').isDisabled(), true);
   assert.equal(await page.getByTestId('artifact-idea-outcome-form').count(), 0);
   await page.keyboard.press('Escape'); await expect(page.getByTestId('artifact-inspector-panel')).toBeVisible();
+  await page.getByTestId('artifact-draft-discard-cancel').click();
+  assert.equal(await page.getByLabel('可证伪条件', {exact: true}).inputValue(), 'New scope unsaved content.');
   assert.equal(history(c).total, 1); assert.equal(history(other).total, 0);
   await page.getByTestId('artifact-idea-plan-discard').click();
+  await expect(page.getByTestId('artifact-idea-plan-discard')).toHaveCount(0);
   await scene(c); await page.getByTestId('artifact-idea-outcome-open').click();
   await page.getByTestId('artifact-idea-outcome-plan').first().click();
   await page.getByTestId('artifact-idea-outcome-runs').click();

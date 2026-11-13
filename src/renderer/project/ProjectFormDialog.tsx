@@ -3,6 +3,7 @@ import { FolderOpen } from 'lucide-react';
 import type { ResearchProject } from '../../shared/types';
 import { truncateMiddle } from '../shared/format';
 import { ModalShell } from '../shell/ModalShell';
+import { errorMessage } from '../app/loaded-state';
 import type { WorkspacePickResult } from './use-projects';
 
 /**
@@ -48,6 +49,10 @@ type FieldErrors = Partial<Record<'title' | 'description' | 'workspacePath', str
 
 const TITLE_MAX = 200;
 const DESCRIPTION_MAX = 5000;
+const LANGUAGES = [
+  { value: 'zh' as const, label: '中文' },
+  { value: 'en' as const, label: '英文' }
+];
 
 function validate(values: ProjectFormValues, mode: 'create' | 'edit'): FieldErrors {
   const errors: FieldErrors = {};
@@ -91,33 +96,46 @@ export function ProjectFormDialog({
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [pickingWorkspace, setPickingWorkspace] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
+  const languageRefs = useRef<Partial<Record<ProjectFormValues['language'], HTMLButtonElement | null>>>({});
+  const pickerGeneration = useRef(0);
+  const pickingRef = useRef(false);
 
   // Re-seed whenever the dialog opens or targets a different project, so a
   // cancelled edit leaves nothing behind. Keyed on the id, not the object, so a
   // parent passing a fresh object each render cannot wipe what the user typed.
   const projectId = project?.id ?? null;
   useEffect(() => {
-    if (!open) {
-      return;
+    pickerGeneration.current++;
+    pickingRef.current = false;
+    setPickingWorkspace(false);
+    if (open) {
+      setValues({
+        title: project?.title ?? '',
+        description: project?.description ?? '',
+        language: project?.language ?? 'zh',
+        workspacePath: project?.workspacePath ?? ''
+      });
+      setErrors({});
+      setWorkspaceError(null);
     }
-    setValues({
-      title: project?.title ?? '',
-      description: project?.description ?? '',
-      language: project?.language ?? 'zh',
-      workspacePath: project?.workspacePath ?? ''
-    });
-    setErrors({});
-    setWorkspaceError(null);
+    return () => {
+      pickerGeneration.current++;
+      pickingRef.current = false;
+    };
     // `project` is intentionally not a dependency; the id is the identity that
     // matters. See the comment above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, projectId]);
+  }, [open, projectId, mode]);
 
   const pickWorkspace = async (): Promise<void> => {
+    if (!open || pending || pickingRef.current) return;
+    const generation = pickerGeneration.current;
+    pickingRef.current = true;
     setPickingWorkspace(true);
     setWorkspaceError(null);
     try {
       const result = await onPickWorkspace();
+      if (generation !== pickerGeneration.current) return;
       if (result.status === 'failed') {
         setWorkspaceError(result.message);
         return;
@@ -127,12 +145,18 @@ export function ProjectFormDialog({
       }
       setValues((current) => ({ ...current, workspacePath: result.path }));
       setErrors((current) => ({ ...current, workspacePath: undefined }));
+    } catch (error) {
+      if (generation === pickerGeneration.current) setWorkspaceError(errorMessage(error));
     } finally {
-      setPickingWorkspace(false);
+      if (generation === pickerGeneration.current) {
+        pickingRef.current = false;
+        setPickingWorkspace(false);
+      }
     }
   };
 
   const submit = (): void => {
+    if (pending || pickingRef.current) return;
     const found = validate(values, mode);
     setErrors(found);
     if (Object.keys(found).length > 0) {
@@ -147,6 +171,7 @@ export function ProjectFormDialog({
   };
 
   const languageLocked = mode === 'edit';
+  const busy = pending || pickingWorkspace;
 
   return (
     <ModalShell
@@ -154,12 +179,14 @@ export function ProjectFormDialog({
       open={open}
       title={mode === 'create' ? '新建研究项目' : '编辑研究项目'}
       onClose={onCancel}
+      beforeClose={() => !busy}
       widthClassName="w-[560px]"
       testId={mode === 'create' ? 'portal-create-dialog' : 'portal-edit-dialog'}
       initialFocusRef={titleRef}
     >
       <form
         className="flex flex-col gap-3"
+        aria-busy={busy}
         onSubmit={(event) => {
           event.preventDefault();
           submit();
@@ -170,6 +197,7 @@ export function ProjectFormDialog({
           <input
             ref={titleRef}
             value={values.title}
+            disabled={busy}
             onChange={(event) => setValues((current) => ({ ...current, title: event.target.value }))}
             aria-invalid={errors.title !== undefined}
             data-testid="project-form-title"
@@ -186,6 +214,7 @@ export function ProjectFormDialog({
           <span className="text-muted text-[length:var(--font-meta-size)]">研究目标</span>
           <textarea
             value={values.description}
+            disabled={busy}
             rows={4}
             onChange={(event) => setValues((current) => ({ ...current, description: event.target.value }))}
             aria-invalid={errors.description !== undefined}
@@ -201,21 +230,29 @@ export function ProjectFormDialog({
 
         <fieldset className="flex flex-col gap-1">
           <legend className="text-muted text-[length:var(--font-meta-size)]">文稿语言</legend>
-          <div role="radiogroup" aria-label="文稿语言" className="flex items-center gap-1">
-            {(
-              [
-                { value: 'zh' as const, label: '中文' },
-                { value: 'en' as const, label: '英文' }
-              ]
-            ).map((option) => {
+          <div
+            role="radiogroup"
+            aria-label="文稿语言"
+            className="flex items-center gap-1"
+            onKeyDown={(event) => {
+              if (busy || languageLocked || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+              event.preventDefault();
+              const next = values.language === 'zh' ? 'en' : 'zh';
+              setValues((current) => ({ ...current, language: next }));
+              languageRefs.current[next]?.focus();
+            }}
+          >
+            {LANGUAGES.map((option) => {
               const selected = values.language === option.value;
               return (
                 <button
                   key={option.value}
+                  ref={(element) => { languageRefs.current[option.value] = element; }}
                   type="button"
                   role="radio"
                   aria-checked={selected}
-                  disabled={languageLocked}
+                  disabled={languageLocked || busy}
+                  tabIndex={selected ? 0 : -1}
                   onClick={() => setValues((current) => ({ ...current, language: option.value }))}
                   data-testid={`project-form-language-${option.value}`}
                   className={
@@ -251,7 +288,7 @@ export function ProjectFormDialog({
             <button
               type="button"
               onClick={() => void pickWorkspace()}
-              disabled={pickingWorkspace}
+              disabled={busy}
               data-testid="project-form-pick-workspace"
               className="flex h-[var(--control-height)] shrink-0 items-center gap-1.5 rounded-control border-[0.5px] border-line px-2.5 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50"
             >
@@ -281,14 +318,15 @@ export function ProjectFormDialog({
           <button
             type="button"
             onClick={onCancel}
+            disabled={busy}
             data-testid="project-form-cancel"
-            className="h-[var(--control-height)] rounded-control border-[0.5px] border-line px-3 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+            className="h-[var(--control-height)] rounded-control border-[0.5px] border-line px-3 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50"
           >
             取消
           </button>
           <button
             type="submit"
-            disabled={pending}
+            disabled={busy}
             data-testid="project-form-submit"
             className="h-[var(--control-height)] rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] active:bg-[var(--accent-deep)] disabled:opacity-50"
           >

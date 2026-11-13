@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { LazyBoundary, retryableLazy } from '../../shell/LazyBoundary';
 import { ShieldAlert } from 'lucide-react';
 import type { ChatTranscriptActivityBlock } from '../transcript';
 import { ActivityBlockShell } from './activity-shell';
@@ -13,7 +13,7 @@ import { useActivityBlockState } from './use-activity-block-state';
  * behaviour, and it names the tier and the tool that was blocked when the backend
  * supplies them — "a guardrail fired" is not actionable without them.
  */
-const StreamingMarkdownView = lazy(async () => ({
+const StreamingMarkdownView = retryableLazy(async () => ({
   default: (await import('./streaming-markdown-view')).StreamingMarkdownView
 }));
 
@@ -41,9 +41,9 @@ export function GuardrailBlock({ block }: { block: GuardrailBlockModel }): React
       onToggle={setOpen}
     >
       <div className="border-t-[0.5px] border-line-soft px-2 py-1.5" data-testid="assistant-guardrail-body">
-        <Suspense fallback={null}>
+        <LazyBoundary fallback={null}>
           <StreamingMarkdownView text={block.content} isStreaming={false} />
-        </Suspense>
+        </LazyBoundary>
       </div>
     </ActivityBlockShell>
   );

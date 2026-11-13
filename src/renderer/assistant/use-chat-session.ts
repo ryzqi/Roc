@@ -43,6 +43,7 @@ export type ChatSession = {
   /** The optimistic echo of the prompt while `startRun` is in flight. */
   pendingUserInput: string | null;
   sending: boolean;
+  cancelling: boolean;
   history: PersistedThreadHistory;
   send: (input: SendChatInput) => Promise<boolean>;
   cancel: () => Promise<void>;
@@ -63,14 +64,17 @@ export function useChatSession(input: {
   const { client, threadId, projectId, workspacePath, onThreadId } = input;
   const [pendingUserInput, setPendingUserInput] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [recoveryAttempt, setRecoveryAttempt] = useState(0);
   const retryRecovery = useCallback(() => setRecoveryAttempt((current) => current + 1), []);
-  const scopeRef = useRef({ client, threadId, projectId, workspacePath, active: true });
+  const scopeRef = useRef({ client, threadId, projectId, workspacePath, active: true, mutating: false, cancelling: false });
   const previous = scopeRef.current;
   if (previous.client !== client || previous.threadId !== threadId || previous.projectId !== projectId || previous.workspacePath !== workspacePath) {
-    scopeRef.current = { client, threadId, projectId, workspacePath, active: true };
+    scopeRef.current = { client, threadId, projectId, workspacePath, active: true, mutating: false, cancelling: false };
   }
+  const scope = scopeRef.current;
   const run = useChatRun(client, { threadId, acceptUnboundEvents: sending });
+  const { reset, setError, applyReplay } = run;
   const history = usePersistedThreadHistory({
     client,
     threadId,
@@ -83,21 +87,37 @@ export function useChatSession(input: {
   const projectTranscript = useMemo(createChatTranscriptProjector, []);
   const messages = projectTranscript({ events: history.events, liveRun, pendingUserInput, threadId });
 
+  const runMutation = useCallback(async (
+    mutation: (isCurrent: () => boolean) => Promise<boolean>
+  ): Promise<boolean> => {
+    const isCurrent = (): boolean => scopeRef.current === scope && scope.active;
+    if (!isCurrent() || scope.mutating) return false;
+    scope.mutating = true;
+    setSending(true);
+    setError(null);
+    try {
+      return await mutation(isCurrent);
+    } catch (caught) {
+      if (isCurrent()) setError(errorMessage(caught));
+      return false;
+    } finally {
+      scope.mutating = false;
+      if (isCurrent()) setSending(false);
+    }
+  }, [scope, setError]);
+
   const send = useCallback(
     async (sendInput: SendChatInput): Promise<boolean> => {
       const text = sendInput.text.trim();
       if (text.length === 0) {
         return false;
       }
-      const scope = scopeRef.current;
-      setSending(true);
-      setPendingUserInput(text);
-      run.setError(null);
-      try {
+      return runMutation(async (isCurrent) => {
+        setPendingUserInput(text);
         const mcpConfig = await getMcpConfig(client);
-        if (scopeRef.current !== scope || !scope.active) return false;
+        if (!isCurrent()) return false;
         if (!mcpConfig.ok) {
-          run.setError(mcpConfig.error.message);
+          setError(mcpConfig.error.message);
           return false;
         }
         const result = await startRun(client, {
@@ -112,10 +132,10 @@ export function useChatSession(input: {
           ...(sendInput.attachments.length === 0 ? {} : { attachments: sendInput.attachments }),
           ...(sendInput.skillIds.length === 0 ? {} : { explicitSkillIds: sendInput.skillIds })
         });
-        if (scopeRef.current !== scope || !scope.active) return false;
+        if (!isCurrent()) return false;
         if (!result.ok) {
           // Keep the text: a failed send must not also discard the prompt.
-          run.setError(result.error.message);
+          setError(result.error.message);
           return false;
         }
         setPendingUserInput(null);
@@ -123,97 +143,100 @@ export function useChatSession(input: {
           onThreadId(result.data.threadId);
         }
         return true;
-      } catch (caught) {
-        if (scopeRef.current === scope && scope.active) run.setError(errorMessage(caught));
-        return false;
-      } finally {
-        if (scopeRef.current === scope && scope.active) setSending(false);
-      }
+      });
     },
-    [client, onThreadId, projectId, run, threadId, workspacePath]
+    [client, onThreadId, projectId, runMutation, setError, threadId]
   );
 
   const cancel = useCallback(async (): Promise<void> => {
+    const isCurrent = (): boolean => scopeRef.current === scope && scope.active;
+    if (!isCurrent() || scope.cancelling) return;
     const runId = run.state.runId;
     if (runId === null) {
       return;
     }
-    const scope = scopeRef.current;
-    const result = await cancelRun(client, runId);
-    if (scopeRef.current !== scope || !scope.active) return;
-    if (!result.ok) {
-      run.setError(result.error.message);
+    scope.cancelling = true;
+    setCancelling(true);
+    try {
+      const result = await cancelRun(client, runId);
+      if (isCurrent() && !result.ok) setError(result.error.message);
+    } catch (caught) {
+      if (isCurrent()) setError(errorMessage(caught));
+    } finally {
+      scope.cancelling = false;
+      if (isCurrent()) setCancelling(false);
     }
-  }, [client, run]);
+  }, [client, run.state.runId, scope, setError]);
 
   const resumeWithApproval = useCallback(
     async (interruptId: string, decisions: ChatResumeDecision[]): Promise<boolean> => {
-      const runId = run.state.runId;
-      const activeThreadId = run.state.threadId ?? threadId;
-      if (runId === null || activeThreadId === null) {
-        run.setError('此审批已不在当前待恢复运行中。请查看任务状态，重新请求现有阶段的审核。');
-        return false;
-      }
-      const scope = scopeRef.current;
-      const result = await resumeApproval(client, { runId, threadId: activeThreadId, interruptId, decisions });
-      if (scopeRef.current !== scope || !scope.active) return false;
-      if (!result.ok) {
-        run.setError(result.error.message);
-        return false;
-      }
-      return true;
+      return runMutation(async (isCurrent) => {
+        const runId = run.state.runId;
+        const activeThreadId = run.state.threadId ?? threadId;
+        if (runId === null || activeThreadId === null) {
+          setError('此审批已不在当前待恢复运行中。请查看任务状态，重新请求现有阶段的审核。');
+          return false;
+        }
+        const result = await resumeApproval(client, { runId, threadId: activeThreadId, interruptId, decisions });
+        if (!isCurrent()) return false;
+        if (!result.ok) {
+          setError(result.error.message);
+          return false;
+        }
+        return true;
+      });
     },
-    [client, run, threadId]
+    [client, run.state.runId, run.state.threadId, runMutation, setError, threadId]
   );
 
   const resumeWithQuestion = useCallback(
     async (interruptId: string, answer: string): Promise<boolean> => {
-      const runId = run.state.runId;
-      const activeThreadId = run.state.threadId ?? threadId;
-      if (runId === null || activeThreadId === null || answer.trim().length === 0) {
-        return false;
-      }
-      const scope = scopeRef.current;
-      const result = await resumeQuestion(client, { runId, threadId: activeThreadId, interruptId, answer });
-      if (scopeRef.current !== scope || !scope.active) return false;
-      if (!result.ok) {
-        run.setError(result.error.message);
-        return false;
-      }
-      setPendingUserInput(null);
-      return true;
+      if (answer.trim().length === 0) return false;
+      return runMutation(async (isCurrent) => {
+        const runId = run.state.runId;
+        const activeThreadId = run.state.threadId ?? threadId;
+        if (runId === null || activeThreadId === null) return false;
+        const result = await resumeQuestion(client, { runId, threadId: activeThreadId, interruptId, answer });
+        if (!isCurrent()) return false;
+        if (!result.ok) {
+          setError(result.error.message);
+          return false;
+        }
+        setPendingUserInput(null);
+        return true;
+      });
     },
-    [client, run, threadId]
+    [client, run.state.runId, run.state.threadId, runMutation, setError, threadId]
   );
 
   const resumeFromCheckpoint = useCallback(async (runId: string): Promise<boolean> => {
-    const activeThreadId = run.state.threadId ?? threadId;
-    if (activeThreadId === null) return false;
-    const scope = scopeRef.current;
-    const isCurrent = (): boolean => scopeRef.current === scope && scope.active;
-    const result = await resumeCheckpointRequest(client, { runId, threadId: activeThreadId });
-    if (!isCurrent()) return false;
-    if (!result.ok) {
-      run.setError(result.error.message);
-      return false;
-    }
-    const replayed = await getRunEventsReplay(client, { runId, afterSequence: 0 });
-    if (!isCurrent()) return false;
-    if (!replayed.ok) {
-      run.setError(replayed.error.message);
-      return false;
-    }
-    run.applyReplay(replayed.data, 0);
-    return true;
-  }, [client, run, threadId]);
+    return runMutation(async (isCurrent) => {
+      const activeThreadId = run.state.threadId ?? threadId;
+      if (activeThreadId === null) return false;
+      const result = await resumeCheckpointRequest(client, { runId, threadId: activeThreadId });
+      if (!isCurrent()) return false;
+      if (!result.ok) {
+        setError(result.error.message);
+        return false;
+      }
+      const replayed = await getRunEventsReplay(client, { runId, afterSequence: 0 });
+      if (!isCurrent()) return false;
+      if (!replayed.ok) {
+        setError(replayed.error.message);
+        return false;
+      }
+      applyReplay(replayed.data, 0);
+      return true;
+    });
+  }, [applyReplay, client, run.state.threadId, runMutation, setError, threadId]);
 
-  const { reset, setError, applyReplay } = run;
   useEffect(() => {
     const scope = scopeRef.current;
     scope.active = true;
     reset();
     setPendingUserInput(null);
     setSending(false);
+    setCancelling(false);
     return () => { scope.active = false; };
   }, [client, threadId, projectId, workspacePath, reset]);
 
@@ -246,6 +269,7 @@ export function useChatSession(input: {
     errorMessage: run.errorMessage,
     pendingUserInput,
     sending,
+    cancelling,
     history,
     send,
     cancel,

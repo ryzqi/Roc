@@ -4,7 +4,7 @@ import {mkdtemp, readFile, mkdir, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import electronPath from 'electron';
-import {_electron} from '@playwright/test';
+import {_electron, expect} from '@playwright/test';
 import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 import {createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
 
@@ -52,6 +52,7 @@ before(async () => {
         method === 'getScholarlyHistory' ? f.snapshots.history(input) : f.snapshots.read(input);
       if (method === 'captureScholarlyRelations') f.saved.release();
       if (method === 'captureScholarlyRelations' && f.holdCaptureReply) {await hold.promise;}
+      if (method === 'cancelScholarlyRelations' && f.holdCancelReply) {await f.cancelReply.promise;}
       if (method === 'captureScholarlyRelations' && f.dropReply) {f.dropReply = false; return {ok: false, error: {message: 'Synthetic reply lost'}};}
       return {ok: true, data: result};
     } catch (error) {return {ok: false, error: {message: error.message}};}
@@ -59,6 +60,7 @@ before(async () => {
 });
 after(async () => {
   hold?.release();
+  for (const f of scenes) f.cancelReply?.release();
   await app?.close();
   for (const f of scenes) await f.dispose();
   api?.dispose();
@@ -180,6 +182,35 @@ test('cancel reaches the running service and cannot save a success or offer canc
   assert.equal(await page.getByRole('button', {name: '重试原请求', exact: true}).count(), 0);
   assert.equal(f.snapshots.history({projectId: f.project.id, itemId: f.item.id, offset: 0, limit: 20}).total, 0);
   assert.equal(await page.getByRole('button', {name: '查询并保存', exact: true}).isEnabled(), true);
+});
+test('scholarly capture prevents same-event duplicate requests and freezes the requested sources', async () => {
+  const f = scene(); f.waitNetwork = true;
+  await mount(f); await open();
+  await page.evaluate(() => {
+    const button = [...document.querySelectorAll('button')].find(button => button.textContent.trim() === '查询并保存');
+    button.click(); button.click();
+  });
+  await expect(page.getByRole('button', {name: '取消查询', exact: true})).toBeVisible();
+  assert.equal(calls.filter(call => call.projectId === f.project.id && call.method === 'captureScholarlyRelations').length, 1);
+  await expect(page.getByLabel('OpenAlex', {exact: true})).toBeDisabled();
+  await page.getByRole('button', {name: '取消查询', exact: true}).click();
+  await expect(page.getByRole('button', {name: '查询并保存', exact: true})).toBeEnabled();
+});
+test('scholarly cancellation has its own synchronous lock while capture is still running', async () => {
+  const f = scene(); f.waitNetwork = true; f.holdCancelReply = true; f.cancelReply = deferred();
+  await mount(f); await open();
+  await page.getByRole('button', {name: '查询并保存', exact: true}).click();
+  await page.getByRole('button', {name: '取消查询', exact: true}).waitFor();
+  await page.evaluate(() => {
+    const button = [...document.querySelectorAll('button')].find(button => button.textContent.trim() === '取消查询');
+    button.click(); button.click();
+  });
+  await page.getByText('scholarly_capture_cancelled', {exact: true}).waitFor();
+  assert.equal(calls.filter(call => call.projectId === f.project.id && call.method === 'cancelScholarlyRelations').length, 1);
+  await expect(page.getByRole('button', {name: '查询并保存', exact: true})).toBeDisabled();
+  f.cancelReply.release();
+  await expect(page.getByRole('button', {name: '查询并保存', exact: true})).toBeEnabled();
+  assert.equal(await page.getByRole('button', {name: '重试原请求', exact: true}).count(), 0);
 });
 test('readonly and changed versions keep saved observations accessible while new capture is gated', async () => {
   const f = scene(); await f.service.capture(f.request('saved'));

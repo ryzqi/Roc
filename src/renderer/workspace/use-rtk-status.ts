@@ -79,7 +79,7 @@ export function useRtkStatus(client: RocClient, enabled: boolean): RtkStatusStat
       return;
     }
     let cancelled = false;
-    setState((current) => ({ ...current, status: 'loading' }));
+    setState((current) => ({ ...current, status: 'loading', error: null }));
     void (async () => {
       const result = await client.api.rtk.status();
       if (cancelled) {
@@ -90,7 +90,10 @@ export function useRtkStatus(client: RocClient, enabled: boolean): RtkStatusStat
         return;
       }
       setState({ status: 'ready', summary: describeRtkStatus(result.data), error: null });
-    })();
+    })().catch((cause: unknown) => {
+      if (cancelled) return;
+      setState({ status: 'error', summary: null, error: cause instanceof Error ? cause.message : '读取 RTK 状态失败' });
+    });
     return () => {
       cancelled = true;
     };

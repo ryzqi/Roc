@@ -211,18 +211,20 @@ export function HooksSection({ store }: { store: SettingsStore }): React.JSX.Ele
       )}
 
       <div className="flex flex-col gap-1 border-t-[0.5px] border-line pt-2">
-        <span className="text-subtle text-[length:var(--font-micro-size)]">配置 JSON</span>
-        <textarea
-          value={jsonText}
-          rows={8}
-          spellCheck={false}
-          onChange={(event) => {
-            setJsonText(event.target.value);
-            setJsonError(null);
-          }}
-          data-testid="settings-hooks-json"
-          className={formTextAreaClass}
-        />
+        <label className="flex flex-col gap-1">
+          <span className="text-subtle text-[length:var(--font-micro-size)]">配置 JSON</span>
+          <textarea
+            value={jsonText}
+            rows={8}
+            spellCheck={false}
+            onChange={(event) => {
+              setJsonText(event.target.value);
+              setJsonError(null);
+            }}
+            data-testid="settings-hooks-json"
+            className={formTextAreaClass}
+          />
+        </label>
         <div className="flex items-center gap-2">
           <button
             type="button"

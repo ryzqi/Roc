@@ -22,22 +22,29 @@ before(async () => {
         import { flushSync } from 'react-dom';
         import { LazyMotion, MotionConfig, domMax } from 'motion/react';
         import { ModelsSection } from './src/renderer/settings/sections/ModelsSection';
+        import { SettingsEditorGuardContext, useSettingsEditorGuards } from './src/renderer/settings/settings-editor-guard';
+        import { RadixSettingsConfirmDialog } from './src/renderer/settings/radix-dialog-pilot';
         const root = createRoot(document.getElementById('root'));
         let generation = 0;
         function Harness({ seed }) {
           const [draft, setDraft] = useState(seed);
+          const guard = useSettingsEditorGuards();
           window.currentDraft = draft;
+          window.replaceDraft = next => flushSync(() => setDraft(next));
+          // Production receives one client from SettingsScope. Keep that identity
+          // stable while this fixture replaces the shared provider draft.
+          const [client] = useState(() => ({ api: { settings: {
+            setProviderSecret: input => new Promise(resolve => {
+              window.secretProvider = input.providerId;
+              window.finishSecret = () => resolve({ok: true, data: {providerId: input.providerId, stored: true}});
+            }),
+            testProvider: input => new Promise(resolve => {
+              window.finishTest = () => resolve({ok: true, data: {status: 'ready', latencyMs: 12, checked: [], error: null}});
+            })
+          }}}));
           const store = {
             draft, base: seed, snapshot: { providerSecretStatus: [] },
-            client: { api: { settings: {
-              setProviderSecret: input => new Promise(resolve => {
-                window.secretProvider = input.providerId;
-                window.finishSecret = () => resolve({ok: true, data: {providerId: input.providerId, stored: true}});
-              }),
-              testProvider: input => new Promise(resolve => {
-                window.finishTest = () => resolve({ok: true, data: {status: 'ready', latencyMs: 12, checked: [], error: null}});
-              })
-            }}}, reload() {},
+            client, reload() {},
             update(mutator) {
               setDraft(previous => {
                 const next = structuredClone(previous);
@@ -46,13 +53,20 @@ before(async () => {
               });
             }
           };
-          return <ModelsSection store={store} />;
+          return <SettingsEditorGuardContext.Provider value={guard.context}>
+            <ModelsSection store={store} />
+            <RadixSettingsConfirmDialog open={guard.transition !== null} title="放弃未保存的编辑？"
+              message="供应商密钥尚未保存。" confirmLabel="放弃修改并继续" tone="destructive"
+              testId="settings-editor-discard" confirmDisabled={guard.busy()}
+              onCancel={guard.cancel} onConfirm={guard.confirm} />
+          </SettingsEditorGuardContext.Provider>;
         }
         window.mount = seed => flushSync(() => root.render(
           <MotionConfig reducedMotion="user"><LazyMotion features={domMax} strict>
             <Harness key={++generation} seed={seed} />
           </LazyMotion></MotionConfig>
         ));
+        window.unmount = () => flushSync(() => root.render(null));
       `,
       resolveDir: process.cwd(), loader: 'tsx'
     },
@@ -78,6 +92,7 @@ before(async () => {
 });
 
 after(async () => {
+  if (page !== undefined && !page.isClosed()) await page.evaluate(() => window.unmount?.());
   try { await app?.close(); } finally {
     if (directory) rmSync(directory, { recursive: true, force: true });
   }
@@ -145,18 +160,25 @@ function seededProviders() {
     models: [model, {...model, id: 'm2', displayName: 'Model Two'}] })), defaultModelId: 'first:m1' };
 }
 
-test('provider switches clear sensitive inputs and pending writes follow provider identity after removal', async () => {
+test('provider switches confirm sensitive draft loss and pending replies follow provider identity after a shared list replacement', async () => {
   await page.evaluate(seed => window.mount(seed), seededProviders());
   await page.getByTestId('settings-provider-secret-input').fill('temporary-key');
   await page.getByTestId('settings-provider-select').selectOption('second');
+  await page.getByTestId('settings-editor-discard-panel').waitFor();
+  await page.getByTestId('settings-editor-discard-cancel').click();
+  await page.getByTestId('settings-editor-discard-panel').waitFor({state:'detached'});
+  assert.equal(await page.getByTestId('settings-provider-secret-input').inputValue(), 'temporary-key');
+  await page.getByTestId('settings-provider-select').selectOption('second');
+  await page.getByTestId('settings-editor-discard-confirm').click();
+  await page.getByTestId('settings-editor-discard-panel').waitFor({state:'detached'});
   assert.equal(await page.getByTestId('settings-provider-secret-input').inputValue(), '');
   await page.getByTestId('settings-provider-secret-input').fill('second-temporary-key');
   await page.getByTestId('settings-provider-secret-save').click();
   await page.waitForFunction(() => window.secretProvider === 'second');
-  await page.getByTestId('settings-provider-select').selectOption('first');
-  assert.equal(await page.getByTestId('settings-provider-secret-input').inputValue(), '');
-  await page.getByTestId('settings-provider-remove').click();
-  await page.getByTestId('settings-provider-remove-confirm-confirm').click();
+  assert.equal(await page.getByTestId('settings-provider-select').isDisabled(), true);
+  assert.equal(await page.getByTestId('settings-provider-secret-input').isDisabled(), true);
+  await page.evaluate(() => window.replaceDraft({...window.currentDraft,
+    providers: window.currentDraft.providers.filter(provider => provider.id !== 'first'), defaultModelId: null}));
   await page.evaluate(() => window.finishSecret());
   await page.waitForFunction(() => window.currentDraft.providers[0]?.credentialRef === 'secret:second');
   assert.equal(await page.evaluate(() => window.currentDraft.providers[0].id), 'second');

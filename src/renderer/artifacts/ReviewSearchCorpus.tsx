@@ -1,4 +1,5 @@
-import {lazy, Suspense, useEffect, useRef, useState} from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
 import type {ResearchReviewProtocolInspection} from '../../shared/schemas/research-systematic-review';
 import type {ResearchReviewCorpusCreate} from '../../shared/schemas/research-review-corpus';
 import type {RocClient} from '../shared/roc-client';
@@ -6,9 +7,10 @@ import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {formSecondaryButtonClass, formPrimaryButtonClass, formInputClass} from '../shared/form-ui';
 import {ReviewSearchQuery, reviewSearchStatuses} from './ReviewSearchQuery';
 import {ReviewSearchPool} from './ReviewSearchPool';
+import {ArtifactDraftDiscard, useArtifactDraft, useArtifactEditorGuard} from './artifact-editor-guard';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
-const ReviewDedupInspector = lazy(async () => ({default: (await import('./ReviewDedupInspector')).ReviewDedupInspector}));
+const ReviewDedupInspector = retryableLazy(async () => ({default: (await import('./ReviewDedupInspector')).ReviewDedupInspector}));
 export function ReviewSearchCorpus({client, protocol, writable, onPending}: {
   client: RocClient; protocol: ResearchReviewProtocolInspection; writable: boolean; onPending: (pending: boolean) => void
 }): React.JSX.Element {
@@ -25,12 +27,15 @@ export function ReviewSearchCorpus({client, protocol, writable, onPending}: {
   const [selectedCorpusId, setSelectedCorpusId] = useState<string | null>(null);
   const requests = useRef(new Map<string, string>());
   const busy = useRef(false);
+  const draft = useArtifactDraft('语料来源选择', selected, busy);
+  const guard = useArtifactEditorGuard();
+  const selectionLocked = guard.locked();
   const active = searches.data?.some(search => search.status === 'running' || search.status === 'cancelling') === true;
   useEffect(() => {
-    if (!active || searches.status !== 'ready') return;
+    if (!active || searches.status !== 'ready' || selectionLocked) return;
     const timer = setTimeout(searches.reload, 1000);
     return () => clearTimeout(timer);
-  }, [active, searches.status, searches.reload]);
+  }, [active, searches.status, searches.reload, selectionLocked]);
   const queries = protocol.version.body.databases.flatMap((database, databaseIndex) =>
     database.queries.map((query, queryIndex) => ({database, query, databaseIndex, queryIndex, key: `${databaseIndex}:${queryIndex}`})));
   const picked = queries.map(query => searches.data?.find(search => search.snapshot.id === selected[query.key]));
@@ -41,8 +46,8 @@ export function ReviewSearchCorpus({client, protocol, writable, onPending}: {
   return <section className="flex min-w-0 flex-col gap-3 border-t-[0.5px] border-line pt-2" data-testid="artifact-review-search">
     <h2 className="font-medium">冻结协议检索与语料</h2>
     <p className="text-muted">显示最近100次执行记录</p>
-    <div className="flex flex-wrap gap-2"><button type="button" className={button} disabled={pending || searches.status === 'loading'}
-      data-testid="artifact-review-search-refresh" onClick={() => {searches.reload(); corpora.reload();}}>刷新检索与语料</button></div>
+    <div className="flex flex-wrap gap-2"><button type="button" className={button} disabled={pending || selectionLocked || searches.status === 'loading'}
+      data-testid="artifact-review-search-refresh" onClick={() => {if (!guard.locked()) {searches.reload(); corpora.reload();}}}>刷新检索与语料</button></div>
     {searches.status !== 'loading' ? null : <p role="status">正在读取实际检索状态…</p>}
     {searches.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{searches.error}</p>}
     {searches.error === null || searches.data === null ? null : <p className="text-muted">以下为上次成功读取的回执，当前状态核查失败。</p>}
@@ -58,7 +63,8 @@ export function ReviewSearchCorpus({client, protocol, writable, onPending}: {
       {searches.data === null ? null : queries.map(query => <label key={query.key} className="flex flex-col gap-1 text-muted">
         {query.database.source} 检索式 {query.queryIndex + 1}
         <select aria-label={`语料来源 ${query.databaseIndex + 1}-${query.queryIndex + 1}`} className={`${formInputClass} border-[0.5px]`}
-          disabled={!editable || pending} value={selected[query.key] ?? ''} onChange={event => {
+          disabled={!editable || pending || draft.locked} value={selected[query.key] ?? ''} onChange={event => {
+            if (busy.current || draft.isLocked()) return;
             setSelected({...selected, [query.key]: event.target.value}); create.reset();
           }}>
           <option value="">选择已结束的实际检索</option>
@@ -71,8 +77,8 @@ export function ReviewSearchCorpus({client, protocol, writable, onPending}: {
       {!completeSelection ? <p className="text-muted">每条协议查询需明确选择一个终态检索。</p> :
         picked.some(search => !search!.coverageComplete) ? <p role="note" className="text-[var(--st-warn)]">所选检索覆盖不完整，将如实记录失败、取消或分页边界。</p> : null}
       {!editable ? null : <button type="button" className={`${formPrimaryButtonClass} border-[0.5px] self-start`}
-        disabled={pending || !completeSelection} data-testid="artifact-review-corpus-create" onClick={() => {
-          if (busy.current || protocol.freezeHash === null || !completeSelection) return;
+        disabled={pending || draft.locked || !completeSelection} data-testid="artifact-review-corpus-create" onClick={() => {
+          if (busy.current || draft.isLocked() || protocol.freezeHash === null || !completeSelection) return;
           const refs = picked.map(search => ({reviewSearchId: search!.snapshot.id, expectedSnapshotHash: search!.snapshotHash,
             expectedReceiptHash: search!.receiptHash!}));
           const signature = JSON.stringify(refs);
@@ -80,8 +86,14 @@ export function ReviewSearchCorpus({client, protocol, writable, onPending}: {
           if (requestId === undefined) {requestId = crypto.randomUUID(); requests.current.set(signature, requestId);}
           const request: ResearchReviewCorpusCreate = {projectId, versionId, expectedFreezeHash: protocol.freezeHash, requestId, searches: refs};
           busy.current = true; onPending(true);
-          void create.run(request).then(result => {busy.current = false; onPending(false); if (result.ok) corpora.reload();});
+          void create.run(request).then(result => {
+            busy.current = false; onPending(false);
+            if (result.ok) {draft.saved(); corpora.reload();}
+          });
         }}>确认并固定所选语料</button>}
+      <ArtifactDraftDiscard dirty={draft.dirty} testId="artifact-review-corpus-discard" onDiscard={() => {
+        setSelected({}); create.reset(); draft.reset({});
+      }} />
       {create.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{create.error}</p>}
       {corpora.status !== 'loading' ? null : <p role="status">正在读取固定语料…</p>}
       {corpora.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{corpora.error}</p>}
@@ -90,8 +102,8 @@ export function ReviewSearchCorpus({client, protocol, writable, onPending}: {
           <p>固定语料 原始记录 {corpus.identifiedRecords} 条 {corpus.currentProtocol ? '当前协议' : '历史协议'}</p>
           <p className="text-muted break-words">{corpus.snapshot.recordedAt} 记录人 {corpus.snapshot.actor.id}</p>
           <p className="text-muted">{corpus.searchCoverageComplete ? '已到所选查询报告终点' : '检索覆盖不完整'}</p>
-          <button type="button" className={`${button} self-start`} disabled={pending} data-testid="artifact-review-corpus-inspect"
-            onClick={() => setSelectedCorpusId(corpus.snapshot.id)}>核查原始记录与去重</button>
+          <button type="button" className={`${button} self-start`} disabled={pending || selectionLocked} data-testid="artifact-review-corpus-inspect"
+            onClick={() => {if (!guard.locked()) setSelectedCorpusId(corpus.snapshot.id);}}>核查原始记录与去重</button>
           <details><summary className="cursor-pointer text-muted">固定来源与计数</summary>
             <ul>{corpus.snapshot.sources.map(source => <li key={source.reviewSearchId} className="break-words text-muted">
               数据库 {source.databaseIndex + 1} 检索式 {source.queryIndex + 1} {reviewSearchStatuses[source.status]}
@@ -100,10 +112,10 @@ export function ReviewSearchCorpus({client, protocol, writable, onPending}: {
           </details>
         </li>)}</ul>}
     </section>
-    {selectedCorpusId === null ? null : <Suspense fallback={<p role="status">正在加载语料核查…</p>}>
+    {selectedCorpusId === null ? null : <LazyBoundary fallback={<p role="status">正在加载语料核查…</p>}>
       <ReviewDedupInspector key={selectedCorpusId} client={client} projectId={projectId} corpusId={selectedCorpusId}
         protocol={protocol} writable={writable && !queryPending && !create.pending}
         onPending={value => {setDedupPending(value); onPending(value);}} />
-    </Suspense>}
+    </LazyBoundary>}
   </section>;
 }

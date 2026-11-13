@@ -86,18 +86,34 @@ before(async()=>{
   api.registerResearchExperimentCapabilities(context,f.repository.experiments,service);
   bridge=api.createPluginCapabilityAdapter({invokeCapability:(name,input)=>handlers.get(name)(input)});
   await buildViteRenderer({directory,script:`
-    import React from 'react';import {createRoot} from 'react-dom/client';import {flushSync} from 'react-dom';
+    import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {flushSync} from 'react-dom';
+    import {LazyMotion,MotionConfig,domAnimation} from 'motion/react';
     import {ArtifactProductionView} from './src/renderer/artifacts/ArtifactProductionView';
     import {ArtifactEvidenceSource} from './src/renderer/artifacts/ArtifactEvidenceSource';
+    import {ArtifactEditorBoundary,useArtifactEditorGuard} from './src/renderer/artifacts/artifact-editor-guard';
+    import {requestArtifactInspectorChange} from './src/renderer/artifacts/artifact-interactions';
+    import {requestNavigation} from './src/renderer/app/navigation-guard';
     const client={api:{research:Object.fromEntries(${JSON.stringify(Object.keys(routes))}.map(method=>[method,input=>window.callMain(method,input)]))}};
     const element=createRoot(document.getElementById('root'));let generation=0;
-    window.mount=(request,writable=true)=>flushSync(()=>element.render(<main className="p-4">
-      <ArtifactProductionView key={++generation} client={client} request={request} writable={writable} initialLocation={null} onLocationChange={()=>{}}/>
-    </main>));
+    function Harness({initialRequest,writable}) {
+      const [request,setRequest]=useState(initialRequest),[open,setOpen]=useState(true);
+      const guard=useArtifactEditorGuard();
+      window.replaceRequest=next=>requestArtifactInspectorChange(()=>flushSync(()=>setRequest(next)));
+      window.navigateAway=()=>requestNavigation({page:'research',projectId:'another-project'},()=>window.navigations++);
+      return <main className="p-4">
+        <button data-testid="result-inspector-close" onClick={()=>guard.request(()=>setOpen(false))}>关闭结果核查</button>
+        {!open?null:<ArtifactProductionView key={JSON.stringify(request)} client={client} request={request} writable={writable}
+          initialLocation={null} onLocationChange={()=>{}}/>}
+      </main>;
+    }
+    window.mount=(request,writable=true)=>{window.navigations=0;flushSync(()=>element.render(
+      <MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict><ArtifactEditorBoundary key={++generation} projectId={request.projectId}>
+        <Harness initialRequest={request} writable={writable}/></ArtifactEditorBoundary></LazyMotion></MotionConfig>));};
     window.clear=()=>flushSync(()=>element.render(null));
-    window.mountEvidence=source=>flushSync(()=>element.render(<main className="p-4">
-      <ArtifactEvidenceSource key={++generation} client={client} source={source} canDecide={false} onChanged={()=>{}}/>
-    </main>));
+    window.mountEvidence=source=>flushSync(()=>element.render(
+      <MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict><ArtifactEditorBoundary key={++generation} projectId={source.evidence.projectId}>
+        <main className="p-4"><ArtifactEvidenceSource client={client} source={source} canDecide={false} onChanged={()=>{}}/></main>
+      </ArtifactEditorBoundary></LazyMotion></MotionConfig>));
   `,style:'body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}main{max-width:560px}'});
   await writeFile(join(directory,'main.cjs'),`const {app,BrowserWindow}=require('electron');
     app.setPath('userData',${JSON.stringify(join(root,'userData'))});
@@ -119,7 +135,7 @@ before(async()=>{
   await page.waitForFunction(()=>typeof mount==='function');
 });
 after(async()=>{
-  try {await app?.close();await inputs?.shutdown();await service?.shutdown();f?.close();api?.dispose();}
+  try {if(page&&!page.isClosed())await page.evaluate(()=>window.clear?.());await app?.close();await inputs?.shutdown();await service?.shutdown();f?.close();api?.dispose();}
   finally {if(root)await rm(root,{recursive:true,force:true});}
   assert.deepEqual(errors,[]);
 });
@@ -156,6 +172,80 @@ async function fillReview() {
   for(const [label,value] of [['统计方法',method.name],['方法选择理由',method.rationale],['方法假设',method.assumptions],['分析限制',method.limitations]])
     await page.getByLabel(label,{exact:true}).fill(value);
 }
+async function openReview() {
+  await page.getByTestId('artifact-experiment-result-review-open').click();
+  await page.getByLabel('指标输出文件').selectOption('metrics.json');
+  await page.getByTestId('artifact-experiment-result-form').waitFor();
+}
+test('metric review drafts protect output replacement, collapse, shell selection, navigation and native unload',async()=>{
+  await scene();await openReview();
+  await page.getByLabel('mean指标名称',{exact:true}).fill('尚未保存的指标定义');
+  assert.equal(await page.getByLabel('指标输出文件').isDisabled(),true);
+  assert.equal(await page.evaluate(()=>{
+    const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;
+  }),true);
+  await page.getByTestId('artifact-experiment-result-review-open').click();
+  await page.getByTestId('artifact-draft-discard').waitFor();
+  await page.getByTestId('artifact-draft-discard-cancel').click();
+  await page.getByTestId('artifact-draft-discard').waitFor({state:'detached'});
+  assert.equal(await page.getByLabel('mean指标名称',{exact:true}).inputValue(),'尚未保存的指标定义');
+  const next={projectId:f.project.id,artifactId:repeat.artifactId,
+    expectedVersion:f.repository.inspectArtifact({projectId:f.project.id,artifactId:repeat.artifactId,expectedVersion:null}).snapshot.version};
+  await page.evaluate(next=>replaceRequest(next),next);
+  await page.getByTestId('artifact-draft-discard').waitFor();
+  await page.getByTestId('artifact-draft-discard-cancel').click();
+  await page.getByTestId('artifact-draft-discard').waitFor({state:'detached'});
+  assert.equal(calls.filter(call=>call.method==='inspectProductionReview').length,1);
+  await page.evaluate(()=>navigateAway());
+  await page.getByTestId('artifact-draft-discard').waitFor();
+  await page.getByTestId('artifact-draft-discard-cancel').click();
+  await page.getByTestId('artifact-draft-discard').waitFor({state:'detached'});
+  assert.equal(await page.evaluate(()=>navigations),0);
+  await page.getByTestId('result-inspector-close').click();
+  await page.getByTestId('artifact-draft-discard').waitFor();
+  await page.getByTestId('artifact-draft-discard-confirm').click();
+  await page.getByTestId('artifact-draft-discard').waitFor({state:'detached'});
+  assert.equal(await page.getByTestId('artifact-experiment-result-form').count(),0);
+  assert.equal(calls.some(call=>call.method==='reviewExperimentResult'),false);
+});
+test('metric review save synchronously blocks collapse and shell navigation and sends one exact main IPC request',async()=>{
+  await scene();await openReview();await fillReview();
+  active.defer='reviewExperimentResult';const held=active;
+  await page.evaluate(()=>{
+    const form=document.querySelector('[data-testid="artifact-experiment-result-form"]');
+    form.requestSubmit();form.requestSubmit();
+    navigateAway();document.querySelector('[data-testid="artifact-experiment-result-review-open"]').click();
+  });
+  await page.waitForFunction(()=>document.querySelector('[data-testid="artifact-experiment-result-form"] fieldset')?.disabled);
+  while(typeof held.finish!=='function')await new Promise(done=>setTimeout(done,10));
+  assert.equal(calls.filter(call=>call.method==='reviewExperimentResult').length,1);
+  assert.equal(await page.evaluate(()=>navigations),0);
+  assert.equal(await page.getByTestId('artifact-draft-discard').count(),0);
+  assert.equal(await page.getByTestId('artifact-experiment-result-review-open').isDisabled(),true);
+  held.finish();await page.getByText('已复核实际运行、输出与审核回执。',{exact:true}).waitFor();
+  await page.evaluate(()=>navigateAway());
+  assert.equal(await page.evaluate(()=>navigations),1);
+});
+test('metric evidence write registers synchronous host pending and preserves its exact result hash',async()=>{
+  const receipt=await review(first,'host-pending');
+  await scene();await openResult(receipt);
+  await page.getByLabel('证据指标',{exact:true}).selectOption('mean');
+  active.defer='captureExperimentResultEvidence';const held=active;
+  await page.evaluate(()=>{
+    const form=document.querySelector('[data-testid="artifact-experiment-metric-evidence"]');
+    form.requestSubmit();form.requestSubmit();navigateAway();
+    document.querySelector('[data-testid="result-inspector-close"]').click();
+  });
+  while(typeof held.finish!=='function')await new Promise(done=>setTimeout(done,10));
+  assert.equal(await page.evaluate(()=>navigations),0);
+  assert.equal(await page.getByTestId('artifact-experiment-metric-evidence').count(),1);
+  assert.equal(calls.filter(call=>call.method==='captureExperimentResultEvidence').length,1);
+  assert.deepEqual(calls.find(call=>call.method==='captureExperimentResultEvidence').input,{
+    projectId:f.project.id,resultId:receipt.snapshot.id,expectedHash:receipt.snapshotHash,metricId:'mean'
+  });
+  held.finish();await page.getByText('指标证据已保存。',{exact:true}).waitFor();
+  await page.evaluate(()=>navigateAway());assert.equal(await page.evaluate(()=>navigations),1);
+});
 test('keyboard review freezes actual negative metrics and main-window method receipt without implicit reads or inferred statistics',async()=>{
   await scene();
   assert.deepEqual(calls.map(value=>value.method),['inspectProductionReview']);

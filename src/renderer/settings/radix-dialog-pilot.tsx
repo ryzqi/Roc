@@ -9,7 +9,7 @@ import {
   scrimTransition,
   scrimVariants
 } from '../shared/motion';
-import { captureDialogOpener, restoreDialogFocus } from '../shell/focus-trap';
+import { captureDialogOpener, focusDialogInitialElement, restoreDialogFocus } from '../shell/focus-trap';
 import type { ConfirmDialogProps } from '../shell/ConfirmDialog';
 import type { ModalShellProps } from '../shell/ModalShell';
 import { useOverlayBehavior } from '../shell/use-overlay-behavior';
@@ -99,7 +99,7 @@ export function RadixSettingsDialogShell({
               animate="animate"
               exit="exit"
               transition={modalPopTransition}
-              className="fixed inset-0 flex"
+              className="ui-modal-layout fixed inset-0"
               data-testid={testId ?? 'overlay'}
               data-overlay-kind="modal"
               data-overlay-layer={layer}
@@ -124,9 +124,9 @@ export function RadixSettingsDialogShell({
                       ? captureDialogOpener()
                       : document.querySelector<HTMLElement>(returnFocusSelector) ?? captureDialogOpener();
                   const preferred = initialFocusRef?.current;
-                  if (preferred != null && preferred.isConnected && !preferred.hasAttribute('disabled')) {
+                  if (initialFocusRef !== undefined && panelRef.current !== null) {
                     event.preventDefault();
-                    preferred.focus();
+                    focusDialogInitialElement(panelRef.current, preferred ?? null);
                   }
                 }}
                 onCloseAutoFocus={(event) => {
@@ -147,7 +147,7 @@ export function RadixSettingsDialogShell({
                   exit="exit"
                   transition={modalPopTransition}
                   data-testid={testId === undefined ? undefined : `${testId}-panel`}
-                  className={`relative z-10 m-auto flex max-h-[min(86vh,calc(100dvh-2*var(--shadow-modal-gutter-block)))] max-w-[min(92vw,calc(100vw-2*var(--shadow-modal-gutter-inline)))] flex-col overflow-hidden rounded-window border-[0.5px] border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[680px]'}`}
+                  className={`relative z-10 row-start-2 mx-auto flex max-h-[min(86vh,calc(100dvh-2*var(--shadow-modal-gutter-block)))] max-w-[min(92vw,calc(100vw-2*var(--shadow-modal-gutter-inline)))] flex-col overflow-hidden rounded-window border-[0.5px] border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[680px]'}`}
                 >
                   <div className="flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-4 py-2.5">
                     <Dialog.Title asChild>

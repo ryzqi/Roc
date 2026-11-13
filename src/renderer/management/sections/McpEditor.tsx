@@ -42,7 +42,7 @@ export function McpEditor({
         {mcp.editingId === null ? '添加自定义服务' : '编辑配置'}
       </h3>
       <fieldset
-        disabled={mcp.save.pending}
+        disabled={mcp.busy}
         className="flex min-w-0 flex-col gap-4 disabled:opacity-50"
       >
         <TextField
@@ -158,7 +158,7 @@ export function McpEditor({
       <div className="flex flex-wrap items-center gap-2 border-t-[0.5px] border-line py-3">
         <button
           type="submit"
-          disabled={mcp.save.pending || mcp.issues.length > 0}
+          disabled={mcp.busy || mcp.issues.length > 0}
           className={formPrimaryButtonClass}
           data-testid="mgmt-mcp-save"
         >
@@ -166,7 +166,7 @@ export function McpEditor({
         </button>
         <button
           type="button"
-          disabled={mcp.save.pending}
+          disabled={mcp.busy}
           onClick={onCancel}
           className={formSecondaryButtonClass}
           data-testid="mgmt-mcp-cancel"

@@ -62,6 +62,7 @@ before(async () => {
     let generation=0;
     window.mount=(initialRequest,writable=true)=>flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
       <Harness key={++generation} initialRequest={initialRequest} writable={writable}/></LazyMotion></MotionConfig>));
+    window.unmount=()=>flushSync(()=>root.render(null));
   `, style: 'body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}main{padding:16px}'});
   await build({entryPoints:['src/main/pdf-preview-protocol.ts'],outfile:join(directory,'protocol.cjs'),bundle:true,platform:'node',format:'cjs',external:['electron'],logLevel:'silent'});
   writeFileSync(join(directory,'main.cjs'),`const {app,BrowserWindow}=require('electron');
@@ -105,6 +106,7 @@ before(async () => {
   await page.waitForFunction(() => typeof window.mount === 'function');
 });
 after(async () => {
+  if (page !== undefined && !page.isClosed()) await page.evaluate(()=>window.unmount?.());
   try {await app?.close();} finally {
     for (const f of fixtures) {await f.libraryService?.shutdown();await f.cleanup();}
     api?.dispose(); if (directory) rmSync(directory, {recursive: true, force: true});
@@ -242,7 +244,16 @@ test('real independent assessment defeats an old null parent without replacing e
   await tid('artifact-review-quality-assessment-save').click();await page.getByRole('alert').filter({hasText:'状态已变化'}).waitFor();
   assert.equal(f.changes(),before);assert.deepEqual(f.qualityAssessments.get(f.assessmentGet),independent);
   assert.equal(await page.getByLabel('Declared methods理由',{exact:true}).inputValue(),'Synthetic explicit human domain judgement');
+  assert.equal(await tid('artifact-review-quality-assessment-refresh').isDisabled(),true);
+  await tid('artifact-review-quality-assessment-discard').click();
+  await tid('artifact-draft-discard-cancel').click();
+  assert.equal(await page.getByLabel('Declared methods理由',{exact:true}).inputValue(),'Synthetic explicit human domain judgement');
+  assert.equal(f.changes(),before);
+  await tid('artifact-review-quality-assessment-discard').click();
+  await tid('artifact-draft-discard-confirm').click();
   await tid('artifact-review-quality-assessment-refresh').click();await tid('artifact-review-quality-assessment-current').waitFor();
+  assert.deepEqual(f.qualityAssessments.get(f.assessmentGet),independent);
+  assert.equal(f.changes(),before);
 });
 
 test('lost actual assessment reply retries exact reasons and Evidence with only one immutable version',async()=>{

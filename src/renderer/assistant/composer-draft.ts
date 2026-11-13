@@ -73,9 +73,11 @@ export function migrateAssistantComposerDraft(
 
 export function clearAssistantComposerDraft(
   projectId: string | null,
-  threadId: string | null
+  threadId: string | null,
+  expectedDraft?: AssistantComposerDraft
 ): void {
   const key = draftKey(projectId, threadId);
+  if (expectedDraft !== undefined && readDraft(key) !== expectedDraft) return;
   if (drafts.delete(key)) {
     notify(key);
   }

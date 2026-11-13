@@ -4,11 +4,15 @@ import type { LiteratureSearchResult, LiteratureCandidate } from '../../shared/s
 import type { LiteratureImportActions } from './use-literature-import-actions';
 import type { ResearchBibliographyFormat, ResearchLiterature } from '../../shared/types';
 import { ModalShell } from '../shell/ModalShell';
+import { ConfirmDialog } from '../shell/ConfirmDialog';
+import { BEFORE_NAVIGATE, type NavigationRequest } from '../app/navigation-guard';
+import { runIpcAction } from '../app/loaded-state';
+import { formInputClass } from '../shared/form-ui';
 import type { ImportTabRequest } from './hub-route';
 import type { LiteratureSearchSource } from './library-store';
 import type { LiteratureImportOutcome } from './use-literature-store';
 import {LiteratureCandidateReview} from './LiteratureCandidateReview';
-import {ZoteroImportPanel} from './ZoteroImportPanel';
+import {ZoteroImportPanel, type ZoteroDraftGuard} from './ZoteroImportPanel';
 import {useZoteroImportJob} from './use-zotero-import-job';
 import {useZoteroAttachmentJobs} from './use-zotero-attachment-jobs';
 import type {RocClient} from '../shared/roc-client';
@@ -96,9 +100,14 @@ const SEARCH_SOURCES: LiteratureSearchSource[] = [
   'europe_pmc'
 ];
 
-const fieldClass =
-  'h-[var(--control-height)] w-full rounded-control border-[0.5px] border-line bg-surface px-2 text-ink text-[length:var(--font-meta-size)] placeholder:text-subtle';
+const fieldClass = `${formInputClass} text-[length:var(--font-meta-size)] placeholder:text-subtle`;
 const labelClass = 'text-muted text-[length:var(--font-micro-size)]';
+type LocalOperation = 'import' | 'pick' | 'search';
+const operationLabels: Record<LocalOperation, string> = {
+  import: '正在导入…',
+  pick: '正在选择文件…',
+  search: '正在检索…'
+};
 
 function outcomeMessage(outcome: LiteratureImportOutcome): { tone: 'ok' | 'bad'; text: string } {
   if (!outcome.ok) {
@@ -118,8 +127,37 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
   const zoteroJob = useZoteroImportJob(props.client, props.projectId, props.onZoteroImported);
   const attachmentJobs = useZoteroAttachmentJobs(props.client, props.projectId, props.onZoteroImported);
   const [tab, setTab] = useState<ImportTabRequest>(props.initialTab ?? 'document');
-  const [pending, setPending] = useState(false);
+  const [operation, setOperation] = useState<LocalOperation | null>(null);
+  const pending = operation !== null;
   const [message, setMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
+  const [savedDrafts, setSavedDrafts] = useState<Partial<Record<ImportTabRequest, string>>>({});
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [zoteroDirty, setZoteroDirty] = useState(false);
+  const zoteroDraft = useRef(false);
+  const pendingNavigation = useRef<(() => void) | null>(null);
+  const busy = useRef<{ revision: number } | null>(null);
+  const mounted = useRef(true);
+  const zoteroDraftGuard = useMemo<ZoteroDraftGuard>(() => ({
+    changed: value => {
+      zoteroDraft.current = value;
+      if (mounted.current) setZoteroDirty(value);
+    },
+    request: proceed => {
+      if (!zoteroDraft.current) {proceed(); return;}
+      pendingNavigation.current = proceed;
+      setDiscardOpen(true);
+    }
+  }), []);
+  const selectTab = (next: ImportTabRequest, focus = false): void => {
+    if (busy.current !== null || next === tab) return;
+    const proceed = (): void => {
+      setTab(next);
+      setMessage(null);
+      if (focus) document.querySelector<HTMLButtonElement>(`[data-testid="literature-import-tab-${next}"]`)?.focus();
+    };
+    if (tab === 'zotero') zoteroDraftGuard.request(proceed);
+    else proceed();
+  };
 
   // Document tab
   const [documentPath, setDocumentPath] = useState<string | null>(null);
@@ -152,12 +190,27 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
   const titleRef = useRef<HTMLInputElement>(null);
   const initialTab = props.initialTab ?? 'document';
   const selectedItemId = props.selectedItem?.id ?? null;
+  const sessionKey = JSON.stringify([open, initialTab, selectedItemId, props.projectId]);
+  const session = useRef({ key: sessionKey, revision: 0 });
+  if (session.current.key !== sessionKey) {
+    session.current = { key: sessionKey, revision: session.current.revision + 1 };
+    busy.current = null;
+  }
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; busy.current = null; };
+  }, []);
 
   // Reset on a new import or selection, not a refreshed object for the same item.
   useEffect(() => {
+    setOperation(null);
+    setDiscardOpen(false);
+    pendingNavigation.current = null;
     if (!open) {
       return;
     }
+    setSavedDrafts({});
     setMessage(null);
     setDocumentPath(null);
     setDocumentTitle('');
@@ -177,7 +230,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
     setSearchError(null);
     setTab(initialTab);
     setDocumentTarget(selectedItemId === null ? 'new-item' : 'library-item');
-  }, [initialTab, open, selectedItemId]);
+  }, [initialTab, open, selectedItemId, props.projectId]);
 
   const manualAuthorsParsed = useMemo(() => parseAuthorsInput(manualAuthors), [manualAuthors]);
   const manualYearParsed = useMemo(() => parseYearInput(manualYear), [manualYear]);
@@ -194,22 +247,72 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
   const normalizedDoi = useMemo(() => normalizeDoi(doiInput), [doiInput]);
   const arxivId = useMemo(() => arxivQueryFromInput(searchQuery), [searchQuery]);
 
-  const run = async (action: () => Promise<LiteratureImportOutcome>): Promise<void> => {
-    setPending(true);
+  // A submitted tab becomes the baseline only after a successful import. Drafts
+  // in other tabs still need a deliberate discard when the dialog closes.
+  const manualFields = [manualTitle, manualAuthors, manualYear, manualDoi, manualUrl, manualAbstract, manualKey];
+  const draftSignatures: Partial<Record<ImportTabRequest, string>> = {
+    document: documentPath !== null || documentTitle.length > 0 || documentKey.length > 0
+      ? JSON.stringify([documentPath, documentTarget, documentTitle, documentKey]) : '',
+    doi: doiInput,
+    bibliography: bibliographyPath === null ? '' : JSON.stringify([bibliographyPath, bibliographyFormat]),
+    manual: manualFields.some(value => value.length > 0) ? JSON.stringify(manualFields) : ''
+  };
+  const dirty = zoteroDirty || Object.entries(draftSignatures)
+    .some(([key, value]) => value !== (savedDrafts[key as ImportTabRequest] ?? ''));
+
+  useEffect(() => {
+    if (!open) return;
+    const navigate = (event: Event): void => {
+      if (!dirty && !zoteroDraft.current && busy.current === null) return;
+      if (busy.current !== null) {
+        event.preventDefault();
+        setMessage({ tone: 'bad', text: '当前操作尚未完成，请稍后切换项目。' });
+        return;
+      }
+      const proceed = (event as CustomEvent<NavigationRequest>).detail.defer();
+      pendingNavigation.current = () => {onClose(); proceed();};
+      setDiscardOpen(true);
+    };
+    const unload = (event: BeforeUnloadEvent): void => {
+      if (!dirty && !zoteroDraft.current && busy.current === null) return;
+      event.preventDefault(); event.returnValue = '';
+    };
+    window.addEventListener(BEFORE_NAVIGATE, navigate);
+    window.addEventListener('beforeunload', unload);
+    return () => {
+      window.removeEventListener(BEFORE_NAVIGATE, navigate);
+      window.removeEventListener('beforeunload', unload);
+    };
+  }, [dirty, open, onClose, pending]);
+
+  async function perform<T>(kind: LocalOperation, action: () => Promise<T>, apply: (result: T) => void): Promise<void> {
+    if (!open || busy.current !== null) return;
+    const request = { revision: session.current.revision };
+    busy.current = request;
+    setOperation(kind);
     setMessage(null);
-    try {
-      const outcome = await action();
-      setMessage(outcomeMessage(outcome));
-    } finally {
-      setPending(false);
+    const result = await runIpcAction(async () => ({ ok: true as const, data: await action() }));
+    if (!mounted.current || busy.current !== request || session.current.revision !== request.revision) return;
+    busy.current = null;
+    setOperation(null);
+    if (!result.ok) {
+      if (kind === 'search') setSearchError(result.error);
+      else setMessage({ tone: 'bad', text: result.error });
+      return;
     }
+    apply(result.data);
+  }
+
+  const run = async (action: () => Promise<LiteratureImportOutcome>): Promise<void> => {
+    const submittedTab = tab, signature = draftSignatures[tab];
+    await perform('import', action, outcome => {
+      setMessage(outcomeMessage(outcome));
+      if (outcome.ok && signature !== undefined) setSavedDrafts(current => ({ ...current, [submittedTab]: signature }));
+    });
   };
 
   const pick = async (assign: (path: string) => void): Promise<void> => {
-    const path = await props.pickFile();
-    if (path !== null) {
-      assign(path);
-    }
+    await perform('pick', props.pickFile, path => { if (path !== null) assign(path); });
   };
 
   const documentReady =
@@ -220,26 +323,33 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
   const manualReady = manualTitle.trim().length > 0 && isCitationKeyValid(effectiveManualKey);
 
   return (
+    <>
     <ModalShell
       closeOnBackdrop={false}
       open={open}
       title="导入文献"
       onClose={onClose}
+      beforeClose={() => {
+        if (busy.current !== null) return false;
+        if (!dirty && !zoteroDraft.current) return true;
+        pendingNavigation.current = null;
+        setDiscardOpen(true);
+        return false;
+      }}
       testId="literature-import-dialog"
       widthClassName="w-[672px]"
       footer={null}
     >
-      <div className="flex flex-col gap-3" data-testid="literature-import-body">
+      <fieldset disabled={pending} className="m-0 flex min-w-0 flex-col gap-3 border-0 p-0" data-testid="literature-import-body">
         <div role="tablist" aria-label="导入方式" className="flex flex-wrap items-center gap-1"
           onKeyDown={event => {
+            if (busy.current !== null) return;
             if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
             event.preventDefault();
             const index = TABS.findIndex(entry => entry.id === tab);
             const next = event.key === 'Home' ? 0 : event.key === 'End' ? TABS.length - 1 :
               (index + (event.key === 'ArrowRight' ? 1 : -1) + TABS.length) % TABS.length;
-            setTab(TABS[next].id);
-            setMessage(null);
-            event.currentTarget.querySelector<HTMLButtonElement>(`[data-testid="literature-import-tab-${TABS[next].id}"]`)!.focus();
+            selectTab(TABS[next].id, true);
           }}>
           {TABS.map((entry) => (
             <button
@@ -248,10 +358,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
               role="tab"
               aria-selected={entry.id === tab}
               tabIndex={entry.id === tab ? 0 : -1}
-              onClick={() => {
-                setTab(entry.id);
-                setMessage(null);
-              }}
+              onClick={() => selectTab(entry.id)}
               data-testid={`literature-import-tab-${entry.id}`}
               className={
                 entry.id === tab
@@ -572,7 +679,8 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
           </div>
         ) : null}
 
-        {tab === 'zotero' ? <ZoteroImportPanel client={props.client} job={zoteroJob} attachments={attachmentJobs} /> : null}
+        {tab === 'zotero' ? <ZoteroImportPanel client={props.client} job={zoteroJob} attachments={attachmentJobs}
+          draftGuard={zoteroDraftGuard} /> : null}
 
         {tab === 'search' ? (
           <div className="flex flex-col gap-2" data-testid="literature-import-panel-search">
@@ -593,12 +701,11 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 onClick={() => {
                   const query = arxivId ?? searchQuery.trim();
                   const sources: LiteratureSearchSource[] = arxivId === null ? SEARCH_SOURCES : ['arxiv'];
-                  setPending(true);
+                  if (busy.current !== null) return;
                   setSearchError(null);
                   setSearchResult(null);
-                  void props
-                    .searchLiterature(query, sources, 10)
-                    .then((result) => {
+                  setSearchHits([]);
+                  void perform('search', () => props.searchLiterature(query, sources, 10), result => {
                       if (result.ok) {
                         setSearchHits(result.result.candidates);
                         setSearchResult(result.result);
@@ -606,8 +713,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                       }
                       setSearchHits([]);
                       setSearchError(result.message);
-                    })
-                    .finally(() => setPending(false));
+                    });
                 }}
                 data-testid="literature-import-search-submit"
                 className="flex h-[var(--control-height)] shrink-0 items-center gap-1 rounded-control border-[0.5px] border-line px-3 text-ink text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
@@ -627,7 +733,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
               </p>
             )}
             {searchResult === null ? null : (
-              <p role="status" className="text-muted text-[length:var(--font-micro-size)]">
+              <p role="status" className="text-muted tabular-nums text-[length:var(--font-micro-size)]">
                 {searchResult.status === 'failed' ? '检索失败，请稍后重试。' : searchResult.status === 'partial' ? '部分来源未完成，以下为可用结果。' : `找到 ${searchResult.total} 篇候选，尚未加入文献库。`}
                 {searchResult.warnings.join(' ')}
               </p>
@@ -648,7 +754,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
         {pending ? (
           <p role="status" className="flex items-center gap-1.5 text-muted text-[length:var(--font-micro-size)]" data-testid="literature-import-pending">
             <Loader2 size={12} aria-hidden="true" className="animate-spin" />
-            正在导入…
+            {operationLabels[operation!]}
           </p>
         ) : null}
 
@@ -669,7 +775,27 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
           <FileText size={10} aria-hidden="true" className="mr-1 inline" />
           添加文档后，在阅读器中选择「解析」即可提取可检索内容。
         </p>
-      </div>
+      </fieldset>
     </ModalShell>
+    <ConfirmDialog
+      open={open && discardOpen}
+      title={zoteroDirty ? '放弃尚未确认的核对说明？' : '放弃尚未导入的内容？'}
+      message={zoteroDirty ? '核对说明尚未确认，放弃后需要重新填写。' : '录入内容尚未导入文献库，放弃后需要重新填写。'}
+      confirmLabel={zoteroDirty ? '放弃说明并继续' : '放弃录入'}
+      cancelLabel="继续录入"
+      confirmDisabled={pending}
+      tone="destructive"
+      testId="literature-import-discard"
+      onCancel={() => { pendingNavigation.current = null; setDiscardOpen(false); }}
+      onConfirm={() => {
+        if (busy.current !== null) return;
+        const proceed = pendingNavigation.current;
+        pendingNavigation.current = null;
+        setDiscardOpen(false);
+        if (proceed === null) onClose();
+        else proceed();
+      }}
+    />
+    </>
   );
 }

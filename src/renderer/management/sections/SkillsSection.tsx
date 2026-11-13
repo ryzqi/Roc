@@ -52,7 +52,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
 
   const builtin = skills.builtin;
   const builtinSnapshot = builtin.snapshot;
-  const builtinBusy = builtin.restore.pending || builtin.check.pending || builtinSnapshot?.updating === true;
+  const busy = skills.busy || builtinSnapshot?.updating === true;
 
   return (
     <div className="flex min-h-0 flex-col gap-3" data-testid="mgmt-skills">
@@ -71,7 +71,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
           <button
             type="button"
             data-testid="mgmt-skills-builtin-check"
-            disabled={builtinBusy}
+            disabled={busy}
             onClick={() => {
               void builtin.check.run(true);
             }}
@@ -84,7 +84,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
             <input
               type="checkbox"
               checked={builtinSnapshot?.autoUpdate ?? true}
-              disabled={builtinSnapshot === null || builtin.autoUpdate.pending}
+              disabled={builtinSnapshot === null || busy}
               onChange={(event) => {
                 void builtin.autoUpdate.run(event.target.checked);
               }}
@@ -136,7 +136,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
                   <button
                     type="button"
                     data-testid={`mgmt-skills-builtin-restore-${source.id}`}
-                    disabled={builtinBusy}
+                    disabled={busy}
                     onClick={() => {
                       void builtin.restore.run(source.id);
                     }}
@@ -179,7 +179,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
           <button
             type="button"
             data-testid="mgmt-skills-reload"
-            disabled={skills.status === 'loading'}
+            disabled={skills.status === 'loading' || busy}
             onClick={() => skills.reload()}
             className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
           >
@@ -255,7 +255,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
                       <input
                         type="checkbox"
                         checked={skills.skillEnabled(skill)}
-                        disabled={skills.toggleEnabled.pending}
+                        disabled={busy}
                         onChange={(event) => {
                           void skills.toggleEnabled.run(skill, event.target.checked);
                         }}
@@ -267,8 +267,10 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
                     <button
                       type="button"
                       data-testid={`mgmt-skill-delete-${skill.id}`}
-                      disabled={skills.remove.pending}
-                      onClick={() => setDeleteTarget(skill.id)}
+                      disabled={busy}
+                      onClick={() => {
+                        if (!skills.isBusy()) setDeleteTarget(skill.id);
+                      }}
                       className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
                     >
                       <Trash2 size={11} aria-hidden="true" />
@@ -293,6 +295,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
           <span className="text-subtle text-[length:var(--font-micro-size)]">技能目录的绝对路径</span>
           <input
             value={importPath}
+            disabled={busy}
             onChange={(event) => setImportPath(event.target.value)}
             placeholder="/Users/you/skills/my-skill"
             data-testid="mgmt-skills-import-path"
@@ -303,7 +306,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
           <button
             type="button"
             data-testid="mgmt-skills-import-run"
-            disabled={skills.importFrom.pending || importRequired !== null}
+            disabled={busy || importRequired !== null}
             onClick={() => {
               void skills.importFrom.run(importPath);
             }}
@@ -343,8 +346,10 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
         confirmLabel="删除"
         tone="destructive"
         testId="mgmt-skills-delete-confirm"
+        confirmDisabled={busy}
         onCancel={() => setDeleteTarget(null)}
         onConfirm={() => {
+          if (skills.isBusy() || builtinSnapshot?.updating === true) return;
           const target = deleteTarget;
           setDeleteTarget(null);
           if (target !== null) {

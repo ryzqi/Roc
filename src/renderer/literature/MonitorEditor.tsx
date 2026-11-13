@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import type {ResearchLibraryItem} from '../../shared/types';
 import {monitorSaveSchema, type MonitorSave, type MonitorQuery, type MonitorVersion, type ResearchMonitor,
   type MonitorAlert, type MonitorCheck} from '../../shared/schemas/research-monitors';
@@ -6,6 +6,7 @@ import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import type {IpcLikeResult} from '../app/loaded-state';
 import MonitorHistory, {monitorButton, monitorStatus, MonitorReadState} from './MonitorHistory';
+import {useLiteratureEditor} from './literature-editor-guard';
 
 type Api = RocClient['api']['research'];
 type Command =
@@ -66,6 +67,8 @@ export default function MonitorEditor({client, projectId, items, writable, activ
   const [note, setNote] = useState<string | null>(null);
   const [validation, setValidation] = useState<string | null>(null);
   const mounted = useRef(true), pollCount = useRef(0);
+  const submitting = useRef(false), cancelling = useRef(false), dirtyRef = useRef(false);
+  const commandRef = useRef<Command | null>(null);
   useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
   const action = useAsyncAction((value: Command) => execute(client, value), {label: '文献监控操作'});
   const target = useAsyncResource(draft.kind !== 'updates' || draft.target === null ? null :
@@ -79,7 +82,14 @@ export default function MonitorEditor({client, projectId, items, writable, activ
   const running = live.data?.records.find(value => value.status === 'running');
   const checking = action.pending && command?.kind === 'check';
   const busy = action.pending || cancel.pending, locked = busy || command !== null || dirty;
-  useEffect(() => {onLockChange(locked); return () => onLockChange(false);}, [locked, onLockChange]);
+  const editor = useLiteratureEditor({label: '监控查询', dirty: () => dirtyRef.current || commandRef.current !== null,
+    busy: () => submitting.current || cancelling.current, discard: () => discard()});
+  const reportLock = (): void => {
+    onLockChange(submitting.current || cancelling.current || dirtyRef.current || commandRef.current !== null);
+    editor.notify();
+  };
+  useLayoutEffect(() => {onLockChange(locked);}, [locked, onLockChange]);
+  useEffect(() => () => onLockChange(false), [onLockChange]);
   useEffect(() => {
     if (!active || live.status !== 'ready' || (!checking && running === undefined) || pollCount.current >= 120) return;
     const timer = window.setTimeout(() => {pollCount.current += 1; live.reload();}, 1000);
@@ -87,17 +97,30 @@ export default function MonitorEditor({client, projectId, items, writable, activ
   }, [active, live.status, live.data, live.reload, checking, running]);
   const reload = (): void => {pollCount.current = 0; setRefresh(value => value + 1);};
   const submit = async (value: Command): Promise<void> => {
+    if (!writable || submitting.current || cancelling.current || (commandRef.current !== null && commandRef.current !== value)) return;
+    submitting.current = true; commandRef.current = value; reportLock();
     setCommand(value); setNote(null); setValidation(null); cancel.reset(); pollCount.current = 0;
     if (value.kind === 'check') live.reload();
-    const result = await action.run(value);
-    if (!mounted.current || !result.ok) return;
-    setCommand(null); setDirty(false); reload();
-    if (result.data.kind === 'save' || result.data.kind === 'control') onSaved(result.data.value);
-    else if (result.data.kind === 'check') setNote(monitorStatus[result.data.value.status]);
-    else setNote('提醒已标为已读');
+    try {
+      const result = await action.run(value);
+      if (!mounted.current || !result.ok) return;
+      commandRef.current = null; dirtyRef.current = false;
+      setCommand(null); setDirty(false); reload();
+      if (result.data.kind === 'save' || result.data.kind === 'control') onSaved(result.data.value);
+      else if (result.data.kind === 'check') setNote(monitorStatus[result.data.value.status]);
+      else setNote('提醒已标为已读');
+    } finally {
+      submitting.current = false;
+      if (mounted.current) reportLock();
+    }
   };
-  const change = (patch: Partial<typeof draft>): void => {setDraft(value => ({...value, ...patch})); setDirty(true); setValidation(null);};
+  const change = (patch: Partial<typeof draft>): void => {
+    if (!writable || submitting.current || cancelling.current || commandRef.current !== null) return;
+    dirtyRef.current = true; reportLock();
+    setDraft(value => ({...value, ...patch})); setDirty(true); setValidation(null);
+  };
   const save = (): void => {
+    if (!writable || submitting.current || cancelling.current || commandRef.current !== null) return;
     const query = draft.kind === 'updates' ? draft.target : {kind: 'search', search: {
       query: draft.search, sources: draft.sources, limit: Number(draft.limit), maxPages: Number(draft.maxPages),
       ...(draft.yearFrom === '' ? {} : {yearFrom: Number(draft.yearFrom)}),
@@ -109,10 +132,22 @@ export default function MonitorEditor({client, projectId, items, writable, activ
     void submit({kind: 'save', input: parsed.data});
   };
   const stop = async (): Promise<void> => {
-    const result = await cancel.run(running!.id);
-    if (!mounted.current || !result.ok) return;
-    setNote(result.data.cancelled ? '主进程已接收取消信号；等待检查终态。' : '没有对应的进行中检查，请刷新状态。');
-    reload();
+    if (!writable || cancelling.current || running === undefined) return;
+    cancelling.current = true; reportLock();
+    try {
+      const result = await cancel.run(running.id);
+      if (!mounted.current || !result.ok) return;
+      setNote(result.data.cancelled ? '主进程已接收取消信号；等待检查终态。' : '没有对应的进行中检查，请刷新状态。');
+      reload();
+    } finally {
+      cancelling.current = false;
+      if (mounted.current) reportLock();
+    }
+  };
+  const discard = (): void => {
+    dirtyRef.current = false; commandRef.current = null; reportLock();
+    setDraft(initialDraft(monitor, version)); setDirty(false); setCommand(null); action.reset(); cancel.reset();
+    setValidation(null); setNote(null); reload();
   };
   const eligible = items.filter(item => !item.archived && item.projectIds.includes(projectId) && item.metadata.doi !== null);
   const targetCurrent = draft.kind !== 'updates' || draft.target === null || (target.status === 'ready' && target.data !== null &&
@@ -171,9 +206,8 @@ export default function MonitorEditor({client, projectId, items, writable, activ
     <div className="flex flex-wrap gap-2">
       <button type="button" className={monitorButton} disabled={!editable || !targetCurrent || (monitor !== null && !dirty)} onClick={save}>
         {action.pending && command?.kind === 'save' ? '保存监控中' : '保存查询版本'}</button>
-      {!busy && (dirty || command !== null) ? <button type="button" className={monitorButton} onClick={() => {
-        setDraft(initialDraft(monitor, version)); setDirty(false); setCommand(null); action.reset(); cancel.reset(); setValidation(null); setNote(null); reload();
-      }}>放弃监控修改</button> : null}
+      {!busy && (dirty || command !== null) ? <button type="button" className={monitorButton}
+        onClick={() => editor.request(discard, '尚未保存的监控查询和原请求将被放弃。')}>放弃监控修改</button> : null}
       {!busy && command !== null ? <button type="button" className={monitorButton} disabled={!writable} onClick={() => void submit(command)}>重试原监控请求</button> : null}
       {monitor === null ? null : <>
         <button type="button" className={monitorButton} disabled={!writable || locked} onClick={() => void submit({kind: 'control', input: {

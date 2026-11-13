@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import type { ResearchEmbeddingConfig } from '../../../shared/types/research';
 import type { RemoteModelEntry } from '../../../shared/types';
@@ -12,6 +12,7 @@ import {
 } from '../settings-rules';
 import type { SettingsStore } from '../settings-scope';
 import { listEmbeddingConfigs, saveEmbeddingConfig } from '../settings-store';
+import { useSettingsEditorTransition, useTransientSettingsEditor } from '../settings-editor-guard';
 import {
   CheckboxField,
   Field,
@@ -134,8 +135,13 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
 
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
   const [form, setForm] = useState<EmbeddingForm | null>(null);
+  const [formBase, setFormBase] = useState<EmbeddingForm | null>(null);
+  const transition = useSettingsEditorTransition();
   const [apiKey, setApiKey] = useState('');
   const [pullModelsOpen, setPullModelsOpen] = useState(false);
+  const saveInFlight = useRef(false);
+  const lifetime = useRef(0);
+  useEffect(() => () => { lifetime.current++; saveInFlight.current = false; }, [client]);
 
   const selectedConfig = configs.find((config) => config.id === selectedConfigId) ?? null;
   useEffect(() => {
@@ -144,6 +150,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
       if (first !== undefined) {
         setSelectedConfigId(first.id);
         setForm(formFromConfig(first));
+        setFormBase(formFromConfig(first));
       }
     }
   }, [configs, form]);
@@ -160,6 +167,16 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
     }) => saveEmbeddingConfig(client, input),
     { label: '保存嵌入配置' }
   );
+  useTransientSettingsEditor({
+    label: '嵌入配置',
+    dirty: apiKey.length > 0 || JSON.stringify(form) !== JSON.stringify(formBase),
+    busy: saveEmbedding.pending,
+    pendingRef: saveInFlight,
+    discard: () => {
+      setApiKey('');
+      setForm(formBase);
+    }
+  });
 
   if (draft === null) {
     return <FormNote testId="settings-rag-unavailable">设置尚未读取完成。</FormNote>;
@@ -275,17 +292,19 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
         )}
       </section>
 
-      <section className="flex flex-col gap-2 rounded-card border-[0.5px] border-line bg-bg-soft px-3 py-2">
+      <fieldset disabled={saveEmbedding.pending} className="flex min-w-0 flex-col gap-2 rounded-card border-[0.5px] border-line bg-bg-soft px-3 py-2">
         <header className="flex flex-wrap items-center gap-2">
           <h4 className="text-ink text-[length:var(--font-meta-size)]">嵌入配置（{configs.length}）</h4>
           <button
             type="button"
             data-testid="settings-embedding-add"
-            onClick={() => {
+            onClick={() => transition(() => {
+              const next = newEmbeddingForm(configs);
               setSelectedConfigId(null);
-              setForm(newEmbeddingForm(configs));
+              setForm(next);
+              setFormBase(next);
               setApiKey('');
-            }}
+            })}
             className={`${formButtonClass} inline-flex items-center gap-1`}
           >
             <Plus size={11} aria-hidden="true" />
@@ -325,9 +344,13 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
                 type="button"
                 data-testid={`settings-embedding-select-${config.id}`}
                 onClick={() => {
+                  if (config.id === selectedConfigId) return;
+                  transition(() => {
                   setSelectedConfigId(config.id);
                   setForm(formFromConfig(config));
+                  setFormBase(formFromConfig(config));
                   setApiKey('');
+                  });
                 }}
                 className={
                   config.id === selectedConfigId
@@ -406,6 +429,9 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
                 data-testid="settings-embedding-save"
                 disabled={saveEmbedding.pending || apiKey.trim().length === 0 || form.name.trim().length === 0}
                 onClick={() => {
+                  if (saveInFlight.current || apiKey.trim().length === 0 || form.name.trim().length === 0) return;
+                  saveInFlight.current = true;
+                  const requestLifetime = lifetime.current;
                   void saveEmbedding
                     .run({
                       id: form.id.trim(),
@@ -417,13 +443,16 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
                       enabled: form.enabled
                     })
                     .then((result) => {
-                      if (!result.ok) {
+                      if (lifetime.current !== requestLifetime || !result.ok) {
                         return;
                       }
                       setApiKey('');
                       setSelectedConfigId(result.data.id);
                       setForm(formFromConfig(result.data));
+                      setFormBase(formFromConfig(result.data));
                       embeddings.reload();
+                    }).finally(() => {
+                      if (lifetime.current === requestLifetime) saveInFlight.current = false;
                     });
                 }}
                 className={formButtonClass}
@@ -439,7 +468,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
             )}
           </div>
         )}
-      </section>
+      </fieldset>
 
       <RemoteModelPicker
         open={pullModelsOpen && form !== null}

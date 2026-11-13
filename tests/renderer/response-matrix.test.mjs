@@ -37,6 +37,7 @@ before(async () => {
     let generation=0;
     window.mount=input=>flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
       <Harness key={++generation} initial={input}/></LazyMotion></MotionConfig>));
+    window.unmount=()=>flushSync(()=>root.render(null));
   `, style: 'body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}'});
   writeFileSync(join(directory, 'main.cjs'), `const {app,BrowserWindow}=require('electron');
     app.setPath('userData',${JSON.stringify(join(directory, 'data'))});
@@ -62,6 +63,7 @@ before(async () => {
   await page.waitForFunction(() => typeof mount === 'function');
 });
 after(async () => {
+  if (page !== undefined && !page.isClosed()) await page.evaluate(() => window.unmount?.());
   try {await app?.close();} finally {
     fixtures.forEach(f => f.close()); api?.dispose();
     if (directory) rmSync(directory, {recursive: true, force: true});
@@ -152,6 +154,9 @@ test('lazy keyboard entry saves exact human matrix and locks the drawer across d
     'artifact-response-refresh', 'artifact-response-history-open', 'artifact-response-edit'];
   for (const id of locked) assert.equal(await page.getByTestId(id).isDisabled(), true, id);
   await page.keyboard.press('Escape');
+  await page.getByTestId('artifact-draft-discard-panel').waitFor();
+  await page.getByTestId('artifact-draft-discard-cancel').click();
+  await page.getByTestId('artifact-draft-discard-panel').waitFor({state:'detached'});
   assert.equal(await page.getByTestId('artifact-inspector-panel').count(), 1);
   await editor().getByRole('textbox', {name: '矩阵修订理由', exact: true}).fill('');
   await page.getByTestId('artifact-response-save').click();

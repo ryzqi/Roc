@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import type { ProviderConfig, ProviderTestResult, RemoteModelEntry } from '../../../shared/types';
 import { buildProviderModelKey, parseProviderModelKey } from '../../../shared/provider-model-key';
@@ -16,6 +16,7 @@ import {
 import type { SettingsStore } from '../settings-scope';
 import { RemoteModelPicker } from '../RemoteModelPicker';
 import { clearProviderSecret, setProviderSecret, testProvider } from '../settings-store';
+import { useSettingsEditorBusy, useSettingsEditorTransition, useTransientSettingsEditor } from '../settings-editor-guard';
 import {
   CheckboxField,
   NumberField,
@@ -31,6 +32,8 @@ import {
 export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.Element {
   const providers = store.draft?.providers ?? [];
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const transition = useSettingsEditorTransition();
+  const busy = useSettingsEditorBusy();
   const provider = providers.find((entry) => entry.id === selectedId) ?? providers[0] ?? null;
 
   if (store.draft === null) {
@@ -44,7 +47,10 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
         {provider === null ? null : (
           <label className="flex min-w-0 flex-col gap-1.5">
             <span className="text-muted text-[length:var(--font-meta-size)]">供应商</span>
-            <select value={provider.id} onChange={(event) => setSelectedId(event.target.value)}
+            <select value={provider.id} disabled={busy} onChange={(event) => {
+              const id = event.target.value;
+              if (id !== provider.id) transition(() => setSelectedId(id));
+            }}
               data-testid="settings-provider-select" className={formInputClass}>
               {providers.map((entry) => (
                 <option key={entry.id} value={entry.id}>
@@ -55,11 +61,12 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
           </label>
         )}
         <button type="button" data-testid="settings-provider-add" className={formButtonClass}
-          onClick={() => {
+          disabled={busy}
+          onClick={() => transition(() => {
             const created = createProviderDraft(CREATABLE_PROVIDER_TYPES[0] ?? 'custom', providers.map((entry) => entry.id));
             store.update((next) => { next.providers.push(created); });
             setSelectedId(created.id);
-          }}>
+          })}>
           <Plus size={14} aria-hidden="true" />新增供应商
         </button>
       </div>
@@ -72,6 +79,9 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
 
 function ProviderEditor({ provider, store }: { provider: ProviderConfig; store: SettingsStore }): React.JSX.Element {
   const [secretInput, setSecretInput] = useState('');
+  const secretInFlight = useRef(false);
+  const lifetime = useRef(0);
+  useEffect(() => () => { lifetime.current++; secretInFlight.current = false; }, [store.client]);
   const [clearSecretOpen, setClearSecretOpen] = useState(false);
   const [removeProviderOpen, setRemoveProviderOpen] = useState(false);
   const [removeModelIndex, setRemoveModelIndex] = useState<number | null>(null);
@@ -106,6 +116,13 @@ function ProviderEditor({ provider, store }: { provider: ProviderConfig; store: 
   const test = useAsyncAction(
     (input: { providerId: string; modelId: string }) => testProvider(store.client, input), { label: '测试供应商连通' }
   );
+  useTransientSettingsEditor({
+    label: '供应商密钥',
+    dirty: secretInput.length > 0,
+    busy: setSecret.pending || clearSecret.pending,
+    pendingRef: secretInFlight,
+    discard: () => setSecretInput('')
+  });
 
   return (
     <>
@@ -124,16 +141,22 @@ function ProviderEditor({ provider, store }: { provider: ProviderConfig; store: 
       <div className="flex flex-col gap-2 border-t-[0.5px] border-line pt-4">
         <div className="form-action-row">
           <TextField label="API Key" type="password" value={secretInput} onChange={setSecretInput}
+            disabled={setSecret.pending || clearSecret.pending}
             placeholder={stored ? '输入新密钥以替换' : '输入密钥'} testId="settings-provider-secret-input" />
           <button type="button" data-testid="settings-provider-secret-save" className={formButtonClass}
             disabled={setSecret.pending || clearSecret.pending || secretInput.trim().length === 0}
             onClick={() => {
+              if (secretInFlight.current || secretInput.trim().length === 0) return;
+              secretInFlight.current = true;
+              const requestLifetime = lifetime.current;
               void setSecret.run({ providerId: provider.id, plaintext: secretInput }).then((result) => {
-                if (!result.ok) return;
+                if (lifetime.current !== requestLifetime || !result.ok) return;
                 setSecretInput('');
                 // safeStorage owns plaintext; only its reference enters the shared draft.
                 patchProvider((entry) => void (entry.credentialRef = credentialRefFor(provider.id)));
                 store.reload();
+              }).finally(() => {
+                if (lifetime.current === requestLifetime) secretInFlight.current = false;
               });
             }}>
             {setSecret.pending ? '保存中…' : '保存密钥'}
@@ -265,8 +288,15 @@ function ProviderEditor({ provider, store }: { provider: ProviderConfig; store: 
         message={`将立即删除 ${provider.name || provider.id} 已保存的 API Key。`} detail="下次调用前需要重新录入密钥。"
         confirmLabel="清除密钥" tone="destructive" testId="settings-secret-clear-confirm" onCancel={() => setClearSecretOpen(false)}
         onConfirm={() => {
+          if (secretInFlight.current) return;
+          secretInFlight.current = true;
+          const requestLifetime = lifetime.current;
           setClearSecretOpen(false);
-          void clearSecret.run(provider.id).then((result) => { if (result.ok) store.reload(); });
+          void clearSecret.run(provider.id).then((result) => {
+            if (lifetime.current === requestLifetime && result.ok) store.reload();
+          }).finally(() => {
+            if (lifetime.current === requestLifetime) secretInFlight.current = false;
+          });
         }} />
       <RadixSettingsConfirmDialog open={removeProviderOpen} title="移除供应商？"
         message={`将移除 ${provider.name || provider.id} 及其模型。`} detail="保存设置后生效；已存密钥会保留。"

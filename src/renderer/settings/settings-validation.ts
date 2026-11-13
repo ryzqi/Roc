@@ -1,7 +1,62 @@
-import { providersSaveSchema } from '../../shared/schemas/ipc-memory-settings';
+import { z } from 'zod';
+import {
+  appSettingsSchema,
+  permissionsConfigSchema,
+  providerConfigSchema,
+  providerModelSchema,
+  providersSaveSchema,
+  rocHookConfigSchema
+} from '../../shared/schemas/ipc-memory-settings';
 import { researchIndexOptionsSchema } from '../../shared/schemas/research-index';
 import { buildProviderModelKey } from '../../shared/provider-model-key';
-import type { DraftIssue, SettingsDraft } from './settings-rules';
+import type { DraftIssue, SettingsDraft, SettingsImportResult } from './settings-rules';
+
+// Import can restore a draft with unfinished names. Save still validates nonblank,
+// unique identifiers and the default-model relationship.
+const importModelSchema = z.object({
+  ...providerModelSchema.shape,
+  id: z.string(),
+  displayName: z.string()
+}).strict();
+const importProviderSchema = z.object({
+  ...providerConfigSchema.shape,
+  id: z.string(),
+  name: z.string(),
+  endpoint: z.string(),
+  models: z.array(importModelSchema)
+}).strict();
+const settingsImportSchema = z.object({
+  schemaVersion: z.literal(1),
+  exportedAt: z.string().default(''),
+  settings: appSettingsSchema,
+  providers: z.array(importProviderSchema),
+  defaultModelId: z.string().nullable(),
+  permissions: permissionsConfigSchema,
+  hooks: rocHookConfigSchema
+}).strict();
+
+/** Validate every field before an imported document can replace the live draft. */
+export function parseSettingsImport(text: string): SettingsImportResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch {
+    return { ok: false, error: '不是合法的 JSON 文本。' };
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return { ok: false, error: '顶层必须是一个 JSON 对象。' };
+  }
+  const result = settingsImportSchema.safeParse(parsed);
+  if (!result.success) {
+    const errors = result.error.issues.map((issue) => {
+      const path = issue.path.reduce<string>((value, part) =>
+        typeof part === 'number' ? `${value}[${part}]` : `${value}${value ? '.' : ''}${String(part)}`, '');
+      return `${path || '文档'}：${issue.message}`;
+    });
+    return { ok: false, error: errors.join('\n') };
+  }
+  return { ok: true, document: result.data };
+}
 
 /** Shared schema validation plus the settings center's cross-resource model selection rule. */
 export function validateDraft(draft: SettingsDraft | null): DraftIssue[] {

@@ -5,6 +5,9 @@ import type { LogService } from './services/log-service';
 
 type MainWindowLike = {
   on: (event: 'close', handler: (event: { preventDefault: () => void }) => void) => void;
+  webContents: {
+    on: (event: 'will-prevent-unload', listener: () => void) => void;
+  };
   isMinimized: () => boolean;
   restore: () => void;
   show: () => void;
@@ -14,7 +17,7 @@ type MainWindowLike = {
 
 type AppLike = {
   requestSingleInstanceLock: () => boolean;
-  on: (event: 'before-quit' | 'second-instance', listener: (...args: unknown[]) => void) => void;
+  on: (event: 'before-quit' | 'will-quit' | 'second-instance', listener: (...args: unknown[]) => void) => void;
   quit: () => void;
   setLoginItemSettings: (settings: {
     openAtLogin: boolean;
@@ -46,6 +49,7 @@ type LifecycleResult = TraySummary | Promise<TraySummary>;
 type TrayMenuItem = {
   label?: string;
   type?: 'separator';
+  enabled?: boolean;
   click?: () => void;
 };
 
@@ -71,6 +75,9 @@ export class MacOSHostService {
   private explicitQuit = false;
   private currentHotkey: string | null = null;
   private shutdownApplied = false;
+  private trayRevision = 0;
+  private trayMutationPending = false;
+  private traySummary: TraySummary | null = null;
 
   constructor(
     private readonly input: {
@@ -88,6 +95,7 @@ export class MacOSHostService {
       createTray: (iconPath: string) => TrayLike;
       openMainPage: (page: MenuPage) => void;
       broadcastTaskUpdated: () => void;
+      broadcastWindowHidden: () => void;
     }
   ) {}
 
@@ -98,8 +106,8 @@ export class MacOSHostService {
     }
     this.input.app.on('before-quit', () => {
       this.explicitQuit = true;
-      this.shutdown();
     });
+    this.input.app.on('will-quit', () => this.shutdown());
     this.input.app.on('second-instance', (_event, commandLine) => {
       this.focusMainWindow();
       const args = Array.isArray(commandLine) ? commandLine.slice(1) : [];
@@ -124,6 +132,11 @@ export class MacOSHostService {
       }
       event.preventDefault();
       window.hide();
+      this.input.broadcastWindowHidden();
+    });
+    window.webContents.on('will-prevent-unload', () => {
+      // A retained draft vetoes app.quit(); subsequent window closes hide again.
+      this.explicitQuit = false;
     });
   }
 
@@ -199,20 +212,31 @@ export class MacOSHostService {
   }
 
   refreshTray(): void {
-    this.applyTraySummaryResult(this.input.lifecycleService.getTraySummary());
+    if (this.shutdownApplied || this.trayMutationPending) return;
+    const revision = ++this.trayRevision;
+    try {
+      this.applyTraySummaryResult(this.input.lifecycleService.getTraySummary(), revision);
+    } catch (error) {
+      this.logTrayFailure(error);
+    }
   }
 
-  private applyTraySummaryResult(result: LifecycleResult): void {
+  private applyTraySummaryResult(result: LifecycleResult, revision: number): void {
+    const apply = (summary: TraySummary): void => {
+      if (!this.shutdownApplied && revision === this.trayRevision) this.applyTraySummary(summary);
+    };
     if (result instanceof Promise) {
-      void result.then((summary) => {
-        this.applyTraySummary(summary);
+      void result.then(apply).catch((error: unknown) => {
+        if (!this.shutdownApplied && revision === this.trayRevision) this.logTrayFailure(error);
       });
       return;
     }
-    this.applyTraySummary(result);
+    apply(result);
   }
 
   private applyTraySummary(summary: TraySummary): void {
+    if (this.shutdownApplied) return;
+    this.traySummary = summary;
     const tray = this.ensureTray();
     tray.setToolTip(summary.backgroundPaused ? 'Roc 已暂停后台执行' : 'Roc 正在后台运行');
     tray.setContextMenu(
@@ -224,12 +248,12 @@ export class MacOSHostService {
           }
         },
         {
-          label: summary.backgroundPaused ? '恢复后台执行' : '暂停后台执行',
+          label: this.trayMutationPending
+            ? (summary.backgroundPaused ? '正在恢复后台执行…' : '正在暂停后台执行…')
+            : (summary.backgroundPaused ? '恢复后台执行' : '暂停后台执行'),
+          enabled: !this.trayMutationPending,
           click: () => {
-            const nextSummary = summary.backgroundPaused
-              ? this.input.lifecycleService.resumeBackgroundExecution()
-              : this.input.lifecycleService.pauseBackgroundExecution();
-            this.applyTrayMutationResult(nextSummary);
+            this.runTrayMutation(summary.backgroundPaused);
           }
         },
         {
@@ -251,16 +275,41 @@ export class MacOSHostService {
     );
   }
 
-  private applyTrayMutationResult(result: LifecycleResult): void {
-    const applyMutation = (summary: TraySummary): void => {
-      this.input.broadcastTaskUpdated();
-      this.applyTraySummary(summary);
+  private runTrayMutation(resume: boolean): void {
+    if (this.shutdownApplied || this.trayMutationPending) return;
+    this.trayMutationPending = true;
+    const revision = ++this.trayRevision;
+    const settle = (summary: TraySummary | null, error?: unknown): void => {
+      if (this.shutdownApplied || revision !== this.trayRevision) return;
+      this.trayMutationPending = false;
+      if (error !== undefined) this.logTrayFailure(error);
+      if (summary !== null) {
+        this.input.broadcastTaskUpdated();
+        this.applyTraySummary(summary);
+      } else if (this.traySummary !== null) {
+        this.applyTraySummary(this.traySummary);
+      }
     };
-    if (result instanceof Promise) {
-      void result.then(applyMutation);
-      return;
+    try {
+      if (this.traySummary !== null) this.applyTraySummary(this.traySummary);
+      const result = resume
+        ? this.input.lifecycleService.resumeBackgroundExecution()
+        : this.input.lifecycleService.pauseBackgroundExecution();
+      if (result instanceof Promise) {
+        void result.then(summary => settle(summary), (error: unknown) => settle(null, error))
+          .catch((error: unknown) => this.logTrayFailure(error));
+      } else {
+        settle(result);
+      }
+    } catch (error) {
+      settle(null, error);
     }
-    applyMutation(result);
+  }
+
+  private logTrayFailure(error: unknown): void {
+    this.input.logService.error('Roc tray update failed.', toLogError(error), {
+      service: 'macos-host', component: 'refreshTray'
+    });
   }
 
   getIntegrationStatus(): HostIntegrationStatus {
@@ -271,7 +320,6 @@ export class MacOSHostService {
   }
 
   requestQuit(): void {
-    this.explicitQuit = true;
     this.input.app.quit();
   }
 
@@ -280,8 +328,10 @@ export class MacOSHostService {
       return;
     }
     this.shutdownApplied = true;
+    this.trayRevision++;
     this.input.globalShortcut.unregisterAll();
     this.tray?.destroy();
+    this.tray = null;
   }
 
   private ensureTray(): TrayLike {
@@ -300,6 +350,7 @@ export class MacOSHostService {
       this.mainWindow.restore();
     }
     this.mainWindow.show();
+    this.input.broadcastWindowHidden();
     this.mainWindow.focus();
   }
 }

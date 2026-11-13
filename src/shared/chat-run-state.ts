@@ -151,6 +151,17 @@ export function applyChatRunEvent(state: ChatRunState, event: ChatRunEvent): Cha
     };
   }
 
+  if (event.type === 'task_acceptance') {
+    if (event.report.runId !== event.runId) throw new Error('chat_task_acceptance_run_mismatch');
+    return {
+      ...state,
+      activityBlocks: [
+        ...state.activityBlocks.filter(block => block.kind !== 'task_acceptance'),
+        {id: `task-acceptance:${event.report.taskId}`, kind: 'task_acceptance', report: event.report}
+      ]
+    };
+  }
+
   if (event.type === 'assistant_block') {
     return applyAssistantBlock(state, event.block);
   }

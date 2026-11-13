@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAsyncAction, useAsyncResource } from '../../app/use-async-resource';
 import { FormSection, formSecondaryButtonClass } from '../../shared/form-ui';
 import type { RocClient } from '../../shared/roc-client';
@@ -8,6 +8,8 @@ const date = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 
 export function PythonEnvironmentSection({ client, projectId }: {
   client: RocClient; projectId: string;
 }): React.JSX.Element {
+  const mounted = useRef(true), selectionPending = useRef(false);
+  useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
   const resource = useAsyncResource(`python-environments:${projectId}`, async () => {
     const [project, selections] = await Promise.all([
       client.api.research.getProject({ id: projectId }),
@@ -67,12 +69,14 @@ export function PythonEnvironmentSection({ client, projectId }: {
       <button type="button" className={`${formSecondaryButtonClass} justify-self-start`}
         data-testid="mgmt-python-environment-select" disabled={unavailable || select.pending}
         onClick={() => {
+          if (unavailable || selectionPending.current || !mounted.current) return;
+          selectionPending.current = true;
           setNotice(null);
           void select.run().then(result => {
-            if (!result.ok) return;
+            if (!result.ok || !mounted.current) return;
             setNotice(result.data === null ? 'cancelled' : 'saved');
             if (result.data !== null) resource.reload();
-          });
+          }).finally(() => {selectionPending.current = false;});
         }}>{select.pending ? '选择并核验中…' : '选择 Python 环境…'}</button>
       {select.pending ? <p role="status" className="text-subtle">在系统面板选择解释器，随后核验环境与项目锁文件。</p> : null}
       {notice === null ? null : <p role="status" className="text-muted">

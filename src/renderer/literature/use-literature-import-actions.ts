@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import type { LiteratureSearchResult } from '../../shared/schemas/literature-import';
 import type { LiteratureImportOutcome, LiteratureStore } from './use-literature-store';
 import type { LiteratureSearchSource } from './library-store';
@@ -13,7 +13,7 @@ import type { LiteratureSearchSource } from './library-store';
  */
 
 export type LiteratureImportActions = {
-  /** Native picker; resolves `null` when the user cancels. */
+  /** Native picker; resolves `null` on cancellation, throws a failure for the dialog to display. */
   pickFile: () => Promise<string | null>;
   /** `research.literature.search`, normalized so the dialog never sees `{ok:false}`. */
   searchLiterature: (
@@ -22,25 +22,20 @@ export type LiteratureImportActions = {
     limit: number
   ) => Promise<{ ok: true; result: LiteratureSearchResult } | { ok: false; message: string }>;
   addCandidate: (searchId: string, candidateId: string) => Promise<LiteratureImportOutcome>;
-  /** Set when the native picker itself failed (permission, dialog error). */
-  pickError: string | null;
 };
 
 export function useLiteratureImportActions({ store }: { store: LiteratureStore }): LiteratureImportActions {
   const client = store.client;
   const { projectId, reload } = store;
   const requests = useRef(new Map<string, string>());
-  const [pickError, setPickError] = useState<string | null>(null);
 
   const pickFile = useCallback(async (): Promise<string | null> => {
-    setPickError(null);
     // `files.selectFromDialog` is the *file* dialog; `workspace.selectFromDialog`
     // is the directory one. Using the workspace one here would let the user pick a
     // folder and then fail with `research_source_format_unsupported`.
     const result = await client.api.files.selectFromDialog();
     if (!result.ok) {
-      setPickError(result.error.message);
-      return null;
+      throw new Error(result.error.message);
     }
     // `{ filePaths: string[] }`; a cancelled dialog is `{ filePaths: [] }`.
     const first = result.data?.filePaths?.[0];
@@ -75,7 +70,7 @@ export function useLiteratureImportActions({ store }: { store: LiteratureStore }
   }, [client, projectId, reload]);
 
   return useMemo(
-    () => ({ pickFile, searchLiterature, addCandidate, pickError }),
-    [pickFile, pickError, searchLiterature, addCandidate]
+    () => ({ pickFile, searchLiterature, addCandidate }),
+    [pickFile, searchLiterature, addCandidate]
   );
 }

@@ -4,6 +4,7 @@ import type {ResearchReviewDuplicateInspection, ResearchReviewDuplicateSave} fro
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
+import {ArtifactDraftDiscard, useArtifactDraft} from './artifact-editor-guard';
 
 const input = `${formInputClass} border-[0.5px]`;
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
@@ -28,6 +29,7 @@ export function ReviewDuplicateEditor({client, corpus, leftHitId, rightHitId, pa
   const [reason, setReason] = useState(parent?.snapshot.request.reason ?? '');
   const [revisionReason, setRevisionReason] = useState('');
   const busy = useRef(false), requests = useRef(new Map<string, string>());
+  const draft = useArtifactDraft('成对去重决定', {decision, ruleName, ruleVersion, reason, revisionReason}, busy);
   const save = useAsyncAction((request: ResearchReviewDuplicateSave) => client.api.research.saveReviewDuplicateDecision(request), {label: '保存人工去重决定'});
   const ready = left.status === 'ready' && right.status === 'ready';
   const canEdit = writable && corpus.currentProtocol && editing;
@@ -54,11 +56,11 @@ export function ReviewDuplicateEditor({client, corpus, leftHitId, rightHitId, pa
       <p className="text-muted break-words">规则 {parent.snapshot.request.rule.name} 版本 {parent.snapshot.request.rule.version}</p>
       <p className="text-muted break-all">记录人 {parent.snapshot.actor.id} {parent.snapshot.recordedAt}</p>
       {!writable || editing ? null : <button type="button" className={`${button} self-start`} data-testid="artifact-review-duplicate-revise"
-        onClick={() => setEditing(true)}>修订此决定</button>}
+        disabled={draft.locked} onClick={() => {if (!draft.isLocked()) setEditing(true);}}>修订此决定</button>}
     </section>}
     {!editing || !writable ? null : <form className="flex flex-col gap-2" onSubmit={event => {
       event.preventDefault();
-      if (!canEdit || !ready || busy.current || decision === '' || leftHitId === rightHitId) return;
+      if (!canEdit || !ready || busy.current || draft.isLocked() || decision === '' || leftHitId === rightHitId) return;
       const body = {projectId, corpusId, expectedCorpusHash: corpus.snapshotHash, leftHitId, rightHitId, decision,
         rule: {name: ruleName, version: ruleVersion}, reason, parentDecisionId: parent?.snapshot.id ?? null,
         expectedParentHash: parent?.snapshotHash ?? null, revisionReason: parent === null ? null : revisionReason};
@@ -66,9 +68,12 @@ export function ReviewDuplicateEditor({client, corpus, leftHitId, rightHitId, pa
       let requestId = requests.current.get(signature);
       if (requestId === undefined) {requestId = crypto.randomUUID(); requests.current.set(signature, requestId);}
       busy.current = true; onPending(true);
-      void save.run({...body, requestId}).then(result => {busy.current = false; onPending(false); if (result.ok) onSaved();});
+      void save.run({...body, requestId}).then(result => {
+        busy.current = false; onPending(false);
+        if (result.ok) {draft.saved(); onSaved();}
+      });
     }}>
-      <fieldset disabled={!canEdit || !ready || save.pending} className="flex flex-col gap-2">
+      <fieldset disabled={!canEdit || !ready || save.pending || draft.locked} className="flex flex-col gap-2">
         <label className="flex flex-col gap-1 text-muted">去重决定
           <select required aria-label="去重决定" className={input} value={decision}
             onChange={event => setDecision(event.target.value as typeof decision)}>
@@ -94,6 +99,13 @@ export function ReviewDuplicateEditor({client, corpus, leftHitId, rightHitId, pa
         <button type="submit" className={`${formPrimaryButtonClass} border-[0.5px] self-start`}
           disabled={leftHitId === rightHitId || decision === ''} data-testid="artifact-review-duplicate-save">保存人工决定</button>
       </fieldset>
+      <ArtifactDraftDiscard dirty={draft.dirty} testId="artifact-review-duplicate-discard" onDiscard={() => {
+        const next = {decision: parent?.snapshot.request.decision ?? '' as typeof decision,
+          ruleName: parent?.snapshot.request.rule.name ?? '', ruleVersion: parent?.snapshot.request.rule.version ?? '',
+          reason: parent?.snapshot.request.reason ?? '', revisionReason: ''};
+        setDecision(next.decision); setRuleName(next.ruleName); setRuleVersion(next.ruleVersion);
+        setReason(next.reason); setRevisionReason(''); setEditing(parent === null); save.reset(); draft.reset(next);
+      }} />
     </form>}
     {leftHitId !== rightHitId ? null : <p role="alert" className="text-[var(--st-warn)]">请选择两个不同的原始命中。</p>}
     {save.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{save.error}</p>}

@@ -127,6 +127,39 @@ test('keyboard import freezes the preview hash, waits for the real response and 
   assert.notEqual(requests[0].requestId, requests[1].requestId);
 });
 
+test('Notebook import submits once when activated twice in the same event', async () => {
+  await page.evaluate(() => {reset(); window.held = deferred(); importResponse = held.promise; mount();});
+  await ready();
+  await importButton().evaluate(button => {button.click(); button.click();});
+  await page.getByText('导入中…', {exact: true}).waitFor();
+  const count = await page.evaluate(() => calls.filter(call => call.method === 'import').length);
+  await page.evaluate(() => held.resolve({ok: true, data: makeImported()}));
+  await page.getByTestId('file-notebook-frozen').waitFor();
+  assert.equal(count, 1, 'one activation must create one immutable import receipt');
+});
+
+test('Notebook keeps snapshot selection and pagination frozen while importing', async () => {
+  await page.evaluate(() => {
+    reset(); window.held = deferred(); importResponse = held.promise;
+    listResponse = {ok: true, data: {items: [makeImported('a', 'older', '9'.repeat(64), 'older.ipynb').receipt], total: 21}};
+    mount();
+  });
+  await ready(); await openHistory();
+  await importButton().click();
+  await page.getByText('导入中…', {exact: true}).waitFor();
+  const currentDisabled = await page.getByRole('button', {name: '当前文件', exact: true}).isDisabled();
+  const historyDisabled = await page.getByTestId('file-notebook-history-item').isDisabled();
+  const pageDisabled = await page.getByRole('button', {name: '下一页'}).isDisabled();
+  await page.getByTestId('file-notebook-history-item').evaluate(button => button.click());
+  const historyReads = await page.evaluate(() => calls.filter(call => call.method === 'get').length);
+  await page.evaluate(() => held.resolve({ok: true, data: makeImported()}));
+  await page.getByTestId('file-notebook-frozen').waitFor();
+  assert.equal(currentDisabled, true);
+  assert.equal(historyDisabled, true);
+  assert.equal(pageDisabled, true);
+  assert.equal(historyReads, 0);
+});
+
 test('changed and missing current files keep exact frozen history readable; corrupted reads fail visibly', async () => {
   await page.evaluate(() => {
     reset(); previewResponse={ok:true,data:makePreview('9'.repeat(64))};

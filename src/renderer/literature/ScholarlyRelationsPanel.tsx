@@ -13,6 +13,8 @@ export default function ScholarlyRelationsPanel({client, projectId, item, writab
   const [selected, setSelected] = useState<ScholarlySnapshotSummary | null>(null);
   const [request, setRequest] = useState<ScholarlyCapture | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const requestRef = useRef<ScholarlyCapture | null>(null);
+  const capturePending = useRef(false), cancelPending = useRef(false);
   const mounted = useRef(true);
   useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
   const capture = useAsyncAction((input: ScholarlyCapture) => client.api.research.captureScholarlyRelations(input),
@@ -29,36 +31,51 @@ export default function ScholarlyRelationsPanel({client, projectId, item, writab
     !item.projectIds.includes(projectId) ? '文献未关联当前项目' : item.metadata.doi === null ? '文献缺少 DOI' :
     sources.length === 0 ? '请选择来源' : null;
   const submit = async (input: ScholarlyCapture): Promise<void> => {
+    if (capturePending.current || cancelPending.current || !mounted.current) return;
+    capturePending.current = true;
+    requestRef.current = input;
     setRequest(input);
     setNote(null);
-    const result = await capture.run(input);
-    if (!mounted.current) return;
-    if (result.ok) {
-      setRequest(null);
-      setSelected(result.data);
-      setHistoryOffset(0);
-      history.reload();
-    }
+    try {
+      const result = await capture.run(input);
+      if (!mounted.current) return;
+      if (result.ok) {
+        requestRef.current = null;
+        setRequest(null);
+        setSelected(result.data);
+        setHistoryOffset(0);
+        history.reload();
+      }
+    } finally {capturePending.current = false;}
   };
   const query = (offset = 0, nextSources = sources, limit = 100): void => {
+    if (capturePending.current || cancelPending.current || !writable || item.archived ||
+      !item.projectIds.includes(projectId) || item.metadata.doi === null || nextSources.length === 0) return;
     cancel.reset();
     void submit({projectId, itemId: item.id, expectedRevision: item.revision,
       requestId: crypto.randomUUID(), sources: nextSources, offset, limit});
   };
   const stop = async (): Promise<void> => {
-    if (request === null) return;
-    const result = await cancel.run(request);
-    if (!mounted.current || !result.ok) return;
-    setNote(result.data.cancelled ? '主进程已接收取消信号' : '没有进行中的查询，请检查保存历史');
-    if (result.data.cancelled) setRequest(null);
-    history.reload();
+    const input = requestRef.current;
+    if (input === null || cancelPending.current || !mounted.current) return;
+    cancelPending.current = true;
+    try {
+      const result = await cancel.run(input);
+      if (!mounted.current || !result.ok) return;
+      setNote(result.data.cancelled ? '主进程已接收取消信号' : '没有进行中的查询，请检查保存历史');
+      if (result.data.cancelled) {requestRef.current = null; setRequest(null);}
+      history.reload();
+    } finally {cancelPending.current = false;}
   };
   return <section aria-label="学术关系" className="space-y-3 px-3 py-2 text-[length:var(--font-body-size)]" data-testid="reader-scholarly-panel">
     <fieldset disabled={busy} className="flex flex-wrap items-center gap-3">
       <legend className="mb-1 text-muted">查询来源</legend>
       {(Object.keys(providerNames) as ScholarlyProvider[]).map(source => <label key={source} className="flex items-center gap-1">
         <input type="checkbox" checked={sources.includes(source)} onChange={event => {
-          setSources(current => event.target.checked ? [...current, source] : current.filter(value => value !== source));
+          if (capturePending.current || cancelPending.current) return;
+          const checked = event.target.checked;
+          setSources(current => checked ? [...current, source] : current.filter(value => value !== source));
+          requestRef.current = null;
           setRequest(null); capture.reset(); cancel.reset(); setNote(null);
         }}/>{providerNames[source]}
       </label>)}

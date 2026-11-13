@@ -3,6 +3,7 @@ import type {TaskFactsSave} from '../../../shared/schemas/research-task-facts';
 import {useAsyncAction, useAsyncResource} from '../../app/use-async-resource';
 import {FormSection, formPrimaryButtonClass, formSecondaryButtonClass, formSelectClass, formTextAreaClass} from '../../shared/form-ui';
 import type {RocClient} from '../../shared/roc-client';
+import {useManagementEditor, useManagementEditorDraft} from '../../management/management-editor-guard';
 
 type Fact = TaskFactsSave['entries'][number];
 const kinds: Record<Fact['kind'], string> = {
@@ -22,6 +23,19 @@ export function TaskFactsPanel({client, projectId, taskId}: {client: RocClient; 
   const action = useAsyncAction((request: TaskFactsSave) => client.api.research.saveTaskFacts(request), {label: '保存任务事实'});
   const [kind, setKind] = useState<Fact['kind']>('constraint');
   const [content, setContent] = useState('');
+  const fields = useRef({kind, content});
+  const saving = useRef(false);
+  const guard = useManagementEditor();
+  useManagementEditorDraft({
+    label: '任务事实',
+    dirty: () => fields.current.content.trim().length > 0,
+    busy: () => saving.current,
+    discard: () => {
+      if (saving.current) return;
+      fields.current.content = '';
+      setContent('');
+    }
+  });
   const [historyOpen, setHistoryOpen] = useState(false);
   const history = useAsyncResource(historyOpen ? JSON.stringify(['task-facts-history', projectId, taskId]) : null,
     () => client.api.research.getTaskFactsHistory({projectId, taskId, beforeRevision: null, limit: 50}), {label: '读取事实历史'});
@@ -34,18 +48,28 @@ export function TaskFactsPanel({client, projectId, taskId}: {client: RocClient; 
   const entries = resource.data?.snapshot?.entries ?? [];
   const locked = action.pending || resource.status !== 'ready';
   const save = async (next: Fact[], clearDraft: boolean): Promise<void> => {
-    const result = await action.run({projectId, taskId, expectedRevision: resource.data?.snapshot?.revision ?? 0, entries: next});
-    if (!mounted.current) return;
-    if (result.ok) {
-      if (clearDraft) setContent('');
-      resource.reload(); history.reload();
+    if (saving.current || resource.status !== 'ready' || (!clearDraft && fields.current.content.trim().length > 0)) return;
+    saving.current = true;
+    guard.notify();
+    try {
+      const result = await action.run({projectId, taskId, expectedRevision: resource.data?.snapshot?.revision ?? 0, entries: next});
+      if (!mounted.current || !result.ok) return;
+      if (clearDraft) {
+        fields.current.content = '';
+        setContent('');
+      }
+      resource.reload();
+      history.reload();
+    } finally {
+      saving.current = false;
+      if (mounted.current) guard.notify();
     }
   };
   return <FormSection title="任务事实" testId="mgmt-task-facts">
     <div className="flex flex-wrap items-center gap-2">
       <span className="text-subtle tabular-nums">版本 {resource.data?.snapshot?.revision ?? 0}</span>
       <button type="button" className={formSecondaryButtonClass} disabled={action.pending}
-        data-testid="mgmt-task-facts-refresh" onClick={resource.reload}>刷新事实</button>
+        data-testid="mgmt-task-facts-refresh" onClick={() => {if (!saving.current) resource.reload();}}>刷新事实</button>
       <button type="button" className={formSecondaryButtonClass} aria-expanded={historyOpen}
         onClick={() => setHistoryOpen(value => !value)}>修订历史</button>
     </div>
@@ -77,21 +101,30 @@ export function TaskFactsPanel({client, projectId, taskId}: {client: RocClient; 
         </div>}
       </li>)}
     </ol>
-    <form className="grid gap-2" onSubmit={event => {
+    <form className="grid gap-2" aria-busy={action.pending} onSubmit={event => {
       event.preventDefault();
-      if (locked || content.trim().length === 0 || entries.length >= 100) return;
-      void save([...entries, {id: crypto.randomUUID(), kind, content, state: 'active',
+      const draft = fields.current;
+      if (locked || saving.current || draft.content.trim().length === 0 || entries.length >= 100) return;
+      void save([...entries, {id: crypto.randomUUID(), kind: draft.kind, content: draft.content, state: 'active',
         sources: [{kind: 'user', locator: '用户在任务事实面板录入'}]}], true);
     }}>
       <label className="grid gap-1"><span className="text-subtle">记录类型</span>
         <select className={formSelectClass} value={kind} disabled={locked} data-testid="mgmt-task-fact-kind"
-          onChange={event => setKind(event.target.value as Fact['kind'])}>
+          onChange={event => {
+            if (saving.current) return;
+            fields.current.kind = event.target.value as Fact['kind'];
+            setKind(fields.current.kind);
+          }}>
           {Object.entries(kinds).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
       </label>
       <label className="grid gap-1"><span className="text-subtle">事实内容</span>
         <textarea className={formTextAreaClass} value={content} disabled={locked} maxLength={2000} rows={3}
-          data-testid="mgmt-task-fact-content" onChange={event => setContent(event.target.value)} />
+          data-testid="mgmt-task-fact-content" onChange={event => {
+            if (saving.current) return;
+            fields.current.content = event.target.value;
+            setContent(fields.current.content);
+          }} />
       </label>
       <button type="submit" className={`${formPrimaryButtonClass} justify-self-start`} data-testid="mgmt-task-fact-save"
         disabled={locked || content.trim().length === 0 || entries.length >= 100}>{action.pending ? '保存中…' : '添加事实'}</button>

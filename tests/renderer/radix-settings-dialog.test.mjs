@@ -14,6 +14,36 @@ const rendererErrors = [];
 const artifacts = join(process.cwd(), '.artifacts/settings-ui');
 const clipAudit = readFileSync('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
 
+for (const field of ['settings', 'providers', 'permissions', 'hooks']) {
+  test(`settings import rejects incomplete ${field} before replacing the live draft`, async () => {
+    await page.evaluate(() => window.mount());
+    await page.getByTestId('titlebar-settings').click();
+    await page.getByTestId('settings-section-backup').click();
+    await page.getByTestId('settings-export-generate').click();
+    const text = await page.getByTestId('settings-export-text').inputValue();
+    const document = JSON.parse(text);
+    if (field === 'settings') document.settings = {};
+    if (field === 'providers') document.providers = [{id: 'local', name: 'Local', endpoint: '', models: [{}]}];
+    if (field === 'permissions') delete document.permissions.grants;
+    if (field === 'hooks') document.hooks.hooks.PreToolUse = [{}];
+    await page.getByTestId('settings-import-text').fill(JSON.stringify(document));
+    await page.getByTestId('settings-import-apply').click();
+    await page.getByTestId('settings-import-error').waitFor();
+    assert.match(await page.getByTestId('settings-import-error').innerText(), new RegExp(field));
+    assert.equal(await page.getByTestId('settings-import-ok').count(), 0);
+    await page.getByTestId('settings-export-generate').click();
+    const unchanged = JSON.parse(await page.getByTestId('settings-export-text').inputValue());
+    delete unchanged.exportedAt;
+    const original = JSON.parse(text);
+    delete original.exportedAt;
+    assert.deepEqual(unchanged, original, 'a refused import must retain the whole current document');
+    await page.getByTestId('settings-section-app').click();
+    await page.getByTestId('settings-section-app-body').waitFor();
+    await page.keyboard.press('Escape');
+    await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
+  });
+}
+
 before(async () => {
   tempDir = mkdtempSync(join(tmpdir(), 'roc-radix-settings-dialog-'));
   await esbuild.build({
@@ -26,6 +56,8 @@ before(async () => {
         import { SettingsModal } from './src/renderer/settings/SettingsModal';
         import { ModalShell } from './src/renderer/shell/ModalShell';
         import { useKeyboardShortcuts } from './src/renderer/app/shortcuts';
+        import { useAppRoute } from './src/renderer/app/use-app-route';
+        import { BEFORE_NAVIGATE } from './src/renderer/app/navigation-guard';
 
         const ok = data => ({ok: true, data});
         function createClient(providers = []) {
@@ -49,6 +81,7 @@ before(async () => {
             settings: {
               get: async () => ok(structuredClone(snapshot)),
               save: async request => {
+                window.settingsSaveRequests.push(request);
                 if (window.failNextSave) {
                   window.failNextSave = false;
                   return {ok: false, error: {code: 'INTERNAL_ERROR', message: 'Save unavailable'}};
@@ -56,7 +89,12 @@ before(async () => {
                 Object.assign(snapshot, structuredClone(request));
                 return ok(structuredClone(snapshot));
               },
-              listRemoteModels: async () => ok({models: [{id: 'new-model'}, {id: 'model-one'}]}),
+              listRemoteModels: async request => {
+                if (!window.deferRemoteModels) return ok({models: [{id: 'new-model'}, {id: 'model-one'}]});
+                return new Promise(resolve => window.remoteModelRequests.push({request, resolve}));
+              },
+              setProviderSecret: request => new Promise(resolve => window.secretRequests.push({request, resolve})),
+              clearProviderSecret: async () => ok(null),
               saveHooks: async ({config}) => { snapshot.hooks.config = structuredClone(config); return ok(snapshot.hooks); }
             },
             research: {
@@ -64,15 +102,23 @@ before(async () => {
                 projectId: 'project-1', revision: 1, kinds: ['markdown'], include: ['**/*'],
                 exclude: [], watch: true, paused: false, embeddingConfigId: null
               }}),
-              saveIndexSettings: async request => ok({settings: request})
+              saveIndexSettings: async request => ok({settings: request}),
+              listEmbeddingConfigs: async () => ok([
+                {id: 'embedding-one', name: 'Embedding one', baseUrl: 'https://models.invalid/v1',
+                  model: 'embedding-test', dimensions: 3, enabled: true, keyConfigured: true},
+                {id: 'embedding-two', name: 'Embedding two', baseUrl: 'https://models.invalid/v1',
+                  model: 'embedding-test', dimensions: 3, enabled: true, keyConfigured: true}
+              ]),
+              saveEmbeddingConfig: request => new Promise(resolve => window.embeddingRequests.push({request, resolve}))
             }
           }};
         }
 
-        function Harness({client}) {
+        function Harness({client, routeClose}) {
           const [open, setOpen] = useState(false);
           const [ambientOpen, setAmbientOpen] = useState(false);
           const [themeOverride, setThemeOverride] = useState('system');
+          const {route, navigate} = useAppRoute();
           useKeyboardShortcuts({
             onToggleSidebar: () => { window.shortcutCounts.sidebar++; },
             onToggleAssistant: () => { window.shortcutCounts.assistant++; },
@@ -82,12 +128,14 @@ before(async () => {
           window.setAmbientOpen = setAmbientOpen;
           return React.createElement(React.Fragment, null,
             React.createElement('button', {
-              type: 'button', 'data-testid': 'titlebar-settings', onClick: () => setOpen(true)
+              type: 'button', 'data-testid': 'titlebar-settings',
+              onClick: () => routeClose ? navigate({...route, page: 'settings'}) : setOpen(true)
             }, '设置'),
             React.createElement(SettingsModal, {
-              open, client, projectId: null, workspacePath: null, themeOverride,
+              open: routeClose ? route.page === 'settings' : open,
+              client, projectId: null, workspacePath: null, themeOverride,
               onThemeOverrideChange: setThemeOverride, onResetUiPreferences: () => { window.resetCount++; },
-              onClose: () => setOpen(false)
+              onClose: () => routeClose ? navigate({...route, page: 'research'}) : setOpen(false)
             }),
             React.createElement(ModalShell, {
               open: ambientOpen, title: '侧栏', onClose: () => setAmbientOpen(false),
@@ -97,13 +145,34 @@ before(async () => {
         }
 
         const root = createRoot(document.getElementById('root'));
+        window.unmount = () => flushSync(() => root.unmount());
+        let navigationGuard = null;
+        window.setNavigationGuard = mode => {
+          if (navigationGuard) window.removeEventListener(BEFORE_NAVIGATE, navigationGuard);
+          navigationGuard = mode === null ? null : event => {
+            if (event.detail.next.page !== 'research') return;
+            window.navigationGuardCalls++;
+            if (mode === 'veto') event.preventDefault();
+            else window.releaseSettingsClose = event.detail.defer();
+          };
+          if (navigationGuard) window.addEventListener(BEFORE_NAVIGATE, navigationGuard);
+        };
         let generation = 0;
-        window.mount = (providers = []) => {
+        window.mount = (providers = [], routeClose = false) => {
+          window.setNavigationGuard(null);
+          window.navigationGuardCalls = 0;
+          window.releaseSettingsClose = null;
+          window.settingsSaveRequests = [];
+          if (routeClose) history.replaceState(null, '', '?page=research');
           window.shortcutCounts = {sidebar: 0, assistant: 0, search: 0, theme: 0};
           window.resetCount = 0;
+          window.deferRemoteModels = false;
+          window.remoteModelRequests = [];
+          window.secretRequests = [];
+          window.embeddingRequests = [];
           flushSync(() => root.render(React.createElement(MotionConfig, {reducedMotion: 'user'},
             React.createElement(LazyMotion, {features: domMax, strict: true},
-              React.createElement(Harness, {key: ++generation, client: createClient(providers)})
+              React.createElement(Harness, {key: ++generation, client: createClient(providers), routeClose})
             )
           )));
         };
@@ -141,6 +210,7 @@ before(async () => {
 
 after(async () => {
   try {
+    await page?.evaluate(() => window.unmount?.());
     await app?.close();
   } finally {
     if (tempDir !== undefined) rmSync(tempDir, {recursive: true, force: true});
@@ -167,6 +237,7 @@ async function auditLayout(state) {
 }
 
 test('settings dialog layers focus, Escape, animations, shortcuts, and ambient drawers correctly', async () => {
+  await page.evaluate(() => window.mount());
   const opener = page.getByTestId('titlebar-settings');
   await opener.click();
   await page.getByTestId('settings-modal-panel').waitFor();
@@ -343,6 +414,143 @@ const modelProviders = [{
       supportsStreaming: true, supportsToolCalls: true, supportsImages: false, options: {temperature: 0.7, maxTokens: 4096}}]
 }];
 
+test('transient provider drafts survive settings close, section and provider changes until confirmed', async () => {
+  const providers = [...modelProviders, {...modelProviders[0], id: 'provider-two', name: 'Second provider'}];
+  await page.setViewportSize({width: 900, height: 850});
+  await page.evaluate(providers => window.mount(providers), providers);
+  await page.getByTestId('titlebar-settings').click();
+  const input = page.getByTestId('settings-provider-secret-input');
+  await input.fill('transient fixture credential');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('settings-discard-panel').waitFor();
+  await page.getByTestId('settings-discard-cancel').click();
+  await page.getByTestId('settings-discard-panel').waitFor({state: 'detached'});
+  assert.equal(await input.inputValue(), 'transient fixture credential');
+  await page.getByTestId('settings-section-app').click();
+  await page.getByTestId('settings-editor-discard-panel').waitFor();
+  await page.getByTestId('settings-editor-discard-cancel').click();
+  await page.getByTestId('settings-editor-discard-panel').waitFor({state: 'detached'});
+  assert.equal(await input.inputValue(), 'transient fixture credential');
+  await page.getByTestId('settings-provider-select').selectOption('provider-two');
+  await page.getByTestId('settings-editor-discard-panel').waitFor();
+  assert.equal(await page.getByTestId('settings-provider-select').inputValue(), 'provider-one');
+  await page.getByTestId('settings-editor-discard-confirm').click();
+  await page.getByTestId('settings-editor-discard-panel').waitFor({state: 'detached'});
+  assert.equal(await page.getByTestId('settings-provider-select').inputValue(), 'provider-two');
+  assert.equal(await input.inputValue(), '');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
+});
+
+test('transient settings writes block unmount and expose failure without losing input', async () => {
+  const providers = [...modelProviders, {...modelProviders[0], id: 'provider-two', name: 'Second provider'}];
+  await page.evaluate(providers => window.mount(providers), providers);
+  await page.getByTestId('titlebar-settings').click();
+  await page.getByTestId('settings-provider-secret-input').fill('pending fixture credential');
+  await page.getByTestId('settings-provider-secret-save').click();
+  await page.waitForFunction(() => window.secretRequests.length === 1);
+  await page.getByTestId('settings-section-app').click();
+  assert.equal(await page.getByTestId('settings-section-models-body').count(), 1);
+  assert.equal(await page.getByTestId('settings-provider-select').isDisabled(), true);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.getByTestId('settings-modal-panel').count(), 1);
+  assert.equal(await page.evaluate(() => {
+    const event = new Event('beforeunload', {cancelable: true});
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  }), true);
+  await page.evaluate(() => window.secretRequests[0].resolve({ok: false, error: {message: 'Secret write refused'}}));
+  await page.getByTestId('settings-provider-secret-error').waitFor();
+  assert.equal(await page.getByTestId('settings-provider-secret-input').inputValue(), 'pending fixture credential');
+  await page.evaluate(() => window.mount());
+});
+
+test('embedding drafts are protected across configuration, section and close transitions', async () => {
+  await page.evaluate(() => window.mount());
+  await page.getByTestId('titlebar-settings').click();
+  await selectSection('rag');
+  await page.getByTestId('settings-embedding-name').fill('Retained embedding');
+  await page.getByTestId('settings-embedding-select-embedding-two').click();
+  await page.getByTestId('settings-editor-discard-panel').waitFor();
+  await page.getByTestId('settings-editor-discard-cancel').click();
+  await page.getByTestId('settings-editor-discard-panel').waitFor({state: 'detached'});
+  assert.equal(await page.getByTestId('settings-embedding-name').inputValue(), 'Retained embedding');
+  await page.getByTestId('settings-embedding-apikey').fill('embedding fixture credential');
+  await page.getByTestId('settings-embedding-save').click();
+  await page.waitForFunction(() => window.embeddingRequests.length === 1);
+  await page.getByTestId('settings-section-app').click();
+  assert.equal(await page.getByTestId('settings-section-rag-body').count(), 1);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.getByTestId('settings-modal-panel').count(), 1);
+  await page.evaluate(() => window.embeddingRequests[0].resolve({ok: false, error: {message: 'Embedding write refused'}}));
+  await page.getByTestId('settings-embedding-save-error').waitFor();
+  await page.keyboard.press('Escape');
+  await page.getByTestId('settings-discard-panel').waitFor();
+  await page.getByTestId('settings-discard-cancel').click();
+  await page.getByTestId('settings-discard-panel').waitFor({state: 'detached'});
+  assert.equal(await page.getByTestId('settings-embedding-name').inputValue(), 'Retained embedding');
+  await page.getByTestId('settings-section-app').click();
+  await page.getByTestId('settings-editor-discard-confirm').click();
+  await page.getByTestId('settings-editor-discard-panel').waitFor({state: 'detached'});
+  await page.getByTestId('settings-section-app-body').waitFor();
+  await page.keyboard.press('Escape');
+  await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
+});
+
+test('remote model fetch freezes request fields until it completes', async () => {
+  await page.setViewportSize({width: 900, height: 850});
+  await page.evaluate(providers => window.mount(providers), modelProviders);
+  await page.evaluate(() => { window.deferRemoteModels = true; });
+  await page.getByTestId('titlebar-settings').click();
+  await page.getByTestId('settings-model-pull').click();
+  await page.getByTestId('settings-provider-models-pull-fetch').click();
+  await page.waitForFunction(() => window.remoteModelRequests.length === 1);
+  assert.equal(await page.getByTestId('settings-provider-models-pull-endpoint').isDisabled(), true);
+  assert.equal(await page.getByTestId('settings-provider-models-pull-key').isDisabled(), true);
+  assert.equal(await page.getByTestId('settings-provider-models-pull-confirm').isDisabled(), true);
+  await page.evaluate(() => window.remoteModelRequests[0].resolve({ok: true, data: {models: [{id: 'fetched-model'}]}}));
+  await page.getByTestId('settings-provider-models-pull-option-fetched-model').waitFor();
+  assert.equal(await page.getByTestId('settings-provider-models-pull-endpoint').isEnabled(), true);
+  await page.getByTestId('settings-provider-models-pull-endpoint').fill('https://another.example/v1');
+  assert.equal(await page.getByTestId('settings-provider-models-pull-option-fetched-model').count(), 0,
+    'changing the endpoint invalidates models from the old request');
+  await page.getByTestId('settings-provider-models-pull-cancel').click();
+  await page.getByTestId('settings-provider-models-pull-panel').waitFor({state: 'detached'});
+  await page.keyboard.press('Escape');
+  await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
+});
+
+test('remote model results and errors cannot enter a reopened picker', async () => {
+  await page.evaluate(providers => window.mount(providers), modelProviders);
+  await page.evaluate(() => { window.deferRemoteModels = true; });
+  await page.getByTestId('titlebar-settings').click();
+  await page.getByTestId('settings-model-pull').click();
+  await page.getByTestId('settings-provider-models-pull-fetch').click();
+  await page.waitForFunction(() => window.remoteModelRequests.length === 1);
+  await page.getByTestId('settings-provider-models-pull-cancel').click();
+  await page.getByTestId('settings-provider-models-pull-panel').waitFor({state: 'detached'});
+  await page.getByTestId('settings-model-pull').click();
+  await page.getByTestId('settings-provider-models-pull-panel').waitFor();
+  await page.evaluate(() => window.remoteModelRequests[0].resolve({ok: true, data: {models: [{id: 'old-session-model'}]}}));
+  await page.waitForTimeout(100);
+  assert.equal(await page.getByTestId('settings-provider-models-pull-list').count(), 0,
+    'a response from the previous open session must be discarded');
+  await page.getByTestId('settings-provider-models-pull-fetch').click();
+  await page.waitForFunction(() => window.remoteModelRequests.length === 2);
+  await page.evaluate(() => window.remoteModelRequests[1].resolve({ok: false, error: {code: 'INTERNAL_ERROR', message: 'Remote unavailable'}}));
+  await page.getByTestId('settings-provider-models-pull-error').waitFor();
+  await page.getByTestId('settings-provider-models-pull-cancel').click();
+  await page.getByTestId('settings-provider-models-pull-panel').waitFor({state: 'detached'});
+  await page.getByTestId('settings-model-pull').click();
+  await page.getByTestId('settings-provider-models-pull-panel').waitFor();
+  assert.equal(await page.getByTestId('settings-provider-models-pull-error').count(), 0);
+  assert.equal(await page.getByTestId('settings-provider-models-pull-fetch').isEnabled(), true);
+  await page.getByTestId('settings-provider-models-pull-cancel').click();
+  await page.getByTestId('settings-provider-models-pull-panel').waitFor({state: 'detached'});
+  await page.keyboard.press('Escape');
+  await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
+});
+
 test('Escape cancels model, provider and secret confirmations without closing settings or losing focus', async () => {
   await page.setViewportSize({width: 900, height: 850});
   await page.evaluate(providers => window.mount(providers), modelProviders);
@@ -432,3 +640,68 @@ test('populated model settings, expanded controls and nested dialogs have zero s
   await page.keyboard.press('Escape');
   await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
 });
+
+for (const draft of ['shared', 'credential']) {
+  test(`settings routed discard closes ${draft} edits after one confirmation`, async () => {
+    await page.setViewportSize({width: 900, height: 700});
+    await page.evaluate(providers => window.mount(providers, true), draft === 'credential' ? modelProviders : []);
+    await page.getByTestId('titlebar-settings').click();
+    const input = draft === 'shared'
+      ? page.getByTestId('settings-open-at-login')
+      : page.getByTestId('settings-provider-secret-input');
+    if (draft === 'shared') {
+      await selectSection('app');
+      await input.check();
+    } else {
+      await input.fill('unsaved fixture credential');
+    }
+    await page.getByTestId('settings-modal-close').click();
+    await page.getByTestId('settings-discard-cancel').click();
+    await page.getByTestId('settings-discard-panel').waitFor({state: 'detached'});
+    if (draft === 'shared') assert.equal(await input.isChecked(), true);
+    else assert.equal(await input.inputValue(), 'unsaved fixture credential');
+    await page.getByTestId('settings-modal-close').click();
+    await page.getByTestId('settings-discard-confirm').click();
+    await page.getByTestId('settings-modal-panel').waitFor({state: 'detached', timeout: 3000});
+    assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('page')), 'research');
+    assert.deepEqual(await page.evaluate(() => window.settingsSaveRequests), [], 'discard never writes settings');
+    assert.equal(await page.evaluate(() => window.secretRequests.length), 0, 'discard never writes a credential');
+    await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'titlebar-settings');
+    await page.getByTestId('titlebar-settings').click();
+    if (draft === 'shared') {
+      await selectSection('app');
+      assert.equal(await input.isChecked(), false);
+    } else {
+      assert.equal(await input.inputValue(), '');
+    }
+    await page.getByTestId('settings-modal-close').click();
+    await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
+  });
+}
+
+for (const guard of ['defer', 'veto']) {
+  test(`settings routed discard respects another surface's ${guard}`, async () => {
+    await page.setViewportSize({width: 900, height: 700});
+    await page.evaluate(() => window.mount([], true));
+    await page.getByTestId('titlebar-settings').click();
+    await selectSection('app');
+    await page.getByTestId('settings-open-at-login').check();
+    await page.evaluate(guard => window.setNavigationGuard(guard), guard);
+    await page.getByTestId('settings-modal-close').click();
+    await page.getByTestId('settings-discard-confirm').click();
+    await page.getByTestId('settings-discard-panel').waitFor({state: 'detached', timeout: 3000});
+    assert.equal(await page.getByTestId('settings-modal-panel').count(), 1, 'the other surface keeps navigation blocked');
+    assert.equal(await page.getByTestId('settings-open-at-login').isChecked(), false, 'only the explicitly discarded settings reset');
+    assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('page')), 'settings');
+    assert.equal(await page.evaluate(() => window.navigationGuardCalls), 1, 'one close navigation reaches all guards');
+    assert.deepEqual(await page.evaluate(() => window.settingsSaveRequests), []);
+    if (guard === 'defer') {
+      await page.evaluate(() => window.releaseSettingsClose());
+    } else {
+      await page.evaluate(() => window.setNavigationGuard(null));
+      await page.getByTestId('settings-modal-close').click();
+    }
+    await page.getByTestId('settings-modal-panel').waitFor({state: 'detached', timeout: 3000});
+    assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('page')), 'research');
+  });
+}

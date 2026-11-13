@@ -27,7 +27,7 @@ export function ErrorBar({ error, onDismiss }: ErrorBarProps): React.JSX.Element
       role={blocked ? 'note' : 'alert'}
       data-testid={blocked ? 'error-blocked' : 'error-page'}
       data-level={error.level}
-      className="flex items-start gap-2 rounded-card border px-3 py-2"
+      className="flex items-start gap-2 rounded-card border-[0.5px] px-3 py-2"
       style={{
         borderColor: blocked ? 'var(--st-warn-line)' : 'var(--st-bad-line)',
         background: 'var(--surface)'

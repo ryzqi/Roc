@@ -40,12 +40,14 @@ export type ChatTranscriptPanelProps = {
   tailTrimmed: boolean;
   hasMoreBefore: boolean;
   loadingOlder: boolean;
+  loadingLatest?: boolean;
   loadOlder(): Promise<void>;
   onJumpToLatest(): Promise<void>;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
   onOpenArtifact: OpenResearchArtifact;
   onReadGateContext: ReadResearchGateContext;
   onApprovalDecision?: (approvalId: string, decisions: ChatResumeDecision[]) => void;
+  approvalPending?: boolean;
 };
 
 export type TranscriptVirtuosoWindow = {
@@ -75,10 +77,12 @@ export function ChatTranscriptPanel({
   tailTrimmed,
   hasMoreBefore,
   loadingOlder,
+  loadingLatest = false,
   loadOlder,
   onJumpToLatest,
   scrollContainerRef,
   onApprovalDecision,
+  approvalPending = false,
   onOpenArtifact,
   onReadGateContext
 }: ChatTranscriptPanelProps): React.JSX.Element {
@@ -114,6 +118,7 @@ export function ChatTranscriptPanel({
   }
 
   function handleScrollBottomClick(): void {
+    if (loadingLatest) return;
     if (tailTrimmed) {
       void onJumpToLatest();
       return;
@@ -147,7 +152,7 @@ export function ChatTranscriptPanel({
         followOutput={isAtBottom ? 'auto' : false}
         atBottomStateChange={setIsAtBottom}
         itemContent={(_index, message) => (
-          <ChatMessageRow message={message} onOpenArtifact={onOpenArtifact} onReadGateContext={onReadGateContext} onApprovalDecision={onApprovalDecision} />
+          <ChatMessageRow message={message} onOpenArtifact={onOpenArtifact} onReadGateContext={onReadGateContext} onApprovalDecision={onApprovalDecision} approvalPending={approvalPending} />
         )}
         startReached={() => {
           if (hasMoreBefore && !loadingOlder) {
@@ -159,7 +164,9 @@ export function ChatTranscriptPanel({
         {isAtBottom ? null : (
           <motion.button
             type="button"
-            aria-label="滚动到最新"
+            aria-label={loadingLatest ? '正在读取最新记录' : '滚动到最新'}
+            aria-disabled={loadingLatest || undefined}
+            aria-busy={loadingLatest || undefined}
             data-testid="assistant-scroll-bottom"
             onClick={handleScrollBottomClick}
             variants={popoverVariants}

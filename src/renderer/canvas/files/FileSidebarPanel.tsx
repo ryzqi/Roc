@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FilePlus2, Loader2, Search, X } from 'lucide-react';
 import type { RocClient } from '../../shared/roc-client';
+import { useAsyncAction } from '../../app/use-async-resource';
+import { ConfirmDialog } from '../../shell/ConfirmDialog';
+import { ModalShell } from '../../shell/ModalShell';
+import { BEFORE_NAVIGATE, type NavigationRequest } from '../../app/navigation-guard';
 import { joinRelative, parentRelative, checkRelativePath, pathRejectionMessage } from '../../workspace/paths';
 import { useFileNameSearch } from '../../workspace/use-file-search';
 import { writeTextFile } from '../../workspace/workspace-store';
@@ -73,50 +76,105 @@ export function FileSidebarPanel({
   const [creating, setCreating] = useState(false);
   const [draftName, setDraftName] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
-  const [creatingPending, setCreatingPending] = useState(false);
+  const createAction = useAsyncAction(
+    (relativePath: string) => writeTextFile(client, { relativePath, content: '', source: NEW_FILE_WRITE_SOURCE }),
+    { label: '创建文件' }
+  );
+  const creatingRef = useRef(false);
+  const mountedRef = useRef(true);
+  const workspaceRef = useRef(workspacePathKey);
+  workspaceRef.current = workspacePathKey;
   /** Set when a search result is opened, so the tree can reveal it (T3.4). */
   const [revealPath, setRevealPath] = useState<string | null>(null);
   /** The file whose preview modal is open, over whatever canvas view is on screen. */
   const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const [confirmPreviewClose, setConfirmPreviewClose] = useState(false);
   const [previewDirty, setPreviewDirty] = useState(false);
-  const previewPanelRef = useRef<HTMLDivElement>(null);
+  const [previewSaving, setPreviewSaving] = useState(false);
+  const previewTransitionRef = useRef<(() => void) | null>(null);
+  const previewDirtyRef = useRef(false);
+  const previewSavingRef = useRef(false);
+  const reportPreviewDirty = useCallback((dirty: boolean) => {
+    previewDirtyRef.current = dirty;
+    setPreviewDirty(dirty);
+  }, []);
+  const reportPreviewSaving = useCallback((saving: boolean) => {
+    previewSavingRef.current = saving;
+    setPreviewSaving(saving);
+  }, []);
 
-  /**
-   * Escape closes the preview, from anywhere.
-   *
-   * A keydown handler on the panel would only fire when focus is already inside it, and the
-   * click that opens a preview leaves focus on the tree row — so the listener has to be on the
-   * window. It is installed only while a preview is open, and it stops propagation so the
-   * shell's own Escape handling (which would close a drawer underneath) does not also run.
-   */
   useEffect(() => {
-    if (previewPath === null) {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const closePreview = (): void => {
+    setPreviewPath(null);
+    setConfirmPreviewClose(false);
+    previewDirtyRef.current = false;
+    previewTransitionRef.current = null;
+  };
+  const requestPreviewTransition = (proceed: () => void): void => {
+    if (previewDirtyRef.current || previewSavingRef.current) {
+      previewTransitionRef.current = proceed;
+      setConfirmPreviewClose(true);
       return;
     }
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      if (!previewDirty || window.confirm('这个文件有未保存的修改。关闭会丢弃它们。')) {
-        setPreviewPath(null);
-      }
-    };
-    window.addEventListener('keydown', onKeyDown, true);
-    // The dialog owns the keyboard while it is up: without this, the next Tab would walk the
-    // tree behind the scrim, which a modal preview must not allow.
-    previewPanelRef.current?.focus();
-    return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [previewPath, previewDirty]);
+    proceed();
+  };
+  const canClosePreview = (): boolean => {
+    if (previewSavingRef.current) return false;
+    if (previewDirtyRef.current) {
+      previewTransitionRef.current = closePreview;
+      setConfirmPreviewClose(true);
+      return false;
+    }
+    return true;
+  };
+  const requestClosePreview = (): void => {
+    if (canClosePreview()) closePreview();
+  };
 
   const search = useFileNameSearch(client, workspacePathKey, query);
   const searching = query.trim().length > 0;
 
   const openFileForPreview = (relativePath: string): void => {
-    setPreviewPath(relativePath);
-    onOpenFile(relativePath);
+    if (relativePath === previewPath) return;
+    requestPreviewTransition(() => {
+      setPreviewPath(relativePath);
+      onOpenFile(relativePath);
+    });
   };
+
+  useEffect(() => {
+    const beforeNavigate = (event: Event): void => {
+      const request = event as CustomEvent<NavigationRequest>;
+      if (request.detail.next.projectId === projectId ||
+          (!previewDirtyRef.current && !previewSavingRef.current)) return;
+      if (previewSavingRef.current) {
+        event.preventDefault();
+        return;
+      }
+      const resume = request.detail.defer();
+      requestPreviewTransition(() => {
+        closePreview();
+        resume();
+      });
+    };
+    window.addEventListener(BEFORE_NAVIGATE, beforeNavigate);
+    return () => window.removeEventListener(BEFORE_NAVIGATE, beforeNavigate);
+  }, [projectId]);
+
+  // A successful save can make a deferred transition safe without discarding.
+  useEffect(() => {
+    if (!confirmPreviewClose || previewDirty || previewSaving) return;
+    const proceed = previewTransitionRef.current;
+    previewTransitionRef.current = null;
+    setConfirmPreviewClose(false);
+    proceed?.();
+  }, [confirmPreviewClose, previewDirty, previewSaving]);
 
   /**
    * Adopt a preview request from another surface.
@@ -147,9 +205,14 @@ export function FileSidebarPanel({
       return;
     }
     lastPreviewRequestRef.current = previewRequest.nonce;
-    setQuery('');
-    setRevealPath(previewRequest.relativePath);
-    setPreviewPath(previewRequest.relativePath);
+    const relativePath = previewRequest.relativePath;
+    if (relativePath !== previewPath) {
+      requestPreviewTransition(() => {
+        setQuery('');
+        setRevealPath(relativePath);
+        setPreviewPath(relativePath);
+      });
+    }
     onPreviewRequestConsumed?.();
   }, [previewRequest]);
 
@@ -176,6 +239,7 @@ export function FileSidebarPanel({
   const targetDirectory = openFile === null ? '' : parentRelative(openFile);
 
   const submitNewFile = async (): Promise<void> => {
+    if (creatingRef.current || !writable || workspacePathKey === null) return;
     const name = draftName.trim();
     if (name.length === 0) {
       return;
@@ -190,16 +254,14 @@ export function FileSidebarPanel({
       setCreateError(pathRejectionMessage(check.reason));
       return;
     }
-    setCreatingPending(true);
+    creatingRef.current = true;
     setCreateError(null);
-    const result = await writeTextFile(client, {
-      relativePath,
-      content: '',
-      source: NEW_FILE_WRITE_SOURCE
-    });
-    setCreatingPending(false);
+    const workspace = workspacePathKey;
+    const result = await createAction.run(relativePath);
+    creatingRef.current = false;
+    if (!mountedRef.current || workspaceRef.current !== workspace) return;
     if (!result.ok) {
-      setCreateError(result.error.message);
+      setCreateError(result.error);
       return;
     }
     setCreating(false);
@@ -211,6 +273,7 @@ export function FileSidebarPanel({
     <form
       className="flex shrink-0 flex-col gap-1 border-b-[0.5px] border-line-soft px-2 pb-2"
       data-testid="file-create-form"
+      aria-busy={createAction.pending}
       onSubmit={(event) => {
         event.preventDefault();
         void submitNewFile();
@@ -219,6 +282,7 @@ export function FileSidebarPanel({
       <div className="flex items-center gap-1">
         <input
           value={draftName}
+          disabled={createAction.pending}
           onChange={(event) => setDraftName(event.target.value)}
           autoFocus
           placeholder="新文件名，例如 notes.md"
@@ -228,14 +292,15 @@ export function FileSidebarPanel({
         />
         <button
           type="submit"
-          disabled={creatingPending || draftName.trim().length === 0}
+          disabled={createAction.pending || draftName.trim().length === 0}
           data-testid="file-create-submit"
           className="h-[var(--control-height-compact)] shrink-0 rounded-control bg-[var(--fill-strong)] px-2 text-[var(--fill-strong-text)] disabled:opacity-40"
         >
-          {creatingPending ? '创建中…' : '创建'}
+          {createAction.pending ? '创建中…' : '创建'}
         </button>
         <button
           type="button"
+          disabled={createAction.pending}
           onClick={() => {
             setCreating(false);
             setDraftName('');
@@ -355,60 +420,54 @@ export function FileSidebarPanel({
         )}
       </div>
 
-      {/*
-        The tree owns preview state. The overlay portals to document.body, like the shell's
-        other overlays, so sidebar scrolling cannot clip its panel or shadow. Opening a file
-        keeps the current canvas view.
-
-        ## Why this is not `ModalShell`
-
-        The shell's shared overlay adds things a *file* preview should not have: a header bar
-        with the path and a close button (the preview already shows the path and its own
-        actions), `aria-hidden` on `#root`, an overlay-stack entry that suppresses the global
-        shortcuts — and, for this surface, a focus-trap effect whose cleanup races the exit
-        animation and can put focus back on `<body>` (the defect `OverlayFocusRestore` records).
-        The shape is deliberate: its own scrim and panel, no shared
-        shell. Escape and the scrim still close it, which is the whole interaction contract of a
-        preview.
-      */}
-      {previewPath === null ? null : createPortal(
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          data-testid="file-preview-modal"
-          data-overlay-kind="modal"
-        >
-          <div
-            aria-hidden="true"
-            data-testid="file-preview-modal-scrim"
-            onClick={() => {
-              if (!previewDirty || window.confirm('这个文件有未保存的修改。关闭会丢弃它们。')) {
-                setPreviewPath(null);
-              }
-            }}
-            className="absolute inset-0 bg-[var(--overlay-scrim)]"
+      <ModalShell
+        open={previewPath !== null}
+        title={`预览 ${previewPath ?? '文件'}`}
+        onClose={closePreview}
+        beforeClose={canClosePreview}
+        closeOnBackdrop={false}
+        hideHeader
+        bodyPadding="none"
+        widthClassName="h-[min(86vh,760px)] w-[1100px]"
+        testId="file-preview-modal"
+      >
+        {previewPath === null ? null : (
+          <FilePreview
+            key={JSON.stringify([workspacePathKey, previewPath])}
+            client={client}
+            projectId={projectId}
+            relativePath={previewPath}
+            workspacePath={workspacePathKey}
+            writable={writable}
+            onDirtyChange={reportPreviewDirty}
+            onSavingChange={reportPreviewSaving}
+            onClose={requestClosePreview}
           />
-          <div
-            ref={previewPanelRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label={`预览 ${previewPath}`}
-            data-testid="file-preview-modal-panel"
-            tabIndex={-1}
-            className="relative z-10 flex h-[min(86vh,760px)] w-[min(1100px,92vw)] flex-col overflow-hidden rounded-window border-[0.5px] border-line bg-surface shadow-[var(--shadow-modal)] focus:outline-none"
-          >
-            <FilePreview
-              client={client}
-              projectId={projectId}
-              relativePath={previewPath}
-              workspacePath={workspacePathKey}
-              writable={writable}
-              onDirtyChange={setPreviewDirty}
-              onClose={() => setPreviewPath(null)}
-            />
-          </div>
-        </div>,
-        document.body
-      )}
+        )}
+      </ModalShell>
+      <ConfirmDialog
+        open={confirmPreviewClose}
+        title="离开文件预览"
+        message={previewSaving
+          ? `正在保存「${previewPath ?? '文件'}」，保存完成后再继续。`
+          : `「${previewPath ?? '文件'}」有未保存的修改，继续后将丢弃这些修改。`}
+        confirmLabel="放弃修改并继续"
+        confirmDisabled={previewSaving}
+        tone="destructive"
+        onConfirm={() => {
+          if (previewSavingRef.current) return;
+          const proceed = previewTransitionRef.current;
+          previewTransitionRef.current = null;
+          setConfirmPreviewClose(false);
+          proceed?.();
+        }}
+        onCancel={() => {
+          previewTransitionRef.current = null;
+          setConfirmPreviewClose(false);
+          if (previewPath !== null) onOpenFile(previewPath);
+        }}
+        testId="file-preview-unsaved"
+      />
     </div>
   );
 }

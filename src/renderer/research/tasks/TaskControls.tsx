@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ResearchTaskDiagnostics } from '../../../shared/schemas/research-task-diagnostics';
 import { useAsyncAction } from '../../app/use-async-resource';
 import { formSecondaryButtonClass } from '../../shared/form-ui';
@@ -10,6 +10,12 @@ export function TaskControls({ client, data, onChanged }: {
   client: RocClient; data: ResearchTaskDiagnostics; onChanged: () => void;
 }): React.JSX.Element {
   const [intent, setIntent] = useState<TaskAction | null>(null);
+  const running = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   const action = useAsyncAction(async (type: TaskAction) => {
     const request = { projectId: data.task.projectId, taskId: data.task.id };
     switch (type) {
@@ -30,8 +36,13 @@ export function TaskControls({ client, data, onChanged }: {
   const canContinue = ['paused', 'interrupted', 'failed', 'cancelled'].includes(status) &&
     data.continuationRunId !== null && !data.canRestoreApproval && !unconfirmed;
   const run = (type: TaskAction): void => {
+    if (running.current) return;
+    running.current = true;
     setIntent(type);
-    void action.run(type).then(() => onChanged());
+    void action.run(type).then(() => {
+      // Cleanup failures can still change the authoritative task state.
+      if (mounted.current) onChanged();
+    }).finally(() => { running.current = false; });
   };
   return (
     <div className="grid gap-1" data-testid="task-controls" aria-busy={action.pending}>

@@ -163,6 +163,7 @@ export function useFileTree(
   const [errors, setErrors] = useState<ReadonlyMap<string, string>>(new Map());
   const [nonce, setNonce] = useState(0);
   const requestSeq = useRef(0);
+  const directoryReadSeq = useRef(new Map<string, number>());
   // Cached directory keys, readable from the watcher without re-subscribing on
   // every load (the map identity changes on each fetched listing).
   const cachedDirectoriesRef = useRef<string[]>([]);
@@ -179,34 +180,48 @@ export function useFileTree(
     setErrors(new Map());
     setLoading(new Set());
     requestSeq.current += 1;
-  }, [workspacePathKey, nonce]);
+    directoryReadSeq.current.clear();
+    return () => {
+      requestSeq.current += 1;
+      directoryReadSeq.current.clear();
+    };
+  }, [client, workspacePathKey, nonce]);
 
   const load = useCallback(
     async (relativePath: string): Promise<void> => {
       const seq = requestSeq.current;
+      const readSeq = (directoryReadSeq.current.get(relativePath) ?? 0) + 1;
+      directoryReadSeq.current.set(relativePath, readSeq);
+      const isCurrent = (): boolean => seq === requestSeq.current && directoryReadSeq.current.get(relativePath) === readSeq;
       setLoading((current) => new Set(current).add(relativePath));
-      const result = await listTree(client, relativePath);
-      // A workspace switch (or a newer reload) makes this response meaningless.
-      if (seq !== requestSeq.current) {
-        return;
+      try {
+        const result = await listTree(client, relativePath);
+        // A workspace switch, unmount or newer read of this directory invalidates the response.
+        if (!isCurrent()) return;
+        if (!result.ok) {
+          setErrors((current) => new Map(current).set(relativePath, result.error.message));
+          return;
+        }
+        setErrors((current) => {
+          const next = new Map(current);
+          next.delete(relativePath);
+          return next;
+        });
+        const sorted = [...result.data.entries].sort(compareTreeEntries);
+        setChildren((current) => new Map(current).set(relativePath, sorted));
+        setTruncated((current) => new Map(current).set(relativePath, result.data.truncated));
+      } catch (cause: unknown) {
+        if (!isCurrent()) return;
+        setErrors((current) => new Map(current).set(relativePath, cause instanceof Error ? cause.message : '读取目录失败'));
+      } finally {
+        if (isCurrent()) {
+          setLoading((current) => {
+            const next = new Set(current);
+            next.delete(relativePath);
+            return next;
+          });
+        }
       }
-      setLoading((current) => {
-        const next = new Set(current);
-        next.delete(relativePath);
-        return next;
-      });
-      if (!result.ok) {
-        setErrors((current) => new Map(current).set(relativePath, result.error.message));
-        return;
-      }
-      setErrors((current) => {
-        const next = new Map(current);
-        next.delete(relativePath);
-        return next;
-      });
-      const sorted = [...result.data.entries].sort(compareTreeEntries);
-      setChildren((current) => new Map(current).set(relativePath, sorted));
-      setTruncated((current) => new Map(current).set(relativePath, result.data.truncated));
     },
     [client]
   );

@@ -1,10 +1,11 @@
-import {useCallback, useState} from 'react';
+import {useCallback, useRef, useState} from 'react';
 import type {z} from 'zod';
 import type {HfSummary, hfFileSchema} from '../../shared/schemas/research-huggingface';
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncResource} from '../app/use-async-resource';
 import {scholarlyButton} from './ScholarlySnapshotView';
 import HuggingFaceDownloadPanel from './HuggingFaceDownloadPanel';
+import {useLiteratureEditor} from './literature-editor-guard';
 
 type File = z.infer<typeof hfFileSchema>;
 const reported = (value: string | boolean | null): string => value === null ? '未报告' : String(value);
@@ -14,31 +15,40 @@ export default function HuggingFaceObservationView({client, observation, writabl
   const [offset, setOffset] = useState(0);
   const [selection, setSelection] = useState<Map<string, File>>(() => new Map());
   const [selectionLocked, setSelectionLocked] = useState(false);
+  const selectionRef = useRef(selection), selectionLock = useRef(false);
   const read = useAsyncResource(JSON.stringify([observation.projectId, observation.id, offset]),
     () => client.api.research.getHuggingFaceObservation({projectId: observation.projectId, observationId: observation.id, offset, limit: 50}),
     {label: '读取 Hub 文件清单'});
-  const clear = useCallback(() => setSelection(new Map()), []);
+  const editor = useLiteratureEditor({label: 'Hub 文件选择', dirty: () => selectionRef.current.size > 0,
+    busy: () => selectionLock.current, discard: () => clear()});
+  const clear = useCallback(() => {
+    selectionRef.current = new Map(); setSelection(selectionRef.current); editor.notify();
+  }, [editor]);
+  const onSelectionLock = useCallback((locked: boolean) => {
+    selectionLock.current = locked; setSelectionLocked(locked); editor.notify();
+  }, [editor]);
   const metadata = observation.metadata;
   const sourceReady = read.status === 'ready' && read.data?.observation.contentHash === observation.contentHash;
   const allowed = metadata !== null && metadata.private === false && metadata.gated === false && metadata.disabled !== true;
   const paths = [...selection.keys()];
   const selectedBytes = [...selection.values()].reduce((sum, file) => sum + file.size, 0);
   const change = (file: File, checked: boolean): void => {
-    setSelection(current => {
-      const next = new Map(current);
-      if (checked) next.set(file.path, file); else next.delete(file.path);
-      return next;
-    });
+    if (!writable || !allowed || !sourceReady || selectionLock.current || file.size > 256 * 1024 * 1024 ||
+      (checked && !selectionRef.current.has(file.path) && selectionRef.current.size >= 20)) return;
+    const next = new Map(selectionRef.current);
+    if (checked) next.set(file.path, file); else next.delete(file.path);
+    selectionRef.current = next; setSelection(next); editor.notify();
+    if (next.size > 0) onLockChange(true);
   };
   return <section aria-label="Hub 观察" className="space-y-2" data-testid="reader-hf-observation">
     <h3 className="break-all font-medium">{observation.request.repo}</h3>
-    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-muted">
+    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-muted tabular-nums">
       <dt>仓库类型</dt><dd>{observation.request.kind === 'dataset' ? '数据集' : '模型'}</dd>
       <dt>固定提交</dt><dd className="break-all font-mono">{observation.request.revision}</dd>
       <dt>查询时间</dt><dd>{observation.queriedAt}</dd>
       <dt>获取时间</dt><dd>{reported(observation.fetchedAt)}</dd>
       <dt>本次观察</dt><dd>{observation.status === 'ok' ? '元数据已保存' : '元数据不可用'}</dd>
-      <dt>文件数量</dt><dd>{observation.fileCount === null ? '未知' : observation.fileCount}</dd>
+      <dt>文件数量</dt><dd>{observation.fileCount === null ? '未知' : `${observation.fileCount.toLocaleString('zh-CN')} 个`}</dd>
       {observation.errorCode === null ? null : <><dt>错误</dt><dd className="break-all text-[var(--st-bad)]">{observation.errorCode}</dd></>}
     </dl>
     {metadata === null ? null : <details data-testid="reader-hf-access">
@@ -77,7 +87,7 @@ export default function HuggingFaceObservationView({client, observation, writabl
               <input type="checkbox" checked={selection.has(file.path)} onChange={event => change(file, event.target.checked)}
                 disabled={!writable || !allowed || !sourceReady || selectionLocked || file.size > 256 * 1024 * 1024 ||
                   !selection.has(file.path) && selection.size >= 20}/>
-              <span className="min-w-0 break-all">{file.path}<span className="ml-2 text-muted tabular-nums">{file.size} 字节</span></span>
+              <span className="min-w-0 break-all">{file.path}<span className="ml-2 text-muted tabular-nums">{file.size.toLocaleString('zh-CN')} 字节</span></span>
             </label>
             <details className="text-muted"><summary className="cursor-pointer">{file.lfs === null ? 'Git 文件标识' : 'LFS 内容标识'}</summary>
               <p className="break-all font-mono">Git blob SHA-1 {file.blobId}</p>
@@ -87,14 +97,14 @@ export default function HuggingFaceObservationView({client, observation, writabl
         </ul>
         <div className="flex flex-wrap gap-2">
           <button type="button" className={scholarlyButton} disabled={selectionLocked || read.status === 'loading' || offset === 0}
-            onClick={() => setOffset(value => Math.max(0, value - 50))}>Hub 文件上一页</button>
+            onClick={() => {if (!selectionLock.current) setOffset(value => Math.max(0, value - 50));}}>Hub 文件上一页</button>
           <button type="button" className={scholarlyButton} disabled={selectionLocked || read.status === 'loading' || read.data.nextOffset === null}
-            onClick={() => setOffset(read.data!.nextOffset!)}>Hub 文件下一页</button>
+            onClick={() => {if (!selectionLock.current && read.data?.nextOffset != null) setOffset(read.data.nextOffset);}}>Hub 文件下一页</button>
         </div>
       </>}
     </details>
     {selection.size === 0 ? null : <p className="break-all text-muted" data-testid="reader-hf-selected">所选文件：{paths.join(', ')}</p>}
     <HuggingFaceDownloadPanel client={client} observation={observation} paths={paths} selectedBytes={selectedBytes}
-      sourceReady={sourceReady} writable={writable} onLockChange={onLockChange} onSelectionLockChange={setSelectionLocked} onClear={clear}/>
+      sourceReady={sourceReady} writable={writable} onLockChange={onLockChange} onSelectionLockChange={onSelectionLock} onClear={clear}/>
   </section>;
 }

@@ -1,4 +1,5 @@
-import {lazy, Suspense, useState} from 'react';
+import { useState } from 'react';
+import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
 import type {ResearchDocument, ResearchDocumentParse} from '../../shared/types';
 import type {ResearchReviewProtocolInspection} from '../../shared/schemas/research-systematic-review';
 import type {ResearchReviewFullTextFrozenPhase} from '../../shared/schemas/research-review-fulltext-screening';
@@ -9,9 +10,10 @@ import {formInputClass, formSecondaryButtonClass} from '../shared/form-ui';
 import {documentContentHash} from '../literature/document-content-hash';
 import {ReviewFullTextDecision} from './ReviewFullTextDecision';
 import {ReviewFullTextArbitration} from './ReviewFullTextArbitration';
+import {useArtifactEditorGuard} from './artifact-editor-guard';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
-const PaperPdfView = lazy(() => import('../literature/PaperPdfView'));
+const PaperPdfView = retryableLazy(() => import('../literature/PaperPdfView'));
 type LoadedSource = {document: ResearchDocument; parsed: ResearchDocumentParse | null};
 export function ReviewFullTextEligibility({client, protocol, phase, item, writable, onPending, onSaved}: {
   client: RocClient; protocol: ResearchReviewProtocolInspection; phase: ResearchReviewFullTextFrozenPhase;
@@ -45,6 +47,8 @@ export function ReviewFullTextEligibility({client, protocol, phase, item, writab
   const [reviewerId, setReviewerId] = useState(''), [decisionPending, setDecisionPending] = useState(false);
   const [arbitrationPending, setArbitrationPending] = useState(false);
   const pending = decisionPending || arbitrationPending;
+  const guard = useArtifactEditorGuard();
+  const selectionLocked = guard.locked();
   const [pdfOpen, setPdfOpen] = useState(false), [offset, setOffset] = useState(0);
   const [selection, setSelection] = useState<{blockId: string; locationIndex: number} | null>(null);
   const parent = item.decisions.find(decision => decision.snapshot.request.reviewerId === reviewerId) ?? null;
@@ -54,8 +58,8 @@ export function ReviewFullTextEligibility({client, protocol, phase, item, writab
       <p className="break-words">{source.filename}</p>
       {read.status !== 'loading' ? null : <p role="status">正在读取保存版本的全文…</p>}
       {read.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{read.error}</p>}
-      <button type="button" className={`${button} self-start`} disabled={pending || read.status === 'loading'}
-        data-testid="artifact-review-full-source-refresh" onClick={read.reload}>重读保存的全文版本</button>
+      <button type="button" className={`${button} self-start`} disabled={pending || selectionLocked || read.status === 'loading'}
+        data-testid="artifact-review-full-source-refresh" onClick={() => {if (!guard.locked()) read.reload();}}>重读保存的全文版本</button>
       {loaded === null ? null : <>
         {loaded.parsed === null ? <p className="text-muted">此绑定仅固定原文件，未固定解析文本。</p> : <>
           <h4 className="font-medium">保存版本的解析文本</h4>
@@ -73,15 +77,15 @@ export function ReviewFullTextEligibility({client, protocol, phase, item, writab
               aria-expanded={pdfOpen} data-testid="artifact-review-full-pdf-toggle" onClick={() => setPdfOpen(!pdfOpen)}>核对原始 PDF</button>}
           </div>
           {!pdfOpen ? null : <div className="h-[480px] min-h-0 min-w-0 border-[0.5px] border-line">
-            <Suspense fallback={<p role="status">正在加载原始 PDF 阅读器…</p>}>
+            <LazyBoundary fallback={<p role="status">正在加载原始 PDF 阅读器…</p>}>
               <PaperPdfView client={client} projectId={projectId} document={loaded.document} parsed={loaded.parsed}
                 selection={selection} onSelectBlock={setSelection} canAnnotate={false} />
-            </Suspense>
+            </LazyBoundary>
           </div>}
         </>}
         <label className="flex flex-col gap-1 text-muted">全文资格审核人
-          <select aria-label="全文资格审核人" className={`${formInputClass} border-[0.5px]`} disabled={pending} value={reviewerId}
-            onChange={event => setReviewerId(event.target.value)}>
+          <select aria-label="全文资格审核人" className={`${formInputClass} border-[0.5px]`} disabled={pending || selectionLocked} value={reviewerId}
+            onChange={event => {if (!guard.locked()) setReviewerId(event.target.value);}}>
             <option value="">选择已声明全文审核人</option>
             {phase.plan.snapshot.request.fullTextReviewers.map(reviewer => <option key={reviewer.id} value={reviewer.id}>
               {reviewer.name} {reviewer.id}</option>)}

@@ -1,5 +1,6 @@
 import { useVisiblePolling } from '../shared/view-activity';
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
 import { Check, CircleAlert, ClipboardCopy, Columns2, Download, FileSearch, Loader2, Pencil, Save, ScanLine, Sparkles, Square, Timer, Type, X } from 'lucide-react';
 import type { ResearchDocument, ResearchParseTier } from '../../shared/types';
 import { useWorkspaceScope } from '../app/workspace-scope';
@@ -12,17 +13,19 @@ import { deriveCitationKey, formatDoi, isCitationKeyValid } from './format';
 import { downloadModels, getModelsStatus } from '../shared/research-models-store';
 import type { LiteratureStore } from './use-literature-store';
 import {useReaderDocument} from './use-reader-document';
+import type {ReadingTranslationGuard} from './ReadingTranslationPanel';
+import {requestReadingChange} from './reading-interactions';
 
-const ReadingDiscoveryPanel = lazy(() => import('./ReadingDiscoveryPanel'));
-const ReadingNotesPanel = lazy(() => import('./ReadingNotesPanel'));
-const ReadingTranslationPanel = lazy(() => import('./ReadingTranslationPanel'));
-const ReadingFormula = lazy(() => import('./ReadingFormula'));
-const PaperPdfView = lazy(() => import('./PaperPdfView'));
-const PaperBlockAsset = lazy(() => import('./PaperBlockAsset'));
-const ScholarlyRelationsPanel = lazy(() => import('./ScholarlyRelationsPanel'));
-const ResearchResourcesPanel = lazy(() => import('./ResearchResourcesPanel'));
-const HuggingFacePanel = lazy(() => import('./HuggingFacePanel'));
-const OpenReviewPanel = lazy(() => import('./OpenReviewPanel'));
+const ReadingDiscoveryPanel = retryableLazy(() => import('./ReadingDiscoveryPanel'));
+const ReadingNotesPanel = retryableLazy(() => import('./ReadingNotesPanel'));
+const ReadingTranslationPanel = retryableLazy(() => import('./ReadingTranslationPanel'));
+const ReadingFormula = retryableLazy(() => import('./ReadingFormula'));
+const PaperPdfView = retryableLazy(() => import('./PaperPdfView'));
+const PaperBlockAsset = retryableLazy(() => import('./PaperBlockAsset'));
+const ScholarlyRelationsPanel = retryableLazy(() => import('./ScholarlyRelationsPanel'));
+const ResearchResourcesPanel = retryableLazy(() => import('./ResearchResourcesPanel'));
+const HuggingFacePanel = retryableLazy(() => import('./HuggingFacePanel'));
+const OpenReviewPanel = retryableLazy(() => import('./OpenReviewPanel'));
 
 const TIER_OPTIONS: ReadonlyArray<{ value: ResearchParseTier; label: string; title: string }> = [
   { value: 'compact', label: '轻量', title: 'PP-OCRv6 Tiny + 文档布局和表格识别，约 19 MB' },
@@ -89,20 +92,32 @@ export function PaperReader({
   const [notesOpen,setNotesOpen]=useState(false),[notesVisited,setNotesVisited]=useState(false);
   const [noteSeed,setNoteSeed]=useState<{id:string;text:string}|null>(null);
   const [translation,setTranslation]=useState<{id:string;segments:{label:string;text:string}[];label:string}|null>(null);
+  const translationGuardRef=useRef<ReadingTranslationGuard|null>(null);
   const [blockFilter,setBlockFilter]=useState('all'),[selectedText,setSelectedText]=useState('');
   const addNote=(text:string):void=>{setNoteSeed({id:crypto.randomUUID(),text});setNotesVisited(true);setNotesOpen(true);};
-  const translate=(segments:{label:string;text:string}[],label:string):void=>setTranslation({id:crypto.randomUUID(),segments,label});
+  const changeTranslation=(proceed:()=>void):void=>{
+    if(translationGuardRef.current)translationGuardRef.current.request(proceed);
+    else proceed();
+  };
+  const translate=(segments:{label:string;text:string}[],label:string):void=>
+    changeTranslation(()=>setTranslation({id:crypto.randomUUID(),segments,label}));
   const [pdfSelection, setPdfSelection] = useState<{parseId: string; blockId: string; locationIndex: number} | null>(null);
   const [openAsset, setOpenAsset] = useState<string | null>(null);
   const [discoveryOpen,setDiscoveryOpen]=useState(false);
-  useEffect(()=>{setTranslation(null);setSelectedText('');setNoteSeed(null);},[selected?.id]);
+  useEffect(()=>{changeTranslation(()=>setTranslation(null));setSelectedText('');setNoteSeed(null);},[selected?.id]);
   const [relationsOpen, setRelationsOpen] = useState(false);
   const [resourcesOpen, setResourcesOpen] = useState(false);
   const [resourcesLocked, setResourcesLocked] = useState(false);
+  const resourcesLockRef = useRef(false);
+  const onResourcesLock = useCallback((value: boolean) => {resourcesLockRef.current = value; setResourcesLocked(value);}, []);
   const [huggingFaceOpen, setHuggingFaceOpen] = useState(false);
   const [huggingFaceLocked, setHuggingFaceLocked] = useState(false);
+  const huggingFaceLockRef = useRef(false);
+  const onHuggingFaceLock = useCallback((value: boolean) => {huggingFaceLockRef.current = value; setHuggingFaceLocked(value);}, []);
   const [openReviewOpen, setOpenReviewOpen] = useState(false);
   const [openReviewLocked, setOpenReviewLocked] = useState(false);
+  const openReviewLockRef = useRef(false);
+  const onOpenReviewLock = useCallback((value: boolean) => {openReviewLockRef.current = value; setOpenReviewLocked(value);}, []);
   /**
    * 解析档位（`document.parse` 的 `tier`）。
    *
@@ -162,8 +177,11 @@ export function PaperReader({
 
   const counts = useMemo(() => (content === null ? null : countParsedBlocks(content)), [content]);
   const selectReaderDocument = (documentId: string): void => {
-    onClearFocus();
-    reader.selectDocument(documentId);
+    if (documentId === activeDocumentId) return;
+    requestReadingChange(literature.projectId ?? '', () => {
+      onClearFocus();
+      reader.selectDocument(documentId);
+    });
   };
 
   /**
@@ -401,17 +419,17 @@ export function PaperReader({
             学术关系
           </button>
           <button type="button" disabled={literature.projectId === null || resourcesLocked} aria-expanded={resourcesOpen}
-            onClick={() => setResourcesOpen(current => !current)} data-testid="reader-resources-toggle"
+            onClick={() => {if (!resourcesLockRef.current) setResourcesOpen(current => !current);}} data-testid="reader-resources-toggle"
             className="min-h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
             科研资源
           </button>
           <button type="button" disabled={literature.projectId === null || huggingFaceLocked} aria-expanded={huggingFaceOpen}
-            onClick={() => setHuggingFaceOpen(current => !current)} data-testid="reader-hf-toggle"
+            onClick={() => {if (!huggingFaceLockRef.current) setHuggingFaceOpen(current => !current);}} data-testid="reader-hf-toggle"
             className="min-h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
             Hugging Face
           </button>
           <button type="button" disabled={literature.projectId === null || openReviewLocked} aria-expanded={openReviewOpen}
-            onClick={() => setOpenReviewOpen(current => !current)} data-testid="reader-openreview-toggle"
+            onClick={() => {if (!openReviewLockRef.current) setOpenReviewOpen(current => !current);}} data-testid="reader-openreview-toggle"
             className="min-h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
             OpenReview
           </button>
@@ -521,24 +539,33 @@ export function PaperReader({
         )}
       </header>
 
+      {!reader.updateAvailable ? null : <div role="status" data-testid="reader-source-update"
+        className="flex shrink-0 flex-wrap items-center gap-2 border-b-[0.5px] border-line px-3 py-2 text-muted">
+        <span>文档已有更新，当前保留原阅读版本。</span>
+        <button type="button" onClick={reader.acceptUpdate}
+          className="rounded-control border-[0.5px] border-line px-2 py-1 text-ink hover:bg-[var(--overlay-hover)]">
+          读取更新版本
+        </button>
+      </div>}
+
       {(discoveryOpen || relationsOpen || resourcesOpen || huggingFaceOpen || openReviewOpen) && literature.projectId !== null ? <div className="max-h-[55%] shrink-0 overflow-y-auto border-b-[0.5px] border-line">
-        {discoveryOpen?<Suspense fallback={<p role="status">加载引文发现…</p>}><ReadingDiscoveryPanel key={`${literature.projectId}:${selected.id}`} client={literature.client} projectId={literature.projectId} itemId={selected.id} writable={scope.writable} onImported={literature.reload}/></Suspense>:null}
-        {relationsOpen ? <Suspense fallback={<p role="status" className="px-3 py-2 text-muted">载入学术关系</p>}>
+        {discoveryOpen?<LazyBoundary fallback={<p role="status">加载引文发现…</p>}><ReadingDiscoveryPanel key={`${literature.projectId}:${selected.id}`} client={literature.client} projectId={literature.projectId} itemId={selected.id} writable={scope.writable} onImported={literature.reload}/></LazyBoundary>:null}
+        {relationsOpen ? <LazyBoundary fallback={<p role="status" className="px-3 py-2 text-muted">载入学术关系</p>}>
           <ScholarlyRelationsPanel key={`${literature.projectId}:${selected.id}`} client={literature.client}
             projectId={literature.projectId} item={selected} writable={scope.writable}/>
-        </Suspense> : null}
-        {resourcesOpen ? <Suspense fallback={<p role="status" className="px-3 py-2 text-muted">载入科研资源</p>}>
+        </LazyBoundary> : null}
+        {resourcesOpen ? <LazyBoundary fallback={<p role="status" className="px-3 py-2 text-muted">载入科研资源</p>}>
           <ResearchResourcesPanel key={`${literature.projectId}:${selected.id}`} client={literature.client}
-            projectId={literature.projectId} writable={scope.writable} onLockChange={setResourcesLocked}/>
-        </Suspense> : null}
-        {huggingFaceOpen ? <Suspense fallback={<p role="status" className="px-3 py-2 text-muted">载入 Hugging Face</p>}>
+            projectId={literature.projectId} writable={scope.writable} onLockChange={onResourcesLock}/>
+        </LazyBoundary> : null}
+        {huggingFaceOpen ? <LazyBoundary fallback={<p role="status" className="px-3 py-2 text-muted">载入 Hugging Face</p>}>
           <HuggingFacePanel key={`${literature.projectId}:${selected.id}`} client={literature.client}
-            projectId={literature.projectId} writable={scope.writable} onLockChange={setHuggingFaceLocked}/>
-        </Suspense> : null}
-        {openReviewOpen ? <Suspense fallback={<p role="status" className="px-3 py-2 text-muted">载入 OpenReview</p>}>
+            projectId={literature.projectId} writable={scope.writable} onLockChange={onHuggingFaceLock}/>
+        </LazyBoundary> : null}
+        {openReviewOpen ? <LazyBoundary fallback={<p role="status" className="px-3 py-2 text-muted">载入 OpenReview</p>}>
           <OpenReviewPanel key={`${literature.projectId}:${selected.id}`} client={literature.client}
-            projectId={literature.projectId} writable={scope.writable} onLockChange={setOpenReviewLocked}/>
-        </Suspense> : null}
+            projectId={literature.projectId} writable={scope.writable} onLockChange={onOpenReviewLock}/>
+        </LazyBoundary> : null}
       </div> : null}
 
       {documents.length === 0 ? (
@@ -745,19 +772,21 @@ export function PaperReader({
             {selectedText?<><button type="button" disabled={!scope.writable} onClick={()=>addNote(`> ${selectedText.replace(/\n/g,'\n> ')}`)}>选区存为笔记</button>
               <button type="button" onClick={()=>translate([{label:'解析文本选区',text:selectedText}],'选区翻译')}>翻译选区</button></>:null}
           </div>
-          {translation && literature.projectId?<Suspense fallback={<p role="status">加载翻译…</p>}><ReadingTranslationPanel key={translation.id} client={literature.client} projectId={literature.projectId}
-            segments={translation.segments} label={translation.label} onNote={addNote} onClose={()=>setTranslation(null)}/></Suspense>:null}
+          {translation && literature.projectId?<LazyBoundary fallback={<p role="status">加载翻译…</p>}><ReadingTranslationPanel key={translation.id} client={literature.client} projectId={literature.projectId}
+            segments={translation.segments} label={translation.label} writable={scope.writable}
+            transitionGuardRef={translationGuardRef} onNote={addNote} onClose={()=>setTranslation(null)}/></LazyBoundary>:null}
           {activeDocument?.mediaType === 'application/pdf' ? (
             <div className="flex shrink-0 flex-wrap items-center gap-2 border-b-[0.5px] border-line px-2 py-1.5">
-              <button type="button" onClick={() => setComparePdf(compare => !compare)} aria-pressed={comparePdf}
+              <button type="button" onClick={() => requestReadingChange(literature.projectId ?? '', () => setComparePdf(compare => !compare))} aria-pressed={comparePdf}
                 data-testid="reader-compare-pdf" className="flex items-center gap-1 rounded-control border-[0.5px] border-line px-2 py-1 text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)]">
                 <Columns2 size={14}/>{comparePdf ? '仅解析文本' : '原文与解析'}
               </button>
               {comparePdf && selectedPdfBlock !== null && content !== null && content.blocks.find(block => block.id === selectedPdfBlock)!.locations.length > 1 ? (
                 <label className="flex items-center gap-1 text-[length:var(--font-meta-size)]">块位置
-                  <select aria-label="解析块位置" value={selectedPdfLocation} onChange={event => setPdfSelection({
-                    parseId: reader.parsed!.run.id, blockId: selectedPdfBlock, locationIndex: Number(event.target.value)
-                  })} className="rounded-control border-[0.5px] border-line bg-surface px-1">
+                  <select aria-label="解析块位置" value={selectedPdfLocation} onChange={event => {
+                    const next = {parseId: reader.parsed!.run.id, blockId: selectedPdfBlock, locationIndex: Number(event.target.value)};
+                    requestReadingChange(literature.projectId ?? '', () => setPdfSelection(next));
+                  }} className="rounded-control border-[0.5px] border-line bg-surface px-1">
                     {content.blocks.find(block => block.id === selectedPdfBlock)!.locations.map((location, index) => (
                       <option key={index} value={index}>第 {location.page} 页，位置 {index + 1}</option>
                     ))}
@@ -770,18 +799,22 @@ export function PaperReader({
           <div className="flex min-h-0 flex-1">
           {!reader.loading && (comparePdf || reader.parsed===null) && activeDocument?.mediaType === 'application/pdf' && literature.projectId !== null ? (
             <div className={`${reader.parsed===null?'w-full':'w-1/2'} min-h-0 min-w-0 border-r-[0.5px] border-line`}>
-              <Suspense fallback={<p role="status" className="p-2 text-muted">加载原文阅读器…</p>}>
+              <LazyBoundary fallback={<p role="status" className="p-2 text-muted">加载原文阅读器…</p>}>
                 <PaperPdfView client={literature.client} projectId={literature.projectId} document={activeDocument} parsed={reader.parsed}
                   onNote={addNote} onTranslate={translate}
                   canAnnotate={scope.writable && scope.projectId === literature.projectId}
                   selection={selectedPdfBlock === null ? null : {blockId: selectedPdfBlock, locationIndex: selectedPdfLocation}}
                   onSelectBlock={selection => {
-                    if(!reader.parsed)return;setPdfSelection({parseId: reader.parsed.run.id, ...selection});
-                    const target = document.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(selection.blockId)}"]`);
-                    target?.focus({preventScroll: true});
-                    target?.scrollIntoView({block: 'center'});
+                    if (!reader.parsed) return;
+                    const next = {parseId: reader.parsed.run.id, ...selection};
+                    requestReadingChange(literature.projectId ?? '', () => {
+                      setPdfSelection(next);
+                      const target = document.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(selection.blockId)}"]`);
+                      target?.focus({preventScroll: true});
+                      target?.scrollIntoView({block: 'center'});
+                    });
                   }}/>
-              </Suspense>
+              </LazyBoundary>
             </div>
           ) : null}
           <div hidden={activeDocument?.mediaType==='application/pdf' && reader.parsed===null} className="min-h-0 min-w-0 flex-1 overflow-y-auto px-3 py-3" data-testid="reader-content-area" onPointerUp={event=>{const selection=window.getSelection();if(selection && event.currentTarget.contains(selection.anchorNode) && event.currentTarget.contains(selection.focusNode))setSelectedText(selection.toString());}}>
@@ -848,7 +881,7 @@ export function PaperReader({
                     {block.kind === 'heading' ? (
                       <h3 className="text-ink">{block.text}</h3>
                     ) : block.kind === 'formula' ? (
-                      <Suspense fallback={<pre>{block.text}</pre>}><ReadingFormula text={block.text}/></Suspense>
+                      <LazyBoundary fallback={<pre>{block.text}</pre>}><ReadingFormula text={block.text}/></LazyBoundary>
                     ) : (
                       <p className="min-w-0 whitespace-pre-wrap break-words">
                         {block.kind === 'figure' ? <span className="text-subtle">[图] </span> : null}
@@ -856,10 +889,10 @@ export function PaperReader({
                       </p>
                     )}
                     {!comparingAsset || activeDocument === null || reader.parsed === null || literature.projectId === null ? null :
-                      <Suspense fallback={<p role="status" className="text-muted">加载解析图像…</p>}>
+                      <LazyBoundary fallback={<p role="status" className="text-muted">加载解析图像…</p>}>
                         <PaperBlockAsset client={literature.client} projectId={literature.projectId} document={activeDocument}
                           parsed={reader.parsed} block={content.blocks[index]}/>
-                      </Suspense>}
+                      </LazyBoundary>}
                     </div>
                     {block.isBlank ? <p role="note" className="mt-1 text-[length:var(--font-meta-size)] text-muted"
                       data-testid="reader-quality-empty">此块没有解析文本，请核对原文。</p> : null}
@@ -894,8 +927,8 @@ export function PaperReader({
             )}
           </div>
           {notesVisited && literature.projectId?<aside hidden={!notesOpen} className="reading-paper-notes min-h-0 w-[40%] min-w-64 max-w-md border-l-[0.5px] border-line" aria-label="论文关联笔记">
-            <Suspense fallback={<p role="status">加载笔记…</p>}><ReadingNotesPanel key={literature.projectId} client={literature.client} projectId={literature.projectId}
-              items={literature.items} itemId={selected.id} writable={scope.writable} seed={noteSeed} onReveal={()=>setNotesOpen(true)} onSeedConsumed={()=>setNoteSeed(null)}/></Suspense>
+            <LazyBoundary fallback={<p role="status">加载笔记…</p>}><ReadingNotesPanel key={literature.projectId} client={literature.client} projectId={literature.projectId}
+              items={literature.items} itemId={selected.id} writable={scope.writable} seed={noteSeed} onReveal={()=>setNotesOpen(true)} onSeedConsumed={()=>setNoteSeed(null)}/></LazyBoundary>
           </aside>:null}
           </div>
 

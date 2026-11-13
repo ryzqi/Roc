@@ -1,7 +1,7 @@
 import type { LogService } from './services/log-service';
 
 type ShellLike = {
-  openExternal: (url: string) => unknown;
+  openExternal: (url: string) => void | Promise<void>;
 };
 
 export type ExternalNavigationPolicyInput = {
@@ -37,6 +37,19 @@ export function handleExternalNavigation(
     return { action: 'deny' };
   }
 
-  void input.shell.openExternal(parsedUrl.toString());
+  const reportFailure = (error: unknown): void => {
+    input.logService.warn('Failed to open the external OS browser.', {
+      service: 'external-link-policy',
+      component: 'handleExternalNavigation',
+      metadata: {
+        error: error instanceof Error ? error.message : String(error)
+      }
+    });
+  };
+  try {
+    void Promise.resolve(input.shell.openExternal(parsedUrl.toString())).catch(reportFailure);
+  } catch (error) {
+    reportFailure(error);
+  }
   return { action: 'deny' };
 }

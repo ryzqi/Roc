@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as esbuild from 'esbuild';
 import electronPath from 'electron';
-import { _electron } from '@playwright/test';
+import { _electron, expect } from '@playwright/test';
 
 let directory, app, page;
 const errors = [];
@@ -121,6 +121,20 @@ test('successful selection reloads main history instead of inventing a current e
   await page.getByTestId('mgmt-python-environment-history').locator('summary').click();
   assert.equal(await page.getByTestId('mgmt-python-environment-history').locator('li').count(), 1);
   assert.ok((await page.evaluate(() => calls.filter(call => call.method === 'list').length)) >= 3);
+});
+test('native environment selection serializes same-event clicks and does not reload after unmount', async () => {
+  await page.evaluate(() => {reset(); window.held = deferred(); selectResponse = held.promise; mount();});
+  await ready();
+  await page.evaluate(() => {
+    const button = document.querySelector('[data-testid="mgmt-python-environment-select"]');
+    button.click(); button.click();
+  });
+  assert.equal(await page.evaluate(() => calls.filter(call => call.method === 'select').length), 1);
+  await expect(selectButton()).toBeDisabled();
+  const reads = await page.evaluate(() => calls.filter(call => call.method === 'list').length);
+  await page.evaluate(() => {clear(); held.resolve({ok: true, data: makeSelection()});});
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(await page.evaluate(() => calls.filter(call => call.method === 'list').length), reads);
 });
 
 test('project switch drops pending old reads and old selection results', async () => {

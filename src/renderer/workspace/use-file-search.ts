@@ -44,7 +44,8 @@ function useDebouncedQuery<Result>(
   emptyResult: Result
 ): QueryState<Result> {
   const debouncedQuery = useDebouncedValue(query, FILE_SEARCH_DEBOUNCE_MS);
-  const [state, setState] = useState<{ status: QueryState<Result>['status']; data: Result | null; error: string | null }>({
+  const [state, setState] = useState<{ key: string | null; status: QueryState<Result>['status']; data: Result | null; error: string | null }>({
+    key,
     status: 'idle',
     data: null,
     error: null
@@ -54,29 +55,37 @@ function useDebouncedQuery<Result>(
 
   useEffect(() => {
     if (key === null || trimmed.length === 0) {
-      setState({ status: 'idle', data: null, error: null });
+      setState({ key, status: 'idle', data: null, error: null });
       return;
     }
     let cancelled = false;
-    setState((current) => ({ status: 'loading', data: current.data, error: null }));
+    setState((current) => ({ key, status: 'loading', data: current.key === key ? current.data : null, error: null }));
     void (async () => {
       const result = await run(trimmed);
       if (cancelled) {
         return;
       }
       if (!result.ok) {
-        setState({ status: 'error', data: emptyResult, error: result.error.message });
+        setState({ key, status: 'error', data: emptyResult, error: result.error.message });
         return;
       }
-      setState({ status: 'ready', data: result.data, error: null });
-    })();
+      setState({ key, status: 'ready', data: result.data, error: null });
+    })().catch((cause: unknown) => {
+      if (cancelled) return;
+      setState({ key, status: 'error', data: emptyResult, error: cause instanceof Error ? cause.message : '搜索文件失败' });
+    });
     return () => {
       cancelled = true;
     };
   }, [key, trimmed, nonce, run, emptyResult]);
 
   const reload = useCallback(() => setNonce((value) => value + 1), []);
-  return useMemo(() => ({ ...state, reload }), [state, reload]);
+  return useMemo(() => ({
+    status: state.key === key ? state.status : key === null || trimmed.length === 0 ? 'idle' : 'loading',
+    data: state.key === key ? state.data : null,
+    error: state.key === key ? state.error : null,
+    reload
+  }), [state, key, trimmed, reload]);
 }
 
 /** Sidebar file tab: name-only search. */

@@ -1,4 +1,5 @@
-import {lazy, Suspense, useEffect, useRef, useState} from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
 import type {ResearchReviewProtocolInspection} from '../../shared/schemas/research-systematic-review';
 import type {ResearchReviewScreeningFrozenPhase, ResearchReviewScreeningPlanInspection, ResearchReviewScreeningFreezeRequest} from '../../shared/schemas/research-review-screening';
 import type {RocClient} from '../shared/roc-client';
@@ -7,9 +8,10 @@ import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '
 import {ReviewTitleDecision} from './ReviewTitleDecision';
 import {ReviewTitleArbitration} from './ReviewTitleArbitration';
 import {screeningStatuses} from './ReviewScreeningOutcome';
+import {ArtifactDraftDiscard, useArtifactDraft, useArtifactEditorGuard} from './artifact-editor-guard';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
-const ReviewFullTextBindings = lazy(async () => ({default: (await import('./ReviewFullTextBindings')).ReviewFullTextBindings}));
+const ReviewFullTextBindings = retryableLazy(async () => ({default: (await import('./ReviewFullTextBindings')).ReviewFullTextBindings}));
 export function ReviewTitleScreening({client, protocol, plan, writable, onPending}: {
   client: RocClient; protocol: ResearchReviewProtocolInspection; plan: ResearchReviewScreeningPlanInspection;
   writable: boolean; onPending: (pending: boolean) => void
@@ -25,6 +27,9 @@ export function ReviewTitleScreening({client, protocol, plan, writable, onPendin
     {label: '冻结标题摘要人工筛选'});
   const pending = recordPending || freeze.pending || fullPending;
   const busy = useRef(false), requests = useRef(new Map<string, string>());
+  const draft = useArtifactDraft('标题摘要整轮审核说明', reviewNote, busy);
+  const guard = useArtifactEditorGuard();
+  const locked = guard.locked();
   const [offset, setOffset] = useState(0);
   const focus = useRef<HTMLDivElement>(null);
   const selected = phase?.items.find(item => item.hit.id === hitId);
@@ -36,31 +41,31 @@ export function ReviewTitleScreening({client, protocol, plan, writable, onPendin
     phase.freeze === null && plan.currentProtocol;
   return <section className="flex min-w-0 flex-col gap-3 border-t-[0.5px] border-line pt-2" data-testid="artifact-review-title">
     <h2 className="font-medium">标题摘要筛选</h2>
-    <button type="button" className={`${button} self-start`} disabled={pending || phaseRead.status === 'loading'}
-      data-testid="artifact-review-title-refresh" onClick={phaseRead.reload}>重读标题摘要筛选</button>
+    <button type="button" className={`${button} self-start`} disabled={pending || locked || phaseRead.status === 'loading'}
+      data-testid="artifact-review-title-refresh" onClick={() => {if (!guard.locked()) phaseRead.reload();}}>重读标题摘要筛选</button>
     {phaseRead.status !== 'loading' ? null : <p role="status">正在读取实际人工筛选状态…</p>}
     {phaseRead.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{phaseRead.error}</p>}
     {phase === null || phaseRead.status === 'ready' ? null : <p className="text-muted">以下为上次成功读取的筛选回执。</p>}
     {phase === null ? null : <>
-      <p data-testid="artifact-review-title-counts">待筛选 {phase.counts.recordsToScreen} = 待审 {phase.counts.pending}
+      <p className="tabular-nums" data-testid="artifact-review-title-counts">待筛选 {phase.counts.recordsToScreen} = 待审 {phase.counts.pending}
         {' + '}无法判断 {phase.counts.uncertain}{' + '}冲突 {phase.counts.conflict}
         {' + '}纳入 {phase.counts.included}{' + '}排除 {phase.counts.excluded}</p>
       {phase.freeze === null ? null : <section className="flex flex-col gap-1" data-testid="artifact-review-title-frozen">
         <h3 className="font-medium">标题摘要筛选已冻结</h3>
         <p className="break-words">{phase.freeze.request.reviewNote}</p>
         <p className="text-muted break-all">审核人 {phase.freeze.actor.id} {phase.freeze.frozenAt}</p>
-        <button type="button" className={`${button} self-start`} disabled={pending}
-          data-testid="artifact-review-fulltext-inspect" onClick={() => setFullOpen(true)}>核查全文获取与资格筛选</button>
-        {!fullOpen ? null : <Suspense fallback={<p role="status">正在加载全文核查…</p>}>
+        <button type="button" className={`${button} self-start`} disabled={pending || locked}
+          data-testid="artifact-review-fulltext-inspect" onClick={() => {if (!guard.locked()) setFullOpen(true);}}>核查全文获取与资格筛选</button>
+        {!fullOpen ? null : <LazyBoundary fallback={<p role="status">正在加载全文核查…</p>}>
           <ReviewFullTextBindings key={`fulltext:${phase.freezeHash}`} client={client} protocol={protocol} projectId={projectId} corpusId={corpusId}
             writable={writable && phaseRead.status === 'ready' && !recordPending && !freeze.pending}
             onPending={value => {setFullPending(value); onPending(value);}} />
-        </Suspense>}
+        </LazyBoundary>}
       </section>}
       <ol start={offset + 1} className="flex flex-col gap-2">{phase.items.slice(offset, offset + 10).map((item, index) =>
         <li key={item.hit.id} className="flex flex-col gap-1" data-testid="artifact-review-title-item">
-          <button type="button" className={`${button} h-auto py-1 text-left break-words`} disabled={pending}
-            data-testid="artifact-review-title-select" aria-pressed={hitId === item.hit.id} onClick={() => setHitId(item.hit.id)}>
+          <button type="button" className={`${button} h-auto py-1 text-left break-words`} disabled={pending || locked}
+            data-testid="artifact-review-title-select" aria-pressed={hitId === item.hit.id} onClick={() => {if (!guard.locked()) setHitId(item.hit.id);}}>
             {offset + index + 1}. 原始命中 {item.hit.recordIndex + 1} {screeningStatuses[item.status]}
             {' '}审核 {item.decisions.length}/{plan.snapshot.request.titleAbstractReviewers.length} 建议 {item.suggestionCount}
           </button>
@@ -80,22 +85,27 @@ export function ReviewTitleScreening({client, protocol, plan, writable, onPendin
       {!editable ? null : <form className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2"
         data-testid="artifact-review-title-freeze-form" onSubmit={event => {
           event.preventDefault();
-          if (busy.current || !editable || pending || phase.counts.pending !== 0 || phase.counts.uncertain !== 0 || phase.counts.conflict !== 0) return;
+          if (busy.current || draft.isLocked() || !editable || pending || phase.counts.pending !== 0 || phase.counts.uncertain !== 0 || phase.counts.conflict !== 0) return;
           const body = {projectId, corpusId, phase: 'title_abstract' as const, expectedReviewHash: phase.reviewHash, reviewNote};
           const signature = JSON.stringify(body);
           let requestId = requests.current.get(signature);
           if (requestId === undefined) {requestId = crypto.randomUUID(); requests.current.set(signature, requestId);}
           busy.current = true; onPending(true);
-          void freeze.run({...body, requestId}).then(result => {busy.current = false; onPending(false); if (result.ok) phaseRead.reload();});
+          void freeze.run({...body, requestId}).then(result => {
+            busy.current = false; onPending(false); if (result.ok) {draft.saved(); phaseRead.reload();}
+          });
         }}>
         <label className="flex flex-col gap-1 text-muted">标题摘要整轮审核说明
-          <textarea required aria-label="标题摘要整轮审核说明" disabled={pending} maxLength={10000} rows={3}
+          <textarea required aria-label="标题摘要整轮审核说明" disabled={pending || draft.locked} maxLength={10000} rows={3}
             className={`${formInputClass} border-[0.5px] h-auto resize-y py-1`} value={reviewNote}
             onChange={event => {setReviewNote(event.target.value); freeze.reset();}} />
         </label>
         <button type="submit" className={`${formPrimaryButtonClass} border-[0.5px] self-start`}
-          disabled={pending || reviewNote.trim() === '' || phase.counts.pending !== 0 || phase.counts.uncertain !== 0 || phase.counts.conflict !== 0}
+          disabled={pending || draft.locked || reviewNote.trim() === '' || phase.counts.pending !== 0 || phase.counts.uncertain !== 0 || phase.counts.conflict !== 0}
           data-testid="artifact-review-title-freeze">确认并冻结整轮标题摘要筛选</button>
+        <ArtifactDraftDiscard dirty={draft.dirty} testId="artifact-review-title-discard" onDiscard={() => {
+          setReviewNote(''); freeze.reset(); draft.reset('');
+        }} />
       </form>}
       {freeze.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{freeze.error}</p>}
     </>}
@@ -113,6 +123,8 @@ function ReviewTitleRecord({client, protocol, phase, item, writable, onPending, 
   const [reviewerId, setReviewerId] = useState(''), [decisionPending, setDecisionPending] = useState(false);
   const [arbitrationPending, setArbitrationPending] = useState(false);
   const pending = decisionPending || arbitrationPending;
+  const guard = useArtifactEditorGuard();
+  const locked = guard.locked();
   const parent = item.decisions.find(decision => decision.snapshot.request.reviewerId === reviewerId) ?? null;
   return <section className="flex min-w-0 flex-col gap-3 border-t-[0.5px] border-line pt-2" data-testid="artifact-review-title-record">
     <h3 className="font-medium">原始标题摘要 {screeningStatuses[item.status]}</h3>
@@ -129,8 +141,8 @@ function ReviewTitleRecord({client, protocol, phase, item, writable, onPending, 
         </pre>
       </details>
       <label className="flex flex-col gap-1 text-muted">标题摘要审核人
-        <select aria-label="标题摘要审核人" className={`${formInputClass} border-[0.5px]`} disabled={pending} value={reviewerId}
-          onChange={event => setReviewerId(event.target.value)}>
+        <select aria-label="标题摘要审核人" className={`${formInputClass} border-[0.5px]`} disabled={pending || locked} value={reviewerId}
+          onChange={event => {if (!guard.locked()) setReviewerId(event.target.value);}}>
           <option value="">选择已声明审核人</option>
           {plan.snapshot.request.titleAbstractReviewers.map(reviewer => <option key={reviewer.id} value={reviewer.id}>
             {reviewer.name} {reviewer.id}</option>)}

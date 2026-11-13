@@ -40,6 +40,7 @@ let nativeMinimum;
 let currentTheme;
 let importedSkill = false;
 let controlsChecked = 0;
+const smokeApiKey = 'smoke-test-key';
 
 const VIEWPORTS = [
   { id: 'wide', width: 1440, height: 900 },
@@ -51,12 +52,16 @@ const VIEWPORTS = [
 ];
 
 async function capture(page, id) {
-  // Motion opacity continues under reduced motion. Capture its settled state.
-  await page.waitForFunction(() => [...document.querySelectorAll('[data-overlay-kind] [data-testid$="-panel"]')]
-    .every(panel => Number(getComputedStyle(panel).opacity) === 1));
+  // Ignore continuous activity indicators, but wait for entry and hover motion.
+  await page.waitForFunction(() =>
+    document.getAnimations().filter(animation => Number.isFinite(animation.effect?.getComputedTiming().iterations))
+      .every(animation => animation.playState !== 'running') &&
+    [...document.querySelectorAll('[data-overlay-kind] [data-testid$="-panel"]')]
+      .every(panel => Number(getComputedStyle(panel).opacity) === 1));
   const audit = await auditLayout(page, `${currentTheme}-${id}`);
   audit.clip = await page.evaluate(`(${clipSource})({viewport: true})`);
   audit.theme = currentTheme;
+  audit.reducedMotion = await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
   audit.viewportEmulated = true;
   audit.belowNativeMinimum = audit.viewport.width < nativeMinimum[0];
   audits.push(audit);
@@ -136,6 +141,16 @@ async function assertFormLayout(panel) {
   for (const control of await controls.all()) await assertControlVisible(control);
 }
 
+async function selectSettingsSection(page, section) {
+  const compact = page.getByTestId('settings-section-select');
+  const navigation = await compact.count() > 0 ? compact : page.getByTestId(`settings-section-${section}`);
+  await assertControlVisible(navigation);
+  if (await compact.count() > 0) await compact.selectOption(section);
+  else await navigation.click();
+  await page.waitForFunction(section =>
+    document.querySelector('[data-testid="settings-panel"]')?.id === `settings-panel-${section}`, section);
+}
+
 try {
   smokeProvider = await startSmokeProvider({});
   app = await electron.launch({
@@ -145,7 +160,7 @@ try {
       ...process.env,
       ROC_SMOKE: '1',
       ROC_DATA_ROOT: dataRoot,
-      ROC_SMOKE_API_KEY: 'smoke-test-key'
+      ROC_SMOKE_API_KEY: smokeApiKey
     }
   });
   const page = await app.firstWindow();
@@ -165,11 +180,40 @@ try {
   await page.waitForSelector('[data-testid="portal"]', { timeout: 15_000 });
 
   // 种一个项目：门户卡网格要有卡才能审查「门户」这一态。
-  const project = await page.evaluate(async (workspacePath) => {
+  const project = await page.evaluate(async ({ workspacePath, endpoint, apiKey }) => {
     const unwrap = (result) => {
       if (!result.ok) throw new Error(JSON.stringify(result.error));
       return result.data;
     };
+    // Exercise the populated model editor and its nested picker with isolated
+    // local data. A fresh profile has no provider, so it only renders empty state.
+    const providerId = 'layout-audit-provider';
+    const modelId = 'layout-audit-model';
+    const current = unwrap(await window.roc.settings.get());
+    unwrap(await window.roc.settings.save({
+      settings: current.settings,
+      providers: [...current.providers, {
+        id: providerId,
+        name: 'Layout Audit Provider',
+        type: 'openai_compatible',
+        endpoint,
+        credentialRef: `secret:${providerId}`,
+        enabled: true,
+        models: [{
+          id: modelId,
+          displayName: 'Layout Audit Model',
+          enabled: true,
+          supportsStreaming: true,
+          supportsToolCalls: true,
+          supportsImages: false
+        }]
+      }],
+      defaultModelId: `${providerId}:${modelId}`,
+      permissions: current.permissions
+    }));
+    unwrap(await window.roc.settings.setProviderSecret({
+      providerId, plaintext: apiKey
+    }));
     unwrap(await window.roc.workspace.select({ path: workspacePath }));
     // capability 是 `research.projects.create`，preload 方法名是 `research.createProject`。
     return unwrap(
@@ -179,7 +223,7 @@ try {
         workspacePath
       })
     );
-  }, workspaceRoot);
+  }, { workspacePath: workspaceRoot, endpoint: smokeProvider.endpoint, apiKey: smokeApiKey });
 
   // 门户列表在挂载时读一次，所以经 IPC 建完项目要重载页面才会出现新卡片。
   await page.reload();
@@ -389,14 +433,14 @@ try {
     await capture(page, `settings-${viewport.id}`);
     for (const section of ['models', 'default-model', 'rag', 'literature', 'sandbox', 'guardrail',
       'app', 'tasks', 'authorization', 'hooks', 'memory', 'pilot', 'backup']) {
-      await page.getByTestId(`settings-section-${section}`).click();
+      await selectSettingsSection(page, section);
       const panel = page.getByTestId('settings-panel');
       await assertFormLayout(panel);
       await capture(page, `settings-${section}-${viewport.id}`);
     }
     await page.getByTestId('settings-modal-scrim').click({position: {x: 4, y: 4}});
     assert.equal(await page.getByTestId('settings-modal-panel').count(), 1, 'form backdrop does not dismiss settings');
-    await page.getByTestId('settings-section-models').click();
+    await selectSettingsSection(page, 'models');
     const remoteModelOpener = page.getByTestId('settings-model-pull');
     await remoteModelOpener.click();
     await page.getByTestId('settings-provider-models-pull-panel').waitFor();
@@ -407,7 +451,7 @@ try {
     await page.getByTestId('settings-provider-models-pull-panel').waitFor({state: 'detached'});
     assert.equal(await remoteModelOpener.evaluate(button => button === document.activeElement), true,
       'nested model dialog returns focus to settings');
-    await page.getByTestId('settings-section-app').click();
+    await selectSettingsSection(page, 'app');
     await page.getByTestId('settings-open-at-login').click();
     await page.keyboard.press('Escape');
     await page.getByTestId('settings-discard-panel').waitFor();
@@ -418,13 +462,46 @@ try {
     await page.keyboard.press('Escape');
     await page.waitForSelector('[data-testid="settings-modal-panel"]', { state: 'detached', timeout: 15_000 });
   }
+  // Verify final positions under the ordinary system motion preference as well.
+  await page.emulateMedia({reducedMotion: 'no-preference'});
+  await browserWindow.evaluate(window => window.setBounds({...window.getBounds(), width: 1440, height: 900}));
+  await page.setViewportSize({width: 1440, height: 900});
+  await page.evaluate(() => window.dispatchEvent(new Event('resize')));
+  await navigate(page, `${projectQuery}&view=latex&assistant=1`);
+  await page.getByTestId('assistant-panel').waitFor();
+  await capture(page, 'normal-motion-default');
+  await page.getByTestId('assistant-model-settings').hover();
+  await capture(page, 'normal-motion-hover');
+  await page.getByTestId('assistant-model-settings').click();
+  await page.getByTestId('assistant-model-picker').waitFor();
+  await capture(page, 'normal-motion-expanded');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('assistant-model-picker').waitFor({state: 'detached'});
+  await navigate(page, `page=settings&project=${project.id}&view=latex&assistant=1`);
+  await page.getByTestId('settings-modal-panel').waitFor();
+  await capture(page, 'normal-motion-final-position');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
+  await page.emulateMedia({reducedMotion: 'reduce'});
   }
 } catch (error) {
   failure = error instanceof Error ? error.message : String(error);
   console.error(error);
   process.exitCode = 1;
 } finally {
+  // Persist the measured result before teardown: a failed check can leave a
+  // protected draft open in this disposable app.
+  writeLayoutAudit(artifactDir, {passed: failure === null, error: failure, nativeMinimum,
+    controlsChecked,
+    target: smokeTarget, reducedMotion: ['reduce', 'no-preference'],
+    narrowScope: 'emulated renderer viewport in disposable Electron window; native minimum and display correction remain enforced',
+    audits, viewports: VIEWPORTS});
   if (app !== undefined) {
+    if (failure !== null) {
+      await app.evaluate(({BrowserWindow}) => {
+        for (const window of BrowserWindow.getAllWindows()) window.destroy();
+      }).catch(error => console.error('[layout:teardown]', error.message));
+    }
     await app.close();
   }
   if (smokeProvider !== undefined) {
@@ -436,9 +513,3 @@ try {
     shell: false
   });
 }
-
-writeLayoutAudit(artifactDir, {passed: failure === null, error: failure, nativeMinimum,
-  controlsChecked,
-  target: smokeTarget, reducedMotion: 'reduce',
-  narrowScope: 'emulated renderer viewport in disposable Electron window; native minimum and display correction remain enforced',
-  audits, viewports: VIEWPORTS});

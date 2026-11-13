@@ -43,6 +43,7 @@ before(async () => {
     let generation=0;
     window.mount=input=>flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
       <Harness key={++generation} initial={input}/></LazyMotion></MotionConfig>));
+    window.unmount=()=>flushSync(()=>root.render(null));
   `, style: 'body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}'});
   writeFileSync(join(directory, 'main.cjs'), `const {app,BrowserWindow}=require('electron');
     app.setPath('userData',${JSON.stringify(join(directory, 'data'))});
@@ -74,7 +75,10 @@ before(async () => {
   await page.waitForFunction(() => typeof mount === 'function');
 });
 after(async () => {
-  try {await app?.close();} finally {
+  try {
+    if (page && !page.isClosed()) await page.evaluate(() => unmount());
+    await app?.close();
+  } finally {
     fixtures.forEach(f => f.close()); api?.dispose();
     if (directory) rmSync(directory, {recursive: true, force: true});
   }
@@ -161,8 +165,17 @@ test('human directness save locks the whole review, preserves exact reply-loss r
   for (const id of ['artifact-inspector-refresh', 'artifact-inspector-review', 'artifact-inspector-return-review',
     'artifact-citation-coverage-toggle', 'artifact-citation-coverage-refresh']) assert.equal(await page.getByTestId(id).isDisabled(), true);
   await page.getByTestId('artifact-inspector-close').click();
+  await page.getByTestId('artifact-draft-discard-panel').waitFor();
   await page.keyboard.press('Escape');
+  await page.getByTestId('artifact-draft-discard-panel').waitFor({state: 'detached'});
+  await page.keyboard.press('Escape');
+  await page.getByTestId('artifact-draft-discard-panel').waitFor();
+  await page.getByTestId('artifact-draft-discard-cancel').click();
+  await page.getByTestId('artifact-draft-discard-panel').waitFor({state: 'detached'});
   await page.getByTestId('artifact-inspector-scrim').click({position: {x: 5, y: 5}});
+  await page.getByTestId('artifact-draft-discard-panel').waitFor();
+  await page.getByTestId('artifact-draft-discard-cancel').click();
+  await page.getByTestId('artifact-draft-discard-panel').waitFor({state: 'detached'});
   assert.equal(await editor().count(), 1);
   await page.getByTestId('artifact-citation-review-save').click();
   assert.equal(await editor().getByRole('textbox', {name: '引用直接性审核理由'}).evaluate(element => element.validity.valueMissing), true);

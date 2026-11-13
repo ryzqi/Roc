@@ -6,6 +6,7 @@ import {useAsyncAction} from '../app/use-async-resource';
 import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
 import {emptyReviewProtocolBody, type ReviewProtocolDraft, type ReviewProtocolDrafts} from './review-protocol-draft';
 import {ReviewProtocolFields} from './ReviewProtocolFields';
+import {useArtifactEditorStatus} from './artifact-editor-guard';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 export function ReviewProtocolEditor({client, projectId, current, writable, drafts, onPending, onSaved}: {
@@ -21,6 +22,9 @@ export function ReviewProtocolEditor({client, projectId, current, writable, draf
   });
   const [validation, setValidation] = useState<string[] | null>(null);
   const busy = useRef(false);
+  const activity = useArtifactEditorStatus({
+    label: '综述协议', dirty: false, unloadDirty: drafts.has(draftKey), pending: () => busy.current
+  });
   const mounted = useRef(true);
   useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
   const save = useAsyncAction((input: ResearchReviewProtocolSaveRequest) => client.api.research.saveReviewProtocol(input), {label: '保存综述协议'});
@@ -28,6 +32,7 @@ export function ReviewProtocolEditor({client, projectId, current, writable, draf
   const pending = save.pending || freeze.pending;
   const editable = writable && (current === null || current.isLatest) && draft.editing;
   const update = (change: Partial<ReviewProtocolDraft>): void => {
+    if (busy.current || activity.isLocked()) return;
     const next = {...draft, ...change, saveRequestId: crypto.randomUUID(), freezeRequestId: crypto.randomUUID()};
     drafts.set(draftKey, next); setDraft(next); setValidation(null); save.reset(); freeze.reset();
   };
@@ -50,12 +55,12 @@ export function ReviewProtocolEditor({client, projectId, current, writable, draf
           <dt>冻结时间</dt><dd>{current.freeze.frozenAt}</dd><dt>审核说明</dt><dd className="break-words">{current.freeze.request.reviewNote}</dd></>}
       </dl>
       {!writable || !current.isLatest || draft.editing ? null : <button type="button" className={`${button} self-start`}
-        disabled={pending} data-testid="artifact-review-revise" onClick={() => update({editing: true})}>修订协议</button>}
+        disabled={pending || activity.locked} data-testid="artifact-review-revise" onClick={() => update({editing: true})}>修订协议</button>}
     </>}
     {!draft.editing || (!editable && current !== null) ? null : <p role="status" data-testid="artifact-review-draft-status">未保存草稿</p>}
     <form onSubmit={event => {
       event.preventDefault();
-      if (!editable || busy.current) return;
+      if (!editable || busy.current || activity.isLocked()) return;
       const input: ResearchReviewProtocolSaveRequest = {
         projectId, requestId: draft.saveRequestId, protocolId: current?.version.protocolId ?? null,
         expectedVersionId: current?.version.id ?? null, expectedVersionHash: current?.versionHash ?? null,
@@ -67,13 +72,13 @@ export function ReviewProtocolEditor({client, projectId, current, writable, draf
       }
       begin(); void save.run(parsed.data).then(finish);
     }} className="flex min-w-0 flex-col gap-3" data-testid="artifact-review-save-form">
-      <ReviewProtocolFields body={editable || current === null ? draft.body : current.version.body} disabled={!editable || pending}
+      <ReviewProtocolFields body={editable || current === null ? draft.body : current.version.body} disabled={!editable || pending || activity.locked}
         onChange={body => update({body})} />
       {!editable || current === null ? null : <label className="flex flex-col gap-1 text-muted">修订原因
-        <textarea aria-label="修订原因" required maxLength={10000} rows={3} disabled={pending} value={draft.deviationReason}
+        <textarea aria-label="修订原因" required maxLength={10000} rows={3} disabled={pending || activity.locked} value={draft.deviationReason}
           className={`${formInputClass} border-[0.5px] h-auto py-1 resize-y`} onChange={event => update({deviationReason: event.target.value})} />
       </label>}
-      {!editable ? null : <button type="submit" className={`${formPrimaryButtonClass} border-[0.5px] self-start`} disabled={pending}
+      {!editable ? null : <button type="submit" className={`${formPrimaryButtonClass} border-[0.5px] self-start`} disabled={pending || activity.locked}
         data-testid="artifact-review-save">{pending ? '正在保存…' : current === null ? '保存协议草稿' : '保存新版本'}</button>}
     </form>
     {validation === null ? null : <ul role="alert" className="text-[var(--st-warn)] break-words">{validation.map((issue, at) => <li key={at}>{issue}</li>)}</ul>}
@@ -81,16 +86,16 @@ export function ReviewProtocolEditor({client, projectId, current, writable, draf
     {current === null || !writable || !current.isLatest || current.freeze !== null || draft.editing ? null :
       <form className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2" data-testid="artifact-review-freeze-form" onSubmit={event => {
         event.preventDefault();
-        if (busy.current) return;
+        if (busy.current || activity.isLocked()) return;
         const input = {projectId, requestId: draft.freezeRequestId, versionId: current.version.id,
           expectedVersionHash: current.versionHash, reviewNote: draft.reviewNote};
         begin(); void freeze.run(input).then(finish);
       }}>
         <label className="flex flex-col gap-1 text-muted">人工审核说明
-          <textarea aria-label="人工审核说明" required maxLength={10000} disabled={pending} rows={3} className={`${formInputClass} border-[0.5px] h-auto py-1 resize-y`}
+          <textarea aria-label="人工审核说明" required maxLength={10000} disabled={pending || activity.locked} rows={3} className={`${formInputClass} border-[0.5px] h-auto py-1 resize-y`}
             value={draft.reviewNote} onChange={event => update({reviewNote: event.target.value})} />
         </label>
-        <button type="submit" disabled={pending || draft.reviewNote.trim() === ''} className={`${formPrimaryButtonClass} border-[0.5px] self-start`}
+        <button type="submit" disabled={pending || activity.locked || draft.reviewNote.trim() === ''} className={`${formPrimaryButtonClass} border-[0.5px] self-start`}
           data-testid="artifact-review-freeze">确认并冻结此版本</button>
       </form>}
     {freeze.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{freeze.error}</p>}

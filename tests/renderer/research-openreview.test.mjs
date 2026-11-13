@@ -24,17 +24,22 @@ before(async () => {
   api = await loadResearchTestApi(); directory = await mkdtemp(join(tmpdir(), 'roc-openreview-ui-')); await mkdir(artifacts, {recursive: true});
   await buildViteRenderer({directory, script: `
     import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {flushSync} from 'react-dom';
+    import {LazyMotion,MotionConfig,domAnimation} from 'motion/react';
+    import {requestReadingChange} from ${JSON.stringify(join(process.cwd(), 'src/renderer/literature/reading-interactions'))};
     import {PaperReader} from ${JSON.stringify(join(process.cwd(), 'src/renderer/literature/PaperReader'))};
     import {WorkspaceScopeProvider} from ${JSON.stringify(join(process.cwd(), 'src/renderer/app/workspace-scope'))};
     const client={api:{research:Object.fromEntries(${JSON.stringify(Object.keys(channels))}.map(method=>[method,input=>window.callMain(method,input)]))}};
     client.api.research.getModelsStatus=async()=>({ok:true,data:{ready:false,error:null,models:[],downloading:false,selectedPack:'compact'}});
     const root=createRoot(document.getElementById('root'));let generation=0;
+    window.unmountHarness=()=>flushSync(()=>root.unmount());
     function Harness({initial}){const [state,setState]=useState(initial);window.updateReader=state=>flushSync(()=>setState(state));
+      window.requestReaderChange=next=>requestReadingChange(state.projectId,()=>flushSync(()=>setState(next)));
       const store={client,...state,documents:[],action:{pending:false,error:null},assistant:{pending:false,error:null},parseInFlight:null};
       const scope={client,projectId:state.projectId,writable:state.writable,workspacePath:'/synthetic',workspaceStatus:'ready',workspaceError:null};
       return <WorkspaceScopeProvider value={scope}><PaperReader literature={store} openInFilesView={()=>{}} onClearFocus={()=>{}}/></WorkspaceScopeProvider>;
     }
-    window.mountReader=initial=>flushSync(()=>root.render(<Harness key={++generation} initial={initial}/>));
+    window.mountReader=initial=>flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
+      <Harness key={++generation} initial={initial}/></LazyMotion></MotionConfig>));
   `, style: 'html,body,#root{height:100%;margin:0}body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}'});
   await writeFile(join(directory, 'main.cjs'), `const {app,BrowserWindow}=require('electron');app.setPath('userData',${JSON.stringify(join(directory, 'data'))});
     app.whenReady().then(()=>new BrowserWindow({show:false,width:1000,height:900}).loadFile(${JSON.stringify(join(directory, 'index.html'))}));`);
@@ -54,7 +59,9 @@ before(async () => {
   });
 });
 after(async () => {
-  for (const hold of holds) hold.release(); await app?.close();
+  for (const hold of holds) hold.release();
+  if (page && !page.isClosed()) await page.evaluate(() => window.unmountHarness());
+  await app?.close();
   for (const f of scenes) await f.dispose(); api?.dispose(); await rm(directory, {recursive: true, force: true});
   assert.deepEqual(errors, []);
 });
@@ -74,7 +81,11 @@ async function scene() {
   f.transport = new api.LiteratureSearchService(async (url, init) => {
     f.network.push(url);
     if (f.waitNetwork) {f.networkStarted.release(); await new Promise((_resolve, reject) => {
-      init.signal.throwIfAborted(); init.signal.addEventListener('abort', () => reject(init.signal.reason), {once: true});
+      init.signal.throwIfAborted(); init.signal.addEventListener('abort', () => {
+        f.abortObserved?.release();
+        if (f.abortFinish) f.abortFinish.promise.then(() => reject(init.signal.reason));
+        else reject(init.signal.reason);
+      }, {once: true});
     });}
     if (f.errorStatus) return new Response('', {status: f.errorStatus});
     const endpoint = new URL(url);
@@ -118,6 +129,55 @@ async function selectSaved() {
   await page.getByTestId('reader-openreview-history').getByRole('button', {name: /公开来源已保存/}).first().click();
   await page.getByTestId('reader-openreview-observation').waitFor();
 }
+
+test('OpenReview capture synchronously freezes its reader toggle and submits one immutable request', async () => {
+  const f = await scene(); await mount(f); await open(); await page.getByLabel('Note 或论坛 ID', {exact: true}).fill('Paper1');
+  f.holdReply = 'captureOpenReview'; f.replyStarted = deferred(); f.replyHold = deferred();
+  await page.evaluate(() => {
+    const submit = [...document.querySelectorAll('button')].find(button => button.textContent === '查询并保存公开来源');
+    submit.click(); submit.click(); document.querySelector('[data-testid="reader-openreview-toggle"]').click();
+  });
+  await f.replyStarted.promise;
+  assert.equal(calls.filter(call => call.projectId === f.project.id && call.method === 'captureOpenReview').length, 1);
+  await expect(page.getByTestId('reader-openreview-panel')).toBeVisible();
+  await expect(page.getByLabel('Note 或论坛 ID', {exact: true})).toBeDisabled();
+  f.holdReply = null; f.replyHold.release(); await page.getByTestId('reader-openreview-entry').waitFor();
+});
+
+test('OpenReview cancel is independent and retains the request until the actual capture exits', async () => {
+  const f = await scene(); f.waitNetwork = true; f.networkStarted = deferred(); f.abortObserved = deferred(); f.abortFinish = deferred();
+  await mount(f); await open(); await page.getByLabel('Note 或论坛 ID', {exact: true}).fill('Paper1');
+  await page.getByRole('button', {name: '查询并保存公开来源', exact: true}).click(); await f.networkStarted.promise;
+  f.holdReply = 'cancelOpenReviewCapture'; f.replyStarted = deferred(); f.replyHold = deferred();
+  await page.evaluate(() => {
+    const cancel = [...document.querySelectorAll('button')].find(button => button.textContent === '取消 OpenReview 查询');
+    cancel.click(); cancel.click();
+  });
+  await f.replyStarted.promise;
+  assert.equal(calls.filter(call => call.projectId === f.project.id && call.method === 'cancelOpenReviewCapture').length, 1);
+  f.holdReply = null; f.replyHold.release();
+  await page.getByText('主进程已接收取消信号；等待查询结束。', {exact: true}).waitFor();
+  await expect(page.getByLabel('Note 或论坛 ID', {exact: true})).toBeDisabled();
+  f.abortFinish.release(); await page.getByRole('button', {name: '重试原 OpenReview 请求', exact: true}).waitFor();
+  assert.equal(f.observations.history({projectId: f.project.id, offset: 0, limit: 20}).total, 0);
+});
+
+test('OpenReview query drafts protect native unload and require confirmation before reading changes or explicit discard', async () => {
+  const f = await scene(); await mount(f); await open(); await page.getByLabel('Note 或论坛 ID', {exact: true}).fill('Paper1');
+  assert.equal(await page.evaluate(() => !window.dispatchEvent(new Event('beforeunload', {cancelable: true}))), true);
+  const next = state(f, {selected: {...f.item, id: 'another-source'}});
+  await page.evaluate(value => window.requestReaderChange(value), next);
+  await page.getByTestId('literature-editor-discard-cancel').click();
+  await expect(page.getByLabel('Note 或论坛 ID', {exact: true})).toHaveValue('Paper1');
+  await expect(page.getByTestId('literature-editor-discard')).toHaveCount(0);
+  await page.getByRole('button', {name: '放弃查询修改', exact: true}).click();
+  await page.getByTestId('literature-editor-discard-cancel').click();
+  await expect(page.getByLabel('Note 或论坛 ID', {exact: true})).toHaveValue('Paper1');
+  await expect(page.getByTestId('literature-editor-discard')).toHaveCount(0);
+  await page.evaluate(value => window.requestReaderChange(value), next);
+  await page.getByTestId('literature-editor-discard-confirm').click();
+  await expect(page.getByTestId('paper-reader')).toHaveAttribute('data-library-item', 'another-source');
+});
 
 test('lazy reader captures public Note wrappers, unknown venue/license and source dates with no workflow acceptance', async () => {
   const f = await scene(); const workflow = f.repository.getWorkflow(f.project.id);
@@ -205,6 +265,8 @@ test('lost capture reply locks original request and retries exactly once without
   await page.evaluate(value => window.updateReader(value), state(f, {writable: false}));
   assert.equal(await page.getByRole('button', {name: '重试原 OpenReview 请求', exact: true}).isEnabled(), false);
   await page.getByRole('button', {name: '放弃原 OpenReview 请求', exact: true}).click();
+  await page.getByTestId('literature-editor-discard-confirm').click();
+  await expect(page.getByTestId('literature-editor-discard')).toHaveCount(0);
   await expect(page.getByTestId('reader-openreview-toggle')).toBeEnabled();
 });
 
@@ -220,6 +282,8 @@ test('dirty query locks history/collapse until explicit discard, while history p
   assert.equal(calls.filter(call => call.projectId === f.project.id && call.method === 'captureOpenReview').length, 0);
   await page.evaluate(value => window.updateReader(value), state(f, {writable: false}));
   await page.getByRole('button', {name: '放弃查询修改', exact: true}).click();
+  await page.getByTestId('literature-editor-discard-confirm').click();
+  await expect(page.getByTestId('literature-editor-discard')).toHaveCount(0);
   await expect(page.getByTestId('reader-openreview-toggle')).toBeEnabled();
   await page.getByRole('button', {name: 'OpenReview 历史下一页', exact: true}).click();
   await expect(page.getByTestId('reader-openreview-history').getByRole('button', {name: /公开来源已保存/})).toHaveCount(1);
@@ -238,6 +302,8 @@ test('late history/capture replies cannot cross project scope and cancel uses ac
   await page.getByRole('button', {name: '放弃原 OpenReview 请求', exact: true}).waitFor();
   assert.equal(held.observations.history({projectId: held.project.id, offset: 0, limit: 20}).total, 0);
   await page.getByRole('button', {name: '放弃原 OpenReview 请求', exact: true}).click();
+  await page.getByTestId('literature-editor-discard-confirm').click();
+  await expect(page.getByTestId('literature-editor-discard')).toHaveCount(0);
   const delayed = await scene(); delayed.holdReply = 'captureOpenReview'; delayed.replyStarted = deferred(); delayed.replyHold = deferred();
   await mount(delayed); await open(); await page.getByRole('textbox', {name: 'Note 或论坛 ID', exact: true}).fill('Paper1');
   await page.getByRole('button', {name: '查询并保存公开来源', exact: true}).click(); await delayed.replyStarted.promise;

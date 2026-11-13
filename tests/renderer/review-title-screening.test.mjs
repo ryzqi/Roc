@@ -50,6 +50,7 @@ before(async () => {
     let generation=0;
     window.mount=(initialRequest,writable=true)=>flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
       <Harness key={++generation} initialRequest={initialRequest} writable={writable}/></LazyMotion></MotionConfig>));
+    window.unmount=()=>flushSync(()=>root.render(null));
   `, style: 'body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}main{padding:16px}'});
   writeFileSync(join(directory, 'main.cjs'), `const {app,BrowserWindow}=require('electron');
     app.setPath('userData',${JSON.stringify(join(directory, 'data'))});
@@ -77,6 +78,7 @@ before(async () => {
   await page.waitForFunction(() => typeof window.mount === 'function');
 });
 after(async () => {
+  if (page !== undefined && !page.isClosed()) await page.evaluate(()=>window.unmount?.());
   try {await app?.close();} finally {
     for (const f of fixtures) await f.dispose();
     api?.dispose(); if (directory) rmSync(directory, {recursive: true, force: true});
@@ -201,9 +203,15 @@ test('independent current decision defeats a stale null parent and a reread pres
   const before=f.changes();await tid('artifact-review-title-save').click();
   await tid('artifact-review-title-decision').getByRole('alert').filter({hasText:'状态已变化'}).waitFor();
   assert.equal(f.changes(),before);assert.equal(await tid('artifact-review-title-decision').getByLabel('筛选理由',{exact:true}).inputValue(),uncertain.reason);
+  assert.equal(await tid('artifact-review-title-refresh').isDisabled(),true);
+  await tid('artifact-review-title-decision-discard').click();await tid('artifact-draft-discard-cancel').click();
+  assert.equal(await tid('artifact-review-title-decision').getByLabel('筛选理由',{exact:true}).inputValue(),uncertain.reason);
+  assert.equal(f.changes(),before);
+  await tid('artifact-review-title-decision-discard').click();await tid('artifact-draft-discard-confirm').click();
   await tid('artifact-review-title-refresh').click();await tid('artifact-review-title-current').waitFor();
   assert.match(await tid('artifact-review-title-current').innerText(),/other-author/u);
   assert.equal(f.freezing.getPhase(f.phase).items[0].decisions[0].snapshotHash,actual.snapshotHash);
+  assert.equal(f.changes(),before);
 });
 
 test('held actual human commit keeps its own form visible and blocks reviewer, record, refresh and closing',async()=>{
@@ -218,13 +226,20 @@ test('held actual human commit keeps its own form visible and blocks reviewer, r
   f.deferMethod=null;f.release();await tid('artifact-review-title-current').waitFor();
 });
 
-test('phase read failure retains labeled old receipts and prohibits writes until a real successful reread',async()=>{
+test('phase reread requires explicit draft discard, retains labeled old receipts on failure and prohibits writes until recovery',async()=>{
   const f=await fixture();await mount(f);await select(f);await fill(uncertain);
+  const before=f.changes();
+  assert.equal(await tid('artifact-review-title-refresh').isDisabled(),true);
+  await tid('artifact-review-title-decision-discard').click();await tid('artifact-draft-discard-cancel').click();
+  assert.equal(await tid('artifact-review-title-decision').getByLabel('筛选理由',{exact:true}).inputValue(),uncertain.reason);
+  await tid('artifact-review-title-decision-discard').click();await tid('artifact-draft-discard-confirm').click();
   f.readFailure={code:'research_review_screening_snapshot_invalid',message:'Synthetic original phase receipt corrupt'};
   await tid('artifact-review-title-refresh').click();await page.getByRole('alert').filter({hasText:'Synthetic original phase'}).waitFor();
   assert.match(await tid('artifact-review-title').innerText(),/上次成功读取/u);assert.equal(await tid('artifact-review-title-form').count(),0);
+  assert.equal(f.changes(),before);
   f.readFailure=null;await tid('artifact-review-title-refresh').click();await tid('artifact-review-title-form').waitFor();
-  assert.equal(await tid('artifact-review-title-decision').getByLabel('筛选理由',{exact:true}).inputValue(),uncertain.reason);
+  assert.equal(await tid('artifact-review-title-decision').getByLabel('筛选理由',{exact:true}).inputValue(),'');
+  assert.equal(f.changes(),before);
 });
 
 test('frozen and archived title decisions stay readable with exact metadata and history but no mutable form at dark narrow size',async()=>{

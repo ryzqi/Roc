@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Archive, RefreshCw, X } from 'lucide-react';
 import type { ResearchNotebookPreview, ResearchNotebookReceipt } from '../../../shared/schemas/research-notebooks';
 import type { RocClient } from '../../shared/roc-client';
@@ -21,6 +21,12 @@ export default function NotebookPreview(props: Props): React.JSX.Element {
 function NotebookPreviewContent({ client, projectId, workspacePath, relativePath, writable, onClose }: Props): React.JSX.Element {
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<ResearchNotebookReceipt | null>(null);
+  const importing = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {mounted.current = false;};
+  }, []);
   const scope = projectId === null || workspacePath === null ? null : JSON.stringify([projectId, workspacePath, relativePath]);
   const current = useAsyncResource(scope, async () => {
     const [project, preview] = await Promise.all([
@@ -74,13 +80,19 @@ function NotebookPreviewContent({ client, projectId, workspacePath, relativePath
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b-[0.5px] border-line px-3 py-2">
         <span className="min-w-0 flex-1 truncate font-mono text-xs" title={relativePath}>{relativePath}</span>
         <button type="button" className={buttonClass} disabled={importNotebook.pending} aria-label="重新读取 Notebook"
-          onClick={() => { current.reload(); history.reload(); frozen.reload(); }}>
+          onClick={() => { if (!importing.current) {current.reload(); history.reload(); frozen.reload();} }}>
           <RefreshCw size={13} aria-hidden="true" />
         </button>
         <button type="button" className={buttonClass} data-testid="file-notebook-import" disabled={!canImport}
           onClick={async () => {
-            const result = await importNotebook.run(current.data!.preview.sha256);
-            if (result.ok) { setSelected(result.data.receipt); history.reload(); }
+            if (!canImport || importing.current) return;
+            importing.current = true;
+            try {
+              const result = await importNotebook.run(current.data!.preview.sha256);
+              if (mounted.current && result.ok) {setSelected(result.data.receipt); history.reload();}
+            } finally {
+              importing.current = false;
+            }
           }}>
           <Archive size={13} aria-hidden="true" />{importNotebook.pending ? '导入中…' : '保存导入快照'}
         </button>
@@ -92,22 +104,26 @@ function NotebookPreviewContent({ client, projectId, workspacePath, relativePath
         <p className="text-muted text-xs" data-testid="file-notebook-trust">静态预览，未执行代码。已有输出未受信，不作为实验结果。</p>
         {scope === null ? <p className="mt-2 text-muted">请先选择有工作目录的项目。</p> : null}
         <div className="my-3 flex flex-wrap items-center gap-2">
-          <button type="button" className={buttonClass} aria-pressed={selected === null} onClick={() => setSelected(null)}>当前文件</button>
+          <button type="button" className={buttonClass} aria-pressed={selected === null} disabled={importNotebook.pending}
+            onClick={() => {if (!importing.current) setSelected(null);}}>当前文件</button>
           <details className="min-w-0 max-w-full" data-testid="file-notebook-history">
             <summary className="cursor-pointer text-xs text-muted">项目导入记录{history.data === null ? '' : `（${history.data.total}）`}</summary>
             <div className="mt-2 space-y-1">
+              {history.status === 'loading' ? <p role="status" className="text-muted text-xs">读取导入记录中…</p> : null}
               {history.data?.items.map(receipt => <button type="button" key={receipt.snapshot.id} className={`${buttonClass} flex w-full text-left`}
-                aria-pressed={selected?.snapshot.id === receipt.snapshot.id} data-testid="file-notebook-history-item"
-                onClick={() => setSelected(receipt)}>
+                aria-pressed={selected?.snapshot.id === receipt.snapshot.id} data-testid="file-notebook-history-item" disabled={importNotebook.pending}
+                onClick={() => {if (!importing.current) setSelected(receipt);}}>
                 <span className="min-w-0 break-all">{receipt.snapshot.request.path}</span>
                 <span className="shrink-0 text-xs">{recordedDate.format(new Date(receipt.snapshot.recordedAt))}</span>
                 <span className="shrink-0 font-mono text-xs">{receipt.snapshot.sha256.slice(0, 8)}</span>
               </button>)}
               {history.data?.total === 0 ? <p className="text-muted text-xs">暂无导入记录。</p> : null}
               {history.data !== null && history.data.total > pageSize ? <div className="flex items-center gap-2">
-                <button type="button" className={buttonClass} disabled={offset === 0} onClick={() => setOffset(offset - pageSize)}>上一页</button>
+                <button type="button" className={buttonClass} disabled={offset === 0 || importNotebook.pending || history.status === 'loading'}
+                  onClick={() => {if (!importing.current) setOffset(offset - pageSize);}}>上一页</button>
                 <span className="text-xs tabular-nums">{offset + 1}–{Math.min(offset + pageSize, history.data.total)}</span>
-                <button type="button" className={buttonClass} disabled={offset + pageSize >= history.data.total} onClick={() => setOffset(offset + pageSize)}>下一页</button>
+                <button type="button" className={buttonClass} disabled={offset + pageSize >= history.data.total || importNotebook.pending || history.status === 'loading'}
+                  onClick={() => {if (!importing.current) setOffset(offset + pageSize);}}>下一页</button>
               </div> : null}
             </div>
           </details>

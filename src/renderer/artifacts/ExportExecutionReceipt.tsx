@@ -1,4 +1,5 @@
-import {lazy, Suspense, useEffect, useRef, useState} from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
 import type {ResearchExportExecution} from '../../shared/schemas/research-exports';
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
@@ -7,7 +8,7 @@ import {ExportPublicationReceipt} from './ExportPublicationReceipt';
 
 export const exportStatusLabels = {preparing: '正在生成', ready: '已生成', failed: '失败', cancelled: '已取消', interrupted: '已中断'} as const;
 const approvals = {unpublished: '尚未登记科研工件', draft: '等待科研审核', approved: '科研审核已批准', superseded: '已被替代'} as const;
-const Zenodo = lazy(async () => ({default: (await import('./ZenodoPanel')).ZenodoPanel}));
+const Zenodo = retryableLazy(async () => ({default: (await import('./ZenodoPanel')).ZenodoPanel}));
 export function ExportExecutionReceipt({client, record, writable, onPending, onDirty}: {
   client: RocClient; record: ResearchExportExecution; writable: boolean; onPending: (value: boolean) => void;
   onDirty: (value: boolean) => void
@@ -56,12 +57,12 @@ export function ExportExecutionReceipt({client, record, writable, onPending, onD
       <button type="button" className={`${formSecondaryButtonClass} border-[0.5px] self-start`}
         aria-expanded={zenodoOpen} disabled={zenodoLocked} data-testid="artifact-zenodo-toggle"
         onClick={() => setZenodoOpen(value => !value)}>{zenodoOpen ? '收起 Zenodo 发布' : '审查 Zenodo 发布'}</button>
-      {!zenodoOpen ? null : <Suspense fallback={<p role="status">正在加载 Zenodo 发布审查…</p>}>
+      {!zenodoOpen ? null : <LazyBoundary fallback={<p role="status">正在加载 Zenodo 发布审查…</p>}>
         <Zenodo key={`${current.projectId}:${current.id}`} client={client} record={current}
           writable={writable && current.approval === 'approved'}
           onDirty={value => {setZenodoDirty(value); onDirty(value);}}
           onPending={value => {setZenodoPending(value); onPending(value);}}/>
-      </Suspense>}
+      </LazyBoundary>}
     </>}
   </section>;
 }

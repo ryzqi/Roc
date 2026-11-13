@@ -1,13 +1,15 @@
-import { Suspense, lazy, useId, useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
+import { LazyBoundary, retryableLazy } from '../../shell/LazyBoundary';
 import { AlertTriangle, Bot, Check, FileText, History, Info, Pencil, RefreshCw, Search } from 'lucide-react';
 import { formatBeijingDateTime } from '../../shared/format';
 import { FormNote, KeyValueRow, formInputClass, formSecondaryButtonClass, formTextAreaClass } from '../../shared/form-ui';
 import type { ManagementScope } from '../management-scope';
 import { autoMemoryActionLabels, autoMemoryTypeLabels, capacityLabel, codePointCount, buildMemoryAssistPrompt, slotUnavailableReason, snapshotIncludesSlot } from '../memory-model';
 import { useMemorySnapshot, useSessionSearch, type MemoryFilesStore } from '../use-memory';
+import { useImeGuard } from '../../shared/hooks/use-ime-guard';
 import './memory-section.css';
 
-const MarkdownView = lazy(async () => ({ default: (await import('../../assistant/blocks/markdown-view')).MarkdownView }));
+const MarkdownView = retryableLazy(async () => ({ default: (await import('../../assistant/blocks/markdown-view')).MarkdownView }));
 type MemoryTool = 'audit' | 'preview' | 'search' | 'details';
 
 /** Reading and editing share the same five backend slots. Only category identity is persisted. */
@@ -18,6 +20,7 @@ export function MemorySection({ scope, store: files }: { scope: ManagementScope;
   const [previewRevision, setPreviewRevision] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const editButtonRef = useRef<HTMLButtonElement>(null);
+  const ime = useImeGuard();
   const selectedKey = `${files.selected.scope}:${files.selected.kind}`;
   const editing = editingKey === selectedKey;
   const selectedMeta = files.rows.find(({ slot }) => slot.scope === files.selected.scope && slot.kind === files.selected.kind)?.meta ?? null;
@@ -75,7 +78,7 @@ export function MemorySection({ scope, store: files }: { scope: ManagementScope;
         <section className="memory-document" aria-labelledby={`${instanceId}-title`} data-testid="mgmt-memory-document">
           <header className="memory-document-heading">
             <div><h3 id={`${instanceId}-title`}>{files.selected.label}</h3><p>{files.selected.purpose}</p><span className="memory-scope">{files.selected.scope === 'workspace' ? `仅适用于 ${memory.workspaceLabel ?? '当前项目'}` : '适用于所有项目'}</span></div>
-            <button ref={editButtonRef} type="button" data-testid="mgmt-memory-edit" hidden={editing} disabled={!writable || files.contentLoading || files.contentError !== null} onClick={() => setEditingKey(selectedKey)} className={formSecondaryButtonClass}>
+            <button ref={editButtonRef} type="button" data-testid="mgmt-memory-edit" hidden={editing} disabled={!writable || files.contentLoading || files.contentError !== null || files.save.pending} onClick={() => setEditingKey(selectedKey)} className={formSecondaryButtonClass}>
               <Pencil size={12} aria-hidden="true" />{dirty ? '继续编辑' : '编辑'}
             </button>
           </header>
@@ -87,7 +90,8 @@ export function MemorySection({ scope, store: files }: { scope: ManagementScope;
           </FormNote></div>}
           {files.save.error === null ? null : <FormNote tone="warn" testId="mgmt-memory-save-error">{files.save.error}</FormNote>}
           {files.contentLoading ? <FormNote>正在读取内容…</FormNote> : files.contentError !== null ? null : editing ? (
-            <div className="memory-editor" data-testid="mgmt-memory-editor" onKeyDown={(event) => {
+            <div className="memory-editor" data-testid="mgmt-memory-editor" onCompositionStart={ime.onCompositionStart} onCompositionEnd={ime.onCompositionEnd} onKeyDown={(event) => {
+              if (ime.shouldIgnoreKeyDown(event)) return;
               if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && dirty && !files.save.pending) { event.preventDefault(); save(); }
               if (event.key === 'Escape' && !dirty && !files.save.pending) { event.stopPropagation(); finishEditing(); }
             }}>
@@ -105,7 +109,7 @@ export function MemorySection({ scope, store: files }: { scope: ManagementScope;
             <>
               {dirty ? <div className="memory-unsaved-note" role="status"><AlertTriangle size={12} aria-hidden="true" />此分类有未保存的修改，正在展示已保存的内容。<button type="button" onClick={() => setEditingKey(selectedKey)}>继续编辑</button></div> : null}
               {(files.content ?? '').trim().length === 0 ? <div className="memory-empty" data-testid="mgmt-memory-empty"><FileText size={25} strokeWidth={1.25} aria-hidden="true" /><h4>还没有{files.selected.label}</h4><p>以后保留在这里的信息会显示在此处。</p>{writable ? <button type="button" data-testid="mgmt-memory-add" onClick={() => setEditingKey(selectedKey)} className={formSecondaryButtonClass}>添加内容</button> : null}</div> :
-                <div className="memory-reading" data-testid="mgmt-memory-reading"><Suspense fallback={<FormNote>正在排版记忆…</FormNote>}><MarkdownView text={files.content ?? ''} /></Suspense></div>}
+                <div className="memory-reading" data-testid="mgmt-memory-reading"><LazyBoundary fallback={<FormNote>正在排版记忆…</FormNote>}><MarkdownView text={files.content ?? ''} /></LazyBoundary></div>}
               {selectedMeta?.updatedAt == null ? null : <p className="memory-updated">最近更新于 {formatBeijingDateTime(selectedMeta.updatedAt)}</p>}
             </>
           )}

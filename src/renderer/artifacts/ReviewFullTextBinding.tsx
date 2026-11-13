@@ -3,6 +3,7 @@ import type {ResearchReviewFullTextBindingInspection, ResearchReviewFullTextBind
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
+import {ArtifactDraftDiscard, useArtifactDraft} from './artifact-editor-guard';
 
 const input = `${formInputClass} border-[0.5px]`, button = `${formSecondaryButtonClass} border-[0.5px]`;
 type Selection = Extract<ResearchReviewFullTextBindingSave['outcome'], {kind: 'retrieved'}>['selection'];
@@ -46,6 +47,7 @@ export function ReviewFullTextBinding({client, projectId, corpusId, hitId, title
     parseMode === 'current' && preview.status === 'ready' ? {documentId: document.id, sourceHash: document.sourceHash,
       parseId: preview.data!.parseId, parseHash: preview.data!.parseHash} : null;
   const busy = useRef(false), requests = useRef(new Map<string, string>());
+  const draft = useArtifactDraft('全文获取与来源绑定', {kind, reason, relationNote, revisionReason, libraryId, documentId, parseMode}, busy);
   return <section className="flex min-w-0 flex-col gap-3 border-t-[0.5px] border-line pt-2" data-testid="artifact-review-fulltext-binding">
     <h3 className="font-medium">全文获取与原始命中关联</h3>
     {raw.status !== 'loading' ? null : <p role="status">正在读取准确原始命中…</p>}
@@ -69,11 +71,11 @@ export function ReviewFullTextBinding({client, projectId, corpusId, hitId, title
         <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(parent.snapshot, null, 2)}</pre>
       </details>
       {!writable || editing ? null : <button type="button" className={`${button} self-start`}
-        data-testid="artifact-review-fulltext-binding-revise" onClick={() => setEditing(true)}>修订全文获取与来源</button>}
+        disabled={draft.locked} data-testid="artifact-review-fulltext-binding-revise" onClick={() => {if (!draft.isLocked()) setEditing(true);}}>修订全文获取与来源</button>}
     </section>}
     {!writable || !editing ? null : <form className="flex flex-col gap-2" data-testid="artifact-review-fulltext-binding-form" onSubmit={event => {
       event.preventDefault();
-      if (busy.current || !writable || raw.status !== 'ready' || kind === '' || (kind === 'retrieved' && selection === null)) return;
+      if (busy.current || draft.isLocked() || !writable || raw.status !== 'ready' || kind === '' || (kind === 'retrieved' && selection === null)) return;
       const outcome: ResearchReviewFullTextBindingSave['outcome'] = kind === 'not_retrieved' ?
         {kind, reason} : {kind, selection: selection!, relationNote};
       const body = {projectId, corpusId, hitId, expectedTitleFreezeHash: titleFreezeHash, outcome,
@@ -83,9 +85,11 @@ export function ReviewFullTextBinding({client, projectId, corpusId, hitId, title
       let requestId = requests.current.get(signature);
       if (requestId === undefined) {requestId = crypto.randomUUID(); requests.current.set(signature, requestId);}
       busy.current = true; onPending(true);
-      void save.run({...body, requestId}).then(result => {busy.current = false; onPending(false); if (result.ok) onSaved();});
+      void save.run({...body, requestId}).then(result => {
+        busy.current = false; onPending(false); if (result.ok) {draft.saved(); onSaved();}
+      });
     }}>
-      <fieldset disabled={save.pending || raw.status !== 'ready'} className="flex flex-col gap-2">
+      <fieldset disabled={save.pending || draft.locked || raw.status !== 'ready'} className="flex flex-col gap-2">
         <label className="flex flex-col gap-1 text-muted">全文获取状态
           <select required aria-label="全文获取状态" className={input} value={kind}
             onChange={event => {setKind(event.target.value as typeof kind); save.reset();}}>
@@ -140,6 +144,13 @@ export function ReviewFullTextBinding({client, projectId, corpusId, hitId, title
           disabled={kind === '' || (kind === 'retrieved' && selection === null)}
           data-testid="artifact-review-fulltext-binding-save">保存人工全文获取与来源绑定</button>
       </fieldset>
+      <ArtifactDraftDiscard dirty={draft.dirty} testId="artifact-review-fulltext-binding-discard" onDiscard={() => {
+        const outcome = parent?.snapshot.request.outcome;
+        const next = {kind: outcome?.kind ?? '' as typeof kind, reason: outcome?.kind === 'not_retrieved' ? outcome.reason : '',
+          relationNote: outcome?.kind === 'retrieved' ? outcome.relationNote : '', revisionReason: '', libraryId: '', documentId: '', parseMode: '' as typeof parseMode};
+        setKind(next.kind); setReason(next.reason); setRelationNote(next.relationNote); setRevisionReason('');
+        setLibraryId(''); setDocumentId(''); setParseMode(''); setEditing(parent === null); save.reset(); draft.reset(next);
+      }} />
     </form>}
     {save.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{save.error}</p>}
     {history.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{history.error}</p>}

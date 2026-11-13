@@ -1,11 +1,12 @@
 import { useVisiblePolling } from '../shared/view-activity';
 import {KnowledgeJobs} from './KnowledgeJobs';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertCircle, Bookmark, Check, ClipboardCopy, DatabaseZap, ExternalLink, FlaskConical, Loader2, Play, RefreshCw, Search, Settings2, Square } from 'lucide-react';
 import type { ResearchIndexedFile, ResearchIndexJob, ResearchIndexStatus, ResearchKnowledgeSearchHit, ResearchKnowledgeSearchResult } from '../../shared/types';
-import { useAsyncResource } from '../app/use-async-resource';
+import { useAsyncAction, useAsyncResource } from '../app/use-async-resource';
 import { useWorkspaceScope } from '../app/workspace-scope';
 import { useCopyFeedback } from '../shared/hooks/use-copy-feedback';
+import { useImeGuard } from '../shared/hooks/use-ime-guard';
 import { useSettingsRevision } from '../shared/settings-events';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
@@ -77,18 +78,37 @@ const JOB_STATUS_LABELS: Readonly<Record<ResearchIndexJob['status'], string>> = 
 };
 
 const POLL_INTERVAL_MS = 1_500;
+type IndexIntent =
+  | { action: 'scan' | 'rebuild' | 'pause' | 'resume' }
+  | { action: 'retry'; fileId: string | null };
 
-export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagStudioProps): React.JSX.Element {
+export function RagStudio(props: RagStudioProps): React.JSX.Element {
+  return <RagStudioContent key={props.literature.projectId} {...props} />;
+}
+
+function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagStudioProps): React.JSX.Element {
   const client = literature.client;
   const projectId = literature.projectId;
   const [query, setQuery] = useState('');
   const [rerank,setRerank]=useState<'none'|'lexical-v1'>('none');
   const [result, setResult] = useState<ResearchKnowledgeSearchResult | null>(null);
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
+  const searchAction = useAsyncAction(
+    (request: Parameters<typeof searchKnowledge>[1]) => searchKnowledge(client, request),
+    { label: '检索知识库' }
+  );
+  const controlAction = useAsyncAction(
+    (request: Parameters<typeof controlIndex>[1]) => controlIndex(client, request),
+    { label: '操作索引' }
+  );
+  const searching = searchAction.pending;
+  const searchError = searchAction.error;
+  const searchInFlight = useRef(false);
+  const controlInFlight = useRef(false);
+  const mounted = useRef(true);
+  const ime = useImeGuard();
   const [jumpError, setJumpError] = useState<string | null>(null);
   const [fileQuery, setFileQuery] = useState('');
-  const [actionPending, setActionPending] = useState(false);
+  const actionPending = controlAction.pending;
   const [note, setNote] = useState<string | null>(null);
   /**
    * Per-hit copy feedback.
@@ -101,6 +121,11 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
   const [copiedChunkId, setCopiedChunkId] = useState<string | null>(null);
   const hitCopy = useCopyFeedback();
   const scope = useWorkspaceScope();
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   /**
    * The index configuration is written by the settings centre, and `settings.*`
@@ -147,55 +172,42 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
   const counts = status?.counts ?? null;
   const revision = status?.settings.revision ?? null;
 
-  const runControl = async (action: 'scan' | 'rebuild' | 'pause' | 'resume'): Promise<void> => {
-    if (projectId === null || revision === null) {
+  const runControl = async (intent: IndexIntent): Promise<void> => {
+    if (controlInFlight.current || projectId === null || revision === null) {
       return;
     }
-    setActionPending(true);
-    try {
-      const result = await controlIndex(client, { projectId, action, expectedRevision: revision });
-      if (!result.ok) {
-        // The message is the backend's own (including revision conflicts): showing
-        // it verbatim beats inventing a retry that would overwrite someone else.
-        literature.clearActionError();
-        setSearchError(result.error.message);
-        return;
-      }
-      reloadStatus();
-      reloadFiles();
-      reloadJobs();
-    } finally {
-      setActionPending(false);
+    controlInFlight.current = true;
+    const result = await controlAction.run({
+      projectId, ...intent, expectedRevision: revision
+    });
+    controlInFlight.current = false;
+    if (!mounted.current) return;
+    if (!result.ok) {
+      literature.clearActionError();
+      return;
     }
+    reloadStatus();
+    reloadFiles();
+    reloadJobs();
   };
 
   const runSearch = async (): Promise<void> => {
     const trimmed = query.trim();
-    if (trimmed.length === 0) {
+    if (searchInFlight.current || trimmed.length === 0 || projectId === null) {
       return;
     }
-    setSearching(true);
-    setSearchError(null);
+    searchInFlight.current = true;
     setNote(null);
-    try {
-      const result = await searchKnowledge(client, {
-        query: trimmed,
-        projectId,
-        limit: 20, rerank,
-        // The configured embedding config, not a hard-coded null: without it the
-        // backend can only return keyword hits, and the panel is displaying the
-        // effective config right below the box.
-        embeddingConfigId: status?.settings.embeddingConfigId ?? null
-      });
-      if (!result.ok) {
-        setResult(null);
-        setSearchError(result.error.message);
-        return;
-      }
-      setResult(result.data);
-    } finally {
-      setSearching(false);
-    }
+    const result = await searchAction.run({
+      query: trimmed,
+      projectId,
+      limit: 20, rerank,
+      // Retrieval uses the effective embedding configuration shown by this view.
+      embeddingConfigId: status?.settings.embeddingConfigId ?? null
+    });
+    searchInFlight.current = false;
+    if (!mounted.current) return;
+    setResult(result.ok ? result.data : null);
   };
 
   /**
@@ -310,7 +322,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
           <button
             type="button"
             disabled={revision === null || actionPending}
-            onClick={() => void runControl('scan')}
+            onClick={() => void runControl({ action: 'scan' })}
             data-testid="rag-scan"
             className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
           >
@@ -320,7 +332,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
           <button
             type="button"
             disabled={revision === null || actionPending}
-            onClick={() => void runControl('rebuild')}
+            onClick={() => void runControl({ action: 'rebuild' })}
             data-testid="rag-rebuild"
             className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
           >
@@ -330,7 +342,7 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
           <button
             type="button"
             disabled={revision === null || actionPending}
-            onClick={() => void runControl(status?.phase === 'paused' ? 'resume' : 'pause')}
+            onClick={() => void runControl({ action: status?.phase === 'paused' ? 'resume' : 'pause' })}
             data-testid="rag-toggle-pause"
             className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-[var(--st-warn)] text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
           >
@@ -346,13 +358,19 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
         </div>
       ) : null}
 
+      {controlAction.error === null ? null : (
+        <div className="shrink-0 px-3 py-2">
+          <ErrorBar error={{ level: 'page', message: controlAction.error }} onDismiss={controlAction.reset} />
+        </div>
+      )}
+
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         <KnowledgeJobs client={client} projectId={projectId} />
         <section className="mb-4">
           <h3 className="mb-1.5 text-muted text-[length:var(--font-meta-size)]">检索（关键词与语义匹配）</h3>
           <label className="mb-2 flex items-center gap-2 text-xs text-subtle">排序方式
-            <select aria-label="排序方式" value={rerank} onChange={event=>setRerank(event.target.value as 'none'|'lexical-v1')}
-              className="rounded-control border border-line bg-surface px-2 py-1 text-ink">
+            <select aria-label="排序方式" value={rerank} disabled={searching} onChange={event=>setRerank(event.target.value as 'none'|'lexical-v1')}
+              className="min-w-0 rounded-control border-[0.5px] border-line bg-surface px-2 py-1 text-ink disabled:opacity-40">
               <option value="none">关键词与语义融合</option><option value="lexical-v1">融合后按查询词覆盖重排（实验）</option>
             </select>
           </label>
@@ -363,7 +381,10 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                onCompositionStart={ime.onCompositionStart}
+                onCompositionEnd={ime.onCompositionEnd}
                 onKeyDown={(event) => {
+                  if (ime.shouldIgnoreKeyDown(event)) return;
                   if (event.key === 'Enter') {
                     event.preventDefault();
                     void runSearch();
@@ -508,31 +529,33 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
               当前工作目录还没有已索引文件。选择「增量扫描」可添加新文件。
             </p>
           ) : (
-            <table className="w-full border-collapse text-[length:var(--font-meta-size)]" data-testid="rag-files">
-              <thead>
-                <tr className="text-left text-subtle text-[length:var(--font-micro-size)]">
-                  <th className="py-0.5 font-normal">路径</th>
-                  <th className="py-0.5 font-normal">类型</th>
-                  <th className="py-0.5 font-normal">状态</th>
-                  <th className="py-0.5 font-normal">文本</th>
-                </tr>
-              </thead>
-              <tbody>
-                {indexedFiles.map((file) => (
-                  <tr key={file.id} className="border-t-[0.5px] border-line-soft" data-testid={`rag-file-${file.id}`}>
-                    <td className="max-w-[24rem] truncate py-0.5 font-mono text-ink">{file.path}</td>
-                    <td className="py-0.5 text-muted">{file.kind}</td>
-                    <td className="py-0.5" data-file-status={file.status}>
-                      <span className={file.status === 'failed' ? 'text-[var(--st-bad)]' : file.status === 'ready' ? 'text-[var(--st-ok)]' : 'text-muted'}>
-                        {FILE_STATUS_LABELS[file.status]}
-                      </span>
-                      {file.error === null ? null : <span className="ml-1 text-subtle">（{file.error}）</span>}
-                    </td>
-                    <td className="py-0.5 text-muted">{file.textIndexed ? '已抽文本' : '未抽文本'}</td>
+            <div role="region" aria-label="已索引文件" tabIndex={0} className="max-w-full overflow-x-auto" data-testid="rag-files-scroll">
+              <table className="w-full min-w-[36rem] table-fixed border-collapse text-[length:var(--font-meta-size)]" data-testid="rag-files">
+                <thead>
+                  <tr className="text-left text-subtle text-[length:var(--font-micro-size)]">
+                    <th scope="col" className="w-2/5 py-0.5 pr-3 font-normal">路径</th>
+                    <th scope="col" className="w-24 py-0.5 pr-3 font-normal">类型</th>
+                    <th scope="col" className="py-0.5 pr-3 font-normal">状态</th>
+                    <th scope="col" className="w-24 py-0.5 font-normal">文本</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {indexedFiles.map((file) => (
+                    <tr key={file.id} className="border-t-[0.5px] border-line-soft" data-testid={`rag-file-${file.id}`}>
+                      <td title={file.path} className="break-all py-1 pr-3 align-top font-mono text-ink">{file.path}</td>
+                      <td className="break-words py-1 pr-3 align-top text-muted">{file.kind}</td>
+                      <td className="break-words py-1 pr-3 align-top" data-file-status={file.status}>
+                        <span className={file.status === 'failed' ? 'text-[var(--st-bad)]' : file.status === 'ready' ? 'text-[var(--st-ok)]' : 'text-muted'}>
+                          {FILE_STATUS_LABELS[file.status]}
+                        </span>
+                        {file.error === null ? null : <span className="ml-1 text-subtle">（{file.error}）</span>}
+                      </td>
+                      <td className="py-1 align-top text-muted">{file.textIndexed ? '已抽文本' : '未抽文本'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </section>
 
@@ -545,38 +568,21 @@ export function RagStudio({ literature, openInFilesView, onOpenInReader }: RagSt
           ) : (
             <ul className="flex flex-col gap-1" data-testid="rag-jobs">
               {jobs.map((job) => (
-                <li key={job.id} className="flex items-center gap-2 text-[length:var(--font-meta-size)]" data-testid={`rag-job-${job.id}`}>
-                  <span className="w-16 shrink-0 text-muted">{JOB_STATUS_LABELS[job.status]}</span>
-                  <span className="min-w-0 flex-1 truncate font-mono text-ink">{job.path}</span>
-                  <span className="shrink-0 text-subtle text-[length:var(--font-micro-size)]">
-                    gen {job.generation}
-                    {job.finishedAt === null ? '' : `，${job.finishedAt}`}
-                  </span>
+                <li key={job.id} className="flex items-start gap-2 text-[length:var(--font-meta-size)]" data-testid={`rag-job-${job.id}`}>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className="shrink-0 text-muted">{JOB_STATUS_LABELS[job.status]}</span>
+                      <span title={job.path} className="min-w-0 flex-1 break-all font-mono text-ink">{job.path}</span>
+                    </div>
+                    <span className="mt-0.5 flex flex-wrap gap-x-2 font-mono tabular-nums text-subtle text-[length:var(--font-micro-size)]">
+                      <span>gen {job.generation}</span>
+                      {job.finishedAt === null ? null : <time dateTime={job.finishedAt} className="break-all">{job.finishedAt}</time>}
+                    </span>
+                  </div>
                   <button
                     type="button"
                     disabled={revision === null || actionPending}
-                    onClick={() => {
-                      if (projectId === null || revision === null) {
-                        return;
-                      }
-                      setActionPending(true);
-                      void controlIndex(client, {
-                        projectId,
-                        action: 'retry',
-                        expectedRevision: revision,
-                        fileId: job.fileId
-                      })
-                        .then((outcome) => {
-                          if (!outcome.ok) {
-                            setSearchError(outcome.error.message);
-                            return;
-                          }
-                          reloadStatus();
-                          reloadFiles();
-                          reloadJobs();
-                        })
-                        .finally(() => setActionPending(false));
-                    }}
+                    onClick={() => void runControl({ action: 'retry', fileId: job.fileId })}
                     data-testid={`rag-job-retry-${job.id}`}
                     className="h-[var(--control-height-compact)] shrink-0 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
                   >

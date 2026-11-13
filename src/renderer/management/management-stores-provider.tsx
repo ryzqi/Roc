@@ -1,10 +1,11 @@
-import { createContext, lazy, Suspense, useCallback, useContext, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
 import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
 import type { ManagementStores, ManagementStoresApi, ManagementStoresSnapshot } from './management-stores-types';
 import type { ManagementScope } from './management-scope';
 
-const ManagementStoresSource = lazy(async () => ({
+const ManagementStoresSource = retryableLazy(async () => ({
   default: (await import('./management-stores-source')).ManagementStoresSource
 }));
 
@@ -45,9 +46,9 @@ export function ManagementStoresProvider({
   return (
     <ManagementStoresContext.Provider value={store}>
       {enabled ? (
-        <Suspense fallback={null}>
+        <LazyBoundary fallback={null}>
           <ManagementStoresSource key={scopeKey} scope={scope} scopeKey={scopeKey} onReady={register} />
-        </Suspense>
+        </LazyBoundary>
       ) : null}
       {children}
     </ManagementStoresContext.Provider>

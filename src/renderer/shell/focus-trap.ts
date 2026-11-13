@@ -4,6 +4,8 @@ const FOCUSABLE_SELECTOR = [
   'textarea:not([disabled])',
   'input:not([disabled])',
   'select:not([disabled])',
+  'summary',
+  '[contenteditable]:not([contenteditable="false"])',
   '[tabindex]:not([tabindex="-1"])'
 ].join(',');
 
@@ -23,10 +25,11 @@ const FOCUSABLE_SELECTOR = [
  */
 
 function isRendered(element: HTMLElement): boolean {
-  if (element.hidden || element.closest('[hidden]') !== null) {
+  if (element.closest('[hidden], [inert], [aria-hidden="true"]') !== null) {
     return false;
   }
-  if (element.getAttribute('aria-hidden') === 'true') {
+  const visibility = getComputedStyle(element).visibility;
+  if (visibility === 'hidden' || visibility === 'collapse') {
     return false;
   }
   // Catches `display: none` and detached subtrees; `position: fixed` elements
@@ -34,9 +37,22 @@ function isRendered(element: HTMLElement): boolean {
   return element.getClientRects().length > 0;
 }
 
+function isAvailable(element: HTMLElement): boolean {
+  // :disabled also catches controls in a disabled fieldset while preserving
+  // the native exception for controls inside its first legend.
+  return isRendered(element) && !element.matches(':disabled') && !element.hasAttribute('disabled');
+}
+
 function findFocusable(root: HTMLElement): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
-    (element) => element.tabIndex >= 0 && isRendered(element) && !element.hasAttribute('inert')
+    (element) =>
+      isAvailable(element) &&
+      (element.tabIndex >= 0 ||
+        // Editing hosts participate in native Tab navigation even though
+        // their tabIndex property defaults to -1. Nested editors do not.
+        (!element.hasAttribute('tabindex') &&
+          element.isContentEditable &&
+          !element.parentElement?.isContentEditable))
   );
 }
 
@@ -53,7 +69,7 @@ export function restoreDialogFocus(opener: HTMLElement | null): boolean {
   if (opener === null || !opener.isConnected) {
     return false;
   }
-  opener.focus();
+  opener.focus({ preventScroll: true });
   return document.activeElement === opener;
 }
 
@@ -64,7 +80,7 @@ export function restoreDialogFocus(opener: HTMLElement | null): boolean {
  * by being first in document order.
  */
 export function focusDialogInitialElement(root: HTMLElement, preferred: HTMLElement | null): void {
-  if (preferred !== null && !preferred.hasAttribute('disabled') && preferred.isConnected) {
+  if (preferred !== null && root.contains(preferred) && isAvailable(preferred)) {
     preferred.focus();
     if (document.activeElement === preferred) {
       return;
@@ -107,7 +123,8 @@ export function trapDialogTabFocus(root: HTMLElement, event: KeyboardEvent): boo
   const first = focusable[0]!;
   const last = focusable[focusable.length - 1]!;
   const active = document.activeElement;
-  const inside = active instanceof HTMLElement && root.contains(active) && isRendered(active);
+  const inside =
+    active instanceof HTMLElement && active !== root && root.contains(active) && isAvailable(active);
 
   if (event.shiftKey) {
     if (!inside || active === first) {

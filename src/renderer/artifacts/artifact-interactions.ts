@@ -16,3 +16,25 @@ export type OpenReviewInspector = (request: ReviewInspectorRequest) => void;
 export type ArtifactInspectorSelection =
   | {kind: 'stage'; request: ResearchArtifactInspectRequest; onReviewContext: (context: ResearchGateReviewContext) => void}
   | {kind: 'review'; request: ReviewInspectorRequest};
+
+export const BEFORE_ARTIFACT_CHANGE = 'roc:before-artifact-inspector-change';
+export type ArtifactChangeRequest = {defer: () => () => void};
+let latestChange = 0;
+
+/** The active inspector must release its draft before a shell entry can replace it. */
+export function requestArtifactInspectorChange(proceed: () => void): void {
+  const revision = ++latestChange;
+  let remaining = 0, dispatched = false, completed = false;
+  const complete = (): void => {
+    if (!dispatched || remaining !== 0 || completed || event.defaultPrevented || revision !== latestChange) return;
+    completed = true; proceed();
+  };
+  const event = new CustomEvent<ArtifactChangeRequest>(BEFORE_ARTIFACT_CHANGE, {cancelable: true, detail: {
+    defer: () => {
+      remaining++;
+      let resumed = false;
+      return () => {if (resumed) return; resumed = true; remaining--; complete();};
+    }
+  }});
+  window.dispatchEvent(event); dispatched = true; complete();
+}

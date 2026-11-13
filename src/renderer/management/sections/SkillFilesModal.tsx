@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react';
+import { LazyBoundary, retryableLazy } from '../../shell/LazyBoundary';
 import { ChevronRight, File as FileIcon, Folder } from 'lucide-react';
 import { ModalShell } from '../../shell/ModalShell';
 import { DelayedFallback } from '../../shell/DelayedFallback';
@@ -33,7 +33,7 @@ import type { SkillsStore } from '../use-skills';
  * 预览按路径寻址，浏览同级目录时不会被打断。markdown 预览沿用助手的 `MarkdownView`，走
  * **懒加载**边界，`react-markdown`/`streamdown` 不会进入管理面板的 chunk，更不会进 eager 图。
  */
-const MarkdownView = lazy(async () => ({ default: (await import('../../assistant/blocks/markdown-view')).MarkdownView }));
+const MarkdownView = retryableLazy(async () => ({ default: (await import('../../assistant/blocks/markdown-view')).MarkdownView }));
 
 export function SkillFilesModal({
   store: skills,
@@ -208,14 +208,14 @@ export function SkillFilesModal({
                           二进制文件：只显示大小与类型（{skills.preview.mediaType ?? '未知类型'}）。
                         </FormNote>
                       ) : filePreviewKind(skills.preview) === 'markdown' ? (
-                        <Suspense fallback={<DelayedFallback label="正在加载 Markdown 渲染…" />}>
+                        <LazyBoundary fallback={<DelayedFallback label="正在加载 Markdown 渲染…" />}>
                           <div
                             className="rounded-card border-[0.5px] border-line bg-surface px-2 py-1.5"
                             data-testid="mgmt-skill-preview-markdown"
                           >
                             <MarkdownView text={skills.preview.content} />
                           </div>
-                        </Suspense>
+                        </LazyBoundary>
                       ) : (
                         <pre
                           className="whitespace-pre-wrap break-words rounded-card border-[0.5px] border-line bg-bg-soft px-2 py-1.5 font-mono text-[length:var(--font-code-size)] text-muted"

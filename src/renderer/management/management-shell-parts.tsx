@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type {AppViewId} from '../app/routes';
 import { Brain, Clock, Cpu, Sparkles, type LucideIcon } from 'lucide-react';
 import type { ManagementScope } from './management-scope';
 import { BackgroundTasksSection } from './sections/BackgroundTasksSection';
@@ -9,6 +10,7 @@ import { MemorySection } from './sections/MemorySection';
 import { SkillsSection } from './sections/SkillsSection';
 import type { ManagementTabId } from './use-management-stores';
 import { useManagementStores } from './management-stores-provider';
+import { requestManagementEditorChange } from './management-interactions';
 
 /**
  * The parts both management shells share (P9/T9.5).
@@ -18,8 +20,8 @@ import { useManagementStores } from './management-stores-provider';
  * full-width canvas view). That is the "两种入口共用同一组件" the phase asked for, without either
  * shell owning a second copy of the section wiring.
  *
- * The tab strip is a recessed track (`bg-bg`, 1px border, 2px inner pad) holding four equal chips,
- * the selected one raised against it, and a **hue per section** (记忆/技能 紫、MCP 天蓝、任务 匣黄)
+ * The tab strip is a recessed track holding four flat chips,
+ * with a **hue per section** (记忆/技能 紫、MCP 天蓝、任务 匣黄)
  * carried by the icon only while the tab is selected. The tab set is
  * `'memory' | 'skills' | 'mcp' | 'tasks'`, in that order.
  */
@@ -65,14 +67,20 @@ export function ManagementTabStrip({
    */
   testIdPrefix: string;
 }): React.JSX.Element {
+  const selectTab = (tab: ManagementTabId, tablist?: HTMLDivElement): void => {
+    if (tab === activeTab) return;
+    requestManagementEditorChange(() => {
+      onTabChange(tab);
+      tablist?.querySelector<HTMLButtonElement>(`[id="${idPrefix}-tab-${tab}"]`)?.focus({preventScroll: true});
+    });
+  };
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
     const index = MANAGEMENT_TABS.findIndex((tab) => tab.id === activeTab);
     if (event.key === 'Home' || event.key === 'End') {
       event.preventDefault();
       const target = event.key === 'Home' ? MANAGEMENT_TABS[0] : MANAGEMENT_TABS[MANAGEMENT_TABS.length - 1];
       if (target !== undefined) {
-        onTabChange(target.id);
-        event.currentTarget.querySelector<HTMLButtonElement>(`[id="${idPrefix}-tab-${target.id}"]`)?.focus();
+        selectTab(target.id, event.currentTarget);
       }
       return;
     }
@@ -83,8 +91,7 @@ export function ManagementTabStrip({
     const delta = event.key === 'ArrowLeft' ? -1 : 1;
     const next = MANAGEMENT_TABS[(index + delta + MANAGEMENT_TABS.length) % MANAGEMENT_TABS.length];
     if (next !== undefined) {
-      onTabChange(next.id);
-      event.currentTarget.querySelector<HTMLButtonElement>(`[id="${idPrefix}-tab-${next.id}"]`)?.focus();
+      selectTab(next.id, event.currentTarget);
     }
   };
 
@@ -109,7 +116,7 @@ export function ManagementTabStrip({
             aria-controls={`${idPrefix}-panel-${tab.id}`}
             tabIndex={selected ? 0 : -1}
             title={summaries[tab.id]}
-            onClick={() => onTabChange(tab.id)}
+            onClick={() => selectTab(tab.id)}
             data-testid={`${testIdPrefix}-tab-${tab.id}`}
             className={
               selected
@@ -134,12 +141,14 @@ export function ManagementSectionBody({
   tab,
   scope,
   idPrefix,
-  testIdPrefix
+  testIdPrefix,
+  canvasView
 }: {
   tab: ManagementTabId;
   scope: ManagementScope;
   idPrefix: string;
   testIdPrefix: string;
+  canvasView?: AppViewId | undefined;
 }): ReactNode {
   let section: ReactNode;
   switch (tab) {
@@ -153,7 +162,7 @@ export function ManagementSectionBody({
       section = <McpSectionContent scope={scope} />;
       break;
     case 'tasks':
-      section = <TasksSectionContent scope={scope} />;
+      section = <TasksSectionContent scope={scope} canvasView={canvasView} />;
       break;
   }
 
@@ -186,7 +195,7 @@ function McpSectionContent({ scope }: { scope: ManagementScope }): ReactNode {
   return store === null ? <ManagementSectionLoading /> : <McpSection scope={scope} store={store} />;
 }
 
-function TasksSectionContent({ scope }: { scope: ManagementScope }): ReactNode {
+function TasksSectionContent({ scope, canvasView }: { scope: ManagementScope; canvasView: AppViewId | undefined }): ReactNode {
   const store = useManagementStores((stores) => stores.tasks);
   return (
     <div className="grid min-w-0 gap-6">
@@ -194,6 +203,7 @@ function TasksSectionContent({ scope }: { scope: ManagementScope }): ReactNode {
         <div key={scope.projectId} className="grid min-w-0 gap-6">
           <PythonEnvironmentSection client={scope.client} projectId={scope.projectId} />
           <ResearchTasksSection client={scope.client} projectId={scope.projectId}
+            canvasView={canvasView}
             selectedTaskId={scope.researchTaskId} onSelectTask={scope.onSelectResearchTask} onOpenArtifact={scope.onOpenArtifact} />
         </div>
       )}

@@ -48,6 +48,7 @@ before(async () => {
     import {LazyMotion,MotionConfig,domAnimation} from 'motion/react';
     import {ArtifactInspector} from './src/renderer/artifacts/ArtifactInspector';
     const root=createRoot(document.getElementById('root'));
+    window.disposeHarness=()=>flushSync(()=>root.render(null));
     const client={api:{research:Object.fromEntries(${JSON.stringify(Object.keys(channels))}.map(method=>[method,input=>window.callMain(method,input)]))}};
     function Harness({initialRequest,writable}) {
       const [request,setRequest]=useState(initialRequest),[open,setOpen]=useState(true);
@@ -105,7 +106,7 @@ before(async () => {
   await page.waitForFunction(() => typeof window.mount === 'function');
 });
 after(async () => {
-  try {await app?.close();} finally {
+  try {await page?.evaluate(()=>window.disposeHarness()); await app?.close();} finally {
     for (const f of fixtures) {await f.libraryService?.shutdown();await f.cleanup();}
     api?.dispose(); if (directory) rmSync(directory, {recursive: true, force: true});
   }
@@ -191,6 +192,31 @@ async function fillGroup(f,position=1,indices=f.includedIndices,id='study-one') 
     await tid('artifact-review-study-group').filter({has:page.getByRole('heading',{name:label,exact:true})}).getByTestId('artifact-review-study-report-add').click();
   }
 }
+
+test('study drafts retain unjoined report notes and reject saving them as completed memberships', async () => {
+  const f = await fixture();
+  f.studies.save(groups(f), actor);
+  await mount(f);
+  await tid('artifact-review-studies-revise').click();
+  await page.getByLabel('归组修订原因', {exact: true}).fill('Keep the saved membership and edit its notes.');
+  await page.getByLabel('研究 1报告原文说明', {exact: true}).fill('This source note has not been joined to a report yet.');
+  assert.equal(await tid('artifact-review-studies-save').isDisabled(), true);
+  assert.equal(await tid('artifact-review-studies-refresh').isDisabled(), true);
+  assert.equal(await page.evaluate(() => {
+    const event = new Event('beforeunload', {cancelable: true});
+    window.dispatchEvent(event); return event.defaultPrevented;
+  }), true);
+  await tid('artifact-review-study-report-discard').click();
+  await page.getByRole('button', {name: '取消', exact: true}).click();
+  assert.equal(await page.getByLabel('研究 1报告原文说明', {exact: true}).inputValue(),
+    'This source note has not been joined to a report yet.');
+  await tid('artifact-review-study-report-discard').click();
+  await page.getByRole('button', {name: '放弃修改并继续', exact: true}).click();
+  assert.equal(await tid('artifact-review-studies-save').isDisabled(), false);
+  await tid('artifact-review-studies-save').click();
+  await page.waitForFunction(() => document.querySelector('[data-testid="artifact-review-studies-current"]')?.textContent.includes('版本 2'));
+  assert.deepEqual(f.studies.get(f.get).snapshot.request.groups, groups(f).groups);
+});
 async function fill(f) {
   if(f.includedIndices.length>0)await fillGroup(f);
   await page.getByLabel('归组审核人',{exact:true}).selectOption(f.reviewerIds[0]);

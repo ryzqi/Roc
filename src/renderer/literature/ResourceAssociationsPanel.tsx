@@ -1,9 +1,10 @@
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import type {ResourceSummary} from '../../shared/schemas/research-resources';
 import type {ResourceTarget, ResourceAssociationSave, ResourceAssociationResult} from '../../shared/schemas/research-resource-associations';
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {scholarlyButton} from './ScholarlySnapshotView';
+import {useLiteratureEditor} from './literature-editor-guard';
 
 const states: Record<ResourceAssociationResult['currentState'], string> = {
   current: '目标版本一致', target_changed: '目标版本已变化', target_unavailable: '目标已不可用'
@@ -20,6 +21,8 @@ export default function ResourceAssociationsPanel({client, resource, writable, o
   const [request, setRequest] = useState<ResourceAssociationSave | null>(null);
   const [saved, setSaved] = useState<ResourceAssociationResult | null>(null);
   const mounted = useRef(true);
+  const submitting = useRef(false), fields = useRef({target: false, rationale: ''});
+  const requestRef = useRef<ResourceAssociationSave | null>(null);
   useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
   const save = useAsyncAction((input: ResourceAssociationSave) => client.api.research.associateResource(input), {label: '保存资源关联'});
   const targets = useAsyncResource(JSON.stringify([resource.projectId, kind, targetOffset]),
@@ -29,15 +32,33 @@ export default function ResourceAssociationsPanel({client, resource, writable, o
     () => client.api.research.getResourceAssociationHistory({projectId: resource.projectId, resourceId: resource.id,
       target: null, offset: historyOffset, limit: 20}), {label: '读取资源关联'});
   const dirty = target !== null || rationale !== '' || request !== null;
-  useEffect(() => {onLockChange(dirty || save.pending); return () => onLockChange(false);}, [dirty, save.pending, onLockChange]);
+  const editor = useLiteratureEditor({label: '资源关联', dirty: () => fields.current.target || fields.current.rationale !== '' || requestRef.current !== null,
+    busy: () => submitting.current, discard: () => discard()});
+  const reportLock = (): void => {
+    onLockChange(submitting.current || fields.current.target || fields.current.rationale !== '' || requestRef.current !== null);
+    editor.notify();
+  };
+  useLayoutEffect(() => {onLockChange(dirty || save.pending);}, [dirty, save.pending, onLockChange]);
+  useEffect(() => () => onLockChange(false), [onLockChange]);
   const locked = save.pending || request !== null;
   const submit = async (input: ResourceAssociationSave): Promise<void> => {
+    if (!writable || submitting.current || (requestRef.current !== null && requestRef.current !== input)) return;
+    submitting.current = true; requestRef.current = input; reportLock();
     setRequest(input); setSaved(null);
-    const result = await save.run(input);
-    if (!mounted.current || !result.ok) return;
-    setSaved(result.data); setRequest(null); setTarget(null); setRationale(''); setHistoryOffset(0); history.reload();
+    try {
+      const result = await save.run(input);
+      if (!mounted.current || !result.ok) return;
+      requestRef.current = null; fields.current = {target: false, rationale: ''};
+      setSaved(result.data); setRequest(null); setTarget(null); setRationale(''); setHistoryOffset(0); history.reload();
+    } finally {
+      submitting.current = false;
+      if (mounted.current) reportLock();
+    }
   };
-  const discard = (): void => {setTarget(null); setRationale(''); setRequest(null); save.reset(); history.reload(); targets.reload();};
+  const discard = (): void => {
+    requestRef.current = null; fields.current = {target: false, rationale: ''}; reportLock();
+    setTarget(null); setRationale(''); setRequest(null); save.reset(); history.reload(); targets.reload();
+  };
   const nextTarget = targets.data?.nextOffset ?? null, nextHistory = history.data?.nextOffset ?? null;
   return <section aria-label="资源版本关联" className="space-y-2 border-t-[0.5px] border-line pt-3" data-testid="reader-resource-associations">
     <h3 className="font-medium">资源版本关联</h3>
@@ -47,6 +68,8 @@ export default function ResourceAssociationsPanel({client, resource, writable, o
       <fieldset disabled={!writable || locked} className="space-y-2">
         <label className="block">目标类型
           <select className={control} value={kind} onChange={event => {
+            if (!writable || submitting.current || requestRef.current !== null) return;
+            fields.current.target = false; reportLock();
             setKind(event.target.value as ResourceTarget['kind']); setTargetOffset(0); setTarget(null); setSaved(null);
           }}><option value="literature">论文</option><option value="experiment">已完成的托管实验</option></select>
         </label>
@@ -54,8 +77,11 @@ export default function ResourceAssociationsPanel({client, resource, writable, o
         {targets.error === null ? null : <div role="alert"><p>{targets.error}</p>
           <button type="button" className={scholarlyButton} onClick={targets.reload}>重试目标</button></div>}
         <label className="block">目标版本
-          <select className={control} value={target === null ? '' : JSON.stringify(target.target)} onChange={event => {
-            const choice = targets.data!.records.find(record => JSON.stringify(record.target) === event.target.value);
+          <select className={control} value={target === null ? '' : JSON.stringify(target.target)}
+            disabled={targets.status !== 'ready' || targets.data === null} onChange={event => {
+            if (!writable || submitting.current || requestRef.current !== null || targets.data === null) return;
+            const choice = targets.data.records.find(record => JSON.stringify(record.target) === event.target.value);
+            fields.current.target = choice !== undefined; reportLock();
             setTarget(choice === undefined ? null : choice); setSaved(null);
           }}>
             <option value="">选择当前项目的具体版本</option>
@@ -72,7 +98,11 @@ export default function ResourceAssociationsPanel({client, resource, writable, o
           <button type="button" className={scholarlyButton} disabled={target !== null} onClick={targets.reload}>刷新目标</button>
         </div>
         <label className="block">关联依据
-          <textarea className={control} rows={3} maxLength={8192} value={rationale} onChange={event => {setRationale(event.target.value); setSaved(null);}}/>
+          <textarea className={control} rows={3} maxLength={8192} value={rationale} onChange={event => {
+            if (!writable || submitting.current || requestRef.current !== null) return;
+            fields.current.rationale = event.target.value; reportLock();
+            setRationale(event.target.value); setSaved(null);
+          }}/>
         </label>
         {target === null ? null : <details><summary className="cursor-pointer text-muted">将绑定的版本身份</summary>
           <pre className="whitespace-pre-wrap break-all text-muted text-[length:var(--font-meta-size)]">{JSON.stringify(target.target, null, 2)}</pre></details>}
@@ -83,7 +113,8 @@ export default function ResourceAssociationsPanel({client, resource, writable, o
             resourceHash: resource.contentHash, target: target!.target, rationale})}>{save.pending ? '保存关联中' : '保存人工关联'}</button>
         {request === null || save.pending ? null : <button type="button" className={scholarlyButton} disabled={!writable}
           onClick={() => void submit(request)}>重试原关联请求</button>}
-        {dirty ? <button type="button" className={scholarlyButton} disabled={save.pending} onClick={discard}>放弃关联草稿并刷新</button> : null}
+        {dirty ? <button type="button" className={scholarlyButton} disabled={save.pending}
+          onClick={() => editor.request(discard, '尚未保存的目标版本、关联依据和原请求将被放弃。')}>放弃关联草稿并刷新</button> : null}
       </div>
     </>}
     {dirty ? <p role="status" className="text-muted">关联草稿未确认，暂不能切换资源</p> : null}

@@ -15,7 +15,7 @@ export default function PdfReadingTools({client,projectId,documentId,sourceHash,
   const [outline,setOutline]=useState<OutlineItem[]>([]),[panel,setPanel]=useState<'outline'|'highlights'|null>(null);
   const [query,setQuery]=useState(''),[matches,setMatches]=useState<{page:number;count:number}[]>([]),[searching,setSearching]=useState(false);
   const [error,setError]=useState<string|null>(null),[busy,setBusy]=useState(false),[note,setNote]=useState(''),[color,setColor]=useState<ReadingHighlight['color']>('yellow');
-  const alive=useRef(true),searchRun=useRef(0);
+  const alive=useRef(true),searchRun=useRef(0),busyRef=useRef(false);
   const pageText=useMemo(()=>createPdfTextCache(pdf),[pdf]);
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;searchRun.current++;};},[]);
   useEffect(()=>{
@@ -43,7 +43,12 @@ export default function PdfReadingTools({client,projectId,documentId,sourceHash,
     })().catch(error=>{if(run===searchRun.current){setError(String(error));setSearching(false);}});},250);
     return()=>{clearTimeout(timer);searchRun.current++;};
   },[query,pdf,pageText]);
-  const run=async(action:()=>Promise<void>):Promise<void>=>{setBusy(true);setError(null);try{await action();}catch(error){if(alive.current)setError(String(error));}finally{if(alive.current)setBusy(false);}};
+  const run=async(action:()=>Promise<void>):Promise<void>=>{
+    if(busyRef.current)return;
+    busyRef.current=true;setBusy(true);setError(null);
+    try{await action();}catch(error){if(alive.current)setError(String(error));}
+    finally{busyRef.current=false;if(alive.current)setBusy(false);}
+  };
   const saveHighlight=async(value:ReadingHighlight):Promise<void>=>{
     const {revision,createdAt,...record}=value;
     const result=await client.api.research.saveReadingHighlight({...record,expectedRevision:revision});
@@ -71,14 +76,15 @@ export default function PdfReadingTools({client,projectId,documentId,sourceHash,
     </div>
     {selection?<div className="reading-toolbar" data-testid="reader-selection-actions">
       <span className="max-w-40 truncate" title={selection.text}>{selection.text}</span>
-      <button type="button" onClick={()=>void run(()=>navigator.clipboard.writeText(selection.text))}>复制选区</button>
+      <button type="button" disabled={busy} onClick={()=>void run(()=>navigator.clipboard.writeText(selection.text))}>复制选区</button>
       <button type="button" disabled={!writable} onClick={()=>onNote(`> ${selection.text.replace(/\n/g,'\n> ')}\n\n第 ${page} 页`)}>摘录到笔记</button>
       <button type="button" onClick={()=>onTranslate([{label:`第 ${page} 页选区`,text:selection.text}],'选区翻译')}>翻译选区</button>
-      <select aria-label="高亮颜色" value={color} onChange={event=>setColor(event.target.value as ReadingHighlight['color'])}>
+      <select aria-label="高亮颜色" value={color} disabled={busy} onChange={event=>setColor(event.target.value as ReadingHighlight['color'])}>
         <option value="yellow">黄色</option><option value="green">绿色</option><option value="blue">蓝色</option><option value="pink">粉色</option></select>
-      <input aria-label="高亮备注" placeholder="高亮备注（可选）" maxLength={10000} value={note} onChange={event=>setNote(event.target.value)}/>
+      <input aria-label="高亮备注" placeholder="高亮备注（可选）" maxLength={10000} value={note} disabled={busy} onChange={event=>setNote(event.target.value)}/>
       <button type="button" disabled={!writable||busy||!selection.rects.length} onClick={()=>void run(async()=>{
-        await saveHighlight({id:crypto.randomUUID(),projectId,documentId,sourceHash,page,text:selection.text,note,color,rects:selection.rects,revision:0,createdAt:'',archived:false});setNote('');
+        await saveHighlight({id:crypto.randomUUID(),projectId,documentId,sourceHash,page,text:selection.text,note,color,rects:selection.rects,revision:0,createdAt:'',archived:false});
+        if(alive.current)setNote('');
       })}>保存高亮</button>
     </div>:null}
     {error?<p role="alert" className="p-2 text-[var(--st-warn)]">{error}</p>:null}

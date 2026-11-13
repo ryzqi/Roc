@@ -129,6 +129,20 @@ async function typeInTerminal(page, command) {
   await page.keyboard.press('Enter');
 }
 
+async function measurePtyGeometry(page, stage) {
+  const marker = `ROC_P3_PTY_${stage}`;
+  const pattern = new RegExp(`${marker}:(\\d+)x(\\d+)`, 'u');
+  await typeInTerminal(page,
+    `python3 -c 'import os; size = os.get_terminal_size(); print("${marker}:%dx%d" % (size.columns, size.lines))'`);
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    const match = pattern.exec(await terminalText(page));
+    if (match !== null) return { cols: Number(match[1]), rows: Number(match[2]) };
+    await page.waitForTimeout(120);
+  }
+  throw new Error(`The real PTY did not report its ${stage} geometry.`);
+}
+
 try {
   app = await electron.launch({
     executablePath: target.executablePath,
@@ -379,20 +393,19 @@ try {
   const pythonOutput = await waitForTerminalText(page, 'Python 3');
   assertCheck('5 终端', 'python3 --version 有输出', /Python 3\.\d/u.test(pythonOutput), (pythonOutput.match(/Python 3\.\d+\.\d+/u) ?? [''])[0]);
 
-  const geometryBefore = (await page.locator('[data-testid="terminal-geometry"]').textContent()) ?? '';
+  const geometryBefore = await measurePtyGeometry(page, 'before');
   const browserWindow = await app.browserWindow(page);
   await browserWindow.evaluate((win) => {
     const bounds = win.getBounds();
     win.setBounds({ ...bounds, width: bounds.width + 240 });
   });
   await page.waitForTimeout(1_200);
-  const geometryAfter = (await page.locator('[data-testid="terminal-geometry"]').textContent()) ?? '';
-  const cols = (value) => Number.parseInt(value.split('x')[0] ?? '0', 10);
+  const geometryAfter = await measurePtyGeometry(page, 'after');
   assertCheck(
     '5 终端',
     '窗口变宽后 PTY 列宽同步',
-    cols(geometryAfter) > cols(geometryBefore),
-    `${geometryBefore} → ${geometryAfter}`
+    geometryAfter.cols > geometryBefore.cols,
+    `${geometryBefore.cols}x${geometryBefore.rows} → ${geometryAfter.cols}x${geometryAfter.rows}`
   );
   // 可访问性（AGENTS.md「保留 focus-visible」）：`outline-none` 在 utilities 层会盖掉
   // base 层的焦点环，所以这里用 computed style 验证聚焦后真的有 2px 可见环。
@@ -413,9 +426,14 @@ try {
     focusRing !== null && focusRing.outlineStyle !== 'none' && Number.parseFloat(focusRing.outlineWidth) >= 2,
     JSON.stringify(focusRing)
   );
+  await page.waitForFunction(() => {
+    const status = document.querySelector('[data-testid="git-rtk-status"]');
+    return status !== null && !status.textContent.includes('读取中');
+  });
+  const rtkLabel = (await page.getByTestId('git-rtk-status').textContent()) ?? '';
+  assertCheck('7 RTK', 'Git 面板显示 rtk.status 一行', rtkLabel.includes('RTK'), rtkLabel);
   await navigate(page, `page=research&project=${first.data.id}&view=terminal`);
   await page.waitForSelector('[data-testid="terminal-view"][data-phase="ready"]', { timeout: 30_000 });
-  assertCheck('7 RTK', '终端底部显示 rtk.status 一行', (await page.locator('[data-testid="terminal-rtk-status"]').count()) === 1, (await page.locator('[data-testid="terminal-rtk-status"]').textContent()) ?? '');
   await page.screenshot({ path: join(artifactDir, '05-terminal.png') });
 
   // 终端现在是画布 tab（不再有 `tool=terminal` 这个粘性标记），离开它不会自动清掉别的工具；

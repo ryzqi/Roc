@@ -44,7 +44,7 @@ export class ReadingDiscoveryService {
       source='Crossref';
     }catch(error){warnings.push(`Crossref：${String(error)}`);}}
     if(!articles.length&&input.direction==='references'&&input.offset===0){
-      source='本地解析 · 参考文献 DOI';
+      source='本地解析：参考文献 DOI';
       for(const document of this.reading.research.documents.list(item.id)){
         if(!document.currentParseId)continue;
         const {data}=this.reading.research.documents.parsed(document.id,document.currentParseId);

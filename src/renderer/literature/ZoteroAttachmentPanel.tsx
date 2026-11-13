@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import type {ZoteroReview, ZoteroItem} from '../../shared/schemas/research-zotero';
 import type {ZoteroChildrenPage} from '../../shared/schemas/research-zotero-attachment';
 import {useAsyncAction} from '../app/use-async-resource';
@@ -14,12 +14,18 @@ export function ZoteroAttachmentPanel({client, original, jobs}: {
 }): React.JSX.Element {
   const [page, setPage] = useState<ZoteroChildrenPage | null>(null);
   const read = useAsyncAction(client.api.research.getZoteroChildren, {label: '读取当前子项'});
+  const pending = useRef(false), mounted = useRef(true);
+  useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
   async function discover(offset: number): Promise<void> {
+    if (!mounted.current || pending.current) return;
     const version = offset === 0 ? null : page!.page.libraryVersion;
+    pending.current = true;
     setPage(null);
-    const response = await read.run({...original.scope, projectId: jobs.projectId,
-      operationId: original.operationId, itemKey: original.itemKey, offset, limit: 20, expectedLibraryVersion: version});
-    if (response.ok) setPage(response.data);
+    try {
+      const response = await read.run({...original.scope, projectId: jobs.projectId,
+        operationId: original.operationId, itemKey: original.itemKey, offset, limit: 20, expectedLibraryVersion: version});
+      if (mounted.current && response.ok) setPage(response.data);
+    } finally {pending.current = false;}
   }
   return <details className="mt-2" data-testid="literature-zotero-attachments">
     <summary className="cursor-pointer text-ink">附件与当前子项</summary>
@@ -30,7 +36,7 @@ export function ZoteroAttachmentPanel({client, original, jobs}: {
       </button>
       {read.error === null ? null : <p role="alert" className="break-words text-[var(--st-warn)]">{read.error}</p>}
       {page === null ? null : <>
-        <p role="status">子项 {page.page.offset + (page.page.records.length > 0 ? 1 : 0)}–{page.page.offset + page.page.records.length} / {page.page.total}，
+        <p role="status" className="tabular-nums">子项 {(page.page.offset + (page.page.records.length > 0 ? 1 : 0)).toLocaleString('zh-CN')}–{(page.page.offset + page.page.records.length).toLocaleString('zh-CN')} / {page.page.total.toLocaleString('zh-CN')}，
           文库版本 {page.page.libraryVersion}</p>
         <ul aria-label="Zotero 当前子项">
           {page.page.records.map(item => <li key={item.key} className="border-b-[0.5px] border-line py-2"

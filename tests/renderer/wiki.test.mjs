@@ -43,14 +43,55 @@ before(async () => {
       flushSync(()=>root.render(React.createElement(WorkspaceScopeProvider,{value:{client,writable:true}},
         React.createElement(RagStudio,{literature:{client,projectId:'p1',action:{error:null}},openInFilesView(){},onOpenInReader(){}}))));
     };
+    window.mountIndexedRag = () => {
+      const path='notes/narrow-canvas-review/long-reference-list-and-measured-results-for-the-current-index-generation.md';
+      const timestamp='2026-11-12T16:35:54.960Z';
+      const error='索引服务暂不可用（synthetic_runtime_fixture_with_long_error_code）';
+      const status={phase:'failed',generation:2,workspacePath:'/tmp/roc-index-layout-fixture',
+        error:null,lastScanAt:timestamp,counts:{total:1,ready:0,queued:0,running:0,failed:1},
+        settings:{projectId:'p1',revision:7,kinds:['markdown'],include:['**/*'],exclude:[],
+          watch:true,paused:false,embeddingConfigId:null}};
+      const file={id:'layout-file',projectId:'p1',path,kind:'markdown',size:120,status:'failed',
+        sourceHash:null,indexedHash:null,textIndexed:false,error,activeJobId:'layout-job',updatedAt:timestamp};
+      const job={id:'layout-job',projectId:'p1',fileId:file.id,path,generation:2,status:'failed',
+        error,createdAt:timestamp,startedAt:timestamp,finishedAt:timestamp};
+      window.indexLayoutFixture={path,timestamp,error,controls:[]};
+      const client={api:{research:{
+        knowledgeJobs:async()=>({ok:true,data:[]}),
+        listIndexedFiles:async()=>({ok:true,data:[file]}),
+        listIndexJobs:async()=>({ok:true,data:[job]}),
+        getIndexStatus:async()=>({ok:true,data:status}),
+        controlIndex:async input=>{window.indexLayoutFixture.controls.push(input);return {ok:true,data:status};}
+      }}};
+      flushSync(()=>root.render(React.createElement(WorkspaceScopeProvider,{value:{client,writable:true}},
+        React.createElement(RagStudio,{literature:{client,projectId:'p1',action:{error:null}},
+          openInFilesView(){},onOpenInReader(){}}))));
+    };
     window.mountJobs = () => {
       let status='failed';
       const jobsClient={api:{research:{knowledgeJobs:async()=>({ok:true,data:[{documentId:'doc',generation:'v1',title:'Synthetic document',status,error:status==='failed'?'向量索引失败，请检查网络后重试。':null}]}),
         retryKnowledgeJob:async input=>{window.retried=input;status='ready';return {ok:true,data:{queued:true}};}}}};
       flushSync(()=>root.render(React.createElement(KnowledgeJobs,{client:jobsClient,projectId:'p1'})));
     };
+    window.mountHeldJobs = () => {
+      const fixture={status:'failed',inputs:[],releases:[]};
+      window.heldJobs=fixture;
+      const jobsClient={api:{research:{
+        knowledgeJobs:async()=>({ok:true,data:[{documentId:'held-doc',generation:'held-v1',
+          title:'Held document',status:fixture.status,error:null}]}),
+        retryKnowledgeJob:input=>{
+          fixture.inputs.push(input);
+          return new Promise(resolve=>fixture.releases.push(result=>{
+            if(result.ok)fixture.status='ready';
+            resolve(result);
+          }));
+        }
+      }}};
+      flushSync(()=>root.render(React.createElement(KnowledgeJobs,{client:jobsClient,projectId:'p1'})));
+    };
     window.mountStore = () => flushSync(() => root.render(React.createElement(StoreHarness)));
     const root = createRoot(document.getElementById('root'));
+    window.unmount=()=>flushSync(()=>root.render(null));
     window.mount = props => flushSync(() => root.render(React.createElement(WikiView,
       {...props, onOpenClaim: id => window.opened = id, onOpenPaper: id => window.paper = id, onRefresh: () => window.refreshed = true})));
   `, resolveDir: process.cwd(), loader: 'js'}, outfile: join(directory, 'app.js'),
@@ -169,9 +210,40 @@ test('source embedding jobs expose errors and keyboard retry refreshes status',a
   const panel=page.getByTestId('rag-source-jobs');
   await panel.getByText('向量索引失败，请检查网络后重试。').waitFor();
   await panel.getByRole('button',{name:'重试',exact:true}).focus();await page.keyboard.press('Enter');
-  await panel.getByText('Synthetic document · 已完成').waitFor();
+  const job=panel.getByRole('listitem').filter({hasText:'Synthetic document'});
+  await job.getByText('已完成',{exact:true}).waitFor();
   assert.deepEqual(await page.evaluate(()=>window.retried),{documentId:'doc',generation:'v1'});
   await page.screenshot({path:join(artifacts,'embedding-jobs.png')});
+});
+
+test('source embedding retry admits one synchronous request, retains a refusal and unlocks an exact retry',async()=>{
+  await page.evaluate(()=>window.mountHeldJobs());
+  const panel=page.getByTestId('rag-source-jobs');
+  const retry=panel.getByRole('button',{name:'重试',exact:true});
+  await retry.waitFor();
+  try {
+    await page.evaluate(()=>{
+      const button=document.querySelector('[data-testid="rag-source-jobs"] li button');
+      button.click();button.click();button.click();
+    });
+    assert.deepEqual(await page.evaluate(()=>window.heldJobs.inputs),[{documentId:'held-doc',generation:'held-v1'}]);
+    assert.equal(await retry.isDisabled(),true);
+    await page.evaluate(()=>window.heldJobs.releases.shift()({ok:false,error:{message:'Synthetic generation retry refused'}}));
+    await panel.getByRole('alert').filter({hasText:'Synthetic generation retry refused'}).waitFor();
+    assert.equal(await retry.isDisabled(),false);
+    await retry.focus();await page.keyboard.press('Enter');
+    assert.deepEqual(await page.evaluate(()=>window.heldJobs.inputs),[
+      {documentId:'held-doc',generation:'held-v1'},{documentId:'held-doc',generation:'held-v1'}
+    ]);
+    await page.evaluate(()=>window.heldJobs.releases.shift()({ok:true,data:{queued:true}}));
+    await panel.getByRole('listitem').filter({hasText:'Held document'}).getByText('已完成',{exact:true}).waitFor();
+    assert.equal(await panel.getByRole('alert').count(),0);
+  } finally {
+    await page.evaluate(()=>{
+      for(const release of window.heldJobs.releases.splice(0))release({ok:false,error:{message:'Fixture disposed'}});
+      window.unmount();
+    });
+  }
 });
 
 test('retrieval exposes optional reranking and sends the selected mode through IPC',async()=>{
@@ -182,6 +254,84 @@ test('retrieval exposes optional reranking and sends the selected mode through I
   await page.waitForFunction(()=>window.searchInput?.rerank==='lexical-v1');
   assert.equal(await page.evaluate(()=>window.searchInput.limit),20);
   await page.getByTestId('rag-degraded').getByText(/仅返回关键词结果/).waitFor();
+});
+
+test('indexed retrieval isolates table scrolling and keeps long paths, failure details and keyboard retry readable in narrow panes',async()=>{
+  const auditSource=readFileSync('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8');
+  const measurements=[];
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.evaluate(()=>{window.unmount();window.mountIndexedRag();});
+  await page.getByTestId('rag-file-layout-file').waitFor();
+  await page.getByTestId('rag-job-layout-job').waitFor();
+  for(const theme of ['light','dark']){
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    for(const width of [1100,380]){
+      await page.setViewportSize({width,height:720});
+      const measurement=await page.evaluate(()=>{
+        const studio=document.querySelector('[data-testid="rag-studio"]');
+        const pane=studio.lastElementChild;
+        const table=document.querySelector('[data-testid="rag-files"]');
+        const file=document.querySelector('[data-testid="rag-file-layout-file"]');
+        const filePath=file.cells[0];
+        const fileStatus=file.cells[2];
+        const job=document.querySelector('[data-testid="rag-job-layout-job"]');
+        const path=Array.from(job.querySelectorAll('span')).find(el=>el.textContent===window.indexLayoutFixture.path);
+        const pathRect=path.getBoundingClientRect();
+        const metadata=Array.from(job.querySelectorAll('span')).find(el=>el.textContent.includes('gen '));
+        const metadataRect=metadata.getBoundingClientRect();
+        return {paneWidth:pane.clientWidth,paneScrollWidth:pane.scrollWidth,
+          tableWidth:table.getBoundingClientRect().width,
+          tableParentOverflow:getComputedStyle(table.parentElement).overflowX,
+          filePathHasFullText:filePath.scrollWidth<=filePath.clientWidth+1,
+          fileErrorFitsCell:fileStatus.scrollWidth<=fileStatus.clientWidth+1,
+          pathWidth:pathRect.width,pathHasFullText:path.scrollWidth<=path.clientWidth+1,
+          pathHasTitle:path.title===window.indexLayoutFixture.path,
+          pathMetadataOverlap:pathRect.left<metadataRect.right&&pathRect.right>metadataRect.left&&
+            pathRect.top<metadataRect.bottom&&pathRect.bottom>metadataRect.top,
+          viewportScrollWidth:document.documentElement.scrollWidth};
+      });
+      const clip=await page.evaluate(`(${auditSource})({root:'body',viewport:true})`);
+      measurements.push({theme,width,...measurement,clip});
+      await page.getByTestId('rag-files').scrollIntoViewIfNeeded();
+      await page.screenshot({path:join(artifacts,`index-table-${theme}-${width}.png`)});
+      await page.getByTestId('rag-job-layout-job').scrollIntoViewIfNeeded();
+      await page.screenshot({path:join(artifacts,`index-job-${theme}-${width}.png`)});
+    }
+  }
+  writeFileSync(join(artifacts,'index-layout.json'),JSON.stringify(measurements,null,2));
+  for(const measurement of measurements){
+    const label=`${measurement.theme}/${measurement.width}`;
+    assert.ok(measurement.paneScrollWidth<=measurement.paneWidth+1,`${label}: the index pane must not scroll horizontally`);
+    assert.ok(measurement.viewportScrollWidth<=measurement.width,`${label}: the viewport must not scroll horizontally`);
+    assert.ok(measurement.pathWidth>0,`${label}: the job path must retain visible space`);
+    assert.ok(measurement.pathHasFullText,`${label}: the full job path must be readable without hovering`);
+    assert.ok(measurement.filePathHasFullText,`${label}: the table path must wrap inside its cell`);
+    assert.ok(measurement.fileErrorFitsCell,`${label}: the failure details must wrap inside their cell`);
+    assert.equal(measurement.pathMetadataOverlap,false,`${label}: the path and generation must occupy separate space`);
+    assert.equal(measurement.clip.cut,0,`${label}: focus and surface shadows must survive clipping`);
+    if(measurement.tableWidth>measurement.paneWidth){
+      assert.match(measurement.tableParentOverflow,/auto|scroll/u,`${label}: only the table owns its horizontal scrolling`);
+    }
+  }
+  const region=page.getByRole('region',{name:'已索引文件',exact:true});
+  await region.focus();
+  const scrollBefore=await region.evaluate(el=>el.scrollLeft);
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction(()=>document.activeElement?.scrollLeft>0);
+  assert.ok(await region.evaluate(el=>el.scrollLeft)>scrollBefore);
+  const fixture=await page.evaluate(()=>window.indexLayoutFixture);
+  const file=page.getByTestId('rag-file-layout-file');
+  assert.equal(await file.locator('td').first().getAttribute('title'),fixture.path);
+  assert.match(await file.innerText(),/synthetic_runtime_fixture_with_long_error_code/u);
+  const retry=page.getByTestId('rag-job-retry-layout-job');
+  await retry.focus();
+  assert.equal(await retry.evaluate(el=>document.activeElement===el),true);
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>window.indexLayoutFixture.controls.length===1);
+  assert.deepEqual(await page.evaluate(()=>window.indexLayoutFixture.controls),[
+    {projectId:'p1',action:'retry',fileId:'layout-file',expectedRevision:7}
+  ]);
+  await page.evaluate(()=>window.unmount());
 });
 
 test('copied Markdown keeps declaration separate from human review status',async()=>{

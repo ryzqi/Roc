@@ -34,6 +34,7 @@ before(async () => {
     let generation=0;
     window.mount=input=>flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
       <Harness key={++generation} initial={input}/></LazyMotion></MotionConfig>));
+    window.unmount=()=>flushSync(()=>root.render(null));
   `, style: 'body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}'});
   writeFileSync(join(directory, 'main.cjs'), `const {app,BrowserWindow}=require('electron');
     app.setPath('userData',${JSON.stringify(join(directory, 'data'))});
@@ -58,6 +59,7 @@ before(async () => {
   await page.waitForFunction(() => typeof mount === 'function');
 });
 after(async () => {
+  if (page !== undefined && !page.isClosed()) await page.evaluate(() => window.unmount?.());
   try {await app?.close();} finally {
     fixtures.forEach(f => {f.close(); rmSync(f.root, {recursive: true, force: true});}); api?.dispose();
     if (directory) rmSync(directory, {recursive: true, force: true});
@@ -147,7 +149,10 @@ test('lazy native form requires explicit rules and preview, locks the drawer, an
     'artifact-response-toggle', 'artifact-journal-toggle', 'artifact-journal-refresh', 'artifact-journal-history-open']) {
     assert.equal(await page.getByTestId(id).isDisabled(), true, id);
   }
-  await page.keyboard.press('Escape'); assert.equal(await page.getByTestId('artifact-inspector-panel').count(), 1);
+  await page.keyboard.press('Escape'); await page.getByTestId('artifact-draft-discard-panel').waitFor();
+  await page.getByTestId('artifact-draft-discard-cancel').click();
+  await page.getByTestId('artifact-draft-discard-panel').waitFor({state:'detached'});
+  assert.equal(await page.getByTestId('artifact-inspector-panel').count(), 1);
   await preview(); assert.match(await page.getByTestId('artifact-journal-preview-result').innerText(), /不通过/u);
   await text('规则原文', 'Changed synthetic requirement.');
   assert.equal(await page.getByTestId('artifact-journal-preview-result').count(), 0);

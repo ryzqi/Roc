@@ -1,3 +1,4 @@
+import {useEffect} from 'react';
 import type {ResearchReviewProtocolSaveRequest} from '../../shared/schemas/research-systematic-review';
 
 export type ReviewProtocolBody = ResearchReviewProtocolSaveRequest['body'];
@@ -12,6 +13,18 @@ export type ReviewProtocolDraft = {
 
 /** Window-local unconfirmed form input, keyed by project and exact protocol version. */
 export type ReviewProtocolDrafts = Map<string, ReviewProtocolDraft>;
+
+/** The shell retains these drafts after the inspector is closed. */
+export function useReviewProtocolDraftGuard(drafts: ReviewProtocolDrafts): void {
+  useEffect(() => {
+    const beforeUnload = (event: BeforeUnloadEvent): void => {
+      if (drafts.size === 0) return;
+      event.preventDefault(); event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => window.removeEventListener('beforeunload', beforeUnload);
+  }, [drafts]);
+}
 
 export function emptyReviewProtocolBody(): ReviewProtocolBody {
   return {

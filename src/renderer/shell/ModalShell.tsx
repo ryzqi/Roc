@@ -84,6 +84,8 @@ export type ModalShellProps = {
    * in the attribute decides nothing.
    */
   bodyPadding?: 'default' | 'none';
+  /** Content with its own toolbar can supply the visible title and close action. */
+  hideHeader?: boolean;
   /**
    * Which layering band the overlay is painted in.
    *
@@ -110,6 +112,7 @@ export function ModalShell({
   beforeClose,
   closeOnBackdrop = true,
   bodyPadding = 'default',
+  hideHeader = false,
   layer = 'dialog'
 }: ModalShellProps): React.JSX.Element | null {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -149,7 +152,7 @@ export function ModalShell({
           // overlays both written as `z-50` are ordered by DOM order, which is how the
           // narrow-window sidebar drawer ended up painted on top of the settings panel.
           style={{ zIndex: OVERLAY_Z_INDEX[layer] }}
-          className="fixed inset-0 flex"
+          className={kind === 'drawer' ? 'fixed inset-0 flex' : 'ui-modal-layout fixed inset-0'}
           data-testid={testId ?? 'overlay'}
           data-overlay-kind={kind}
           data-overlay-layer={layer}
@@ -191,9 +194,10 @@ export function ModalShell({
             className={
               kind === 'drawer'
                 ? `relative z-10 ml-auto flex h-full max-w-[calc(100vw-var(--shadow-modal-gutter-inline))] flex-col border-l-[0.5px] border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[520px]'}`
-                : `relative z-10 m-auto flex max-h-[min(86vh,calc(100dvh-2*var(--shadow-modal-gutter-block)))] max-w-[min(92vw,calc(100vw-2*var(--shadow-modal-gutter-inline)))] flex-col overflow-clip rounded-window border-[0.5px] border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[680px]'}`
+                : `relative z-10 row-start-2 mx-auto flex max-h-[min(86vh,calc(100dvh-2*var(--shadow-modal-gutter-block)))] max-w-[min(92vw,calc(100vw-2*var(--shadow-modal-gutter-inline)))] flex-col overflow-clip rounded-window border-[0.5px] border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[680px]'}`
             }
           >
+            {hideHeader ? <h2 id={titleId} className="sr-only">{title}</h2> : (
             <div className="flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-4 py-2.5">
               <h2 id={titleId} className="min-w-0 flex-1 truncate text-ink text-[length:var(--font-h3-size)]">
                 {title}
@@ -208,6 +212,7 @@ export function ModalShell({
                 <X size={14} aria-hidden="true" />
               </button>
             </div>
+            )}
 
             <div
               id={bodyId}

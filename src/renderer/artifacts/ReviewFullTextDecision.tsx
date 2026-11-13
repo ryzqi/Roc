@@ -9,6 +9,7 @@ import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
 import {ReviewScreeningOutcome, screeningOutcome, screeningOutcomeDraft, screeningDecisions} from './ReviewScreeningOutcome';
+import {ArtifactDraftDiscard, useArtifactDraft} from './artifact-editor-guard';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 export function ReviewFullTextDecision({client, protocol, plan, titleFreezeHash, binding, hitId, reviewerId, parent, writable, onPending, onSaved}: {
@@ -34,6 +35,7 @@ export function ReviewFullTextDecision({client, protocol, plan, titleFreezeHash,
   const save = useAsyncAction((request: ResearchReviewFullTextDecisionSave) => client.api.research.saveReviewFullTextDecision(request),
     {label: '保存人工全文资格决定'});
   const busy = useRef(false), requests = useRef(new Map<string, string>());
+  const editor = useArtifactDraft('全文资格人工决定', {draft, revisionReason, considered}, busy);
   const canEdit = writable && binding.referenceStatus === 'current' && editing;
   return <section className="flex min-w-0 flex-col gap-3" data-testid="artifact-review-full-decision">
     {parent === null ? null : <section className="flex flex-col gap-1" data-testid="artifact-review-full-current">
@@ -48,12 +50,13 @@ export function ReviewFullTextDecision({client, protocol, plan, titleFreezeHash,
         </pre>
       </details>
       {!writable || editing ? null : <button type="button" className={`${button} self-start`}
-        data-testid="artifact-review-full-revise" onClick={() => setEditing(true)}>修订此审核人决定</button>}
+        disabled={editor.locked} data-testid="artifact-review-full-revise"
+        onClick={() => {if (!editor.isLocked()) setEditing(true);}}>修订此审核人决定</button>}
     </section>}
     <section className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2" data-testid="artifact-review-full-suggestions">
       <h4 className="font-medium">独立模型建议</h4>
-      <button type="button" className={`${button} self-start`} disabled={save.pending || suggestions.status === 'loading'}
-        onClick={suggestions.reload}>重读模型建议</button>
+      <button type="button" className={`${button} self-start`} disabled={save.pending || editor.locked || suggestions.status === 'loading'}
+        onClick={() => {if (!editor.isLocked()) suggestions.reload();}}>重读模型建议</button>
       {suggestions.status !== 'loading' ? null : <p role="status">正在读取原始建议…</p>}
       {suggestions.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{suggestions.error}</p>}
       {suggestions.status !== 'ready' ? null : suggestions.data!.length === 0 ? <p className="text-muted">本页没有模型建议。</p> :
@@ -67,27 +70,28 @@ export function ReviewFullTextDecision({client, protocol, plan, titleFreezeHash,
               {JSON.stringify({outcome: item.snapshot.request.outcome, origin: item.snapshot.origin, recordedAt: item.snapshot.recordedAt}, null, 2)}
             </pre>
           </details>
-          {!canEdit ? null : <button type="button" className={`${button} self-start`} disabled={save.pending || !item.sourceCurrent || item.snapshot.request.bindingId !== binding.snapshot.id || item.snapshot.request.expectedBindingHash !== binding.snapshotHash}
+          {!canEdit ? null : <button type="button" className={`${button} self-start`} disabled={save.pending || editor.locked || !item.sourceCurrent || item.snapshot.request.bindingId !== binding.snapshot.id || item.snapshot.request.expectedBindingHash !== binding.snapshotHash}
             data-testid="artifact-review-full-consider" onClick={() => {
+              if (busy.current || editor.isLocked()) return;
               setConsidered({id: item.snapshot.id, expectedHash: item.snapshotHash}); save.reset();
             }}>记录已参考此建议</button>}
         </li>)}</ul>}
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={button} disabled={save.pending || suggestions.status === 'loading' || offset === 0}
-          onClick={() => setOffset(offset - 30)}>上一页建议</button>
+        <button type="button" className={button} disabled={save.pending || editor.locked || suggestions.status === 'loading' || offset === 0}
+          onClick={() => {if (!editor.isLocked()) setOffset(offset - 30);}}>上一页建议</button>
         <span className="text-muted">第 {Math.floor(offset / 30) + 1} 页</span>
-        <button type="button" className={button} disabled={save.pending || suggestions.status !== 'ready' || suggestions.data!.length < 30}
-          onClick={() => setOffset(offset + 30)}>下一页建议</button>
+        <button type="button" className={button} disabled={save.pending || editor.locked || suggestions.status !== 'ready' || suggestions.data!.length < 30}
+          onClick={() => {if (!editor.isLocked()) setOffset(offset + 30);}}>下一页建议</button>
       </div>
     </section>
     {considered === null ? null : <div className="flex flex-col gap-1">
       <p className="text-muted break-all">已参考建议 {considered.id}</p>
-      {!canEdit ? null : <button type="button" className={`${button} self-start`} disabled={save.pending}
-        onClick={() => {setConsidered(null); save.reset();}}>清除建议引用</button>}
+      {!canEdit ? null : <button type="button" className={`${button} self-start`} disabled={save.pending || editor.locked}
+        onClick={() => {if (!busy.current && !editor.isLocked()) {setConsidered(null); save.reset();}}}>清除建议引用</button>}
     </div>}
     {!canEdit ? null : <form className="flex flex-col gap-2" data-testid="artifact-review-full-form" onSubmit={event => {
       event.preventDefault();
-      if (busy.current || !canEdit || draft.decision === '') return;
+      if (busy.current || !canEdit || editor.isLocked() || draft.decision === '') return;
       const body = {projectId, corpusId, expectedPlanHash: plan.snapshotHash, expectedTitleFreezeHash: titleFreezeHash,
         bindingId: binding.snapshot.id, expectedBindingHash: binding.snapshotHash, hitId, phase: 'full_text' as const,
         reviewerId, outcome: screeningOutcome(draft.decision, draft), consideredSuggestion: considered,
@@ -97,9 +101,11 @@ export function ReviewFullTextDecision({client, protocol, plan, titleFreezeHash,
       let requestId = requests.current.get(signature);
       if (requestId === undefined) {requestId = crypto.randomUUID(); requests.current.set(signature, requestId);}
       busy.current = true; onPending(true);
-      void save.run({...body, requestId}).then(result => {busy.current = false; onPending(false); if (result.ok) onSaved();});
+      void save.run({...body, requestId}).then(result => {
+        busy.current = false; onPending(false); if (result.ok) {editor.saved(); onSaved();}
+      });
     }}>
-      <fieldset disabled={save.pending} className="flex flex-col gap-2">
+      <fieldset disabled={save.pending || editor.locked} className="flex flex-col gap-2">
         <ReviewScreeningOutcome protocol={protocol} value={draft} allowUncertain onChange={value => {setDraft(value); save.reset();}} />
         {parent === null ? null : <label className="flex flex-col gap-1 text-muted">筛选修订原因
           <textarea required aria-label="筛选修订原因" maxLength={10000} rows={3}
@@ -110,6 +116,12 @@ export function ReviewFullTextDecision({client, protocol, plan, titleFreezeHash,
           disabled={draft.decision === '' || (draft.decision === 'include' && draft.inclusionCriterionIds.length === 0)}
           data-testid="artifact-review-full-save">保存全文资格人工决定</button>
       </fieldset>
+      <ArtifactDraftDiscard dirty={editor.dirty} testId="artifact-review-full-decision-discard" onDiscard={() => {
+        const next = {draft: screeningOutcomeDraft(parent?.snapshot.request.outcome ?? null), revisionReason: '',
+          considered: parent?.snapshot.request.consideredSuggestion ?? null};
+        setDraft(next.draft); setRevisionReason(''); setConsidered(next.considered); setEditing(parent === null);
+        save.reset(); editor.reset(next);
+      }} />
     </form>}
     {save.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{save.error}</p>}
     {history.error === null ? null : <p role="alert" className="text-[var(--st-warn)] break-words">{history.error}</p>}

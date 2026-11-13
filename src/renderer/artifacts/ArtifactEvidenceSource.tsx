@@ -1,12 +1,14 @@
-import {lazy, Suspense, useState} from 'react';
+import { useState } from 'react';
+import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
 import type {ResearchInspectedEvidence} from '../../shared/schemas/research-evidence-source';
 import type {RocClient} from '../shared/roc-client';
 import {formSecondaryButtonClass} from '../shared/form-ui';
+import {useArtifactEditorGuard} from './artifact-editor-guard';
 
-const SourceMigrations = lazy(async () => ({default: (await import('./ArtifactSourceMigrations')).ArtifactSourceMigrations}));
-const SourceReplacements = lazy(async () => ({default: (await import('./ArtifactSourceReplacements')).ArtifactSourceReplacements}));
-const DocumentSource = lazy(async () => ({default: (await import('./ArtifactDocumentSource')).ArtifactDocumentSource}));
-const ExperimentSource = lazy(async () => ({default:(await import('./ArtifactExperimentEvidence')).ArtifactExperimentEvidence}));
+const SourceMigrations = retryableLazy(async () => ({default: (await import('./ArtifactSourceMigrations')).ArtifactSourceMigrations}));
+const SourceReplacements = retryableLazy(async () => ({default: (await import('./ArtifactSourceReplacements')).ArtifactSourceReplacements}));
+const DocumentSource = retryableLazy(async () => ({default: (await import('./ArtifactDocumentSource')).ArtifactDocumentSource}));
+const ExperimentSource = retryableLazy(async () => ({default:(await import('./ArtifactExperimentEvidence')).ArtifactExperimentEvidence}));
 
 export function ArtifactEvidenceSource({client, source, canDecide, onChanged}: {
   client: RocClient; source: ResearchInspectedEvidence; canDecide: boolean; onChanged: () => void
@@ -15,6 +17,7 @@ export function ArtifactEvidenceSource({client, source, canDecide, onChanged}: {
   const [showReplacements, setShowReplacements] = useState(false);
   const [showDocument, setShowDocument] = useState(false);
   const [showExperiment,setShowExperiment]=useState(false);
+  const guard = useArtifactEditorGuard();
   const evidence = source.evidence;
   return <details data-reading-key={`evidence:${evidence.id}`} className="border-b-[0.5px] border-line py-2 [&::details-content]:overflow-clip!">
     <summary data-reading-key={`evidence-summary:${evidence.id}`} className="cursor-pointer break-words text-ink">{evidence.title}
@@ -30,9 +33,9 @@ export function ArtifactEvidenceSource({client, source, canDecide, onChanged}: {
         data-testid={`artifact-experiment-evidence-toggle-${evidence.id}`} onClick={()=>setShowExperiment(value=>!value)}>
         {showExperiment?'收起实验结果来源':'查看实验结果来源'}
       </button>
-      {!showExperiment?null:<Suspense fallback={<p role="status">加载实验结果来源…</p>}>
+      {!showExperiment?null:<LazyBoundary fallback={<p role="status">加载实验结果来源…</p>}>
         <ExperimentSource key={`${evidence.id}:${evidence.sourceVersion}`} client={client} evidence={evidence}/>
-      </Suspense>}
+      </LazyBoundary>}
     </>}
     {source.sourceLocator === null ? null : <>
       <button type="button" className={`${formSecondaryButtonClass} mt-2 border-[0.5px]`}
@@ -40,27 +43,31 @@ export function ArtifactEvidenceSource({client, source, canDecide, onChanged}: {
         data-reading-key={`document-source-toggle:${evidence.id}`} onClick={() => setShowDocument(open => !open)}>
         {showDocument ? '收起原文固定版本' : '查看原文固定版本'}
       </button>
-      {!showDocument ? null : <Suspense fallback={<p role="status">加载原文阅读器…</p>}>
+      {!showDocument ? null : <LazyBoundary fallback={<p role="status">加载原文阅读器…</p>}>
         <DocumentSource client={client} evidence={evidence} locator={source.sourceLocator}/>
-      </Suspense>}
+      </LazyBoundary>}
     </>}
     {source.referenceStatus !== 'superseded' || source.sourceLocator === null ? null : <>
       <button type="button" className={`${formSecondaryButtonClass} mt-2 border-[0.5px]`}
-        aria-expanded={showMigrations} data-testid={`artifact-source-migrations-toggle-${evidence.id}`}
-        data-reading-key={`source-migrations-toggle:${evidence.id}`} onClick={() => setShowMigrations(open => !open)}>
+        aria-expanded={showMigrations} disabled={guard.locked()} data-testid={`artifact-source-migrations-toggle-${evidence.id}`}
+        data-reading-key={`source-migrations-toggle:${evidence.id}`} onClick={() => {
+          if (!guard.locked()) setShowMigrations(open => !open);
+        }}>
         {showMigrations ? '收起定位候选' : '查看定位候选'}
       </button>
-      {!showMigrations ? null : <Suspense fallback={<p role="status">正在加载定位候选…</p>}>
+      {!showMigrations ? null : <LazyBoundary fallback={<p role="status">正在加载定位候选…</p>}>
         <SourceMigrations client={client} projectId={evidence.projectId} evidenceId={evidence.id} canDecide={canDecide}/>
-      </Suspense>}
+      </LazyBoundary>}
     </>}
     <button type="button" className={`${formSecondaryButtonClass} mt-2 border-[0.5px]`}
-      aria-expanded={showReplacements} data-testid={`artifact-source-replacements-toggle-${evidence.id}`}
-      data-reading-key={`source-replacements-toggle:${evidence.id}`} onClick={() => setShowReplacements(open => !open)}>
+      aria-expanded={showReplacements} disabled={guard.locked()} data-testid={`artifact-source-replacements-toggle-${evidence.id}`}
+      data-reading-key={`source-replacements-toggle:${evidence.id}`} onClick={() => {
+        if (!guard.locked()) setShowReplacements(open => !open);
+      }}>
       {showReplacements ? '收起来源替代' : '查看来源替代'}
     </button>
-    {!showReplacements ? null : <Suspense fallback={<p role="status">正在加载来源替代…</p>}>
+    {!showReplacements ? null : <LazyBoundary fallback={<p role="status">正在加载来源替代…</p>}>
       <SourceReplacements client={client} source={source} canDecide={canDecide} onChanged={onChanged}/>
-    </Suspense>}
+    </LazyBoundary>}
   </details>;
 }

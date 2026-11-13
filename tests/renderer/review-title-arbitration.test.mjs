@@ -52,6 +52,7 @@ before(async () => {
     let generation=0;
     window.mount=(initialRequest,writable=true)=>flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
       <Harness key={++generation} initialRequest={initialRequest} writable={writable}/></LazyMotion></MotionConfig>));
+    window.unmount=()=>flushSync(()=>root.render(null));
   `, style: 'body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}main{padding:16px}'});
   writeFileSync(join(directory, 'main.cjs'), `const {app,BrowserWindow}=require('electron');
     app.setPath('userData',${JSON.stringify(join(directory, 'data'))});
@@ -79,6 +80,7 @@ before(async () => {
   await page.waitForFunction(() => typeof window.mount === 'function');
 });
 after(async () => {
+  if (page !== undefined && !page.isClosed()) await page.evaluate(()=>window.unmount?.());
   try {await app?.close();} finally {
     for (const f of fixtures) await f.dispose();
     api?.dispose(); if (directory) rmSync(directory, {recursive: true, force: true});
@@ -253,8 +255,14 @@ test('a real newer human decision invalidates ready-to-freeze hash and a fresh r
   const before=f.changes();await tid('artifact-review-title-freeze').click();
   await tid('artifact-review-title').getByRole('alert').filter({hasText:'状态已变化'}).waitFor();assert.equal(f.changes(),before);
   assert.equal(f.db.prepare('SELECT count(*) FROM research_review_screening_freezes').pluck().get(),0);
+  assert.equal(await tid('artifact-review-title-refresh').isDisabled(),true);
+  await tid('artifact-review-title-discard').click();await tid('artifact-draft-discard-cancel').click();
+  assert.equal(await page.getByLabel('标题摘要整轮审核说明',{exact:true}).inputValue(),'Synthetic original ready set');
+  assert.equal(f.changes(),before);
+  await tid('artifact-review-title-discard').click();await tid('artifact-draft-discard-confirm').click();
   await tid('artifact-review-title-refresh').click();await page.waitForFunction(()=>document.querySelector('[data-testid="artifact-review-title-counts"]')?.textContent.includes('无法判断 1'));
   assert.equal(await tid('artifact-review-title-freeze').isDisabled(),true);
+  assert.equal(f.changes(),before);
 });
 
 test('marked missing whole-round receipt is a real read failure and never reopens mutable decisions or a fresh freeze',async()=>{

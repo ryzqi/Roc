@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { GitBranch, History, Loader2, RefreshCw, Upload, X } from 'lucide-react';
 import { BACKEND_ERROR_CODES } from '../../app/loaded-state';
 import type { RocClient } from '../../shared/roc-client';
@@ -18,6 +18,7 @@ import {
 import { GitBranchSwitcher } from './GitBranchSwitcher';
 import { GitChangeLists } from './GitChangeLists';
 import { GitFileDiff } from './GitFileDiff';
+import {useGitCommitDraftGuard, type GitCommitDrafts} from './git-commit-draft';
 
 /**
  * Git panel (P3/T3.5) — the whole Git surface, in the top-bar drawer.
@@ -47,6 +48,10 @@ export type GitPanelProps = {
   workspacePath: string | null;
   /** Archived projects are read-only. */
   writable: boolean;
+  /** The shell retains messages after the drawer closes; standalone consumers use a local map. */
+  commitDrafts?: GitCommitDrafts;
+  /** Registers the operation reader so the shell can guard navigation in the same event. */
+  onBusyChange?: (read: (() => boolean) | null) => void;
   /**
    * One layout: the stacked one the top-bar drawer uses.
    *
@@ -60,13 +65,36 @@ export type GitPanelProps = {
   layout: 'drawer';
 };
 
-export function GitPanel({ client, workspacePath, writable, layout }: GitPanelProps): React.JSX.Element {
+export function GitPanel({commitDrafts, ...props}: GitPanelProps): React.JSX.Element {
+  const [localDrafts] = useState<GitCommitDrafts>(() => new Map());
+  useGitCommitDraftGuard(localDrafts);
+  return <GitPanelContent key={props.workspacePath} {...props} commitDrafts={commitDrafts ?? localDrafts} />;
+}
+
+function GitPanelContent({client, workspacePath, writable, layout, commitDrafts, onBusyChange}:
+  Omit<GitPanelProps, 'commitDrafts'> & {commitDrafts: GitCommitDrafts}): React.JSX.Element {
   const git = useGitWorkspace(client, workspacePath);
   const rtk = useRtkStatus(client, workspacePath !== null);
-  const [commitMessage, setCommitMessage] = useState('');
+  const [commitMessage, setCommitMessage] = useState(() =>
+    workspacePath === null ? '' : commitDrafts.get(workspacePath) ?? '');
+  const messageRef = useRef(commitMessage);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [discardTarget, setDiscardTarget] = useState<string | null>(null);
   const [branchOpen, setBranchOpen] = useState(false);
+
+  useLayoutEffect(() => {
+    onBusyChange?.(git.isBusy);
+    return () => onBusyChange?.(null);
+  }, [git.isBusy, onBusyChange]);
+  useEffect(() => {
+    const unload = (event: BeforeUnloadEvent): void => {
+      if (!git.isBusy()) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', unload);
+    return () => window.removeEventListener('beforeunload', unload);
+  }, [git.isBusy]);
 
   const changes = git.snapshot?.changes ?? [];
   const groups = useMemo(() => groupGitChanges(changes), [changes]);
@@ -93,11 +121,13 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
   const selectedChange = changes.find((change) => change.relativePath === git.selectedPath) ?? null;
 
   const runCommit = async (): Promise<void> => {
-    if (!commitState.enabled) {
+    if (!commitState.enabled || git.isBusy()) {
       return;
     }
-    const ok = await git.commit(commitMessage);
+    const ok = await git.commit(messageRef.current);
     if (ok) {
+      if (workspacePath !== null) commitDrafts.delete(workspacePath);
+      messageRef.current = '';
       setCommitMessage('');
       setSelectedPaths([]);
     }
@@ -124,14 +154,16 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
       {git.pending === 'push' ? (
         <button
           type="button"
-          onClick={() => void git.cancelPush()}
+          onClick={() => {if (!git.cancellingPush) void git.cancelPush();}}
           aria-label="取消 Git 推送"
+          aria-disabled={git.cancellingPush}
+          aria-busy={git.cancellingPush || undefined}
           data-testid="git-cancel-push"
-          title="停止当前推送"
-          className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control px-2 text-[var(--st-warn)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline focus-visible:outline-2"
+          title={git.cancellingPush ? '正在请求取消当前推送' : '停止当前推送'}
+          className="flex min-h-[var(--control-height-compact)] items-center gap-1 rounded-control px-2 text-muted hover:text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline focus-visible:outline-2 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
         >
           <X size={12} aria-hidden="true" />
-          <span className="text-[length:var(--font-micro-size)]">取消</span>
+          <span className="text-[length:var(--font-micro-size)]">{git.cancellingPush ? '请求取消中…' : '取消'}</span>
         </button>
       ) : (
         <button
@@ -167,7 +199,14 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
     <div className="flex shrink-0 flex-col gap-1.5">
       <textarea
         value={commitMessage}
-        onChange={(event) => setCommitMessage(event.target.value)}
+        onChange={(event) => {
+          if (git.isBusy() || !writable || workspacePath === null) return;
+          const message = event.target.value;
+          messageRef.current = message;
+          if (message.length === 0) commitDrafts.delete(workspacePath);
+          else commitDrafts.set(workspacePath, message);
+          setCommitMessage(message);
+        }}
         disabled={busy || !writable}
         placeholder="提交信息（必填）"
         aria-label="提交信息"
@@ -181,9 +220,9 @@ export function GitPanel({ client, workspacePath, writable, layout }: GitPanelPr
           disabled={!commitState.enabled}
           onClick={() => void runCommit()}
           data-testid="git-commit"
-          className="h-[var(--control-height)] rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] active:bg-[var(--accent-deep)] disabled:opacity-40"
+          className="h-[var(--control-height)] rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] tabular-nums active:bg-[var(--accent-deep)] disabled:opacity-40"
         >
-          {git.pending === 'commit' ? '提交中…' : `提交（${git.snapshot?.changedFiles ?? 0} 个文件）`}
+          {git.pending === 'commit' ? '提交中…' : `提交（${(git.snapshot?.changedFiles ?? 0).toLocaleString()} 个文件）`}
         </button>
         <span className="min-w-0 flex-1 truncate text-muted text-[length:var(--font-micro-size)]">
           {commitState.enabled || git.pending === 'commit' ? '' : commitState.reason}
