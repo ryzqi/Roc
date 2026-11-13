@@ -248,10 +248,10 @@ test('source embedding retry admits one synchronous request, retains a refusal a
 
 test('retrieval exposes optional reranking and sends the selected mode through IPC',async()=>{
   await page.evaluate(()=>window.mountRag());
-  await page.getByLabel('排序方式').selectOption('lexical-v1');
+  await page.getByLabel('排序方式').selectOption('semantic');
   await page.getByTestId('rag-query').fill('注意力机制');
   await page.getByTestId('rag-search').focus();await page.keyboard.press('Enter');
-  await page.waitForFunction(()=>window.searchInput?.rerank==='lexical-v1');
+  await page.waitForFunction(()=>window.searchInput?.rerank==='semantic');
   assert.equal(await page.evaluate(()=>window.searchInput.limit),20);
   await page.getByTestId('rag-degraded').getByText(/仅返回关键词结果/).waitFor();
 });

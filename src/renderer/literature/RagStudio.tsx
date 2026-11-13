@@ -90,7 +90,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
   const client = literature.client;
   const projectId = literature.projectId;
   const [query, setQuery] = useState('');
-  const [rerank,setRerank]=useState<'none'|'lexical-v1'>('none');
+  const [rerank,setRerank]=useState<'none'|'semantic'>('semantic');
   const [result, setResult] = useState<ResearchKnowledgeSearchResult | null>(null);
   const searchAction = useAsyncAction(
     (request: Parameters<typeof searchKnowledge>[1]) => searchKnowledge(client, request),
@@ -369,9 +369,9 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
         <section className="mb-4">
           <h3 className="mb-1.5 text-muted text-[length:var(--font-meta-size)]">检索（关键词与语义匹配）</h3>
           <label className="mb-2 flex items-center gap-2 text-xs text-subtle">排序方式
-            <select aria-label="排序方式" value={rerank} disabled={searching} onChange={event=>setRerank(event.target.value as 'none'|'lexical-v1')}
+            <select aria-label="排序方式" value={rerank} disabled={searching} onChange={event=>setRerank(event.target.value as 'none'|'semantic')}
               className="min-w-0 rounded-control border-[0.5px] border-line bg-surface px-2 py-1 text-ink disabled:opacity-40">
-              <option value="none">关键词与语义融合</option><option value="lexical-v1">融合后按查询词覆盖重排（实验）</option>
+              <option value="none">关键词与语义融合</option><option value="semantic">语义精排（不可用时回退融合）</option>
             </select>
           </label>
           <div className="flex gap-2">
@@ -408,6 +408,9 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
             </button>
           </div>
 
+          {result && <p role="status" className="mt-2 text-xs text-subtle">{result.ranking.reranker.status === 'succeeded'
+            ? '已使用语义精排' : result.ranking.reranker.status === 'not_requested' ? '使用融合排序'
+            : `精排未使用，已回退融合排序（${({config_missing:'未配置',disabled:'已停用',timeout:'超时',failed:'服务故障'} as const)[result.ranking.reranker.status]}）`}</p>}
           {result?.ranking?.degradation && <p role="status" className="mt-2 text-xs text-subtle" data-testid="rag-degraded">
             语义检索暂不可用，本次仅返回关键词结果（{{timeout:'请求超时',network:'网络故障',rate_limit:'服务限流',provider_unavailable:'服务暂不可用'}[result.ranking.degradation]}）。可稍后重试。
           </p>}

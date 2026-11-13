@@ -1,3 +1,4 @@
+import {RerankerSettings} from './RerankerSettings';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import type { ResearchEmbeddingConfig } from '../../../shared/types/research';
@@ -42,7 +43,7 @@ import {
  *    it is never part of the settings draft, the export snapshot or `localStorage`.
  *
  * Everything the legacy `ModelSettings` had for RAG that the backend does **not** have
- * (chunk size, chunk overlap, topK, RRF k, vector/keyword/paper weights, reranker model,
+ * (chunk size, chunk overlap, topK, RRF k, vector/keyword/paper weights,
  * similarity threshold, contextual prefix, parent expansion) is absent on purpose and
  * registered in findings F22.
  */
@@ -469,6 +470,8 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
           </div>
         )}
       </fieldset>
+
+      <RerankerSettings client={client} />
 
       <RemoteModelPicker
         open={pullModelsOpen && form !== null}

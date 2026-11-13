@@ -1,4 +1,6 @@
 import {researchWikiCapabilities, registerResearchWikiCapabilities} from './wiki-capabilities';
+import {ResearchRerankerService} from './reranker-service';
+import {rerankerConfigSchema, rerankerSaveSchema} from '../../../shared/schemas/research-reranker';
 import {knowledgeContextRequestSchema, knowledgeContextResultSchema} from '../../../shared/schemas/research-knowledge-context';
 import {recordCapabilityOperationReceipt} from '../../kernel/capability-operation-context';
 import {knowledgeJobSchema, knowledgeJobsListSchema, knowledgeJobRetrySchema} from '../../../shared/schemas/research-knowledge-jobs';
@@ -215,6 +217,8 @@ const knowledgeCapabilities = {
   retry: descriptor('research.knowledge.retry', knowledgeJobRetrySchema, z.object({queued:z.literal(true)})),
   listEmbedding: descriptor('research.embedding.list', emptyInputSchema, researchEmbeddingConfigSchema.array()),
   saveEmbedding: descriptor('research.embedding.save', researchEmbeddingConfigSaveRequestSchema, researchEmbeddingConfigSchema),
+  readReranker: descriptor('research.reranker.read', emptyInputSchema, rerankerConfigSchema.nullable()),
+  saveReranker: descriptor('research.reranker.save', rerankerSaveSchema, rerankerConfigSchema),
   upsertDocument: descriptor('research.knowledge.upsert', researchKnowledgeDocumentUpsertRequestSchema, researchKnowledgeDocumentSchema),
   search: descriptor('research.knowledge.search', researchKnowledgeSearchRequestSchema, researchKnowledgeSearchResultSchema),
   context: descriptor('research.knowledge.context', knowledgeContextRequestSchema, knowledgeContextResultSchema)
@@ -316,7 +320,10 @@ export function createResearchPlugin(options: ResearchPluginOptions): RocPlugin 
         library: options.libraryRoot ?? null, index: options.indexRoot ?? null, experiment: options.experimentRoot ?? null,
         export: options.exportRoot ?? null, model: options.modelsRoot ?? null, resource: options.resourceRoot
       }));
-      const researchEmbeddings = new ResearchEmbeddingService(researchRepository.knowledge, embeddingClient, context);
+      const reranker = new ResearchRerankerService(context);
+      context.capabilities.register(pluginId, knowledgeCapabilities.readReranker, () => reranker.readConfig());
+      context.capabilities.register(pluginId, knowledgeCapabilities.saveReranker, input => reranker.saveConfig(rerankerSaveSchema.parse(input)));
+      const researchEmbeddings = new ResearchEmbeddingService(researchRepository.knowledge, embeddingClient, context, reranker);
       embeddings = researchEmbeddings;
       researchRepository.knowledgeJobs.start((id, signal) => researchEmbeddings.embedDocument(id, null, signal));
       const researchIndexer = new ResearchIndexService(researchRepository, toolchain, researchEmbeddings, options.indexRoot ?? null, context.logger, options.indexWatch);

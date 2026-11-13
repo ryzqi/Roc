@@ -7,6 +7,7 @@ import { researchEmbeddingConfigSaveRequestSchema } from '../../../shared/schema
 import type { OpenAICompatibleEmbeddingClient } from './embedding-client';
 import { vectorToBlob } from './embedding-vectors';
 import type { EmbeddingConfigRow, KnowledgeSourceWrite, ResearchKnowledgeRepository } from './knowledge-repository';
+import type {ResearchRerankerService} from './reranker-service';
 
 type EmbeddingTask = { configId: string | null; controller: AbortController; promise: Promise<unknown> };
 export type ResearchEmbeddingReceipt = { configId: string; revision: number } | null;
@@ -16,7 +17,8 @@ export class ResearchEmbeddingService {
   private closed = false;
 
   constructor(private readonly knowledge: ResearchKnowledgeRepository, private readonly client: OpenAICompatibleEmbeddingClient,
-    private readonly context: Pick<RocPluginContext, 'secrets' | 'logger'>) {}
+    private readonly context: Pick<RocPluginContext, 'secrets' | 'logger'>,
+    private readonly reranker?: ResearchRerankerService) {}
 
   async listConfigs(): Promise<ResearchEmbeddingConfig[]> {
     const rows = this.knowledge.listEmbeddingConfigRows();
@@ -160,7 +162,16 @@ export class ResearchEmbeddingService {
     const row = this.select(request.embeddingConfigId);
     return await this.task(row?.id ?? null, signal, async (active) => {
       this.requireActive(active);
-      if (row === null) return this.knowledge.searchKnowledge({ request, vector: null });
+      const finish = async (result: ResearchKnowledgeSearchResult) => {
+        if (request.rerank === 'none') return result;
+        const ranked = this.reranker === undefined ? {scores: null, receipt: {
+          status: 'config_missing' as const, model: null, configHash: null, elapsedMs: 0
+        }} : await this.reranker.rank(request.query,
+          this.knowledge.searchCandidates(result).map(hit => `Document: ${hit.title}\n${hit.content.slice(0, 6000)}`), active);
+        this.requireActive(active);
+        return this.knowledge.applyRerank(result, ranked.scores, ranked.receipt);
+      };
+      if (row === null) return finish(this.knowledge.searchKnowledge({ request, vector: null }));
       this.knowledge.requireEmbeddingConfig(row.id, row.revision);
       let values: number[][];
       try {
@@ -170,10 +181,10 @@ export class ResearchEmbeddingService {
         this.knowledge.requireEmbeddingConfig(row.id,row.revision);
         const reason=transientEmbeddingFailure(error);
         if(reason===null) throw error;
-        return this.knowledge.searchKnowledge({request,vector:null,degradation:reason});
+        return finish(this.knowledge.searchKnowledge({request,vector:null,degradation:reason}));
       }
       this.requireActive(active);
-      return this.knowledge.searchKnowledge({ request, vector: { configId: row.id, configRevision: row.revision, blob: vectorToBlob(values[0]) } });
+      return finish(this.knowledge.searchKnowledge({ request, vector: { configId: row.id, configRevision: row.revision, blob: vectorToBlob(values[0]) } }));
     });
   }
 

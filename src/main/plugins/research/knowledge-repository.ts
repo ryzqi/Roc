@@ -1,3 +1,5 @@
+import {routeScientificQuery, selectDiverse} from './query-routing';
+import type {RerankerReceipt} from '../../../shared/schemas/research-reranker';
 import {structuredSpans, spanLocator, knowledgeChunkVersion, chunkTokenCount} from './knowledge-chunks';
 import {keywordTextV1,keywordQueryV1} from './knowledge-keywords';
 import { createHash } from 'node:crypto';
@@ -302,11 +304,12 @@ export class ResearchKnowledgeRepository {
     degradation?: 'timeout'|'network'|'rate_limit'|'provider_unavailable';
   }): ResearchKnowledgeSearchResult {
     const candidateLimit=input.request.candidateLimit ?? Math.min(200,Math.max(50,input.request.limit*4));
-    const rerank=input.request.rerank ?? 'none';
-    const keywordHits = this.keywordSearch(input.request.query, input.request.projectId, candidateLimit);
+    const documentId = this.queryDocument(input.request);
+    const route = routeScientificQuery(input.request.query, documentId);
+    const keywordHits = this.keywordSearch(input.request.query, input.request.projectId, candidateLimit, documentId);
     const config = input.vector === null ? null : this.requireEmbeddingConfig(input.vector.configId, input.vector.configRevision);
     const vectorHits = input.vector === null || config === null ? [] : this.vectorSearch(input.request.projectId, candidateLimit,
-      { spaceKey: embeddingSpaceKey(config.id, config.revision), dimensions: config.dimensions, blob: input.vector.blob });
+      { spaceKey: embeddingSpaceKey(config.id, config.revision), dimensions: config.dimensions, blob: input.vector.blob }, documentId);
     const merged = new Map<string, ResearchKnowledgeSearchHit>();
     keywordHits.forEach((hit, index) => {
       merged.set(hit.chunkId, { ...hit, keywordRank: index + 1, vectorRank: null, rrfScore: 1 / (60 + index + 1) });
@@ -322,20 +325,16 @@ export class ResearchKnowledgeRepository {
       }
     });
     const ordered = Array.from(merged.values()).sort((left, right) => right.rrfScore - left.rrfScore);
-    const terms=[...new Set(input.request.query.toLocaleLowerCase().match(/\p{Script=Han}+|[\p{L}\p{N}]+/gu) ?? [])];
-    const rerankScores=new Map(ordered.map(hit=>[hit.chunkId,terms.length===0?0:
-      terms.filter(term=>(hit.title+'\n'+hit.content).toLocaleLowerCase().includes(term)).length/terms.length]));
-    if (rerank==='lexical-v1') ordered.sort((a,b)=>rerankScores.get(b.chunkId)!-rerankScores.get(a.chunkId)! || b.rrfScore-a.rrfScore);
-    const hits = ordered.slice(0, input.request.limit);
+    const hits = selectDiverse(ordered, input.request.limit, route.diversify);
     const documents=new Map<string,KnowledgeVersionDocument>();
-    const candidates = ordered.map((hit, index) => ({
+    const candidates = ordered.map(hit => ({
       ...this.indexedVersion(hit.chunkId, input.request.projectId, documents),
-      rerankScore: rerank==='none' ? null : rerankScores.get(hit.chunkId)!,
+      rerankScore: null,
       keywordRank: hit.keywordRank, vectorRank: hit.vectorRank, score: hit.rrfScore,
       reason: 'sum(1/(60+rank)); equal channel weights' as const,
-      outputRank: index < input.request.limit ? index + 1 : null
+      outputRank: hits.includes(hit) ? hits.indexOf(hit) + 1 : null
     }));
-    const rankingInput = {schemaVersion:2 as const, candidateLimit, rerank, degradation:input.degradation ?? null, projectId: input.request.projectId, limit: input.request.limit,
+    const rankingInput = {schemaVersion:3 as const, candidateLimit, route, reranker: {status: 'not_requested' as const, model: null, configHash: null, elapsedMs: 0}, degradation:input.degradation ?? null, projectId: input.request.projectId, limit: input.request.limit,
       embedding: input.vector === null ? null : {configId: input.vector.configId,
         revision: input.vector.configRevision, queryVectorHash: createHash('sha256').update(input.vector.blob).digest('hex')}, candidates};
     return {
@@ -352,11 +351,50 @@ export class ResearchKnowledgeRepository {
     };
   }
 
+  private queryDocument(request: ResearchKnowledgeSearchRequest): string | null {
+    const rows = this.db.prepare(`SELECT id,title,metadata_json FROM research_knowledge_documents
+      WHERE (? IS NULL OR project_id=? OR project_id IS NULL)`).all(request.projectId, request.projectId) as Array<{id: string; title: string; metadata_json: string}>;
+    if (request.documentId) {
+      if (!rows.some(row => row.id === request.documentId)) throw new Error('research_knowledge_project_mismatch');
+      return request.documentId;
+    }
+    const query = request.query.toLocaleLowerCase();
+    const doi = query.match(/10\.\d{4,9}\/[^\s"<>]+/u)?.[0];
+    const matched = rows.filter(row => (row.title.length >= 8 && query.includes(row.title.toLocaleLowerCase())) ||
+      (doi !== undefined && row.metadata_json.toLocaleLowerCase().includes(doi)));
+    return matched.length === 1 ? matched[0]!.id : null;
+  }
+
+  searchCandidates(result: ResearchKnowledgeSearchResult): ResearchKnowledgeSearchHit[] {
+    return result.ranking.candidates.map(candidate => {
+      const row = this.db.prepare(`SELECT c.id AS chunk_id,c.document_id,d.title,c.content,c.locator,d.source_type,d.source_id
+        FROM research_knowledge_chunks c JOIN research_knowledge_documents d ON d.id=c.document_id WHERE c.id=?`)
+        .get(candidate.chunkId) as KnowledgeHitRow;
+      return {...toKnowledgeHit(row), keywordRank: candidate.keywordRank, vectorRank: candidate.vectorRank, rrfScore: candidate.score};
+    });
+  }
+
+  applyRerank(result: ResearchKnowledgeSearchResult, scores: number[] | null, reranker: RerankerReceipt): ResearchKnowledgeSearchResult {
+    this.assertSearchCurrent(result);
+    const ordered = this.searchCandidates(result);
+    const byId = new Map(ordered.map((hit, index) => [hit.chunkId, scores?.[index] ?? null]));
+    if (scores !== null) {
+      if (scores.length !== ordered.length || scores.some(score => !Number.isFinite(score))) throw new Error('reranker_scores_invalid');
+      ordered.sort((a,b) => byId.get(b.chunkId)! - byId.get(a.chunkId)! || b.rrfScore - a.rrfScore);
+    }
+    const hits = selectDiverse(ordered, result.ranking.limit, result.ranking.route.diversify);
+    const candidates = ordered.map(hit => ({...result.ranking.candidates.find(candidate => candidate.chunkId === hit.chunkId)!,
+      rerankScore: byId.get(hit.chunkId)!, outputRank: hits.includes(hit) ? hits.indexOf(hit) + 1 : null}));
+    const {inputHash: _hash, ranker, coverage, ...previous} = result.ranking;
+    const snapshot = {...previous, reranker, candidates};
+    return {...result, hits, ranking: {ranker, coverage, ...snapshot, inputHash: hashText(JSON.stringify({query: result.query, ...snapshot}))}};
+  }
+
   /** A receipt describes the indexed snapshot, never a claim about an unindexed external file. */
   assertSearchCurrent(result: ResearchKnowledgeSearchResult): void {
-    const {projectId, limit, embedding, candidates} = result.ranking;
-    const options=result.ranking.schemaVersion===1?{}:{schemaVersion:2,candidateLimit:result.ranking.candidateLimit,rerank:result.ranking.rerank, ...(result.ranking.degradation===undefined?{}:{degradation:result.ranking.degradation})};
-    if (result.ranking.inputHash !== hashText(JSON.stringify({query: result.query,...options, projectId, limit, embedding, candidates}))) {
+    const {inputHash, ranker: _ranker, coverage: _coverage, ...snapshot} = result.ranking;
+    const {projectId, embedding, candidates} = snapshot;
+    if (inputHash !== hashText(JSON.stringify({query: result.query, ...snapshot}))) {
       throw new Error('research_knowledge_ranking_changed');
     }
     if (embedding !== null) this.requireEmbeddingConfig(embedding.configId, embedding.revision);
@@ -391,8 +429,8 @@ export class ResearchKnowledgeRepository {
       indexedVersion:hashText(JSON.stringify({...fields,...document}))};
   }
 
-  private keywordSearch(query: string, projectId: string | null, limit: number): ResearchKnowledgeSearchHit[] {
-    if (/\p{Script=Han}/u.test(query)) return this.hanKeywordSearch(query,projectId,limit);
+  private keywordSearch(query: string, projectId: string | null, limit: number, documentId: string | null = null): ResearchKnowledgeSearchHit[] {
+    if (/\p{Script=Han}/u.test(query)) return this.hanKeywordSearch(query,projectId,limit,documentId);
     const match = query
       .split(/\s+/u)
       .map((term) => term.replace(/"/gu, ''))
@@ -401,7 +439,7 @@ export class ResearchKnowledgeRepository {
       .join(' OR ');
     if (match.length === 0) return [];
     const titleMatch = `title : (${match})`;
-    const args = [match, projectId, projectId, projectId, projectId, titleMatch, projectId, projectId, projectId, projectId, limit];
+    const args = [match, projectId, projectId, projectId, projectId, documentId, documentId, titleMatch, projectId, projectId, projectId, projectId, documentId, documentId, limit];
     // Sort candidate identities and ranks; load text only for the selected chunks.
     const rows = this.db
       .prepare(
@@ -416,6 +454,7 @@ export class ResearchKnowledgeRepository {
              AND NOT EXISTS (SELECT 1 FROM research_knowledge_chunk_structure child WHERE child.parent_chunk_id=c.id)
              AND (? IS NULL OR (c.project_id = ? OR c.project_id IS NULL))
              AND (? IS NULL OR (d.project_id = ? OR d.project_id IS NULL))
+             AND (? IS NULL OR d.id = ?)
          ),
          title_hits AS MATERIALIZED (
            SELECT c.id AS chunk_id, c.document_id, c.chunk_index,
@@ -428,6 +467,7 @@ export class ResearchKnowledgeRepository {
              AND NOT EXISTS (SELECT 1 FROM research_knowledge_chunk_structure child WHERE child.parent_chunk_id=c.id)
              AND (? IS NULL OR (c.project_id = ? OR c.project_id IS NULL))
              AND (? IS NULL OR (d.project_id = ? OR d.project_id IS NULL))
+             AND (? IS NULL OR d.id = ?)
          ),
          selected AS MATERIALIZED (
            SELECT * FROM (
@@ -452,7 +492,7 @@ export class ResearchKnowledgeRepository {
     return rows.map((row) => toKnowledgeHit(row));
   }
 
-  private hanKeywordSearch(query: string, projectId: string | null, limit: number): ResearchKnowledgeSearchHit[] {
+  private hanKeywordSearch(query: string, projectId: string | null, limit: number, documentId: string | null): ResearchKnowledgeSearchHit[] {
     const match=keywordQueryV1(query);
     if (!match) return [];
     const rows=this.db.prepare(`WITH content_hits AS MATERIALIZED (
@@ -465,24 +505,26 @@ export class ResearchKnowledgeRepository {
       FROM hits JOIN research_knowledge_chunks c ON c.rowid=hits.rowid JOIN research_knowledge_documents d ON d.id=c.document_id
       WHERE (? IS NULL OR c.project_id=? OR c.project_id IS NULL) AND (? IS NULL OR d.project_id=? OR d.project_id IS NULL)
       AND NOT EXISTS (SELECT 1 FROM research_knowledge_chunk_structure child WHERE child.parent_chunk_id=c.id)
+      AND (? IS NULL OR d.id = ?)
       ORDER BY hits.source,hits.rank,c.document_id,c.chunk_index LIMIT ?`)
-      .all(`content : (${match})`,`title : (${match})`,projectId,projectId,projectId,projectId,limit) as KnowledgeHitRow[];
+      .all(`content : (${match})`,`title : (${match})`,projectId,projectId,projectId,projectId,documentId,documentId,limit) as KnowledgeHitRow[];
     return rows.map(toKnowledgeHit);
   }
 
   private vectorSearch(
     projectId: string | null,
     limit: number,
-    vector: { spaceKey: string; dimensions: number; blob: Buffer }
+    vector: { spaceKey: string; dimensions: number; blob: Buffer },
+    documentId: string | null = null
   ): ResearchKnowledgeSearchHit[] {
     const blob = normalizeEmbeddingBlob(vector.blob, vector.dimensions);
-    const projectJoin = projectId === null ? '' : 'JOIN research_knowledge_chunks scoped ON scoped.id = e.chunk_id';
-    const projectClause = projectId === null ? '' : 'AND (scoped.project_id = ? OR scoped.project_id IS NULL)';
+    const projectJoin = projectId === null && documentId === null ? '' : 'JOIN research_knowledge_chunks scoped ON scoped.id = e.chunk_id';
+    const projectClause = (projectId === null ? '' : 'AND (scoped.project_id = ? OR scoped.project_id IS NULL)') +
+      (documentId === null ? '' : ' AND scoped.document_id = ?');
     // Rank narrow vector rows first; hydrate document text only for the selected hits.
     // MATERIALIZED keeps SQLite from flattening the joins back into the full scan.
-    const args = projectId === null
-      ? [blob, vector.spaceKey, vector.dimensions, limit]
-      : [blob, vector.spaceKey, vector.dimensions, projectId, limit];
+    const args = [blob, vector.spaceKey, vector.dimensions,
+      ...(projectId === null ? [] : [projectId]), ...(documentId === null ? [] : [documentId]), limit];
     const rows = this.db
       .prepare(
         `WITH nearest AS MATERIALIZED (

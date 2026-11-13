@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import {queryRouteSchema, rerankerReceiptSchema} from './research-reranker';
 import {researchArtifactVersionsSchema} from './research-artifact-version';
 
 export const researchStageSchema = z.enum([
@@ -303,7 +304,8 @@ export const researchKnowledgeSearchRequestSchema = z
     projectId: z.string().min(1).nullable(),
     limit: z.number().int().positive().max(50),
     candidateLimit: z.number().int().min(50).max(200).optional(),
-    rerank: z.enum(['none','lexical-v1']).optional(),
+    rerank: z.enum(['none','semantic']).optional(),
+    documentId: z.string().min(1).optional(),
     embeddingConfigId: z.string().min(1).nullable()
   })
   .strict();
@@ -332,9 +334,10 @@ export const researchKnowledgeSearchResultSchema = z
     embeddingModel: z.string().nullable(),
     generatedAt: z.string(),
     ranking: z.object({
-      schemaVersion: z.union([z.literal(1),z.literal(2)]), ranker: z.literal('rrf-v1-k60'),
-      candidateLimit: z.number().int().min(50).max(200).optional(),
-      rerank: z.enum(['none','lexical-v1']).optional(),
+      schemaVersion: z.literal(3), ranker: z.literal('rrf-v1-k60'),
+      candidateLimit: z.number().int().min(50).max(200),
+      route: queryRouteSchema,
+      reranker: rerankerReceiptSchema,
       degradation: z.enum(['timeout','network','rate_limit','provider_unavailable']).nullable().optional(),
       inputHash: z.string().regex(/^[a-f0-9]{64}$/u),
       projectId: z.string().nullable(), limit: z.number().int().positive(),
@@ -347,7 +350,7 @@ export const researchKnowledgeSearchResultSchema = z
         indexedVersion: z.string().regex(/^[a-f0-9]{64}$/u),
         chunkHash: z.string().regex(/^[a-f0-9]{64}$/u),
         keywordRank: z.number().int().positive().nullable(), vectorRank: z.number().int().positive().nullable(),
-        rerankScore: z.number().min(0).max(1).nullable().optional(),
+        rerankScore: z.number().min(0).max(1).nullable(),
         score: z.number().nonnegative(), reason: z.literal('sum(1/(60+rank)); equal channel weights'),
         outputRank: z.number().int().positive().nullable()
       }).strict())

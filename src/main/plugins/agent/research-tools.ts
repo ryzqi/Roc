@@ -321,17 +321,17 @@ export function createResearchTools(input: {
       description: '查看阶段运行状态。传 runId 看单次；不传则列出最近若干次。启动阶段运行后用这个跟进。',
       schema: z.object({ runId: z.string().trim().min(1).optional(), limit: z.number().int().min(1).max(50).optional() }).strict()
     }),
-    tool(async ({ query, limit }) => {
+    tool(async ({ query, limit, documentId }) => {
       const result = await invoke<ResearchKnowledgeSearchResult>(
         'research.knowledge.search',
-        { query, projectId, limit: limit ?? 6, embeddingConfigId: null }
+        { query, projectId, limit: limit ?? 6, ...(documentId ? {documentId} : {}), embeddingConfigId: null }
       );
       return [knowledgeSearchView(result), result.ranking];
     }, {
       name: 'research_search_knowledge',
       responseFormat: 'content_and_artifact',
       description: '检索本项目与全局文献原文，返回真实 chunkId、indexedVersion 和定位。需要实验设置或邻接原文时用 research_read_knowledge_context；捕获用 research_capture_evidence。',
-      schema: z.object({ query: z.string().trim().min(1), limit: z.number().int().min(1).max(20).optional() }).strict()
+      schema: z.object({ query: z.string().trim().min(1), documentId: z.string().optional(), limit: z.number().int().min(1).max(20).optional() }).strict()
     }),
     tool(request => invoke('research.knowledge.context', {...request, projectId}), {
       name: 'research_read_knowledge_context',

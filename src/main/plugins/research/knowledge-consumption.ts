@@ -6,6 +6,7 @@ export function knowledgeSearchView(result: ResearchKnowledgeSearchResult, maxCh
   return {
     query: result.query, generatedAt: result.generatedAt,
     coverage: result.ranking.coverage, degradation: result.ranking.degradation ?? null,
+    route: result.ranking.route, reranker: result.ranking.reranker.status,
     hits: result.hits.map(hit => {
       const indexedVersion = versions.get(hit.chunkId);
       if (!indexedVersion) throw new Error('research_knowledge_snapshot_missing_hit');

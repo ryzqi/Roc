@@ -200,7 +200,7 @@ export function listIndexJobs(
 
 export function searchKnowledge(
   client: RocClient,
-  input: { query: string; projectId: string | null; limit: number; embeddingConfigId: string | null; rerank?: 'none'|'lexical-v1' }
+  input: { query: string; projectId: string | null; limit: number; embeddingConfigId: string | null; rerank?: 'none'|'semantic' }
 ): Promise<IpcLikeResult<ResearchKnowledgeSearchResult>> {
   return client.api.research.searchKnowledge(input);
 }

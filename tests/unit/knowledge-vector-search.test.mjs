@@ -29,7 +29,7 @@ test('Chinese phrase retrieval finds unsegmented text, short terms, mixed querie
   } finally {db.close();}
 });
 
-test('fusion recalls beyond the display limit and records optional lexical reranking inputs',async()=>{
+test('fusion recalls beyond the display limit and records semantic reranking receipts',async()=>{
   const {applyResearchDatabaseSchema}=await importTypeScriptModule('src/main/infrastructure/database-schemas.ts',{
     platform:'node',external:['better-sqlite3'],tempDir:resolve('.runtime')});
   const db=new Database(':memory:');
@@ -41,12 +41,14 @@ test('fusion recalls beyond the display limit and records optional lexical reran
       repo.upsertFromSource({id,projectId:null,sourceType:'file',sourceId:id,title:id,content,chunks:[{content,locator:null}],embeddingPolicy:'none'});
       repo.storeChunkEmbeddings({configId:'test',configRevision:1,chunks:repo.knowledgeChunks(id),vectors:[Buffer.from(new Float32Array(vector).buffer)]});
     }
-    const result=repo.searchKnowledge({request:{query:'alpha beta',projectId:null,limit:1,rerank:'lexical-v1'},
+    const base=repo.searchKnowledge({request:{query:'alpha beta',projectId:null,limit:1},
       vector:{configId:'test',configRevision:1,blob:Buffer.from(new Float32Array([1,0]).buffer)}});
+    const result=repo.applyRerank(base,base.ranking.candidates.map(candidate=>candidate.documentId==='b'?1:0),
+      {status:'succeeded',model:'fixture',configHash:'fixture',elapsedMs:1});
     assert.equal(result.hits[0].documentId,'b');
     assert.ok(result.ranking.candidates.length>result.hits.length);
     assert.equal(result.ranking.candidateLimit,50);
-    assert.equal(result.ranking.rerank,'lexical-v1');
+    assert.equal(result.ranking.reranker.status,'succeeded');
     assert.equal(result.ranking.candidates[0].rerankScore,1);
     repo.assertSearchCurrent(result);
     const changed=structuredClone(result);changed.ranking.candidateLimit=100;

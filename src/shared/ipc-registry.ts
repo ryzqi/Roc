@@ -37,6 +37,7 @@ import {
   researchIdeaPlanFreezeRequestSchema, researchIdeaPlanInspectionSchema, researchIdeaPlanHistoryResultSchema
 } from './schemas/research-idea-plans';
 import { z } from 'zod';
+import {rerankerConfigSchema, rerankerSaveSchema} from './schemas/research-reranker';
 import {researchResponseMatrixSaveSchema, researchResponseMatrixReceiptSchema, researchResponseMatrixInspectSchema,
   researchResponseMatrixInspectionSchema, researchResponseMatrixHistorySchema, researchResponseMatrixHistoryResultSchema} from './schemas/research-response-matrix';
 import {researchCitationCoverageRequestSchema, researchCitationCoverageInspectionSchema} from './schemas/research-citation-coverage';
@@ -755,6 +756,8 @@ export const ipcRegistry = {
     request({ key: 'researchKnowledgeJobs', channel: 'roc:research:knowledge-jobs', domain: 'research', method: 'knowledgeJobs', kind: 'plugin', capabilityName: 'research.knowledge.jobs', inputTransform: first, contract: methodContract(oneArg(knowledgeJobsListSchema), knowledgeJobSchema.array()) }),
     request({ key: 'researchKnowledgeRetry', channel: 'roc:research:knowledge-retry', domain: 'research', method: 'retryKnowledgeJob', kind: 'plugin', capabilityName: 'research.knowledge.retry', inputTransform: first, contract: methodContract(oneArg(knowledgeJobRetrySchema), z.object({queued:z.literal(true)})) }),
     request({ key: 'researchEmbeddingList', channel: 'roc:research:embedding-list', domain: 'research', method: 'listEmbeddingConfigs', kind: 'plugin', capabilityName: 'research.embedding.list', inputTransform: none, contract: methodContract(noArgs, researchEmbeddingConfigSchema.array()) }),
+    request({key: 'researchRerankerRead', channel: 'roc:research:reranker-read', domain: 'research', method: 'readRerankerConfig', kind: 'plugin', capabilityName: 'research.reranker.read', inputTransform: none, contract: methodContract(noArgs, rerankerConfigSchema.nullable())}),
+    request({key: 'researchRerankerSave', channel: 'roc:research:reranker-save', domain: 'research', method: 'saveRerankerConfig', kind: 'plugin', capabilityName: 'research.reranker.save', inputTransform: first, contract: methodContract(oneArg(rerankerSaveSchema), rerankerConfigSchema)}),
     request({ key: 'researchEmbeddingSave', channel: 'roc:research:embedding-save', domain: 'research', method: 'saveEmbeddingConfig', kind: 'plugin', capabilityName: 'research.embedding.save', inputTransform: first, contract: methodContract(oneArg(researchEmbeddingConfigSaveRequestSchema), researchEmbeddingConfigSchema) }),
     request({ key: 'researchKnowledgeUpsert', channel: 'roc:research:knowledge-upsert', domain: 'research', method: 'upsertKnowledgeDocument', kind: 'plugin', capabilityName: 'research.knowledge.upsert', inputTransform: first, contract: methodContract(oneArg(researchKnowledgeDocumentUpsertRequestSchema), researchKnowledgeDocumentSchema) }),
     request({ key: 'researchKnowledgeSearch', channel: 'roc:research:knowledge-search', domain: 'research', method: 'searchKnowledge', kind: 'plugin', capabilityName: 'research.knowledge.search', inputTransform: first, contract: methodContract(oneArg(researchKnowledgeSearchRequestSchema), researchKnowledgeSearchResultSchema) }),
