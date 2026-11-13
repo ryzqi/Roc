@@ -5,6 +5,7 @@ import { createInterface } from 'node:readline';
 import { build } from 'esbuild';
 import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 import { ROOT, contained, fail, hash, sha256, writeJson } from './common.mjs';
+import { verifyApplicationEvidence } from './application-verifier.mjs';
 
 export async function prepareApplication(directory) {
   const path = join(directory, 'application-worker.mjs');
@@ -79,7 +80,8 @@ export async function executeApplication({ artifact, input, directory, config, c
   try {
     taskSignal.throwIfAborted();
     send({ view: { id: 'benchmark-task', family: input.kind === 'qasper' ? 'literature-verification' : 'experiment-script', difficulty: 'hard', prompt: input.prompt, outputFormat: 'json' },
-      benchmark: input.kind, providerId: 'evaluation-host', modelId: config.model, temperature: config.temperature, contextWindowTokens: config.contextWindowTokens ?? 65536,
+      benchmark: input.kind, providerId: config.providerId ?? 'evaluation-host', modelId: config.model, temperature: config.temperature,
+      contextWindowTokens: config.contextWindowTokens ?? 65536, maxOutputTokens: config.maxOutputTokens ?? 4096,
       isolationProbePaths: protectedPaths, isolationProbePort: null });
     for await (const line of lines) {
       retain('transcript.jsonl', line + '\n');
@@ -87,7 +89,7 @@ export async function executeApplication({ artifact, input, directory, config, c
       const message = JSON.parse(line);
       if (message.type === 'request') {
         requests++;
-        if (result !== null || message.requestHash !== hash(message.body)) fail('policy', 'worker_request_invalid');
+        if (result !== null || message.index !== requests - 1 || message.requestHash !== hash(message.body)) fail('policy', 'worker_request_invalid');
         const tools = message.body.tools;
         // Public benchmarks have one fixed main-agent tool set; no dynamic tools or subagents.
         const expected = artifact.manifests[input.kind].tools.filter(t => t.executionScopes.includes('main')).map(t => t.modelVisibleName).sort();
@@ -102,7 +104,7 @@ export async function executeApplication({ artifact, input, directory, config, c
         }
         record({ type: 'model_request', requestHash: message.requestHash, request: requests, toolSchemaHash });
         const body = await complete(message.body, taskSignal);
-        retain('responses.jsonl', JSON.stringify({ request: requests, body }) + '\n');
+        retain('responses.jsonl', JSON.stringify({ request: requests, requestHash: message.requestHash, responseHash: hash(body), body }) + '\n');
         taskSignal.throwIfAborted(); send({ type: 'response', body });
       } else if (message.type === 'execute') {
         if (input.kind !== 'scienceagentbench' || message.command !== 'python solution.py' || !execute) fail('policy', 'worker_execution_denied');
@@ -127,7 +129,6 @@ export async function executeApplication({ artifact, input, directory, config, c
     if (taskSignal.aborted) fail(controller.signal.reason?.message === 'task_deadline' ? 'agent' : 'infrastructure', controller.signal.reason?.message ?? 'worker_aborted');
     if (code !== 0 || !result || !isolationVerified) fail('harness', 'application_worker_failed');
     writeJson(join(directory, 'output.json'), result);
-    return { output: result.output, workspace, requests, toolSchemaHash, evidenceComplete: true };
   } catch (error) {
     if (truncated) fail('infrastructure', 'evidence_limit');
     if (signal.aborted) fail('operator', 'run_cancelled');
@@ -138,4 +139,12 @@ export async function executeApplication({ artifact, input, directory, config, c
     try { await stop(); unlinkSync(join(root, 'node_modules')); writeJson(join(directory, 'cleanup.json'), { processGroupGone: true, dependencyLinkRemoved: true }); }
     catch { writeJson(join(directory, 'cleanup.json'), { processGroupGone: false }); fail('infrastructure', 'worker_cleanup_unconfirmed'); }
   }
+  const verification = verifyApplicationEvidence({ artifact, input, directory, config, requests, toolSchemaHash });
+  const { finalAnswer, ...evidence } = verification;
+  writeJson(join(directory, 'runtime-verification.json'), evidence);
+  if (verification.status !== 'verified') fail('harness', `application_evidence_invalid:${verification.reason}`);
+  writeJson(join(directory, 'final-answer.json'), finalAnswer);
+  return { output: finalAnswer.output, workspace, requests, toolSchemaHash, evidenceComplete: true,
+    runtimeVerification: { status: 'verified', contractHash: hash(verification.contract),
+      finalAnswerHash: finalAnswer.sha256, evidenceHash: sha256(readFileSync(join(directory, 'runtime-verification.json'))) } };
 }

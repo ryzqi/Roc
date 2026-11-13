@@ -2,7 +2,7 @@ import { closeSync, existsSync, fsyncSync, lstatSync, openSync, realpathSync, wr
 import { join, resolve } from 'node:path';
 import { z } from 'zod';
 import { directory, EVAL_ROOT, fail, hash, readJson, sourceIdentity } from './common.mjs';
-import { compareRuns, comparisonFields, inspectRun } from './report.mjs';
+import { compareRuns, comparisonFields, hasApplicationRuntimeEvidence, inspectRun } from './report.mjs';
 
 const text = z.string().trim().min(1).max(8000);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
@@ -93,6 +93,7 @@ export function createExperiment({ baselinePath, spec, specDirectory = process.c
   // Reject missing/unstable legacy tool evidence before spending on a new candidate.
   const schemas = new Set(baseline.trials.map(t => t.toolSchemaHash));
   if (!a.toolManifest?.tools?.length || schemas.size !== 1 || !digest.safeParse([...schemas][0]).success) fail('policy', 'tool_contract_evidence_missing');
+  if (!hasApplicationRuntimeEvidence(baseline)) fail('policy', 'application_runtime_evidence_missing');
   const source = sourceIdentity(), changes = changedFiles(a.source, source);
   if (changes.some(p => !spec.allowedChanges.includes(p))) fail('policy', 'experiment_undeclared_source_changes');
   const incidents = spec.incidents.map(p => {
@@ -120,7 +121,7 @@ function loadExperiment(path) {
 export function claimExperiment(path, runPath, manifest) {
   const context = loadExperiment(path), { protocol, baseline } = context;
   if (manifest.source.sourceHash !== protocol.candidateSource.sourceHash) fail('state', 'experiment_candidate_source_changed');
-  for (const key of ['suite', 'profile', 'evidence', 'repeats', 'split', 'metrics', 'scorerHash']) {
+  for (const key of ['suite', 'profile', 'evidence', 'repeats', 'split', 'metrics', 'scorerHash', 'applicationContract']) {
     if (hash(manifest[key]) !== hash(baseline.manifest[key])) fail('policy', `experiment_contract_mismatch:${key}`);
   }
   // Exclusive and durable before any model-host access. Failed attempts stay visible;

@@ -13,7 +13,8 @@ export function createProvider(config, record, { complete }) {
     snapshot: () => ({ requests, inputTokens, outputTokens }),
     async complete(body, signal) {
       const bytes = Buffer.byteLength(JSON.stringify(body));
-      if (body.model !== config.model || body.stream !== false || body.max_tokens !== 4096 || body.temperature !== config.temperature) fail('policy', 'provider_request_binding_changed');
+      if (body.model !== config.model || body.stream !== false || body.max_tokens !== (config.maxOutputTokens ?? 4096)
+        || body.temperature !== config.temperature) fail('policy', 'provider_request_binding_changed');
       if (bytes > config.maxInputBytes) fail('policy', 'provider_input_limit');
       const requestNumber = ++requests;
       record({ type: 'provider_admitted', requestNumber });

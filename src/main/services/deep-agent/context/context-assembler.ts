@@ -5,7 +5,7 @@ import type { ExplicitSkillContext } from './explicit-skills';
 import type { ReferencedFileContext } from './referenced-files';
 import type { ContextArtifactStore } from './context-artifact-store';
 import { createContextArtifactReadTool } from './context-artifact-tool';
-import { filterPlanModeModelTools } from '../model-tool-exposure';
+import { filterPlanModeModelTools, isPlanModeModelVisibleToolName } from '../model-tool-exposure';
 import type { MemoryRememberAdapter, MemorySearchAdapter } from './memory-tools';
 import { createMemorySearchTool, createRememberTool } from './memory-tools';
 import type { SessionSearchAdapter } from './session-search-tool';
@@ -81,6 +81,10 @@ export function assembleContextHarness(input: {
     referencedFileContexts: input.referencedFileContexts,
     researchProjectId: input.researchProjectId,
     taskContract: input.taskContract,
+    allowedToolNames: input.allowedToolNames.filter((name) =>
+      input.mode !== 'plan' || isPlanModeModelVisibleToolName(name)
+    ),
+    memorySources: input.memorySources,
     tools: tools.map(tool => ({
       name: tool.name,
       description: tool.description

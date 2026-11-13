@@ -42,6 +42,7 @@ async function receive(): Promise<unknown> {
 function send(value: unknown): void { process.stdout.write(`${JSON.stringify(value)}\n`); }
 type WorkerInput = {
   view: unknown; providerId: string; modelId: string; temperature: number; contextWindowTokens: number;
+  maxOutputTokens: number;
   isolationProbePaths: string[]; isolationProbePort: number | null;
   benchmark?: unknown;
 };
@@ -107,14 +108,14 @@ if (benchmark === 'scienceagentbench') {
 let requestCount = 0;
 const model = new ChatOpenAI({
   model: input.modelId, apiKey: ['fixture', 'stdio'].join('-'), temperature: input.temperature,
-  streaming: false, maxRetries: 0, maxTokens: 4096,
+  streaming: false, maxRetries: 0, maxTokens: input.maxOutputTokens,
   configuration: {
     baseURL: 'http://roc-evaluation.invalid/v1',
     fetch: async (_url, init) => {
       const original = JSON.parse(String(init?.body)) as Record<string, unknown>;
       const { stream_options: _streamOptions, ...parameters } = original;
       const body = { ...parameters, stream: false };
-      send({ type: 'request', index: requestCount, body, requestHash: qualityHash(body) });
+      send({ type: 'request', index: requestCount++, body, requestHash: qualityHash(body) });
       const reply = await receive() as { type: string; body?: unknown };
       if (reply.type !== 'response') throw new Error('quality_worker_provider_failed');
       if (original.stream !== true) {
@@ -141,7 +142,7 @@ const handle: LangChainChatModelHandle = {
   provider: { id: input.providerId, name: 'Evaluation host', type: 'openai_compatible',
     enabled: true, models: [], endpoint: 'http://roc-evaluation.invalid/v1', credentialRef: null },
   runtime: { providerType: 'openai_compatible', baseUrl: null, streaming: false,
-    modelKwargs: {}, contextWindowTokens: input.contextWindowTokens, maxOutputTokens: 4096 }
+    modelKwargs: {}, contextWindowTokens: input.contextWindowTokens, maxOutputTokens: input.maxOutputTokens }
 };
 const eventBus = new EventBus({ error: (message, metadata) => {
   process.stderr.write(`${JSON.stringify({ message, metadata })}\n`);

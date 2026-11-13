@@ -9,6 +9,7 @@ import { loadDataset, prepareScience, scienceRecipeSchema } from '../lib/data.mj
 import { compareRuns, summarize, sealRun, inspectRun } from '../lib/report.mjs';
 import { createProvider, validateProviderOptions } from '../lib/provider.mjs';
 import { runBenchmark, selectTasks, profiles } from '../lib/runner.mjs';
+import { applicationContract } from '../lib/application-verifier.mjs';
 import { parseScienceGrade, gradeScience } from '../lib/science.mjs';
 import { testArtifacts } from './test-artifacts.mjs';
 
@@ -58,7 +59,9 @@ function run(score = .8) {
   const selection = Array.from({ length: 5 }, (_, i) => ({ id: `q${i}`, clusterId: `paper${i}` }));
   const manifest = { suite: 'qasper', evidence: 'live-model', datasetIdentity: 'dataset', selection, repeats: 3, metrics: ['answerF1'], scorerHash: 'scorer', provider: { model: 'frozen' }, environment: { node: 'same' }, split: 'holdout', exclusions: [], source: { sourceHash: String(score) } };
   manifest.toolManifest = { tools: [{ modelVisibleName: 'read_file', executionScopes: ['main'], effect: 'read' }] };
-  const trials = selection.flatMap(t => Array.from({ length: 3 }, (_, repeat) => ({ taskId: t.id, clusterId: t.clusterId, repeat, status: 'scored', metrics: { answerF1: score }, latencyMs: 100, toolSchemaHash: hash('test-schema') })));
+  manifest.applicationContract = applicationContract;
+  const trials = selection.flatMap(t => Array.from({ length: 3 }, (_, repeat) => ({ taskId: t.id, clusterId: t.clusterId, repeat, status: 'scored', metrics: { answerF1: score }, latencyMs: 100, toolSchemaHash: hash('test-schema'),
+    runtimeVerification: { status: 'verified', contractHash: hash(applicationContract), finalAnswerHash: hash('final-answer'), evidenceHash: hash('runtime-evidence') } })));
   return { manifest, trials, summary: summarize(manifest, trials) };
 }
 test('paired comparison detects regression and never calls fixture/small/incomplete evidence green', () => {
@@ -89,6 +92,14 @@ test('legacy or partial tool evidence cannot establish non-inferiority', () => {
   assert.equal(compareRuns(run(), missing).conclusion, 'insufficient');
   const mixed = run(); mixed.trials[0].toolSchemaHash = hash('different');
   assert.equal(compareRuns(run(), mixed).conclusion, 'incompatible');
+});
+test('legacy aggregate-answer runs and partial runtime evidence cannot establish a QASPER quality comparison', () => {
+  const a = run(), b = run(); delete a.manifest.applicationContract; delete b.manifest.applicationContract;
+  assert.deepEqual(compareRuns(a, b), { conclusion: 'insufficient', reason: 'application_runtime_evidence_missing' });
+  const missing = run(); delete missing.trials[0].runtimeVerification;
+  assert.deepEqual(compareRuns(run(), missing), { conclusion: 'insufficient', reason: 'application_runtime_evidence_missing' });
+  const drift = run(); drift.manifest.applicationContract = { ...applicationContract, answerBoundary: 'aggregate-output' };
+  assert.deepEqual(compareRuns(run(), drift).mismatches, ['applicationContract']);
 });
 test('fixture runner seals actual tool schemas across independent task workspaces without a live provider', async () => {
   const dataset = join(root, 'schema-dataset'); mkdirSync(dataset);

@@ -8,6 +8,7 @@ import { captureIncident as captureIncidentRecord, createExperiment as createExp
 import { ROOT, directory, fileInventory, hash, readJson, sourceIdentity, writeJson } from '../lib/common.mjs';
 import { inspectRun, sealRun, summarize } from '../lib/report.mjs';
 import { importQasper } from '../lib/qasper.mjs';
+import { applicationContract } from '../lib/application-verifier.mjs';
 import { testArtifacts } from './test-artifacts.mjs';
 
 const root = testArtifacts('experiment');
@@ -24,10 +25,11 @@ function sample({ score = .8, evidence = 'live-model', split = 'development', fa
   const selection = Array.from({ length: 5 }, (_, i) => ({ id: `q${i}`, clusterId: `paper${i}` }));
   const manifest = { suite: 'qasper', evidence, profile: 'full', datasetIdentity: hash('synthetic'), selection, repeats: 3,
     metrics: ['answerF1', 'citationValidity'], scorerHash: hash('test-scorer'), provider: { model: 'test-only', },
-    environment: { node: process.version }, split, exclusions: [], source, testOnly: true,
+    environment: { node: process.version }, split, exclusions: [], source, testOnly: true, applicationContract,
     toolManifest: { tools: [{ modelVisibleName: 'read_file', executionScopes: ['main'], effect: 'read' }] } };
   const trials = selection.flatMap(t => Array.from({ length: 3 }, (_, repeat) => ({ taskId: t.id, clusterId: t.clusterId, repeat,
-    status: 'scored', metrics: { answerF1: score, citationValidity: 1 }, latencyMs: 100, toolSchemaHash: hash('test-schema') })));
+    status: 'scored', metrics: { answerF1: score, citationValidity: 1 }, latencyMs: 100, toolSchemaHash: hash('test-schema'),
+    runtimeVerification: { status: 'verified', contractHash: hash(applicationContract), finalAnswerHash: hash('test-answer'), evidenceHash: hash('test-evidence') } })));
   return { path, manifest, trials, fatal };
 }
 function save(run) {
@@ -72,6 +74,8 @@ test('holdout and incomplete baselines cannot enter the optimization loop', () =
   assert.throws(() => createExperiment({ baselinePath: broken.path, spec }), /requires_complete_baseline/);
   const legacy = sample(); legacy.trials.forEach(t => { delete t.toolSchemaHash; }); save(legacy);
   assert.throws(() => createExperiment({ baselinePath: legacy.path, spec }), /tool_contract_evidence_missing/);
+  const oldBoundary = sample(); delete oldBoundary.manifest.applicationContract; save(oldBoundary);
+  assert.throws(() => createExperiment({ baselinePath: oldBoundary.path, spec }), /application_runtime_evidence_missing/);
 });
 test('registration requires declared source changes and complete, bounded acceptance criteria', () => {
   const baseline = sample();

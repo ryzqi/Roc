@@ -2,7 +2,7 @@
 
 默认套件 `roc-harness` 评测当前 Roc 的真实运行编排、checkpoint 恢复、工具副作用、审批、取消、并发编辑、权限和循环控制。模型响应由本地控制器提供，经过真实 LangChain 模型适配器；不需要配置模型或凭据，不发送推理请求。评分以持久化状态、文件字节和完整事件证据为准。
 
-所有评测由手动命令触发，使用隔离工作区和数据库，不启动 Roc 界面或生产数据库。QASPER、ScienceAgentBench 保留为模型任务质量补充轨道；native 保留为服务合同回归。精确任务定义见 [harness Task Spec](tasks/roc-harness/Task.md)，当前结果见 [VALIDATION.md](VALIDATION.md)。
+所有评测由手动命令触发，使用隔离工作区和数据库，不启动 Roc 界面或生产数据库。QASPER 保留为 Roc 论文问答与证据选择的任务表现评测，与默认 harness 行为评测并行；ScienceAgentBench 保留科学任务适配入口，native 保留服务合同回归。精确任务定义见 [harness Task Spec](tasks/roc-harness/Task.md)和 [QASPER Task Spec](tasks/qasper/Task.md)，当前结果见 [VALIDATION.md](VALIDATION.md)。
 
 在仓库根目录执行，使用已安装的 pnpm 依赖和 macOS `sandbox-exec`：
 
@@ -65,14 +65,14 @@ evaluation/
 |---|---|---|
 | roc-harness（默认） | 10 个真实运行案例，7 个维度，独立证据验收 | 控制模型下的运行行为，非模型质量 |
 | roc-native | 94 项执行、权限、恢复、工具副作用等确定性合同检查 | 含合成 pilot 任务；补充回归 |
-| qasper | 官方 v0.3 dev 文本数据、真实文件工具、答案/证据 F1 | Roc 文本适配子集，非官方全量榜单 |
+| qasper | 官方 v0.3 dev 文本数据、真实 Roc agent 流程、独立 checkpoint 验证、答案/证据 F1 | 论文文本问答表现，非官方全量榜单 |
 | scienceagentbench | verified 数据导入、本机 Python、真实执行授权、独立 grader 与五类自动校准 | 本地合成任务链路已验证；官方任务环境尚未导入 |
 
 [Registry](lib/registry.json) 只列可运行或需要 verified 环境的适配器，已移除七个未实现的占位套件。[Harness](tasks/roc-harness/Task.md)、[QASPER](tasks/qasper/Task.md)、[Science](tasks/scienceagentbench/Task.md)、[native](tasks/roc-native/Task.md) 的精确任务定义均为 Draft / unreviewed，不能视为已经批准的发布门槛。沿用项目原生 runner，未引入 Harbor。
 
 ## 公共质量套件
 
-以下命令用于补充质量轨道。`doctor` 无推理请求；不带 `--fixture` 的公共套件会使用 Roc 已配置模型。
+以下命令用于公共任务表现评测。`doctor` 无推理请求；不带 `--fixture` 的公共套件会使用 Roc 已配置模型。
 
 ```sh
 pnpm harness:bench list
@@ -95,7 +95,17 @@ pnpm harness:bench run --suite qasper --dataset "$ROC_EVAL_DATASET" --profile fa
 pnpm harness:bench run --suite qasper --dataset "$ROC_EVAL_DATASET" --profile smoke --provider-options evaluation/provider-options.example.json
 ```
 
-模型配置或钥匙串失败会封存 incomplete 报告，未完成题目保留在分母中。已保留 11 月 13 日的真实 QASPER smoke、完整 150-trial 基线和一次 provider 中断记录，见 [VALIDATION.md](VALIDATION.md)。它们是历史测量，不能替代当前配置预检或证明本次模型质量改善。
+模型配置或钥匙串失败会封存 incomplete 报告，未完成题目保留在分母中。已保留 11 月 13 日的真实 QASPER smoke、150-trial 历史运行和一次 provider 中断记录，见 [VALIDATION.md](VALIDATION.md)。历史运行使用聚合助手文本评分，其中包含过程叙述，不能作为新评分边界的质量基线；原分数与 seal 保留，需要用当前实现重新建立真实模型基线。
+
+### QASPER 的实际 Roc 流程
+
+`run --suite qasper` 把冻结的论文与问题送入独立 worker，创建真实 `AgentPluginRuntime`、`DeepAgent` graph、会话、SQLite checkpointer、用量账本和生产文件工具。worker 的模型请求经宿主桥接到 Roc 的 `LangChainModelFactory` 与所选已配置模型；官方答案和证据标注只留在宿主评分器。每题只开放 `ls` / `read_file`，可以分页读取完整论文。
+
+生产完成事件会聚合多个工具轮次的助手文本。评测保留该原始文本在 `output.json`，由宿主侧[独立 verifier](lib/application-verifier.mjs)读取最后一个 root checkpoint 的无工具助手消息，并与最后一次模型响应逐字核对；验证通过后才写入 `final-answer.json` 供 QASPER 评分。最终消息仍必须是严格 JSON；Markdown 围栏、额外叙述、无效引用和错误答案按原评分规则处理。
+
+`runtime-verification.json` 核对完成的 run/thread、冻结问题/模型/限制/manifest、顺序请求响应、实际工具 schema、持久化事件、会话聚合输出、用量回执、工具参数、论文原始字节、进程退出与清理。缺失或损坏证据使 trial invalid、run incomplete。provider 未提供 usage 时保留 unknown 用量，不能假定为零。
+
+当前 adapter 为 `qasper-roc-runtime-v2`，manifest 冻结最终答案边界，逐题 grade 绑定 runtime evidence 和最终答案哈希。这证明所测答案经过当前 Roc 文本工具流程；PDF、检索、界面交互和子代理需要单独任务环境。
 
 ## 每次更新的流程
 
@@ -128,7 +138,7 @@ pnpm harness:bench compare /absolute/baseline-run /absolute/candidate-run
 
 按 paper/repo 分组后固定 hash 划分 development/holdout，同组不跨分区。QASPER 共 281 篇论文、1005 题；233 题包含不能映射到文本段落的证据，明确排除，支持的 development 611 / holdout 161。报告记录全部未选和排除原因。公开数据的本地 holdout 不意味着模型未见过这些数据。
 
-比较要求数据、选择、重复、模型配置哈希、请求配置、评分代码、环境、split、完整 capability manifest 和实际请求的工具 schema 一致；harness 源码及 worker bundle 可变化。每个 trial 必须保留实际工具 schema 哈希，缺失时返回 `insufficient/tool_contract_evidence_missing`；两轮工具或权限不同、schema 不同均为 `incompatible`。旧记录不能通过补填字段升级为质量证据，需要重新运行。工具增删、参数或描述变化的消融实验需要单独设计协议，不能套用当前固定工具比较。lockfile 变化要求新基线。只对完整的真实模型运行、至少 5 个 cluster 且每题至少 3 次重复，计算 2000 次配对 cluster bootstrap 的 95% 区间。非劣界限为 -0.05；所有指标区间下界均不低于此值才判 non-inferior，上界仍低于该值判 regression，其余为 inconclusive。这是初始工程判据，尚未做统计功效校准。fixture、smoke、fast 不能生成质量通过结论。
+比较要求数据、选择、重复、模型配置哈希、请求配置、评分代码、环境、split、完整 capability manifest、实际请求的工具 schema 和 runtime/最终答案合同一致；harness 源码及 worker bundle 可变化。每个 trial 必须保留实际工具 schema 哈希，缺失时返回 `insufficient/tool_contract_evidence_missing`。QASPER / Science 还要求逐题已验证的 runtime 证据，缺失时返回 `insufficient/application_runtime_evidence_missing`；即使任务超时仍计为 agent 失败，缺少该证据也不能进入质量比较。两轮工具、权限、schema 或答案边界不同均为 `incompatible`。旧记录不能通过补填字段升级为质量证据，需要重新运行。工具增删、参数或描述变化的消融实验需要单独设计协议，不能套用当前固定工具比较。lockfile 变化要求新基线。只对完整的真实模型运行、至少 5 个 cluster 且每题至少 3 次重复，计算 2000 次配对 cluster bootstrap 的 95% 区间。非劣界限为 -0.05；所有指标区间下界均不低于此值才判 non-inferior，上界仍低于该值判 regression，其余为 inconclusive。这是初始工程判据，尚未做统计功效校准。fixture、smoke、fast 不能生成质量通过结论。
 
 ## 模型与请求配置
 
@@ -174,7 +184,7 @@ pnpm harness:bench run --suite scienceagentbench --dataset /path/from-prepare --
 
 每轮有 `manifest.json`（源码/数据/选择/模型/环境）、`events.jsonl`（请求/任务事件）、`trials.json`、`summary.json`、`report.md` 和 `seal.json`。Harness 每题保留阶段请求响应、审批决策、工具事件、崩溃前/最终 SQLite、文件字节、逐条件 grade、进程退出与清理记录。请求正文保留实际工具 schema。
 
-公共套件另保留 `tool-schema.json`（实际工具定义及哈希）、checkpoint 和最终答案。模型请求在运行时按当前 scope 的 manifest 过滤；宿主在转发前再次检查固定工具集合、重复项与 schema 结构，并拒绝 trial 内 schema 漂移。runner 拒绝不同 trial 之间的 schema 漂移；已发出请求的 agent 失败也保留 schema 哈希。native 原始普通文件归档；隔离测试故意产生的符号链接仅记录路径/目标，不跟随目标。
+公共套件另保留 `tool-schema.json`（实际工具定义及哈希）、`transcript.jsonl`、带请求/响应哈希的 `responses.jsonl`、SQLite checkpoint、`output.json`（原始聚合文本）、`runtime-verification.json` 和 `final-answer.json`（验证后的最终消息）。Science 也通过该 runtime verifier，科学正确性仍由独立 grader 读取数据产物决定。模型请求在运行时按当前 scope 的 manifest 过滤；宿主在转发前再次检查固定工具集合、重复项与 schema 结构，并拒绝 trial 内 schema 漂移。runner 拒绝不同 trial 之间的 schema 漂移；已发出请求的 agent 失败也保留 schema 哈希。native 原始普通文件归档；隔离测试故意产生的符号链接仅记录路径/目标，不跟随目标。
 
 证据文件独占创建，事件 fsync，seal 保存文件清单哈希，`inspect`/`compare` 重新核验。seal 能检测修改，不是数字签名或不可改写存储。worker 轨迹超 32 MiB 显式 invalid；不会静默截断后通过。原始数据/轨迹可能含任务内容，保存在本地且不自动上传。
 

@@ -16,7 +16,7 @@ run --experiment → 唯一候选运行 → 独立比较 + 质量底线
 - fixture 可以完整演练流程，但永远不能得到可采纳的模型质量结论。smoke / fast 也不满足正式比较的样本门槛。
 - `eligible` 表示满足本次冻结的开发验收条件，不等于显著提升、独立留出集通过或生产发布批准。精确 Task Specs 当前仍为 Draft。
 - 根因分类和 reviewer 名字是操作者的记录，不是自动证实的因果关系或经过认证的身份。seal/hash 检查证据漂移，不提供签名或不可改写存储。
-- 默认 `roc-harness` 使用逐场景验收 gate，不进入本质量实验协议。现有真实 QASPER 基线见 [VALIDATION.md](VALIDATION.md)；S01 独立留出集、真实用户任务、MCP 故障服务和语义 judge 需要各自的任务与验证。
+- 默认 `roc-harness` 使用逐场景验收 gate，不进入本质量实验协议。保留的真实 QASPER 历史运行见 [VALIDATION.md](VALIDATION.md)，其聚合文本评分边界已过时，不能作为当前 experiment 基线；需先按 `qasper-roc-runtime-v2` 建立新基线。S01 独立留出集、真实用户任务、MCP 故障服务和语义 judge 需要各自的任务与验证。
 
 ## 1. 建立基线并记录观察
 
@@ -30,7 +30,7 @@ ROC_EVAL_BASELINE=/absolute/path/to/baseline-run
 pnpm harness:bench inspect "$ROC_EVAL_BASELINE"
 ```
 
-查看 `trials.json` 找到 taskId/repeat，再检查该题的请求响应、工具结果、checkpoint、最终输出、独立 grade、退出与 cleanup。记录观察与可证伪假设，不只抄录模型自我解释。
+查看 `trials.json` 找到 taskId/repeat，再检查该题的请求响应、工具结果、checkpoint、原始 `output.json`、`final-answer.json`、`runtime-verification.json`、独立 grade、退出与 cleanup。QASPER 评分取验证后的最终消息，原始聚合文本用于诊断。记录观察与可证伪假设，不只抄录模型自我解释。
 
 ```sh
 mkdir -p evaluation/local
@@ -65,7 +65,7 @@ pnpm harness:bench experiment inspect "$ROC_EVAL_EXPERIMENT"
 - `trialFloors`：指定指标的逐题底线，避免关键失败被均分掩盖。空对象表示没有额外逐题门槛。
 - `nonInferiorityMargin`：0 到 0.05，只能维持或收紧已有非劣界限；仍使用原配对 cluster bootstrap、2000 次重采样、95% 区间。
 
-源码身份覆盖 src/scripts/resources/evaluation/package/lockfile。评分器、工具合同、数据、依赖、评测代码和说明文档的变更不属于本协议允许的候选变量；需要先在新评测协议上重新建立基线。不要通过把这些文件加入允许列表规避固定实验条件。实际工具 schema 发生变化也会被拦截，工具消融需要另行设计协议。
+源码身份覆盖 src/scripts/resources/evaluation/package/lockfile。评分器、runtime/最终答案合同、工具合同、数据、依赖、评测代码和说明文档的变更不属于本协议允许的候选变量；需要先在新评测协议上重新建立基线。创建时缺少逐题已验证 runtime 证据会返回 `application_runtime_evidence_missing`，在模型宿主访问之前拒绝。不要通过把这些文件加入允许列表规避固定实验条件。实际工具 schema 发生变化也会被拦截，工具消融需要另行设计协议。
 
 `spec.incidents` 的相对路径以 spec 文件目录为基准，其余命令行路径以当前目录为基准。创建后所有证据引用均保存为绝对路径；移动证据目录会使引用失效。
 

@@ -41,7 +41,14 @@ export function inspectRun(path) {
   const manifest = readJson(join(path, 'manifest.json')), summary = readJson(join(path, 'summary.json')), trials = readJson(join(path, 'trials.json'));
   return { path, sealHash: sha256(readFileSync(join(path, 'seal.json'))), manifest, summary, trials };
 }
-export const comparisonFields = ['suite', 'evidence', 'datasetIdentity', 'selection', 'repeats', 'metrics', 'scorerHash', 'provider', 'environment', 'split', 'toolManifest'];
+export const comparisonFields = ['suite', 'evidence', 'datasetIdentity', 'selection', 'repeats', 'metrics', 'scorerHash', 'provider', 'environment', 'split', 'toolManifest', 'applicationContract'];
+export function hasApplicationRuntimeEvidence(run) {
+  const contract = run.manifest.applicationContract;
+  return contract?.schemaVersion === 1 && typeof contract.answerBoundary === 'string' && run.trials.length > 0
+    && run.trials.every(t => t.runtimeVerification?.status === 'verified' && t.runtimeVerification.contractHash === hash(contract)
+      && /^[a-f0-9]{64}$/.test(t.runtimeVerification.finalAnswerHash ?? '')
+      && /^[a-f0-9]{64}$/.test(t.runtimeVerification.evidenceHash ?? ''));
+}
 export function compareRuns(baseline, candidate, { margin = .05 } = {}) {
   if (!Number.isFinite(margin) || margin < 0 || margin > .05) fail('policy', 'comparison_margin_invalid');
   const a = baseline.manifest, b = candidate.manifest;
@@ -49,6 +56,9 @@ export function compareRuns(baseline, candidate, { margin = .05 } = {}) {
   if (mismatches.length) return { conclusion: 'incompatible', mismatches };
   if ([baseline, candidate].some(r => r.summary.status !== 'complete')) return { conclusion: 'incomplete' };
   if (baseline.sealHash && baseline.sealHash === candidate.sealHash) return { conclusion: 'insufficient', reason: 'same_run_is_not_independent_evidence' };
+  if (['qasper', 'scienceagentbench'].includes(a.suite) && ![baseline, candidate].every(hasApplicationRuntimeEvidence)) {
+    return { conclusion: 'insufficient', reason: 'application_runtime_evidence_missing' };
+  }
   const expectedKeys = a.selection.flatMap(t => Array.from({ length: a.repeats }, (_, repeat) => `${t.id}:${repeat}`));
   const index = run => {
     const result = new Map(run.trials.map(t => [`${t.taskId}:${t.repeat}`, t]));

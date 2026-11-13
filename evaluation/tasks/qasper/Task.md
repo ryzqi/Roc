@@ -19,7 +19,7 @@ Each dataset question generates exactly the prompt in `qasperInput(task)`:
 
 ## Relevant agent conditions
 
-Real AgentPluginRuntime and DeepAgent executor in chat mode, fresh thread/database/checkpointer per repeat; only ls/read_file tools. The innermost model wrapper filters framework-added tools by the current scope manifest. Before dispatch, the host independently requires exactly these two names and retains the complete actual schema in tool-schema.json; schema drift within or between trials invalidates the run. Tools and prompt can affect results. No retrieval service, memory history, PDF vision, web browsing, subagents or production Electron UI is tested. Model uses the host stdio bridge; fixture mode makes two scripted requests and is wiring evidence only. Live calls use the existing Roc configured model through a read-only Electron model host and the production model factory; worker never receives credentials.
+Real AgentPluginRuntime and DeepAgent executor in chat mode, fresh thread/database/checkpointer per repeat; only ls/read_file tools. The innermost model wrapper filters framework-added tools by the current scope manifest. Before dispatch, the host independently requires exactly these two names and retains the complete actual schema in tool-schema.json; schema drift within or between trials invalidates the run. Tools and prompt can affect results. No retrieval service, memory history, PDF vision, web browsing, subagents or production Electron UI is tested. Model uses the host stdio bridge; fixture mode makes two scripted requests and is wiring evidence only. Live calls use the existing Roc configured model through a read-only Electron model host and the production model factory; worker never receives credentials. The selected provider/model and actual context/output limits are frozen in both the run manifest and persisted runtime snapshot.
 
 ## Environment
 
@@ -27,15 +27,17 @@ macOS sandbox-exec allows runtime dependencies and private trial files, denies h
 
 ## Verification
 
+Adapter `qasper-roc-runtime-v2` scores the final no-tool assistant message from the last root checkpoint after the host-only verifier independently binds it to the terminal model response. Serialized message constructors are parsed as data, never revived. The original aggregate completion/session text remains in output.json; selected final text is written to final-answer.json only after verification. No prose removal, fence stripping or JSON repair is performed.
+
 | ID | Result | Independent evidence and exact check | Pass condition |
 |---|---|---|---|
 | Q1 | Structured answer | Plain JSON, exactly answer:string and evidence:string[] | Invalid output is agent failure, all metrics 0 |
 | Q2 | Answer correctness | Official lower/punctuation/article normalization, multiset token F1; maximum across annotations | Continuous answerF1, not all-or-nothing |
 | Q3 | Evidence selection | Paragraph IDs resolve to exact source paragraph text; official evidence set overlap divided by original list lengths; maximum across annotations | Continuous evidenceF1; empty/empty=1 |
 | Q4 | Valid citations | Every paragraph ID exists and is unique | citationValidity 1 or 0; invalid citations keep independently computed F1 and count as agent failure |
-| Q5 | Valid evidence chain | Worker hash, manifest hash, sandbox probes, complete output and cleanup | Non-agent failure makes trial invalid and run incomplete |
+| Q5 | Valid evidence chain | Read-only SQLite completed run/thread/root checkpoint; frozen prompt, workspace identity, provider/model/limits and manifest; indexed and hashed request/response streams; checkpoint-to-terminal answer equality; persisted events and aggregate session output; usage receipts and observed tool inputs; unchanged public paper bytes; worker hash, isolation probes, process exit and cleanup | All checks pass before scoring; missing/corrupt evidence is non-agent invalid and run incomplete |
 
-Alternative annotations are accepted independently for answer and evidence per upstream scoring semantics. Unanswerable annotations become answer Unanswerable with empty evidence. Empty normalized answer F1 is 0. Wrong answers remain in the denominator. Mean over all valid trials is descriptive, not a release pass. Version comparison uses same frozen conditions and paired cluster bootstrap as specified in report.mjs; fixture, one-repeat, fewer than five clusters or incomplete runs cannot pass a quality comparison.
+Alternative annotations are accepted independently for answer and evidence per upstream scoring semantics. Unanswerable annotations become answer Unanswerable with empty evidence. Empty normalized answer F1 is 0. Wrong answers remain in the denominator. Unknown provider usage remains unknown and does not invalidate an otherwise complete run. Mean over all valid trials is descriptive, not a release pass. Version comparison uses the same frozen runtime/answer-boundary contract and per-trial verified evidence, alongside the other conditions and paired cluster bootstrap in report.mjs; fixture, one-repeat, fewer than five clusters or incomplete runs cannot pass a quality comparison. Earlier aggregate-answer runs remain diagnostic evidence and require a new live baseline; they are not rescored or upgraded.
 
 ## Fairness and leakage
 

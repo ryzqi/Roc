@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import type { ChatStartRunRequest, RunExecutionSnapshot, WorkflowHint } from '../../../../shared/types';
-import { ROC_FILE_TOOL_PROMPT_LINES } from '../filesystem-tool-contract';
+import { ROC_FILE_TOOL_PATH_FIELDS, ROC_FILE_TOOL_PROMPT_LINES } from '../filesystem-tool-contract';
 import { BACKGROUND_TASK_CREATION_WORKFLOW_OVERVIEW, createCapabilitySummary } from '../prompt';
 import { ROC_SHELL_TOOL_DESCRIPTION_LINES } from '../shell-policy';
 
@@ -20,6 +20,7 @@ type PromptBlockType =
   | 'self_config'
   | 'explicit_skills'
   | 'referenced_files'
+  | 'memory'
   | 'context_recall'
   | 'plan_mode'
   | 'research'
@@ -59,18 +60,25 @@ export function buildPromptBlocks(input: {
   workspacePath: string | null;
   workflowHint: WorkflowHint;
   tools: readonly PromptToolDescriptor[];
+  allowedToolNames?: readonly string[];
+  memorySources?: readonly string[];
   explicitSkillContexts: readonly ExplicitSkillPromptContext[];
   referencedFileContexts: readonly ReferencedFilePromptContext[];
   researchProjectId: string | null;
   taskContract?: RunExecutionSnapshot['taskContract'];
 }): PromptBlock[] {
+  // Framework tools are authorized by the manifest but are absent from the custom tool descriptors.
+  const toolNames = new Set(input.allowedToolNames ?? input.tools.map((tool) => tool.name));
+  const hasRecall = toolNames.has('memory_search') || toolNames.has('session_search');
+  const hasMemory = (input.memorySources?.length ?? 0) > 0 || hasRecall || toolNames.has('remember');
   return [
-    createBlock('static', BlockStability.STATIC, buildStaticPrompt(input.mode)),
-    createBlock('workspace', BlockStability.WORKSPACE, buildWorkspacePrompt(input.workspacePath, input.mode)),
-    createBlock('tools', BlockStability.CAPABILITY, buildToolsPrompt(input.tools)),
+    createBlock('static', BlockStability.STATIC, buildStaticPrompt()),
+    createBlock('workspace', BlockStability.WORKSPACE, buildWorkspacePrompt(input.workspacePath, input.mode, toolNames, hasMemory)),
+    createBlock('tools', BlockStability.CAPABILITY, buildToolsPrompt(input.tools, toolNames)),
     createBlock('capability', BlockStability.CAPABILITY, `Capabilities: ${createCapabilitySummary(input.enabledCapabilities)}`),
+    ...(hasMemory ? [createBlock('memory', BlockStability.CAPABILITY, buildMemoryPrompt(toolNames))] : []),
     ...(
-      input.tools.some((tool) => tool.name === 'roc_self_config')
+      toolNames.has('roc_self_config')
         ? [createBlock('self_config', BlockStability.CAPABILITY, buildSelfConfigPrompt())]
         : []
     ),
@@ -84,7 +92,7 @@ export function buildPromptBlocks(input: {
         ? []
         : [createBlock('referenced_files', BlockStability.REQUEST, buildReferencedFilesPrompt(input.referencedFileContexts))]
     ),
-    createBlock('context_recall', BlockStability.WORKSPACE, buildContextRecallPrompt(input.workspacePath)),
+    ...(hasRecall ? [createBlock('context_recall', BlockStability.WORKSPACE, buildContextRecallPrompt(input.workspacePath, toolNames))] : []),
     ...(
       input.researchProjectId === null || input.mode === 'plan'
         ? []
@@ -110,12 +118,25 @@ function buildTaskContractPrompt(contract: RunExecutionSnapshot['taskContract'])
   ].join('\n');
 }
 
-function buildStaticPrompt(mode: RunExecutionSnapshot['mode']): string {
+function buildStaticPrompt(): string {
   return [
     'You are Roc, a macOS coding agent. Be concise; claim only inspected evidence.',
     'Inspect relevant source, tests, and config before edits. Keep changes scoped to the request.',
     'Run direct verification after code or config changes. Report results and blockers plainly.',
     '',
+    'Follow the requested final-response format exactly. When the user requests only JSON, return only the requested JSON value: no Markdown fences, preface, or trailing explanation. Use valid JSON syntax and only the requested keys.',
+    'For factual questions, give the shortest sufficient answer. Prefer the requested names, values, or a brief description of the necessary relationship; omit background and examples unless requested.',
+    "For a yes/no question without a request for explanation, the answer itself is only the requested labels or a yes/no response in the question's language, inside the requested output format. Use the requested unanswerable form only when the inspected material cannot decide the question; evidence of a negative result supports a negative answer.",
+    'Resolve the exact question scope before answering, including only, all, not, and which result is being measured. Distinguish what the authors actually use, propose, or evaluate from related work they merely discuss.',
+    'Cite the smallest set of inspected passages that directly supports the answer. Keep source identifiers exact; avoid optional claims that need additional evidence.',
+    'Before submitting, check the requested format, answer scope, and whether the cited material supports every part of the answer.',
+    '',
+    'Read SKILL.md silently; never quote, paraphrase, or summarize it.'
+  ].join('\n');
+}
+
+function buildMemoryPrompt(toolNames: ReadonlySet<string>): string {
+  return [
     'Memory files available to the agent:',
     '  /memory/global/USER.md      — user identity, preferences, comm style (global only; there is no workspace USER.md)',
     '  /memory/global/AGENTS.md    — global default rules',
@@ -124,68 +145,72 @@ function buildStaticPrompt(mode: RunExecutionSnapshot['mode']): string {
     '  /memory/workspaces/current/MEMORY.md   — workspace-specific facts plus the index of workspace topic files',
     '  /memory/global/topics/<slug>.md and /memory/workspaces/current/topics/<slug>.md — topic detail files',
     '',
-    'The five files above are injected when non-empty; do not probe their paths with read_file.',
-    'Topic files are not injected. Read one only when its MEMORY.md index matches this task.',
-    'If injected memory is insufficient, call memory_search before guessing a path.',
-    // Plan Mode 不绑定 remember / write_file / edit_file，因此不给出记忆写入指令：
-    // 提示模型使用未绑定的工具会诱发工具名幻觉，而未知工具名要多消耗一轮才能自纠。
-    ...(mode === 'plan' ? [] : buildMemoryWritePromptLines()),
-    '',
-    'Read SKILL.md silently; never quote, paraphrase, or summarize it.'
+    'The five files above are injected when non-empty; do not probe their paths with file tools.',
+    'Topic files are not injected. Consult one through available read or recall tools only when its MEMORY.md index matches this task.',
+    ...(toolNames.has('memory_search') ? ['If injected memory is insufficient, call memory_search before guessing a path.'] : []),
+    ...buildMemoryWritePromptLines(toolNames)
   ].join('\n');
 }
 
-function buildMemoryWritePromptLines(): string[] {
+function buildMemoryWritePromptLines(toolNames: ReadonlySet<string>): string[] {
   return [
-    'Use remember for one durable fact. It validates, deduplicates, and reports the target file.',
-    'High-confidence user preferences go to USER.md; other accepted facts go to scoped MEMORY.md.',
-    'Use edit_file/write_file for memory restructuring or corrections. On capacity overflow, merge entries or move detail to a topic file and keep one index line.',
-    'Change AGENTS.md only through explicit file edits.'
+    ...(toolNames.has('remember') ? [
+      'Use remember for one durable fact. It validates, deduplicates, and reports the target file.',
+      'High-confidence user preferences go to USER.md; other accepted facts go to scoped MEMORY.md.'
+    ] : []),
+    ...(toolNames.has('edit_file') && toolNames.has('write_file') ? [
+      'Use edit_file/write_file for memory restructuring or corrections. On capacity overflow, merge entries or move detail to a topic file and keep one index line.'
+    ] : []),
+    ...(toolNames.has('edit_file') || toolNames.has('write_file') ? ['Change AGENTS.md only through explicit file edits.'] : [])
   ];
 }
 
-function buildWorkspacePrompt(workspacePath: string | null, mode: RunExecutionSnapshot['mode']): string {
+function buildWorkspacePrompt(
+  workspacePath: string | null,
+  mode: RunExecutionSnapshot['mode'],
+  toolNames: ReadonlySet<string>,
+  hasMemory: boolean
+): string {
   if (workspacePath === null) {
-    if (mode === 'plan') {
-      return [
-        'Workspace: not selected.',
-        'File inspection is unavailable until the user selects a workspace.'
-      ].join('\n');
-    }
     return [
       'Workspace: not selected.',
-      'Command cwd unavailable. Ask the user to select a workspace before local commands.'
+      'Workspace file inspection and command cwd are unavailable until the user selects a workspace.'
     ].join('\n');
   }
-  if (mode === 'plan') {
-    return [
-      `Workspace: ${workspacePath}`,
-      'Plan Mode is read-only: no local mutation, execution, or task commits. Read/search and authorized MCP remain available.',
-      'Use Roc virtual routes /workspace/, /memory/, and /skills/ for local inspection.',
-      'Use ls, read_file, glob, grep, web_read, web_search, and authorized MCP tools as applicable.',
-      'Use ask_user only for a concise clarification.'
-    ].join('\n');
-  }
+  const hasFileTools = Object.keys(ROC_FILE_TOOL_PATH_FIELDS).some((name) => toolNames.has(name));
+  const shellTools = ['run_shell_command', 'run_isolated_read_command', 'run_trusted_host_command'].filter((name) => toolNames.has(name));
+  const [routes, memoryRoutes, writes, hostRoutes] = ROC_FILE_TOOL_PROMPT_LINES;
   return [
     `Workspace: ${workspacePath}`,
-    ...ROC_FILE_TOOL_PROMPT_LINES,
-    '',
-    'Tool routing: file operations (read/write/list/delete) use file tools; execution tasks (test/build/compile/script) use run_shell_command.',
-    '',
-    ...ROC_SHELL_TOOL_DESCRIPTION_LINES,
-    'After write_file/edit_file, verify with read_file before reporting the change.'
+    ...(mode === 'plan' ? ['Plan Mode is read-only: no local mutation, execution, or task commits.'] : []),
+    ...(hasFileTools ? [routes, ...(hasMemory ? [memoryRoutes] : []), hostRoutes] : []),
+    ...(toolNames.has('write_file') && toolNames.has('edit_file') ? [writes] : []),
+    ...(toolNames.has('write_file') && !toolNames.has('edit_file') ? ['write_file creates or replaces a file.'] : []),
+    ...(toolNames.has('edit_file') && !toolNames.has('write_file') ? ['Use edit_file for targeted changes.'] : []),
+    ...(toolNames.has('read_file') ? [
+      'When the user supplies an exact file path, read it directly; list or search only when needed to locate material.',
+      'Read the sections needed to decide the question and support the answer. Continue paging when relevant evidence is outside the returned range; stop expanding once the answer and its scope are supported.'
+    ] : []),
+    ...(shellTools.length > 0 ? [
+      `Execution tools: ${shellTools.join(', ')}. Use file tools for file operations.`,
+      ...ROC_SHELL_TOOL_DESCRIPTION_LINES
+    ] : []),
+    ...(toolNames.has('read_file') && (toolNames.has('write_file') || toolNames.has('edit_file')) ? [
+      'After a file change, verify with read_file before reporting it.'
+    ] : [])
   ].join('\n');
 }
 
-function buildToolsPrompt(tools: readonly PromptToolDescriptor[]): string {
-  if (tools.length === 0) {
-    return [
-      'Available tools are defined by the runtime schema.',
-      '',
-      buildHumanClarificationPrompt()
-    ].join('\n');
-  }
-  return ['Available Tools:', ...[...tools].sort((left, right) => left.name.localeCompare(right.name, 'en')).map(formatToolDescriptor), '', buildHumanClarificationPrompt()].join('\n');
+function buildToolsPrompt(tools: readonly PromptToolDescriptor[], toolNames: ReadonlySet<string>): string {
+  const descriptors = new Map(tools.map((tool) => [tool.name, tool]));
+  return [
+    toolNames.size === 0 ? 'No tools are available for this run.' : 'Available Tools:',
+    ...[...toolNames].sort((left, right) => left.localeCompare(right, 'en')).map((name) =>
+      formatToolDescriptor(descriptors.get(name) ?? { name })
+    ),
+    'Call only tools exposed by the current runtime schema, even if other guidance mentions additional tools.',
+    ...(toolNames.has('ask_user') ? ['', buildHumanClarificationPrompt()] : [])
+  ].join('\n');
 }
 
 function formatToolDescriptor(tool: PromptToolDescriptor): string {
@@ -214,15 +239,19 @@ function buildSelfConfigPrompt(): string {
   ].join('\n');
 }
 
-function buildContextRecallPrompt(workspacePath: string | null): string {
+function buildContextRecallPrompt(workspacePath: string | null, toolNames: ReadonlySet<string>): string {
   const defaultScope = workspacePath === null ? 'all' : 'current';
   return [
     'Recall tools (loaded on demand):',
-    '- memory_search(query) finds durable facts, preferences, decisions, pitfalls, and project conventions.',
-    '- session_search(query) finds prior conversation snippets.',
-    'For earlier decisions or preferences, call memory_search first; use session_search only if it has no entry.',
-    `Default session_search scope: ${defaultScope}.`,
-    'Use scope=all only for cross-workspace history or insufficient current scope.',
+    ...(toolNames.has('memory_search') ? ['- memory_search(query) finds durable facts, preferences, decisions, pitfalls, and project conventions.'] : []),
+    ...(toolNames.has('session_search') ? [
+      '- session_search(query) finds prior conversation snippets.',
+      `Default session_search scope: ${defaultScope}.`,
+      'Use scope=all only for cross-workspace history or insufficient current scope.'
+    ] : []),
+    ...(toolNames.has('memory_search') && toolNames.has('session_search') ? [
+      'For earlier decisions or preferences, call memory_search first; use session_search only if it has no entry.'
+    ] : []),
     'Results are snippets, not full transcripts.'
   ].join('\n');
 }

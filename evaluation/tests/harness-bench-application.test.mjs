@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import Database from 'better-sqlite3';
 import { prepareApplication, executeApplication } from '../lib/application.mjs';
+import { verifyApplicationEvidence } from '../lib/application-verifier.mjs';
+import { importQasper, gradeQasper } from '../lib/qasper.mjs';
 import { fixtureConfig, fixtureCompletion } from '../lib/fixture.mjs';
 import { fileInventory, hash, sha256, ROOT } from '../lib/common.mjs';
 import { scienceFixture } from './science-fixture.mjs';
@@ -14,13 +17,26 @@ const artifact = await prepareApplication(root), hidden = join(root, 'hidden-gol
 writeFileSync(hidden, 'hidden-evaluation-truth');
 const input = { kind: 'qasper', prompt: 'Read /workspace/paper.json using read_file and answer JSON.', files: { 'paper.json': '{"title":"Visible paper","paragraphs":[{"id":"p0","text":"visible-paper-sentinel"}]}' } };
 function trial(name) { const path = join(root, name); mkdirSync(path); return path; }
+const [unanswerable] = importQasper({ paper: { title: 'Visible paper', abstract: 'visible-paper-sentinel', full_text: [],
+  qas: [{ question_id: 'missing-answer', question: 'What is missing?', answers: [{ answer: {
+    unanswerable: true, extractive_spans: [], free_form_answer: '', yes_no: null, evidence: []
+  } }] }] } });
 
-test('real Roc file tool exposes only public paper; complete trace, isolation and cleanup retained', async () => {
+test('QASPER scores the verified final answer while retaining Roc tool narration and independent runtime evidence', async t => {
   const path = trial('paper'), requests = [];
-  const result = await executeApplication({ artifact, input, directory: path, config: fixtureConfig,
-    protectedPaths: [hidden], signal: new AbortController().signal, record: () => {}, complete: body => { requests.push(body); return fixtureCompletion(body); } });
+  const config = { ...fixtureConfig, providerId: 'wire-test', maxOutputTokens: 128, contextWindowTokens: 70000 };
+  const result = await executeApplication({ artifact, input, directory: path, config,
+    protectedPaths: [hidden], signal: new AbortController().signal, record: () => {}, complete: body => {
+      requests.push(body);
+      const reply = fixtureCompletion(body);
+      if (requests.length === 1) reply.choices[0].message.content = "I'll read the paper file first.";
+      return reply;
+    } });
   assert.equal(result.output, '{"answer":"Unanswerable","evidence":[]}');
-  assert.equal(requests.length, 2);
+  assert.deepEqual(gradeQasper(unanswerable, result.output).metrics, { answerF1: 1, evidenceF1: 1, citationValidity: 1 });
+  assert.equal(requests.length, 2); assert.equal(result.requests, 2);
+  assert.equal(result.runtimeVerification.status, 'verified');
+  assert.ok(requests.every(request => request.max_tokens === 128));
   for (const request of requests) assert.deepEqual(request.tools.map(t => t.function.name).sort(), ['ls', 'read_file']);
   assert.equal(result.toolSchemaHash, hash(requests[0].tools));
   assert.deepEqual(JSON.parse(readFileSync(join(path, 'tool-schema.json'))).tools, requests[0].tools);
@@ -29,8 +45,68 @@ test('real Roc file tool exposes only public paper; complete trace, isolation an
   const trace = readFileSync(join(path, 'transcript.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
   assert.ok(trace.some(m => m.type === 'isolation' && m.filesDenied && m.childDenied));
   assert.ok(trace.some(m => m.event?.type === 'run_completed'));
+  assert.deepEqual(trace.filter(m => m.type === 'request').map(m => m.index), [0, 1]);
+  const aggregate = JSON.parse(readFileSync(join(path, 'output.json'))).output;
+  assert.equal(aggregate, "I'll read the paper file first." + result.output);
+  assert.equal(gradeQasper(unanswerable, aggregate).reason, 'output_not_json');
+  assert.equal(JSON.parse(readFileSync(join(path, 'final-answer.json'))).output, result.output);
+  assert.equal(JSON.parse(readFileSync(join(path, 'runtime-verification.json'))).status, 'verified');
   assert.equal(JSON.parse(readFileSync(join(path, 'cleanup.json'))).processGroupGone, true);
   assert.ok(fileInventory(path).some(f => f.path === 'worker/agent.sqlite'));
+
+  const args = { artifact, input, directory: path, config, requests: 2, toolSchemaHash: result.toolSchemaHash };
+  const modifyJson = (name, mutate) => {
+    const target = join(path, name), value = JSON.parse(readFileSync(target));
+    mutate(value); writeFileSync(target, JSON.stringify(value) + '\n');
+  };
+  const modifyDb = mutate => {
+    const db = new Database(join(path, 'worker/agent.sqlite'));
+    try { mutate(db); } finally { db.close(); }
+  };
+  const cases = [
+    { name: 'forged worker output', files: ['output.json'], mutate: () => modifyJson('output.json', value => { value.output = '{"answer":"forged","evidence":[]}'; }), criterion: 'ordered-transport' },
+    { name: 'wrong request count in both result records', files: ['output.json', 'transcript.jsonl'], mutate: () => {
+      modifyJson('output.json', value => { value.requests = 999; });
+      const target = join(path, 'transcript.jsonl'), rows = readFileSync(target, 'utf8').trim().split('\n').map(JSON.parse);
+      rows.find(row => row.type === 'result').requests = 999; writeFileSync(target, rows.map(JSON.stringify).join('\n') + '\n');
+    }, criterion: 'ordered-transport' },
+    { name: 'checkpoint answer differs from model response', files: ['worker/agent.sqlite'], mutate: () => modifyDb(db => {
+      const row = db.prepare("SELECT checkpoint_id, checkpoint_blob FROM langgraph_checkpoints WHERE checkpoint_ns='' ORDER BY checkpoint_id DESC LIMIT 1").get();
+      const raw = JSON.parse(row.checkpoint_blob.toString()); raw.channel_values.messages.at(-1).kwargs.content = '{"answer":"forged","evidence":[]}';
+      db.prepare('UPDATE langgraph_checkpoints SET checkpoint_blob=? WHERE checkpoint_id=?').run(Buffer.from(JSON.stringify(raw)), row.checkpoint_id);
+    }), criterion: 'final-answer-boundary' },
+    { name: 'missing root checkpoint', files: ['worker/agent.sqlite'], mutate: () => modifyDb(db => db.prepare("DELETE FROM langgraph_checkpoints WHERE checkpoint_ns=''").run()) },
+    { name: 'missing model ledger', files: ['worker/agent.sqlite'], mutate: () => modifyDb(db => db.prepare("DELETE FROM agent_calls WHERE kind='model'").run()), criterion: 'usage-ledger' },
+    { name: 'corrupt database', files: ['worker/agent.sqlite'], mutate: () => writeFileSync(join(path, 'worker/agent.sqlite'), 'corrupt') },
+    { name: 'missing responses', files: ['responses.jsonl'], mutate: () => unlinkSync(join(path, 'responses.jsonl')) },
+    { name: 'corrupt responses', files: ['responses.jsonl'], mutate: () => writeFileSync(join(path, 'responses.jsonl'), '{broken}\n') },
+    { name: 'modified public paper', files: ['worker/workspace/paper.json'], mutate: () => writeFileSync(join(path, 'worker/workspace/paper.json'), '{"tampered":true}'), criterion: 'public-workspace-unchanged' },
+    { name: 'unconfirmed cleanup', files: ['cleanup.json'], mutate: () => modifyJson('cleanup.json', value => { value.processGroupGone = false; }), criterion: 'isolation-and-cleanup' }
+  ];
+  for (const scenario of cases) await t.test(`independent verifier rejects ${scenario.name}`, () => {
+    const original = scenario.files.map(name => [join(path, name), readFileSync(join(path, name))]);
+    try {
+      scenario.mutate();
+      const verdict = verifyApplicationEvidence(args);
+      assert.equal(verdict.status, 'invalid', scenario.name);
+      assert.equal(verdict.finalAnswer, undefined);
+      if (scenario.criterion) assert.ok(verdict.checks.some(check => check.id === scenario.criterion && !check.passed), JSON.stringify(verdict));
+    } finally { for (const [target, content] of original) writeFileSync(target, content); }
+    assert.equal(verifyApplicationEvidence(args).status, 'verified', 'restored owned trial must remain valid');
+  });
+});
+test('a fenced terminal answer remains a QASPER format failure after real Roc tool execution', async () => {
+  const path = trial('fenced');
+  const result = await executeApplication({ artifact, input, directory: path, config: fixtureConfig,
+    protectedPaths: [hidden], signal: new AbortController().signal, record: () => {}, complete: body => {
+      const reply = fixtureCompletion(body);
+      reply.choices[0].message.content = body.messages.some(m => m.role === 'tool')
+        ? '```json\n{"answer":"Unanswerable","evidence":[]}\n```' : 'Reading the paper.';
+      return reply;
+    } });
+  assert.equal(result.runtimeVerification.status, 'verified');
+  assert.equal(result.output, '```json\n{"answer":"Unanswerable","evidence":[]}\n```');
+  assert.equal(gradeQasper(unanswerable, result.output).reason, 'output_not_json');
 });
 test('host rejects unexpected, missing, duplicate or malformed tools before dispatch and schema drift before redispatch', async () => {
   const valid = ['ls', 'read_file'].map(name => ({ type: 'function', function: { name, parameters: { type: 'object', properties: {} } } }));
@@ -51,8 +127,8 @@ const schemas = ${JSON.stringify(scenario.schemas)};
 let i = 0;
 createInterface({ input: process.stdin }).on('line', () => {
   if (i >= schemas.length) return;
-  const body = { tools: schemas[i++] };
-  console.log(JSON.stringify({ type: 'request', body, requestHash: createHash('sha256').update(JSON.stringify(canonical(body))).digest('hex') }));
+  const index = i, body = { tools: schemas[i++] };
+  console.log(JSON.stringify({ type: 'request', index, body, requestHash: createHash('sha256').update(JSON.stringify(canonical(body))).digest('hex') }));
 });\n`);
     const faultyArtifact = { ...artifact, path: workerPath, sha256: sha256(readFileSync(workerPath)) };
     let calls = 0;

@@ -4,7 +4,7 @@
   "suites": [
     {"id":"roc-harness","component":"agent harness lifecycle and tool effects","adapter":"production-runtime-controlled-model-v1","status":"available","source":"evaluation/tasks/roc-harness/Task.md","license":"project","metrics":["scenarioPassRate"],"evidence":"controlled-model","default":true},
     {"id":"roc-native","component":"supplementary native contract regressions","adapter":"native","status":"available","source":"scripts/harness-eval/run.mjs","license":"project","metrics":["contractPassRate"],"evidence":"fixture"},
-    {"id":"qasper","component":"paper reading and evidence","adapter":"qasper-v1","status":"available","source":"https://huggingface.co/datasets/allenai/qasper","license":"CC-BY-4.0","metrics":["answerF1","evidenceF1","citationValidity"],"track":"roc-adapted-text"},
+    {"id":"qasper","component":"paper reading and evidence","adapter":"qasper-roc-runtime-v2","status":"available","source":"https://huggingface.co/datasets/allenai/qasper","license":"CC-BY-4.0","metrics":["answerF1","evidenceF1","citationValidity"],"track":"roc-adapted-text"},
     {"id":"scienceagentbench","component":"scientific task execution","adapter":"scienceagentbench-local-verified-v2","status":"requires-verified-environment","source":"https://github.com/OSU-NLP-Group/ScienceAgentBench","license":"CC-BY-4.0 with per-task upstream exceptions; do not redistribute unpacked data","split":"verified","metrics":["successRate"],"track":"roc-adapted"}
   ]
 }

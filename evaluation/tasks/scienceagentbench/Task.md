@@ -31,7 +31,7 @@ Only allowlisted ordinary data files are copied to verifier-input; recognized ex
 | S1 | Required artifacts | Inventory and allowlist copies after worker termination | Missing output yields agent successRate=0 |
 | S2 | Scientific correctness | Frozen grader, hidden truth and actual data outputs | Exit 0, JSON success:boolean and evidence:nonempty; score 1 or 0 |
 | S3 | Grader calibration | Five actual grader executions before evaluated trials | oracle and alternative accepted; incorrect-output, corrupt-output and shortcut rejected |
-| S4 | Runtime correctness | Grant events, tool trace, environment/source/data identities and process cleanup | Environment/protocol/cleanup failure invalidates run |
+| S4 | Runtime correctness | Independent read-only SQLite completed run/thread/root checkpoint, final assistant bound to terminal model response, frozen inputs/model/limits/manifest, ordered hashed transport, persisted events, session output, usage/tool ledger; grant events, environment/source/data identities, worker isolation and process cleanup | Runtime/environment/protocol/cleanup failure invalidates run before scientific scoring |
 
 Task-specific tolerances, accepted formats and allowlist come from the upstream task and local recipe. No scoring by narrative regex or self-reported completion; no implicit paid model judge. Grader nonzero exit or malformed reward is verifier-invalid. A valid negative grade remains an agent failure in the denominator. Score is mean per-trial success, not upstream best-of-three.
 
@@ -43,4 +43,4 @@ Public data may be in model training. Group by source repo before hash splitting
 
 ## Remaining validation
 
-The local synthetic task exercises actual Roc file tools, consumed grants, Python, hidden-data/network/subprocess denial and five independent calibration outcomes. Official prepared tasks, dependency recipes and graders remain to be imported and audited. Actual configured credential access is currently blocked on this host. No official scientific quality claim until those gaps are resolved. Manual profiles: smoke1x1, fast5x1, full50x3 development and release all supported holdout x3; same-condition comparisons require enough independent repo groups.
+The local synthetic task exercises actual Roc file tools, consumed grants, Python, hidden-data/network/subprocess denial and five independent calibration outcomes. The shared configured-model bridge is exercised with a local scripted provider; that does not establish official scientific quality. Official prepared tasks, dependency recipes and graders remain to be imported and audited. No official scientific quality claim until those gaps are resolved. Manual profiles: smoke1x1, fast5x1, full50x3 development and release all supported holdout x3; same-condition comparisons require the frozen runtime contract, per-trial verified evidence and enough independent repo groups.

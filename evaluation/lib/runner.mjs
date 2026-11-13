@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { ROOT, EVAL_ROOT, RUNS, directory, fail, hash, journal, readJson, sha256, snapshotNativeEvidence, sourceIdentity, writeJson } from './common.mjs';
 import { loadDataset } from './data.mjs';
 import { prepareApplication, executeApplication } from './application.mjs';
+import { applicationContract } from './application-verifier.mjs';
 import { qasperInput, gradeQasper } from './qasper.mjs';
 import { scienceInput, sciencePreflight, stageScience, executeScience, gradeScience } from './science.mjs';
 import { createProvider, validateProviderOptions } from './provider.mjs';
@@ -28,6 +29,7 @@ export function selectTasks(tasks, profile) {
 const errorRecord = error => ({ failureClass: error.failureClass ?? 'infrastructure', reason: String(error.message ?? error).slice(0, 320) });
 function scorerHash(suite) {
   const names = ['report.mjs', 'data.mjs', suite === 'qasper' ? 'qasper.mjs' : suite === 'scienceagentbench' ? 'science.mjs' : '../../scripts/harness-eval/run.mjs'];
+  if (suite === 'qasper' || suite === 'scienceagentbench') names.push('application-verifier.mjs', 'application.mjs');
   return hash(names.map(name => [name, sha256(readFileSync(new URL(name, import.meta.url)))]));
 }
 export async function runBenchmark(options) {
@@ -49,6 +51,9 @@ export async function runBenchmark(options) {
     const suite = registry.suites.find(s => s.id === options.suite);
     if (!suite || !['available', 'requires-verified-environment'].includes(suite.status)) fail('environment', 'suite_not_implemented');
     manifest.source = sourceIdentity(); manifest.scorerHash = scorerHash(options.suite); manifest.metrics = suite.metrics;
+    if (options.suite === 'qasper' || options.suite === 'scienceagentbench') {
+      manifest.applicationContract = applicationContract; manifest.adapter = suite.adapter;
+    }
     if (options.experiment) {
       experiment = claimExperiment(options.experiment, root, manifest);
       manifest.experiment = experiment.binding;
@@ -119,6 +124,7 @@ export async function runBenchmark(options) {
             execute: options.suite === 'scienceagentbench' ? (workspace, signal, limits) => executeScience(task, workspace, signal, limits) : undefined });
           grade = options.suite === 'qasper' ? gradeQasper(task, result.output) : await gradeScience(dataset, task, result.workspace, trialDir, controller.signal);
           grade.requests = result.requests;
+          grade.runtimeVerification = result.runtimeVerification;
         } catch (error) {
           const failure = controller.signal.aborted ? { failureClass: 'operator', reason: 'run_cancelled' } : errorRecord(error);
           grade = { status: failure.failureClass === 'agent' ? 'failed' : 'invalid', ...failure,
