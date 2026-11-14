@@ -109,8 +109,11 @@ test('Electron model host completes through an existing local provider without l
     model = await openRocModel({ rocRoot: path });
     assert.equal(requests, 0);
     assert.equal(model.identity.applicationName, 'roc');
-    const reply = await model.complete({ model: 'test-model', messages: [{ role: 'user', content: '6*7' }] }, AbortSignal.timeout(10000));
-    assert.equal(reply.choices[0].message.content, '42'); assert.equal(requests, 1);
+    const replies = await Promise.all(['first', 'second'].map(requestId => model.complete({
+      model: 'test-model', messages: [{ role: 'user', content: '6*7' }]
+    }, AbortSignal.timeout(10000), { trialId: requestId, requestId })));
+    assert.ok(replies.every(reply => reply.choices[0].message.content === '42'));
+    assert.equal(requests, 2);
     assert.equal(hash(fileInventory(path)), before);
   } finally { await model?.close(); await new Promise(resolve => server.close(resolve)); }
 });
@@ -168,6 +171,9 @@ test('QASPER runs through the configured Roc factory, real file tools, checkpoin
     assert.ok(requests[1].messages.some(message => message.role === 'tool' && JSON.stringify(message.content).includes('public-paper-sentinel')));
     assert.equal(JSON.stringify(requests).includes('hidden-reference-sentinel'), false);
     const sealed = inspectRun(result.directory), trial = sealed.trials[0];
+    assert.equal(sealed.manifest.evidence, 'engineering-fixture');
+    assert.equal(sealed.manifest.qasperQualification.status, 'unverified');
+    assert.equal(sealed.summary.qualityConclusion, 'fixture-only');
     assert.equal(sealed.manifest.provider.providerId, 'llama_cpp');
     assert.equal(sealed.manifest.provider.maxOutputTokens, 128);
     assert.equal(trial.runtimeVerification.status, 'verified');

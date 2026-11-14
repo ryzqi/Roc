@@ -1,5 +1,12 @@
 {
   "maxInputBytes": 262144,
   "requestTimeoutMs": 120000,
-  "taskTimeoutMs": 300000
+  "taskTimeoutMs": 300000,
+  "budget": {
+    "maxModelRequests": 1000,
+    "maxInputTokens": 10000000,
+    "maxOutputTokens": 1000000,
+    "maxTaskDurationMs": 300000,
+    "maxRunDurationMs": 3600000
+  }
 }

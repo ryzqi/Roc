@@ -96,6 +96,21 @@ all ten cases once. `full` runs all ten three times. `--task` selects one case f
 diagnosis; its passing result establishes only that selected scope. There is no
 controlled-model holdout or `release` profile.
 
+Canonical commands are `pnpm evaluate run`, `pnpm evaluate run --profile full`
+and `pnpm evaluate run --task CASE_ID`; `pnpm harness:bench` remains the same
+CLI's compatibility alias. Trial scheduling defaults to concurrency=2 and can
+be set to 1–8, with separate trial workspaces/databases and frozen executionPolicy.
+The run retains a durable plan, sequenced journal, lifecycle states, scoped host
+budget/usage, grade artifacts and evidence seal. Controlled receipts exercise
+accounting; they are not inference resource measurements.
+
+`pnpm evaluate run --resume UNSEALED_RUN` verifies unchanged source, manifest,
+plan, journal prefix, budget ledger and a departed prior owner. It can verify
+and regrade complete evidence after dispatch, but never blindly replays
+uncertain dispatched work. Sealed runs, including gracefully sealed incomplete
+runs, cannot be resumed. This run-level recovery is separate from the deliberate
+production checkpoint restarts inside each fault-injection case.
+
 ## Verifier audit and fairness
 
 Validate a complete run, a supported alternative final assistant response,
@@ -109,8 +124,11 @@ original or product data.
 
 These cases measure deterministic harness behavior under specified faults.
 They do not measure model tool selection, scientific quality, prompt-injection
-resistance, cross-session memory quality or general agent capability. QASPER
-and verified ScienceAgentBench remain separate supplementary tracks. Future
+resistance, cross-session memory quality or general agent capability. QASPER,
+production RAG component/E2E tasks and verified ScienceAgentBench have separate
+Task Specs and independent evidence. Offline `pnpm evaluate check` seals
+engineering/readiness audits, with regressionAcceptance=not_evaluated; it does
+not establish a retrieval threshold or model-quality pass. Future
 context, child-agent and external-effect tasks need their own independent
 environment and spec.
 
@@ -122,3 +140,6 @@ environment and spec.
   products and obsolete setup failures.
 - The task and accompanying Roc world-knowledge changes remain Draft until
   explicitly reviewed by the user.
+- Fixture, controlled-model and synthetic ten-question × three-repeat evidence
+  cannot establish quality, an independently reviewed dataset or holdout
+  approval. Statistical experiments do not replace this per-criterion gate.

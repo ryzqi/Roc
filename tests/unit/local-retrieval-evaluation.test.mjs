@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { evaluateLocalRetrieval, relevanceMetrics, validateLocalRetrievalCorpus } from '../../scripts/lib/local-retrieval-evaluation.mjs';
-const fixture = () => JSON.parse(readFileSync('tests/fixtures/local-retrieval-quality.json', 'utf8'));
+import { evaluateLocalRetrieval, relevanceMetrics, validateLocalRetrievalCorpus } from '../../evaluation/adapters/frozen-retrieval/index.mjs';
+const fixture = () => JSON.parse(readFileSync('tests/fixtures/local-retrieval-quality-context-role-v2.json', 'utf8'));
 test('production FTS and frozen vectors compare identical scoped queries and keep engineering provenance', async () => {
   const report = await evaluateLocalRetrieval(fixture()); assert.equal(report.rows.length, 32); assert.equal(report.groups.length, 12);
   for (const row of report.rows) assert.equal(row.hits.some(id => id.startsWith('foreign:') || id.startsWith('stale:')), false);
@@ -54,7 +54,7 @@ test('strategy vectors are independently consumed and contextual input drift fai
   const corpus=fixture();
   for(const strategy of corpus.queries[0].strategies) {
     strategy.query='absentquery';
-    const {sha256}=await import('../../scripts/lib/local-retrieval-evaluation.mjs');
+    const {sha256}=await import('../../evaluation/adapters/frozen-retrieval/index.mjs');
     strategy.embeddingInputSha256=sha256(strategy.query);
   }
   corpus.queries[0].strategies[0].embedding=[1,0,0];
@@ -63,6 +63,11 @@ test('strategy vectors are independently consumed and contextual input drift fai
   assert.notDeepEqual(rows[0].hits,rows[1].hits);
   const changed=fixture();changed.documents[0].title='Changed embedding context';
   await assert.rejects(()=>evaluateLocalRetrieval(changed),/document_embedding_input_changed/);
+});
+
+test('historical pre-role fixture is rejected by current production embedding inputs', async () => {
+  const historical = JSON.parse(readFileSync('tests/fixtures/local-retrieval-quality.json', 'utf8'));
+  await assert.rejects(() => evaluateLocalRetrieval(historical), /document_embedding_input_changed/);
 });
 
 test('undefined metrics and partial chains stay distinct from perfect retrieval',()=>{

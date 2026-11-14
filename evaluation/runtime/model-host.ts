@@ -27,7 +27,8 @@ try {
   await app.whenReady(); app.dock?.hide(); send({ type: 'stage', stage: 'ready' });
   let model: Awaited<ReturnType<typeof createConfiguredModel>> | undefined;
   for await (const line of iterator) {
-    const request = JSON.parse(line) as { type: string; rocRoot: string; selection?: { providerId: string; modelId: string }; body: Parameters<typeof completeConfigured>[1] };
+    const request = JSON.parse(line) as { type: string; requestId: string; rocRoot: string; selection?: { providerId: string; modelId: string }; body: Parameters<typeof completeConfigured>[1] };
+    if (typeof request.requestId !== 'string' || !request.requestId || request.requestId.length > 256) throw new Error('protocol');
     if (request.type === 'init' && !model) {
       send({ type: 'stage', stage: 'configuration' });
       model = await createConfiguredModel(request.rocRoot, {
@@ -35,10 +36,10 @@ try {
         encryptString: async () => { throw new Error('readonly'); },
         decryptString: async bytes => { send({ type: 'stage', stage: 'credential_decryption' }); const value = await safeStorage.decryptStringAsync(bytes); return { plaintext: value.result, shouldReEncrypt: false }; }
       }, request.selection);
-      send({ type: 'ready', identity: { ...model.identity, applicationName: app.getName() } });
+      send({ type: 'ready', requestId: request.requestId, identity: { ...model.identity, applicationName: app.getName() } });
     } else if (request.type === 'complete' && model) {
       send({ type: 'stage', stage: 'inference' });
-      send({ type: 'response', body: await completeConfigured(model, request.body, controller.signal) });
+      send({ type: 'response', requestId: request.requestId, body: await completeConfigured(model, request.body, controller.signal) });
     }
     else throw new Error('protocol');
   }

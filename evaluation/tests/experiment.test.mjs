@@ -10,6 +10,11 @@ import { inspectRun, sealRun, summarize } from '../lib/report.mjs';
 import { importQasper } from '../lib/qasper.mjs';
 import { applicationContract } from '../lib/application-verifier.mjs';
 import { testArtifacts } from './test-artifacts.mjs';
+import { experimentSpecSchema, fixedExperimentSpecSchema } from '../lib/experiment.mjs';
+import { validateAcceptance } from '../lib/comparison.mjs';
+import { ablationSpecSchema, validateAblationSpec } from '../lib/ablation.mjs';
+import { readEvents } from '../lib/lifecycle.mjs';
+import { officialQasperFields, officialQasperTest } from './qasper-official.mjs';
 
 const root = testArtifacts('experiment');
 const captureIncident = options => captureIncidentRecord({ ...options, outputRoot: join(root, 'incidents') });
@@ -18,15 +23,18 @@ const analysis = { category: 'agent', observation: 'The answer omits supporting 
   proposedChange: 'Clarify evidence retrieval in the prompt.', expectedOutcome: 'Improve grounded answers without breaking existing tasks.' };
 const acceptance = { nonInferiorityMargin: .05, absoluteFloors: { answerF1: .7, citationValidity: 1 }, trialFloors: { citationValidity: 1 } };
 
-// Synthetic sealed records exercise gate logic, not model quality. They are kept
+// Synthetic scores/receipts on independently pinned official QASPER inputs
+// exercise gate logic, not model quality. They are kept
 // under .runtime/tests, never added to the archive of actual benchmark runs.
 function sample({ score = .8, evidence = 'live-model', split = 'development', fatal = null, source = sourceIdentity() } = {}) {
   const path = directory(root, 'synthetic-run');
-  const selection = Array.from({ length: 5 }, (_, i) => ({ id: `q${i}`, clusterId: `paper${i}` }));
+  const official = officialQasperFields(5, split);
+  const selection = official?.selection ?? Array.from({ length: 5 }, (_, i) => ({ id: `q${i}`, clusterId: `paper${i}` }));
   const manifest = { suite: 'qasper', evidence, profile: 'full', datasetIdentity: hash('synthetic'), selection, repeats: 3,
     metrics: ['answerF1', 'citationValidity'], scorerHash: hash('test-scorer'), provider: { model: 'test-only', },
     environment: { node: process.version }, split, exclusions: [], source, testOnly: true, applicationContract,
     toolManifest: { tools: [{ modelVisibleName: 'read_file', executionScopes: ['main'], effect: 'read' }] } };
+  if (official) Object.assign(manifest, official);
   const trials = selection.flatMap(t => Array.from({ length: 3 }, (_, repeat) => ({ taskId: t.id, clusterId: t.clusterId, repeat,
     status: 'scored', metrics: { answerF1: score, citationValidity: 1 }, latencyMs: 100, toolSchemaHash: hash('test-schema'),
     runtimeVerification: { status: 'verified', contractHash: hash(applicationContract), finalAnswerHash: hash('test-answer'), evidenceHash: hash('test-evidence') } })));
@@ -38,7 +46,7 @@ function save(run) {
   return run;
 }
 function protocol(baseline, overrides = {}) {
-  const incident = captureIncident({ runPath: baseline.path, trial: { taskId: 'q0', repeat: 0 }, analysis });
+  const incident = captureIncident({ runPath: baseline.path, trial: { taskId: baseline.manifest.selection[0].id, repeat: 0 }, analysis });
   const spec = { schemaVersion: 1, title: 'Synthetic gate calibration', hypothesis: analysis.hypothesis,
     incidents: [incident.directory], allowedChanges: [], acceptance, ...overrides };
   return { experiment: createExperiment({ baselinePath: baseline.path, spec }), spec, incident };
@@ -53,10 +61,86 @@ function candidateFor(baseline, experiment, { score = .85, fatal = null, mutate 
   return candidate;
 }
 const review = decision => ({ decision, reviewer: 'Synthetic test reviewer', rationale: 'Test-only gate calibration.',
-  reviewedTrials: [{ taskId: 'q0', repeat: 0, finding: 'Test-only evidence inspected.' }] });
+  reviewedTrials: [{ taskId: officialQasperFields()?.selection[0].id ?? 'q0', repeat: 0, finding: 'Test-only evidence inspected.' }] });
+
+// These schema checks deliberately avoid sourceIdentity, workers and providers.
+const pureSpec = () => ({ schemaVersion: 1, title: 'Evaluator contract fixture', hypothesis: 'Tests the evaluator only.',
+  incidents: ['/test-only/incident'], allowedChanges: [], acceptance: structuredClone(acceptance) });
+const pureSeed = () => ({ metrics: ['answerF1', 'citationValidity'],
+  permissions: { worker: 'isolated', host: 'read-only', externalTools: false },
+  toolManifest: { schemaVersion: 1, tools: [{ modelVisibleName: 'read_file', effect: 'read', executionScopes: ['main'],
+    approval: 'none', reconciliation: 'read-only', schemaHash: hash('read-schema') }] } });
+const pureAblation = () => ({ ...pureSpec(), kind: 'ablation', acceptance: { ...structuredClone(acceptance),
+  primaryMetrics: ['answerF1'], resourceCeilings: { costUsd: 1 } },
+  ablation: { retrievalConfig: { baseline: { mode: 'bm25', rerank: 'none', topK: 20 },
+    candidate: { mode: 'hybrid', rerank: 'none', topK: 20 } } } });
+
+test('pure: untagged v1 fixed specs remain valid and discriminants are strict', () => {
+  const legacy = pureSpec();
+  assert.deepEqual(fixedExperimentSpecSchema.parse(legacy), legacy);
+  assert.deepEqual(experimentSpecSchema.parse(legacy), legacy);
+  assert.equal(experimentSpecSchema.parse({ ...legacy, kind: 'fixed-contract' }).kind, 'fixed-contract');
+  assert.equal(experimentSpecSchema.parse(pureAblation()).kind, 'ablation');
+  for (const invalid of [{ ...legacy, kind: 'permissive' }, { ...legacy, allowToolChanges: true },
+    { ...legacy, kind: 'fixed-contract', ablation: pureAblation().ablation }]) {
+    assert.equal(experimentSpecSchema.safeParse(invalid).success, false);
+  }
+});
+test('pure: acceptance bounds cannot be relaxed and multiple primaries require a registered policy', () => {
+  for (const margin of [-.01, .050001, NaN, Infinity]) {
+    assert.equal(experimentSpecSchema.safeParse({ ...pureSpec(),
+      acceptance: { ...acceptance, nonInferiorityMargin: margin } }).success, false);
+  }
+  for (const extra of [{ minimumClusters: 4 }, { minimumRepeats: 2 },
+    { primaryMetrics: ['answerF1', 'citationValidity'] }, { primaryMetrics: ['answerF1', 'answerF1'] },
+    { resourceCeilings: { inventedResource: 0 } }]) {
+    assert.equal(experimentSpecSchema.safeParse({ ...pureSpec(), acceptance: { ...acceptance, ...extra } }).success, false);
+  }
+  validateAcceptance({ acceptance: { ...acceptance, primaryMetrics: ['answerF1', 'citationValidity'],
+    multiplicity: 'fixed-sequence', minimumClusters: 6, minimumRepeats: 4 } }, pureSeed().metrics);
+  assert.throws(() => validateAcceptance({ acceptance: { ...acceptance, absoluteFloors: { answerF1: .7 } } },
+    pureSeed().metrics), /absolute_floors_must_cover_all_metrics/);
+  assert.throws(() => validateAcceptance({ acceptance: { ...acceptance, primaryMetrics: ['missing'] } },
+    pureSeed().metrics), /unknown_acceptance_metric/);
+  assert.throws(() => validateAcceptance({ acceptance: { ...acceptance,
+    metricDirections: { answerF1: 'lower-is-better' } } }, pureSeed().metrics), /lower_metric_requires_absolute_ceiling/);
+});
+test('pure: ablations require exact genuine differences, explicit permissions, primary metrics and resource gates', () => {
+  const spec = pureAblation(), seed = pureSeed();
+  assert.deepEqual(validateAblationSpec(spec, seed), spec);
+  assert.equal(ablationSpecSchema.safeParse({ ...spec, ablation: {} }).success, false);
+  assert.equal(ablationSpecSchema.safeParse({ ...spec,
+    acceptance: { ...spec.acceptance, primaryMetrics: undefined } }).success, false);
+  assert.equal(ablationSpecSchema.safeParse({ ...spec,
+    acceptance: { ...spec.acceptance, resourceCeilings: {} } }).success, false);
+  assert.throws(() => validateAblationSpec(spec, { ...seed, permissions: undefined }), /permissions_contract_required/);
+  assert.throws(() => validateAblationSpec({ ...spec, ablation: { retrievalConfig: {
+    baseline: { mode: 'bm25' }, candidate: { mode: 'bm25' } } } }, seed), /retrieval_difference_required/);
+  assert.equal(ablationSpecSchema.safeParse({ ...spec, ablation: { retrievalConfig: {
+    baseline: { mode: 'bm25' }, candidate: { mode: 'hybrid' }, allowAny: true } } }).success, false);
+});
+test('pure: capability ablations freeze shared effects, scope, approvals, reconciliation and unknown policy metadata', () => {
+  const seed = pureSeed(), spec = pureAblation();
+  const before = { toolManifest: structuredClone(seed.toolManifest), toolSchemaHash: hash('before-schema') };
+  const after = { toolManifest: structuredClone(seed.toolManifest), toolSchemaHash: hash('after-schema') };
+  after.toolManifest.tools[0].schemaHash = hash('new-read-schema');
+  const capabilities = { ...spec, ablation: { capabilities: { baseline: before, candidate: after } } };
+  validateAblationSpec(capabilities, seed);
+  for (const [field, value] of [['effect', 'write'], ['executionScopes', ['global']], ['approval', 'bypass'],
+    ['reconciliation', 'replay'], ['unknownPermissionMetadata', 'new']]) {
+    const changed = structuredClone(capabilities);
+    changed.ablation.capabilities.candidate.toolManifest.tools[0][field] = value;
+    assert.throws(() => validateAblationSpec(changed, seed), /ablation_tool_policy_changed/);
+  }
+  const changedOuter = structuredClone(capabilities);
+  changedOuter.ablation.capabilities.candidate.toolManifest.schemaVersion = 2;
+  assert.throws(() => validateAblationSpec(changedOuter, seed), /ablation_outer_tool_contract_changed/);
+  const noDifference = { ...spec, ablation: { capabilities: { baseline: before, candidate: before } } };
+  assert.throws(() => validateAblationSpec(noDifference, seed), /ablation_capability_difference_required/);
+});
 
 test('incident records exact sealed observation and leaves diagnosis a hypothesis', () => {
-  const baseline = save(sample()), incident = captureIncident({ runPath: baseline.path, trial: { taskId: 'q0', repeat: 2 }, analysis });
+  const baseline = save(sample()), incident = captureIncident({ runPath: baseline.path, trial: { taskId: baseline.manifest.selection[0].id, repeat: 2 }, analysis });
   const record = readJson(join(incident.directory, 'incident.json'));
   assert.equal(record.source.sealHash, inspectRun(baseline.path).sealHash);
   assert.deepEqual(record.observed, baseline.trials[2]); assert.equal(record.diagnosisStatus, 'operator-hypothesis');
@@ -103,10 +187,12 @@ test('claim freezes source and contracts, refuses retries, and checks actual too
   assertExperimentManifest(context, candidate.manifest);
   assert.throws(() => assertExperimentManifest(context, { ...candidate.manifest, provider: { ...candidate.manifest.provider, model: 'changed' } }), /contract_mismatch:provider/);
   assert.throws(() => assertExperimentManifest(context, { ...candidate.manifest, datasetIdentity: 'changed' }), /contract_mismatch:datasetIdentity/);
+  assert.throws(() => assertExperimentManifest(context, { ...candidate.manifest,
+    qasperQualification: { status: 'verified', hash: hash('self-declared-pin') } }), /contract_mismatch:qasperQualification/);
   assertExperimentToolSchema(context, hash('test-schema'));
   assert.throws(() => assertExperimentToolSchema(context, hash('changed schema')), /tool_schema_mismatch/);
 });
-test('low-to-low noninferiority fails the absolute floor; stricter frozen margins catch smaller regressions', () => {
+officialQasperTest('low-to-low noninferiority fails the absolute floor; stricter frozen margins catch smaller regressions', () => {
   const low = save(sample({ score: .4 })), { experiment } = protocol(low);
   candidateFor(low, experiment, { score: .4 });
   const result = assessExperiment(experiment.directory);
@@ -117,7 +203,7 @@ test('low-to-low noninferiority fails the absolute floor; stricter frozen margin
   candidateFor(high, strict.experiment, { score: .87 });
   assert.equal(assessExperiment(strict.experiment.directory).comparison.conclusion, 'regression');
 });
-test('a per-trial hard floor cannot disappear into a passing average', () => {
+officialQasperTest('a per-trial hard floor cannot disappear into a passing average', () => {
   const baseline = save(sample()), { experiment } = protocol(baseline, { acceptance: {
     ...acceptance, absoluteFloors: { answerF1: .7, citationValidity: .9 }, trialFloors: { answerF1: .5 }
   } });
@@ -125,7 +211,7 @@ test('a per-trial hard floor cannot disappear into a passing average', () => {
   const result = assessExperiment(experiment.directory);
   assert.equal(result.comparison.conclusion, 'non-inferior');
   assert.ok(Object.values(result.absoluteFloors).every(f => f.passed));
-  assert.equal(result.status, 'rejected'); assert.equal(result.trialFailures[0].taskId, 'q0');
+  assert.equal(result.status, 'rejected'); assert.equal(result.trialFailures[0].taskId, baseline.manifest.selection[0].id);
 });
 test('fixture, incomplete and unregistered candidates cannot be adopted', () => {
   const fixture = save(sample({ evidence: 'fixture' })), f = protocol(fixture);
@@ -139,7 +225,7 @@ test('fixture, incomplete and unregistered candidates cannot be adopted', () => 
   candidateFor(baseline, missing.experiment, { mutate: c => { delete c.manifest.experiment; } });
   assert.throws(() => assessExperiment(missing.experiment.directory), /candidate_binding_changed/);
 });
-test('adoption binds recomputed evidence and a trace review; decisions and records cannot be silently replaced', () => {
+officialQasperTest('adoption binds recomputed evidence and a trace review; decisions and records cannot be silently replaced', () => {
   const baseline = save(sample()), { experiment } = protocol(baseline);
   assert.equal(inspectExperiment(experiment.directory).state, 'registered');
   candidateFor(baseline, experiment);
@@ -211,6 +297,13 @@ test('CLI executes the full incident/experiment/review lifecycle through the rea
   const switched = cli(['run', ...options.filter(o => o !== '--fixture'), '--experiment', experiment.directory], 2);
   assert.equal(switched.fatal.reason, 'experiment_contract_mismatch:evidence');
   assert.equal(switched.attempted, 0); assert.equal(switched.usage.requests, 0);
+  assert.equal(switched.usage.dispatchedRequests, 0);
+  assert.equal(switched.usage.inputTokens, 0); assert.equal(switched.usage.outputTokens, 0);
+  assert.equal(switched.usage.unknownUsageRequests, 0); assert.equal(switched.usage.costUsd, 0);
+  assert.equal(switched.usage.policyHash, hash(inspectRun(switched.directory).manifest.executionPolicy.budget));
+  assert.equal(switched.usage.elapsedMs, switched.usage.capturedAtMs - switched.usage.startedAtMs);
+  assert.equal(readEvents(join(switched.directory, 'events.jsonl')).some(event =>
+    event.type === 'model_request' || event.type === 'budget_dispatched' || event.type === 'retrieval_request'), false);
   const candidate = cli(['run', ...options, '--experiment', experiment.directory]);
   const run = inspectRun(candidate.directory);
   assert.equal(run.manifest.experiment.protocolHash, experiment.protocolHash);

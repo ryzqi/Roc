@@ -5,12 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 
-const api = await importTypeScriptModule('scripts/harness-eval/quality-evaluation/runner.ts', { platform: 'node' });
+const api = await importTypeScriptModule('evaluation/adapters/s01/runner.ts', { platform: 'node' });
 const { readFileSync } = await import('node:fs');
-const datasetApi = await importTypeScriptModule('scripts/harness-eval/quality-evaluation/dataset.ts', { platform: 'node' });
+const datasetApi = await importTypeScriptModule('evaluation/adapters/s01/dataset.ts', { platform: 'node' });
 const { dataset, expectations } = datasetApi.loadQualityDatasetPackage('tests/fixtures/quality-evaluation/manifest.json',
   readFileSync('tests/fixtures/quality-evaluation/manifest.sha256', 'utf8').trim());
-const protocolApi = await importTypeScriptModule('scripts/harness-eval/quality-evaluation/protocol.ts', { platform: 'node' });
+const protocolApi = await importTypeScriptModule('evaluation/adapters/s01/protocol.ts', { platform: 'node' });
 
 function fixture(overrides = {}) {
   const lock = {

@@ -25,7 +25,7 @@ export async function sciencePreflight(dataset, tasks, runDirectory, signal) {
       if (entry.observed !== expected) fail('verifier', 'science_calibration_failed');
     }
   }
-  return { backend: 'macos-local-python-v2', identities, calibration };
+  return { backend: 'macos-local-python-v2', evidenceKind: 'engineering-fixture', identities, calibration };
 }
 export function stageScience(dataset, task, workspace) {
   const source = contained(dataset.root, task.environment.publicDir);
@@ -51,13 +51,15 @@ export function parseScienceGrade(text) {
   let result;
   try { result = JSON.parse(text); } catch { fail('verifier', 'science_grade_not_json'); }
   if (!result || typeof result.success !== 'boolean' || typeof result.evidence !== 'string' || !result.evidence.trim()) fail('verifier', 'science_grade_schema_invalid');
-  return { status: result.success ? 'scored' : 'failed', failureClass: result.success ? null : 'agent', reason: result.success ? null : 'scientific_result_incorrect',
+  return { status: result.success ? 'scored' : 'failed', success: result.success,
+    failureClass: result.success ? null : 'agent', reason: result.success ? null : 'scientific_result_incorrect',
     metrics: { successRate: result.success ? 1 : 0 }, evidence: result.evidence };
 }
 export async function gradeScience(dataset, task, workspace, trialDirectory, signal) {
   const inventory = fileInventory(workspace), outputs = join(trialDirectory, 'verifier-input'); mkdirSync(outputs);
   for (const name of task.environment.outputFiles) {
-    if (!inventory.some(f => f.path === name)) return { status: 'failed', failureClass: 'agent', reason: 'required_output_missing', metrics: { successRate: 0 } };
+    if (!inventory.some(f => f.path === name)) return { status: 'failed', success: false,
+      failureClass: 'agent', reason: 'required_output_missing', metrics: { successRate: 0 } };
     const target = contained(outputs, name); mkdirSync(dirname(target), { recursive: true }); copyFileSync(contained(workspace, name), target);
   }
   const environment = loadPython(task.environment.verifierEnvironment);

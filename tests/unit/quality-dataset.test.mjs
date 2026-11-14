@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 
-const api = await importTypeScriptModule('scripts/harness-eval/quality-evaluation/index.ts', { platform: 'node' });
+const api = await importTypeScriptModule('evaluation/adapters/s01/index.ts', { platform: 'node' });
 const raw = JSON.parse(readFileSync('tests/fixtures/quality-evaluation/manifest.json', 'utf8'));
 const frozen = value => api.freezeQualityDataset(value, api.qualityHash(value));
 const root = mkdtempSync(join(tmpdir(), 'roc-quality-data-'));

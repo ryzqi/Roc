@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { readFileSync, rmSync } from 'node:fs';
 import { build } from 'esbuild';
 import electron from 'electron';
@@ -23,7 +24,7 @@ export async function openRocModel({ rocRoot = process.env.ROC_DATA_ROOT ?? join
   const child = spawn(electron, [path, root, appName], { cwd: root, detached: true, stdio: ['pipe', 'pipe', 'ignore'],
     env: { PATH: '/usr/bin:/bin', HOME: homedir(), TMPDIR: root, LANG: 'en_US.UTF-8',
       LANGSMITH_TRACING: 'false', LANGCHAIN_TRACING_V2: 'false' } });
-  let pending = null, closed = false, closing, stage = 'startup';
+  let pending = null, closed = false, closing, stage = 'startup', queue = Promise.resolve();
   const close = () => closing ??= (async () => {
     child.stdin.end(); await terminateProcessTreeWithRetry(child); lines.close();
     rmSync(root, { recursive: true, force: true });
@@ -43,25 +44,30 @@ export async function openRocModel({ rocRoot = process.env.ROC_DATA_ROOT ?? join
         pending.reject(new Error(/^[a-z_]+$/.test(message.code) ? message.code : 'roc_model_host_failed'));
         pending = null; closed = true; return;
       }
-      if (!pending) { reject(); return; }
+      if (!pending || message.requestId !== pending.requestId) { reject(); return; }
       pending.resolve(message); pending = null;
     } catch { reject(); }
   });
-  async function request(value, signal) {
+  async function requestOnce(value, signal, requestId) {
     if (closed || pending) fail('provider', 'roc_model_host_unavailable');
     received = 0;
     const abort = () => { reject(`roc_model_host_${signal.reason?.name === 'TimeoutError' ? 'timeout' : 'cancelled'}_${stage}`); void close(); };
     signal.addEventListener('abort', abort, { once: true });
     try {
       signal.throwIfAborted();
-      return await new Promise((resolve, reject) => { pending = { resolve, reject }; child.stdin.write(JSON.stringify(value) + '\n'); });
+      return await new Promise((resolve, reject) => { pending = { resolve, reject, requestId }; child.stdin.write(JSON.stringify({ ...value, requestId }) + '\n'); });
     } finally { signal.removeEventListener('abort', abort); }
+  }
+  function request(value, signal, requestId = randomUUID()) {
+    const result = queue.then(() => requestOnce(value, signal, requestId));
+    queue = result.catch(() => {});
+    return result;
   }
   try {
     const response = await request({ type: 'init', rocRoot: resolve(rocRoot), selection: providerId ? { providerId, modelId } : undefined }, AbortSignal.timeout(30000));
     if (response.type !== 'ready') fail('environment', 'roc_model_not_ready');
-    return { identity: response.identity, close, complete: async (body, signal) => {
-      const result = await request({ type: 'complete', body }, signal);
+    return { identity: response.identity, close, complete: async (body, signal, correlation) => {
+      const result = await request({ type: 'complete', body }, signal, correlation?.requestId);
       if (result.type !== 'response') fail('provider', 'roc_model_response_invalid');
       return result.body;
     } };

@@ -12,15 +12,15 @@ const root = realpathSync(mkdtempSync('.runtime/tmp/quality-application-adapter-
 after(() => rmSync(root, { recursive: true, force: true }));
 const workerPath = join(root, 'application-worker.mjs');
 const adapterPath = join(root, 'adapter.mjs');
-await build({ entryPoints: ['scripts/harness-eval/quality-evaluation/application-worker.ts'], outfile: workerPath,
+await build({ entryPoints: ['evaluation/runtime/application-worker.ts'], outfile: workerPath,
   bundle: true, packages: 'external', platform: 'node', format: 'esm', loader: { '.md': 'text' }, logLevel: 'silent' });
-await build({ entryPoints: ['scripts/harness-eval/quality-evaluation/application-adapter.ts'], outfile: adapterPath,
+await build({ entryPoints: ['evaluation/adapters/s01/application-adapter.ts'], outfile: adapterPath,
   bundle: true, packages: 'external', platform: 'node', format: 'esm', logLevel: 'silent' });
 const api = await import(pathToFileURL(adapterPath).href);
 const { importTypeScriptModule } = await import('../../scripts/lib/bundle-ts.mjs');
-const dataApi = await importTypeScriptModule('scripts/harness-eval/quality-evaluation/dataset.ts', { platform: 'node' });
-const runnerApi = await importTypeScriptModule('scripts/harness-eval/quality-evaluation/runner.ts', { platform: 'node' });
-const protocolApi = await importTypeScriptModule('scripts/harness-eval/quality-evaluation/protocol.ts', { platform: 'node' });
+const dataApi = await importTypeScriptModule('evaluation/adapters/s01/dataset.ts', { platform: 'node' });
+const runnerApi = await importTypeScriptModule('evaluation/adapters/s01/runner.ts', { platform: 'node' });
+const protocolApi = await importTypeScriptModule('evaluation/adapters/s01/protocol.ts', { platform: 'node' });
 const { dataset, expectations } = dataApi.loadQualityDatasetPackage('tests/fixtures/quality-evaluation/manifest.json',
   readFileSync('tests/fixtures/quality-evaluation/manifest.sha256', 'utf8').trim());
 let networkConnections = 0;

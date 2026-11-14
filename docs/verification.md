@@ -14,12 +14,13 @@
 | 真实科研生产链 | `pnpm test:research-p0`（包含构建）；使用实际工具链验证解析、生产、审批与导出 |
 | 系统性综述 | `pnpm test:review-workflow`；配合 [renderer 测试](../tests/renderer/) 验证用户决定与来源变化 |
 | 计算资源与原生边界 | `pnpm test:research-resources`、`pnpm test:research-environment-boundaries`、`pnpm test:research-native-code` |
-| 助手工程评估 | `pnpm harness:eval`；真实模型与独立 benchmark 的配置见 [evaluation](../evaluation/README.md) |
+| 助手工程评估 | [Native](../evaluation/adapters/native/run.mjs)：`pnpm evaluation:native:check`（94 项确定性合同）；[S01](../evaluation/adapters/s01/check.mjs)：`pnpm evaluation:s01:check`（离线数据审计）；统一工作流、真实模型与独立 benchmark 的配置见 [evaluation](../evaluation/README.md) |
+| 冻结向量检索回归 | [Frozen retrieval](../evaluation/adapters/frozen-retrieval/check.mjs)：`pnpm evaluation:frozen-retrieval:check <frozen-corpus.json> <report.json>`；指标 API 见 [index.mjs](../evaluation/adapters/frozen-retrieval/index.mjs)，覆盖冻结输入的生产排序与工程回归 |
 | 完整本地测试 | `pnpm test`；包含 unit、renderer 与 Electron smoke，不能替代外部服务互操作 |
 
 壳层闸门：`pnpm verify:p3-workspace`、`pnpm verify:p4-assistant`、`pnpm verify:p5-literature`、`pnpm verify:p8-settings`、`pnpm verify:p9-management`。根据受影响表面选择；旧阶段页的 P6/P7 闸门已删除。
 
-性能和检索质量使用不同入口：`research:*bench` 测量耗时与资源，`research:retrieval-eval` / `research:local-retrieval-eval` 评估各自冻结协议。完整命令和保存产物见[性能基线](research-performance.md)与[文献融合](research-literature-fusion.md)。不能用通过工程 fixture 的成绩代替真实科研质量。
+性能和检索回归使用不同入口：`research:*bench` 测量耗时与资源，`research:retrieval-eval` 评估文献融合冻结协议，`evaluation:frozen-retrieval:check` 使用预先捕获的向量验证生产检索排序。后者属于 `frozen-embedding` 工程回归，不测量真实线上 ingestion、embedding 生成或建索引质量。完整命令和保存产物见[性能基线](research-performance.md)与[文献融合](research-literature-fusion.md)。不能用通过工程 fixture 的成绩代替独立人工审核的真实科研质量。
 
 ## Smoke 的确定性边界
 

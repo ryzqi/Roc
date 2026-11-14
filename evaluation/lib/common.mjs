@@ -60,10 +60,21 @@ export function sourceIdentity() {
     sourceHash: hash(files), files, lockfileHash: sha256(readFileSync(join(ROOT, 'pnpm-lock.yaml'))),
     node: process.version, platform: process.platform, arch: process.arch };
 }
-export function journal(path) {
-  const fd = openSync(path, 'wx', 0o600);
+export function journal(path, { resume = false } = {}) {
   let sequence = 0;
-  return { append(event) { writeSync(fd, JSON.stringify({ ...event, sequence: ++sequence, at: new Date().toISOString() }) + '\n'); fsyncSync(fd); },
+  if (resume) {
+    const stat = lstatSync(path), text = readFileSync(path, 'utf8');
+    if (!stat.isFile() || stat.isSymbolicLink() || text && !text.endsWith('\n')) fail('state', 'run_journal_invalid');
+    const previous = text.trim() ? text.trimEnd().split('\n').map(JSON.parse) : [];
+    if (previous.some((event, index) => event.sequence !== index + 1)) fail('state', 'run_journal_sequence_invalid');
+    sequence = previous.length;
+  }
+  const fd = openSync(path, resume ? 'a' : 'wx', 0o600);
+  return { append(event) {
+    const entry = { ...event, sequence: ++sequence, at: new Date().toISOString() };
+    writeSync(fd, JSON.stringify(entry) + '\n'); fsyncSync(fd);
+    return entry;
+  },
     close() { closeSync(fd); } };
 }
 export class EvaluationError extends Error {

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { hash } from './common.mjs';
+import { fail, hash } from './common.mjs';
+import { qasperDiagnostics } from '../analysis/qasper.mjs';
 
 // Native QASPER normalization/metrics, from allenai/qasper-led-baseline/scripts/evaluator.py.
 // Kept as a small independent implementation; fixtures test parity with upstream examples.
@@ -53,12 +54,20 @@ export function qasperInput(task) {
   return { kind: 'qasper', prompt: `Read /workspace/paper.json using the available file tools. Answer this question about the paper: ${question}\nReturn only JSON with keys "answer" (string) and "evidence" (array of paragraph IDs such as p0). Use "Unanswerable" with no evidence if the paper does not answer the question. Cite only paragraphs supporting your answer.`,
     files: { 'paper.json': JSON.stringify({ title, paragraphs }, null, 2) } };
 }
-export function gradeQasper(task, output) {
+export function gradeQasper(task, output, { directory = null } = {}) {
+  if (!Array.isArray(task.references) || !task.references.length || task.references.some(ref =>
+    typeof ref.answer !== 'string' || !Array.isArray(ref.evidence) || ref.evidence.some(text => typeof text !== 'string'))
+    || !Array.isArray(task.visible?.paragraphs)) fail('scoring', 'qasper_hidden_truth_unreadable');
+  const invalid = reason => {
+    const metrics = { answerF1: 0, evidenceF1: 0, citationValidity: 0 };
+    return { status: 'failed', failureClass: 'agent', reason, success: false, metrics,
+      diagnostics: qasperDiagnostics(task, null, metrics, reason, directory) };
+  };
   let result;
-  try { result = JSON.parse(output); } catch { return { status: 'failed', failureClass: 'agent', reason: 'output_not_json', metrics: { answerF1: 0, evidenceF1: 0, citationValidity: 0 } }; }
+  try { result = JSON.parse(output); } catch { return invalid('output_not_json'); }
   if (!result || typeof result.answer !== 'string' || !Array.isArray(result.evidence) || result.evidence.some(id => typeof id !== 'string')
     || Object.keys(result).some(key => !['answer', 'evidence'].includes(key))) {
-    return { status: 'failed', failureClass: 'agent', reason: 'output_schema_invalid', metrics: { answerF1: 0, evidenceF1: 0, citationValidity: 0 } };
+    return invalid('output_schema_invalid');
   }
   const paragraphs = new Map(task.visible.paragraphs.map(p => [p.id, p.text]));
   const valid = result.evidence.every(id => paragraphs.has(id)) && new Set(result.evidence).size === result.evidence.length;
@@ -68,6 +77,10 @@ export function gradeQasper(task, output) {
     evidenceF1: Math.max(...task.references.map(ref => evidenceF1(predicted, ref.evidence))),
     citationValidity: valid ? 1 : 0
   };
-  return { status: valid ? 'scored' : 'failed', failureClass: valid ? null : 'agent', reason: valid ? null : 'citation_invalid', metrics };
+  const reason = valid ? null : 'citation_invalid';
+  return { status: valid ? 'scored' : 'failed', failureClass: valid ? null : 'agent', reason, metrics,
+    success: valid && task.references.some(ref => answerF1(result.answer, ref.answer) === 1
+      && evidenceF1(predicted, ref.evidence) === 1),
+    diagnostics: qasperDiagnostics(task, result, metrics, reason, directory) };
 }
 export const loadQasper = path => importQasper(JSON.parse(readFileSync(path, 'utf8')));

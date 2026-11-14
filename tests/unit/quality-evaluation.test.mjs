@@ -15,14 +15,14 @@ const qualityBundle = join(bundleDirectory, 'quality-evaluation.mjs');
 const optimizerBundle = join(bundleDirectory, 'optimizer-dataset.mjs');
 await Promise.all([
   build({
-    entryPoints: [join(repositoryRoot, 'scripts/harness-eval/quality-evaluation/index.ts')],
+    entryPoints: [join(repositoryRoot, 'evaluation/adapters/s01/index.ts')],
     outfile: qualityBundle,
     bundle: true,
     platform: 'node',
     format: 'esm'
   }),
   build({
-    entryPoints: [join(repositoryRoot, 'scripts/harness-eval/optimizer/dataset.ts')],
+    entryPoints: [join(repositoryRoot, 'evaluation/adapters/native/optimizer/dataset.ts')],
     outfile: optimizerBundle,
     bundle: true,
     platform: 'node',

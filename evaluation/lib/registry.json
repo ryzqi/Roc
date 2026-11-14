@@ -1,10 +1,20 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "trigger": "manual",
+  "tracks": [
+    {"id":"runtime","name":"Runtime reliability","suites":["roc-harness","roc-native"],"grading":"independent state, permissions, approval and effect verification"},
+    {"id":"rag","name":"Research RAG quality","suites":["frozen-retrieval","rag-retrieval","rag-paper-qa","qasper"],"grading":"source-based ranking, evidence and answer graders"},
+    {"id":"agent","name":"Agent capability","suites":["roc-s01"],"grading":"final-state validators; live dataset not yet ready"},
+    {"id":"research","name":"Research workflow","suites":["scienceagentbench"],"grading":"verified scientific artifacts and official validators"}
+  ],
   "suites": [
-    {"id":"roc-harness","component":"agent harness lifecycle and tool effects","adapter":"production-runtime-controlled-model-v1","status":"available","source":"evaluation/tasks/roc-harness/Task.md","license":"project","metrics":["scenarioPassRate"],"evidence":"controlled-model","default":true},
-    {"id":"roc-native","component":"supplementary native contract regressions","adapter":"native","status":"available","source":"scripts/harness-eval/run.mjs","license":"project","metrics":["contractPassRate"],"evidence":"fixture"},
-    {"id":"qasper","component":"paper reading and evidence","adapter":"qasper-roc-runtime-v3","status":"available","source":"https://huggingface.co/datasets/allenai/qasper","license":"CC-BY-4.0","metrics":["answerF1","evidenceF1","citationValidity"],"track":"roc-adapted-text"},
-    {"id":"scienceagentbench","component":"scientific task execution","adapter":"scienceagentbench-local-verified-v2","status":"requires-verified-environment","source":"https://github.com/OSU-NLP-Group/ScienceAgentBench","license":"CC-BY-4.0 with per-task upstream exceptions; do not redistribute unpacked data","split":"verified","metrics":["successRate"],"track":"roc-adapted"}
+    {"id":"roc-harness","track":"runtime","component":"agent lifecycle and tool effects","adapter":"production-runtime-controlled-model-v1","status":"available","source":"evaluation/tasks/roc-harness/Task.md","license":"project","metrics":["scenarioPassRate"],"evidence":"controlled-model","default":true},
+    {"id":"roc-native","track":"runtime","component":"supplementary native contract regressions","adapter":"native-contract-v2","status":"available","source":"evaluation/adapters/native/run.mjs","license":"project","metrics":["contractPassRate"],"evidence":"fixture"},
+    {"id":"frozen-retrieval","track":"rag","component":"frozen-vector ranking regression","adapter":"frozen-retrieval-engineering-v1","status":"engineering-check-only","source":"evaluation/adapters/frozen-retrieval/","license":"project","metrics":["recallAtK","ndcgAtK"],"evidence":"engineering-fixture"},
+    {"id":"rag-retrieval","track":"rag","component":"production indexing, BM25, embeddings, RRF and reranking","adapter":"roc-production-retrieval-v1","status":"available","source":"evaluation/tasks/rag-retrieval/Task.md","license":"per-source; verified in dataset","metrics":["recall20","ndcg10","evidenceChainRecall20","wrongSourceRate","staleHitRate"],"evidence":"production-component","taskSchemaVersion":1},
+    {"id":"rag-paper-qa","track":"rag","component":"production Agent plus research tools and source evidence","adapter":"roc-production-rag-paper-qa-v1","status":"available","source":"evaluation/tasks/rag-paper-qa/Task.md","license":"per-source; verified in dataset","metrics":["answerF1","evidenceF1","citationValidity","retrievalRecall20","evidenceChainRecall20","contextCoverage","evidenceReadCoverage","abstentionAccuracy","wrongSourceRate","staleHitRate"],"taskSchemaVersion":1},
+    {"id":"qasper","track":"rag","component":"paper reading and evidence","adapter":"qasper-roc-runtime-v3","status":"available","source":"https://huggingface.co/datasets/allenai/qasper","license":"CC-BY-4.0","metrics":["answerF1","evidenceF1","citationValidity"],"benchmarkProtocol":"roc-adapted-text"},
+    {"id":"roc-s01","track":"agent","component":"S01 agent capability contract and readiness audit","adapter":"s01-production-application-v1","status":"contract-check-only","source":"evaluation/adapters/s01/Task.md","license":"project","metrics":[],"evidence":"engineering-fixture","scientificStatus":"insufficient"},
+    {"id":"scienceagentbench","track":"research","component":"scientific task execution","adapter":"scienceagentbench-local-verified-v2","status":"requires-verified-environment","source":"https://github.com/OSU-NLP-Group/ScienceAgentBench","license":"CC-BY-4.0 with per-task upstream exceptions; do not redistribute unpacked data","split":"verified","metrics":["successRate"],"benchmarkProtocol":"roc-adapted"}
   ]
 }

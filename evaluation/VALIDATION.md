@@ -1,3 +1,15 @@
+# Roc 评测流程重构验证 — 2026-11-14
+
+**Verified passing（工程验收）**：统一四轨评测、真实生产 RAG、独立证据与评分、预算/并发/安全续跑及预登记对照已完成；342 项评测器检查、35 项迁移消费者检查和七轮受控/离线 CLI 验收通过。完整原始证据审计与历史保留复验通过，删除 34 个旧实现文件及三个空运行缓存目录。
+
+[本轮完整验证记录](validation-history/2026-11-14-evaluation-refactor.md) 保存精确命令、源码冻结、运行报告、审计与清理证据。当前入口和合同见 [README](README.md) 与 [EXPERIMENTS](EXPERIMENTS.md)。本轮未新增真实模型质量对照、人工审核 holdout 或发布批准；Task Specs 与 world knowledge 保持 Draft。
+
+## 历史记录（2026-11-13，原文保留）
+
+以下正文完整保留原字节，其中“当前”、旧入口、v2 合同及质量结论均指 2026-11-13 当时的实现和运行，不代表本轮合同或验收结果。历史 grade、数据和 seals 未升级或重新计分。
+
+<!-- ROC_EVALUATION_REFACTOR_2026_11_14_HISTORY -->
+
 # Roc harness、清理与 QASPER 接入验证 — 2026-11-13
 
 **Verified passing**：默认 `roc-harness` 保留 10 个案例、7 个维度的真实运行验收，当前完整运行 30/30 通过。QASPER 保留为 Roc 论文问答与证据选择的任务表现评测，已接通实际配置模型工厂、生产 graph/文件工具、SQLite checkpoint 独立验证和严格评分。当前 5 项新增回归、64 项既有回归和 typecheck 均通过；同条件的真实 QASPER v2 基线及优化候选均完成 150/150。候选提升了开发集表现，但未通过预设质量门槛，评估为 **rejected**。任务定义与 Roc world knowledge 保持 Draft / unreviewed。

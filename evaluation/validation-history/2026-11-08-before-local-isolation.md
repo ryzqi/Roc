@@ -1,4 +1,6 @@
 > 历史记录：目录隔离与本机 Python 改造之前的验证。下列旧命令、Docker 限制和配置接口已失效；当前状态见 [VALIDATION.md](../VALIDATION.md)。历史运行目录保持原样。
+>
+> 2026-11-14 复核：本文四个 `.artifacts/harness-bench/` 证据路径的目标当前均已缺失，已改为路径文字。以下结果仅保留当时的验证记录，无法在当前工作区重新检查这些旧产物；不能据此声称本轮验收通过。原始路径仍保留用于历史追溯。
 
 # 验证记录 — 2026-11-08
 
@@ -43,8 +45,8 @@ pnpm harness:bench run --suite qasper --dataset .artifacts/harness-bench/dataset
 
 最终运行目录：
 
-- [native 报告](../../.artifacts/harness-bench/runs/roc-native-2026-11-07T17-47-17.557Z-ab6585b6/report.md)
-- [QASPER 报告](../../.artifacts/harness-bench/runs/qasper-2026-11-07T17-47-17.557Z-f972f41e/report.md)
+- native 报告：`../../.artifacts/harness-bench/runs/roc-native-2026-11-07T17-47-17.557Z-ab6585b6/report.md`
+- QASPER 报告：`../../.artifacts/harness-bench/runs/qasper-2026-11-07T17-47-17.557Z-f972f41e/report.md`
 - 前轮 QASPER：`.artifacts/harness-bench/runs/qasper-2026-11-07T17-46-10.374Z-02a1eeeb`
 
 ```sh
@@ -55,7 +57,7 @@ pnpm harness:bench compare .artifacts/harness-bench/runs/qasper-2026-11-07T17-46
 
 两份 inspect 退出 0，全部文件 seal 校验通过；compare 退出 2，conclusion=insufficient，所有 confidence95=null，符合 fixture/单次重复边界。源码变化被记录，冻结条件保持一致。对比产物：
 
-[comparison.json](../../.artifacts/harness-bench/comparisons/comparison-2026-11-07T17-48-10.271Z-16290630/comparison.json)
+comparison.json：`../../.artifacts/harness-bench/comparisons/comparison-2026-11-07T17-48-10.271Z-16290630/comparison.json`
 
 ```sh
 pnpm harness:bench run --suite scienceagentbench --dataset .artifacts/harness-bench/datasets/scienceagentbench-4034896c71cbbb3d6cc29b6f05d22239401327b49748ae10eaca7229e67c8353 --profile fast --provider evaluation/lib/provider.example.json
@@ -64,7 +66,7 @@ pnpm harness:bench inspect .artifacts/harness-bench/runs/scienceagentbench-2026-
 
 这里使用的是单测生成的合成数据合同及不可用示例 provider，专门检查 preflight；不是官方 scientific evaluation。两命令均按预期退出 2，status=incomplete，environment/docker_not_installed，attempted=0，costBasis=not-dispatched。inspect 验证该失败报告的 seal 有效。
 
-[环境缺失报告](../../.artifacts/harness-bench/runs/scienceagentbench-2026-11-07T17-46-37.322Z-f3cf3cf7/report.md)
+环境缺失报告：`../../.artifacts/harness-bench/runs/scienceagentbench-2026-11-07T17-46-37.322Z-f3cf3cf7/report.md`
 
 ## 本次发现与修复
 

@@ -6,23 +6,27 @@ import { build } from 'esbuild';
 import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 import { ROOT, contained, fail, hash, sha256, writeJson } from './common.mjs';
 import { verifyApplicationEvidence } from './application-verifier.mjs';
+import { verifyRagApplication } from '../adapters/rag/verification.mjs';
+import { durableJson, inspectTrialSeal, sealTrial, assertProcessGone } from './lifecycle.mjs';
 
-export async function prepareApplication(directory) {
+export async function prepareApplication(directory, { kind: selectedKind, toolNames } = {}) {
   const path = join(directory, 'application-worker.mjs');
   const compiled = await build({ entryPoints: [join(ROOT, 'evaluation/runtime/application-worker.ts')],
     outfile: path, bundle: true, packages: 'external', platform: 'node', format: 'esm', metafile: true,
     loader: { '.md': 'text' }, logLevel: 'silent' });
-  if (Object.keys(compiled.metafile.inputs).some(name => /fixtures|evaluation\/lib\/(?:qasper|science|runner|report)|quality-evaluation\/(?:dataset|validators|statistics|protocol|runner)\.ts/u.test(name))) fail('policy', 'evaluator_in_worker_graph');
+  if (Object.keys(compiled.metafile.inputs).some(name => /fixtures|evaluation\/(?:lib|adapters|graders|analysis|tests|tasks)\//u.test(name))) fail('policy', 'evaluator_in_worker_graph');
   const packages = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
   const { benchmarkManifest } = await importTypeScriptModule(join(ROOT, 'evaluation/runtime/benchmark-runtime.ts'), {
     platform: 'node', external: [...Object.keys(packages.dependencies), ...Object.keys(packages.devDependencies)], tempDir: join(ROOT, 'evaluation/.runtime/imports') });
-  const artifact = { path, sha256: sha256(readFileSync(path)), manifests: Object.fromEntries(['qasper', 'scienceagentbench'].map(kind => [kind, benchmarkManifest(kind)])),
+  const artifact = { path, sha256: sha256(readFileSync(path)), manifests: Object.fromEntries(['qasper', 'scienceagentbench', 'rag-paper-qa'].map(kind =>
+    [kind, benchmarkManifest(kind, kind === selectedKind ? toolNames : undefined)])),
     nodeModulesPath: realpathSync(join(ROOT, 'node_modules')) };
   writeJson(join(directory, 'worker.json'), artifact);
   return artifact;
 }
 
-export async function executeApplication({ artifact, input, directory, config, complete, record, signal, execute, stage, protectedPaths = [join(dirname(artifact.path), 'worker.json')] }) {
+export async function executeApplication({ artifact, input, directory, config, complete, record, signal, execute, stage, research,
+  lifecycle = () => {}, correlation = {}, protectedPaths = [join(dirname(artifact.path), 'worker.json')] }) {
   if (process.platform !== 'darwin') fail('environment', 'macos_sandbox_required');
   if (sha256(readFileSync(artifact.path)) !== artifact.sha256) fail('state', 'worker_changed');
   const root = join(directory, 'worker'), workspace = join(root, 'workspace');
@@ -43,18 +47,20 @@ export async function executeApplication({ artifact, input, directory, config, c
     (allow file-read* file-map-executable (subpath "/usr/lib") (subpath "/usr/share") (subpath "/System/Library")
       (subpath "/opt/homebrew/opt") (subpath "/opt/homebrew/Cellar") (subpath ${quote(artifact.nodeModulesPath)}))
     (allow file-read* file-write* file-map-executable (subpath ${quote(root)}))
-    ${input.kind === 'qasper' ? `(deny file-write* (subpath ${quote(workspace)}))` : ''}
+    ${['qasper', 'rag-paper-qa'].includes(input.kind) ? `(deny file-write* (subpath ${quote(workspace)}))` : ''}
     (allow file-read* file-write-data (literal "/dev/null") (literal "/dev/urandom"))
     (allow signal (target self))`;
   writeFileSync(join(directory, 'sandbox.sb'), policy, { mode: 0o600 });
+  lifecycle('dispatched');
   const child = spawn('/usr/bin/sandbox-exec', ['-p', policy, node, join(root, 'application-worker.mjs')], {
     cwd: root, detached: true, stdio: ['pipe', 'pipe', 'pipe'],
     env: { PATH: '/usr/bin:/bin', HOME: root, TMPDIR: root, LANG: 'en_US.UTF-8', OPENSSL_CONF: '/dev/null',
       LANGSMITH_TRACING: 'false', LANGCHAIN_TRACING_V2: 'false' }
   });
+  record({ type: 'worker_started', pid: child.pid });
   const { terminateProcessTreeWithRetry } = await importTypeScriptModule(join(ROOT, 'src/main/services/process-tree.ts'), { platform: 'node' });
   const closed = new Promise((resolve, reject) => { child.once('error', reject); child.once('close', (code, exitSignal) => {
-    writeJson(join(directory, 'process.json'), { code, signal: exitSignal }); resolve(code);
+    writeJson(join(directory, 'process.json'), { pid: child.pid, code, signal: exitSignal }); resolve(code);
   }); });
   void closed.catch(() => {});
   let cleanup;
@@ -79,10 +85,12 @@ export async function executeApplication({ artifact, input, directory, config, c
   child.stdout.on('data', chunk => { stdoutBytes += chunk.length; if (stdoutBytes > 32 * 1024 * 1024) { truncated = true; controller.abort(); } });
   try {
     taskSignal.throwIfAborted();
-    send({ view: { id: 'benchmark-task', family: input.kind === 'qasper' ? 'literature-verification' : 'experiment-script', difficulty: 'hard', prompt: input.prompt, outputFormat: 'json',
+    send({ view: { id: 'benchmark-task', family: input.kind === 'scienceagentbench' ? 'experiment-script' : 'literature-verification', difficulty: 'hard', prompt: input.prompt, outputFormat: 'json',
       ...(input.responseContract === undefined ? {} : { responseContract: input.responseContract }) },
       benchmark: input.kind, providerId: config.providerId ?? 'evaluation-host', modelId: config.model, temperature: config.temperature,
+      benchmarkToolNames: artifact.manifests[input.kind].tools.map(tool => tool.modelVisibleName),
       contextWindowTokens: config.contextWindowTokens ?? 65536, maxOutputTokens: config.maxOutputTokens ?? 4096,
+      ...(input.kind === 'rag-paper-qa' ? { researchProjectId: research?.projectId } : {}),
       isolationProbePaths: protectedPaths, isolationProbePort: null });
     for await (const line of lines) {
       retain('transcript.jsonl', line + '\n');
@@ -103,10 +111,16 @@ export async function executeApplication({ artifact, input, directory, config, c
           toolSchemaHash = observed;
           writeJson(join(directory, 'tool-schema.json'), { schemaVersion: 1, toolSchemaHash, tools });
         }
-        record({ type: 'model_request', requestHash: message.requestHash, request: requests, toolSchemaHash });
-        const body = await complete(message.body, taskSignal);
-        retain('responses.jsonl', JSON.stringify({ request: requests, requestHash: message.requestHash, responseHash: hash(body), body }) + '\n');
+        const requestId = `chat-${correlation.traceId ?? hash(directory).slice(0, 32)}-${requests}`;
+        const binding = { ...correlation, requestId, requestHash: message.requestHash, request: requests };
+        record({ type: 'model_request', ...binding, toolSchemaHash });
+        const body = await complete(message.body, taskSignal, binding);
+        retain('responses.jsonl', JSON.stringify({ ...binding, responseHash: hash(body), body }) + '\n');
         taskSignal.throwIfAborted(); send({ type: 'response', body });
+      } else if (message.type === 'research') {
+        if (input.kind !== 'rag-paper-qa' || !research || typeof message.toolCallId !== 'string') fail('policy', 'worker_research_denied');
+        const value = await research.invoke(message.name, message.request, message.toolCallId, taskSignal);
+        send({ type: 'research_result', toolCallId: message.toolCallId, result: value });
       } else if (message.type === 'execute') {
         if (input.kind !== 'scienceagentbench' || message.command !== 'python solution.py' || !execute) fail('policy', 'worker_execution_denied');
         if (!Number.isInteger(message.maxDurationMs) || message.maxDurationMs <= 0 || message.maxDurationMs > 120000
@@ -130,6 +144,7 @@ export async function executeApplication({ artifact, input, directory, config, c
     if (taskSignal.aborted) fail(controller.signal.reason?.message === 'task_deadline' ? 'agent' : 'infrastructure', controller.signal.reason?.message ?? 'worker_aborted');
     if (code !== 0 || !result || !isolationVerified) fail('harness', 'application_worker_failed');
     writeJson(join(directory, 'output.json'), result);
+    lifecycle('completed');
   } catch (error) {
     if (truncated) fail('infrastructure', 'evidence_limit');
     if (signal.aborted) fail('operator', 'run_cancelled');
@@ -137,15 +152,52 @@ export async function executeApplication({ artifact, input, directory, config, c
     throw error;
   } finally {
     clearTimeout(timer); taskSignal.removeEventListener('abort', abort); lines.close(); child.stdin.end();
-    try { await stop(); unlinkSync(join(root, 'node_modules')); writeJson(join(directory, 'cleanup.json'), { processGroupGone: true, dependencyLinkRemoved: true }); }
-    catch { writeJson(join(directory, 'cleanup.json'), { processGroupGone: false }); fail('infrastructure', 'worker_cleanup_unconfirmed'); }
+    try {
+      try { await stop(); unlinkSync(join(root, 'node_modules')); writeJson(join(directory, 'cleanup.json'), { processGroupGone: true, dependencyLinkRemoved: true }); }
+      catch { writeJson(join(directory, 'cleanup.json'), { processGroupGone: false }); fail('infrastructure', 'worker_cleanup_unconfirmed'); }
+    } finally { await research?.close(); }
   }
-  const verification = verifyApplicationEvidence({ artifact, input, directory, config, requests, toolSchemaHash });
+  const verification = verifyApplicationEvidence({ artifact, input: { ...input, researchProjectId: research?.projectId },
+    directory, config, requests, toolSchemaHash });
   const { finalAnswer, ...evidence } = verification;
   writeJson(join(directory, 'runtime-verification.json'), evidence);
   if (verification.status !== 'verified') fail('harness', `application_evidence_invalid:${verification.reason}`);
   writeJson(join(directory, 'final-answer.json'), finalAnswer);
-  return { output: finalAnswer.output, workspace, requests, toolSchemaHash, evidenceComplete: true,
+  let rag;
+  if (input.kind === 'rag-paper-qa') {
+    rag = verifyRagApplication({ directory, research });
+    writeJson(join(directory, 'rag-verification.json'), rag.report);
+    if (rag.report.status !== 'verified') fail('harness', `rag_evidence_invalid:${rag.report.reason}`);
+  }
+  const verifiedResult = { output: finalAnswer.output, workspace, requests, toolSchemaHash, evidenceComplete: true,
+    ...(rag ? { ragEvidence: rag.evidence, ragVerification: { status: 'verified', contractHash: rag.report.contract.hash,
+      evidenceHash: sha256(readFileSync(join(directory, 'rag-verification.json'))) } } : {}),
     runtimeVerification: { status: 'verified', contractHash: hash(verification.contract),
       finalAnswerHash: finalAnswer.sha256, evidenceHash: sha256(readFileSync(join(directory, 'runtime-verification.json'))) } };
+  const { output: _output, workspace: _workspace, ragEvidence: _ragEvidence, ...metadata } = verifiedResult;
+  durableJson(join(directory, 'application-result.json'), metadata);
+  lifecycle('verified', { evidenceSealHash: sealTrial(directory, 'verified-evidence.json') });
+  return verifiedResult;
+}
+
+// Recovery validates existing bytes and persisted effects. It never launches a
+// worker, calls a provider, reruns a tool, or reconstructs an answer from narration.
+export function recoverApplication({ artifact, input, directory, config, research }) {
+  assertProcessGone(directory);
+  const metadata = JSON.parse(readFileSync(join(directory, 'application-result.json'), 'utf8'));
+  inspectTrialSeal(directory, 'verified-evidence.json');
+  const verified = verifyApplicationEvidence({ artifact, input: { ...input, researchProjectId: research?.projectId },
+    directory, config, requests: metadata.requests, toolSchemaHash: metadata.toolSchemaHash });
+  if (verified.status !== 'verified'
+    || hash(verified.contract) !== metadata.runtimeVerification?.contractHash
+    || verified.finalAnswer.sha256 !== metadata.runtimeVerification.finalAnswerHash
+    || sha256(readFileSync(join(directory, 'runtime-verification.json'))) !== metadata.runtimeVerification.evidenceHash) fail('state', 'resume_application_evidence_invalid');
+  let rag;
+  if (input.kind === 'rag-paper-qa') {
+    rag = verifyRagApplication({ directory, research });
+    if (rag.report.status !== 'verified' || rag.report.contract.hash !== metadata.ragVerification?.contractHash
+      || sha256(readFileSync(join(directory, 'rag-verification.json'))) !== metadata.ragVerification.evidenceHash) fail('state', 'resume_rag_evidence_invalid');
+  }
+  return { ...metadata, output: verified.finalAnswer.output, workspace: join(directory, 'worker/workspace'),
+    ...(rag ? { ragEvidence: rag.evidence } : {}) };
 }

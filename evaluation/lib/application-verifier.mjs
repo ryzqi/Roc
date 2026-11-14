@@ -37,7 +37,7 @@ function readState(path) {
     if (db.pragma('quick_check', { simple: true }) !== 'ok') throw new Error('application_database_corrupt');
     return {
       runs: db.prepare('SELECT * FROM agent_runs ORDER BY id').all(),
-      threads: db.prepare('SELECT id FROM agent_threads ORDER BY id').all(),
+      threads: db.prepare('SELECT id,research_project_id FROM agent_threads ORDER BY id').all(),
       checkpoints: db.prepare("SELECT * FROM langgraph_checkpoints WHERE checkpoint_ns = '' ORDER BY checkpoint_id DESC").all(),
       writes: db.prepare('SELECT thread_id, checkpoint_ns, checkpoint_id, channel FROM langgraph_checkpoint_writes').all(),
       events: db.prepare('SELECT run_id, sequence, event_json, event_bytes FROM agent_run_events ORDER BY sequence').all(),
@@ -102,6 +102,8 @@ export function verifyApplicationEvidence({ artifact, input, directory, config, 
       && snapshot.workspaceIdentity.dev === String(identity.dev) && snapshot.workspaceIdentity.ino === String(identity.ino)
       && snapshot.capabilityManifest?.manifestHash === manifest.manifestHash && snapshot.frozenInputs?.manifestHash === manifest.manifestHash
       && hash(snapshot.capabilityManifest) === hash(manifest)
+      && (input.kind !== 'rag-paper-qa' || (state.threads[0].research_project_id === input.researchProjectId
+        && snapshot.researchProjectId === input.researchProjectId && snapshot.runOrigin === 'chat'))
       && (input.kind !== 'qasper' || (snapshot.runOrigin === 'chat' && snapshot.mode === 'run' && snapshot.taskContract.kind === 'reply')),
     ['worker/agent.sqlite', 'worker/workspace'], { model: snapshot.model, limits: snapshot.modelConfig, manifestHash: manifest.manifestHash });
     check('ordered-transport', proposed.length > 0 && proposed.length === requests && responses.length === requests
@@ -171,7 +173,7 @@ export function verifyApplicationEvidence({ artifact, input, directory, config, 
       return names.includes(envelope.name) && envelope.inputHash === call.input_hash
         && tools.some(tool => tool.name === envelope.name && hash({ name: tool.name, args: tool.args }) === call.input_hash);
     }), ['worker/agent.sqlite', 'responses.jsonl'], { proposed: tools.length, fileReads: tools.filter(t => t.name === 'read_file').length });
-    if (input.kind === 'qasper') {
+    if (['qasper', 'rag-paper-qa'].includes(input.kind)) {
       const expected = Object.entries(input.files).map(([path, content]) => ({ path, bytes: Buffer.byteLength(content), sha256: sha256(content) }))
         .sort((a, b) => a.path.localeCompare(b.path)), actual = fileInventory(workspace);
       check('public-workspace-unchanged', hash(actual) === hash(expected), ['worker/workspace'], { actual, expected });

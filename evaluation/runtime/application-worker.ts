@@ -24,6 +24,10 @@ import { RocPaths } from '../../src/main/services/paths';
 import type { LangChainChatModelHandle } from '../../src/main/services/langchain-model-factory';
 import { agentTaskViewSchema, qualityHash } from './agent-task-view';
 import { benchmarkKindSchema, benchmarkManifest } from './benchmark-runtime';
+import {getCapabilityOperationContext} from '../../src/main/kernel/capability-operation-context';
+import {takeProposedResearchTool, type ProposedResearchTool} from './research-tool-correlation';
+import {researchKnowledgeSearchRequestSchema, researchKnowledgeSearchResultSchema} from '../../src/shared/schemas/research';
+import {knowledgeContextRequestSchema, knowledgeContextResultSchema} from '../../src/shared/schemas/research-knowledge-context';
 import { z } from 'zod';
 import type { ExecutionGrantBinding } from '../../src/main/services/deep-agent/execution-grant-broker';
 
@@ -40,11 +44,19 @@ async function receive(): Promise<unknown> {
   return JSON.parse(next.value);
 }
 function send(value: unknown): void { process.stdout.write(`${JSON.stringify(value)}\n`); }
+let exchangeTail: Promise<unknown> = Promise.resolve();
+function exchange(value: unknown): Promise<unknown> {
+  const result = exchangeTail.then(async () => {send(value); return await receive();});
+  exchangeTail = result.catch(() => {});
+  return result;
+}
 type WorkerInput = {
   view: unknown; providerId: string; modelId: string; temperature: number; contextWindowTokens: number;
   maxOutputTokens: number;
   isolationProbePaths: string[]; isolationProbePort: number | null;
   benchmark?: unknown;
+  researchProjectId?: string;
+  benchmarkToolNames?: string[];
 };
 const input = await receive() as WorkerInput;
 const view = agentTaskViewSchema.parse(input.view);
@@ -83,9 +95,34 @@ const manifestBase = {
   tools: [], skills: [], mcpServers: [], untrustedContextPolicy: 'external_content_reference_only' as const
 };
 const manifest = benchmark === undefined ? { ...manifestBase, manifestHash: createRunCapabilityManifestHash(manifestBase) }
-  : benchmarkManifest(benchmark);
+  : benchmarkManifest(benchmark, input.benchmarkToolNames);
 const capabilities = new CapabilityRegistry();
 const broker = openExecutionGrantBroker(db);
+const pendingTools: ProposedResearchTool[] = [];
+if (benchmark === 'rag-paper-qa') {
+  const projectId = input.researchProjectId;
+  if (!projectId) throw new Error('benchmark_research_project_required');
+  for (const [name, inputSchema, outputSchema] of [
+    ['research.knowledge.search', researchKnowledgeSearchRequestSchema, researchKnowledgeSearchResultSchema],
+    ['research.knowledge.context', knowledgeContextRequestSchema, knowledgeContextResultSchema]
+  ] as const) {
+    const descriptor = {name, version: '1.0.0', inputSchema, outputSchema};
+    capabilities.declare('benchmark', descriptor);
+    capabilities.register('benchmark', descriptor, async request => {
+      const operation = getCapabilityOperationContext();
+      const tool = takeProposedResearchTool(pendingTools, {name, request, projectId, toolCallId: operation?.toolCallId});
+      const response = await exchange({type: 'research', name, request, toolCallId: tool.id}) as {
+        type: string; toolCallId: string; result: unknown;
+      };
+      if (response.type !== 'research_result' || response.toolCallId !== tool.id) throw new Error('benchmark_research_protocol');
+      return response.result;
+    });
+  }
+  const facts = {name: 'research.task.facts.forChat', version: '1.0.0', inputSchema: z.unknown(), outputSchema: z.null()};
+  capabilities.declare('benchmark', facts);
+  // These QA environments have no linked production research Task/fact snapshot.
+  capabilities.register('benchmark', facts, async () => null);
+}
 if (benchmark === 'scienceagentbench') {
   const descriptor = { name: 'shell.executeAgent', version: '1.0.0', inputSchema: z.unknown(), outputSchema: z.unknown() };
   capabilities.declare('benchmark', descriptor);
@@ -115,9 +152,12 @@ const model = new ChatOpenAI({
       const original = JSON.parse(String(init?.body)) as Record<string, unknown>;
       const { stream_options: _streamOptions, ...parameters } = original;
       const body = { ...parameters, stream: false };
-      send({ type: 'request', index: requestCount++, body, requestHash: qualityHash(body) });
-      const reply = await receive() as { type: string; body?: unknown };
+      const reply = await exchange({ type: 'request', index: requestCount++, body, requestHash: qualityHash(body) }) as { type: string; body?: unknown };
       if (reply.type !== 'response') throw new Error('quality_worker_provider_failed');
+      if (benchmark === 'rag-paper-qa') {
+        const response = reply.body as {choices?: Array<{message?: {tool_calls?: ProposedResearchTool[]}}>};
+        pendingTools.push(...(response.choices?.[0]?.message?.tool_calls ?? []));
+      }
       if (original.stream !== true) {
         return new Response(JSON.stringify(reply.body), { status: 200, headers: { 'content-type': 'application/json' } });
       }
@@ -170,6 +210,10 @@ const runtime = new AgentPluginRuntime({
   },
   ...(benchmark === undefined ? {} : { workspaceProvider: async () => ({ id: 'evaluation-workspace',
     path: join(root, 'workspace'), displayName: 'Evaluation workspace', lastOpenedAt: new Date().toISOString(), trustState: 'trusted' as const }) }),
+  ...(benchmark !== 'rag-paper-qa' ? {} : {researchProjectProvider: async (projectId: string) => {
+    if (projectId !== input.researchProjectId) throw new Error('research_project_not_found');
+    return {workspacePath: join(root, 'workspace')};
+  }}),
   capabilityPreviewProvider: async () => ({
     runnable: false, modelId: input.modelId, builtInTools: manifest.tools.map(tool => tool.modelVisibleName), toolCards: [], skillCards: [],
     subagents: [], interruptOn: {}, manifest, reason: 'No connected capabilities; evaluation host supplies the model.'
@@ -180,6 +224,7 @@ try {
     : `${view.conversationTurns.map((turn, index) => `Prior user turn ${index + 1}:\n${turn}`).join('\n\n')}\n\nCurrent user turn:\n${view.prompt}`;
   const started = await runtime.startRun({ input: prompt, mode: benchmark === 'scienceagentbench' ? 'task' : 'chat', enabledCapabilities: { mcpServers: [], skills: [] },
     ...(view.responseContract === undefined ? {} : { responseContract: view.responseContract }),
+    ...(benchmark === 'rag-paper-qa' ? {researchProjectId: input.researchProjectId} : {}),
     ...(benchmark === 'scienceagentbench' ? { taskSource: 'workbench' as const, shellAllowedCommands: ['python solution.py'] } : {}) });
   const run = repository.getRun(started.runId);
   if (run === null) throw new Error('quality_worker_run_missing');

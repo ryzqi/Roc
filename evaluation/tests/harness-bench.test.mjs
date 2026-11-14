@@ -4,7 +4,8 @@ import { test } from 'node:test';
 import { cpSync, mkdirSync, writeFileSync, readFileSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { answerF1, evidenceF1, importQasper, qasperInput, gradeQasper } from '../lib/qasper.mjs';
-import { hash, sha256, writeJson, fileInventory, snapshotNativeEvidence, ROOT } from '../lib/common.mjs';
+import { hash, sha256, readJson, writeJson, fileInventory, snapshotNativeEvidence, ROOT } from '../lib/common.mjs';
+import { readEvents } from '../lib/lifecycle.mjs';
 import { loadDataset, prepareScience, scienceRecipeSchema } from '../lib/data.mjs';
 import { compareRuns, summarize, sealRun, inspectRun } from '../lib/report.mjs';
 import { createProvider, validateProviderOptions } from '../lib/provider.mjs';
@@ -12,6 +13,7 @@ import { runBenchmark, selectTasks, profiles } from '../lib/runner.mjs';
 import { applicationContract } from '../lib/application-verifier.mjs';
 import { parseScienceGrade, gradeScience } from '../lib/science.mjs';
 import { testArtifacts } from './test-artifacts.mjs';
+import { officialQasperFields, officialQasperTest } from './qasper-official.mjs';
 
 const root = testArtifacts('protocol');
 const paragraph = 'The experiment measured a 25% increase.';
@@ -56,15 +58,19 @@ test('selection is stable, distributes clusters, and never fills from another sp
   assert.ok(selectTasks(tasks, profiles.release).every(t => t.split === 'holdout'));
 });
 function run(score = .8) {
-  const selection = Array.from({ length: 5 }, (_, i) => ({ id: `q${i}`, clusterId: `paper${i}` }));
+  // Only the inputs/provenance are official; scores and runtime receipts are
+  // synthetic evaluator assertions, not fresh benchmark measurements.
+  const official = officialQasperFields(5, 'holdout');
+  const selection = official?.selection ?? Array.from({ length: 5 }, (_, i) => ({ id: `q${i}`, clusterId: `paper${i}` }));
   const manifest = { suite: 'qasper', evidence: 'live-model', datasetIdentity: 'dataset', selection, repeats: 3, metrics: ['answerF1'], scorerHash: 'scorer', provider: { model: 'frozen' }, environment: { node: 'same' }, split: 'holdout', exclusions: [], source: { sourceHash: String(score) } };
+  if (official) Object.assign(manifest, official);
   manifest.toolManifest = { tools: [{ modelVisibleName: 'read_file', executionScopes: ['main'], effect: 'read' }] };
   manifest.applicationContract = applicationContract;
   const trials = selection.flatMap(t => Array.from({ length: 3 }, (_, repeat) => ({ taskId: t.id, clusterId: t.clusterId, repeat, status: 'scored', metrics: { answerF1: score }, latencyMs: 100, toolSchemaHash: hash('test-schema'),
     runtimeVerification: { status: 'verified', contractHash: hash(applicationContract), finalAnswerHash: hash('final-answer'), evidenceHash: hash('runtime-evidence') } })));
   return { manifest, trials, summary: summarize(manifest, trials) };
 }
-test('paired comparison detects regression and never calls fixture/small/incomplete evidence green', () => {
+officialQasperTest('paired comparison detects regression and never calls fixture/small/incomplete evidence green', () => {
   assert.equal(compareRuns(run(.8), run(.9)).conclusion, 'non-inferior');
   assert.equal(compareRuns(run(.8), run(.6)).conclusion, 'regression');
   const fixtureA = run(), fixtureB = run(); fixtureA.manifest.evidence = fixtureB.manifest.evidence = 'fixture';
@@ -75,7 +81,7 @@ test('paired comparison detects regression and never calls fixture/small/incompl
   assert.deepEqual(compareRuns(run(), drift).mismatches, ['scorerHash']);
   const missing = run(); missing.trials.pop(); assert.throws(() => compareRuns(run(), missing), /trial_set_invalid/);
 });
-test('comparison holds tool permissions and observed schemas fixed while allowing harness changes', () => {
+officialQasperTest('comparison holds tool permissions and observed schemas fixed while allowing harness changes', () => {
   const drift = run(); drift.manifest.toolManifest.tools.push({ modelVisibleName: 'write_file', executionScopes: ['main'], effect: 'write' });
   assert.deepEqual(compareRuns(run(), drift).mismatches, ['toolManifest']);
   const scope = run(); scope.manifest.toolManifest.tools[0].executionScopes.push('subagent');
@@ -95,13 +101,15 @@ test('legacy or partial tool evidence cannot establish non-inferiority', () => {
 });
 test('legacy aggregate-answer runs and partial runtime evidence cannot establish a QASPER quality comparison', () => {
   const a = run(), b = run(); delete a.manifest.applicationContract; delete b.manifest.applicationContract;
-  assert.deepEqual(compareRuns(a, b), { conclusion: 'insufficient', reason: 'application_runtime_evidence_missing' });
+  assert.deepEqual(compareRuns(a, b), { conclusion: 'insufficient', reason: 'application_runtime_evidence_missing',
+    protocolKind: 'fixed-contract', releaseEligible: false });
   const missing = run(); delete missing.trials[0].runtimeVerification;
-  assert.deepEqual(compareRuns(run(), missing), { conclusion: 'insufficient', reason: 'application_runtime_evidence_missing' });
+  assert.deepEqual(compareRuns(run(), missing), { conclusion: 'insufficient', reason: 'application_runtime_evidence_missing',
+    protocolKind: 'fixed-contract', releaseEligible: false });
   const drift = run(); drift.manifest.applicationContract = { ...applicationContract, answerBoundary: 'aggregate-output' };
   assert.deepEqual(compareRuns(run(), drift).mismatches, ['applicationContract']);
 });
-test('versioned response requirements preserve legacy comparisons and reject missing, unknown or mixed contracts', () => {
+officialQasperTest('versioned response requirements preserve legacy comparisons and reject missing, unknown or mixed contracts', () => {
   const withContract = contract => {
     const result = run();
     result.manifest.applicationContract = contract;
@@ -119,12 +127,14 @@ test('versioned response requirements preserve legacy comparisons and reject mis
     { ...applicationContract, schemaVersion: 3 }
   ]) {
     assert.deepEqual(compareRuns(withContract(contract), withContract(contract)),
-      { conclusion: 'insufficient', reason: 'application_runtime_evidence_missing' });
+      { conclusion: 'insufficient', reason: 'application_runtime_evidence_missing',
+        protocolKind: 'fixed-contract', releaseEligible: false });
   }
   const mismatchedReceipt = run();
   mismatchedReceipt.trials[0].runtimeVerification.contractHash = hash(legacy);
   assert.deepEqual(compareRuns(run(), mismatchedReceipt),
-    { conclusion: 'insufficient', reason: 'application_runtime_evidence_missing' });
+    { conclusion: 'insufficient', reason: 'application_runtime_evidence_missing',
+      protocolKind: 'fixed-contract', releaseEligible: false });
 });
 test('fixture runner seals actual tool schemas across independent task workspaces without a live provider', async () => {
   const dataset = join(root, 'schema-dataset'); mkdirSync(dataset);
@@ -138,8 +148,25 @@ test('fixture runner seals actual tool schemas across independent task workspace
   assert.equal(result.status, 'complete', JSON.stringify(result.fatal));
   assert.equal(result.usage.requests, 4);
   const sealed = inspectRun(result.directory);
+  assert.equal(sealed.manifest.qasperQualification.status, 'unverified');
+  assert.equal(sealed.summary.qualityConclusion, 'fixture-only');
   assert.equal(new Set(sealed.trials.map(t => t.toolSchemaHash)).size, 1);
   for (const trial of sealed.trials) assert.match(trial.toolSchemaHash, /^[a-f0-9]{64}$/);
+  const plan = readJson(join(result.directory, 'run-plan.json'));
+  assert.equal(plan.maxConcurrentTrials, 2);
+  let active = 0, maximum = 0;
+  for (const event of readEvents(join(result.directory, 'events.jsonl'))) {
+    if (event.type !== 'trial_state') continue;
+    if (event.to === 'dispatched') { active++; maximum = Math.max(maximum, active); }
+    if (event.to === 'completed') active--;
+    assert.ok(active >= 0 && active <= 2);
+  }
+  assert.equal(maximum, 2);
+  assert.equal(active, 0);
+  const processes = sealed.trials.map(trial => readJson(join(result.directory, trial.trialId, 'process.json')).pid);
+  assert.equal(new Set(processes).size, 2);
+  assert.equal(new Set(sealed.trials.map(trial => trial.traceId)).size, 2);
+  assert.ok(sealed.trials.every(trial => trial.traces.artifacts.some(pointer => pointer.artifact.endsWith('worker/agent.sqlite'))));
   assert.equal(compareRuns(sealed, sealed).conclusion, 'insufficient');
 });
 test('invalid trials, unattempted trials and empty selections are visible and incomplete', () => {
@@ -182,7 +209,7 @@ test('transport failure remains visible and bad binding prevents dispatch', asyn
   await assert.rejects(provider.complete({ ...body, model: 'wrong' }, new AbortController().signal), /binding_changed/);
   assert.equal(calls, 0);
   await assert.rejects(provider.complete(body, new AbortController().signal), /transport_failed/);
-  assert.deepEqual(provider.snapshot(), { requests: 1, inputTokens: 0, outputTokens: 0 });
+  assert.deepEqual(provider.snapshot(), { requests: 1, inputTokens: null, outputTokens: null });
   await assert.rejects(provider.complete(body, new AbortController().signal), /transport_failed/);
   assert.equal(calls, 2);
   assert.throws(() => validateProviderOptions({ apiKey: 'test-only' }));
