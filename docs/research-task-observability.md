@@ -1,6 +1,6 @@
 # ResearchTask：任务事实、执行观测与离线诊断
 
-`ResearchTask` diagnostics now connect the existing execution tree to persisted model-call observations, chat telemetry/replay and managed experiment resource receipts. The management drawer discloses these details on demand. Task ownership follows [ADR 0028](adr/0028-execution-task-ownership.md); these views use existing records and local diagnostics.
+`ResearchTask` diagnostics connect the execution tree to persisted model-call observations, chat telemetry/replay and managed experiment resource receipts. The management drawer discloses these details on demand. Task ownership follows [ADR 0028](adr/0028-execution-task-ownership.md).
 
 ## Authoritative records
 

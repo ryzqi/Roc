@@ -4,7 +4,7 @@
 
 ## Purpose and evidence
 
-Preserve the 94-case deterministic reliability contract implemented by [the native adapter](../../adapters/native/run.mjs) as a supplementary track and bring its raw evidence into the manual benchmark audit workflow. Cases cover effect/checkpoint/tool-loop/state/permissions and recovery behavior; many pilot tasks use synthetic `pilot_action` tools. They are not independent research-quality examples or a substitute for the production lifecycle cases in `../roc-harness/Task.md`.
+Preserve the 94-case deterministic reliability contract implemented by [the native adapter](../../adapters/native/run.mjs) as a supplementary track and bring its raw evidence into the manual benchmark audit workflow. Cases cover effect/checkpoint/tool-loop/state/permissions and recovery behavior; many pilot tasks use synthetic `pilot_action` tools. They are not independent research-quality examples or a substitute for the [production lifecycle cases](../roc-harness/Task.md).
 
 ## Agent input and conditions
 

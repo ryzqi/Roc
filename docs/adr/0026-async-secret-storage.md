@@ -3,7 +3,7 @@
 ## 背景
 
 Electron 45 把 `safeStorage` 的同步 API（`isEncryptionAvailable` / `encryptString` /
-`decryptString`）标记为废弃：Chromium 移除了同步 OSCrypt 后端，45 是弃用版，46 直接删除。
+`decryptString`）标记为废弃。
 异步替代品（`isAsyncEncryptionAvailable` / `encryptStringAsync` / `decryptStringAsync`）用的是
 同一套系统密钥，磁盘上已有的密文可以原样解密。
 
@@ -50,20 +50,8 @@ type SafeStorageBackend = {
 明文已经到手、旧密文仍可解密，所以读取成功。但永久失败会把这条凭据一直留在旧密钥下，
 因此失败要 `warn` 一次（`provider_secret_re_encrypt_failed` / `plugin_secret_re_encrypt_failed`）。
 
-### 5. 读取不再是纯只读
-
-轮转重写发生在 `get` 里。这是有意的自愈：只有在读取时才知道「这份密文需要重写」。
-代价写在下面。
-
 ## 代价
 
-- **任何新的密钥路径都必须异步**，包括插件能力与 IPC handler。同步函数里读密钥会拿到
-  `Promise`，`pnpm typecheck` 会当场拦下（但 `Promise<Promise<T>>` 这种返回是可以通过的，
-  所以 capability handler 一律写 `await`，不给隐式展平留位置）。
-- **`getProviderSecret` 多了一次 `await`**：模型创建路径（`langchain-model-factory`）因此
-  变成异步链。这条链本来就在 async 上下文里，改动只是传播。
-- **读取可能写盘**：`get` 在轮转时会重写密文（文件走 rename，SQLite 走一条 UPDATE）。
-  只读副本、只读数据目录等场景下重写会失败——失败被降级成一条 warn，读取照常返回。
-- **`plugin_secrets.updated_at` 只因真实重写而变化**，不再因为「有人读了一次」而变化。
-- **单测用假的 `SafeStorageBackend`**（`tests/unit/secret-storage.test.mjs`），真的 OSCrypt
-  （包括跨重启能否解密）由 `pnpm verify:p8-settings` 在真 Electron 里守。
+异步性传播到模型创建、插件能力与 IPC handler，调用方必须等待密钥读取。`get` 在密钥轮转时可能写盘；只读目录中的重写失败仅记录警告，已解密的读取仍成功。`plugin_secrets.updated_at` 只在真实重写后变化。
+
+[`secret-storage.test.mjs`](../../tests/unit/secret-storage.test.mjs) 使用假的 `SafeStorageBackend` 验证合同；真实 OSCrypt 与跨重启解密由 `pnpm verify:p8-settings` 在 Electron 中验证。本 ADR 不表示本次已运行这些检查。

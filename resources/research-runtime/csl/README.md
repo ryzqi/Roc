@@ -2,7 +2,7 @@
 
 这些文件是 **Citation Style Language** 样式，来自
 [citation-style-language/styles](https://github.com/citation-style-language/styles)，
-按 CC BY-SA 3.0 分发（原文见 `../licenses/csl-CC-BY-SA-3.0.txt`）。
+按 CC BY-SA 3.0 分发（[许可原文](../licenses/csl-CC-BY-SA-3.0.txt)）。
 
 | 文件 | 用途 |
 | --- | --- |
@@ -13,21 +13,14 @@
 | `ieee.csl` | 数字序号（工程与计算机方向） |
 | `china-national-standard-gb-t-7714-2015-numeric.csl` | GB/T 7714-2015 顺序编码制（中文投稿） |
 
-## 为什么是数据而不是依赖
+## 使用与维护
 
-Typst 的 `#bibliography(..., style: "x.csl")` 通过 hayagriva 直接吃 CSL 样式，所以这些 XML
-就是全部运行时依赖——不需要再引入 citeproc-js 之类的第二个 CSL 引擎（两个引擎就是两份真相，
-而且 `citeproc-rs` 上游已 archived，见 `docs/adr/0025-typst-report-engine.md`）。
+Typst 原生读取这些 XML 样式，用于导出报告的参考文献；决策见 [ADR 0025](../../../docs/adr/0025-typst-report-engine.md)。导出请求可指定 `reportCitationStyle`，省略时按项目 zh/en 语言选择默认样式，locale 使用锁定 Typst 的内置资源。
 
-## 怎么加一种样式
+新增样式时：
 
-1. 从上游仓库下载 `.csl`，去掉文件名里的空格（`prepare.ts` 按原文件名复制，文件名进 lockHashes）；
-2. 放进本目录，`scripts/research/prepare.ts` 的 `computeLockHashes()` 会自动纳入 `csl/` 下的每个文件，
-   所以**加样式要重建工具链**，这与 Vale 规则集同一条规矩；
-3. 在 `src/shared/schemas/research-citation-style.ts` 的样式表里登记，
-   否则这个文件只是随包睡在那里。
+1. 保存上游 `.csl`，在 [`provenance.json`](provenance.json) 记录来源与 SHA-256。
+2. 在[样式表](../../../src/shared/schemas/research-citation-style.ts)登记请求枚举与文件名。
+3. 重新[准备工具链](../README.md)：本目录全部普通文件（含 README）进入 manifest 的 `lockHashes`，原工具链不会自动覆盖。
 
-固定来源：分支 `master`、提交 `ffd2a7b91280d84c9237ae97f9e5fd1f5abbe756`（2026-10-19）。
-文件哈希由 `tools.lock.json` 的 `lockHashes` 与实际文件共同钉住，不在这里抄第二遍。
-
-所有六份样式的原始来源与 SHA-256 见 `provenance.json`。导出请求的 `reportCitationStyle` 可选；未提供时保持原来的按语言默认值。locale 使用所固定 Typst 引擎的内置资源，项目语言为 zh/en；未增加另一套外部 locale 下载。
+当前六份样式固定于上游 `master` 提交 `ffd2a7b91280d84c9237ae97f9e5fd1f5abbe756`（2026-10-19），逐文件摘要以 provenance 为准。

@@ -1,102 +1,65 @@
 # 科研图稿
 
-科研图稿由研究 agent 创建，没有单独的图表编辑器。新图稿使用离线 Vega-Lite v6 JSON spec 和显式声明的本地 CSV/TSV/DSV/JSON 输入。图稿不会执行 Python、Matplotlib 或任意 JavaScript；spec 只接受 Vega-Lite 受限表达式语法。独立的数据实验支持 TypeScript、R、Julia 和 Python，详见[数据实验说明](research-experiments.md)。Python 图稿记录只允许读取已保存的历史产物，不能重新执行或作为新图稿输入。
+定量图稿由科研角色使用离线Vega-Lite v6和声明的本地CSV/TSV/DSV/JSON生成，无独立图表编辑器。新图稿不执行Python/Matplotlib或任意JavaScript；旧Python图稿仅可读保存产物。数据计算走[实验](research-experiments.md)，非数值方法图见下节。
 
-## 创建图稿
+## 非数值方法图
 
-`startFigure` 请求的 `engine` 固定为 `vega-lite`，`sourceVersion` 为 `1`。`sourcePath` 必须指向 `.vl.json` 文件；`inputPaths` 列出 spec 使用的所有本地数据文件，路径相对于项目工作区。`data.url` 必须与 `inputPaths` 中的路径完全相同。应用将 spec 和声明的数据复制到本次运行的只读快照，再在关闭网络的隔离任务中渲染。
+助手工具 `research_render_diagram` 调用 `research.diagrams.render({projectId, path, expectedHash?})`，读取项目内已保存的 `.mmd`。支持静态流程、时序、状态、类和 ER 图；拒绝配置指令、HTML、交互和外部资源。源码最多 50,000 字节，渲染前后重验 hash；归档项目拒绝生成。
 
-```json
-{
-  "engine": "vega-lite",
-  "sourceVersion": 1,
-  "sourcePath": "figures/improvement.vl.json",
-  "inputPaths": ["data/results.csv"],
-  "label": "各组改善幅度",
-  "timeoutMs": 120000,
-  "figure": {
-    "widthInches": 5,
-    "heightInches": 2.5,
-    "dpi": 180,
-    "seed": 7
-  }
-}
-```
+Mermaid 在按需启动的隔离 Electron 窗口渲染，没有 preload 或 Node 权限；产物写入 `diagrams/<id>/`，保存 `source.mmd`、SVG、PNG、PDF 和 manifest，记录来源、渲染器及文件哈希。30 秒超时或取消会销毁窗口并回收准入，失败输出目录清理。输出不带定量 data trace，也不自动成为流程批准的图稿；布局和科学含义须人工核对。类型与资源上限以[源码策略](../src/shared/research-diagram-policy.ts)为准。
 
-对应的 `figures/improvement.vl.json`：
+## 创建与冻结
+
+startFigure要求engine:vega-lite、sourceVersion:1、新requestId、.vl.json的sourcePath、inputPaths及figure物理尺寸/DPI/seed。路径均相对项目，data.url须精确匹配声明输入。示例spec：
 
 ```json
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
-  "data": { "url": "data/results.csv" },
-  "mark": { "type": "bar", "color": "#20736b" },
+  "data": {"url": "data/results.csv"},
+  "mark": "bar",
   "encoding": {
-    "x": { "field": "Group", "type": "nominal" },
-    "y": { "field": "Improvement", "type": "quantitative" }
+    "x": {"field": "Group", "type": "nominal"},
+    "y": {"field": "Improvement", "type": "quantitative"}
   }
 }
 ```
 
-渲染只从本次快照读取已声明的数据。远程 URL、外部图片、链接和 SVG 资源会被拒绝。单个输入最多 64 MiB，合计最多 256 MiB，数据行合计最多 100,000 行；spec 上限 4 MiB、最大嵌套深度 64。宽高范围为 1–24 英寸，DPI 为 72–1200，seed 为 0–4294967295 的整数；总像素不超过 32,000,000。seed 会控制 Vega 随机源；同一输入和环境仍可能受系统字体差异影响。
+源spec和数据复制到只读快照，远程URL、外部图片/链接/SVG资源拒绝。spec上限4MiB/深度64，单输入64MiB、总256MiB、数据100000行。宽高1–24英寸、DPI72–1200、uint32 seed、总32000000像素以内。seed控制Vega随机源，字体差异仍可能影响渲染。
 
-## 运行、查看和发布
+inspectFigureEnvironment返回Vega/Vega-Lite/Canvas/Node与pipeline hash。start可传expectedEnvironmentHash固定检查环境；省略时记录当前环境。getFigureRun/cancelFigure查询或取消，修改内容使用新请求。
 
-`inspectFigureEnvironment` 返回 Vega、Vega-Lite、Canvas 和 Node 环境及其 hash。可以将 `hash` 传给 `startFigure.expectedEnvironmentHash`，在已检查环境变化时拒绝启动。UI 不必传 hash；主进程使用当前环境并将其记录在运行快照中。
+## 渲染与发布
 
-`startFigure` 返回可轮询的运行记录。使用 `getFigureRun` 查看状态，使用 `cancelFigure` 取消。每次重绘使用新的 `requestId`；修改 spec、数据、参数或选项都会产生独立运行。成功运行生成 `figure.png`、`figure.svg`、单页 `figure.pdf`、`figure-data.json` 和 `figure-validation.json`。PDF 使用 `pdf-lib@1.17.1` 创建精确 point 尺寸的页面并嵌入同一 PNG，页面尺寸和输出 DPI 来自 `figure` 选项，避免原生 PDF 后端将页面取整。主进程独立校验三种格式的尺寸、页数及 SHA-256；验证失败时运行标记为失败，并保留已收集的日志和产物供诊断。
+pipeline/6先生成完整SVG布局，再等比缩放、居中到指定物理画布，支持facet/concat/repeat。源码决定密度和留白，须视觉核对。PNG尺寸Math.trunc(inches*dpi)，SVG/PDF为精确point尺寸，背景沿用解析值，显式透明保留；PDF嵌入同一PNG。
 
-阶段角色使用 `start_figure → get_figure → publish_figure`，三个工具统一采用真实图稿运行 `runId`。`get_figure` 只读取当前项目、当前有效阶段所拥有的图稿，返回状态、错误、文件数和 `artifactId`，不返回二进制。`failed`、`cancelled`、`interrupted` 是终态，不能继续轮询或发布。`get_experiment` 只查询脚本实验；图稿工具不接受 `experimentId` 别名。
+成功输出figure.png/svg/pdf、figure-data.json和figure-validation.json。主进程独立核对尺寸、单页PDF及全部SHA-256；失败保留实际日志/产物。data trace为实际scenegraph的post-transform datum，保存场景路径、编译编码、直接字段、常量/不支持通道及spec/环境/编译spec hash。filter/aggregate/formula/stack后的值来自绘制项，不能按输入字段猜指标。最多1000 mark、100000场景遍历项，超限失败。
 
-渲染 pipeline `/6` 在作业入口将 spec 相对路径解析到冻结项目目录，先生成包含标题、坐标轴与分面的完整 SVG，再将其自然布局等比缩放并居中放入指定物理画布。该适配也支持 facet、concat、repeat 等不服从 Vega-Lite 顶层 fit 的组合布局；源码布局仍决定内容密度与留白，发布前需要视觉检查。SVG/PDF 保持英寸换算后的 point 尺寸，PNG 使用 `Math.trunc(inches * dpi)` 像素尺寸，三个格式使用同一适配后的 SVG，完整画布沿用 Vega 解析后的背景色（显式透明保留透明）；严格尺寸和数据验证保持不变。发布与运行的 `artifactId` 在同一数据库事务中关联。
+角色使用start_figure → get_figure → publish_figure的真实runId；失败/取消/中断不能发布。Owned工具绑定项目与有效阶段，get_experiment不查询图稿。冻结旧工具合同不原地扩权，合同变化须新建阶段运行。
 
-`figure-data.json` 保存实际 Vega scenegraph 的 post-transform datum、场景路径、完整编译编码、直接字段编码及常量/暂不支持的编码通道，绑定源 spec、渲染环境和编译 spec 的 SHA-256。filter、aggregate、formula 和 stack 之后的数据来自实际绘制项；默认柱图的 y 字段可能是 stack 生成的 `mean_end`，而非输入的 `mean`。条件、表达式及嵌套字段编码保留完整原文并标为 unsupported；不推断科学含义或自动关联实验指标。回执最多 1000 个 mark，场景遍历最多 100,000 项；超限拒绝，不截断。
+可编辑绘图阶段调用publishFigure({projectId,runId,replacesFigureId:null})；发布重验冻结文件和schema2清单，在同一事务关联图稿、工件、provenance及run.artifactId。getFigure/listFigures返回验证、审核与真实runId；recordFigure历史元数据不能替代真实渲染。
 
-主进程核对 renderer 返回的回执字节/hash，再核对回执来源及环境。回执是运行输出及 version 2 图稿清单的必需文件，任何字节变化会阻止验证、审批或导出。导出保留 `provenance/figures/<figureId>/` 下完整图稿清单、输入、输出及日志；三种图片同时位于 LaTeX 图稿目录。
+## 人工审核与替换
 
-运行快照固化工具清单。包含旧图稿查询合同的快照不原地扩权；执行或重试会报 `research_run_tool_contract_changed`，须使用新 `requestId` 新建阶段运行。历史记录保留用于审计。
+发布状态rendered；图稿说明通过subjectType:figure的Claim关联证据。阶段角色输出接到本次真实图稿；complete重验清单/spec/数据/输出和证据，进入waiting_approval。用户核对完整工件版本后approve，图稿才approved；文件可解析不证明科学支持。
 
-运行成功后，在可编辑的绘图阶段发布：
+退回后修改并重绘，以replacesFigureId原子替换当前审核集合，旧图标为superseded，来源/主张/事件保留。新图重新关联主张，不继承科学审核；待批准/批准版本须先按流程退回，不直接覆盖。
 
-```typescript
-await research.publishFigure({ projectId, runId, replacesFigureId: null });
-```
-
-发布前会重新验证冻结文件、写入并核验图稿清单，然后在同一事务中建立图稿、流程工件和 provenance。`getFigure({projectId, figureId})` 与 `listFigures({projectId, limit})` 返回图稿、验证报告、当前审核状态和运行标识。旧 `recordFigure` 接口只能保存历史元数据，不能覆盖已发布图稿，也不能替代真实渲染验证。
-
-## 人工审核和替换
-
-发布后的状态为 `rendered`。通过 `createClaim` 将图稿说明保存为 `subjectType: "figure"` 的主张，并关联带定位的证据。阶段 agent 完成绘图时，结构化输出会关联本次运行已发布的图稿并追加模型 provenance，不会另造空图稿。绘图阶段 `complete` 先验证清单、spec、数据和输出，再检查证据；通过后进入 `waiting_approval`。用户检查图稿、主张与证据后调用阶段 `approve`，图稿才显示 `approved`。
-
-核验期间阶段、图稿或主张版本改变时，旧请求失败，须基于当前内容重新审核；应用关闭也会撤销迟到批准。审核期间任何文件变化都会阻止批准。输出能被解析不代表科学结论已获证实，图稿内容仍须审核。
-
-审核退回后，重新运行修改后的 spec，再用旧图稿 ID 作为 `replacesFigureId` 发布新图。替换会原子移除旧图在当前审核集合中的位置，并将旧图标为 `superseded`；旧 spec、文件、主张、证据和替换事件保留。新图须重新关联主张，证据不会自动继承。等待批准或已批准的版本不能直接替换，须先退回或按流程回到绘图阶段。
-
-已登记输出通过资源路由按哈希读取，支持 PNG/SVG/PDF；响应禁用脚本和网络资源，仅允许 SVG 自身内嵌的 data: 图片，路径与哈希失配时拒绝读取：
+没有独立路由（[ADR0024](adr/0024-stage-surface-removed.md)），旧?view=figures回到默认LaTeX。检查与数据映射在[工件抽屉](research-artifact-inspector.md)，人工决定仍走助手闸门。登记图稿可按hash读取PNG/SVG/PDF，禁脚本/网络，仅允许SVG内嵌data图片：
 
 ```text
 roc-preview://research/figures/{encodedProjectId}/{encodedFigureId}/{png|svg|pdf}/{sha256}
 ```
 
-图稿与实验来源在工作区原文件变化后仍可读取。批准的图稿可进入[科研最终导出](research-exports.md)。图稿域没有独立路由页面，但工件检查器提供预览、数据映射和人工审核（[ADR 0024](adr/0024-stage-surface-removed.md)）：对话代理调度图稿阶段，阶段角色通过内部 `research.figure.startOwned` / `getOwned` / `publishOwned` 映射调用生产工具。Owned 映射不增加公开 IPC 能力；旧链接 `?view=figures` 会回到默认 LaTeX 视图。审核与替换仍经过人工审批闸门 `research_approve_gate`。
+原工作区修改不改变已冻结来源。批准图稿进入[导出](research-exports.md)，PNG/SVG/PDF随包，其他输入/输出按逐资源交付审查；清单和日志采用公开投影。
 
-## 图稿数据人工映射
-`research.inspectFigureConsistency` 验证实际图稿冻结文件，返回编译 mark、完整编码及直接字段摘要；场景项按显式 mark、offset、limit（最多 200）分页读取。数值位置只包括直接编码的有限 datum；基线等数值也会计数，不能自动推断它们都是科学指标。条件、表达式、常量和缺失字段不接受指标映射。
+## 实际绘制数据映射
 
-`research.saveFigureConsistencyReview` 将指定 mark、channel、field 和 scenePath 绑定到图稿主张及真实结果指标 Evidence。请求显式包含工件版本、图稿 manifest/trace hash、单位、转换/舍入/容差规则、最新父审核和人工理由。计算沿用正文合同；不一致照实保存，不授予科学批准。主进程在异步指标读取后再次核对图稿文件，并在事务中重查主张、Evidence、结果和工件版本。窗口身份由 IPC 绑定，完全相同的请求重试返回原回执且零重复写入。
+inspectFigureConsistency核对真实冻结文件，返回mark、完整编码和直接字段；按mark/offset/limit（最多200）分页。仅直接编码的有限datum可映射，常量、条件、表达式、缺字段不接受；基线值计数不意味着科学指标。
 
-保存不可变版本，包括冻结运行、图稿、trace 引用、选中编码/实际 scene item、主张、Evidence、指标结果与计算。审核头纳入整个工件快照，保存后旧阶段审批版本失效。`research.getFigureConsistencyHistory` 独立验证保存 JSON/hash、来源清单关联、计算与父版本；当前来源失效后仍能读取明确标注的 `stored_receipt`。每条映射只保存选中项，不复制整个 trace。
+saveFigureConsistencyReview明确绑定mark/channel/field/scenePath、图稿Claim、真实指标Evidence、工件版本、manifest/trace hash、单位规则、最新parent和人工理由。转换/舍入/容差沿用[写作检查](research-writing-checks.md#主张数值与实验指标)。异步读取后重验文件，事务重查主张/证据/结果/版本；不一致照实保存。
 
-主进程合同、IPC、同壳映射界面与审批/导出消费者共同使用这一回执。核对的是实际 datum 和完整编码，不推断科学含义或最终像素位置。
+不可变回执保存选中编码/item、运行/图稿/trace、主张和指标计算，不复制整份trace。审核头进入工件hash；getFigureConsistencyHistory独立核验stored_receipt和父链，历史不证明当前来源有效。实际datum/编码核对不推断科学意义或最终像素位置。
 
-## 图稿数据映射界面
-同一工件抽屉提供按需加载的「检查图稿绘制数据」，保留独立的说明文字数值检查。场景标记、完整编码、实际数值字段和场景路径可浏览；每页 20 项，摘要和分页分别绑定图稿/工件版本。分页不会清空累计映射，正在编辑的待加入字段会锁住翻页与标记切换。仅直接数值字段可选，常量和不支持的编码分别显示。
+“检查图稿绘制数据”按需加载，每页20项，累计草稿不随分页丢失；未加入字段锁住翻页/mark切换。人明确选来源及规则，空数值拒绝而不转零。草稿/保存中锁定关闭、刷新、其他审核和阶段决定；同内容重试保留请求ID。当前文件失效隐藏旧成功报告，批准/归档范围只读。
 
-人工明确选择场景项、通道、主张、真实指标 Evidence 和展示单位，再填写转换、舍入、容差及审核理由。空数值输入拒绝加入，不自动转成零。加入、替换、移除和放弃均是本地草稿动作；保存绑定最新父回执和整个工件版本。保存中或有草稿时锁住抽屉关闭、Escape、刷新、阶段审核以及其他审核编辑。完全相同的丢失回执重试返回原版本且零重复写入。成功后刷新整个工件，旧审批上下文失效。
-
-保存回执可独立分页、展开全部原文；当前冻结文件变化时隐藏此前成功的报告并拒绝保存，历史仍明确标注未按当前来源复核。只读、已批准、归档状态可浏览，不能保存。迟到的摘要、场景页、指标和保存回复不会进入另一项目。
-
-## 审批与导出消费者
-
-complete/approve、任务验收和导出会核对已有数值/直接性审核的当前主张、Evidence、指标结果版本及图稿 run/manifest。人工闸门和导出来源捕获还检查实际冻结结果和图稿字节；异步检查期间新增审核或改变工件集合/版本会拒绝旧请求。拒绝审批仍允许修正。没有映射不代表科学批准，也不强制把每条基线通道映射为科学指标；保存的不一致数值和间接/不支持引用声明保持真实结论。
-
-图稿正常从 rendered 变为 approved 时，已有数值审核仍可使用；任何内容、运行、主张或来源变化必须重新核查。导出 schema 5 包含最新审核和全部分页历史。图稿回执明确脱敏两个本机 workspace 字段，同时保留原回执来源哈希和可独立核对的脱敏 snapshot 哈希；细节见 [导出审核快照](research-exports.md#citation--scientific-consistency-审核快照)。历史导出文件读取核对保存字节和 ZIP，不要求当前来源恢复成功。
+complete/approve、任务验收及导出重验已有直接性/数值审核与实际来源；期间新增审核或版本变化拒绝旧上下文。无映射不证明科学批准。rendered → approved不使现有映射失效，其他内容/来源变化须重查；完整审核历史与脱敏回执见[导出审核快照](research-exports.md#科研审核快照)。

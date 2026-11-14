@@ -1,387 +1,91 @@
 # Zotero 本地只读接入
 
-支持本地 API 只读发现、冻结预览、逐页核对检查点、来源状态与用户授权的附件导入。自动化使用受控 HTTP fixture；真实客户端和原生选择框仍需独立互操作验收，见[验证边界](verification.md)。
+Roc 支持本地只读发现、冻结预览、逐页核对检查点、来源状态观察和单文件授权导入。自动化使用受控 HTTP fixture；真实 Zotero 客户端与原生选择框的互操作仍需独立验收，见[验证边界](verification.md)。
 
-主进程 `zotero-adapter.ts` 固定访问 `http://127.0.0.1:23119/api/`，只发 GET。
-请求不含 API key，不访问 Connector，不触发授权、修改设置或写回 Zotero。
-重定向不跟随；返回的网页、附件或分页链接不能改变请求主机。初始化不会读取
-Zotero 文库；只有调用探测/读取能力才发本地请求。
+## 连接与范围
 
-## 当前合同与支持范围
+主进程适配器固定访问 `http://127.0.0.1:23119/api/`，只发 GET，不含 API key、不跟随重定向。返回的网页、附件或分页链接不能改变主机。初始化、恢复和读取本地回执不访问 Zotero；只有显式探测/来源读取发送请求。请求超时 10 秒、响应上限 8 MiB；取消和关闭会中止请求，迟到结果不能发布为成功。
 
-2026-11-03 读取的官方
-[Local API](https://www.zotero.org/support/dev/web_api/v3/local_api)
-更新于 2026-07-29。Zotero 高级设置中需允许其他应用通信，未启用返回 403。
-API 版本固定为 3；Zotero 10+ 的 Zotero-Server-ID 标识数据库实例，本地对象
-version 与云端或其他实例无关。缺少实例标识的旧客户端不支持，不生成替代身份。
-探测输出 connected、disabled、unreachable、unsupported 或 invalid_response；
-unreachable 只表示本地请求未完成，不能单凭它推断未安装。
+API 版本固定为 3，必须返回真实 `Zotero-Server-ID`；缺实例标识的客户端不受支持，不生成替代身份。探测状态为 connected、disabled、unreachable、unsupported 或 invalid_response。高级设置需允许其他应用通信，未启用时为 403。不可达不能推出未安装；常用目录检测也不能证明系统安装状态。
 
-个人库固定 `users/0`；群组库为 `groups/<groupID>`。同步范围使用实例 ID 与
-`{kind,id}`，后续对象映射还必须含 itemKey，DOI 不替代同步主键。
-群组 metadata version 属于云同步版本，不能作为该群组文库的本地检查点。
-群组列表不要求 Last-Modified-Version；集合和文献页要求它并核对预期版本。
-实例变更或版本变更拒绝整页，不能沿用旧检查点或缓存成功结果。
+个人库为 `users/0`，群组库为 `groups/<groupID>`。范围由 serverId、library `{kind,id}`、nullable collectionKey 及可信 owner/project 共同确定；对象身份另含 itemKey，DOI 不替代同步主键。IPC 明确传 projectId（文库范围为 null），owner/runId 来自真实执行上下文或窗口 sender，输入不能指定其他会话。
 
-来源结构与响应头核对到 Zotero 主仓库固定 commit
-[1ca9d58c9aa9aeca1032d3966f3765d4d40ab7b2](https://github.com/zotero/zotero/blob/1ca9d58c9aa9aeca1032d3966f3765d4d40ab7b2/chrome/content/zotero/xpcom/server/server_localAPI.js)。
-旧文档中的 xpcom/localAPI 路径已移动，当前代码位于 xpcom/server。
+items/collections 请求携带 expectedLibraryVersion，首次可为 null；下一页沿用实际响应版本。items 的 nullable since 表示增量下限，offset 默认 0，limit 默认 20、最大 50。适配器显式发送分页参数，校验实例、版本、Total-Results、数量、唯一对象键及对象 key/version。缺失、版本回退、412 或实例变化均失败，不返回成功空页。群组元数据版本不能当作文库本地检查点，群组列表也不要求 Last-Modified-Version。
 
-## 分页读取
+合同依据为 2026-11-03/04 核对的 [Local API](https://www.zotero.org/support/dev/web_api/v3/local_api)、[分页规范](https://www.zotero.org/support/dev/web_api/v3/basics)及[固定官方源码](https://github.com/zotero/zotero/blob/1ca9d58c9aa9aeca1032d3966f3765d4d40ab7b2/chrome/content/zotero/xpcom/server/server_localAPI.js)。这是来源核对记录，不是本轮在线互操作结果。
 
-主进程能力及对应 preload：
+## 能力入口
 
-| 能力 | preload 方法 | 内容 |
-| --- | --- | --- |
-| research.zotero.status | research.getZoteroStatus | 常用应用目录检测与独立 API 连接状态 |
-| research.zotero.probe | research.probeZotero | API/实例/schema 头及探测时间 |
-| research.zotero.groups | research.getZoteroGroups | 当前用户的群组元数据页 |
-| research.zotero.collections | research.getZoteroCollections | 指定库的集合、父集合及版本 |
-| research.zotero.items | research.getZoteroItems | 指定库/集合的原始对象页，含标签和附件引用 |
-| research.zotero.preview | research.previewZotero | 按可信会话/项目保存完整来源页并返回审查预览 |
-| research.zotero.getPreview | research.getZoteroPreview | 按预览 ID 读取已冻结的来源对象 |
-| research.zotero.sources | research.getZoteroSources | 指定文献在当前会话/项目中的 Zotero 收录回执及原始对象 |
-| research.zotero.review | research.reviewZotero | 冻结来源与当前文库字段、对象版本及范围内原始来源的只读核对 |
-| research.zotero.sourceObserve | research.observeZoteroSource | 校验本范围原始收录回执后，显式读取当前对象并保存来源状态观察 |
-| research.zotero.sourceState | research.readZoteroSourceState | 只读同原始收录回执与集合范围的最后有效观察 |
-| research.zotero.children | research.getZoteroChildren | 校验原始父对象收录回执后，显式分页读取当前原始子项 |
-| research.zotero.attachmentInspect | research.inspectZoteroAttachment | 验证原收录回执与当前子附件关系，保存路径/访问/文件身份检查 |
-| research.zotero.attachmentRead | research.readZoteroAttachment | 只读当前会话/项目的附件检查记录 |
-| research.zotero.attachmentGrant | research.grantZoteroAttachment | 原生选择并授权检查记录中的一个真实附件文件 |
-| research.zotero.attachmentGrantRead | research.readZoteroAttachmentGrant | 只读当前会话/项目的单文件输入授权回执 |
-| research.zotero.attachmentImport | research.importZoteroAttachment | 使用真实单文件授权读取附件，事务保存文档与来源回执 |
-| research.zotero.attachmentImportRead | research.readZoteroAttachmentImport | 只读当前会话/项目的已提交附件导入回执 |
-| research.zotero.attachmentImportCancel | research.cancelZoteroAttachmentImport | 对本范围进行中的附件导入请求发出实际取消信号 |
+以下为 preload 方法；完整 schema/能力声明见 `src/shared/schemas/research-zotero*.ts` 和 `src/shared/surfaces.ts`。
 
-读取参数显式携带 serverId、library、expectedLibraryVersion；首次读取可指定
-expectedLibraryVersion:null。items 还需要 collectionKey/since，null 分别表示
-整个库/不限制修改版本。offset 默认 0，limit 默认 20、最大 50。下一页使用真实
-返回的 libraryVersion 作为 expectedLibraryVersion。所有请求回传 Server-ID，
-同时检查响应头，412 和响应实例不符都拒绝。
-
-本地 API 默认无分页上限，因此适配器每次明确发送 start/limit。页数、总量与
-返回条数必须一致，缺失 Total-Results、重复对象键、错配 key/version、对象版本
-大于 libraryVersion 均失败。页面保留原始已知/未知字段，附响应原始字节 SHA-256、
-fetchedAt、total 和 nextOffset；不截断后伪装成有效页面。
-分页/版本依据
-[官方 Basics](https://www.zotero.org/support/dev/web_api/v3/basics)。
+| 分组 | 方法 |
+| --- | --- |
+| 连接与分页发现 | `getZoteroStatus`、`probeZotero`、`getZoteroGroups`、`getZoteroCollections`、`getZoteroItems` |
+| 冻结预览与只读差异 | `previewZotero`、`getZoteroPreview`、`reviewZotero` |
+| 题录收录与原始来源 | `addLiterature`（kind:zotero）、`getZoteroSources` |
+| 逐页核对会话 | `startZoteroSync`、`readZoteroSync`、`findZoteroSync`、`readZoteroSyncPage`、`captureZoteroSyncPage`、`acknowledgeZoteroSync`、`controlZoteroSync` |
+| 来源状态 | `observeZoteroSource`、`readZoteroSourceState` |
+| 子项与附件检查 | `getZoteroChildren`、`inspectZoteroAttachment`、`readZoteroAttachment` |
+| 单文件授权 | `grantZoteroAttachment`、`readZoteroAttachmentGrant` |
+| 附件导入 | `importZoteroAttachment`、`readZoteroAttachmentImport`、`cancelZoteroAttachmentImport` |
 
 ## 冻结预览
 
-数据库 13 保存预览原始完整来源页、查询参数、实例、库、版本、响应 hash 与抓取
-时间。主进程从可信执行上下文填写 owner、projectId、runId；输入不能指定其他
-会话或项目。预览不收录文献，不启动附件读取、解析、索引或书目 worker。
+`previewZotero` 使用 `include=data,csljson` 抓取并保存完整一页，保留请求、实例/库/版本、原始已知与未知字段、响应字节 SHA-256 和 fetchedAt。它只创建审查快照，不收录、读取附件、解析或索引。
 
-preview 使用 items 参数，以 `include=data,csljson` 抓取一页，再完整保存；返回首 20 个对象。
-getPreview 只读本地快照，不重新请求 Zotero，默认 20、最多 30 个对象。
-`capturedTotal` / `nextPreviewOffset` 是保存页内的分页；
-`sourcePage.total` / `sourcePage.nextOffset` 是 Zotero 查询的总量及下一次来源读取位置。
-两个范围保持独立，不能把保存的一页当作已抓取整库。
+当前预览合同 schemaVersion 2、`projection:data,csljson`，审查有效期 7 天。contentHash 覆盖完整来源页、请求、预览身份与有效期。读回先验证整页再截取展示范围；旧合同、损坏、过期或其他会话/项目显式失败，不补造 CSL。有效期不删除正式文献和收录历史。
 
-contentHash 覆盖固定版本、预览 ID、完整来源页、原始请求和审查有效期。每次读回
-先校验全部内容，再截取当前显示页；被省略的末页记录损坏也会拒绝。未找到、
-其他会话/项目、7 天有效期结束或内容损坏均显式失败。预览有效期不删除正式文库
-或已有科研历史。旧数据库升级不补造 Zotero 来源、预览或导入映射。
+初次返回最多 20 个对象；`getZoteroPreview` 默认 20、最多 30，只读快照。`capturedTotal` / `nextPreviewOffset` 表示保存页内分页，`sourcePage.total` / `sourcePage.nextOffset` 表示 Zotero 来源总量与下一页。保存一页不等于已抓取整库。
 
-请求失败、保存失败、调用者取消或应用关闭不返回成功预览。导入服务跟踪预览
-请求，关闭时中断并等待其退出；忽略取消的迟到响应仍被发布前检查拒绝。
-应用重启后的有效快照可在同一会话/项目继续审查；原始响应与冻结内容 hash 保留。
-当前预览合同为版本 2，显式声明 `projection:data,csljson`。旧的版本 1 不补造 CSL、
-不转换；数据库升级仍保留原始旧预览行，读取不符合当前合同的数据显式失败。
+## 对象收录、引用键与原始版本
 
-## 对象收录与原始版本
+`addLiterature` 的 Zotero 输入为 previewId/itemKey，单次最多 30 论文。作业创建前固定本范围的完整原始对象、版本、题录与 CSL；笔记、附件、批注不能作为论文。缺题名/CSL、格式或题名/DOI冲突显式失败。完整 CSL 交给原生书目 worker；未知字段保持未知，不生成题名、作者或年份。通用归并合同见[文献融合](research-literature-fusion.md)。
 
-现有 `research.addLiterature` 接受 `kind:zotero`、previewId、itemKey。用户选择的
-每个对象在创建作业前按会话/项目读回完整预览，固定原始对象、版本、题录投影和
-导出的 CSL。附加 source 类型为 Zotero；附件、笔记、批注不能作为论文收录。
-缺题名、格式错误、缺 CSL 或 CSL 的题名/DOI 与原记录不一致均显式失败。
+对象映射使用 serverId、library kind/id、itemKey。不同对象即使 DOI 相同也保留独立映射和回执，可指向同一规范文献。同一版本内容变化、对象版本回退或已绑定对象改变文献身份均拒绝。原始版本保存完整 data/CSL；每次新请求另存 operationId、所见文库版本、previewId、抓取/收录时间。相同 requestId 重放原结果；新请求复用已保存对象版本与书目，不重复 worker/来源、不修改本地注释、标签或引用键。归档文献返回 skipped_archived。
 
-CSL 走现有原生书目 worker，不使用只含题名/作者的临时书目代替完整导出。期刊、
-卷期、页码、完整作者角色和日期保留在书目/原始 CSL 中；DOI 规范化后比较。
-缺字段继续保持未知，不生成虚构题名、年份或作者。
+引用键映射由 `zotero-citation-key.ts` 和共享 schema 定义：
 
-数据库 14 的同步主键为 serverId、library kind/id、itemKey；导入作业键也由该
-对象身份产生。不同对象即使 DOI 相同，也独立保留映射、原始版本与收录回执，
-可以共同指向同一个规范文献。同一来源版本出现不同内容、对象版本回退或已绑定
-对象要改到其他文献时拒绝，不按 DOI 重写同步主键。
+- 显式来源候选为 native `data.citationKey`、CSL `citation-key`、Extra 的 `Citation Key:`；CSL id 和 Zotero itemKey 是对象身份。
+- 有既有本地键时保留；新文献可采用一致、有效且不冲突的来源键。
+- 无有效唯一来源或发生碰撞时生成本地键，记录 `invalid_source_key`、`source_disagreement`、`key_collision`、`local_key_retained` 等真实问题。预览中尚未生成的 localKey 为 null，收录回执记录实际映射。
 
-原始对象版本只保存一次，含全部题录、标签、集合、未知字段与 CSL。每次新的
-收录请求另存 operationId、所见文库版本、previewId、抓取与收录时间的回执。
-相同 requestId 的重放读回原结果；新 requestId 收录同一版本时复用已保存文献
-和书目，不重复 worker、不追加重复文献来源、不改引用键或本地注释/标签。
-需要关联新项目时只建立项目关联，在事务提交后发布作业事件。
+文献、对象映射、原始版本、收录回执和逐项作业结果同事务提交。失败回滚该对象，不留下成功结果；多对象作业可部分失败。取消停止余下对象，已提交条目保留。`getZoteroSources` 默认 20、最多 50 条，校验完整原始对象及 hash；归档或预览过期不使正式回执失效。
 
-新来源版本保留旧、新两侧原始数据；不覆盖 Roc 用户已有书目 note/keywords。
-已归档文献保持归档，返回 skipped_archived，不自动恢复。元数据归并仍使用现有
-强身份规则；题名相似不建立新归并边。归并歧义、来源/CSL 冲突和不可重试的冻结
-输入错误保留明确原因。多对象作业可部分失败；取消停止剩余对象并拒绝迟到 worker。
-
-文献、对象映射、原始版本、当前收录回执与作业结果在同一 SQLite 事务提交。
-写入失败回滚该对象的全部变更，不留下“已收录”的结果。getZoteroSources 默认
-20、最多 50 条；按可信会话/项目分页回执，每条带完整原始对象及 hash，读取校验
-对象 key/version/hash。文献归档和预览审查有效期结束后，已收录回执仍可读。
-多个新请求使用相同对象版本，会有独立回执；这不表示文献或原始版本重复。
-
-对象版本记录用于下文的显式逐页增量核对与来源状态观察。
-实例变化及版本回退仍需人工核对，不能凭失败结果伪造同步完成。
-
-## 附件与取消
-
-主进程附件路径方法读取 `items/<key>/file/view/url` 的纯文本 file URI，仅接受
-本机 file URL，不跟随 `/file` 的 302。它只返回引用，不读取文件、不证明文件存在，
-不授予 filesystem 权限，也不直接暴露成 renderer 的文件读取接口。后续导入必须
-单独核对用户选择、真实路径、访问范围、文件存在性和链接附件状态。
-
-请求超时 10 秒，响应字节上限 8 MiB。调用者取消及插件关闭中断读取，并等待
-进行中的请求退出；已关闭适配器拒绝新请求，迟到响应不能成为有效页面。
-HTTP/解析失败显式保留为失败，不回退为成功空页。
-
-## 设置状态
-
-现有设置弹窗的「文献与解析」区提供 Zotero「检测连接」。打开设置不自动读取
-Zotero；用户点击才检查 /Applications/Zotero.app 和 ~/Applications/Zotero.app 的
-Contents/MacOS/zotero 文件，同时探测固定 loopback API。只检测应用执行文件是否
-存在，不启动它，不扫描或读取 Zotero 文库。其他路径的安装不在检测范围内；
-未发现常用目录安装不能推出系统中未安装，API 不可达也不能推出未安装。目录
-读取异常是明确的失败，不伪装成未发现。
-
-UI 独立显示应用目录与 API：已连接、未启用通信、不可达、版本不支持、响应无效。
-已连接时列出真实 API3 和题录预览能力；未启用提示高级设置操作，Roc 不代为修改。
-每次检测使用新资源键，立即移除旧状态；关闭后的迟到结果不能出现在再次打开
-的区块。新 UI 使用 12/13px tokens、0.5px 分隔线、键盘焦点和状态文字。
-
-## Renderer 预览边界
-
-previewZotero、getZoteroPreview、getZoteroSources 的 IPC 请求显式要求
-projectId（库范围用 null）。主进程 bridge 使用真实 sender ID 构造 window owner
-和项目上下文，输入不能提供 owner/runId。能力入口剥离 IPC 项目字段后，核心服务
-仍验证 scope-neutral 请求；原始快照请求与内容 hash 格式保持不变。检索池
-getLiteraturePool 同样通过文献上下文读取。
-
-## 选择与收录 UI
-
-文献画布现有「导入」弹窗新增 Zotero 页签；方向键、Home/End 切换导入方式。
-点击「连接 Zotero」后读取分页群组与所选文库的集合。用户选个人/群组库、集合
-和每次20/30/50对象的读取范围，再点击「读取并预览」。集合翻页沿用已见本地
-文库版本，版本变更阻止后续预览；重新连接显式重建选择。
-
-来源总量/下一页与已保存预览内分页分别展示。预览只显示原始对象，用户逐项
-勾选，单次最多30论文；笔记、批注、附件和缺题录/CSL对象不能当论文收录。
-原生details可用键盘展开原始题录、标签、集合、附件引用和未知字段。读取失败
-显示原始失败信息；来源翻页先清空旧预览，不把旧内容显示成新页成功。
-
-收录走既有作业与请求ID。传输失败重试保持相同ID，已明确部分失败可只重试
-标记可重试的条目。结果逐项显示收录/关联/已存在/归档跳过/失败/取消及原因。
-取消通过requestId查到真实operationId再发停止请求；「已请求取消」与最终
-取消回执分开，已提交条目不回滚。取消请求未结束时不开始新收录。
-
-导入作业与回执状态由现有弹窗组件持有，关闭或切换页签不取消作业；同一画布
-重新打开Zotero可看进行中/最终结果。项目切换重建弹窗，旧项目迟到结果不能
-进入新项目。这里不承诺跨应用重启恢复UI选择；整库检查点/恢复使用下文独立会话合同。
-
-## 来源与本地差异核对
-
-`reviewZotero` 要求明确 projectId、当前范围的 previewId 和1–30个不重复 itemKey。
-仅读取已有冻结预览、文库与映射，不请求 Zotero、不运行书目 worker、不写数据库。
-返回冻结原始来源、规范文库现值/书目字段/归档状态、已记录对象版本和当前文库修订。
-对象状态区分新对象、未变化、新版本、版本回退、同版本内容冲突与文献身份改变。
-原始旧来源仅返回同 owner/project 的最新收录回执；其他范围可见规范文库元数据，
-不能读取这里的原始来源历史。损坏来源和歧义文献身份明确失败。
-
-界面按当前预览与选择核对，迟到结果不能替代新选择。核对完成后才能收录；
-版本回退、同版本冲突、身份改变、归档或读取失败阻止收录。题名、作者、DOI、
-摘要和 URL 仅在双方都有值时展示精确差异；没有语义书目等价判断。
-键盘 details 展示两侧值、本地注释/标签和本范围原始旧来源。核对是当前只读
-视图，不是持久化批准；收录仍在主进程按原有版本/身份合同检查并保留已有字段、
-补齐缺值、另存原始来源。没有字段覆盖接口或 Zotero 写回。
+`reviewZotero` 对当前 previewId 和 1–30 个唯一 itemKey 比较冻结来源、规范文库现值与本范围已收录原始版本；只读、不联网、不运行 worker。它区分新对象、未变化、新版本、回退、同版本冲突和身份改变，按双方实际值显示字段差异。核对不构成持久批准或覆盖授权；收录仍重新检查身份/版本并按保留已有值、补齐缺值策略执行。
 
 ## 可恢复的逐页核对检查点
 
-同步会话保存逐页决定、已见对象和完成批次检查点，不补造历史检查点。
-`startZoteroSync` 明确实例/库/集合、full、incremental或显式rebaseline及1–50页大小；incremental
-仅从同 owner/project/实例/库/集合的上次完整核对版本读取 since。full重新读取
-全范围，保留旧完整版本下限；rebaseline按当前来源完整核对，末页确认后可建立
-较低的新检查点。旧对象导入版本约束仍执行。每个范围只能有一个进行中
-或暂停会话；创建和读取会话不发送 HTTP、不收录题录。
+同步会话范围是可信 owner/project/实例/库/集合。`startZoteroSync` 显式选择 full、incremental 或 rebaseline，页大小 1–50；同范围只允许一个进行中或暂停会话。incremental 从上次完整核对版本取 since；full 保留旧版本下限；rebaseline 明确按当前来源建立检查点，完成后可建立较低版本，已有对象回退/冲突约束仍生效。
 
-`captureZoteroSyncPage` 使用真实会话ID和expectedRevision，只捕获当前位置的一页；
-冻结预览与会话更新同一事务。首个响应固定目标文库版本与总量，后续页面要求一致，
-跨页重复对象不能推进。待核对页不能隐式覆盖；replacePreviewId明确指定被替换页，
-重读会生成新预览并使旧选择失效。过期预览不能确认，但可以显式重读同位置。
+`captureZoteroSyncPage` 使用 syncId/expectedRevision 捕获当前位置一页，冻结预览与会话更新同事务。首个响应固定目标版本/总量；后续必须一致、不能跨页重复。待核对页不隐式覆盖，replacePreviewId 明确重读并使旧选择失效。过期页不能确认，可显式重读同位置。
 
-`acknowledgeZoteroSync` 要求当前预览、所有对象的真实收录回执或逐项明确跳过理由。
-50对象页可以拆为多个既有30论文收录作业；未完成/失败的收录不能伪装为已收录。
-确认页的决定、已见对象和下页位置同事务；只有最后一页完成才推进 since检查点。
-已成功收录的题录不因确认事务失败而消失；检查点与页回执会一起回滚。
-“检查点完成”表示本次捕获范围全部核对，不表示全部对象已收录或检索覆盖完整。
+`acknowledgeZoteroSync` 要求当前页每个对象都有真实收录回执或明确跳过理由。50 对象页可拆成多个 30 论文作业；失败/未完成不能当已收录。页决定、已见对象与位置一起提交，只有末页确认推进完整 since 检查点。确认失败不撤销已提交题录，但检查点和页回执回滚。**完成表示捕获范围已逐项核对，不表示全部收录或完整检索覆盖。**
 
-`controlZoteroSync` 显式pause/resume/abandon，要求当前修订；暂停/放弃中止实际HTTP，
-保留已确认页、待核对预览与旧完整版本。同一同步不能重复并发读取。断连不推进；
-实例变更、版本回退、页间版本/总量变化或重复对象进入reset_required，保留旧历史。
-重启只读已有状态，不自动HTTP或收录。通过保存的syncId恢复同可信owner/project；
-UI按当前范围查找并恢复，见下一节。
+pause/resume/abandon 要求当前修订；暂停/放弃中止实际读取并保留历史。实例变化、版本回退、页间版本/总量变化或重复对象进入 reset_required；断连不推进。find/read/readPage 只读已有状态，重启不自动联网或收录。增量缺席不能证明永久删除或集合移除；单对象状态另行显式观察。
 
-官方固定源码再次核对于2026-11-04：since按本地clientVersion筛选，
-format=versions返回对象本地版本；includeTrashed=1和items/trash可报告软删除，
-源码没有/deleted接口。增量结果中缺席不能证明永久删除或集合移除；本阶段不标记
-这种推测，也不删除本地题录、证据或附件。单对象状态观察与附件检查/授权后端见下文。
-依据仍为本文固定官方源码，新增读件hash保存在`pr05-zotero-primary-contract.json`。
+UI 在同一导入页恢复当前范围会话，明确提供读取、暂停、继续、结束、刷新、重读过期页及 rebaseline。确认前必须加载整页并逐项收录/跳过；只显示前 20/30 个对象不能确认 50 对象页。确认不自动读取下一页。
 
-## 检查点发现与恢复 UI
+## 来源状态观察
 
-`findZoteroSync` 只读当前可信owner/project/实例/库/集合的最新会话；
-时间戳相同也按实际插入顺序定位。没有记录返回null，不创建或启动同步。
-`readZoteroSyncPage` 返回当前待核对预览及实际同预览的已收录对象键；
-读取不改变版本、请求 Zotero或运行worker。其他owner/project不能读取，
-旧集合的迟到lookup不能替代当前选择。原始来源仍按现有预览范围和hash验证。
+`observeZoteroSource` 先校验本范围真实原始收录 operationId、实例/库/itemKey 与 hash，再显式 GET 当前对象并保存不可变观察。对象响应的 Last-Modified-Version 不推进文库检查点。present/trashed 来自真实记录；404 通过 API/schema/实例头校验后才记 not_found，仍不能证明永久删除。
 
-现有Zotero导入页显示「增量逐页核对」「完整重新核对」及真实检查点状态。
-用户显式读取、暂停、继续、结束本次或打开待核对页。关闭后重连同一范围，
-从数据库恢复暂停状态、当前位置和已收录回执；没有自动继续来源读取或收录。
-版本/状态错误后刷新真实后端状态，另有只读「刷新核对状态」动作。
-过期页读取失败保留检查点，显式重新读取本页生成新预览。
+集合成员区分 listed/not_listed/unknown/not_requested；子对象缺集合列表、回收站和未找到状态保持 unknown。版本区分 missing/regressed/unchanged/newer/version_conflict，同版本比较请求到的 data 结构。观察保留原始收录版本、当前原文、响应/hash及检查时间，不修改规范题录、证据、映射或附件。失败保留最后有效观察；`readZoteroSourceState` 只读本地记录。
 
-已收录对象不能重复勾选。本次预览必须全部加载显示，再逐项收录或填入未收录
-对象的共同跳过理由；主进程仍逐键检查回执。仅显示前20/30对象不能确认50对象页。
-确认只推进核对位置，下一页来源仍由用户点击读取；部分失败和确认事务失败保留
-当前位置/预览。暂停后继续才能确认本页。原有单页手动导入保持其独立作用。
+## 附件：发现 → 检查 → 授权 → 导入
 
-reset_required状态提供「按当前来源重新建立检查点」，明确按新来源建立版本并
-保留旧历史/本地资料。该动作选择rebaseline，不自动发生；完成页后可建立较低的
-同实例检查点。既有题录/对象的版本回退和内容冲突继续拒绝，不能借此降级或覆盖。
+四步独立执行，均依赖本范围真实父对象收录回执；读回校验范围、hash和上下游链接。
 
-## 原始收录回执对应的来源状态
+| 步骤 | 实际行为与边界 |
+| --- | --- |
+| 发现当前子项 | `getZoteroChildren` 显式分页读取父对象 children，校验 parentItem/实例/版本；保留笔记与附件真实类型，不写数据库或读取文件 |
+| 检查附件引用 | 核对当前附件类型、parentItem/linkMode；imported_file/imported_url/linked_file 才读取本地 file URI。只做路径/访问/文件身份检查，不读内容或授权；网址、嵌入图片、回收站、缺失、拒绝访问、符号链接/非文件、格式/大小问题分别报告 |
+| 单文件输入授权 | ready 检查记录经再次身份核验后，在真实发送窗口打开原生单文件选择框。用户必须选中同一真实文件；输入仅 projectId/inspectionId/requestId，不能提供任意路径。取消无授权回执；授权为 `read_one_file`，仍不读字节或建文档 |
+| 授权导入 | projectId/grantId/requestId 和 library_only/current_project 目标。无 Zotero HTTP、解析或自动索引；renderer不能提供 sourcePath/字节。只读打开时使用 O_NOFOLLOW，核对 fd 身份、大小、读取前后身份和实际字节，再传给现有文档服务 |
 
-`research_zotero_source_states` 保存不可变来源状态。输入显式携带 projectId、实例/库、真实收录 operationId、
-itemKey 与 nullable collectionKey。主进程先验证原始回执归属及 hash，再请求 Zotero；
-其他会话/项目/作业不能触发来源读取。复合外键指向实际对象收录观察。
+文档、内容 SHA-256、附件检查/授权/父来源和导入回执同事务提交；失败清理本次临时副本并保留授权。相同请求重放已提交结果，不重读外部文件；新请求相同文献/内容复用文档并追加来源回执。requestId 不能换绑授权或目标，归档文献不能新增附件。取消发真实信号，最终回执才能确定结果；已导入不等于已解析。
 
-单对象 GET 固定读取 `items/<key>?format=json&include=data`，仅使用原回执的实例/库。
-该响应的 Last-Modified-Version 是对象版本，绝不推进文库检查点。present/trashed 来自
-实际对象及 deleted 布尔值；404 必须先通过 API/schema/实例头验证，才记为 not_found。
-not_found 表示本次来源未找到，不能证明永久删除。网络、解析、写入失败保留为失败，
-不会替代最后有效观察。初始化、恢复、只读观察均不自动发 HTTP。
+## 界面与恢复边界
 
-顶层对象的 collections 明确证明 listed/not_listed；子对象省略集合列表时为 unknown。
-顶层缺失或非法集合数据显式失败。未请求集合为 not_requested，回收站/未找到的集合
-成员状态为 unknown。版本状态为 missing/regressed/unchanged/newer/version_conflict；
-同版本仅比较 data 的结构内容，键顺序及未请求的 CSL 导出不造成冲突。
+设置弹窗「文献与解析」中的检测按钮独立呈现常用目录安装检测与 API 状态；打开设置不自动探测或修改 Zotero。文献画布现有「导入」弹窗提供 Zotero 页签，用户显式连接、选库/集合、预览、核对、选择和收录。来源总量与保存页分页分开；原始字段、引用键问题和失败原因可展开查看。
 
-每条观察保留原始收录对象版本、规范文献 ID、当前原文、响应 hash、检查/记录时间及
-内容 SHA-256。读回验证来源/ID/hash 与原回执链接；过期预览不使正式收录回执失效。
-关闭服务中止实际 HTTP，等待退出并拒绝迟到观察写入。本能力不修改规范题录、
-对象映射、证据或附件。来源详情 UI 见下文。
-
-## 原始来源详情中的状态 UI
-
-沿用导入弹窗的「已收录的原始来源」详情。只有当前范围存在原始收录回执且用户展开
-详情时，才读取本地保存的观察；不开启后台 Zotero 检查。显式「检查当前来源」使用
-该回执的 operationId/实例/库/itemKey 和当前项目/集合，保存返回的真实状态。
-
-界面展示存在/回收站/未找到、当前集合成员状态、对象版本变化、原收录/当前版本及
-真实检查时间。not_found 明确说明不能确认永久删除；来源缺失、回收站或集合移除时
-显示 Roc 题录、证据与附件保留。原始观察 JSON 可展开，未保存和读取损坏分别呈现。
-检查失败保留最后有效观察及错误；不会变成来源缺失、完成收录或检查点成功。
-
-关闭/重开详情只读保存状态。项目/集合/实例/库/对象/原始 operationId/版本变化时
-重建状态组件，旧读取或检查响应不能替代新范围。缺少原回执时没有当前来源检查动作。
-新界面复用现有原生 details、ModalShell、token、焦点和滚动布局。
-
-## 附件引用检查后端
-
-追加不可变附件检查，与真实父对象收录回执建立复合外键。
-输入携带 projectId、实例/库、父对象 operationId/itemKey 与 attachmentKey。
-先校验当前会话/项目的实际原始回执，再 GET 当前附件；type、parentItem 与 linkMode
-必须真实对应该父对象。关系或模式错误不读取路径，其他会话/项目的回执不触发 HTTP。
-
-固定官方源码 `attachments.js` 的 linkModeToName 核对于2026-11-04，明确支持
-imported_file、imported_url、linked_file、linked_url、embedded_image。仅前3种读取
-file/view/url 本地引用；链接网址、嵌入图片、回收站及未找到来源分别记录原因，
-不请求文件路径、不下载网址。链接文件单独保留其类型，不伪装成 Zotero 管理文件。
-
-本地引用只做 lstat/realpath/access 检查，记录引用路径、真实路径、设备/inode、
-大小与修改/变更时间；不打开内容、不创建文档、不授予文件权限。缺失、无权读取、
-符号链接/非文件与不支持文档格式/大小分别报告。路径或文件身份在检查过程中变化
-显式失败。记录保留当前原始附件、来源 hash、原收录对象版本与实际检查时间。
-只读回放检查 hash、父对象/回执链接与当前会话/项目；预览过期不抹除已收录历史。
-传输/写入失败不替代原记录。服务关闭中止 HTTP 并拒绝迟到检查写入。
-
-## 原生选择的单文件输入授权
-
-追加拥有 owner/project 的不可变授权回执，关联实际附件检查记录。
-输入只有 projectId、inspectionId 和 requestId；renderer 不能提交 selectedPath 来授予权限。
-调用前检查记录必须属于当前范围且文件 ready；真实路径/文件身份必须仍与检查时一致。
-用户通过当前发送窗口的原生单文件选择框选取该文件，授权按钮与路径明确标注读取范围。
-链接文件同样需要显式选择。取消返回 cancelled/null，没有授权回执；选错文件、符号链接、
-缺失或文件身份变化明确拒绝。该过程仍不读取附件字节、不创建文档。
-
-授权只允许 read_one_file，保留已选真实路径、设备/inode/大小/修改与变更时间、
-检查记录 hash、真实授权时间及自身内容 hash。只读回放验证范围、hash和检查记录对应。
-同请求重放返回原回执，不再打开选择框；重复进行中请求拒绝。requestId不能换绑检查记录。
-数据损坏、写入失败和服务关闭不能成为授权成功。内容读取/导入将单独校验授权与文件身份。
-
-主进程原生适配器动态加载 Electron，校验真实 window owner 与 webContents 对应的
-BrowserWindow，再调用单 openFile 的
-[showOpenDialog](https://github.com/electron/electron/blob/main/docs/api/dialog.md)。
-框架合同经 Context7 官方文档及本地 Electron45 类型核对；真实 Electron45 进程验证
-动态导入、发送窗口查询、父窗口归属和原生选择 API。取消任务结束授权等待并拒绝迟到返回；
-原生选择框本身沿所属窗口生命周期关闭，不声称主动撤销原生 sheet。
-
-## 按单文件授权导入附件内容
-
-追加拥有 owner/project 的附件导入回执，关联实际授权与文档。
-输入显式携带 projectId、grantId、requestId 和 library_only/current_project 目标。
-原授权、检查记录和原收录回执必须同范围；归档文献不能新增附件。renderer不能指定
-另一 sourcePath 或提交文件字节绕过授权。本步骤没有 Zotero HTTP、worker解析或自动索引。
-
-读取先验证真实路径，再使用 O_RDONLY/O_NOFOLLOW 打开已授权文件。在读取任何字节前
-确认实际文件描述符的设备/inode/大小/时间等于授权记录；限定大小，读取后再核对身份及
-实际字节数。缺失、无权读取、路径/身份变化和取消分别失败。已验证字节直接传入既有
-ResearchDocumentService，保存过程不会重新打开原来源路径，避免核对后换文件的窗口。
-
-文档 ID、实际内容 SHA-256/大小、原始附件检查、父对象来源、授权 hash、目标项目、
-导入时间与自身内容 hash 一起保留。文档与回执共用事务；回执写失败回滚文档/项目关联，
-清除本次临时私有副本，保留输入授权以便显式重试。新项目关联通知在事务提交后才发布；
-通知错误会记录日志，不删除已提交的文档或回执。其他手动文档导入继续使用其明确入口。
-
-相同请求重放只读已提交回执，即使外部原文件后来丢失也不重读；不同请求的同文献/内容
-复用既有文档，追加独立来源回执。requestId不能换绑授权或目标。只读回放核对范围、
-hash、来源/授权/文档链接。当前请求可取消；cancelRequested表示信号已发出，原请求退出
-后才结束。服务关闭会中止实际读/复制和迟到事务，不伪造已导入或解析完成。
-
-## 原始父对象范围内的子项发现
-
-`getZoteroChildren` 输入显式携带 projectId、原收录 operationId、实例/库/itemKey、
-offset/limit/expectedLibraryVersion。主进程先校验当前会话/项目的真实原始父对象回执，
-再按原回执范围 GET `items/<key>/children?format=json&include=data&start=...&limit=...`。
-个人/群组库沿用既有固定主机、实例、版本、数量和原文 hash 合同；每个返回子项的
-parentItem 必须严格等于父对象键。其他范围和不匹配关系均显式失败。
-
-返回原收录父对象、实际请求与原始子项页；笔记和附件保留其真实类型、分页数量、
-对象/文库版本，不把所有子项当成附件。初始化和只读回执不发 HTTP；显式发现不写
-数据库、不读附件字节、不创建文档或授权。关闭中止真实请求并拒绝迟到返回。
-附件发现、检查、授权与导入界面见下文。
-
-## 原始来源内的附件操作界面
-
-已收录的待核对页对象提供独立「查看已收录来源与附件」只读入口；暂停时仍能打开，
-原重复收录勾选保持禁用。来源详情中展开「附件与当前子项」不自动请求 Zotero；
-只有点击「读取当前子项」才读取真实子项页，显示笔记/附件原始类型、对象版本、
-文库版本和数量。下一页沿用真实文库版本；读取错误清除本次页面并显式显示原因。
-
-每个附件先点击「检查附件引用」，展示实际模式、引用/真实路径、访问状态与检查时间。
-管理文件、已保存网页文件、链接文件分别呈现；链接网址/嵌入图片/回收站/未找到来源、
-缺失/拒绝访问/无效/不支持格式均保留真实原因。笔记和批注没有文件授权入口。
-ready 才允许显式选择真实文件并授权单文件读取；取消选择明确显示未授权。
-renderer 只传 inspectionId/requestId/projectId，不传任意授权路径或文件字节。
-
-获得授权后另行确认「仅文库」或「文库与当前项目」，点击导入。失败保留授权和
-原请求 ID/目标，以同请求重试；真实提交回执展示文件名、目标、内容 hash 和实际
-文档状态，已导入不表示已解析。取消先显示实际已发信号，等待原导入退出；
-取消失败不能成为已取消，提交成功也不被迟到的取消响应改成失败。
-
-检查/授权/请求/回执由弹窗持有，按真实项目/实例/库/原收录 operation/父对象/附件
-键分开。关闭详情、切换 tab、关闭弹窗期间操作继续；重开同来源并显式读取子项后
-恢复当前弹窗保存的状态和回执，不重新选择或导入。不同来源/项目的迟到响应
-不能替代当前范围。应用重启后的底层回执仍可按正式 ID 读取；本界面不声称跨重启
-自动发现这条操作链。没有第二弹窗、后台抓取或自动解析/索引。
+来源详情只读已有观察，点击才检查当前来源或读取子项；附件操作依次展示真实状态、单文件授权与导入目标。进行中作业在关闭详情/弹窗或切换页签时继续，同一画布重开可查看结果；项目/来源范围变更后拒绝旧响应。原始回执和同步检查点可跨应用重启读取，但 UI 选择与附件操作链不承诺跨重启自动恢复。没有后台抓取、Zotero 写回或自动解析/索引。

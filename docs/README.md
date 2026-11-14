@@ -8,7 +8,7 @@
 | --- | --- |
 | [科研工作台](research-workbench.md) | 壳层、路由、助手工具与阶段入口 |
 | [科研工件检查器](research-artifact-inspector.md) | 工件快照、生产文件与人工审核版本 |
-| [Idea Canvas、方法计划与结果评估](research-ideas.md) | Idea Canvas、方法计划与结果评估 |
+| [Idea Canvas、方法计划与结果评估](research-ideas.md) | 构思晋升、方案批准与结果裁决 |
 | [科研实验运行](research-experiments.md) | TypeScript、R、Julia、Python 实验执行 |
 | [Python 环境选择、预检与执行](research-python-environment.md) | CPython 环境选择、冻结检查与执行边界 |
 | [Notebook 导入与执行合同](research-notebooks.md) | Notebook 导入、预览与 Python 子集执行 |
@@ -35,11 +35,11 @@
 
 | 文档 | 内容 |
 | --- | --- |
-| [科研写作检查](research-writing-checks.md) | 正文一致性、数值映射、引文审核与 Vale |
-| [科研图稿](research-figures.md) | Vega 图稿、真实绘制数据与人工映射 |
+| [科研写作检查](research-writing-checks.md) | 文献字段、正文一致性、数值映射、引文审核与 Vale |
+| [科研图稿](research-figures.md) | Vega 定量图稿、Mermaid 方法图与人工数据映射 |
 | [Review Response Matrix](research-response-matrix.md) | 审稿意见与回复矩阵 |
 | [Journal Compliance](research-journal-compliance.md) | 版本化期刊规则与符合性报告 |
-| [科研最终导出](research-exports.md) | 冻结正文、科学审核快照与最终 ZIP |
+| [科研最终导出](research-exports.md) | 冻结正文、审核快照、DOCX/HTML 与 arXiv 候选包 |
 | [科研 RO-Crate 合同](research-ro-crate.md) | RO-Crate 侧车、实体关系与公开投影 |
 
 ## 科研资源与外部服务
@@ -59,7 +59,7 @@
 | [验证入口](verification.md) | 开发命令、测试范围与尚需独立验收的边界 |
 | [Research performance baselines](research-performance.md) | 历史性能协议、基线与复现入口 |
 | [内置技能源（Built-in skills）](builtin-skills.md) | 随包技能来源、安装、同步与许可 |
-| [RTK 集成](rtk-integration.md) | 随包 RTK 的 shell 输出压缩 |
+| [RTK 集成](rtk-integration.md) | 随包 RTK、显式压缩与生产命令工具边界 |
 
 ## 架构决定
 
@@ -85,6 +85,6 @@
 
 ## 历史报告与测量产物
 
-[2026-11-07 写作生态调研](reports/2026-11-07-scientific-writing-ecosystem.md) 归档当时的集成评估，不作为当前待办清单。性能协议和基线 JSON 保留原始测量与来源信息，由[性能文档](research-performance.md)解释；更新指南不代表重新跑过这些基准。
+[2026-11-07 写作生态调研](reports/2026-11-07-scientific-writing-ecosystem.md)和 [2026-11-08 Agent 审计](agent-harness-evaluation-audit-2026-11-08.md)保留当时的观察，不作为当前待办清单或命令指南。当前评测入口见 [evaluation](../evaluation/README.md)。性能协议和基线 JSON 保留原始测量与来源，由[性能文档](research-performance.md)解释；更新文档不代表重新执行基准。
 
 专题以一份主文档维护：方法计划归入 Idea，任务上下文归入任务观测，PDF 坐标归入阅读导航，Vale 归入写作检查，OSF 政策归入资源。[Vale 旧入口](research-prose.md)仅保留跳转，供随包规则引用。过期实施流水账已移除，验证入口和未完成的独立验收范围集中在[验证说明](verification.md)。

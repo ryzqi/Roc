@@ -1,6 +1,6 @@
 # 科研 RO-Crate 合同
 
-导出固定 RO-Crate **1.2** 和 Roc profile **roc-research-1**。这是明确的稳定目标；不声称为最新规范。公开元数据、图生成及离线校验已接入 `prepareExport` 和实际 ZIP。prepare 必须提交逐资源出版审查；既有工件抽屉提供作者、许可与交付方式编辑。
+导出固定 RO-Crate **1.2** 和 Roc profile **roc-research-1**。这是明确的稳定目标；不声称为最新规范。公开元数据、图生成及离线校验接入 `prepareExport` 和实际 ZIP。准备、生成、封存和保存流程统一见[导出合同](research-exports.md)；本文只定义公开元数据与逐资源再分发审查。
 
 规范依据：[1.2 结构](https://www.researchobject.org/ro-crate/specification/1.2/structure.html)、[根数据实体](https://www.researchobject.org/ro-crate/specification/1.2/root-data-entity.html)、[profile](https://www.researchobject.org/ro-crate/specification/1.2/profiles.html)、[软件源码](https://www.researchobject.org/ro-crate/specification/1.2/workflows.html)、[validator 离线模式](https://rocrate-validator.readthedocs.io/en/stable/5_offline_mode/)。
 
@@ -39,7 +39,9 @@
 
 parser 改变输入 JSON（包括丢弃保留属性）时直接拒绝。独立校验拒绝错误投影摘要、未声明的私有值、旧版 raw receipt 和缺少必填字段的数据。公开字符串的私有值识别由 crate 输入和投影模块共用。
 
-公开投影应用于实际 ZIP 的 sources、科学审核、figure manifest 和日志。
+公开投影用于实际 ZIP 的 sources、科学审核、figure manifest 和日志。日志及图稿 manifest 使用
+`public_file_projection`，另存原磁盘文件 path/sha256/size；内层 projection 保存 canonical JSON 摘要和省略清单。
+改写后的历史回执标为 `private_source_receipt` 并登记 verification_claim，不声称能由公开包重建私有回执。
 
 ## 原始资源与再分发审查合同
 
@@ -49,22 +51,16 @@ parser 改变输入 JSON（包括丢弃保留属性）时直接拒绝。独立�
 
 `validateExportPublication` 用于 prepare、实际 ZIP 和发布/交付重验边界。
 
-## 实际 ZIP 与公开封存
-
-manifest 采用严格版本 3；旧 manifest 和缺少 publicationReview 的 prepare 请求拒绝。来源 capture、execute、publish 和 write 均验证审查 sourceHash、资源身份、交付方式及许可元数据。完全相同请求重放返回已保存记录，不重新执行或新增事件；归档项目拒绝操作。
-
-明确 bundled 的原件保持原字节、大小和哈希，识别到的私有文本拒绝交付。metadata_only 不复制原件，crate 仅保留许可及获取说明。图稿渲染文件与导入模板必须 bundled；不可达模板文件放在 provenance/template，留在编译树之外。
-
-运行日志和图稿 manifest 使用 public_file_projection：originalFile 保存原磁盘字节的 path/sha256/size，内层 projection 分别保存原 JSON canonical 摘要、公开值摘要及 omission。来源、编译日志和科研审核使用 public_projection。改写后的 stored_receipt/redacted_receipt 标记改为 private_source_receipt，并登记 verification_claim；不宣称可由公开包重建私有回执。
-
-生成顺序为 payload、固定 profile、真实 RO-Crate、manifest3、公开包校验、ZIP。crate 从实际资源清单和已批准工件派生，使用真实环境、参数、seed、内容与工件版本。manifest 封存 crate 字节；crate 不封存自身或 manifest 哈希。准备完成、历史 inspect 及交付时校验全部文件、公开投影、引用闭包与真实 ZIP 摘要；发布和交付额外重验当前科学审批。
-
 ## 人工出版审查
 
-已批准稿件的工件抽屉提供懒加载的“审查公开科研导出”。当前项目处于 export 阶段、工件来源仍有效且客户端可写时，才能读取新出版选择、预览或提交；只读和归档状态仍可查看保存历史。界面读取实际已批准图稿和就绪模板，不推断作者、发布日期或再分发许可。
+已批准稿件的工件抽屉按需打开“审查公开科研导出”。项目处于 export、来源有效且可写时，
+才可读取新选择、预览或提交；历史仍可只读查看。读取真实已批准图稿与就绪模板，不推断作者或许可。
 
-选择后通过 `getExportInputs` 捕获来源。每个原件明确填写科研对象类型、公开元数据、许可及随包交付或仅元数据决定；必须随包交付的图稿和模板禁用仅元数据。软件须提供 URL 与版本；参考文献只交付元数据，并填写许可和获取说明。
+通过 `getExportInputs` 捕获当前来源，逐原件填写对象类型、公开元数据、许可和交付决定。
+必须交付的图稿与模板只能 bundled；软件提供 URL/版本，参考文献仅元数据。bundled 保持原字节，
+识别到私有文本时拒绝交付；metadata_only 不复制原件。不可达模板文件放在 provenance/template，
+留在编译树之外。
 
-预览使用共享严格 schema，再重新捕获来源核对 sourceHash；来源漂移要求放弃编辑、重新读取和审查。预览及保存回执展示全部解析后的字段、许可说明、获取说明、原件 SHA-256 和交付决定；RO-Crate 版本单独标明。编辑会使预览失效并产生新 requestId。提交回执丢失时，保留原预览及 requestId，重新提交同一请求可查询原记录。
-
-未完成审查和待定操作锁定抽屉关闭、刷新及其他编辑入口。权限变化保留已捕获草稿，并允许明确放弃；取消生成在只读状态禁用，等待后端取消终态期间锁定历史导航。生成状态、错误、取消及历史来自真实保存记录，界面不推断 PDF 成功，也不执行外部公开发布。
+预览使用严格 schema 并重新捕获 sourceHash；来源漂移要求重新读取和审查。回执展示全部公开字段、
+许可、获取说明、原件 SHA-256 和交付决定。编辑撤销预览并更换 requestId，丢失回执保留原请求精确重试。
+锁定、取消、迟到响应与历史读取遵循[工件检查器](research-artifact-inspector.md)。界面不执行外部公开发布。

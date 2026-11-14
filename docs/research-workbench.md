@@ -27,9 +27,7 @@ Roc 默认打开**项目门户**（`page=research`，未选项目）。进入某
 
 ## 面表：壳里有哪些面
 
-一个面按**落点**分四种，全部声明在 `src/shared/surfaces.ts`（`resolveSurface` 是唯一的解释入口）。
-渲染层、preload 与闸门脚本读同一张表；类型（`CanvasTabId` / `CanvasViewId` / `DrawerSectionId`）与集合都由它
-派生，修改时应同步检查消费者。
+落点、类型与集合统一由 `src/shared/surfaces.ts` 派生；`resolveSurface`区分可用、parked和未知面，渲染层、preload与检查脚本共用。
 
 | 落点 | 面 | 说明 |
 | --- | --- | --- |
@@ -43,8 +41,7 @@ Roc 默认打开**项目门户**（`page=research`，未选项目）。进入某
 **没有画布落点的东西**：文件由左栏文件树 + 预览浮层承载（`?tool=files` 只把左栏切到文件 tab）；
 工作区 diff 由顶栏 Git 抽屉承载（`?tool=git`，`git-panel`）；后台任务只有管理抽屉。
 
-每个面由三类东西共同定义，且只有一处声明：**分类**在面表，**URL 形状**在 `routes.ts`，**外观**（图标与
-色相）在渲染层（`WorkspaceCanvas` 的 `TAB_APPEARANCE`，以 `CanvasTabId` 为键的 `Record`，漏一个 tab 编译不过）。
+分类在面表，URL形状在routes.ts，图标与色相在WorkspaceCanvas；视觉token和动效规范见 [ADR0023](adr/0023-visual-and-motion-spec.md)。
 
 ## URL 契约
 
@@ -61,7 +58,7 @@ Roc 默认打开**项目门户**（`page=research`，未选项目）。进入某
 
 `page=research-new`（菜单「新建研究项目」）规范化为 `page=research` + `newProject=1`，由门户展开创建表单。
 `?stage=` 曾经是契约的一部分；阶段面删除后**不再读写**——来的值直接忽略，所以原生菜单与旧深链不会报错。
-`page=chat` 规范化为 `page=research&assistant=1`（留在当前项目 + 打开助手）。
+旧 URL `page=chat` 按普通研究页解析，助手是否打开取决于 `assistant=1`；原生菜单的 chat 意图才保留当前项目并打开助手。
 
 **重载后应当还在的面进 URL**（画布视图、Git 抽屉、设置、助手列）；**瞬时选择器不进**（⌘K 搜索、各类表单浮层）。
 
@@ -75,8 +72,6 @@ Roc 默认打开**项目门户**（`page=research`，未选项目）。进入某
 工具覆盖项目与工件读取、文献检索和导入、证据捕获、文稿检查、知识检索、综述协作及阶段调度。完整名称与参数以该注册表和共享 schema 为准。
 
 - 工具名与权限进入本轮能力清单（`researchProjectId` 写进运行快照），所以运行时的工具集和冻结的清单一致。
-- `research_lint_manuscript` 提供 Vale 确定性文稿检查（Vale，见 [research-writing-checks.md](research-writing-checks.md)）：
-  只读，不改正文，草稿也可以检查。
 - 阶段推进仍是服务端的阶段角色运行（`research_run_stage` 启动，后台继续，不阻塞对话）。阶段角色运行是
   **对话代理调用的内部工具**，不是并列的第二种执行入口。
 - 人工闸门没有取消：`research_approve_gate` 用 LangGraph `interrupt` 在对话里发出批准 / 退回卡片，
@@ -117,12 +112,7 @@ Roc 默认打开**项目门户**（`page=research`，未选项目）。进入某
 七个域**保留服务合同和数据，没有独立阶段路由**（[ADR 0024](adr/0024-stage-surface-removed.md) 有意保留），
 声明在 `src/shared/surfaces.ts` 的 `PARKED_CAPABILITIES`：**构思、实验、图稿、正文、导出、模板包、阶段策略**。
 `resolveSurface` 将这些独立页面标记为 `parked`；验证脚手架拒绝将它们当作可用页面。用户 URL 中的这些 `?view=` 值由路由解析器归一到默认 `latex` 视图。
-能力由助手调度，已有工件可在[工件检查器](research-artifact-inspector.md)查看来源、结果并进行人工审核；这些检查器没有新增阶段页面。专题合同见：
-
-- [Idea Canvas](research-ideas.md)
-- [实验运行](research-experiments.md)
-- [图稿](research-figures.md)
-- [最终导出](research-exports.md)
+能力由助手调度，已有工件可在[工件检查器](research-artifact-inspector.md)查看来源、结果并进行人工审核；这些检查器没有新增阶段页面。专题合同见[文档索引](README.md)。
 
 ## 快捷键
 
@@ -141,7 +131,4 @@ Roc 默认打开**项目门户**（`page=research`，未选项目）。进入某
 
 ## 相关文档
 
-- [术语（CONTEXT.md）](../CONTEXT.md)
-- [文稿检查（Vale）](research-writing-checks.md)
-- [RTK 集成](rtk-integration.md)
-- [架构 ADR](adr/0001-research-workbench-architecture.md)
+[术语](../CONTEXT.md)、[写作检查](research-writing-checks.md)、[RTK](rtk-integration.md)与[架构决定](README.md#架构决定)。

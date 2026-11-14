@@ -22,7 +22,7 @@
 
 源码、Markdown、输出与附件类型均通过 React 文本节点显示。已有执行计数和输出明确标注为原始未受信记录；不会创建 iframe、执行脚本或加载附件。文件和 cell/source/output/attachment 哈希可展开核对。原文件变化或缺失时仍可明确选择原导入快照。
 
-预览浮层沿用现有控件、焦点和 Escape 行为，挂载到 `document.body`，避免文件侧栏滚动祖先裁切投影。真实 Electron 初轮裁切审计发现底部 28.8px；修复后的明暗主题均 `cut=0, hidden=0`。480px 组件视口下无页面横向溢出，代码局部滚动、来源哈希换行；生产明暗截图和窄窗焦点截图已视觉核对。
+预览浮层挂载到 `document.body`，避免文件侧栏滚动祖先裁切，沿用焦点和 Escape 行为。代码局部滚动、来源哈希换行，支持明暗主题与窄窗；验证入口见[验证说明](verification.md)。
 
 ## 受控 Python cell 子集
 `notebookPythonSource` 只为明确声明 Python 的冻结 nbformat 4.5 生成执行源码。kernelspec 若提供，必须是 python3/Python；拒绝 raw cell 和无 code 的 Notebook。Markdown 不执行，已有输出不进入运行结果。代码按原 cell 顺序在共享的独立 `__main__` 命名空间执行，完整源码不使用截断预览。每个文件名包含原 Notebook SHA 和 cell ID，错误保留原 cell 行号。

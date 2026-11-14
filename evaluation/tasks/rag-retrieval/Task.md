@@ -68,11 +68,11 @@ Missing/corrupt index, receipts, schema, mapping, evidence or cleanup is verifie
 
 ## Review, comparison and acceptance
 
-Quality evidence requires `datasetProvenance.kind="human_reviewed"`, review.draft=0 and a frozen `datasetReview` with schemaVersion=1/status=reviewed/producer. Every selected task attests `hash({visible,expected})` through at least two distinct reviewers independent of the producer; different judgmentHashes require a third independent arbiter bound to the same contentHash. Agent-reviewed specs, synthetic assertions and copied reviewer names are not human review evidence.
+Quality evidence requires `datasetProvenance.kind="human_reviewed"`, review.draft=0 and a frozen `datasetReview` with schemaVersion=1/status=reviewed/producer. Review identities, content hashes and arbitration follow the [RAG data qualification](../../README.md#生产-rag); agent-reviewed specs and synthetic assertions supply no human evidence.
 
 Each metric needs at least five applicable independent source clusters and three repeats; NA clusters do not meet this threshold. Applicability is frozen within a task, across repeats and across both arms. Complete production component evidence with verified provenance is necessary; controlled/synthetic/insufficient runs are unadoptable, including synthetic ten-question × three-repeat fixtures.
 
-Ordinary comparison freezes tools/schema, retrieval config/provider, data/selection, grader/metric/task contracts, permissions and runtime evidence. Exact retrieval or capability differences require a protocol preregistered before two fresh arms, using `spec.kind="ablation"` and `spec.ablation`; the seed is not a scored arm. Paired cluster bootstrap uses 2000 samples, margin at most 0.05 and conservative multiplicity handling. Superiority requires preregistered primary metrics and a strictly positive benefit CI lower bound; noninferior is not a release decision. Frozen absolute floors/ceilings, resource degradation/budget gates and known-cost requirements still apply. See [EXPERIMENTS](../../EXPERIMENTS.md).
+Ordinary comparison freezes tools/schema, retrieval config/provider, data/selection, grader/metric/task contracts, permissions and runtime evidence. Shared [comparison statistics](../../README.md#比较) and [experiment gates](../../EXPERIMENTS.md) apply. Exact retrieval/capability differences require a preregistered ablation and two fresh arms; the seed is not a scored arm. Absolute quality/resource and known-cost gates remain effective, and noninferior is not release approval.
 
 ## Open decisions and limits
 

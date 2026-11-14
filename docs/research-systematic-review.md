@@ -1,302 +1,109 @@
 # 系统性综述
 
-协议冻结 → 检索与原始语料 → 人工去重 → 双轮筛选 → 证据提取 → 质量评价 → 研究归组与报告。每步保留固定输入与版本回执；模型建议与人工决定独立保存，不据工程计数推断科学质量或 meta-analysis 结论。
+协议冻结 → 检索与原始语料 → 人工去重 → 双轮筛选 → 证据提取 → 质量评价 → 研究归组与报告。每步固定输入与版本回执；模型建议和人工决定独立保存。工程计数不证明科学质量、检索完整性或 meta-analysis 结论。
 
-### 文献库内的协议核查
+## 入口与共同合同
 
-文献库工具栏“综述核查”通过唯一 `AppShell` 的检查器打开项目内抽屉，不增加综述路由或阶段导航。检查器选择明确区分阶段工件与综述协议，协议 ID 不作为阶段工件 ID 使用。综述内容按需加载，使用项目现有 `ModalShell`、token 和焦点/动效约定。
+文献工具栏「综述核查」在唯一 AppShell 的项目检查器内打开，内容按需加载；协议、语料与阶段工件使用不同身份，不增加综述路由。界面复用[工件检查器](research-artifact-inspector.md)的抽屉、焦点和异步状态。
 
-结构化表单包含问题、可选 PICO、纳入/排除标准、发表年份、分库检索式及分页范围、两轮人工审核人数、按设计声明的质量框架/版本和提取字段/单位。新表单的方法内容为空，保存只产生人工窗口归属的协议版本；冻结需要单独填写审核说明并明确确认。修改现有协议必须从准确父版本/哈希产生新版本并记录修订原因，原冻结收据和版本保持不变。
+人工保存/冻结入口先校验严格 schema，再由主进程绑定真实 sender window、项目和具体能力。wire actor/reviewer、模型直调或跨范围上下文不能获得人工权限。用户填报的研究者 ID/姓名是出处声明，窗口身份是调用出处，二者都不认证独立领域审核。
 
-检查器直接读取真实协议列表、准确版本和修订历史。历史/归档内容显示保存的固定正文，禁止保存或冻结；损坏的冻结标记/收据显示错误，不改成可编辑草稿。草稿在当前窗口按项目和准确协议版本隔离保存，不进入 `localStorage`，不作为已审核协议。IPC 失败重试保持原请求与载荷，修改表单后产生新请求；保存待回执期间禁止重复提交、切换检查器中的协议或关闭抽屉。
+所有修订追加不可变版本，要求当前父 ID/hash 与原因；相同项目/requestId/内容/调用者精确重放只读，漂移或旧父版本拒绝。独立收据与 head/freeze 标记同事务保存；已标记收据缺失、内容/hash或父链损坏显式失败，不退为草稿、空数据或旧版最新。归档和旧协议历史可读，新科学写入要求当前协议和来源。
 
-### 固定协议与人工确认
+只读 `referenceStatus` / `sourcesCurrent` 核对数据库引用，不表示重新读取磁盘；科学写入在 main-only `verifyCurrent` 核验真实原文件与准确解析/坐标工件，异步后和写后复查固定输入。重解析保留原决定/来源/收据，失效状态显式显示，不把旧判断挂到新原文。
 
-`ResearchRepository.systematicReviews` 保存独立于普通搜索策略的综述协议。协议明确研究问题、可空的 PICO、带 ID 的纳入/排除标准、发表年份范围、分库查询式和页预算、两轮审核人数、人工冲突解决、按研究设计声明的质量评价框架版本，以及提取字段/单位。没有默认纳入标准、默认审核人或默认评价框架。规范不验证用户声明方法的科学适用性；冻结前仍需要人工审查。
+## 公共 API
 
-`save` 创建新协议或追加新版本。修改必须指明当前父版本 ID/哈希并填写偏离原因；不会改写父版本或旧冻结。版本快照保存项目、请求/请求哈希、父关系、完整内容、可信调用者和时间。新协议 version1，后续版本严格递增。
+方法属于现有 research 插件和生成 preload；精确请求由 `src/shared/schemas/research-review*.ts` 定义。
 
-`freeze` 接受所显示版本的准确哈希和人工审核说明。独立冻结收据与版本的 freeze_hash 标记在同一数据库事务保存；原始版本 JSON 和版本哈希不变。缺少已标记收据、内容损坏或身份不一致时读取失败，不能退成草稿。新检索调用 `requireFrozen` 必须使用当前版本及准确的冻结收据哈希；历史版本保留可读。
+| 步骤 | 主要方法 |
+| --- | --- |
+| 协议版本与冻结 | `saveReviewProtocol`、`freezeReviewProtocol`、`getReviewProtocol`、`getReviewProtocolHistory`、`listReviewProtocols` |
+| 冻结查询 | `startReviewSearch`、`cancelReviewSearch`、`getReviewSearch`、`listReviewSearches`、`getReviewSearchPool` |
+| 原始语料 | `createReviewCorpus`、`getReviewCorpus`、`listReviewCorpora`、`getReviewCorpusHit` |
+| 人工去重 | `saveReviewDuplicateDecision`、`getReviewDuplicateDecisionHistory`、`getReviewDeduplication`、`freezeReviewDeduplication` |
+| 审核人声明 | `createReviewScreeningPlan`、`getReviewScreeningPlan` |
+| 标题摘要 | `saveReviewScreeningDecision`、`getReviewScreeningDecisionHistory`、`listReviewScreeningSuggestions`、`getReviewScreeningPhase`、`adjudicateReviewScreening`、`getReviewScreeningArbitrationHistory`、`freezeReviewScreeningPhase` |
+| 全文来源 | `saveReviewFullTextBinding`、`getReviewFullTextBinding`、`listReviewFullTextBindings`、`getReviewFullTextBindingHistory` |
+| 全文资格 | `saveReviewFullTextDecision`、`getReviewFullTextDecisionHistory`、`suggestReviewFullTextDecision`、`listReviewFullTextSuggestions`、`getReviewFullTextScreeningPhase`、`adjudicateReviewFullText`、`getReviewFullTextArbitrationHistory`、`freezeReviewFullTextScreening` |
+| 提取 | `saveReviewExtraction`、`getReviewExtraction`、`listReviewExtractions`、`getReviewExtractionHistory` |
+| 质量 | `createReviewQualityPlan`、`getReviewQualityPlan`、`listReviewQualityPlans`、`saveReviewQualityAssessment`、`getReviewQualityAssessment`、`getReviewQualityAssessmentHistory` |
+| 研究归组与报告 | `saveReviewStudies`、`getReviewStudies`、`getReviewStudiesHistory`、`getReviewReport` |
 
-相同项目/请求 ID/内容/调用者重放零写入；漂移、并发旧版本、跨项目、已归档写入和重复冻结均明确失败。归档协议历史可以读取。没有生成 Evidence、主张、科学审核或 PRISMA 计数。
+## 协议、查询与原始语料
 
-### 数据与验证
+协议独立于普通 search_strategy，明确问题、nullable PICO、带 ID 的纳入/排除标准、年份、分库查询和页预算、两轮1或2名审核人、人工冲突解决、按设计声明的质量框架/版本与提取字段/单位。新表单方法为空，无默认标准、审核人或框架。保存仅创建版本；冻结另需准确 versionHash 和人工说明，原版本字节/hash不变。修改当前版本另存父关系/偏离原因，旧冻结不改写。
 
-`research_review_protocol_versions` 与 `research_review_protocol_freezes` 保存协议版本与冻结收据；不会给已有普通搜索/文献补造综述协议或人工决定。来源快照独立保留。
+每次 `startReviewSearch` 执行一个冻结分库查询，只接收项目、准确协议版本/freezeHash、数据库/查询索引、requestId 与 nullable 重试父记录/hash；主进程派生 query/source/年份/pageSize/maxPages。复用[文献融合](research-literature-fusion.md)的 governor、缓存、请求账本和原始池。先保存不可变请求，再调度真实请求；人工开始/取消均绑定窗口权限。
 
-### 公共 API 的人工边界
+状态为 running/cancelling/complete/partial/failed/cancelled/interrupted。complete 要求本查询达到 API 报告终点；页预算耗尽、continuation 缺失或覆盖未知为 partial。缓存命中保留原抓取时间，不能宣称重新联网。取消先保存意图/身份/hash，再中止请求，真实退出后保存终态。重试必须引用最新终态记录/hash，不扩大预算、不覆盖历史或重试已完整覆盖查询。关闭/项目删除或归档先停请求；重启保留 interrupted 与已发账本，不自动重跑。
 
-生成 preload API 为 `saveReviewProtocol`、`freezeReviewProtocol`、`getReviewProtocol`、`getReviewProtocolHistory`、`listReviewProtocols`，对应 `research.reviewProtocol.save/freeze/get/history/list`。声明和实际注册均在现有 research 插件内，renderer 没有 Node/数据库访问入口。
+固定语料需人工为每个声明查询选择一条准确终态执行及快照/收据hash。漏项、重复、运行中或协议漂移拒绝；partial/failed/cancelled/interrupted 可如实固定，保留覆盖缺口和失败零结果。语料只保存不可变来源/原始命中引用，不复制第二套论文库；重复返回、未知年份和范围外记录保留。读取重新校验真实池/账本/收据，新协议使旧语料 currentProtocol:false。
 
-保存与冻结扩展既有 `research-human-context`：主进程先验证严格请求，再将有效 sender window 与项目、具体能力绑定。模型直调、无窗口、跨能力/项目上下文和 wire actor/reviewer 都不能得到人工权限。用户窗口是应用调用身份，不等于独立领域审查者认证。读取准确版本和历史不会更新决定。
+## 人工去重与审核人声明
 
-### 冻结协议检索
+去重决定固定A/B两端命中与原始来源/hash、规则名称/版本、理由、调用者和父版本。duplicate 明确移除左项/保留右项，distinct 明确保留不同记录；系统不从 DOI/题名自动作出决定，不删除原返回。相同无向对反转方向仍属同一版本链。
 
-`startReviewSearch` 每次执行协议中一个明确的分库查询。请求指定项目、协议版本/冻结收据哈希、数据库/查询索引、请求 ID，以及可空的重试父记录/哈希；没有自定义 query、source、owner 或 actor。参数由主进程从固定协议派生，包括原始查询式、发表年份条件、页大小和最大页数。原生 main sender 绑定 start/cancel 的人工上下文；模型直调不能启动或取消。
+去重冻结提交全部当前决定ID/hash（含distinct），解析重复链到最终保留项。环、多个移除目标、distinct与链矛盾、漏项/旧版本均阻止冻结。未声明重复的命中保留。收据固定准确集合并满足 `identifiedRecords = removedDuplicates + recordsToScreen`；重复移除不是全文排除。冻结后需新语料才能调整决定，空/无重复集合也需人工冻结。
 
-每条查询先保存不可变请求快照再启动实际 `LiteratureImportService`，复用共享 Provider governor、缓存、请求账本和原始结果池。`getReviewSearch`、`listReviewSearches` 和 `getReviewSearchPool` 读取准确的执行/池哈希；后者按实际原始记录分页。原始池保留年份未知和范围外记录，不将经过年份过滤/候选上限的短预览视为完整语料。读取还核对池内原始请求收据与实际账本记录，不能用另一执行的数据替代。
+随后固定两轮审核人和仲裁人。人数严格匹配协议1或2，同轮ID唯一、同ID姓名一致，跨轮允许相同人；不补造第三人。一个语料仅一个声明，需要新安排则新建语料。研究者声明与实际main actor分开保存。
 
-状态来自真实执行：running/cancelling/complete/partial/failed/cancelled/interrupted。complete 只表示这一个已声明查询读到 API 报告的结果末尾；页预算耗尽、continuation 缺失或 coverage 未知均为 partial。它不证明数据库覆盖所有研究，也不证明科学检索质量。Provider 失败保留实际请求/响应摘要和失败结果，不算完整检索。
+## 双轮筛选与人工冻结
 
-取消先在同一事务保存人工请求/哈希/身份和 cancelling 标记，再中止实际 Provider 请求；执行返回后写终态收据。删除已标记取消收据或终态收据会拒绝读取。记录保存失败显示状态丢失错误并记录主进程故障，不能用空数据或成功状态掩盖。
+| 阶段 | 固定材料 | 状态与冻结条件 |
+| --- | --- | --- |
+| 标题摘要 | 去重集合、计划hash、原始命中/记录/摘要存在状态、声明审核人、标准、理由 | pending/uncertain/conflict/included/excluded；全部included或excluded才可冻结 |
+| 全文 | 标题冻结纳入集合、计划/标题冻结hash、准确全文binding ID/hash、声明审核人和标准 | retrieval_pending/not_retrieved/source_changed/pending/uncertain/conflict/included/excluded；全部明确not_retrieved或来源有效的included/excluded才可冻结 |
 
-重试必须明确选择当前终态记录及其快照哈希，创建新请求；不覆盖旧结果、不扩展原协议页预算，不重放已完成覆盖的查询。候选预览过期后，已固定原始池仍可读。插件关闭先停止父任务与综述检索，再清理子服务；删除/归档项目先终止其查询。重启将当时运行/取消中的查询记为 interrupted，保留已完成池和已发请求账本，不自动重新请求或重做人工确认。
+纳入需协议内纳入标准，排除需一个主排除原因，无法判断独立保存；少审核人为pending，双人结果或主排除原因不同为conflict。每位审核人独立修订，旧判断不覆盖。缺摘要保持missing，不自动生成摘要或结论。
 
-### 检索回执、原始记录与人工固定语料
+建议存入独立表，出处来自实际CapabilityOperationContext的operation/tool-call/能力版本/尝试，不接受wire origin/modelId/runId。建议不增加人工计数；consideredSuggestion只记录准确已读引用，不替代人的结果。全文新决定/建议须实际verifyCurrent；旧绑定建议不能成为新来源的已考虑建议，用户须明确修订每位审核人的决定。
 
-冻结协议在同一检查器中显示准确分库查询与分页范围。人工点击后由主进程启动已声明查询，保存真实窗口归属；检查器只在已读取的运行状态下顺序轮询，不重发启动请求，进入终态、读取失败或离开后停止。运行中记录数显示为待终态回执；终态与检索覆盖分别展示。取消需要准确修订和人工原因，取消已请求与已取消按实际回执区分。明确重试绑定原查询及准确前序快照，不能扩大范围，也不能重复完整覆盖的执行。
+仲裁由已声明仲裁人针对完整当前conflict/uncertain集合，引用全部当前决定ID/hash、最终标准/理由及准确来源。缺审核、已一致、旧集合或失效来源拒绝。只有最新且currentDecisionSet:true的仲裁解除冲突；新审核/来源使旧仲裁失效，历史保留。仲裁不改写逐人决定。
 
-执行记录保留原始取回时间、来源错误、分页停止原因与缓存命中。新执行可能使用既有 Provider 响应缓存，界面显示缓存原始取回时间；不承诺重新访问网络或补齐覆盖。读取失败显示错误，旧回执明确标为上次读取结果且不能用于新的写入。最近执行列表最多100次，列表之外的查询显示为尚未核查，不能据此宣称从未执行或以空前序启动。
+整轮冻结绑定准确reviewHash、当前逐人决定、有效仲裁、来源与主排除原因，保存独立收据/标记。标题满足 `recordsToScreen = included + excluded`；全文满足 `reportsToSeek = not_retrieved + included + excluded`。空集合也需人工冻结；未取得全文独立于资格排除。冻结后禁止本轮新增决定、建议、仲裁（全文另禁新binding）。后来重解析保留冻结计数/hash，同时显示来源失效，不能授权新科学写入。
 
-原始池每页10条，保留所有重复返回、未知年份/摘要/标识符和原始来源声明，元数据以转义文本核对。人工逐查询明确选择一个准确终态执行，再以冻结协议、执行快照/终态收据哈希固定语料。失败、取消或分页不完整仍如实保留覆盖缺口；界面不把完整选择全部查询等同于穷尽科学文献。固定语料显示准确原始记录数、来源和人工记录人，不创建另一套论文库。
+## 全文取得与原文提取
 
-### 固定原始语料
+全文binding只针对标题冻结纳入命中，由人明确选择已有managed document、原始SHA和nullable准确parse ID/hash，或记录not_retrieved理由。系统不猜DOI/题名对应关系。source-only允许没有可信解析；若选解析，须已发布currentParseId，不是activeParseId。绑定固定原字节、解析/坐标身份和人工说明，保存时真实核验，历史读取只报告引用状态。
 
-`createReviewCorpus/getReviewCorpus/listReviewCorpora/getReviewCorpusHit` 固定所有声明的分库查询结果。人工捕获必须明确选择每个查询的一条终态执行及其快照/收据哈希；遗漏、重复、运行中或协议漂移均拒绝。主进程绑定创建窗口身份，模型直调和 wire actor 不能创建。
+提取只针对全文冻结纳入报告，复用已有Evidence和原文，不复制数据源。每个字段保存number/text/missing/unjudgeable，缺失/无法判断有理由；required必须明确填写，optional未填仍未提取。数值须有限且单位与协议准确一致，空值不能成为零。研究设计保存原文支持的text或missing/unjudgeable，不自动套质量量表。
 
-`research_review_corpora` 只保存不可变来源引用与原始命中引用，不复制第二套论文库。来源带查询、执行、结果池、收据哈希、实际状态和覆盖情况；命中带原始池索引与记录哈希。重复返回、年份未知和范围外记录保留，尚无去重决定。partial/failed/cancelled/interrupted 可固定，但不能成为完整检索；失败零结果也保留实际来源。读取重新核对真实池、账本及来源收据。
+提取固定准确全文冻结/binding/协议、字段定义/单位、Evidence+locator digest及解析/坐标版本、审核人/actor与父版本。source-only binding仍以原字节为权威，提取另固定实际Evidence解析。重解析使旧提取superseded，须显式选新Evidence并修订，不能把旧值换绑新原文。
 
-新协议使旧语料 `currentProtocol:false`，固定内容仍可读；归档允许历史读取，拒绝新捕获。相同请求与调用者重放零写入，内容/调用者漂移拒绝；事务内写入后复核来源，失败整事务回滚。
+## 质量框架与逐域评价
 
-### 人工去重与固定筛选集合
+质量plan绑定准确人工提取版本，研究设计必须为已保存text并匹配协议 `{studyDesign, framework, version}`。missing/unjudgeable设计不能猜替代框架。用户明确输入domains/问题/各域与总体允许类别、文档依据、审核人和理由，来源为user_declared；这不是完整官方量表实现或统一数值评分。同提取不原地换框架，新提取需新plan。
 
-`saveReviewDuplicateDecision/getReviewDuplicateDecisionHistory/getReviewDeduplication/freezeReviewDeduplication` 记录人工两端比较并冻结语料的待筛选集合。每个决定固定两端命中、来源查询/执行/池/收据/记录哈希、规则名称/版本、理由、请求与调用者。duplicate 明确移除左项、保留右项；distinct 明确保留不同记录。系统不从 DOI 或标题自动产生决定，不复制或删除原始返回。
+评价逐个覆盖每个冻结domain恰好一次，judged类别来自该域选项，overall由人单独选择；unjudgeable保留理由。判断引用该提取已有Evidence/digest，不从域判断计算总体分数。保存不可变评价父链与head标记；失效提取/来源不能新写入。旧框架/评价保留currentExtraction:false或superseded。
 
-同一无向记录对的修订追加版本，必须带最新父决定 ID/哈希和修订原因；反转保留方向仍属于同一对。旧版本和原语料字节保留。冻结必须提交所有当前决定的准确 ID/哈希，包括 distinct；缺项、旧版本、重复或漂移拒绝。人工重复链解析为最终保留项，循环、同一项多个移除目标及 distinct 与重复链矛盾均阻止冻结，未解决的决定仍可读取和修订。
+## 报告、研究归组与计数
 
-去重审核保存不可变决定版本与独立冻结收据，语料的收据哈希标记在同一事务保存。缺少已标记收据、来源或父版本损坏、冻结内容与当前固定决定不一致均报错，不能重置成未审查。冻结保存原始命中数、重复移除数、待筛选数和准确集合，满足 `identifiedRecords = removedDuplicates + recordsToScreen`；重复移除不是全文排除。无重复或失败零命中的语料也需明确人工冻结，原检索不完整标记不变。
+[PRISMA 2020词汇表](https://journals.plos.org/plosmedicine/article?id=10.1371/journal.pmed.1003583)区分record、report和study；一研究可有多报告，报告数不能充作研究数。[正式流程图](https://www.prisma-statement.org/prisma-2020-flow-diagram)的新/更新及来源范围需人工确认，当前只展示有依据的计数，不自动选择完整模板。
 
-冻结后的决定不再修改；需要改动时显式捕获新的语料并重新记录/冻结，已有审查不被覆盖。历史协议/归档仍可读取固定决定，禁止新写入；当前筛选前要求准确且仍属当前协议的冻结哈希。主进程绑定 save/freeze 窗口身份，工具直调、wire actor、跨项目/能力上下文无法写入。窗口身份是调用出处，不能证明独立领域审核人身份。
+研究归组由人覆盖全部全文冻结纳入报告，明确studyId/名称/身份理由和每份准确hit/binding及原文说明；允许多报告一研究，也允许明确说明同报告涉及多研究。系统不按标题/DOI/作者推断身份。未归组为null，只有零纳入报告可显式保存空归组获得审核后的零研究数。includedReports与人工studyId数独立。
 
-### 语料原始记录与成对人工去重核查
-
-固定语料的“核查原始记录与去重”在现有检查器内按需加载，不创建路由、阶段工件 ID 或另一套论文库。每页10条通过真实 `getReviewCorpusHit` 核对准确命中/来源/记录哈希、题名、DOI、摘要与完整原始元数据。选择 A/B 后将键盘焦点移到成对核查内容；两端来源保持独立显示，不因题名或 DOI 相同自动判定重复。
-
-人工明确选择“同一报告，移除 A，保留 B”或“不同报告，均保留”，填写规则名、规则版本和核查理由。修订必须绑定当前准确父决定/哈希并填写修订原因；原始决定和来源记录保留。历史展示原判断、理由、修订说明和实际窗口记录人。整轮冻结单独确认当前全部决定与审核说明，只有真实冻结收据才展示重复移除数和待筛选数。未声明重复的原始命中保留，不推断不同研究身份。
-
-保存/冻结失败重试保持原请求与载荷；真实提交后回执丢失不会增加重复决定或冻结收据。同命中不能构成成对决定，独立新父版本/有环图拒绝写入或冻结，已有人工事实保持可见。冻结/归档只可阅读，丢失已标记冻结收据显示校验错误，不能重新打开可写空审核。
-
-### 固定筛选审核人声明
-
-`createReviewScreeningPlan/getReviewScreeningPlan` 在人工去重冻结后保存两轮审核人和仲裁人的明确声明。声明固定语料/去重冻结/协议版本哈希、两轮审核人 ID/姓名、仲裁人、说明、实际调用者及请求哈希。标题摘要和全文的人数分别严格匹配协议的1或2；同轮不可重复 ID，同一 ID 在两轮/仲裁声明中必须使用一致姓名。跨轮允许同一审核人；仲裁人按用户声明记录，不补造第三人或身份认证。
-
-声明中的研究者身份是用户填报的审查出处，保存权限仍来自 main sender。二者独立保存；研究者姓名/ID不能给工具人工权限，也不能证明独立领域审核已经发生。筛选决定使用下文的独立版本合同。
-
-`research_review_screening_plans` 与语料收据标记同事务写入。一个语料仅有一个固定声明，不提供默认名单或原地替换；需要新安排时创建新语料，保留已有审查。相同请求/调用者重放零写入，来源/身份漂移明确失败。已标记声明丢失、字节损坏或上游固定去重改变时报错；历史协议/归档可读，禁止新声明。
-
-### 审核人声明检查器
-
-冻结去重结果后，“核查审核人声明与筛选”在同一检查器按需加载审核人声明。两轮1或2人的输入数量取自准确冻结协议；标识和姓名由用户明确填写，没有默认名单。仅当前语料的主进程读取错误码 `research_review_screening_plan_not_found` 可显示创建表单，收据损坏、权限失败或无错误码的连接失败不会被当作未创建。公共读取 hook 在切换范围的首帧清空旧状态与错误身份。
-
-确认绑定准确语料和去重冻结哈希。保存失败保留名单、说明和请求身份；真实提交后回执丢失可原请求幂等重试。待提交期间表单保持可见，字段、切换、重读及关闭检查器禁用。声明已冻结时显示两轮名单、仲裁人、声明说明和独立的窗口记录人；历史协议/归档只可阅读。
-
-### 标题摘要决定与独立建议
-
-`saveReviewScreeningDecision/getReviewScreeningDecisionHistory/getReviewScreeningPhase/listReviewScreeningSuggestions` 保存和读取逐项标题摘要审查。请求明确 phase、固定计划哈希、原始命中、声明审核人、纳入/排除/无法判断结果、理由及可空的已阅读建议引用。纳入必须指明协议内的纳入标准，排除必须指明一个协议内的主排除原因；未知标准、未声明审核人、已移除重复项、跨项目和来源漂移拒绝。每位审核人独立追加版本，修订带准确父 ID/哈希及原因，旧决定不覆盖。
-
-将人工决定与 agent 建议存入不同表，phase 是固定记录和索引键。每条决定固定声明审核人和真实窗口调用者、原始 hit/record/query/pool/receipt 引用及摘要实际存在状态。null/空摘要记录为 missing，不补写摘要，也不自动产生结论。历史读取重新验证父链、原池、协议、审核人和所考虑的建议。
-
-`research.reviewScreening.suggest` 是独立能力，主进程从实际 CapabilityOperationContext 派生 operation/tool-call/能力版本/首次尝试来源；wire 不接受 origin、modelId 或 runId。没有工具操作上下文就拒绝。重试可重放同一操作的首个固定建议，内容或能力版本漂移不能覆盖旧记录。这里记录的是实际工具建议出处，没有虚构已执行的模型请求或模型身份。建议不能调用人工决定入口，也不能增加已纳入/排除计数；人工即使引用某建议，仍明确填写自己的结果与理由。
-
-逐项状态来自协议要求的人数及实际决定：pending、uncertain、conflict、included、excluded。双人结果不一致或虽都排除但主原因不同均为 conflict；无法判断单独可见，少一个审核人仍为 pending。计数满足 `recordsToScreen = pending + uncertain + conflict + included + excluded`。这些是当前逐项状态；仲裁、整轮冻结、全文决定与报告按下文的独立步骤完成，逐项共识本身不构成完整综述。声明身份与窗口身份仍不能证明独立领域审核。
-
-### 标题摘要筛选检查器
-
-冻结声明后，“核查标题摘要筛选”在同一抽屉按需加载。准确去重后命中列表每页10条，真实人工计数区分待审、无法判断、冲突、纳入和排除。选中命中后核对固定原始题名、摘要、完整元数据与来源引用，再选择已声明审核人。缺失摘要如实展示，不生成摘要或结论。
-
-人工明确填写纳入准则、一个主要排除准则或无法判断结果，以及理由。逐人修订使用准确父 ID/哈希和修订原因，历史保留原判断与记录人。独立模型建议每页30条，按后端最新顺序显示准则和实际工具来源；“记录已参考此建议”只记录其准确引用，不能填充或替代人工结果。无外部模型消费的科学正确性声明。
-
-保存失败保留原输入与请求身份；实际提交后回执丢失重试不会追加重复决定。独立新父版本使旧请求拒绝，显式重读后显示实际权威。待提交时表单仍可见，审核人、记录、刷新和关闭禁用。重读失败显示上次回执并禁止写入；冻结和归档只可核对原记录、决定和历史。
-
-### 绑定当前决定的人工仲裁
-
-`adjudicateReviewScreening/getReviewScreeningArbitrationHistory` 记录声明仲裁人对完整冲突/无法判断集合的人工处理。请求带准确计划哈希、全部当前审核决定 ID/哈希、最终纳入或主原因排除、理由和实际主进程调用者。少审核人、已经一致、未知仲裁人/标准、旧决定或重复引用都拒绝。修订追加版本，必须带最新父仲裁 ID/哈希和修订原因。
-
-独立仲裁表保存两端审核来源、固定材料、身份和不可变历史。审核决定更新时旧仲裁 `currentDecisionSet:false`，仍可读取，但不能解除当前冲突。既有 `getReviewScreeningPhase` 返回带仲裁的解析状态，仅应用最新且匹配当前全部决定的仲裁；原始逐人决定、建议和理由不改写。不同主排除原因由用户明确选择；整轮冻结见下文。
-
-事务写入后重新验证计划和完整审核集合。即使存储回调追加一条合法的审核新版本，保存也会拒绝并回滚仲裁与该变更，不能把过期仲裁返回为成功。原协议历史/归档可读，当前状态和科学适用范围分别显示；新判断拒绝。声明仲裁人身份仍是用户填报，权限由有效 main sender 绑定。
-
-### 标题摘要整轮冻结
-
-`freezeReviewScreeningPhase` 人工确认既有 `getReviewScreeningPhase` 展示的准确 `reviewHash`。审核集合包含固定计划/语料、原始有序命中、当前逐人决定哈希、实际应用的仲裁哈希、当前状态和主排除原因。模型建议数量与当前协议的展示标志不改变这个人工集合哈希；建议仍独立读取。全部记录必须纳入或排除，pending/uncertain/conflict 任一非零都会拒绝冻结。空结果也需明确人工操作，检索不完整信息仍保留在原语料。
-
-独立冻结收据和计划 `title_freeze_hash` 同事务保存。冻结后拒绝新的审核决定、建议和仲裁；相同旧请求只读取原始记录。读取重新核对当前完整审核集合与冻结哈希；丢失已标记收据、内容损坏或任何合法的新审核版本漂移都不能退成未冻结或成功。写入期间即使追加一条完整有效的新审核版本，冻结和该变更也会一起回滚。
-
-冻结保留每项主排除原因和实际审核/仲裁出处，满足 `recordsToScreen = included + excluded`。这些是标题摘要计数，重复移除和全文排除仍分开。历史协议/归档可读原收据；当前全文阶段必须使用准确、仍属当前协议的标题冻结哈希。它不是科学检索完整性或独立领域审查认证。
-
-### 标题摘要仲裁与整轮冻结检查器
-
-选中原始命中后，人工仲裁并列显示当前逐人决定、准则和准确引用。只有完整冲突/无法判断集合，或对应当前集合的已有仲裁，才显示仲裁操作。用户选择已声明仲裁人、最终纳入准则或主要排除准则并填写理由。请求绑定当前全部决定 ID/哈希；修订同时绑定准确父仲裁及原因。
-
-新审核修订使旧仲裁显示不适用于当前集合，原判断和历史仍可核对。重新仲裁明确使用当前全部决定，不能让旧仲裁解除新冲突。实际提交后回执丢失保持原请求，仲裁和冻结重试均不生成第二份权威记录。
-
-整轮冻结由用户填写审核说明，使用后端当前 `reviewHash`。待审、无法判断或冲突非零时禁用冻结；空原始集合也须明确人工冻结。待提交期间保留当前表单，禁用其他写入、刷新、选择和关闭。来源/审核集合变化会拒绝旧冻结哈希；已标记冻结收据丢失显示真实校验失败，不能重新打开可写筛选。
-
-### 全文取得与明确来源绑定
-
-`saveReviewFullTextBinding/getReviewFullTextBinding/listReviewFullTextBindings/getReviewFullTextBindingHistory` 只处理标题摘要整轮已冻结的纳入记录。用户明确选择现有 managed document、原始 SHA 和可空的准确 parse ID/hash；不推断 DOI/标题匹配，不复制论文库。`not_retrieved` 保存人工未取得理由，独立于全文 eligibility 排除。取得状态修订追加版本，必须带最新父 ID/哈希与理由，原记录不变。
-
-固定原始命中/检索来源、标题冻结哈希、文档/论文身份、原始字节 SHA、文件元数据、可选解析哈希/指纹/页数/坐标快照哈希、人工理由和 main 调用者。source-only 允许缺失或不可信解析，重解析不使固定原始字节绑定过期；明确选中的解析必须是已发布 `currentParseId`，不是运行中的 `activeParseId`。后来重解析使旧解析绑定显示 `superseded`，保留历史。
-
-保存实际调用现有 source/preview 读取原始文件及选中坐标工件；异步读取后在事务内复核项目、冻结、父版本和完整来源快照。即使实际 preview 返回后坐标元数据被替换成合法新哈希，也拒绝保存未经核验的快照。写后来源漂移整事务回滚。后续科学写入使用 main-only `verifyCurrent` 再次实际核验字节和当前绑定，来源损坏不能授权新决定。
-
-历史读取显示 `isLatest/currentProtocol/referenceStatus`，不重新抓取文件。`referenceStatus` 是保存来源与数据库引用的状态，不能证明当前磁盘文件已读取；物理文件损坏在实际 source/preview/verify 边界报错。工具直调、wire actor、跨项目和归档不能新写入，主进程在真实异步核验中保留窗口身份。
-
-### 全文获取与来源绑定检查器
-
-真实标题摘要冻结后，“核查全文获取与资格筛选”在同一抽屉按需加载准确全文集合。列表只包含冻结标题摘要纳入的原始命中，每页10条，展示后端实际的待获取、未获取、来源变化及资格状态。未获取全文须填写原因，与全文排除分别保存。
-
-已获取全文由用户明确选择已有项目文献、原文件以及仅原文件或当前解析版本，填写与原始命中的关联说明。当前解析的准确哈希来自实际原文预览回执；保存时主进程核验真实文件字节和当前解析。界面不猜题名/DOI身份、不自动导入第二份文献，也不推断原文件与命中的科学对应关系。
-
-修订使用准确父绑定/哈希和原因，历史保留原来源。回执丢失保持原请求幂等重试；重解析或原文件字节变化拒绝旧选择，恢复后可明确重试。读取来源列表失败显示错误，不能变成空成功选择。待提交期间表单保持可见，来源字段、记录、刷新和关闭禁用。归档/全文已冻结只可阅读；旧解析引用变化仍明确显示。
-
-### 全文逐人资格决定与独立建议
-
-`saveReviewFullTextDecision/getReviewFullTextDecisionHistory/suggestReviewFullTextDecision/listReviewFullTextSuggestions/getReviewFullTextScreeningPhase` 使用现有 phase-keyed 决定/建议表的 `full_text` 阶段。每项固定已冻结标题摘要纳入记录、计划/标题冻结哈希、准确全文来源绑定 ID/哈希、协议声明的全文审核人、标准、理由、父版本和调用者。人工 include/exclude/uncertain 与实际工具 operation/call/version 的建议分别保存；建议不计为人工决定，明确考虑建议也不要求同意。来源不能由 wire model/run/actor 字段伪造。
-
-新人工决定和建议先调用实际 `verifyCurrent` 核验原文/坐标工件，异步后再在事务里核对准确绑定、协议、父版本和审核人；写后来源漂移、损坏或丢失新行一起回滚。未取得全文、已过期来源、另一项目、标题已排除记录、未声明审核人/标准或不完整修订均拒绝资格写入。source-only 原始字节仍可人工审查，不强制使用缺失或不可信解析。
-
-整轮只包含标题摘要已冻结的纳入记录，分别展示 `retrieval_pending/not_retrieved/source_changed/pending/uncertain/conflict/included/excluded`，其和等于 `reportsToSeek`。未取得全文不是 eligibility 排除。双人决定与主排除原因都一致才形成结论；单人按固定协议人数执行。任何审核人仍引用旧绑定时，旧决定保留为 `sourceCurrent:false`，不能成为当前共识；用户必须明确修订每位审核人的决定到新来源。旧来源建议不能作为新来源的 consideredSuggestion。
-
-同步读取把当前已核验标题快照传给同批来源/历史行，仍逐行检查源、哈希和父链；异步和写后重新取得状态，不设持久缓存。历史协议/归档可读固定决定与建议，新写入拒绝。当前决定还未包含人工仲裁或全文整轮冻结。
-
-### 全文资格决定检查器
-
-已绑定全文的原始命中可读取准确文档和保存的解析版本。读取回执的文档、解析身份及内容哈希必须匹配；原解析文本每页20块，原 PDF 通过现有 `PaperPdfView` 按需加载并使用受校验预览协议。仅原文件绑定明确显示没有固定解析文本，不补造解析。
-
-已声明全文审核人独立填写准则、结果和理由。决定绑定准确计划、标题摘要冻结及全文绑定 ID/哈希；修订另带准确父决定和原因，历史保留原来源与判断。独立建议显示实际工具出处和当前/历史来源标记。旧绑定或失效来源的建议可阅读，不能当作当前建议引用；考虑建议不填充人工结果。
-
-真实来源字节变化会拒绝新判断，失败保留输入和请求。待提交时人工表单保持可见，来源修订、原文重读、审核人、记录和关闭禁用。新来源版本不覆盖旧决定；历史来源与归档可阅读保存的解析文本及原判断，不能继续写入。全文获取、资格判断和标题摘要计数分别展示。
-
-### 全文人工仲裁
-
-`adjudicateReviewFullText/getReviewFullTextArbitrationHistory` 在现有 `full_text` 仲裁版本表固定全部当前审核 ID/哈希、准确来源绑定、协议/标题冻结/计划哈希、声明仲裁人、最终标准/理由与 main 调用者。仲裁必须针对完整且来源有效的 conflict/uncertain 集合；单人无法判断也可明确仲裁。已一致、缺审核、未取得、过期来源或过期/重复/缺失审核引用均不能仲裁。
-
-新仲裁实际核验原始/坐标字节，异步后重新读取完整当前集合，在事务内核对最新父仲裁与所有来源/审核引用。插入后追加一条完全合法的新审核版本，也会使仲裁失败并回滚仲裁及该修订；损坏/丢行/来源漂移同样明确失败。人工决定和来源绑定不被仲裁改写。
-
-`getReviewFullTextScreeningPhase` 现在返回 resolved view，只有最新且 `currentDecisionSet:true` 的仲裁解除冲突。审核修订或来源变化使旧仲裁明确过期，保留原文、原标准、理由和版本；新仲裁带准确最新父 ID/哈希。历史协议/归档可读，禁止新写入。重开 SQLite 不重新检索、导入或补造审核。
-
-### 全文整轮冻结与来源历史
-
-`freezeReviewFullTextScreening` 固定显示的准确 reviewHash、当前绑定/逐人决定/有效仲裁 ID/哈希、主排除原因和人工计数。所有标题摘要纳入记录必须明确 not_retrieved 或来源有效的 included/excluded；未处理取得状态、来源过期、未完成审核、无法判断或冲突阻止冻结。每个取得来源先实际核验原始/坐标字节，异步后事务内重新核对全集合。有效新审核版本、来源变动或协议变化发生在写入期间，也使收据/标记和事务内变动一起回滚。
-
-独立 `full_freeze_hash` 与现有 `full_text` 冻结收据同行提交。缺少/损坏标记或收据不能退成未冻结。新绑定、人工决定、模型建议和仲裁写入全部拒绝，原请求精确重放保持只读。建议数量和 currentProtocol 不成为冻结人工权威。
-
-计数守恒 `reportsToSeek = not_retrieved + included + excluded`；not_retrieved 只表示未取得，不是全文资格排除，标题摘要排除和重复移除仍分开。冻结保留人工作出的准确来源版本结论。后来原文重解析时，原冻结收据/人工计数/哈希不变，live phase 显示 source_changed、旧仲裁失效与 `sourcesCurrent:false`，后续科学写入不得使用过期来源。
-
-`sourcesCurrent` 检查当前数据库来源引用，不表示只读调用重新读过磁盘字节；科学操作仍在实际 `verifyCurrent` 边界核验文件。历史协议/归档保持收据可读，不能新写入。数据库升级保存每个原字段/原行，新标记为空，不补造终局审核或取得记录。
-
-### 全文人工仲裁与整轮冻结检查器
-
-全文仲裁引用准确计划、标题摘要冻结、当前全文来源绑定以及全部当前审核决定哈希。用户选择已声明仲裁人并独立填写准则、最终结果和理由。旧审核集合改变时仲裁显示不适用；修订使用准确父仲裁和原因，保存不可变历史。主进程在新仲裁及整轮冻结前真实核验原文件和当前来源。
-
-整轮全文冻结由用户填写审核说明并确认准确 `reviewHash`。待获取、来源变化、待审、无法判断或冲突仍存在时禁用冻结；未获取报告作为明确终态保留，与资格排除分别计数。冻结回执展示 `reportsToSeek = not_retrieved + included + excluded`，空集合也需要明确人工操作。
-
-回执丢失保持原请求幂等重试；字节变化拒绝新收据，恢复原文件后可重试原请求。待提交时当前表单保持可见，其他写入、来源重读、记录、刷新和关闭禁用。已标记冻结回执丢失显示错误，不能打开可写空审核。冻结后重解析与归档保留原收据计数、来源和判断，同时显示来源引用已变化。
-
-### 原文证据、单位与人工提取
-
-`saveReviewExtraction/getReviewExtraction/listReviewExtractions/getReviewExtractionHistory` 只保存全文已冻结纳入记录的人工确认提取。固定全文冻结/绑定/协议哈希、原始命中、协议字段定义与单位、实际已有 Evidence/原文块/解析/坐标版本、声明审核人、主进程 actor、确认说明和不可变父版本。复用已有论文/Evidence，不另复制数据源。
-
-字段分别保存 number/text/missing/unjudgeable；缺失和无法判断各有理由，不补造数值。所有已声明 required 字段必须明确填写，optional 未填写仍未提取，不冒充缺失。数字必须有准确协议单位；单位不匹配、未声明字段/审核人、NaN/Infinity、缺少证据或陈旧父版本均拒绝。研究设计也明确保存原文支持的文本或 missing/unjudgeable，不能自动套一个质量评分。
-
-现有 managed Evidence 来源校验拆出只读 `readCurrentEvidenceSourceLocator`，供原捕获和新提取共享实际当前索引块/文档/解析/原文一致性。新提取固定静态 Evidence+locator digest 和坐标哈希，实际核验原文与各准确解析的坐标工件；异步后重捕获准确来源快照，写后核对完整预期载荷哈希和有效来源。即使插入期间把值改成另一个完全规范化的载荷，或使 Evidence 失效，也不能承认成功，整事务回滚。
-
-source-only 全文绑定保持原始字节权威，提取另固定实际当前 Evidence 解析。重解析后旧提取及引用保留为 superseded；用户必须明确选择实际新 Evidence 并修订提取，不能把旧数值悄悄挂到新原文。历史协议/归档只读，当前科学写入仍实际核验字节；只读 referenceStatus 是来源引用状态，不代表再次读取磁盘。
-
-### 检查器内的人工证据提取
-
-全文整轮冻结后，在同一检查器按需打开证据提取，只能选择该冻结纳入的报告。每个字段及研究设计都需明确选择已有 Evidence、核查原文与定位，再手动引用准确摘要；摘要固定 Evidence 与 sourceLocator，不借用关系服务的整组 sourceDigest。失效或不对应全文绑定的来源禁止引用，保存时主进程重新核验真实原文与解析工件。没有新论文库、自动补值或自动重抓证据。
-
-字段使用冻结协议的 ID、单位与必填声明。文本、明确数值、原文未报告、无法判断分别保存；空数值不能变成零，无单位字段不提供数值选项，可选字段需明确勾选。审核人来自已声明全文审核/仲裁名单。修订使用准确父提取 ID/哈希与原因，已保存版本和每份历史完整字段/原文定位均可核查。提交后回执丢失保留准确载荷幂等重试；读取失败保留标记的旧回执并禁止写入。待回执时保留当前表单，禁止选择、刷新、修订其他内容和关闭。
-
-### 按研究设计冻结质量框架定义
-
-`createReviewQualityPlan/getReviewQualityPlan/listReviewQualityPlans` 为准确人工提取版本冻结质量框架定义。研究设计必须来自该提取明确保存的文本，并准确匹配冻结协议声明的 `{studyDesign, framework, version}`。missing/unjudgeable 设计、未声明框架、版本不匹配均拒绝，不能猜测替代框架。
-
-用户明确声明 domains、问题、各域允许的判断类别、总体判断类别、文档说明和确认理由；定义来源固定为 `user_declared`。这记录可审查的用户定义，不宣称已实现完整官方量表，不生成统一数值评分。审核人来自已冻结的全文/仲裁名单；main 窗口 actor 单独保存，不能证明独立身份认证。
-
-在提取上保存独立 `quality_plan_hash`，并保存不可变框架收据。get/list/create 对丢失、损坏收据或标记报错，不能退回未初始化。准确原请求只读重放；同一提取不能原地改框架，新提取版本须建立新框架，旧定义保留 `currentExtraction:false`。
-
-新科学操作使用 main-only `extractions.verifyCurrent` 实际核验原文和各准确解析的坐标工件，异步后复查最新提取、协议及来源。创建框架的事务写后再次核对准确收据及当前状态；合法新提取或 Evidence 失效发生在写入期间，也使框架/标记和事务内漂移一起回滚。只读 `referenceStatus` 仍表示数据库引用状态。逐域人工评价见下文。
-
-### 检查器内的设计匹配质量框架
-
-已保存提取在同一检查器按需打开质量框架，真实 `getReviewQualityPlan` 成功返回 null 才表示尚未冻结；transport、权限或收据校验失败不变成空表单。框架仅列出协议中与人工研究设计准确匹配的声明项，未报告/无法判断的设计不能选择替代框架。评价域 ID、名称、问题、每域2..10个类别、总体2..10个类别、文档依据与审核人均为空白显式输入；重复 ID/类别禁止提交，定义来源固定为 user_declared。
-
-保存需要准确提取 ID/哈希和声明的全文/仲裁审核人，主进程核验实际来源。冻结后完整定义只读；提取修订需单独建立新框架，旧框架从准确提取历史按需读取并显示 currentExtraction/referenceStatus。回执丢失保留准确载荷重试，pending期间保留表单并禁止提取修订、切换、刷新与关闭。没有框架默认选择或统一分数。
-
-### 逐域人工质量评价
-
-`saveReviewQualityAssessment/getReviewQualityAssessment/getReviewQualityAssessmentHistory` 保存准确质量框架与提取版本的人工判断。每个冻结 domain 必须恰好出现一次，judged 类别必须属于该域的冻结选项；overall 使用明确的总体选项。每项均保存理由及该提取已有 Evidence 的准确 digest。无法判断使用独立 `unjudgeable` 状态和理由，不补造分类或数值，也不从逐域判断自动计算总体分数。
-
-保存不可变评价版本、父版本/哈希/修订理由、声明全文/仲裁审核人和可信 main actor，并在框架上独立保存 `assessment_head_hash`。读取/历史/保存均校验最新收据与标记；最新版本丢失、标记缺失、载荷或父版本损坏不能退为未审核或旧版最新。原请求精确只读重放，改变内容/actor 或使用旧父版本均拒绝。
-
-新评价先实际核验原文与准确解析工件；异步后重新校验当前框架、提取、来源及父版本，插入后再取得准确当前状态。同一同步步骤内复用已校验上下文，异步和写入边界重新读取，不持久缓存。即使写入期间产生合法新提取/评价、改变成另一份规范化评价载荷，或使 Evidence 失效，也不能承认过期评价，事务内收据/标记/漂移一起回滚。异步期间独立完成的人工修订保留，旧请求拒绝。
-
-新提取必须使用新质量框架与评价；旧评价保留 `currentExtraction:false`。原文重解析后历史评价仍可核对，显示 `referenceStatus:superseded`，当前科学写入拒绝。协议变更/归档保留只读历史。明确 synthetic 人工判断用于验证工程契约，不宣称独立科学评价准确性。
-
-### 检查器内的逐域人工评价
-
-冻结框架按需打开同一检查器内的质量评价。每个评价域使用该域冻结类别，总体判断使用总体类别并由人明确选择；judged 与 unjudgeable 分开保存，各自需要理由和此提取版本已保存的原文 Evidence/digest。没有自动总体分数或跨设计统一量表，也不从新的 Evidence 重新抓取定位来替换原始提取引用。
-
-真实 nullable 读取与读取失败分开。人工保存使用准确框架/提取/父评价哈希，主进程核验实际原文；独立新评价使旧父请求拒绝。修订保留原类别、理由和准确证据，历史完整快照可展开。回执丢失精确重试，pending期间保留本表单并禁止提取修订、框架刷新、报告选择和关闭。归档与重解析保留旧判断/来源引用只读，并明确标记来源变化。
-
-### 纳入报告与人工声明研究
-
-PRISMA 2020 区分数据库/网站中的 record、提供研究信息的 report 和 study；一项研究可以有多份报告，不能把纳入报告数直接写成研究数。2026-11-04 已核对 [Page 等的 PRISMA 2020 原文词汇表](https://journals.plos.org/plosmedicine/article?id=10.1371/journal.pmed.1003583)。[官方流程图](https://www.prisma-statement.org/prisma-2020-flow-diagram) 按新/更新综述及检索来源提供不同模板，报表需按实际范围选择。
-
-`saveReviewStudies/getReviewStudies/getReviewStudiesHistory` 保存全文冻结纳入报告的完整人工研究归组。用户明确填写 studyId、名称、身份理由及每份报告的原文说明，成员引用准确 hit/binding 哈希。每个纳入报告必须被覆盖；同一组内重复报告、重复 studyId、未纳入/未取得报告、错误绑定哈希或缺少说明均拒绝。允许多份报告属于同一声明研究，也允许用户明确说明同一报告涉及多个声明研究；不推断标题/DOI/作者身份，不自动合并研究。
-
-`includedReports` 按不同冻结纳入报告计算，`includedStudies` 按人工声明研究 ID 计算。未保存归组时返回 null，研究数尚未审核；只有零纳入报告才能明确保存空归组并得到审核后的零研究数。计数代表该次人工声明，不证明科研身份准确。
-
-在现有筛选计划上保存独立 `study_group_head_hash` 和不可变归组父版本收据；最新记录/标记丢失或损坏不能退回未归组或旧版最新。新归组对每个纳入来源实际核验原文/解析工件，异步后核对协议、来源和父版本，插入后复查准确收据/当前来源。规范化身份篡改、合法新归组或来源漂移使事务回滚；异步期间独立完成的人工修订保留，旧请求拒绝。原文重解析后历史身份/成员/计数保留，并显示 `sourcesCurrent:false`；该字段是数据库引用状态，只读操作不再次读取磁盘。声明全文/仲裁审核人与可信 main actor 单独保存，协议变更/归档只读。
-
-### 检查器内的人工研究归组
-
-全文冻结后在同一检查器按需核查纳入报告与声明研究。初始没有研究 ID 或成员预填；用户填写身份理由、明确选择冻结纳入报告并填写原文说明，引用准确 binding 哈希。每份纳入报告必须被覆盖，同一研究不能重复关联同一报告，研究 ID 必须唯一。多份报告可以显式归入一项研究，同一报告也可以明确关联不同声明研究；系统不从标题、DOI或报告数推断研究身份。
-
-未审核归组仍为 null，研究数未报告；只有无纳入报告时才能明确保存空归组并得到审核的零研究。修订使用准确父版本/哈希与原因，完整历史成员来源可核查。主进程保存时核验所有真实原文；回执丢失精确重试，pending期间保留表单，禁止其他来源/提取写入和关闭。来源变化或归档保留固定的报告/研究计数并只读。
-
-### 真实计数、查询附录与报告级证据表
-
-`getReviewReport` 在同一 SQLite 只读事务内取得准确协议、语料、去重、标题摘要、全文、研究归组与最新提取/质量收据。正文格式为 `roc.review-report.v1`，保存各冻结哈希；正文 `bodyHash` 与当前协议/来源/提取引用状态分开。原文重解析或协议变更后，原始正文、计数和哈希保持不变，当前状态明确变为过期；只读引用检查不重新核验磁盘字节。
-
-计数逐项关联真实冻结权威，并验证四条等式：
+`getReviewReport` 在一个SQLite只读事务内读取协议、语料、各冻结权威、归组及最新提取/质量收据。格式 `roc.review-report.v1`，正文bodyHash与当前协议/来源状态分开；新提取/评价/归组改变正文，重解析/协议变更只改变引用状态。四条等式为：
 
 - identifiedRecords = removedDuplicates + recordsScreened
 - recordsScreened = recordsExcluded + reportsSought
 - reportsSought = reportsNotRetrieved + reportsAssessed
 - reportsAssessed = reportsExcluded + includedReports
 
-研究数在未审核归组时为 null，明确归组后才使用人工声明 studyId 数。重复移除、标题排除、全文未取得和全文资格排除各自独立。检索覆盖标记保留实际失败/分页边界，不代表所有相关研究已穷尽。
+查询附录保留实际参数/日期、原池/账本/来源错误和覆盖缺口；原始记录、排除清单引用准确记录与人工决定。证据表按报告保存最新提取、单位/Evidence/原文定位、对应质量框架/评价；未提取/未评价为null，missing/unjudgeable保持类型。不自动分配研究级效应量或计算meta-analysis；损坏来源/标记收据拒绝整个报告。
 
-查询附录保留实际查询参数、日期、原始响应/执行回执、来源错误和覆盖范围；组装原始记录时按来源批量读取池，并核对每个原始命中的记录哈希，保留全部原始 metadata、重复记录及未知值。Provider 错误保留在来源回执；执行层 errorCode 仍按原链路语义保存，不能把成功处理的失败来源池伪装成执行器异常。
+## 助手读取、建议与拥有查询
 
-排除清单引用准确冻结人工决定/仲裁/全文绑定及主排除标准。证据表按报告保存准确最新提取、对应质量框架、评价与 Evidence/单位/原文定位；缺少提取、框架或评价明确为 null，missing/unjudgeable 保留原类型与理由。研究归组与报告级提取分开，不自动向多个研究分配同一效应量，不计算 meta-analysis。原始来源池或已标记收据损坏时拒绝整个报表，不返回空数据替代。
+`research_review_read` 读取准确协议/查询/池、语料/命中、筛选/冻结、全文绑定、提取/质量/归组/报告。分页返回真实总数/范围/下一页，列表达上限标记capped；snapshotHash/reviewHash/bodyHash对应完整记录，不把展示页当完整快照。fulltext_content由准确binding派生文档/原始hash/parse身份，真实校验原文/坐标后读固定块；未取得或无绑定解析失败，不触发解析或换到最新版本。
 
-### 检查器内的真实计数和只读报告
+`research_review_suggest_title/fulltext` 只保存建议，项目由运行装配绑定、requestId为可信工具idempotencyKey；精确重放返回原建议，载荷漂移拒绝。模型不能人工仲裁或冻结。工具回执链接绑定准确版本/语料/正文hash，通过 `ToolMessage.artifact.roc_review_receipt_links` 保留最多三条受schema校验的链接，在唯一AppShell打开readonly检查器。只读入口直接按ID/hash读取，不用近期列表猜身份，不提供人工提交控件；正文改变使旧链接失败。
 
-全文冻结后同一检查器按需读取 `getReviewReport` 的正文/哈希和当前引用状态。界面逐条显示四项守恒等式，区分重复移除、标题摘要排除、未取得报告和全文资格排除；研究数未审核时显示未报告，明确归组后才显示真实人工声明数。查询附录保存准确日期/参数、原始来源错误和终态回执，全部原始记录、排除清单和报告级证据表各按10项分页。提取单位、missing/unjudgeable、逐域/总体质量判断和准确 Evidence/原文定位完整保留；缺少提取、框架或评价各自明确显示。没有研究级效应分配或汇总。
+助手执行冻结查询使用ExecutionGrantBroker独立调度凭证，绑定父Run/线程/项目、冻结Manifest、查询请求/hash和工具域。Manifest须允许 `research_review_execute_query` 在main执行；阶段/查询凭证不互换，复制、过期、撤销、重启或父终结拒绝。内部 `research.reviewSearch.startOwned/getOwned/cancelOwned` 保存实际owner回执，读取/取消分别要求main工具权限，没有新增renderer IPC或从actor文本猜拥有者。
 
-2026-11-05 复核 [PRISMA 官方流程图](https://www.prisma-statement.org/prisma-2020-flow-diagram) 的四种模板范围及许可，并核对 [Page 等原文 Box 1](https://journals.plos.org/plosmedicine/article?id=10.1371/journal.pmed.1003583) 的 record/report/study 区别。当前只展示这些计数数据项，正式模板仍需人工确认新/更新综述及全部检索来源，不能从当前分库协议自动推断完整格式适用性。
+先保存查询/owner，再关联Agent数据库 `review_search` 执行与真实聊天根任务，成功后才发Provider请求；关联失败保留失败记录，不自动补挂或重跑。每个请求前核对owner、父Manifest/线程/项目、任务状态和取消信号。父取消、任务暂停/取消清理本任务查询，其他任务独立；状态通知驱动现有任务界面，查询阶段字段为空。任务记录与诊断见[任务可观测性](research-task-observability.md)。
 
-### 助手综述读取与筛选建议
+## 界面与验证边界
 
-绑定研究项目的助手通过 `research_review_read` 读取真实协议版本、查询与原始池、语料/命中、两轮筛选状态及冻结依据、全文绑定、人工提取、质量定义/评价、研究归组和报表。语料、筛选与报表附录明确返回分页总数、范围与是否还有下一页；协议/执行/语料列表达到请求上限时标记 `capped`，不能据此推断未展示项不存在。分页中的 `snapshotHash`、`reviewHash` 和 `bodyHash` 始终对应完整主进程记录，并不声称分页结果就是完整保存快照。报表保留真实计数守恒、查询缺口、研究数未审核的 `null`、来源失效、缺失提取和未评价质量。
+各步在同一检查器按需打开原始材料、人工表单和完整历史；列表/原文分明确分页，错误不变成空表单。待写回执保留输入/requestId并禁用冲突操作/切换/关闭，精确重试不新增权威记录。范围切换隔离旧响应，只读/历史/归档保留保存值与live失效状态。
 
-`research_review_suggest_title` 与 `research_review_suggest_fulltext` 只保存模型建议。项目身份由运行装配绑定，模型输入没有审核人、actor、来源身份或 requestId；建议 requestId 使用实际可信工具操作的 `idempotencyKey`，来源保留调用/操作/能力版本与尝试信息。精确重试返回原建议，载荷改变拒绝；取消发生在实际落盘后仍保留原回执供同操作重试。新请求必须通过现有冻结阶段、声明准则、准确计划/标题冻结/全文绑定哈希和真实原文校验。建议不计为人工决定，不仲裁、不冻结。清单仅允许主助手提交建议，现有重试机制采用 `retry_safe`；只读工具可供已授权阅读任务使用。
-
-`research_review_read` 的 `fulltext_content` 从准确 binding ID/哈希派生实际 document、sourceHash、parseId 和 parseHash，复用原 preview 对真实原文/坐标工件进行校验，再读取准确解析块并复核 binding。返回真实块总数、明确分页、原解析 run、页数和坐标哈希；模型不能另填文档或解析身份，读取不触发解析、不创建工件。未取回和没有绑定解析分别失败，原文件改变不能返回缓存文本作为成功读取。重解析和归档后只要准确原来源仍可核验，就返回指定的旧解析及失效标记，不改到最新解析；读取取消后停止后续调用，不返回迟到内容。
-
-协议、语料和报告读取结果携带准确只读链接，分别绑定版本/冻结、语料、完整报告正文哈希；两轮状态的链接指向其准确固定语料。真实 SDK ToolCall 使用 `content_and_artifact`，链接保存在 `ToolMessage.artifact` 的 `roc_review_receipt_links` 中。长结果进入原上下文工件库后，投影仍保留最多三条经过 schema 核验的链接，预览文字不构成导航身份。工具行及嵌套活动通过项目范围打开唯一 `AppShell` 检查器，入口明确区分 `manage` 和 `readonly`。只读入口直接读取指定 ID/哈希，不用最近100项列表猜范围，不出现人工提交/冻结或记录选择控件；旧报告正文已变化时显示错误，用户重新读取后才能打开新链接。协议方法、原始查询/记录和报告内容保留；重解析或归档后固定正文与 live 来源状态分开显示。键盘打开、Escape 焦点返回、跨项目禁用、迟到读取隔离和失败读取均沿用原抽屉/异步边界。
-
-助手拥有的冻结查询通过下述独立调度凭证执行。人工终局审核使用原 main/window 边界；本地确定性工程验收不表示真实模型筛选质量或正式 PRISMA 模板适用性已验证。
-
-主进程 `ExecutionGrantBroker` 为冻结查询提供独立的调度凭证。凭证绑定实际运行中的父 Run、线程、项目、冻结 Manifest、查询请求和重试来源；当前快照必须明确允许 `research_review_execute_query` 在 main 范围执行。严格请求 schema 拒绝模型附加的父身份。查询请求使用独立域的摘要，凭证表保存明确的工具域。阶段与查询凭证不能串用，已消费凭证不能再次消费或复制为有效对象；过期、撤销、重启、父运行终结和绑定变化均拒绝消费。查询调用上下文传递实际父取消信号，并隔离并发操作。凭证本身不创建任务或执行记录；任务关联由拥有查询服务在调度前完成。
-
-内部 `research.reviewSearch.startOwned/getOwned/cancelOwned` 使用上述可信凭证和主进程拥有者上下文。为查询保存独立拥有者回执与哈希标记；拥有者不能从 actor 文本推断，丢失或改变回执明确失败。旧人工查询保留原始快照、哈希和真实用户身份，不补造聊天父运行或任务。读取和取消分别要求 Manifest 的 main 工具权限，读取凭证不能取消查询；复制凭证、同项目其他聊天和父运行撤销均拒绝。人工开始/取消及终局审核仍使用现有窗口边界，内部拥有查询能力没有新增 renderer IPC。
-
-查询先持久化请求与拥有者，再在 Agent 数据库关联 `review_search` 执行，成功后才调度网络请求。首个查询创建或复用真实聊天根任务，将此前模型调用归入原任务用量记录；同一父 Run 的查询重试及后续阶段共享记录，不设置累计预算限制，也不改变科研评审 `parentRunId` 的含义。任务关联失败保留准确失败查询和原因，不发 Provider 请求；相同请求不会补挂成新任务，后续尝试必须明确引用原查询及其快照哈希。跨库步骤之间重启后，未完成查询保留为中断记录，系统不自动再次检索。
-
-每次 Provider 请求前核对拥有者、查询执行快照、父 Manifest/线程/项目、任务状态和取消信号。父取消直接中断真实请求，迟到结果不能成为完成回执；任务暂停/取消等待本任务查询清理，不停止同项目其他任务。开始、取消意图和持久化终态失效通知驱动现有任务界面刷新。查询诊断保留真实 `complete/partial/cancelling` 等状态、开始结束时间和错误，阶段字段为空；只有完整检索计入执行完成。不补造历史查询事件。助手通过现有 Harness 的独立查询工具使用这些内部能力。
+本地确定性测试核验版本、权限、来源和计数合同；真实模型筛选质量、独立领域评价准确性和正式PRISMA模板适用性仍需独立验收，见[验证边界](verification.md)。

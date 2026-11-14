@@ -1,6 +1,16 @@
 # 内置技能源（Built-in skills）
 
-Roc 把两个上游 Skill 仓库**随安装包内置**，并在运行时按上游提交自动同步：
+Roc 内置十一阶段研究 Skill，并提供两个可安装的上游技能源。两者使用不同的加载和更新合同。
+
+## 阶段 Skill
+
+[`resources/research-skills/`](../resources/research-skills/) 的每个阶段包含正文、`skill.manifest.json`、许可和评测要求；`catalog.json` 保存封闭资源 bundle。`ResearchSkillRegistry` 核对完整阶段集合、角色、输入/输出 schema hash、内容 hash、许可和能力要求，再加载对应内容；恢复时还核对冻结的 Skill pin。缺失或漂移均拒绝，不回退到原始正文。
+
+聊天与阶段角色共用上下文装配，实际权限仍由角色、run Manifest 和执行授权共同约束。维护取舍见 [ADR 0030](adr/0030-required-skill-contracts.md)，检查入口为 `pnpm check:skills`；改动正文须同步其 Manifest 和 bundle，不能只改 Markdown。
+
+## 可安装的上游技能源
+
+以下两个仓库随安装包提供快照，并在运行时按上游提交自动同步：
 
 | 来源 | 仓库 | 许可证 | 默认安装 |
 | --- | --- | --- | --- |

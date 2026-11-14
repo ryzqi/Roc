@@ -5,7 +5,7 @@
 ## 决定
 
 - **对话代理是唯一执行入口。** 主进程在对话运行装配阶段按 `researchProjectId` 注入科研工具，工具名与权限进入本轮能力清单（manifest），受既有审批与审计约束。
-- **文稿真身是工作目录里的 LaTeX 文件。** 对话代理用既有文件工具（`read_file` / `write_file` / `edit_file`）读写 `.tex` / `.bib` / `.sty`；画布的 LaTeX tab 编辑的是同一批工作区文件。数据库只存阶段、运行、工件记录和版本快照用于溯源。
+- **工作区编辑与受控稿件各有明确来源。** 对话代理用文件工具读写 `.tex` / `.bib` / `.sty`，画布 LaTeX 编辑同一批工作区文件。受控稿件另由数据库保存 sections、主张身份、确定性 LaTeX 与内容哈希；批准和导出重新核对当前主张与源码，工作区文件编辑不会自动成为已批准稿件。合同见[证据与主张](../research-evidence-relations.md)和[导出](../research-exports.md)。
 - **人工闸门保留，但搬到对话里确认。** 对话代理调用闸门工具，工具用 LangGraph `interrupt` 在对话流里发出批准 / 退回卡片，用户决定后才调用 `research.workflow.transition`（含图稿 / 导出校验）。
 - **助手列是改动与产物的执行面。** 本次对话产生的文件改动、工件预览与运行日志都在这里；画布承载文献 / LaTeX / 终端与管理视图。
 - **搜索与产物工具直接复用现有 capability**（`research.literature.search`、`research.knowledge.search`、`research.evidence.*`、`research.artifacts.*`、`research.workflow.*`），不新增平行实现。

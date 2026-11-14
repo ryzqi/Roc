@@ -1,10 +1,10 @@
 # 学术关系来源快照
 
-X-ECO A1 在现有科研插件中提供 `ScholarlyRelationsService`。它读取 OpenAlex、Crossref 和 Semantic Scholar 的公开关系元数据，保存不可变的来源观察；没有内容下载或外部写入。
+`ScholarlyRelationsService` 读取 OpenAlex、Crossref 和 Semantic Scholar 的公开关系元数据，保存不可变的来源观察；没有内容下载或外部写入。
 
 ## 固定的官方合同
 
-合同核对时间：2026-11-06。该日期是本次检索日期，不是 Provider 政策生效日期。
+官方资料核对时间：2026-11-06，不是 Provider 政策生效日期。
 
 - [OpenAlex Work attributes](https://help.openalex.org/data/works/attributes/)：`referenced_works` 为出向引用；`related_works` 为语义邻近作品，不能映射成版本关系。单作品 DOI 查询核对返回的 DOI，保留 OpenAlex 原生作品标识。`is_retracted=false` 保存为 `not_reported`，不认证论文可信或没有撤稿。
 - [Crossref 官方响应格式](https://github.com/CrossRef/rest-api-doc/blob/master/api_format.md)：`reference`、`relation`、`update-to` 可缺省。无 DOI 的参考文献计入未映射数量；保留原始关系类型、字段路径和 `asserted-by`。版本类型显式映射，其他类型保留为 `provider_relation`。`update-to.DOI` 指向被更新作品，因此保存通知 DOI → 原作 DOI；类型保留为 correction、retraction 或 Provider 原始关系。
@@ -37,7 +37,7 @@ X-ECO A1 在现有科研插件中提供 `ScholarlyRelationsService`。它读取 
 
 ## 阅读器中的来源检查
 
-X-ECO A2 在现有 `PaperReader` 操作栏添加「学术关系」，打开时才加载面板及读取历史。面板使用阅读器内独立滚动区域，不新增 shell 或路由。历史每页 20 条，关系每页 50 条；选中记录后历史折叠，仍可展开或翻页。
+`PaperReader` 操作栏的“学术关系”打开时才加载面板及读取历史。阅读器内独立滚动，历史每页 20 条、关系每页 50 条；选中记录后历史折叠，仍可展开或翻页。
 
 显示保存时的 DOI、文献版本、查询时间及各来源真实状态。来源详情保留字段是否报告、未映射数量、撤稿观察、获取时间、缓存、GET 回执、响应哈希和端点；关系展示方向、类型、原始 Provider 类型、字段及断言方。Semantic Scholar 后续页必须点击另存，沿用原记录的 limit 和新 requestId，超出 offset 9900 时明确禁用。
 

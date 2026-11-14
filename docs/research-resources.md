@@ -4,7 +4,7 @@
 
 ## 官方合同
 
-核对日期为 2026-11-06，仅表示本次读取日期。
+官方资料核对日期：2026-11-06，不是政策生效日期。
 
 - [DataCite Public API](https://support.datacite.org/docs/api) 和 [GET DOI](https://support.datacite.org/reference/get_dois-id)：使用 JSON API v2 的 `/dois/{doi}`，仅读取公开 findable 记录。404 表示本次公开元数据不可用，不认定 DOI 在全球不存在。没有使用废弃 v1 API。
 - [DataCite Metadata Schema 4.7 version](https://datacite-metadata-schema.readthedocs.io/en/4.7/properties/version/)：保存 Provider 报告的原始版本，不推断最新版本。`reportedSchemaVersion` 保留返回值；通用 kernel-4 URI 不被解释为具体 4.7 注册版本。
@@ -24,11 +24,8 @@
 
 四个生成式 IPC 方法为 `captureResource`、`cancelResourceCapture`、`getResourceHistory` 和 `getResource`。捕获只返回摘要，历史每页最多 50 条，关系每页最多 100 条。标题最多 32 个、许可最多 64 个、关系最多 10000 个；超限失败，不截断成成功。
 
-## 传输边界
-
-DataCite 只加入主进程元数据 Provider 类型，论文搜索 source 枚举仍只接收论文来源。内部读取复用 `LiteratureSearchService.readProviderJson`，没有独立下载通道。
-
-主进程注册、插件能力清单和 shutdown 已接入。服务关闭会撤销进行中作业，等待结果结束，清空插件资源引用。
+DataCite 属于元数据 Provider，不进入论文搜索 source 枚举。传输、缓存、取消和关闭复用
+`LiteratureSearchService.readProviderJson`；共同网络边界见[学术关系](research-scholarly-relations.md#网络与读取边界)。
 
 ## 显式关联
 
@@ -36,7 +33,7 @@ DataCite 只加入主进程元数据 Provider 类型，论文搜索 source 枚�
 
 论文绑定真实项目 membership、未归档状态、revision、DOI（允许显式 null）及 `{id,revision,metadata,bibliography}` 的哈希。实验只接受当前项目已完成的托管 execution，绑定 inputHash、environment.hash 与完整 schema-parsed execution 哈希；必须具有环境、输入哈希、结束时间、零退出码且无 error。手工登记或未完成实验不能作为目标。
 
-目标分页接口返回主进程计算的身份，每页最多 50 条。人工从当前窗口明确保存 rationale；IPC 参数不接受 actor 或 approved，主进程绑定实际 windowId，并核对 capability/project。当前结构保存关联账本，不推断既有关系。事务内在插入前后校验项目、资源及目标版本；插入触发器造成的来源变化会回滚。相同 projectId/requestId 精确重放，不同内容拒绝。
+目标分页接口返回主进程计算的身份，每页最多 50 条。人工明确保存 rationale；IPC 不接受 actor 或 approved，身份由实际窗口绑定。事务内在插入前后校验项目、资源及目标版本，漂移回滚。相同 projectId/requestId 精确重放，不同内容拒绝。
 
 历史/read 返回 `{association,currentState}`，状态为 current、target_changed 或 target_unavailable。论文取消项目关联/归档或托管执行不再存在时标明 unavailable；版本变化标明 changed。保存的记录保持原始目标版本、标题、资源哈希、人工身份、时间和关联哈希。资源或账本损坏明确失败，不能转成 unavailable。归档项目允许旧关联读取及精确重放，不能新增。
 
@@ -46,15 +43,17 @@ DataCite 只加入主进程元数据 Provider 类型，论文搜索 source 枚�
 
 ## 阅读器资源面板
 
-阅读器的“科研资源”按钮懒加载项目资源面板；与学术关系共用一个最高 55% 的滚动容器，保留正文空间。查询由人工填写数据集/软件 DOI 后触发，提供实际取消、20 条观察历史分页和不可变观察详情。许可六字段、报告版本、缺失字段、空集合、失败观察及 GET/缓存/哈希回执分别显示；原始关系保持来源方向，折叠展示并按 50 条分页，换页保留展开状态。没有内容下载。
+阅读器的“科研资源”按需加载项目面板，与学术关系共用最高 55% 的滚动区域。人工填写 DOI 后查询，
+可真实取消；观察历史每页 20 条、原始关系每页 50 条。许可六字段、报告版本、缺省/空集合、
+失败及 GET/缓存/哈希回执分别显示，关系保持来源方向。
 
-人工关联明确选择主进程提供的论文版本或已完成托管实验身份，填写依据后保存。草稿、进行中的保存和未确认回执锁定资源切换及面板关闭；失败后原样重试同一 requestId，或明确放弃草稿重新读取候选。观察查询的未确认请求也固定 DOI 和 requestId，允许精确重试或显式开始新请求。只读项目可查历史、放弃草稿，不能发起或重试写入。项目/论文/资源键及卸载标记隔离迟到回执。关联历史显示当前版本一致、已变化或不可用以及主进程人工身份。
+关联从真实论文/托管实验目标选择并填写依据。未保存、保存中和未确认回执锁定切换与关闭；
+精确重试保持 DOI/requestId 或完整关联请求，重新读取须明确放弃旧草稿。只读项目可查历史和放弃草稿，
+不能发起写入。迟到回执按项目/论文/资源隔离；历史展示人工身份及版本 current/changed/unavailable。
 
 ## OSF Projects 政策决定
 
-历史政策核查日期：2026-11-06。范围：核对官方政策并决定是否立项 Projects 写入同步。
-
-### 已核对的官方时间表
+历史政策核查日期：2026-11-06；决定不立项 Projects 写入同步。
 
 | 日期 | 官方变化 | Roc 的实施含义 |
 | --- | --- | --- |
@@ -66,6 +65,5 @@ DataCite 只加入主进程元数据 Provider 类型，论文搜索 source 枚�
 
 来源于 2026-11-06 读取：[OSF Projects API Impact](https://help.osf.io/article/744-osf-projects-api-impact)（页面标注 2026-08-11 更新）及 [COS OSF Changes](https://www.cos.io/osf-changes)。API Impact 页关于个别剩余管理操作存在例外，不能从「只读」推导所有 HTTP 方法一律停用；本决定仅涉及新建、上传和持续写同步。
 
-### 决定与后续边界
-
-不立项 OSF Projects 写入同步。没有新增连接器、后台目的地、凭据配置或远端操作。未来可单独评估公开内容只读导入或独立预注册；当前决定不启动这两项，也不授权真实账户写入。[Zenodo 审核式发布](research-zenodo.md)使用独立合同。
+当前没有 OSF Projects 写入连接器；公开内容只读导入和独立预注册需另行评估。
+[Zenodo 审核式发布](research-zenodo.md)使用独立合同。

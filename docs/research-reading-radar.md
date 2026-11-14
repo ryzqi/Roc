@@ -20,19 +20,17 @@
 
 ## 数据与边界
 
-- Migration 65 新增项目隔离的笔记、高亮、订阅、文章与推荐缓存。笔记/高亮有版本冲突检查；高亮绑定 PDF 内容哈希，现有不可变证据批注继续保留。
+- 笔记、高亮、订阅、文章与推荐缓存按项目隔离。笔记/高亮有版本冲突检查；高亮绑定 PDF 内容哈希，与不可变证据批注分别存储。
 - 笔记当前存入 Roc 数据库，可显式导出 Markdown；采用数据库存储，不使用 Agentero 的文件夹存储模型。笔记切换、退出和工作区导航保护未保存内容。
 - 外部网页运行于独立、临时 `WebContentsView` 会话，没有 preload、Node 或 Roc bridge；模态面板出现时隐藏原生网页。应用内导航限制在对应站点，权限申请和下载默认拒绝。
 - 网络请求在主进程执行，验证 HTTPS 和公开目标地址，并限制响应大小、重定向与超时。翻译密钥走已有 secret storage，不写入 renderer 持久化状态。
-- 新增页面仍在唯一 AppShell 内，笔记编辑器和雷达按需加载；PDF 使用 `roc-preview`。修复了首次导航前未注册预览协议和适宽渲染被高度抖动反复触发的问题。
+- 笔记编辑器和雷达在唯一 AppShell 内按需加载；PDF 使用 `files.preview*` 返回的协议 URL。
 
-## 真实外部服务结果与限制
+## 外部服务边界
 
-- Cool Papers 论文元数据提取成功，保留标题、arXiv 标识和 PDF 地址。实时浏览发现 `/arxiv` 返回 404，已改为有效的 `/arxiv/cs.AI` 分类入口。
-- 魔搭真实页面加载、隔离和论文链接提取成功；优先读取卡片编码的标题元数据，Cool Papers 则读取标题链接，避免把摘要、标签或操作按钮当成标题。
-- 腾讯翻译成功；Google 在当前网络 45 秒超时，错误真实显示。没有 BYOK 凭据，未宣称其余渠道已通过在线验收。
-- Semantic Scholar 返回 HTTP 429，参考文献发现成功回退到 Crossref，得到 37 条。后续被引仍受 Semantic Scholar 服务可用性影响。
-- 当天 arXiv RSS 明确声明周末跳过且返回零篇，服务保留真实空列表。推荐排序使用受控嵌入进行回归，未完成用户真实嵌入配置下的每日推荐在线验收。
-- 本地参考文献回退识别参考文献章节中的 DOI；没有可解析标识的条目不能可靠自动入库。在线解析质量及外站页面结构仍取决于各自数据源。
+- Cool Papers、魔搭页面的元数据提取依赖外站结构；标题、arXiv 标识和 PDF 地址需在入库前核对。
+- 翻译渠道的凭据、限流和网络错误会直接影响结果；渠道存在不代表当前网络下在线验收通过。
+- 参考文献优先用 Semantic Scholar，首批无结果时回退 Crossref，再提取本地参考文献 DOI；后续被引仍依赖 Semantic Scholar。无可解析标识的条目不能可靠自动入库。
+- arXiv RSS 无当日内容时保留空列表；推荐需实际嵌入配置，受控排序测试不代表在线推荐质量。
 
-实现入口位于 `src/main/plugins/research/{reading-*,radar-*}`、`src/renderer/literature/`、`src/main/ipc/radar-browser-ipc.ts` 和 `src/shared/schemas/research-reading.ts`。
+实现入口位于 `src/main/plugins/research/{reading-*,radar-*}`、`src/renderer/literature/`、`src/main/ipc/radar-browser-ipc.ts` 和 `src/shared/schemas/research-reading.ts`。验证方法见 [verification](verification.md)。

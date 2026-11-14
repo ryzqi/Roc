@@ -1,137 +1,92 @@
 # Research performance baselines
 
-These are historical measurements tied to the recorded commits, protocols and environments. Documentation maintenance does not rerun them; check each linked JSON for its source hashes and sample details. Local `.artifacts/` logs are optional run outputs, not required repository files.
+These are historical measurements, not current-run acceptance. Each durable JSON records the measured source identity, protocol, samples and limitations; documentation maintenance does not rerun benchmarks. `.artifacts/research-optimization/` contains optional local raw outputs. General validation boundaries are in [verification](verification.md).
 
-The frozen retrieval benchmark measures the production SQLite FTS and sqlite-vec repository on isolated generated data. The harness does not contact providers or open a user database.
+## Reproduction
 
-## Frozen retrieval protocol
+Run from the repository root. These commands exercise the current implementation and create new reports; they do not reproduce the historical source revision automatically.
 
-[The protocol](research-performance-protocol.json) freezes 10,000 / 100,000 / 1,000,000 chunks, 384 dimensions, seed 19790527, four projects, 100 chunks per document, 20 samples per group, top 20 results, a 64 MiB SQLite connection cache, and WAL / NORMAL pragmas. Eight groups per scale combine English / mixed queries, all projects / project-0, and fresh / repeated connections. The P95 goals are FTS 2,500 ms, vector 2,500 ms, and total 5,000 ms.
+| Scope | Entry point | Durable historical evidence |
+| --- | --- | --- |
+| SQLite FTS / exact vector retrieval | `pnpm research:retrieval-bench <report.json>` | [Original](research-retrieval-baseline.json), [narrow ranking](research-retrieval-narrow.json), [protocol](research-performance-protocol.json) |
+| PDF parser / page-proxy reuse | `node scripts/benchmark-pdf-document-parser.mjs <report.json>` | [PDF](research-pdf-performance.json) |
+| Indexed graph neighborhoods | `pnpm research:graph-bench` | [Graph](research-graph-performance.json) |
+| Native process admission | `pnpm research:admission-bench` | [Admission](research-admission-performance.json) |
+| Injected provider requests / cache | `pnpm research:network-bench` | [Network](research-network-performance.json) |
+| Managed storage inventory | `pnpm research:storage-bench` | [Storage](research-storage-performance.json) |
 
-Each chunk includes the common English and Chinese query terms. This stresses broad candidate sets; the generated corpus does not represent the relevance distribution of a real research library. Candidate counts describe eligible matches before the top 20 limit. Fusion counts describe the union of actual returned candidate IDs.
+Use a new output path and preserve historical reports. Benchmarks use isolated generated fixtures or injected requests, not a user database or live providers. Full report paths and hashes are recorded in the durable JSON.
 
-A fresh connection resets SQLite's page cache. It does not flush the OS or filesystem cache. Repeated connections run one unmeasured query first; this does not establish that the complete database fits in memory. Generated vectors measure exact cosine scan throughput and cannot establish semantic relevance.
+## Frozen retrieval protocol and results
 
-## Reproduction and evidence
+The protocol freezes 10,000 / 100,000 / 1,000,000 chunks, 384 dimensions, seed 19790527, four projects, 100 chunks per document, 20 samples per group, top 20 results, a 64 MiB SQLite connection cache and WAL / NORMAL pragmas. Eight groups per scale combine English / mixed queries, all projects / project-0 and fresh / repeated connections. P95 goals are FTS 2,500 ms, vector 2,500 ms and total 5,000 ms.
 
-Run `pnpm research:retrieval-bench` (`node scripts/benchmark-research-retrieval.mjs`) from the repository root. The measurement baseline is `892a9cba`. The machine is a MacBookPro18,3 with 10 logical CPUs and 32 GiB RAM, macOS arm64, Node v26.13.0 and pnpm 12.5.1. The report records the SQLite version and actual pragmas.
+The 2026-11-06 original run starts at `892a9cba`; narrow ranking starts at `c0cd1437` with the implementation change identified by source hashes. The recorded machine is MacBookPro18,3, 10 logical CPUs, 32 GiB RAM, macOS arm64, Node v26.13.0 and pnpm 12.5.1. Each run completed 24 groups / 480 timed searches and checked production schema, chunk/vector counts, integrity, ordered unique top-20 results and project isolation.
 
-Each scale runs in a separate child with a task-created temporary database, removed in `finally`. The harness uses the production schema initialization, repository and sqlite-vec. It verifies chunk/vector counts, SQLite integrity and foreign keys, unique ordered top 20 results, and project isolation. Eligible FTS counts are computed outside timed searches. Existing repository stages are wrapped for measurement without adding a product API.
+| Chunks | Original FTS / vector / total P95 maxima | Narrow FTS / vector / total P95 maxima | Database | Original / narrow peak RSS |
+| --- | --- | --- | ---: | --- |
+| 10,000 | 12.9 / 11.8 / 24.9 ms | 10.2 / 11.7 / 21.9 ms | 37.3 MiB | 276.2 / 262.0 MiB |
+| 100,000 | 242.8 / 124.8 / 359.6 ms | 93.9 / 126.9 / 211.0 ms | 359.5 MiB | 660.9 / 657.7 MiB |
+| 1,000,000 | 2508.8 / 1351.5 / 3717.6 ms | 1108.4 / 1361.7 / 2312.6 ms | 3585.2 MiB | 3742.4 / 3728.9 MiB |
 
-Full samples are in `.artifacts/research-optimization/retrieval-performance.json`; the log is `.artifacts/research-optimization/retrieval-full.log`. The compact durable report is [research-retrieval-baseline.json](research-retrieval-baseline.json). That report retains sample counts, percentile summaries, candidate counts, source hashes and the frozen protocol hash. RSS includes the worker's imports, generation and searches; the OS peak covers the complete worker lifetime. Disk bytes describe the checkpointed database, excluding transient WAL files.
+The original million-chunk mixed / all-projects / repeated FTS group missed its target by 8.8 ms. Narrow ranking met every frozen target: maximum million-chunk FTS P95 fell 55.8%, total P95 37.8%. It sorts and limits candidate identity/rank rows before loading selected text and metadata. The recorded comparison retains the same protocol, corpus, candidate ranges, database bytes and pragmas.
 
-The first 10k loader failed before measurement because a bundled native dependency attempted `require(fs)` from a data URL. The existing loader's native external / `.runtime` mode resolved the error. A second preflight passed, and the full run supersedes both preflight reports. No timing goals were changed.
+Every generated chunk contains common query terms, so this stresses broad candidate sets. Eligible-match counts precede top-20; fusion counts are returned-ID unions. Fresh connections reset SQLite page cache, not OS cache; repeated connections warm one query. Generated vectors measure exact scan throughput, not semantic relevance. RSS covers worker imports/generation/search; disk bytes exclude transient WAL. These timing results do not establish retrieval quality or authorize a database migration.
 
-## Acceptance limits
+## PDF contract and fixed long-document fixture
 
-Independent human-reviewed Chinese, English and mixed query relevance is **Blocked, not run**. It requires reviewer provenance, frozen source hashes, judgments and an evaluation split. The existing provider-fusion evaluator is not evidence of local FTS or embedding quality.
+The parser and stored-content reader accept output contract 4; derivation generation 3 is a separate text/index identity. The 2026-11-06 benchmark uses a 400-page / 625,447-byte, text-only fixture and three isolated samples per eight routes. Production native full parse and page-201 parse publish real outputs. Abort at page-5 layout leaves no later pages or output files. The PDF.js/canvas probe reuses page proxies on one document and cleans them; it does not establish a bitmap cache.
 
-SQLite remains the engine. A timing target miss requires investigation of candidate filtering and two-stage ranking before evaluating ANN or a different database. This benchmark does not authorize a database migration.
+| Native scenario | P95 elapsed | First native extraction P95 |
+| --- | ---: | ---: |
+| Full 400 pages | 290.6 ms | 51.6 ms |
+| Page 201 only | 66.6 ms | 57.2 ms |
+| Cancel at page 5 | 72.3 ms | 56.0 ms |
 
-## Measured retrieval results
+Full-parse peak worker RSS P95 is 252.8 MiB; abort-to-rejection/cleanup P95 is 2.6 ms. First extraction is an intermediate event, distinct from published parse output. The linked report retains event-loop delay, page acquisition/paint timings, hardware and source/raw-report hashes.
 
-Status: **Verified passing** for benchmark execution and integrity; the FTS performance target remains unmet in one group. All 480 timed searches completed. Million-chunk mixed-query / all-projects / repeated-connection FTS P95 was 2508.8 ms, 8.8 ms above the frozen 2500 ms target. Other stage targets and all total-time targets passed. The A1B increment below resolves that miss without changing the query or ordering.
+Historical Electron reader first-paint samples for the same bytes were 1665.7 / 1673.4 / 1671.9 ms, including activation, sealed preview, protocol fetch and worker startup. Navigation 201/400/1 checked real pixels, one visible canvas, at most four million pixels, one worker and release on close. Native extraction and browser first paint are separate measurements. Three samples and uncontrolled OS cache support descriptive figures only; scanned/mixed fixtures stopped at missing-model validation, so representative OCR throughput remains unrun.
 
-| Chunks | Maximum FTS P95 | Maximum vector P95 | Maximum total P95 | Database | Worker peak RSS |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| 10000 | 12.9 ms | 11.8 ms | 24.9 ms | 37.3 MiB | 276.2 MiB |
-| 100000 | 242.8 ms | 124.8 ms | 359.6 ms | 359.5 MiB | 660.9 MiB |
-| 1000000 | 2508.8 ms | 1351.5 ms | 3717.6 ms | 3585.2 MiB | 3742.4 MiB |
+## Graph neighborhoods
 
-Validation: `node --check scripts/benchmark-research-retrieval.mjs`, complete benchmark execution, report readback / protocol and sample consistency checks, and `git diff --check` all passed. No product code changed, so build and renderer checks are not repeated for this script/document increment.
+The production projection indexes recorded `cites` / `sourced-from` relations and expands shared-evidence claims only for the selected node. It does not materialize a shared-claim clique. Loaded nodes and neighborhoods page independently at 50 items; this is bounded renderer projection, not database pagination or a force-layout benchmark.
 
-## Narrow FTS ranking (A1B)
+Five samples per scale freeze P95 goals of 2,500 ms derivation, 100 ms first-page expansion and 10 ms cached-ID paging. All recorded groups pass.
 
-The production keyword search now materializes candidate IDs, document IDs, chunk indices and ranks, sorts and limits those rows, then loads text, titles, sources and locators for the selected hits. This removes large chunk payloads from broad candidate materialization. Body-first ordering, BM25, title deduplication, tie ordering and both chunk/document project boundaries remain intact. There is one current implementation.
-
-Run `pnpm research:retrieval-bench .artifacts/research-optimization/retrieval-narrow-performance.json`. The starting commit is `c0cd1437` with the repository change recorded by the source hashes in [research-retrieval-narrow.json](research-retrieval-narrow.json). The original report remains unchanged. Full samples and logs are `.artifacts/research-optimization/retrieval-narrow-performance.json` and `retrieval-narrow-full.log`.
-
-| Chunks | Maximum FTS P95 | Maximum vector P95 | Maximum total P95 | Worker peak RSS |
+| Claims / recorded links | Derive P95 | Expand first page P95 | Page selected IDs P95 | Process peak RSS |
 | --- | ---: | ---: | ---: | ---: |
-| 10000 | 10.2 ms | 11.7 ms | 21.9 ms | 262.0 MiB |
-| 100000 | 93.9 ms | 126.9 ms | 211.0 ms | 657.7 MiB |
-| 1000000 | 1108.4 ms | 1361.7 ms | 2312.6 ms | 3728.9 MiB |
+| 100 / 100 | 0.38 ms | 0.08 ms | 0.011 ms | 18.1 MiB |
+| 300 / 300 | 0.56 ms | 0.04 ms | 0.002 ms | 21.0 MiB |
+| 1,000 / 1,000 | 1.19 ms | 0.27 ms | 0.005 ms | 26.3 MiB |
+| 10,000 / 10,000 | 14.56 ms | 0.95 ms | 0.005 ms | 108.4 MiB |
+| 50,000 / 50,000 | 79.12 ms | 3.86 ms | 0.007 ms | 239.4 MiB |
 
-All 24 groups / 480 searches meet the frozen FTS, vector and total P95 goals. The million-chunk maximum FTS P95 falls 55.8%, and maximum total P95 falls 37.8%. Hardware, protocol hash, corpus hashes, candidate ranges, database bytes and pragmas match the original baseline; only the repository implementation hash changes. This is a repeat on generated broad-match data, with the cache and semantic-quality limitations stated above.
+The original 1,000-claim fixture generated 500,500 links and took up to about 651 ms; its samples remain in the report. Historical Electron checks mounted the same 50,000-claim recipe three times, inspected bounded lists, real frames, keyboard/focus and light/dark layouts. Five nearest-rank samples make P95 the maximum; RSS includes imports and prior scales.
 
-Verification from the repository root: `node --test tests/unit/knowledge-vector-search.test.mjs` passed 2/2, including production-schema keyword ordering/scoping/metadata and exact sqlite-vec ranking. Full benchmark and before/after report consistency checks passed. `pnpm build` (including typecheck), `node scripts/smoke-electron.mjs` (13/13, zero renderer errors), `pnpm check:ipc`, `pnpm check:renderer-chunks` and `git diff --check` passed. Logs use the `retrieval-narrow-` prefix in the same artifact directory. Status: **Verified passing** for this engineering performance change; independent retrieval quality remains unrun.
+## Admission, network and storage
 
-## Current PDF contract and long-document measurements (A2)
+| Baseline | Fixture and recorded result | Limit |
+| --- | --- | --- |
+| Native admission | Three samples × 12 finite probes / six projects; global 2, project 1, parser 1 and GPU 1 verified; bounded 10-second wait goal passed | Fixed 140 ms native holds measure admission/startup/cleanup, not engine throughput or a universal starvation deadline |
+| Injected network | Five samples, scripted 25 ms fetch; request P95 <1,000 ms and cancellation <250 ms; cold cache ≈28 ms, warm <1 ms, two-failure recovery ≈839 ms | No sockets/live providers; policy clock is virtual, fetch/retry/cache/cancellation elapsed time is real |
+| Storage | Five scans each of 1,000 / 10,000 generated 256-byte files; P95 16.53 / 154.08 ms against 5,000 ms goal; exact totals and zero database writes checked | Warm filesystem observations, not user-library or OCR/model throughput |
 
-The parser and stored-content reader accept output contract 4 only. The benchmark's obsolete contract 3 route and environment switches are removed. Derivation generation 3 is still the current text/index identity and is independent from the output format.
+Admission receipts preserve wait/hold, resources and stdout/stderr. An initial native startup failure remains unexplained; subsequent regression runs passed without a claimed scheduler fix. Network fixtures cover cache scope/quotas, retries, payload validation, circuit recovery, cancellation and shutdown; invalid responses are not cached.
 
-`node scripts/benchmark-pdf-document-parser.mjs .artifacts/research-optimization/pdf-current-final-performance.json` runs three isolated worker samples for each of eight routes. The shared long fixture is 400 pages / 625,447 bytes, 612×792, Helvetica, 10 lines per page with 100 evidence words plus 10 page labels, and no images. Native full parse and page-201 local parse use production parser/outputs. A real AbortController cancels at page-5 layout; no later pages or output files remain. The production PDF.js/canvas probe paints pages 1/1/201/1 on one document, verifies cached page-proxy identity and cleans each page. It does not retain or claim a bitmap cache.
-
-| Long native scenario | P95 elapsed | First native extraction P95 | Peak worker RSS P95 |
-| --- | ---: | ---: | ---: |
-| Full 400-page parse | 290.6 ms | 51.6 ms | 252.8 MiB |
-| Page 201 local parse | 66.6 ms | 57.2 ms | See report |
-| Cancel at page 5 | 72.3 ms | 56.0 ms | See report |
-
-Cancellation response P95 is 2.6 ms from abort to parser rejection/cleanup. First extraction is an intermediate event; readable parse means completed and published parser output. Event-loop delay and page acquisition/paint timings are retained in [research-pdf-performance.json](research-pdf-performance.json), together with hardware, source/implementation hashes, sample measurements and the full raw-report hash. Three samples are a descriptive baseline; no percentile reliability or production OCR throughput claim is made. Scanned/mixed fixtures stop at real missing-model validation, clean output and never run inference.
-
-The actual Electron reader uses the exact same long-PDF bytes and production parser/preview registry. Three repeated reader activations first paint at 1665.7 / 1673.4 / 1671.9 ms, including keyboard activation, sealed preview, protocol fetch and the native worker. Navigation to 201/400/1 checks nonempty source pixels, one visible canvas, at most 4 million pixels, one worker and full release on close. Browser first paint is separate from native extraction and parse completion. Raw evidence is `.artifacts/research-optimization/pr07-reader-selection/long-pdf-performance.json`; the compact report includes its hash and samples. OS cache is uncontrolled.
-
-From the repository root, syntax check, 24 parser/cache samples, report/hash readback, `node --test tests/unit/architecture-repair-corpus.test.mjs` (14/14), `pnpm build` (including typecheck), and `node --test tests/renderer/paper-reader.test.mjs` (31/31) passed. Reader coverage also checks historical identity, source corruption, cancellation, keyboard interaction, light/dark layouts and clipping. `node scripts/smoke-electron.mjs` (13/13, zero renderer errors), `pnpm check:ipc`, `pnpm check:renderer-chunks` and `git diff --check` passed. Logs use the `pdf-current-` prefix. Status: **Verified passing** for current-contract parsing, this fixed native fixture and covered reader behavior; representative scanned OCR throughput remains unrun.
-
-## Indexed graph neighborhoods and bounded lists (A3)
-
-The renderer now projects actual `cites` and `sourced-from` relations into linear adjacency indexes. It expands shared-evidence claims only for the selected node; it does not materialize the shared-claim clique. Only loaded evidence establishes these relationships. Node and neighborhood lists paginate independently at 50 items, filter changes reset the node page, changing selection resets the neighborhood page, and reduced data clamps both pages. Narrow windows stack the detail region below the list. Neighbor buttons support keyboard selection and the existing assistant callback. The relation count describes recorded citations and sources.
-
-Run `pnpm research:graph-bench` from the repository root. It uses production `deriveGraph` and neighbor functions on 100 / 300 / 1,000 / 10,000 / 50,000 claims sharing one loaded evidence, five samples each. Before execution, the harness fixes P95 goals of 2,500 ms derivation, 100 ms expanded-page lookup and 10 ms paging cached selected IDs. All pass. Five samples use nearest rank, so P95 is the maximum; these are descriptive measurements. RSS covers the same-process imports and prior scales, not an isolated per-scale peak.
-
-| Claims | Recorded links | Derive P95 | Expand first page P95 | Page selected IDs P95 | Process peak RSS |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| 100 | 100 | 0.38 ms | 0.08 ms | 0.011 ms | 18.1 MiB |
-| 300 | 300 | 0.56 ms | 0.04 ms | 0.002 ms | 21.0 MiB |
-| 1000 | 1000 | 1.19 ms | 0.27 ms | 0.005 ms | 26.3 MiB |
-| 10000 | 10000 | 14.56 ms | 0.95 ms | 0.005 ms | 108.4 MiB |
-| 50000 | 50000 | 79.12 ms | 3.86 ms | 0.007 ms | 239.4 MiB |
-
-The original 1,000-claim fixture generated 500,500 links and took up to about 651 ms. The original 100/300/1,000 samples remain in [research-graph-performance.json](research-graph-performance.json), together with current source/corpus hashes, hardware and raw-report hashes. The recipe and machine match. Raw files are `.artifacts/research-optimization/graph-baseline.json`, `graph-current.json` and their logs.
-
-Real Electron tests mount the production view with the same 50,000-claim recipe three times and record two real animation frames after mount, 50 node buttons, 50 neighbor buttons and selected detail text. First-frame samples are in `graph-ui/first-frame.json`; they include derivation and DOM work, not database/network latency. Light/dark 1,250/1,099/650 px, static/hover/expanded/focus states retain visible controls, no horizontal overflow and clip-audit `cut=0`. Screenshots and audit receipts are under `graph-ui/`. This is bounded rendering of the current store projection; it does not establish database pagination or a force-layout benchmark.
-
-Verification: `node --test tests/unit/renderer-derive.test.mjs` 11/11; `pnpm typecheck`; `pnpm build`; `node --test tests/renderer/knowledge-graph.test.mjs` 6/6. `node scripts/smoke-electron.mjs` 13/13 with zero renderer errors; `pnpm check:ipc`; `pnpm check:renderer-chunks` 1,134,468 eager bytes / six files; syntax and diff checks passed. Status: **Verified passing** for the graph projection, benchmark and tested renderer behavior.
+`research.getStorageUsage({projectId})` inventories configured managed roots without opening the user workspace or deleting files. Ownership and retention groups, missing roots and errors remain explicit; symlinks/invalid roots/I/O errors refuse partial success. Apparent bytes, per-group inode-deduplicated allocated blocks, logical vector/chunk payload and database allocation are distinct. Shared references and APFS allocation are not exclusive physical usage; unclassified bytes grant no deletion permission.
 
 ## Frozen retrieval engineering regression
 
-`pnpm evaluation:frozen-retrieval:check <frozen-corpus.json> <report.json>` invokes [the adapter entry point](../evaluation/adapters/frozen-retrieval/check.mjs). Its [API](../evaluation/adapters/frozen-retrieval/index.mjs) evaluates the production `ResearchKnowledgeRepository`, current database schema, FTS tokenization, exact sqlite-vec cosine search and RRF, using an isolated in-memory database and captured vectors. No model/provider is contacted. Reports identify `evaluationMode: "frozen-embedding"` and `evaluationPurpose: "engineering-regression"`: this measures ranking on supplied vectors, not online ingestion, embedding generation or index-build quality. Keyword and fusion modes use the same top-20 cutoff, queries, scope and vector snapshot. Each explicit query strategy runs against the same complete judgments; reports include recall@20, graded nDCG@10, evidence-chain coverage, no-answer nonempty retrieval, actual returned candidates, IDs, language aggregates, corpus/raw-input hashes and implementation hashes. These candidate counts are returned hits, not total eligible matches; no-answer nonempty retrieval does not measure answer refusal, and chain coverage does not measure reasoning correctness.
+Run the current adapter from the repository root:
 
-The current input contract is demonstrated by [the context-role engineering fixture](../tests/fixtures/local-retrieval-quality-context-role-v2.json). It requires `contractVersion: 2`, corpus ID, development/test split, producer/reviewers/time, embedding model/revision/producer/dimensions, documents with source identity/version and whole/chunk SHA256, captured chunk vectors and contextual embedding-input hashes, and Chinese/English/mixed queries with captured vectors, answerability and annotated evidence chains. Every query supplies the same two or more named strategies and grades 0–3 for **every** in-scope chunk, including global chunks. Duplicate IDs, incomplete judgments, unknown reviewers, changed sources and invalid vectors fail before database loading; changed production embedding inputs fail before scoring. Human-reviewed input requires a reviewer different from its producer; supplied identities remain provenance declarations, not verified scientific credentials.
+```sh
+pnpm evaluation:frozen-retrieval:check tests/fixtures/local-retrieval-quality-context-role-v2.json evaluation/local/frozen-retrieval/regression.json
+```
 
-The current corpus is `engineering-local-retrieval-context-role-v2`. Its 32 current document-input hashes were captured through the production database schema, `upsertFromSource` and `knowledgeChunks()`, including the actual scientific `Role:` context. It preserves the original document content, queries, judgments and explicitly assigned three-dimensional synthetic axis vectors; embedding revision `1-synthetic-axes-preserved-context-role-v2` records this new input binding while retaining the original vector producer. The new engineering provenance records the input refresh and engineering self-check. No embedding model was called and no vectors were regenerated. The [original v2 input](../tests/fixtures/local-retrieval-quality.json) remains byte-preserved and is explicitly rejected by current production inputs with `document_embedding_input_changed`. This fixture establishes engineering regression behavior only; it does not establish human-reviewed scientific retrieval quality.
+Both paths are required. [The adapter](../evaluation/adapters/frozen-retrieval/index.mjs) evaluates the production repository/schema, FTS, exact sqlite-vec search and RRF in an isolated in-memory database with captured vectors. Reports declare `frozen-embedding` / `engineering-regression`; they measure supplied-vector ranking, not embedding generation, ingestion or index-build quality. Recall@20, graded nDCG@10, evidence-chain coverage, no-answer nonempty retrieval, returned IDs, language aggregates and hashes retain distinct meanings; chain coverage is not reasoning correctness and nonempty retrieval is not answer refusal.
 
-From the repository root, run `pnpm evaluation:frozen-retrieval:check tests/fixtures/local-retrieval-quality-context-role-v2.json evaluation/local/frozen-retrieval/regression.json`. The corpus and report paths are both required. Input drift is an error; capture production inputs into a new versioned fixture and record vector provenance before establishing a new baseline. Real model-captured vectors require embedding the changed inputs again. Preserve historical fixtures and reports rather than writing new output over them.
+[Contract-2 input](../tests/fixtures/local-retrieval-quality-context-role-v2.json) requires source/chunk and actual contextual embedding-input hashes, vector provenance, producer/reviewers/split and complete grades 0–3 for every in-scope chunk under the same two or more named strategies. Invalid IDs, provenance, judgments, scope, vectors or changed production inputs fail before scoring. Human-reviewed input requires a reviewer distinct from its producer; identities are declarations, not verified credentials.
 
-### Historical offline local retrieval tooling (A4)
+The current engineering fixture binds 32 production document-input hashes, including scientific `Role:` context, while preserving original content/judgments and three-dimensional synthetic axis vectors. No model was called or vector regenerated. [The original input](../tests/fixtures/local-retrieval-quality.json) is byte-preserved and rejected by current inputs with `document_embedding_input_changed`; [its historical report](research-local-quality-fixture.json) records designed evaluator outcomes only. Input drift requires a new versioned fixture and provenance; real model vectors require re-embedding changed inputs.
 
-The historical command was `pnpm research:local-retrieval-eval tests/fixtures/local-retrieval-quality.json .artifacts/research-optimization/local-quality-fixture.json`; that package entry point has been removed. That frozen fixture had 27 documents, 26 eligible chunks, three queries, two strategies and explicit three-dimensional axis vectors. A foreign-project matching document verifies isolation. Its Chinese/English raw keyword queries have recall@20/nDCG@10 of 0; explicit expanded terms and captured-vector fusion find the synthetic relevant chunk. Mixed queries find it in both strategies. These designed outcomes establish evaluator behavior only and do not measure a real embedding model or justify a tokenizer/engine change. The durable engineering report is [research-local-quality-fixture.json](research-local-quality-fixture.json).
-
-Historical verification: `node --test tests/unit/local-retrieval-evaluation.test.mjs` passed 4/4, covering real repository evaluation, cutoffs/graded ranking and required provenance/source/scope failures; the recorded CLI run, syntax checks and `git diff --check` passed. Logs are `.artifacts/research-optimization/local-quality*.log`. Status: **Verified passing** for that local tooling run; independent human-reviewed retrieval quality remains **Blocked, not run**. No renderer/main product code changed in that increment.
-
-## Multi-project native admission (A5)
-
-`pnpm research:admission-bench` runs 12 finite native probes across six projects, three samples, using the current `runResearchProcess` sandbox, monitor, cleanup and shared coordinator. Cross-process monotonic intervals prove global concurrency two, project one, parser one and GPU one; unrelated projects overlap. Each row retains actual admission wait/hold and resource usage. Native holding is fixed at 140 ms; full hold time includes startup, monitoring and cleanup. Parse/compute/GPU labels select admission classes and do not measure those engines' throughput.
-
-The frozen 10-second bounded-fixture wait goal passes in all samples. Exact timings, hardware, protocol/implementation hashes and full report hash are in [research-admission-performance.json](research-admission-performance.json); raw samples/logs use `.artifacts/research-optimization/admission-*`. Direct coordinator observations and the real native regression prove that the earliest eligible background request yields to foreground once and precedes later foreground work. This describes the bounded workload, not a universal starvation deadline.
-
-From the repository root: `node --test tests/unit/research-process-admission.test.mjs` 6/6, the complete 36-probe benchmark, and `node --test --test-name-pattern='real process admission prioritizes foreground once' tests/integration/research-process-resources.test.mjs` passed. The first native regression failed with a marker timeout and computation exit 125; its old receipt omitted stdout/stderr. Terminal receipts now preserve both streams and admission, and both subsequent runs pass. The initial startup failure's cause is unconfirmed; the first failure log is retained and no scheduler fix is claimed. Syntax/report/diff checks passed. Status: **Verified passing** for the final engineering admission benchmark and regressions, with that transient native-startup limitation. Product implementation is unchanged; build/renderer checks are not repeated.
-
-## Injected provider network baseline (A6)
-
-`pnpm research:network-bench` runs five samples against the current `LiteratureSearchService`, shared host governor and bounded project-scoped cache, bundled together to preserve error-class identity. The injected fetch waits 25 ms and returns scripted responses; it creates no sockets or live provider calls. Cold/warm cache and foreign-project misses, quota exhaustion/cached reads/window reset, 429 Retry-After, 500 retries, invalid HTTP200 payloads, circuit recovery, queued/in-flight cancellation, independent-host progress and shutdown all use production contracts and real receipts.
-
-[research-network-performance.json](research-network-performance.json) records frozen policies/targets, source and raw-report hashes, exact P95 timings and representative request/health receipts. Raw samples are `.artifacts/research-optimization/network-current.json`. Policy time advances virtually to measure admission behavior; fetch latency, built-in 250/500 ms retry delays, cache and cancellation use real wall time. Policy timestamps must not be interpreted as Internet elapsed time. Five samples make P95 the maximum. All frozen request targets below 1,000 ms and cancellation targets below 250 ms pass; cold cache is about 28 ms, warm cache below 1 ms, two-failure 500 recovery about 839 ms. Invalid responses dispatch three times and are never cached; the next request is blocked until the cooldown expires, and a validated probe restores health.
-
-From the repository root: `node --test tests/unit/literature-import.test.mjs` 86/86, complete five-sample benchmark, syntax/report/diff checks passed. The unit suite also covers active-provider shutdown, cache byte/entry/TTL bounds and durable cancelled request receipts. Status: **Verified passing** for injected network/admission/cache behavior and this descriptive baseline. Product code is unchanged, so build/renderer checks are not repeated. Live-provider latency and outages remain unmeasured.
-
-## Readonly managed storage inventory (A7)
-
-`research.getStorageUsage({projectId})` inventories configured library/index/experiment/export/model/resource roots. It never opens the user workspace or deletes files. Source ownership comes from actual document/library links, indexed sources, run roots and project-bound resource downloads; foreign records are omitted. Approved output, traceable source, retained records, scratch/model cache and unclassified files remain distinct. Unclassified bytes grant no deletion permission. Existing derived-artifact startup pruning is unchanged.
-
-Groups report apparent bytes and `lstat.blocks × 512`, deduplicated by device/inode within each type/retention/scope group. Shared project references are nonadditive; cross-group hardlinks can appear in multiple groups. APFS clone/compression/block accounting is not exclusive physical disk usage. Logical chunk UTF8/vector payload bytes are separate from SQLite database allocation. The response omits absolute paths and foreign project identities. Missing/unconfigured roots are explicit; symlinks, overlapping roots, invalid entries and I/O failures refuse a partial success report. The scan is an observational interval, not an atomic filesystem snapshot.
-
-`pnpm research:storage-bench` generates isolated 1,000/10,000-file index directories, 256 bytes per file, five real scans per scale. A 5,000 ms P95 goal is frozen before running; both pass (16.53/154.08 ms). The production database and actual file byte totals are checked each sample, including zero database writes. These warm filesystem samples are descriptive; RSS includes the bundled fixture and previous scales. [research-storage-performance.json](research-storage-performance.json) records hardware, recipe/source hashes, allocation observations and the raw-report hash. No true OCR/model workload throughput is inferred.
-
-Verification from the repository root: `node --test tests/unit/research-storage-usage.test.mjs` passed 6/6 (including generated preload/capability invocation) after correcting two fixture-only public-field/table-column mistakes. The tests exercise shared/foreign ownership, hardlinks, approved output/log/scratch, real vector blobs, root failures and unchanged data. Benchmark passed all ten samples. `pnpm build` (including typecheck), `node scripts/smoke-electron.mjs` (13/13, zero renderer errors), `pnpm check:ipc`, `pnpm check:renderer-chunks` (1,134,468 eager bytes / 6 files), syntax and diff checks passed. Logs use the `storage-` prefix in `.artifacts/research-optimization/`. Status: **Verified passing** for the readonly API and this engineering baseline. No UI was added and representative workload/user-library measurements remain unrun.
+Historical benchmark, integrity and focused runtime/renderer checks are recorded with each report. Independent human-reviewed local retrieval quality, representative scanned OCR, live-provider latency and user-library workload measurements remain unrun; none is established by these engineering baselines.

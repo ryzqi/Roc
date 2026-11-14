@@ -2,16 +2,7 @@
 
 ## 背景
 
-导出交付包今天有 PDF、`source/`（可重编译的 LaTeX）、`references.bib`、图稿与追溯数据。
-缺两样东西，用户在审稿与投稿时会自己补：
-
-1. **规范样式的参考文献表**。LaTeX 那边的样式由模板的 `\bibliographystyle` 决定，Roc 生成不了
-   GB/T 7714 / APA / IEEE 的成品列表；
-2. **过程材料**。研究目标、证据索引、图稿清单散在界面与 `provenance/sources.json` 里，
-   人工评审闸门（`docs/research-exports.md`）看到的只有论文 PDF。
-
-Typst 被提出来同时解决这两件事，并且被问到一个更大的问题：**能不能全面采用 Typst（替掉
-Tectonic + TeX bundle）**。本 ADR 用实测数据回答后者，并记录前者落地的边界。
+导出需要便于人工审核的过程报告和按 CSL 样式排版的参考文献表。采用 Typst 生成这份报告，同时保留既有 LaTeX 正文、用户模板与可重编译源码合同。现行交付内容见[导出](../research-exports.md)。
 
 ## 决策时的历史实测（darwin-arm64，20 页正文 / 30 条参考文献 / 1 表 / 1 公式）
 
@@ -23,53 +14,25 @@ Tectonic + TeX bundle）**。本 ADR 用实测数据回答后者，并记录前�
 | Typst 0.13.1 | — | 0.24 / 0.24 / 0.25 s | 61 MiB | 32 MB | 无 |
 | Typst 0.15.0 | — | 0.30 / 0.31 / 0.30 s | — | 43 MB | 无 |
 
-中文字形已验证：Typst 在 `--font-path /System/Library/Fonts{,/Supplemental}` 下用
-`Songti SC` / `Times New Roman` 正常排版（PingFang 在 `AssetsV2` 里，沙箱下不开放，见下）。
-沙箱可跑：`sandbox-exec` + 只读字体目录 + `--root` 限制，编译成功。
-
-**结论：两者的编译速度基本持平（Typst 0.15 比 Tectonic 热启动慢约 3%，0.13 快约 17%）。**
-「Typst 更快」在 CLI 单次编译这个层面**不成立**——Tectonic 的内存缓存已经很快了。
+当时还验证了只读系统字体目录、`--root` 限制与沙箱下的中文排版。这组样本的热编译速度接近，不能据此断言 Typst 普遍更快，也不能视为当前版本的测量。
 
 ## 决定
 
-1. **不全面采用 Typst。** LaTeX 主链（claims → `latex-source.ts` 确定性重算 → Tectonic → PDFium）
-   不动。全面替换的收益与代价完全不成比例：
-   - 省下的是 51.5 MB 二进制 + 34 MB bundle，而工具链整体约 2.5 GB（Python + MinerU + 模型占 99%），
-     **节省 3.7% 的重量，换来重写整条导出合同**（`docs/research-exports.md` 的槽位、
-     `citation-integrity.ts`、模板导入、BibTeX 闸门全部只对 LaTeX 成立）；
-   - 投稿源格式由具体平台和期刊规定，既有 LaTeX 模板与可重编译 `.tex` 交付仍需支持；全面替换会引入格式兼容风险；
-   - 速度不构成理由（见上表）。
-2. **Typst 只做导出附带的 `report.pdf`**（`src/main/plugins/research/typst-report.ts`）：
-   项目/研究目标、本版规模、证据索引表、图稿清单、按 CSL 样式排版的完整参考文献。
-   它**渲染的不是正文**——正文的真身是 claim 序列，渲染第二遍就是两份真相。
-3. **CSL 由 Typst 原生的 hayagriva 承担**，不引入 citeproc-js / citeproc-rs：
-   - 一份 `#bibliography("references.bib", style: "apa.csl")` 就完成格式化，没有第二个引擎；
-   - `citeproc-rs` 上游已 archived（最后一次 wasm 发布 2021），`citeproc-js` 则是「再用一个
-     JS 引擎做同一件事」——两个引擎对同一份数据给出不同结果时，没人知道该信哪个；
-   - 样式是**数据**：`resources/research-runtime/csl/` 三份 `.csl`（APA / IEEE / GB/T 7714），
-     参与 `lockHashes`，加样式要重建工具链。
-4. **交付包必须包含报告**：`report.pdf` 和 `report.typ` 是导出合同的一部分。报告生成失败时，
-   导出作业失败，保留 `logs/export-error.txt`，不能发布或人工批准缺少报告的交付包。
-   P0 集成发现旧实现因编译目录错误漏掉报告却返回成功；取消这种成功降级。
+1. LaTeX 正文主链保留：主张与 sections 确定性生成源码，经 Tectonic 编译和 PDFium 预览。全面替换需要重做模板、引用完整性和投稿源码合同；上述历史测量不足以支持这种成本。
+2. [`typst-report.ts`](../../src/main/plugins/research/typst-report.ts) 生成 `report.pdf`：项目目标、本版规模、证据索引、图稿清单和 CSL 参考文献。正文继续使用批准稿件，避免维护第二份正文。
+3. CSL 使用 Typst 原生引擎，不再引入另一个引用格式化引擎。随包[六种样式](../../resources/research-runtime/csl/README.md)参与工具链 `lockHashes`。
+4. `report.pdf` 和可编辑的 `report.typ` 都是必需交付文件。报告生成失败则导出失败并保留错误日志，不能批准缺少报告的包。
 
 ## 落地边界（红线）
 
-- **renderer 里不引入 `@myriaddreamin/typst.ts`**（WASM 编译器 + 字体数据）。PDF 预览继续走
-  `files.preview*` 协议与 PDFium；`pnpm check:renderer-chunks` 维护的 eager 图不接受这个体积。
-- **Typst 路径必须离线**：`--root` 指向本次 job，`networkAccess: 'none'`，字体显式给
-  `--font-path`（用户自己装的字体不参与，与 Vale 的 `--no-global` 同一个理由：同一输入同一输出）。
-- **`.tar.xz` 用系统 `bsdtar` 解**：Node 没有 xz 解码器。这是**构建机**上的例外（`prepare.ts`），
-  应用运行时从不调用 `/usr/bin/tar`；解包后只 copy 一个同名二进制进 `bin/`，其余丢弃。
-- 报告源的 `.typ` 一起进交付包（`report.typ`），用户手上有 Typst 就能改；不改也能用 PDF。
+- 编译在主进程工具链执行，renderer 不引入 Typst WASM；预览继续使用 `files.preview*` 协议。
+- 编译必须离线，`--root` 指向本次 job，字体显式限定为工具链允许的系统目录，避免用户安装环境改变输出。
+- `.tar.xz` 的系统解包仅用于构建准备；运行时使用已准备的 binary。准备流程见[工具链资源](../../resources/research-runtime/README.md)。
 
 ## 代价
 
-- 工具链再重 43 MB（并存而非替换）。这是本决定的直接成本，写在表格里而不是藏起来。
-- 一份新的工具要维护：版本锁、许可证（Apache-2.0）、smoke 覆盖、架构双份归档。
-- `report.pdf` 的内容一旦成为用户的期待，它就是合同的一部分：改它的版式要像改导出一样谨慎。
+工具链增加一个 binary、版本锁、许可和 smoke 维护面。体积以当前锁文件与构建产物为准，不沿用历史占比；报告内容和版式属于导出合同。
 
 ## 什么情况下这个决定会变
 
-- 目标投稿系统普遍接受 Typst 源，且已核实相应提交要求，或者
-- 报告类产物变成一等公民（例如文献综述、审稿回复都走同一条排版链），到那时 Typst 会从
-  「附加物」变成「第二条产品线」，需要单独 ADR 重新划边界。
+目标投稿系统的源码要求改变，或综述、审稿回复等需要独立排版产品线时，再用单独 ADR 重审边界。

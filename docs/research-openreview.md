@@ -26,7 +26,7 @@ Provider response selection ignores unrelated fields while the raw response hash
 - Archive preserves history and exact replay but refuses new captures, including in-flight commit. Save verifies scope before and after insertion in a transaction and reads back the actual stored row. Trigger-induced archive or snapshot corruption rolls back the entire insertion.
 - There is no v1 adapter, token field, actor field, legacy IPC alias or automatic literature/evidence approval.
 
-Migration 57 adds `research_openreview_observations` without synthesizing prior observations. Production plugin declaration, capability registration and shutdown all include the service.
+Current observations live in `research_openreview_observations`; prior observations are not synthesized. Database initialization and incompatible-store handling follow [database storage](database-storage.md).
 
 ## Reader controls
 

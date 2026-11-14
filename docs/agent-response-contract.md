@@ -49,4 +49,4 @@ executor 分别传递终轮 `finalResponse` 和聚合会话 `finalMessage`。响
 
 QASPER adapter `qasper-roc-runtime-v3` 从公开 `paper.json` 生成答案/证据 schema，约束 ID 存在且唯一。独立 verifier 额外核对冻结响应合同，最终评分仍绑定 root checkpoint 和最后一次原始模型响应，原生 QASPER grader 保持原样。
 
-响应要求、application contract 和文件工具描述已变化，v2 历史结果保留原分数与 seal，不能直接与 v3 生成质量比较。必须用同一 v3 数据、模型、请求配置、工具定义和评分合同另建兼容基线。受控回归验证运行行为；答案 F1、证据 F1、格式失败率与资源改善须由真实模型运行测量。
+响应要求、application contract 和文件工具描述已变化，v2 结果不能直接与 v3 比较。原始运行证据已清理，现仅保留带日期的[历史摘要](../evaluation/VALIDATION.md)。当前比较必须另建相同数据、adapter、模型、请求配置、工具定义和评分合同的兼容基线。受控回归验证运行行为；答案 F1、证据 F1、格式失败率与资源改善须由真实模型运行测量。

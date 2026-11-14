@@ -2,12 +2,11 @@
 
 ## 概述
 
-Roc 集成 RTK v1.1.0 OSS arm64 发行版，用于压缩 Roc `run_shell_command` 工具的 shell 输出。集成路径是：
+Roc 随包提供 RTK v1.1.0 OSS arm64 binary，供状态查询和命令压缩使用。当前生产命令链与 RTK middleware 的覆盖范围不同：
 
-1. `RTKMiddleware` 通过 LangChain `createMiddleware({ wrapToolCall })` 拦截 shell 工具调用。
-2. `CommandRewriter` 调用 bundled RTK binary 的 `rewrite` 子命令，把支持的命令改成 `rtk ...` 形式。
-3. `ShellExecutionService` 识别 `rtk ...` 命令，转交 bundled RTK binary 执行。
-4. RTK 不可用、命令不支持、或改写失败时，仅对 Roc shell 风险策略允许的命令回退到原命令。
+- 模型的 `run_shell_command`、`run_isolated_read_command`、`run_trusted_host_command` 先经过 shell 策略和执行授权，再分别进入隔离环境或经人工批准的主机执行。三者都按授权绑定的原命令执行，回执为 `usedRtk:false`，不自动改写或转交 RTK。
+- `RTKMiddleware` 只拦截 `execute`、`bash`、`shell`、`terminal`，调用 `CommandRewriter` 执行 `rtk rewrite <command>`。Roc 不向模型暴露框架原生 `execute` 工具；随包 binary 可用不代表生产命令输出已经压缩。
+- 主机 agent 执行环境可配置 RTK 的 PATH、tracking DB 和 tee 目录；用户终端保留原始输出，标记 `user_terminal_raw_output`。
 
 ## 资源位置
 
@@ -34,7 +33,9 @@ resources/rtk-binaries/darwin-arm64/LICENSE
 - `src/rtk-integration/rewriter.ts`：调用 `rtk rewrite <command>`，解析 `rtk ...` 参数。
 - `src/rtk-integration/middleware.ts`：拦截 LangChain shell 工具调用并改写命令。
 - `src/main/services/rtk-service.ts`：向 Roc 状态面板和执行链暴露 bundled RTK binary 状态。
-- `src/main/services/shell-execution-service.ts`：执行 RTK 命令，设置 RTK 运行时路径、tracking DB 和 tee 目录。
+- `src/main/services/deep-agent/command-tool.ts`、`src/main/plugins/agent/run-harness.ts`：生产命令策略、精确命令绑定与授权。
+- `src/main/plugins/runtime-tools/index.ts`：消费授权，选择隔离或主机执行环境。
+- `src/main/services/shell-execution-service.ts`：主机命令执行、运行环境与输出上限。
 
 ## 调试
 
@@ -45,14 +46,15 @@ resources/rtk-binaries/darwin-arm64/rtk --version
 resources/rtk-binaries/darwin-arm64/rtk rewrite "git status"
 ```
 
-从仓库根目录运行完整验证：`pnpm test` 写 `.artifacts/smoke-electron/result.json`；`pnpm smoke:mac` 写 `.artifacts/mac-package/result.json`。
+完整测试和打包验证见[验证入口](verification.md)；上述 binary 检查不证明生产工具经过 RTK。
 
 ## 降级行为
 
-- `RTKBinaryManager` 在非 arm64 架构上不提供 binary：middleware 不改写；Roc command tool 仅在 Roc shell 风险策略允许时按原命令执行。
-- `rtk rewrite` 返回 unsupported：Roc command tool 仅在 Roc shell 风险策略允许时按原路径执行，并记录 `command_not_supported`。
-- RTK deny：middleware 返回错误 `ToolMessage`，不执行原命令。
-- 改写后命令执行失败：默认回退原命令；实际执行仍受 `ShellExecutionService` 的 RTK 与 shell 风险策略约束。
+以下仅描述 middleware，不能作为生产命令的授权或降级规则：
+
+- binary 不可用或命令不支持时，调用原 handler。
+- `rtk rewrite` 返回 deny（exit 2）时，返回错误 `ToolMessage`，不执行原命令。
+- 默认 `fallbackOnError:true`：改写抛错或改写后的 handler 抛错时重试原 handler；handler 返回失败结果本身不触发此回退。
 
 ## 版本与来源
 

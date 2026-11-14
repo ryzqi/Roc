@@ -22,7 +22,7 @@ Crossref 每次最多 100 条：满页下一检查 offset 加 100；短页重置
 
 ## 回执与去重
 
-Migration 58 安装监控、查询版本、mutation 请求、检查、检查点、seen 和 alerts 七张表。transport 前持久化 running check；每个监控最多一个 running check。终态包括 complete、partial、failed、cancelled、interrupted。重启将未结束检查置为 interrupted；相同 request key 返回旧回执，不自动重读。
+监控、查询版本、mutation 请求、检查、检查点、seen 和 alerts 保存在当前科研库。transport 前持久化 running check；每个监控最多一个 running check。终态包括 complete、partial、failed、cancelled、interrupted。重启将未结束检查置为 interrupted；相同 request key 返回旧回执，不自动重读。
 
 成功来源的检查点、普通论文 seen、提醒和终态检查在同一事务提交，并在事务前后校验控制与查询版本。首次成功搜索建立普通论文 baseline；首次发现撤稿或勘误即提示。seen 按查询版本、来源、论文身份保存；提醒按 monitor、身份、类型跨来源去重。unknown、未报告或后来消失不会删除旧提醒。
 
@@ -32,18 +32,10 @@ Migration 58 安装监控、查询版本、mutation 请求、检查、检查点�
 
 ## 现有文献画布界面
 
-第五个内部 tab「监控」首次访问才懒加载，不增加路由或 shell。监控按项目隔离；查询版本和控制 revision 切换会重建编辑器。草稿、进行中命令和结果不确定时锁定监控选择及 tab 离开；项目变为只读后保留草稿、禁写并允许放弃。
+文献画布的「监控」子视图首次访问才懒加载。监控按项目隔离；查询版本和控制 revision 切换会重建编辑器。草稿、进行中命令和结果不确定时锁定监控选择及 tab 离开；项目变为只读后保留草稿、禁写并允许放弃。
 
 保存、暂停/恢复、检查和已读保留精确失败请求；重试不生成新的 requestId。取消针对主进程返回的真实 running check ID，并分别显示取消信号与终态。当前检查每秒刷新权威回执，最多 120 次，隐藏、读取错误或终态停止；手动刷新可恢复。列表、查询版本、检查和提醒分别分页，每页 20 条。
 
 DOI 目标按真实条目 ID 读取，不从当前过滤列表推断目标缺失。读取未完成或失败时禁止保存/立即检查，显示原始失败和重试；版本变化要求显式重新选择。查询保留已绑定选项，避免过滤列表清空合法绑定。检查详情展开后才渲染大型来源内容，原始 JSON 第二层展开后才序列化。
 
-UI 验证均在仓库根目录执行：
-
-- `pnpm build`（含 typecheck）
-- `node --test tests/renderer/research-monitors.test.mjs`
-- `node --test tests/renderer/literature-review.test.mjs tests/renderer/scholarly-relations.test.mjs tests/renderer/research-resources.test.mjs tests/renderer/research-openreview.test.mjs`
-- `node scripts/smoke-electron.mjs`
-- `pnpm check:ipc`
-- `pnpm check:renderer-chunks`
-- `git diff --check`
+验证入口：仓库根目录执行 `node --test tests/renderer/research-monitors.test.mjs`；跨模块检查按[验证说明](verification.md)选择。

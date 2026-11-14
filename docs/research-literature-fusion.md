@@ -1,334 +1,88 @@
 # 学术检索融合
 
-检索保存候选快照。只有独立的收录操作才修改文献库；候选不代表已读论文、
-已验证证据或完整学术覆盖。
+检索保存候选快照；独立收录操作才修改文献库。候选不是已读论文、已验证证据或完整学术覆盖。当前合同由 `literature-import.ts`、`literature-fusion.ts` 和 `literature-identity-graph.ts` 定义；[系统性综述](research-systematic-review.md)复用请求账本和完整原始池，[Zotero](research-zotero.md)使用独立来源身份与预览。
 
-## 冻结排序合同
+## 排序与身份
 
-当前快照版本为 13，排序方法为 RRF v1：
+当前搜索快照 schemaVersion 14，排序为 RRF v1：`score = sum(1 / (60 + source_rank))`。所有选中来源权重为 1，rank 是该来源分页范围的原始一基位置。同来源同论文只用首次 rank 贡献一次分数，全部原始观察仍保留。请求完成顺序和来源选择顺序不改变结果；同分按规范 identity 的 UTF-16 码元顺序排列。
 
-```text
-score(paper) = sum(1 / (60 + source_rank(paper)))
-```
+身份首先使用规范 DOI；无 DOI 时使用规范 arXiv、PMID 或来源/外部 ID。标题相同或近似不建立归并边。强身份图保留实际声明的 aliases 和竞争 DOI：无 DOI 连通分量只有唯一 DOI 锚点才附着，竞争锚点保持独立并返回 identityConflicts，不自动合并不同 DOI。
 
-所有选中来源的权重为 1。rank 是来源分页范围内原始的一基位置。同一来源出现同一
-论文多次时，只用第一次的 rank 贡献一次分数，全部元数据记录仍然保留。来源请求
-完成顺序与用户选择来源的顺序不改变排序；改变来源内部排名则会改变贡献。
-同分按规范化文献 identity 的 UTF-16 码元顺序排序，不依赖操作系统 locale。
+| 来源标识 | 当前处理 |
+| --- | --- |
+| OpenAlex `ids.doi` / `ids.pmid` | 保存原始字典与映射；主 DOI 与 ids.doi 冲突时保留竞争 DOI，附加 PMID 不连接其他论文 |
+| Semantic Scholar `externalIds.DOI` / `externalIds.ArXiv` | 参与强身份图；未经验证的 PubMed 等字段只保留原始值，不猜身份边 |
+| arXiv | 支持现代/旧 ID 与 abs URL，版本为正整数；同一论文修订只贡献一次来源分数，仅连接实际观察版本，不补造缺失版本或内容 |
+| PubMed / Europe PMC | MED 映射 `pmid:<id>`；其他 namespace 保持独立。PMC 与 MED 同号不归并，PMID 不经浮点转换 |
 
-当前归并依据首先是规范化 DOI；没有 DOI 时采用规范化 arXiv、PMID 或来源与
-外部 ID。标题相同或近似不构成归并依据。不同 DOI 不因同一个 arXiv/PMID 自动
-合并；预印本与正式出版版之间的关系仍需实际来源证据。
+已知标识格式错误在缓存前失败。Provider 声明的 arXiv 版本不等于从 arXiv 实际取得该版内容，预印本与出版版关系仍需直接来源证据。
 
-同一声明的来源身份只有一个已观察 DOI 时，无 DOI 记录连接到该 DOI。多个
-DOI 锚点仍保留独立候选，无 DOI 记录也单独保留；`identityConflicts` 显示共享
-标识及竞争 DOI。`aliases` 保存该候选实际关联的规范身份。主展示记录保持
-原 Provider 元数据，缺失 DOI 不用来拆分已确认同一标识的记录。
+## 元数据、冲突与收录
 
-OpenAlex 的 `ids.doi` / `ids.pmid` 与 Semantic Scholar 的
-`externalIds.DOI` / `externalIds.ArXiv` 参与强身份图。每条观察保存原始字段、
-原始值与规范身份，完整标识字典也保留未知键。Semantic PubMed JSON 字段尚未
-验证，因此只保留未知原始数据，不猜测身份边。已知标识格式错误在缓存前拒绝。
-OpenAlex 主 DOI 与 ids.doi 冲突时保留竞争 DOI，该记录的附加 PMID 不连接其他
-论文。无 DOI 的连通分量只有唯一 DOI 锚点时才附着；竞争锚点不能自动归并。
+主展示记录按 Crossref → OpenAlex → Semantic Scholar → PubMed → Europe PMC → arXiv，再按 rank/metadataHash 选择。该顺序只决定主元数据，不能解释为可信度、研究质量或排序权重。候选保存稳定 candidateId、identity、score、来源贡献、全部记录、rank/hash/抓取时间，以及字段与身份冲突；DOI 大小写/解析 URL 差异不算冲突。
 
-来源依据为 2026-11-03 核对的
-[OpenAlex work attributes](https://help.openalex.org/data/works/attributes/)
-以及 Ai2 编写的
-[Semantic externalIds.ArXiv consumer](https://github.com/allenai/genesys/blob/main/model_discovery/agents/search_utils.py)。
-不使用 OpenAlex 各 location 的 DOI 推测版本相同，也不将 Semantic 声明的
-arXiv vN 当作已从 arXiv 端点取得该版内容。修订关系继续仅来自直接观察的
-arXiv 记录。
+年份筛选按主记录执行，未知年份排除并提示。模型工具只返回摘要和冲突预览；完整原始记录受可信 owner/project 和快照有效期约束，模型字段不能扩大权限。当前合同不兼容的旧快照显式失败，预览 7 天过期不删除正式文献、证据、执行账本或原始池。
 
-arXiv 规范化支持现代 ID、旧 archive/subject ID 和 `/abs/` URL。0704–1412 序号
-为 4 位，1501 起为 5 位，版本必须为正整数。候选保留完整原始 ID 和记录；
-同一 arXiv 的多次修订只贡献一次来源分数。`arxiv_later_version` 关系只连接实际
-观察到的相邻版本及其元数据 hash；v1/v3 不推测 v2，无版本 ID 不推测具体最新版本。
-格式依据 [arXiv identifier](https://info.arxiv.org/help/arxiv_identifier.html)。
+独立收录先准备所有来源观察，全部成功且身份一致后才事务写入文库。`sources.providerRecord` 保留规范化前的原始记录。候选准备或来源/身份冲突导致该候选整体失败；多候选作业可部分成功。归档条目不自动恢复。
 
-PubMed 使用 `pmid:<id>`，Europe PMC 的 MED 来源映射到同一 PMID。其余 Europe
-PMC 记录保留 `<namespace>:<id>`，PMC 与 MED 即使编号相同也不归并。PubMed
-查询返回非 MED 来源会在缓存前失败。PMID 不经浮点转换，依据
-[NLM PubMed help](https://pubmed.ncbi.nlm.nih.gov/help/) 的稳定唯一标识合同。
+文库与候选匹配使用同一身份规则。只有唯一匹配时，新 DOI 可提升原无 DOI 条目的规范身份，保留条目 ID、引用键、主元数据优先级和来源；后续无 DOI 收录不丢失已知 DOI。多个历史条目共享别名或已有不同 DOI 时拒绝自动整理。
 
-## 元数据与审查
+| 正式观察 | 读取入口 | 保留内容 |
+| --- | --- | --- |
+| Provider 标识 | `research.getLibraryIdentifiers` / `research.library.getIdentifiers` | 执行/来源/rank、外部 ID、原始字典、规范映射和 metadataHash |
+| 类型/版本/许可/撤稿/更正 | `research.getLibraryReviews` / `research.library.getReviews` | 原始记录 hash、观察时间与来源声明 |
 
-主记录按 Crossref、OpenAlex、Semantic Scholar、PubMed、Europe PMC、arXiv 的
-固定顺序选择，同一来源再按 rank 和元数据 hash 选择。此顺序决定展示及收录的
-主记录，不代表可信度、研究质量或排序权重。收录同时准备所有不同来源观察，
-全部成功后才在一个事务写入文库 `sources`，其中 `providerRecord` 保留规范化
-之前的原始 Provider 记录；不会因候选快照过期丢失修订记录及其原始 hash。
-任何来源准备失败或改变身份均取消该候选的全部写入。
+两者默认 20、最多 50 条；候选过期或文库归档后仍可读。同执行/来源/rank 的内容冲突回滚候选收录，不补造历史观察。标识中的 DOI 同步到规范 metadata、书目/BibTeX/已有 CSL，原记录与原书目保留。
 
-每个候选保存 identity、稳定 candidateId、score、逐来源贡献、全部来源记录、
-元数据 hash、来源 rank 和抓取时间。DOI、标题、作者、年份、引用量与访问 URL
-不一致时保留冲突值和各自来源。DOI 的大小写/解析 URL 差异不作为冲突。
-模型工具返回摘要与冲突预览，不复制全部 Provider 记录；原始元数据仍在受会话、
-项目和有效期约束的搜索快照内。模型内容不能升级项目或工具权限。
+导入弹窗可展开原始观察和冲突，未知状态保持未知。OpenAlex 的许可只适用于声明副本，`is_retracted:false` 表示来源未报告撤稿；Crossref update-to 表示当前记录更新目标 DOI，不判定当前记录自身已撤稿。其他未经验证字段不生成结论。
 
-查询、来源和年份筛选继续保存在请求快照中。年份筛选基于明确选择的主记录；
-年份未知时排除并提示。部分来源失败保留状态、失败原因和 Retry-After。所有
-来源首个页面全部失败仍是 failed；后页失败且已有候选时返回 partial，保留已验证
-页面。不能把空结果解释为成功或穷尽检索。
+## 人工确认检索计划
 
-旧版本搜索快照不转换、不补猜测字段。读取不符合当前合同的快照显式失败。
-正式文献、证据和科研历史不随候选有效期删除。
+Discovery 的结构化 searchPlan 保留阶段 instruction 原样作为 researchQuestion；它不是未经保存的聊天逐字记录。refinedQuestion、keywords、synonyms、domain、excludedTerms 和查询式是建议。每条 query 固定来源、年份、limit/maxPages；excludedTerms 只有写入具体查询式才由来源执行。
 
-文库保存条目 ID、书目、原始 `sources`、归档状态和项目/附件引用，使用规范身份与声明别名索引。
-身份与别名从主元数据和实际保留的 `providerRecord` 建立；缺失的原始来源不推测补齐。
-收录、候选匹配与文库
-查询使用同一身份规则。只有一个匹配条目时，新的 DOI 可提升原无 DOI 条目的
-规范身份，保留原条目 ID、引用键、主元数据优先级和来源；之后无 DOI 收录仍
-保留已知 DOI。多个历史条目共享别名时显式拒绝自动整理，归档条目也保留身份。
-已有不同 DOI 的条目不会因共享来源标识自动合并。
+现有人工作业闸门显示完整计划并绑定 expectedSearchPlanHash。缺 hash、内容漂移、superseded、占位或无类型输出不能获批。Retrieval 绑定唯一已批准 search_strategy 工件与内容 hash；阶段工具只接收零起始 queryIndex，主进程派生参数并在实际请求前复核。相同项目下同一已批准工件/hash/queryId 不重复派发，账本返回 `research_search_query_already_dispatched`；每条查询仍使用已冻结页预算。
 
-当前结构单独持久化 Provider 标识观察：文库条目、执行 ID、来源、原始 rank、
-外部 ID、抓取时间、元数据 hash、原始字典与映射结果。旧数据不补造外部观察。
-收录核对原始 Provider 记录及重新映射结果；同一执行/来源/rank 只有一个观察，
-相同内容重复收录幂等，不同内容或不同条目冲突会回滚整个候选收录。
-仅标识字段提供的 DOI 也同步到规范 metadata、书目 DOI、BibTeX 字段及已有 CSL；
-原始来源记录和原始书目仍保留。
+快照/账本保留策略 ID/hash、原始问题、查询编号和批准时刻。普通会话/文献弹窗直接查询为 strategy:null，不补造已确认科研计划。
 
-`research.library.getIdentifiers` / `research.getLibraryIdentifiers` 分页读取这些
-观察，默认 20 条、最多 50 条。候选过期和文库归档不删除观察。普通文库列表
-不附带完整原始字典，模型搜索/读回工具也省略字典；模型仍可核对已知映射值。
+## Provider、分页与覆盖
 
-数据库 11 单独保存候选收录时的审查观察，含执行、来源、排名、原始记录 hash
-与观察时间。`research.library.getReviews` / `research.getLibraryReviews` 按同样的
-默认 20/最多 50 条分页读取，候选过期或文库归档后仍可读。旧文库不补造类型、
-许可或撤稿结论。不同审查内容不能占据同一执行/来源/排名，冲突会回滚收录。
+六来源均校验容器、题名、身份与已知字段。合法空数组是空结果；缺容器、HTTP200错误对象、类型错误或无身份记录为 `literature_provider_response_invalid`，不生成随机 ID、题名或空成功。arXiv 先校验 XML/Atom，错误 entry 拒绝；OpenAlex 使用 per_page。
 
-导入弹窗逐候选展示来源、类型、版本、许可、撤稿及更正/更新信息，原生 details
-用键盘展开完整来源和字段/身份冲突。来源缺失的状态显示未知，不显示“正常”。
-`is_retracted:false` 显示“来源未报告撤稿”，不代表独立核查或永久有效。收录仍
-是独立按钮，撤稿信息供人核对，归档条目不能自动恢复。
+limit 默认 10、最多 30，限制每页原始条数与最终候选数；maxPages 默认 1、最多 3。OpenAlex 用 page，Crossref/arXiv 用 offset，Semantic 用响应 offset，PubMed/Europe PMC 用 opaque cursor。查询/每页条数固定，cursor 不能改变主机；重复 cursor、倒退/重叠位置拒绝。排名缺口保留，不重新编号。Semantic 后页越过 1,000 条范围时停止。
 
-OpenAlex 保存 type、primary_location 的 version/license/landing_page_url 以及
-is_retracted。许可只用于所声明副本，不推广到其他版本，依据
-[OpenAlex locations](https://help.openalex.org/data/locations/)。
-Crossref 保存 type、license 的 URL/content-version 与 update-to 的目标信息，
-依据 [Crossref Swagger](https://api.crossref.org/swagger-docs)。更新关系显示当前
-记录更新哪个 DOI，不据此判定当前记录自身已撤稿。arXiv 版本来自实际 entry.id；
-其他来源尚未验证的字段保持未知。所有已知字段在缓存前校验。
+coverage 保存实际 API 声明总量、校验页数、分页范围和后续位置。未知统计为 null/unknown，不以返回条数补造命中总数；reported_end 只表示响应报告的查询终点，limited/truncated 表示仍有限制。stopReason 区分 reported_end/page_limit/provider_limit/continuation_unavailable/failed。首轮全部来源失败为 failed，后页失败且已有结果为 partial；已校验页与错误保留。complete 表示本次请求成功，不能证明学术 Recall 或穷尽检索。
 
-## 原始问题与确认检索计划
+每次实际 GET 保存 URL、位置、起止时间、HTTP状态、Retry-After、响应原始字节 SHA-256及传输错误。重试独立记账，退避不算 HTTP执行时间；200无效载荷保留200/hash但标为数据失败。缓存页保留原始抓取时间/hash、独立 hit/miss；命中不生成新 HTTP回执。
 
-discovery 输出结构化 searchPlan。researchQuestion 必须逐字等于该阶段已保存的
-instruction，这是原始研究指令快照，不冒充未经保留的原始聊天逐字记录。
-refinedQuestion、keywords、synonyms、domain、excludedTerms 和查询式是模型建议。
-queries 固定 query、sources、limit、maxPages 和需要的年份范围；
-不设置跨查询或跨调用的累计预算上限。排除项是纳入筛选标准；只有明确
-写入具体查询式的条件才由来源执行，不声称 API 自动理解所有计划字段。
+## 账本与完整原始池
 
-discovery 现在使用现有人工闸门。助手审批卡展示原始指令、建议问题、关键词/
-同义词、领域、排除项以及每个查询的来源、时间范围、页数和数量。批准携带用户
-看到的计划内容 hash；中断恢复重新读取后内容变化，或缺少原 hash，均拒绝批准。
-直接 workflow approval 也必须提供对应 expectedSearchPlanHash。失败或无类型的
-手工占位策略不能作为计划，旧自动批准状态不代表用户确认。
+检索开始保存 executionId、可信 owner/project/runId、冻结请求和 running；HTTP前保存 dispatched，读取/本地终止后保存 received。received 不等于远端成功，HTTP状态可为 null。候选、完整原始池和执行终态同事务发布；取消、关闭或写入失败不发布成功候选。
 
-retrieval 启动前绑定唯一的已批准 search_strategy 工件及内容 hash。该阶段
-search_literature 只接收零起始 queryIndex；主进程填写固定查询参数并再次核对，
-模型不能改写来源、范围或分页数量。每次实际 HTTP 之前检查工件仍然有效；
-计划 superseded 或内容变化后停止下一请求，保留原回执，不发布候选。
+审计失败抛错：派发前写失败就不发 HTTP，完成记录失败保留 unknown，不补造状态/hash/结束时间。重启将 running 标记 interrupted、未完成请求标记 unknown，保留字节回执；本地恢复时间不能当远端结束时间。
 
-搜索快照及执行账本保存策略工件 ID、内容 hash、原始问题、查询编号和实际
-批准时刻。普通会话或文献弹窗的直接查询保存 strategy:null，不假称已执行一个
-经过用户确认的科研策略。已有正式文献与历史产物不迁移为虚构的新计划。
+完整池保留融合前所有已校验来源记录、原始排名/标识/审查、请求、确认策略与回执，年份/候选上限不截断它。`getLiteraturePool` / `research.literature.getPool` 按 executionId 分页（默认20、最多30），每次先校验完整 contentHash，再返回 total/nextOffset。缺旧池显式失败，不能从RRF前N候选反推。完整池是标注输入准备，不等于独立相关性标签或完整论文全集。
 
-## Provider 响应合同
+## 准入、缓存与关闭
 
-六个来源都校验结果容器、论文身份与题名。合法的空数组是空结果；缺失容器、
-HTTP 200 错误对象、无身份记录或错误数据类型是来源失败，错误码为
-`literature_provider_response_invalid`。不生成随机论文 ID、虚构题名或空成功。
-来源可以增加元数据字段，已有必需字段不能消失后仍被接受。
+来源共用主机级 FIFO 准入，每主机同时一个 HTTP尝试直到响应校验结束；六检索来源使用五主机，PubMed/Europe PMC共享EBI。DataCite、Hugging Face、OpenReview的独立主机也复用 governor。每次普通搜索分批最多三个来源，不同主机可并行。
 
-每个来源保存实际 GET 尝试的 URL、分页位置、起止时间、HTTP 状态、Retry-After、
-响应原始字节 SHA-256 和传输失败码。重试保留独立回执，等待退避不算作 HTTP
-执行时间。HTTP 200 但内容无效时，HTTP 回执保留 200 与响应 hash，来源仍标记
-数据失败。并发来源使用各自的请求上下文，不能互换回执。请求过滤条件继续
-保存在搜索请求快照中；逐页保存位置、rankOffset、条数、覆盖范围与缓存观察。
+应用策略为每主机每小时最多300次、最短1秒（arXiv 3秒）；重试计数，缓存/拒绝准入不计数。配额是进程内上限，非远端剩余额度，重启重建窗口。Retry-After影响同主机其他项目；响应限额只收紧间隔。连续三次HTTP/传输/超时/载荷失败开启60秒冷却，新校验成功才恢复健康，旧缓存不清故障。取消/关闭不计来源故障，排队和退避可取消。
 
-OpenAlex 请求使用官方 `per_page` 参数。arXiv 先验证 XML 语法，再校验 Atom
-结构；错误 entry 不能成为论文，公开 DOI 则保留到元数据中。Atom 的响应结构、
-DOI 扩展与错误 entry 依据
-[arXiv API manual](https://info.arxiv.org/help/api/user-manual.html)。
-本地 fixture 验证正确、空、缺容器、缺身份、Atom 错误与未闭合 XML；没有把
-fixture 覆盖等同于真实 Provider 可用性。
-
-## 持久化执行与请求回执
-
-科研数据库版本 7 新增检索执行与逐来源请求账本。可信入口在开始检索时保存
-executionId、会话 owner、项目、执行 runId、冻结请求和 running 状态；发起 HTTP
-之前保存 dispatched 回执，读取结束或本地终止后保存 received 回执。received
-表示已记录本地结果，HTTP 状态仍可为 null，不表示远端成功。
-
-快照显式关联 executionId。候选快照与执行终态在同一 SQLite 事务提交；
-取消、关闭、数据库失败均不发布成功候选。所有并发来源退出并记录结果后才关闭
-执行范围，导入服务关闭也等待这些搜索，不让迟到回执写入已关闭数据库。
-
-请求审计写入失败必须抛错。发起前写入失败时不发 HTTP；完成记录失败时已保存
-的请求保持 unknown，不能补造 HTTP 200、响应 hash 或完成时间。重启把 running
-执行标记 interrupted，把未结束的请求标记 unknown，保留原始回执字节字段与
-空结束时间，并拒绝迟到结果覆盖。执行终止时间是本地恢复时间，不是远端请求
-实际结束时间。
-
-候选 7 天有效期清理只删除预览。执行身份、原始请求和回执仍保留，不能因取消
-或预览过期丢掉实际检索记录。旧快照对应的请求或执行不推测补齐。执行与原始池提供只读能力；综述内的查询回执界面见[系统性综述](research-systematic-review.md)。
-
-## 完整原始检索池
-
-数据库 12 保存融合前完整的已验证检索池，包含每条原始来源排名、元数据、
-标识字典、审查观察、请求、确认策略和逐来源回执。年份筛选、最终候选上限和
-旧候选过期删除不会删掉池中的记录。检索池与候选发布、执行完成在同一事务
-提交；池写入失败不发布候选，执行仍留下失败记录。
-
-`research.literature.getPool` / `research.getLiteraturePool` 按 executionId 分页读取，
-默认 20、最多 30 条，权限继续由可信会话/项目上下文决定。每页带完整池的
-contentHash、total 和 nextOffset，hash 覆盖固定版本、执行、时间、请求、策略、
-来源状态与全部记录。读取先校验完整池，内容篡改显式失败。此接口不在模型
-搜索工具中自动展开，也不修改正式文库。旧执行缺少原始池时显式不存在，
-不能从最终 RRF 候选反推完整池。
-
-完整池是后续独立人工标注及来源排序/RRF 比较的输入准备。仅拿 RRF 已选中的
-前 N 个候选做来源排序基线会产生选择偏差；完整池解决记录丢失，尚不构成独立
-标注或学术质量验收。当前仍没有独立查询集与人工相关性标签，不能报告真实
-Recall@20、nDCG@10 或质量提升。
+共享进程内LRU最多32条/8MiB响应文本、TTL5分钟，键包含可信项目、完整URL/分页和格式。仅校验成功结果缓存，不写磁盘。治理状态是该次结果的应用观察，不是实时远端健康或学术覆盖评分。关闭中止并等待所有请求/导入，清空缓存，拒绝迟到结果和工件。
 
 ## 离线标注与排名评估
 
-评估工具只读取明确指定的本地 JSON，不调用 Provider 或模型，也不写文库。
-输入合同在 `src/shared/schemas/literature-retrieval-evaluation.ts`。完整池须按
-`getLiteraturePool` 分页结果重建，校验全部记录数量与 contentHash；不能只保存
-一页或当前候选。没有原始池的历史执行不能进入评估。
-
-先准备 capture set：`schemaVersion:1`、corpusId、明确的 minimumTopics，以及
-queries 数组；每个查询包含 queryId、topicId 和完整 pool。执行：
+评估仅读明确本地JSON，不调用Provider/模型或写文库；输入为 `src/shared/schemas/literature-retrieval-evaluation.ts`。先重建每个完整池并校验数量/hash，准备 schemaVersion1、corpusId、minimumTopics 和 queries（queryId/topicId/pool）：
 
 ```sh
 pnpm research:retrieval-eval --prepare captures.json new-annotation-packet.json
-```
-
-输出 `unlabeled_packet`，按原始元数据 hash 排列。保留问题、时间范围、题名、
-作者、摘要、DOI、URL 与已知原始标识值，移除排名、分数、来源排序和候选归组。
-同一元数据 hash 的不同标识观察取并集。packet contentHash 和执行/pool hash
-用于核对来源；URL 和标识仍可能透露 Provider，不能宣称来源盲法。包本身无相关性
-标签，不能直接作为评估输入。
-
-人工评审需要独立确定 paperId，给每个原始元数据 recordHash 恰好一个归属，并按
-0–3 级标注 grade；grade>0 为相关。每个 paper 保留 evidenceRefs。已知相关但未被
-捕获的论文使用空 recordHashes，仍进入 Recall 分母和理想排名。完整 pool 只证明
-抓取记录完整，无法证明相关论文全集完整；只有池内判断时应报告池内 Recall。
-人工评审与争议裁定的方法、范围、遗漏论文发现方法应保存在 annotation evidence。
-
-带标签输入在 capture set 上增加 kind、annotation，并给每个查询增加 papers。
-`engineering_fixture` 必须 annotation:null，始终输出 engineering_only。
-`human_reviewed` 必须声明 method:independent_human、blindToRanking:true、至少两个
-不同 reviewerIds、producerIds 和 evidence 的 reference/SHA-256；评审者不能同时
-是生产者。工具记录 declared_independent_human，不认证身份、证据内容或独立性。
-人工评估要求相关源码已提交且无相关工作区改动，捕获 limit 至少 20。执行：
-
-```sh
 pnpm research:retrieval-eval labeled-corpus.json new-report.json
 ```
 
-两种输出均先完成内容写入，再原子发布新文件；已有路径报 EEXIST，不覆盖。
-不完整 pool、hash 错误、重复查询/执行、缺失/重复标签和无相关论文分母均显式失败，
-不会发布报告。报告保留 corpus/pool hash、源码 commit、编译 bundle hash、查询、
-主题、失败/部分失败数量与声明的最小主题数。达到声明数量只表示数量条件满足，
-不证明样本有代表性或评估结论成立。
+准备输出 unlabeled_packet，按metadataHash排序，保留问题/元数据/已知标识，移除排名、分数、来源排序与候选分组。URL/标识仍可能透露来源，不能声称来源盲法。人工给每个原始recordHash恰好一个paperId归属、0–3级grade和evidenceRefs；已知相关但未捕获论文可用空recordHashes，进入Recall分母/理想排名。仅池内判断须按池内Recall解释。
 
-基线按固定来源优先级、原始 rank 和 identity 排序，与 RRF v1 使用相同的当前
-身份归并及主记录年份规则。这是来源排序比较，不是历史完整应用版本的质量比较。
-每个排名先截取 20 个候选，重复 paperId 只首次计相关性；合并多个人工 paperId
-的候选不计增益，并计入 falseMerges20。失败查询保留，空排名重复率为 null。
+engineering_fixture 要求 annotation:null，始终 engineering_only；human_reviewed 声明 independent_human、blindToRanking、至少两名不同且不属于producerIds的reviewer及证据reference/SHA-256。人工模式要求相关源码已提交且无相关工作区改动、捕获limit≥20。工具仅记录 declared_independent_human，不认证身份、独立性或科学代表性。
 
-Recall@20 为前 20 个候选中不同相关论文数除以全部已标注相关论文数。
-nDCG@10 使用 gain=`2^grade-1`、discount=`log2(rank+1)`，理想排名包括全部已标注
-相关论文，含没有捕获记录的论文。公式依据
-[Microsoft Research TR-2008-164](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2008-164.pdf)；
-Recall 与等权主题汇总依据
-[NIST TREC 2021 overview](https://trec.nist.gov/pubs/trec30/papers/Overview-2021.pdf)。
-同主题查询先平均，再等权平均主题；重复率按全部查询的前 20 个候选槽位汇总。
-没有未经依据的目标值、置信区间或提升声明。当前保留的示例均为合成工程 fixture；
-独立人工检索验收仍为 `Blocked, not run`。
+基线按固定来源优先级/rank/identity排列，与RRF使用同一当前身份和年份规则。前20截断后重复paperId只首次计增益，跨多个paperId的归并计falseMerges20。Recall@20分母为全部已标注相关论文；nDCG@10使用gain=`2^grade-1`、discount=`log2(rank+1)`。同主题查询先平均，再等权平均主题；重复率按全部前20槽位汇总，空排名为null。报告保留失败/部分查询、数量条件、corpus/pool/源码/bundle身份；达到minimumTopics不等于科学验收。
 
-## 来源覆盖与运行约束
-
-当前来源 coverage 保存实际响应声明的 API 命中数、通过校验的页数、分页范围和
-后续页标识。OpenAlex 使用 meta.count；Crossref 使用 total-results；Semantic
-Scholar 使用 total/next；Europe PMC 使用 hitCount/nextCursorMark；arXiv 使用
-Atom totalResults。统计缺失保留 null 与 unknown，并提示统计或终点未经报告；
-不以返回条数补造 API 总命中数。
-
-coverage 的 limited 表示当前候选尚未覆盖声明的 API 命中，truncated 同步标记
-并提示后续分页。reported_end 仅表示抓取到该响应报告的 API 查询终点；complete
-表示本次来源请求成功。学术 Recall、完整领域覆盖和穷尽结论需要独立标注与验证。
-非法计数、与页面记录矛盾的计数或超出请求条数的页面是来源失败，HTTP 回执仍保留。
-缓存命中保留原始统计、opaque cursor 与响应抓取身份。
-
-`maxPages` 默认 1、最多 3，限制每来源抓取页数；`limit` 限制每页原始条数和
-融合后最终候选数。OpenAlex 使用 page，Crossref/arXiv 使用 offset，Semantic
-Scholar 使用响应声明的 offset，PubMed/Europe PMC 使用原始 opaque cursor。
-查询和每页条数在分页中保持固定，cursor 作为参数编码，不改变主机或查询。
-来源返回的 offset 跳跃保留实际排名；即使响应报告终点，收集条数与声明总数
-不符时，聚合覆盖为 unknown。不能把缺失区间重新编号为连续排名。
-
-stopReason 区分 reported_end、page_limit、provider_limit、
-continuation_unavailable 和 failed。重复 cursor、倒退或重叠 offset 显式拒绝；
-Semantic Scholar 下一页越过 1000 条范围时停止，保留未抓取位置。后页 HTTP
-或数据失败保留之前的候选和回执。取消期间已有 HTTP 仍记录，候选不发布。
-旧来源级 cache 字段已移除；每个页面独立记录 hit/miss，缓存命中不生成请求。
-OpenAlex 当前基础 page/per_page 支持范围与 key 要求依据
-[OpenAlex paging](https://help.openalex.org/api/paging/)；
-Crossref 当前整数统计和 offset/rows 合同依据
-[Crossref Swagger specification](https://api.crossref.org/swagger-docs)；
-Semantic Scholar relevance search 的分页与范围依据
-[Semantic Scholar Graph API](https://api.semanticscholar.org/api-docs/graph)。
-Europe PMC 的后续 cursor 与终页省略规则依据
-[Europe PMC API release announcement](https://groups.google.com/a/ebi.ac.uk/g/epmc-webservices/c/yG8kMl1R3cI)。
-
-来源共用主机级准入，复用现有 FIFO 资源协调器。每个主机同时只有一个 HTTP
-尝试，连接保持到结果校验完成；不同主机可以并行。PubMed 与 Europe PMC 使用
-同一 EBI 主机，因此共享连接、配额和冷却。当前五个主机限定应用最多五个活跃
-尝试，每次搜索继续分批调度最多三个来源。
-
-应用策略为每主机固定一小时窗口最多 300 次尝试，最短间隔 1 秒，arXiv 为 3 秒。
-这是本应用的进程内调用上限，不代表远端剩余额度；重启会重建窗口，其他程序和
-机器的调用不在这个计数内。缓存命中和被拒绝的准入不占配额；重试分别占用。
-配额耗尽显式报告 `literature_provider_quota_exhausted`，没有虚构 HTTP 回执。
-
-Retry-After 在主机范围生效，包括其他项目的排队请求。Crossref 的响应 rate
-limit/interval 只收紧应用间隔，不能扩大本地配额。连续三个 HTTP、传输、超时
-或有效载荷失败开启 60 秒断路冷却；到期后允许受同一连接约束的恢复尝试。
-只有新的完整校验成功才能恢复健康，旧缓存不能清除失败。用户取消及应用关闭
-不计来源故障。排队与退避可取消，取消之后不继续调度该搜索。
-
-快照保存主机、unknown/healthy/degraded/cooldown/quota_exhausted、连续失败数、
-本地剩余次数/重置时间、实际最短间隔、冷却截止及最后成功/失败时间。它是该次
-结果观察到的应用状态，不是后台轮询的实时服务状态或学术覆盖评分。
-
-arXiv 的单连接和 3 秒要求依据
-[arXiv API terms](https://info.arxiv.org/help/api/tou.html)。
-Crossref 通用访问页仍有较旧的汇总限额，本实现采用 2026-07-21 发布的 public
-list query 1 次/秒要求并观察响应头：
-[Crossref query rate limits](https://community.crossref.org/t/refining-rest-api-limits-for-improved-stability-and-reliability/16137)。
-
-应用共享进程内 LRU 响应缓存，最多 32 条、8 MiB UTF-8 响应文本，TTL 为 5 分钟。
-缓存键包含可信项目、完整请求 URL（查询和分页参数）与响应格式。只有通过响应
-及文献合同校验的结果才写入缓存，失败响应不缓存。导入入口从执行上下文确定
-项目并保存请求，模型提供的项目字段不能改变缓存或快照范围。
-
-每页明确记录 cache miss 或 hit。命中保留原始抓取时间及原始字节响应 hash，
-该页 HTTP 回执为空，不把缓存读取伪装成新抓取。缓存不写磁盘，插件关闭时清空。
-关闭先中断父阶段，再同时关闭检索、导入及原生服务，并汇总清理失败。检索关闭
-中断进行中的请求、等待请求退出并拒绝后续读取；迟到角色输出不能发布工件。
-
-确定性回归覆盖来源到达顺序、来源内重复、同分排序、DOI 等价写法、同标题不同
-文献、冲突保存、快照读回、独立收录、模型预览、六来源分页、分页上限、
-排名缺口、后页失败、逐页缓存/重试回执和分页取消。原生 P0 验证检索/人工收录到
-解析、证据、实验、论文和导出的消费者链。
-
-这批不提供学术 Recall@20/nDCG@10。独立标注集尚未建立。Provider 原始请求与
-分页回执、有界缓存、进程内配额/健康度、持久化请求账本和确认检索计划已接入。
-OpenAlex/Semantic 已验证外部标识归并及候选类型/版本/许可/撤稿/更正/冲突展示
-已接入。其他来源未验证字段保持未知；独立检索标注与质量指标尚无验收结论，见[验证边界](verification.md)。
+输出原子发布新文件，已有路径EEXIST不覆盖；不完整池、hash/标签/身份错误和缺相关分母均失败。现有示例为合成工程fixture；独立人工查询集与真实Recall/nDCG验收尚未建立，见[验证边界](verification.md)。本地SQLite/向量检索另见[性能与冻结检索](research-performance.md)。

@@ -31,7 +31,7 @@ R 使用 `{ kind: "renv", rootPath, libraryPath }`：`rootPath` 是所选 R 的 
 
 Julia 使用 `{ kind: "julia", rootPath, depotPath }`：`rootPath` 包含 `bin/julia`，`depotPath` 指定已准备的 depot，均为绝对目录。预检使用所选 Julia 的 Pkg 检查 Project/Manifest 是否同步、依赖和 artifacts 是否已安装，以及 Manifest 中的 Julia 版本。实际选中的项目/版本化 Manifest、工作区项目配置、JuliaLocalPreferences/LocalPreferences 和 JuliaArtifacts/Artifacts 配置会保存到输入快照，保留 Julia 自身的文件选择优先级。运行关闭 startup 文件和自动预编译，使用已有编译缓存；不加载默认全局环境。本地相对路径依赖的 Project.toml 与源码需要一并声明为输入，绝对路径依赖会被拒绝。
 
-R/Julia 解释器、包元数据及锁文件摘要均纳入环境指纹，运行结束时再次校验。未声明版本的 Julia 包将版本记录为 `null`。应用不安装 R/Julia 或修改其项目库/depot；所选运行时需与当前 macOS 兼容。
+R/Julia 环境身份包含解释器、包元数据、锁文件及声明代码树的完整字节/链接摘要，运行结束时再次校验。未声明版本的 Julia 包记录为 `null`。应用不安装 R/Julia 或修改其项目库/depot；所选运行时需与当前 macOS 兼容。读取范围与审计文件见[执行资源治理](research-execution-resources.md)。
 
 文件源码路径（Python 为 `source.path`，其他引擎为 `sourcePath`）和 `inputPaths` 均为项目内相对路径。项目外文件、符号链接和路径越界会失败；原项目中的输入保持只读。R/Julia 的脚本参数进入 `commandArgs(trailingOnly=TRUE)` 或 Julia `ARGS`；TypeScript 参数通过 `context.parameters` 提供。R/Julia 输出写入本次输出/临时目录，标准输出和错误单独保存。
 
@@ -39,11 +39,9 @@ R/Julia 解释器、包元数据及锁文件摘要均纳入环境指纹，运行
 
 `publishExperiment` 从已提交的运行记录生成并校验 JSON 清单，再关联实验阶段的流程工件及 provenance；需要项目处于可编辑的实验阶段。取消会等待进程退出并保存日志，应用关闭或重启恢复时将未完成运行标记为 interrupted。中断运行不自动重复执行，重新运行须使用新 `requestId`，并重新校验环境与当前输入。
 
-阶段 Agent 的写工具由服务绑定当前项目和本次阶段运行。脚本修改使用 `expectedHash`；实验、图稿、导出启动使用新的 `requestId`，重复同一请求返回已有记录。`ownerRunId` 只由服务写入，模型不能指定项目身份。取消或替换阶段运行后，迟到的脚本写入、完成结果和发布都会被拒绝。人工批准和最终 ZIP 交付仍不向模型开放。
+阶段 Agent 的写工具绑定当前项目和实际 owner，脚本修改须传 `expectedHash`。取消/替换阶段后拒绝迟到写入及发布；阶段输出必须关联本次运行链真实发布工件，元数据不能代替执行。失败记录保留，重试接续来源；完整所有权合同见 [ADR 0028](adr/0028-execution-task-ownership.md)。
 
-实验、绘图和导出阶段的模型输出必须绑定本次运行链已发布的真实工件。系统不会另造 `path=null` 的空产物；未发布时阶段失败并保留模型版本。失败或重试会留下已发布记录，重试成功后把模型 provenance 接到这些工件。手工创建的元数据工件不能代替实际发布。
-
-实验域**没有独立阶段页面**（[ADR 0024](adr/0024-stage-surface-removed.md)）：启动 TypeScript/R/Julia/Python 实验、读取日志与发布走上面的 capability（`research.experiment.startOwned` / `publishOwned`），由对话代理调用；旧链接 `?view=experiments` 会回到默认 LaTeX 视图。运行结果和来源由工件检查器展示；Python 环境选择位于管理任务区，原生选择须由用户发起。`inspectExperimentEnvironment` 提供真实环境检查。任意本机 R/Julia 包的源码并非完整打包快照；环境摘要记录实际包版本、安装元数据及项目锁文件，运行前后都会重新检查其一致性。
+实验域没有独立阶段页面（[ADR 0024](adr/0024-stage-surface-removed.md)）：对话代理调用 `research.experiment.startOwned` / `publishOwned`，日志、来源和指标审核在[工件检查器](research-artifact-inspector.md)展示。旧 `?view=experiments` 回到默认 LaTeX。Python 环境选择位于管理任务区，由用户发起；`inspectExperimentEnvironment` 提供真实预检。原生包代码身份被完整核对，但运行时和包原件不因此全部随实验打包。
 
 修改 R 进程适配器时，构建机需要 macOS 的 Command Line Tools；以下命令只构建 arm64 库，并更新源码与二进制哈希。应用运行时直接使用已构建资源。
 
