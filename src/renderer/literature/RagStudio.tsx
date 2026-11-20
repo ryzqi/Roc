@@ -1,7 +1,7 @@
 import { useVisiblePolling } from '../shared/view-activity';
 import {KnowledgeJobs} from './KnowledgeJobs';
 import { useEffect, useRef, useState } from 'react';
-import { AlertCircle, Bookmark, Check, ClipboardCopy, DatabaseZap, ExternalLink, FlaskConical, Loader2, Play, RefreshCw, Search, Settings2, Square } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Bookmark, Check, ChevronDown, ClipboardCopy, DatabaseZap, ExternalLink, FlaskConical, Loader2, Play, RefreshCw, Search, Settings2, Square } from 'lucide-react';
 import type { ResearchIndexedFile, ResearchIndexJob, ResearchIndexStatus, ResearchKnowledgeSearchHit, ResearchKnowledgeSearchResult } from '../../shared/types';
 import { useAsyncAction, useAsyncResource } from '../app/use-async-resource';
 import { useWorkspaceScope } from '../app/workspace-scope';
@@ -10,8 +10,12 @@ import { useImeGuard } from '../shared/hooks/use-ime-guard';
 import { useSettingsRevision } from '../shared/settings-events';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
+import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
 import { controlIndex, listIndexedFiles, listIndexJobs, searchKnowledge } from './library-store';
 import type { LiteratureStore } from './use-literature-store';
+import './rag-studio.css';
+
+const ScientificMarkdown = retryableLazy(() => import('./ScientificMarkdown'));
 
 /**
  * RAG Studio (P5/T5.5).
@@ -90,6 +94,11 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
   const client = literature.client;
   const projectId = literature.projectId;
   const [query, setQuery] = useState('');
+  const [indexOpen, setIndexOpen] = useState(false);
+  const [expandedHits, setExpandedHits] = useState<ReadonlySet<string>>(() => new Set());
+  const queryRef = useRef<HTMLInputElement>(null);
+  const backRef = useRef<HTMLButtonElement>(null);
+  const indexVisited = useRef(false);
   const [rerank,setRerank]=useState<'none'|'semantic'>('semantic');
   const [result, setResult] = useState<ResearchKnowledgeSearchResult | null>(null);
   const searchAction = useAsyncAction(
@@ -127,6 +136,15 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
     return () => { mounted.current = false; };
   }, []);
 
+  useEffect(() => {
+    if (indexOpen) {
+      indexVisited.current = true;
+      backRef.current?.focus();
+    } else if (indexVisited.current) {
+      queryRef.current?.focus();
+    }
+  }, [indexOpen]);
+
   /**
    * The index configuration is written by the settings centre, and `settings.*`
    * has no push channel — so the effective-config block below re-reads when settings change
@@ -142,12 +160,12 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
   const status = statusResource.data;
 
   const filesResource = useAsyncResource(
-    projectId === null ? null : `index-files:${projectId}:${fileQuery}`,
+    projectId === null || !indexOpen ? null : `index-files:${projectId}:${fileQuery}`,
     () => listIndexedFiles(client, { projectId: projectId ?? '', query: fileQuery, includeMissing: true, limit: 100 }),
     { label: '读取索引文件' }
   );
   const jobsResource = useAsyncResource(
-    projectId === null ? null : `index-jobs:${projectId}`,
+    projectId === null || !indexOpen ? null : `index-jobs:${projectId}`,
     () => listIndexJobs(client, { projectId: projectId ?? '', limit: 50 }),
     { label: '读取索引作业' }
   );
@@ -165,8 +183,10 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
   const reloadJobs = jobsResource.reload;
   useVisiblePolling(() => {
     reloadStatus();
-    reloadFiles();
-    reloadJobs();
+    if (indexOpen) {
+      reloadFiles();
+      reloadJobs();
+    }
   }, POLL_INTERVAL_MS, busy);
 
   const counts = status?.counts ?? null;
@@ -198,6 +218,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
     }
     searchInFlight.current = true;
     setNote(null);
+    setJumpError(null);
     const result = await searchAction.run({
       query: trimmed,
       projectId,
@@ -208,6 +229,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
     searchInFlight.current = false;
     if (!mounted.current) return;
     setResult(result.ok ? result.data : null);
+    setExpandedHits(new Set());
   };
 
   /**
@@ -288,7 +310,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
       })
       .then((ok) => {
         if (ok) {
-          setNote('已写入知识库（note 来源；重复保存会更新同一条）。');
+          setNote('已保存到知识库。');
         }
       });
   };
@@ -297,7 +319,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
     return (
       <EmptyState
         icon={DatabaseZap}
-        title="索引属于项目"
+        title="选择项目后检索知识"
         testId="rag-no-project"
       />
     );
@@ -305,19 +327,37 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
 
   const indexedFiles = filesResource.data ?? [];
   const jobs = jobsResource.data ?? [];
+  const sourceLabel = (hit: ResearchKnowledgeSearchHit): string =>
+    ({literature: '文献', file: '工作区文件', note: '知识笔记', experiment: '实验记录'} as Readonly<Record<string, string>>)[hit.sourceType] ?? '知识来源';
 
   return (
-    <div className="flex h-full min-h-0 flex-col" data-testid="rag-studio">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b-[0.5px] border-line px-3 py-2">
-        <span className="flex items-center gap-1.5 text-[length:var(--font-meta-size)]" data-testid="rag-phase" data-phase={status?.phase ?? 'loading'}>
-          {status === null ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : null}
-          {status === null ? '读取索引状态…' : PHASE_LABELS[status.phase]}
-        </span>
-        {counts === null ? null : (
-          <span className="font-mono text-muted text-[length:var(--font-micro-size)]" data-testid="rag-counts">
-            文件 {counts.total}，已索引 {counts.ready}，排队 {counts.queued}，进行 {counts.running}，失败 {counts.failed}
-          </span>
-        )}
+    <div className="rag-studio flex h-full min-h-0 min-w-0 flex-col" data-testid="rag-studio">
+      <header className="rag-heading">
+        <div className="rag-heading-title">
+          {indexOpen ? <button ref={backRef} type="button" className="rag-button" aria-label="返回检索" onClick={() => setIndexOpen(false)}>
+            <ArrowLeft size={16} aria-hidden="true" />
+          </button> : <Search size={18} aria-hidden="true" className="text-muted" />}
+          <h2>{indexOpen ? '管理索引' : '检索项目知识'}</h2>
+        </div>
+        {indexOpen ? null : <button type="button" className="rag-button" onClick={() => setIndexOpen(true)} data-testid="rag-index-toggle">
+          {busy ? <Loader2 size={14} aria-hidden="true" className="animate-spin" /> : <DatabaseZap size={14} aria-hidden="true" />}
+          管理索引
+          {counts && counts.failed > 0 ? <span className="text-[var(--st-warn)]">{counts.failed} 项失败</span> : null}
+        </button>}
+      </header>
+
+      {indexOpen ? (
+        <div className="rag-body rag-index-panel" data-testid="rag-index-panel">
+          <section className="rag-index-summary">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-2" data-testid="rag-phase" data-phase={status?.phase ?? 'loading'}>
+                {statusResource.status === 'loading' ? <Loader2 size={14} aria-hidden="true" className="animate-spin" /> : null}
+                {status === null ? statusResource.status === 'error' ? '索引状态不可用' : '读取索引状态…' : PHASE_LABELS[status.phase]}
+              </span>
+              {counts === null ? null : <span className="text-muted tabular-nums" data-testid="rag-counts">
+                {counts.total} 个文件，已索引 {counts.ready}，排队 {counts.queued}，进行中 {counts.running}，失败 {counts.failed}
+              </span>}
+            </div>
         <div className="ml-auto flex items-center gap-1">
           <button
             type="button"
@@ -350,169 +390,10 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
             {status?.phase === 'paused' ? '继续' : '暂停'}
           </button>
         </div>
-      </div>
-
-      {statusResource.status === 'error' ? (
-        <div className="shrink-0 px-3 py-2">
-          <ErrorBar error={{ level: 'page', message: statusResource.error ?? '读取索引状态失败', retry: reloadStatus }} />
-        </div>
-      ) : null}
-
-      {controlAction.error === null ? null : (
-        <div className="shrink-0 px-3 py-2">
-          <ErrorBar error={{ level: 'page', message: controlAction.error }} onDismiss={controlAction.reset} />
-        </div>
-      )}
-
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <KnowledgeJobs client={client} projectId={projectId} />
-        <section className="mb-4">
-          <h3 className="mb-1.5 text-muted text-[length:var(--font-meta-size)]">检索（关键词与语义匹配）</h3>
-          <label className="mb-2 flex items-center gap-2 text-xs text-subtle">排序方式
-            <select aria-label="排序方式" value={rerank} disabled={searching} onChange={event=>setRerank(event.target.value as 'none'|'semantic')}
-              className="min-w-0 rounded-control border-[0.5px] border-line bg-surface px-2 py-1 text-ink disabled:opacity-40">
-              <option value="none">关键词与语义融合</option><option value="semantic">语义精排（不可用时回退融合）</option>
-            </select>
-          </label>
-          <div className="flex gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-control border-[0.5px] border-line bg-surface px-2">
-              <Search size={11} aria-hidden="true" className="shrink-0 text-subtle" />
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                onCompositionStart={ime.onCompositionStart}
-                onCompositionEnd={ime.onCompositionEnd}
-                onKeyDown={(event) => {
-                  if (ime.shouldIgnoreKeyDown(event)) return;
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    void runSearch();
-                  }
-                }}
-                aria-label="检索知识库"
-                placeholder="检索已索引内容"
-                data-testid="rag-query"
-                className="h-[var(--control-height)] min-w-0 flex-1 bg-transparent text-ink text-[length:var(--font-meta-size)] placeholder:text-subtle"
-              />
-            </div>
-            <button
-              type="button"
-              disabled={query.trim().length === 0 || searching}
-              onClick={() => void runSearch()}
-              data-testid="rag-search"
-              className="flex h-[var(--control-height)] items-center gap-1 rounded-control bg-accent-soft px-3 text-ink text-[length:var(--font-meta-size)] active:bg-[var(--accent-soft-strong)] disabled:opacity-40"
-            >
-              {searching ? <Loader2 size={11} aria-hidden="true" className="animate-spin" /> : null}
-              检索
-            </button>
-          </div>
-
-          {result && <p role="status" className="mt-2 text-xs text-subtle">{result.ranking.reranker.status === 'succeeded'
-            ? '已使用语义精排' : result.ranking.reranker.status === 'not_requested' ? '使用融合排序'
-            : `精排未使用，已回退融合排序（${({config_missing:'未配置',disabled:'已停用',timeout:'超时',failed:'服务故障'} as const)[result.ranking.reranker.status]}）`}</p>}
-          {result?.ranking?.degradation && <p role="status" className="mt-2 text-xs text-subtle" data-testid="rag-degraded">
-            语义检索暂不可用，本次仅返回关键词结果（{{timeout:'请求超时',network:'网络故障',rate_limit:'服务限流',provider_unavailable:'服务暂不可用'}[result.ranking.degradation]}）。可稍后重试。
-          </p>}
-          {searchError === null ? null : (
-            <p role="alert" className="mt-1.5 flex items-center gap-1 text-[var(--st-bad)] text-[length:var(--font-micro-size)]" data-testid="rag-search-error">
-              <AlertCircle size={11} aria-hidden="true" />
-              {searchError}
-            </p>
-          )}
-          {jumpError === null ? null : (
-            <p role="alert" className="mt-1.5 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" data-testid="rag-jump-error">
-              {jumpError}
-            </p>
-          )}
-          {note === null && literature.action.error === null ? null : (
-            <p role="status" className="mt-1.5 text-muted text-[length:var(--font-micro-size)]" data-testid="rag-note">
-              {note ?? literature.action.error}
-            </p>
-          )}
-
-          {result === null ? null : result.hits.length === 0 ? (
-            <EmptyState compact icon={Search} title="没有命中" description="换一个说法，或先建索引。" testId="rag-no-hits" />
-          ) : (
-            <>
-              <p className="mt-2 font-mono text-subtle text-[length:var(--font-micro-size)]" data-testid="rag-search-meta">
-                关键词 {result.keywordCount}，向量 {result.vectorCount}，嵌入模型 {result.embeddingModel ?? '未配置'}，{result.generatedAt}
-              </p>
-              <ul className="mt-1.5 flex flex-col gap-1.5" data-testid="rag-hits">
-                {result.hits.map((hit) => (
-                  <li
-                    key={hit.chunkId}
-                    className="rounded-card border-[0.5px] border-line bg-surface px-2.5 py-2"
-                    data-testid={`rag-hit-${hit.chunkId}`}
-                  >
-                    <header className="flex items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate text-ink text-[length:var(--font-meta-size)]">{hit.title}</span>
-                      <span className="shrink-0 font-mono text-subtle text-[length:var(--font-micro-size)]">
-                        综合相关度 {hit.rrfScore.toFixed(4)}
-                        {hit.keywordRank === null ? '' : `，关键词第 ${hit.keywordRank}`}
-                        {hit.vectorRank === null ? '' : `，语义第 ${hit.vectorRank}`}
-                      </span>
-                    </header>
-                    <p className="mt-1 whitespace-pre-wrap text-muted text-[length:var(--font-meta-size)]">{hit.content}</p>
-                    <footer className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      <span className="min-w-0 flex-1 truncate font-mono text-subtle text-[length:var(--font-micro-size)]">
-                        {hit.sourceType}，{hit.locator ?? '无 locator'}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          hitCopy.copy(hit.content);
-                          setCopiedChunkId(hit.chunkId);
-                        }}
-                        title="复制这条命中的正文"
-                        data-testid={`rag-hit-copy-${hit.chunkId}`}
-                        className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
-                      >
-                        {hitCopy.copied && copiedChunkId === hit.chunkId ? (
-                          <Check size={10} aria-hidden="true" className="text-[var(--st-ok)]" />
-                        ) : (
-                          <ClipboardCopy size={10} aria-hidden="true" />
-                        )}
-                        {hitCopy.copied && copiedChunkId === hit.chunkId ? '已复制' : '复制'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openHit(hit)}
-                        data-testid={`rag-hit-open-${hit.chunkId}`}
-                        className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
-                      >
-                        <ExternalLink size={10} aria-hidden="true" />
-                        {hit.documentId.startsWith('project-index:') ? '打开来源文件' : '在阅读器里定位'}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={projectId === null}
-                        onClick={() => captureHit(hit)}
-                        title="将当前检索结果保存为项目证据。"
-                        data-testid={`rag-hit-capture-${hit.chunkId}`}
-                        className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
-                      >
-                        <FlaskConical size={10} aria-hidden="true" />
-                        捕获为证据
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => saveHitAsNote(hit)}
-                        title="将当前检索结果保存为知识库笔记。"
-                        data-testid={`rag-hit-save-${hit.chunkId}`}
-                        className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
-                      >
-                        <Bookmark size={10} aria-hidden="true" />
-                        写入知识库
-                      </button>
-                    </footer>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </section>
-
+          </section>
+          {statusResource.status === 'error' ? <ErrorBar error={{level: 'page', message: statusResource.error ?? '读取索引状态失败', retry: reloadStatus}} /> : null}
+          {controlAction.error === null ? null : <ErrorBar error={{level: 'page', message: controlAction.error}} onDismiss={controlAction.reset} />}
+          <KnowledgeJobs client={client} projectId={projectId} />
         <section className="mb-4">
           <div className="mb-1.5 flex items-center gap-2">
             <h3 className="text-muted text-[length:var(--font-meta-size)]">已索引文件</h3>
@@ -527,7 +408,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
           </div>
           {filesResource.status === 'error' ? (
             <ErrorBar error={{ level: 'page', message: filesResource.error ?? '读取索引文件失败', retry: reloadFiles }} />
-          ) : indexedFiles.length === 0 ? (
+          ) : filesResource.status === 'loading' ? <p role="status">正在读取索引文件…</p> : indexedFiles.length === 0 ? (
             <p className="text-subtle text-[length:var(--font-micro-size)]" data-testid="rag-no-files">
               当前工作目录还没有已索引文件。选择「增量扫描」可添加新文件。
             </p>
@@ -564,7 +445,9 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
 
         <section className="mb-4">
           <h3 className="mb-1.5 text-muted text-[length:var(--font-meta-size)]">索引作业</h3>
-          {jobs.length === 0 ? (
+          {jobsResource.error ? (
+            <ErrorBar error={{level: 'page', message: jobsResource.error, retry: reloadJobs}} />
+          ) : jobsResource.status === 'loading' ? <p role="status">正在读取索引作业…</p> : jobs.length === 0 ? (
             <p className="text-subtle text-[length:var(--font-micro-size)]" data-testid="rag-no-jobs">
               还没有索引作业记录。
             </p>
@@ -599,7 +482,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
 
         <section>
           <h3 className="mb-1.5 flex items-center gap-2 text-muted text-[length:var(--font-meta-size)]">
-            生效配置（只读，写入口在设置中心）
+            索引设置
             <button
               type="button"
               onClick={() => scope.openSettings()}
@@ -611,22 +494,22 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
             </button>
           </h3>
           {status === null ? null : (
-            <dl className="grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono text-[length:var(--font-micro-size)]" data-testid="rag-settings">
-              <dt className="text-subtle">revision</dt>
+            <dl className="rag-settings-grid" data-testid="rag-settings">
+              <dt className="text-subtle">设置版本</dt>
               <dd className="text-ink">{status.settings.revision}</dd>
-              <dt className="text-subtle">generation</dt>
+              <dt className="text-subtle">索引版本</dt>
               <dd className="text-ink">{status.generation}</dd>
-              <dt className="text-subtle">kinds</dt>
+              <dt className="text-subtle">文件类型</dt>
               <dd className="text-ink">{status.settings.kinds.join(', ')}</dd>
-              <dt className="text-subtle">include</dt>
+              <dt className="text-subtle">包含路径</dt>
               <dd className="text-ink">{status.settings.include.join(', ')}</dd>
-              <dt className="text-subtle">exclude</dt>
+              <dt className="text-subtle">排除路径</dt>
               <dd className="text-ink">{status.settings.exclude.join(', ')}</dd>
-              <dt className="text-subtle">watch / paused</dt>
+              <dt className="text-subtle">自动监听 / 暂停</dt>
               <dd className="text-ink">
-                {String(status.settings.watch)} / {String(status.settings.paused)}
+                {status.settings.watch ? '开启' : '关闭'} / {status.settings.paused ? '是' : '否'}
               </dd>
-              <dt className="text-subtle">embeddingConfigId</dt>
+              <dt className="text-subtle">嵌入模型配置</dt>
               <dd className="text-ink">{status.settings.embeddingConfigId ?? '未配置'}</dd>
               <dt className="text-subtle">工作目录</dt>
               <dd className="min-w-0 truncate text-ink">{status.workspacePath ?? '未绑定'}</dd>
@@ -640,7 +523,109 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
             </p>
           )}
         </section>
-      </div>
+        </div>
+      ) : (
+        <>
+          <section className="rag-search-header" aria-label="检索条件">
+            <form className="rag-query-form" onSubmit={event => {event.preventDefault(); void runSearch();}}>
+              <label className="rag-query-field">
+                <Search size={16} aria-hidden="true" className="shrink-0 text-muted" />
+                <span className="sr-only">检索知识库</span>
+                <input ref={queryRef} type="search" value={query} onChange={event => setQuery(event.target.value)}
+                  onCompositionStart={ime.onCompositionStart} onCompositionEnd={ime.onCompositionEnd}
+                  onKeyDown={event => {if (event.key === 'Enter' && ime.shouldIgnoreKeyDown(event)) event.preventDefault();}}
+                  placeholder="输入问题、关键词或原文片段" data-testid="rag-query" />
+              </label>
+              <button type="submit" disabled={!query.trim() || searching} data-testid="rag-search" className="rag-search-button">
+                {searching ? <Loader2 size={14} aria-hidden="true" className="animate-spin" /> : null}
+                {searching ? '检索中' : '检索'}
+              </button>
+            </form>
+            <div className="rag-search-options">
+              <span className="text-muted">范围：项目文献、笔记与工作区文件</span>
+              <details className="rag-options" data-testid="rag-search-options">
+                <summary><Settings2 size={13} aria-hidden="true" />检索选项<ChevronDown size={12} aria-hidden="true" /></summary>
+                <label>排序方式
+                  <select aria-label="排序方式" value={rerank} disabled={searching} onChange={event => setRerank(event.target.value as 'none' | 'semantic')}>
+                    <option value="semantic">语义精排</option><option value="none">关键词与语义融合</option>
+                  </select>
+                </label>
+              </details>
+            </div>
+            {result?.ranking?.degradation ? <p role="status" className="rag-feedback" data-testid="rag-degraded">
+              <AlertCircle size={14} aria-hidden="true" />
+              语义检索暂不可用，本次仅返回关键词结果（{{timeout:'请求超时',network:'网络故障',rate_limit:'服务限流',provider_unavailable:'服务暂不可用'}[result.ranking.degradation]}）。可稍后重试。
+            </p> : null}
+            {searchError === null ? null : <p role="alert" className="rag-feedback text-[var(--st-bad)]" data-testid="rag-search-error">
+              <AlertCircle size={14} aria-hidden="true" />{searchError}
+            </p>}
+            {jumpError === null ? null : <p role="alert" className="rag-feedback text-[var(--st-warn)]" data-testid="rag-jump-error">{jumpError}</p>}
+            {note === null && literature.action.error === null ? null : <p role="status" className="rag-feedback" data-testid="rag-note">{note ?? literature.action.error}</p>}
+            {hitCopy.error ? <p role="alert" className="rag-feedback text-[var(--st-bad)]">{hitCopy.error}</p> : null}
+          </section>
+
+          <section className="rag-body rag-results" aria-label="检索结果" aria-busy={searching} data-testid="rag-results">
+            {result === null ? (
+              <EmptyState icon={Search} title={searching ? '正在查找相关内容…' : '从项目知识中寻找答案'}
+                description={searching ? undefined : '输入问题或关键词，查看相关原文和来源。'} testId="rag-search-empty" />
+            ) : <>
+              <div className="rag-results-heading">
+                <p role="status" className="min-w-0 break-words"><strong>{result.hits.length} 条结果</strong><span className="ml-2 text-muted">“{result.query}”</span></p>
+                <details className="rag-result-details" data-testid="rag-result-details">
+                  <summary>检索详情</summary>
+                  <div className="text-muted" data-testid="rag-search-meta">
+                    <p>关键词命中 {result.keywordCount} 条，语义命中 {result.vectorCount} 条</p>
+                    <p>嵌入模型：{result.embeddingModel ?? '未配置'}</p>
+                    <p>{result.ranking.reranker.status === 'succeeded' ? '已使用语义精排' : result.ranking.reranker.status === 'not_requested' ? '使用融合排序'
+                      : `精排未使用，已回退融合排序（${({config_missing:'未配置',disabled:'已停用',timeout:'超时',failed:'服务故障'} as const)[result.ranking.reranker.status]}）`}</p>
+                    <time dateTime={result.generatedAt}>{result.generatedAt}</time>
+                  </div>
+                </details>
+              </div>
+              {result.hits.length === 0 ? <EmptyState compact icon={Search} title="没有找到相关内容" description="尝试更具体的关键词，或在管理索引中检查资料是否已收录。" testId="rag-no-hits" /> : (
+                <ol className="rag-hit-list" data-testid="rag-hits">
+                  {result.hits.map((hit, index) => {
+                    const expanded = expandedHits.has(hit.chunkId);
+                    const longContent = hit.content.length > 300 || hit.content.split('\n').length > 5;
+                    return <li key={hit.chunkId} className="rag-hit" data-testid={`rag-hit-${hit.chunkId}`}>
+                      <div className="rag-hit-title">
+                        <span className="rag-hit-number" aria-hidden="true">{index + 1}</span>
+                        <h3>{hit.title}</h3>
+                      </div>
+                      <div className="rag-hit-source"><span>{sourceLabel(hit)}</span>{hit.locator ? <span>{hit.locator.replace(/^page:(\d+)$/u, '第 $1 页')}</span> : null}</div>
+                      <div className={`rag-hit-content${longContent && !expanded ? ' is-collapsed' : ''}`} data-testid={`rag-hit-content-${hit.chunkId}`}>
+                        <LazyBoundary fallback={<p>{hit.content}</p>}><ScientificMarkdown text={hit.content} /></LazyBoundary>
+                      </div>
+                      {longContent ? <button type="button" className="rag-expand" aria-expanded={expanded} onClick={() => setExpandedHits(current => {
+                        const next = new Set(current); if (next.has(hit.chunkId)) next.delete(hit.chunkId); else next.add(hit.chunkId); return next;
+                      })}>{expanded ? '收起原文' : '展开原文'}</button> : null}
+                      <footer className="rag-hit-actions">
+                        <button type="button" onClick={() => openHit(hit)} data-testid={`rag-hit-open-${hit.chunkId}`} className="rag-button rag-open-source">
+                          <ExternalLink size={13} aria-hidden="true" />{hit.documentId.startsWith('project-index:') ? '打开来源文件' : '在阅读器里定位'}
+                        </button>
+                        <button type="button" onClick={() => {hitCopy.copy(hit.content); setCopiedChunkId(hit.chunkId);}}
+                          data-testid={`rag-hit-copy-${hit.chunkId}`} className="rag-button">
+                          {hitCopy.copied && copiedChunkId === hit.chunkId ? <Check size={13} aria-hidden="true" /> : <ClipboardCopy size={13} aria-hidden="true" />}
+                          {hitCopy.copied && copiedChunkId === hit.chunkId ? '已复制' : '复制'}
+                        </button>
+                        <button type="button" disabled={literature.action.pending || !scope.writable} onClick={() => captureHit(hit)}
+                          data-testid={`rag-hit-capture-${hit.chunkId}`} className="rag-button"><FlaskConical size={13} aria-hidden="true" />存为证据</button>
+                        <button type="button" disabled={literature.action.pending || !scope.writable} onClick={() => saveHitAsNote(hit)}
+                          data-testid={`rag-hit-save-${hit.chunkId}`} className="rag-button"><Bookmark size={13} aria-hidden="true" />写入知识库</button>
+                      </footer>
+                      <details className="rag-hit-ranking"><summary>匹配依据</summary>
+                        <span>融合分数 {hit.rrfScore.toFixed(4)}</span>
+                        {hit.keywordRank === null ? null : <span>关键词第 {hit.keywordRank} 名</span>}
+                        {hit.vectorRank === null ? null : <span>语义第 {hit.vectorRank} 名</span>}
+                      </details>
+                    </li>;
+                  })}
+                </ol>
+              )}
+            </>}
+          </section>
+        </>
+      )}
     </div>
   );
 }

@@ -249,6 +249,7 @@ test('source embedding retry admits one synchronous request, retains a refusal a
 
 test('retrieval exposes optional reranking and sends the selected mode through IPC',async()=>{
   await page.evaluate(()=>window.mountRag());
+  await page.getByTestId('rag-search-options').locator('summary').click();
   await page.getByLabel('排序方式').selectOption('semantic');
   await page.getByTestId('rag-query').fill('注意力机制');
   await page.getByTestId('rag-search').focus();await page.keyboard.press('Enter');
@@ -262,6 +263,7 @@ test('indexed retrieval isolates table scrolling and keeps long paths, failure d
   const measurements=[];
   await page.emulateMedia({reducedMotion:'reduce'});
   await page.evaluate(()=>{window.unmount();window.mountIndexedRag();});
+  await page.getByTestId('rag-index-toggle').click();
   await page.getByTestId('rag-file-layout-file').waitFor();
   await page.getByTestId('rag-job-layout-job').waitFor();
   for(const theme of ['light','dark']){

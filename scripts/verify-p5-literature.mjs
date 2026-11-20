@@ -749,9 +749,10 @@ try {
   const graphCount = await page.locator('[data-testid="knowledge-graph"]').count();
   assertCheck('4 空数据', '空项目的图谱显示空态（不画力导向示意图）', graphEmpty && graphCount === 0, `empty=${graphEmpty} graph=${graphCount}`);
   await page.click('[data-testid="literature-subview-rag"]');
+  await page.click('[data-testid="rag-index-toggle"]');
   const ragEmptyFiles = await appears(page, '[data-testid="rag-no-files"]', 30_000);
   const ragCounts = (await page.textContent('[data-testid="rag-counts"]')) ?? '';
-  assertCheck('4 空数据', '空项目的 RAG 显示真实的 0 文件，而不是假分块', ragEmptyFiles && /\u6587\u4ef6 0/u.test(ragCounts), ragCounts.trim());
+  assertCheck('4 空数据', '空项目的 RAG 显示真实的 0 文件，而不是假分块', ragEmptyFiles && /0 个文件/u.test(ragCounts), ragCounts.trim());
   await page.screenshot({ path: join(artifactDir, '04-empty-state.png') });
 
   // ---- 回到闸门 1：等真解析完成 -------------------------------------------------
@@ -823,14 +824,15 @@ try {
   // ---- 闸门 2：真索引 → 真实文件数与命中 → 跳回原文位置 ------------------------
   await page.click('[data-testid="literature-subview-rag"]');
   await page.waitForSelector('[data-testid="rag-studio"]', { timeout: 20_000 });
+  await page.click('[data-testid="rag-index-toggle"]');
   await page.click('[data-testid="rag-scan"]');
   const indexedReady = await page
     .waitForSelector(`[data-testid="rag-files"] [data-file-status="ready"]`, { timeout: 120_000 })
     .then(() => true)
     .catch(() => false);
   assertCheck('2 真索引', '增量扫描后后端报告真实索引文件', indexedReady, '');
-  const countsAfterScan = await waitForText(page, '[data-testid="rag-counts"]', (text) => /\u6587\u4ef6 [1-9]/u.test(text), 60_000);
-  const totalMatch = /\u6587\u4ef6 (\d+)/u.exec(countsAfterScan);
+  const countsAfterScan = await waitForText(page, '[data-testid="rag-counts"]', (text) => /[1-9]\d* 个文件/u.test(text), 60_000);
+  const totalMatch = /(\d+) 个文件/u.exec(countsAfterScan);
   const totalFiles = totalMatch === null ? 0 : Number.parseInt(totalMatch[1], 10);
   assertCheck('2 真索引', 'RAG 显示真实文件数（不是假分块数 — B14）', totalFiles > 0, countsAfterScan.trim());
   const noteRow = page.locator('[data-testid="rag-files"] tr', { hasText: indexNoteRelativePath });
@@ -841,12 +843,14 @@ try {
   const failedRows = await page.locator('[data-testid="rag-files"] [data-file-status="failed"]').count();
   assertCheck('2 真索引', '不可解析的文件被真实报为失败（不是静默跳过）', failedRows > 0, `failed=${failedRows}`);
 
+  await page.getByRole('button', {name: '返回检索', exact: true}).click();
   await page.fill('[data-testid="rag-query"]', indexNoteMarker);
   await page.click('[data-testid="rag-search"]');
   await page.waitForSelector('[data-testid="rag-hits"]', { timeout: 60_000 });
+  await page.getByTestId('rag-result-details').locator('summary').click();
   const searchMeta = (await page.textContent('[data-testid="rag-search-meta"]')) ?? '';
-  assertCheck('2 真索引', '检索由后端返回真实关键词/向量计数', /关键词 [1-9]/u.test(searchMeta), searchMeta.trim());
-  const hitRows = page.locator('[data-testid="rag-hits"] li');
+  assertCheck('2 真索引', '检索由后端返回真实关键词/向量计数', /关键词命中 [1-9]/u.test(searchMeta), searchMeta.trim());
+  const hitRows = page.locator('[data-testid="rag-hits"] > li');
   const hitCount = await hitRows.count();
   assertCheck('2 真索引', '命中列表非空', hitCount > 0, `hits=${hitCount}`);
   const firstHitText = (await hitRows.first().textContent()) ?? '';
