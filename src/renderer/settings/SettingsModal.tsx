@@ -379,7 +379,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
               </label>
               <label className="sr-only" htmlFor="settings-domain-select">设置领域</label>
               <select id="settings-domain-select" aria-label="设置领域" value={activeDomain} disabled={busy}
-                onChange={event => setActiveDomain(event.target.value as SettingsDomainId)}
+                onChange={event => { const domain = SETTINGS_DOMAINS.find(item => item.id === event.target.value); const first = domain?.sectionIds[0]; if (first !== undefined) selectSection(first); }}
                 className={`${formInputClass} mb-2 w-full`} data-testid="settings-domain-select">
                 {SETTINGS_DOMAINS.map(domain => <option key={domain.id} value={domain.id}>{domain.label}</option>)}
               </select>
@@ -416,7 +416,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
               </label>
               <nav aria-label="设置领域" className="settings-domains mt-2 grid gap-1">
                 {SETTINGS_DOMAINS.map(domain => <button key={domain.id} type="button" disabled={busy} data-testid={`settings-domain-${domain.id}`} aria-pressed={activeDomain === domain.id}
-                  onClick={() => { setSearchQuery(''); setActiveDomain(domain.id); }}
+                  onClick={() => { setSearchQuery(''); const first = domain.sectionIds[0]; if (first !== undefined) selectSection(first); }}
                   className="settings-domain-item flex min-h-8 items-center justify-between rounded-control px-2 text-start text-ink-muted enabled:hover:bg-[var(--overlay-hover)] aria-[pressed=true]:bg-[var(--overlay-active)] aria-[pressed=true]:text-ink-primary focus-visible:outline-2 focus-visible:outline-focus-ring">
                   <span>{domain.label}</span><span className="text-[length:var(--font-micro-size)] tabular-nums">{domain.sectionIds.length}</span>
                 </button>)}
