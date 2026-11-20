@@ -1,0 +1,284 @@
+import { useEffect, useRef, useState } from 'react';
+import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
+import type {ResearchArtifactInspectRequest} from '../../shared/schemas/research-artifact-inspector';
+import type {ResearchGateReviewContext} from '../../shared/schemas/research-gate-review';
+import type {RocClient} from '../shared/roc-client';
+import {useAsyncResource} from '../app/use-async-resource';
+import {ModalShell} from '../shell/ModalShell';
+import {formSecondaryButtonClass} from '../shared/form-ui';
+import type {ArtifactReadingLocations} from './artifact-reading-location';
+import {useArtifactReadingLocation} from './use-artifact-reading-location';
+import {ArtifactEvidenceSource} from './ArtifactEvidenceSource';
+
+const StageContent = retryableLazy(async () => ({default: (await import('./ArtifactStageContent')).ArtifactStageContent}));
+const ProductionView = retryableLazy(async () => ({default: (await import('./ArtifactProductionView')).ArtifactProductionView}));
+const Relations = retryableLazy(async () => ({default: (await import('./ArtifactRelations')).ArtifactRelations}));
+const IdeaPlans = retryableLazy(async () => ({default: (await import('./IdeaPlans')).IdeaPlans}));
+const IdeaOutcomes = retryableLazy(async () => ({default: (await import('./IdeaOutcomes')).IdeaOutcomes}));
+const CitationCoverage = retryableLazy(async () => ({default: (await import('./ArtifactCitationCoverage')).ArtifactCitationCoverage}));
+const Consistency = retryableLazy(async () => ({default: (await import('./ArtifactConsistency')).ArtifactConsistency}));
+const FigureConsistency = retryableLazy(async () => ({default: (await import('./ArtifactFigureConsistency')).ArtifactFigureConsistency}));
+const ResponseMatrix = retryableLazy(async () => ({default: (await import('./ArtifactResponseMatrix')).ArtifactResponseMatrix}));
+const JournalCompliance = retryableLazy(async () => ({default: (await import('./ArtifactJournalCompliance')).ArtifactJournalCompliance}));
+const ExportReview = retryableLazy(async () => ({default: (await import('./ArtifactExportReview')).ArtifactExportReview}));
+import {useArtifactEditorActivity, useArtifactEditorGuard} from './artifact-editor-guard';
+
+const button = `${formSecondaryButtonClass} border-[0.5px]`;
+
+export function StageArtifactInspector({client, request, writable, onClose, onOpenTask, onReviewContext, readingLocations}: {
+  client: RocClient; request: ResearchArtifactInspectRequest; onClose: () => void; onOpenTask: (taskId: string) => void;
+  writable: boolean; onReviewContext: (context: ResearchGateReviewContext) => void; readingLocations: ArtifactReadingLocations
+}): React.JSX.Element {
+  const baseline = useRef(request.expectedVersion);
+  const read = useAsyncResource(`artifact:inspect:${JSON.stringify(request)}`,
+    () => client.api.research.inspectArtifact({...request, expectedVersion: baseline.current}), {label: '读取科研工件'});
+  const result = read.status === 'ready' ? read.data : null;
+  const snapshot = result?.snapshot;
+  const [reviewNonce, setReviewNonce] = useState(0);
+  const [relationSaved, setRelationSaved] = useState(false);
+  const guard = useArtifactEditorGuard();
+  const plan = useArtifactEditorActivity('方法计划'), outcome = useArtifactEditorActivity('结果评估');
+  const {pending: planPending, dirty: planDirty, setPending: setPlanPending, setDirty: setPlanDirty} = plan;
+  const {pending: outcomePending, dirty: outcomeDirty, setPending: setOutcomePending, setDirty: setOutcomeDirty} = outcome;
+  const [coverageOpen, setCoverageOpen] = useState(false);
+  const citation = useArtifactEditorActivity('引用审核');
+  const {pending: citationPending, dirty: citationDirty, setPending: setCitationPending, setDirty: setCitationDirty} = citation;
+  const [consistencyOpen, setConsistencyOpen] = useState(false);
+  const consistency = useArtifactEditorActivity('数值审核');
+  const {pending: consistencyPending, dirty: consistencyDirty, setPending: setConsistencyPending, setDirty: setConsistencyDirty} = consistency;
+  const [figureConsistencyOpen, setFigureConsistencyOpen] = useState(false);
+  const figure = useArtifactEditorActivity('图稿数据审核');
+  const {pending: figurePending, dirty: figureDirty, setPending: setFigurePending, setDirty: setFigureDirty} = figure;
+  const [responseOpen, setResponseOpen] = useState(false);
+  const response = useArtifactEditorActivity('审稿矩阵');
+  const {pending: responsePending, dirty: responseDirty, setPending: setResponsePending, setDirty: setResponseDirty} = response;
+  const [journalOpen, setJournalOpen] = useState(false);
+  const journal = useArtifactEditorActivity('投稿检查');
+  const {pending: journalPending, dirty: journalDirty, setPending: setJournalPending, setDirty: setJournalDirty} = journal;
+  const [exportOpen, setExportOpen] = useState(false);
+  const exporting = useArtifactEditorActivity('公开导出');
+  const {pending: exportPending, dirty: exportDirty, setPending: setExportPending, setDirty: setExportDirty} = exporting;
+  const otherLocked = planPending || planDirty || outcomePending || outcomeDirty || citationPending || citationDirty;
+  const consistencyLocked = consistencyPending || consistencyDirty;
+  const figureLocked = figurePending || figureDirty;
+  const responseLocked = responsePending || responseDirty;
+  const journalLocked = journalPending || journalDirty;
+  const exportLocked = exportPending || exportDirty;
+  const legacyLocked = otherLocked || consistencyLocked || figureLocked || responseLocked || journalLocked || exportLocked;
+  const planLocked = guard.locked();
+  const savedLocation = readingLocations.get(JSON.stringify([request.projectId, request.artifactId]));
+  const [productionChoice,setProductionChoice] = useState<{version: string; open: boolean} | null>(null);
+  const productionOpen = snapshot !== undefined && (productionChoice?.version === snapshot.version ?
+    productionChoice.open : savedLocation !== undefined && savedLocation.version === snapshot.version && savedLocation.productionOpen);
+  const reading = useArtifactReadingLocation(request, snapshot?.version, readingLocations, productionOpen);
+  const close = (): void => {if (guard.busy()) return; reading.save(); onClose();};
+  const review = useAsyncResource(reviewNonce > 0 ? `gate:${JSON.stringify(request)}:${reviewNonce}` : null,
+    () => {
+      if (snapshot === undefined) throw new Error('research_artifact_snapshot_required');
+      return client.api.research.getGateReviewContext({projectId: request.projectId, expectedStage: snapshot.currentStage, artifactId: request.artifactId});
+    }, {label: '读取整阶段审核上下文'});
+  const reviewedSelection = review.data?.artifactLinks.find(link => link.artifactId === request.artifactId);
+  const matchesDisplayedSnapshot = reviewedSelection !== undefined && snapshot !== undefined &&
+    reviewedSelection.expectedVersion === snapshot.version;
+  useEffect(() => {
+    if (result?.status === 'current') baseline.current = result.snapshot.version;
+  }, [result]);
+  const statuses = {draft: '草稿', approved: '已批准', superseded: '已被替代'};
+  return <ModalShell open kind="drawer" title={snapshot?.artifact.title ?? '科研工件'} onClose={close} bodyRef={reading.bodyRef}
+    widthClassName="w-[560px]" testId="artifact-inspector" beforeClose={() => !guard.busy()}>
+    <div className="flex flex-col gap-3 text-[length:var(--font-body-size)]">
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className={button} disabled={read.status === 'loading' || planLocked}
+          data-testid="artifact-inspector-refresh" data-reading-key="refresh" onClick={()=>{if (guard.locked()) return; reading.save(); read.reload();}}>刷新工件</button>
+        {result?.status !== 'stale' ? null : <button type="button" className={button} disabled={planLocked}
+          data-testid="artifact-inspector-recapture" onClick={() => {baseline.current = result.snapshot.version; read.reload();}}>
+          按当前版本重新核对
+        </button>}
+        {snapshot?.origin === null || snapshot?.origin === undefined || snapshot.origin.taskId === null ||
+          !snapshot.availableActions.includes('return_to_task') ? null : <button type="button" className={button}
+          disabled={planLocked} data-testid="artifact-inspector-task" onClick={() => {reading.save(); onOpenTask(snapshot.origin!.taskId!);}}>查看关联任务</button>}
+        {snapshot?.availableActions.includes('review_gate') ? <button type="button" className={button}
+          disabled={review.status === 'loading' || planLocked} data-testid="artifact-inspector-review"
+          onClick={() => setReviewNonce(value => value + 1)}>读取本阶段全部审核工件</button> : null}
+        {snapshot?.production===null||snapshot===undefined||snapshot.projectStatus==='archived'||snapshot.artifact.status==='superseded' ? null :
+          snapshot.artifact.status==='approved'||snapshot.availableActions.includes('review_gate') ? <button type="button"
+            className={button} disabled={planLocked} data-testid="artifact-inspector-production" aria-expanded={productionOpen}
+            data-reading-key="production-toggle" onClick={()=>setProductionChoice({version:snapshot.version,open:!productionOpen})}>{productionOpen?'收起生产文件':'查看生产文件'}</button> : null}
+      </div>
+      {read.status === 'loading' ? <p role="status">正在读取工件…</p> : null}
+      {planPending ? <p role="status">正在保存方法计划，请等待回执。</p> :
+        planDirty ? <p role="status">方法计划含未保存修改，保存或放弃后可关闭工件。</p> : null}
+      {outcomePending ? <p role="status">正在关联指标证据并保存评估，请等待回执。</p> :
+        outcomeDirty ? <p role="status">结果评估含未保存修改，保存或放弃后可关闭工件。</p> : null}
+      {citationPending ? <p role="status">正在保存引用直接性，请等待回执。</p> :
+        citationDirty ? <p role="status">引用审核含未保存修改，保存或放弃后可关闭工件。</p> : null}
+      {consistencyPending ? <p role="status">正在保存数值审核，请等待回执。</p> :
+        consistencyDirty ? <p role="status">数值审核含未保存修改，保存或放弃后可关闭工件。</p> : null}
+      {figurePending ? <p role="status">正在保存图稿数据审核，请等待回执。</p> :
+        figureDirty ? <p role="status">图稿数据审核含未保存修改，保存或放弃后可关闭工件。</p> : null}
+      {responsePending ? <p role="status">正在保存审稿矩阵，请等待回执。</p> :
+        responseDirty ? <p role="status">审稿矩阵含未保存修改，保存或放弃后可关闭工件。</p> : null}
+      {journalPending ? <p role="status">正在核对或保存投稿检查，请等待回执。</p> :
+        journalDirty ? <p role="status">投稿检查含未保存修改，保存或放弃后可关闭工件。</p> : null}
+      {exportPending ? <p role="status">正在提交导出操作，请等待回执。</p> :
+        exportDirty ? <p role="status">公开导出含未完成审查，生成或放弃后可关闭工件。</p> : null}
+      {read.error === null ? null : <p role="alert" className="break-words text-[var(--st-warn)]">{read.error}</p>}
+      {result?.status === 'stale' ? <p role="alert" className="text-[var(--st-warn)]">
+        工件或来源已变更。当前内容需要重新核对。
+      </p> : null}
+      {reviewNonce > 0 && review.status === 'loading' ? <p role="status">正在读取整个阶段的审核上下文…</p> : null}
+      {review.error === null ? null : <p role="alert" className="break-words text-[var(--st-warn)]">{review.error}</p>}
+      {relationSaved ? <p role="status">关系变更已保存，请核对刷新后的工件版本。</p> : null}
+      {review.data === null ? null : <section className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2" data-testid="artifact-inspector-gate-context">
+        <h2 className="font-medium">本阶段全部待核对工件</h2>
+        <ul className="flex flex-col gap-1">
+          {review.data.artifactLinks.map(link => <li className="break-words" key={link.artifactId}>{link.title}
+            <span className="ml-2 break-all font-mono text-muted text-[length:var(--font-meta-size)]">{link.expectedVersion}</span>
+          </li>)}
+        </ul>
+        <p className="text-muted">重读时间 {review.data.readAt}。返回后核对全部内容，再提交人工决定。</p>
+        {matchesDisplayedSnapshot ? null : <p role="alert" className="text-[var(--st-warn)]">
+          审核版本与当前显示的工件快照不同。请刷新工件，核对新内容后再返回助手。
+        </p>}
+        <button type="button" disabled={!matchesDisplayedSnapshot || read.status !== 'ready' || review.status !== 'ready' || planLocked}
+          className={`${button} self-start disabled:cursor-not-allowed disabled:opacity-50`} data-testid="artifact-inspector-return-review" onClick={() => {
+          onReviewContext(review.data!);
+          close();
+        }}>返回助手重新确认</button>
+      </section>}
+      {snapshot === undefined ? null : <>
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-muted">
+          <dt>工件状态</dt><dd>{statuses[snapshot.artifact.status]}</dd>
+          <dt>人工闸门</dt><dd>{snapshot.stage.gateApproved ? '已通过' :
+            snapshot.stage.status === 'waiting_approval' ? '等待人工审核' : '尚未通过'}</dd>
+          <dt>快照版本</dt><dd className="break-all font-mono text-[length:var(--font-meta-size)]">{snapshot.version}</dd>
+        </dl>
+        <LazyBoundary fallback={<p role="status">正在加载工件正文…</p>}>
+          <StageContent snapshot={snapshot} />
+        </LazyBoundary>
+        {snapshot.artifact.kind !== 'manuscript' ? null : <section className="border-t-[0.5px] border-line pt-2">
+          <button type="button" className={button} aria-expanded={coverageOpen} disabled={planLocked}
+            data-testid="artifact-citation-coverage-toggle" data-reading-key="citation-coverage-toggle"
+            onClick={() => setCoverageOpen(open => !open)}>{coverageOpen ? '收起引用检查' : '检查正文引用'}</button>
+          {!coverageOpen ? null : <LazyBoundary fallback={<p role="status">正在加载引用检查…</p>}>
+            <CitationCoverage key={`${snapshot.artifact.id}:${snapshot.version}`} client={client}
+              projectId={request.projectId} artifactId={request.artifactId} artifactVersion={snapshot.version}
+              writable={writable && !citation.locked && result?.status === 'current' && snapshot.projectStatus !== 'archived' &&
+                snapshot.artifact.status === 'draft' && snapshot.currentStage === snapshot.artifact.stage &&
+                snapshot.stage.artifactIds.includes(snapshot.artifact.id) &&
+                ['ready', 'running', 'paused', 'blocked', 'failed', 'waiting_approval'].includes(snapshot.stage.status)}
+              onPending={setCitationPending} onDirty={setCitationDirty}
+              onSaved={() => {setCitationPending(false); setCitationDirty(false); baseline.current = null; reading.save(); read.reload();}}/>
+          </LazyBoundary>}
+        </section>}
+        {!['manuscript', 'figure'].includes(snapshot.artifact.kind) ? null : <section className="border-t-[0.5px] border-line pt-2">
+          <button type="button" className={button} aria-expanded={consistencyOpen} disabled={planLocked}
+            data-testid="artifact-consistency-toggle" onClick={() => setConsistencyOpen(value => !value)}>
+            {consistencyOpen ? '收起数值检查' : '检查科研数值'}
+          </button>
+          {!consistencyOpen ? null : <LazyBoundary fallback={<p role="status">正在加载数值检查…</p>}>
+            <Consistency key={`${snapshot.artifact.id}:${snapshot.version}`} client={client} snapshot={snapshot} locked={consistency.locked}
+              writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived' &&
+                snapshot.artifact.status === 'draft' && snapshot.currentStage === snapshot.artifact.stage &&
+                snapshot.stage.artifactIds.includes(snapshot.artifact.id) &&
+                ['ready', 'running', 'paused', 'blocked', 'failed', 'waiting_approval'].includes(snapshot.stage.status)}
+              onDirty={setConsistencyDirty} onPending={setConsistencyPending}
+              onSaved={() => {setConsistencyPending(false); setConsistencyDirty(false); baseline.current = null; reading.save(); read.reload();}}/>
+          </LazyBoundary>}
+        </section>}
+        {snapshot.artifact.kind !== 'figure' ? null : <section className="border-t-[0.5px] border-line pt-2">
+          <button type="button" className={button} aria-expanded={figureConsistencyOpen} disabled={planLocked}
+            data-testid="artifact-figure-consistency-toggle" onClick={() => setFigureConsistencyOpen(value => !value)}>
+            {figureConsistencyOpen ? '收起绘制数据检查' : '检查图稿绘制数据'}
+          </button>
+          {!figureConsistencyOpen ? null : <LazyBoundary fallback={<p role="status">正在加载绘制数据检查…</p>}>
+            <FigureConsistency key={`${snapshot.artifact.id}:${snapshot.version}`} client={client} snapshot={snapshot}
+              locked={figure.locked}
+              writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived' &&
+                snapshot.artifact.status === 'draft' && snapshot.currentStage === snapshot.artifact.stage &&
+                snapshot.stage.artifactIds.includes(snapshot.artifact.id) &&
+                ['ready', 'running', 'paused', 'blocked', 'failed', 'waiting_approval'].includes(snapshot.stage.status)}
+              onDirty={setFigureDirty} onPending={setFigurePending}
+              onSaved={() => {setFigurePending(false); setFigureDirty(false); baseline.current = null; reading.save(); read.reload();}}/>
+          </LazyBoundary>}
+        </section>}
+        {snapshot.artifact.kind !== 'manuscript' ? null : <section className="border-t-[0.5px] border-line pt-2">
+          <button type="button" className={button} aria-expanded={responseOpen} disabled={planLocked}
+            data-testid="artifact-response-toggle" onClick={() => setResponseOpen(value => !value)}>
+            {responseOpen ? '收起审稿回复' : '检查审稿回复'}
+          </button>
+          {!responseOpen ? null : <LazyBoundary fallback={<p role="status">正在加载审稿矩阵…</p>}>
+            <ResponseMatrix key={`${snapshot.artifact.id}:${snapshot.version}`} client={client} snapshot={snapshot}
+              locked={response.locked}
+              writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived'}
+              onDirty={setResponseDirty} onPending={setResponsePending}
+              onSaved={() => {setResponsePending(false); setResponseDirty(false); baseline.current = null; reading.save(); read.reload();}}/>
+          </LazyBoundary>}
+        </section>}
+        {snapshot.artifact.kind !== 'manuscript' ? null : <section className="border-t-[0.5px] border-line pt-2">
+          <button type="button" className={button} aria-expanded={journalOpen} disabled={planLocked}
+            data-testid="artifact-journal-toggle" onClick={() => setJournalOpen(value => !value)}>
+            {journalOpen ? '收起投稿检查' : '检查期刊投稿'}
+          </button>
+          {!journalOpen ? null : <LazyBoundary fallback={<p role="status">正在加载投稿检查…</p>}>
+            <JournalCompliance key={`${snapshot.artifact.id}:${snapshot.version}`} client={client} snapshot={snapshot}
+              locked={journal.locked}
+              writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived' &&
+                snapshot.artifact.status === 'draft' && snapshot.currentStage === snapshot.artifact.stage &&
+                snapshot.stage.artifactIds.includes(snapshot.artifact.id) &&
+                ['ready', 'running', 'paused', 'blocked', 'failed', 'waiting_approval'].includes(snapshot.stage.status)}
+              onDirty={setJournalDirty} onPending={setJournalPending}
+              onSaved={() => {setJournalPending(false); setJournalDirty(false); baseline.current = null; reading.save(); read.reload();}}/>
+          </LazyBoundary>}
+        </section>}
+        {snapshot.artifact.kind !== 'manuscript' || snapshot.artifact.status !== 'approved' ? null :
+          <section className="border-t-[0.5px] border-line pt-2">
+            <button type="button" className={button} aria-expanded={exportOpen} disabled={planLocked}
+              data-testid="artifact-export-toggle" onClick={() => setExportOpen(value => !value)}>
+              {exportOpen ? '收起公开导出' : '审查公开科研导出'}
+            </button>
+            {!exportOpen ? null : <LazyBoundary fallback={<p role="status">正在加载公开导出审查…</p>}>
+              <ExportReview key={`${snapshot.artifact.id}:${snapshot.version}`} client={client} snapshot={snapshot}
+                locked={exporting.locked}
+                writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived' && snapshot.currentStage === 'export'}
+                onDirty={setExportDirty} onPending={setExportPending}/>
+            </LazyBoundary>}
+          </section>}
+        {snapshot.ideaCanvas === null ? null : <LazyBoundary fallback={<p role="status">正在加载方法计划…</p>}>
+          <IdeaPlans key={`${snapshot.artifact.id}:${snapshot.ideaCanvas.contentHash}:${snapshot.ideaPlan?.versionHash ?? 'new'}:${snapshot.ideaPlan?.freezeHash ?? 'draft'}`}
+            client={client} canvas={snapshot.ideaCanvas} current={snapshot.ideaPlan}
+            locked={plan.locked}
+            writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived' && snapshot.artifact.status !== 'superseded'}
+            onPending={setPlanPending} onDirty={setPlanDirty}
+            onSaved={() => {setPlanPending(false); setPlanDirty(false); baseline.current = null; reading.save(); read.reload();}}/>
+        </LazyBoundary>}
+        {snapshot.ideaCanvas === null ? null : <LazyBoundary fallback={<p role="status">正在加载结果评估…</p>}>
+          <IdeaOutcomes key={`${snapshot.artifact.id}:${snapshot.version}`} client={client} canvas={snapshot.ideaCanvas}
+            heads={snapshot.ideaOutcomes} locked={outcome.locked}
+            writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived' && snapshot.artifact.status !== 'superseded'}
+            onPending={setOutcomePending} onDirty={setOutcomeDirty}
+            onSaved={() => {setOutcomePending(false); setOutcomeDirty(false); baseline.current = null; reading.save(); read.reload();}}/>
+        </LazyBoundary>}
+        {!productionOpen||snapshot.production===null ? null : <LazyBoundary fallback={<p role="status">正在加载生产视图…</p>}>
+          <ProductionView key={snapshot.version} client={client} writable={writable && !planLocked && result?.status === 'current' && snapshot.projectStatus !== 'archived'} request={{projectId:request.projectId,
+            artifactId:request.artifactId,expectedVersion:snapshot.version}}
+            initialLocation={reading.location?.productionFile ?? null} onLocationChange={reading.setProductionFile}/>
+        </LazyBoundary>}
+        <section className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2" aria-label="工件证据来源">
+          <h2 className="font-medium text-ink">证据来源</h2>
+          {snapshot.evidence.length === 0 ? <p className="text-muted">尚无保存的证据关联。</p> :
+            snapshot.evidence.map(source => <ArtifactEvidenceSource key={`${snapshot.version}:${source.evidence.id}`}
+              client={client} source={source} canDecide={!legacyLocked && result?.status === 'current' && snapshot.projectStatus !== 'archived'}
+              onChanged={() => {reading.save(); read.reload();}}/>)}
+        </section>
+        <LazyBoundary fallback={<p role="status">正在加载证据关系…</p>}>
+          <Relations key={snapshot.version} client={client} snapshot={snapshot} current={writable && !legacyLocked && result?.status === 'current'}
+            onChanged={() => {reading.save(); setRelationSaved(true); read.reload();}}/>
+        </LazyBoundary>
+        <details data-reading-key="raw-snapshot" className="text-muted"><summary data-reading-key="raw-snapshot-summary" className="cursor-pointer">工件与来源快照原文</summary>
+          <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(snapshot, null, 2)}</pre>
+        </details>
+      </>}
+    </div>
+  </ModalShell>;
+}

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "roc-scientific-rag-v1",
+  "provenance": {
+    "kind": "pending",
+    "producer": null,
+    "sourceRevision": null,
+    "license": null
+  },
+  "papers": [],
+  "queriesPath": "queries/queries.json",
+  "queriesHash": null
+}

@@ -1,0 +1,519 @@
+import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
+import { z } from 'zod';
+import type { BaseStore } from '@langchain/langgraph';
+
+import type {
+  AgentRuntimeStatus,
+  AppSettings,
+  ApprovalMode,
+  McpServerSnapshot,
+  McpToolContractV1,
+  RunCapabilityManifestV1,
+  ResearchProject,
+  SkillSnapshot,
+  Workspace
+} from '../../../shared/types';
+import { RocDomainError } from '../../services/errors';
+import {
+  agentCapabilityPreviewRequestSchema,
+  agentCapabilityPreviewSchema,
+  agentRuntimeStatusSchema,
+  deepAgentConfigPreviewSchema,
+  sessionListInputSchema,
+  sessionMessageSchema,
+  sessionMessageSearchRequestSchema,
+  sessionMessageSearchResultSchema
+} from '../../../shared/schemas/agent';
+import {
+  pilotOptInRequestSchema,
+  pilotStatusSchema
+} from '../../../shared/schemas/harness-pilot';
+import { runDiagnosticsRequestSchema, runDiagnosticsSchema } from '../../../shared/schemas/run-diagnostics';
+import {
+  activeChatRunSchema,
+  chatActiveRunRequestSchema,
+  chatCancelRunRequestSchema,
+  chatCancelRunResultSchema,
+  chatCorrectRunRequestSchema,
+  chatCorrectRunResultSchema,
+  chatRunInputsRequestSchema,
+  chatRunInputsResultSchema,
+  chatReconcileEffectsResultSchema,
+  chatResumeRunRequestSchema,
+  chatResumeRunResultSchema,
+  chatRunEventsReplayRequestSchema,
+  chatRunEventsReplayResultSchema,
+  chatRunEventsReplayPageSchema,
+  chatStartRunRequestSchema,
+  chatStartRunResultSchema
+} from '../../../shared/schemas/chat';
+import type { CapabilityDescriptor, RocPlugin, RocPluginContext } from '../../kernel/types';
+import { ContextArtifactStore } from '../../services/deep-agent/context/context-artifact-store';
+import { RocSqliteCheckpointer } from '../../services/deep-agent/sqlite-checkpointer';
+import { RunUsageLedger } from '../../services/deep-agent/run-usage-ledger';
+import { PilotStateStore } from '../../services/deep-agent/pilot-gate';
+import { PilotRunCoordinator } from '../../services/deep-agent/pilot-run';
+import { AgentToolEffectStore } from '../../services/deep-agent/tool-effect-store';
+import { EffectReconciliationService } from '../../services/deep-agent/effect-reconciliation-service';
+import type { HookRuntime } from '../../services/hooks';
+import type { MetricsService } from '../../services/metrics-service';
+import type { RocPaths } from '../../services/paths';
+import type { SelfConfigService } from '../../services/self-config';
+import type { ExecutionGrantBroker } from '../../services/deep-agent/execution-grant-broker';
+import { workspacePathStructureChangedEventType } from '../../services/workspace-path-structure-event';
+import { buildAgentCapabilityPreview, buildDeepAgentConfigPreview } from './capability-preview';
+import { createAgentDeepAgentExecutor } from './deep-agent-executor';
+import { StaticAgentModelFactoryAdapter, type AgentModelFactoryAdapter } from './model-factory-adapter';
+import { AgentRunEventLog } from './run-event-log';
+import type { AgentCapabilityPreviewProvider, AgentDeepAgentExecutor, AgentMcpContractDiscoveryProvider } from './runtime';
+import { AgentPluginRuntime } from './runtime';
+import type { AgentLifecycleHookEmitter } from './runtime-types';
+import { AgentSessionRepository } from './session-repository';
+import type { ResearchProof } from '../../services/deep-agent/task-contract-store';
+import type { ResearchTaskRepository } from '../research/research-task-repository';
+
+const pluginId = '@roc/plugin-agent';
+const capabilityVersion = '1.0.0';
+
+const emptyInputSchema = z.object({}).strict();
+
+const baseAgentCapabilityDescriptors = [
+  descriptor('agent.status.get', emptyInputSchema, agentRuntimeStatusSchema),
+  descriptor('agent.config.preview', emptyInputSchema, deepAgentConfigPreviewSchema),
+  descriptor('agent.run.start', chatStartRunRequestSchema, chatStartRunResultSchema),
+  descriptor('agent.run.cancel', chatCancelRunRequestSchema, chatCancelRunResultSchema),
+  descriptor('agent.run.correct', chatCorrectRunRequestSchema, chatCorrectRunResultSchema),
+  descriptor('agent.run.inputs', chatRunInputsRequestSchema, chatRunInputsResultSchema),
+  descriptor('agent.run.effects.reconcile', chatRunInputsRequestSchema, chatReconcileEffectsResultSchema),
+  descriptor('agent.run.resume', chatResumeRunRequestSchema, chatResumeRunResultSchema),
+  descriptor('agent.run.events.list', chatRunEventsReplayRequestSchema, chatRunEventsReplayResultSchema),
+  descriptor('agent.run.events.replay', chatRunEventsReplayRequestSchema, chatRunEventsReplayPageSchema),
+  descriptor('agent.run.diagnostics.get', runDiagnosticsRequestSchema, runDiagnosticsSchema.nullable()),
+  descriptor('agent.pilot.status', emptyInputSchema, pilotStatusSchema),
+  descriptor('agent.pilot.enable', pilotOptInRequestSchema, pilotStatusSchema),
+  descriptor('agent.pilot.rollback', emptyInputSchema, pilotStatusSchema),
+  descriptor('agent.run.active.get', chatActiveRunRequestSchema, activeChatRunSchema.nullable()),
+  descriptor('agent.sessions.list', sessionListInputSchema, z.array(sessionMessageSchema)),
+  descriptor('agent.sessions.search', sessionMessageSearchRequestSchema, sessionMessageSearchResultSchema)
+] as const satisfies readonly CapabilityDescriptor[];
+
+const agentCapabilityPreviewDescriptor = descriptor(
+  'agent.capability.preview',
+  agentCapabilityPreviewRequestSchema,
+  agentCapabilityPreviewSchema
+);
+
+const agentCapabilityDescriptors = [
+  ...baseAgentCapabilityDescriptors,
+  agentCapabilityPreviewDescriptor
+] as const satisfies readonly CapabilityDescriptor[];
+
+export type AgentPluginOptions = {
+  researchTasks: ResearchTaskRepository;
+  executionGrantBroker: ExecutionGrantBroker;
+  capabilityPreview?: {
+    deleteFileApprovalModeProvider: () => ApprovalMode;
+    mcpApprovalModeProvider: () => ApprovalMode;
+  };
+  deepAgentExecutor?: {
+    memoryStore: BaseStore;
+    paths: RocPaths;
+    getMemorySettings?: () => AppSettings['memory'];
+    hookRuntime?: Pick<HookRuntime, 'runEvent'>;
+    metricsService?: Pick<MetricsService, 'recordPromptCacheMetrics'>;
+    selfConfigService?: SelfConfigService;
+  } | AgentDeepAgentExecutor;
+  modelFactory?: AgentModelFactoryAdapter;
+  status?: AgentRuntimeStatus;
+  statusProvider?: () => AgentRuntimeStatus;
+};
+
+export function createAgentPlugin(options: AgentPluginOptions): RocPlugin {
+  let runtime: AgentPluginRuntime | null = null;
+  const capabilities =
+    options.capabilityPreview === undefined ? baseAgentCapabilityDescriptors : agentCapabilityDescriptors;
+  const capabilityDependencies = resolveCapabilityDependencies(options);
+  return {
+    manifest: {
+      id: pluginId,
+      version: '1.0.0',
+      displayName: 'Agent',
+      description: 'Roc agent runtime plugin.',
+      required: true,
+      order: 10,
+      dependencies: resolveDependencies(options),
+      ...(capabilityDependencies.length === 0 ? {} : { capabilityDependencies }),
+      capabilities
+    },
+    initialize: async (context) => {
+      const db = context.database.getConnection();
+      const modelFactory = options.modelFactory === undefined ? new StaticAgentModelFactoryAdapter(blockedModelHandle()) : options.modelFactory;
+      const runEventLog = new AgentRunEventLog(db);
+      const repository = new AgentSessionRepository(db, { runEventLog });
+      repository.reconcileStartupRuns();
+      options.researchTasks.reconcileInterruptedChats();
+      const usageLedger = new RunUsageLedger(db);
+      usageLedger.reconcileStartup();
+      // P6-04: absent paths mean no place to persist the opt-in, so the pilot stays unwired and the
+      // capability reports that instead of pretending a gate exists.
+      const pilot = createPilotCoordinator(options, usageLedger);
+      runtime = new AgentPluginRuntime({
+        capabilityPreviewProvider: createCapabilityPreviewProvider(context, options),
+        mcpContractDiscoveryProvider: createMcpContractDiscoveryProvider(context),
+        deepAgentExecutor: resolveDeepAgentExecutor(context, options.deepAgentExecutor, repository, options.executionGrantBroker),
+        executionGrantBroker: options.executionGrantBroker,
+        effectReconciliationService: new EffectReconciliationService(new AgentToolEffectStore(db)),
+        eventBus: context.eventBus,
+        lifecycleHooks: resolveLifecycleHooks(context, options.deepAgentExecutor),
+        modelFactory,
+        pilot: pilot ?? undefined,
+        pluginId,
+        repository,
+        runEventLog,
+        status: options.status,
+        statusProvider: options.statusProvider,
+        workspaceProvider: async () => await context.capabilities.invoke<{}, Workspace | null>('workspace.getCurrent', {}),
+        researchProjectProvider: (projectId) => loadResearchProjectWorkspace(context, projectId),
+        researchStageProofProvider: async (projectId, stage) => await context.capabilities.invoke<
+          { projectId: string; stage: import('../../../shared/types').ResearchStage }, ResearchProof
+        >('research.workflow.verifyStageArtifacts', { projectId, stage })
+      });
+      registerAgentCapabilities(context, runtime, options);
+    },
+    shutdown: async () => {
+      if (runtime !== null) {
+        await runtime.shutdown();
+      }
+      runtime = null;
+    },
+    healthCheck: async () => ({ status: 'healthy' })
+  };
+}
+
+
+async function loadResearchProjectWorkspace(
+  context: RocPluginContext,
+  projectId: string
+): Promise<{ workspacePath: string | null } | null> {
+  try {
+    const project = await context.capabilities.invoke<{ id: string }, ResearchProject>('research.projects.get', { id: projectId });
+    if (project.status === 'archived') throw new Error('research_project_archived');
+    return { workspacePath: project.workspacePath };
+  } catch (error) {
+    if (error instanceof RocDomainError) {
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === 'capability_not_found' || message === 'capability_not_ready') {
+      throw new RocDomainError({
+        code: 'research_project_unavailable',
+        message: '研究项目服务还没准备好，无法开始对话。',
+        category: 'degraded',
+        retryable: true,
+        userAction: '稍后再发送。'
+      });
+    }
+    if (message.startsWith('research_project_not_found')) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function createCapabilityPreviewProvider(
+  context: RocPluginContext,
+  options: AgentPluginOptions
+): AgentCapabilityPreviewProvider | undefined {
+  if (options.capabilityPreview === undefined) {
+    return undefined;
+  }
+  const capabilityPreviewOptions = options.capabilityPreview;
+  const selfConfigAvailable = isSelfConfigAvailable(options.deepAgentExecutor);
+  return async ({ explicitSkillIds, mode, requestedCapabilities, runtimeStatus, shellAllowedCommands, trustedHostAvailable, workflowHint, researchProjectId }) =>
+    buildAgentCapabilityPreview({
+      deleteFileApprovalMode: capabilityPreviewOptions.deleteFileApprovalModeProvider(),
+      explicitSkillIds,
+      mcpApprovalMode: capabilityPreviewOptions.mcpApprovalModeProvider(),
+      mcpServers: await context.capabilities.invoke<{}, McpServerSnapshot[]>('mcp.listServers', {}),
+      mode,
+      requestedCapabilities,
+      selfConfigAvailable,
+      shellAllowedCommands,
+      trustedHostAvailable,
+      runtimeStatus,
+      skills: await context.capabilities.invoke<{}, SkillSnapshot[]>('skills.list', {}),
+      workflowHint,
+      researchProjectId: researchProjectId ?? null
+    });
+}
+
+// manifest 只能宣称执行器真的会绑定的工具：roc_self_config 依赖注入的 SelfConfigService。
+function isSelfConfigAvailable(option: AgentPluginOptions['deepAgentExecutor']): boolean {
+  if (option === undefined || 'execute' in option) {
+    return false;
+  }
+  return option.selfConfigService !== undefined;
+}
+
+function createMcpContractDiscoveryProvider(context: RocPluginContext): AgentMcpContractDiscoveryProvider {
+  return async ({ manifest }) => {
+    const selectedServerIds = new Set<string>();
+    for (const tool of manifest.tools) {
+      if (tool.provenance.kind === 'mcp') selectedServerIds.add(tool.provenance.serverId);
+    }
+    const servers = manifest.mcpServers.filter((server) => selectedServerIds.has(server.id));
+    if (servers.length === 0) return [];
+    const runId = `mcp-contract-discovery-${randomUUID()}`;
+    try {
+      return await context.capabilities.invoke<
+        { runId: string; servers: RunCapabilityManifestV1['mcpServers']; signal: AbortSignal },
+        McpToolContractV1[]
+      >('mcp.tools.contracts.get', {
+        runId,
+        servers,
+        signal: AbortSignal.timeout(15_000)
+      });
+    } finally {
+      await context.capabilities.invoke<{ runId: string }, { released: true }>('mcp.tools.release', { runId });
+    }
+  };
+}
+
+function resolveDeepAgentExecutor(
+  context: RocPluginContext,
+  option: AgentPluginOptions['deepAgentExecutor'],
+  repository: AgentSessionRepository,
+  executionGrantBroker: ExecutionGrantBroker
+): AgentDeepAgentExecutor | undefined {
+  if (option === undefined) {
+    return undefined;
+  }
+  if ('execute' in option) {
+    return option;
+  }
+  const agentDb = context.database.getConnection();
+  return createAgentDeepAgentExecutor({
+    capabilities: context.capabilities,
+    checkpointer: new RocSqliteCheckpointer(agentDb),
+    contextArtifactStore: new ContextArtifactStore(agentDb, option.getMemorySettings?.().sessionRetentionDays ?? 90),
+    getMemorySettings: option.getMemorySettings,
+    hookRuntime: option.hookRuntime,
+    metricsService: option.metricsService,
+    paths: option.paths,
+    // session_messages 只由 repository 写：压缩 flush 走它的 interface，而不是第二个直连 SQL 的写入者。
+    sessionHistory: repository,
+    store: option.memoryStore,
+    selfConfigService: option.selfConfigService,
+    executionGrantBroker,
+    usageLedger: new RunUsageLedger(agentDb),
+    toolEffectStore: new AgentToolEffectStore(agentDb),
+    onWorkspacePathStructureChanged: (workspacePath, reason) => {
+      void context.eventBus.publish({
+        type: workspacePathStructureChangedEventType,
+        source: pluginId,
+        payload: { workspacePath, reason },
+        createdAt: new Date().toISOString()
+      }).catch((error: unknown) => {
+        context.logger.warn('Agent workspace path structure event publish failed.', {
+          workspacePath,
+          reason,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
+    }
+  });
+}
+
+/**
+ * P6-04: the pilot needs (a) a directory for its opt-in state and (b) the same ledger the runs use.
+ * Both only exist in the in-process executor composition; an injected executor has neither, so the
+ * pilot stays absent and its capabilities answer with `agent_pilot_unavailable`.
+ */
+function createPilotCoordinator(
+  options: AgentPluginOptions,
+  ledger: RunUsageLedger
+): PilotRunCoordinator | null {
+  const executor = options.deepAgentExecutor;
+  if (executor === undefined || 'execute' in executor) {
+    return null;
+  }
+  return new PilotRunCoordinator({
+    store: new PilotStateStore({ directory: join(executor.paths.configDir, 'pilot') }),
+    ledger
+  });
+}
+
+function resolveLifecycleHooks(
+  context: RocPluginContext,
+  option: AgentPluginOptions['deepAgentExecutor']
+): AgentLifecycleHookEmitter | undefined {
+  if (option === undefined || 'execute' in option) {
+    return undefined;
+  }
+  const hookRuntime = option.hookRuntime;
+  if (hookRuntime === undefined) {
+    return undefined;
+  }
+  return {
+    emitSessionEnd: async (input) => {
+      const workspacePath = input.request.workspacePath === undefined ? null : input.request.workspacePath;
+      const outcome = await hookRuntime.runEvent({
+        schemaVersion: 1,
+        event: 'SessionEnd',
+        runId: input.runId,
+        threadId: input.threadId,
+        workspacePath,
+        cwd: workspacePath === null ? option.paths.root : workspacePath,
+        triggeredAt: new Date().toISOString(),
+        payload: {
+          status: input.status,
+          error: input.error
+        }
+      }, {
+        signal: input.signal
+      });
+      for (const event of outcome.events) {
+        await context.eventBus.publish({
+          type: 'agent.chat.run-event',
+          source: pluginId,
+          payload: event,
+          createdAt: new Date().toISOString()
+        });
+      }
+    }
+  };
+}
+
+function resolveDependencies(options: AgentPluginOptions): string[] {
+  const dependencies = new Set<string>();
+  dependencies.add('@roc/plugin-workspace');
+  if (options.capabilityPreview !== undefined) {
+    dependencies.add('@roc/plugin-mcp');
+    dependencies.add('@roc/plugin-skills');
+  }
+  if (options.deepAgentExecutor !== undefined && !('execute' in options.deepAgentExecutor)) {
+    dependencies.add('@roc/plugin-mcp');
+    dependencies.add('@roc/plugin-skills');
+    dependencies.add('@roc/plugin-runtime-tools');
+  }
+  return [...dependencies];
+}
+
+// memory 插件反向依赖 agent，不能放进 dependencies（会成环），只能声明为运行时能力依赖。
+// research 同理：绑定项目的对话运行会在装配阶段调用 research.* 能力，但不静态依赖该插件模块。
+function resolveCapabilityDependencies(options: AgentPluginOptions): string[] {
+  if (options.deepAgentExecutor !== undefined && !('execute' in options.deepAgentExecutor)) {
+    return ['@roc/plugin-task', '@roc/plugin-memory', '@roc/plugin-research'];
+  }
+  return [];
+}
+
+function registerAgentCapabilities(
+  context: RocPluginContext,
+  runtime: AgentPluginRuntime,
+  options: AgentPluginOptions
+): void {
+  context.capabilities.register(pluginId, baseDescriptor('agent.status.get'), async () => runtime.getStatus());
+  context.capabilities.register(pluginId, baseDescriptor('agent.config.preview'), async () =>
+    buildDeepAgentConfigPreview({
+      deleteFileApprovalMode: options.capabilityPreview?.deleteFileApprovalModeProvider() ?? 'default',
+      runtimeStatus: runtime.getStatus(),
+      mode: 'chat'
+    })
+  );
+  context.capabilities.register(pluginId, baseDescriptor('agent.run.start'), async (input) =>
+    runtime.startRun(chatStartRunRequestSchema.parse(input))
+  );
+  context.capabilities.register(pluginId, baseDescriptor('agent.run.cancel'), async (input) => {
+    const request = chatCancelRunRequestSchema.parse(input);
+    const result = await runtime.cancelRun(request);
+    const task = options.researchTasks.taskForChat(request.runId);
+    if (task !== null && ['active', 'waiting_approval', 'failed'].includes(task.status)) {
+      await context.capabilities.invoke('research.task.cancel', { taskId: task.id, projectId: task.projectId });
+    }
+    return result;
+  });
+  context.capabilities.register(pluginId, baseDescriptor('agent.run.correct'), async input => {
+    const request = chatCorrectRunRequestSchema.parse(input);
+    return runtime.enqueueRunInput(request);
+  });
+  context.capabilities.register(pluginId, baseDescriptor('agent.run.inputs'), async input =>
+    runtime.readRunInputs(chatRunInputsRequestSchema.parse(input)));
+  context.capabilities.register(pluginId, baseDescriptor('agent.run.effects.reconcile'), async input =>
+    runtime.reconcileRunEffects(chatRunInputsRequestSchema.parse(input)));
+  context.capabilities.register(pluginId, baseDescriptor('agent.run.resume'), async (input) =>
+    runtime.resumeRun(chatResumeRunRequestSchema.parse(input))
+  );
+  context.capabilities.register(pluginId, baseDescriptor('agent.run.events.list'), async (input) =>
+    runtime.listRunEvents(chatRunEventsReplayRequestSchema.parse(input))
+  );
+  context.capabilities.register(pluginId, baseDescriptor('agent.run.events.replay'), async (input) =>
+    runtime.replayRunEvents(chatRunEventsReplayRequestSchema.parse(input))
+  );
+  context.capabilities.register(pluginId, baseDescriptor('agent.run.diagnostics.get'), async (input) =>
+    runtime.getRunDiagnostics(runDiagnosticsRequestSchema.parse(input))
+  );
+  context.capabilities.register(pluginId, baseDescriptor('agent.pilot.status'), async () =>
+    runtime.getPilotStatus()
+  );
+  context.capabilities.register(pluginId, baseDescriptor('agent.pilot.enable'), async (input) =>
+    runtime.enablePilot(pilotOptInRequestSchema.parse(input))
+  );
+  context.capabilities.register(pluginId, baseDescriptor('agent.pilot.rollback'), async () =>
+    runtime.rollbackPilot()
+  );
+  context.capabilities.register(pluginId, baseDescriptor('agent.run.active.get'), async (input) =>
+    runtime.getActiveRun(chatActiveRunRequestSchema.parse(input))
+  );
+  context.capabilities.register(pluginId, baseDescriptor('agent.sessions.list'), async (input) =>
+    runtime.listSessionMessages(sessionListInputSchema.parse(input))
+  );
+  context.capabilities.register(pluginId, baseDescriptor('agent.sessions.search'), async (input) =>
+    runtime.searchSessionMessages(sessionMessageSearchRequestSchema.parse(input))
+  );
+  if (context.capabilities.list().some((capability) => capability.name === agentCapabilityPreviewDescriptor.name)) {
+    context.capabilities.register(pluginId, agentCapabilityPreviewDescriptor, async (input) => {
+      const request = agentCapabilityPreviewRequestSchema.parse(input);
+      return await runtime.getCapabilityPreview({
+        mode: request.mode,
+        requestedCapabilities: {
+          mcpServers: request.mcpServers,
+          skills: request.skills
+        },
+        trustedHostAvailable: request.mode !== 'plan'
+      });
+    });
+  }
+}
+
+type BaseAgentCapabilityName = (typeof baseAgentCapabilityDescriptors)[number]['name'];
+
+// 按名字取 descriptor，而不是按数组下标：插入或重排 baseAgentCapabilityDescriptors 不会静默错位。
+function baseDescriptor(name: BaseAgentCapabilityName): CapabilityDescriptor {
+  const found = baseAgentCapabilityDescriptors.find((candidate) => candidate.name === name);
+  if (found === undefined) {
+    throw new Error(`agent_capability_descriptor_missing:${name}`);
+  }
+  return found;
+}
+
+function descriptor<TName extends string, TInput, TOutput>(
+  name: TName,
+  inputSchema: z.ZodType<TInput>,
+  outputSchema: z.ZodType<TOutput>
+): CapabilityDescriptor<TInput, TOutput> & { readonly name: TName } {
+  return {
+    name,
+    version: capabilityVersion,
+    inputSchema,
+    outputSchema
+  };
+}
+
+function blockedModelHandle(): { providerId: string; modelId: string } {
+  return {
+    providerId: 'unconfigured',
+    modelId: 'unconfigured'
+  };
+}

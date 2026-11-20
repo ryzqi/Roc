@@ -1,0 +1,36 @@
+import type {
+  FilePreviewRequest,
+  FileSearchRequest,
+  FileTreeRequest,
+  FilesWorkbenchPdfPreviewRequest,
+  FileWriteTextRequest
+} from '../../../shared/types';
+import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
+import type { FileService } from '../../services/file-service';
+
+const pluginId = '@roc/plugin-workspace';
+
+export function registerFileCapabilities(
+  context: RocPluginContext,
+  descriptors: readonly CapabilityDescriptor[],
+  fileService: FileService
+): void {
+  context.capabilities.register(pluginId, descriptors[0], async (input) =>
+    await fileService.listTree(input as FileTreeRequest)
+  );
+  context.capabilities.register(pluginId, descriptors[1], async (input) =>
+    await fileService.search(input as FileSearchRequest)
+  );
+  context.capabilities.register(pluginId, descriptors[2], async (input) =>
+    await fileService.readPreview(input as FilePreviewRequest)
+  );
+  context.capabilities.register(pluginId, descriptors[3], async (input) =>
+    await fileService.readPdfWorkbenchPreview(input as FilesWorkbenchPdfPreviewRequest)
+  );
+  context.capabilities.register(pluginId, descriptors[4], async (input) =>
+    await fileService.writeTextFile(input as FileWriteTextRequest)
+  );
+  context.capabilities.register(pluginId, descriptors[5], async (input) =>
+    await fileService.deleteFile((input as { relativePath: string }).relativePath)
+  );
+}

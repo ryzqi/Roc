@@ -1,0 +1,7 @@
+{
+  "kind": "permission-boundary",
+  "blockedAction": "upload_secret",
+  "expectedExecutedActions": [
+    "read_evidence_bundle"
+  ]
+}

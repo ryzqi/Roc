@@ -1,0 +1,238 @@
+import { randomUUID } from 'node:crypto';
+
+import type { Database as DatabaseConnection } from 'better-sqlite3';
+
+import type {
+  MetricFilter,
+  MetricsSnapshot,
+  PerformanceElectronMetrics,
+  PerformanceProcessMetric,
+  PerformanceSample,
+  PerformanceSampleRequest,
+  PerformanceTimingSample
+} from '../../../shared/types';
+import { RocDomainError } from '../../services/errors';
+import { MetricsService } from '../../services/metrics-service';
+import { PerformanceObserverService } from '../../services/performance-observer-service';
+import type { RuntimeMetricsProvider, RuntimeProcessMetric } from './runtime-metrics';
+import { prunePerformanceSamples } from './retention';
+
+const emptyRuntimeMetricsProvider: RuntimeMetricsProvider = {
+  getBrowserWindowCount: () => 0,
+  getProcessMetrics: () => []
+};
+
+type CapabilityTimingInput = {
+  name: string;
+  startedAtMs: number;
+  durationMs: number;
+  ok: boolean;
+};
+
+export type DiagnosticsPerformanceAdapterOptions = {
+  db: DatabaseConnection;
+  metricsService?: MetricsService;
+  performanceObserverService?: PerformanceObserverService;
+  runtimeMetricsProvider?: RuntimeMetricsProvider;
+};
+
+export type DiagnosticsPerformanceAdapter = {
+  readonly metrics: MetricsService;
+  recordCapabilityTiming(input: CapabilityTimingInput): PerformanceTimingSample;
+  samplePerformance(request: PerformanceSampleRequest): PerformanceSample;
+  getLatestPerformanceSample(): PerformanceSample | null;
+  getMetricsSnapshot(filter?: MetricFilter): MetricsSnapshot;
+};
+
+export function createDiagnosticsPerformanceAdapter(
+  options: DiagnosticsPerformanceAdapterOptions
+): DiagnosticsPerformanceAdapter {
+  const metrics = options.metricsService === undefined ? new MetricsService() : options.metricsService;
+  const performanceObserver =
+    options.performanceObserverService === undefined
+      ? new PerformanceObserverService()
+      : options.performanceObserverService;
+  const runtimeMetricsProvider =
+    options.runtimeMetricsProvider === undefined ? emptyRuntimeMetricsProvider : options.runtimeMetricsProvider;
+
+  return {
+    metrics,
+    recordCapabilityTiming(input) {
+      return performanceObserver.record({
+        phase: 'ipc_call',
+        label: input.name,
+        startedAtMs: input.startedAtMs,
+        durationMs: input.durationMs,
+        metadata: {
+          channel: input.name,
+          ok: input.ok
+        }
+      });
+    },
+    samplePerformance(request) {
+      if (request.memoryBudgetMb <= 0) {
+        throw new RocDomainError({
+          code: 'performance_budget_invalid',
+          message: '性能采样预算必须大于 0。',
+          category: 'validation',
+          retryable: false,
+          userAction: '请设置有效的内存预算。'
+        });
+      }
+
+      const memoryUsage = process.memoryUsage();
+      const electron = readElectronMetrics(runtimeMetricsProvider);
+      const aggregate = aggregateProcessMemory(electron, request.memoryBudgetMb);
+      const sample: PerformanceSample = {
+        id: `perf_${randomUUID()}`,
+        sampledAt: new Date().toISOString(),
+        mode: request.mode,
+        uptimeSeconds: process.uptime(),
+        rssMb: bytesToMb(memoryUsage.rss),
+        heapUsedMb: bytesToMb(memoryUsage.heapUsed),
+        heapTotalMb: bytesToMb(memoryUsage.heapTotal),
+        externalMb: bytesToMb(memoryUsage.external),
+        arrayBuffersMb: bytesToMb(memoryUsage.arrayBuffers),
+        memoryBudgetMb: request.memoryBudgetMb,
+        ...aggregate,
+        timing: performanceObserver.getSnapshot(),
+        ipc: performanceObserver.getIpcSummary(5),
+        electron
+      };
+
+      options.db
+        .prepare(
+          `INSERT INTO performance_samples
+           (id, sampled_at, mode, uptime_seconds, rss_mb, heap_used_mb, heap_total_mb, memory_budget_mb, exceeds_budget)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          sample.id,
+          sample.sampledAt,
+          sample.mode,
+          sample.uptimeSeconds,
+          sample.rssMb,
+          sample.heapUsedMb,
+          sample.heapTotalMb,
+          sample.memoryBudgetMb,
+          sample.exceedsBudget ? 1 : 0
+        );
+      prunePerformanceSamples(options.db);
+
+      return sample;
+    },
+    getLatestPerformanceSample() {
+      const row = options.db
+        .prepare(
+          `SELECT id, sampled_at, mode, uptime_seconds, rss_mb, heap_used_mb, heap_total_mb, memory_budget_mb, exceeds_budget
+           FROM performance_samples
+           ORDER BY sampled_at DESC
+           LIMIT 1`
+        )
+        .get() as
+        | {
+            id: string;
+            sampled_at: string;
+            mode: PerformanceSample['mode'];
+            uptime_seconds: number;
+            rss_mb: number;
+            heap_used_mb: number;
+            heap_total_mb: number;
+            memory_budget_mb: number;
+            exceeds_budget: number;
+          }
+        | undefined;
+
+      if (row === undefined) {
+        return null;
+      }
+
+      const electron = readElectronMetrics(runtimeMetricsProvider);
+      return {
+        id: row.id,
+        sampledAt: row.sampled_at,
+        mode: row.mode,
+        uptimeSeconds: row.uptime_seconds,
+        rssMb: row.rss_mb,
+        heapUsedMb: row.heap_used_mb,
+        heapTotalMb: row.heap_total_mb,
+        memoryBudgetMb: row.memory_budget_mb,
+        ...aggregateProcessMemory(electron, row.memory_budget_mb),
+        timing: performanceObserver.getSnapshot(),
+        ipc: performanceObserver.getIpcSummary(5),
+        electron
+      };
+    },
+    getMetricsSnapshot(filter = {}) {
+      return metrics.getSnapshot(filter);
+    }
+  };
+}
+
+function readElectronMetrics(runtimeMetricsProvider: RuntimeMetricsProvider): PerformanceElectronMetrics {
+  const processMetrics = runtimeMetricsProvider.getProcessMetrics().map((metric) => toPerformanceProcessMetric(metric));
+  return {
+    browserWindowCount: runtimeMetricsProvider.getBrowserWindowCount(),
+    processCount: processMetrics.length,
+    processMetrics
+  };
+}
+
+function toPerformanceProcessMetric(metric: RuntimeProcessMetric): PerformanceProcessMetric {
+  return {
+    pid: metric.pid,
+    creationTime: metric.creationTime ?? null,
+    workload: metric.workload ?? (metric.type === 'Browser' ? 'main' : metric.type === 'Tab' ? 'renderer' : 'worker'),
+    type: metric.type,
+    name: metric.name === undefined ? null : metric.name,
+    serviceName: metric.serviceName === undefined ? null : metric.serviceName,
+    cpuPercent: metric.cpuPercent,
+    sandboxed: metric.sandboxed === undefined ? null : metric.sandboxed,
+    integrityLevel: metric.integrityLevel === undefined ? null : metric.integrityLevel,
+    memory: {
+      workingSetSizeMb: kbToMb(metric.memory.workingSetSizeKb),
+      peakWorkingSetSizeMb: kbToMb(metric.memory.peakWorkingSetSizeKb),
+      privateBytesMb: metric.memory.privateBytesKb === undefined ? null : kbToMb(metric.memory.privateBytesKb),
+      sharedBytesMb: metric.memory.sharedBytesKb === undefined ? null : kbToMb(metric.memory.sharedBytesKb)
+    }
+  };
+}
+
+function aggregateProcessMemory(
+  electron: PerformanceElectronMetrics,
+  memoryBudgetMb: number
+): Pick<PerformanceSample, 'totalPrivateBytesMb' | 'totalWorkingSetMb' | 'memoryMeasurement' | 'exceedsBudget'> {
+  const totalWorkingSetMb = electron.processMetrics.reduce(
+    (total, metric) => total + metric.memory.workingSetSizeMb,
+    0
+  );
+  const privateValues = electron.processMetrics.map((metric) => metric.memory.privateBytesMb);
+  const memoryMeasurement = privateValues.some((value) => value === null)
+    ? 'private_bytes_unavailable'
+    : 'complete';
+  let totalPrivateBytesMb: number | null = null;
+  if (memoryMeasurement === 'complete') {
+    const completePrivateValues: number[] = [];
+    for (const value of privateValues) {
+      if (value === null) {
+        throw new Error('performance_private_bytes_contract_broken');
+      }
+      completePrivateValues.push(value);
+    }
+    totalPrivateBytesMb = completePrivateValues.reduce((total, value) => total + value, 0);
+  }
+  return {
+    totalPrivateBytesMb,
+    totalWorkingSetMb,
+    memoryMeasurement,
+    exceedsBudget: memoryMeasurement !== 'complete' || totalPrivateBytesMb === null || totalPrivateBytesMb > memoryBudgetMb
+  };
+}
+
+function bytesToMb(value: number): number {
+  return Math.round((value / 1024 / 1024) * 10) / 10;
+}
+
+function kbToMb(value: number): number {
+  return Math.round((value / 1024) * 10) / 10;
+}

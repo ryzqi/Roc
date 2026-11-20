@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "corpusId": "roc-literature-public-v1",
+  "asOf": "2026-11-19",
+  "annotationStatus": "unlabeled_seed_set",
+  "limits": {"limit": 20, "maxPages": 1},
+  "sources": ["openalex", "semantic_scholar", "arxiv", "openreview"],
+  "topics": [
+    {"id": "multi-agent-security", "queries": ["multi agent security", "LLM agent prompt injection", "adversarial attacks multi agent systems"], "papers": [
+      {"id": "injecagent", "title": "InjecAgent: Benchmarking Indirect Prompt Injections in Tool-Integrated Large Language Model Agents", "arxivId": "2403.02691"},
+      {"id": "agentpoison", "title": "AgentPoison: Red-teaming LLM Agents via Poisoning Memory or Knowledge Bases", "arxivId": "2407.12784"}
+    ]},
+    {"id": "agent-memory", "queries": ["LLM agent memory", "long term memory language model agents", "episodic memory generative agents"], "papers": [
+      {"id": "memgpt", "title": "MemGPT: Towards LLMs as Operating Systems", "arxivId": "2310.08560"},
+      {"id": "generative-agents", "title": "Generative Agents: Interactive Simulacra of Human Behavior", "arxivId": "2304.03442"}
+    ]},
+    {"id": "runtime-reliability", "queries": ["agent runtime reliability", "language model agents failure recovery", "software engineering agent execution reliability"], "papers": [
+      {"id": "swe-bench", "title": "SWE-bench: Can Language Models Resolve Real-World GitHub Issues?", "arxivId": "2310.06770"},
+      {"id": "agentbench", "title": "AgentBench: Evaluating LLMs as Agents", "arxivId": "2308.03688"}
+    ]},
+    {"id": "agentic-rag", "sources": ["acl"], "collections": {"acl": "2025.acl"}, "queries": ["agentic retrieval augmented generation", "adaptive RAG", "retrieval augmented generation evaluation"], "papers": [
+      {"id": "rag", "title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks", "arxivId": "2005.11401"},
+      {"id": "self-rag", "title": "Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection", "arxivId": "2310.11511"}
+    ]},
+    {"id": "deep-research", "queries": ["deep research language model agents", "automated literature research synthesis", "research agents question asking retrieval"], "papers": [
+      {"id": "storm", "title": "Assisting in Writing Wikipedia-like Articles From Scratch with Large Language Models", "arxivId": "2402.14207"}
+    ]},
+    {"id": "llm-evaluation", "queries": ["LLM evaluation benchmark", "general AI assistant evaluation", "holistic language model evaluation"], "papers": [
+      {"id": "helm", "title": "Holistic Evaluation of Language Models", "arxivId": "2211.09110"},
+      {"id": "gaia", "title": "GAIA: a benchmark for General AI Assistants", "arxivId": "2311.12983"}
+    ]},
+    {"id": "multimodal-agent", "sources": ["cvf"], "collections": {"cvf": "CVPR2025"}, "queries": ["multimodal agent", "visual web agent", "computer use agents"], "papers": [
+      {"id": "visualwebarena", "title": "VisualWebArena: Evaluating Multimodal Agents on Realistic Visual Web Tasks", "arxivId": "2401.13649"},
+      {"id": "osworld", "title": "OSWorld: Benchmarking Multimodal Agents for Open-Ended Tasks in Real Computer Environments", "arxivId": "2404.07972"}
+    ]}
+  ]
+}

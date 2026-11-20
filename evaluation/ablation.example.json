@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "kind": "ablation",
+  "title": "RAG retrieval BM25 / hybrid component ablation",
+  "hypothesis": "填写来自真实 incident 的可证伪假设。阈值仅为示例，必须在两臂执行前按审核后的数据和业务要求冻结。",
+  "incidents": ["/absolute/path/from-incident-command"],
+  "allowedChanges": [],
+  "acceptance": {
+    "nonInferiorityMargin": 0.05,
+    "absoluteFloors": {
+      "recall20": 0.7,
+      "ndcg10": 0.6,
+      "evidenceChainRecall20": 0.7,
+      "wrongSourceRate": 0,
+      "staleHitRate": 0
+    },
+    "absoluteCeilings": {"wrongSourceRate": 0, "staleHitRate": 0},
+    "metricDirections": {"wrongSourceRate": "lower-is-better", "staleHitRate": "lower-is-better"},
+    "trialFloors": {},
+    "primaryMetrics": ["evidenceChainRecall20"],
+    "minimumClusters": 5,
+    "minimumRepeats": 3,
+    "resourceCeilings": {"retrievalP95Ms": 2000, "costUsd": 10},
+    "maxResourceDegradation": {"latencyP95Ms": 0.2}
+  },
+  "ablation": {
+    "retrievalConfig": {
+      "baseline": {"mode": "bm25", "rerank": "none", "candidateLimit": 50, "topK": 20, "contextMaxChars": 6000},
+      "candidate": {"mode": "hybrid", "rerank": "none", "candidateLimit": 50, "topK": 20, "contextMaxChars": 6000}
+    }
+  }
+}

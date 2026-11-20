@@ -1,0 +1,141 @@
+import * as motion from 'motion/react-m';
+import { useRef } from 'react';
+import { BookOpen, FileText, Terminal } from 'lucide-react';
+import { canvasTabIds, surfaceFor, type CanvasTabId } from '../../shared/surfaces';
+import { tabIndicatorTransition } from '../shared/motion';
+
+/**
+ * Canvas: the primary tab strip plus the project views.
+ *
+ * The three top-level tabs are 文献 / LaTeX / 终端 — the three surfaces a researcher keeps open while
+ * working. Other views (记忆 / 技能 / MCP) are reached from the sidebar, the chrome or the grid, so a
+ * tab is only selected when the routed view is one of the three.
+ *
+ * **The list, the order and the labels come from the surface table** (`src/shared/surfaces.ts`). All
+ * this module still owns is the *appearance* — which Lucide glyph and which icon hue each tab uses —
+ * because an icon is a renderer concern. That division is deliberate: the classification has one
+ * home, the rendering detail has another, and the `Record` below makes a tab added to the table
+ * without an icon a compile error rather than a blank slot.
+ *
+ * Selection is derived from the URL, not from component state: the active tab is whichever of the
+ * three matches `?view=`.
+ *
+ * ## The indicator travels between tabs
+ *
+ * The active tab carries a shared `layoutId` indicator, so the underline *slides*
+ * when the tab changes instead of blinking. It used to be a per-tab opacity
+ * transition, kept out by a self-imposed eager-byte ceiling that no longer
+ * exists; the real budget lives in `check-renderer-chunks.mjs` (1,700,000 B) and
+ * the layout-projection engine fits inside it. `MotionConfig
+ * reducedMotion="user"` still governs the travel: for reduced-motion users the
+ * indicator appears where it belongs without sliding.
+ *
+ * Icon hues are category identity, not decoration: they are exposed as
+ * `--icon-*` so no component carries a hex and the light theme can drop to the
+ * 600 stops for contrast.
+ */
+
+export type { CanvasTabId };
+
+export type WorkspaceCanvasProps = {
+  /** `null` when the routed view is not one of the three primary tabs. */
+  activeTab: CanvasTabId | null;
+  onTabChange: (tab: CanvasTabId) => void;
+  /** Project views (`ViewContent`), or the portal placeholder. */
+  children: React.ReactNode;
+  /** Rendered at the right of the tab strip (project-scoped actions). */
+  actions?: React.ReactNode;
+};
+
+/** 图标与色相属于渲染层，id / 顺序 / 标签属于面表。 */
+const TAB_APPEARANCE: Record<CanvasTabId, { icon: typeof BookOpen; iconClass: string }> = {
+  literature: { icon: BookOpen, iconClass: 'text-[var(--icon-literature)]' },
+  latex: { icon: FileText, iconClass: 'text-[var(--icon-latex)]' },
+  terminal: { icon: Terminal, iconClass: 'text-[var(--icon-terminal)]' }
+};
+
+const TABS: ReadonlyArray<{ id: CanvasTabId; label: string; icon: typeof BookOpen; iconClass: string }> =
+  canvasTabIds.map((id) => ({ id, label: surfaceFor(id).label, ...TAB_APPEARANCE[id] }));
+
+const TAB_BASE =
+  'relative flex h-[30px] shrink-0 items-center gap-1.5 rounded-control border-[0.5px] px-3 whitespace-nowrap text-[length:var(--font-meta-size)] transition-colors duration-[var(--duration-fast)]';
+
+export function WorkspaceCanvas({
+  activeTab,
+  onTabChange,
+  children,
+  actions
+}: WorkspaceCanvasProps): React.JSX.Element {
+  const tabRefs = useRef<Partial<Record<CanvasTabId, HTMLButtonElement | null>>>({});
+  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+      return;
+    }
+    const index = TABS.findIndex((tab) => tabRefs.current[tab.id]?.contains(event.target as Node));
+    if (index < 0) return;
+    event.preventDefault();
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? TABS.length - 1
+      : event.key === 'ArrowLeft' ? (index + TABS.length - 1) % TABS.length : (index + 1) % TABS.length;
+    const nextTab = TABS[next]!.id;
+    onTabChange(nextTab);
+    tabRefs.current[nextTab]?.focus();
+  };
+
+  return (
+    <div className="workspace-canvas-container flex h-full min-h-0 flex-col" data-testid="canvas">
+      <div className="no-scrollbar flex h-10 shrink-0 items-center gap-1 overflow-x-auto border-b-[0.5px] border-line px-3">
+        <div role="tablist" aria-label="画布" onKeyDown={onKeyDown} className="flex items-center gap-1">
+        {TABS.map((tab, index) => {
+          const selected = tab.id === activeTab;
+          const Icon = tab.icon;
+          // When no primary tab is selected (a parked or unknown `?view=`), the
+          // whole strip would otherwise be `tabIndex={-1}` and therefore
+          // unreachable by keyboard. The first tab stays tabbable as the entry
+          // point; roving focus takes over once a tab is selected.
+          const tabbable = selected || (activeTab === null && index === 0);
+          return (
+            <button
+              key={tab.id}
+              ref={(element) => { tabRefs.current[tab.id] = element; }}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              tabIndex={tabbable ? 0 : -1}
+              onClick={() => onTabChange(tab.id)}
+              data-testid={`canvas-tab-${tab.id}`}
+              className={
+                selected
+                  ? `${TAB_BASE} border-line-strong bg-surface font-semibold text-ink`
+                  : `${TAB_BASE} border-transparent text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]`
+              }
+            >
+              <Icon size={13} aria-hidden="true" className={tab.iconClass} />
+              <span>{tab.label}</span>
+              {selected ? (
+                // `layoutId` is shared across the three tabs, so React mounts one
+                // indicator at a time and motion interpolates its box — the slide.
+                //
+                // The bar is mono, not `--accent`: chrome selection is always a
+                // raised monochrome mark, and `--accent` is reserved for the
+                // primary action and focus. A coloured bar here would be the
+                // only colour in an otherwise mono shell.
+                <motion.div
+                  aria-hidden="true"
+                  data-testid="canvas-tab-indicator"
+                  layoutId="canvas-active-tab-indicator"
+                  transition={tabIndicatorTransition}
+                  className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-ink"
+                />
+              ) : null}
+            </button>
+          );
+        })}
+        </div>
+        {actions === undefined ? null : <div className="ml-auto flex shrink-0 items-center gap-1 py-1">{actions}</div>}
+      </div>
+
+      {/* Single scroll surface for the canvas. */}
+      <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+    </div>
+  );
+}

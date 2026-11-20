@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "frozenAt": "2026-11-06",
+  "scope": "Isolated local engineering baseline, no scientific quality claim",
+  "retrieval": {
+    "scales": [10000, 100000, 1000000],
+    "dimensions": 384,
+    "seed": 19790527,
+    "projectCount": 4,
+    "chunksPerDocument": 100,
+    "sqliteCacheKiB": 65536,
+    "limit": 20,
+    "samples": 20,
+    "queries": ["topic7 evidence", "机器学习 topic7"],
+    "p95TargetsMs": {"ftsMs": 2500, "vectorMs": 2500, "totalMs": 5000}
+  },
+  "quality": {
+    "status": "Blocked, not run",
+    "requires": "Independent human-reviewed Chinese, English and mixed query/source relevance labels with source hashes, reviewer identity and frozen split",
+    "rule": "Compare query strategies on the same corpus before evaluating another engine; generated vectors do not count as semantic relevance labels"
+  },
+  "cache": {
+    "connectionCold": "Fresh SQLite connection; OS cache remains uncontrolled",
+    "repeatedConnection": "Same connection after one unmeasured query; do not claim the complete database is resident"
+  },
+  "decision": {
+    "engine": "Retain SQLite",
+    "rule": "A target miss triggers candidate filtering and two-stage ranking investigation first; this baseline does not authorize an ANN or database migration"
+  }
+}

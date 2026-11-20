@@ -1,0 +1,2522 @@
+{
+  "schemaVersion": 1,
+  "kind": "scientific-sciegqa-preselected-public-cohort",
+  "selection": {
+    "version": "sciegqa-balanced-published-cohort/1",
+    "papers": 45,
+    "questionsPerPaper": 5,
+    "paperOrder": "arxiv-id-ascending-within-domain-then-round-robin-lexicographic-domain",
+    "questionOrder": "original-published-row-ascending",
+    "selectionUses": [
+      "original-paper-id",
+      "original-domain",
+      "original-published-row"
+    ],
+    "selectionExcludes": [
+      "parser-output",
+      "image-correspondence-outcome",
+      "retrieval-result",
+      "download-success"
+    ]
+  },
+  "sourceLockHash": "71a265bab51d8354021eea87c38f53dc990d8c1d1a83b91e726a88ec91cbfd60",
+  "sourceRevision": "9bdca77be633cc3259d7e3739d35b38ab00bf5d9",
+  "labelsHash": "c94be28ad739cf571d56c77fc8bb0732f38b057f93749b0be823c28214785faf",
+  "annotationProvenance": {
+    "kind": "published-human-benchmark",
+    "localHumanReview": false,
+    "project": "https://yuwenhan07.github.io/SciEGQA-project/",
+    "publication": "https://arxiv.org/abs/2511.15090",
+    "trainingSetIncluded": false
+  },
+  "license": null,
+  "papers": [
+    {
+      "id": "sciegqa:cs:2311.07631",
+      "domain": "cs",
+      "docName": "2311.07631",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/cs/2311.07631_The_4+1_Model_of_Data_Science.pdf",
+        "bytes": 424938,
+        "path": "pdfs/cs/2311.07631.pdf",
+        "sha256": "2551035de153b3de967b7f2372802af4548408ee73dd2aa2910c43987c3b091f"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:0",
+          "publishedRow": 0,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:0:page-group:0:page:4:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:1",
+          "publishedRow": 1,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:1:page-group:0:page:26:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:2",
+          "publishedRow": 2,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:2:page-group:0:page:26:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:3",
+          "publishedRow": 3,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:3:page-group:0:page:8:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:4",
+          "publishedRow": 4,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:4:page-group:0:page:26:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:econ:2405.09360",
+      "domain": "econ",
+      "docName": "2405.09360",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/econ/2405.09360_The_Unfairness_of_varepsilon-Fairness.pdf",
+        "bytes": 403252,
+        "path": "pdfs/econ/2405.09360.pdf",
+        "sha256": "2cc0bf872d37bf6257746d22b403828ac9a313b028f41b67bda96dd13f3ff13b"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:10",
+          "publishedRow": 10,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:10:page-group:0:page:2:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:11",
+          "publishedRow": 11,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:11:page-group:0:page:11:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:12",
+          "publishedRow": 12,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:12:page-group:0:page:8:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:13",
+          "publishedRow": 13,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:13:page-group:0:page:8:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:14",
+          "publishedRow": 14,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:14:page-group:0:page:6:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:eess:2412.07948",
+      "domain": "eess",
+      "docName": "2412.07948",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/eess/2412.07948_Frechet_Music_Distance_A_Metric_For_Generative_Symbolic_Music_Evaluation.pdf",
+        "bytes": 528262,
+        "path": "pdfs/eess/2412.07948.pdf",
+        "sha256": "77c1bf54c3da64f61628f866071027550f81772fb057ca5c54dbdd70264e1410"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:100",
+          "publishedRow": 100,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:100:page-group:0:page:1:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:101",
+          "publishedRow": 101,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:101:page-group:0:page:4:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:102",
+          "publishedRow": 102,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:102:page-group:0:page:5:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:103",
+          "publishedRow": 103,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:103:page-group:0:page:5:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:104",
+          "publishedRow": 104,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:104:page-group:0:page:3:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:math:2412.05250",
+      "domain": "math",
+      "docName": "2412.05250",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/math/2412.05250_Constructing_projective_modules.pdf",
+        "bytes": 1479621,
+        "path": "pdfs/math/2412.05250.pdf",
+        "sha256": "685534e0fded53cde5a5902d0c829f18d19c04c5ed1ec0ec9e15884b4e22ead2"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:297",
+          "publishedRow": 297,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:297:page-group:0:page:83:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:298",
+          "publishedRow": 298,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:298:page-group:0:page:6:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:299",
+          "publishedRow": 299,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:299:page-group:0:page:41:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:300",
+          "publishedRow": 300,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:300:page-group:0:page:100:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:301",
+          "publishedRow": 301,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:301:page-group:0:page:44:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:physics:2409.18430",
+      "domain": "physics",
+      "docName": "2409.18430",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/physics/2409.18430_Energy_Levels_and_Transition_Rates_of_Laser-Cooling_Candidate_Th-.pdf",
+        "bytes": 2132189,
+        "path": "pdfs/physics/2409.18430.pdf",
+        "sha256": "1338749e56afff17fa627f51f0b6858d21fdc923801ab6295fb0b6eb8c8a4812"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:381",
+          "publishedRow": 381,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:381:page-group:0:page:13:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:382",
+          "publishedRow": 382,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:382:page-group:0:page:17:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:383",
+          "publishedRow": 383,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:383:page-group:0:page:10:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:384",
+          "publishedRow": 384,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:384:page-group:0:page:15:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:385",
+          "publishedRow": 385,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:385:page-group:0:page:4:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:q-bio:2403.03335",
+      "domain": "q-bio",
+      "docName": "2403.03335",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/q-bio/2403.03335_From_virtual_patients_to_digital_twins_in_immuno-oncology_lessons_learned_from_mechanistic_quantitative_systems_pharmacology_modeling.pdf",
+        "bytes": 518029,
+        "path": "pdfs/q-bio/2403.03335.pdf",
+        "sha256": "1aa7a4df1335bbd96b8c4d8f5b6e031fe85418e61575de8efb8baab5442bbce0"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:481",
+          "publishedRow": 481,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:481:page-group:0:page:8:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:482",
+          "publishedRow": 482,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:482:page-group:0:page:12:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:483",
+          "publishedRow": 483,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:483:page-group:0:page:2:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:484",
+          "publishedRow": 484,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:484:page-group:0:page:10:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:485",
+          "publishedRow": 485,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:485:page-group:0:page:11:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:q-fin:2401.05713",
+      "domain": "q-fin",
+      "docName": "2401.05713",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/q-fin/2401.05713_Super-hedging-pricing_formulas_and_Immediate-Profit_arbitrage_for_market_models_under_random_horizon.pdf",
+        "bytes": 382551,
+        "path": "pdfs/q-fin/2401.05713.pdf",
+        "sha256": "03dfff525b40b3e646aee0f47b1b9a15fb72ee3be1063a50ea87afc7d70e61d0"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:559",
+          "publishedRow": 559,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:559:page-group:0:page:1:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:560",
+          "publishedRow": 560,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:560:page-group:0:page:3:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:561",
+          "publishedRow": 561,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:561:page-group:0:page:22:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:562",
+          "publishedRow": 562,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:562:page-group:0:page:3:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:563",
+          "publishedRow": 563,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:563:page-group:0:page:25:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:stat:2309.06983",
+      "domain": "stat",
+      "docName": "2309.06983",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/stat/2309.06983_Creating_Community_in_a_Data_Science_Classroom.pdf",
+        "bytes": 116259,
+        "path": "pdfs/stat/2309.06983.pdf",
+        "sha256": "cb054290bb8d29eee4a8d833ad1b9f54b11f21d701583c935c04781470056ca9"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:658",
+          "publishedRow": 658,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:658:page-group:0:page:4:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:659",
+          "publishedRow": 659,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:659:page-group:0:page:6:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:660",
+          "publishedRow": 660,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:660:page-group:0:page:14:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:661",
+          "publishedRow": 661,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:661:page-group:0:page:17:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:662",
+          "publishedRow": 662,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:662:page-group:0:page:14:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:cs:2408.14349",
+      "domain": "cs",
+      "docName": "2408.14349",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/cs/2408.14349_Evaluating_the_Usability_of_Qualified_Electronic_Signatures_Systematized_Use_Cases_and_Design_Paradigms.pdf",
+        "bytes": 542733,
+        "path": "pdfs/cs/2408.14349.pdf",
+        "sha256": "8a0f6d7436c9b5706f6c3bb59e1939544e3b99b3ecac66b62d319daa0d13e2d6"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:50",
+          "publishedRow": 50,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:50:page-group:0:page:4:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:51",
+          "publishedRow": 51,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:51:page-group:0:page:5:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:52",
+          "publishedRow": 52,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:52:page-group:0:page:3:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:53",
+          "publishedRow": 53,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:53:page-group:0:page:2:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:54",
+          "publishedRow": 54,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:54:page-group:0:page:11:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:econ:2406.05299",
+      "domain": "econ",
+      "docName": "2406.05299",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/econ/2406.05299_Learning_about_informativeness.pdf",
+        "bytes": 402512,
+        "path": "pdfs/econ/2406.05299.pdf",
+        "sha256": "b4871ac2f488b9e3e1ac388506ecd92450c96805dfc0dd256ceefdd1d5a10330"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:20",
+          "publishedRow": 20,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:20:page-group:0:page:9:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:21",
+          "publishedRow": 21,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:21:page-group:0:page:10:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:22",
+          "publishedRow": 22,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:22:page-group:0:page:12:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:23",
+          "publishedRow": 23,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:23:page-group:0:page:11:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:24",
+          "publishedRow": 24,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:24:page-group:0:page:8:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:eess:2412.10649",
+      "domain": "eess",
+      "docName": "2412.10649",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/eess/2412.10649_Hidden_Echoes_Survive_Training_in_Audio_To_Audio_Generative_Instrument_Models.pdf",
+        "bytes": 2408663,
+        "path": "pdfs/eess/2412.10649.pdf",
+        "sha256": "404b85d54736d0a702f2567f3fe0503a9d8e41e46ceb11bb5c3f36d8b14cf3ba"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:130",
+          "publishedRow": 130,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:130:page-group:0:page:2:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:131",
+          "publishedRow": 131,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:131:page-group:0:page:5:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:132",
+          "publishedRow": 132,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:132:page-group:0:page:7:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:133",
+          "publishedRow": 133,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:133:page-group:0:page:5:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:134",
+          "publishedRow": 134,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:134:page-group:0:page:7:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:math:2412.06942",
+      "domain": "math",
+      "docName": "2412.06942",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/math/2412.06942_Hausdorff_reflection_preserves_shape.pdf",
+        "bytes": 100047,
+        "path": "pdfs/math/2412.06942.pdf",
+        "sha256": "bccf953a59b92857e6085b8f77bcf3a8a4cab2c2c6676991189efe77e3bc26d4"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:307",
+          "publishedRow": 307,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:307:page-group:0:page:5:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:308",
+          "publishedRow": 308,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:308:page-group:0:page:5:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:309",
+          "publishedRow": 309,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:309:page-group:0:page:2:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:310",
+          "publishedRow": 310,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:310:page-group:0:page:2:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:311",
+          "publishedRow": 311,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:311:page-group:0:page:4:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:physics:2410.23529",
+      "domain": "physics",
+      "docName": "2410.23529",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/physics/2410.23529_Canonical-Polyadic-Decomposition_of_the_Potential_Energy_Surface_Fitted_by_Warm-Started_Support_Vector_Regression.pdf",
+        "bytes": 4666869,
+        "path": "pdfs/physics/2410.23529.pdf",
+        "sha256": "b65611d8d6a865b15ee3e7bccda8fc7e5d79fe7d9699de2697a79443ae21cacd"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:391",
+          "publishedRow": 391,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:391:page-group:0:page:32:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:392",
+          "publishedRow": 392,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:392:page-group:0:page:28:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:393",
+          "publishedRow": 393,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:393:page-group:0:page:2:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:394",
+          "publishedRow": 394,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:394:page-group:0:page:13:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:395",
+          "publishedRow": 395,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:395:page-group:0:page:29:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:q-bio:2404.05865",
+      "domain": "q-bio",
+      "docName": "2404.05865",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/q-bio/2404.05865_Effectiveness_of_Self-Assessment_Software_to_Evaluate_Preclinical_Operative_Procedures.pdf",
+        "bytes": 1443449,
+        "path": "pdfs/q-bio/2404.05865.pdf",
+        "sha256": "83c006322db2fd0bcdd7641b372f3ae63e67ced2e3d27cea8db53dd8d44317fb"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:491",
+          "publishedRow": 491,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:491:page-group:0:page:15:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:492",
+          "publishedRow": 492,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:492:page-group:0:page:16:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:493",
+          "publishedRow": 493,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:493:page-group:0:page:14:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:1107",
+          "publishedRow": 1107,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:1107:page-group:0:page:16:region:0",
+            "sciegqa:test:1107:page-group:0:page:16:region:1"
+          ]
+        },
+        {
+          "id": "sciegqa:test:1108",
+          "publishedRow": 1108,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:1108:page-group:0:page:15:region:0",
+            "sciegqa:test:1108:page-group:0:page:15:region:1"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:q-fin:2410.22346",
+      "domain": "q-fin",
+      "docName": "2410.22346",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/q-fin/2410.22346_Representation_Learning_for_Regime_detection_in_Block_Hierarchical_Financial_Markets.pdf",
+        "bytes": 1391981,
+        "path": "pdfs/q-fin/2410.22346.pdf",
+        "sha256": "e7cec63ce007ed90e81ebf1e4ebe8ad0dcf9d467374de4b1f6e291b4a2cbe41f"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:568",
+          "publishedRow": 568,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:568:page-group:0:page:3:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:569",
+          "publishedRow": 569,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:569:page-group:0:page:2:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:570",
+          "publishedRow": 570,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:570:page-group:0:page:5:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:571",
+          "publishedRow": 571,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:571:page-group:0:page:5:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:572",
+          "publishedRow": 572,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:572:page-group:0:page:2:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:stat:2312.12645",
+      "domain": "stat",
+      "docName": "2312.12645",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/stat/2312.12645_Revisiting_the_effect_of_greediness_on_the_efficacy_of_exchange_algorithms_for_generating_exact_optimal_experimental_designs.pdf",
+        "bytes": 388228,
+        "path": "pdfs/stat/2312.12645.pdf",
+        "sha256": "1303e13ccf6c233c208a6ec2e7e9206fd2e465c7a20cd86ee1e8857a6e17bf64"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:668",
+          "publishedRow": 668,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:668:page-group:0:page:6:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:669",
+          "publishedRow": 669,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:669:page-group:0:page:7:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:670",
+          "publishedRow": 670,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:670:page-group:0:page:6:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:671",
+          "publishedRow": 671,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:671:page-group:0:page:3:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:672",
+          "publishedRow": 672,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:672:page-group:0:page:5:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:cs:2412.09651",
+      "domain": "cs",
+      "docName": "2412.09651",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/cs/2412.09651_Assisted_morbidity_coding_the_SISCOweb_use_case_for_identifying_the_main_diagnosis_in_Hospital_Discharge_Records.pdf",
+        "bytes": 879995,
+        "path": "pdfs/cs/2412.09651.pdf",
+        "sha256": "889ac2fb275ed715f10e36cd903fbad8d193326b3613756d9c95f9f0182d9e97"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:110",
+          "publishedRow": 110,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:110:page-group:0:page:7:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:111",
+          "publishedRow": 111,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:111:page-group:0:page:5:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:112",
+          "publishedRow": 112,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:112:page-group:0:page:12:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:113",
+          "publishedRow": 113,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:113:page-group:0:page:10:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:114",
+          "publishedRow": 114,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:114:page-group:0:page:6:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:econ:2406.11528",
+      "domain": "econ",
+      "docName": "2406.11528",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/econ/2406.11528_Optimal_Robust_Contract_Design.pdf",
+        "bytes": 471067,
+        "path": "pdfs/econ/2406.11528.pdf",
+        "sha256": "259dc9ca105df8dc63045d73605a69da219d824f8ac9db0181b364b8ce804065"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:30",
+          "publishedRow": 30,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:30:page-group:0:page:11:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:31",
+          "publishedRow": 31,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:31:page-group:0:page:11:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:32",
+          "publishedRow": 32,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:32:page-group:0:page:14:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:33",
+          "publishedRow": 33,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:33:page-group:0:page:10:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:34",
+          "publishedRow": 34,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:34:page-group:0:page:7:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:eess:2412.13786",
+      "domain": "eess",
+      "docName": "2412.13786",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/eess/2412.13786_SongEditor_Adapting_Zero-Shot_Song_Generation_Language_Model_as_a_Multi-Task_Editor.pdf",
+        "bytes": 1672080,
+        "path": "pdfs/eess/2412.13786.pdf",
+        "sha256": "5b42506d300b4e94cb8e133e392395ab82550623947aa0d72fb2914650e64765"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:150",
+          "publishedRow": 150,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:150:page-group:0:page:7:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:151",
+          "publishedRow": 151,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:151:page-group:0:page:1:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:152",
+          "publishedRow": 152,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:152:page-group:0:page:6:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:153",
+          "publishedRow": 153,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:153:page-group:0:page:10:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:154",
+          "publishedRow": 154,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:154:page-group:0:page:5:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:math:2412.11897",
+      "domain": "math",
+      "docName": "2412.11897",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/math/2412.11897_A_vanishing_theorem_in_Siefrings_intersection_theory.pdf",
+        "bytes": 275738,
+        "path": "pdfs/math/2412.11897.pdf",
+        "sha256": "38c163bf85e2c2eaeb556efd00511421c3f7773d61988b50a6307ddf35d30692"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:314",
+          "publishedRow": 314,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:314:page-group:0:page:4:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:315",
+          "publishedRow": 315,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:315:page-group:0:page:5:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:316",
+          "publishedRow": 316,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:316:page-group:0:page:2:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:317",
+          "publishedRow": 317,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:317:page-group:0:page:10:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:318",
+          "publishedRow": 318,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:318:page-group:0:page:2:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:physics:2411.15169",
+      "domain": "physics",
+      "docName": "2411.15169",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/physics/2411.15169_Exact_solution_of_the_Heat_Equation_for_initial_polynomials_or_splines.pdf",
+        "bytes": 1029895,
+        "path": "pdfs/physics/2411.15169.pdf",
+        "sha256": "d7197c74e62145c6b864955f980a0278c09636564ce9b036ab3f023c78acd389"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:401",
+          "publishedRow": 401,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:401:page-group:0:page:8:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:402",
+          "publishedRow": 402,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:402:page-group:0:page:11:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:403",
+          "publishedRow": 403,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:403:page-group:0:page:9:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:404",
+          "publishedRow": 404,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:404:page-group:0:page:5:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:405",
+          "publishedRow": 405,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:405:page-group:0:page:13:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:q-bio:2405.17578",
+      "domain": "q-bio",
+      "docName": "2405.17578",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/q-bio/2405.17578_Cell_migration_Beyond_Brownian_motion.pdf",
+        "bytes": 122768,
+        "path": "pdfs/q-bio/2405.17578.pdf",
+        "sha256": "25cce08dfee6ea00b47f9281a619b7ce561a0a3c6ff1947a20df09b22165291b"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:494",
+          "publishedRow": 494,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:494:page-group:0:page:1:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:495",
+          "publishedRow": 495,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:495:page-group:0:page:1:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:1110",
+          "publishedRow": 1110,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:1110:page-group:0:page:1:region:0",
+            "sciegqa:test:1110:page-group:0:page:1:region:1"
+          ]
+        },
+        {
+          "id": "sciegqa:test:1513",
+          "publishedRow": 1513,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:1513:page-group:0:page:1:region:0",
+            "sciegqa:test:1513:page-group:1:page:3:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:1514",
+          "publishedRow": 1514,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:1514:page-group:0:page:2:region:0",
+            "sciegqa:test:1514:page-group:1:page:1:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:q-fin:2411.08145",
+      "domain": "q-fin",
+      "docName": "2411.08145",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/q-fin/2411.08145_Automated_Market_Making_the_case_of_Pegged_Assets.pdf",
+        "bytes": 1858009,
+        "path": "pdfs/q-fin/2411.08145.pdf",
+        "sha256": "77b7801e7b1c12480f520ef54c481f9e4a8b607b73f825a6602c9d8613675c8b"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:578",
+          "publishedRow": 578,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:578:page-group:0:page:20:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:579",
+          "publishedRow": 579,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:579:page-group:0:page:16:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:580",
+          "publishedRow": 580,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:580:page-group:0:page:14:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:581",
+          "publishedRow": 581,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:581:page-group:0:page:15:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:582",
+          "publishedRow": 582,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:582:page-group:0:page:16:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:stat:2405.20601",
+      "domain": "stat",
+      "docName": "2405.20601",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/stat/2405.20601_Bayesian_Nonparametric_Quasi_Likelihood.pdf",
+        "bytes": 1115519,
+        "path": "pdfs/stat/2405.20601.pdf",
+        "sha256": "2da13e104135996166b129d201e87a790f91a572eb0638d6a14d4c32f450634c"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:678",
+          "publishedRow": 678,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:678:page-group:0:page:20:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:679",
+          "publishedRow": 679,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:679:page-group:0:page:25:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:680",
+          "publishedRow": 680,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:680:page-group:0:page:22:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:681",
+          "publishedRow": 681,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:681:page-group:0:page:7:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:682",
+          "publishedRow": 682,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:682:page-group:0:page:18:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:cs:2412.10129",
+      "domain": "cs",
+      "docName": "2412.10129",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/cs/2412.10129_TIGRE_v3_Efficient_and_easy_to_use_iterative_computed_tomographic_reconstruction_toolbox_for_real_datasets.pdf",
+        "bytes": 4868970,
+        "path": "pdfs/cs/2412.10129.pdf",
+        "sha256": "fb556c83ac5bb570ed76bc03ca1ca245b0ae2c98ffd7ffb254ae45e08d02889b"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:120",
+          "publishedRow": 120,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:120:page-group:0:page:18:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:121",
+          "publishedRow": 121,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:121:page-group:0:page:17:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:122",
+          "publishedRow": 122,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:122:page-group:0:page:21:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:123",
+          "publishedRow": 123,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:123:page-group:0:page:22:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:124",
+          "publishedRow": 124,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:124:page-group:0:page:9:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:econ:2408.09618",
+      "domain": "econ",
+      "docName": "2408.09618",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/econ/2408.09618_kendallknight_An_R_Package_for_Efficient_Implementation_of_Kendalls_Correlation_Coefficient_Computation.pdf",
+        "bytes": 204051,
+        "path": "pdfs/econ/2408.09618.pdf",
+        "sha256": "5bcbb5f8ff192b192f630e0a3e9ed89682ee4cf4c137c0f2b1314b3707945639"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:40",
+          "publishedRow": 40,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:40:page-group:0:page:9:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:41",
+          "publishedRow": 41,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:41:page-group:0:page:7:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:42",
+          "publishedRow": 42,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:42:page-group:0:page:6:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:43",
+          "publishedRow": 43,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:43:page-group:0:page:7:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:44",
+          "publishedRow": 44,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:44:page-group:0:page:9:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:eess:2412.15322",
+      "domain": "eess",
+      "docName": "2412.15322",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/eess/2412.15322_MMAudio_Taming_Multimodal_Joint_Training_for_High-Quality_Video-to-Audio_Synthesis.pdf",
+        "bytes": 4530506,
+        "path": "pdfs/eess/2412.15322.pdf",
+        "sha256": "50b45a4c6c5baeab51b273b094a47cfb7d102e5f2e0ab09c3e8a04ecf0e55d27"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:160",
+          "publishedRow": 160,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:160:page-group:0:page:20:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:161",
+          "publishedRow": 161,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:161:page-group:0:page:14:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:162",
+          "publishedRow": 162,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:162:page-group:0:page:8:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:163",
+          "publishedRow": 163,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:163:page-group:0:page:1:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:164",
+          "publishedRow": 164,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:164:page-group:0:page:16:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:math:2412.12319",
+      "domain": "math",
+      "docName": "2412.12319",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/math/2412.12319_The_Critical_Beta-splitting_Random_Tree_IV_Mellin_analysis_of_Leaf_Height.pdf",
+        "bytes": 526854,
+        "path": "pdfs/math/2412.12319.pdf",
+        "sha256": "1f95abc9dc17dd97ab21ac4e20bfaac5fd5e5c035d154c77476e6ee3eafe8363"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:324",
+          "publishedRow": 324,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:324:page-group:0:page:40:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:325",
+          "publishedRow": 325,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:325:page-group:0:page:4:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:326",
+          "publishedRow": 326,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:326:page-group:0:page:7:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:327",
+          "publishedRow": 327,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:327:page-group:0:page:7:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:328",
+          "publishedRow": 328,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:328:page-group:0:page:32:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:physics:2412.10069",
+      "domain": "physics",
+      "docName": "2412.10069",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/physics/2412.10069_Spatio-temporal_Dynamical_Indices_for_Complex_Systems.pdf",
+        "bytes": 20951282,
+        "path": "pdfs/physics/2412.10069.pdf",
+        "sha256": "0c452bdd7fcb6f0878327e35027becc9faf1f6983f34c637c55889d1feb0a19e"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:411",
+          "publishedRow": 411,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:411:page-group:0:page:5:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:412",
+          "publishedRow": 412,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:412:page-group:0:page:18:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:413",
+          "publishedRow": 413,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:413:page-group:0:page:14:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:414",
+          "publishedRow": 414,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:414:page-group:0:page:22:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:415",
+          "publishedRow": 415,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:415:page-group:0:page:13:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:q-bio:2409.05340",
+      "domain": "q-bio",
+      "docName": "2409.05340",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/q-bio/2409.05340_Non-explosivity_of_endotactic_stochastic_reaction_systems.pdf",
+        "bytes": 2269922,
+        "path": "pdfs/q-bio/2409.05340.pdf",
+        "sha256": "62c8f96ba88377ff4f5d2cb36ddda151ff84474a0a336d09107d06e8068e5c0b"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:496",
+          "publishedRow": 496,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:496:page-group:0:page:9:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:497",
+          "publishedRow": 497,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:497:page-group:0:page:3:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:498",
+          "publishedRow": 498,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:498:page-group:0:page:12:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:499",
+          "publishedRow": 499,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:499:page-group:0:page:9:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:1111",
+          "publishedRow": 1111,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:1111:page-group:0:page:9:region:0",
+            "sciegqa:test:1111:page-group:0:page:9:region:1"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:q-fin:2411.08382",
+      "domain": "q-fin",
+      "docName": "2411.08382",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/q-fin/2411.08382_Hybrid_Vector_Auto_Regression_and_Neural_Network_Model_for_Order_Flow_Imbalance_Prediction_in_High_Frequency_Trading.pdf",
+        "bytes": 1999348,
+        "path": "pdfs/q-fin/2411.08382.pdf",
+        "sha256": "9f4a078d67d40defea05fa0cefec07fe63f92a074db3948da156b223f7ac3e64"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:588",
+          "publishedRow": 588,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:588:page-group:0:page:11:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:589",
+          "publishedRow": 589,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:589:page-group:0:page:11:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:590",
+          "publishedRow": 590,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:590:page-group:0:page:17:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:591",
+          "publishedRow": 591,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:591:page-group:0:page:13:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:592",
+          "publishedRow": 592,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:592:page-group:0:page:17:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:stat:2407.10577",
+      "domain": "stat",
+      "docName": "2407.10577",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/stat/2407.10577_Alternative_proof_for_the_bias_of_the_hot_hand_statistic_of_streak_length_one.pdf",
+        "bytes": 99404,
+        "path": "pdfs/stat/2407.10577.pdf",
+        "sha256": "41aa0355bd25d1e322c8e346fc8722668aee3e1c453598f0a61663de8eae1d4e"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:688",
+          "publishedRow": 688,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:688:page-group:0:page:1:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:1257",
+          "publishedRow": 1257,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:1257:page-group:0:page:1:region:0",
+            "sciegqa:test:1257:page-group:0:page:1:region:1"
+          ]
+        },
+        {
+          "id": "sciegqa:test:1596",
+          "publishedRow": 1596,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:1596:page-group:0:page:3:region:0",
+            "sciegqa:test:1596:page-group:1:page:2:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:1597",
+          "publishedRow": 1597,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:1597:page-group:0:page:2:region:0",
+            "sciegqa:test:1597:page-group:1:page:1:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:1598",
+          "publishedRow": 1598,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:1598:page-group:0:page:3:region:0",
+            "sciegqa:test:1598:page-group:1:page:1:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:cs:2412.11719",
+      "domain": "cs",
+      "docName": "2412.11719",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/cs/2412.11719_The_publication_activity_and_migration_trends_of_Ukrainian_scientists_in_the_social_sciences_and_humanities_during_the_first_two_years_of_the_Russo-Ukrainian_war.pdf",
+        "bytes": 461210,
+        "path": "pdfs/cs/2412.11719.pdf",
+        "sha256": "e0ad41fd948dc02d2bf3f82bdb0d0972cb0db871a1d9c7997a6b3292551111d2"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:140",
+          "publishedRow": 140,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:140:page-group:0:page:8:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:141",
+          "publishedRow": 141,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:141:page-group:0:page:3:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:142",
+          "publishedRow": 142,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:142:page-group:0:page:1:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:143",
+          "publishedRow": 143,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:143:page-group:0:page:9:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:144",
+          "publishedRow": 144,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:144:page-group:0:page:10:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:econ:2409.08773",
+      "domain": "econ",
+      "docName": "2409.08773",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/econ/2409.08773_The_Clustered_Dose-Response_Function_Estimator_for_continuous_treatment_with_heterogeneous_treatment_effects.pdf",
+        "bytes": 1529010,
+        "path": "pdfs/econ/2409.08773.pdf",
+        "sha256": "f2964aa5794264d0cbf5c8df96b1a6a5405e7c5e0ac99d78e29cd2ebadbb1799"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:60",
+          "publishedRow": 60,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:60:page-group:0:page:40:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:61",
+          "publishedRow": 61,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:61:page-group:0:page:28:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:62",
+          "publishedRow": 62,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:62:page-group:0:page:26:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:63",
+          "publishedRow": 63,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:63:page-group:0:page:45:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:64",
+          "publishedRow": 64,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:64:page-group:0:page:7:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:eess:2412.16977",
+      "domain": "eess",
+      "docName": "2412.16977",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/eess/2412.16977_Incremental_Disentanglement_for_Environment-Aware_Zero-Shot_Text-to-Speech_Synthesis.pdf",
+        "bytes": 1962436,
+        "path": "pdfs/eess/2412.16977.pdf",
+        "sha256": "b3256c04afecb31867c83f413958c187136cf3bfd81145c65050b15f042909ad"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:170",
+          "publishedRow": 170,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:170:page-group:0:page:4:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:171",
+          "publishedRow": 171,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:171:page-group:0:page:4:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:172",
+          "publishedRow": 172,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:172:page-group:0:page:4:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:173",
+          "publishedRow": 173,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:173:page-group:0:page:3:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:174",
+          "publishedRow": 174,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:174:page-group:0:page:1:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:math:2412.12372",
+      "domain": "math",
+      "docName": "2412.12372",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/math/2412.12372_On_Mahlers_conjecture_for_even_s-concave_functions_in_dimensions_1_and_2.pdf",
+        "bytes": 415163,
+        "path": "pdfs/math/2412.12372.pdf",
+        "sha256": "ec7ce931a8c50ce693ef1862686e98f26b8dc46ce18a7a08ff8f8daef4d43f63"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:334",
+          "publishedRow": 334,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:334:page-group:0:page:16:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:335",
+          "publishedRow": 335,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:335:page-group:0:page:3:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:336",
+          "publishedRow": 336,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:336:page-group:0:page:3:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:337",
+          "publishedRow": 337,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:337:page-group:0:page:11:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:338",
+          "publishedRow": 338,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:338:page-group:0:page:2:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:physics:2412.14319",
+      "domain": "physics",
+      "docName": "2412.14319",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/physics/2412.14319_On_material-uniform_elastic_bodies_with_disclinations_and_their_homogenization.pdf",
+        "bytes": 231885,
+        "path": "pdfs/physics/2412.14319.pdf",
+        "sha256": "a5b67fca04d5f1f813614534725d0eca6124eb7107e982285ac5febe3f9f438d"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:421",
+          "publishedRow": 421,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:421:page-group:0:page:10:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:422",
+          "publishedRow": 422,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:422:page-group:0:page:10:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:423",
+          "publishedRow": 423,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:423:page-group:0:page:3:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:424",
+          "publishedRow": 424,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:424:page-group:0:page:12:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:425",
+          "publishedRow": 425,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:425:page-group:0:page:11:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:q-bio:2410.10919",
+      "domain": "q-bio",
+      "docName": "2410.10919",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/q-bio/2410.10919_Fine-tuning_the_ESM2_protein_language_model_to_understand_the_functional_impact_of_missense_variants.pdf",
+        "bytes": 2561830,
+        "path": "pdfs/q-bio/2410.10919.pdf",
+        "sha256": "370c4446f9bd19794430786d5a68e8d9834d5fae7aa08ed6b23dc3d34ca78b72"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:500",
+          "publishedRow": 500,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:500:page-group:0:page:8:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:501",
+          "publishedRow": 501,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:501:page-group:0:page:2:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:502",
+          "publishedRow": 502,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:502:page-group:0:page:5:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:503",
+          "publishedRow": 503,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:503:page-group:0:page:6:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:504",
+          "publishedRow": 504,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:504:page-group:0:page:9:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:q-fin:2411.08804",
+      "domain": "q-fin",
+      "docName": "2411.08804",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/q-fin/2411.08804_FinRobot_AI_Agent_for_Equity_Research_and_Valuation_with_Large_Language_Models.pdf",
+        "bytes": 2380031,
+        "path": "pdfs/q-fin/2411.08804.pdf",
+        "sha256": "8e6152212489617a36990d6e4c2eabc4fb946ca96e76fc44501becaa151348d0"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:598",
+          "publishedRow": 598,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:598:page-group:0:page:3:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:599",
+          "publishedRow": 599,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:599:page-group:0:page:6:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:600",
+          "publishedRow": 600,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:600:page-group:0:page:6:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:601",
+          "publishedRow": 601,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:601:page-group:0:page:7:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:602",
+          "publishedRow": 602,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:602:page-group:0:page:6:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:stat:2409.14197",
+      "domain": "stat",
+      "docName": "2409.14197",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/stat/2409.14197_Advancing_Employee_Behavior_Analysis_through_Synthetic_Data_Leveraging_ABMs_GANs_and_Statistical_Models_for_Enhanced_Organizational_Efficiency.pdf",
+        "bytes": 226540,
+        "path": "pdfs/stat/2409.14197.pdf",
+        "sha256": "e196ba9aa9a298b622d1ad7b97f29c7177d5914d4eec9d5c05f79d8adeae3835"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:689",
+          "publishedRow": 689,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:689:page-group:0:page:4:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:690",
+          "publishedRow": 690,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:690:page-group:0:page:7:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:691",
+          "publishedRow": 691,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:691:page-group:0:page:6:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:692",
+          "publishedRow": 692,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:692:page-group:0:page:4:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:693",
+          "publishedRow": 693,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:693:page-group:0:page:2:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:cs:2412.17966",
+      "domain": "cs",
+      "docName": "2412.17966",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/cs/2412.17966_tuGEMM_Area-Power-Efficient_Temporal_Unary_GEMM_Architecture_for_Low-Precision_Edge_AI.pdf",
+        "bytes": 3166312,
+        "path": "pdfs/cs/2412.17966.pdf",
+        "sha256": "a9fff4245e2a63445d6f0a086c8b8a32ea32cb6945b32d72a4faeee309288aaa"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:180",
+          "publishedRow": 180,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:180:page-group:0:page:3:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:181",
+          "publishedRow": 181,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:181:page-group:0:page:3:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:182",
+          "publishedRow": 182,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:182:page-group:0:page:4:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:183",
+          "publishedRow": 183,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:183:page-group:0:page:3:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:184",
+          "publishedRow": 184,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:184:page-group:0:page:4:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:econ:2410.14317",
+      "domain": "econ",
+      "docName": "2410.14317",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/econ/2410.14317_Identification_of_a_Rank-dependent_Peer_Effect_Model.pdf",
+        "bytes": 354796,
+        "path": "pdfs/econ/2410.14317.pdf",
+        "sha256": "1386f3dc284a3a849bbffca840ca253772a7885ed08a83731d8d02ae5447b6ff"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:70",
+          "publishedRow": 70,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:70:page-group:0:page:17:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:71",
+          "publishedRow": 71,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:71:page-group:0:page:6:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:72",
+          "publishedRow": 72,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:72:page-group:0:page:21:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:73",
+          "publishedRow": 73,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:73:page-group:0:page:13:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:74",
+          "publishedRow": 74,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:74:page-group:0:page:26:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:eess:2412.18619",
+      "domain": "eess",
+      "docName": "2412.18619",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/eess/2412.18619_Next_Token_Prediction_Towards_Multimodal_Intelligence_A_Comprehensive_Survey.pdf",
+        "bytes": 5637244,
+        "path": "pdfs/eess/2412.18619.pdf",
+        "sha256": "62639b830c03437e068254514be24fccc88b6210119fc3b751cd1bb54dfa7265"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:190",
+          "publishedRow": 190,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:190:page-group:0:page:15:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:191",
+          "publishedRow": 191,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:191:page-group:0:page:23:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:192",
+          "publishedRow": 192,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:192:page-group:0:page:20:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:193",
+          "publishedRow": 193,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:193:page-group:0:page:26:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:194",
+          "publishedRow": 194,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:194:page-group:0:page:21:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:math:2412.12446",
+      "domain": "math",
+      "docName": "2412.12446",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/math/2412.12446_Conditional_expectations_on_Fell_bundles.pdf",
+        "bytes": 237483,
+        "path": "pdfs/math/2412.12446.pdf",
+        "sha256": "cbd5d17e609080d88be8af5fc040998c2f3ad252a3a3e68e8319e25a5ad3d9ca"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:344",
+          "publishedRow": 344,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:344:page-group:0:page:11:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:345",
+          "publishedRow": 345,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:345:page-group:0:page:6:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:346",
+          "publishedRow": 346,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:346:page-group:0:page:14:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:347",
+          "publishedRow": 347,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:347:page-group:0:page:15:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:348",
+          "publishedRow": 348,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:348:page-group:0:page:9:region:0"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sciegqa:physics:2412.14976",
+      "domain": "physics",
+      "docName": "2412.14976",
+      "pdf": {
+        "archive": "PDF.tar",
+        "archiveMember": "PDF/physics/2412.14976_Quantum_Compilation_Toolkit_for_Rydberg_Atom_Arrays_with_Implications_for_Problem_Hardness_and_Quantum_Speedups.pdf",
+        "bytes": 4360634,
+        "path": "pdfs/physics/2412.14976.pdf",
+        "sha256": "146cf270283972d45bc8fa4bdb2a2ff3874569758a9364e925e920192a84c71b"
+      },
+      "paperLayoutCategory": null,
+      "questions": [
+        {
+          "id": "sciegqa:test:431",
+          "publishedRow": 431,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:431:page-group:0:page:7:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:432",
+          "publishedRow": 432,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:432:page-group:0:page:3:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:433",
+          "publishedRow": 433,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:433:page-group:0:page:18:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:434",
+          "publishedRow": 434,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:434:page-group:0:page:9:region:0"
+          ]
+        },
+        {
+          "id": "sciegqa:test:435",
+          "publishedRow": 435,
+          "queryCategory": null,
+          "publishedRegionIds": [
+            "sciegqa:test:435:page-group:0:page:11:region:0"
+          ]
+        }
+      ]
+    }
+  ],
+  "questionCount": 225,
+  "scientificBaselineReady": false
+}

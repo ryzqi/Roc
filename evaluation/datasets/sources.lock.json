@@ -1,0 +1,793 @@
+{
+  "schemaVersion": 2,
+  "policy": "Verified public snapshots contain only acquired exact bytes, fixed upstream revisions or explicitly content-pinned official archives, and original license evidence. Verification qualifies source identity only; it never grants human review, runtime fidelity or scientific quality. Pending records carry no invented hashes.",
+  "sources": [
+    {
+      "id": "bfcl",
+      "status": "verified",
+      "revision": "6ea57973c7a6097fd7c5915698c54c17c5b1b6c8",
+      "license": "Apache-2.0",
+      "artifacts": [
+        {
+          "path": "LICENSE",
+          "bytes": 11357,
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+          "gitBlobSha1": "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64",
+          "url": "https://raw.githubusercontent.com/ShishirPatil/gorilla/6ea57973c7a6097fd7c5915698c54c17c5b1b6c8/LICENSE",
+          "format": "text",
+          "role": "license",
+          "license": "Apache-2.0"
+        },
+        {
+          "path": "berkeley-function-call-leaderboard/README.md",
+          "bytes": 17311,
+          "sha256": "c6c95683cce9653788c8b3f3f5002d2f5c27b95a1288544fe82c2a2faf5e12d0",
+          "gitBlobSha1": "39fc8a708a2c4cd29eeb37f946f7612cab9e2353",
+          "url": "https://raw.githubusercontent.com/ShishirPatil/gorilla/6ea57973c7a6097fd7c5915698c54c17c5b1b6c8/berkeley-function-call-leaderboard/README.md",
+          "format": "text",
+          "role": "provenance",
+          "license": "Apache-2.0"
+        },
+        {
+          "path": "berkeley-function-call-leaderboard/bfcl_eval/data/BFCL_v4_simple_python.json",
+          "bytes": 283274,
+          "sha256": "82dd63ba502eb2520c6b5d1d9a5c4b590e03ff261565175561f6228a367d1991",
+          "gitBlobSha1": "356a0db61e54eb1d92d8e10d014463cf2eb513cc",
+          "url": "https://raw.githubusercontent.com/ShishirPatil/gorilla/6ea57973c7a6097fd7c5915698c54c17c5b1b6c8/berkeley-function-call-leaderboard/bfcl_eval/data/BFCL_v4_simple_python.json",
+          "format": "jsonl",
+          "role": "records",
+          "license": "Apache-2.0"
+        },
+        {
+          "path": "berkeley-function-call-leaderboard/bfcl_eval/data/possible_answer/BFCL_v4_simple_python.json",
+          "bytes": 63627,
+          "sha256": "90cd5bc653690ee8e459b5b3f3fc9458606f7f3fcbf795bb51b7dc581f8c86dc",
+          "gitBlobSha1": "268c55641a21b51fc15730ce39ce906444a935a1",
+          "url": "https://raw.githubusercontent.com/ShishirPatil/gorilla/6ea57973c7a6097fd7c5915698c54c17c5b1b6c8/berkeley-function-call-leaderboard/bfcl_eval/data/possible_answer/BFCL_v4_simple_python.json",
+          "format": "jsonl",
+          "role": "ground-truth",
+          "license": "Apache-2.0"
+        },
+        {
+          "path": "berkeley-function-call-leaderboard/bfcl_eval/data/BFCL_v4_multi_turn_base.json",
+          "bytes": 390425,
+          "sha256": "1a21a995d06fd6f20ba55de7bced30ef953ec35e998f502ec2ecf4d66ef1c43a",
+          "gitBlobSha1": "656fbd5e56969373353cd58b880234a6cc4edc99",
+          "url": "https://raw.githubusercontent.com/ShishirPatil/gorilla/6ea57973c7a6097fd7c5915698c54c17c5b1b6c8/berkeley-function-call-leaderboard/bfcl_eval/data/BFCL_v4_multi_turn_base.json",
+          "format": "jsonl",
+          "role": "records",
+          "license": "Apache-2.0"
+        },
+        {
+          "path": "berkeley-function-call-leaderboard/bfcl_eval/data/possible_answer/BFCL_v4_multi_turn_base.json",
+          "bytes": 78931,
+          "sha256": "1fee67823b317571649177dd89d63969feaae4e810cc7448ee55ba797fb7c8fc",
+          "gitBlobSha1": "3ee85fcd5e8cccca24e2347e464b58fd1b9f02a1",
+          "url": "https://raw.githubusercontent.com/ShishirPatil/gorilla/6ea57973c7a6097fd7c5915698c54c17c5b1b6c8/berkeley-function-call-leaderboard/bfcl_eval/data/possible_answer/BFCL_v4_multi_turn_base.json",
+          "format": "jsonl",
+          "role": "ground-truth",
+          "license": "Apache-2.0"
+        },
+        {
+          "path": "berkeley-function-call-leaderboard/bfcl_eval/data/multi_turn_func_doc/gorilla_file_system.json",
+          "bytes": 13953,
+          "sha256": "c4c1b741c71e2a17c97a5dc9c4a91d89978c4eaece56494d14272d5df6c650e9",
+          "gitBlobSha1": "b9a6d2d314febe8ccf201887ef87cfe081ffbf4e",
+          "url": "https://raw.githubusercontent.com/ShishirPatil/gorilla/6ea57973c7a6097fd7c5915698c54c17c5b1b6c8/berkeley-function-call-leaderboard/bfcl_eval/data/multi_turn_func_doc/gorilla_file_system.json",
+          "format": "jsonl",
+          "role": "asset",
+          "license": "Apache-2.0"
+        }
+      ],
+      "licenseFile": "LICENSE",
+      "attribution": "Berkeley Function Calling Leaderboard, Shishir Patil and Gorilla contributors; Apache-2.0.",
+      "upstream": "https://github.com/ShishirPatil/gorilla",
+      "adaptation": {
+        "status": "development-slice-available",
+        "scope": "Original first-turn cat task adapted to Roc read_file; not the complete BFCL multi-turn or API benchmark."
+      },
+      "verification": {
+        "kind": "github-revision-and-git-blobs",
+        "access": "anonymous-read-only",
+        "rawBytesVerified": true,
+        "humanReview": "pending"
+      }
+    },
+    {
+      "id": "toolsandbox",
+      "status": "verified",
+      "revision": "c8571d7854316d2e1c5f288e59fe1e34e53f6dd1",
+      "license": "LicenseRef-Apple-ToolSandbox",
+      "artifacts": [
+        {
+          "path": "LICENSE",
+          "bytes": 2668,
+          "sha256": "2283d5566b38210fbfb9fcb06619f1d0a8101bff9df974ea8afc3393508e9015",
+          "gitBlobSha1": "31b0b9895eca483652d061be2aae1085880ea34a",
+          "url": "https://raw.githubusercontent.com/apple/ToolSandbox/c8571d7854316d2e1c5f288e59fe1e34e53f6dd1/LICENSE",
+          "format": "text",
+          "role": "license",
+          "license": "LicenseRef-Apple-ToolSandbox"
+        },
+        {
+          "path": "ACKNOWLEDGEMENTS",
+          "bytes": 141471,
+          "sha256": "4586b0107c3f74732b99f791949136a6b32db9b958bdea75f4933aef0302ad92",
+          "gitBlobSha1": "aee3197619b575f913a849501be654e8fb7c4d70",
+          "url": "https://raw.githubusercontent.com/apple/ToolSandbox/c8571d7854316d2e1c5f288e59fe1e34e53f6dd1/ACKNOWLEDGEMENTS",
+          "format": "text",
+          "role": "license",
+          "license": "LicenseRef-Apple-ToolSandbox"
+        },
+        {
+          "path": "tool_sandbox/scenarios/single_tool_call_scenarios.py",
+          "bytes": 49816,
+          "sha256": "dd295b0f64c53015bfebea538891be3183a7a1f74ec37454a0f154b93fab9e38",
+          "gitBlobSha1": "2dbd790281c7b1ce0b55644d5e2bf622f430c7f0",
+          "url": "https://raw.githubusercontent.com/apple/ToolSandbox/c8571d7854316d2e1c5f288e59fe1e34e53f6dd1/tool_sandbox/scenarios/single_tool_call_scenarios.py",
+          "format": "text",
+          "role": "records",
+          "license": "LicenseRef-Apple-ToolSandbox"
+        },
+        {
+          "path": "tool_sandbox/scenarios/multiple_tool_call_scenarios.py",
+          "bytes": 265184,
+          "sha256": "e2d351bebf9afec76d37263b02544120c78b687f4dd4501ab0a4b6c981ce1ff3",
+          "gitBlobSha1": "05de33f7c164133de27ff25b24d198c4c4fb58c3",
+          "url": "https://raw.githubusercontent.com/apple/ToolSandbox/c8571d7854316d2e1c5f288e59fe1e34e53f6dd1/tool_sandbox/scenarios/multiple_tool_call_scenarios.py",
+          "format": "text",
+          "role": "records",
+          "license": "LicenseRef-Apple-ToolSandbox"
+        },
+        {
+          "path": "tool_sandbox/scenarios/multiple_user_turn_scenarios.py",
+          "bytes": 148087,
+          "sha256": "784c636140afbb452e94df301191f466f6d06929d3eebec13ba1a66992a74baf",
+          "gitBlobSha1": "0df9029c1e45dcbfb8a32a253e5fae5fe09384df",
+          "url": "https://raw.githubusercontent.com/apple/ToolSandbox/c8571d7854316d2e1c5f288e59fe1e34e53f6dd1/tool_sandbox/scenarios/multiple_user_turn_scenarios.py",
+          "format": "text",
+          "role": "records",
+          "license": "LicenseRef-Apple-ToolSandbox"
+        }
+      ],
+      "licenseFile": "LICENSE",
+      "attribution": "ToolSandbox, Apple Inc.; custom Apple license with third-party notices in ACKNOWLEDGEMENTS.",
+      "upstream": "https://github.com/apple/ToolSandbox",
+      "adaptation": {
+        "status": "blocked",
+        "reason": "Original scenarios are Python builders with DB milestones and business-tool semantics. No upstream Python is executed; independent native milestone and Roc environment mapping is still required."
+      },
+      "verification": {
+        "kind": "github-revision-and-git-blobs",
+        "access": "anonymous-read-only",
+        "rawBytesVerified": true,
+        "humanReview": "pending"
+      }
+    },
+    {
+      "id": "longmemeval-v2",
+      "status": "verified",
+      "revision": "f152293e235517d504809563c833d7190b8c713b",
+      "license": "Apache-2.0",
+      "artifacts": [
+        {
+          "path": "README.md",
+          "bytes": 3437,
+          "sha256": "c5de92eadfd8238802b476e446b05a766c312ab0f07518dbda434f914aa4df37",
+          "url": "https://huggingface.co/datasets/xiaowu0162/longmemeval-v2/resolve/f152293e235517d504809563c833d7190b8c713b/README.md",
+          "gitBlobSha1": "db28e2234dd8b0a4221f2620d213567b1235aea0",
+          "format": "text",
+          "role": "provenance",
+          "license": "Apache-2.0"
+        },
+        {
+          "path": "DATA_CARD.md",
+          "bytes": 2506,
+          "sha256": "8d4a3795dd32a33c6878d5572889e42655fd6c803e2ce385b360648217563aa8",
+          "url": "https://huggingface.co/datasets/xiaowu0162/longmemeval-v2/resolve/f152293e235517d504809563c833d7190b8c713b/DATA_CARD.md",
+          "gitBlobSha1": "6304b0d8117109fc4fa391d65a9d0e7d9d862f16",
+          "format": "text",
+          "role": "provenance",
+          "license": "Apache-2.0"
+        },
+        {
+          "path": "SCHEMA.md",
+          "bytes": 1879,
+          "sha256": "0672cf47cf16c30365648770628b433076bb3f5b73edded673af7dd6d5f3246f",
+          "url": "https://huggingface.co/datasets/xiaowu0162/longmemeval-v2/resolve/f152293e235517d504809563c833d7190b8c713b/SCHEMA.md",
+          "gitBlobSha1": "484dd6845a367868903cb08deaf7cf5f4a9ef9d7",
+          "format": "text",
+          "role": "provenance",
+          "license": "Apache-2.0"
+        },
+        {
+          "path": "LICENSE",
+          "bytes": 9109,
+          "sha256": "d547f7673579465fcecc8f257fcdb410f51c82fd784a10b1587e83036f9c29e1",
+          "url": "https://huggingface.co/datasets/xiaowu0162/longmemeval-v2/resolve/f152293e235517d504809563c833d7190b8c713b/LICENSE",
+          "gitBlobSha1": "40f5b15901ddd3ae6ec083141125ff9ce3e2d3ff",
+          "format": "text",
+          "role": "license",
+          "license": "Apache-2.0"
+        },
+        {
+          "path": "checksums.sha256",
+          "bytes": 3561,
+          "sha256": "b17a18daa52873f915808502217c3c5fab39d20638544f986401155c9e8d67a6",
+          "url": "https://huggingface.co/datasets/xiaowu0162/longmemeval-v2/resolve/f152293e235517d504809563c833d7190b8c713b/checksums.sha256",
+          "gitBlobSha1": "44a1cf9928a785fa3aaccfd8ffd05d4259522c7b",
+          "format": "text",
+          "role": "provenance",
+          "license": "Apache-2.0"
+        },
+        {
+          "path": "questions.jsonl",
+          "bytes": 286186,
+          "sha256": "0a3ae5ebea938c24d7800e1e0b0828e08ae1646f939a53853b2b8cdc08e292b7",
+          "url": "https://huggingface.co/datasets/xiaowu0162/longmemeval-v2/resolve/f152293e235517d504809563c833d7190b8c713b/questions.jsonl",
+          "gitBlobSha1": "6366c4aeacc783d302b38f22fe3ce1edb8f26f3d",
+          "format": "jsonl",
+          "role": "records",
+          "license": "Apache-2.0"
+        },
+        {
+          "path": "haystacks/lme_v2_small.json",
+          "bytes": 822632,
+          "sha256": "9b5301defb23a088a5f06e45ff8d5f35e569d78305a66d492046a9fff9b46593",
+          "url": "https://huggingface.co/datasets/xiaowu0162/longmemeval-v2/resolve/f152293e235517d504809563c833d7190b8c713b/haystacks/lme_v2_small.json",
+          "gitBlobSha1": "e358dcf693a0860bc0cb7815a16285ee35d1bc16",
+          "format": "json",
+          "role": "history",
+          "license": "Apache-2.0"
+        }
+      ],
+      "licenseFile": "LICENSE",
+      "attribution": "LongMemEval V2, Xiaowu and dataset contributors; pinned HF dataset card and LICENSE both specify Apache-2.0.",
+      "upstream": "https://huggingface.co/datasets/xiaowu0162/longmemeval-v2",
+      "adaptation": {
+        "status": "blocked",
+        "reason": "Pinned small haystacks contain trajectory IDs only. Complete trajectory state/observation bytes were not acquired; ID lists cannot qualify as histories. Visual/browser requirements remain unsupported."
+      },
+      "verification": {
+        "kind": "hf-revision-and-git-blobs",
+        "access": "anonymous-read-only",
+        "rawBytesVerified": true,
+        "humanReview": "pending"
+      },
+      "unresolved": [
+        {
+          "path": "trajectories.jsonl",
+          "status": "pending",
+          "reason": "Complete trajectories exceed this small acquisition scope and are required for faithful history import."
+        }
+      ]
+    },
+    {
+      "id": "locomo",
+      "status": "verified",
+      "revision": "3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376",
+      "license": "CC-BY-NC-4.0",
+      "artifacts": [
+        {
+          "path": "LICENSE.txt",
+          "bytes": 19347,
+          "sha256": "41003d4a74749c0220e33dd415042164b5a1093ed401f36277234f772d22d3d0",
+          "gitBlobSha1": "fe463e0f7888bbf8b82e42d55f5743508ddafb7e",
+          "url": "https://raw.githubusercontent.com/snap-research/locomo/3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376/LICENSE.txt",
+          "format": "text",
+          "role": "license",
+          "license": "CC-BY-NC-4.0"
+        },
+        {
+          "path": "README.MD",
+          "bytes": 7109,
+          "sha256": "9f8e6fd00a3400aa687109f40ed53715f0a2c028ee3f8c465bdfa96475640e8a",
+          "gitBlobSha1": "8418f7637a75434f76ea1531e0c340996962c488",
+          "url": "https://raw.githubusercontent.com/snap-research/locomo/3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376/README.MD",
+          "format": "text",
+          "role": "provenance",
+          "license": "CC-BY-NC-4.0"
+        },
+        {
+          "path": "data/locomo10.json",
+          "bytes": 2805274,
+          "sha256": "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4",
+          "gitBlobSha1": "d95b872480b413d935821fdc3c84f8a8f5f29e73",
+          "url": "https://raw.githubusercontent.com/snap-research/locomo/3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376/data/locomo10.json",
+          "format": "json",
+          "role": "records",
+          "license": "CC-BY-NC-4.0"
+        }
+      ],
+      "licenseFile": "LICENSE.txt",
+      "attribution": "LoCoMo, Snap Research and dataset authors; Creative Commons Attribution-NonCommercial 4.0.",
+      "upstream": "https://github.com/snap-research/locomo",
+      "adaptation": {
+        "status": "development-slice-available",
+        "scope": "Complete original conversation plus original question/answer/evidence references, adapted to real cross-session remember/memory_search. No claim of the complete upstream memory or multimodal benchmark."
+      },
+      "verification": {
+        "kind": "github-revision-and-git-blobs",
+        "access": "anonymous-read-only",
+        "rawBytesVerified": true,
+        "humanReview": "pending"
+      }
+    },
+    {
+      "id": "qasper",
+      "status": "verified",
+      "revision": "v0.3-dev",
+      "license": "CC-BY-4.0",
+      "url": "https://qasper-dataset.s3.us-west-2.amazonaws.com/qasper-train-dev-v0.3.tgz",
+      "artifacts": [
+        {
+          "path": "source.tgz",
+          "role": "archive",
+          "bytes": 10835856,
+          "sha256": "a28fdf966db827bcee3d873107d6b6669864fb7ca8fbf73a192f5e39191bdb5a",
+          "format": "bytes",
+          "license": "CC-BY-4.0",
+          "url": "https://qasper-dataset.s3.us-west-2.amazonaws.com/qasper-train-dev-v0.3.tgz"
+        },
+        {
+          "path": "qasper-dev-v0.3.json",
+          "role": "records",
+          "bytes": 11398686,
+          "sha256": "2ae7ee62a65b1c4225791c70de80c2aad4e8998cf1fd4f09a53103db4f21af93",
+          "format": "json",
+          "license": "CC-BY-4.0",
+          "archiveMember": {
+            "archive": "source.tgz",
+            "path": "qasper-dev-v0.3.json"
+          }
+        }
+      ],
+      "verification": {
+        "kind": "existing-locked-official-adapter",
+        "existingLock": "evaluation/lib/sources.lock.json",
+        "existingLockSha256": "36a89257f40a61e51e464a2f2a57751b64a566caf4500029a82b7c1a889580f8",
+        "archiveMemberVerifiedLocally": true,
+        "derivation": "loadDataset().qasperQualification",
+        "humanReview": "pending"
+      }
+    },
+    {
+      "id": "scifact",
+      "status": "verified",
+      "revision": "68b98a56d93e0f9da0d2aab4e6c3294699a0f72e",
+      "license": "CC-BY-4.0 AND ODC-By-1.0",
+      "artifacts": [
+        {
+          "path": "LICENSE.md",
+          "bytes": 542,
+          "sha256": "56ee69bc639cbab8f0b2e4b67091ec5e9390aa99a1d65f0a35e4274686c9a806",
+          "gitBlobSha1": "18a738e109d7e3b28935a75d2134c5ccd602f403",
+          "url": "https://raw.githubusercontent.com/allenai/scifact/68b98a56d93e0f9da0d2aab4e6c3294699a0f72e/LICENSE.md",
+          "format": "text",
+          "role": "license",
+          "license": "Apache-2.0"
+        },
+        {
+          "path": "README.md",
+          "bytes": 8671,
+          "sha256": "3f0eb7f6d009b3785fede6592918b8b583e7193d26f14173fdf0c79aba1dcc79",
+          "gitBlobSha1": "b483bc1102536ce1e58b4a4794a567abb66d78f1",
+          "url": "https://raw.githubusercontent.com/allenai/scifact/68b98a56d93e0f9da0d2aab4e6c3294699a0f72e/README.md",
+          "format": "text",
+          "role": "provenance",
+          "license": "Apache-2.0"
+        },
+        {
+          "path": "data.tar.gz",
+          "bytes": 3115079,
+          "sha256": "11c621288d41ac144d29b13b0f8503b3820b7d6e8b1f6ff24dff335c196d76be",
+          "url": "https://scifact.s3-us-west-2.amazonaws.com/release/latest/data.tar.gz",
+          "format": "bytes",
+          "role": "archive",
+          "license": "CC-BY-4.0 AND ODC-By-1.0"
+        },
+        {
+          "path": "data/claims_dev.jsonl",
+          "bytes": 65007,
+          "sha256": "86f0435d08fdb65d1aa41d1472684f57e6e71930626497bdf4d7a9ec1a632217",
+          "archiveMember": {
+            "archive": "data.tar.gz",
+            "path": "data/claims_dev.jsonl"
+          },
+          "format": "jsonl",
+          "role": "records",
+          "license": "CC-BY-4.0"
+        },
+        {
+          "path": "data/claims_train.jsonl",
+          "bytes": 175616,
+          "sha256": "f4c8fa82d8bd0653a9cc8d61a6ea48c25eacea64e90af5dbf390ebb1b74372f0",
+          "archiveMember": {
+            "archive": "data.tar.gz",
+            "path": "data/claims_train.jsonl"
+          },
+          "format": "jsonl",
+          "role": "records",
+          "license": "CC-BY-4.0"
+        },
+        {
+          "path": "data/corpus.jsonl",
+          "bytes": 8307875,
+          "sha256": "b8d6c89624cb2ed74dee8938effc4f5d8bd2086887880af8110d64be4ceade62",
+          "archiveMember": {
+            "archive": "data.tar.gz",
+            "path": "data/corpus.jsonl"
+          },
+          "format": "jsonl",
+          "role": "corpus",
+          "license": "ODC-By-1.0"
+        }
+      ],
+      "licenseFile": "LICENSE.md",
+      "attribution": "SciFact, Allen Institute for AI; claims/evidence CC-BY-4.0, S2ORC corpus ODC-By-1.0, repository code Apache-2.0.",
+      "upstream": "https://github.com/allenai/scifact",
+      "adaptation": {
+        "status": "development-slice-available",
+        "scope": "Original annotated claims, cited corpus records and sentence identities mapped explicitly to offline text-native BM25 and citation evidence."
+      },
+      "verification": {
+        "kind": "official-linked-content-addressed-archive",
+        "access": "anonymous-read-only",
+        "rawBytesVerified": true,
+        "humanReview": "pending",
+        "dataPin": "data.tar.gz SHA-256 plus independently checked members",
+        "revisionScope": "Git commit pins repository metadata/license/link only; mutable S3 data URL is pinned by exact archive bytes."
+      }
+    },
+    {
+      "id": "scienceagentbench-verified",
+      "status": "verified",
+      "revision": "9c6e96c9e74572e979b0930ee735041cef528cb7",
+      "license": "CC-BY-4.0",
+      "artifacts": [
+        {
+          "path": "README.md",
+          "bytes": 5705,
+          "sha256": "e482e8a8662d84a991ea473bc7934e945364c489d2c49396bc5979a6f674c9d0",
+          "url": "https://huggingface.co/datasets/osunlp/ScienceAgentBench/resolve/9c6e96c9e74572e979b0930ee735041cef528cb7/README.md",
+          "gitBlobSha1": "a3cdb281ee783de9df2aa8c5b7c40b896331bdf6",
+          "format": "text",
+          "role": "license",
+          "license": "CC-BY-4.0"
+        },
+        {
+          "path": "data/verified-00000-of-00001.parquet",
+          "bytes": 129086,
+          "sha256": "c6f937863a220bd1762a00c20a0f79cc8dfca900b819bdb552150310731ae147",
+          "url": "https://huggingface.co/datasets/osunlp/ScienceAgentBench/resolve/9c6e96c9e74572e979b0930ee735041cef528cb7/data/verified-00000-of-00001.parquet",
+          "lfsSha256": "c6f937863a220bd1762a00c20a0f79cc8dfca900b819bdb552150310731ae147",
+          "format": "bytes",
+          "role": "records",
+          "license": "CC-BY-4.0"
+        },
+        {
+          "path": "code/LICENSE",
+          "bytes": 1088,
+          "sha256": "93b43d692b033b76129504448695bfe76ef22d18b11e51352bfab4b5622e5aaa",
+          "gitBlobSha1": "281b68077e52aa0edc708b0daeeab60d4601c1d1",
+          "url": "https://raw.githubusercontent.com/OSU-NLP-Group/ScienceAgentBench/c26e151ed601ba109dc4d35e057ff8e73fec469d/LICENSE",
+          "codeRevision": "c26e151ed601ba109dc4d35e057ff8e73fec469d",
+          "format": "text",
+          "role": "license",
+          "license": "MIT"
+        },
+        {
+          "path": "code/README.md",
+          "bytes": 12039,
+          "sha256": "0696fe4ffa234ea30346901d9d61263d20d548e58810049c873b2049ac1a04b1",
+          "gitBlobSha1": "d1eb0900de1820ec40bd1f35c63bc25ff050b26a",
+          "url": "https://raw.githubusercontent.com/OSU-NLP-Group/ScienceAgentBench/c26e151ed601ba109dc4d35e057ff8e73fec469d/README.md",
+          "codeRevision": "c26e151ed601ba109dc4d35e057ff8e73fec469d",
+          "format": "text",
+          "role": "provenance",
+          "license": "MIT"
+        },
+        {
+          "path": "code/evaluation/harness/grading.py",
+          "bytes": 8334,
+          "sha256": "5304f28f57072f056a3ffc3828f84d8fbb3a00eb0630ba57f63f676c8af0f0a1",
+          "gitBlobSha1": "2e72ebddae712d8f789b100f187b58b2a4e5955a",
+          "url": "https://raw.githubusercontent.com/OSU-NLP-Group/ScienceAgentBench/c26e151ed601ba109dc4d35e057ff8e73fec469d/evaluation/harness/grading.py",
+          "codeRevision": "c26e151ed601ba109dc4d35e057ff8e73fec469d",
+          "format": "text",
+          "role": "grader",
+          "license": "MIT"
+        },
+        {
+          "path": "code/evaluation/harness/test_spec.py",
+          "bytes": 7114,
+          "sha256": "d73889e6f566bc833b157638562d889238b39f23b5f126b35675d1b4d221ca8a",
+          "gitBlobSha1": "4865849dc621c0b4ea7cdfccdf815a64b09caf4b",
+          "url": "https://raw.githubusercontent.com/OSU-NLP-Group/ScienceAgentBench/c26e151ed601ba109dc4d35e057ff8e73fec469d/evaluation/harness/test_spec.py",
+          "codeRevision": "c26e151ed601ba109dc4d35e057ff8e73fec469d",
+          "format": "text",
+          "role": "grader",
+          "license": "MIT"
+        },
+        {
+          "path": "code/requirements.txt",
+          "bytes": 203,
+          "sha256": "6ae1c5bc9b6cfd772093f01fc4d47bbe2cf88fee0bc7dadaae45966f5c8b39ca",
+          "gitBlobSha1": "315a1d8b71f5123660396551f2d91fc36bef14cc",
+          "url": "https://raw.githubusercontent.com/OSU-NLP-Group/ScienceAgentBench/c26e151ed601ba109dc4d35e057ff8e73fec469d/requirements.txt",
+          "codeRevision": "c26e151ed601ba109dc4d35e057ff8e73fec469d",
+          "format": "text",
+          "role": "environment",
+          "license": "MIT"
+        }
+      ],
+      "licenseFile": "README.md",
+      "attribution": "ScienceAgentBench, OSU NLP Group; official HF verified metadata CC-BY-4.0. Separately pinned repository code is MIT.",
+      "upstream": "https://huggingface.co/datasets/osunlp/ScienceAgentBench",
+      "adaptation": {
+        "status": "blocked",
+        "reason": "Official verified parquet bytes and grader source are pinned, but a local parquet reader, per-task original assets, compatible frozen environment, independent grader execution and calibration are absent."
+      },
+      "verification": {
+        "kind": "hf-revision-lfs-and-github-blob",
+        "access": "anonymous-read-only",
+        "rawBytesVerified": true,
+        "humanReview": "pending",
+        "verifiedSplit": "verified",
+        "licenseEvidence": {
+          "kind": "upstream-dataset-card",
+          "file": "README.md",
+          "field": "license"
+        },
+        "codeRevision": "c26e151ed601ba109dc4d35e057ff8e73fec469d"
+      },
+      "scientificQualification": {
+        "metadata": "verified-split-bytes-pinned",
+        "assets": "pending",
+        "environment": "pending",
+        "grader": "upstream-source-pinned-not-task-calibrated",
+        "calibration": "not-run",
+        "expertReview": "pending",
+        "scientificQuality": false
+      },
+      "unresolved": [
+        {
+          "path": "original-task-assets",
+          "status": "pending",
+          "reason": "No unpacked scientific assets acquired or redistributed."
+        },
+        {
+          "path": "audited-task-environment-and-grader",
+          "status": "pending",
+          "reason": "No per-task environment, grader calibration or expert review established."
+        }
+      ]
+    },
+    {
+      "id": "agentdojo",
+      "status": "verified",
+      "revision": "089ed468cf3ed0322acc66b0211f26d9d90dbf60",
+      "license": "MIT",
+      "artifacts": [
+        {
+          "path": "LICENSE",
+          "bytes": 1161,
+          "sha256": "4285a071f2d382338e52b4fb0a186d952984a34d43a33d8872e1a1d8cb43401e",
+          "gitBlobSha1": "006aed0b22a430c0f3c6a4fb46768d967b8c3dbc",
+          "url": "https://raw.githubusercontent.com/ethz-spylab/agentdojo/089ed468cf3ed0322acc66b0211f26d9d90dbf60/LICENSE",
+          "format": "text",
+          "role": "license",
+          "license": "MIT"
+        },
+        {
+          "path": "src/agentdojo/default_suites/v1/workspace/user_tasks.py",
+          "bytes": 55415,
+          "sha256": "d2a550b812b7f40ee2dea17ac19d44f2dd063d103524118216b563eca6e44171",
+          "gitBlobSha1": "15f72f17305629f16cd7d754e47640e8b2613985",
+          "url": "https://raw.githubusercontent.com/ethz-spylab/agentdojo/089ed468cf3ed0322acc66b0211f26d9d90dbf60/src/agentdojo/default_suites/v1/workspace/user_tasks.py",
+          "format": "text",
+          "role": "records",
+          "license": "MIT"
+        },
+        {
+          "path": "src/agentdojo/default_suites/v1/workspace/injection_tasks.py",
+          "bytes": 10615,
+          "sha256": "03e0894ffb544a79fd0bfd2c62cc5f90b19a2b1d429068d800239bfd020b6dcc",
+          "gitBlobSha1": "2648b16b8b8b251eec2beced7a005a9397197eeb",
+          "url": "https://raw.githubusercontent.com/ethz-spylab/agentdojo/089ed468cf3ed0322acc66b0211f26d9d90dbf60/src/agentdojo/default_suites/v1/workspace/injection_tasks.py",
+          "format": "text",
+          "role": "records",
+          "license": "MIT"
+        },
+        {
+          "path": "src/agentdojo/data/suites/workspace/include/cloud_drive.yaml",
+          "bytes": 28245,
+          "sha256": "a9731cd49fe7eb726e43c1727c40eff0d6ca2d85d53728aa744860a8c4214130",
+          "gitBlobSha1": "7e71eace9f47e6ce26305bed666ff5e175a26b15",
+          "url": "https://raw.githubusercontent.com/ethz-spylab/agentdojo/089ed468cf3ed0322acc66b0211f26d9d90dbf60/src/agentdojo/data/suites/workspace/include/cloud_drive.yaml",
+          "format": "text",
+          "role": "asset",
+          "license": "MIT"
+        },
+        {
+          "path": "src/agentdojo/data/suites/workspace/include/calendar.yaml",
+          "bytes": 9610,
+          "sha256": "69b0ae96804e986b5a0dba694ad6ca34cf01c8c6b57bb8ceb618d9ed8640b803",
+          "gitBlobSha1": "cde328c8a27fff582f79bf18c354429cf4128c5c",
+          "url": "https://raw.githubusercontent.com/ethz-spylab/agentdojo/089ed468cf3ed0322acc66b0211f26d9d90dbf60/src/agentdojo/data/suites/workspace/include/calendar.yaml",
+          "format": "text",
+          "role": "asset",
+          "license": "MIT"
+        }
+      ],
+      "licenseFile": "LICENSE",
+      "attribution": "AgentDojo, ETH Zurich SPY Lab and contributors; MIT license.",
+      "upstream": "https://github.com/ethz-spylab/agentdojo",
+      "adaptation": {
+        "status": "blocked",
+        "reason": "Pinned original workspace user/injection task classes and YAML data use upstream business APIs and Python checkers. Native benign-task, attack-goal and independent effect mapping to Roc is not yet complete; no upstream code is executed."
+      },
+      "verification": {
+        "kind": "github-revision-and-git-blobs",
+        "access": "anonymous-read-only",
+        "rawBytesVerified": true,
+        "humanReview": "pending"
+      }
+    },
+    {
+      "id": "injecagent",
+      "status": "verified",
+      "revision": "f19c9f2c79a41046eb13c03c51a24c567a8ffa07",
+      "license": "MIT",
+      "artifacts": [
+        {
+          "path": "LICENCE",
+          "bytes": 1066,
+          "sha256": "b48589499dbb84caa796b00b4ea652b0443e49660282c44d890fd473b8c0674e",
+          "gitBlobSha1": "878c4b9af4eb6f2b81267aeb935ccbd022c27a7c",
+          "url": "https://raw.githubusercontent.com/uiuc-kang-lab/InjecAgent/f19c9f2c79a41046eb13c03c51a24c567a8ffa07/LICENCE",
+          "format": "text",
+          "role": "license",
+          "license": "MIT"
+        },
+        {
+          "path": "README.md",
+          "bytes": 4586,
+          "sha256": "09e81a9e68d5c2a1b491456c83da4ef0126426deb7eafa8588349c2dcce278ea",
+          "gitBlobSha1": "819d1aff39a908b4bd67f8414dcc318aa390c9e4",
+          "url": "https://raw.githubusercontent.com/uiuc-kang-lab/InjecAgent/f19c9f2c79a41046eb13c03c51a24c567a8ffa07/README.md",
+          "format": "text",
+          "role": "provenance",
+          "license": "MIT"
+        },
+        {
+          "path": "data/test_cases_dh_base.json",
+          "bytes": 672918,
+          "sha256": "0a8186468d21389af432e8c7b399ae42264d1b93a07b65c7a489468508604305",
+          "gitBlobSha1": "976ad4e2108a553a3b885951e8eb119aa91f9445",
+          "url": "https://raw.githubusercontent.com/uiuc-kang-lab/InjecAgent/f19c9f2c79a41046eb13c03c51a24c567a8ffa07/data/test_cases_dh_base.json",
+          "format": "json",
+          "role": "records",
+          "license": "MIT"
+        },
+        {
+          "path": "data/test_cases_ds_base.json",
+          "bytes": 765370,
+          "sha256": "4daab35c62a3845e8b9400f4dca58b9c9f37e57cd33b2337552557fbb26282e9",
+          "gitBlobSha1": "16f82d8a34349182eba883871333e569bafc6b93",
+          "url": "https://raw.githubusercontent.com/uiuc-kang-lab/InjecAgent/f19c9f2c79a41046eb13c03c51a24c567a8ffa07/data/test_cases_ds_base.json",
+          "format": "json",
+          "role": "records",
+          "license": "MIT"
+        },
+        {
+          "path": "data/attacker_cases_dh.jsonl",
+          "bytes": 10937,
+          "sha256": "999d52e15af3c80a3303a09430af0f3878d1f91e4c573ca7b477a91cdfa6b991",
+          "gitBlobSha1": "a4814fa052d46694e1fbab6679f6e285f5f5b2b2",
+          "url": "https://raw.githubusercontent.com/uiuc-kang-lab/InjecAgent/f19c9f2c79a41046eb13c03c51a24c567a8ffa07/data/attacker_cases_dh.jsonl",
+          "format": "jsonl",
+          "role": "ground-truth",
+          "license": "MIT"
+        },
+        {
+          "path": "data/user_cases.jsonl",
+          "bytes": 10924,
+          "sha256": "c840e2b00fdce68e7142d0970220522303d67b2530d6fb36ef1112448cdd8977",
+          "gitBlobSha1": "6f3dd74a29539ac36c1afec4455fdbfa7870fcb1",
+          "url": "https://raw.githubusercontent.com/uiuc-kang-lab/InjecAgent/f19c9f2c79a41046eb13c03c51a24c567a8ffa07/data/user_cases.jsonl",
+          "format": "jsonl",
+          "role": "records",
+          "license": "MIT"
+        },
+        {
+          "path": "data/tools.json",
+          "bytes": 541498,
+          "sha256": "e21a8f70b1d5de4677d6d52642936a322655d79b17a72c84f600550384083a1e",
+          "gitBlobSha1": "931760299e344dbe7dec352ff44a167e8624069e",
+          "url": "https://raw.githubusercontent.com/uiuc-kang-lab/InjecAgent/f19c9f2c79a41046eb13c03c51a24c567a8ffa07/data/tools.json",
+          "format": "json",
+          "role": "asset",
+          "license": "MIT"
+        }
+      ],
+      "licenseFile": "LICENCE",
+      "attribution": "InjecAgent, UIUC Kang Lab and contributors; MIT license.",
+      "upstream": "https://github.com/uiuc-kang-lab/InjecAgent",
+      "adaptation": {
+        "status": "development-slice-available",
+        "scope": "Original user task and attacker payload/achievement coordinates adapted to an untrusted local file. Original external business tools are outside this engineering slice."
+      },
+      "verification": {
+        "kind": "github-revision-and-git-blobs",
+        "access": "anonymous-read-only",
+        "rawBytesVerified": true,
+        "humanReview": "pending"
+      }
+    },
+    {
+      "id": "tau2-bench",
+      "status": "pending",
+      "revision": null,
+      "license": null,
+      "artifacts": [],
+      "reason": "P1 source not imported."
+    },
+    {
+      "id": "alce",
+      "status": "pending",
+      "revision": null,
+      "license": null,
+      "artifacts": [],
+      "reason": "P1 source not imported."
+    },
+    {
+      "id": "core-bench",
+      "status": "pending",
+      "revision": null,
+      "license": null,
+      "artifacts": [],
+      "reason": "P1 source/environment not imported."
+    },
+    {
+      "id": "paperbench",
+      "status": "pending",
+      "revision": null,
+      "license": null,
+      "artifacts": [],
+      "reason": "P1 gold-track source/rubric not imported."
+    },
+    {
+      "id": "mlagentbench",
+      "status": "pending",
+      "revision": null,
+      "license": null,
+      "artifacts": [],
+      "reason": "P1 source/environment not imported."
+    },
+    {
+      "id": "gaia",
+      "status": "pending",
+      "revision": null,
+      "license": null,
+      "artifacts": [],
+      "reason": "P2 source deferred."
+    },
+    {
+      "id": "ragbench",
+      "status": "pending",
+      "revision": null,
+      "license": null,
+      "artifacts": [],
+      "reason": "P2 source deferred."
+    },
+    {
+      "id": "mle-bench",
+      "status": "pending",
+      "revision": null,
+      "license": null,
+      "artifacts": [],
+      "reason": "P2 source/environment deferred."
+    }
+  ]
+}

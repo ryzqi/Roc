@@ -1,0 +1,47 @@
+[
+  {
+    "id": "cm-controlled-release",
+    "pmcid": "PMC11918824",
+    "doi": "10.1155/2023/6039254",
+    "title": "Controlled Release of Mesenchymal Stem Cell-Conditioned Media from a Microsphere/Gel-Based Drug Delivery System for Wound Healing of Tympanic Membrane Perforations",
+    "authors": "Bruk LA, Fan X, Resnick JL, DiLeo MV",
+    "year": 2023,
+    "license": "CC BY",
+    "licenseMetadataUrl": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID:40226420&format=json",
+    "articleUrl": "https://europepmc.org/articles/PMC11918824",
+    "locator": "Results 3.1, first paragraph",
+    "excerpt": "The article reports 21 μg of total protein released on day 1 and another 10 μg over the next 20 days; FGF-2 release was 121 pg on day 1 and 75 pg over the next 14 days.",
+    "attribution": "Bruk LA, Fan X, Resnick JL, DiLeo MV. Controlled Release of Mesenchymal Stem Cell-Conditioned Media from a Microsphere/Gel-Based Drug Delivery System for Wound Healing of Tympanic Membrane Perforations. DOI: 10.1155/2023/6039254. PMCID: PMC11918824.",
+    "capturedOn": "2026-10-30"
+  },
+  {
+    "id": "niti-cyclic-fatigue",
+    "pmcid": "PMC10895534",
+    "doi": "10.6026/973206300191348",
+    "title": "Effect of NaOCl on cyclic fatigue resistance",
+    "authors": "Langaliya A, Dhull KS, Gupta B, Saleem Agwan MA, Gupta S, Macha Y, Makkad RS",
+    "year": 2023,
+    "license": "CC BY",
+    "licenseMetadataUrl": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID:38415037&format=json",
+    "articleUrl": "https://europepmc.org/articles/PMC10895534",
+    "locator": "Abstract, results statement",
+    "excerpt": "The abstract reports 60 endodontic files and cycles to fracture of 1053.50 ± 134.81 for TruNatomy, 652.66 ± 58.66 for Hero Gold, and 494.50 ± 47.69 for ProTaper Gold after 5.25% NaOCl treatment.",
+    "attribution": "Langaliya A, Dhull KS, Gupta B, Saleem Agwan MA, Gupta S, Macha Y, Makkad RS. Effect of NaOCl on cyclic fatigue resistance. DOI: 10.6026/973206300191348. PMCID: PMC10895534.",
+    "capturedOn": "2026-10-30"
+  },
+  {
+    "id": "periodontal-gel-chip",
+    "pmcid": "PMC10895532",
+    "doi": "10.6026/973206300191342",
+    "title": "Chlorhexidine and doxycycline gel versus chip as adjuncts in oral hygiene among Indians",
+    "authors": "Rajpoot AS, Bagde H, Thumar S, Pattnaik N, Saha N, Patel K, Mehta DN, Panigrahi B",
+    "year": 2023,
+    "license": "CC BY",
+    "licenseMetadataUrl": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID:38415043&format=json",
+    "articleUrl": "https://europepmc.org/articles/PMC10895532",
+    "locator": "Abstract, sample and result statements",
+    "excerpt": "The abstract reports 90 adult Indian patients with moderate chronic periodontitis; it reports better pocket-depth and attachment-level changes for the chlorhexidine group than for doxycycline, and better periodontal outcomes for gel than chip forms.",
+    "attribution": "Rajpoot AS, Bagde H, Thumar S, Pattnaik N, Saha N, Patel K, Mehta DN, Panigrahi B. Chlorhexidine and doxycycline gel versus chip as adjuncts in oral hygiene among Indians. DOI: 10.6026/973206300191342. PMCID: PMC10895532.",
+    "capturedOn": "2026-10-30"
+  }
+]

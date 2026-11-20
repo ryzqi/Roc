@@ -1,0 +1,1 @@
+export const CHAT_WINDOW_MIN_WIDTH = 1184;

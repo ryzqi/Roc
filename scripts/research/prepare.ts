@@ -1,0 +1,309 @@
+import { constants } from 'node:fs';
+import { chmod, copyFile, cp, lstat, mkdir, mkdtemp, open, readdir, readFile, rename, rm } from 'node:fs/promises';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
+import { spawn } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { parseArgs } from 'node:util';
+import { convertTexBundle, extractToolArchive, parseTexBundleFileList } from './archive-utils.ts';
+import { downloadVerified, fileSha256 } from './download-asset.ts';
+import { verifyManifest, writeManifest } from './manifest.ts';
+
+const PROJECT_ROOT = fileURLToPath(new URL('../..', import.meta.url));
+const SOURCES = join(PROJECT_ROOT, 'resources/research-runtime');
+const SCRIPTS = fileURLToPath(new URL('.', import.meta.url));
+const LOCK_FILES = ['tools.lock.json', 'tex-bundle-files.txt'] as const;
+/**
+ * 与脚本一起进 lockHashes 的 **src 文件**。
+ *
+ * `smoke.ts` 会 import 主进程的 pdf.js 资源目录助手，所以它也是构建输入：
+ * 不登记的话，改一行助手既不会要求重建工具链，也抓不到脏构建。
+ */
+const SCRIPTED_SRC_FILES = ['src/main/plugins/research/pdfjs-assets.ts'] as const;
+const SCRIPT_FILES = [
+  'prepare.ts',
+  'archive-utils.ts',
+  'download-asset.ts',
+  'manifest.ts',
+  'smoke.ts',
+  'build-r-process.ts'
+] as const;
+const DARWIN_O_EXLOCK = 0x20;
+const PROXY_KEYS = [
+  'PATH', 'HOME', 'TMPDIR', 'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY',
+  'https_proxy', 'http_proxy', 'no_proxy', 'SSL_CERT_FILE'
+];
+
+type ToolsLock = {
+  schemaVersion: number;
+  tectonicVersion: string;
+  /**
+   * Vale（prose linter）的版本。它不在归档里跑，而是作为 `bin/vale` 被 `lintProse()` 直接调。
+   */
+  valeVersion: string;
+  /**
+   * Typst 的版本。它只服务 `compileTypst()`（导出附带的报告），不进 LaTeX 主链。
+   * 归档是 `.tar.xz`：Node 没有 xz 解码器，所以走系统 `/usr/bin/tar`（bsdtar，linked liblzma）。
+   * 只取出归档里那一个 `typst` 二进制，其余内容丢弃。
+   */
+  typstVersion: string;
+  pandocVersion: string;
+  texBundle: { url: string; sha256: string; size: number; zipSha256: string };
+  architectures: Record<string, Record<string, { url: string; sha256: string }>>;
+};
+
+function fail(code: string): never {
+  throw new Error(code);
+}
+
+async function pathInfo(path: string) {
+  try {
+    return await lstat(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+/**
+ * Roc 只发布 Apple Silicon。随包 TeX 与报告排版工具当前只构建 arm64，
+ * 所以这里**只能**返回 arm64，而不是「支持的两个架构之一」。
+ */
+function hostArchitecture(): 'arm64' {
+  if (process.platform !== 'darwin' || process.arch !== 'arm64') {
+    fail('research_toolchain_build_requires_matching_macos_host');
+  }
+  return 'arm64';
+}
+
+function overlaps(left: string, right: string): boolean {
+  return left === right || left.startsWith(`${right}${sep}`) || right.startsWith(`${left}${sep}`);
+}
+
+export function buildEnvironment(): NodeJS.ProcessEnv {
+  const environment: NodeJS.ProcessEnv = {};
+  for (const key of PROXY_KEYS) {
+    const value = process.env[key];
+    if (value !== undefined) environment[key] = value;
+  }
+  return environment;
+}
+
+
+async function copyPreservingMode(source: string, destination: string): Promise<void> {
+  await copyFile(source, destination);
+  const info = await lstat(source);
+  await chmod(destination, info.mode & 0o777);
+}
+
+async function walkFiles(root: string): Promise<string[]> {
+  const files: string[] = [];
+  const visit = async (directory: string): Promise<void> => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const full = join(directory, entry.name);
+      if (entry.isDirectory() && !entry.isSymbolicLink()) await visit(full);
+      else files.push(full);
+    }
+  };
+  await visit(root);
+  return files;
+}
+
+async function findNamedFiles(root: string, name: string): Promise<string[]> {
+  const found: string[] = [];
+  for (const file of await walkFiles(root)) {
+    const info = await lstat(file);
+    if (!info.isSymbolicLink() && info.isFile() && file.split(sep).pop() === name) found.push(file);
+  }
+  return found;
+}
+
+async function runCommand(
+  command: string,
+  args: string[],
+  options: { env: NodeJS.ProcessEnv; capture?: boolean; discardStdout?: boolean }
+): Promise<string> {
+  return await new Promise((resolvePromise, reject) => {
+    const child = spawn(command, args, {
+      env: options.env,
+      stdio: ['ignore', options.capture === true ? 'pipe' : options.discardStdout === true ? 'ignore' : 'inherit', options.capture === true ? 'pipe' : 'inherit']
+    });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    child.stdout?.on('data', (chunk: Buffer) => stdout.push(chunk));
+    child.stderr?.on('data', (chunk: Buffer) => stderr.push(chunk));
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code !== 0) {
+        const detail = Buffer.concat(stderr).toString('utf8').trim();
+        reject(new Error(detail === '' ? `research_toolchain_command_failed:${command}` : detail));
+        return;
+      }
+      resolvePromise(Buffer.concat(stdout).toString('utf8'));
+    });
+  });
+}
+
+/**
+ * `.tar.xz` 的解包：用系统 bsdtar。
+ *
+ * 为什么不自己解 xz：Node 只内置 gzip/brotli，xz 需要 liblzma；为一个二进制引入纯 JS 的
+ * xz 解码器不划算。macOS 自带的 `/usr/bin/tar` 就是 bsdtar（linked liblzma），且**只在构建机**
+ * 上跑（应用运行时从不调它）。风险边界：解包后只从树里 copy 一个同名二进制进 `bin/`，
+ * 其余内容随 staging 一起删除；归档本身的 sha256 已在 `downloadVerified()` 验证过。
+ */
+async function extractTarXz(archive: string, destination: string): Promise<void> {
+  await mkdir(destination, { recursive: true });
+  await runCommand('/usr/bin/tar', ['-xf', archive, '-C', destination], { env: buildEnvironment() });
+}
+
+async function withPrepareLock(lockPath: string, work: () => Promise<void>): Promise<void> {  if ((await pathInfo(lockPath))?.isSymbolicLink()) fail('research_toolchain_lock_symlink');
+  const flags = constants.O_RDWR | constants.O_CREAT | constants.O_NONBLOCK | DARWIN_O_EXLOCK;
+  let handle;
+  try {
+    handle = await open(lockPath, flags, 0o644);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EAGAIN' || (error as NodeJS.ErrnoException).code === 'EWOULDBLOCK') {
+      fail('research_toolchain_locked');
+    }
+    throw error;
+  }
+  try {
+    await work();
+  } finally {
+    await handle.close();
+  }
+}
+
+
+
+export async function computeLockHashes(): Promise<Record<string, string>> {
+  const lockHashes: Record<string, string> = {};
+  for (const name of LOCK_FILES) lockHashes[name] = await fileSha256(join(SOURCES, name));
+  const runtimeFiles = (await readdir(SOURCES)).filter((name) => name.endsWith('.mts')).sort();
+  for (const name of runtimeFiles) lockHashes[name] = await fileSha256(join(SOURCES, name));
+  const licenseRoot = join(SOURCES, 'licenses');
+  if (await pathInfo(licenseRoot) !== null) {
+    for (const file of (await walkFiles(licenseRoot)).sort()) {
+      const info = await lstat(file);
+      if (!info.isFile() || info.isSymbolicLink()) continue;
+      lockHashes[relative(SOURCES, file).split(sep).join('/')] = await fileSha256(file);
+    }
+  }
+  // Vale 的规则集是**配置**而不是二进制：它决定了检查结论，所以必须进 lockHashes，
+  // 否则改一条规则既不会要求重建工具链，也不会被 `research_toolchain_source_mismatch` 抓到。
+  // CSL 样式是同一类东西：它是引用格式化的数据，改了它报告里的参考文献会变。
+  for (const directory of ['vale', 'csl']) {
+    const root = join(SOURCES, directory);
+    if (await pathInfo(root) === null) continue;
+    for (const file of (await walkFiles(root)).sort()) {
+      const info = await lstat(file);
+      if (!info.isFile() || info.isSymbolicLink()) continue;
+      lockHashes[relative(SOURCES, file).split(sep).join('/')] = await fileSha256(file);
+    }
+  }
+  for (const name of SCRIPT_FILES) lockHashes[`scripts/${name}`] = await fileSha256(join(SCRIPTS, name));
+  for (const name of SCRIPTED_SRC_FILES) lockHashes[name] = await fileSha256(join(PROJECT_ROOT, name));
+  return lockHashes;
+}
+
+function sameRecord(left: Record<string, string>, right: Record<string, string>): boolean {
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length && keys.every((key) => left[key] === right[key]);
+}
+
+export async function prepare(architecture: string, outputPath: string, cachePath: string): Promise<void> {
+  if (architecture !== hostArchitecture()) fail('research_toolchain_build_requires_matching_macos_host');
+  if ((await pathInfo(outputPath))?.isSymbolicLink()
+      || (await pathInfo(cachePath))?.isSymbolicLink()) {
+    fail('research_toolchain_directory_symlink');
+  }
+  const output = resolve(outputPath);
+  const cache = resolve(cachePath);
+  if (overlaps(output, cache)) fail('research_toolchain_output_overlaps_cache');
+  const lockHashes = await computeLockHashes();
+  // `JSON.parse` 会抛：lock 被改坏时要报领域错误码，而不是把 SyntaxError 丢给构建者。
+  let tools: ToolsLock;
+  try { tools = JSON.parse(await readFile(join(SOURCES, 'tools.lock.json'), 'utf8')) as ToolsLock; }
+  catch { fail('research_tools_lock_invalid'); }
+  if (tools.schemaVersion !== 1) fail('research_tools_lock_invalid');
+  if (await pathInfo(output) !== null) {
+    const existing = await verifyManifest(output);
+    if (!sameRecord(existing.lockHashes, lockHashes) || existing.architecture !== architecture) {
+      fail('research_toolchain_existing_sources_differ_use_new_output');
+    }
+    console.log(`已有工具链校验通过：${output}`);
+    return;
+  }
+  await mkdir(cache, { recursive: true });
+  await mkdir(dirname(output), { recursive: true });
+  await withPrepareLock(join(cache, 'prepare.lock'), async () => {
+    const staging = await mkdtemp(join(dirname(output), '.research-toolchain-'));
+    try {
+      const root = join(staging, 'toolchain');
+      await mkdir(join(root, 'bin'), { recursive: true });
+      const archTools = tools.architectures[architecture];
+      if (archTools === undefined) fail('research_tools_lock_invalid');
+      for (const [name, item] of Object.entries(archTools)) {
+        const archiveName = `${item.sha256}-${basename(new URL(item.url).pathname)}`;
+        const archive = await downloadVerified(item.url, item.sha256, join(cache, archiveName));
+        const extracted = join(staging, name);
+        // xz 只有 `.tar.xz` 这一种（当前只有 typst）：Node 没有 xz 解码器，用系统 bsdtar。
+        // 安全边界留给调用方：只从解出来的树里 copy 一个同名二进制进 `bin/`，其余丢弃。
+        if (item.url.endsWith('.tar.xz') || item.url.endsWith('.zip')) await extractTarXz(archive, extracted);
+        else await extractToolArchive(archive, extracted);
+        const candidates = await findNamedFiles(extracted, name);
+        if (candidates.length !== 1) fail(`research_tool_binary_ambiguous:${name}`);
+        await copyPreservingMode(candidates[0], join(root, 'bin', name));
+      }
+      // 模型不再进工具链归档（提案 §5）：它们由 `research.models.*` 落到用户数据目录，
+      // 工具链只保留代码与原生工具，构建也不再联网拉 2 GB 权重。
+      const bundle = tools.texBundle;
+      const fileList = parseTexBundleFileList(await readFile(join(SOURCES, 'tex-bundle-files.txt'), 'utf8'));
+      const cachedZip = join(cache, 'tex-bundle.zip');
+      const zipInfo = await pathInfo(cachedZip);
+      if (zipInfo === null || !zipInfo.isFile() || await fileSha256(cachedZip) !== bundle.zipSha256) {
+        if (zipInfo !== null) await rm(cachedZip);
+        const archive = await downloadVerified(bundle.url, bundle.sha256, join(cache, 'tlextras-2022.0r0.tar'), {
+          expectedSize: bundle.size
+        });
+        await convertTexBundle(archive, cachedZip, fileList);
+        if (await fileSha256(cachedZip) !== bundle.zipSha256) fail('research_tex_zip_hash_mismatch');
+      }
+      await mkdir(join(root, 'tex'));
+      await copyPreservingMode(cachedZip, join(root, 'tex/bundle.zip'));
+      for (const name of (await readdir(SOURCES)).filter((item) => item.endsWith('.mts'))) {
+        await copyPreservingMode(join(SOURCES, name), join(root, name));
+      }
+      await mkdir(join(root, 'locks'));
+      for (const name of LOCK_FILES) await copyPreservingMode(join(SOURCES, name), join(root, 'locks', name));
+      await cp(join(SOURCES, 'licenses'), join(root, 'licenses'), { recursive: true, preserveTimestamps: true });
+      await cp(join(SOURCES, 'vale'), join(root, 'vale'), { recursive: true, preserveTimestamps: true });
+      await cp(join(SOURCES, 'csl'), join(root, 'csl'), { recursive: true, preserveTimestamps: true });
+      const versions = { tectonic: tools.tectonicVersion, vale: tools.valeVersion, typst: tools.typstVersion, pandoc: tools.pandocVersion };
+      const manifest = await writeManifest(root, { architecture, versions, lockHashes });
+      await rename(root, output);
+      console.log(`科研工具链已准备：${output}（${manifest.entries.length} 个文件或链接）`);
+    } finally {
+      await rm(staging, { recursive: true, force: true });
+    }
+  });
+}
+
+async function main(): Promise<void> {
+  const { values } = parseArgs({
+    options: {
+      // 只有一个合法值，所以默认就是它：让调用方为一个必填常量传参没有意义。
+      arch: { type: 'string', default: 'arm64' },
+      output: { type: 'string' },
+      cache: { type: 'string', default: join(PROJECT_ROOT, '.runtime/research-downloads') }
+    },
+    strict: true
+  });
+  if (values.arch !== 'arm64') fail('research_toolchain_build_requires_matching_macos_host');
+  if (values.output === undefined || values.output === '') fail('research_toolchain_output_required');
+  await prepare(values.arch, values.output, values.cache ?? join(PROJECT_ROOT, '.runtime/research-downloads'));
+}
+
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  await main();
+}

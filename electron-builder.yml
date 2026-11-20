@@ -1,0 +1,104 @@
+appId: com.roc.desktop
+productName: Roc
+npmRebuild: false
+electronDist: node_modules/electron/dist
+directories:
+  output: release
+electronLanguages:
+  - en-US
+  - zh-CN
+files:
+  - dist/**
+  - package.json
+  - "!**/*.map"
+  - "!**/*.d.ts"
+  - "!**/*.d.mts"
+  - "!**/*.d.cts"
+  - "!**/.DS_Store"
+  - "!dist/renderer/.vite/**"
+  - "!node_modules/better-sqlite3/deps/**"
+  - "!node_modules/better-sqlite3/src/**"
+  - "!node_modules/node-pty/src/**"
+  - "!node_modules/node-pty/typings/**"
+  - "!node_modules/node-pty/scripts/**"
+  - "!node_modules/node-pty/deps/**"
+  - "!node_modules/node-pty/lib/**/*.test.js"
+  - "!node_modules/node-pty/lib/test/**"
+  - "!node_modules/pdfjs-dist/build/**"
+  - "!node_modules/pdfjs-dist/web/**"
+  - "!node_modules/pdfjs-dist/types/**"
+  - "!node_modules/pdfjs-dist/image_decoders/**"
+  - "!node_modules/pdfjs-dist/legacy/web/**"
+  - "!node_modules/pdfjs-dist/legacy/image_decoders/**"
+extraResources:
+  - from: resources
+    to: .
+    filter:
+      - trayTemplate*.png
+      - trayTemplate@2x.png
+  - from: resources/builtin-skills
+    to: builtin-skills
+    filter:
+      - "**/*"
+asarUnpack:
+  - node_modules/better-sqlite3/**
+  - node_modules/node-pty/**
+  - node_modules/@napi-rs/canvas/**
+  - node_modules/@napi-rs/canvas-darwin-arm64/**
+  - node_modules/pdfjs-dist/**
+  - node_modules/onnxruntime-node/bin/napi-v6/darwin/arm64/**
+  - node_modules/sqlite-vec-darwin-arm64/**
+beforePack: ./scripts/builder-hooks/before-pack.mjs
+afterExtract: ./scripts/builder-hooks/after-extract.mjs
+afterPack: ./scripts/builder-hooks/after-pack.mjs
+mac:
+  executableName: Roc
+  icon: resources/icon.icns
+  category: public.app-category.productivity
+  # 只产出 .app：package:mac 与 package:dir 都传 --dir，不打 zip/dmg。
+  target:
+    - dir
+  files:
+    - dist/**
+    - package.json
+    - "!dist/**/*.map"
+    - "!dist/renderer/.vite/**"
+    - "!node_modules/better-sqlite3/prebuilds/!(darwin-arm64).node"
+    - "!node_modules/node-pty/prebuilds/!(darwin-arm64)/**"
+    - "!node_modules/onnxruntime-node/bin/napi-v6/!(darwin)/**"
+    - "!node_modules/onnxruntime-node/bin/napi-v6/darwin/!(arm64)/**"
+    # The binding loads libonnxruntime.1.dylib. The fully versioned copy is identical.
+    - "!node_modules/onnxruntime-node/bin/napi-v6/darwin/arm64/libonnxruntime.*.*.*.dylib"
+    - "!node_modules/node-pty/third_party/**"
+    - "!node_modules/node-pty/node_modules/node-addon-api/**"
+    - "!node_modules/@napi-rs/canvas-linux-*/**"
+    - "!node_modules/@napi-rs/canvas-win32-*/**"
+    - "!node_modules/@napi-rs/canvas-android-*/**"
+    - "!node_modules/@napi-rs/canvas-darwin-!(arm64)/**"
+  extraResources:
+    - from: resources/builtin-skills
+      to: builtin-skills
+      filter:
+        - "**/*"
+    - from: resources/rtk-binaries
+      to: rtk-binaries
+      filter:
+        - darwin-arm64/**
+    # ripgrep 随包：文件内容搜索（files.search）与 Agent grep 共用这一个二进制。
+    # 许可证文本一并分发（MIT OR Unlicense）。
+    - from: resources/ripgrep-binaries
+      to: ripgrep-binaries
+      filter:
+        - darwin-arm64/**
+        - licenses/**
+        - ripgrep.lock.json
+    - from: .runtime/research-toolchain/darwin-arm64
+      to: research-toolchain
+      filter:
+        - "**/*"
+        - "!models"
+        - "!models/**"
+        - "!bibliography.py"
+  identity: "-"
+  sign: ./scripts/builder-hooks/sign.mjs
+  hardenedRuntime: false

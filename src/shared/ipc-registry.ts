@@ -1,0 +1,1077 @@
+import {visualProjectSchema, visualConfigSchema, visualSaveConfigSchema, visualIndexRequestSchema, visualIndexResultSchema, visualSearchRequestSchema, visualSearchResultSchema, visualInspectModelSchema, visualModelSchema} from './schemas/research-visual-retrieval';
+import {figureUnderstandingRequestSchema, figureUnderstandingResultSchema} from './schemas/research-figure-understanding';
+import * as wikiPages from './schemas/research-wiki-pages';
+import {scientificKnowledgeSearchSchema, scientificKnowledgeSearchResultSchema} from './schemas/research-scientific-knowledge-search';
+import {paperCardKnowledgeReadRequestSchema, paperCardKnowledgeSchema} from './schemas/research-paper-card-knowledge';
+import {claimComparisonRequestSchema, claimComparisonSchema} from './schemas/research-claim-comparison';
+import {knowledgeContextRequestSchema, knowledgeContextResultSchema} from './schemas/research-knowledge-context';
+import {scientificSearchRequestSchema, scientificSearchResultSchema} from './schemas/research-scientific-search';
+import {scientificGenerationsRequestSchema, scientificGenerationActivateSchema,
+  scientificGenerationsResultSchema} from './schemas/research-scientific-generations';
+import {scientificContextRequestSchema, scientificContextResultSchema} from './schemas/research-scientific-context';
+import {scientificEvidenceRequestSchema, scientificEvidenceResultSchema} from './schemas/research-scientific-evidence';
+import {scientificKnowledgeReadRequestSchema, scientificKnowledgeReadSchema, scientificExtractionDocumentRequestSchema,
+  scientificExtractionJobsRequestSchema, scientificExtractionJobRequestSchema,
+  scientificExtractionJobSchema} from './schemas/research-scientific-extraction';
+import {knowledgeJobSchema, knowledgeJobsListSchema, knowledgeJobRetrySchema} from './schemas/research-knowledge-jobs';
+import {researchWikiReadSchema, researchWikiSnapshotSchema} from './schemas/research-wiki';
+import {radarBrowserRequestSchema,radarBrowserResultSchema} from './schemas/research-reading';
+import {readingDiscoveryRequestSchema,readingDiscoveryResultSchema,radarCapturePageSchema,radarArticleMarkSchema,radarArticleSchema,radarArticlesRequestSchema,radarArticlesSchema,radarFeedSaveSchema,radarFeedSchema,radarFeedsSchema,radarImportResultSchema,radarImportSchema,radarRecommendSchema,radarRecommendationsSchema,radarRefreshSchema,readingEmptySchema,readingExportResultSchema,readingHighlightListSchema,readingHighlightSaveSchema,readingHighlightSchema,readingHighlightsSchema,readingNoteExportSchema,readingNoteSaveSchema,readingNoteSchema,readingNotesSchema,readingScopeSchema,readingTranslateSchema,readingTranslationSchema,translationSettingsSaveSchema,translationSettingsSchema} from './schemas/research-reading';
+import {taskExecutionDiagnosticsRequestSchema, taskExecutionObservationsSchema, taskDiagnosticsExportSchema} from './schemas/research-task-observability';
+import {taskFactsSaveSchema, taskFactsSnapshotSchema, taskFactsViewSchema, taskFactsHistoryRequestSchema, taskFactsHistorySchema} from './schemas/research-task-facts';
+import {researchStorageRequestSchema, researchStorageUsageSchema} from './schemas/research-storage';
+import {zenodoCredentialSchema, zenodoCredentialStatusSchema, zenodoCredentialReadSchema, zenodoStartSchema, zenodoOperationSchema, zenodoOperationReadSchema, zenodoOperationForPreparationSchema, zenodoOperationListSchema, zenodoOperationListResultSchema, zenodoOperationActionSchema, zenodoPublicationApproveSchema, zenodoPublicationApprovalSchema, zenodoPublishSchema} from './schemas/research-zenodo-remote';
+import {zenodoInputsRequestSchema, zenodoInputsSchema, zenodoPrepareSchema, zenodoPreparedSchema, zenodoReadSchema, zenodoListSchema, zenodoListResultSchema} from './schemas/research-zenodo';
+import {monitorSaveSchema, monitorSchema, monitorReadSchema, monitorControlSchema, monitorCheckRequestSchema, monitorCheckSchema, monitorCancelSchema, monitorCancelResultSchema, monitorListSchema, monitorListResultSchema, monitorHistorySchema, monitorChecksResultSchema, monitorVersionsResultSchema, monitorAlertsResultSchema, monitorCheckReadSchema, monitorAcknowledgeSchema, monitorAlertSchema} from './schemas/research-monitors';
+import {openReviewCaptureSchema, openReviewCancelSchema, openReviewCancelResultSchema, openReviewSummarySchema, openReviewHistorySchema, openReviewHistoryResultSchema, openReviewReadSchema, openReviewReadResultSchema} from './schemas/research-openreview';
+import {hfCaptureSchema, hfCancelSchema, hfCancelResultSchema, hfSummarySchema,
+  hfHistorySchema, hfHistoryResultSchema, hfReadSchema, hfReadResultSchema} from './schemas/research-huggingface';
+import {hfDownloadStartSchema, hfDownloadReceiptSchema, hfDownloadCancelSchema, hfDownloadCancelResultSchema,
+  hfDownloadReadSchema, hfDownloadHistorySchema, hfDownloadHistoryResultSchema} from './schemas/research-huggingface-downloads';
+import {
+  resourceCaptureSchema, resourceCancelSchema, resourceCancelResultSchema, resourceSummarySchema,
+  resourceHistorySchema, resourceHistoryResultSchema, resourceReadSchema, resourceReadResultSchema
+} from './schemas/research-resources';
+import {
+  resourceAssociationSaveSchema, resourceAssociationResultSchema, resourceAssociationReadSchema,
+  resourceAssociationHistorySchema, resourceAssociationHistoryResultSchema, resourceTargetsSchema, resourceTargetsResultSchema
+} from './schemas/research-resource-associations';
+import {
+  scholarlyCaptureSchema, scholarlyCancelSchema, scholarlyCancelResultSchema, scholarlySnapshotSummarySchema,
+  scholarlyHistorySchema, scholarlyHistoryResultSchema, scholarlyReadSchema, scholarlyReadResultSchema
+} from './schemas/research-scholarly-relations';
+import {researchJournalSaveSchema, researchJournalReceiptSchema, researchJournalInspectSchema,
+  researchJournalInspectionSchema, researchJournalHistorySchema, researchJournalHistoryResultSchema} from './schemas/research-journal-compliance';
+import {
+  researchIdeaOutcomeSaveSchema, researchIdeaOutcomeGetSchema, researchIdeaOutcomeHistorySchema,
+  researchIdeaOutcomeReceiptSchema, researchIdeaOutcomeHistoryResultSchema
+} from './schemas/research-idea-outcomes';
+import {
+  researchIdeaPlanSaveSchema, researchIdeaPlanGetSchema, researchIdeaPlanHistorySchema,
+  researchIdeaPlanFreezeRequestSchema, researchIdeaPlanInspectionSchema, researchIdeaPlanHistoryResultSchema
+} from './schemas/research-idea-plans';
+import { z } from 'zod';
+import {rerankerConfigSchema, rerankerSaveSchema} from './schemas/research-reranker';
+import {researchResponseMatrixSaveSchema, researchResponseMatrixReceiptSchema, researchResponseMatrixInspectSchema,
+  researchResponseMatrixInspectionSchema, researchResponseMatrixHistorySchema, researchResponseMatrixHistoryResultSchema} from './schemas/research-response-matrix';
+import {researchCitationCoverageRequestSchema, researchCitationCoverageInspectionSchema} from './schemas/research-citation-coverage';
+import {researchConsistencySaveSchema, researchConsistencyReceiptSchema, researchConsistencyHistorySchema,
+  researchConsistencyHistoryResultSchema, researchConsistencyInspectSchema, researchConsistencyInspectionSchema} from './schemas/research-consistency';
+import {researchFigureConsistencySaveSchema, researchFigureConsistencyReceiptSchema, researchFigureConsistencyHistorySchema,
+  researchFigureConsistencyHistoryResultSchema, researchFigureConsistencyInspectSchema, researchFigureConsistencyInspectionSchema} from './schemas/research-figure-consistency';
+import {researchCitationReviewSaveSchema, researchCitationReviewReceiptSchema,
+  researchCitationReviewHistorySchema, researchCitationReviewHistoryResultSchema} from './schemas/research-citation-reviews';
+import {researchReviewReportGetSchema,researchReviewReportInspectionSchema} from './schemas/research-review-report';
+import {researchReviewStudiesSaveSchema,researchReviewStudiesGetSchema,researchReviewStudiesInspectionSchema} from './schemas/research-review-studies';
+import {
+  researchReviewQualityPlanCreateSchema,researchReviewQualityPlanInspectionSchema,researchReviewQualityPlanGetSchema,
+  researchReviewQualityPlansListSchema,researchReviewQualityAssessmentSaveSchema,researchReviewQualityAssessmentGetSchema,
+  researchReviewQualityAssessmentInspectionSchema
+} from './schemas/research-review-quality';
+import {
+  researchReviewExtractionSaveSchema,researchReviewExtractionInspectionSchema,researchReviewExtractionGetSchema,
+  researchReviewExtractionHistorySchema,researchReviewExtractionListSchema
+} from './schemas/research-review-extraction';
+import {
+  researchReviewFullTextDecisionSaveSchema,researchReviewFullTextDecisionInspectionSchema,researchReviewFullTextDecisionHistorySchema,
+  researchReviewFullTextSuggestionCreateSchema,researchReviewFullTextSuggestionInspectionSchema,researchReviewFullTextSuggestionListSchema,
+  researchReviewFullTextPhaseGetSchema,researchReviewFullTextFrozenPhaseSchema,researchReviewFullTextFreezeRequestSchema,
+  researchReviewFullTextArbitrationSaveSchema,researchReviewFullTextArbitrationInspectionSchema,researchReviewFullTextArbitrationHistorySchema
+} from './schemas/research-review-fulltext-screening';
+import {
+  researchReviewFullTextBindingSaveSchema,researchReviewFullTextBindingInspectionSchema,researchReviewFullTextBindingGetSchema,
+  researchReviewFullTextBindingListSchema,researchReviewFullTextBindingsListSchema
+} from './schemas/research-review-fulltext';
+import {
+  researchReviewScreeningPlanCreateSchema, researchReviewScreeningPlanGetSchema, researchReviewScreeningPlanInspectionSchema,
+  researchReviewScreeningDecisionSaveSchema, researchReviewScreeningDecisionInspectionSchema, researchReviewScreeningDecisionHistorySchema,
+  researchReviewScreeningSuggestionListSchema, researchReviewScreeningSuggestionInspectionSchema,
+  researchReviewScreeningPhaseGetSchema, researchReviewScreeningFrozenPhaseSchema,
+  researchReviewScreeningArbitrationSaveSchema, researchReviewScreeningArbitrationInspectionSchema, researchReviewScreeningArbitrationHistorySchema,
+  researchReviewScreeningFreezeRequestSchema
+} from './schemas/research-review-screening';
+import {
+  researchReviewDuplicateSaveSchema, researchReviewDuplicateInspectionSchema, researchReviewDuplicateHistorySchema,
+  researchReviewDeduplicationGetSchema, researchReviewDeduplicationFreezeSchema, researchReviewDeduplicationInspectionSchema
+} from './schemas/research-review-deduplication';
+import {
+  researchReviewCorpusCreateSchema, researchReviewCorpusInspectionSchema, researchReviewCorpusGetSchema,
+  researchReviewCorpusListSchema, researchReviewCorpusHitRequestSchema, researchReviewCorpusHitResultSchema
+} from './schemas/research-review-corpus';
+import {
+  researchReviewSearchStartSchema, researchReviewSearchGetSchema, researchReviewSearchListSchema,
+  researchReviewSearchInspectionSchema, researchReviewSearchPoolRequestSchema, researchReviewSearchPoolResultSchema,
+  researchReviewSearchCancelSchema
+} from './schemas/research-review-search';
+import {
+  researchReviewProtocolSaveRequestSchema, researchReviewProtocolFreezeRequestSchema, researchReviewProtocolInspectionSchema,
+  researchReviewProtocolGetRequestSchema, researchReviewProtocolHistoryRequestSchema, researchReviewProtocolListRequestSchema
+} from './schemas/research-systematic-review';
+import {researchArtifactInspectRequestSchema, researchArtifactInspectResultSchema} from './schemas/research-artifact-inspector';
+import {researchGateReviewRequestSchema, researchGateReviewContextSchema} from './schemas/research-gate-review';
+import {researchProductionReviewRequestSchema, researchProductionReviewReadSchema} from './schemas/research-production-review';
+import { literatureAddSchema, literatureCancelImportSchema, literatureGetImportSchema, literatureImportResultSchema,
+  literatureReadSearchSchema, literatureSearchInputSchema, literatureSearchResultSchema, literatureLibraryChangedSchema } from './schemas/literature-import';
+import {changePaperAcquisitionSchema, listPaperAcquisitionSchema, listPaperAcquisitionResultSchema,
+  paperAcquisitionJobSchema, literatureAcquisitionSettingsSchema} from './schemas/literature-acquisition';
+import {literatureReadIdentifiersSchema, literatureIdentifierRecordsResultSchema} from './schemas/literature-identifiers';
+import {literatureReadReviewsSchema, literatureReviewRecordsResultSchema} from './schemas/literature-review';
+import {literatureReadPoolSchema, literatureSearchPoolPageSchema} from './schemas/literature-search-pool';
+import {
+  zoteroProbeRequestSchema, zoteroProbeSchema, zoteroGroupsRequestSchema, zoteroGroupsPageSchema,
+  zoteroPageRequestSchema, zoteroCollectionsPageSchema, zoteroItemsRequestSchema, zoteroItemsPageSchema,
+  zoteroPreviewPageSchema, zoteroSourcesPageSchema,
+  zoteroStatusSchema, zoteroPreviewIpcSchema, zoteroPreviewReadIpcSchema, zoteroSourcesIpcSchema,
+  zoteroReviewIpcSchema, zoteroReviewSchema
+} from './schemas/research-zotero';
+import {
+  zoteroSyncStartIpcSchema, zoteroSyncReadIpcSchema, zoteroSyncPageIpcSchema,
+  zoteroSyncControlIpcSchema, zoteroSyncAcknowledgeIpcSchema, zoteroSyncSchema, zoteroSyncCapturedPageSchema, zoteroSyncFindIpcSchema
+} from './schemas/research-zotero-sync';
+import {zoteroSourceStateIpcSchema, zoteroSourceStateSchema} from './schemas/research-zotero-source-state';
+import {zoteroAttachmentIpcSchema, zoteroAttachmentReadIpcSchema, zoteroAttachmentInspectionSchema,
+  zoteroAttachmentGrantIpcSchema, zoteroAttachmentGrantReadIpcSchema, zoteroAttachmentGrantOutcomeSchema,
+  zoteroAttachmentGrantSchema} from './schemas/research-zotero-attachment';
+import {zoteroAttachmentImportIpcSchema, zoteroAttachmentImportReadIpcSchema, zoteroAttachmentImportSchema,
+  zoteroAttachmentImportCancelSchema, zoteroChildrenIpcSchema, zoteroChildrenPageSchema} from './schemas/research-zotero-attachment';
+
+import { menuPages } from './surfaces';
+import { runDiagnosticsRequestSchema, runDiagnosticsSchema } from './schemas/run-diagnostics';
+import { researchTaskRequestSchema, researchTaskSchema, researchTaskExecutionSchema, researchTaskContinueRequestSchema } from './schemas/research-tasks';
+import { researchTaskForChatRequestSchema, researchTaskDiagnosticsSchema } from './schemas/research-task-diagnostics';
+import { researchTaskEventsRequestSchema, researchTaskEventsPageSchema, researchTaskUpdatedSchema, researchTaskListRequestSchema, researchTaskListPageSchema } from './schemas/research-tasks';
+import {researchEvidenceInspectRequestSchema, researchEvidenceInspectionSchema} from './schemas/research-evidence-source';
+import {
+  researchDocumentAnnotationCreateRequestSchema, researchDocumentAnnotationCaptureRequestSchema,
+  researchDocumentAnnotationListRequestSchema, researchDocumentAnnotationGetRequestSchema, researchDocumentAnnotationInspectionSchema
+} from './schemas/research-document-annotations';
+import {
+  researchSourceMigrationListSchema, researchSourceMigrationGetSchema, researchSourceMigrationInspectionSchema,
+  researchSourceMigrationCaptureSchema, researchSourceMigrationRejectSchema, researchSourceMigrationDecisionSchema
+} from './schemas/research-source-migrations';
+import {
+  researchSourceReplacementRequestSchema, researchSourceReplacementListSchema, researchSourceReplacementGetSchema,
+  researchSourceReplacementSchema, researchSourceReplacementInspectionSchema
+} from './schemas/research-source-replacements';
+import {
+  researchEvidenceRelationProposalSchema, researchEvidenceRelationReviewSchema, researchEvidenceRelationSchema,
+  researchEvidenceRelationListSchema, researchEvidenceRelationHistorySchema, researchEvidenceRelationRevisionSchema
+} from './schemas/research-evidence-relations';
+
+import {
+  agentCapabilityPreviewRequestSchema,
+  agentCapabilityPreviewSchema,
+  agentRuntimeStatusSchema,
+  deepAgentConfigPreviewSchema
+} from './schemas/agent';
+import {
+  pilotOptInRequestSchema,
+  pilotStatusSchema
+} from './schemas/harness-pilot';
+import {
+  activeChatRunSchema,
+  chatActiveRunRequestSchema,
+  chatCancelRunResultSchema,
+  chatRunEventSchema,
+  chatRunEventsReplayRequestSchema,
+  chatRunEventsReplayResultSchema,
+  chatRunEventsReplayPageSchema,
+  chatCorrectRunRequestSchema,
+  chatCorrectRunResultSchema,
+  chatRunInputsRequestSchema,
+  chatRunInputsResultSchema,
+  chatReconcileEffectsResultSchema,
+  chatResumeRunRequestSchema,
+  chatResumeRunResultSchema,
+  chatStartRunIpcRequestSchema,
+  chatStartRunResultSchema
+} from './schemas/chat';
+import {
+  activeTaskItemSchema,
+  appStatusSchema,
+  backgroundTaskPreviewRequestSchema,
+  backgroundTaskPreviewSchema,
+  backgroundTaskSchema,
+  closedResultSchema,
+  deletedResultSchema,
+  deliveredResultSchema,
+  diagnosticCheckSchema,
+  diagnosticPackageRequestSchema,
+  diagnosticPackageSchema,
+  healthCheckResultSchema,
+  ipcResultSchema,
+  metricFilterSchema,
+  metricsSnapshotSchema,
+  openedPageResultSchema,
+  openedResultSchema,
+  performanceSampleRequestSchema,
+  performanceSampleSchema,
+  scheduledTaskRunSchema,
+  scheduledTaskRunsRequestSchema,
+  schedulerStatusSchema,
+  systemAppearanceSnapshotSchema,
+  taskDeleteBackgroundResultSchema,
+  taskDeleteThreadRequestSchema,
+  taskDeleteThreadResultSchema,
+  taskDetailSchema,
+  taskIdRequestSchema,
+  taskMessageHistoryPageSchema,
+  taskMessageHistoryRequestSchema,
+  taskRunNowResultSchema,
+  taskSnapshotSchema,
+  taskUpdateEventSchema,
+  traySummarySchema,
+  updateBackgroundTaskRequestSchema,
+  windowBoundsSnapshotSchema,
+  windowHiddenSnapshotSchema,
+  windowResourcePressureSchema,
+  windowStateSnapshotSchema
+} from './schemas/ipc-core';
+import {
+  memoryFileReadRequestSchema,
+  memoryFileWriteOutcomeSchema,
+  memoryFileWriteRequestSchema,
+  memorySnapshotPreviewSchema,
+  memoryStatusSchema,
+  providerSecretClearResultSchema,
+  providerSecretSetRequestSchema,
+  providerSecretSetResultSchema,
+  providerTestRequestSchema,
+  providerTestResultSchema,
+  rocHookConfigSnapshotSchema,
+  sessionListInputSchema,
+  sessionMessageSchema,
+  sessionMessageSearchRequestSchema,
+  sessionMessageSearchResultSchema,
+  settingsSaveHookConfigRequestSchema,
+  settingsSaveRequestSchema,
+  settingsListRemoteModelsRequestSchema,
+  settingsListRemoteModelsResultSchema,
+  settingsSetDefaultModelRequestSchema,
+  settingsSnapshotSchema,
+  settingsTrustHookRequestSchema
+} from './schemas/ipc-memory-settings';
+import {
+  builtinSkillsAutoUpdateRequestSchema,
+  builtinSkillsCheckRequestSchema,
+  builtinSkillsCheckResultSchema,
+  builtinSkillsStatusSchema
+} from './schemas/builtin-skills';
+import {
+  mcpApprovalModeRequestSchema,
+  mcpServerConfigSchema,
+  mcpServerEnabledRequestSchema,
+  mcpServerSnapshotSchema,
+  mcpServerTestResultSchema,
+  mcpServersConfigSchema,
+  skillEnabledRequestSchema,
+  skillFilePreviewRequestSchema,
+  skillFilePreviewResultSchema,
+  skillFileTreeRequestSchema,
+  skillFileTreeResultSchema,
+  skillImportRequestSchema,
+  skillSnapshotSchema
+} from './schemas/ipc-mcp-skills';
+import {
+  researchProjectCreateRequestSchema,
+  researchProjectIdRequestSchema,
+  researchProjectSchema,
+  researchProjectUpdateRequestSchema,
+  researchEmbeddingConfigSaveRequestSchema,
+  researchEmbeddingConfigSchema,
+  researchKnowledgeDocumentSchema,
+  researchKnowledgeDocumentUpsertRequestSchema,
+  researchKnowledgeSearchRequestSchema,
+  researchKnowledgeSearchResultSchema,
+  researchStageRoleProfileSchema,
+  researchStageRoleRequestSchema,
+  researchProvenanceCreateRequestSchema,
+  researchProvenanceListRequestSchema,
+  researchProvenanceSchema,
+  researchArtifactCreateRequestSchema,
+  researchArtifactIdRequestSchema,
+  researchArtifactListRequestSchema,
+  researchArtifactSchema,
+  researchArtifactUpdateRequestSchema,
+  researchWorkflowEventSchema,
+  researchWorkflowEventsRequestSchema,
+  researchTemplateCompileRequestSchema,
+  researchTemplateImportRequestSchema,
+  researchTemplateSchema,
+  researchWorkflowSnapshotSchema,
+  researchWorkflowTransitionRequestSchema
+} from './schemas/research';
+import {
+  researchTemplateEntryRequestSchema, researchTemplateFileContentSchema, researchTemplateFileRequestSchema,
+  researchTemplateFileSaveRequestSchema, researchTemplateFileSchema, researchTemplateListRequestSchema,
+  researchToolchainStatusSchema, researchModelsStatusSchema,
+  researchModelsSelectRequestSchema, researchModelsDownloadRequestSchema, researchModelsImportRequestSchema,
+  researchModelsRemoveRequestSchema
+} from './schemas/research-production';
+import { researchProseLintReportSchema, researchProseLintRequestSchema } from './schemas/research-prose';
+import { researchNotebookFileRequestSchema, researchNotebookImportRequestSchema, researchNotebookGetRequestSchema,
+  researchNotebookListRequestSchema, researchNotebookPreviewSchema, researchNotebookImportedSchema,
+  researchNotebookListResultSchema } from './schemas/research-notebooks';
+import {researchExperimentResultReviewSchema,researchExperimentResultGetSchema,researchExperimentResultListSchema,
+  researchExperimentResultReceiptSchema,researchExperimentResultListResultSchema,
+  researchExperimentCompareSchema,researchExperimentComparisonSchema,
+  researchExperimentResultEvidenceCaptureSchema,researchExperimentResultEvidenceGetSchema,
+  researchExperimentResultEvidenceTraceSchema} from './schemas/research-experiment-results';
+import { researchPythonEnvironmentSelectSchema, researchPythonEnvironmentGetSchema, researchPythonEnvironmentListSchema,
+  researchPythonEnvironmentSelectionSchema } from './schemas/research-python-environments';
+import {
+  researchLibraryArchiveRequestSchema, researchLibraryCitationKeyRequestSchema, researchLibraryDoiImportRequestSchema,
+  researchLibraryExportRequestSchema, researchLibraryExportSchema, researchLibraryFileImportRequestSchema,
+  researchLibraryIdRequestSchema, researchLibraryImportResultSchema, researchLibraryItemSchema, researchLibraryLinkRequestSchema,
+  researchLibraryListRequestSchema, researchLibraryRecordImportRequestSchema
+} from './schemas/research-library';
+import {
+  researchDocumentIdRequestSchema, researchDocumentImportRequestSchema, researchDocumentListRequestSchema,
+  researchDocumentParseRequestSchema, researchDocumentParseSchema, researchDocumentRunSchema, researchDocumentSchema,
+  researchDocumentStartParseRequestSchema, researchDocumentBatchParseRequestSchema, researchDocumentBatchParseSchema
+} from './schemas/research-documents';
+import {researchDocumentPreviewRequestSchema, researchDocumentPreviewSchema, researchDocumentResolveParseRequestSchema} from './schemas/research-document-preview';
+import {
+  researchIndexedFileSchema, researchIndexedSourceSchema, researchIndexControlRequestSchema, researchIndexEvidenceSourceRequestSchema,
+  researchIndexFilesRequestSchema, researchIndexJobsRequestSchema, researchIndexJobSchema, researchIndexProjectRequestSchema,
+  researchIndexSettingsSaveSchema, researchIndexStatusSchema
+} from './schemas/research-index';
+import { researchExperimentEnvironmentRequestSchema, researchExperimentEnvironmentSchema, researchExperimentEvidenceRequestSchema,
+  researchExperimentExecutionSchema, researchExperimentFileContentSchema, researchExperimentFileRequestSchema, researchExperimentIdRequestSchema,
+  researchExperimentListRequestSchema, researchExperimentStartRequestSchema } from './schemas/research-experiments';
+import { researchFigureEnvironmentRequestSchema, researchFigureRendererEnvironmentSchema, researchFigureIdRequestSchema,
+  researchFigureListRequestSchema, researchFigurePublicationSchema, researchFigurePublishRequestSchema,
+  researchFigureRunSchema, researchFigureStartRequestSchema } from './schemas/research-figures';
+import { researchExportDeliverySchema, researchExportExecutionSchema, researchExportFileContentSchema, researchExportIdRequestSchema,
+  researchExportListRequestSchema, researchExportPrepareRequestSchema, researchExportPublishRequestSchema, researchExportReadRequestSchema, researchExportInputsRequestSchema,
+  researchExportWriteRequestSchema } from './schemas/research-exports';
+import {researchExportInputsSchema} from './schemas/research-export-publication';
+import { researchProductionInputContentSchema, researchProductionInputReadSchema, researchProductionInputRequestSchema,
+  researchProductionInputSchema } from './schemas/research-production-inputs';
+import {
+  fileDialogSelectionSchema,
+  fileNameSearchRequestSchema,
+  fileNameSearchResultSchema,
+  filePdfPreviewRequestSchema,
+  filePdfPreviewResultSchema,
+  filePreviewRequestSchema,
+  filePreviewResultSchema,
+  fileSearchRequestSchema,
+  fileSearchResultSchema,
+  fileTreeRequestSchema,
+  fileTreeResultSchema,
+  fileWriteResultSchema,
+  fileWriteTextRequestSchema,
+  gitBatchFileOperationRequestSchema,
+  gitBranchListResultSchema,
+  gitBranchMutationResultSchema,
+  gitCancelRequestSchema,
+  gitCheckoutBranchRequestSchema,
+  gitCommitRequestSchema,
+  gitCommitResultSchema,
+  gitCreateBranchRequestSchema,
+  gitDiffStatResultSchema,
+  gitFileDiffResultSchema,
+  gitFileOperationRequestSchema,
+  gitPushRequestSchema,
+  gitPushResultSchema,
+  gitStatusResultSchema,
+  rtkStatusSchema,
+  shellConfirmationRequestSchema,
+  shellConfirmationResultSchema,
+  shellExecutionIpcRequestSchema,
+  shellExecutionResultSchema,
+  terminalSessionCloseRequestSchema,
+  terminalSessionCreateRequestSchema,
+  terminalSessionExitEventSchema,
+  terminalSessionInputRequestSchema,
+  terminalSessionOutputEventSchema,
+  terminalSessionResizeRequestSchema,
+  terminalSessionSnapshotSchema,
+  workspaceChangedEventSchema,
+  workspaceSchema,
+  workspaceSelectRequestSchema
+} from './schemas/ipc-workspace';
+import type { IpcResult } from './types';
+import {
+  researchArtifactContentRequestSchema, researchArtifactContentSchema, researchStagePoliciesRequestSchema,
+  researchStagePolicySchema, researchStageRunIdRequestSchema, researchStageRunRetryRequestSchema,
+  researchStageRunSchema, researchStageRunStartRequestSchema, researchStageRunsRequestSchema, researchReviewCycleSchema
+} from './schemas/research-runs';
+import {
+  researchClaimCreateRequestSchema,
+  researchClaimHistoryRequestSchema,
+  researchClaimListRequestSchema,
+  researchClaimSchema,
+  researchClaimUpdateRequestSchema,
+  researchEvidenceCaptureRequestSchema,
+  researchEvidenceListRequestSchema,
+  researchEvidenceSchema,
+  researchExportBundleRequestSchema,
+  researchExportBundleSchema,
+  researchManuscriptGetRequestSchema,
+  researchManuscriptSaveRequestSchema,
+  researchManuscriptSchema
+} from './schemas/research-evidence';
+import {
+  researchIdeaCanvasGetRequestSchema,
+  researchIdeaCanvasHistoryRequestSchema,
+  researchIdeaCanvasSaveRequestSchema,
+  researchIdeaCanvasSchema,
+  researchIdeaPromoteRequestSchema,
+  researchIdeaPromotionSchema
+} from './schemas/research-ideas';
+
+export type IpcInputTransform =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'first' }
+  | { readonly kind: 'optional-first' }
+  | { readonly kind: 'id'; readonly key: 'id' | 'runId' };
+
+type IpcArgsSchema = z.ZodType<unknown[]>;
+
+export type IpcMethodContract<
+  TArgsSchema extends IpcArgsSchema = IpcArgsSchema,
+  TResultSchema extends z.ZodType = z.ZodType
+> = {
+  readonly args: TArgsSchema;
+  readonly result: TResultSchema;
+};
+
+export type IpcEventContract<TPayloadSchema extends z.ZodType = z.ZodType> = {
+  readonly payload: TPayloadSchema;
+};
+
+type IpcRequestMetadata = {
+  readonly key: string;
+  readonly channel: `roc:${string}`;
+  readonly domain: string;
+  readonly method: string;
+  readonly contract: IpcMethodContract;
+} & (
+  | { readonly kind: 'direct' }
+  | {
+      readonly kind: 'plugin';
+      readonly capabilityName: string;
+      readonly inputTransform: IpcInputTransform;
+    }
+);
+
+type IpcEventMetadata = {
+  readonly key: string;
+  readonly channel: `roc:${string}`;
+  readonly domain: string;
+  readonly method: string;
+  readonly contract: IpcEventContract;
+};
+
+function methodContract<TArgsSchema extends IpcArgsSchema, TResultSchema extends z.ZodType>(
+  args: TArgsSchema,
+  result: TResultSchema
+): IpcMethodContract<TArgsSchema, TResultSchema> {
+  return { args, result };
+}
+
+function eventContract<TPayloadSchema extends z.ZodType>(
+  payload: TPayloadSchema
+): IpcEventContract<TPayloadSchema> {
+  return { payload };
+}
+
+function request<const TDefinition extends IpcRequestMetadata>(definition: TDefinition): TDefinition {
+  return definition;
+}
+
+function event<const TDefinition extends IpcEventMetadata>(definition: TDefinition): TDefinition {
+  return definition;
+}
+
+const none = { kind: 'none' } as const;
+const first = { kind: 'first' } as const;
+const optionalFirst = { kind: 'optional-first' } as const;
+const id = (key: 'id' | 'runId') => ({ kind: 'id', key }) as const;
+const noArgs = z.tuple([]);
+const oneArg = <TSchema extends z.ZodType>(schema: TSchema) => z.tuple([schema]);
+const optionalArg = <TSchema extends z.ZodType>(schema: TSchema) => z.tuple([schema.optional()]);
+const stringArg = oneArg(z.string());
+/**
+ * 一个原生菜单 / 托盘 / 全局热键能请壳打开的页面。
+ *
+ * 收窄成 `src/shared/surfaces.ts` 的 `menuPages` 而不是 `z.string()`：这个通道存在的目的是传给
+ * `app.onNavigate` 并由渲染层兑现，所以一个"发得出、认不出"的 page 应当在入口就被契约拒掉，
+ * 而不是变成一事件被渲染层默默丢弃。
+ */
+const menuPageArg = oneArg(z.enum(menuPages));
+
+export const ipcRegistry = {
+  version: 2,
+  requests: [
+    request({ key: 'appGetStatus', channel: 'roc:app:get-status', domain: 'app', method: 'getStatus', kind: 'plugin', capabilityName: 'app.status.get', inputTransform: none, contract: methodContract(noArgs, appStatusSchema) }),
+    request({ key: 'appOpenSettings', channel: 'roc:app:open-settings', domain: 'app', method: 'openSettings', kind: 'direct', contract: methodContract(noArgs, openedResultSchema) }),
+    request({ key: 'appOpenMainPage', channel: 'roc:app:open-main-page', domain: 'app', method: 'openMainPage', kind: 'direct', contract: methodContract(menuPageArg, openedPageResultSchema) }),
+    request({ key: 'windowGetState', channel: 'roc:window:get-state', domain: 'window', method: 'getState', kind: 'direct', contract: methodContract(noArgs, windowStateSnapshotSchema) }),
+    request({ key: 'windowGetBounds', channel: 'roc:window:get-bounds', domain: 'window', method: 'getBounds', kind: 'direct', contract: methodContract(noArgs, windowBoundsSnapshotSchema) }),
+    request({ key: 'windowMinimize', channel: 'roc:window:minimize', domain: 'window', method: 'minimize', kind: 'direct', contract: methodContract(noArgs, windowStateSnapshotSchema) }),
+    request({ key: 'windowToggleMaximize', channel: 'roc:window:toggle-maximize', domain: 'window', method: 'toggleMaximize', kind: 'direct', contract: methodContract(noArgs, windowStateSnapshotSchema) }),
+    request({ key: 'windowClose', channel: 'roc:window:close', domain: 'window', method: 'close', kind: 'direct', contract: methodContract(noArgs, closedResultSchema) }),
+    request({ key: 'tasksGetSnapshot', channel: 'roc:tasks:get-snapshot', domain: 'tasks', method: 'getSnapshot', kind: 'plugin', capabilityName: 'task.snapshot.get', inputTransform: none, contract: methodContract(noArgs, taskSnapshotSchema) }),
+    request({ key: 'tasksGetThreadMessages', channel: 'roc:tasks:get-thread-messages', domain: 'tasks', method: 'getThreadMessages', kind: 'plugin', capabilityName: 'task.thread.messages.list', inputTransform: first, contract: methodContract(oneArg(taskMessageHistoryRequestSchema), taskMessageHistoryPageSchema) }),
+    request({ key: 'tasksListBackgroundTasks', channel: 'roc:tasks:list-background-tasks', domain: 'tasks', method: 'listBackgroundTasks', kind: 'plugin', capabilityName: 'task.background.list', inputTransform: none, contract: methodContract(noArgs, backgroundTaskSchema.array()) }),
+    request({ key: 'tasksDeleteThread', channel: 'roc:tasks:delete-thread', domain: 'tasks', method: 'deleteThread', kind: 'plugin', capabilityName: 'task.thread.delete', inputTransform: first, contract: methodContract(oneArg(taskDeleteThreadRequestSchema), taskDeleteThreadResultSchema) }),
+    request({ key: 'tasksCreateBackgroundPreview', channel: 'roc:tasks:create-background-preview', domain: 'tasks', method: 'createBackgroundTaskPreview', kind: 'plugin', capabilityName: 'task.background.preview', inputTransform: first, contract: methodContract(oneArg(backgroundTaskPreviewRequestSchema), backgroundTaskPreviewSchema) }),
+    request({ key: 'tasksCreateBackgroundTask', channel: 'roc:tasks:create-background-task', domain: 'tasks', method: 'createBackgroundTask', kind: 'plugin', capabilityName: 'task.background.create', inputTransform: first, contract: methodContract(oneArg(backgroundTaskPreviewRequestSchema), backgroundTaskSchema) }),
+    request({ key: 'tasksPauseBackgroundTask', channel: 'roc:tasks:pause-background-task', domain: 'tasks', method: 'pauseBackgroundTask', kind: 'plugin', capabilityName: 'task.background.pause', inputTransform: id('id'), contract: methodContract(stringArg, backgroundTaskSchema) }),
+    request({ key: 'tasksResumeBackgroundTask', channel: 'roc:tasks:resume-background-task', domain: 'tasks', method: 'resumeBackgroundTask', kind: 'plugin', capabilityName: 'task.background.resume', inputTransform: id('id'), contract: methodContract(stringArg, backgroundTaskSchema) }),
+    request({ key: 'tasksCancelBackgroundTask', channel: 'roc:tasks:cancel-background-task', domain: 'tasks', method: 'cancelBackgroundTask', kind: 'plugin', capabilityName: 'task.background.cancel', inputTransform: id('id'), contract: methodContract(stringArg, backgroundTaskSchema) }),
+    request({ key: 'tasksGetActiveTasks', channel: 'roc:tasks:get-active-tasks', domain: 'tasks', method: 'getActiveTasks', kind: 'plugin', capabilityName: 'task.active.list', inputTransform: none, contract: methodContract(noArgs, activeTaskItemSchema.array()) }),
+    request({ key: 'tasksGetTaskDetail', channel: 'roc:tasks:get-task-detail', domain: 'tasks', method: 'getTaskDetail', kind: 'plugin', capabilityName: 'task.detail.get', inputTransform: first, contract: methodContract(oneArg(taskIdRequestSchema), taskDetailSchema) }),
+    request({ key: 'tasksListScheduledRuns', channel: 'roc:tasks:list-scheduled-runs', domain: 'tasks', method: 'listScheduledRuns', kind: 'plugin', capabilityName: 'task.scheduledRuns.list', inputTransform: first, contract: methodContract(oneArg(scheduledTaskRunsRequestSchema), scheduledTaskRunSchema.array()) }),
+    request({ key: 'tasksRunBackgroundNow', channel: 'roc:tasks:run-background-now', domain: 'tasks', method: 'runBackgroundNow', kind: 'plugin', capabilityName: 'task.background.runNow', inputTransform: id('id'), contract: methodContract(stringArg, taskRunNowResultSchema) }),
+    request({ key: 'tasksDeleteBackgroundTask', channel: 'roc:tasks:delete-background-task', domain: 'tasks', method: 'deleteBackgroundTask', kind: 'plugin', capabilityName: 'task.background.delete', inputTransform: id('id'), contract: methodContract(stringArg, taskDeleteBackgroundResultSchema) }),
+    request({ key: 'tasksUpdateBackgroundTask', channel: 'roc:tasks:update-background-task', domain: 'tasks', method: 'updateBackgroundTask', kind: 'plugin', capabilityName: 'task.background.update', inputTransform: first, contract: methodContract(oneArg(updateBackgroundTaskRequestSchema), backgroundTaskSchema) }),
+    request({ key: 'tasksGetSchedulerStatus', channel: 'roc:tasks:get-scheduler-status', domain: 'tasks', method: 'getSchedulerStatus', kind: 'plugin', capabilityName: 'task.scheduler.status', inputTransform: none, contract: methodContract(noArgs, schedulerStatusSchema) }),
+    request({ key: 'lifecycleGetTraySummary', channel: 'roc:lifecycle:get-tray-summary', domain: 'lifecycle', method: 'getTraySummary', kind: 'plugin', capabilityName: 'lifecycle.getTraySummary', inputTransform: none, contract: methodContract(noArgs, traySummarySchema) }),
+    request({ key: 'lifecyclePauseBackground', channel: 'roc:lifecycle:pause-background', domain: 'lifecycle', method: 'pauseBackgroundExecution', kind: 'plugin', capabilityName: 'lifecycle.pauseBackgroundExecution', inputTransform: none, contract: methodContract(noArgs, traySummarySchema) }),
+    request({ key: 'lifecycleResumeBackground', channel: 'roc:lifecycle:resume-background', domain: 'lifecycle', method: 'resumeBackgroundExecution', kind: 'plugin', capabilityName: 'lifecycle.resumeBackgroundExecution', inputTransform: none, contract: methodContract(noArgs, traySummarySchema) }),
+    request({ key: 'diagnosticsSamplePerformance', channel: 'roc:diagnostics:sample-performance', domain: 'diagnostics', method: 'samplePerformance', kind: 'plugin', capabilityName: 'diagnostics.samplePerformance', inputTransform: first, contract: methodContract(oneArg(performanceSampleRequestSchema), performanceSampleSchema) }),
+    request({ key: 'diagnosticsCreatePackage', channel: 'roc:diagnostics:create-package', domain: 'diagnostics', method: 'createDiagnosticPackage', kind: 'plugin', capabilityName: 'diagnostics.createPackage', inputTransform: first, contract: methodContract(oneArg(diagnosticPackageRequestSchema), diagnosticPackageSchema) }),
+    request({ key: 'diagnosticsRunChecks', channel: 'roc:diagnostics:run-checks', domain: 'diagnostics', method: 'runChecks', kind: 'plugin', capabilityName: 'diagnostics.runChecks', inputTransform: none, contract: methodContract(noArgs, diagnosticCheckSchema.array()) }),
+    request({ key: 'diagnosticsGetMetricsSnapshot', channel: 'roc:diagnostics:get-metrics-snapshot', domain: 'diagnostics', method: 'getMetricsSnapshot', kind: 'plugin', capabilityName: 'diagnostics.getMetricsSnapshot', inputTransform: optionalFirst, contract: methodContract(optionalArg(metricFilterSchema), metricsSnapshotSchema) }),
+    request({ key: 'diagnosticsRunHealthCheck', channel: 'roc:diagnostics:health-check', domain: 'diagnostics', method: 'runHealthCheck', kind: 'plugin', capabilityName: 'diagnostics.runHealthCheck', inputTransform: none, contract: methodContract(noArgs, healthCheckResultSchema) }),
+    request({ key: 'memoryStatus', channel: 'roc:memory:status', domain: 'memory', method: 'status', kind: 'plugin', capabilityName: 'memory.status.get', inputTransform: none, contract: methodContract(noArgs, memoryStatusSchema) }),
+    request({ key: 'memoryReadFile', channel: 'roc:memory:read-file', domain: 'memory', method: 'readFile', kind: 'plugin', capabilityName: 'memory.file.read', inputTransform: first, contract: methodContract(oneArg(memoryFileReadRequestSchema), z.string().nullable()) }),
+    request({ key: 'memoryWriteFile', channel: 'roc:memory:write-file', domain: 'memory', method: 'writeFile', kind: 'plugin', capabilityName: 'memory.file.write', inputTransform: first, contract: methodContract(oneArg(memoryFileWriteRequestSchema), memoryFileWriteOutcomeSchema) }),
+    request({ key: 'memorySnapshotPreview', channel: 'roc:memory:snapshot-preview', domain: 'memory', method: 'snapshotPreview', kind: 'plugin', capabilityName: 'memory.snapshot.preview', inputTransform: none, contract: methodContract(noArgs, memorySnapshotPreviewSchema) }),
+    request({ key: 'sessionMessagesList', channel: 'roc:session:messages-list', domain: 'sessions', method: 'list', kind: 'plugin', capabilityName: 'agent.sessions.list', inputTransform: first, contract: methodContract(oneArg(sessionListInputSchema), sessionMessageSchema.array()) }),
+    request({ key: 'sessionMessagesSearch', channel: 'roc:session:messages-search', domain: 'sessions', method: 'search', kind: 'plugin', capabilityName: 'agent.sessions.search', inputTransform: first, contract: methodContract(oneArg(sessionMessageSearchRequestSchema), sessionMessageSearchResultSchema) }),
+    request({ key: 'settingsGet', channel: 'roc:settings:get', domain: 'settings', method: 'get', kind: 'direct', contract: methodContract(noArgs, settingsSnapshotSchema) }),
+    request({ key: 'settingsSave', channel: 'roc:settings:save', domain: 'settings', method: 'save', kind: 'direct', contract: methodContract(oneArg(settingsSaveRequestSchema), settingsSnapshotSchema) }),
+    request({ key: 'settingsSetDefaultModel', channel: 'roc:settings:set-default-model', domain: 'settings', method: 'setDefaultModel', kind: 'direct', contract: methodContract(oneArg(settingsSetDefaultModelRequestSchema), settingsSnapshotSchema) }),
+    request({ key: 'settingsListRemoteModels', channel: 'roc:settings:list-remote-models', domain: 'settings', method: 'listRemoteModels', kind: 'direct', contract: methodContract(oneArg(settingsListRemoteModelsRequestSchema), settingsListRemoteModelsResultSchema) }),
+    request({ key: 'settingsTestProvider', channel: 'roc:settings:test-provider', domain: 'settings', method: 'testProvider', kind: 'direct', contract: methodContract(oneArg(providerTestRequestSchema), providerTestResultSchema) }),
+    request({ key: 'settingsSetProviderSecret', channel: 'roc:settings:set-provider-secret', domain: 'settings', method: 'setProviderSecret', kind: 'direct', contract: methodContract(oneArg(providerSecretSetRequestSchema), providerSecretSetResultSchema) }),
+    request({ key: 'settingsClearProviderSecret', channel: 'roc:settings:clear-provider-secret', domain: 'settings', method: 'clearProviderSecret', kind: 'direct', contract: methodContract(stringArg, providerSecretClearResultSchema) }),
+    request({ key: 'settingsHooksGet', channel: 'roc:settings:hooks:get', domain: 'settings', method: 'getHooks', kind: 'direct', contract: methodContract(noArgs, rocHookConfigSnapshotSchema) }),
+    request({ key: 'settingsHooksSave', channel: 'roc:settings:hooks:save', domain: 'settings', method: 'saveHooks', kind: 'direct', contract: methodContract(oneArg(settingsSaveHookConfigRequestSchema), rocHookConfigSnapshotSchema) }),
+    request({ key: 'settingsHooksTrust', channel: 'roc:settings:hooks:trust', domain: 'settings', method: 'trustHook', kind: 'direct', contract: methodContract(oneArg(settingsTrustHookRequestSchema), rocHookConfigSnapshotSchema) }),
+    request({ key: 'mcpListServers', channel: 'roc:mcp:list-servers', domain: 'mcp', method: 'listServers', kind: 'plugin', capabilityName: 'mcp.listServers', inputTransform: none, contract: methodContract(noArgs, mcpServerSnapshotSchema.array()) }),
+    request({ key: 'mcpEnsureExaPreset', channel: 'roc:mcp:ensure-exa-preset', domain: 'mcp', method: 'ensureExaPreset', kind: 'plugin', capabilityName: 'mcp.ensureExaPreset', inputTransform: none, contract: methodContract(noArgs, mcpServerConfigSchema) }),
+    request({ key: 'mcpUpsertServer', channel: 'roc:mcp:upsert-server', domain: 'mcp', method: 'upsertServer', kind: 'plugin', capabilityName: 'mcp.upsertServer', inputTransform: first, contract: methodContract(oneArg(mcpServerConfigSchema), mcpServerConfigSchema) }),
+    request({ key: 'mcpSetServerEnabled', channel: 'roc:mcp:set-server-enabled', domain: 'mcp', method: 'setServerEnabled', kind: 'plugin', capabilityName: 'mcp.setServerEnabled', inputTransform: first, contract: methodContract(oneArg(mcpServerEnabledRequestSchema), mcpServerConfigSchema) }),
+    request({ key: 'mcpDeleteServer', channel: 'roc:mcp:delete-server', domain: 'mcp', method: 'deleteServer', kind: 'plugin', capabilityName: 'mcp.deleteServer', inputTransform: id('id'), contract: methodContract(stringArg, deletedResultSchema) }),
+    request({ key: 'mcpTestServer', channel: 'roc:mcp:test-server', domain: 'mcp', method: 'testServer', kind: 'plugin', capabilityName: 'mcp.testServer', inputTransform: id('id'), contract: methodContract(stringArg, mcpServerTestResultSchema) }),
+    request({ key: 'mcpGetConfig', channel: 'roc:mcp:get-config', domain: 'mcp', method: 'getConfig', kind: 'plugin', capabilityName: 'mcp.getConfig', inputTransform: none, contract: methodContract(noArgs, mcpServersConfigSchema) }),
+    request({ key: 'mcpSetApprovalMode', channel: 'roc:mcp:set-approval-mode', domain: 'mcp', method: 'setApprovalMode', kind: 'plugin', capabilityName: 'mcp.setApprovalMode', inputTransform: first, contract: methodContract(oneArg(mcpApprovalModeRequestSchema), mcpServersConfigSchema) }),
+    request({ key: 'skillsList', channel: 'roc:skills:list', domain: 'skills', method: 'list', kind: 'plugin', capabilityName: 'skills.list', inputTransform: none, contract: methodContract(noArgs, skillSnapshotSchema.array()) }),
+    request({ key: 'skillsImport', channel: 'roc:skills:import', domain: 'skills', method: 'importSkill', kind: 'plugin', capabilityName: 'skills.import', inputTransform: first, contract: methodContract(oneArg(skillImportRequestSchema), skillSnapshotSchema) }),
+    request({ key: 'skillsSetEnabled', channel: 'roc:skills:set-enabled', domain: 'skills', method: 'setEnabled', kind: 'plugin', capabilityName: 'skills.setEnabled', inputTransform: first, contract: methodContract(oneArg(skillEnabledRequestSchema), skillSnapshotSchema) }),
+    request({ key: 'skillsDelete', channel: 'roc:skills:delete', domain: 'skills', method: 'deleteSkill', kind: 'plugin', capabilityName: 'skills.delete', inputTransform: id('id'), contract: methodContract(stringArg, deletedResultSchema) }),
+    request({ key: 'skillsListFiles', channel: 'roc:skills:list-files', domain: 'skills', method: 'listFiles', kind: 'plugin', capabilityName: 'skills.files.list', inputTransform: first, contract: methodContract(oneArg(skillFileTreeRequestSchema), skillFileTreeResultSchema) }),
+    request({ key: 'skillsReadFile', channel: 'roc:skills:read-file', domain: 'skills', method: 'readFile', kind: 'plugin', capabilityName: 'skills.file.read', inputTransform: first, contract: methodContract(oneArg(skillFilePreviewRequestSchema), skillFilePreviewResultSchema) }),
+    request({ key: 'skillsBuiltinStatus', channel: 'roc:skills:builtin-status', domain: 'skills', method: 'builtinStatus', kind: 'plugin', capabilityName: 'skills.builtin.status', inputTransform: none, contract: methodContract(noArgs, builtinSkillsStatusSchema) }),
+    request({ key: 'skillsBuiltinCheck', channel: 'roc:skills:builtin-check', domain: 'skills', method: 'builtinCheck', kind: 'plugin', capabilityName: 'skills.builtin.check', inputTransform: first, contract: methodContract(oneArg(builtinSkillsCheckRequestSchema), builtinSkillsCheckResultSchema) }),
+    request({ key: 'skillsBuiltinAutoUpdate', channel: 'roc:skills:builtin-auto-update', domain: 'skills', method: 'builtinAutoUpdate', kind: 'plugin', capabilityName: 'skills.builtin.autoUpdate', inputTransform: first, contract: methodContract(oneArg(builtinSkillsAutoUpdateRequestSchema), builtinSkillsStatusSchema) }),
+    request({ key: 'skillsBuiltinRestore', channel: 'roc:skills:builtin-restore', domain: 'skills', method: 'builtinRestore', kind: 'plugin', capabilityName: 'skills.builtin.restore', inputTransform: first, contract: methodContract(oneArg(z.object({ sourceId: z.string().min(1) }).strict()), builtinSkillsStatusSchema) }),
+    request({ key: 'researchProjectsList', channel: 'roc:research:projects-list', domain: 'research', method: 'listProjects', kind: 'plugin', capabilityName: 'research.projects.list', inputTransform: none, contract: methodContract(noArgs, researchProjectSchema.array()) }),
+    request({ key: 'researchProjectsGet', channel: 'roc:research:projects-get', domain: 'research', method: 'getProject', kind: 'plugin', capabilityName: 'research.projects.get', inputTransform: first, contract: methodContract(oneArg(researchProjectIdRequestSchema), researchProjectSchema) }),
+    request({ key: 'researchProjectsCreate', channel: 'roc:research:projects-create', domain: 'research', method: 'createProject', kind: 'plugin', capabilityName: 'research.projects.create', inputTransform: first, contract: methodContract(oneArg(researchProjectCreateRequestSchema), researchProjectSchema) }),
+    request({ key: 'researchProjectsUpdate', channel: 'roc:research:projects-update', domain: 'research', method: 'updateProject', kind: 'plugin', capabilityName: 'research.projects.update', inputTransform: first, contract: methodContract(oneArg(researchProjectUpdateRequestSchema), researchProjectSchema) }),
+    request({ key: 'researchProjectsDelete', channel: 'roc:research:projects-delete', domain: 'research', method: 'deleteProject', kind: 'plugin', capabilityName: 'research.projects.delete', inputTransform: first, contract: methodContract(oneArg(researchProjectIdRequestSchema), deletedResultSchema.extend({ id: z.string() }).strict()) }),
+    request({ key: 'researchWorkflowGet', channel: 'roc:research:workflow-get', domain: 'research', method: 'getWorkflow', kind: 'plugin', capabilityName: 'research.workflow.get', inputTransform: first, contract: methodContract(oneArg(researchProjectIdRequestSchema), researchWorkflowSnapshotSchema) }),
+    request({ key: 'researchWorkflowTransition', channel: 'roc:research:workflow-transition', domain: 'research', method: 'transitionWorkflow', kind: 'plugin', capabilityName: 'research.workflow.transition', inputTransform: first, contract: methodContract(oneArg(researchWorkflowTransitionRequestSchema), researchWorkflowSnapshotSchema) }),
+    request({ key: 'researchWorkflowEvents', channel: 'roc:research:workflow-events', domain: 'research', method: 'listWorkflowEvents', kind: 'plugin', capabilityName: 'research.workflow.events', inputTransform: first, contract: methodContract(oneArg(researchWorkflowEventsRequestSchema), researchWorkflowEventSchema.array()) }),
+    request({ key: 'researchWorkflowPolicies', channel: 'roc:research:workflow-policies', domain: 'research', method: 'listStagePolicies', kind: 'plugin', capabilityName: 'research.workflow.policies', inputTransform: first, contract: methodContract(oneArg(researchStagePoliciesRequestSchema), researchStagePolicySchema.array()) }),
+    request({ key: 'researchWorkflowReviewCycle', channel: 'roc:research:workflow-review-cycle', domain: 'research', method: 'getReviewCycle', kind: 'plugin', capabilityName: 'research.workflow.reviewCycle', inputTransform: first, contract: methodContract(oneArg(researchStagePoliciesRequestSchema), researchReviewCycleSchema.nullable()) }),
+    request({ key: 'researchWorkflowSavePolicy', channel: 'roc:research:workflow-save-policy', domain: 'research', method: 'saveStagePolicy', kind: 'plugin', capabilityName: 'research.workflow.savePolicy', inputTransform: first, contract: methodContract(oneArg(researchStagePolicySchema), researchStagePolicySchema) }),
+    request({ key: 'researchWorkflowStartRun', channel: 'roc:research:workflow-start-run', domain: 'research', method: 'startStageRun', kind: 'plugin', capabilityName: 'research.workflow.startRun', inputTransform: first, contract: methodContract(oneArg(researchStageRunStartRequestSchema), researchStageRunSchema) }),
+    request({ key: 'researchWorkflowGetRun', channel: 'roc:research:workflow-get-run', domain: 'research', method: 'getStageRun', kind: 'plugin', capabilityName: 'research.workflow.getRun', inputTransform: first, contract: methodContract(oneArg(researchStageRunIdRequestSchema), researchStageRunSchema) }),
+    request({ key: 'researchWorkflowListRuns', channel: 'roc:research:workflow-list-runs', domain: 'research', method: 'listStageRuns', kind: 'plugin', capabilityName: 'research.workflow.listRuns', inputTransform: first, contract: methodContract(oneArg(researchStageRunsRequestSchema), researchStageRunSchema.array()) }),
+    request({ key: 'researchWorkflowCancelRun', channel: 'roc:research:workflow-cancel-run', domain: 'research', method: 'cancelStageRun', kind: 'plugin', capabilityName: 'research.workflow.cancelRun', inputTransform: first, contract: methodContract(oneArg(researchStageRunIdRequestSchema), researchStageRunSchema) }),
+    request({key: 'researchStorageUsage', channel: 'roc:research:storage-usage', domain: 'research', method: 'getStorageUsage', kind: 'plugin', capabilityName: 'research.storage.usage', inputTransform: first, contract: methodContract(oneArg(researchStorageRequestSchema), researchStorageUsageSchema)}),
+    request({ key: 'researchTaskGet', channel: 'roc:research:task-get', domain: 'research', method: 'getTask', kind: 'plugin', capabilityName: 'research.task.get', inputTransform: first, contract: methodContract(oneArg(researchTaskRequestSchema), researchTaskSchema) }),
+    request({ key: 'researchTaskExecutions', channel: 'roc:research:task-executions', domain: 'research', method: 'getTaskExecutions', kind: 'plugin', capabilityName: 'research.task.executions', inputTransform: first, contract: methodContract(oneArg(researchTaskRequestSchema), researchTaskExecutionSchema.array()) }),
+    request({ key: 'researchTaskCancel', channel: 'roc:research:task-cancel', domain: 'research', method: 'cancelTask', kind: 'plugin', capabilityName: 'research.task.cancel', inputTransform: first, contract: methodContract(oneArg(researchTaskRequestSchema), researchTaskSchema) }),
+    request({ key: 'researchTaskPause', channel: 'roc:research:task-pause', domain: 'research', method: 'pauseTask', kind: 'plugin', capabilityName: 'research.task.pause', inputTransform: first, contract: methodContract(oneArg(researchTaskRequestSchema), researchTaskSchema) }),
+    request({ key: 'researchTaskContinue', channel: 'roc:research:task-continue', domain: 'research', method: 'continueTask', kind: 'plugin', capabilityName: 'research.task.continue', inputTransform: first, contract: methodContract(oneArg(researchTaskContinueRequestSchema), researchStageRunSchema) }),
+    request({ key: 'researchTaskRestoreApproval', channel: 'roc:research:task-restore-approval', domain: 'research', method: 'restoreTaskApproval', kind: 'plugin', capabilityName: 'research.task.restoreApproval', inputTransform: first, contract: methodContract(oneArg(researchTaskRequestSchema), researchTaskSchema) }),
+    request({ key: 'researchTaskList', channel: 'roc:research:task-list', domain: 'research', method: 'listTasks', kind: 'plugin', capabilityName: 'research.task.list', inputTransform: first, contract: methodContract(oneArg(researchTaskListRequestSchema), researchTaskListPageSchema) }),
+    request({ key: 'researchTaskDiagnostics', channel: 'roc:research:task-diagnostics', domain: 'research', method: 'getTaskDiagnostics', kind: 'plugin', capabilityName: 'research.task.diagnostics', inputTransform: first, contract: methodContract(oneArg(researchTaskRequestSchema), researchTaskDiagnosticsSchema) }),
+    request({ key: 'researchTaskForChat', channel: 'roc:research:task-for-chat', domain: 'research', method: 'getTaskForChat', kind: 'plugin', capabilityName: 'research.task.forChat', inputTransform: first, contract: methodContract(oneArg(researchTaskForChatRequestSchema), researchTaskDiagnosticsSchema.nullable()) }),
+    request({key: 'researchTaskExecutionDiagnostics', channel: 'roc:research:task-execution-diagnostics', domain: 'research', method: 'getTaskExecutionDiagnostics', kind: 'plugin', capabilityName: 'research.task.diagnostics.execution', inputTransform: first, contract: methodContract(oneArg(taskExecutionDiagnosticsRequestSchema), taskExecutionObservationsSchema)}),
+    request({key: 'researchTaskDiagnosticsExport', channel: 'roc:research:task-diagnostics-export', domain: 'research', method: 'exportTaskDiagnostics', kind: 'plugin', capabilityName: 'research.task.diagnostics.export', inputTransform: first, contract: methodContract(oneArg(researchTaskRequestSchema), taskDiagnosticsExportSchema)}),
+    request({key: 'researchTaskFactsGet', channel: 'roc:research:task-facts-get', domain: 'research', method: 'getTaskFacts', kind: 'plugin', capabilityName: 'research.task.facts.get', inputTransform: first, contract: methodContract(oneArg(researchTaskRequestSchema), taskFactsViewSchema)}),
+    request({key: 'researchTaskFactsSave', channel: 'roc:research:task-facts-save', domain: 'research', method: 'saveTaskFacts', kind: 'plugin', capabilityName: 'research.task.facts.save', inputTransform: first, contract: methodContract(oneArg(taskFactsSaveSchema), taskFactsSnapshotSchema)}),
+    request({key: 'researchTaskFactsHistory', channel: 'roc:research:task-facts-history', domain: 'research', method: 'getTaskFactsHistory', kind: 'plugin', capabilityName: 'research.task.facts.history', inputTransform: first, contract: methodContract(oneArg(taskFactsHistoryRequestSchema), taskFactsHistorySchema)}),
+    request({ key: 'researchTaskEvents', channel: 'roc:research:task-events', domain: 'research', method: 'getTaskEvents', kind: 'plugin', capabilityName: 'research.task.events', inputTransform: first, contract: methodContract(oneArg(researchTaskEventsRequestSchema), researchTaskEventsPageSchema) }),
+    request({ key: 'researchWorkflowRetryRun', channel: 'roc:research:workflow-retry-run', domain: 'research', method: 'retryStageRun', kind: 'plugin', capabilityName: 'research.workflow.retryRun', inputTransform: first, contract: methodContract(oneArg(researchStageRunRetryRequestSchema), researchStageRunSchema) }),
+    request({key: 'researchGateReview', channel: 'roc:research:gate-review', domain: 'research', method: 'getGateReviewContext', kind: 'plugin', capabilityName: 'research.workflow.gateReview', inputTransform: first, contract: methodContract(oneArg(researchGateReviewRequestSchema), researchGateReviewContextSchema)}),
+    request({key: 'researchArtifactInspect', channel: 'roc:research:artifact-inspect', domain: 'research', method: 'inspectArtifact', kind: 'plugin', capabilityName: 'research.artifacts.inspect', inputTransform: first, contract: methodContract(oneArg(researchArtifactInspectRequestSchema), researchArtifactInspectResultSchema)}),
+    request({ key: 'researchArtifactContent', channel: 'roc:research:artifact-content', domain: 'research', method: 'getArtifactContent', kind: 'plugin', capabilityName: 'research.artifacts.content', inputTransform: first, contract: methodContract(oneArg(researchArtifactContentRequestSchema), researchArtifactContentSchema.nullable()) }),
+    request({ key: 'researchProductionInputInspect', channel: 'roc:research:production-input-inspect', domain: 'research', method: 'inspectProductionInput', kind: 'plugin', capabilityName: 'research.artifacts.inspectProduction', inputTransform: first, contract: methodContract(oneArg(researchProductionInputRequestSchema), researchProductionInputSchema) }),
+    request({ key: 'researchProductionInputRead', channel: 'roc:research:production-input-read', domain: 'research', method: 'readProductionInputFile', kind: 'plugin', capabilityName: 'research.artifacts.readProductionFile', inputTransform: first, contract: methodContract(oneArg(researchProductionInputReadSchema), researchProductionInputContentSchema) }),
+    request({key: 'researchProductionReviewInspect', channel: 'roc:research:production-review-inspect', domain: 'research', method: 'inspectProductionReview', kind: 'plugin', capabilityName: 'research.artifacts.inspectProductionReview', inputTransform: first, contract: methodContract(oneArg(researchProductionReviewRequestSchema), researchProductionInputSchema)}),
+    request({key: 'researchProductionReviewRead', channel: 'roc:research:production-review-read', domain: 'research', method: 'readProductionReviewFile', kind: 'plugin', capabilityName: 'research.artifacts.readProductionReviewFile', inputTransform: first, contract: methodContract(oneArg(researchProductionReviewReadSchema), researchProductionInputContentSchema)}),
+    request({ key: 'researchArtifactsCreate', channel: 'roc:research:artifacts-create', domain: 'research', method: 'createArtifact', kind: 'plugin', capabilityName: 'research.artifacts.create', inputTransform: first, contract: methodContract(oneArg(researchArtifactCreateRequestSchema), researchArtifactSchema) }),
+    request({ key: 'researchArtifactsGet', channel: 'roc:research:artifacts-get', domain: 'research', method: 'getArtifact', kind: 'plugin', capabilityName: 'research.artifacts.get', inputTransform: first, contract: methodContract(oneArg(researchArtifactIdRequestSchema), researchArtifactSchema) }),
+    request({ key: 'researchArtifactsList', channel: 'roc:research:artifacts-list', domain: 'research', method: 'listArtifacts', kind: 'plugin', capabilityName: 'research.artifacts.list', inputTransform: first, contract: methodContract(oneArg(researchArtifactListRequestSchema), researchArtifactSchema.array()) }),
+    request({ key: 'researchArtifactsUpdate', channel: 'roc:research:artifacts-update', domain: 'research', method: 'updateArtifact', kind: 'plugin', capabilityName: 'research.artifacts.update', inputTransform: first, contract: methodContract(oneArg(researchArtifactUpdateRequestSchema), researchArtifactSchema) }),
+    request({ key: 'researchEvidenceCapture', channel: 'roc:research:evidence-capture', domain: 'research', method: 'captureEvidence', kind: 'plugin', capabilityName: 'research.evidence.capture', inputTransform: first, contract: methodContract(oneArg(researchEvidenceCaptureRequestSchema), researchEvidenceSchema) }),
+    request({key: 'researchWikiSearch', channel: 'roc:research:wiki-search', domain: 'research', method: 'searchWiki', kind: 'plugin', capabilityName: 'research.wiki.search', inputTransform: first, contract: methodContract(oneArg(wikiPages.wikiSearchSchema), wikiPages.wikiSearchResultSchema)}),
+    request({key: 'researchWikiKnowledgeSearch', channel: 'roc:research:wiki-knowledge-search', domain: 'research', method: 'searchWikiKnowledge', kind: 'plugin', capabilityName: 'research.wiki.knowledge.search', inputTransform: first, contract: methodContract(oneArg(scientificKnowledgeSearchSchema), scientificKnowledgeSearchResultSchema)}),
+    request({key: 'researchWikiRead', channel: 'roc:research:wiki-read', domain: 'research', method: 'readWiki', kind: 'plugin', capabilityName: 'research.wiki.read', inputTransform: first, contract: methodContract(oneArg(wikiPages.wikiPageRequestSchema), wikiPages.wikiPageSchema)}),
+    request({key: 'researchWikiSection', channel: 'roc:research:wiki-section', domain: 'research', method: 'readWikiSection', kind: 'plugin', capabilityName: 'research.wiki.section', inputTransform: first, contract: methodContract(oneArg(wikiPages.wikiSectionReadSchema), wikiPages.wikiSectionDetailSchema)}),
+    request({key: 'researchWikiResynthesize', channel: 'roc:research:wiki-resynthesize', domain: 'research', method: 'resynthesizeWiki', kind: 'plugin', capabilityName: 'research.wiki.resynthesize', inputTransform: first, contract: methodContract(oneArg(wikiPages.wikiResynthesizeSchema), wikiPages.wikiPageSchema)}),
+    request({key: 'researchWikiPaperRetry', channel: 'roc:research:wiki-paper-retry', domain: 'research', method: 'retryWikiPaper', kind: 'plugin', capabilityName: 'research.wiki.paper.retry', inputTransform: first, contract: methodContract(oneArg(wikiPages.wikiPageRequestSchema), wikiPages.wikiPageSchema)}),
+    request({key: 'researchWikiPaperKnowledge', channel: 'roc:research:wiki-paper-knowledge', domain: 'research', method: 'readWikiPaperKnowledge', kind: 'plugin', capabilityName: 'research.wiki.paper.knowledge', inputTransform: first, contract: methodContract(oneArg(paperCardKnowledgeReadRequestSchema), paperCardKnowledgeSchema)}),
+    request({key: 'researchWikiCreate', channel: 'roc:research:wiki-create', domain: 'research', method: 'createWiki', kind: 'plugin', capabilityName: 'research.wiki.create', inputTransform: first, contract: methodContract(oneArg(wikiPages.wikiCreateSchema), wikiPages.wikiPageSchema)}),
+    request({key: 'researchWikiSave', channel: 'roc:research:wiki-save', domain: 'research', method: 'saveWiki', kind: 'plugin', capabilityName: 'research.wiki.save', inputTransform: first, contract: methodContract(oneArg(wikiPages.wikiSaveSchema), wikiPages.wikiPageSchema)}),
+    request({key: 'researchWikiCompile', channel: 'roc:research:wiki-compile', domain: 'research', method: 'compileWiki', kind: 'plugin', capabilityName: 'research.wiki.compile', inputTransform: first, contract: methodContract(oneArg(wikiPages.wikiCompileSchema), wikiPages.wikiSummarySchema)}),
+    request({key: 'researchWikiRollback', channel: 'roc:research:wiki-rollback', domain: 'research', method: 'rollbackWiki', kind: 'plugin', capabilityName: 'research.wiki.rollback', inputTransform: first, contract: methodContract(oneArg(wikiPages.wikiRollbackSchema), wikiPages.wikiPageSchema)}),
+    request({key: 'researchWikiHistory', channel: 'roc:research:wiki-history', domain: 'research', method: 'wikiHistory', kind: 'plugin', capabilityName: 'research.wiki.history', inputTransform: first, contract: methodContract(oneArg(wikiPages.wikiHistorySchema), wikiPages.wikiRevisionSchema.omit({sections: true}).array())}),
+    request({key: 'researchWikiRevision', channel: 'roc:research:wiki-revision', domain: 'research', method: 'wikiRevision', kind: 'plugin', capabilityName: 'research.wiki.revision', inputTransform: first, contract: methodContract(oneArg(wikiPages.wikiRevisionReadSchema), wikiPages.wikiRevisionSchema)}),
+    request({ key: 'researchWikiSnapshot', channel: 'roc:research:wiki-snapshot', domain: 'research', method: 'wikiSnapshot', kind: 'plugin', capabilityName: 'research.wiki.snapshot', inputTransform: first, contract: methodContract(oneArg(researchWikiReadSchema), researchWikiSnapshotSchema) }),
+    request({ key: 'researchEvidenceInspect', channel: 'roc:research:evidence-inspect', domain: 'research', method: 'inspectEvidence', kind: 'plugin', capabilityName: 'research.evidence.inspect', inputTransform: first, contract: methodContract(oneArg(researchEvidenceInspectRequestSchema), researchEvidenceInspectionSchema) }),
+    request({ key: 'researchRelationsPropose', channel: 'roc:research:relations-propose', domain: 'research', method: 'proposeEvidenceRelation', kind: 'plugin', capabilityName: 'research.relations.propose', inputTransform: first, contract: methodContract(oneArg(researchEvidenceRelationProposalSchema), researchEvidenceRelationSchema) }),
+    request({ key: 'researchRelationsReview', channel: 'roc:research:relations-review', domain: 'research', method: 'reviewEvidenceRelation', kind: 'plugin', capabilityName: 'research.relations.review', inputTransform: first, contract: methodContract(oneArg(researchEvidenceRelationReviewSchema), researchEvidenceRelationSchema) }),
+    request({ key: 'researchRelationsList', channel: 'roc:research:relations-list', domain: 'research', method: 'listEvidenceRelations', kind: 'plugin', capabilityName: 'research.relations.list', inputTransform: first, contract: methodContract(oneArg(researchEvidenceRelationListSchema), researchEvidenceRelationSchema.array()) }),
+    request({ key: 'researchRelationsHistory', channel: 'roc:research:relations-history', domain: 'research', method: 'evidenceRelationHistory', kind: 'plugin', capabilityName: 'research.relations.history', inputTransform: first, contract: methodContract(oneArg(researchEvidenceRelationHistorySchema), researchEvidenceRelationRevisionSchema.array()) }),
+    request({ key: 'researchSourceMigrationsList', channel: 'roc:research:source-migrations-list', domain: 'research', method: 'listSourceMigrations', kind: 'plugin', capabilityName: 'research.sourceMigrations.list', inputTransform: first, contract: methodContract(oneArg(researchSourceMigrationListSchema), researchSourceMigrationInspectionSchema.array()) }),
+    request({ key: 'researchSourceMigrationsGet', channel: 'roc:research:source-migrations-get', domain: 'research', method: 'getSourceMigration', kind: 'plugin', capabilityName: 'research.sourceMigrations.get', inputTransform: first, contract: methodContract(oneArg(researchSourceMigrationGetSchema), researchSourceMigrationInspectionSchema) }),
+    request({ key: 'researchSourceMigrationsCapture', channel: 'roc:research:source-migrations-capture', domain: 'research', method: 'captureSourceMigration', kind: 'plugin', capabilityName: 'research.sourceMigrations.capture', inputTransform: first, contract: methodContract(oneArg(researchSourceMigrationCaptureSchema), researchSourceMigrationDecisionSchema) }),
+    request({ key: 'researchSourceMigrationsReject', channel: 'roc:research:source-migrations-reject', domain: 'research', method: 'rejectSourceMigration', kind: 'plugin', capabilityName: 'research.sourceMigrations.reject', inputTransform: first, contract: methodContract(oneArg(researchSourceMigrationRejectSchema), researchSourceMigrationDecisionSchema) }),
+    request({ key: 'researchSourceReplacementsReplace', channel: 'roc:research:source-replacements-replace', domain: 'research', method: 'replaceEvidenceSource', kind: 'plugin', capabilityName: 'research.sourceReplacements.replace', inputTransform: first, contract: methodContract(oneArg(researchSourceReplacementRequestSchema), researchSourceReplacementSchema) }),
+    request({ key: 'researchSourceReplacementsList', channel: 'roc:research:source-replacements-list', domain: 'research', method: 'listSourceReplacements', kind: 'plugin', capabilityName: 'research.sourceReplacements.list', inputTransform: first, contract: methodContract(oneArg(researchSourceReplacementListSchema), researchSourceReplacementInspectionSchema.array()) }),
+    request({ key: 'researchSourceReplacementsGet', channel: 'roc:research:source-replacements-get', domain: 'research', method: 'getSourceReplacement', kind: 'plugin', capabilityName: 'research.sourceReplacements.get', inputTransform: first, contract: methodContract(oneArg(researchSourceReplacementGetSchema), researchSourceReplacementInspectionSchema) }),
+    request({key:'researchReviewReportGet',channel:'roc:research:review-report-get',domain:'research',method:'getReviewReport',kind:'plugin',capabilityName:'research.reviewReport.get',inputTransform:first,contract:methodContract(oneArg(researchReviewReportGetSchema),researchReviewReportInspectionSchema)}),
+    request({key:'researchReviewStudiesSave',channel:'roc:research:review-studies-save',domain:'research',method:'saveReviewStudies',kind:'plugin',capabilityName:'research.reviewStudies.save',inputTransform:first,contract:methodContract(oneArg(researchReviewStudiesSaveSchema),researchReviewStudiesInspectionSchema)}),
+    request({key:'researchReviewStudiesGet',channel:'roc:research:review-studies-get',domain:'research',method:'getReviewStudies',kind:'plugin',capabilityName:'research.reviewStudies.get',inputTransform:first,contract:methodContract(oneArg(researchReviewStudiesGetSchema),researchReviewStudiesInspectionSchema.nullable())}),
+    request({key:'researchReviewStudiesHistory',channel:'roc:research:review-studies-history',domain:'research',method:'getReviewStudiesHistory',kind:'plugin',capabilityName:'research.reviewStudies.history',inputTransform:first,contract:methodContract(oneArg(researchReviewStudiesGetSchema),researchReviewStudiesInspectionSchema.array())}),
+    request({key:'researchReviewQualityAssessmentSave',channel:'roc:research:review-quality-assessment-save',domain:'research',method:'saveReviewQualityAssessment',kind:'plugin',capabilityName:'research.reviewQuality.saveAssessment',inputTransform:first,contract:methodContract(oneArg(researchReviewQualityAssessmentSaveSchema),researchReviewQualityAssessmentInspectionSchema)}),
+    request({key:'researchReviewQualityAssessmentGet',channel:'roc:research:review-quality-assessment-get',domain:'research',method:'getReviewQualityAssessment',kind:'plugin',capabilityName:'research.reviewQuality.getAssessment',inputTransform:first,contract:methodContract(oneArg(researchReviewQualityAssessmentGetSchema),researchReviewQualityAssessmentInspectionSchema.nullable())}),
+    request({key:'researchReviewQualityAssessmentHistory',channel:'roc:research:review-quality-assessment-history',domain:'research',method:'getReviewQualityAssessmentHistory',kind:'plugin',capabilityName:'research.reviewQuality.assessmentHistory',inputTransform:first,contract:methodContract(oneArg(researchReviewQualityAssessmentGetSchema),researchReviewQualityAssessmentInspectionSchema.array())}),
+    request({key:'researchReviewQualityPlanCreate',channel:'roc:research:review-quality-plan-create',domain:'research',method:'createReviewQualityPlan',kind:'plugin',capabilityName:'research.reviewQuality.createPlan',inputTransform:first,contract:methodContract(oneArg(researchReviewQualityPlanCreateSchema),researchReviewQualityPlanInspectionSchema)}),
+    request({key:'researchReviewQualityPlanGet',channel:'roc:research:review-quality-plan-get',domain:'research',method:'getReviewQualityPlan',kind:'plugin',capabilityName:'research.reviewQuality.getPlan',inputTransform:first,contract:methodContract(oneArg(researchReviewQualityPlanGetSchema),researchReviewQualityPlanInspectionSchema.nullable())}),
+    request({key:'researchReviewQualityPlans',channel:'roc:research:review-quality-plans',domain:'research',method:'listReviewQualityPlans',kind:'plugin',capabilityName:'research.reviewQuality.plans',inputTransform:first,contract:methodContract(oneArg(researchReviewQualityPlansListSchema),researchReviewQualityPlanInspectionSchema.array())}),
+    request({key:'researchReviewExtractionSave',channel:'roc:research:review-extraction-save',domain:'research',method:'saveReviewExtraction',kind:'plugin',capabilityName:'research.reviewExtraction.save',inputTransform:first,contract:methodContract(oneArg(researchReviewExtractionSaveSchema),researchReviewExtractionInspectionSchema)}),
+    request({key:'researchReviewExtractionGet',channel:'roc:research:review-extraction-get',domain:'research',method:'getReviewExtraction',kind:'plugin',capabilityName:'research.reviewExtraction.get',inputTransform:first,contract:methodContract(oneArg(researchReviewExtractionGetSchema),researchReviewExtractionInspectionSchema)}),
+    request({key:'researchReviewExtractionList',channel:'roc:research:review-extraction-list',domain:'research',method:'listReviewExtractions',kind:'plugin',capabilityName:'research.reviewExtraction.list',inputTransform:first,contract:methodContract(oneArg(researchReviewExtractionListSchema),researchReviewExtractionInspectionSchema.array())}),
+    request({key:'researchReviewExtractionHistory',channel:'roc:research:review-extraction-history',domain:'research',method:'getReviewExtractionHistory',kind:'plugin',capabilityName:'research.reviewExtraction.history',inputTransform:first,contract:methodContract(oneArg(researchReviewExtractionHistorySchema),researchReviewExtractionInspectionSchema.array())}),
+    request({key:'researchReviewFullTextFreeze',channel:'roc:research:review-fulltext-freeze',domain:'research',method:'freezeReviewFullTextScreening',kind:'plugin',capabilityName:'research.reviewFullTextScreening.freeze',inputTransform:first,contract:methodContract(oneArg(researchReviewFullTextFreezeRequestSchema),researchReviewFullTextFrozenPhaseSchema)}),
+    request({key:'researchReviewFullTextAdjudicate',channel:'roc:research:review-fulltext-adjudicate',domain:'research',method:'adjudicateReviewFullText',kind:'plugin',capabilityName:'research.reviewFullTextScreening.adjudicate',inputTransform:first,contract:methodContract(oneArg(researchReviewFullTextArbitrationSaveSchema),researchReviewFullTextArbitrationInspectionSchema)}),
+    request({key:'researchReviewFullTextArbitrations',channel:'roc:research:review-fulltext-arbitrations',domain:'research',method:'getReviewFullTextArbitrationHistory',kind:'plugin',capabilityName:'research.reviewFullTextScreening.arbitrations',inputTransform:first,contract:methodContract(oneArg(researchReviewFullTextArbitrationHistorySchema),researchReviewFullTextArbitrationInspectionSchema.array())}),
+    request({key:'researchReviewFullTextDecisionSave',channel:'roc:research:review-fulltext-decision-save',domain:'research',method:'saveReviewFullTextDecision',kind:'plugin',capabilityName:'research.reviewFullTextScreening.save',inputTransform:first,contract:methodContract(oneArg(researchReviewFullTextDecisionSaveSchema),researchReviewFullTextDecisionInspectionSchema)}),
+    request({key:'researchReviewFullTextDecisionHistory',channel:'roc:research:review-fulltext-decision-history',domain:'research',method:'getReviewFullTextDecisionHistory',kind:'plugin',capabilityName:'research.reviewFullTextScreening.history',inputTransform:first,contract:methodContract(oneArg(researchReviewFullTextDecisionHistorySchema),researchReviewFullTextDecisionInspectionSchema.array())}),
+    request({key:'researchReviewFullTextSuggest',channel:'roc:research:review-fulltext-suggest',domain:'research',method:'suggestReviewFullTextDecision',kind:'plugin',capabilityName:'research.reviewFullTextScreening.suggest',inputTransform:first,contract:methodContract(oneArg(researchReviewFullTextSuggestionCreateSchema),researchReviewFullTextSuggestionInspectionSchema)}),
+    request({key:'researchReviewFullTextSuggestions',channel:'roc:research:review-fulltext-suggestions',domain:'research',method:'listReviewFullTextSuggestions',kind:'plugin',capabilityName:'research.reviewFullTextScreening.suggestions',inputTransform:first,contract:methodContract(oneArg(researchReviewFullTextSuggestionListSchema),researchReviewFullTextSuggestionInspectionSchema.array())}),
+    request({key:'researchReviewFullTextPhase',channel:'roc:research:review-fulltext-phase',domain:'research',method:'getReviewFullTextScreeningPhase',kind:'plugin',capabilityName:'research.reviewFullTextScreening.phase',inputTransform:first,contract:methodContract(oneArg(researchReviewFullTextPhaseGetSchema),researchReviewFullTextFrozenPhaseSchema)}),
+    request({key:'researchReviewFullTextSave',channel:'roc:research:review-fulltext-save',domain:'research',method:'saveReviewFullTextBinding',kind:'plugin',capabilityName:'research.reviewFullText.save',inputTransform:first,contract:methodContract(oneArg(researchReviewFullTextBindingSaveSchema),researchReviewFullTextBindingInspectionSchema)}),
+    request({key:'researchReviewFullTextGet',channel:'roc:research:review-fulltext-get',domain:'research',method:'getReviewFullTextBinding',kind:'plugin',capabilityName:'research.reviewFullText.get',inputTransform:first,contract:methodContract(oneArg(researchReviewFullTextBindingGetSchema),researchReviewFullTextBindingInspectionSchema)}),
+    request({key:'researchReviewFullTextList',channel:'roc:research:review-fulltext-list',domain:'research',method:'listReviewFullTextBindings',kind:'plugin',capabilityName:'research.reviewFullText.list',inputTransform:first,contract:methodContract(oneArg(researchReviewFullTextBindingsListSchema),researchReviewFullTextBindingInspectionSchema.array())}),
+    request({key:'researchReviewFullTextHistory',channel:'roc:research:review-fulltext-history',domain:'research',method:'getReviewFullTextBindingHistory',kind:'plugin',capabilityName:'research.reviewFullText.history',inputTransform:first,contract:methodContract(oneArg(researchReviewFullTextBindingListSchema),researchReviewFullTextBindingInspectionSchema.array())}),
+    request({key: 'researchReviewScreeningFreeze', channel: 'roc:research:review-screening-freeze', domain: 'research', method: 'freezeReviewScreeningPhase', kind: 'plugin', capabilityName: 'research.reviewScreening.freeze', inputTransform: first, contract: methodContract(oneArg(researchReviewScreeningFreezeRequestSchema), researchReviewScreeningFrozenPhaseSchema)}),
+    request({key: 'researchReviewScreeningAdjudicate', channel: 'roc:research:review-screening-adjudicate', domain: 'research', method: 'adjudicateReviewScreening', kind: 'plugin', capabilityName: 'research.reviewScreening.adjudicate', inputTransform: first, contract: methodContract(oneArg(researchReviewScreeningArbitrationSaveSchema), researchReviewScreeningArbitrationInspectionSchema)}),
+    request({key: 'researchReviewScreeningArbitrations', channel: 'roc:research:review-screening-arbitrations', domain: 'research', method: 'getReviewScreeningArbitrationHistory', kind: 'plugin', capabilityName: 'research.reviewScreening.arbitrations', inputTransform: first, contract: methodContract(oneArg(researchReviewScreeningArbitrationHistorySchema), researchReviewScreeningArbitrationInspectionSchema.array())}),
+    request({key: 'researchReviewScreeningSave', channel: 'roc:research:review-screening-save', domain: 'research', method: 'saveReviewScreeningDecision', kind: 'plugin', capabilityName: 'research.reviewScreening.save', inputTransform: first, contract: methodContract(oneArg(researchReviewScreeningDecisionSaveSchema), researchReviewScreeningDecisionInspectionSchema)}),
+    request({key: 'researchReviewScreeningHistory', channel: 'roc:research:review-screening-history', domain: 'research', method: 'getReviewScreeningDecisionHistory', kind: 'plugin', capabilityName: 'research.reviewScreening.history', inputTransform: first, contract: methodContract(oneArg(researchReviewScreeningDecisionHistorySchema), researchReviewScreeningDecisionInspectionSchema.array())}),
+    request({key: 'researchReviewScreeningSuggestions', channel: 'roc:research:review-screening-suggestions', domain: 'research', method: 'listReviewScreeningSuggestions', kind: 'plugin', capabilityName: 'research.reviewScreening.suggestions', inputTransform: first, contract: methodContract(oneArg(researchReviewScreeningSuggestionListSchema), researchReviewScreeningSuggestionInspectionSchema.array())}),
+    request({key: 'researchReviewScreeningPhase', channel: 'roc:research:review-screening-phase', domain: 'research', method: 'getReviewScreeningPhase', kind: 'plugin', capabilityName: 'research.reviewScreening.phase', inputTransform: first, contract: methodContract(oneArg(researchReviewScreeningPhaseGetSchema), researchReviewScreeningFrozenPhaseSchema)}),
+    request({key: 'researchReviewScreeningCreatePlan', channel: 'roc:research:review-screening-createPlan', domain: 'research', method: 'createReviewScreeningPlan', kind: 'plugin', capabilityName: 'research.reviewScreening.createPlan', inputTransform: first, contract: methodContract(oneArg(researchReviewScreeningPlanCreateSchema), researchReviewScreeningPlanInspectionSchema)}),
+    request({key: 'researchReviewScreeningGetPlan', channel: 'roc:research:review-screening-getPlan', domain: 'research', method: 'getReviewScreeningPlan', kind: 'plugin', capabilityName: 'research.reviewScreening.getPlan', inputTransform: first, contract: methodContract(oneArg(researchReviewScreeningPlanGetSchema), researchReviewScreeningPlanInspectionSchema)}),
+    request({key: 'researchReviewDeduplicationSave', channel: 'roc:research:review-deduplication-save', domain: 'research', method: 'saveReviewDuplicateDecision', kind: 'plugin', capabilityName: 'research.reviewDeduplication.save', inputTransform: first, contract: methodContract(oneArg(researchReviewDuplicateSaveSchema), researchReviewDuplicateInspectionSchema)}),
+    request({key: 'researchReviewDeduplicationHistory', channel: 'roc:research:review-deduplication-history', domain: 'research', method: 'getReviewDuplicateDecisionHistory', kind: 'plugin', capabilityName: 'research.reviewDeduplication.history', inputTransform: first, contract: methodContract(oneArg(researchReviewDuplicateHistorySchema), researchReviewDuplicateInspectionSchema.array())}),
+    request({key: 'researchReviewDeduplicationGet', channel: 'roc:research:review-deduplication-get', domain: 'research', method: 'getReviewDeduplication', kind: 'plugin', capabilityName: 'research.reviewDeduplication.get', inputTransform: first, contract: methodContract(oneArg(researchReviewDeduplicationGetSchema), researchReviewDeduplicationInspectionSchema)}),
+    request({key: 'researchReviewDeduplicationFreeze', channel: 'roc:research:review-deduplication-freeze', domain: 'research', method: 'freezeReviewDeduplication', kind: 'plugin', capabilityName: 'research.reviewDeduplication.freeze', inputTransform: first, contract: methodContract(oneArg(researchReviewDeduplicationFreezeSchema), researchReviewDeduplicationInspectionSchema)}),
+    request({key: 'researchReviewCorpusCreate', channel: 'roc:research:review-corpus-create', domain: 'research', method: 'createReviewCorpus', kind: 'plugin', capabilityName: 'research.reviewCorpus.create', inputTransform: first, contract: methodContract(oneArg(researchReviewCorpusCreateSchema), researchReviewCorpusInspectionSchema)}),
+    request({key: 'researchReviewCorpusGet', channel: 'roc:research:review-corpus-get', domain: 'research', method: 'getReviewCorpus', kind: 'plugin', capabilityName: 'research.reviewCorpus.get', inputTransform: first, contract: methodContract(oneArg(researchReviewCorpusGetSchema), researchReviewCorpusInspectionSchema)}),
+    request({key: 'researchReviewCorpusList', channel: 'roc:research:review-corpus-list', domain: 'research', method: 'listReviewCorpora', kind: 'plugin', capabilityName: 'research.reviewCorpus.list', inputTransform: first, contract: methodContract(oneArg(researchReviewCorpusListSchema), researchReviewCorpusInspectionSchema.array())}),
+    request({key: 'researchReviewCorpusHit', channel: 'roc:research:review-corpus-hit', domain: 'research', method: 'getReviewCorpusHit', kind: 'plugin', capabilityName: 'research.reviewCorpus.hit', inputTransform: first, contract: methodContract(oneArg(researchReviewCorpusHitRequestSchema), researchReviewCorpusHitResultSchema)}),
+    request({key: 'researchReviewSearchStart', channel: 'roc:research:review-search-start', domain: 'research', method: 'startReviewSearch', kind: 'plugin', capabilityName: 'research.reviewSearch.start', inputTransform: first, contract: methodContract(oneArg(researchReviewSearchStartSchema), researchReviewSearchInspectionSchema)}),
+    request({key: 'researchReviewSearchGet', channel: 'roc:research:review-search-get', domain: 'research', method: 'getReviewSearch', kind: 'plugin', capabilityName: 'research.reviewSearch.get', inputTransform: first, contract: methodContract(oneArg(researchReviewSearchGetSchema), researchReviewSearchInspectionSchema)}),
+    request({key: 'researchReviewSearchList', channel: 'roc:research:review-search-list', domain: 'research', method: 'listReviewSearches', kind: 'plugin', capabilityName: 'research.reviewSearch.list', inputTransform: first, contract: methodContract(oneArg(researchReviewSearchListSchema), researchReviewSearchInspectionSchema.array())}),
+    request({key: 'researchReviewSearchPool', channel: 'roc:research:review-search-pool', domain: 'research', method: 'getReviewSearchPool', kind: 'plugin', capabilityName: 'research.reviewSearch.pool', inputTransform: first, contract: methodContract(oneArg(researchReviewSearchPoolRequestSchema), researchReviewSearchPoolResultSchema)}),
+    request({key: 'researchReviewSearchCancel', channel: 'roc:research:review-search-cancel', domain: 'research', method: 'cancelReviewSearch', kind: 'plugin', capabilityName: 'research.reviewSearch.cancel', inputTransform: first, contract: methodContract(oneArg(researchReviewSearchCancelSchema), researchReviewSearchInspectionSchema)}),
+    request({key: 'researchReviewProtocolSave', channel: 'roc:research:review-protocol-save', domain: 'research', method: 'saveReviewProtocol', kind: 'plugin', capabilityName: 'research.reviewProtocol.save', inputTransform: first, contract: methodContract(oneArg(researchReviewProtocolSaveRequestSchema), researchReviewProtocolInspectionSchema)}),
+    request({key: 'researchReviewProtocolFreeze', channel: 'roc:research:review-protocol-freeze', domain: 'research', method: 'freezeReviewProtocol', kind: 'plugin', capabilityName: 'research.reviewProtocol.freeze', inputTransform: first, contract: methodContract(oneArg(researchReviewProtocolFreezeRequestSchema), researchReviewProtocolInspectionSchema)}),
+    request({key: 'researchReviewProtocolGet', channel: 'roc:research:review-protocol-get', domain: 'research', method: 'getReviewProtocol', kind: 'plugin', capabilityName: 'research.reviewProtocol.get', inputTransform: first, contract: methodContract(oneArg(researchReviewProtocolGetRequestSchema), researchReviewProtocolInspectionSchema)}),
+    request({key: 'researchReviewProtocolHistory', channel: 'roc:research:review-protocol-history', domain: 'research', method: 'getReviewProtocolHistory', kind: 'plugin', capabilityName: 'research.reviewProtocol.history', inputTransform: first, contract: methodContract(oneArg(researchReviewProtocolHistoryRequestSchema), researchReviewProtocolInspectionSchema.array())}),
+    request({key: 'researchReviewProtocolList', channel: 'roc:research:review-protocol-list', domain: 'research', method: 'listReviewProtocols', kind: 'plugin', capabilityName: 'research.reviewProtocol.list', inputTransform: first, contract: methodContract(oneArg(researchReviewProtocolListRequestSchema), researchReviewProtocolInspectionSchema.array())}),
+    request({key: 'researchAnnotationsCreate', channel: 'roc:research:annotations-create', domain: 'research', method: 'createDocumentAnnotation', kind: 'plugin', capabilityName: 'research.annotations.create', inputTransform: first, contract: methodContract(oneArg(researchDocumentAnnotationCreateRequestSchema), researchDocumentAnnotationInspectionSchema)}),
+    request({key: 'researchAnnotationsCapture', channel: 'roc:research:annotations-capture', domain: 'research', method: 'captureDocumentAnnotation', kind: 'plugin', capabilityName: 'research.annotations.capture', inputTransform: first, contract: methodContract(oneArg(researchDocumentAnnotationCaptureRequestSchema), researchDocumentAnnotationInspectionSchema)}),
+    request({key: 'researchAnnotationsList', channel: 'roc:research:annotations-list', domain: 'research', method: 'listDocumentAnnotations', kind: 'plugin', capabilityName: 'research.annotations.list', inputTransform: first, contract: methodContract(oneArg(researchDocumentAnnotationListRequestSchema), researchDocumentAnnotationInspectionSchema.array())}),
+    request({key: 'researchAnnotationsGet', channel: 'roc:research:annotations-get', domain: 'research', method: 'getDocumentAnnotation', kind: 'plugin', capabilityName: 'research.annotations.get', inputTransform: first, contract: methodContract(oneArg(researchDocumentAnnotationGetRequestSchema), researchDocumentAnnotationInspectionSchema)}),
+    request({ key: 'researchEvidenceList', channel: 'roc:research:evidence-list', domain: 'research', method: 'listEvidence', kind: 'plugin', capabilityName: 'research.evidence.list', inputTransform: first, contract: methodContract(oneArg(researchEvidenceListRequestSchema), researchEvidenceSchema.array()) }),
+    request({ key: 'researchClaimsCreate', channel: 'roc:research:claims-create', domain: 'research', method: 'createClaim', kind: 'plugin', capabilityName: 'research.claims.create', inputTransform: first, contract: methodContract(oneArg(researchClaimCreateRequestSchema), researchClaimSchema) }),
+    request({ key: 'researchClaimsUpdate', channel: 'roc:research:claims-update', domain: 'research', method: 'updateClaim', kind: 'plugin', capabilityName: 'research.claims.update', inputTransform: first, contract: methodContract(oneArg(researchClaimUpdateRequestSchema), researchClaimSchema) }),
+    request({ key: 'researchClaimsCompare', channel: 'roc:research:claims-compare', domain: 'research', method: 'compareClaims', kind: 'plugin', capabilityName: 'research.claims.compare', inputTransform: first, contract: methodContract(oneArg(claimComparisonRequestSchema), claimComparisonSchema) }),
+    request({ key: 'researchClaimsList', channel: 'roc:research:claims-list', domain: 'research', method: 'listClaims', kind: 'plugin', capabilityName: 'research.claims.list', inputTransform: first, contract: methodContract(oneArg(researchClaimListRequestSchema), researchClaimSchema.array()) }),
+    request({ key: 'researchClaimsHistory', channel: 'roc:research:claims-history', domain: 'research', method: 'getClaimHistory', kind: 'plugin', capabilityName: 'research.claims.history', inputTransform: first, contract: methodContract(oneArg(researchClaimHistoryRequestSchema), researchClaimSchema.array()) }),
+    request({ key: 'researchManuscriptSave', channel: 'roc:research:manuscript-save', domain: 'research', method: 'saveManuscript', kind: 'plugin', capabilityName: 'research.manuscript.save', inputTransform: first, contract: methodContract(oneArg(researchManuscriptSaveRequestSchema), researchManuscriptSchema) }),
+    request({ key: 'researchManuscriptGet', channel: 'roc:research:manuscript-get', domain: 'research', method: 'getManuscript', kind: 'plugin', capabilityName: 'research.manuscript.get', inputTransform: first, contract: methodContract(oneArg(researchManuscriptGetRequestSchema), researchManuscriptSchema.nullable()) }),
+    request({key: 'researchJournalSave', channel: 'roc:research:journal-save', domain: 'research', method: 'saveJournalCompliance', kind: 'plugin', capabilityName: 'research.journalCompliance.save', inputTransform: first, contract: methodContract(oneArg(researchJournalSaveSchema), researchJournalReceiptSchema)}),
+    request({key: 'researchJournalInspect', channel: 'roc:research:journal-inspect', domain: 'research', method: 'inspectJournalCompliance', kind: 'plugin', capabilityName: 'research.journalCompliance.inspect', inputTransform: first, contract: methodContract(oneArg(researchJournalInspectSchema), researchJournalInspectionSchema)}),
+    request({key: 'researchJournalHistory', channel: 'roc:research:journal-history', domain: 'research', method: 'getJournalComplianceHistory', kind: 'plugin', capabilityName: 'research.journalCompliance.history', inputTransform: first, contract: methodContract(oneArg(researchJournalHistorySchema), researchJournalHistoryResultSchema)}),
+    request({key: 'researchResponseMatrixSave', channel: 'roc:research:response-matrix-save', domain: 'research', method: 'saveResponseMatrix', kind: 'plugin', capabilityName: 'research.responseMatrix.save', inputTransform: first, contract: methodContract(oneArg(researchResponseMatrixSaveSchema), researchResponseMatrixReceiptSchema)}),
+    request({key: 'researchResponseMatrixInspect', channel: 'roc:research:response-matrix-inspect', domain: 'research', method: 'inspectResponseMatrix', kind: 'plugin', capabilityName: 'research.responseMatrix.inspect', inputTransform: first, contract: methodContract(oneArg(researchResponseMatrixInspectSchema), researchResponseMatrixInspectionSchema)}),
+    request({key: 'researchResponseMatrixHistory', channel: 'roc:research:response-matrix-history', domain: 'research', method: 'getResponseMatrixHistory', kind: 'plugin', capabilityName: 'research.responseMatrix.history', inputTransform: first, contract: methodContract(oneArg(researchResponseMatrixHistorySchema), researchResponseMatrixHistoryResultSchema)}),
+    request({key: 'researchConsistencySave', channel: 'roc:research:consistency-save', domain: 'research', method: 'saveConsistencyReview', kind: 'plugin', capabilityName: 'research.consistency.save', inputTransform: first, contract: methodContract(oneArg(researchConsistencySaveSchema), researchConsistencyReceiptSchema)}),
+    request({key: 'researchConsistencyHistory', channel: 'roc:research:consistency-history', domain: 'research', method: 'getConsistencyHistory', kind: 'plugin', capabilityName: 'research.consistency.history', inputTransform: first, contract: methodContract(oneArg(researchConsistencyHistorySchema), researchConsistencyHistoryResultSchema)}),
+    request({key: 'researchConsistencyInspect', channel: 'roc:research:consistency-inspect', domain: 'research', method: 'inspectConsistency', kind: 'plugin', capabilityName: 'research.consistency.inspect', inputTransform: first, contract: methodContract(oneArg(researchConsistencyInspectSchema), researchConsistencyInspectionSchema)}),
+    request({key: 'researchFigureConsistencySave', channel: 'roc:research:figure-consistency-save', domain: 'research', method: 'saveFigureConsistencyReview', kind: 'plugin', capabilityName: 'research.figureConsistency.save', inputTransform: first, contract: methodContract(oneArg(researchFigureConsistencySaveSchema), researchFigureConsistencyReceiptSchema)}),
+    request({key: 'researchFigureConsistencyHistory', channel: 'roc:research:figure-consistency-history', domain: 'research', method: 'getFigureConsistencyHistory', kind: 'plugin', capabilityName: 'research.figureConsistency.history', inputTransform: first, contract: methodContract(oneArg(researchFigureConsistencyHistorySchema), researchFigureConsistencyHistoryResultSchema)}),
+    request({key: 'researchFigureConsistencyInspect', channel: 'roc:research:figure-consistency-inspect', domain: 'research', method: 'inspectFigureConsistency', kind: 'plugin', capabilityName: 'research.figureConsistency.inspect', inputTransform: first, contract: methodContract(oneArg(researchFigureConsistencyInspectSchema), researchFigureConsistencyInspectionSchema)}),
+    request({key: 'researchCitationCoverage', channel: 'roc:research:citation-coverage', domain: 'research', method: 'inspectCitationCoverage', kind: 'plugin', capabilityName: 'research.manuscript.citationCoverage', inputTransform: first, contract: methodContract(oneArg(researchCitationCoverageRequestSchema), researchCitationCoverageInspectionSchema)}),
+    request({key: 'researchCitationReviewSave', channel: 'roc:research:citation-review-save', domain: 'research', method: 'saveCitationReview', kind: 'plugin', capabilityName: 'research.citationReviews.save', inputTransform: first, contract: methodContract(oneArg(researchCitationReviewSaveSchema), researchCitationReviewReceiptSchema)}),
+    request({key: 'researchCitationReviewHistory', channel: 'roc:research:citation-review-history', domain: 'research', method: 'getCitationReviewHistory', kind: 'plugin', capabilityName: 'research.citationReviews.history', inputTransform: first, contract: methodContract(oneArg(researchCitationReviewHistorySchema), researchCitationReviewHistoryResultSchema)}),
+    request({ key: 'researchManuscriptExportBundle', channel: 'roc:research:manuscript-export-bundle', domain: 'research', method: 'getExportBundle', kind: 'plugin', capabilityName: 'research.manuscript.exportBundle', inputTransform: first, contract: methodContract(oneArg(researchExportBundleRequestSchema), researchExportBundleSchema) }),
+    request({key:'researchExperimentResultReview',channel:'roc:research:experiment-result-review',domain:'research',method:'reviewExperimentResult',kind:'plugin',capabilityName:'research.experimentResults.review',inputTransform:first,contract:methodContract(oneArg(researchExperimentResultReviewSchema),researchExperimentResultReceiptSchema)}),
+    request({key:'researchExperimentResultGet',channel:'roc:research:experiment-result-get',domain:'research',method:'getExperimentResult',kind:'plugin',capabilityName:'research.experimentResults.get',inputTransform:first,contract:methodContract(oneArg(researchExperimentResultGetSchema),researchExperimentResultReceiptSchema)}),
+    request({key:'researchExperimentResultList',channel:'roc:research:experiment-result-list',domain:'research',method:'listExperimentResults',kind:'plugin',capabilityName:'research.experimentResults.list',inputTransform:first,contract:methodContract(oneArg(researchExperimentResultListSchema),researchExperimentResultListResultSchema)}),
+    request({key:'researchExperimentResultCompare',channel:'roc:research:experiment-result-compare',domain:'research',method:'compareExperimentResults',kind:'plugin',capabilityName:'research.experimentResults.compare',inputTransform:first,contract:methodContract(oneArg(researchExperimentCompareSchema),researchExperimentComparisonSchema)}),
+    request({key:'researchExperimentResultEvidenceCapture',channel:'roc:research:experiment-result-evidence-capture',domain:'research',method:'captureExperimentResultEvidence',kind:'plugin',capabilityName:'research.experimentResults.captureEvidence',inputTransform:first,contract:methodContract(oneArg(researchExperimentResultEvidenceCaptureSchema),researchEvidenceSchema)}),
+    request({key:'researchExperimentResultEvidenceGet',channel:'roc:research:experiment-result-evidence-get',domain:'research',method:'getExperimentResultEvidence',kind:'plugin',capabilityName:'research.experimentResults.evidence',inputTransform:first,contract:methodContract(oneArg(researchExperimentResultEvidenceGetSchema),researchExperimentResultEvidenceTraceSchema.nullable())}),
+    request({ key: 'researchNotebookPreview', channel: 'roc:research:notebook-preview', domain: 'research', method: 'previewNotebook', kind: 'plugin', capabilityName: 'research.notebooks.preview', inputTransform: first, contract: methodContract(oneArg(researchNotebookFileRequestSchema), researchNotebookPreviewSchema) }),
+    request({ key: 'researchNotebookImport', channel: 'roc:research:notebook-import', domain: 'research', method: 'importNotebook', kind: 'plugin', capabilityName: 'research.notebooks.import', inputTransform: first, contract: methodContract(oneArg(researchNotebookImportRequestSchema), researchNotebookImportedSchema) }),
+    request({ key: 'researchNotebookGet', channel: 'roc:research:notebook-get', domain: 'research', method: 'getNotebook', kind: 'plugin', capabilityName: 'research.notebooks.get', inputTransform: first, contract: methodContract(oneArg(researchNotebookGetRequestSchema), researchNotebookImportedSchema) }),
+    request({ key: 'researchNotebookList', channel: 'roc:research:notebook-list', domain: 'research', method: 'listNotebooks', kind: 'plugin', capabilityName: 'research.notebooks.list', inputTransform: first, contract: methodContract(oneArg(researchNotebookListRequestSchema), researchNotebookListResultSchema) }),
+    request({ key: 'researchPythonEnvironmentSelect', channel: 'roc:research:python-environment-select', domain: 'research', method: 'selectPythonEnvironment', kind: 'plugin', capabilityName: 'research.pythonEnvironments.select', inputTransform: first, contract: methodContract(oneArg(researchPythonEnvironmentSelectSchema), researchPythonEnvironmentSelectionSchema.nullable()) }),
+    request({ key: 'researchPythonEnvironmentGet', channel: 'roc:research:python-environment-get', domain: 'research', method: 'getPythonEnvironmentSelection', kind: 'plugin', capabilityName: 'research.pythonEnvironments.get', inputTransform: first, contract: methodContract(oneArg(researchPythonEnvironmentGetSchema), researchPythonEnvironmentSelectionSchema) }),
+    request({ key: 'researchPythonEnvironmentList', channel: 'roc:research:python-environment-list', domain: 'research', method: 'listPythonEnvironmentSelections', kind: 'plugin', capabilityName: 'research.pythonEnvironments.list', inputTransform: first, contract: methodContract(oneArg(researchPythonEnvironmentListSchema), researchPythonEnvironmentSelectionSchema.array()) }),
+    request({ key: 'researchIdeaOutcomeSave', channel: 'roc:research:idea-outcome-save', domain: 'research', method: 'saveIdeaOutcome', kind: 'plugin', capabilityName: 'research.ideaOutcomes.save', inputTransform: first, contract: methodContract(oneArg(researchIdeaOutcomeSaveSchema), researchIdeaOutcomeReceiptSchema) }),
+    request({ key: 'researchIdeaOutcomeGet', channel: 'roc:research:idea-outcome-get', domain: 'research', method: 'getIdeaOutcome', kind: 'plugin', capabilityName: 'research.ideaOutcomes.get', inputTransform: first, contract: methodContract(oneArg(researchIdeaOutcomeGetSchema), researchIdeaOutcomeReceiptSchema) }),
+    request({ key: 'researchIdeaOutcomeHistory', channel: 'roc:research:idea-outcome-history', domain: 'research', method: 'getIdeaOutcomeHistory', kind: 'plugin', capabilityName: 'research.ideaOutcomes.history', inputTransform: first, contract: methodContract(oneArg(researchIdeaOutcomeHistorySchema), researchIdeaOutcomeHistoryResultSchema) }),
+    request({ key: 'researchIdeaPlanSave', channel: 'roc:research:idea-plan-save', domain: 'research', method: 'saveIdeaPlan', kind: 'plugin', capabilityName: 'research.ideaPlans.save', inputTransform: first, contract: methodContract(oneArg(researchIdeaPlanSaveSchema), researchIdeaPlanInspectionSchema) }),
+    request({ key: 'researchIdeaPlanFreeze', channel: 'roc:research:idea-plan-freeze', domain: 'research', method: 'freezeIdeaPlan', kind: 'plugin', capabilityName: 'research.ideaPlans.freeze', inputTransform: first, contract: methodContract(oneArg(researchIdeaPlanFreezeRequestSchema), researchIdeaPlanInspectionSchema) }),
+    request({ key: 'researchIdeaPlanGet', channel: 'roc:research:idea-plan-get', domain: 'research', method: 'getIdeaPlan', kind: 'plugin', capabilityName: 'research.ideaPlans.get', inputTransform: first, contract: methodContract(oneArg(researchIdeaPlanGetSchema), researchIdeaPlanInspectionSchema) }),
+    request({ key: 'researchIdeaPlanHistory', channel: 'roc:research:idea-plan-history', domain: 'research', method: 'getIdeaPlanHistory', kind: 'plugin', capabilityName: 'research.ideaPlans.history', inputTransform: first, contract: methodContract(oneArg(researchIdeaPlanHistorySchema), researchIdeaPlanHistoryResultSchema) }),
+    request({ key: 'researchIdeasSave', channel: 'roc:research:ideas-save', domain: 'research', method: 'saveIdeaCanvas', kind: 'plugin', capabilityName: 'research.ideas.save', inputTransform: first, contract: methodContract(oneArg(researchIdeaCanvasSaveRequestSchema), researchIdeaCanvasSchema) }),
+    request({ key: 'researchIdeasGet', channel: 'roc:research:ideas-get', domain: 'research', method: 'getIdeaCanvas', kind: 'plugin', capabilityName: 'research.ideas.get', inputTransform: first, contract: methodContract(oneArg(researchIdeaCanvasGetRequestSchema), researchIdeaCanvasSchema.nullable()) }),
+    request({ key: 'researchIdeasHistory', channel: 'roc:research:ideas-history', domain: 'research', method: 'getIdeaCanvasHistory', kind: 'plugin', capabilityName: 'research.ideas.history', inputTransform: first, contract: methodContract(oneArg(researchIdeaCanvasHistoryRequestSchema), researchIdeaCanvasSchema.array()) }),
+    request({ key: 'researchIdeasPromote', channel: 'roc:research:ideas-promote', domain: 'research', method: 'promoteIdeaCanvas', kind: 'plugin', capabilityName: 'research.ideas.promote', inputTransform: first, contract: methodContract(oneArg(researchIdeaPromoteRequestSchema), researchIdeaPromotionSchema) }),
+    request({ key: 'researchLiteratureSearch', channel: 'roc:research:literature-search', domain: 'research', method: 'searchLiterature', kind: 'plugin', capabilityName: 'research.literature.search', inputTransform: first, contract: methodContract(oneArg(literatureSearchInputSchema), literatureSearchResultSchema) }),
+    request({ key: 'researchLiteratureReadSearch', channel: 'roc:research:literature-read-search', domain: 'research', method: 'readLiteratureSearch', kind: 'plugin', capabilityName: 'research.literature.getSearch', inputTransform: first, contract: methodContract(oneArg(literatureReadSearchSchema), literatureSearchResultSchema) }),
+    request({ key: 'researchLiteratureAdd', channel: 'roc:research:literature-add', domain: 'research', method: 'addLiterature', kind: 'plugin', capabilityName: 'research.library.addLiterature', inputTransform: first, contract: methodContract(oneArg(literatureAddSchema), literatureImportResultSchema) }),
+    request({ key: 'researchLiteratureGetImport', channel: 'roc:research:literature-get-import', domain: 'research', method: 'getLiteratureImport', kind: 'plugin', capabilityName: 'research.library.getImportOperation', inputTransform: first, contract: methodContract(oneArg(literatureGetImportSchema), literatureImportResultSchema) }),
+    request({key: 'researchAcquisitionList', channel: 'roc:research:acquisition-list', domain: 'research', method: 'listAcquisition', kind: 'plugin', capabilityName: 'research.library.listAcquisition', inputTransform: first, contract: methodContract(oneArg(listPaperAcquisitionSchema), listPaperAcquisitionResultSchema)}),
+    request({key: 'researchAcquisitionSettings', channel: 'roc:research:acquisition-settings', domain: 'research', method: 'acquisitionSettings', kind: 'plugin', capabilityName: 'research.library.acquisitionSettings', inputTransform: first, contract: methodContract(oneArg(z.object({}).strict()), literatureAcquisitionSettingsSchema)}),
+    request({key: 'researchAcquisitionSaveSettings', channel: 'roc:research:acquisition-save-settings', domain: 'research', method: 'saveAcquisitionSettings', kind: 'plugin', capabilityName: 'research.library.saveAcquisitionSettings', inputTransform: first, contract: methodContract(oneArg(literatureAcquisitionSettingsSchema), literatureAcquisitionSettingsSchema)}),
+    request({key: 'researchAcquisitionRetry', channel: 'roc:research:acquisition-retry', domain: 'research', method: 'retryAcquisition', kind: 'plugin', capabilityName: 'research.library.retryAcquisition', inputTransform: first, contract: methodContract(oneArg(changePaperAcquisitionSchema), paperAcquisitionJobSchema)}),
+    request({key: 'researchAcquisitionCancel', channel: 'roc:research:acquisition-cancel', domain: 'research', method: 'cancelAcquisition', kind: 'plugin', capabilityName: 'research.library.cancelAcquisition', inputTransform: first, contract: methodContract(oneArg(changePaperAcquisitionSchema), paperAcquisitionJobSchema)}),
+    request({ key: 'researchLiteraturePool', channel: 'roc:research:literature-pool', domain: 'research', method: 'getLiteraturePool', kind: 'plugin', capabilityName: 'research.literature.getPool', inputTransform: first, contract: methodContract(oneArg(literatureReadPoolSchema), literatureSearchPoolPageSchema) }),
+    request({key: 'researchZoteroProbe', channel: 'roc:research:zotero-probe', domain: 'research', method: 'probeZotero', kind: 'plugin', capabilityName: 'research.zotero.probe', inputTransform: first, contract: methodContract(oneArg(zoteroProbeRequestSchema), zoteroProbeSchema)}),
+    request({key: 'researchZoteroStatus', channel: 'roc:research:zotero-status', domain: 'research', method: 'getZoteroStatus', kind: 'plugin', capabilityName: 'research.zotero.status', inputTransform: first, contract: methodContract(oneArg(zoteroProbeRequestSchema), zoteroStatusSchema)}),
+    request({key: 'researchZoteroGroups', channel: 'roc:research:zotero-groups', domain: 'research', method: 'getZoteroGroups', kind: 'plugin', capabilityName: 'research.zotero.groups', inputTransform: first, contract: methodContract(oneArg(zoteroGroupsRequestSchema), zoteroGroupsPageSchema)}),
+    request({key: 'researchZoteroCollections', channel: 'roc:research:zotero-collections', domain: 'research', method: 'getZoteroCollections', kind: 'plugin', capabilityName: 'research.zotero.collections', inputTransform: first, contract: methodContract(oneArg(zoteroPageRequestSchema), zoteroCollectionsPageSchema)}),
+    request({key: 'researchZoteroItems', channel: 'roc:research:zotero-items', domain: 'research', method: 'getZoteroItems', kind: 'plugin', capabilityName: 'research.zotero.items', inputTransform: first, contract: methodContract(oneArg(zoteroItemsRequestSchema), zoteroItemsPageSchema)}),
+    request({key: 'researchZoteroPreview', channel: 'roc:research:zotero-preview', domain: 'research', method: 'previewZotero', kind: 'plugin', capabilityName: 'research.zotero.preview', inputTransform: first, contract: methodContract(oneArg(zoteroPreviewIpcSchema), zoteroPreviewPageSchema)}),
+    request({key: 'researchZoteroReadPreview', channel: 'roc:research:zotero-read-preview', domain: 'research', method: 'getZoteroPreview', kind: 'plugin', capabilityName: 'research.zotero.getPreview', inputTransform: first, contract: methodContract(oneArg(zoteroPreviewReadIpcSchema), zoteroPreviewPageSchema)}),
+    request({key: 'researchZoteroSources', channel: 'roc:research:zotero-sources', domain: 'research', method: 'getZoteroSources', kind: 'plugin', capabilityName: 'research.zotero.sources', inputTransform: first, contract: methodContract(oneArg(zoteroSourcesIpcSchema), zoteroSourcesPageSchema)}),
+    request({key: 'researchZoteroReview', channel: 'roc:research:zotero-review', domain: 'research', method: 'reviewZotero', kind: 'plugin', capabilityName: 'research.zotero.review', inputTransform: first, contract: methodContract(oneArg(zoteroReviewIpcSchema), zoteroReviewSchema)}),
+    request({key: 'researchZoteroSyncStart', channel: 'roc:research:zotero-sync-start', domain: 'research', method: 'startZoteroSync', kind: 'plugin', capabilityName: 'research.zotero.syncStart', inputTransform: first, contract: methodContract(oneArg(zoteroSyncStartIpcSchema), zoteroSyncSchema)}),
+    request({key: 'researchZoteroSyncRead', channel: 'roc:research:zotero-sync-read', domain: 'research', method: 'readZoteroSync', kind: 'plugin', capabilityName: 'research.zotero.syncRead', inputTransform: first, contract: methodContract(oneArg(zoteroSyncReadIpcSchema), zoteroSyncSchema)}),
+    request({key: 'researchZoteroSyncFind', channel: 'roc:research:zotero-sync-find', domain: 'research', method: 'findZoteroSync', kind: 'plugin', capabilityName: 'research.zotero.syncFind', inputTransform: first, contract: methodContract(oneArg(zoteroSyncFindIpcSchema), zoteroSyncSchema.nullable())}),
+    request({key: 'researchZoteroSyncReadPage', channel: 'roc:research:zotero-sync-read-page', domain: 'research', method: 'readZoteroSyncPage', kind: 'plugin', capabilityName: 'research.zotero.syncReadPage', inputTransform: first, contract: methodContract(oneArg(zoteroSyncReadIpcSchema), zoteroSyncCapturedPageSchema)}),
+    request({key: 'researchZoteroSourceObserve', channel: 'roc:research:zotero-source-observe', domain: 'research', method: 'observeZoteroSource', kind: 'plugin', capabilityName: 'research.zotero.sourceObserve', inputTransform: first, contract: methodContract(oneArg(zoteroSourceStateIpcSchema), zoteroSourceStateSchema)}),
+    request({key: 'researchZoteroSourceState', channel: 'roc:research:zotero-source-state', domain: 'research', method: 'readZoteroSourceState', kind: 'plugin', capabilityName: 'research.zotero.sourceState', inputTransform: first, contract: methodContract(oneArg(zoteroSourceStateIpcSchema), zoteroSourceStateSchema.nullable())}),
+    request({key: 'researchZoteroAttachmentInspect', channel: 'roc:research:zotero-attachment-inspect', domain: 'research', method: 'inspectZoteroAttachment', kind: 'plugin', capabilityName: 'research.zotero.attachmentInspect', inputTransform: first, contract: methodContract(oneArg(zoteroAttachmentIpcSchema), zoteroAttachmentInspectionSchema)}),
+    request({key: 'researchZoteroAttachmentRead', channel: 'roc:research:zotero-attachment-read', domain: 'research', method: 'readZoteroAttachment', kind: 'plugin', capabilityName: 'research.zotero.attachmentRead', inputTransform: first, contract: methodContract(oneArg(zoteroAttachmentReadIpcSchema), zoteroAttachmentInspectionSchema)}),
+    request({key: 'researchZoteroAttachmentGrant', channel: 'roc:research:zotero-attachment-grant', domain: 'research', method: 'grantZoteroAttachment', kind: 'plugin', capabilityName: 'research.zotero.attachmentGrant', inputTransform: first, contract: methodContract(oneArg(zoteroAttachmentGrantIpcSchema), zoteroAttachmentGrantOutcomeSchema)}),
+    request({key: 'researchZoteroAttachmentGrantRead', channel: 'roc:research:zotero-attachment-grant-read', domain: 'research', method: 'readZoteroAttachmentGrant', kind: 'plugin', capabilityName: 'research.zotero.attachmentGrantRead', inputTransform: first, contract: methodContract(oneArg(zoteroAttachmentGrantReadIpcSchema), zoteroAttachmentGrantSchema)}),
+    request({key: 'researchZoteroAttachmentImport', channel: 'roc:research:zotero-attachment-import', domain: 'research', method: 'importZoteroAttachment', kind: 'plugin', capabilityName: 'research.zotero.attachmentImport', inputTransform: first, contract: methodContract(oneArg(zoteroAttachmentImportIpcSchema), zoteroAttachmentImportSchema)}),
+    request({key: 'researchZoteroAttachmentImportRead', channel: 'roc:research:zotero-attachment-import-read', domain: 'research', method: 'readZoteroAttachmentImport', kind: 'plugin', capabilityName: 'research.zotero.attachmentImportRead', inputTransform: first, contract: methodContract(oneArg(zoteroAttachmentImportReadIpcSchema), zoteroAttachmentImportSchema)}),
+    request({key: 'researchZoteroAttachmentImportCancel', channel: 'roc:research:zotero-attachment-import-cancel', domain: 'research', method: 'cancelZoteroAttachmentImport', kind: 'plugin', capabilityName: 'research.zotero.attachmentImportCancel', inputTransform: first, contract: methodContract(oneArg(zoteroAttachmentImportReadIpcSchema), zoteroAttachmentImportCancelSchema)}),
+    request({key: 'researchZoteroChildren', channel: 'roc:research:zotero-children', domain: 'research', method: 'getZoteroChildren', kind: 'plugin', capabilityName: 'research.zotero.children', inputTransform: first, contract: methodContract(oneArg(zoteroChildrenIpcSchema), zoteroChildrenPageSchema)}),
+    request({key: 'researchZoteroSyncPage', channel: 'roc:research:zotero-sync-page', domain: 'research', method: 'captureZoteroSyncPage', kind: 'plugin', capabilityName: 'research.zotero.syncPage', inputTransform: first, contract: methodContract(oneArg(zoteroSyncPageIpcSchema), zoteroSyncCapturedPageSchema)}),
+    request({key: 'researchZoteroSyncControl', channel: 'roc:research:zotero-sync-control', domain: 'research', method: 'controlZoteroSync', kind: 'plugin', capabilityName: 'research.zotero.syncControl', inputTransform: first, contract: methodContract(oneArg(zoteroSyncControlIpcSchema), zoteroSyncSchema)}),
+    request({key: 'researchZoteroSyncAcknowledge', channel: 'roc:research:zotero-sync-acknowledge', domain: 'research', method: 'acknowledgeZoteroSync', kind: 'plugin', capabilityName: 'research.zotero.syncAcknowledge', inputTransform: first, contract: methodContract(oneArg(zoteroSyncAcknowledgeIpcSchema), zoteroSyncSchema)}),
+    request({ key: 'researchLiteratureCancelImport', channel: 'roc:research:literature-cancel-import', domain: 'research', method: 'cancelLiteratureImport', kind: 'plugin', capabilityName: 'research.library.cancelImportOperation', inputTransform: first, contract: methodContract(oneArg(literatureCancelImportSchema), literatureImportResultSchema) }),
+    request({ key: 'researchKnowledgeJobs', channel: 'roc:research:knowledge-jobs', domain: 'research', method: 'knowledgeJobs', kind: 'plugin', capabilityName: 'research.knowledge.jobs', inputTransform: first, contract: methodContract(oneArg(knowledgeJobsListSchema), knowledgeJobSchema.array()) }),
+    request({ key: 'researchKnowledgeRetry', channel: 'roc:research:knowledge-retry', domain: 'research', method: 'retryKnowledgeJob', kind: 'plugin', capabilityName: 'research.knowledge.retry', inputTransform: first, contract: methodContract(oneArg(knowledgeJobRetrySchema), z.object({queued:z.literal(true)})) }),
+    request({ key: 'researchEmbeddingList', channel: 'roc:research:embedding-list', domain: 'research', method: 'listEmbeddingConfigs', kind: 'plugin', capabilityName: 'research.embedding.list', inputTransform: none, contract: methodContract(noArgs, researchEmbeddingConfigSchema.array()) }),
+    request({key: 'researchRerankerRead', channel: 'roc:research:reranker-read', domain: 'research', method: 'readRerankerConfig', kind: 'plugin', capabilityName: 'research.reranker.read', inputTransform: none, contract: methodContract(noArgs, rerankerConfigSchema.nullable())}),
+    request({key: 'researchRerankerSave', channel: 'roc:research:reranker-save', domain: 'research', method: 'saveRerankerConfig', kind: 'plugin', capabilityName: 'research.reranker.save', inputTransform: first, contract: methodContract(oneArg(rerankerSaveSchema), rerankerConfigSchema)}),
+    request({ key: 'researchEmbeddingSave', channel: 'roc:research:embedding-save', domain: 'research', method: 'saveEmbeddingConfig', kind: 'plugin', capabilityName: 'research.embedding.save', inputTransform: first, contract: methodContract(oneArg(researchEmbeddingConfigSaveRequestSchema), researchEmbeddingConfigSchema) }),
+    request({ key: 'researchKnowledgeUpsert', channel: 'roc:research:knowledge-upsert', domain: 'research', method: 'upsertKnowledgeDocument', kind: 'plugin', capabilityName: 'research.knowledge.upsert', inputTransform: first, contract: methodContract(oneArg(researchKnowledgeDocumentUpsertRequestSchema), researchKnowledgeDocumentSchema) }),
+    request({ key: 'researchKnowledgeSearch', channel: 'roc:research:knowledge-search', domain: 'research', method: 'searchKnowledge', kind: 'plugin', capabilityName: 'research.knowledge.search', inputTransform: first, contract: methodContract(oneArg(researchKnowledgeSearchRequestSchema), researchKnowledgeSearchResultSchema) }),
+    request({key: 'researchVisualConfig', channel: 'roc:research:visual-config', domain: 'research', method: 'readVisualConfig', kind: 'plugin', capabilityName: 'research.visual.config', inputTransform: first, contract: methodContract(oneArg(visualProjectSchema), visualConfigSchema)}),
+    request({key: 'researchVisualInspectModel', channel: 'roc:research:visual-inspectModel', domain: 'research', method: 'inspectVisualModel', kind: 'plugin', capabilityName: 'research.visual.inspectModel', inputTransform: first, contract: methodContract(oneArg(visualInspectModelSchema), visualModelSchema)}),
+    request({key: 'researchVisualSaveConfig', channel: 'roc:research:visual-saveConfig', domain: 'research', method: 'saveVisualConfig', kind: 'plugin', capabilityName: 'research.visual.saveConfig', inputTransform: first, contract: methodContract(oneArg(visualSaveConfigSchema), visualConfigSchema)}),
+    request({key: 'researchVisualRebuild', channel: 'roc:research:visual-rebuild', domain: 'research', method: 'rebuildVisualIndex', kind: 'plugin', capabilityName: 'research.visual.rebuild', inputTransform: first, contract: methodContract(oneArg(visualIndexRequestSchema), visualIndexResultSchema)}),
+    request({key: 'researchVisualSearch', channel: 'roc:research:visual-search', domain: 'research', method: 'searchVisualKnowledge', kind: 'plugin', capabilityName: 'research.visual.search', inputTransform: first, contract: methodContract(oneArg(visualSearchRequestSchema), visualSearchResultSchema)}),
+    request({key: 'researchFigureUnderstanding', channel: 'roc:research:figure-understanding', domain: 'research', method: 'understandScientificFigure', kind: 'plugin', capabilityName: 'research.visual.understandFigure', inputTransform: first, contract: methodContract(oneArg(figureUnderstandingRequestSchema), figureUnderstandingResultSchema)}),
+    request({key: 'researchScientificSearch', channel: 'roc:research:scientific-search', domain: 'research', method: 'searchScientificKnowledge', kind: 'plugin', capabilityName: 'research.knowledge.scientificSearch', inputTransform: first, contract: methodContract(oneArg(scientificSearchRequestSchema), scientificSearchResultSchema)}),
+    request({key: 'researchScientificGenerations', channel: 'roc:research:scientific-generations', domain: 'research', method: 'listScientificGenerations', kind: 'plugin', capabilityName: 'research.knowledge.scientificGenerations', inputTransform: first, contract: methodContract(oneArg(scientificGenerationsRequestSchema), scientificGenerationsResultSchema)}),
+    request({key: 'researchScientificActivate', channel: 'roc:research:scientific-activate', domain: 'research', method: 'activateScientificGeneration', kind: 'plugin', capabilityName: 'research.knowledge.scientificActivate', inputTransform: first, contract: methodContract(oneArg(scientificGenerationActivateSchema), scientificGenerationsResultSchema)}),
+    request({key: 'researchScientificContext', channel: 'roc:research:scientific-context', domain: 'research', method: 'readScientificContext', kind: 'plugin', capabilityName: 'research.knowledge.scientificContext', inputTransform: first, contract: methodContract(oneArg(scientificContextRequestSchema), scientificContextResultSchema)}),
+    request({key: 'researchScientificEvidence', channel: 'roc:research:scientific-evidence', domain: 'research', method: 'validateScientificEvidence', kind: 'plugin', capabilityName: 'research.knowledge.scientificEvidence', inputTransform: first, contract: methodContract(oneArg(scientificEvidenceRequestSchema), scientificEvidenceResultSchema)}),
+    request({key: 'researchScientificRead', channel: 'roc:research:scientific-read', domain: 'research', method: 'readScientificKnowledge', kind: 'plugin', capabilityName: 'research.knowledge.scientificRead', inputTransform: first, contract: methodContract(oneArg(scientificKnowledgeReadRequestSchema), scientificKnowledgeReadSchema)}),
+    request({key: 'researchExtractionEnqueue', channel: 'roc:research:extraction-enqueue', domain: 'research', method: 'enqueueScientificExtraction', kind: 'plugin', capabilityName: 'research.knowledge.extractionEnqueue', inputTransform: first, contract: methodContract(oneArg(scientificExtractionDocumentRequestSchema), scientificExtractionJobSchema)}),
+    request({key: 'researchExtractionJobs', channel: 'roc:research:extraction-jobs', domain: 'research', method: 'scientificExtractionJobs', kind: 'plugin', capabilityName: 'research.knowledge.extractionJobs', inputTransform: first, contract: methodContract(oneArg(scientificExtractionJobsRequestSchema), scientificExtractionJobSchema.array())}),
+    request({key: 'researchExtractionRetry', channel: 'roc:research:extraction-retry', domain: 'research', method: 'retryScientificExtraction', kind: 'plugin', capabilityName: 'research.knowledge.extractionRetry', inputTransform: first, contract: methodContract(oneArg(scientificExtractionJobRequestSchema), scientificExtractionJobSchema)}),
+    request({key: 'researchExtractionCancel', channel: 'roc:research:extraction-cancel', domain: 'research', method: 'cancelScientificExtraction', kind: 'plugin', capabilityName: 'research.knowledge.extractionCancel', inputTransform: first, contract: methodContract(oneArg(scientificExtractionJobRequestSchema), scientificExtractionJobSchema)}),
+    request({key: 'researchKnowledgeContext', channel: 'roc:research:knowledge-context', domain: 'research', method: 'readKnowledgeContext', kind: 'plugin', capabilityName: 'research.knowledge.context', inputTransform: first, contract: methodContract(oneArg(knowledgeContextRequestSchema), knowledgeContextResultSchema)}),
+    request({ key: 'researchWorkflowRole', channel: 'roc:research:workflow-role', domain: 'research', method: 'getRoleProfile', kind: 'plugin', capabilityName: 'research.workflow.role', inputTransform: first, contract: methodContract(oneArg(researchStageRoleRequestSchema), researchStageRoleProfileSchema) }),
+    request({ key: 'researchExperimentEnvironment', channel: 'roc:research:experiment-environment', domain: 'research', method: 'inspectExperimentEnvironment', kind: 'plugin', capabilityName: 'research.experiment.environment', inputTransform: first, contract: methodContract(oneArg(researchExperimentEnvironmentRequestSchema), researchExperimentEnvironmentSchema) }),
+    request({ key: 'researchExperimentStart', channel: 'roc:research:experiment-start', domain: 'research', method: 'startExperiment', kind: 'plugin', capabilityName: 'research.experiment.start', inputTransform: first, contract: methodContract(oneArg(researchExperimentStartRequestSchema), researchExperimentExecutionSchema) }),
+    request({ key: 'researchExperimentGet', channel: 'roc:research:experiment-get', domain: 'research', method: 'getExperiment', kind: 'plugin', capabilityName: 'research.experiment.get', inputTransform: first, contract: methodContract(oneArg(researchExperimentIdRequestSchema), researchExperimentExecutionSchema) }),
+    request({ key: 'researchExperimentList', channel: 'roc:research:experiment-list', domain: 'research', method: 'listExperiments', kind: 'plugin', capabilityName: 'research.experiment.list', inputTransform: first, contract: methodContract(oneArg(researchExperimentListRequestSchema), researchExperimentExecutionSchema.array()) }),
+    request({ key: 'researchExperimentCancel', channel: 'roc:research:experiment-cancel', domain: 'research', method: 'cancelExperiment', kind: 'plugin', capabilityName: 'research.experiment.cancel', inputTransform: first, contract: methodContract(oneArg(researchExperimentIdRequestSchema), researchExperimentExecutionSchema) }),
+    request({ key: 'researchExperimentRead', channel: 'roc:research:experiment-read', domain: 'research', method: 'readExperimentFile', kind: 'plugin', capabilityName: 'research.experiment.read', inputTransform: first, contract: methodContract(oneArg(researchExperimentFileRequestSchema), researchExperimentFileContentSchema) }),
+    request({ key: 'researchExperimentPublish', channel: 'roc:research:experiment-publish', domain: 'research', method: 'publishExperiment', kind: 'plugin', capabilityName: 'research.experiment.publish', inputTransform: first, contract: methodContract(oneArg(researchExperimentIdRequestSchema), researchExperimentExecutionSchema) }),
+    request({ key: 'researchExperimentEvidence', channel: 'roc:research:experiment-evidence', domain: 'research', method: 'getEvidenceExperimentSource', kind: 'plugin', capabilityName: 'research.experiment.evidenceSource', inputTransform: first, contract: methodContract(oneArg(researchExperimentEvidenceRequestSchema), researchExperimentFileRequestSchema.nullable()) }),
+    request({ key: 'researchFigureEnvironment', channel: 'roc:research:figure-environment', domain: 'research', method: 'inspectFigureEnvironment', kind: 'plugin', capabilityName: 'research.figure.environment', inputTransform: first, contract: methodContract(oneArg(researchFigureEnvironmentRequestSchema), researchFigureRendererEnvironmentSchema) }),
+    request({ key: 'researchFigureStart', channel: 'roc:research:figure-start', domain: 'research', method: 'startFigure', kind: 'plugin', capabilityName: 'research.figure.start', inputTransform: first, contract: methodContract(oneArg(researchFigureStartRequestSchema), researchFigureRunSchema) }),
+    request({ key: 'researchFigureGetRun', channel: 'roc:research:figure-get-run', domain: 'research', method: 'getFigureRun', kind: 'plugin', capabilityName: 'research.figure.getRun', inputTransform: first, contract: methodContract(oneArg(researchExperimentIdRequestSchema), researchFigureRunSchema) }),
+    request({ key: 'researchFigureListRuns', channel: 'roc:research:figure-list-runs', domain: 'research', method: 'listFigureRuns', kind: 'plugin', capabilityName: 'research.figure.listRuns', inputTransform: first, contract: methodContract(oneArg(researchFigureListRequestSchema), researchFigureRunSchema.array()) }),
+    request({ key: 'researchFigureCancel', channel: 'roc:research:figure-cancel', domain: 'research', method: 'cancelFigure', kind: 'plugin', capabilityName: 'research.figure.cancel', inputTransform: first, contract: methodContract(oneArg(researchExperimentIdRequestSchema), researchFigureRunSchema) }),
+    request({ key: 'researchFigureRead', channel: 'roc:research:figure-read', domain: 'research', method: 'readFigureFile', kind: 'plugin', capabilityName: 'research.figure.read', inputTransform: first, contract: methodContract(oneArg(researchExperimentFileRequestSchema), researchExperimentFileContentSchema) }),
+    request({ key: 'researchFigurePublish', channel: 'roc:research:figure-publish', domain: 'research', method: 'publishFigure', kind: 'plugin', capabilityName: 'research.figure.publish', inputTransform: first, contract: methodContract(oneArg(researchFigurePublishRequestSchema), researchFigurePublicationSchema) }),
+    request({ key: 'researchFigureGet', channel: 'roc:research:figure-get', domain: 'research', method: 'getFigure', kind: 'plugin', capabilityName: 'research.figure.get', inputTransform: first, contract: methodContract(oneArg(researchFigureIdRequestSchema), researchFigurePublicationSchema) }),
+    request({ key: 'researchFigureList', channel: 'roc:research:figure-list', domain: 'research', method: 'listFigures', kind: 'plugin', capabilityName: 'research.figure.list', inputTransform: first, contract: methodContract(oneArg(researchFigureListRequestSchema), researchFigurePublicationSchema.array()) }),
+    request({ key: 'researchExportInputs', channel: 'roc:research:export-inputs', domain: 'research', method: 'getExportInputs', kind: 'plugin', capabilityName: 'research.export.inputs', inputTransform: first, contract: methodContract(oneArg(researchExportInputsRequestSchema), researchExportInputsSchema) }),
+    request({ key: 'researchExportPrepare', channel: 'roc:research:export-prepare', domain: 'research', method: 'prepareExport', kind: 'plugin', capabilityName: 'research.export.prepare', inputTransform: first, contract: methodContract(oneArg(researchExportPrepareRequestSchema), researchExportExecutionSchema) }),
+    request({ key: 'researchExportGet', channel: 'roc:research:export-get', domain: 'research', method: 'getExport', kind: 'plugin', capabilityName: 'research.export.get', inputTransform: first, contract: methodContract(oneArg(researchExportIdRequestSchema), researchExportExecutionSchema) }),
+    request({ key: 'researchExportList', channel: 'roc:research:export-list', domain: 'research', method: 'listExports', kind: 'plugin', capabilityName: 'research.export.list', inputTransform: first, contract: methodContract(oneArg(researchExportListRequestSchema), researchExportExecutionSchema.array()) }),
+    request({ key: 'researchExportCancel', channel: 'roc:research:export-cancel', domain: 'research', method: 'cancelExport', kind: 'plugin', capabilityName: 'research.export.cancel', inputTransform: first, contract: methodContract(oneArg(researchExportIdRequestSchema), researchExportExecutionSchema) }),
+    request({ key: 'researchExportPublish', channel: 'roc:research:export-publish', domain: 'research', method: 'publishExport', kind: 'plugin', capabilityName: 'research.export.publish', inputTransform: first, contract: methodContract(oneArg(researchExportPublishRequestSchema), researchExportExecutionSchema) }),
+    request({ key: 'researchExportRead', channel: 'roc:research:export-read', domain: 'research', method: 'readExportFile', kind: 'plugin', capabilityName: 'research.export.read', inputTransform: first, contract: methodContract(oneArg(researchExportReadRequestSchema), researchExportFileContentSchema) }),
+    request({ key: 'researchExportWrite', channel: 'roc:research:export-write', domain: 'research', method: 'writeExport', kind: 'plugin', capabilityName: 'research.export.write', inputTransform: first, contract: methodContract(oneArg(researchExportWriteRequestSchema), researchExportDeliverySchema) }),
+    request({ key: 'researchProvenanceAdd', channel: 'roc:research:provenance-add', domain: 'research', method: 'addProvenance', kind: 'plugin', capabilityName: 'research.provenance.add', inputTransform: first, contract: methodContract(oneArg(researchProvenanceCreateRequestSchema), researchProvenanceSchema) }),
+    request({ key: 'researchProvenanceList', channel: 'roc:research:provenance-list', domain: 'research', method: 'listProvenance', kind: 'plugin', capabilityName: 'research.provenance.list', inputTransform: first, contract: methodContract(oneArg(researchProvenanceListRequestSchema), researchProvenanceSchema.array()) }),
+    request({ key: 'researchTemplateImport', channel: 'roc:research:template-import', domain: 'research', method: 'importTemplate', kind: 'plugin', capabilityName: 'research.template.import', inputTransform: first, contract: methodContract(oneArg(researchTemplateImportRequestSchema), researchTemplateSchema) }),
+    request({ key: 'researchTemplateCompile', channel: 'roc:research:template-compile', domain: 'research', method: 'compileTemplate', kind: 'plugin', capabilityName: 'research.template.compile', inputTransform: first, contract: methodContract(oneArg(researchTemplateCompileRequestSchema), researchTemplateSchema) }),
+    request({ key: 'researchToolchainStatus', channel: 'roc:research:toolchain-status', domain: 'research', method: 'getToolchainStatus', kind: 'plugin', capabilityName: 'research.toolchain.status', inputTransform: none, contract: methodContract(noArgs, researchToolchainStatusSchema) }),
+    request({ key: 'researchProseLint', channel: 'roc:research:prose-lint', domain: 'research', method: 'lintManuscript', kind: 'plugin', capabilityName: 'research.prose.lint', inputTransform: first, contract: methodContract(oneArg(researchProseLintRequestSchema), researchProseLintReportSchema) }),
+    request({ key: 'researchModelsStatus', channel: 'roc:research:models-status', domain: 'research', method: 'getModelsStatus', kind: 'plugin', capabilityName: 'research.models.status', inputTransform: none, contract: methodContract(noArgs, researchModelsStatusSchema) }),
+    request({ key: 'researchModelsSelect', channel: 'roc:research:models-select', domain: 'research', method: 'selectModels', kind: 'plugin', capabilityName: 'research.models.select', inputTransform: first, contract: methodContract(oneArg(researchModelsSelectRequestSchema), researchModelsStatusSchema) }),
+    request({ key: 'researchModelsImport', channel: 'roc:research:models-import', domain: 'research', method: 'importModels', kind: 'plugin', capabilityName: 'research.models.import', inputTransform: first, contract: methodContract(oneArg(researchModelsImportRequestSchema), researchModelsStatusSchema) }),
+    request({ key: 'researchModelsRemove', channel: 'roc:research:models-remove', domain: 'research', method: 'removeModels', kind: 'plugin', capabilityName: 'research.models.remove', inputTransform: first, contract: methodContract(oneArg(researchModelsRemoveRequestSchema), researchModelsStatusSchema) }),
+    request({ key: 'researchModelsDownload', channel: 'roc:research:models-download', domain: 'research', method: 'downloadModels', kind: 'plugin', capabilityName: 'research.models.download', inputTransform: first, contract: methodContract(oneArg(researchModelsDownloadRequestSchema), researchModelsStatusSchema) }),
+    request({ key: 'researchModelsCancel', channel: 'roc:research:models-cancel', domain: 'research', method: 'cancelModelsDownload', kind: 'plugin', capabilityName: 'research.models.cancel', inputTransform: none, contract: methodContract(noArgs, researchModelsStatusSchema) }),
+    request({ key: 'researchTemplateGet', channel: 'roc:research:template-get', domain: 'research', method: 'getTemplate', kind: 'plugin', capabilityName: 'research.template.get', inputTransform: first, contract: methodContract(oneArg(researchTemplateCompileRequestSchema), researchTemplateSchema) }),
+    request({ key: 'researchTemplateList', channel: 'roc:research:template-list', domain: 'research', method: 'listTemplates', kind: 'plugin', capabilityName: 'research.template.list', inputTransform: first, contract: methodContract(oneArg(researchTemplateListRequestSchema), researchTemplateSchema.array()) }),
+    request({ key: 'researchTemplateFiles', channel: 'roc:research:template-files', domain: 'research', method: 'getTemplateFiles', kind: 'plugin', capabilityName: 'research.template.files', inputTransform: first, contract: methodContract(oneArg(researchTemplateCompileRequestSchema), researchTemplateFileSchema.array()) }),
+    request({ key: 'researchTemplateReadFile', channel: 'roc:research:template-read-file', domain: 'research', method: 'readTemplateFile', kind: 'plugin', capabilityName: 'research.template.readFile', inputTransform: first, contract: methodContract(oneArg(researchTemplateFileRequestSchema), researchTemplateFileContentSchema) }),
+    request({ key: 'researchTemplateSaveFile', channel: 'roc:research:template-save-file', domain: 'research', method: 'saveTemplateFile', kind: 'plugin', capabilityName: 'research.template.saveFile', inputTransform: first, contract: methodContract(oneArg(researchTemplateFileSaveRequestSchema), researchTemplateFileContentSchema) }),
+    request({ key: 'researchTemplateSetEntry', channel: 'roc:research:template-set-entry', domain: 'research', method: 'setTemplateEntry', kind: 'plugin', capabilityName: 'research.template.setEntry', inputTransform: first, contract: methodContract(oneArg(researchTemplateEntryRequestSchema), researchTemplateSchema) }),
+    request({ key: 'researchTemplateCancel', channel: 'roc:research:template-cancel', domain: 'research', method: 'cancelTemplateCompile', kind: 'plugin', capabilityName: 'research.template.cancel', inputTransform: first, contract: methodContract(oneArg(researchTemplateCompileRequestSchema), researchTemplateSchema) }),
+    request({ key: 'researchLibraryList', channel: 'roc:research:library-list', domain: 'research', method: 'listLibrary', kind: 'plugin', capabilityName: 'research.library.list', inputTransform: first, contract: methodContract(oneArg(researchLibraryListRequestSchema), researchLibraryItemSchema.array()) }),
+    request({ key: 'researchLibraryGet', channel: 'roc:research:library-get', domain: 'research', method: 'getLibraryItem', kind: 'plugin', capabilityName: 'research.library.get', inputTransform: first, contract: methodContract(oneArg(researchLibraryIdRequestSchema), researchLibraryItemSchema) }),
+    request({ key: 'researchLibraryIdentifiers', channel: 'roc:research:library-identifiers', domain: 'research', method: 'getLibraryIdentifiers', kind: 'plugin', capabilityName: 'research.library.getIdentifiers', inputTransform: first, contract: methodContract(oneArg(literatureReadIdentifiersSchema), literatureIdentifierRecordsResultSchema) }),
+    request({ key: 'researchLibraryReviews', channel: 'roc:research:library-reviews', domain: 'research', method: 'getLibraryReviews', kind: 'plugin', capabilityName: 'research.library.getReviews', inputTransform: first, contract: methodContract(oneArg(literatureReadReviewsSchema), literatureReviewRecordsResultSchema) }),
+    request({key: 'researchScholarlyCapture', channel: 'roc:research:scholarly-capture', domain: 'research', method: 'captureScholarlyRelations', kind: 'plugin', capabilityName: 'research.scholarly.capture', inputTransform: first, contract: methodContract(oneArg(scholarlyCaptureSchema), scholarlySnapshotSummarySchema)}),
+    request({key: 'researchScholarlyCancel', channel: 'roc:research:scholarly-cancel', domain: 'research', method: 'cancelScholarlyRelations', kind: 'plugin', capabilityName: 'research.scholarly.cancel', inputTransform: first, contract: methodContract(oneArg(scholarlyCancelSchema), scholarlyCancelResultSchema)}),
+    request({key: 'researchScholarlyHistory', channel: 'roc:research:scholarly-history', domain: 'research', method: 'getScholarlyHistory', kind: 'plugin', capabilityName: 'research.scholarly.history', inputTransform: first, contract: methodContract(oneArg(scholarlyHistorySchema), scholarlyHistoryResultSchema)}),
+    request({key: 'researchScholarlyRead', channel: 'roc:research:scholarly-read', domain: 'research', method: 'getScholarlyRelations', kind: 'plugin', capabilityName: 'research.scholarly.read', inputTransform: first, contract: methodContract(oneArg(scholarlyReadSchema), scholarlyReadResultSchema)}),
+    request({key: 'researchHuggingFaceDownloadStart', channel: 'roc:research:huggingface-download-start', domain: 'research', method: 'startHuggingFaceDownload', kind: 'plugin', capabilityName: 'research.huggingfaceDownloads.start', inputTransform: first, contract: methodContract(oneArg(hfDownloadStartSchema), hfDownloadReceiptSchema)}),
+    request({key: 'researchHuggingFaceDownloadCancel', channel: 'roc:research:huggingface-download-cancel', domain: 'research', method: 'cancelHuggingFaceDownload', kind: 'plugin', capabilityName: 'research.huggingfaceDownloads.cancel', inputTransform: first, contract: methodContract(oneArg(hfDownloadCancelSchema), hfDownloadCancelResultSchema)}),
+    request({key: 'researchHuggingFaceDownloadRead', channel: 'roc:research:huggingface-download-read', domain: 'research', method: 'getHuggingFaceDownload', kind: 'plugin', capabilityName: 'research.huggingfaceDownloads.read', inputTransform: first, contract: methodContract(oneArg(hfDownloadReadSchema), hfDownloadReceiptSchema)}),
+    request({key: 'researchHuggingFaceDownloadHistory', channel: 'roc:research:huggingface-download-history', domain: 'research', method: 'getHuggingFaceDownloads', kind: 'plugin', capabilityName: 'research.huggingfaceDownloads.history', inputTransform: first, contract: methodContract(oneArg(hfDownloadHistorySchema), hfDownloadHistoryResultSchema)}),
+    request({key: 'researchZenodoSaveCredential', channel: 'roc:research:zenodo-saveCredential', domain: 'research', method: 'saveZenodoCredential', kind: 'plugin', capabilityName: 'research.zenodo.saveCredential', inputTransform: first, contract: methodContract(oneArg(zenodoCredentialSchema), zenodoCredentialStatusSchema)}),
+    request({key: 'researchZenodoClearCredential', channel: 'roc:research:zenodo-clearCredential', domain: 'research', method: 'clearZenodoCredential', kind: 'plugin', capabilityName: 'research.zenodo.clearCredential', inputTransform: first, contract: methodContract(oneArg(zenodoCredentialReadSchema), zenodoCredentialStatusSchema)}),
+    request({key: 'researchZenodoCredentialStatus', channel: 'roc:research:zenodo-credentialStatus', domain: 'research', method: 'getZenodoCredentialStatus', kind: 'plugin', capabilityName: 'research.zenodo.credentialStatus', inputTransform: first, contract: methodContract(oneArg(zenodoCredentialReadSchema), zenodoCredentialStatusSchema)}),
+    request({key: 'researchZenodoStart', channel: 'roc:research:zenodo-start', domain: 'research', method: 'startZenodoOperation', kind: 'plugin', capabilityName: 'research.zenodo.start', inputTransform: first, contract: methodContract(oneArg(zenodoStartSchema), zenodoOperationSchema)}),
+    request({key: 'researchZenodoGetOperation', channel: 'roc:research:zenodo-getOperation', domain: 'research', method: 'getZenodoOperation', kind: 'plugin', capabilityName: 'research.zenodo.getOperation', inputTransform: first, contract: methodContract(oneArg(zenodoOperationReadSchema), zenodoOperationSchema)}),
+    request({key: 'researchZenodoOperationForPreparation', channel: 'roc:research:zenodo-operationForPreparation', domain: 'research', method: 'getZenodoOperationForPreparation', kind: 'plugin', capabilityName: 'research.zenodo.operationForPreparation', inputTransform: first, contract: methodContract(oneArg(zenodoOperationForPreparationSchema), zenodoOperationSchema.nullable())}),
+    request({key: 'researchZenodoListOperations', channel: 'roc:research:zenodo-listOperations', domain: 'research', method: 'getZenodoOperations', kind: 'plugin', capabilityName: 'research.zenodo.listOperations', inputTransform: first, contract: methodContract(oneArg(zenodoOperationListSchema), zenodoOperationListResultSchema)}),
+    request({key: 'researchZenodoRefresh', channel: 'roc:research:zenodo-refresh', domain: 'research', method: 'refreshZenodoOperation', kind: 'plugin', capabilityName: 'research.zenodo.refresh', inputTransform: first, contract: methodContract(oneArg(zenodoOperationReadSchema), zenodoOperationSchema)}),
+    request({key: 'researchZenodoResume', channel: 'roc:research:zenodo-resume', domain: 'research', method: 'resumeZenodoOperation', kind: 'plugin', capabilityName: 'research.zenodo.resume', inputTransform: first, contract: methodContract(oneArg(zenodoOperationActionSchema), zenodoOperationSchema)}),
+    request({key: 'researchZenodoApprovePublication', channel: 'roc:research:zenodo-approvePublication', domain: 'research', method: 'approveZenodoPublication', kind: 'plugin', capabilityName: 'research.zenodo.approvePublication', inputTransform: first, contract: methodContract(oneArg(zenodoPublicationApproveSchema), zenodoPublicationApprovalSchema)}),
+    request({key: 'researchZenodoPublish', channel: 'roc:research:zenodo-publish', domain: 'research', method: 'publishZenodo', kind: 'plugin', capabilityName: 'research.zenodo.publish', inputTransform: first, contract: methodContract(oneArg(zenodoPublishSchema), zenodoOperationSchema)}),
+    request({key: 'researchZenodoCancel', channel: 'roc:research:zenodo-cancel', domain: 'research', method: 'cancelZenodoOperation', kind: 'plugin', capabilityName: 'research.zenodo.cancel', inputTransform: first, contract: methodContract(oneArg(zenodoOperationReadSchema), zenodoOperationSchema)}),
+    request({key: 'researchZenodoInputs', channel: 'roc:research:zenodo-inputs', domain: 'research', method: 'getZenodoInputs', kind: 'plugin', capabilityName: 'research.zenodo.inputs', inputTransform: first, contract: methodContract(oneArg(zenodoInputsRequestSchema), zenodoInputsSchema)}),
+    request({key: 'researchZenodoPrepare', channel: 'roc:research:zenodo-prepare', domain: 'research', method: 'prepareZenodo', kind: 'plugin', capabilityName: 'research.zenodo.prepare', inputTransform: first, contract: methodContract(oneArg(zenodoPrepareSchema), zenodoPreparedSchema)}),
+    request({key: 'researchZenodoRead', channel: 'roc:research:zenodo-read', domain: 'research', method: 'getZenodoPreparation', kind: 'plugin', capabilityName: 'research.zenodo.getPreparation', inputTransform: first, contract: methodContract(oneArg(zenodoReadSchema), zenodoPreparedSchema)}),
+    request({key: 'researchZenodoList', channel: 'roc:research:zenodo-list', domain: 'research', method: 'getZenodoPreparations', kind: 'plugin', capabilityName: 'research.zenodo.listPreparations', inputTransform: first, contract: methodContract(oneArg(zenodoListSchema), zenodoListResultSchema)}),
+    request({key:'researchRadarBrowser',channel:'roc:research:radar-browser',domain:'research',method:'radarBrowser',kind:'direct',contract:methodContract(oneArg(radarBrowserRequestSchema),radarBrowserResultSchema)}),
+    request({key:'researchCaptureRadarPage',channel:'roc:research:captureRadarPage',domain:'research',method:'captureRadarPage',kind:'plugin',capabilityName:'research.reading.captureRadarPage',inputTransform:first,contract:methodContract(oneArg(radarCapturePageSchema),radarArticleSchema)}),
+    request({key:'researchDiscoverReadingRelations',channel:'roc:research:discoverReadingRelations',domain:'research',method:'discoverReadingRelations',kind:'plugin',capabilityName:'research.reading.discoverReadingRelations',inputTransform:first,contract:methodContract(oneArg(readingDiscoveryRequestSchema),readingDiscoveryResultSchema)}),
+    request({key:'researchReadingListReadingNotes',channel:'roc:research:reading-listReadingNotes',domain:'research',method:'listReadingNotes',kind:'plugin',capabilityName:'research.reading.listReadingNotes',inputTransform:first,contract:methodContract(oneArg(readingScopeSchema),readingNotesSchema)}),
+    request({key:'researchReadingSaveReadingNote',channel:'roc:research:reading-saveReadingNote',domain:'research',method:'saveReadingNote',kind:'plugin',capabilityName:'research.reading.saveReadingNote',inputTransform:first,contract:methodContract(oneArg(readingNoteSaveSchema),readingNoteSchema)}),
+    request({key:'researchReadingExportReadingNote',channel:'roc:research:reading-exportReadingNote',domain:'research',method:'exportReadingNote',kind:'plugin',capabilityName:'research.reading.exportReadingNote',inputTransform:first,contract:methodContract(oneArg(readingNoteExportSchema),readingExportResultSchema)}),
+    request({key:'researchReadingListReadingHighlights',channel:'roc:research:reading-listReadingHighlights',domain:'research',method:'listReadingHighlights',kind:'plugin',capabilityName:'research.reading.listReadingHighlights',inputTransform:first,contract:methodContract(oneArg(readingHighlightListSchema),readingHighlightsSchema)}),
+    request({key:'researchReadingSaveReadingHighlight',channel:'roc:research:reading-saveReadingHighlight',domain:'research',method:'saveReadingHighlight',kind:'plugin',capabilityName:'research.reading.saveReadingHighlight',inputTransform:first,contract:methodContract(oneArg(readingHighlightSaveSchema),readingHighlightSchema)}),
+    request({key:'researchReadingListRadarFeeds',channel:'roc:research:reading-listRadarFeeds',domain:'research',method:'listRadarFeeds',kind:'plugin',capabilityName:'research.reading.listRadarFeeds',inputTransform:first,contract:methodContract(oneArg(readingScopeSchema),radarFeedsSchema)}),
+    request({key:'researchReadingSaveRadarFeed',channel:'roc:research:reading-saveRadarFeed',domain:'research',method:'saveRadarFeed',kind:'plugin',capabilityName:'research.reading.saveRadarFeed',inputTransform:first,contract:methodContract(oneArg(radarFeedSaveSchema),radarFeedSchema)}),
+    request({key:'researchReadingListRadarArticles',channel:'roc:research:reading-listRadarArticles',domain:'research',method:'listRadarArticles',kind:'plugin',capabilityName:'research.reading.listRadarArticles',inputTransform:first,contract:methodContract(oneArg(radarArticlesRequestSchema),radarArticlesSchema)}),
+    request({key:'researchReadingRefreshRadarFeed',channel:'roc:research:reading-refreshRadarFeed',domain:'research',method:'refreshRadarFeed',kind:'plugin',capabilityName:'research.reading.refreshRadarFeed',inputTransform:first,contract:methodContract(oneArg(radarRefreshSchema),radarFeedSchema)}),
+    request({key:'researchReadingMarkRadarArticle',channel:'roc:research:reading-markRadarArticle',domain:'research',method:'markRadarArticle',kind:'plugin',capabilityName:'research.reading.markRadarArticle',inputTransform:first,contract:methodContract(oneArg(radarArticleMarkSchema),radarArticleSchema)}),
+    request({key:'researchReadingImportRadarArticle',channel:'roc:research:reading-importRadarArticle',domain:'research',method:'importRadarArticle',kind:'plugin',capabilityName:'research.reading.importRadarArticle',inputTransform:first,contract:methodContract(oneArg(radarImportSchema),radarImportResultSchema)}),
+    request({key:'researchReadingRecommendRadar',channel:'roc:research:reading-recommendRadar',domain:'research',method:'recommendRadar',kind:'plugin',capabilityName:'research.reading.recommendRadar',inputTransform:first,contract:methodContract(oneArg(radarRecommendSchema),radarRecommendationsSchema)}),
+    request({key:'researchReadingGetReadingTranslationSettings',channel:'roc:research:reading-getReadingTranslationSettings',domain:'research',method:'getReadingTranslationSettings',kind:'plugin',capabilityName:'research.reading.getReadingTranslationSettings',inputTransform:first,contract:methodContract(oneArg(readingEmptySchema),translationSettingsSchema)}),
+    request({key:'researchReadingSaveReadingTranslationSettings',channel:'roc:research:reading-saveReadingTranslationSettings',domain:'research',method:'saveReadingTranslationSettings',kind:'plugin',capabilityName:'research.reading.saveReadingTranslationSettings',inputTransform:first,contract:methodContract(oneArg(translationSettingsSaveSchema),translationSettingsSchema)}),
+    request({key:'researchReadingTranslateReading',channel:'roc:research:reading-translateReading',domain:'research',method:'translateReading',kind:'plugin',capabilityName:'research.reading.translateReading',inputTransform:first,contract:methodContract(oneArg(readingTranslateSchema),readingTranslationSchema)}),
+    request({key: 'researchMonitorSave', channel: 'roc:research:monitor-save', domain: 'research', method: 'saveMonitor', kind: 'plugin', capabilityName: 'research.monitors.save', inputTransform: first, contract: methodContract(oneArg(monitorSaveSchema), monitorSchema)}),
+    request({key: 'researchMonitorControl', channel: 'roc:research:monitor-control', domain: 'research', method: 'controlMonitor', kind: 'plugin', capabilityName: 'research.monitors.control', inputTransform: first, contract: methodContract(oneArg(monitorControlSchema), monitorSchema)}),
+    request({key: 'researchMonitorCheck', channel: 'roc:research:monitor-check', domain: 'research', method: 'checkMonitor', kind: 'plugin', capabilityName: 'research.monitors.check', inputTransform: first, contract: methodContract(oneArg(monitorCheckRequestSchema), monitorCheckSchema)}),
+    request({key: 'researchMonitorCancel', channel: 'roc:research:monitor-cancel', domain: 'research', method: 'cancelMonitorCheck', kind: 'plugin', capabilityName: 'research.monitors.cancel', inputTransform: first, contract: methodContract(oneArg(monitorCancelSchema), monitorCancelResultSchema)}),
+    request({key: 'researchMonitorAcknowledge', channel: 'roc:research:monitor-acknowledge', domain: 'research', method: 'acknowledgeMonitorAlert', kind: 'plugin', capabilityName: 'research.monitors.acknowledge', inputTransform: first, contract: methodContract(oneArg(monitorAcknowledgeSchema), monitorAlertSchema)}),
+    request({key: 'researchMonitorRead', channel: 'roc:research:monitor-read', domain: 'research', method: 'getMonitor', kind: 'plugin', capabilityName: 'research.monitors.read', inputTransform: first, contract: methodContract(oneArg(monitorReadSchema), monitorSchema)}),
+    request({key: 'researchMonitorList', channel: 'roc:research:monitor-list', domain: 'research', method: 'getMonitors', kind: 'plugin', capabilityName: 'research.monitors.list', inputTransform: first, contract: methodContract(oneArg(monitorListSchema), monitorListResultSchema)}),
+    request({key: 'researchMonitorVersions', channel: 'roc:research:monitor-versions', domain: 'research', method: 'getMonitorVersions', kind: 'plugin', capabilityName: 'research.monitors.versions', inputTransform: first, contract: methodContract(oneArg(monitorHistorySchema), monitorVersionsResultSchema)}),
+    request({key: 'researchMonitorChecks', channel: 'roc:research:monitor-checks', domain: 'research', method: 'getMonitorChecks', kind: 'plugin', capabilityName: 'research.monitors.checks', inputTransform: first, contract: methodContract(oneArg(monitorHistorySchema), monitorChecksResultSchema)}),
+    request({key: 'researchMonitorAlerts', channel: 'roc:research:monitor-alerts', domain: 'research', method: 'getMonitorAlerts', kind: 'plugin', capabilityName: 'research.monitors.alerts', inputTransform: first, contract: methodContract(oneArg(monitorHistorySchema), monitorAlertsResultSchema)}),
+    request({key: 'researchMonitorReadCheck', channel: 'roc:research:monitor-readcheck', domain: 'research', method: 'getMonitorCheck', kind: 'plugin', capabilityName: 'research.monitors.readCheck', inputTransform: first, contract: methodContract(oneArg(monitorCheckReadSchema), monitorCheckSchema)}),
+    request({key: 'researchOpenReviewCapture', channel: 'roc:research:openreview-capture', domain: 'research', method: 'captureOpenReview', kind: 'plugin', capabilityName: 'research.openreview.capture', inputTransform: first, contract: methodContract(oneArg(openReviewCaptureSchema), openReviewSummarySchema)}),
+    request({key: 'researchOpenReviewCancel', channel: 'roc:research:openreview-cancel', domain: 'research', method: 'cancelOpenReviewCapture', kind: 'plugin', capabilityName: 'research.openreview.cancel', inputTransform: first, contract: methodContract(oneArg(openReviewCancelSchema), openReviewCancelResultSchema)}),
+    request({key: 'researchOpenReviewHistory', channel: 'roc:research:openreview-history', domain: 'research', method: 'getOpenReviewHistory', kind: 'plugin', capabilityName: 'research.openreview.history', inputTransform: first, contract: methodContract(oneArg(openReviewHistorySchema), openReviewHistoryResultSchema)}),
+    request({key: 'researchOpenReviewRead', channel: 'roc:research:openreview-read', domain: 'research', method: 'getOpenReviewObservation', kind: 'plugin', capabilityName: 'research.openreview.read', inputTransform: first, contract: methodContract(oneArg(openReviewReadSchema), openReviewReadResultSchema)}),
+    request({key: 'researchHuggingFaceCapture', channel: 'roc:research:huggingface-capture', domain: 'research', method: 'captureHuggingFace', kind: 'plugin', capabilityName: 'research.huggingface.capture', inputTransform: first, contract: methodContract(oneArg(hfCaptureSchema), hfSummarySchema)}),
+    request({key: 'researchHuggingFaceCancel', channel: 'roc:research:huggingface-cancel', domain: 'research', method: 'cancelHuggingFaceCapture', kind: 'plugin', capabilityName: 'research.huggingface.cancel', inputTransform: first, contract: methodContract(oneArg(hfCancelSchema), hfCancelResultSchema)}),
+    request({key: 'researchHuggingFaceHistory', channel: 'roc:research:huggingface-history', domain: 'research', method: 'getHuggingFaceHistory', kind: 'plugin', capabilityName: 'research.huggingface.history', inputTransform: first, contract: methodContract(oneArg(hfHistorySchema), hfHistoryResultSchema)}),
+    request({key: 'researchHuggingFaceRead', channel: 'roc:research:huggingface-read', domain: 'research', method: 'getHuggingFaceObservation', kind: 'plugin', capabilityName: 'research.huggingface.read', inputTransform: first, contract: methodContract(oneArg(hfReadSchema), hfReadResultSchema)}),
+    request({key: 'researchResourceCapture', channel: 'roc:research:resource-capture', domain: 'research', method: 'captureResource', kind: 'plugin', capabilityName: 'research.resource.capture', inputTransform: first, contract: methodContract(oneArg(resourceCaptureSchema), resourceSummarySchema)}),
+    request({key: 'researchResourceCancel', channel: 'roc:research:resource-cancel', domain: 'research', method: 'cancelResourceCapture', kind: 'plugin', capabilityName: 'research.resource.cancel', inputTransform: first, contract: methodContract(oneArg(resourceCancelSchema), resourceCancelResultSchema)}),
+    request({key: 'researchResourceHistory', channel: 'roc:research:resource-history', domain: 'research', method: 'getResourceHistory', kind: 'plugin', capabilityName: 'research.resource.history', inputTransform: first, contract: methodContract(oneArg(resourceHistorySchema), resourceHistoryResultSchema)}),
+    request({key: 'researchResourceRead', channel: 'roc:research:resource-read', domain: 'research', method: 'getResource', kind: 'plugin', capabilityName: 'research.resource.read', inputTransform: first, contract: methodContract(oneArg(resourceReadSchema), resourceReadResultSchema)}),
+    request({key: 'researchResourceAssociate', channel: 'roc:research:resource-associate', domain: 'research', method: 'associateResource', kind: 'plugin', capabilityName: 'research.resourceAssociations.save', inputTransform: first, contract: methodContract(oneArg(resourceAssociationSaveSchema), resourceAssociationResultSchema)}),
+    request({key: 'researchResourceAssociationRead', channel: 'roc:research:resource-association-read', domain: 'research', method: 'getResourceAssociation', kind: 'plugin', capabilityName: 'research.resourceAssociations.read', inputTransform: first, contract: methodContract(oneArg(resourceAssociationReadSchema), resourceAssociationResultSchema)}),
+    request({key: 'researchResourceAssociationHistory', channel: 'roc:research:resource-association-history', domain: 'research', method: 'getResourceAssociationHistory', kind: 'plugin', capabilityName: 'research.resourceAssociations.history', inputTransform: first, contract: methodContract(oneArg(resourceAssociationHistorySchema), resourceAssociationHistoryResultSchema)}),
+    request({key: 'researchResourceTargets', channel: 'roc:research:resource-targets', domain: 'research', method: 'getResourceTargets', kind: 'plugin', capabilityName: 'research.resourceAssociations.targets', inputTransform: first, contract: methodContract(oneArg(resourceTargetsSchema), resourceTargetsResultSchema)}),
+    request({ key: 'researchLibraryImportRecord', channel: 'roc:research:library-import-record', domain: 'research', method: 'importLibraryRecord', kind: 'plugin', capabilityName: 'research.library.importRecord', inputTransform: first, contract: methodContract(oneArg(researchLibraryRecordImportRequestSchema), researchLibraryImportResultSchema) }),
+    request({ key: 'researchLibraryImportDoi', channel: 'roc:research:library-import-doi', domain: 'research', method: 'importLibraryDoi', kind: 'plugin', capabilityName: 'research.library.importDoi', inputTransform: first, contract: methodContract(oneArg(researchLibraryDoiImportRequestSchema), researchLibraryImportResultSchema) }),
+    request({ key: 'researchLibraryImportFile', channel: 'roc:research:library-import-file', domain: 'research', method: 'importBibliography', kind: 'plugin', capabilityName: 'research.library.importFile', inputTransform: first, contract: methodContract(oneArg(researchLibraryFileImportRequestSchema), researchLibraryImportResultSchema) }),
+    request({ key: 'researchLibraryExport', channel: 'roc:research:library-export', domain: 'research', method: 'exportBibliography', kind: 'plugin', capabilityName: 'research.library.export', inputTransform: first, contract: methodContract(oneArg(researchLibraryExportRequestSchema), researchLibraryExportSchema) }),
+    request({ key: 'researchLibraryLink', channel: 'roc:research:library-link', domain: 'research', method: 'linkLibraryItem', kind: 'plugin', capabilityName: 'research.library.linkProject', inputTransform: first, contract: methodContract(oneArg(researchLibraryLinkRequestSchema), researchLibraryItemSchema) }),
+    request({ key: 'researchLibraryArchive', channel: 'roc:research:library-archive', domain: 'research', method: 'archiveLibraryItem', kind: 'plugin', capabilityName: 'research.library.archive', inputTransform: first, contract: methodContract(oneArg(researchLibraryArchiveRequestSchema), researchLibraryItemSchema) }),
+    request({ key: 'researchLibraryCitationKey', channel: 'roc:research:library-citation-key', domain: 'research', method: 'setLibraryCitationKey', kind: 'plugin', capabilityName: 'research.library.setCitationKey', inputTransform: first, contract: methodContract(oneArg(researchLibraryCitationKeyRequestSchema), researchLibraryItemSchema) }),
+    request({ key: 'researchDocumentImport', channel: 'roc:research:document-import', domain: 'research', method: 'importDocument', kind: 'plugin', capabilityName: 'research.document.import', inputTransform: first, contract: methodContract(oneArg(researchDocumentImportRequestSchema), researchDocumentSchema) }),
+    request({ key: 'researchDocumentList', channel: 'roc:research:document-list', domain: 'research', method: 'listDocuments', kind: 'plugin', capabilityName: 'research.document.list', inputTransform: first, contract: methodContract(oneArg(researchDocumentListRequestSchema), researchDocumentSchema.array()) }),
+    request({ key: 'researchDocumentGet', channel: 'roc:research:document-get', domain: 'research', method: 'getDocument', kind: 'plugin', capabilityName: 'research.document.get', inputTransform: first, contract: methodContract(oneArg(researchDocumentIdRequestSchema), researchDocumentSchema) }),
+    request({ key: 'researchDocumentParse', channel: 'roc:research:document-parse', domain: 'research', method: 'parseDocument', kind: 'plugin', capabilityName: 'research.document.parse', inputTransform: first, contract: methodContract(oneArg(researchDocumentStartParseRequestSchema), researchDocumentSchema) }),
+    request({ key: 'researchDocumentParseMany', channel: 'roc:research:document-parse-many', domain: 'research', method: 'parseDocuments', kind: 'plugin', capabilityName: 'research.document.parseMany', inputTransform: first, contract: methodContract(oneArg(researchDocumentBatchParseRequestSchema), researchDocumentBatchParseSchema) }),
+    request({ key: 'researchDocumentCancel', channel: 'roc:research:document-cancel', domain: 'research', method: 'cancelDocumentParse', kind: 'plugin', capabilityName: 'research.document.cancel', inputTransform: first, contract: methodContract(oneArg(researchDocumentParseRequestSchema), researchDocumentSchema) }),
+    request({ key: 'researchDocumentRuns', channel: 'roc:research:document-runs', domain: 'research', method: 'listDocumentParses', kind: 'plugin', capabilityName: 'research.document.runs', inputTransform: first, contract: methodContract(oneArg(researchDocumentIdRequestSchema), researchDocumentRunSchema.array()) }),
+    request({ key: 'researchDocumentContent', channel: 'roc:research:document-content', domain: 'research', method: 'getDocumentContent', kind: 'plugin', capabilityName: 'research.document.content', inputTransform: first, contract: methodContract(oneArg(researchDocumentPreviewRequestSchema), researchDocumentParseSchema) }),
+    request({ key: 'researchDocumentPreview', channel: 'roc:research:document-preview', domain: 'research', method: 'previewDocument', kind: 'plugin', capabilityName: 'research.document.preview', inputTransform: first, contract: methodContract(oneArg(researchDocumentPreviewRequestSchema), researchDocumentPreviewSchema) }),
+    request({ key: 'researchDocumentResolveParse', channel: 'roc:research:document-resolve-parse', domain: 'research', method: 'resolveDocumentParse', kind: 'plugin', capabilityName: 'research.document.resolveParse', inputTransform: first, contract: methodContract(oneArg(researchDocumentResolveParseRequestSchema), researchDocumentSchema) }),
+    request({ key: 'researchIndexStatus', channel: 'roc:research:index-status', domain: 'research', method: 'getIndexStatus', kind: 'plugin', capabilityName: 'research.index.status', inputTransform: first, contract: methodContract(oneArg(researchIndexProjectRequestSchema), researchIndexStatusSchema) }),
+    request({ key: 'researchIndexConfigure', channel: 'roc:research:index-configure', domain: 'research', method: 'saveIndexSettings', kind: 'plugin', capabilityName: 'research.index.configure', inputTransform: first, contract: methodContract(oneArg(researchIndexSettingsSaveSchema), researchIndexStatusSchema) }),
+    request({ key: 'researchIndexControl', channel: 'roc:research:index-control', domain: 'research', method: 'controlIndex', kind: 'plugin', capabilityName: 'research.index.control', inputTransform: first, contract: methodContract(oneArg(researchIndexControlRequestSchema), researchIndexStatusSchema) }),
+    request({ key: 'researchIndexFiles', channel: 'roc:research:index-files', domain: 'research', method: 'listIndexedFiles', kind: 'plugin', capabilityName: 'research.index.files', inputTransform: first, contract: methodContract(oneArg(researchIndexFilesRequestSchema), researchIndexedFileSchema.array()) }),
+    request({ key: 'researchIndexJobs', channel: 'roc:research:index-jobs', domain: 'research', method: 'listIndexJobs', kind: 'plugin', capabilityName: 'research.index.jobs', inputTransform: first, contract: methodContract(oneArg(researchIndexJobsRequestSchema), researchIndexJobSchema.array()) }),
+    request({ key: 'researchIndexEvidenceSource', channel: 'roc:research:index-evidence-source', domain: 'research', method: 'getEvidenceIndexSource', kind: 'plugin', capabilityName: 'research.index.evidenceSource', inputTransform: first, contract: methodContract(oneArg(researchIndexEvidenceSourceRequestSchema), researchIndexedSourceSchema.nullable()) }),
+    request({ key: 'agentGetStatus', channel: 'roc:agent:get-status', domain: 'agent', method: 'getStatus', kind: 'plugin', capabilityName: 'agent.status.get', inputTransform: none, contract: methodContract(noArgs, agentRuntimeStatusSchema) }),
+    request({ key: 'agentGetRunDiagnostics', channel: 'roc:agent:get-run-diagnostics', domain: 'agent', method: 'getRunDiagnostics', kind: 'plugin', capabilityName: 'agent.run.diagnostics.get', inputTransform: first, contract: methodContract(oneArg(runDiagnosticsRequestSchema), runDiagnosticsSchema.nullable()) }),
+    request({ key: 'agentGetConfigPreview', channel: 'roc:agent:get-config-preview', domain: 'agent', method: 'getConfigPreview', kind: 'plugin', capabilityName: 'agent.config.preview', inputTransform: none, contract: methodContract(noArgs, deepAgentConfigPreviewSchema) }),
+    request({ key: 'agentGetCapabilityPreview', channel: 'roc:agent:get-capability-preview', domain: 'agent', method: 'getCapabilityPreview', kind: 'plugin', capabilityName: 'agent.capability.preview', inputTransform: first, contract: methodContract(oneArg(agentCapabilityPreviewRequestSchema), agentCapabilityPreviewSchema) }),
+    request({ key: 'agentPilotStatus', channel: 'roc:agent:pilot-status', domain: 'agent', method: 'getPilotStatus', kind: 'plugin', capabilityName: 'agent.pilot.status', inputTransform: none, contract: methodContract(noArgs, pilotStatusSchema) }),
+    request({ key: 'agentPilotEnable', channel: 'roc:agent:pilot-enable', domain: 'agent', method: 'enablePilot', kind: 'plugin', capabilityName: 'agent.pilot.enable', inputTransform: first, contract: methodContract(oneArg(pilotOptInRequestSchema), pilotStatusSchema) }),
+    request({ key: 'agentPilotRollback', channel: 'roc:agent:pilot-rollback', domain: 'agent', method: 'rollbackPilot', kind: 'plugin', capabilityName: 'agent.pilot.rollback', inputTransform: none, contract: methodContract(noArgs, pilotStatusSchema) }),
+    request({ key: 'chatStartRun', channel: 'roc:chat:start-run', domain: 'chat', method: 'startRun', kind: 'plugin', capabilityName: 'agent.run.start', inputTransform: first, contract: methodContract(oneArg(chatStartRunIpcRequestSchema), chatStartRunResultSchema) }),
+    request({ key: 'chatCancelRun', channel: 'roc:chat:cancel-run', domain: 'chat', method: 'cancelRun', kind: 'plugin', capabilityName: 'agent.run.cancel', inputTransform: id('runId'), contract: methodContract(stringArg, chatCancelRunResultSchema) }),
+    request({ key: 'chatCorrectRun', channel: 'roc:chat:correct-run', domain: 'chat', method: 'correctRun', kind: 'plugin', capabilityName: 'agent.run.correct', inputTransform: first, contract: methodContract(oneArg(chatCorrectRunRequestSchema), chatCorrectRunResultSchema) }),
+    request({ key: 'chatRunInputs', channel: 'roc:chat:run-inputs', domain: 'chat', method: 'runInputs', kind: 'plugin', capabilityName: 'agent.run.inputs', inputTransform: first, contract: methodContract(oneArg(chatRunInputsRequestSchema), chatRunInputsResultSchema) }),
+    request({ key: 'chatReconcileEffects', channel: 'roc:chat:reconcile-effects', domain: 'chat', method: 'reconcileEffects', kind: 'plugin', capabilityName: 'agent.run.effects.reconcile', inputTransform: first, contract: methodContract(oneArg(chatRunInputsRequestSchema), chatReconcileEffectsResultSchema) }),
+    request({ key: 'chatResumeRun', channel: 'roc:chat:resume-run', domain: 'chat', method: 'resumeRun', kind: 'plugin', capabilityName: 'agent.run.resume', inputTransform: first, contract: methodContract(oneArg(chatResumeRunRequestSchema), chatResumeRunResultSchema) }),
+    request({ key: 'chatGetRunEvents', channel: 'roc:chat:get-run-events', domain: 'chat', method: 'getRunEvents', kind: 'plugin', capabilityName: 'agent.run.events.list', inputTransform: first, contract: methodContract(oneArg(chatRunEventsReplayRequestSchema), chatRunEventsReplayResultSchema) }),
+    request({ key: 'chatReplayRunEvents', channel: 'roc:chat:replay-run-events', domain: 'chat', method: 'replayRunEvents', kind: 'plugin', capabilityName: 'agent.run.events.replay', inputTransform: first, contract: methodContract(oneArg(chatRunEventsReplayRequestSchema), chatRunEventsReplayPageSchema) }),
+    request({ key: 'chatGetActiveRun', channel: 'roc:chat:get-active-run', domain: 'chat', method: 'getActiveRun', kind: 'plugin', capabilityName: 'agent.run.active.get', inputTransform: first, contract: methodContract(oneArg(chatActiveRunRequestSchema), activeChatRunSchema.nullable()) }),
+    request({ key: 'workspaceGetCurrent', channel: 'roc:workspace:get-current', domain: 'workspace', method: 'getCurrent', kind: 'plugin', capabilityName: 'workspace.getCurrent', inputTransform: none, contract: methodContract(noArgs, workspaceSchema.nullable()) }),
+    request({ key: 'workspaceSelect', channel: 'roc:workspace:select', domain: 'workspace', method: 'select', kind: 'plugin', capabilityName: 'workspace.select', inputTransform: first, contract: methodContract(oneArg(workspaceSelectRequestSchema), workspaceSchema) }),
+    request({ key: 'workspaceSelectFromDialog', channel: 'roc:workspace:select-from-dialog', domain: 'workspace', method: 'selectFromDialog', kind: 'direct', contract: methodContract(noArgs, workspaceSchema.nullable()) }),
+    request({ key: 'filesSelectFromDialog', channel: 'roc:files:select-from-dialog', domain: 'files', method: 'selectFromDialog', kind: 'direct', contract: methodContract(noArgs, fileDialogSelectionSchema.nullable()) }),
+    request({ key: 'filesListTree', channel: 'roc:files:list-tree', domain: 'files', method: 'listTree', kind: 'plugin', capabilityName: 'files.listTree', inputTransform: first, contract: methodContract(oneArg(fileTreeRequestSchema), fileTreeResultSchema) }),
+    request({ key: 'filesSearch', channel: 'roc:files:search', domain: 'files', method: 'search', kind: 'plugin', capabilityName: 'files.search', inputTransform: first, contract: methodContract(oneArg(fileSearchRequestSchema), fileSearchResultSchema) }),
+    request({ key: 'filesSearchByName', channel: 'roc:files:search-by-name', domain: 'files', method: 'searchByName', kind: 'plugin', capabilityName: 'files.searchByName', inputTransform: first, contract: methodContract(oneArg(fileNameSearchRequestSchema), fileNameSearchResultSchema) }),
+    request({ key: 'filesPreview', channel: 'roc:files:preview', domain: 'files', method: 'preview', kind: 'plugin', capabilityName: 'files.preview', inputTransform: first, contract: methodContract(oneArg(filePreviewRequestSchema), filePreviewResultSchema) }),
+    request({ key: 'filesPreviewPdf', channel: 'roc:files:preview-pdf', domain: 'files', method: 'previewPdf', kind: 'plugin', capabilityName: 'files.previewPdf', inputTransform: first, contract: methodContract(oneArg(filePdfPreviewRequestSchema), filePdfPreviewResultSchema) }),
+    request({ key: 'filesWriteText', channel: 'roc:files:write-text', domain: 'files', method: 'writeText', kind: 'plugin', capabilityName: 'files.writeText', inputTransform: first, contract: methodContract(oneArg(fileWriteTextRequestSchema), fileWriteResultSchema) }),
+    request({ key: 'gitStatus', channel: 'roc:git:status', domain: 'git', method: 'status', kind: 'plugin', capabilityName: 'git.status', inputTransform: none, contract: methodContract(noArgs, gitStatusResultSchema) }),
+    request({ key: 'gitDiffStat', channel: 'roc:git:diff-stat', domain: 'git', method: 'diffStat', kind: 'plugin', capabilityName: 'git.diffStat', inputTransform: none, contract: methodContract(noArgs, gitDiffStatResultSchema) }),
+    request({ key: 'gitFileDiff', channel: 'roc:git:file-diff', domain: 'git', method: 'fileDiff', kind: 'plugin', capabilityName: 'git.fileDiff', inputTransform: first, contract: methodContract(oneArg(gitFileOperationRequestSchema), gitFileDiffResultSchema) }),
+    request({ key: 'gitStageFile', channel: 'roc:git:stage-file', domain: 'git', method: 'stageFile', kind: 'plugin', capabilityName: 'git.stageFile', inputTransform: first, contract: methodContract(oneArg(gitFileOperationRequestSchema), gitStatusResultSchema) }),
+    request({ key: 'gitStageFiles', channel: 'roc:git:stage-files', domain: 'git', method: 'stageFiles', kind: 'plugin', capabilityName: 'git.stageFiles', inputTransform: first, contract: methodContract(oneArg(gitBatchFileOperationRequestSchema), gitStatusResultSchema) }),
+    request({ key: 'gitUnstageFile', channel: 'roc:git:unstage-file', domain: 'git', method: 'unstageFile', kind: 'plugin', capabilityName: 'git.unstageFile', inputTransform: first, contract: methodContract(oneArg(gitFileOperationRequestSchema), gitStatusResultSchema) }),
+    request({ key: 'gitDiscardFile', channel: 'roc:git:discard-file', domain: 'git', method: 'discardFile', kind: 'plugin', capabilityName: 'git.discardFile', inputTransform: first, contract: methodContract(oneArg(gitFileOperationRequestSchema), gitStatusResultSchema) }),
+    request({ key: 'gitCommit', channel: 'roc:git:commit', domain: 'git', method: 'commit', kind: 'plugin', capabilityName: 'git.commit', inputTransform: first, contract: methodContract(oneArg(gitCommitRequestSchema), gitCommitResultSchema) }),
+    request({ key: 'gitPush', channel: 'roc:git:push', domain: 'git', method: 'push', kind: 'plugin', capabilityName: 'git.push', inputTransform: first, contract: methodContract(oneArg(gitPushRequestSchema), gitPushResultSchema) }),
+    request({ key: 'gitCancel', channel: 'roc:git:cancel', domain: 'git', method: 'cancel', kind: 'plugin', capabilityName: 'git.cancel', inputTransform: first, contract: methodContract(oneArg(gitCancelRequestSchema), z.boolean()) }),
+    request({ key: 'gitListBranches', channel: 'roc:git:list-branches', domain: 'git', method: 'listBranches', kind: 'plugin', capabilityName: 'git.listBranches', inputTransform: none, contract: methodContract(noArgs, gitBranchListResultSchema) }),
+    request({ key: 'gitCreateBranch', channel: 'roc:git:create-branch', domain: 'git', method: 'createBranch', kind: 'plugin', capabilityName: 'git.createBranch', inputTransform: first, contract: methodContract(oneArg(gitCreateBranchRequestSchema), gitBranchMutationResultSchema) }),
+    request({ key: 'gitCheckoutBranch', channel: 'roc:git:checkout-branch', domain: 'git', method: 'checkoutBranch', kind: 'plugin', capabilityName: 'git.checkoutBranch', inputTransform: first, contract: methodContract(oneArg(gitCheckoutBranchRequestSchema), gitBranchMutationResultSchema) }),
+    request({ key: 'terminalCreateSession', channel: 'roc:terminal:create-session', domain: 'terminal', method: 'createSession', kind: 'plugin', capabilityName: 'terminal.createSession', inputTransform: first, contract: methodContract(oneArg(terminalSessionCreateRequestSchema), terminalSessionSnapshotSchema) }),
+    request({ key: 'terminalWriteInput', channel: 'roc:terminal:write-input', domain: 'terminal', method: 'writeInput', kind: 'plugin', capabilityName: 'terminal.writeInput', inputTransform: first, contract: methodContract(oneArg(terminalSessionInputRequestSchema), deliveredResultSchema) }),
+    request({ key: 'terminalResize', channel: 'roc:terminal:resize', domain: 'terminal', method: 'resize', kind: 'plugin', capabilityName: 'terminal.resize', inputTransform: first, contract: methodContract(oneArg(terminalSessionResizeRequestSchema), terminalSessionSnapshotSchema) }),
+    request({ key: 'terminalCloseSession', channel: 'roc:terminal:close-session', domain: 'terminal', method: 'closeSession', kind: 'plugin', capabilityName: 'terminal.closeSession', inputTransform: first, contract: methodContract(oneArg(terminalSessionCloseRequestSchema), closedResultSchema) }),
+    request({ key: 'rtkStatus', channel: 'roc:rtk:status', domain: 'rtk', method: 'status', kind: 'plugin', capabilityName: 'rtk.status', inputTransform: none, contract: methodContract(noArgs, rtkStatusSchema) }),
+    request({ key: 'shellExecute', channel: 'roc:shell:execute', domain: 'shell', method: 'execute', kind: 'plugin', capabilityName: 'shell.execute', inputTransform: first, contract: methodContract(oneArg(shellExecutionIpcRequestSchema), shellExecutionResultSchema) }),
+    request({ key: 'shellConfirm', channel: 'roc:shell:confirm', domain: 'shell', method: 'confirm', kind: 'direct', contract: methodContract(oneArg(shellConfirmationRequestSchema), shellConfirmationResultSchema) })
+  ],
+  events: [
+    event({ key: 'researchTaskUpdated', channel: 'roc:research:task-updated', domain: 'research', method: 'onTaskUpdated', contract: eventContract(researchTaskUpdatedSchema) }),
+    event({ key: 'researchLibraryChanged', channel: 'roc:research:library-changed', domain: 'research', method: 'onLibraryChanged', contract: eventContract(literatureLibraryChangedSchema) }),
+    event({ key: 'appearanceUpdated', channel: 'roc:appearance:updated', domain: 'app', method: 'onAppearanceUpdated', contract: eventContract(systemAppearanceSnapshotSchema) }),
+    event({ key: 'navigate', channel: 'roc:navigate', domain: 'app', method: 'onNavigate', contract: eventContract(z.string()) }),
+    event({ key: 'windowHidden', channel: 'roc:window:hidden', domain: 'window', method: 'onHidden', contract: eventContract(windowHiddenSnapshotSchema) }),
+    event({ key: 'windowResourcePressure', channel: 'roc:window:resource-pressure', domain: 'window', method: 'onResourcePressure', contract: eventContract(windowResourcePressureSchema) }),
+    event({ key: 'tasksUpdated', channel: 'roc:tasks:updated', domain: 'tasks', method: 'onUpdated', contract: eventContract(taskUpdateEventSchema.nullable()) }),
+    event({ key: 'workspaceChanged', channel: 'roc:workspace:changed', domain: 'workspace', method: 'onChanged', contract: eventContract(workspaceChangedEventSchema) }),
+    event({ key: 'terminalOutput', channel: 'roc:terminal:output', domain: 'terminal', method: 'onOutput', contract: eventContract(terminalSessionOutputEventSchema) }),
+    event({ key: 'terminalExit', channel: 'roc:terminal:exit', domain: 'terminal', method: 'onExit', contract: eventContract(terminalSessionExitEventSchema) }),
+    event({ key: 'chatRunEvent', channel: 'roc:chat:run-event', domain: 'chat', method: 'onRunEvent', contract: eventContract(chatRunEventSchema) }),
+    event({ key: 'skillsUpdated', channel: 'roc:skills:updated', domain: 'skills', method: 'onUpdated', contract: eventContract(builtinSkillsStatusSchema) })
+  ]
+} as const;
+
+export type IpcRequestEntry = (typeof ipcRegistry.requests)[number];
+export type IpcEventEntry = (typeof ipcRegistry.events)[number];
+type RequestEntry = IpcRequestEntry;
+type EventEntry = IpcEventEntry;
+type IpcDomain = RequestEntry['domain'] | EventEntry['domain'];
+
+const requestsByChannel = new Map<string, IpcRequestEntry>(
+  ipcRegistry.requests.map((entry) => [entry.channel, entry] as const)
+);
+
+function getRequestEntry(channel: string): IpcRequestEntry {
+  const entry = requestsByChannel.get(channel);
+  if (entry === undefined) {
+    throw new Error(`ipc_request_contract_not_found:${channel}`);
+  }
+  return entry;
+}
+
+export function parseIpcRequestArgs(channel: string, args: unknown[]): unknown[] {
+  return getRequestEntry(channel).contract.args.parse(args);
+}
+
+export function parseIpcResult(channel: string, result: unknown): IpcResult<unknown> {
+  const entry = getRequestEntry(channel);
+  return ipcResultSchema(entry.contract.result).parse(result);
+}
+
+export function parseIpcEventPayload(channel: string, payload: unknown): IpcEventPayload {
+  const entry = ipcRegistry.events.find((candidate) => candidate.channel === channel);
+  if (entry === undefined) {
+    throw new Error(`ipc_event_contract_not_found:${channel}`);
+  }
+  return entry.contract.payload.parse(payload);
+}
+
+/** Every registered event payload, as one distributable union. */
+type RegisteredEventPayloadSchema = (typeof ipcRegistry.events)[number]['contract']['payload'];
+export type IpcEventPayload = z.output<RegisteredEventPayloadSchema>;
+
+type RequestMethod<TEntry> = TEntry extends {
+  contract: IpcMethodContract<infer TArgsSchema, infer TResultSchema>;
+}
+  ? (...args: z.output<TArgsSchema>) => Promise<IpcResult<z.output<TResultSchema>>>
+  : never;
+
+type EventMethod<TEntry> = TEntry extends { contract: IpcEventContract<infer TPayloadSchema> }
+  ? (callback: (payload: z.output<TPayloadSchema>) => void) => () => void
+  : never;
+
+type DomainRequests<TDomain extends IpcDomain> = {
+  [TEntry in RequestEntry as TEntry['domain'] extends TDomain ? TEntry['method'] : never]: RequestMethod<TEntry>;
+};
+
+type DomainEvents<TDomain extends IpcDomain> = {
+  [TEntry in EventEntry as TEntry['domain'] extends TDomain ? TEntry['method'] : never]: EventMethod<TEntry>;
+};
+
+type Expand<TValue> = { [TKey in keyof TValue]: TValue[TKey] };
+
+export type RocPreloadApi = {
+  [TDomain in IpcDomain]: Expand<DomainRequests<TDomain> & DomainEvents<TDomain>>;
+};

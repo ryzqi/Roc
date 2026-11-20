@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "tectonicVersion": "0.17.0",
+  "valeVersion": "3.28.1",
+  "typstVersion": "0.15.1",
+  "texBundle": {
+    "url": "https://data1b.fullyjustified.net/tlextras-2022.0r0.tar",
+    "sha256": "425685e124746c15ba9bb8e0596bdaad98fce886afa347fbcf9ec0e9acd7fe79",
+    "zipSha256": "820b326ea1d3e49712763d641a7b0a8b21af621dd4158d703ab4eb1eb35886a8",
+    "size": 2881562112,
+    "formatSerial": 33,
+    "upstreamDefault": "https://relay.fullyjustified.net/default_bundle_v33.tar"
+  },
+  "architectures": {
+    "arm64": {
+      "tectonic": {
+        "url": "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.17.0/tectonic-0.17.0-aarch64-apple-darwin.tar.gz",
+        "sha256": "a3f1cac7c5678f01661a92212f58480ae3b0634115d880dbc59e2953ded45667"
+      },
+      "vale": {
+        "url": "https://github.com/vale-cli/vale/releases/download/v3.28.1/vale_3.28.1_macOS_arm64.tar.gz",
+        "sha256": "b5362c16d2c95db9d773078b957f5bd59cef27d05dac34c5248a93fed130e9f1"
+      },
+      "typst": {
+        "url": "https://github.com/typst/typst/releases/download/v0.15.1/typst-aarch64-apple-darwin.tar.xz",
+        "sha256": "48f62ed034aa3a7978309579ac6ca00045e2ef0da73114e8af27cfd8e74dc05a"
+      },
+      "pandoc": {
+        "url": "https://github.com/jgm/pandoc/releases/download/3.14/pandoc-3.14-arm64-macOS.zip",
+        "sha256": "58d6593884fec9d4424b641b92503c316d9c36decb2891ff8d73ae74dd3b6304"
+      }
+    }
+  },
+  "pandocVersion": "3.14"
+}

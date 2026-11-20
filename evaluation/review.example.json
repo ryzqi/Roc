@@ -1,0 +1,8 @@
+{
+  "decision": "adopt",
+  "reviewer": "填写实际评审人",
+  "rationale": "填写对收益、退化、成本与证据局限的判断。",
+  "reviewedTrials": [
+    {"taskId": "填写实际检查过的候选 taskId", "repeat": 0, "finding": "填写完整轨迹和最终状态的检查结果。"}
+  ]
+}

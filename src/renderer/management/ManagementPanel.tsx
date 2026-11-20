@@ -1,0 +1,123 @@
+import { useState } from 'react';
+import { ConfirmDialog } from '../shell/ConfirmDialog';
+import { ModalShell } from '../shell/ModalShell';
+import { useManagement } from './management-scope';
+import { MANAGEMENT_LOADING_SUMMARIES, MANAGEMENT_TABS, ManagementSectionBody, ManagementTabStrip, managementSummary } from './management-shell-parts';
+import type { ManagementTabId } from './use-management-stores';
+import { useManagementStores } from './management-stores-provider';
+import { discardManagementDrafts, managementDraftState } from './management-draft-state';
+import { requestManagementEditorChange } from './management-interactions';
+
+/**
+ * Management drawer (P1 shell, P9 content).
+ *
+ * Same component is opened from two places (assistant-adjacent 管理 button and the canvas service
+ * entry), rendered as a right-hand drawer so neither entry has to know the other's placement. The
+ * tab set is fixed at four — memory / skills / MCP / background tasks — and deliberately excludes
+ * guardrails (they are settings, §7) and telemetry/eval (no backend entity; metrics live in the run
+ * diagnostics view).
+ *
+ * **The width changed in P9** from 560px to `min(720px, 92vw)`: the four tabs carry a markdown
+ * editor with an outline, a file browser with a preview, an MCP form and a task form, and a 560px
+ * column forced the editors into a scroll of their own (the draft and its outline could not be seen
+ * together). The tab strip, the per-tab summary and the section bodies come from
+ * `management-shell-parts` so the canvas views cannot drift from the drawer.
+ *
+ * **The 「在画布中打开」 button is gone (P10).** It competed with the tab strip for the same row
+ * and it was not the only way in: the command palette (⌘K → 管理) reaches every canvas management
+ * view through `AppShell`'s `openManagementSection`. The drawer is the drawer; canvas management is
+ * entered from the palette (menu intents do not carry canvas views — `menuPages` has settings /
+ * new-project / chat / tasks).
+ */
+
+export type ManagementPanelProps = {
+  open: boolean;
+  onClose: () => void;
+  /** Controlled: the assistant-adjacent button and the canvas service entry open different tabs,
+   *  so the owner holds the selection. */
+  activeTab: ManagementTabId;
+  onTabChange: (tab: ManagementTabId) => void;
+};
+
+export function ManagementPanel({
+  open,
+  onClose,
+  activeTab,
+  onTabChange
+}: ManagementPanelProps): React.JSX.Element {
+  const scope = useManagement();
+  const summaries = useManagementStores((stores) => stores.summaries);
+  const stores = useManagementStores((stores) => stores);
+  const drafts = managementDraftState(stores);
+  const visibleSummaries = summaries ?? MANAGEMENT_LOADING_SUMMARIES;
+  const tab = MANAGEMENT_TABS.some((entry) => entry.id === activeTab) ? activeTab : 'memory';
+  const [discardOpen, setDiscardOpen] = useState(false);
+
+  /**
+   * Unsaved management drafts are never dropped silently.
+   *
+   * The drawer and canvas share one scope-owned draft store. Leaving the drawer with
+   * edits still asks first, and discarding clears the same draft both surfaces display.
+   */
+  const beforeClose = (): boolean => {
+    requestManagementEditorChange(() => {
+      const current = managementDraftState(stores);
+      if (current.busy) return;
+      if (current.sections.length === 0) onClose();
+      else setDiscardOpen(true);
+    });
+    return false;
+  };
+
+  return (
+    <>
+    <ModalShell
+      open={open}
+      title="管理"
+      kind="drawer"
+      onClose={onClose}
+      beforeClose={beforeClose}
+      closeDisabled={drafts.busy}
+      closeOnBackdrop={false}
+      bodyPadding="none"
+      widthClassName="w-[min(720px,92vw)]"
+      testId="management-panel"
+    >
+      <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-4 leading-normal tabular-nums">
+        <ManagementTabStrip
+          activeTab={tab}
+          onTabChange={onTabChange}
+          summaries={visibleSummaries}
+          idPrefix="mgmt-drawer"
+          testIdPrefix="mgmt"
+        />
+
+        <p className="shrink-0 text-muted text-[length:var(--font-meta-size)]" data-testid="mgmt-summary">
+          {managementSummary(tab, visibleSummaries)}
+        </p>
+
+        <ManagementSectionBody tab={tab} scope={scope} idPrefix="mgmt-drawer" testIdPrefix="mgmt" />
+      </div>
+    </ModalShell>
+
+    <ConfirmDialog
+      open={open && discardOpen}
+      title="放弃未保存的管理改动？"
+      message={`${drafts.sections.join('、')} 尚未保存。`}
+      detail="放弃后需要重新填写。"
+      confirmLabel="放弃修改"
+      cancelLabel="继续编辑"
+      tone="destructive"
+      confirmDisabled={drafts.busy}
+      testId="mgmt-discard"
+      onCancel={() => setDiscardOpen(false)}
+      onConfirm={() => {
+        if (managementDraftState(stores).busy) return;
+        setDiscardOpen(false);
+        discardManagementDrafts(stores);
+        onClose();
+      }}
+    />
+    </>
+  );
+}

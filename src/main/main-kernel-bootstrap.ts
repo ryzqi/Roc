@@ -1,0 +1,419 @@
+import { join } from 'node:path';
+
+import type {
+  AgentRuntimeStatus,
+  AppStatus,
+  SettingsSaveRequest,
+  ShellConfirmationRequest,
+  ShellConfirmationResult,
+  SystemAppearanceSnapshot
+} from '../shared/types';
+import { setLogService, toLogError } from './services/errors';
+import type { SafeStorageBackend } from './infrastructure/safe-storage-backend';
+import type { DatabasePool } from './infrastructure/database-pool';
+import { KernelRuntime } from './kernel/kernel-runtime';
+import type { EventSubscription, RocEventEnvelope, RocPlugin } from './kernel/types';
+import { createAppPlugin } from './plugins/app';
+import { LangChainAgentModelFactoryAdapter } from './plugins/agent/model-factory-adapter';
+import { createAgentPlugin } from './plugins/agent';
+import { AgentTaskHistoryContract } from './plugins/agent/agent-task-history-contract';
+import { AgentMemoryStatsContract } from './plugins/agent/agent-memory-stats-contract';
+import { createDiagnosticsPlugin } from './plugins/diagnostics';
+import type { RuntimeMetricsProvider } from './plugins/diagnostics/runtime-metrics';
+import { createMcpPlugin } from './plugins/mcp';
+import { createMemoryPlugin } from './plugins/memory';
+import { createRuntimeToolsPlugin } from './plugins/runtime-tools';
+import { createResearchPlugin } from './plugins/research';
+import { createResearchRoleExecutor } from './plugins/research/role-executor';
+import { createSkillsPlugin } from './plugins/skills';
+import { createTaskPlugin } from './plugins/task';
+import { createWorkspacePlugin } from './plugins/workspace';
+import { RocSqliteStore } from './services/memory/sqlite-store';
+import { ConfigService } from './services/config-service';
+import { HookCommandRunner, HookConfigService, HookRuntime, HookTrustService } from './services/hooks';
+import { LangChainModelFactory } from './services/langchain-model-factory';
+import { LogService } from './services/log-service';
+import { MetricsService } from './services/metrics-service';
+import { PerformanceObserverService } from './services/performance-observer-service';
+import { RocPaths } from './services/paths';
+import { ProviderRuntimeService } from './services/provider-runtime-service';
+import { SecretService } from './services/secret-service';
+import { SelfConfigService } from './services/self-config';
+import { openExecutionGrantBroker } from './services/deep-agent/execution-grant-broker';
+import { WorkspaceService } from './services/workspace-service';
+import { ResearchTaskRepository } from './plugins/research/research-task-repository';
+import { RunUsageLedger } from './services/deep-agent/run-usage-ledger';
+
+export type MainKernelBootstrapOptions = {
+  dataRoot?: string;
+  researchToolchainRoot?: string;
+  researchModelsRoot?: string;
+  builtinSkillsRoot?: string;
+  safeStorage: SafeStorageBackend;
+  confirmShellRequest?: (request: ShellConfirmationRequest) => Promise<ShellConfirmationResult>;
+  plugins?: readonly RocPlugin[];
+  performanceObserverService?: PerformanceObserverService;
+  runtimeMetricsProvider?: RuntimeMetricsProvider;
+  version?: string;
+  isPackaged?: boolean;
+  getAppearance?: () => SystemAppearanceSnapshot;
+};
+
+export type MainKernelBootstrap = {
+  readonly paths: RocPaths;
+  readonly runtime: KernelRuntime;
+  readonly configService: ConfigService;
+  readonly hookConfigService: HookConfigService;
+  readonly hookTrustService: HookTrustService;
+  readonly logService: LogService;
+  readonly secretService: SecretService;
+  readonly providerRuntimeService: ProviderRuntimeService;
+  readonly performanceObserverService: PerformanceObserverService;
+  start(): Promise<void>;
+  startDatabaseMaintenance(): void;
+  shutdown(): Promise<void>;
+  syncSettingsSnapshot(request: SettingsSaveRequest): void;
+  invokeCapability<TInput, TOutput>(name: string, input: TInput): Promise<TOutput>;
+  subscribeEvent<TPayload>(
+    type: string,
+    handler: (event: RocEventEnvelope<TPayload>) => void | Promise<void>
+  ): EventSubscription;
+};
+
+export function createMainKernelBootstrap(options: MainKernelBootstrapOptions): MainKernelBootstrap {
+  const paths = new RocPaths(options.dataRoot);
+  const pluginDataDir = join(paths.root, 'plugin-data');
+  const performanceObserverService = options.performanceObserverService ?? new PerformanceObserverService();
+  paths.ensureTree();
+  const configService = new ConfigService(paths);
+  configService.initialize();
+  const hookTrustService = new HookTrustService(paths);
+  const hookConfigService = new HookConfigService(paths, hookTrustService);
+  const hookCommandRunner = new HookCommandRunner();
+  const hookRuntime = new HookRuntime({
+    configService: hookConfigService,
+    trustService: hookTrustService,
+    commandRunner: hookCommandRunner
+  });
+  const selfConfigService = new SelfConfigService({
+    paths,
+    hookConfigService,
+    hookTrustService,
+    commandRunner: hookCommandRunner,
+    configService
+  });
+  const logService = new LogService(paths);
+  logService.initialize();
+  setLogService(logService);
+  const secretService = new SecretService(paths, options.safeStorage);
+  const metricsService = new MetricsService();
+  const modelFactory = new LangChainModelFactory(configService, secretService, logService);
+  const providerRuntimeService = new ProviderRuntimeService(configService, modelFactory, metricsService);
+  const runtime = new KernelRuntime({
+    rootDir: pluginDataDir,
+    performanceObserverService,
+    memoryRetentionPolicy: () => {
+      configService.reloadSettingsDocument();
+      const memory = configService.getSettings().memory;
+      return {
+        autoMemoryAuditRetentionDays: memory.autoMemory.auditRetentionDays,
+        sessionMessageRetentionDays: memory.sessionRetentionDays
+      };
+    },
+    createPlugins: (databasePool) =>
+      options.plugins ??
+      createDefaultMainKernelPlugins({
+        configService,
+        confirmShellRequest: options.confirmShellRequest,
+        databasePool,
+        hookRuntime,
+        metricsService,
+        modelFactory,
+        paths,
+        performanceObserverService,
+        runtimeMetricsProvider: options.runtimeMetricsProvider,
+        selfConfigService,
+        version: requireMainKernelVersion(options.version),
+        isPackaged: options.isPackaged,
+        getAppearance: options.getAppearance,
+        researchToolchainRoot: options.researchToolchainRoot,
+        researchModelsRoot: options.researchModelsRoot,
+        builtinSkillsRoot: options.builtinSkillsRoot
+      }),
+    safeStorage: options.safeStorage
+  });
+
+  return {
+    paths,
+    runtime,
+    configService,
+    hookConfigService,
+    hookTrustService,
+    logService,
+    secretService,
+    providerRuntimeService,
+    performanceObserverService,
+    async start() {
+      try {
+        paths.ensureTree();
+        await runtime.start();
+      } catch (error) {
+        logService.error('Application startup failed.', toLogError(error), { service: 'main' });
+        setLogService(null);
+        // Electron exits immediately after this rejection. Drain and close the
+        // application destination even when its asynchronous open is still pending.
+        await logService.close();
+        throw error;
+      }
+    },
+    startDatabaseMaintenance() {
+      runtime.startDatabaseMaintenance();
+    },
+    async shutdown() {
+      try {
+        await runtime.shutdown();
+      } finally {
+        setLogService(null);
+        await logService.close();
+      }
+    },
+    syncSettingsSnapshot(request) {
+      void request;
+      configService.reloadSettingsDocument();
+    },
+    async invokeCapability<TInput, TOutput>(name: string, input: TInput): Promise<TOutput> {
+      return await runtime.invokeCapability<TInput, TOutput>(name, input);
+    },
+    subscribeEvent<TPayload>(
+      type: string,
+      handler: (event: RocEventEnvelope<TPayload>) => void | Promise<void>
+    ): EventSubscription {
+      return runtime.subscribeEvent(type, handler);
+    }
+  };
+}
+
+function createDefaultMainKernelPlugins(input: {
+  researchToolchainRoot?: string;
+  researchModelsRoot?: string;
+  builtinSkillsRoot?: string;
+  databasePool: DatabasePool;
+  paths: RocPaths;
+  configService: ConfigService;
+  confirmShellRequest?: (request: ShellConfirmationRequest) => Promise<ShellConfirmationResult>;
+  hookRuntime: HookRuntime;
+  metricsService: MetricsService;
+  modelFactory: LangChainModelFactory;
+  performanceObserverService: PerformanceObserverService;
+  runtimeMetricsProvider?: RuntimeMetricsProvider;
+  selfConfigService: SelfConfigService;
+  version: string;
+  isPackaged?: boolean;
+  getAppearance?: () => SystemAppearanceSnapshot;
+}): readonly RocPlugin[] {
+  input.paths.ensureTree();
+  const configService = input.configService;
+  const agentDatabase = input.databasePool.getConnection('@roc/plugin-agent');
+  const executionGrantBroker = openExecutionGrantBroker(agentDatabase);
+  const researchTasks = new ResearchTaskRepository(agentDatabase);
+  const researchUsageLedger = new RunUsageLedger(agentDatabase);
+  // One binding, two readers. `workspace.select` writes this instance (the workspace plugin owns
+  // the capability) and the memory plugin reads it, so the two project memory slots
+  // (`/memory/workspaces/current/{AGENTS,MEMORY}.md`) resolve against the directory the shell
+  // actually bound instead of a permanent `null` (B26).
+  const workspaceService = new WorkspaceService();
+  const agentModelFactory = new LangChainAgentModelFactoryAdapter(input.modelFactory, {
+    beforeCreate: () => configService.reloadSettingsDocument()
+  });
+
+  return [
+    createAppPlugin({
+      statusProvider: () => {
+        configService.reloadSettingsDocument();
+        return createAppStatus({
+          configService,
+          getAppearance: input.getAppearance,
+          isPackaged: input.isPackaged === true,
+          paths: input.paths,
+          version: input.version
+        });
+      }
+    }),
+    createAgentPlugin({
+      researchTasks,
+      executionGrantBroker,
+      capabilityPreview: {
+        deleteFileApprovalModeProvider: () => {
+          configService.reloadSettingsDocument();
+          return configService.getPermissions().mode;
+        },
+        mcpApprovalModeProvider: () => {
+          configService.reloadSettingsDocument();
+          return configService.getMcpConfig().approvalMode;
+        }
+      },
+      deepAgentExecutor: {
+        getMemorySettings: () => {
+          configService.reloadSettingsDocument();
+          return configService.getSettings().memory;
+        },
+        hookRuntime: input.hookRuntime,
+        metricsService: input.metricsService,
+        memoryStore: new RocSqliteStore(input.databasePool.getConnection('@roc/plugin-memory')),
+        paths: input.paths,
+        selfConfigService: input.selfConfigService
+      },
+      modelFactory: agentModelFactory,
+      statusProvider: () => {
+        configService.reloadSettingsDocument();
+        return createAgentRuntimeStatus(configService);
+      }
+    }),
+    createMemoryPlugin({
+      // `memory.status` reports session rows and full-text-index health, both of which live in the
+      // agent database — the memory plugin only owns the memory database.
+      agentFacts: new AgentMemoryStatsContract(agentDatabase),
+      getWorkspace: () => {
+        const workspace = workspaceService.getCurrentWorkspace();
+        return workspace === null ? null : { path: workspace.path, label: workspace.displayName };
+      },
+      getMemorySettings: () => {
+        configService.reloadSettingsDocument();
+        return configService.getSettings().memory;
+      }
+    }),
+    createTaskPlugin({
+      agentTaskHistory: new AgentTaskHistoryContract(agentDatabase)
+    }),
+    createWorkspacePlugin({ rootDir: input.paths.root, workspaceService }),
+    createResearchPlugin({
+      modelFactory: input.modelFactory,
+      diagnosticsRoot: input.paths.diagnosticsDir,
+      resourceRoot: join(input.paths.root, 'research-resources'),
+      tasks: researchTasks,
+      usageLedger: researchUsageLedger,
+      executionGrantBroker,
+      roleExecutor: createResearchRoleExecutor(agentModelFactory, researchUsageLedger), toolchainRoot: input.researchToolchainRoot,
+      modelsRoot: input.researchModelsRoot,
+      libraryRoot: join(input.paths.root, 'research-library'), indexRoot: join(input.paths.root, 'research-index'), experimentRoot: join(input.paths.root, 'research-experiments'),
+      exportRoot: join(input.paths.root, 'research-exports'), proseRoot: join(input.paths.root, 'research-prose') }),
+    createMcpPlugin({ configService }),
+    createSkillsPlugin({ rootDir: input.paths.root, bundledRoot: input.builtinSkillsRoot }),
+    createRuntimeToolsPlugin({
+      confirmShellRequest: input.confirmShellRequest,
+      executionGrantBroker,
+      rootDir: input.paths.root,
+      // Same instance the shell binds: `shell.execute` without an explicit `cwd` must resolve the
+      // bound directory instead of throwing `workspace_not_selected`.
+      workspaceService
+    }),
+    createDiagnosticsPlugin({
+      performanceObserverService: input.performanceObserverService,
+      rootDir: input.paths.root,
+      runtimeMetricsProvider: input.runtimeMetricsProvider
+    })
+  ];
+}
+
+function requireMainKernelVersion(version: string | undefined): string {
+  if (version === undefined || version.trim().length === 0) {
+    throw new Error('main_kernel_version_missing');
+  }
+  return version;
+}
+
+function createAppStatus(input: {
+  configService: ConfigService;
+  getAppearance?: () => SystemAppearanceSnapshot;
+  isPackaged: boolean;
+  paths: RocPaths;
+  version: string;
+}): AppStatus {
+  const workspaceLabel = '未选择工作区';
+  const workspaceReady = 'blocked';
+  return {
+    appName: 'Roc',
+    version: input.version,
+    mode: detectMode(input.isPackaged),
+    startedAt: new Date().toISOString(),
+    appearance: input.getAppearance === undefined ? defaultAppearance() : input.getAppearance(),
+    workspace: {
+      selectedPath: null,
+      label: workspaceLabel
+    },
+    paths: input.paths.snapshot(),
+    services: {
+      app: 'ready',
+      config: 'ready',
+      database: 'ready',
+      memory: 'ready',
+      tasks: 'ready',
+      lifecycle: 'ready',
+      diagnostics: 'ready',
+      mcp: 'ready',
+      skills: 'ready',
+      agent: input.configService.hasDefaultModel() ? 'ready' : 'blocked',
+      workspace: workspaceReady,
+      files: workspaceReady,
+      git: workspaceReady,
+      terminal: workspaceReady,
+      rtk: 'ready'
+    },
+    defaultModelConfigured: input.configService.hasDefaultModel(),
+    rendererBoundary: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: {
+        enabled: false,
+        evaluated: true,
+        reason: 'Electron sandbox blocks the current bundled ESM preload; smoke timed out before renderer root appeared.',
+        compensatingControls: ['contextIsolation', 'nodeIntegration=false', 'typed preload API', 'external URL scheme allowlist']
+      }
+    }
+  };
+}
+
+/**
+ * `mode` is the only public signal that a run is automated (`AppStatus.mode`). The smoke
+ * harness and the eight gates assert it, so it must stay in the contract; the values are the
+ * registered test seams' vocabulary, not a product setting (`docs/README.md` § 测试 seam).
+ */
+function detectMode(isPackaged: boolean): AppStatus['mode'] {
+  if (process.env.VITEST === 'true') {
+    return 'test';
+  }
+  if (process.env.ROC_SMOKE === '1') {
+    return 'smoke';
+  }
+  if (isPackaged) {
+    return 'packaged';
+  }
+  return 'development';
+}
+
+function defaultAppearance(): SystemAppearanceSnapshot {
+  return {
+    accentColor: '#0078d4',
+    inForcedColorsMode: false,
+    prefersReducedTransparency: false,
+    resolvedTheme: 'dark',
+    shouldUseHighContrastColors: false,
+    shouldUseInvertedColorScheme: false,
+    themeSource: 'system'
+  };
+}
+
+function createAgentRuntimeStatus(configService: ConfigService): AgentRuntimeStatus {
+  const defaultModelState = configService.getDefaultModelState();
+  const defaultModelConfigured = defaultModelState.status === 'ready';
+  return {
+    deepAgentsPackage: 'available',
+    deepAgentsApi: {
+      createDeepAgent: true
+    },
+    defaultModelConfigured,
+    defaultModelState,
+    memoryAccess: 'store_backend',
+    execution: defaultModelConfigured ? 'ready' : 'blocked_until_provider_configured'
+  };
+}

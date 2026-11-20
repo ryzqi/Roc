@@ -1,0 +1,200 @@
+import { spawn } from 'node:child_process';
+import { terminateProcessTree } from '../process-tree';
+import type { RocHookCommandInput, RocHookCommandOutput } from '../../../shared/types';
+import { HookCommandOutputSchema } from './schema';
+
+const maxOutputBytes = 64 * 1024;
+
+export type HookCommandRunRequest = {
+  command: string;
+  cwd: string;
+  timeoutSeconds: number;
+  signal?: AbortSignal;
+  input: RocHookCommandInput;
+};
+
+export type HookCommandRunResult =
+  | {
+      status: 'completed';
+      durationMs: number;
+      stdout: string;
+      stderr: string;
+      output: RocHookCommandOutput;
+    }
+  | {
+      status: 'failed';
+      durationMs: number;
+      stdout: string;
+      stderr: string;
+      error: string;
+    };
+
+export class HookCommandRunner {
+  async run(request: HookCommandRunRequest): Promise<HookCommandRunResult> {
+    const startedAt = Date.now();
+    if (isVirtualHookCwd(request.cwd)) {
+      return {
+        status: 'failed',
+        durationMs: 0,
+        stdout: '',
+        stderr: '',
+        error: 'hook_cwd_virtual_path'
+      };
+    }
+    if (request.signal?.aborted === true) {
+      return {
+        status: 'failed',
+        durationMs: 0,
+        stdout: '',
+        stderr: '',
+        error: 'hook_command_aborted'
+      };
+    }
+    return await new Promise<HookCommandRunResult>((resolve) => {
+      const child = spawn('/bin/zsh', ['-f', '-c', request.command], {
+        cwd: request.cwd,
+        detached: true,
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+      let stdout = '';
+      let stderr = '';
+      let settled = false;
+      // A cleanup failure must be reported, not thrown from a timer callback.
+      const terminate = (): string | null => {
+        try { terminateProcessTree(child); return null; }
+        catch { return 'hook_command_cleanup_failed'; }
+      };
+      const timeout = setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        request.signal?.removeEventListener('abort', abort);
+        const failure = terminate();
+        resolve({
+          status: 'failed',
+          durationMs: Date.now() - startedAt,
+          stdout: truncateOutput(stdout),
+          stderr: truncateOutput(stderr),
+          error: failure ?? 'hook_command_timeout'
+        });
+      }, request.timeoutSeconds * 1000);
+      const abort = () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timeout);
+        const failure = terminate();
+        resolve({
+          status: 'failed',
+          durationMs: Date.now() - startedAt,
+          stdout: truncateOutput(stdout),
+          stderr: truncateOutput(stderr),
+          error: failure ?? 'hook_command_aborted'
+        });
+      };
+      if (request.signal?.aborted === true) {
+        abort();
+      } else {
+        request.signal?.addEventListener('abort', abort, { once: true });
+      }
+
+      child.stdout.on('data', (chunk: Buffer | string) => {
+        stdout = truncateOutput(stdout + chunkToString(chunk));
+      });
+      child.stderr.on('data', (chunk: Buffer | string) => {
+        stderr = truncateOutput(stderr + chunkToString(chunk));
+      });
+      child.stdin.on('error', () => undefined);
+      child.on('error', (error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timeout);
+        request.signal?.removeEventListener('abort', abort);
+        resolve({
+          status: 'failed',
+          durationMs: Date.now() - startedAt,
+          stdout: truncateOutput(stdout),
+          stderr: truncateOutput(stderr),
+          error: error.message
+        });
+      });
+      child.on('close', (code) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timeout);
+        request.signal?.removeEventListener('abort', abort);
+        const trimmedStdout = stdout.trim();
+        if (code !== 0) {
+          resolve({
+            status: 'failed',
+            durationMs: Date.now() - startedAt,
+            stdout: truncateOutput(stdout),
+            stderr: truncateOutput(stderr),
+            error: `hook_command_exit_${code === null ? 'unknown' : code}`
+          });
+          return;
+        }
+        if (trimmedStdout.length === 0) {
+          resolve({
+            status: 'completed',
+            durationMs: Date.now() - startedAt,
+            stdout: '',
+            stderr: truncateOutput(stderr),
+            output: { action: 'continue' }
+          });
+          return;
+        }
+        try {
+          resolve({
+            status: 'completed',
+            durationMs: Date.now() - startedAt,
+            stdout: truncateOutput(stdout),
+            stderr: truncateOutput(stderr),
+            output: HookCommandOutputSchema.parse(JSON.parse(trimmedStdout))
+          });
+        } catch (error) {
+          resolve({
+            status: 'failed',
+            durationMs: Date.now() - startedAt,
+            stdout: truncateOutput(stdout),
+            stderr: truncateOutput(stderr),
+            error: `hook_output_json_invalid: ${error instanceof Error ? error.message : String(error)}`
+          });
+        }
+      });
+      child.stdin.end(JSON.stringify(request.input));
+    });
+  }
+}
+
+export function isVirtualHookCwd(cwd: string): boolean {
+  return (
+    cwd === '/workspace' ||
+    cwd.startsWith('/workspace/') ||
+    cwd === '/memory' ||
+    cwd.startsWith('/memory/') ||
+    cwd === '/skills' ||
+    cwd.startsWith('/skills/')
+  );
+}
+
+function truncateOutput(value: string): string {
+  const buffer = Buffer.from(value, 'utf8');
+  if (buffer.length <= maxOutputBytes) {
+    return value;
+  }
+  return `${buffer.subarray(0, maxOutputBytes).toString('utf8')}\n[truncated]`;
+}
+
+function chunkToString(chunk: Buffer | string): string {
+  if (typeof chunk === 'string') {
+    return chunk;
+  }
+  return chunk.toString('utf8');
+}

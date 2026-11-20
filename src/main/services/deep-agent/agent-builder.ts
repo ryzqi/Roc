@@ -1,0 +1,435 @@
+import {
+  GENERAL_PURPOSE_SUBAGENT,
+  createDeepAgent,
+  createPatchToolCallsMiddleware,
+  createSkillsMiddleware,
+  createSubAgent,
+  type CompiledSubAgent
+} from 'deepagents';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { ClientTool } from '@langchain/core/tools';
+import type { SubAgent } from 'deepagents';
+import { MessagesValue, StateSchema, type BaseCheckpointSaver, type BaseStore } from '@langchain/langgraph';
+import {
+  anthropicPromptCachingMiddleware,
+  createMiddleware,
+} from 'langchain';
+import { SystemMessage } from '@langchain/core/messages';
+import { z } from 'zod';
+import { describeHarnessTools, harnessImplementationHash } from './harness-revision';
+import { dependencies } from '../../../../package.json';
+import { hashToolInput } from './tool-effect-store';
+import type { InterruptDecisionType, RunCapabilityExecutionScopeV1, RunCapabilityManifestV1, RunExecutionSnapshot } from '../../../shared/types';
+import type { RocHookMiddlewareOptions } from '../hooks';
+import type { RescueToolCandidate } from '../forge-guardrails';
+import type { RocCompositeBackend } from './backend';
+import {
+  createRocFilesystemPermissions,
+  createRocReadOnlyFilesystemPermissions
+} from './filesystem-tool-contract';
+import { ensureRocHarnessProfilesRegistered } from './harness-profiles';
+import {
+  type ContextCompactionWiring,
+  type DeepAgentMiddleware,
+  type MiddlewareStackContext,
+  resolveMiddlewareStack,
+  readMiddlewareName
+} from './middleware-stack';
+import { isPlanModeModelVisibleToolName } from './model-tool-exposure';
+import { createCapabilityFilesystemMiddleware } from './framework-capability-middleware';
+import type { AgentToolEffectStore } from './tool-effect-store';
+import type { RunUsageLedger } from './run-usage-ledger';
+import type { RunUsageObserver } from './run-usage-observer';
+import type { ToolAdmissionObserver } from './tool-resource-coordinator';
+import { DEEP_AGENT_BUILT_IN_TOOLS, type RuntimeSubagent } from './types';
+import type {ResearchTaskContext} from '../../../shared/schemas/research-task-facts';
+
+export type DeepAgentBuildInput = {
+  snapshot: RunExecutionSnapshot;
+  usageLedger: RunUsageLedger;
+  usageObserver: RunUsageObserver;
+  model: BaseChatModel;
+  systemPrompt: string;
+  backend: RocCompositeBackend;
+  store: BaseStore;
+  memorySources: string[];
+  skillSources: string[];
+  subagents: RuntimeSubagent[];
+  tools: ClientTool[];
+  checkpointer: BaseCheckpointSaver | undefined;
+  hookMiddleware?: RocHookMiddlewareOptions;
+  toolEffectStore?: AgentToolEffectStore;
+  observeToolAdmission?: ToolAdmissionObserver;
+  contextCompaction: ContextCompactionWiring;
+  loadResearchTaskContext?: () => Promise<ResearchTaskContext | null>;
+};
+
+const DEEP_AGENT_RESERVED_TOOL_NAMES = new Set<string>([
+  ...DEEP_AGENT_BUILT_IN_TOOLS,
+  'execute'
+]);
+type SubagentTools = NonNullable<SubAgent['tools']>;
+
+type DeepAgentBuildPolicy = {
+  runId: string;
+  threadId: string;
+  mode: RunExecutionSnapshot['mode'];
+  capabilityManifest: RunCapabilityManifestV1;
+  /**
+   * 运行时注册进 ToolNode 的工具名全集：自定义工具 ∪ deepagents 内置工具。
+   * Plan Mode 的工具过滤只作用于模型可见性（wrapModelCall），不影响 ToolNode 注册，
+   * 因此内置工具在两种模式下都属于绑定集合。
+   */
+  boundToolNames: readonly string[];
+  filesystemPermissions: ReturnType<typeof createRocFilesystemPermissions>;
+  interruptOn: NonNullable<Parameters<typeof createDeepAgent>[0]>['interruptOn'];
+  workspaceHash: string | null;
+  workspacePath: string | null;
+  workspaceIdentity: RunExecutionSnapshot['workspaceIdentity'];
+  researchProjectId: RunExecutionSnapshot['researchProjectId'];
+};
+
+/**
+ * langchain 的 interruptOn 只接受 approve/edit/reject；Roc 的能力清单多一个科研闸门的
+ * 'revise'（由闸门工具在 resume 后自己解析）。这里在交给 langchain 前收敛，
+ * 并保证至少保留 approve/reject，避免全部被过滤后触发 langchain 建 schema 失败。
+ */
+function toLangchainAllowedDecisions(
+  allowedDecisions: readonly InterruptDecisionType[]
+): Array<'approve' | 'edit' | 'reject'> {
+  const decisions = allowedDecisions.filter(
+    (decision): decision is 'approve' | 'edit' | 'reject' => decision !== 'revise'
+  );
+  if (decisions.length > 0) {
+    return decisions;
+  }
+  return allowedDecisions.includes('reject') ? ['reject'] : ['approve'];
+}
+
+function compileDeepAgentBuildPolicy(input: DeepAgentBuildInput): DeepAgentBuildPolicy {
+  const { snapshot } = input;
+  return {
+    runId: snapshot.runId,
+    threadId: snapshot.threadId,
+    mode: snapshot.mode,
+    capabilityManifest: snapshot.capabilityManifest,
+    boundToolNames: [
+      ...new Set([...input.tools.map((tool) => tool.name), ...DEEP_AGENT_BUILT_IN_TOOLS])
+    ],
+    filesystemPermissions: snapshot.mode === 'plan'
+      ? createRocReadOnlyFilesystemPermissions()
+      : createRocFilesystemPermissions(),
+    interruptOn: compileInterruptPolicy(snapshot),
+    workspaceHash: snapshot.workspace === null ? null : snapshot.workspace.hash,
+    workspacePath: snapshot.workspace === null ? null : snapshot.workspace.path,
+    workspaceIdentity: snapshot.workspaceIdentity,
+    researchProjectId: snapshot.researchProjectId ?? null
+  };
+}
+
+function compileInterruptPolicy(
+  snapshot: RunExecutionSnapshot
+): DeepAgentBuildPolicy['interruptOn'] {
+  const interruptOn: NonNullable<DeepAgentBuildPolicy['interruptOn']> = {};
+  for (const tool of snapshot.capabilityManifest.tools) {
+    if (tool.approvalPolicy.kind === 'required') {
+      interruptOn[tool.modelVisibleName] = {
+        allowedDecisions: toLangchainAllowedDecisions(tool.approvalPolicy.allowedDecisions)
+      };
+    }
+  }
+  if (
+    snapshot.runOrigin === 'workbench_creation' &&
+    (snapshot.workflowHint === 'propose_background_task' || snapshot.workflowHint === 'background_task_change')
+  ) {
+    interruptOn.update_background_task = {
+      allowedDecisions: ['approve', 'edit', 'reject']
+    };
+    interruptOn.cancel_background_task = {
+      allowedDecisions: ['approve', 'edit', 'reject']
+    };
+  }
+  return Object.keys(interruptOn).length === 0 ? undefined : interruptOn;
+}
+
+export function buildDeepAgent(input: DeepAgentBuildInput): { agent: ReturnType<typeof createDeepAgent>; revision: string } {
+  ensureRocHarnessProfilesRegistered();
+  const policy = compileDeepAgentBuildPolicy(input);
+  const knownToolCandidates = (): RescueToolCandidate[] => {
+    const candidates = [...input.tools.map((tool) => createRescueToolCandidate(tool)), ...DEEP_AGENT_BUILT_IN_TOOLS];
+    if (policy.mode !== 'plan') {
+      return candidates;
+    }
+    return candidates.filter((candidate) =>
+      isPlanModeModelVisibleToolName(typeof candidate === 'string' ? candidate : candidate.name)
+    );
+  };
+  const tools = policy.mode === 'plan' ? createPlanModeCustomTools(input) : input.tools;
+  const subagentSpecs = createDeepAgentSubagentSpecs(input, policy, tools);
+  const subagents = subagentSpecs.map(spec => compileRocSubagent(input, policy, spec));
+
+  const middleware = resolveMiddlewareStack(createMiddlewareStackContext(input, policy, 'main', knownToolCandidates));
+  const revision = input.usageLedger.freezeRevision(input.snapshot.runId, {
+    schemaVersion: 1, implementation: harnessImplementationHash, adapterVersion: 1, frameworkVersions: dependencies, model: input.snapshot.model,
+    manifest: input.snapshot.capabilityManifest, contextPolicyVersion: 2,
+    promptHash: hashToolInput(input.systemPrompt),
+    tools: describeHarnessTools(tools),
+    middleware: middleware.map(readMiddlewareName),
+    permissions: policy.filesystemPermissions,
+    subagents: subagentSpecs.map(spec => ({
+      name: spec.name, description: spec.description, systemPrompt: spec.systemPrompt,
+      skills: spec.skills ?? [],
+      tools: (spec.tools ?? []).map(tool => typeof tool === 'string' ? tool : tool.name),
+      permissions: spec.permissions ?? policy.filesystemPermissions
+    }))
+  });
+  const agent = createDeepAgent({
+    // Roc independently verifies the message history from each saved root checkpoint.
+    stateSchema: new StateSchema({ messages: MessagesValue }),
+    model: input.model,
+    systemPrompt: input.systemPrompt,
+    backend: input.backend,
+    store: input.store,
+    memory: policy.mode === 'plan' ? [] : input.memorySources,
+    skills: input.skillSources,
+    subagents,
+    tools,
+    permissions: policy.filesystemPermissions,
+    interruptOn: policy.interruptOn,
+    checkpointer: input.checkpointer,
+    middleware
+  });
+  return { agent, revision };
+}
+
+function createMiddlewareStackContext(
+  input: DeepAgentBuildInput,
+  policy: DeepAgentBuildPolicy,
+  executionScope: RunCapabilityExecutionScopeV1,
+  knownToolCandidates: () => RescueToolCandidate[]
+): MiddlewareStackContext {
+  return {
+    backend: input.backend,
+    usageLedger: input.usageLedger,
+    modelConfig: input.snapshot.modelConfig,
+    usageObserver: input.usageObserver,
+    contextCompaction: input.contextCompaction,
+    executionScope,
+    hookMiddleware: input.hookMiddleware,
+    knownToolCandidates,
+    memorySources: input.memorySources,
+    model: input.model,
+    policy,
+    observeToolAdmission: input.observeToolAdmission,
+    toolEffectStore: input.toolEffectStore,
+    taskContract: input.snapshot.taskContract,
+    loadResearchTaskContext: input.loadResearchTaskContext
+  };
+}
+
+/**
+ * 子代理拿不到主 agent 的工具全集，所以 rescue 不装在 subagent scope；spec 已经按 scope 把它挡掉，
+ * 这里只需给出一个永不被调用的候选集来源，用抛错替代空数组，免得将来 spec 改了却静默拿到空候选。
+ */
+function subagentToolCandidates(): () => RescueToolCandidate[] {
+  return () => {
+    throw new Error('agent_subagent_rescue_candidates_unavailable');
+  };
+}
+
+function createPlanModeCustomTools(input: DeepAgentBuildInput): ClientTool[] {
+  return input.tools.filter((tool) => {
+    if (!isPlanModeModelVisibleToolName(tool.name)) {
+      return false;
+    }
+    return !DEEP_AGENT_RESERVED_TOOL_NAMES.has(tool.name);
+  });
+}
+
+function createDeepAgentSubagentSpecs(input: DeepAgentBuildInput, policy: DeepAgentBuildPolicy, tools: ClientTool[]): SubAgent[] {
+  const declarativeSubagents = requireDeclarativeSubagents(input.subagents);
+  const scopedTools = filterToolsForExecutionScope(tools, policy.capabilityManifest, 'subagent');
+  // 每个子代理各解一份栈实例：hook middleware 持有排队上下文等可变闭包状态，共享实例会跨子代理泄漏。
+  const resolveSubagentGuardrails = (): DeepAgentMiddleware[] => resolveMiddlewareStack(
+    createMiddlewareStackContext(input, policy, 'subagent', subagentToolCandidates())
+  );
+  const generalPurposeSubagent: SubAgent = {
+    ...GENERAL_PURPOSE_SUBAGENT,
+    // SAFETY: The filtered tools' names are constrained by the manifest's subagent scope; the dynamic runtime list cannot express deepagents' literal SubagentTools union.
+    tools: scopedTools.filter((tool) => {
+      const contract = policy.capabilityManifest.tools.find((entry) => entry.modelVisibleName === tool.name);
+      return contract !== undefined && (contract.effectClass === 'none' || contract.effectClass === 'network_read');
+    }) as unknown as SubagentTools,
+    skills: [],
+    permissions: createRocReadOnlyFilesystemPermissions(),
+    middleware: resolveSubagentGuardrails(),
+    ...(policy.interruptOn === undefined ? {} : { interruptOn: policy.interruptOn })
+  };
+  return [
+    generalPurposeSubagent,
+    ...declarativeSubagents.map((subagent) =>
+      applySubagentMiddleware(policy, subagent, scopedTools, resolveSubagentGuardrails())
+    )
+  ];
+}
+
+function requireDeclarativeSubagents(subagents: RuntimeSubagent[]): SubAgent[] {
+  const declarativeSubagents: SubAgent[] = [];
+  for (const subagent of subagents) {
+    if (!isSubAgentSpec(subagent)) {
+      throw new Error(`agent_subagent_safety_contract_unsupported:${subagent.name}`);
+    }
+    declarativeSubagents.push(subagent);
+  }
+  return declarativeSubagents;
+}
+
+function compileRocSubagent(input: DeepAgentBuildInput, policy: DeepAgentBuildPolicy, spec: SubAgent): CompiledSubAgent {
+  const tools = spec.tools === undefined ? [] : spec.tools;
+  const model = spec.model === undefined ? input.model : spec.model;
+  const middleware = [
+    createCapabilityFilesystemMiddleware(input.backend,
+      spec.permissions === undefined ? policy.filesystemPermissions : spec.permissions, policy.capabilityManifest, 'subagent'),
+    createPatchToolCallsMiddleware(),
+    ...(spec.skills === undefined || spec.skills.length === 0
+      ? []
+      : [createSkillsMiddleware({ backend: input.backend, sources: [...spec.skills] })]),
+    ...(spec.middleware === undefined ? [] : spec.middleware),
+    ...createRocSubagentCacheMiddleware(model)
+  ];
+  const runnable = createSubAgent({
+    ...spec,
+    model,
+    tools,
+    middleware
+  });
+  return {
+    name: spec.name,
+    description: spec.description,
+    runnable
+  };
+}
+
+function createRocSubagentCacheMiddleware(model: NonNullable<SubAgent['model']>) {
+  if (!isAnthropicModel(model)) {
+    return [];
+  }
+  return [
+    anthropicPromptCachingMiddleware({ unsupportedModelBehavior: 'ignore', minMessagesToCache: 1 }),
+    createRocCacheBreakpointMiddleware()
+  ];
+}
+
+function createRocCacheBreakpointMiddleware() {
+  return createMiddleware({
+    name: 'RocCacheBreakpointMiddleware',
+    wrapModelCall: (request, handler) => {
+      if (!isAnthropicModel(request.model)) {
+        return handler(request);
+      }
+      const content = request.systemMessage.content;
+      const blocks = typeof content === 'string'
+        ? [{ type: 'text' as const, text: content }]
+        : Array.isArray(content)
+          ? [...content]
+          : [];
+      if (blocks.length === 0) {
+        return handler(request);
+      }
+      blocks[blocks.length - 1] = {
+        ...blocks[blocks.length - 1],
+        cache_control: { type: 'ephemeral' }
+      };
+      return handler({
+        ...request,
+        systemMessage: new SystemMessage({ content: blocks })
+      });
+    }
+  });
+}
+
+function isAnthropicModel(model: unknown): boolean {
+  if (typeof model === 'string') {
+    if (model.includes(':')) {
+      return model.split(':')[0] === 'anthropic';
+    }
+    return model.startsWith('claude');
+  }
+  if (!isRecord(model)) {
+    return false;
+  }
+  const getName = model.getName;
+  if (typeof getName !== 'function') {
+    return false;
+  }
+  const modelName = getName.call(model);
+  if (modelName === 'ConfigurableModel') {
+    const defaultConfig = model._defaultConfig;
+    if (!isRecord(defaultConfig)) {
+      return false;
+    }
+    return defaultConfig.modelProvider === 'anthropic';
+  }
+  return modelName === 'ChatAnthropic';
+}
+
+/** 声明式子代理自带的 middleware 排在 Roc guardrail 栈之前：它先声明，Roc 的安全契约后追加。 */
+function applySubagentMiddleware(
+  policy: DeepAgentBuildPolicy,
+  subagent: SubAgent,
+  defaultTools: ClientTool[],
+  guardrails: readonly DeepAgentMiddleware[]
+): SubAgent {
+  const declared = subagent.middleware === undefined ? [] : [...subagent.middleware];
+  const tools = subagent.tools === undefined
+    ? defaultTools
+    : filterToolsForExecutionScope(subagent.tools, policy.capabilityManifest, 'subagent');
+  return {
+    ...subagent,
+    // SAFETY: `tools` is either a declared subagent list or the main list filtered by the subagent manifest scope; deepagents' literal SubagentTools union cannot represent this runtime selection.
+    tools: tools as unknown as SubagentTools,
+    permissions: createRocReadOnlyFilesystemPermissions(),
+    ...(policy.interruptOn === undefined ? {} : { interruptOn: policy.interruptOn }),
+    middleware: [...declared, ...guardrails]
+  };
+}
+
+function filterToolsForExecutionScope<T extends { name: string }>(
+  tools: readonly T[],
+  manifest: RunCapabilityManifestV1,
+  executionScope: RunCapabilityExecutionScopeV1
+): T[] {
+  const allowedToolNames = new Set(
+    manifest.tools
+      .filter((tool) => tool.executionScopes.includes(executionScope))
+      .map((tool) => tool.modelVisibleName)
+  );
+  return tools.filter((tool) => allowedToolNames.has(tool.name));
+}
+
+function isSubAgentSpec(subagent: RuntimeSubagent): subagent is SubAgent {
+  return 'systemPrompt' in subagent;
+}
+
+function createRescueToolCandidate(tool: ClientTool): RescueToolCandidate {
+  const schema = 'schema' in tool ? tool.schema : undefined;
+  if (!(schema instanceof z.ZodObject)) {
+    return tool.name;
+  }
+  return {
+    name: tool.name,
+    acceptsBareArgs: (args) => acceptsBareArgs(schema, args)
+  };
+}
+
+function acceptsBareArgs(schema: z.ZodObject, args: Record<string, unknown>): boolean {
+  const parsed = schema.safeParse(args);
+  if (!parsed.success || !isRecord(parsed.data)) {
+    return false;
+  }
+  return Object.keys(args).every((key) => Object.prototype.hasOwnProperty.call(parsed.data, key));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}

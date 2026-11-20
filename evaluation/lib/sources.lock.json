@@ -1,0 +1,10 @@
+{
+  "qasper": {
+    "version": "v0.3-dev",
+    "url": "https://qasper-dataset.s3.us-west-2.amazonaws.com/qasper-train-dev-v0.3.tgz",
+    "archiveSha256": "a28fdf966db827bcee3d873107d6b6669864fb7ca8fbf73a192f5e39191bdb5a",
+    "member": "qasper-dev-v0.3.json",
+    "memberSha256": "2ae7ee62a65b1c4225791c70de80c2aad4e8998cf1fd4f09a53103db4f21af93",
+    "license": "CC-BY-4.0"
+  }
+}

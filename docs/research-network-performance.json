@@ -1,0 +1,636 @@
+{
+  "contractVersion": 1,
+  "protocol": {
+    "samples": 5,
+    "fetchLatencyMs": 25,
+    "requestP95TargetMs": 1000,
+    "cancelP95TargetMs": 250,
+    "policy": {
+      "minIntervalMs": 1000,
+      "maxRequests": 300,
+      "windowMs": 3600000,
+      "failureThreshold": 3,
+      "cooldownMs": 60000
+    },
+    "cache": {
+      "maxEntries": 32,
+      "maxBytes": 8388608,
+      "ttlMs": 300000
+    },
+    "policyClock": "virtual; waits advance policy time only",
+    "latencyClock": "real performance.now"
+  },
+  "protocolSha256": "af59687fb15bf2b48f070559ea55877baed3643f9054ec30c17fb942bdaef364",
+  "timings": {
+    "cold-cache": {
+      "p95Ms": 41.28783399999999
+    },
+    "warm-cache": {
+      "p95Ms": 0.22074999999949796
+    },
+    "429-retry": {
+      "p95Ms": 56.54291699999976
+    },
+    "500-retry": {
+      "p95Ms": 838.9603340000001
+    },
+    "queued-cancel": {
+      "p95Ms": 0.36137500000040745
+    },
+    "inflight-cancel": {
+      "p95Ms": 0.36524999999983265
+    }
+  },
+  "sourceHashes": {
+    "scripts/benchmark-research-network.mjs": "83326e7253277b3d127a728a171bf69ed5d458bae67e4a1f19570d23719948d4",
+    "src/main/plugins/research/literature-service.ts": "74705a6b941388373d6adbeae33e2219d4f24f8d53b4f40e0a04d996b87c8843",
+    "src/main/plugins/research/literature-provider-governor.ts": "73b96f5101ac545bd3279d723179455c9b6ba100e89334f7eb03766dd0601f79",
+    "src/main/plugins/research/literature-response-cache.ts": "6788ac7d0414e9ca93db4dec26c29120dc453389e5ee96a211929767f12fb824"
+  },
+  "hardware": {
+    "cpu": "Apple M1 Pro",
+    "memoryBytes": 34359738368,
+    "node": "v26.13.0",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "limits": "Production service/governor/cache; scripted in-process fetch, no sockets or provider calls. Policy waits use virtual time; fetch latency, built-in 250/500ms retry delays and cancellation use real wall time. Five samples give descriptive maxima, not Internet throughput. Shutdown regression also covers active provider work in literature-import.test.mjs.",
+  "rawReport": {
+    "path": ".artifacts/research-optimization/network-current.json",
+    "sha256": "c4c4c36e7cafd54cb07a1e8c03823862a5b92632d2c61c5c1de7cc9a04dee5ab"
+  },
+  "representativeReceipts": [
+    {
+      "name": "cold-cache",
+      "elapsedMs": 41.28783399999999,
+      "receipt": {
+        "fetchedAt": "2026-11-06T05:54:33.259Z",
+        "responseHash": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "cache": "miss",
+        "requests": [
+          {
+            "attempt": 1,
+            "method": "GET",
+            "url": "https://api.crossref.org/fixture?id=cache",
+            "startedAt": "2026-11-06T05:54:33.219Z",
+            "endedAt": "2026-11-06T05:54:33.259Z",
+            "status": 200,
+            "retryAfterMs": null,
+            "responseHash": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+            "errorCode": null
+          }
+        ],
+        "governance": {
+          "host": "api.crossref.org",
+          "state": "healthy",
+          "consecutiveFailures": 0,
+          "remainingRequests": 299,
+          "quotaResetAt": "2026-11-06T01:00:00.000Z",
+          "minIntervalMs": 1000,
+          "cooldownUntil": null,
+          "lastSuccessAt": "2026-11-06T00:00:00.000Z",
+          "lastFailureAt": null
+        },
+        "status": "ok",
+        "value": {
+          "ok": true
+        },
+        "errorCode": null,
+        "retryAfterMs": null
+      }
+    },
+    {
+      "name": "warm-cache",
+      "elapsedMs": 0.1028750000000116,
+      "receipt": {
+        "fetchedAt": "2026-11-06T05:54:33.259Z",
+        "responseHash": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "cache": "hit",
+        "requests": [],
+        "governance": {
+          "host": "api.crossref.org",
+          "state": "healthy",
+          "consecutiveFailures": 0,
+          "remainingRequests": 299,
+          "quotaResetAt": "2026-11-06T01:00:00.000Z",
+          "minIntervalMs": 1000,
+          "cooldownUntil": null,
+          "lastSuccessAt": "2026-11-06T00:00:00.000Z",
+          "lastFailureAt": null
+        },
+        "status": "ok",
+        "value": {
+          "ok": true
+        },
+        "errorCode": null,
+        "retryAfterMs": null
+      }
+    },
+    {
+      "name": "quota-reset",
+      "denied": {
+        "fetchedAt": null,
+        "responseHash": null,
+        "cache": "miss",
+        "requests": [],
+        "governance": {
+          "host": "api.crossref.org",
+          "state": "quota_exhausted",
+          "consecutiveFailures": 0,
+          "remainingRequests": 0,
+          "quotaResetAt": "2026-11-06T01:00:00.000Z",
+          "minIntervalMs": 1000,
+          "cooldownUntil": null,
+          "lastSuccessAt": "2026-11-06T00:00:01.000Z",
+          "lastFailureAt": null
+        },
+        "status": "error",
+        "value": null,
+        "errorCode": "literature_provider_quota_exhausted",
+        "retryAfterMs": 3599000
+      },
+      "cached": {
+        "fetchedAt": "2026-11-06T05:54:33.315Z",
+        "responseHash": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "cache": "hit",
+        "requests": [],
+        "governance": {
+          "host": "api.crossref.org",
+          "state": "quota_exhausted",
+          "consecutiveFailures": 0,
+          "remainingRequests": 0,
+          "quotaResetAt": "2026-11-06T01:00:00.000Z",
+          "minIntervalMs": 1000,
+          "cooldownUntil": null,
+          "lastSuccessAt": "2026-11-06T00:00:01.000Z",
+          "lastFailureAt": null
+        },
+        "status": "ok",
+        "value": {
+          "ok": true
+        },
+        "errorCode": null,
+        "retryAfterMs": null
+      },
+      "recovery": {
+        "fetchedAt": "2026-11-06T05:54:33.370Z",
+        "responseHash": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "cache": "miss",
+        "requests": [
+          {
+            "attempt": 1,
+            "method": "GET",
+            "url": "https://api.crossref.org/fixture?id=q3",
+            "startedAt": "2026-11-06T05:54:33.343Z",
+            "endedAt": "2026-11-06T05:54:33.370Z",
+            "status": 200,
+            "retryAfterMs": null,
+            "responseHash": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+            "errorCode": null
+          }
+        ],
+        "governance": {
+          "host": "api.crossref.org",
+          "state": "healthy",
+          "consecutiveFailures": 0,
+          "remainingRequests": 1,
+          "quotaResetAt": "2026-11-06T02:00:01.000Z",
+          "minIntervalMs": 1000,
+          "cooldownUntil": null,
+          "lastSuccessAt": "2026-11-06T01:00:01.000Z",
+          "lastFailureAt": null
+        },
+        "status": "ok",
+        "value": {
+          "ok": true
+        },
+        "errorCode": null,
+        "retryAfterMs": null
+      },
+      "dispatches": [
+        {
+          "host": "api.crossref.org",
+          "policyTime": 1793923200000,
+          "wallStartMs": 176.018708
+        },
+        {
+          "host": "api.crossref.org",
+          "policyTime": 1793923201000,
+          "wallStartMs": 203.609666
+        },
+        {
+          "host": "api.crossref.org",
+          "policyTime": 1793926801000,
+          "wallStartMs": 231.317166
+        }
+      ],
+      "waits": [
+        1000
+      ]
+    },
+    {
+      "name": "429-retry",
+      "elapsedMs": 55.84729200000004,
+      "receipt": {
+        "fetchedAt": "2026-11-06T05:54:33.425Z",
+        "responseHash": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "cache": "miss",
+        "requests": [
+          {
+            "attempt": 1,
+            "method": "GET",
+            "url": "https://api.crossref.org/fixture?id=retry",
+            "startedAt": "2026-11-06T05:54:33.370Z",
+            "endedAt": "2026-11-06T05:54:33.398Z",
+            "status": 429,
+            "retryAfterMs": 2000,
+            "responseHash": null,
+            "errorCode": "literature_provider_http_429"
+          },
+          {
+            "attempt": 2,
+            "method": "GET",
+            "url": "https://api.crossref.org/fixture?id=retry",
+            "startedAt": "2026-11-06T05:54:33.398Z",
+            "endedAt": "2026-11-06T05:54:33.425Z",
+            "status": 200,
+            "retryAfterMs": null,
+            "responseHash": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+            "errorCode": null
+          }
+        ],
+        "governance": {
+          "host": "api.crossref.org",
+          "state": "healthy",
+          "consecutiveFailures": 0,
+          "remainingRequests": 298,
+          "quotaResetAt": "2026-11-06T01:00:00.000Z",
+          "minIntervalMs": 1000,
+          "cooldownUntil": null,
+          "lastSuccessAt": "2026-11-06T00:00:02.000Z",
+          "lastFailureAt": "2026-11-06T00:00:00.000Z"
+        },
+        "status": "ok",
+        "value": {
+          "ok": true
+        },
+        "errorCode": null,
+        "retryAfterMs": null
+      },
+      "dispatches": [
+        {
+          "host": "api.crossref.org",
+          "policyTime": 1793923200000,
+          "wallStartMs": 258.026166
+        },
+        {
+          "host": "api.crossref.org",
+          "policyTime": 1793923202000,
+          "wallStartMs": 285.860458
+        }
+      ],
+      "policyWaits": [
+        1000,
+        1000
+      ]
+    },
+    {
+      "name": "500-retry",
+      "elapsedMs": 838.9603340000001,
+      "receipt": {
+        "fetchedAt": "2026-11-06T05:54:34.264Z",
+        "responseHash": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "cache": "miss",
+        "requests": [
+          {
+            "attempt": 1,
+            "method": "GET",
+            "url": "https://api.crossref.org/fixture?id=retry",
+            "startedAt": "2026-11-06T05:54:33.426Z",
+            "endedAt": "2026-11-06T05:54:33.453Z",
+            "status": 500,
+            "retryAfterMs": null,
+            "responseHash": null,
+            "errorCode": "literature_provider_http_500"
+          },
+          {
+            "attempt": 2,
+            "method": "GET",
+            "url": "https://api.crossref.org/fixture?id=retry",
+            "startedAt": "2026-11-06T05:54:33.706Z",
+            "endedAt": "2026-11-06T05:54:33.734Z",
+            "status": 500,
+            "retryAfterMs": null,
+            "responseHash": null,
+            "errorCode": "literature_provider_http_500"
+          },
+          {
+            "attempt": 3,
+            "method": "GET",
+            "url": "https://api.crossref.org/fixture?id=retry",
+            "startedAt": "2026-11-06T05:54:34.236Z",
+            "endedAt": "2026-11-06T05:54:34.264Z",
+            "status": 200,
+            "retryAfterMs": null,
+            "responseHash": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+            "errorCode": null
+          }
+        ],
+        "governance": {
+          "host": "api.crossref.org",
+          "state": "healthy",
+          "consecutiveFailures": 0,
+          "remainingRequests": 297,
+          "quotaResetAt": "2026-11-06T01:00:00.000Z",
+          "minIntervalMs": 1000,
+          "cooldownUntil": null,
+          "lastSuccessAt": "2026-11-06T00:00:02.000Z",
+          "lastFailureAt": "2026-11-06T00:00:01.000Z"
+        },
+        "status": "ok",
+        "value": {
+          "ok": true
+        },
+        "errorCode": null,
+        "retryAfterMs": null
+      },
+      "dispatches": [
+        {
+          "host": "api.crossref.org",
+          "policyTime": 1793923200000,
+          "wallStartMs": 313.931083
+        },
+        {
+          "host": "api.crossref.org",
+          "policyTime": 1793923201000,
+          "wallStartMs": 593.911083
+        },
+        {
+          "host": "api.crossref.org",
+          "policyTime": 1793923202000,
+          "wallStartMs": 1124.338708
+        }
+      ],
+      "policyWaits": [
+        1000,
+        1000
+      ]
+    },
+    {
+      "name": "invalid-circuit-recovery",
+      "failures": [
+        {
+          "fetchedAt": "2026-11-06T05:54:34.292Z",
+          "responseHash": "5402f431c7780ce4ec7364228d4e239fd481a112a7b3b4bf30bcfd5ad3e406a4",
+          "cache": "miss",
+          "requests": [
+            {
+              "attempt": 1,
+              "method": "GET",
+              "url": "https://api.crossref.org/fixture?id=invalid",
+              "startedAt": "2026-11-06T05:54:34.265Z",
+              "endedAt": "2026-11-06T05:54:34.292Z",
+              "status": 200,
+              "retryAfterMs": null,
+              "responseHash": "5402f431c7780ce4ec7364228d4e239fd481a112a7b3b4bf30bcfd5ad3e406a4",
+              "errorCode": null
+            }
+          ],
+          "governance": {
+            "host": "api.crossref.org",
+            "state": "degraded",
+            "consecutiveFailures": 1,
+            "remainingRequests": 299,
+            "quotaResetAt": "2026-11-06T01:00:00.000Z",
+            "minIntervalMs": 1000,
+            "cooldownUntil": null,
+            "lastSuccessAt": null,
+            "lastFailureAt": "2026-11-06T00:00:00.000Z"
+          },
+          "status": "error",
+          "value": null,
+          "errorCode": "literature_provider_response_invalid",
+          "retryAfterMs": null
+        },
+        {
+          "fetchedAt": "2026-11-06T05:54:34.320Z",
+          "responseHash": "5402f431c7780ce4ec7364228d4e239fd481a112a7b3b4bf30bcfd5ad3e406a4",
+          "cache": "miss",
+          "requests": [
+            {
+              "attempt": 1,
+              "method": "GET",
+              "url": "https://api.crossref.org/fixture?id=invalid",
+              "startedAt": "2026-11-06T05:54:34.293Z",
+              "endedAt": "2026-11-06T05:54:34.320Z",
+              "status": 200,
+              "retryAfterMs": null,
+              "responseHash": "5402f431c7780ce4ec7364228d4e239fd481a112a7b3b4bf30bcfd5ad3e406a4",
+              "errorCode": null
+            }
+          ],
+          "governance": {
+            "host": "api.crossref.org",
+            "state": "degraded",
+            "consecutiveFailures": 2,
+            "remainingRequests": 298,
+            "quotaResetAt": "2026-11-06T01:00:00.000Z",
+            "minIntervalMs": 1000,
+            "cooldownUntil": null,
+            "lastSuccessAt": null,
+            "lastFailureAt": "2026-11-06T00:00:01.000Z"
+          },
+          "status": "error",
+          "value": null,
+          "errorCode": "literature_provider_response_invalid",
+          "retryAfterMs": null
+        },
+        {
+          "fetchedAt": "2026-11-06T05:54:34.348Z",
+          "responseHash": "5402f431c7780ce4ec7364228d4e239fd481a112a7b3b4bf30bcfd5ad3e406a4",
+          "cache": "miss",
+          "requests": [
+            {
+              "attempt": 1,
+              "method": "GET",
+              "url": "https://api.crossref.org/fixture?id=invalid",
+              "startedAt": "2026-11-06T05:54:34.321Z",
+              "endedAt": "2026-11-06T05:54:34.348Z",
+              "status": 200,
+              "retryAfterMs": null,
+              "responseHash": "5402f431c7780ce4ec7364228d4e239fd481a112a7b3b4bf30bcfd5ad3e406a4",
+              "errorCode": null
+            }
+          ],
+          "governance": {
+            "host": "api.crossref.org",
+            "state": "cooldown",
+            "consecutiveFailures": 3,
+            "remainingRequests": 297,
+            "quotaResetAt": "2026-11-06T01:00:00.000Z",
+            "minIntervalMs": 1000,
+            "cooldownUntil": "2026-11-06T00:01:02.000Z",
+            "lastSuccessAt": null,
+            "lastFailureAt": "2026-11-06T00:00:02.000Z"
+          },
+          "status": "error",
+          "value": null,
+          "errorCode": "literature_provider_response_invalid",
+          "retryAfterMs": null
+        }
+      ],
+      "denied": {
+        "fetchedAt": null,
+        "responseHash": null,
+        "cache": "miss",
+        "requests": [],
+        "governance": {
+          "host": "api.crossref.org",
+          "state": "cooldown",
+          "consecutiveFailures": 3,
+          "remainingRequests": 297,
+          "quotaResetAt": "2026-11-06T01:00:00.000Z",
+          "minIntervalMs": 1000,
+          "cooldownUntil": "2026-11-06T00:01:02.000Z",
+          "lastSuccessAt": null,
+          "lastFailureAt": "2026-11-06T00:00:02.000Z"
+        },
+        "status": "error",
+        "value": null,
+        "errorCode": "literature_provider_cooldown",
+        "retryAfterMs": 60000
+      },
+      "recovered": {
+        "fetchedAt": "2026-11-06T05:54:34.377Z",
+        "responseHash": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "cache": "miss",
+        "requests": [
+          {
+            "attempt": 1,
+            "method": "GET",
+            "url": "https://api.crossref.org/fixture?id=invalid",
+            "startedAt": "2026-11-06T05:54:34.349Z",
+            "endedAt": "2026-11-06T05:54:34.377Z",
+            "status": 200,
+            "retryAfterMs": null,
+            "responseHash": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+            "errorCode": null
+          }
+        ],
+        "governance": {
+          "host": "api.crossref.org",
+          "state": "healthy",
+          "consecutiveFailures": 0,
+          "remainingRequests": 296,
+          "quotaResetAt": "2026-11-06T01:00:00.000Z",
+          "minIntervalMs": 1000,
+          "cooldownUntil": null,
+          "lastSuccessAt": "2026-11-06T00:01:02.000Z",
+          "lastFailureAt": "2026-11-06T00:00:02.000Z"
+        },
+        "status": "ok",
+        "value": {
+          "ok": true
+        },
+        "errorCode": null,
+        "retryAfterMs": null
+      },
+      "dispatches": [
+        {
+          "host": "api.crossref.org",
+          "policyTime": 1793923200000,
+          "wallStartMs": 1153.321291
+        },
+        {
+          "host": "api.crossref.org",
+          "policyTime": 1793923201000,
+          "wallStartMs": 1180.735083
+        },
+        {
+          "host": "api.crossref.org",
+          "policyTime": 1793923202000,
+          "wallStartMs": 1208.684
+        },
+        {
+          "host": "api.crossref.org",
+          "policyTime": 1793923262000,
+          "wallStartMs": 1236.981541
+        }
+      ],
+      "policyWaits": [
+        1000,
+        1000
+      ]
+    },
+    {
+      "name": "queued-cancel",
+      "elapsedMs": 0.2594579999999951,
+      "dispatchesAtCancel": 1
+    },
+    {
+      "name": "inflight-cancel",
+      "elapsedMs": 0.16441600000007384,
+      "health": {
+        "host": "api.crossref.org",
+        "state": "unknown",
+        "consecutiveFailures": 0,
+        "remainingRequests": 299,
+        "quotaResetAt": "2026-11-06T01:00:00.000Z",
+        "minIntervalMs": 1000,
+        "cooldownUntil": null,
+        "lastSuccessAt": null,
+        "lastFailureAt": null
+      }
+    },
+    {
+      "name": "independent-host-and-shutdown",
+      "independent": {
+        "fetchedAt": "2026-11-06T05:54:34.434Z",
+        "responseHash": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+        "cache": "miss",
+        "requests": [
+          {
+            "attempt": 1,
+            "method": "GET",
+            "url": "https://api.openalex.org/fixture?id=independent",
+            "startedAt": "2026-11-06T05:54:34.406Z",
+            "endedAt": "2026-11-06T05:54:34.434Z",
+            "status": 200,
+            "retryAfterMs": null,
+            "responseHash": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93",
+            "errorCode": null
+          }
+        ],
+        "governance": {
+          "host": "api.openalex.org",
+          "state": "healthy",
+          "consecutiveFailures": 0,
+          "remainingRequests": 299,
+          "quotaResetAt": "2026-11-06T01:00:00.000Z",
+          "minIntervalMs": 1000,
+          "cooldownUntil": null,
+          "lastSuccessAt": "2026-11-06T00:00:00.000Z",
+          "lastFailureAt": null
+        },
+        "status": "ok",
+        "value": {
+          "ok": true
+        },
+        "errorCode": null,
+        "retryAfterMs": null
+      },
+      "dispatches": [
+        {
+          "host": "api.crossref.org",
+          "policyTime": 1793923200000,
+          "wallStartMs": 1266.769625
+        },
+        {
+          "host": "api.openalex.org",
+          "policyTime": 1793923200000,
+          "wallStartMs": 1294.5465
+        }
+      ]
+    }
+  ]
+}

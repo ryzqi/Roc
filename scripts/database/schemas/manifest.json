@@ -1,0 +1,48 @@
+{
+  "dbName": "research",
+  "targetVersion": 74,
+  "snapshots": [
+    {
+      "version": 71,
+      "commit": "0b37d4db2492b0bff8cf74a3f0da957feaa9ee28",
+      "filename": "research-v71.sql",
+      "sha256": "dcc26f84d96b61a137721b831965ee55fab7198221a192f53b48b857c013a04a",
+      "inputs": {
+        "src/main/infrastructure/database-schemas.ts": "5352a2aec73044a9c4bed304d8a98ffe848d3da41b531535c21ada6c8c261121",
+        "src/main/infrastructure/wiki-schema.ts": "a949a2d6aa2fcdb13d5034317c4ed4599bd9935d0183324035f15b620c30966c",
+        "src/main/infrastructure/database-schema.ts": "5450fc97707bba280d338099f319f2b70d810b98d132765384060f50704f538a",
+        "src/main/infrastructure/execution-events.ts": "a56e5cf61b6bc50dac9a9cbdee14089ad8dbfb5edefa392f314293a58672d33b",
+        "src/shared/schemas/execution-events.ts": "ad33bcc8468aa9175de18f55c003d0e8d750222900a40cd8c4c7f076702d498b"
+      }
+    },
+    {
+      "version": 72,
+      "commit": "10df4c76a43f3d9f96e57ab8cb11c28131c5a3a6",
+      "filename": "research-v72.sql",
+      "sha256": "1bf86b7c343fb4bdeb7fcd06426f906f498fcfeca3adc58697862d8b600f83aa",
+      "inputs": {
+        "src/main/infrastructure/database-schemas.ts": "90e6d9230f4f55b728012e5809db151e2cdb5d3b0b0234508767adb2d9ddd378",
+        "src/main/infrastructure/scientific-index-schema.ts": "c9b8d723aec49b62537a4ae2aff902e6e57647542f8a5cb57042a4b72338c5e4",
+        "src/main/infrastructure/database-schema.ts": "5450fc97707bba280d338099f319f2b70d810b98d132765384060f50704f538a",
+        "src/main/infrastructure/wiki-schema.ts": "a949a2d6aa2fcdb13d5034317c4ed4599bd9935d0183324035f15b620c30966c",
+        "src/main/infrastructure/execution-events.ts": "a56e5cf61b6bc50dac9a9cbdee14089ad8dbfb5edefa392f314293a58672d33b",
+        "src/shared/schemas/execution-events.ts": "ad33bcc8468aa9175de18f55c003d0e8d750222900a40cd8c4c7f076702d498b"
+      }
+    },
+    {
+      "version": 73,
+      "commit": "a03159020a599707ef5e181e105c726749c29ef3",
+      "filename": "research-v73.sql",
+      "sha256": "b37d9e8bbcbd3819135f539d4db9518534dc217212e8d7cadcae583058d4f847",
+      "inputs": {
+        "src/main/infrastructure/database-schemas.ts": "2955f73f58dbc28fe256b686e8c6f3e42ece2db98470878543e18a11d182abdb",
+        "src/main/infrastructure/scientific-index-schema.ts": "c9b8d723aec49b62537a4ae2aff902e6e57647542f8a5cb57042a4b72338c5e4",
+        "src/main/infrastructure/scientific-extraction-schema.ts": "1fd2755e2dd7d8fc4707f4e0885be20c86f3f096443c8f447ab5a292e4694323",
+        "src/main/infrastructure/database-schema.ts": "5450fc97707bba280d338099f319f2b70d810b98d132765384060f50704f538a",
+        "src/main/infrastructure/wiki-schema.ts": "a949a2d6aa2fcdb13d5034317c4ed4599bd9935d0183324035f15b620c30966c",
+        "src/main/infrastructure/execution-events.ts": "a56e5cf61b6bc50dac9a9cbdee14089ad8dbfb5edefa392f314293a58672d33b",
+        "src/shared/schemas/execution-events.ts": "ad33bcc8468aa9175de18f55c003d0e8d750222900a40cd8c4c7f076702d498b"
+      }
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "id": "roc-literature-retrieval",
+  "version": "1.6.0",
+  "stage": "retrieval",
+  "description": "多源查找文献并建立可追溯的证据集。",
+  "entry": {
+    "path": "SKILL.md",
+    "hash": "7648b53bedcb6d5884e86b88b1cf3a7da37d20a0c8aa4c13a5cfb90fe96e45f9"
+  },
+  "references": [],
+  "license": {
+    "id": "LicenseRef-Roc-Internal",
+    "resource": {
+      "path": "LICENSE.md",
+      "hash": "9c62dabb7abb8f2b52d97742bf8f7bc0320fda9f450dc47bfe2ca4ccb0bb9f05"
+    }
+  },
+  "source": {
+    "kind": "project",
+    "origin": "Roc/resources/research-skills/retrieval",
+    "revision": "s05-1.2.0",
+    "hash": "7648b53bedcb6d5884e86b88b1cf3a7da37d20a0c8aa4c13a5cfb90fe96e45f9"
+  },
+  "inputs": {
+    "schema": "researchStageRunStartRequest/v1",
+    "hash": "7898f7a36053375c323b8817abf2ff30409b58e4d94d669a407e83145c74d310"
+  },
+  "outputs": {
+    "schema": "researchStageOutput/v5",
+    "hash": "5d93469afdfdb27f1630bc652fe1af33c9a6cc2a4e52f3ebd69e19b5661b8531",
+    "artifactKind": "source_corpus"
+  },
+  "requiredCapabilities": [
+    "research.knowledge.search",
+    "research.evidence.list",
+    "research.evidence.inspect",
+    "research.artifacts.get"
+  ],
+  "forbiddenEffects": [
+    "human_approval",
+    "final_delivery",
+    "permission_change",
+    "host_execution",
+    "workspace_write",
+    "production_execute"
+  ],
+  "qualityGates": [
+    "Source identity and locator are real and current.",
+    "Human approval remains a separate gate.",
+    "Unknown results stay uncertain."
+  ],
+  "evalCases": [
+    {
+      "path": "eval-cases.json",
+      "hash": "d08c2711da60accd72c4425f2a2208cba7111ce1a0509d943ebf32d09c70cad7"
+    }
+  ],
+  "runtimeContract": "roc-research-stage/v2"
+}

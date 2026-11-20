@@ -1,0 +1,43 @@
+@preamble{"Proceedings of the Roc Data Workshop"}
+
+@string{rocjournal = "Journal of " # "Reproducible Systems"}
+
+@proceedings{roc-workshop-2025,
+  title = {Proceedings of {Reliable {Research} Systems}},
+  year = {2025},
+  editor = {van der Waals, Johannes D. and García Márquez, Ana and {World Health Organization}},
+  publisher = {Example Press},
+  venue = {上海},
+  publishernote = {retain this unknown field}
+}
+
+@inproceedings{unicode-names-2025,
+  author = {García, María-José and 李, 明 and {World Health Organization} and de la Cruz, Ana and van Beethoven, Ludwig and Smith, John Paul, Jr.},
+  title = {{\'{E}}vidence from {Nested {Studies}} and {\textbf{LaTeX-Only}} Titles},
+  booktitle = rocjournal # { Annual Meeting},
+  year = {2025},
+  crossref = {roc-workshop-2025},
+  doi = {10.5555/roc.2025.1},
+  customresearchfield = {must survive parse and export}
+}
+
+@online{biblatex-extensions-2024,
+  author = {{Roc Research Group}},
+  title = {A BibLaTeX Entry with Unknown Metadata},
+  date = {2024-09-17},
+  eprinttype = {arxiv},
+  eprint = {2409.01234},
+  langid = {english},
+  annotation = {BibLaTeX-only fields remain available to callers},
+  note = {braces: {one {two}}; escaped: \{literal\}}
+}
+
+@article{postfix-and-particles,
+  author = {Ludwig van Beethoven and Ana de la Cruz and Jane Doe, Jr.},
+  title = {Particles, Suffixes, and {Protected Capitalization}},
+  journal = {Roc Journal},
+  year = {2023},
+  volume = {7},
+  number = {2},
+  pages = {11--29}
+}

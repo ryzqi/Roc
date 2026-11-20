@@ -1,0 +1,596 @@
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  AlertTriangle,
+  LoaderCircle,
+  ArchiveRestore,
+  BookOpen,
+  Brain,
+  CalendarClock,
+  Cpu,
+  Database,
+  FileCode,
+  FlaskConical,
+  KeyRound,
+  Layers,
+  Shield,
+  Sliders,
+  Webhook,
+  type LucideIcon
+} from 'lucide-react';
+import { RadixSettingsConfirmDialog, RadixSettingsDialogShell } from './radix-dialog-pilot';
+import { formInputClass, formPrimaryButtonClass } from '../shared/form-ui';
+import { EmptyState } from '../shell/EmptyState';
+import type { ThemeOverride } from '../app/ui-state';
+import type { RocClient } from '../shared/roc-client';
+import { SETTINGS_SECTIONS, highImpactChanges, sectionForDraftPath, type SettingsSectionId } from './settings-rules';
+import { useSettingsStore, type SettingsStore } from './settings-scope';
+import { BEFORE_NAVIGATE, type NavigationRequest } from '../app/navigation-guard';
+import { SettingsEditorGuardContext, useSettingsEditorGuards } from './settings-editor-guard';
+import { AppSection, TasksSection } from './sections/AppSections';
+import { AuthorizationSection } from './sections/AuthorizationSection';
+import { BackupSection } from './sections/BackupSection';
+import { DefaultModelSection } from './sections/DefaultModelSection';
+import { HooksSection } from './sections/HooksSection';
+import { ModelsSection } from './sections/ModelsSection';
+import { RagSection } from './sections/RagSection';
+import { LiteratureSection, SandboxSection } from './sections/ReadOnlySections';
+import { PilotSection } from './sections/PilotSection';
+import { GuardrailSection, MemorySection } from './sections/SecuritySections';
+
+/**
+ * Section glyphs.
+ *
+ * The settings rail carries an icon on every row (`Layers` / `Database` /
+ * `BookOpen` / `FileCode` / `Shield` / `Sliders`), and that is most of what makes the rail
+ * scannable at a glance. They live here rather than in `settings-rules.ts` on purpose: that
+ * module holds pure data and is imported by `tests/unit/renderer-settings.test.mjs`, so
+ * pulling a React component library into it would make the rules layer depend on the view
+ * layer. The glyphs come from one vocabulary and cover every section.
+ *
+ * Monochrome by design — only the selected state tints its icon, and the hue
+ * a selected row needs is already carried by the row's own surface.
+ */
+const SECTION_ICONS: Readonly<Record<SettingsSectionId, LucideIcon>> = {
+  models: Layers,
+  'default-model': Cpu,
+  rag: Database,
+  literature: BookOpen,
+  sandbox: FileCode,
+  guardrail: Shield,
+  app: Sliders,
+  tasks: CalendarClock,
+  authorization: KeyRound,
+  hooks: Webhook,
+  memory: Brain,
+  pilot: FlaskConical,
+  backup: ArchiveRestore
+};
+
+/**
+ * Settings centre (P8/T8.2–T8.4).
+ *
+ * ## Fixed shape
+ *
+ * `min(1100px, 92vw)` × `min(86vh, 760px)`, a 200px section list with 36px rows, an action footer
+ * pinned below the scrolling form, and the thirteen sections in their normative order. The height is passed through `widthClassName` because `ModalShell` only caps its panel; a
+ * settings window that scrolls the whole modal (header and section list included) loses the
+ * dirty bar exactly when it matters.
+ *
+ * ## One draft, one save
+ *
+ * `settings.save` is whole-document (F22), so the surface is a document editor: the dirty bar
+ * shows `store.diff.count`, the section dots come from `store.diff.sections`, and 「保存设置」
+ * writes everything. Two consequences are deliberate:
+ *
+ *  - Shared document edits survive section changes. Independent secret and embedding editors
+ *    guard their own transient drafts before a section change can unmount them.
+ *  - **A discard is explicit and its own button**; closing with unsaved edits opens a
+ *    confirmation that offers 继续编辑 first and focuses cancel (MASTER §11).
+ *
+ * ## Dirty dots are not colour-only
+ *
+ * A dirty row carries a glyph, a `title`, and a screen-reader-only sentence, and the row
+ * element exposes `data-dirty` — so the state is assertable by the P8 gate without reading
+ * pixels.
+ */
+
+export type SettingsModalProps = {
+  open: boolean;
+  client: RocClient;
+  projectId: string | null;
+  workspacePath: string | null;
+  themeOverride: ThemeOverride;
+  onThemeOverrideChange: (next: ThemeOverride) => void;
+  onResetUiPreferences: () => void;
+  onClose: () => void;
+};
+
+function renderSection(
+  id: SettingsSectionId,
+  store: SettingsStore,
+  props: SettingsModalProps
+): React.JSX.Element {
+  switch (id) {
+    case 'models':
+      return <ModelsSection store={store} />;
+    case 'default-model':
+      return <DefaultModelSection store={store} />;
+    case 'rag':
+      return <RagSection store={store} />;
+    case 'literature':
+      return <LiteratureSection store={store} />;
+    case 'sandbox':
+      return <SandboxSection store={store} />;
+    case 'guardrail':
+      return <GuardrailSection store={store} />;
+    case 'app':
+      return (
+        <AppSection
+          store={store}
+          themeOverride={props.themeOverride}
+          onThemeOverrideChange={props.onThemeOverrideChange}
+        />
+      );
+    case 'tasks':
+      return <TasksSection store={store} />;
+    case 'authorization':
+      return <AuthorizationSection store={store} />;
+    case 'hooks':
+      return <HooksSection store={store} />;
+    case 'memory':
+      return <MemorySection store={store} />;
+    case 'pilot':
+      return <PilotSection client={props.client} />;
+    case 'backup':
+      return (
+        <BackupSection
+          store={store}
+          workspacePath={props.workspacePath}
+          onResetUiPreferences={props.onResetUiPreferences}
+        />
+      );
+  }
+}
+
+/**
+ * The panel body: error, loading (the draft is not built yet — the settings document and the
+ * per-project index status are two loads), or the section itself.
+ *
+ * A function rather than a nested ternary inside the JSX so the three states stay readable and
+ * the loader cannot be mistaken for an empty form.
+ */
+function renderPanel(
+  id: SettingsSectionId,
+  store: SettingsStore,
+  props: SettingsModalProps
+): React.JSX.Element {
+  if (store.status === 'error') {
+    return (
+      <EmptyState
+        tone="error"
+        title="读取设置失败"
+        action={{ label: '重试', onClick: () => store.reload() }}
+        testId="settings-load-error"
+      />
+    );
+  }
+  if (store.draft === null) {
+    return <EmptyState tone="loading" title="正在读取设置…" testId="settings-loading" />;
+  }
+  return renderSection(id, store, props);
+}
+
+function dirtyBarText(dirty: boolean, dirtyCount: number, savedOnce: boolean): string {
+  if (dirty) {
+    return `未保存 ${dirtyCount} 项`;
+  }
+  return savedOnce ? '所有修改已保存' : '';
+}
+
+export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
+  const store = useSettingsStore(props.client, props.projectId);
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>('models');
+  const [discardIntent, setDiscardIntent] = useState<'close' | 'reset' | 'navigate' | null>(null);
+  const [closeAfterDiscard, setCloseAfterDiscard] = useState(false);
+  const editorGuard = useSettingsEditorGuards();
+  const navigationContinuation = useRef<(() => void) | null>(null);
+  const current = useRef({ open: props.open, store });
+  current.current = { open: props.open, store };
+  const [impactOpen, setImpactOpen] = useState(false);
+  const [saveAttempted, setSaveAttempted] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+  const activeNavigationRef = useRef<HTMLButtonElement | HTMLSelectElement>(null);
+  const restoreNavigationFocus = useRef(false);
+  const [compactNavigation, setCompactNavigation] = useState(() => window.matchMedia('(max-width: 719px)').matches);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [focusIssue, setFocusIssue] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 719px)');
+    const update = (): void => {
+      restoreNavigationFocus.current = document.activeElement === activeNavigationRef.current
+        || listRef.current?.contains(document.activeElement) === true;
+      setCompactNavigation(media.matches);
+    };
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  useEffect(() => {
+    if (restoreNavigationFocus.current) {
+      activeNavigationRef.current?.focus();
+      restoreNavigationFocus.current = false;
+    }
+  }, [compactNavigation]);
+  useEffect(() => {
+    if (focusIssue) {
+      panelRef.current?.focus();
+      setFocusIssue(false);
+    }
+  }, [activeSection, focusIssue]);
+
+  const dirtyCount = store.diff.count;
+  const dirty = dirtyCount > 0;
+
+  // The shell closes settings through the guarded route. Dispatch only after
+  // discarded drafts commit, so this surface no longer defers its own close.
+  useLayoutEffect(() => {
+    if (!closeAfterDiscard) return;
+    setCloseAfterDiscard(false);
+    if (props.open) props.onClose();
+  }, [closeAfterDiscard, props.open, props.onClose]);
+  const impacts = highImpactChanges(store.base, store.draft);
+  const transientDirty = editorGuard.dirty();
+  const busy = store.save.pending || editorGuard.busy();
+
+  useEffect(() => {
+    const navigate = (event: Event): void => {
+      const state = current.current;
+      if (!state.open) return;
+      if (state.store.save.isPending() || editorGuard.busy()) {
+        event.preventDefault();
+      } else if (state.store.diff.count > 0 || editorGuard.dirty()) {
+        navigationContinuation.current = (event as CustomEvent<NavigationRequest>).detail.defer();
+        setDiscardIntent('navigate');
+      }
+    };
+    const unload = (event: BeforeUnloadEvent): void => {
+      const state = current.current;
+      if (state.open && (state.store.save.isPending() || state.store.diff.count > 0 || editorGuard.busy() || editorGuard.dirty())) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    };
+    window.addEventListener(BEFORE_NAVIGATE, navigate);
+    window.addEventListener('beforeunload', unload);
+    return () => {
+      window.removeEventListener(BEFORE_NAVIGATE, navigate);
+      window.removeEventListener('beforeunload', unload);
+    };
+  }, [editorGuard.busy, editorGuard.dirty]);
+
+  // Unsaved drafts are never discarded silently: the veto opens a confirmation instead of
+  // closing, and Escape cancels it.
+  const requestClose = (): boolean => {
+    if (store.save.isPending() || editorGuard.busy()) {
+      return false;
+    }
+    if (!dirty && !editorGuard.dirty()) {
+      return true;
+    }
+    setDiscardIntent('close');
+    return false;
+  };
+
+  /**
+   * Vertical tablist keyboard support: ↑/↓ step, Home/End jump to the ends (the WAI-ARIA
+   * convention for `role="tablist"`, and what every macOS settings window does).
+   */
+  const selectSection = (id: SettingsSectionId, focusPanel = false): void => {
+    const select = (): void => {
+      setActiveSection(id);
+      if (focusPanel) setFocusIssue(true);
+      else listRef.current?.querySelector<HTMLButtonElement>(`[data-section="${id}"]`)?.focus({ preventScroll: true });
+    };
+    if (store.save.isPending()) return;
+    if (id === activeSection) select();
+    else editorGuard.context.request(select);
+  };
+
+  const onListKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      const target = event.key === 'Home' ? SETTINGS_SECTIONS[0] : SETTINGS_SECTIONS[SETTINGS_SECTIONS.length - 1];
+      if (target !== undefined) {
+        selectSection(target.id);
+      }
+      return;
+    }
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+      return;
+    }
+    event.preventDefault();
+    const index = SETTINGS_SECTIONS.findIndex((section) => section.id === activeSection);
+    const delta = event.key === 'ArrowDown' ? 1 : -1;
+    const next = SETTINGS_SECTIONS[(index + delta + SETTINGS_SECTIONS.length) % SETTINGS_SECTIONS.length];
+    if (next !== undefined) {
+      selectSection(next.id);
+    }
+  };
+
+  const persist = (): void => {
+    void store.save.run().then((saved) => {
+      if (saved) {
+        setSaveAttempted(false);
+      } else {
+        setSaveAttempted(true);
+      }
+    });
+  };
+
+  const requestSave = (): void => {
+    if (store.save.isPending() || editorGuard.busy()) return;
+    if (store.issues.length > 0) {
+      setSaveAttempted(true);
+      return;
+    }
+    if (impacts.length > 0) {
+      setImpactOpen(true);
+      return;
+    }
+    persist();
+  };
+
+  /**
+   * Every issue is shown, including one whose path maps to no section — a blocker that cannot be
+   * seen is worse than one with a vague location, and `validateDraft` is the only thing standing
+   * between the user and a backend rejection.
+   */
+  const issueEntries = store.issues.map((issue) => ({ issue, section: sectionForDraftPath(issue.path) }));
+
+  return (
+    <SettingsEditorGuardContext.Provider value={editorGuard.context}>
+      <RadixSettingsDialogShell
+        open={props.open}
+        title="设置"
+        onClose={props.onClose}
+        beforeClose={requestClose}
+        closeDisabled={busy}
+        closeOnBackdrop={false}
+        widthClassName="w-[min(1100px,92vw)] h-[min(86vh,760px)]"
+        testId="settings-modal"
+        initialFocusRef={activeNavigationRef}
+        returnFocusSelector='[data-testid="titlebar-settings"]'
+        // The left rail brings its own columns; see `bodyPadding` in `ModalShell`.
+        bodyPadding="none"
+      >
+        <div className="flex h-full flex-col min-[720px]:flex-row">
+          {compactNavigation ? (
+            <div className="shrink-0 border-b-[0.5px] border-line bg-[var(--material-sidebar)] px-4 py-2">
+              <select
+                ref={(element) => { activeNavigationRef.current = element; }}
+                aria-label="设置分区"
+                value={activeSection}
+                disabled={busy}
+                onChange={(event) => selectSection(event.target.value as SettingsSectionId)}
+                className={`${formInputClass} w-full`}
+                data-testid="settings-section-select"
+              >
+                {SETTINGS_SECTIONS.map((section) => (
+                  <option key={section.id} value={section.id}>
+                    {section.label}{store.dirtySections.has(section.id) ? '（未保存）' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div
+              ref={listRef}
+              role="tablist"
+              aria-orientation="vertical"
+              aria-label="设置分区"
+              onKeyDown={onListKeyDown}
+              className="flex w-[200px] shrink-0 flex-col gap-1 overflow-y-auto border-e-[0.5px] border-line bg-[var(--material-sidebar)] p-3"
+              data-testid="settings-sections"
+            >
+              {SETTINGS_SECTIONS.map((section) => {
+                const selected = section.id === activeSection;
+                const sectionDirty = store.dirtySections.has(section.id);
+                const Icon = SECTION_ICONS[section.id];
+                return (
+                  <button
+                    key={section.id}
+                    type="button"
+                    ref={selected ? (element) => { activeNavigationRef.current = element; } : undefined}
+                    role="tab"
+                    disabled={busy}
+                    id={`settings-tab-${section.id}`}
+                    data-section={section.id}
+                    data-dirty={sectionDirty ? 'true' : 'false'}
+                    aria-selected={selected}
+                    aria-controls={`settings-panel-${section.id}`}
+                    tabIndex={selected ? 0 : -1}
+                    onClick={() => selectSection(section.id)}
+                    title={sectionDirty ? `${section.label}：有未保存的修改` : section.label}
+                    data-testid={`settings-section-${section.id}`}
+                    className={
+                      selected
+                        ? 'flex h-9 shrink-0 items-center gap-2 rounded-control bg-[var(--overlay-active)] px-3 text-start font-[var(--font-weight-medium)] text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:opacity-50'
+                        : 'flex h-9 shrink-0 items-center gap-2 rounded-control px-3 text-start text-muted enabled:hover:bg-[var(--overlay-hover)] enabled:hover:text-ink enabled:active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:opacity-50'
+                    }
+                  >
+                    <Icon
+                      size={13}
+                      aria-hidden="true"
+                      className={selected ? 'shrink-0 text-ink' : 'shrink-0 text-subtle'}
+                    />
+                    <span className="text-[length:var(--font-meta-size)]">{section.label}</span>
+                    {sectionDirty ? (
+                      <>
+                        <span
+                          aria-hidden="true"
+                          className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--st-warn)] ring-1 ring-[var(--st-warn-line)]"
+                          data-testid={`settings-dirty-dot-${section.id}`}
+                        />
+                        <span className="sr-only">（有未保存的修改）</span>
+                      </>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col px-4 py-3 min-[720px]:px-6">
+            {store.save.error === null ? null : (
+              <p
+                role="alert"
+                data-testid="settings-save-error"
+                className="mt-2 flex items-start gap-1.5 rounded-card border-[0.5px] border-[var(--st-bad-line)] px-2 py-1.5 text-[var(--st-bad)] text-[length:var(--font-meta-size)]"
+              >
+                <AlertTriangle size={12} aria-hidden="true" className="mt-0.5 shrink-0" />
+                <span className="min-w-0">{store.save.error}</span>
+              </p>
+            )}
+
+            {saveAttempted && issueEntries.length > 0 ? (
+              <ul
+                role="alert"
+                data-testid="settings-field-issues"
+                className="mt-2 flex flex-col gap-0.5 rounded-card border-[0.5px] border-[var(--st-warn-line)] px-2 py-1.5"
+              >
+                {issueEntries.map(({ issue, section }) => (
+                  <li
+                    key={`${issue.path}:${issue.message}`}
+                    className="flex items-start gap-1.5 text-[var(--st-warn)] text-[length:var(--font-meta-size)]"
+                  >
+                    <AlertTriangle size={12} aria-hidden="true" className="mt-0.5 shrink-0" />
+                    <span className="min-w-0">
+                      {section === null ? (
+                        <span className="mr-1 font-mono text-[length:var(--font-micro-size)]">{issue.path}</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            selectSection(section, true);
+                          }}
+                          className="mr-1 underline decoration-dotted"
+                          data-testid={`settings-issue-jump-${section}`}
+                        >
+                          {SETTINGS_SECTIONS.find((entry) => entry.id === section)?.label ?? section}
+                        </button>
+                      )}
+                      {issue.message}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            <div
+              key={activeSection}
+              ref={panelRef}
+              role={compactNavigation ? 'region' : 'tabpanel'}
+              id={`settings-panel-${activeSection}`}
+              aria-labelledby={compactNavigation ? undefined : `settings-tab-${activeSection}`}
+              aria-label={compactNavigation ? SETTINGS_SECTIONS.find((section) => section.id === activeSection)?.label : undefined}
+              tabIndex={-1}
+              className="ui-scroll-region -mx-1 flex-1 px-1 pt-2 pb-5 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
+              data-testid="settings-panel"
+            >
+              {renderPanel(activeSection, store, props)}
+            </div>
+
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-t-[0.5px] border-line pt-3">
+              <span className="min-w-0 flex-1 text-muted text-[length:var(--font-meta-size)] tabular-nums" role="status" data-testid="settings-dirty-bar">
+                {dirtyBarText(dirty, dirtyCount, store.savedAt !== null)}
+                {transientDirty ? `${dirty ? '，' : ''}${editorGuard.labels.join('、')}尚未保存` : ''}
+              </span>
+              <button
+                type="button"
+                onClick={() => setDiscardIntent('reset')}
+                disabled={(!dirty && !transientDirty) || busy}
+                data-testid="settings-discard-draft"
+                className="min-h-[var(--control-height)] rounded-control px-3 text-muted enabled:hover:bg-[var(--overlay-hover)] enabled:hover:text-ink enabled:active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+              >
+                放弃修改
+              </button>
+              <button
+                type="button"
+                onClick={requestSave}
+                disabled={!dirty || busy}
+                aria-busy={store.save.pending || undefined}
+                data-testid="settings-save"
+                className={formPrimaryButtonClass}
+              >
+                {store.save.pending ? <LoaderCircle size={12} aria-hidden="true" className="motion-safe:animate-spin" /> : null}
+                {store.save.pending ? '保存中…' : '保存设置'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <RadixSettingsConfirmDialog
+          open={discardIntent !== null}
+          title="放弃未保存的设置？"
+          message={transientDirty
+            ? `${editorGuard.labels.join('、')}尚未保存${dirty ? `，另有 ${dirtyCount} 项设置修改` : ''}。放弃后需要重新填写。`
+            : `有 ${dirtyCount} 项设置尚未保存。`}
+          confirmLabel="放弃修改"
+          cancelLabel="继续编辑"
+          tone="destructive"
+          testId="settings-discard"
+          confirmDisabled={busy}
+          onCancel={() => {
+            setDiscardIntent(null);
+            navigationContinuation.current = null;
+          }}
+          onConfirm={() => {
+            if (store.save.isPending() || editorGuard.busy()) return;
+            const resume = navigationContinuation.current;
+            navigationContinuation.current = null;
+            setDiscardIntent(null);
+            store.discard();
+            editorGuard.discard();
+            setSaveAttempted(false);
+            if (discardIntent === 'close') {
+              setCloseAfterDiscard(true);
+            } else if (discardIntent === 'navigate') {
+              resume?.();
+            }
+          }}
+        />
+
+        <RadixSettingsConfirmDialog
+          open={editorGuard.transition !== null}
+          title="放弃未保存的编辑内容？"
+          message={`${editorGuard.labels.join('、')}尚未保存，放弃后需要重新填写。`}
+          confirmLabel="放弃修改"
+          cancelLabel="继续编辑"
+          tone="destructive"
+          confirmDisabled={busy}
+          testId="settings-editor-discard"
+          onCancel={editorGuard.cancel}
+          onConfirm={editorGuard.confirm}
+        />
+
+        <RadixSettingsConfirmDialog
+          open={impactOpen}
+          title="保存这些高影响设置？"
+          message={impacts.map((impact) => impact.title).join("、")}
+          detail={impacts.map((impact) => impact.detail).join('\n')}
+          pending={store.save.pending}
+          error={store.save.error}
+          confirmLabel="保存设置"
+          testId="settings-impact-confirm"
+          onCancel={() => setImpactOpen(false)}
+          onConfirm={() => {
+            if (store.save.isPending()) return;
+            void store.save.run().then((saved) => {
+              setSaveAttempted(!saved);
+              if (saved) setImpactOpen(false);
+            });
+          }}
+        />
+      </RadixSettingsDialogShell>
+    </SettingsEditorGuardContext.Provider>
+  );
+}

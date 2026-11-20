@@ -1,0 +1,15 @@
+{
+  "kind": "memory",
+  "requiredPhrases": [
+    "60 endodontic files",
+    "90 patients",
+    "keep the studies separate"
+  ],
+  "forbiddenPhrases": [
+    "same population"
+  ],
+  "citations": [
+    "10.6026/973206300191348",
+    "10.6026/973206300191342"
+  ]
+}

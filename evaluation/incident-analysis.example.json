@@ -1,0 +1,7 @@
+{
+  "category": "agent",
+  "observation": "请填写实际观察到的失败或遗漏，并核对完整轨迹与独立评分。",
+  "hypothesis": "请填写待验证的根因假设，不能把模型解释当成已确认根因。",
+  "proposedChange": "请填写单项候选修改。",
+  "expectedOutcome": "请填写预期改善和必须保留的行为。"
+}

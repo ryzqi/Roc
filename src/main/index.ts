@@ -1,0 +1,582 @@
+import './proxy-runtime';
+import {
+  BrowserWindow,
+  Menu,
+  Tray,
+  app,
+  globalShortcut,
+  nativeImage,
+  nativeTheme,
+  powerMonitor,
+  screen,
+  shell,
+  systemPreferences
+} from 'electron';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { totalmem } from 'node:os';
+import { ipcChannels } from '../shared/ipc';
+import type { LiteratureLibraryChanged } from '../shared/schemas/literature-import';
+import type { ResearchTaskUpdated } from '../shared/schemas/research-tasks';
+import type { MenuPage } from '../shared/surfaces';
+import type { BuiltinSkillsStatus, ChatRunEvent, ShellConfirmationRequest, TaskUpdateEvent, TerminalSessionExitEvent, TerminalSessionOutputEvent, TraySummary, WorkspaceChangedEvent } from '../shared/types';
+import { registerIpc } from './ipc/register-ipc';
+import { confirmShellRequestWithDialog } from './ipc/shell-ipc';
+import { createMainKernelBootstrap, type MainKernelBootstrap } from './main-kernel-bootstrap';
+import { RocPaths } from './services/paths';
+import { agentChatRunEventType } from './plugins/agent/runtime';
+import { workspaceChangedEventType } from './plugins/workspace';
+import { builtinSkillsUpdatedEventType } from './plugins/skills';
+import {
+  terminalSessionExitEventType,
+  terminalSessionOutputEventType
+} from './plugins/workspace/terminal-capabilities';
+import { PerformanceObserverService } from './services/performance-observer-service';
+import { MacOSHostService } from './macos-host-service';
+import { initializeMacOSPath } from './macos-environment';
+import {
+  bindWindowHiddenBroadcast,
+  buildMainWindowOptions,
+  getWindowBounds,
+  getWindowHiddenState,
+  resolveMainWindowBounds,
+  type HiddenBroadcastWindow
+} from './window-shell';
+import {
+  bindWindowPlacementPersistence,
+  readWindowPlacementSnapshot
+} from './window-state-store';
+import { buildApplicationMenuTemplate } from './application-menu';
+import { broadcastToWindows, sendToWindow } from './window-messaging';
+import { createTerminalOutputBatcher } from './terminal-output-batcher';
+import { bindNativeContextMenu } from './native-context-menu';
+import { buildSystemAppearanceSnapshot } from './system-appearance';
+import { handleExternalNavigation } from './external-link-policy';
+import {
+  createElectronRuntimeMetricsProvider,
+  createElectronSafeStorageBackend
+} from './electron-runtime-adapters';
+import { toLogError } from './services/errors';
+import { registerPdfPreviewProtocol, registerPdfPreviewScheme } from './pdf-preview-protocol';
+import { applyChromiumRuntimeFlags } from './chromium-runtime-flags';
+import { mainResourceActivity } from './services/resource-activity';
+import { MainResourceBudget } from './services/resource-budget';
+import { setResearchProcessResourcePolicy } from './plugins/research/process-runner';
+
+const mainModuleDir = dirname(fileURLToPath(import.meta.url));
+const isDevelopment = !app.isPackaged;
+const mainRendererUrl = isDevelopment && process.env.ELECTRON_RENDERER_URL !== undefined
+  ? process.env.ELECTRON_RENDERER_URL
+  : pathToFileURL(join(mainModuleDir, '../renderer/index.html')).href;
+const preloadPath = join(mainModuleDir, '../preload/index.cjs');
+const trayIconPath = isDevelopment
+  ? join(mainModuleDir, '../../resources/trayTemplate.png')
+  : join(process.resourcesPath, 'trayTemplate.png');
+const mainReadyStartedAtMs = performance.now();
+// Keep the existing module-ready budget comparable while also measuring the
+// Electron bootstrap and static dependencies that ran before this module body.
+const processStartedAtMs = mainReadyStartedAtMs - process.uptime() * 1000;
+let pdfPreviewKernel: MainKernelBootstrap | null = null;
+let pdfPreviewProtocolRegistered = false;
+
+if (process.platform !== 'darwin') {
+  console.error('Roc requires macOS.');
+  app.exit(1);
+}
+
+registerPdfPreviewScheme();
+applyChromiumRuntimeFlags(app.commandLine);
+
+let mainWindow: BrowserWindow | null = null;
+let activeKernel: MainKernelBootstrap | null = null;
+let powerResumeBound = false;
+let screenBoundsBound = false;
+let systemAppearanceBound = false;
+let appShutdownComplete = false;
+let appShutdownInProgress: Promise<void> | null = null;
+let resourceBudget: MainResourceBudget | null = null;
+
+const hostService = new MacOSHostService({
+  isPackaged: app.isPackaged,
+  app: {
+    requestSingleInstanceLock: () => app.requestSingleInstanceLock(),
+    on: (event, listener) => {
+      if (event === 'before-quit') {
+        app.on('before-quit', listener);
+        return;
+      }
+      if (event === 'will-quit') {
+        app.on('will-quit', listener);
+        return;
+      }
+      app.on('second-instance', listener);
+    },
+    quit: () => {
+      app.quit();
+    },
+    setLoginItemSettings: (settings) => {
+      app.setLoginItemSettings(settings);
+    },
+    getLoginItemSettings: () => app.getLoginItemSettings()
+  },
+  globalShortcut,
+  lifecycleService: {
+    getTraySummary: () => requireActiveKernel().invokeCapability<{}, TraySummary>('lifecycle.getTraySummary', {}),
+    pauseBackgroundExecution: () =>
+      requireActiveKernel().invokeCapability<{}, TraySummary>('lifecycle.pauseBackgroundExecution', {}),
+    resumeBackgroundExecution: () =>
+      requireActiveKernel().invokeCapability<{}, TraySummary>('lifecycle.resumeBackgroundExecution', {})
+  },
+  logService: {
+    info: (message, context) => {
+      const kernel = activeKernel;
+      if (kernel === null) {
+        console.log(JSON.stringify({ ...context, level: 'info', message }));
+        return;
+      }
+      kernel.logService.info(message, context);
+    },
+    warn: (message, context) => {
+      const kernel = activeKernel;
+      if (kernel === null) {
+        console.log(JSON.stringify({ ...context, level: 'warn', message }));
+        return;
+      }
+      kernel.logService.warn(message, context);
+    },
+    error: (message, error, context) => {
+      const kernel = activeKernel;
+      if (kernel === null) {
+        console.log(JSON.stringify({
+          ...context,
+          level: 'error',
+          message,
+          error: {
+            code: 'error',
+            message: error.message,
+            stack: error.stack
+          }
+        }));
+        return;
+      }
+      kernel.logService.error(message, error, context);
+    }
+  },
+  menu: Menu,
+  trayIconPath,
+  createTray: (iconPath) => {
+    const trayImage = nativeImage.createFromPath(iconPath);
+    if (trayImage.isEmpty()) {
+      throw new Error(`Failed to load tray icon from ${iconPath}.`);
+    }
+    trayImage.setTemplateImage(true);
+    const tray = new Tray(trayImage);
+    return {
+      setToolTip: (tooltip) => {
+        tray.setToolTip(tooltip);
+      },
+      setContextMenu: (menu) => {
+        tray.setContextMenu(menu as Menu | null);
+      },
+      destroy: () => {
+        tray.destroy();
+      }
+    };
+  },
+  openMainPage: showMainPage,
+  broadcastTaskUpdated: () => {
+    broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, null);
+  },
+  broadcastWindowHidden: broadcastMainWindowHidden
+});
+
+const ownsSingleInstanceLock = hostService.initializeProcessIdentity();
+
+// The renderer may veto beforeunload. Retain the kernel until all windows close.
+app.on('will-quit', (event) => {
+  if (appShutdownComplete) {
+    return;
+  }
+  if (appShutdownInProgress !== null) {
+    event.preventDefault();
+    return;
+  }
+  const kernel = activeKernel;
+  resourceBudget?.stop();
+  resourceBudget = null;
+  activeKernel = null;
+  pdfPreviewKernel = null;
+  if (kernel === null) {
+    appShutdownComplete = true;
+    return;
+  }
+  event.preventDefault();
+  appShutdownInProgress = Promise.resolve()
+    .then(async () => {
+      if (kernel !== null) {
+        await kernel.shutdown();
+      }
+    })
+    .catch((error: unknown) => {
+      console.error(error);
+    })
+    .finally(() => {
+      appShutdownComplete = true;
+      appShutdownInProgress = null;
+      // will-quit already confirmed every window closed; finish the pending exit.
+      app.exit(0);
+    });
+});
+
+async function loadMainRenderer(window: BrowserWindow): Promise<void> {
+  await window.loadURL(mainRendererUrl);
+}
+
+function showMainPage(page: MenuPage): void {
+  if (mainWindow === null || mainWindow.isDestroyed()) {
+    return;
+  }
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow.show();
+  broadcastMainWindowHidden();
+  mainWindow.focus();
+  sendToWindow(mainWindow, ipcChannels.navigate, page);
+}
+
+function broadcastMainWindowHidden(): void {
+  if (mainWindow === null || mainWindow.isDestroyed()) return;
+  const snapshot = getWindowHiddenState(mainWindow);
+  resourceBudget?.setHidden(snapshot.hidden);
+  sendToWindow(mainWindow, ipcChannels.windowHidden, snapshot);
+}
+
+function requireActiveKernel(): MainKernelBootstrap {
+  if (activeKernel === null) {
+    throw new Error('Kernel is not ready.');
+  }
+  return activeKernel;
+}
+
+async function createWindow(): Promise<void> {
+  if (!ownsSingleInstanceLock) {
+    return;
+  }
+  await initializeMacOSPath();
+  const performanceObserverService = new PerformanceObserverService();
+  const safeStorageBackend = createElectronSafeStorageBackend();
+  const runtimeMetricsProvider = createElectronRuntimeMetricsProvider();
+  const kernel = createMainKernelBootstrap({
+    confirmShellRequest: async (request: ShellConfirmationRequest) => {
+      if (mainWindow === null) {
+        throw new Error('shell_confirm_main_window_missing');
+      }
+      return await confirmShellRequestWithDialog(request, mainWindow, requireActiveKernel().logService);
+    },
+    dataRoot: process.env.ROC_DATA_ROOT,
+    getAppearance: getSystemAppearanceSnapshot,
+    isPackaged: app.isPackaged,
+    researchToolchainRoot: app.isPackaged ? join(process.resourcesPath, 'research-toolchain')
+      : join(mainModuleDir, `../../.runtime/research-toolchain/darwin-${process.arch}`),
+    researchModelsRoot: app.isPackaged
+      ? join(new RocPaths(process.env.ROC_DATA_ROOT).root, 'research-models')
+      : join(mainModuleDir, '../../.runtime/research-models'),
+    builtinSkillsRoot: app.isPackaged
+      ? join(process.resourcesPath, 'builtin-skills')
+      : join(mainModuleDir, '../../resources/builtin-skills'),
+    performanceObserverService,
+    safeStorage: safeStorageBackend,
+    runtimeMetricsProvider,
+    version: app.getVersion()
+  });
+  const windowStateFilePath = join(kernel.paths.configDir, 'window-state.json');
+  const restoredPlacement = readWindowPlacementSnapshot(windowStateFilePath);
+  const restoredBounds = resolveMainWindowBounds(
+    restoredPlacement === null ? null : restoredPlacement.bounds,
+    getDisplayWorkAreas()
+  );
+
+  mainWindow = kernel.performanceObserverService.measure('window_created', 'mainWindow', () =>
+    new BrowserWindow(buildMainWindowOptions(preloadPath, restoredBounds))
+  );
+  if (restoredPlacement !== null && restoredPlacement.maximized) {
+    mainWindow.maximize();
+  }
+  bindWindowPlacementPersistence(mainWindow, windowStateFilePath);
+  bindWindowHiddenBroadcast(mainWindow as HiddenBroadcastWindow, (snapshot) => {
+    resourceBudget?.setHidden(snapshot.hidden);
+    sendToWindow(mainWindow, ipcChannels.windowHidden, snapshot);
+  });
+  bindDisplayBoundsCorrection();
+  bindSystemAppearanceBroadcast();
+  hostService.bindMainWindow(mainWindow);
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+  const kernelStarted = kernel.start().then(() => {
+    activeKernel = kernel;
+    pdfPreviewKernel = kernel;
+    kernel.performanceObserverService.record({
+      phase: 'main_ready',
+      label: 'app.whenReady',
+      startedAtMs: mainReadyStartedAtMs,
+      durationMs: performance.now() - mainReadyStartedAtMs,
+      metadata: {
+        packaged: app.isPackaged,
+        bootstrapAndImportsMs: mainReadyStartedAtMs - processStartedAtMs,
+        processToMainReadyMs: performance.now() - processStartedAtMs
+      }
+    });
+  });
+  Menu.setApplicationMenu(Menu.buildFromTemplate(buildApplicationMenuTemplate(showMainPage)));
+
+  const externalNavigationInput = {
+    shell,
+    logService: kernel.logService
+  };
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    return handleExternalNavigation(url, externalNavigationInput);
+  });
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    event.preventDefault();
+    handleExternalNavigation(url, externalNavigationInput);
+  });
+  bindNativeContextMenu(mainWindow.webContents);
+
+  let mainWindowShown = false;
+  function showMainWindowOnce(label: string): void {
+    if (mainWindowShown) {
+      return;
+    }
+    mainWindowShown = true;
+    if (activeKernel !== null) {
+      kernel.startDatabaseMaintenance();
+    }
+    kernel.performanceObserverService.record({
+      phase: 'ready_to_show',
+      label,
+      startedAtMs: mainReadyStartedAtMs,
+      durationMs: performance.now() - mainReadyStartedAtMs,
+      metadata: {
+        window: 'main',
+        processToReadyToShowMs: performance.now() - processStartedAtMs
+      }
+    });
+    mainWindow?.show();
+    broadcastMainWindowHidden();
+  }
+
+  mainWindow.once('ready-to-show', () => {
+    showMainWindowOnce('mainWindow.ready-to-show');
+  });
+  mainWindow.webContents.once('did-finish-load', () => {
+    showMainWindowOnce('mainWindow.did-finish-load');
+  });
+
+  // Install the preview handler before the first renderer navigation. The
+  // renderer eagerly fetches the original PDF while mounting the reader; a
+  // later registration leaves that first request at Chromium's
+  // ERR_UNKNOWN_URL_SCHEME and only a reload can recover it.
+  if (!pdfPreviewProtocolRegistered) {
+    registerPdfPreviewProtocol(() => pdfPreviewKernel,
+      isDevelopment && process.env.ELECTRON_RENDERER_URL !== undefined ? new URL(process.env.ELECTRON_RENDERER_URL).origin : null);
+    pdfPreviewProtocolRegistered = true;
+  }
+  const rendererLoaded = kernel.performanceObserverService.measureAsync('renderer_loaded', 'mainWindow.loadRenderer', () => loadMainRenderer(mainWindow!));
+  await Promise.all([kernelStarted, rendererLoaded]);
+  resourceBudget = new MainResourceBudget({
+    activity: mainResourceActivity,
+    mainRssBudgetBytes: Math.min(2 * 1024 ** 3, totalmem() / 8),
+    sampleMainRss: () => process.memoryUsage.rss(),
+    setProcessPolicy: setResearchProcessResourcePolicy,
+    reclaimIdleDatabaseMemory: () => {
+      const result = kernel.runtime.reclaimTransientMemory();
+      kernel.logService.info('Released idle database caches.', { service: 'main', ...result });
+    },
+    onState: snapshot => {
+      sendToWindow(mainWindow, ipcChannels.windowResourcePressure, { pressure: snapshot.pressure });
+      kernel.logService.info('Resource budget state changed.', { service: 'main', ...snapshot });
+    },
+    onError: error => kernel.logService.error('Resource budget operation failed.', toLogError(error), { service: 'main' })
+  });
+  resourceBudget.setHidden(mainWindow === null || getWindowHiddenState(mainWindow).hidden);
+  resourceBudget.start();
+  sendToWindow(mainWindow, ipcChannels.windowResourcePressure, { pressure: resourceBudget.snapshot().pressure });
+  hostService.syncSettings(kernel.configService.getSettings());
+  registerIpc(kernel, mainWindow, {
+    openMainPage: showMainPage,
+    closeMainWindow: () => {
+      mainWindow?.close();
+    },
+    syncHostSettings: (settings) => {
+      hostService.syncSettings(settings);
+    },
+    getHostIntegrationStatus: () => hostService.getIntegrationStatus(),
+    broadcastTaskUpdated: (event) => {
+      hostService.refreshTray();
+      broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, event ?? null);
+    }
+  }, mainRendererUrl);
+
+  const terminalOutputBatcher = createTerminalOutputBatcher({
+    intervalMs: 16,
+    send: (event) => {
+      broadcastToWindows([mainWindow], ipcChannels.terminalOutput, event, {
+        include: (_window, index) => index === 0
+      });
+    }
+  });
+  kernel.subscribeEvent<TerminalSessionOutputEvent>(terminalSessionOutputEventType, (event) => {
+    terminalOutputBatcher.schedule(event.payload);
+  });
+  kernel.subscribeEvent<TerminalSessionExitEvent>(terminalSessionExitEventType, (event) => {
+    terminalOutputBatcher.flush();
+    broadcastToWindows([mainWindow], ipcChannels.terminalExit, event.payload, {
+      include: (_window, index) => index === 0
+    });
+  });
+  kernel.subscribeEvent<BuiltinSkillsStatus>(builtinSkillsUpdatedEventType, (event) => {
+    broadcastToWindows([mainWindow], ipcChannels.skillsUpdated, event.payload, {
+      include: (_window, index) => index === 0
+    });
+  });
+  kernel.subscribeEvent<WorkspaceChangedEvent>(workspaceChangedEventType, (event) => {
+    broadcastToWindows([mainWindow], ipcChannels.workspaceChanged, event.payload, {
+      include: (_window, index) => index === 0
+    });
+  });
+  kernel.subscribeEvent<LiteratureLibraryChanged>('research.library.changed', (event) => {
+    broadcastToWindows([mainWindow], ipcChannels.researchLibraryChanged, event.payload);
+  });
+  kernel.subscribeEvent<ResearchTaskUpdated>('research.task.updated', event => {
+    broadcastToWindows([mainWindow], ipcChannels.researchTaskUpdated, event.payload);
+  });
+  kernel.subscribeEvent<ChatRunEvent>(agentChatRunEventType, (event) => {
+    broadcastToWindows([mainWindow], ipcChannels.chatRunEvent, event.payload, {
+      include: (_window, index) => index === 0
+    });
+    if (event.payload.runId.startsWith('run_') && shouldBroadcastTaskRefresh(event.payload)) {
+      broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, null);
+    }
+  });
+  kernel.subscribeEvent<TaskUpdateEvent>('task.updated', (event) => {
+    hostService.refreshTray();
+    broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, event.payload);
+  });
+  if (!powerResumeBound) {
+    powerResumeBound = true;
+    powerMonitor.on('suspend', () => resourceBudget?.suspend());
+    powerMonitor.on('resume', () => {
+      resourceBudget?.resume();
+      const currentKernel = activeKernel;
+      if (currentKernel === null) {
+        return;
+      }
+      void Promise.all([
+        currentKernel.invokeCapability<{}, { handled: true }>('task.scheduler.handlePowerResume', {}),
+        currentKernel.invokeCapability<{}, { handled: true }>('research.monitors.handlePowerResume', {})
+      ])
+        .then(() => {
+          hostService.refreshTray();
+          broadcastToWindows([mainWindow], ipcChannels.tasksUpdated, null);
+        })
+        .catch((error: unknown) => {
+          currentKernel.logService.error('Task scheduler power resume handling failed.', toLogError(error), {
+            service: 'main',
+            component: 'powerMonitor.resume'
+          });
+        });
+    });
+  }
+  if (mainWindowShown) {
+    kernel.startDatabaseMaintenance();
+  }
+}
+
+function shouldBroadcastTaskRefresh(event: ChatRunEvent): boolean {
+  return (
+    event.type === 'run_started' ||
+    event.type === 'run_completed' ||
+    event.type === 'run_failed' ||
+    event.type === 'run_interrupted' ||
+    event.type === 'run_resumed'
+  );
+}
+
+function bindDisplayBoundsCorrection(): void {
+  if (screenBoundsBound) {
+    return;
+  }
+  screenBoundsBound = true;
+  const correctBounds = (): void => {
+    if (mainWindow === null || mainWindow.isDestroyed() || mainWindow.isMaximized()) {
+      return;
+    }
+    const currentBounds = getWindowBounds(mainWindow);
+    const nextBounds = resolveMainWindowBounds(currentBounds, getDisplayWorkAreas());
+    if (
+      nextBounds.x === currentBounds.x &&
+      nextBounds.y === currentBounds.y &&
+      nextBounds.width === currentBounds.width &&
+      nextBounds.height === currentBounds.height
+    ) {
+      return;
+    }
+    mainWindow.setBounds(nextBounds);
+  };
+  screen.on('display-added', correctBounds);
+  screen.on('display-removed', correctBounds);
+  screen.on('display-metrics-changed', correctBounds);
+}
+
+function bindSystemAppearanceBroadcast(): void {
+  if (systemAppearanceBound) {
+    return;
+  }
+  systemAppearanceBound = true;
+  const broadcastSystemAppearance = (): void => {
+    broadcastToWindows([mainWindow], ipcChannels.appearanceUpdated, getSystemAppearanceSnapshot());
+  };
+  nativeTheme.on('updated', broadcastSystemAppearance);
+  const colorSubscription = systemPreferences.subscribeLocalNotification('NSSystemColorsDidChangeNotification', broadcastSystemAppearance);
+  app.once('will-quit', () => systemPreferences.unsubscribeLocalNotification(colorSubscription));
+}
+
+function getSystemAppearanceSnapshot() {
+  return buildSystemAppearanceSnapshot({
+    nativeTheme,
+    systemPreferences
+  });
+}
+
+function getDisplayWorkAreas(): Array<{ workArea: { x: number; y: number; width: number; height: number } }> {
+  return screen.getAllDisplays().map((display) => ({
+    workArea: {
+      x: display.workArea.x,
+      y: display.workArea.y,
+      width: display.workArea.width,
+      height: display.workArea.height
+    }
+  }));
+}
+
+if (!ownsSingleInstanceLock) {
+  app.exit(0);
+} else {
+  app.whenReady().then(createWindow).catch((error: unknown) => {
+    console.error(error);
+    app.exit(1);
+  });
+}
+
+app.on('activate', () => {
+  if (mainWindow !== null && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    mainWindow.show();
+    broadcastMainWindowHidden();
+    mainWindow.focus();
+  }
+});

@@ -1,0 +1,191 @@
+import {
+  mcpServerConfigSchema,
+  mcpServerTransportFieldsSchema,
+  mcpServersConfigSchema
+} from '../../shared/schemas/ipc-mcp-skills';
+import type { ApprovalMode, McpServerConfig, McpServerSnapshot, McpServerTestResult, McpServersConfig } from '../../shared/types';
+import { RocDomainError } from './errors';
+import { requireText } from './validation';
+
+export type McpConfigService = {
+  getMcpConfig(): McpServersConfig;
+  saveMcpConfig(config: McpServersConfig): void;
+};
+
+export class McpService {
+  constructor(private readonly configService: McpConfigService) {}
+
+  listServers(): McpServerSnapshot[] {
+    const config = this.readConfig();
+
+    return config.servers.map((server) => ({
+      id: server.id,
+      name: server.name,
+      enabled: server.enabled,
+      transport: server.transport,
+      status: 'not_connected',
+      tools: server.allowedTools.length,
+      preset: server.preset,
+      riskLevel: server.riskLevel,
+      url: server.url,
+      command: server.command,
+      allowedTools: server.allowedTools,
+      lastError: null
+    }));
+  }
+
+  getConfig(): McpServersConfig {
+    return this.readConfig();
+  }
+
+  setApprovalMode(approvalMode: ApprovalMode): McpServersConfig {
+    const config = this.readConfig();
+    const nextConfig: McpServersConfig = {
+      ...config,
+      approvalMode
+    };
+    this.writeConfig(nextConfig);
+    return nextConfig;
+  }
+
+  ensureExaPreset(): McpServerConfig {
+    const existing = this.readConfig().servers.find((server) => server.id === 'exa-hosted');
+    if (existing !== undefined) {
+      return existing;
+    }
+
+    return this.upsertServer({
+      id: 'exa-hosted',
+      name: 'Exa Hosted MCP',
+      transport: 'http',
+      enabled: false,
+      url: 'https://mcp.exa.ai/mcp',
+      preset: true,
+      riskLevel: 'medium',
+      allowedTools: ['web_search_exa', 'web_search_advanced_exa']
+    });
+  }
+
+  upsertServer(server: McpServerConfig): McpServerConfig {
+    const parsed = mcpServerConfigSchema.parse(server);
+    this.validateTransportFields(parsed);
+    const config = this.readConfig();
+    const existingIndex = config.servers.findIndex((item) => item.id === parsed.id);
+    const nextServers =
+      existingIndex === -1 ? [...config.servers, parsed] : config.servers.map((item) => (item.id === parsed.id ? parsed : item));
+    this.writeConfig({
+      schemaVersion: 1,
+      approvalMode: config.approvalMode,
+      servers: nextServers
+    });
+    return parsed;
+  }
+
+  setServerEnabled(id: string, enabled: boolean): McpServerConfig {
+    const serverId = requireText(id, 'mcp_server_id_empty', 'MCP server ID 不能为空。', '请选择要修改的 MCP server。');
+    const config = this.readConfig();
+    const found = config.servers.find((server) => server.id === serverId);
+    if (found === undefined) {
+      throw this.notFound(serverId);
+    }
+    const nextServer: McpServerConfig = {
+      ...found,
+      enabled
+    };
+    this.writeConfig({
+      schemaVersion: 1,
+      approvalMode: config.approvalMode,
+      servers: config.servers.map((server) => (server.id === serverId ? nextServer : server))
+    });
+    return nextServer;
+  }
+
+  deleteServer(id: string): void {
+    const serverId = requireText(id, 'mcp_server_id_empty', 'MCP server ID 不能为空。', '请选择要删除的 MCP server。');
+    const config = this.readConfig();
+    const found = config.servers.find((server) => server.id === serverId);
+    if (found === undefined) {
+      throw this.notFound(serverId);
+    }
+    this.writeConfig({
+      schemaVersion: 1,
+      approvalMode: config.approvalMode,
+      servers: config.servers.filter((server) => server.id !== serverId)
+    });
+  }
+
+  testServer(id: string): McpServerTestResult {
+    const serverId = requireText(id, 'mcp_server_id_empty', 'MCP server ID 不能为空。', '请选择要测试的 MCP server。');
+    const server = this.readConfig().servers.find((item) => item.id === serverId);
+    if (server === undefined) {
+      throw this.notFound(serverId);
+    }
+
+    const checked = server.transport === 'stdio' ? ['id', 'name', 'transport', 'command'] : ['id', 'name', 'transport', 'url'];
+    const missingTransportField = this.missingTransportField(server);
+    if (missingTransportField !== null) {
+      let error: string;
+      if (missingTransportField === 'command') {
+        error = 'stdio MCP server 缺少 command。';
+      } else {
+        error = 'HTTP/SSE MCP server 缺少 url。';
+      }
+      return { serverId, status: 'invalid', checked, error };
+    }
+
+    return {
+      serverId,
+      status: 'ready',
+      checked,
+      error: null
+    };
+  }
+
+  private readConfig(): McpServersConfig {
+    return this.configService.getMcpConfig();
+  }
+
+  private writeConfig(config: McpServersConfig): void {
+    const parsed = mcpServersConfigSchema.parse(config);
+    this.configService.saveMcpConfig(parsed);
+  }
+
+  private missingTransportField(server: McpServerConfig): 'command' | 'url' | null {
+    const result = mcpServerTransportFieldsSchema.safeParse(server);
+    if (result.success) return null;
+    return result.error.issues[0]?.path[0] === 'command' ? 'command' : 'url';
+  }
+
+  private validateTransportFields(server: McpServerConfig): void {
+    const missingField = this.missingTransportField(server);
+    if (missingField === 'command') {
+      throw new RocDomainError({
+        code: 'mcp_stdio_command_missing',
+        message: 'stdio MCP server 必须配置 command。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请填写本地 MCP server 启动命令。'
+      });
+    }
+    if (missingField === 'url') {
+      throw new RocDomainError({
+        code: 'mcp_url_missing',
+        message: 'HTTP/SSE MCP server 必须配置 url。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请填写 MCP server URL。'
+      });
+    }
+  }
+
+  private notFound(id: string): RocDomainError {
+    return new RocDomainError({
+      code: 'mcp_server_not_found',
+      message: `找不到 MCP server ${id}。`,
+      category: 'not_found',
+      retryable: false,
+      userAction: '请刷新能力管理页后重试。'
+    });
+  }
+
+}

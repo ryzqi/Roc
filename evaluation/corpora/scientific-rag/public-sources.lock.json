@@ -1,0 +1,897 @@
+{
+  "schemaVersion": 1,
+  "id": "scientific-public-2026-11-16",
+  "policy": "Exact acquired bytes; public upstream human annotation provenance is preserved separately from local independent reviews. No scientific category, reviewer or PDF version alignment is inferred. Raw assets stay local and are not redistributed.",
+  "qasper": {
+    "revision": "v0.3-dev",
+    "lock": "evaluation/lib/sources.lock.json",
+    "pdfSelection": "supported-question-count-desc-paper-id-asc-top45-v1",
+    "pdfCohort": [
+      "1910.06592",
+      "1909.13104",
+      "1910.12574",
+      "2002.01320",
+      "1603.01514",
+      "1901.01010",
+      "1902.09666",
+      "1911.07555",
+      "1601.02403",
+      "1611.03599",
+      "1805.10824",
+      "1903.11437",
+      "1905.11268",
+      "1908.05828",
+      "1908.08717",
+      "1910.03634",
+      "1912.00667",
+      "1912.08904",
+      "2002.07306",
+      "2004.04721",
+      "1605.03481",
+      "1706.01678",
+      "1706.06894",
+      "1707.06806",
+      "1712.05999",
+      "1802.06024",
+      "1802.07862",
+      "1806.04511",
+      "1809.01541",
+      "1809.06537",
+      "1810.04428",
+      "1904.04358",
+      "1905.07791",
+      "1908.04042",
+      "1908.09246",
+      "1908.10084",
+      "1909.03582",
+      "1909.06200",
+      "1911.00841",
+      "1912.03627",
+      "2001.01269",
+      "2002.02070",
+      "2002.03407",
+      "2004.02192",
+      "1503.00841"
+    ],
+    "pdfRevision": "content-pinned official arxiv responses; QASPER-to-PDF version alignment not verified",
+    "annotationLicense": "CC-BY-4.0",
+    "pdfLicense": "per-paper arXiv license; not granted by annotation license"
+  },
+  "omnidocbench": {
+    "revision": "aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec",
+    "repository": "opendatalab/OmniDocBench",
+    "imageSelection": "lexicographic-first6-per-declared-attribute-or-object-v1",
+    "datasetLicense": "upstream-research-only-noncommercial",
+    "codeLicenseNotDatasetLicense": true
+  },
+  "annotationProvenance": {
+    "qasper": {
+      "kind": "published-human-annotations",
+      "methodSource": "https://aclanthology.org/2021.naacl-main.365/",
+      "identityFields": [
+        "question_id",
+        "question_writer",
+        "answers.annotation_id",
+        "answers.worker_id"
+      ],
+      "localIndependentReview": "not_performed"
+    },
+    "omnidocbench": {
+      "kind": "published-manual-and-assisted-expert-checked-annotations",
+      "methodSource": "https://arxiv.org/abs/2412.07626",
+      "identityFields": [
+        "page_info.image_path",
+        "layout_dets.anno_id"
+      ],
+      "localIndependentReview": "not_performed"
+    }
+  },
+  "files": [
+    {
+      "path": "omnidocbench/README.md",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/README.md",
+      "role": "license-and-annotation-method",
+      "bytes": 13441,
+      "sha256": "9ac999a6615ae74009c997c4ddc8a72c52423c2b0384235b4126bdc213576e81"
+    },
+    {
+      "path": "omnidocbench/images/PPT_1001115_eng_page_003.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_1001115_eng_page_003.png",
+      "bytes": 139454,
+      "sha256": "6b91b8be02fd82b9ad9e52310644bed7af1e6cce12e18cb1b58fc1d5b70975d1",
+      "groups": [
+        "single_column"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_1001115_eng_page_005.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_1001115_eng_page_005.png",
+      "bytes": 159864,
+      "sha256": "efc8a57ad3f1e250cf61b6740fabbe76ccf583f39b4baa97111b2a005e68974b",
+      "groups": [
+        "single_column"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_1001115_eng_page_011.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_1001115_eng_page_011.png",
+      "bytes": 167716,
+      "sha256": "6269f3a6041f09e4d69029d21a8e52a45bcab7b1d2762b4f088729fa13fdb867",
+      "groups": [
+        "single_column"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_1001115_eng_page_015.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_1001115_eng_page_015.png",
+      "bytes": 805791,
+      "sha256": "454b83bfc3c82073e282d1767361ed7eea88aa6ac7312cb42d4c671f0a9c9909",
+      "groups": [
+        "single_column",
+        "figure"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_11.2013EvaluatingTraineeteacherproficiency_page_010.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_11.2013EvaluatingTraineeteacherproficiency_page_010.png",
+      "bytes": 157230,
+      "sha256": "eec974d0546dcb2aaeb0d441c0131c68eb01cc0611a2e87febe638dcc2c081e3",
+      "groups": [
+        "single_column"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_11.2013EvaluatingTraineeteacherproficiency_page_029.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_11.2013EvaluatingTraineeteacherproficiency_page_029.png",
+      "bytes": 114328,
+      "sha256": "dbeaf73292b948b705881254a85a853c7bf740ac80b849dc97417e9bd85dcff2",
+      "groups": [
+        "single_column"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_8076_MEYER_Chapter_2_-_Language_Change_page_012.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_8076_MEYER_Chapter_2_-_Language_Change_page_012.png",
+      "bytes": 260249,
+      "sha256": "f7c9c7cba308d517aa921c2ddfe82b0950d66d924694b8f281bf5073728ddd0f",
+      "groups": [
+        "table"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_8076_MEYER_Chapter_2_-_Language_Change_page_014.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_8076_MEYER_Chapter_2_-_Language_Change_page_014.png",
+      "bytes": 781133,
+      "sha256": "32e2d0f6a7a8a2e38ea11bea12f4c0a2e2cbfe24a993966d45a8267dd139f42e",
+      "groups": [
+        "table"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_8076_MEYER_Chapter_2_-_Language_Change_page_021.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_8076_MEYER_Chapter_2_-_Language_Change_page_021.png",
+      "bytes": 227375,
+      "sha256": "737ce9cc33eb343ad0048efeca718f584e836104835e1c2930f027234d523722",
+      "groups": [
+        "table"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_B14_Claeys_Consistent Presentation of Images_v2_page_006.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_B14_Claeys_Consistent%20Presentation%20of%20Images_v2_page_006.png",
+      "bytes": 673936,
+      "sha256": "26d25e9d25db4ddf61e5e0a9245d228d37c733c043653ad07d312507b7468fcb",
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_B14_Claeys_Consistent Presentation of Images_v2_page_010.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_B14_Claeys_Consistent%20Presentation%20of%20Images_v2_page_010.png",
+      "bytes": 180336,
+      "sha256": "d8239ee3708d505b53672af71c64fc5be2de5e014297682deb236a6560f12441",
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_BaharMartonosi_page_010.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_BaharMartonosi_page_010.png",
+      "bytes": 327805,
+      "sha256": "880ebc5739d0b8a709ba462d206b642f44ad1f37e9fe4ceaecd01dea2b49d839",
+      "groups": [
+        "figure"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_CalculusReview_page_002.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_CalculusReview_page_002.png",
+      "bytes": 128459,
+      "sha256": "2c6fad07b405c19a7c2622d041babf18a7e585a00272aa70e9dde73201b87088",
+      "groups": [
+        "figure"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_CalculusReview_page_009.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_CalculusReview_page_009.png",
+      "bytes": 331304,
+      "sha256": "271586573b129abdbb6fea1b9266e4a266b90cfaaba1b42e62dff124c1826081",
+      "groups": [
+        "figure"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_CalculusReview_page_014.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_CalculusReview_page_014.png",
+      "bytes": 81470,
+      "sha256": "a4618bdd0c1db9a73ba40c4d5c235f855533d1f664341d7e9f3e3234b6c3d6c9",
+      "groups": [
+        "equation"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_CalculusReview_page_033.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_CalculusReview_page_033.png",
+      "bytes": 87658,
+      "sha256": "244cdc43067438180612694466e158212dee2565457b224ba2a84bd2a6a845da",
+      "groups": [
+        "equation"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_Catalysis.ppt_page_016.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_Catalysis.ppt_page_016.png",
+      "bytes": 2237420,
+      "sha256": "279a2157e7418c14075dc78eb3d92585b12827fec6cf313b29c3c1b042b18e13",
+      "groups": [
+        "table"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_LEP power point presentation-English-FINAL-10-31-07_page_010.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_LEP%20power%20point%20presentation-English-FINAL-10-31-07_page_010.png",
+      "bytes": 1333401,
+      "sha256": "c3beae0d576da26fba82e8784f10678ecd43685e63baecee767acc2d650034f3",
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_LEP power point presentation-English-FINAL-10-31-07_page_011.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_LEP%20power%20point%20presentation-English-FINAL-10-31-07_page_011.png",
+      "bytes": 1324415,
+      "sha256": "3e1d3a32d5d51db558d2cf55778cc52c167f33617e220c81d4dbdcb32468e1b7",
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_MMAT5390Lecture1_page_023.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_MMAT5390Lecture1_page_023.png",
+      "bytes": 219444,
+      "sha256": "58967ad0390bacd49a539627009d953feb0eee235b5a38a4dc741652692eb05a",
+      "groups": [
+        "equation"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_MMAT5390Lecture1_page_024.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_MMAT5390Lecture1_page_024.png",
+      "bytes": 158622,
+      "sha256": "34c6c3bf8cb1b92aeeb49dbe978dd90cd3c7b150a3ce7eb6565597bf58d40eef",
+      "groups": [
+        "equation"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_StewartCalcET7e_03_02_page_007.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_StewartCalcET7e_03_02_page_007.png",
+      "bytes": 214407,
+      "sha256": "2fea47743eed2bae256a65649009d6d9e9412578c5b85857f5d266cd07de6c2f",
+      "groups": [
+        "equation"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/PPT_StewartCalcET7e_03_02_page_010.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/PPT_StewartCalcET7e_03_02_page_010.png",
+      "bytes": 131200,
+      "sha256": "68c8f81d4329677b0256f70e33b162cde7b603e9ebf149e47459c6cb9d76f26f",
+      "groups": [
+        "equation"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/book_zh_JGJ1022003_extracted_page_27.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/book_zh_JGJ1022003_extracted_page_27.png",
+      "bytes": 159889,
+      "sha256": "37397ee3d187b7435592b45f7395312385a538e371963dfb16630cd57d9030dd",
+      "groups": [
+        "double_column"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/book_zh_JJD10031991_extracted_page_6.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/book_zh_JJD10031991_extracted_page_6.png",
+      "bytes": 162790,
+      "sha256": "60709946a4a756ee5520beb73a5b3840d119556ee12e9700362326af18102c8c",
+      "groups": [
+        "double_column"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/book_zh_TB100782001_extracted_page_21.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/book_zh_TB100782001_extracted_page_21.png",
+      "bytes": 186382,
+      "sha256": "7259a4736158677fc9d16e52851fc9e14a2e7847e43f2893d70ef69e61ce3cb7",
+      "groups": [
+        "double_column"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/color_textbook_zhonggaokao_小学_13.人教新起点英语（4-5年级）_人教新起点五年级英语下册_课本_人教新起点英语5B电子课本_page_046.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/color_textbook_zhonggaokao_%E5%B0%8F%E5%AD%A6_13.%E4%BA%BA%E6%95%99%E6%96%B0%E8%B5%B7%E7%82%B9%E8%8B%B1%E8%AF%AD%EF%BC%884-5%E5%B9%B4%E7%BA%A7%EF%BC%89_%E4%BA%BA%E6%95%99%E6%96%B0%E8%B5%B7%E7%82%B9%E4%BA%94%E5%B9%B4%E7%BA%A7%E8%8B%B1%E8%AF%AD%E4%B8%8B%E5%86%8C_%E8%AF%BE%E6%9C%AC_%E4%BA%BA%E6%95%99%E6%96%B0%E8%B5%B7%E7%82%B9%E8%8B%B1%E8%AF%AD5B%E7%94%B5%E5%AD%90%E8%AF%BE%E6%9C%AC_page_046.png",
+      "bytes": 1763822,
+      "sha256": "0a00e0562cd745b62603b5f1aa2c47c990550834e5f40ec6684ad88913d3d182",
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/color_textbook_zhonggaokao_小学_13.人教新起点英语（4-5年级）_人教新起点四年级英语下册_课本_人教新起点英语4B电子课本_page_087.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/color_textbook_zhonggaokao_%E5%B0%8F%E5%AD%A6_13.%E4%BA%BA%E6%95%99%E6%96%B0%E8%B5%B7%E7%82%B9%E8%8B%B1%E8%AF%AD%EF%BC%884-5%E5%B9%B4%E7%BA%A7%EF%BC%89_%E4%BA%BA%E6%95%99%E6%96%B0%E8%B5%B7%E7%82%B9%E5%9B%9B%E5%B9%B4%E7%BA%A7%E8%8B%B1%E8%AF%AD%E4%B8%8B%E5%86%8C_%E8%AF%BE%E6%9C%AC_%E4%BA%BA%E6%95%99%E6%96%B0%E8%B5%B7%E7%82%B9%E8%8B%B1%E8%AF%AD4B%E7%94%B5%E5%AD%90%E8%AF%BE%E6%9C%AC_page_087.png",
+      "bytes": 6639383,
+      "sha256": "6ed1d10fd0fd7c0501519964c17f48f07d0e0fb3854ad27c96155881e87c7438",
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/color_textbook_zhonggaokao_小学_KET听说读写逐项突破_KET听说读写逐项突破之轻松搞定KET写作25分 【10讲 褚连一】_第04讲第四课KET分类词汇训练二_第四课KET分类词汇训练二_page_003.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/color_textbook_zhonggaokao_%E5%B0%8F%E5%AD%A6_KET%E5%90%AC%E8%AF%B4%E8%AF%BB%E5%86%99%E9%80%90%E9%A1%B9%E7%AA%81%E7%A0%B4_KET%E5%90%AC%E8%AF%B4%E8%AF%BB%E5%86%99%E9%80%90%E9%A1%B9%E7%AA%81%E7%A0%B4%E4%B9%8B%E8%BD%BB%E6%9D%BE%E6%90%9E%E5%AE%9AKET%E5%86%99%E4%BD%9C25%E5%88%86%20%E3%80%9010%E8%AE%B2%20%E8%A4%9A%E8%BF%9E%E4%B8%80%E3%80%91_%E7%AC%AC04%E8%AE%B2%E7%AC%AC%E5%9B%9B%E8%AF%BEKET%E5%88%86%E7%B1%BB%E8%AF%8D%E6%B1%87%E8%AE%AD%E7%BB%83%E4%BA%8C_%E7%AC%AC%E5%9B%9B%E8%AF%BEKET%E5%88%86%E7%B1%BB%E8%AF%8D%E6%B1%87%E8%AE%AD%E7%BB%83%E4%BA%8C_page_003.png",
+      "bytes": 319801,
+      "sha256": "c3c359458792507d1118ee16c0ceef7cd504dd902111506446ad72173808e591",
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/color_textbook_zhonggaokao_小学_KET听说读写逐项突破_KET听说读写逐项突破之轻松搞定KET写作25分 【10讲 褚连一】_第08讲第八课写作Part8训练_第八课写作Part8训练_page_003.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/color_textbook_zhonggaokao_%E5%B0%8F%E5%AD%A6_KET%E5%90%AC%E8%AF%B4%E8%AF%BB%E5%86%99%E9%80%90%E9%A1%B9%E7%AA%81%E7%A0%B4_KET%E5%90%AC%E8%AF%B4%E8%AF%BB%E5%86%99%E9%80%90%E9%A1%B9%E7%AA%81%E7%A0%B4%E4%B9%8B%E8%BD%BB%E6%9D%BE%E6%90%9E%E5%AE%9AKET%E5%86%99%E4%BD%9C25%E5%88%86%20%E3%80%9010%E8%AE%B2%20%E8%A4%9A%E8%BF%9E%E4%B8%80%E3%80%91_%E7%AC%AC08%E8%AE%B2%E7%AC%AC%E5%85%AB%E8%AF%BE%E5%86%99%E4%BD%9CPart8%E8%AE%AD%E7%BB%83_%E7%AC%AC%E5%85%AB%E8%AF%BE%E5%86%99%E4%BD%9CPart8%E8%AE%AD%E7%BB%83_page_003.png",
+      "bytes": 1021446,
+      "sha256": "7f2e48d375247f3b18fafd715abffa2ec3f7973ee4c653e3348eef4d10bb0f2b",
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/color_textbook_zhonggaokao_小学_KET听说读写逐项突破_KET听说读写逐项突破之轻松搞定KET写作25分 【10讲 褚连一】_第09讲第九课写作Part9小作文详解_【8054】第九课写作Part9小作文详解_page_001.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/color_textbook_zhonggaokao_%E5%B0%8F%E5%AD%A6_KET%E5%90%AC%E8%AF%B4%E8%AF%BB%E5%86%99%E9%80%90%E9%A1%B9%E7%AA%81%E7%A0%B4_KET%E5%90%AC%E8%AF%B4%E8%AF%BB%E5%86%99%E9%80%90%E9%A1%B9%E7%AA%81%E7%A0%B4%E4%B9%8B%E8%BD%BB%E6%9D%BE%E6%90%9E%E5%AE%9AKET%E5%86%99%E4%BD%9C25%E5%88%86%20%E3%80%9010%E8%AE%B2%20%E8%A4%9A%E8%BF%9E%E4%B8%80%E3%80%91_%E7%AC%AC09%E8%AE%B2%E7%AC%AC%E4%B9%9D%E8%AF%BE%E5%86%99%E4%BD%9CPart9%E5%B0%8F%E4%BD%9C%E6%96%87%E8%AF%A6%E8%A7%A3_%E3%80%908054%E3%80%91%E7%AC%AC%E4%B9%9D%E8%AF%BE%E5%86%99%E4%BD%9CPart9%E5%B0%8F%E4%BD%9C%E6%96%87%E8%AF%A6%E8%A7%A3_page_001.png",
+      "bytes": 926377,
+      "sha256": "e50bedfce6755d6987307c35bf2b6f08207af5ec9088bb5a36e6cc005a9972aa",
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/color_textbook_zhonggaokao_小学_KET听说读写逐项突破_KET听说读写逐项突破之轻松搞定KET写作25分 【10讲 褚连一】_第10讲第十课写作Part9小作文练习_第十课写作Part9小作文练习_page_020.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/color_textbook_zhonggaokao_%E5%B0%8F%E5%AD%A6_KET%E5%90%AC%E8%AF%B4%E8%AF%BB%E5%86%99%E9%80%90%E9%A1%B9%E7%AA%81%E7%A0%B4_KET%E5%90%AC%E8%AF%B4%E8%AF%BB%E5%86%99%E9%80%90%E9%A1%B9%E7%AA%81%E7%A0%B4%E4%B9%8B%E8%BD%BB%E6%9D%BE%E6%90%9E%E5%AE%9AKET%E5%86%99%E4%BD%9C25%E5%88%86%20%E3%80%9010%E8%AE%B2%20%E8%A4%9A%E8%BF%9E%E4%B8%80%E3%80%91_%E7%AC%AC10%E8%AE%B2%E7%AC%AC%E5%8D%81%E8%AF%BE%E5%86%99%E4%BD%9CPart9%E5%B0%8F%E4%BD%9C%E6%96%87%E7%BB%83%E4%B9%A0_%E7%AC%AC%E5%8D%81%E8%AF%BE%E5%86%99%E4%BD%9CPart9%E5%B0%8F%E4%BD%9C%E6%96%87%E7%BB%83%E4%B9%A0_page_020.png",
+      "bytes": 623612,
+      "sha256": "3003e011317866aa8ed894851b9e54c6325a94148b903c7ec76144f24e5d3c27",
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/color_textbook_zhonggaokao_小学_KET听说读写逐项突破_KET听说读写逐项突破之轻松搞定KET口语25分【10 褚连一】_第04讲第四课口语部分Part2详解下_第四课口语部分Part2详解下_page_001.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/color_textbook_zhonggaokao_%E5%B0%8F%E5%AD%A6_KET%E5%90%AC%E8%AF%B4%E8%AF%BB%E5%86%99%E9%80%90%E9%A1%B9%E7%AA%81%E7%A0%B4_KET%E5%90%AC%E8%AF%B4%E8%AF%BB%E5%86%99%E9%80%90%E9%A1%B9%E7%AA%81%E7%A0%B4%E4%B9%8B%E8%BD%BB%E6%9D%BE%E6%90%9E%E5%AE%9AKET%E5%8F%A3%E8%AF%AD25%E5%88%86%E3%80%9010%20%E8%A4%9A%E8%BF%9E%E4%B8%80%E3%80%91_%E7%AC%AC04%E8%AE%B2%E7%AC%AC%E5%9B%9B%E8%AF%BE%E5%8F%A3%E8%AF%AD%E9%83%A8%E5%88%86Part2%E8%AF%A6%E8%A7%A3%E4%B8%8B_%E7%AC%AC%E5%9B%9B%E8%AF%BE%E5%8F%A3%E8%AF%AD%E9%83%A8%E5%88%86Part2%E8%AF%A6%E8%A7%A3%E4%B8%8B_page_001.png",
+      "bytes": 416723,
+      "sha256": "9c314537a4140dc65b7806a9bac746356405cbcf1bc6fe4b1dffdde293f67d86",
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/color_textbook_zhonggaokao_小学_KET听说读写逐项突破_KET听说读写逐项突破之轻松搞定KET口语25分【10 褚连一】_第09讲第九课口语部分Part2模拟三_第九课口语部分Part2模拟三_page_001.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/color_textbook_zhonggaokao_%E5%B0%8F%E5%AD%A6_KET%E5%90%AC%E8%AF%B4%E8%AF%BB%E5%86%99%E9%80%90%E9%A1%B9%E7%AA%81%E7%A0%B4_KET%E5%90%AC%E8%AF%B4%E8%AF%BB%E5%86%99%E9%80%90%E9%A1%B9%E7%AA%81%E7%A0%B4%E4%B9%8B%E8%BD%BB%E6%9D%BE%E6%90%9E%E5%AE%9AKET%E5%8F%A3%E8%AF%AD25%E5%88%86%E3%80%9010%20%E8%A4%9A%E8%BF%9E%E4%B8%80%E3%80%91_%E7%AC%AC09%E8%AE%B2%E7%AC%AC%E4%B9%9D%E8%AF%BE%E5%8F%A3%E8%AF%AD%E9%83%A8%E5%88%86Part2%E6%A8%A1%E6%8B%9F%E4%B8%89_%E7%AC%AC%E4%B9%9D%E8%AF%BE%E5%8F%A3%E8%AF%AD%E9%83%A8%E5%88%86Part2%E6%A8%A1%E6%8B%9F%E4%B8%89_page_001.png",
+      "bytes": 269837,
+      "sha256": "bc055360cca95029474c4c44010e627202544bdd9c093f9fa38718dc20901f45",
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/docstructbench_llm-raw-scihub-o.O-ajhb.10190.pdf_5.jpg",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/docstructbench_llm-raw-scihub-o.O-ajhb.10190.pdf_5.jpg",
+      "bytes": 698396,
+      "sha256": "5fe73ef247263ce0b7fe8b6905ddc72cdd1f20f8c641c06bb624243e5acdb435",
+      "groups": [
+        "academic"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/docstructbench_llm-raw-scihub-o.O-ana.20363.pdf_5.jpg",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/docstructbench_llm-raw-scihub-o.O-ana.20363.pdf_5.jpg",
+      "bytes": 1001052,
+      "sha256": "548f9432984f3b6fe8ba461648d3c6ca43e80b87380aa36ff159b7352d3b7507",
+      "groups": [
+        "academic"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/docstructbench_llm-raw-scihub-o.O-bf00151572.pdf_3.jpg",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/docstructbench_llm-raw-scihub-o.O-bf00151572.pdf_3.jpg",
+      "bytes": 459744,
+      "sha256": "67e5a56bc14f8d5d2c87e6156b0bc576da3e2dda5510386937f16f9ba1cc8872",
+      "groups": [
+        "academic"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/docstructbench_llm-raw-scihub-o.O-bf00326833.pdf_3.jpg",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/docstructbench_llm-raw-scihub-o.O-bf00326833.pdf_3.jpg",
+      "bytes": 674895,
+      "sha256": "68aa6aa65a1d78eb4e0d76752480204968178c43c95ea09a85bb3c07b3304fde",
+      "groups": [
+        "academic"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/docstructbench_llm-raw-scihub-o.O-bf03175144.pdf_4.jpg",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/docstructbench_llm-raw-scihub-o.O-bf03175144.pdf_4.jpg",
+      "bytes": 832426,
+      "sha256": "299daa711a9fa60bfb90d1f24f66c5352f5d6c1895ecc571a1e9879a105f9115",
+      "groups": [
+        "academic"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/docstructbench_llm-raw-scihub-o.O-ceat.200407001.pdf_3.jpg",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/docstructbench_llm-raw-scihub-o.O-ceat.200407001.pdf_3.jpg",
+      "bytes": 749370,
+      "sha256": "2ae27f3a9284810bf7ce479ac8921359ccf00b7ebee1017b5e8da3e28ebe4af4",
+      "groups": [
+        "academic"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/exam_paper_2004-2019上海高考英语听力原文和答案_page_010.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/exam_paper_2004-2019%E4%B8%8A%E6%B5%B7%E9%AB%98%E8%80%83%E8%8B%B1%E8%AF%AD%E5%90%AC%E5%8A%9B%E5%8E%9F%E6%96%87%E5%92%8C%E7%AD%94%E6%A1%88_page_010.png",
+      "bytes": 4442794,
+      "sha256": "628e197f69dd34bea8a0166d327d23ea3afe7037980392353268d5db268f4a02",
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/exam_paper_2004-2019上海高考英语听力原文和答案_page_050.png",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/exam_paper_2004-2019%E4%B8%8A%E6%B5%B7%E9%AB%98%E8%80%83%E8%8B%B1%E8%AF%AD%E5%90%AC%E5%8A%9B%E5%8E%9F%E6%96%87%E5%92%8C%E7%AD%94%E6%A1%88_page_050.png",
+      "bytes": 4921169,
+      "sha256": "0f69c46def894afc60ba0d36901578d9aa65705ad3a9510274e8915fb710f88e",
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/jiaocaineedrop_2005_QP.pdf_5.jpg",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/jiaocaineedrop_2005_QP.pdf_5.jpg",
+      "bytes": 214373,
+      "sha256": "c0f9de66c6ebb07946d16983eca1c0d1ce8873356a20390c15c6614138cb797c",
+      "groups": [
+        "scan"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/jiaocaineedrop_bde81e42743067b574946698491d7f19.pdf_14.jpg",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/jiaocaineedrop_bde81e42743067b574946698491d7f19.pdf_14.jpg",
+      "bytes": 302665,
+      "sha256": "87e14273e1c29326e0642e5b56a0a798954efe0b0d9c468b22cb3e96524008a3",
+      "groups": [
+        "scan"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/jiaocaineedrop_jiaocai_needrop_en_108.jpg",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/jiaocaineedrop_jiaocai_needrop_en_108.jpg",
+      "bytes": 315849,
+      "sha256": "2dc2ef0617db9bf2c22f7f182ef22c4cd01111e0502dbc2fcec78148b68be5d2",
+      "groups": [
+        "scan"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/images/jiaocaineedrop_jiaocai_needrop_en_1141.jpg",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/images/jiaocaineedrop_jiaocai_needrop_en_1141.jpg",
+      "bytes": 291240,
+      "sha256": "d737d2e2ffac3874557a726d43ccc325ed36a3429bc72c71a7d0c2040d5641e2",
+      "groups": [
+        "scan"
+      ],
+      "role": "page-image"
+    },
+    {
+      "path": "omnidocbench/labels.json",
+      "url": "https://huggingface.co/datasets/opendatalab/OmniDocBench/resolve/aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec/OmniDocBench.json",
+      "role": "annotations",
+      "bytes": 42208096,
+      "sha256": "a45cd84b04ad8b793e775089640e6b681209abea33ead54c1828ddca35fae496"
+    },
+    {
+      "path": "qasper/paper-page.html",
+      "url": "https://aclanthology.org/2021.naacl-main.365/",
+      "role": "annotation-method",
+      "bytes": 47575,
+      "sha256": "bc31e69860d159b7288faf662ba1c2dcce729ec8d76ee195f68136b1682bf9fd"
+    },
+    {
+      "path": "qasper/pdfs/1503.00841.pdf",
+      "url": "https://arxiv.org/pdf/1503.00841",
+      "bytes": 956266,
+      "sha256": "9ca21eaff3c946e95cc649e627db3a4b9e69d0f7397bae3e30d39be495261ba5",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1601.02403.pdf",
+      "url": "https://arxiv.org/pdf/1601.02403",
+      "bytes": 581962,
+      "sha256": "0366d7449aff5a067f3b2c6f9680989dd3b9c2063f8a8f70c46b8c2dc75e22b6",
+      "paperId": "1601.02403",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1603.01514.pdf",
+      "url": "https://arxiv.org/pdf/1603.01514",
+      "bytes": 630375,
+      "sha256": "deaebadde4cccedcb498d456a81ea72b91a6370e7df9cf069a5320a8fe8ee89a",
+      "paperId": "1603.01514",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1605.03481.pdf",
+      "url": "https://arxiv.org/pdf/1605.03481",
+      "bytes": 730271,
+      "sha256": "08f4f012ea69174235c5b9cc07d1bc49b7c510db981054ef08b66718cea2a8b8",
+      "paperId": "1605.03481",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1611.03599.pdf",
+      "url": "https://arxiv.org/pdf/1611.03599",
+      "bytes": 257813,
+      "sha256": "b4d5ba7265c6e169f3aab007f93663536cc87c9438a85dd342a0ef7fd6f6652f",
+      "paperId": "1611.03599",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1706.01678.pdf",
+      "url": "https://arxiv.org/pdf/1706.01678",
+      "bytes": 223420,
+      "sha256": "aa5b9a53432ad388ded276ba60d77b5a3dcaa39f42b9e1d6297339fb8f63f797",
+      "paperId": "1706.01678",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1706.06894.pdf",
+      "url": "https://arxiv.org/pdf/1706.06894",
+      "bytes": 111806,
+      "sha256": "40054fb96e9624b7043816d021f7dcbdaa3d1a7771bac57c1328c6e15b40449f",
+      "paperId": "1706.06894",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1707.06806.pdf",
+      "url": "https://arxiv.org/pdf/1707.06806",
+      "bytes": 609613,
+      "sha256": "1e9b4652d66996665f545ebdf01876785259e48cb0e22410b6c3f6e18b6e8cd6",
+      "paperId": "1707.06806",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1712.05999.pdf",
+      "url": "https://arxiv.org/pdf/1712.05999",
+      "bytes": 457554,
+      "sha256": "fc073a07c9a40fb171d378249317711f586c52f51289836ec75a9558e2ec3862",
+      "paperId": "1712.05999",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1802.06024.pdf",
+      "url": "https://arxiv.org/pdf/1802.06024",
+      "bytes": 224757,
+      "sha256": "b7f0b684e73e6efb0186dd349a66b159305d82e6df76a393ab9e64a4b5181814",
+      "paperId": "1802.06024",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1802.07862.pdf",
+      "url": "https://arxiv.org/pdf/1802.07862",
+      "bytes": 1605366,
+      "sha256": "57be0f09b1e4c7d213c38f9c56125729c11985cc9353144e5d1e1ea4dbf61674",
+      "paperId": "1802.07862",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1805.10824.pdf",
+      "url": "https://arxiv.org/pdf/1805.10824",
+      "bytes": 93425,
+      "sha256": "0708328da9225b8b040e984b19638a8e2ac285ba597c198a57d152b94839cb3b",
+      "paperId": "1805.10824",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1806.04511.pdf",
+      "url": "https://arxiv.org/pdf/1806.04511",
+      "bytes": 565692,
+      "sha256": "899fb07bda44d11a98f5290b505544456957ec54d84a95d2c149011fbe42a564",
+      "paperId": "1806.04511",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1809.01541.pdf",
+      "url": "https://arxiv.org/pdf/1809.01541",
+      "bytes": 249808,
+      "sha256": "99d9cbed4fa2be85ec45af5d90c9585192a203837790bf8680bef2a3fe678f4c",
+      "paperId": "1809.01541",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1809.06537.pdf",
+      "url": "https://arxiv.org/pdf/1809.06537",
+      "bytes": 1719523,
+      "sha256": "c79ed77bd5471c179722e12165eda020cab331d66ee47c9c7bf4586f75655c85",
+      "paperId": "1809.06537",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1810.04428.pdf",
+      "url": "https://arxiv.org/pdf/1810.04428",
+      "bytes": 106212,
+      "sha256": "6268f6ab39dbb05f6e84c37769e105973a063f1a090b28cea5c1e3d535b4efe1",
+      "paperId": "1810.04428",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1901.01010.pdf",
+      "url": "https://arxiv.org/pdf/1901.01010",
+      "bytes": 1568759,
+      "sha256": "7ba2a96d0baef25aeae91b8c418a2427371bd3d1dc845c26c669a56f8710aebc",
+      "paperId": "1901.01010",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1902.09666.pdf",
+      "url": "https://arxiv.org/pdf/1902.09666",
+      "bytes": 101387,
+      "sha256": "b2958058e79e1f9a8ecb92dbf46405b07a43708967f839634bc22c72d1e4e4dd",
+      "paperId": "1902.09666",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1903.11437.pdf",
+      "url": "https://arxiv.org/pdf/1903.11437",
+      "bytes": 648648,
+      "sha256": "10a33be340b1b8ae4979c63aad06fcce306224ecf8e908891bb9acd5d6aad434",
+      "paperId": "1903.11437",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1904.04358.pdf",
+      "url": "https://arxiv.org/pdf/1904.04358",
+      "bytes": 882838,
+      "sha256": "753e49c459c505933ee9ddcac54a61cf78b248704c2849551dd1967f7d9e457b",
+      "paperId": "1904.04358",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1905.07791.pdf",
+      "url": "https://arxiv.org/pdf/1905.07791",
+      "bytes": 312925,
+      "sha256": "cd208dd241aee30621b30362b30c81acf282004812c8a32cdcc5ff1d62a2c911",
+      "paperId": "1905.07791",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1905.11268.pdf",
+      "url": "https://arxiv.org/pdf/1905.11268",
+      "bytes": 476262,
+      "sha256": "0bc18d7fb240eb86151cb1d0a9efdb8aa0ee5a3d1cad90053cde6b3dc38e5444",
+      "paperId": "1905.11268",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1908.04042.pdf",
+      "url": "https://arxiv.org/pdf/1908.04042",
+      "bytes": 767519,
+      "sha256": "5415218507f2376dba0a365e9910eb1614e541a2638a51eae74d42894f4ed7be",
+      "paperId": "1908.04042",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1908.05828.pdf",
+      "url": "https://arxiv.org/pdf/1908.05828",
+      "bytes": 470822,
+      "sha256": "e4f96c27168894e6509912ee08f7107f4eb32b13a50209800147e0ec7f492337",
+      "paperId": "1908.05828",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1908.08717.pdf",
+      "url": "https://arxiv.org/pdf/1908.08717",
+      "bytes": 585890,
+      "sha256": "4bdd2796d83361009a00dea884f9d7936714650b9a1ff9f42bf56defd60872a7",
+      "paperId": "1908.08717",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1908.09246.pdf",
+      "url": "https://arxiv.org/pdf/1908.09246",
+      "bytes": 540564,
+      "sha256": "051f3162ba34bb18662af6514903400d2edef562e41666dcb46eeb54179262b7",
+      "paperId": "1908.09246",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1908.10084.pdf",
+      "url": "https://arxiv.org/pdf/1908.10084",
+      "bytes": 548961,
+      "sha256": "92366d22fc0521350d6cbe0ad72bcee754f90e88181d7b4a8e2adb1e7e594fec",
+      "paperId": "1908.10084",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1909.03582.pdf",
+      "url": "https://arxiv.org/pdf/1909.03582",
+      "bytes": 746196,
+      "sha256": "0e862b286e3e7346595c3454ad6808c93ed99634fe3bbce52629472cfe3f00c7",
+      "paperId": "1909.03582",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1909.06200.pdf",
+      "url": "https://arxiv.org/pdf/1909.06200",
+      "bytes": 408346,
+      "sha256": "b58103686a31267796b90ed9a0185b7ea166eff88d41749918ea7b7e31d867bb",
+      "paperId": "1909.06200",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1909.13104.pdf",
+      "url": "https://arxiv.org/pdf/1909.13104",
+      "bytes": 344330,
+      "sha256": "72f6782f66dfe83720f4010bccc9be09e9c311a4bf1aa3b56a8c2d7e990869d8",
+      "paperId": "1909.13104",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1910.03634.pdf",
+      "url": "https://arxiv.org/pdf/1910.03634",
+      "bytes": 2514283,
+      "sha256": "cbcb4fe6d98bf1787b246025b4dae2aaade66d549be3cc1b750c1aabc569d099",
+      "paperId": "1910.03634",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1910.06592.pdf",
+      "url": "https://arxiv.org/pdf/1910.06592",
+      "bytes": 913305,
+      "sha256": "3bdf7e026a91e3f3ee74f6cdc506beb257fbbb6b0e9f9eced99f6913a774a31d",
+      "paperId": "1910.06592",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1910.12574.pdf",
+      "url": "https://arxiv.org/pdf/1910.12574",
+      "bytes": 411855,
+      "sha256": "fc73ec892bbc5dc6537b19def622fc020f8a98c22f809a0565b7728f843efeda",
+      "paperId": "1910.12574",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1911.00841.pdf",
+      "url": "https://arxiv.org/pdf/1911.00841",
+      "bytes": 947901,
+      "sha256": "7f315f55542eff75963144b800d45174d6297d25635d59d27a655afb2776eb4f",
+      "paperId": "1911.00841",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1911.07555.pdf",
+      "url": "https://arxiv.org/pdf/1911.07555",
+      "bytes": 101198,
+      "sha256": "4fa67db35e9bb608a02789eba1f822745094bfd7bc8069d2987a23916f832c38",
+      "paperId": "1911.07555",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1912.00667.pdf",
+      "url": "https://arxiv.org/pdf/1912.00667",
+      "bytes": 556963,
+      "sha256": "aafbf138bd076fe8fbf4e491e73c4de8c0c32b72a79d674bbe8b91a296329e71",
+      "paperId": "1912.00667",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1912.03627.pdf",
+      "url": "https://arxiv.org/pdf/1912.03627",
+      "bytes": 120783,
+      "sha256": "e76e2e38025c7d9474ba942e9eb134d586876ac9ef4e8f7f9bd0ea7b827c13ee",
+      "paperId": "1912.03627",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/1912.08904.pdf",
+      "url": "https://arxiv.org/pdf/1912.08904",
+      "bytes": 1256902,
+      "sha256": "3b4682f9d816d2bba012784a8a2644bc4e48dec07938ec1b86f04e652ad21fb4",
+      "paperId": "1912.08904",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/2001.01269.pdf",
+      "url": "https://arxiv.org/pdf/2001.01269",
+      "bytes": 385379,
+      "sha256": "93d58769039098db39f61ca30438fd422fbb0948bf50138f66734389d419f2bc",
+      "paperId": "2001.01269",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/2002.01320.pdf",
+      "url": "https://arxiv.org/pdf/2002.01320",
+      "bytes": 262043,
+      "sha256": "818e39a908a65fe23c46587a1668d1522de75a4f1c49b47f251b6b6a2b3f898d",
+      "paperId": "2002.01320",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/2002.02070.pdf",
+      "url": "https://arxiv.org/pdf/2002.02070",
+      "bytes": 2859125,
+      "sha256": "13629a6a9f5b3d773fb45cd867c89b8b99f6cfebdc5deddb5de9a468a6a93736",
+      "paperId": "2002.02070",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/2002.03407.pdf",
+      "url": "https://arxiv.org/pdf/2002.03407",
+      "bytes": 140491,
+      "sha256": "501fb497fa135c4df0b517f96b78d2fe9981ba0f3ecc31bcdb8555e7fac8e5ce",
+      "paperId": "2002.03407",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/2002.07306.pdf",
+      "url": "https://arxiv.org/pdf/2002.07306",
+      "bytes": 448597,
+      "sha256": "79be7a045afc79ae192d93ed1db20dd48f9fa3624795918038b3f6764da8af74",
+      "paperId": "2002.07306",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/2004.02192.pdf",
+      "url": "https://arxiv.org/pdf/2004.02192",
+      "bytes": 656910,
+      "sha256": "28b235253165f615b8cd606c075db43d33d11b20ced0245beec7cffdd8828694",
+      "paperId": "2004.02192",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/pdfs/2004.04721.pdf",
+      "url": "https://arxiv.org/pdf/2004.04721",
+      "bytes": 235515,
+      "sha256": "c19690fada0d49364cbfd9bd59a397e49e5d4febc19283c455f19e8ef51872df",
+      "paperId": "2004.04721",
+      "role": "original-pdf"
+    },
+    {
+      "path": "qasper/source-page.html",
+      "url": "https://allenai.org/data/qasper",
+      "role": "attribution",
+      "bytes": 628579,
+      "sha256": "5f768a85f850ec66c23ac1d87243bc81d55550fe9dc7077b837d23e81418ffd2"
+    }
+  ]
+}

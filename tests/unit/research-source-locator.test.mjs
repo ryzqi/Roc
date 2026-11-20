@@ -1,0 +1,323 @@
+import {after, before, test} from 'node:test';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import Database from 'better-sqlite3';
+import {unknownExperiment, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+
+let api;
+before(async()=>{api=await loadResearchTestApi();});
+after(()=>api?.dispose());
+const hash=value=>createHash('sha256').update(value).digest('hex');
+const timestamp='2026-11-04T00:00:00.000Z';
+
+function importedDocument(f) {
+  const sourceHash=hash('synthetic original PDF');
+  return f.repository.documents.import({id:'locator-document',libraryItemId:null,projectId:f.project.id,
+    filename:'fixture.pdf',mediaType:'pdf',sourcePath:'documents/fixture.pdf',sourceHash,size:22,
+    entry:{metadata:{id:'locator-literature',source:'local',externalId:'locator-fixture',doi:null,
+      title:'Locator fixture',authors:['Synthetic Author'],abstract:null,publishedYear:2026,citationCount:null,
+      url:null,openAccessUrl:null,importedAt:timestamp,updatedAt:timestamp},
+      bibliography:{citationKey:'locator2026',entryType:'article',fields:{title:'Locator fixture'},preambles:[],
+        csl:null,title:'Locator fixture',authors:['Synthetic Author'],doi:null,publishedYear:2026,abstract:null,url:null}}
+  },false).document;
+}
+function parsedContent(document,blocks) {
+  return {outputPath:'/tmp/synthetic-locator-output',files:{},content:{
+    contractVersion:4,engine:'paddleocr.js',engineVersion:'synthetic-locator-test',parserVersion:'roc-research-parser/2',
+    parserFingerprint:hash('synthetic parser'),modelManifest:'',runtime:{node:'synthetic'},tier:'compact',
+    parseMode:'native-text',device:'cpu',sourceHash:document.sourceHash,pageCount:4,
+    content:blocks.map(block=>block.text).join('\n\n'),blocks,assets:[],
+    artifacts:{middleJson:'artifacts/middle.json',markdown:'artifacts/document.md',structuredContent:'artifacts/structured.json'},
+    warnings:[]}};
+}
+function block(id,{text='A repeated retained paragraph.',page=2,locations,locator='page:2'}={}) {
+  return {id,kind:'paragraph',label:'Synthetic paragraph',text,locator,imageAssetId:null,
+    locations:locations??[{page,bbox:[1,2,30,40],coordinateOrigin:'TOPLEFT'}]};
+}
+function publishParse(f,document,parseId,blocks) {
+  const content=parsedContent(document,blocks);
+  f.repository.documents.begin(document.id,parseId);
+  f.repository.documents.complete(document.id,parseId,content, null);
+  return content;
+}
+const capture=(f,parseId,index=0)=>f.repository.evidence.capture({projectId:f.project.id,chunkId:`document:${parseId}:chunk:${index}`});
+
+test('capture preserves exact imported document parse source and ordered block coordinates, including duplicate prose',async ()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const document=importedDocument(f);
+    const content=publishParse(f,document,'locator-parse',[
+      block('blank',{text:'',locations:[]}),block('same-first',{page:1}),block('same-second',{page:3})]);
+    const evidence=capture(f,'locator-parse',1);
+    const inspected=f.repository.evidence.inspectEvidence(evidence.id,f.project.id);
+    assert.deepEqual(inspected.sourceLocator,{
+      documentId:document.id,parseId:'locator-parse',knowledgeDocumentId:'document:locator-parse',blockId:'same-second',
+      sourceHash:document.sourceHash,parseHash:hash(JSON.stringify(f.repository.documents.parsed(document.id,'locator-parse').data.content)),parserFingerprint:content.content.parserFingerprint,
+      rawLocator:'page:2',locations:[{page:3,bbox:[1,2,30,40],coordinateOrigin:'TOPLEFT'}]});
+    assert.equal(capture(f,'locator-parse',1).id,evidence.id);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_evidence_source_locators').pluck().get(),1);
+    const artifact=f.repository.createArtifact({projectId:f.project.id,stage:'reading',kind:'reading_notes',title:'Locator view',path:null});
+    f.repository.evidence.createClaim({experiment: {...unknownExperiment}, projectId:f.project.id,artifactId:artifact.id,subjectType:'claim',
+      content:'Synthetic unreviewed hypothesis',status:'hypothesis',evidenceIds:[evidence.id]});
+    const result=f.repository.inspectArtifact({projectId:f.project.id,artifactId:artifact.id,expectedVersion:null});
+    assert.deepEqual(result.snapshot.evidence[0].sourceLocator,inspected.sourceLocator);
+    const before=f.db.prepare('SELECT total_changes()').pluck().get();
+    f.repository.inspectArtifact({projectId:f.project.id,artifactId:artifact.id,expectedVersion:result.snapshot.version});
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+  }finally{await f.close();}
+});
+
+test('a document block without coordinates preserves empty locations; arbitrary knowledge has no managed-document locator',async ()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const document=importedDocument(f);publishParse(f,document,'no-region',[block('no-region',{locations:[]})]);
+    const evidence=capture(f,'no-region');
+    assert.deepEqual(f.repository.evidence.inspectEvidence(evidence.id,f.project.id).sourceLocator.locations,[]);
+    f.repository.knowledge.upsertFromSource({id:'unmanaged-source',projectId:f.project.id,sourceType:'experiment',
+      sourceId:'synthetic-run',title:'Recorded result',content:'A recorded result.',embeddingPolicy:'none',
+      chunks:[{content:'A recorded result.',locator:'output/results.csv:line:2'}]});
+    const raw=f.repository.evidence.capture({projectId:f.project.id,chunkId:'unmanaged-source:chunk:0'});
+    const inspected=f.repository.evidence.inspectEvidence(raw.id,f.project.id);
+    assert.equal(inspected.sourceLocator,null);
+    assert.equal(inspected.evidence.locator,'output/results.csv:line:2');
+  }finally{await f.close();}
+});
+
+test('reparse keeps old evidence and its immutable source coordinates while new evidence captures the new parse',async ()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const document=importedDocument(f);publishParse(f,document,'old-parse',[block('old-block',{page:1})]);
+    const old=capture(f,'old-parse'),first=f.repository.evidence.inspectEvidence(old.id,f.project.id);
+    publishParse(f,document,'new-parse',[block('new-block',{page:4})]);
+    const latest=capture(f,'new-parse'),history=f.repository.evidence.inspectEvidence(old.id,f.project.id);
+    assert.equal(history.referenceStatus,'superseded');
+    assert.deepEqual(history.sourceLocator,first.sourceLocator);
+    assert.equal(history.evidence.excerpt,old.excerpt);
+    assert.throws(()=>f.repository.evidence.getEvidence(old.id,f.project.id),/research_evidence_reference_superseded/u);
+    assert.notEqual(latest.id,old.id);
+    assert.equal(f.repository.evidence.inspectEvidence(latest.id,f.project.id).sourceLocator.parseId,'new-parse');
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_evidence_source_locators').pluck().get(),2);
+  }finally{await f.close();}
+});
+
+test('same-document reparse proposes exact raw block targets without replacing evidence or upgrading a hypothesis',async ()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const document=importedDocument(f);
+    publishParse(f,document,'migration-old',[block('old-block',{page:1})]);
+    const old=capture(f,'migration-old');
+    const artifact=f.repository.createArtifact({projectId:f.project.id,stage:'reading',kind:'reading_notes',title:'Migration hypothesis',path:null});
+    const claim=f.repository.evidence.createClaim({experiment: {...unknownExperiment}, projectId:f.project.id,artifactId:artifact.id,subjectType:'claim',
+      content:'An unreviewed inference.',status:'hypothesis',evidenceIds:[old.id]});
+    const originalSource=f.repository.evidence.inspectEvidence(old.id,f.project.id);
+    const target=block('new-block',{page:4});
+    publishParse(f,document,'migration-new',[block('empty',{text:'',locations:[]}),target]);
+    const before=f.db.prepare('SELECT total_changes()').pluck().get();
+    const [candidate]=f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:old.id});
+    assert.equal(candidate.targetStatus,'current');
+    assert.equal(candidate.proposal.status,'needs_review');
+    assert.equal(candidate.proposal.match,'exact_text');
+    assert.equal(candidate.proposal.sourceDigest,api.relationSourceDigest(candidate.proposal.source));
+    assert.deepEqual(candidate.proposal.source.sourceLocator,originalSource.sourceLocator);
+    assert.equal(candidate.proposal.source.referenceStatus,'superseded');
+    assert.deepEqual(candidate.proposal.targets,[{chunkId:'document:migration-new:chunk:0',block:target}]);
+    assert.equal(candidate.proposal.targetParseHash,hash(JSON.stringify(f.repository.documents.parsed(document.id,'migration-new').data.content)));
+    assert.deepEqual(f.repository.evidence.getClaim(claim.id),claim);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_evidence').pluck().get(),1);
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+    f.db.transaction(()=>f.repository.evidence.sourceMigrations.proposeForParse(document.id,'migration-new'))();
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+    assert.deepEqual(f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:old.id}),[candidate]);
+  }finally{await f.close();}
+});
+
+test('duplicate target paragraphs remain ambiguous in original indexed order, without choosing a nearby page',async ()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const document=importedDocument(f);
+    publishParse(f,document,'duplicate-old',[block('old',{page:2})]);
+    const old=capture(f,'duplicate-old');
+    const first=block('first',{page:1}),second=block('second',{page:3});
+    publishParse(f,document,'duplicate-new',[first,block('blank',{text:' ',locations:[]}),second]);
+    const [candidate]=f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:old.id});
+    assert.equal(candidate.proposal.match,'ambiguous');
+    assert.deepEqual(candidate.proposal.targets,[{chunkId:'document:duplicate-new:chunk:0',block:first},
+      {chunkId:'document:duplicate-new:chunk:1',block:second}]);
+    assert.equal(candidate.proposal.status,'needs_review');
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_evidence').pluck().get(),1);
+  }finally{await f.close();}
+});
+
+test('whitespace matching is explicit, changed prose has no target, and later reparse preserves stale proposals',async ()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const document=importedDocument(f);
+    publishParse(f,document,'whitespace-old',[block('old')]);
+    const old=capture(f,'whitespace-old');
+    const normalized=block('normalized',{text:'  A repeated\n retained paragraph.  ',locations:[]});
+    publishParse(f,document,'whitespace-new',[normalized]);
+    const [first]=f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:old.id});
+    assert.equal(first.proposal.match,'normalized_text');
+    assert.equal(first.proposal.matchingRule,'exact_text_then_whitespace/1');
+    assert.deepEqual(first.proposal.targets[0].block,normalized);
+    publishParse(f,document,'changed-prose',[block('changed',{text:'A different scientific statement.'})]);
+    const before=f.db.prepare('SELECT total_changes()').pluck().get();
+    const [stale,unmatched]=f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:old.id});
+    assert.equal(stale.targetStatus,'stale');
+    assert.deepEqual(stale.proposal,first.proposal);
+    assert.equal(unmatched.targetStatus,'current');
+    assert.equal(unmatched.proposal.match,'no_match');
+    assert.deepEqual(unmatched.proposal.targets,[]);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_evidence').pluck().get(),1);
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+  }finally{await f.close();}
+});
+
+test('migration persistence failure rolls back the parse, index and invalidation together',async ()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const document=importedDocument(f);
+    publishParse(f,document,'rollback-old',[block('old')]);
+    const old=capture(f,'rollback-old'),original=f.repository.evidence.inspectEvidence(old.id,f.project.id);
+    f.repository.documents.begin(document.id,'rollback-new');
+    f.db.exec(`CREATE TRIGGER reject_migration BEFORE INSERT ON research_source_migration_proposals
+      BEGIN SELECT RAISE(ABORT,'synthetic_migration_insert_failed'); END`);
+    assert.throws(()=>f.repository.documents.complete(document.id,'rollback-new',parsedContent(document,[block('new')]), null),
+      /synthetic_migration_insert_failed/u);
+    assert.equal(f.repository.documents.get(document.id).currentParseId,'rollback-old');
+    assert.deepEqual(f.repository.evidence.inspectEvidence(old.id,f.project.id),original);
+    assert.equal(f.repository.evidence.getEvidence(old.id,f.project.id).id,old.id);
+    assert.ok(f.db.prepare("SELECT id FROM research_knowledge_chunks WHERE id='document:rollback-old:chunk:0'").get());
+    assert.equal(f.db.prepare("SELECT id FROM research_knowledge_chunks WHERE id='document:rollback-new:chunk:0'").get(),undefined);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_source_migration_proposals').pluck().get(),0);
+    f.repository.flushKnowledgeFromSource();
+    assert.equal(f.repository.knowledgeJobs.list(null).some(job=>job.documentId==='document:rollback-new'),false);
+    assert.equal(f.db.prepare("SELECT id FROM research_knowledge_chunks WHERE id='document:rollback-new:chunk:0'").get(),undefined);
+  }finally{await f.close();}
+});
+
+test('migration reads refuse foreign sources and corrupt snapshots or current target versions without writes',async ()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const document=importedDocument(f);
+    publishParse(f,document,'scope-old',[block('old')]);
+    const old=capture(f,'scope-old');
+    publishParse(f,document,'scope-new',[block('new')]);
+    const other=f.repository.createProject({title:'Other migration scope',description:'Synthetic',workspacePath:'/tmp/other-migration'});
+    const before=f.db.prepare('SELECT total_changes()').pluck().get();
+    assert.throws(()=>f.repository.evidence.sourceMigrations.list({projectId:other.id,evidenceId:old.id}),
+      /research_evidence_project_mismatch/u);
+    assert.throws(()=>f.repository.evidence.sourceMigrations.proposeForParse(document.id,'scope-new'),
+      /research_source_migration_transaction_required/u);
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
+    const row=f.db.prepare('SELECT id,snapshot_json FROM research_source_migration_proposals').get();
+    f.db.prepare("UPDATE research_source_migration_proposals SET snapshot_json=json_set(snapshot_json,'$.targets[0].block.text','Forged target') WHERE id=?").run(row.id);
+    const damaged=f.db.prepare('SELECT total_changes()').pluck().get();
+    assert.throws(()=>f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:old.id}),
+      /research_source_migration_snapshot_invalid/u);
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),damaged);
+    f.db.prepare('UPDATE research_source_migration_proposals SET snapshot_json=? WHERE id=?').run(row.snapshot_json,row.id);
+    f.db.prepare('UPDATE research_documents SET source_hash=? WHERE id=?').run(hash('Changed source'),document.id);
+    const sourceChanged=f.db.prepare('SELECT total_changes()').pluck().get();
+    assert.throws(()=>f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:old.id}),
+      /research_source_migration_source_changed/u);
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),sourceChanged);
+    f.db.prepare('UPDATE research_documents SET source_hash=? WHERE id=?').run(document.sourceHash,document.id);
+    f.db.prepare("UPDATE research_document_parses SET data_json=json_set(data_json,'$.content.blocks[0].text','Changed same parse') WHERE id='scope-new'").run();
+    const changed=f.db.prepare('SELECT total_changes()').pluck().get();
+    assert.throws(()=>f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:old.id}),
+      /research_source_migration_target_changed/u);
+    assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),changed);
+  }finally{await f.close();}
+});
+
+test('zero geometry preserves a page-only location and out-of-range pages or inverted regions cannot be captured',async ()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const document=importedDocument(f);
+    publishParse(f,document,'zero-geometry',[block('logical-page',{locations:[{page:2,bbox:[0,0,0,0],coordinateOrigin:'TOPLEFT'}]})]);
+    const evidence=capture(f,'zero-geometry');
+    assert.deepEqual(f.repository.evidence.inspectEvidence(evidence.id,f.project.id).sourceLocator.locations,
+      [{page:2,bbox:null,coordinateOrigin:null}]);
+    publishParse(f,document,'bad-page',[block('bad-page',{page:5})]);
+    assert.throws(()=>capture(f,'bad-page'),/research_evidence_source_page_invalid/u);
+    publishParse(f,document,'bad-region',[block('bad-region',{locations:[{page:1,bbox:[40,20,1,2],coordinateOrigin:'TOPLEFT'}]})]);
+    assert.throws(()=>capture(f,'bad-region'),/research_evidence_source_region_invalid/u);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_evidence').pluck().get(),1);
+  }finally{await f.close();}
+});
+
+test('changed source block or parse identity rolls back capture; existing captured locator cannot be silently rewritten',async ()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const document=importedDocument(f),content=publishParse(f,document,'guarded-parse',[block('guarded')]);
+    const update=value=>f.db.prepare('UPDATE research_document_parses SET data_json=? WHERE id=?')
+      .run(JSON.stringify(value),'guarded-parse');
+    const wrongSource=structuredClone(content);wrongSource.content.sourceHash=hash('changed source');update(wrongSource);
+    assert.throws(()=>capture(f,'guarded-parse'),/research_evidence_source_hash_invalid/u);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_evidence').pluck().get(),0);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_evidence_source_locators').pluck().get(),0);
+    const wrongBlock=structuredClone(content);wrongBlock.content.blocks[0].text='Other saved prose.';update(wrongBlock);
+    assert.throws(()=>capture(f,'guarded-parse'),/research_evidence_source_block_invalid/u);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_evidence').pluck().get(),0);
+    update(content);const original=capture(f,'guarded-parse');
+    const captured=f.repository.evidence.inspectEvidence(original.id,f.project.id).sourceLocator;
+    const changed=structuredClone(content);changed.content.blocks[0].locations[0].page=3;update(changed);
+    assert.throws(()=>capture(f,'guarded-parse'),/research_evidence_source_locator_conflict/u);
+    assert.deepEqual(f.repository.evidence.inspectEvidence(original.id,f.project.id).sourceLocator,captured);
+  }finally{await f.close();}
+});
+
+test('Wiki resolves PDF citations through the captured document and ignores library list filtering',async ()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const document=importedDocument(f);publishParse(f,document,'wiki-source-parse',[block('wiki-block')]);
+    const evidence=capture(f,'wiki-source-parse');
+    assert.equal(evidence.sourceType,'file');
+    assert.deepEqual(f.repository.library.list({projectId:f.project.id,query:'no such paper',includeArchived:false,limit:200,offset:0}),[]);
+    const snapshot=f.repository.evidence.wikiSnapshot(f.project.id);
+    assert.deepEqual(snapshot.papers,[{evidenceId:evidence.id,libraryItemId:document.libraryItemId,title:'Locator fixture',year:2026}]);
+    f.repository.knowledge.upsertFromSource({id:'unmanaged-file',projectId:f.project.id,sourceType:'file',
+      sourceId:document.libraryItemId,title:'Unmanaged file with a coincident identifier',content:'Separate raw file.',
+      chunks:[{content:'Separate raw file.',locator:'notes.md:line:1'}],embeddingPolicy:'none'});
+    f.repository.evidence.capture({projectId:f.project.id,chunkId:'unmanaged-file:chunk:0'});
+    assert.equal(f.repository.evidence.wikiSnapshot(f.project.id).papers.length,1);
+    publishParse(f,document,'wiki-source-reparse',[block('new-block')]);
+    assert.deepEqual(f.repository.evidence.wikiSnapshot(f.project.id).papers,snapshot.papers,'historical sources retain their actual paper');
+  }finally{await f.close();}
+});
+
+test('long managed blocks keep annotation parents and exact child spans through search, capture and reparse',async ()=>{
+  const f=createResearchFixture(api,'reading');
+  try {
+    const document=importedDocument(f);
+    const text=Array.from({length:200},(_,i)=>`第${i}段的注意力机制结果与限定条件。`).join('\n\n');
+    publishParse(f,document,'long-old',[block('long',{text})]);
+    const parent=capture(f,'long-old');
+    assert.equal(parent.excerpt,text);
+    const result=f.repository.knowledge.searchKnowledge({request:{projectId:f.project.id,query:'注意力机制',limit:10},vector:null});
+    assert.ok(result.hits.length>1);
+    assert.ok(result.hits.every(hit=>hit.chunkId!=='document:long-old:chunk:0'));
+    const child=f.repository.evidence.capture({projectId:f.project.id,chunkId:result.hits[0].chunkId});
+    const source=f.repository.evidence.inspectEvidence(child.id,f.project.id);
+    const span=source.sourceLocator.textSpan;
+    assert.equal(child.excerpt,text.slice(span.start,span.end));
+    assert.equal(source.sourceLocator.blockId,'long');
+    const context=f.repository.knowledge.chunkContext(f.project.id,child.chunkId,1000);
+    assert.equal(context.parentChunkId,parent.chunkId);
+    assert.ok(context.content.length<=1000);
+    assert.equal(context.content,text.slice(context.start,context.end));
+    assert.throws(()=>f.repository.knowledge.chunkContext(f.project.id,child.chunkId,8001),/budget/);
+    publishParse(f,document,'long-new',[block('long-new',{text})]);
+    assert.deepEqual(f.repository.evidence.inspectEvidence(child.id,f.project.id).sourceLocator,source.sourceLocator);
+    const proposal=f.repository.evidence.sourceMigrations.list({projectId:f.project.id,evidenceId:child.id})[0];
+    assert.equal(proposal.proposal.match,'exact_text');
+    assert.deepEqual(proposal.proposal.targets[0].textSpan,span);
+    const decision=f.repository.evidence.sourceMigrations.decide({projectId:f.project.id,proposalId:proposal.proposal.id,
+      requestId:'long-span-capture',expectedProposalHash:proposal.proposalHash,expectedSourceDigest:proposal.proposal.sourceDigest,
+      expectedTargetParseHash:proposal.proposal.targetParseHash,note:null,action:'capture',chunkId:proposal.proposal.targets[0].chunkId},
+      {kind:'user',id:'fixture-human'});
+    assert.equal(decision.capturedSource.evidence.excerpt,child.excerpt);
+    assert.deepEqual(decision.capturedSource.sourceLocator.textSpan,span);
+  }finally{await f.close();}
+});

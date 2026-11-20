@@ -1,0 +1,19 @@
+{
+  "kind": "paper-facts",
+  "studies": [
+    {
+      "doi": "10.1155/2023/6039254",
+      "facts": {
+        "total_protein_day1_ug": 21,
+        "total_protein_next20d_ug": 10
+      },
+      "tolerance": 0.01
+    },
+    {
+      "doi": "10.6026/973206300191342",
+      "facts": {
+        "patients_n": 90
+      }
+    }
+  ]
+}

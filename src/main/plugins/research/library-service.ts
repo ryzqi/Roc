@@ -1,0 +1,246 @@
+import { lstat, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join } from 'node:path';
+import type { z } from 'zod';
+import type { ResearchLiterature } from '../../../shared/types';
+import type {
+  researchLibraryDoiImportRequestSchema, researchLibraryFileImportRequestSchema, researchLibraryExportRequestSchema,
+  researchLibraryRecordImportRequestSchema, researchLibraryImportResultSchema, researchLibraryExportSchema,
+  researchLibraryRetractionRequestSchema, researchLibraryRetractionSchema, researchLibraryRetractionResultSchema
+} from '../../../shared/schemas/research-library';
+import { readResearchFile, researchWorkspace } from './research-files';
+import { bibliographyIdentity, normalizeResearchDoi, referenceKey } from './literature-identity';
+import { betterBibtexKey } from './cite-key';
+import { openAlexWorkUrl, readOpenAlexRetraction, unknownRetraction } from './retraction-check';
+import type { BibliographyEntry, ResearchLibraryRepository } from './library-repository';
+import type { ResearchToolchain } from './toolchain';
+
+type LibraryTools = Pick<ResearchToolchain, 'readBibliography' | 'normalizeBibliography' | 'writeBibliography'>;
+type ImportResult = z.infer<typeof researchLibraryImportResultSchema>;
+type LibraryFetch = (url: string, init: RequestInit) => Promise<Response>;
+
+export class ResearchLibraryService {
+  private readonly active = new Set<{ controller: AbortController; promise: Promise<unknown> }>();
+  private closed = false;
+
+  constructor(private readonly repository: ResearchLibraryRepository, private readonly tools: LibraryTools,
+    private readonly rootPath: string | null, private readonly fetchImpl: LibraryFetch = (url, init) => fetch(url, init)) {}
+
+  async importFile(request: z.infer<typeof researchLibraryFileImportRequestSchema>): Promise<ImportResult> {
+    this.repository.validateDestination(request.projectId);
+    return await this.job(async (root, directory, signal) => {
+      if (!isAbsolute(request.sourcePath)) throw new Error('research_absolute_path_required');
+      const info = await lstat(request.sourcePath);
+      if (!info.isFile() || info.isSymbolicLink()) throw new Error('research_bibliography_source_invalid');
+      const content = await readResearchFile(await researchWorkspace(dirname(request.sourcePath)), basename(request.sourcePath), 16 * 1024 * 1024);
+      const source = join(directory, request.format === 'csl-json' ? 'source.json' : 'source.bib');
+      await writeFile(source, content, { flag: 'wx', mode: 0o600 });
+      const entries = await this.tools.readBibliography({ projectRoot: root, sourcePath: source, outputDir: join(directory, 'parsed'), jobDir: directory, format: request.format, signal,
+        admission: { projectId: request.projectId, priority: 'user' } });
+      this.requireActive(signal);
+      return this.repository.import(entries.map((bibliography) => ({ metadata: localMetadata(bibliography), bibliography })), request.projectId);
+    });
+  }
+
+  async importRecord(request: z.infer<typeof researchLibraryRecordImportRequestSchema>): Promise<ImportResult> {
+    this.repository.validateDestination(request.projectId);
+    return await this.job(async (root, directory, signal) => {
+      const source = join(directory, 'metadata.json');
+      await writeFile(source, JSON.stringify([{ metadata: request.record, citationKey: request.citationKey }]), { flag: 'wx', mode: 0o600 });
+      const entries = await this.tools.normalizeBibliography({ projectRoot: root, sourcePath: source, outputDir: join(directory, 'normalized'), jobDir: directory, signal,
+        admission: { projectId: request.projectId, priority: 'user' } });
+      if (entries.length !== 1) throw new Error('research_bibliography_response_count_invalid');
+      this.requireActive(signal);
+      const bibliography = entries[0];
+      return this.repository.import([{ metadata: { ...request.record, title: bibliography.title, authors: bibliography.authors }, bibliography }], request.projectId);
+    });
+  }
+
+  async importDoi(request: z.infer<typeof researchLibraryDoiImportRequestSchema>): Promise<ImportResult> {
+    this.repository.validateDestination(request.projectId);
+    const entry = await this.prepareDoi(request.doi, request.projectId);
+    return this.repository.import([entry], request.projectId);
+  }
+
+  async prepareRecord(record: ResearchLiterature, projectId: string | null, signal?: AbortSignal): Promise<{ metadata: ResearchLiterature; bibliography: BibliographyEntry }> {
+    return this.job(async (root, directory, jobSignal) => {
+      const source = join(directory, 'metadata.json');
+      await writeFile(source, JSON.stringify([{ metadata: record, citationKey: 'candidate' }]), { flag: 'wx', mode: 0o600 });
+      const entries = await this.tools.normalizeBibliography({ projectRoot: root, sourcePath: source, outputDir: join(directory, 'normalized'), jobDir: directory, signal: jobSignal,
+        admission: { projectId, priority: 'user' } });
+      this.requireActive(jobSignal);
+      if (entries.length !== 1) throw new Error('research_bibliography_response_count_invalid');
+      const bibliography = entries[0];
+      return { metadata: { ...record, title: bibliography.title, authors: bibliography.authors }, bibliography };
+    }, signal);
+  }
+
+  async prepareZotero(record: ResearchLiterature, cslJson: string, projectId: string | null, signal?: AbortSignal): Promise<{metadata: ResearchLiterature; bibliography: BibliographyEntry}> {
+    return this.job(async (root, directory, jobSignal) => {
+      const source = join(directory, 'zotero-csl.json');
+      await writeFile(source, cslJson, {flag: 'wx', mode: 0o600});
+      const entries = await this.tools.readBibliography({projectRoot: root, sourcePath: source,
+        outputDir: join(directory, 'parsed'), jobDir: directory, format: 'csl-json', signal: jobSignal,
+        admission: { projectId, priority: 'user' }});
+      this.requireActive(jobSignal);
+      if (entries.length !== 1) throw new Error('research_bibliography_response_count_invalid');
+      const bibliography = {...entries[0], doi: entries[0].doi === null ? null : normalizeResearchDoi(entries[0].doi)};
+      if (bibliography.doi !== record.doi || bibliography.title !== record.title) throw new Error('zotero_csl_metadata_mismatch');
+      return {metadata: {...record, authors: bibliography.authors, publishedYear: bibliography.publishedYear},
+        bibliography};
+    }, signal);
+  }
+
+  async prepareDoi(inputDoi: string, projectId: string | null, signal?: AbortSignal): Promise<{ metadata: ResearchLiterature; bibliography: BibliographyEntry }> {
+    const doi = normalizeResearchDoi(inputDoi);
+    return await this.job(async (root, directory, signal) => {
+      const response = await this.fetchImpl(`https://doi.org/${encodeURIComponent(doi)}`, {
+        headers: { accept: 'application/vnd.citationstyles.csl+json', 'user-agent': 'Roc-research/0.1' }, signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)])
+      });
+      if (!response.ok) throw new Error(`research_doi_http_${response.status}`);
+      if (response.body === null) throw new Error('research_doi_response_invalid');
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      try {
+        while (true) {
+          const next = await reader.read();
+          if (next.done) break;
+          size += next.value.byteLength;
+          if (size > 4 * 1024 * 1024) throw new Error('research_doi_response_too_large');
+          chunks.push(next.value);
+        }
+      } finally { await reader.cancel(); }
+      let csl: unknown;
+      try { csl = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+      catch (cause) { throw new Error('research_doi_response_invalid', { cause }); }
+      if (typeof csl !== 'object' || csl === null || Array.isArray(csl) || !('DOI' in csl) || typeof csl.DOI !== 'string'
+          || normalizeResearchDoi(csl.DOI) !== doi) throw new Error('research_doi_response_mismatch');
+      const source = join(directory, 'doi.json');
+      const type = 'type' in csl && typeof csl.type === 'string' ? doiCslTypes[csl.type] ?? csl.type : undefined;
+      const normalized: Record<string, unknown> = { ...csl, type, id: referenceKey(doi), 'citation-key': referenceKey(doi) };
+      for (const field of ['ISSN', 'ISBN']) {
+        const value = normalized[field];
+        if (Array.isArray(value)) {
+          if (value.length === 0 || !value.every((entry: unknown) => typeof entry === 'string' && entry.trim())) throw new Error('research_doi_response_invalid');
+          normalized[field] = value.join(', ');
+        }
+      }
+      await writeFile(source, JSON.stringify([normalized]), { flag: 'wx', mode: 0o600 });
+      const entries = await this.tools.readBibliography({ projectRoot: root, sourcePath: source, outputDir: join(directory, 'parsed'), jobDir: directory, format: 'csl-json', signal,
+        admission: { projectId, priority: 'user' } });
+      if (entries.length !== 1) throw new Error('research_bibliography_response_count_invalid');
+      this.requireActive(signal);
+      const entry = entries[0];
+      // csl 里的 `id` / `citation-key` 是**内部临时标识**（`referenceKey(doi)`），只用于解析回写；
+      // 入库的引用键按 Better BibTeX 公式重新生成，与用户模板、Zotero 库叫同一个名字。
+      const bibliography = { ...entry,
+        citationKey: betterBibtexKey({ authors: entry.authors, publishedYear: entry.publishedYear, title: entry.title }, this.repository.usedCitationKeys()) };
+      const metadata = { ...localMetadata(bibliography), id: `doi:${doi}`, source: 'doi' as const, externalId: doi,
+        url: bibliography.url ?? `https://doi.org/${doi}` };
+      return { metadata, bibliography };
+    }, signal);
+  }
+
+  /**
+   * 撤稿核查：**联网动作**，不进离线工具链，不写库、不改条目。
+   *
+   * 每个 DOI 打一次 OpenAlex；并发上限 4（≤50 条），响应上限 1 MiB，超时 30 s。
+   * 任何单条失败都落成 `unknown`（带 `detail`），**不把失败当安全**。
+   * 结论带 `checkedAt`：它是「核查时点的快照」，不是永久事实。
+   */
+  async checkRetractions(request: z.infer<typeof researchLibraryRetractionRequestSchema>): Promise<z.infer<typeof researchLibraryRetractionResultSchema>> {
+    if (new Set(request.ids).size !== request.ids.length) throw new Error('research_library_selection_duplicate');
+    const items = request.ids.map((id) => this.repository.get(id));
+    const results: z.infer<typeof researchLibraryRetractionSchema>[] = [];
+    for (let start = 0; start < items.length; start += 4) {
+      const batch = items.slice(start, start + 4);
+      results.push(...await Promise.all(batch.map((item) => this.checkRetraction(item))));
+    }
+    return { results };
+  }
+
+  private async checkRetraction(item: ReturnType<ResearchLibraryRepository['get']>): Promise<z.infer<typeof researchLibraryRetractionSchema>> {
+    const doi = item.bibliography.doi ?? item.metadata.doi;
+    const checkedAt = new Date().toISOString();
+    const base = { id: item.id, citationKey: item.bibliography.citationKey, doi, checkedSource: 'openalex' as const, checkedAt };
+    if (doi === null) return { ...base, status: 'unknown', detail: 'doi_missing' };
+    try {
+      const response = await this.fetchImpl(openAlexWorkUrl(doi), {
+        headers: { accept: 'application/json', 'user-agent': 'Roc-research/0.1' }, signal: AbortSignal.timeout(30_000)
+      });
+      // 404 是「OpenAlex 没有这条 work」，与网络失败分开写：用户能据此判断是标识符问题还是网络问题。
+      if (response.status === 404) return { ...base, status: 'unknown', detail: 'openalex_not_found' };
+      if (!response.ok) return { ...base, status: 'unknown', detail: `openalex_http_${response.status}` };
+      const text = (await response.text()).slice(0, 1024 * 1024);
+      let payload: unknown;
+      try { payload = JSON.parse(text); }
+      catch { return unknownRetraction({ id: item.id, citationKey: item.bibliography.citationKey, doi, detail: 'openalex_payload_invalid', checkedAt }); }
+      const read = readOpenAlexRetraction(payload);
+      return { ...base, status: read.status, detail: read.detail };
+    } catch (error) {
+      const detail = error instanceof Error && error.name === 'TimeoutError' ? 'openalex_timeout' : 'openalex_unreachable';
+      return { ...base, status: 'unknown', detail };
+    }
+  }
+
+  async export(request: z.infer<typeof researchLibraryExportRequestSchema>): Promise<z.infer<typeof researchLibraryExportSchema>> {
+    if (new Set(request.ids).size !== request.ids.length) throw new Error('research_library_selection_duplicate');
+    const items = request.ids.map((id) => this.repository.get(id));
+    if (items.some((item) => item.archived)) throw new Error('research_library_item_archived');
+    return await this.job(async (root, directory, signal) => {
+      const source = join(directory, 'entries.json');
+      await writeFile(source, JSON.stringify(items.map((item) => item.bibliography)), { flag: 'wx', mode: 0o600 });
+      const result = await this.tools.writeBibliography({ projectRoot: root, sourcePath: source, outputDir: join(directory, 'exported'), jobDir: directory,
+        format: request.format, signal, admission: { projectId: null, priority: 'user' } });
+      this.requireActive(signal);
+      return { format: request.format, ...result };
+    });
+  }
+
+  async shutdown(): Promise<void> {
+    this.closed = true;
+    for (const task of this.active) task.controller.abort();
+    await Promise.allSettled([...this.active].map((task) => task.promise));
+  }
+
+  private async job<T>(operation: (root: string, directory: string, signal: AbortSignal) => Promise<T>, parentSignal?: AbortSignal): Promise<T> {
+    if (this.closed) throw new Error('research_library_closed');
+    const controller = new AbortController();
+    const signal = parentSignal === undefined ? controller.signal : AbortSignal.any([controller.signal, parentSignal]);
+    const task: { controller: AbortController; promise: Promise<unknown> } = { controller, promise: Promise.resolve() };
+    const execute = async (): Promise<T> => {
+      if (this.rootPath === null || !isAbsolute(this.rootPath)) throw new Error('research_library_storage_unavailable');
+      try {
+        if ((await lstat(this.rootPath)).isSymbolicLink()) throw new Error('research_library_storage_symlink');
+      } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+      await mkdir(this.rootPath, { recursive: true, mode: 0o700 });
+      const root = await realpath(this.rootPath);
+      const directory = await mkdtemp(join(root, '.bibliography-'));
+      try { this.requireActive(signal); return await operation(root, directory, signal); }
+      finally { await rm(directory, { recursive: true, force: true }); }
+    };
+    this.active.add(task);
+    const pending = execute();
+    task.promise = pending;
+    try { return await pending; }
+    finally { this.active.delete(task); }
+  }
+
+  private requireActive(signal: AbortSignal): void {
+    if (signal.aborted || this.closed) throw new Error('research_library_cancelled');
+  }
+}
+
+function localMetadata(entry: BibliographyEntry): ResearchLiterature {
+  const externalId = bibliographyIdentity(entry);
+  const now = new Date().toISOString();
+  return { id: `local:${externalId}`, source: 'local', externalId, doi: entry.doi, title: entry.title, authors: entry.authors,
+    abstract: entry.abstract, publishedYear: entry.publishedYear, citationCount: null, url: entry.url, openAccessUrl: null, importedAt: now, updatedAt: now };
+}
+
+const doiCslTypes: Readonly<Record<string, string>> = {
+  'journal-article': 'article-journal', 'book-chapter': 'chapter', 'proceedings-article': 'paper-conference',
+  'posted-content': 'article', dissertation: 'thesis', monograph: 'book', 'edited-book': 'book',
+  'reference-book': 'book', 'reference-entry': 'entry-encyclopedia', 'book-part': 'chapter',
+  'report-component': 'report', 'report-series': 'report', 'book-series': 'book', journal: 'periodical'
+};

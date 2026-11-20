@@ -1,0 +1,9 @@
+{
+  "kind": "csv-report",
+  "filename": "release-windows.csv",
+  "rows": [
+    "measure,day1,next_window,window_days",
+    "total_protein_ug,21,10,20",
+    "fgf2_pg,121,75,14"
+  ]
+}

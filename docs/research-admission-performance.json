@@ -1,0 +1,252 @@
+{
+  "contractVersion": 1,
+  "protocol": {
+    "samples": 3,
+    "projects": 6,
+    "jobs": 12,
+    "nativeHoldMs": 140,
+    "globalLimit": 2,
+    "projectLimit": 1,
+    "parseLimit": 1,
+    "gpuLimit": 1,
+    "priority": "oldest eligible background yields to foreground once; no further eligible overtakes",
+    "starvationWaitTargetMs": 10000
+  },
+  "protocolSha256": "c4ec78a1377c05ab2a799e0aede44c887f850af320f7a7f61a96c28f0b1ff99f",
+  "nativeSourceSha256": "98adc2c86c7eac99f4d487fd5518ba6c75ef841d7818795542d2b4bae526aa63",
+  "sourceHashes": {
+    "scripts/benchmark-research-admission.mjs": "ed3f3384b1d3742d170f1703bb4979066555b4d1c293ef37642ff09a806a1a03",
+    "src/main/services/deep-agent/tool-resource-coordinator.ts": "cc2f1b67d4474a255ce0dd17d9c418dcec9a2e94e00fb21e3cbbc70e67951af6",
+    "src/main/plugins/research/process-runner.ts": "d7fb4b15d840b39ed97f5bad756b9705bf705c369e7bde826dad007641baf1ba"
+  },
+  "hardware": {
+    "cpu": "Apple M1 Pro",
+    "memoryBytes": 34359738368,
+    "node": "v26.13.0",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "fairness": {
+    "order": [
+      "active-a",
+      "active-b",
+      "user1",
+      "background",
+      "user2",
+      "user3"
+    ],
+    "eligibleBackgroundOvertakes": 1,
+    "starvationDetected": false,
+    "observations": [
+      {
+        "id": "active-a",
+        "status": "released",
+        "waitMs": 0,
+        "holdMs": 1,
+        "resourceKinds": [
+          "research",
+          "research_cpu"
+        ],
+        "conflictKinds": []
+      },
+      {
+        "id": "user1",
+        "status": "released",
+        "waitMs": 1,
+        "holdMs": 0,
+        "resourceKinds": [
+          "research",
+          "research_cpu"
+        ],
+        "conflictKinds": [
+          "research_cpu"
+        ]
+      },
+      {
+        "id": "background",
+        "status": "released",
+        "waitMs": 1,
+        "holdMs": 1,
+        "resourceKinds": [
+          "research",
+          "research_cpu"
+        ],
+        "conflictKinds": [
+          "research_cpu"
+        ]
+      },
+      {
+        "id": "user2",
+        "status": "released",
+        "waitMs": 2,
+        "holdMs": 0,
+        "resourceKinds": [
+          "research",
+          "research_cpu"
+        ],
+        "conflictKinds": [
+          "research_cpu"
+        ]
+      },
+      {
+        "id": "user3",
+        "status": "released",
+        "waitMs": 1,
+        "holdMs": 0,
+        "resourceKinds": [
+          "research",
+          "research_cpu"
+        ],
+        "conflictKinds": [
+          "research_cpu"
+        ]
+      },
+      {
+        "id": "active-b",
+        "status": "released",
+        "waitMs": 0,
+        "holdMs": 2,
+        "resourceKinds": [
+          "research",
+          "research_cpu"
+        ],
+        "conflictKinds": []
+      }
+    ]
+  },
+  "limits": "Finite native probes use real admission/sandbox/monitor/cleanup. parse/compute/GPU are admission classes; this does not measure parser, experiment or GPU throughput. Wait target is frozen for this bounded workload, not a universal scheduler deadline.",
+  "rawReport": {
+    "path": ".artifacts/research-optimization/admission-current.json",
+    "sha256": "0414cce7538949adb6edd48eec193afe67686e7b7938d365544e4a7d13e83f3e"
+  },
+  "nativeRegression": {
+    "path": ".artifacts/research-optimization/xsafe-a8/native-resources.json",
+    "sha256": "7472fad16309c097b9001d327603beac258ef114f2480f15fa58f555e62dc577",
+    "receipts": [
+      {
+        "scenario": "real-fair-admission",
+        "order": [
+          "firstUser",
+          "background",
+          "laterUser"
+        ],
+        "backgroundAdmission": {
+          "waitMs": 249,
+          "holdMs": 197
+        }
+      },
+      {
+        "scenario": "admission-terminals",
+        "terminals": [
+          {
+            "error": "research_process_cancelled",
+            "stdout": "",
+            "stderr": "",
+            "admission": {
+              "waitMs": 0,
+              "holdMs": 655
+            }
+          },
+          {
+            "error": "research_process_cancelled",
+            "stdout": "",
+            "stderr": "",
+            "admission": {
+              "waitMs": 0,
+              "holdMs": 1332
+            }
+          },
+          {
+            "error": "research_process_cancelled",
+            "stdout": "",
+            "stderr": "",
+            "admission": {
+              "waitMs": 249,
+              "holdMs": 197
+            }
+          },
+          {
+            "error": "research_process_cancelled",
+            "stdout": "",
+            "stderr": "",
+            "admission": {
+              "waitMs": 11,
+              "holdMs": 238
+            }
+          },
+          {
+            "error": "research_process_cancelled",
+            "stdout": "",
+            "stderr": "",
+            "admission": {
+              "waitMs": 446,
+              "holdMs": 241
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "samples": [
+    {
+      "elapsedMs": 2677.17675,
+      "waitP95Ms": 2284,
+      "holdP95Ms": 730,
+      "maxWaitMs": 2284,
+      "starvationDetected": false,
+      "peaks": {
+        "global": 2,
+        "parse": 1,
+        "gpu": 1,
+        "projects": {
+          "project-0": 1,
+          "project-1": 1,
+          "project-2": 1,
+          "project-3": 1,
+          "project-4": 1,
+          "project-5": 1
+        }
+      }
+    },
+    {
+      "elapsedMs": 2505.168583,
+      "waitP95Ms": 2107,
+      "holdP95Ms": 447,
+      "maxWaitMs": 2107,
+      "starvationDetected": false,
+      "peaks": {
+        "global": 2,
+        "parse": 1,
+        "gpu": 1,
+        "projects": {
+          "project-0": 1,
+          "project-1": 1,
+          "project-2": 1,
+          "project-3": 1,
+          "project-4": 1,
+          "project-5": 1
+        }
+      }
+    },
+    {
+      "elapsedMs": 2382.5874999999996,
+      "waitP95Ms": 1977,
+      "holdP95Ms": 447,
+      "maxWaitMs": 1977,
+      "starvationDetected": false,
+      "peaks": {
+        "global": 2,
+        "parse": 1,
+        "gpu": 1,
+        "projects": {
+          "project-0": 1,
+          "project-1": 1,
+          "project-2": 1,
+          "project-3": 1,
+          "project-4": 1,
+          "project-5": 1
+        }
+      }
+    }
+  ]
+}

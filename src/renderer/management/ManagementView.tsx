@@ -1,0 +1,63 @@
+import { useState } from 'react';
+import { drawerSectionForCanvasView } from '../../shared/surfaces';
+import type { ViewProps } from '../app/view-registry';
+import { useManagement } from './management-scope';
+import { MANAGEMENT_LOADING_SUMMARIES, ManagementSectionBody, ManagementTabStrip, managementSummary } from './management-shell-parts';
+import { useManagementStores } from './management-stores-provider';
+import type { ManagementTabId } from './use-management-stores';
+
+/**
+ * Management as a canvas view (P9/T9.5).
+ *
+ * The route contract P1 froze maps `?view=memory|skills|mcp` onto three view ids (`app.openMainPage`
+ * can ask for them), so those routes need a real surface — leaving them as P1's placeholder would
+ * be the "dead face" the P6 review already punished once. This renders the **same** tab strip and
+ * the same section bodies as the drawer, only framed for the canvas instead of a drawer, which is
+ * what "画布服务「连接器 / 技能 / 项目记忆」" means in MASTER §5.
+ *
+ * The initial tab comes from the view id so a deep link lands on the right section; the user can
+ * still switch tabs without the URL changing, because the tab is presentation state (the same call
+ * the literature hub made for its sub-views — adding a query parameter would extend the frozen
+ * route contract for a selector).
+ */
+
+export function ManagementView({ view }: ViewProps): React.JSX.Element {
+  const scope = useManagement();
+  const summaries = useManagementStores((stores) => stores.summaries);
+  const visibleSummaries = summaries ?? MANAGEMENT_LOADING_SUMMARIES;
+  const [tab, setTab] = useState<ManagementTabId>(() => viewForInitialTab(view));
+
+  return (
+    <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-4 leading-normal tabular-nums" data-testid="management-view" data-view={view}>
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-balance text-ink text-[length:var(--font-h3-size)]">管理</h2>
+      </div>
+      <div className="max-w-[520px]">
+        <ManagementTabStrip
+          activeTab={tab}
+          onTabChange={setTab}
+          summaries={visibleSummaries}
+          idPrefix="mgmt-view"
+          testIdPrefix="mgmt-view"
+        />
+      </div>
+      <p className="shrink-0 text-muted text-[length:var(--font-meta-size)]" data-testid="mgmt-view-summary">
+        {managementSummary(tab, visibleSummaries)}
+      </p>
+      <ManagementSectionBody tab={tab} scope={scope} canvasView={view} idPrefix="mgmt-view" testIdPrefix="mgmt-view" />
+    </div>
+  );
+}
+
+/**
+ * 深链落到哪个分区。
+ *
+ * 记忆 / 技能 / MCP 三个画布视图各自对应一个同名分区——`drawerSectionForCanvasView` 就是面表里那条
+ * 「这个视图也是抽屉分区」的反向查询，而不是第三份手写的对应表。
+ *
+ * 落在其它视图上时缺省到 记忆：这个函数取的是初始 tab，不是路由守卫，所以它不该抛错来接管一个
+ * 已经由路由决定的事。（文献 / LaTeX / 终端 走的是别的组件，不会到这里。）
+ */
+function viewForInitialTab(view: ViewProps['view']): ManagementTabId {
+  return drawerSectionForCanvasView(view) ?? 'memory';
+}

@@ -1,0 +1,410 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Code2, FileText, Loader2, Save } from 'lucide-react';
+import type { FilePreviewResult } from '../../shared/types';
+import { useAsyncAction, useAsyncResource } from '../app/use-async-resource';
+import { useWorkspaceScope } from '../app/workspace-scope';
+import { BEFORE_NAVIGATE, type NavigationRequest } from '../app/navigation-guard';
+import { ModalShell } from '../shell/ModalShell';
+import { EmptyState } from '../shell/EmptyState';
+import { ErrorBar } from '../shell/ErrorBar';
+import { formatBeijingDateTime, formatBytes } from '../shared/format';
+import { fileName } from '../workspace/paths';
+import { listTree, previewFile, writeTextFile } from '../workspace/workspace-store';
+import { SourceEditor } from './SourceEditor';
+import { InlineHint, primaryButtonClass } from './panel-shell';
+
+/**
+ * 文稿 (P7/T7.5) — the workspace LaTeX/BibTeX editor behind the route's `latex` view.
+ *
+ * This replaces the legacy `LatexEditorView`, which "compiled" with a `setTimeout` over a local
+ * file list. What it does now is the honest version of that surface:
+ *
+ *  - **Files come from the workspace** (`files.listTree` + `files.preview`), scoped to the
+ *    extensions an author edits; nothing is synthesised.
+ *  - **Saving is `files.writeText`** — and that call has **no `expectedHash`**: workspace writes
+ *    are guarded by the backend's *recovery point* (`fileWriteResult.recoveryPoint` carries the
+ *    pre-write sha256 and a snapshot path), not by optimistic concurrency. Hash-based concurrency
+ *    exists only for *template* files (`research.template.saveFile`). The panel says so and shows
+ *    the recovery point after a save, instead of claiming a guard the contract does not have.
+ *  - **A truncated preview can never be saved.** `filePreviewResult.truncated` means the content
+ *    is a prefix; saving it would overwrite the file with a fragment. The editor is read-only in
+ *    that case with the reason.
+ *  - **There is no compile button here.** Compiling is the template panel's
+ *    `research.template.compile`, whose output the export stage consumes.
+ */
+
+const EDITABLE_EXTENSIONS = ['.tex', '.bib', '.cls', '.sty', '.bbl', '.txt', '.md', '.json', '.yaml', '.yml', '.csv'];
+
+export function LatexPanel(): React.JSX.Element {
+  /**
+   * Whether this panel may write.
+   *
+   * One rule now that the stage workspace is gone: the project's own archived flag. The
+   * `writeAllowed` override this used to take existed for the *stage-group* half of the rule —
+   * the stage workspace passed `scope.writable && stageGroupWriteAllowed(...)` because the
+   * backend refuses artifact writes for a non-current stage but happily starts an experiment
+   * run, so a panel gating on the archived flag alone would have offered live buttons behind a
+   * 「只读：非当前阶段组」 badge. With the stage surface removed the override has no source, so the
+   * prop went with it and the route-rendered predicate is the only one.
+   */
+  const scope = useWorkspaceScope();
+  const canWrite = scope.writable;
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [draft, setDraft] = useState<string | null>(null);
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const [pendingLeave, setPendingLeave] = useState<{ proceed: () => void; kind?: 'unload' } | null>(null);
+  const savingRef = useRef(false);
+  const dirtyRef = useRef(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const files = useAsyncResource<{
+    entries: { path: string; sizeBytes: number; updatedAt: string }[];
+    partial: boolean;
+  }>(
+    scope.workspacePath === null ? null : `latex-files:${scope.workspacePath}`,
+    async () => {
+      const root = await listTree(scope.client, '');
+      if (!root.ok) {
+        return root;
+      }
+      const collected: { path: string; sizeBytes: number; updatedAt: string }[] = [];
+      let partial = root.data.truncated;
+      for (const entry of root.data.entries) {
+        if (entry.type === 'file' && isEditable(entry.name)) {
+          collected.push({ path: entry.relativePath, sizeBytes: entry.size, updatedAt: entry.updatedAt });
+        }
+      }
+      // One extra level covers the usual `chapters/` / `sections/` / `refs/` layout without
+      // duplicating the sidebar's lazy tree.
+      for (const entry of root.data.entries) {
+        if (entry.type !== 'directory') {
+          continue;
+        }
+        const nested = await listTree(scope.client, entry.relativePath);
+        if (!nested.ok) {
+          partial = true;
+          continue;
+        }
+        partial ||= nested.data.truncated;
+        for (const child of nested.data.entries) {
+          if (child.type === 'file' && isEditable(child.name)) {
+            collected.push({ path: child.relativePath, sizeBytes: child.size, updatedAt: child.updatedAt });
+          }
+        }
+      }
+      return { ok: true, data: {entries: collected, partial} };
+    },
+    { label: '扫描文稿文件' }
+  );
+
+  const preview = useAsyncResource<FilePreviewResult>(
+    selectedPath === null || scope.workspacePath === null ? null : JSON.stringify(['latex-preview', scope.workspacePath, selectedPath]),
+    () => previewFile(scope.client, selectedPath ?? ''),
+    { label: '读取文稿文件' }
+  );
+
+  const save = useAsyncAction(
+    (input: { path: string; content: string }) =>
+      writeTextFile(scope.client, { relativePath: input.path, content: input.content, source: 'renderer/latex' }),
+    { label: '保存文稿文件' }
+  );
+  const [recovery, setRecovery] = useState<string | null>(null);
+
+  const previewData = preview.data;
+  const isText = previewData !== null && previewData.kind === 'text';
+  const isTruncated = isText && previewData.truncated;
+  const canEdit = canWrite && preview.status === 'ready' && isText && !isTruncated;
+  const entries = files.data?.entries ?? [];
+
+  /** Latch the loaded text into `draft` once per path, so typing does not fight the reload. */
+  const loadedPathRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (selectedPath === null || previewData === null || !isText) {
+      return;
+    }
+    if (loadedPathRef.current === selectedPath) {
+      return;
+    }
+    loadedPathRef.current = selectedPath;
+    setDraft(previewData.content);
+    setBaseline(previewData.content);
+    // 不清 note/recovery：保存后会立刻 `preview.reload()`，而重读会让本效应再跑一次 —— 那会把
+    // 「已保存 N 字节」与 recovery point 在不到一次 IPC 往返内抹掉（评审 P2）。清空只发生在换文件时。
+  }, [isText, previewData, selectedPath]);
+
+  const selectFile = useCallback((path: string | null) => {
+    loadedPathRef.current = null;
+    setDraft(null);
+    setBaseline(null);
+    save.reset();
+    setNote(null);
+    setRecovery(null);
+    setSelectedPath(path);
+  }, [save.reset]);
+
+  const dirty = draft !== null && baseline !== null && draft !== baseline;
+  dirtyRef.current = dirty;
+
+  const requestLeave = (proceed: () => void): void => {
+    if (savingRef.current) return;
+    if (dirtyRef.current) setPendingLeave((current) => current ?? { proceed });
+    else proceed();
+  };
+  const onSelect = (path: string | null): void => {
+    if (path !== selectedPath) requestLeave(() => selectFile(path));
+  };
+
+  const saveDraft = async (): Promise<boolean> => {
+    if (!canEdit || selectedPath === null || draft === null || savingRef.current) return false;
+    savingRef.current = true;
+    const content = draft;
+    try {
+      const saved = await save.run({ path: selectedPath, content });
+      if (!saved.ok) return false;
+      setBaseline(content);
+      dirtyRef.current = false;
+      setNote(`已保存 ${saved.data.bytesWritten} 字节。`);
+      setRecovery('写入前已保留备份。');
+      files.reload();
+      return true;
+    } finally {
+      savingRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    const guard = (event: Event): void => {
+      const request = event as CustomEvent<NavigationRequest>;
+      if (request.detail.next.projectId === scope.projectId && request.detail.next.view === 'latex') return;
+      if (!dirtyRef.current && !savingRef.current) return;
+      if (savingRef.current) {
+        event.preventDefault();
+        return;
+      }
+      setPendingLeave({ proceed: request.detail.defer() });
+    };
+    const beforeUnload = (event: BeforeUnloadEvent): void => {
+      if (!dirtyRef.current && !savingRef.current) return;
+      event.preventDefault();
+      event.returnValue = '';
+      if (!savingRef.current) setPendingLeave((current) => current ?? { kind: 'unload', proceed: () => setNote('修改已处理，请重试关闭或刷新窗口。') });
+    };
+    window.addEventListener(BEFORE_NAVIGATE, guard);
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => {
+      window.removeEventListener(BEFORE_NAVIGATE, guard);
+      window.removeEventListener('beforeunload', beforeUnload);
+    };
+  }, [scope.projectId]);
+
+  useEffect(() => {
+    const keydown = (event: KeyboardEvent): void => {
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 's' && !event.isComposing) {
+        event.preventDefault();
+        if (dirtyRef.current) void saveDraft();
+      }
+    };
+    window.addEventListener('keydown', keydown);
+    return () => window.removeEventListener('keydown', keydown);
+  });
+
+  if (scope.workspacePath === null) {
+    return (
+      <div className="flex h-full flex-col justify-center" data-testid="production-latex">
+        <EmptyState
+          icon={Code2}
+          title="未绑定工作目录"
+          action={{ label: '重试绑定', onClick: scope.rebindWorkspace }}
+          testId="production-latex-no-workspace"
+        />
+      </div>
+    );
+  }
+
+
+  const fileState = files.status === 'error' ? (
+    <ErrorBar error={{level: 'page', message: files.error ?? '扫描文件失败', retry: files.reload}} />
+  ) : files.status === 'loading' && files.data === null ? (
+    <EmptyState compact tone="loading" title="正在读取文稿列表…" />
+  ) : files.data?.partial ? (
+    <div className="flex flex-wrap items-baseline gap-2 text-xs">
+      <p role="status">部分文稿未列出</p>
+      <button type="button" onClick={files.reload} disabled={files.status === 'loading'}
+        className="rounded-control px-2 py-1 text-muted hover:bg-[var(--overlay-hover)] disabled:opacity-50">重新扫描</button>
+    </div>
+  ) : entries.length === 0 ? (
+    <EmptyState compact title="没有可编辑的文稿文件" testId="production-latex-empty"
+      action={{label: '重新扫描', onClick: files.reload}} />
+  ) : null;
+
+  return (
+    <>
+    <ModalShell
+      open={pendingLeave !== null}
+      title="保存文稿修改？"
+      testId="latex-unsaved"
+      closeOnBackdrop={false}
+      beforeClose={() => !savingRef.current}
+      onClose={() => setPendingLeave(null)}
+      widthClassName="w-[520px]"
+      footer={<>
+        <button type="button" disabled={save.pending} onClick={() => setPendingLeave(null)} className="rounded-control border-[0.5px] border-line px-3 py-1">取消</button>
+        <button type="button" disabled={save.pending} onClick={() => {
+          const action = pendingLeave;
+          setPendingLeave(null);
+          dirtyRef.current = false;
+          setDraft(baseline);
+          action?.proceed();
+        }} className="rounded-control border-[0.5px] border-line px-3 py-1">放弃修改</button>
+        <button type="button" disabled={save.pending || !canEdit} onClick={() => {
+          const action = pendingLeave;
+          void saveDraft().then((saved) => {
+            if (!saved) return;
+            setPendingLeave(null);
+            action?.proceed();
+          });
+        }} className={primaryButtonClass}>{save.pending ? '正在保存…' : pendingLeave?.kind === 'unload' ? '保存' : '保存并继续'}</button>
+      </>}
+    >
+      <p className="text-ink">{selectedPath} 有未保存的修改。放弃后无法恢复这些修改。{pendingLeave?.kind === 'unload' ? '处理后请重试关闭或刷新窗口。' : ''}</p>
+      {save.error === null ? null : <p role="alert" className="text-[var(--st-bad)]">{save.error}</p>}
+    </ModalShell>
+    <div className="production-latex-layout flex h-full min-h-0" data-testid="production-latex">
+      <label className="latex-file-picker hidden shrink-0 items-center gap-2 border-b-[0.5px] border-line px-3 py-2">
+        <span className="shrink-0 text-muted text-[length:var(--font-meta-size)]">文稿</span>
+        <select
+          aria-label="选择文稿文件"
+          value={selectedPath ?? ""}
+          onChange={(event) => onSelect(event.target.value === "" ? null : event.target.value)}
+          className="h-8 min-w-0 flex-1 rounded-control border-[0.5px] border-line bg-surface px-2 text-ink text-[length:var(--font-meta-size)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+        >
+          <option value="">选择文稿文件</option>
+          {entries.map((file) => (
+            <option key={file.path} value={file.path}>{file.path}</option>
+          ))}
+        </select>
+      </label>
+      <nav
+        aria-label="文稿文件"
+        className="production-latex-file-list flex w-[200px] shrink-0 flex-col gap-1 overflow-y-auto border-r-[0.5px] border-line p-2"
+        data-testid="production-latex-files"
+      >
+        <span className="text-subtle text-[length:var(--font-meta-size)]">
+          文稿文件{files.data === null ? '' : `（${entries.length.toLocaleString('zh-CN')}）`}
+        </span>
+        {fileState}
+        {entries.length === 0 ? null : (
+          <ul className="flex flex-col gap-0.5">
+            {entries.map((file) => (
+              <li key={file.path}>
+                <button
+                  type="button"
+                  data-testid={`production-latex-file-${file.path}`}
+                  data-selected={file.path === selectedPath ? 'true' : 'false'}
+                  aria-current={file.path === selectedPath ? 'true' : undefined}
+                  onClick={() => onSelect(file.path)}
+                  className={[
+                    'flex w-full min-w-0 flex-col items-start rounded-control px-2 py-1 text-left',
+                    'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent',
+                    file.path === selectedPath
+                      ? 'bg-[var(--overlay-active)] text-ink'
+                      : 'text-muted hover:bg-[var(--overlay-hover)] hover:text-ink'
+                  ].join(' ')}
+                >
+                  <span className="w-full truncate font-mono text-[length:var(--font-meta-size)]" title={file.path}>
+                    {file.path}
+                  </span>
+                  <span dir="ltr" className="flex flex-wrap gap-x-2 tabular-nums text-subtle text-[length:var(--font-meta-size)]">
+                    <span>{formatBytes(file.sizeBytes)}</span>
+                    <span>{formatBeijingDateTime(file.updatedAt)}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </nav>
+
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="latex-file-picker hidden shrink-0 flex-col px-2">{fileState}</div>
+        {selectedPath === null && entries.length > 0 ? (
+          <EmptyState
+            icon={FileText}
+            title="选择一个文稿文件"
+            testId="production-latex-no-file"
+          />
+        ) : selectedPath === null ? null : (
+          <section className="flex min-h-0 flex-1 flex-col" data-testid="production-latex-editor">
+            <header className="flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-3 py-2">
+              <h2 className="min-w-0 flex-1 truncate text-[length:var(--font-ui-size)] font-medium" title={selectedPath}>{fileName(selectedPath)}</h2>
+              {isText ? <span role="status" data-testid="latex-dirty-indicator" className="text-muted text-[length:var(--font-meta-size)]">{dirty ? '未保存' : canWrite && !isTruncated ? '已保存' : '只读'}</span> : null}
+              <button type="button" disabled={save.pending} data-testid="production-latex-reload"
+                onClick={() => requestLeave(() => {
+                  loadedPathRef.current = null;
+                  setDraft(baseline);
+                  dirtyRef.current = false;
+                  preview.reload();
+                })}
+                className="rounded-control px-2 py-1 text-muted hover:bg-[var(--overlay-hover)] disabled:opacity-50">
+                重新读取
+              </button>
+              <button type="button" data-testid="production-latex-save" disabled={!canEdit || save.pending || !dirty}
+                onClick={() => void saveDraft()} className={primaryButtonClass} title="保存 (⌘S)">
+                {save.pending ? <Loader2 size={14} aria-hidden="true" className="mr-1 inline animate-spin motion-reduce:animate-none" /> :
+                  <Save size={14} aria-hidden="true" className="mr-1 inline" />}{save.pending ? '保存中…' : '保存'}
+              </button>
+            </header>
+            {preview.status === 'loading' ? <InlineHint text="正在读取文件…" /> : null}
+            {preview.status === 'error' ? (
+              <ErrorBar error={{ level: 'page', message: preview.error ?? '读取文件失败', retry: preview.reload }} />
+            ) : null}
+            {previewData !== null && previewData.kind !== 'text' ? (
+              <InlineHint
+                text={`这个文件是 ${previewData.kind}，不在文稿编辑器里打开（预览请用文件视图）。`}
+                testId="production-latex-not-text"
+              />
+            ) : null}
+            {isTruncated ? (
+              <p className="text-[var(--st-warn)] text-[length:var(--font-meta-size)]" data-testid="production-latex-truncated" role="note">
+                文件过大，编辑器只读。
+              </p>
+            ) : null}
+            {isText ? (
+              <>
+                <SourceEditor key={selectedPath} value={draft ?? previewData.content} readOnly={!canEdit || save.pending} onChange={(value) => { setDraft(value); setNote(null); setRecovery(null); }} />
+                <div className="flex shrink-0 flex-wrap items-center gap-2 border-t-[0.5px] border-line px-3 py-1.5">
+                  <span className="text-subtle text-[length:var(--font-meta-size)]" role="status" data-testid="production-latex-state">
+                    {canEdit ? (dirty ? '有未保存的修改' : '与磁盘一致') : '只读'}　{formatBytes(previewData.sizeBytes)}
+                  </span>
+                  {canWrite ? null : (
+                    <span className="text-[var(--st-warn)] text-[length:var(--font-meta-size)]" data-testid="production-latex-readonly">
+                      项目已归档：文件只读。
+                    </span>
+                  )}
+                </div>
+                {note === null ? null : (
+                  <p role="status" className="shrink-0 px-3 text-muted text-[length:var(--font-meta-size)]" data-testid="production-latex-save-note">
+                    {note}
+                  </p>
+                )}
+                {recovery === null ? null : (
+                  <p className="shrink-0 px-3 text-subtle text-[length:var(--font-meta-size)]" data-testid="production-latex-recovery">
+                    {recovery}
+                  </p>
+                )}
+                {save.error === null ? null : <InlineHint text={save.error} testId="production-latex-save-error" />}
+              </>
+            ) : null}
+          </section>
+        )}
+
+      </div>
+    </div>
+    </>
+  );
+}
+
+function isEditable(name: string): boolean {
+  const lower = name.toLowerCase();
+  return EDITABLE_EXTENSIONS.some((extension) => lower.endsWith(extension));
+}

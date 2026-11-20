@@ -1,0 +1,268 @@
+import { z } from 'zod';
+
+import {
+  closedResultSchema,
+  deliveredResultSchema
+} from '../../../shared/schemas/ipc-core';
+import {
+  fileNameSearchRequestSchema,
+  fileNameSearchResultSchema,
+  filePdfPreviewRequestSchema,
+  filePdfPreviewResultSchema,
+  filePreviewRequestSchema,
+  filePreviewResultSchema,
+  fileSearchRequestSchema,
+  fileSearchResultSchema,
+  fileTreeRequestSchema,
+  fileTreeResultSchema,
+  fileWriteResultSchema,
+  fileWriteTextRequestSchema,
+  gitBatchFileOperationRequestSchema,
+  gitBranchListResultSchema,
+  gitBranchMutationResultSchema,
+  gitCancelRequestSchema,
+  gitCheckoutBranchRequestSchema,
+  gitCommitRequestSchema,
+  gitCommitResultSchema,
+  gitCreateBranchRequestSchema,
+  gitDiffStatResultSchema,
+  gitFileDiffResultSchema,
+  gitFileOperationRequestSchema,
+  gitPushResultSchema,
+  gitPushRequestSchema,
+  gitStatusResultSchema,
+  terminalSessionCloseRequestSchema,
+  terminalSessionCreateRequestSchema,
+  terminalSessionInputRequestSchema,
+  terminalSessionResizeRequestSchema,
+  terminalSessionSnapshotSchema,
+  workspaceSchema,
+  workspaceSelectRequestSchema
+} from '../../../shared/schemas/ipc-workspace';
+import type {
+  FileDeleteResult,
+  FileNameSearchRequest,
+  WorkspaceSelectRequest
+} from '../../../shared/types';
+import type { CapabilityDescriptor, EventSubscription, RocPlugin, RocPluginContext } from '../../kernel/types';
+import { FileService, type FileRecoveryPointDatabase } from '../../services/file-service';
+import { GitService } from '../../services/git-service';
+import { RocPaths } from '../../services/paths';
+import { TerminalSessionService } from '../../services/terminal-session-service';
+import { WorkspaceChangeWatcherService } from '../../services/workspace-change-watcher-service';
+import {
+  workspacePathStructureChangedEventType,
+  type WorkspacePathStructureChangedPayload
+} from '../../services/workspace-path-structure-event';
+import { WorkspaceService } from '../../services/workspace-service';
+import { registerFileCapabilities } from './file-capabilities';
+import { registerGitCapabilities } from './git-capabilities';
+import {
+  registerTerminalCapabilities,
+  terminalSessionExitEventType,
+  terminalSessionOutputEventType
+} from './terminal-capabilities';
+
+const pluginId = '@roc/plugin-workspace';
+const capabilityVersion = '1.0.0';
+export const workspaceChangedEventType = 'workspace.changed';
+
+const relativePathRequestSchema = z.object({
+  relativePath: z.string()
+}).strict();
+
+const emptyInputSchema = z.object({});
+
+const workspaceCapabilityDescriptors = [
+  descriptor('workspace.getCurrent', emptyInputSchema, workspaceSchema.nullable()),
+  descriptor('workspace.select', workspaceSelectRequestSchema, workspaceSchema),
+  descriptor('files.listTree', fileTreeRequestSchema, fileTreeResultSchema),
+  descriptor('files.search', fileSearchRequestSchema, fileSearchResultSchema),
+  descriptor('files.preview', filePreviewRequestSchema, filePreviewResultSchema),
+  descriptor('files.previewPdf', filePdfPreviewRequestSchema, filePdfPreviewResultSchema),
+  descriptor('files.writeText', fileWriteTextRequestSchema, fileWriteResultSchema),
+  descriptor('files.delete', relativePathRequestSchema, z.custom<FileDeleteResult>()),
+  descriptor('git.status', emptyInputSchema, gitStatusResultSchema),
+  descriptor('git.diffStat', emptyInputSchema, gitDiffStatResultSchema),
+  descriptor('git.fileDiff', gitFileOperationRequestSchema, gitFileDiffResultSchema),
+  descriptor('git.stageFile', gitFileOperationRequestSchema, gitStatusResultSchema),
+  descriptor('git.stageFiles', gitBatchFileOperationRequestSchema, gitStatusResultSchema),
+  descriptor('git.unstageFile', gitFileOperationRequestSchema, gitStatusResultSchema),
+  descriptor('git.discardFile', gitFileOperationRequestSchema, gitStatusResultSchema),
+  descriptor('git.commit', gitCommitRequestSchema, gitCommitResultSchema),
+  descriptor('git.push', gitPushRequestSchema, gitPushResultSchema),
+  descriptor('git.listBranches', emptyInputSchema, gitBranchListResultSchema),
+  descriptor('git.createBranch', gitCreateBranchRequestSchema, gitBranchMutationResultSchema),
+  descriptor('git.checkoutBranch', gitCheckoutBranchRequestSchema, gitBranchMutationResultSchema),
+  descriptor('terminal.createSession', terminalSessionCreateRequestSchema, terminalSessionSnapshotSchema),
+  descriptor('terminal.writeInput', terminalSessionInputRequestSchema, deliveredResultSchema),
+  descriptor('terminal.resize', terminalSessionResizeRequestSchema, terminalSessionSnapshotSchema),
+  descriptor('terminal.closeSession', terminalSessionCloseRequestSchema, closedResultSchema),
+  descriptor('files.streamPdfPreviewResource', relativePathRequestSchema, z.custom<Response>()),
+  // 追加到末尾：registerFileCapabilities / git / terminal 都按位置下标切分，插在中间会静默错位。
+  descriptor('files.searchByName', fileNameSearchRequestSchema, fileNameSearchResultSchema),
+  descriptor('git.cancel', gitCancelRequestSchema, z.boolean())
+] as const satisfies readonly CapabilityDescriptor[];
+
+/**
+ * `workspaceService` lets another plugin read the **same** binding this plugin owns.
+ *
+ * `workspace.select` is the only writer of `WorkspaceService.currentWorkspace`, so a second
+ * instance would be a second answer to "which directory is bound" — the memory plugin needs the
+ * one the shell actually selected for its two project memory slots (B26). When it is omitted the
+ * plugin keeps its own instance, which is what the standalone tests want.
+ */
+export type WorkspacePluginOptions = {
+  rootDir?: string;
+  workspaceService?: WorkspaceService;
+};
+
+export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): RocPlugin {
+  let terminalService: TerminalSessionService | null = null;
+  let workspaceChangeWatcher: WorkspaceChangeWatcherService | null = null;
+  let unsubscribeTerminalOutput: EventSubscription | null = null;
+  let unsubscribeTerminalExit: EventSubscription | null = null;
+  let unsubscribePathStructureChange: EventSubscription | null = null;
+  return {
+    manifest: {
+      id: pluginId,
+      version: '1.0.0',
+      displayName: 'Workspace',
+      description: 'Roc workspace plugin.',
+      required: true,
+      order: 40,
+      dependencies: [],
+      capabilities: workspaceCapabilityDescriptors
+    },
+    initialize: async (context) => {
+      const paths = new RocPaths(options.rootDir);
+      paths.ensureTree();
+      const workspaceService = options.workspaceService ?? new WorkspaceService();
+      const fileService = new FileService(paths, createFileDatabaseAdapter(context), workspaceService, undefined, {
+        onPathSnapshotDiagnostic: (event) => context.logger.info('File name search path snapshot diagnostic.', { ...event })
+      });
+      const gitService = new GitService(workspaceService);
+      workspaceChangeWatcher = new WorkspaceChangeWatcherService({
+        logger: context.logger,
+        onInvalidate: (workspacePath, reason) => fileService.invalidateFileNameSnapshot(workspacePath, reason),
+        isKnownSnapshotPath: (workspacePath, relativePath) => fileService.hasFileNamePathSnapshotEntry(workspacePath, relativePath),
+        onChange: (event) =>
+          context.eventBus.publish({
+            type: workspaceChangedEventType,
+            source: pluginId,
+            payload: event,
+            createdAt: new Date().toISOString()
+          })
+      });
+      const currentWorkspace = workspaceService.getCurrentWorkspace();
+      workspaceChangeWatcher.setWorkspace(currentWorkspace === null ? null : currentWorkspace.path);
+      unsubscribePathStructureChange = context.eventBus.subscribe<unknown>(workspacePathStructureChangedEventType, (event) => {
+        const payload = parseWorkspacePathStructureChangedPayload(event.payload);
+        if (payload === null) {
+          context.logger.warn('Workspace path structure event payload rejected.');
+          return;
+        }
+        fileService.invalidateFileNameSnapshot(payload.workspacePath, payload.reason);
+      });
+      terminalService = new TerminalSessionService(paths, workspaceService);
+      unsubscribeTerminalOutput = terminalService.onOutput((payload) => {
+        void context.eventBus.publish({
+          type: terminalSessionOutputEventType,
+          source: pluginId,
+          payload,
+          createdAt: new Date().toISOString()
+        }).catch((error: unknown) => {
+          context.logger.error('Workspace terminal output event publish failed.', {
+            error: error instanceof Error ? error.message : String(error)
+          });
+        });
+      });
+      unsubscribeTerminalExit = terminalService.onExit((payload) => {
+        void context.eventBus.publish({
+          type: terminalSessionExitEventType,
+          source: pluginId,
+          payload,
+          createdAt: new Date().toISOString()
+        }).catch((error: unknown) => {
+          context.logger.error('Workspace terminal exit event publish failed.', {
+            error: error instanceof Error ? error.message : String(error)
+          });
+        });
+      });
+
+      context.capabilities.register(pluginId, workspaceCapabilityDescriptors[0], async () =>
+        workspaceService.getCurrentWorkspace()
+      );
+      context.capabilities.register(pluginId, workspaceCapabilityDescriptors[1], async (input) => {
+        const workspace = workspaceService.selectWorkspace((input as WorkspaceSelectRequest).path);
+        fileService.invalidateAllFileNameSnapshots('workspace.selection');
+        workspaceChangeWatcher?.setWorkspace(workspace.path);
+        return workspace;
+      });
+      registerFileCapabilities(context, workspaceCapabilityDescriptors.slice(2, 8), fileService);
+      registerGitCapabilities(context, workspaceCapabilityDescriptors.slice(8, 20), gitService, {
+        cancelDescriptor: workspaceCapabilityDescriptors[26],
+        onWorkspacePathsChanged: (workspacePath, reason) => fileService.invalidateFileNameSnapshot(workspacePath, reason)
+      });
+      registerTerminalCapabilities(context, workspaceCapabilityDescriptors.slice(20, 24), terminalService);
+      context.capabilities.register(pluginId, workspaceCapabilityDescriptors[24], async (input) =>
+        await fileService.streamPdfPreviewResource((input as { relativePath: string }).relativePath)
+      );
+      context.capabilities.register(pluginId, workspaceCapabilityDescriptors[25], async (input) =>
+        await fileService.searchByName(input as FileNameSearchRequest)
+      );
+    },
+    shutdown: async () => {
+      if (unsubscribeTerminalOutput !== null) {
+        unsubscribeTerminalOutput();
+      }
+      if (unsubscribeTerminalExit !== null) {
+        unsubscribeTerminalExit();
+      }
+      if (unsubscribePathStructureChange !== null) {
+        unsubscribePathStructureChange();
+      }
+      unsubscribeTerminalOutput = null;
+      unsubscribeTerminalExit = null;
+      unsubscribePathStructureChange = null;
+      if (terminalService !== null) {
+        terminalService.shutdown();
+      }
+      terminalService = null;
+      if (workspaceChangeWatcher !== null) {
+        workspaceChangeWatcher.shutdown();
+      }
+      workspaceChangeWatcher = null;
+    },
+    healthCheck: async () => ({ status: 'healthy' })
+  };
+}
+
+function parseWorkspacePathStructureChangedPayload(value: unknown): WorkspacePathStructureChangedPayload | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const payload = value as Partial<WorkspacePathStructureChangedPayload>;
+  if (typeof payload.workspacePath !== 'string' || payload.workspacePath.trim().length === 0
+      || typeof payload.reason !== 'string' || payload.reason.trim().length === 0) return null;
+  return { workspacePath: payload.workspacePath, reason: payload.reason };
+}
+
+function createFileDatabaseAdapter(context: RocPluginContext): FileRecoveryPointDatabase {
+  return {
+    get db() {
+      return context.database.getConnection();
+    }
+  };
+}
+
+function descriptor<TInput, TOutput>(
+  name: string,
+  inputSchema: z.ZodType<TInput>,
+  outputSchema: z.ZodType<TOutput>
+): CapabilityDescriptor<TInput, TOutput> {
+  return {
+    name,
+    version: capabilityVersion,
+    inputSchema,
+    outputSchema
+  };
+}

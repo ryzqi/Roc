@@ -1,0 +1,9 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+  "data": { "values": [{ "group": "A", "mean": 2 }, { "group": "B", "mean": 4 }] },
+  "mark": "bar",
+  "encoding": {
+    "x": { "field": "group", "type": "nominal" },
+    "y": { "field": "mean", "type": "quantitative" }
+  }
+}

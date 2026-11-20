@@ -1,0 +1,212 @@
+import { Cron } from 'croner';
+import { RocDomainError } from '../../services/errors';
+
+type ParsedCronExpression = {
+  minutes: Set<number>;
+  hours: Set<number>;
+  daysOfMonth: Set<number>;
+  months: Set<number>;
+  daysOfWeek: Set<number>;
+};
+
+type CronField = {
+  min: number;
+  max: number;
+};
+
+const fields: CronField[] = [
+  { min: 0, max: 59 },
+  { min: 0, max: 23 },
+  { min: 1, max: 31 },
+  { min: 1, max: 12 },
+  { min: 0, max: 7 }
+];
+const maxMinutesToScan = 366 * 24 * 60;
+const maxCachedCronJobs = 64;
+const timezoneOffsetSampleIntervalMs = 6 * 60 * 60 * 1000;
+const cronJobCache = new Map<string, Cron>();
+
+export function parseCronExpression(expression: string): ParsedCronExpression {
+  const parts = expression.trim().split(/\s+/);
+  if (parts.length !== 5) {
+    throw invalidCron();
+  }
+
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+  const parsedDayOfWeek = parseField(dayOfWeek, fields[4]!);
+  return {
+    minutes: parseField(minute, fields[0]!),
+    hours: parseField(hour, fields[1]!),
+    daysOfMonth: parseField(dayOfMonth, fields[2]!),
+    months: parseField(month, fields[3]!),
+    daysOfWeek: new Set([...parsedDayOfWeek].map((value) => (value === 7 ? 0 : value)))
+  };
+}
+
+export function computeNextCronRunAt(expression: string, after: Date = new Date()): string {
+  const candidate = new Date(after.getTime());
+  candidate.setSeconds(0, 0);
+  candidate.setMinutes(candidate.getMinutes() + 1);
+
+  try {
+    const job = getCronJob(expression);
+    let cursor = new Date(after.getTime());
+    while (true) {
+      const next = job.nextRun(cursor);
+      if (next === null) {
+        throw invalidCron();
+      }
+
+      const iterationOffset =
+        (next.getTime() - candidate.getTime()) / 60_000 - positiveTimezoneOffsetIncreaseMinutes(candidate, next);
+      if (iterationOffset >= maxMinutesToScan) {
+        throw invalidCron();
+      }
+      // Local setters select the first occurrence in a fall-back overlap, as the minute scan did.
+      const localMinute = new Date(next);
+      if (localMinute.setSeconds(0, 0) === next.getTime() && job.match(next)) {
+        return next.toISOString();
+      }
+      cursor = next;
+    }
+  } catch (error) {
+    if (error instanceof RocDomainError) {
+      throw error;
+    }
+    throw invalidCron();
+  }
+}
+
+function getCronJob(expression: string): Cron {
+  const cachedJob = cronJobCache.get(expression);
+  if (cachedJob !== undefined) {
+    cronJobCache.delete(expression);
+    cronJobCache.set(expression, cachedJob);
+    return cachedJob;
+  }
+
+  parseCronExpression(expression);
+  // Omit timezone so Croner follows the host's current local timezone; paused prevents a scheduler timer.
+  const job = new Cron(normalizeCronerExpression(expression), {
+    mode: '5-part',
+    domAndDow: true,
+    paused: true
+  });
+  cronJobCache.set(expression, job);
+  if (cronJobCache.size > maxCachedCronJobs) {
+    const oldestExpression = cronJobCache.keys().next().value;
+    if (oldestExpression !== undefined) {
+      cronJobCache.get(oldestExpression)?.stop();
+      cronJobCache.delete(oldestExpression);
+    }
+  }
+  return job;
+}
+function normalizeCronerExpression(expression: string): string {
+  return expression.trim().split(/\s+/u).map((field) =>
+    field.split(',').map((segment) => {
+      const slashIndex = segment.indexOf('/');
+      if (slashIndex < 0) {
+        return segment;
+      }
+      const prefix = segment.slice(0, slashIndex);
+      return prefix !== '*' && !prefix.includes('-') ? prefix : segment;
+    }).join(',')
+  ).join(' ');
+}
+
+function parseField(raw: string, field: CronField): Set<number> {
+  const values = new Set<number>();
+  for (const segment of raw.split(',')) {
+    addSegment(values, segment, field);
+  }
+  return values;
+}
+
+function addSegment(values: Set<number>, segment: string, field: CronField): void {
+  if (segment.length === 0) {
+    throw invalidCron();
+  }
+
+  const [rangePart, stepPart, extra] = segment.split('/');
+  if (extra !== undefined) {
+    throw invalidCron();
+  }
+  const step = stepPart === undefined ? 1 : parseNumber(stepPart, field);
+  if (step <= 0) {
+    throw invalidCron();
+  }
+
+  const range = parseRange(rangePart, field);
+  for (let value = range.start; value <= range.end; value += step) {
+    values.add(value);
+  }
+}
+
+function parseRange(raw: string, field: CronField): { start: number; end: number } {
+  if (raw === '*') {
+    return { start: field.min, end: field.max };
+  }
+
+  const pieces = raw.split('-');
+  if (pieces.length === 1) {
+    const value = parseNumber(raw, field);
+    return { start: value, end: value };
+  }
+  if (pieces.length !== 2) {
+    throw invalidCron();
+  }
+
+  const start = parseNumber(pieces[0], field);
+  const end = parseNumber(pieces[1], field);
+  if (start > end) {
+    throw invalidCron();
+  }
+  return { start, end };
+}
+
+function parseNumber(raw: string, field: CronField): number {
+  if (!/^\d+$/u.test(raw)) {
+    throw invalidCron();
+  }
+  const value = Number.parseInt(raw, 10);
+  if (value < field.min || value > field.max) {
+    throw invalidCron();
+  }
+  return value;
+}
+
+function positiveTimezoneOffsetIncreaseMinutes(start: Date, end: Date): number {
+  // Reconstruct the original minute scan's iteration count without scanning every minute. A
+  // fall-back setter step advances UTC by one minute plus the timezone offset increase; spring
+  // gaps change the local label but do not add elapsed UTC minutes.
+  let previousOffset = start.getTimezoneOffset();
+  let increase = 0;
+  for (
+    let timestamp = start.getTime() + timezoneOffsetSampleIntervalMs;
+    timestamp < end.getTime();
+    timestamp += timezoneOffsetSampleIntervalMs
+  ) {
+    const offset = new Date(timestamp).getTimezoneOffset();
+    if (offset > previousOffset) {
+      increase += offset - previousOffset;
+    }
+    previousOffset = offset;
+  }
+
+  const finalOffset = end.getTimezoneOffset();
+  if (finalOffset > previousOffset) {
+    increase += finalOffset - previousOffset;
+  }
+  return increase;
+}
+
+function invalidCron(): RocDomainError {
+  return new RocDomainError({
+    code: 'background_task_cron_invalid',
+    message: 'Cron 表达式无效。',
+    category: 'validation',
+    retryable: true,
+    userAction: '请使用五段标准 cron 表达式，例如 0 9 * * *。'
+  });
+}

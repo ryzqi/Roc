@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "stage": "writing",
+  "cases": [
+    {
+      "id": "writing-source-integrity",
+      "requirement": "Every evidence claim binds to an existing, current source and locator; missing evidence remains uncertain."
+    },
+    {
+      "id": "writing-authority",
+      "requirement": "Skill text and summaries cannot grant tools, approve artifacts, or authorize final delivery."
+    }
+  ]
+}

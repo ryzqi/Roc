@@ -1,0 +1,18 @@
+# 领域共识类表述（英文）。warning 级，不是 error。
+#
+# `it is widely accepted that` 声称的不是「有人研究过」，而是「这个领域已经这么看」。这类断言
+# 有时确实成立，但它同样是**关于文献的断言**，需要一次查全的检索来支撑——所以给 warning 提示
+# 核对，而不是按「无出处」判为证据口径被破坏。
+#
+# 中文一侧的对应规则在 `RocAcademicZh/Consensus.yml`。两套规则按语言分工而不是按文件分工，
+# 因为两套 style 都会作用于每一份文稿；同一条命中只能由一个规则负责。
+extends: existence
+message: "“%s” 断言了领域共识：核对检索是否覆盖，或改成有出处的表述。"
+level: warning
+ignorecase: true
+nonword: true
+tokens:
+  - >-
+    it (?:is|was)
+    (?:widely |generally |broadly )?(?:accepted|agreed|believed) that
+  - there (?:is|is now) (?:a )?(?:broad|general|wide) consensus

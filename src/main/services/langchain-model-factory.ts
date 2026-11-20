@@ -1,0 +1,581 @@
+import { createHash } from 'node:crypto';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { ChatAnthropic, type ChatAnthropicInput } from '@langchain/anthropic';
+import { type ChatOpenAIFields } from '@langchain/openai';
+import { DEFAULT_CONTEXT_WINDOW_TOKENS, resolveNvidiaBaseUrl } from '../../shared/provider-defaults';
+import { DEFAULT_MODEL_OUTPUT_TOKENS, resolveRunModelOutputTokens } from '../../shared/model-context';
+import { type ProviderConfig, type ProviderModelOptions, type ProviderType } from '../../shared/types';
+import type { ConfigService } from './config-service';
+import { RocDomainError } from './errors';
+import {
+  LlamaCppCompatibleChatOpenAI,
+  NvidiaCompatibleChatOpenAI,
+  ReasoningAwareChatOpenAI
+} from './langchain-openai-compatible-models';
+import { probeNvidiaTtfb } from './langchain-nvidia-probe';
+import {
+  applyOpenAiCompatibleDefaultOptions,
+  buildLlamaCppSamplingModelKwargs,
+  buildNvidiaModelKwargs,
+  createFetchWithoutAuthorization,
+  resolveAnthropicThinking,
+  resolveLlamaCppSamplingProfile,
+  resolveOpenAiCompatibleDefaultOptions,
+  resolveStreamUsage,
+  type ModelFactoryLogService
+} from './langchain-provider-options';
+import { providerRequestTimeoutMs } from './provider-request-retry';
+import type { SecretService } from './secret-service';
+import { sanitizeAnthropicCompatibleTools } from './provider-tool-json-schema';
+
+type LangChainModelRuntime = {
+  providerType: ProviderType;
+  baseUrl: string | null;
+  streaming: boolean;
+  modelKwargs: Record<string, unknown>;
+  contextWindowTokens: number;
+  maxOutputTokens: number;
+};
+
+export type LangChainChatModelHandle = {
+  provider: ProviderConfig;
+  model: BaseChatModel;
+  modelId: string;
+  runtime: LangChainModelRuntime;
+};
+
+type CreateModelOptions = {
+  streaming?: boolean;
+  maxOutputTokens?: number;
+};
+
+type AnthropicClientOptions = NonNullable<ChatAnthropicInput['clientOptions']>;
+
+const openAiNoAuthPlaceholderKey = 'roc-no-auth';
+const llamaCppProviderRequestTimeoutMs = 600_000;
+
+/**
+ * 解析用户在设置页填的 Provider 端点。
+ *
+ * `new URL` 对非 URL 字符串直接抛 `TypeError`，对 `localhost:11434`、`file:///…` 这类
+ * 能解析但不是 HTTP 端的字符串则默不作声地放过。两者都在这里换成同一个领域错误：
+ * 端点的唯一合法形态是 http(s)。
+ */
+function parseHttpEndpoint(endpoint: string): URL {
+  let url: URL;
+  try {
+    url = new URL(endpoint.trim());
+  } catch {
+    throw invalidProviderEndpoint();
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw invalidProviderEndpoint();
+  }
+  return url;
+}
+
+function invalidProviderEndpoint(): RocDomainError {
+  return new RocDomainError({
+    code: 'provider_endpoint_invalid',
+    message: 'Provider 端点不是合法的 http(s) URL。',
+    category: 'validation',
+    retryable: false,
+    userAction: '请在设置页把 Provider 端点改成完整的 http(s) 地址。'
+  });
+}
+
+function warnIfAnthropicCacheControlConfigured(model: ChatAnthropic, logService: ModelFactoryLogService | null): void {
+  const defaultOptions = (model as ChatAnthropic & {
+    defaultOptions?: {
+      cache_control?: unknown;
+    };
+  }).defaultOptions;
+  if (defaultOptions?.cache_control !== undefined) {
+    logService?.warn('Anthropic model retained cache_control defaults.', {
+      service: 'langchain-model-factory',
+      component: 'warnIfAnthropicCacheControlConfigured'
+    });
+  }
+}
+
+export class LangChainModelFactory {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly secretService: SecretService,
+    private readonly logService: ModelFactoryLogService | null = null
+  ) {}
+
+  /** Synchronous fence for background consumers; credentials and provider options leave only as a digest. */
+  defaultChatModelStamp(): string {
+    const providers = this.configService.getProviders();
+    const state = this.configService.getDefaultModelState();
+    const provider = providers.providers.find(item => item.id === state.providerId);
+    return createHash('sha256').update(JSON.stringify({
+      defaultModelId: providers.defaultModelId, state,
+      provider: provider ? {id: provider.id, type: provider.type, enabled: provider.enabled,
+        endpoint: provider.endpoint, credentialRef: provider.credentialRef, options: provider.options,
+        model: provider.models.find(item => item.id === state.modelId)} : null
+    })).digest('hex');
+  }
+
+  async createDefaultChatModel(options: CreateModelOptions = {}): Promise<LangChainChatModelHandle> {
+    const defaultModelState = this.configService.getDefaultModelState();
+    if (defaultModelState.status !== 'ready' || defaultModelState.modelId === null || defaultModelState.providerId === null) {
+      throw this.configService.createDefaultModelError(defaultModelState);
+    }
+
+    const provider = this.resolveProviderById(defaultModelState.providerId);
+    return await this.createModelForProvider(provider, defaultModelState.modelId, options);
+  }
+
+  async createProviderChatModel(providerId: string, options: CreateModelOptions = {}): Promise<LangChainChatModelHandle> {
+    const provider = this.resolveProviderById(providerId);
+    const model = provider.models.find((item) => item.enabled);
+    if (model === undefined) {
+      throw new RocDomainError({
+        code: 'provider_model_missing',
+        message: 'Provider 没有已启用模型。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请先为该 Provider 配置至少一个已启用模型。'
+      });
+    }
+    return await this.createModelForProvider(provider, model.id, options);
+  }
+
+  async createChatModelByModelId(modelId: string, options: CreateModelOptions = {}): Promise<LangChainChatModelHandle> {
+    const matches = this.configService
+      .getProviders()
+      .providers.filter((provider) => provider.models.some((candidate) => candidate.id === modelId));
+
+    if (matches.length === 0) {
+      throw new RocDomainError({
+        code: 'provider_model_missing',
+        message: '恢复运行需要的模型不存在或未启用。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请检查默认模型与 Provider 配置后重新发起本轮任务。'
+      });
+    }
+    if (matches.length > 1) {
+      throw new RocDomainError({
+        code: 'provider_model_ambiguous',
+        message: '恢复运行需要的模型映射到多个 Provider，无法确定恢复上下文。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请确保该模型 ID 只存在于一个已配置 Provider 中后重试。'
+      });
+    }
+
+    return await this.createModelForProvider(matches[0]!, modelId, options);
+  }
+
+  async createChatModelByProviderAndModel(
+    providerId: string,
+    modelId: string,
+    options: CreateModelOptions = {}
+  ): Promise<LangChainChatModelHandle> {
+    return await this.createModelForProvider(this.resolveProviderById(providerId), modelId, options);
+  }
+
+  resolveCheapModelHandle(activeHandle: LangChainChatModelHandle): LangChainChatModelHandle {
+    return activeHandle;
+  }
+
+  private buildAnthropicClientOptions(provider: ProviderConfig, timeoutMs: number): AnthropicClientOptions {
+    const providerTimeoutMs = provider.options?.timeoutMs;
+    const clientOptions: AnthropicClientOptions = {
+      maxRetries: 0,
+      timeout: providerTimeoutMs === undefined ? timeoutMs : providerTimeoutMs
+    };
+    if (provider.options?.defaultHeaders !== undefined) {
+      clientOptions.defaultHeaders = provider.options.defaultHeaders;
+    }
+    return clientOptions;
+  }
+
+  private applyAnthropicSamplingParams(config: ChatAnthropicInput, options: ProviderModelOptions): void {
+    if (options.temperature !== undefined) {
+      config.temperature = options.temperature;
+    }
+    if (options.topP !== undefined) {
+      config.topP = options.topP;
+    }
+    if (options.topK !== undefined) {
+      config.topK = options.topK;
+    }
+    if (options.stop !== undefined && options.stop.length > 0) {
+      config.stopSequences = options.stop;
+    }
+  }
+
+  private createAnthropicModel(
+    provider: ProviderConfig,
+    modelId: string,
+    modelOptions: ProviderModelOptions,
+    apiKey: string,
+    options: {
+      streaming: boolean;
+      contextWindowTokens: number;
+      maxOutputTokens: number;
+      requestTimeoutMs: number;
+    }
+  ): LangChainChatModelHandle {
+    const baseUrl = this.normalizeAnthropicApiUrl(provider.endpoint);
+    const providerOptions = modelOptions;
+    const config: ChatAnthropicInput = {
+      model: modelId,
+      apiKey,
+      anthropicApiUrl: baseUrl,
+      streaming: options.streaming,
+      maxRetries: 0,
+      streamUsage: resolveStreamUsage(provider, modelOptions, options.streaming),
+      maxTokens: Math.min(modelOptions.maxTokens ?? options.maxOutputTokens, options.maxOutputTokens),
+      clientOptions: this.buildAnthropicClientOptions(provider, options.requestTimeoutMs)
+    };
+    this.applyAnthropicSamplingParams(config, providerOptions);
+    const thinking = resolveAnthropicThinking(providerOptions);
+    if (thinking !== undefined) {
+      config.thinking = thinking;
+    }
+    const model = new ProviderCompatibleChatAnthropic(config);
+    warnIfAnthropicCacheControlConfigured(model, this.logService);
+    return {
+      provider,
+      modelId,
+      runtime: {
+        providerType: provider.type,
+        baseUrl,
+        streaming: options.streaming,
+        modelKwargs: {},
+        contextWindowTokens: options.contextWindowTokens,
+        maxOutputTokens: options.maxOutputTokens
+      },
+      model
+    };
+  }
+
+  async createModelForProvider(
+    provider: ProviderConfig,
+    modelId: string,
+    options: CreateModelOptions = {}
+  ): Promise<LangChainChatModelHandle> {
+    if (!provider.enabled) {
+      throw new RocDomainError({
+        code: 'provider_disabled',
+        message: 'Provider 未启用。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请先启用 Provider 后再发起调用。'
+      });
+    }
+
+    const targetModel = provider.models.find((item) => item.id === modelId);
+    if (targetModel === undefined || !targetModel.enabled) {
+      throw new RocDomainError({
+        code: 'provider_model_missing',
+        message: 'Provider 模型不存在或未启用。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请从已启用模型列表中选择一个模型。'
+      });
+    }
+
+    const apiKey = await this.resolveCredential(provider);
+    const modelOptions: ProviderModelOptions = targetModel.options ?? {};
+    const llamaCppSamplingProfile =
+      provider.type === 'llama_cpp' ? resolveLlamaCppSamplingProfile(provider, modelId, modelOptions, this.logService) : null;
+    const temperature =
+      provider.type === 'llama_cpp'
+        ? modelOptions.temperature ?? llamaCppSamplingProfile?.temperature
+        : modelOptions.temperature;
+    const requestedMaxOutputTokens = options.maxOutputTokens ?? DEFAULT_MODEL_OUTPUT_TOKENS;
+    if (!Number.isSafeInteger(requestedMaxOutputTokens) || requestedMaxOutputTokens <= 0) {
+      throw new Error('model_output_limit_invalid');
+    }
+    const requestedStreaming = options.streaming ?? true;
+    const streaming = provider.type === 'llama_cpp' ? true : requestedStreaming;
+    const requestTimeoutMs = provider.type === 'llama_cpp' ? llamaCppProviderRequestTimeoutMs : providerRequestTimeoutMs;
+    const contextWindowTokens =
+      modelOptions.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS;
+    const maxTokens = resolveRunModelOutputTokens(
+      contextWindowTokens,
+      Math.min(modelOptions.maxTokens ?? requestedMaxOutputTokens, requestedMaxOutputTokens)
+    );
+
+    if (provider.type === 'anthropic_compatible') {
+      return this.createAnthropicModel(provider, modelId, modelOptions, apiKey, {
+        streaming,
+        contextWindowTokens,
+        maxOutputTokens: maxTokens,
+        requestTimeoutMs
+      });
+    }
+
+    if (
+      provider.type !== 'openai_compatible' &&
+      provider.type !== 'openrouter' &&
+      provider.type !== 'nvidia' &&
+      provider.type !== 'llama_cpp'
+    ) {
+      throw new RocDomainError({
+        code: 'provider_type_unsupported',
+        message: '当前 Provider 类型尚未支持 LangChain 聊天执行。',
+        category: 'external',
+        retryable: false,
+        userAction: '请先使用 OpenAI-compatible、OpenRouter、Anthropic-compatible、NVIDIA 或 llama.cpp Provider。'
+      });
+    }
+
+    const modelKwargs: Record<string, unknown> = {};
+    if (provider.type === 'openai_compatible') {
+      // Recent DeepSeek models default to thinking, which rejects forced tool
+      // choice. Honor the user's explicit switch while leaving other compatible
+      // APIs and provider-specific modelKwargs in control of their own protocol.
+      if (typeof modelOptions.thinking === 'boolean' && /(?:^|[/:])deepseek-(?:v3\.2|v4(?:\.\d+)?|flash)(?:$|[-/])/iu.test(modelId)) {
+        modelKwargs.thinking = { type: modelOptions.thinking ? 'enabled' : 'disabled' };
+      }
+      Object.assign(modelKwargs, modelOptions.modelKwargs);
+    }
+    if (provider.type === 'nvidia') {
+      Object.assign(modelKwargs, buildNvidiaModelKwargs(modelId, modelOptions, streaming));
+    }
+    if (provider.type === 'llama_cpp') {
+      modelKwargs.cache_prompt = true;
+      Object.assign(modelKwargs, buildLlamaCppSamplingModelKwargs(modelOptions, llamaCppSamplingProfile));
+    }
+
+    const baseUrl = provider.type === 'nvidia' ? resolveNvidiaBaseUrl(provider) : provider.endpoint.trim();
+    const apiKeyForChatModel =
+      provider.type === 'llama_cpp' && apiKey.length === 0 ? openAiNoAuthPlaceholderKey : apiKey;
+    const defaultHeaders =
+      provider.type === 'openrouter'
+        ? {
+            'HTTP-Referer': 'https://github.com/roc-ai/roc',
+            'X-OpenRouter-Title': 'Roc'
+          }
+        : provider.type === 'openai_compatible'
+          ? provider.options?.defaultHeaders
+          : undefined;
+    const openAiRequestTimeoutMs =
+      provider.type === 'openai_compatible' ? provider.options?.timeoutMs ?? requestTimeoutMs : requestTimeoutMs;
+    const openAiParams = provider.type === 'openai_compatible' ? modelOptions : null;
+    const openAiDefaultOptions = resolveOpenAiCompatibleDefaultOptions(openAiParams);
+    const openAiReasoning = openAiParams?.reasoning;
+    const openAiOrganization =
+      provider.type === 'openai_compatible' ? provider.options?.organization?.trim() ?? '' : '';
+    const openAiTopP = provider.type === 'llama_cpp' ? modelOptions.topP ?? llamaCppSamplingProfile?.topP : modelOptions.topP;
+    const openAiPresencePenalty =
+      provider.type === 'llama_cpp'
+        ? modelOptions.presencePenalty ?? llamaCppSamplingProfile?.presencePenalty
+        : modelOptions.presencePenalty;
+    const openAiStop = provider.type === 'openai_compatible' ? openAiParams?.stop : undefined;
+    const openAiFrequencyPenalty = provider.type === 'openai_compatible' ? openAiParams?.frequencyPenalty : undefined;
+    const openAiConfiguration =
+      provider.type === 'llama_cpp' && apiKey.length === 0
+        ? {
+            baseURL: baseUrl,
+            maxRetries: 0,
+            fetch: createFetchWithoutAuthorization()
+          }
+        : {
+            baseURL: baseUrl,
+            maxRetries: 0,
+            ...(openAiOrganization.length === 0 ? {} : { organization: openAiOrganization }),
+            ...(defaultHeaders === undefined ? {} : { defaultHeaders })
+          };
+    const OpenAiChatModelClass =
+      provider.type === 'llama_cpp'
+        ? LlamaCppCompatibleChatOpenAI
+        : ReasoningAwareChatOpenAI;
+    const chatModelFields: ChatOpenAIFields = {
+      model: modelId,
+      apiKey: apiKeyForChatModel,
+      streaming,
+      streamUsage: resolveStreamUsage(provider, modelOptions, streaming),
+      maxRetries: 0,
+      temperature,
+      topP: openAiTopP,
+      presencePenalty: openAiPresencePenalty,
+      frequencyPenalty: openAiFrequencyPenalty,
+      stop: openAiStop,
+      timeout: openAiRequestTimeoutMs,
+      configuration: openAiConfiguration,
+      ...(maxTokens === undefined ? {} : { maxTokens }),
+      ...(openAiReasoning === undefined ? {} : { reasoning: openAiReasoning }),
+      modelKwargs
+    };
+    const chatModel =
+      provider.type === 'nvidia'
+        ? new NvidiaCompatibleChatOpenAI(chatModelFields, { modelId, providerOptions: modelOptions })
+        : new OpenAiChatModelClass(chatModelFields);
+    applyOpenAiCompatibleDefaultOptions(chatModel, openAiDefaultOptions);
+
+    return {
+      provider,
+      modelId,
+      runtime: {
+        providerType: provider.type,
+        baseUrl,
+        streaming,
+        modelKwargs,
+        contextWindowTokens,
+        maxOutputTokens: maxTokens
+      },
+      model: chatModel
+    };
+  }
+
+  buildPromptMessages(input: string, capabilitySummary: string): [SystemMessage, HumanMessage] {
+    return [
+      new SystemMessage(`Roc capability boundary: ${capabilitySummary}`),
+      new HumanMessage(input)
+    ];
+  }
+
+  /**
+   * NVIDIA NIM 探活：发起一次最小 chat/completions 流式请求，收到非空文本 delta 才视为连通。
+   * 不复用 ChatOpenAI / LangChain，避免 SDK 等待完整 LangChain 消息。30 秒客户端硬超时。
+   */
+  async probeNvidiaTtfb(
+    provider: ProviderConfig,
+    modelId: string,
+    modelOptions: ProviderModelOptions,
+    prompt: string,
+    options: { signal?: AbortSignal; timeoutMs?: number } = {}
+  ): Promise<{ latencyMs: number }> {
+    return await probeNvidiaTtfb({
+      provider,
+      modelId,
+      modelOptions,
+      prompt,
+      apiKey: await this.resolveCredential(provider),
+      logService: this.logService,
+      options
+    });
+  }
+  private resolveProviderById(providerId: string): ProviderConfig {
+    const provider = this.configService.getProviders().providers.find((item) => item.id === providerId);
+    if (provider === undefined) {
+      throw new RocDomainError({
+        code: 'provider_not_found',
+        message: `找不到 Provider ${providerId}。`,
+        category: 'not_found',
+        retryable: false,
+        userAction: '请刷新设置页后重试。'
+      });
+    }
+    return provider;
+  }
+
+  private normalizeAnthropicApiUrl(endpoint: string): string {
+    const url = parseHttpEndpoint(endpoint);
+    const path = url.pathname.replace(/\/+$/, '');
+    if (path.endsWith('/v1/messages')) {
+      url.pathname = path.slice(0, -'/v1/messages'.length) || '/';
+      return url.toString();
+    }
+    if (path.endsWith('/v1')) {
+      url.pathname = path.slice(0, -'/v1'.length) || '/';
+      return url.toString();
+    }
+    url.pathname = path.length === 0 ? '/' : path;
+    return url.toString();
+  }
+
+  private async resolveCredential(provider: ProviderConfig): Promise<string> {
+    const credentialRef = provider.credentialRef;
+    if (credentialRef === null) {
+      if (provider.type === 'llama_cpp') {
+        return '';
+      }
+      throw new RocDomainError({
+        code: 'provider_credential_missing',
+        message: 'Provider 缺少凭据引用。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请在设置页为 Provider 录入 API Key 后再重试。'
+      });
+    }
+
+    const trimmed = credentialRef.trim();
+    if (trimmed.length === 0) {
+      throw new RocDomainError({
+        code: 'provider_credential_ref_invalid',
+        message: 'Provider 凭据引用不能为空。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请在设置页重新配置 Provider 凭据。'
+      });
+    }
+    if (!trimmed.startsWith('secret:')) {
+      throw new RocDomainError({
+        code: 'provider_credential_ref_unsupported',
+        message: 'Provider 凭据引用必须为 secret:<providerId>。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请在设置页为 Provider 录入 API Key 以生成加密凭据。'
+      });
+    }
+
+    const referencedProviderId = trimmed.slice('secret:'.length).trim();
+    if (!/^[A-Za-z0-9_-]+$/.test(referencedProviderId)) {
+      throw new RocDomainError({
+        code: 'provider_credential_ref_invalid',
+        message: 'Provider 凭据引用的 providerId 含有不允许的字符。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请使用 secret:<providerId> 形式的凭据引用。'
+      });
+    }
+    if (referencedProviderId !== provider.id) {
+      throw new RocDomainError({
+        code: 'provider_credential_ref_mismatch',
+        message: 'Provider 凭据引用的 providerId 与 Provider 不匹配。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请在设置页重新录入该 Provider 的 API Key。'
+      });
+    }
+
+    const value = await this.secretService.getProviderSecret(provider.id);
+    if (value.trim().length === 0) {
+      throw new RocDomainError({
+        code: 'provider_credential_unavailable',
+        message: 'Provider 凭据未存储。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请在设置页为该 Provider 录入 API Key 后再发起调用。'
+      });
+    }
+    if (/[\r\n]/.test(value)) {
+      throw new RocDomainError({
+        code: 'provider_credential_ref_invalid',
+        message: 'Provider 凭据中包含非法换行字符。',
+        category: 'validation',
+        retryable: false,
+        userAction: '请重新录入不含换行的 Provider API Key。'
+      });
+    }
+    return value;
+  }
+}
+
+class ProviderCompatibleChatAnthropic extends ChatAnthropic {
+  override formatStructuredToolToAnthropic(
+    tools: Parameters<ChatAnthropic['formatStructuredToolToAnthropic']>[0],
+    fields?: Parameters<ChatAnthropic['formatStructuredToolToAnthropic']>[1]
+  ): ReturnType<ChatAnthropic['formatStructuredToolToAnthropic']> {
+    const formatted = super.formatStructuredToolToAnthropic(tools, fields);
+    if (formatted === undefined) {
+      return formatted;
+    }
+    // The SDK filters tools with top-level schema compositions. Surface that
+    // unsupported contract before a request can silently omit a supplied tool.
+    if (formatted.length !== tools?.length) {
+      throw new Error('provider_tool_schema_root_unsupported');
+    }
+    return sanitizeAnthropicCompatibleTools(formatted);
+  }
+}

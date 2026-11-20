@@ -1,0 +1,673 @@
+{
+  "schemaVersion": 1,
+  "status": "Verified passing",
+  "reports": {
+    "phase7-performance-pairs-fixed-01/report.json": {
+      "sha256": "f8d4353a498316fd5f11fd9293bd25b078c9415f3f1574bc058cd91f3ed73965",
+      "summary": [
+        {
+          "id": "native-400-before",
+          "summary": {
+            "elapsedMs": {
+              "count": 3,
+              "min": 357.59333300000003,
+              "p50": 359.855083,
+              "p95": 372.185583,
+              "max": 372.185583
+            },
+            "peakRssBytes": {
+              "count": 3,
+              "min": 272564224,
+              "p50": 272613376,
+              "p95": 275267584,
+              "max": 275267584
+            },
+            "initialRssBytes": {
+              "count": 3,
+              "min": 54351944,
+              "p50": 54630544,
+              "p95": 54876376,
+              "max": 54876376
+            },
+            "finalRssBytes": {
+              "count": 3,
+              "min": 207785352,
+              "p50": 208129680,
+              "p95": 208342504,
+              "max": 208342504
+            },
+            "tailGrowthBytes": {
+              "count": 3,
+              "min": 30150664,
+              "p50": 30232512,
+              "p95": 30707936,
+              "max": 30707936
+            },
+            "created": {
+              "count": 3,
+              "min": 0,
+              "p50": 0,
+              "p95": 0,
+              "max": 0
+            },
+            "released": {
+              "count": 3,
+              "min": 0,
+              "p50": 0,
+              "p95": 0,
+              "max": 0
+            },
+            "highWater": {
+              "count": 3,
+              "min": 0,
+              "p50": 0,
+              "p95": 0,
+              "max": 0
+            },
+            "retained": {
+              "count": 3,
+              "min": 0,
+              "p50": 0,
+              "p95": 0,
+              "max": 0
+            },
+            "pages": {
+              "count": 3,
+              "min": 400,
+              "p50": 400,
+              "p95": 400,
+              "max": 400
+            },
+            "trial": {
+              "count": 3,
+              "min": 0,
+              "p50": 1,
+              "p95": 2,
+              "max": 2
+            }
+          }
+        },
+        {
+          "id": "native-400-after",
+          "summary": {
+            "elapsedMs": {
+              "count": 3,
+              "min": 360.611625,
+              "p50": 364.742084,
+              "p95": 368.67879199999993,
+              "max": 368.67879199999993
+            },
+            "peakRssBytes": {
+              "count": 3,
+              "min": 271122432,
+              "p50": 271532032,
+              "p95": 271728640,
+              "max": 271728640
+            },
+            "initialRssBytes": {
+              "count": 3,
+              "min": 54302936,
+              "p50": 54352088,
+              "p95": 54712536,
+              "max": 54712536
+            },
+            "finalRssBytes": {
+              "count": 3,
+              "min": 205491544,
+              "p50": 206835224,
+              "p95": 207326936,
+              "max": 207326936
+            },
+            "tailGrowthBytes": {
+              "count": 3,
+              "min": 30347320,
+              "p50": 30363824,
+              "p95": 30429120,
+              "max": 30429120
+            },
+            "created": {
+              "count": 3,
+              "min": 0,
+              "p50": 0,
+              "p95": 0,
+              "max": 0
+            },
+            "released": {
+              "count": 3,
+              "min": 0,
+              "p50": 0,
+              "p95": 0,
+              "max": 0
+            },
+            "highWater": {
+              "count": 3,
+              "min": 0,
+              "p50": 0,
+              "p95": 0,
+              "max": 0
+            },
+            "retained": {
+              "count": 3,
+              "min": 0,
+              "p50": 0,
+              "p95": 0,
+              "max": 0
+            },
+            "pages": {
+              "count": 3,
+              "min": 400,
+              "p50": 400,
+              "p95": 400,
+              "max": 400
+            },
+            "trial": {
+              "count": 3,
+              "min": 0,
+              "p50": 1,
+              "p95": 2,
+              "max": 2
+            }
+          }
+        },
+        {
+          "id": "scanned-3-before",
+          "summary": {
+            "elapsedMs": {
+              "count": 3,
+              "min": 5958.194208,
+              "p50": 5985.569041999999,
+              "p95": 6013.741375,
+              "max": 6013.741375
+            },
+            "peakRssBytes": {
+              "count": 3,
+              "min": 2825142272,
+              "p50": 2837725184,
+              "p95": 2865020928,
+              "max": 2865020928
+            },
+            "initialRssBytes": {
+              "count": 3,
+              "min": 133209336,
+              "p50": 133651752,
+              "p95": 134929536,
+              "max": 134929536
+            },
+            "finalRssBytes": {
+              "count": 3,
+              "min": 549376232,
+              "p50": 550408592,
+              "p95": 551342840,
+              "max": 551342840
+            },
+            "tailGrowthBytes": {
+              "count": 3,
+              "min": 505807784,
+              "p50": 506757936,
+              "p95": 537166736,
+              "max": 537166736
+            },
+            "created": {
+              "count": 3,
+              "min": 5,
+              "p50": 5,
+              "p95": 5,
+              "max": 5
+            },
+            "released": {
+              "count": 3,
+              "min": 5,
+              "p50": 5,
+              "p95": 5,
+              "max": 5
+            },
+            "highWater": {
+              "count": 3,
+              "min": 5,
+              "p50": 5,
+              "p95": 5,
+              "max": 5
+            },
+            "retained": {
+              "count": 3,
+              "min": 0,
+              "p50": 0,
+              "p95": 0,
+              "max": 0
+            },
+            "pages": {
+              "count": 3,
+              "min": 3,
+              "p50": 3,
+              "p95": 3,
+              "max": 3
+            },
+            "trial": {
+              "count": 3,
+              "min": 0,
+              "p50": 1,
+              "p95": 2,
+              "max": 2
+            }
+          }
+        },
+        {
+          "id": "scanned-3-after",
+          "summary": {
+            "elapsedMs": {
+              "count": 3,
+              "min": 6005.686124999999,
+              "p50": 6076.4557079999995,
+              "p95": 6086.287083,
+              "max": 6086.287083
+            },
+            "peakRssBytes": {
+              "count": 3,
+              "min": 1971191808,
+              "p50": 1995374592,
+              "p95": 1996292096,
+              "max": 1996292096
+            },
+            "initialRssBytes": {
+              "count": 3,
+              "min": 132340720,
+              "p50": 133373200,
+              "p95": 134945848,
+              "max": 134945848
+            },
+            "finalRssBytes": {
+              "count": 3,
+              "min": 1874973816,
+              "p50": 1899402552,
+              "p95": 1900385856,
+              "max": 1900385856
+            },
+            "tailGrowthBytes": {
+              "count": 3,
+              "min": 53510792,
+              "p50": 68272632,
+              "p95": 83690192,
+              "max": 83690192
+            },
+            "created": {
+              "count": 3,
+              "min": 15,
+              "p50": 15,
+              "p95": 15,
+              "max": 15
+            },
+            "released": {
+              "count": 3,
+              "min": 15,
+              "p50": 15,
+              "p95": 15,
+              "max": 15
+            },
+            "highWater": {
+              "count": 3,
+              "min": 2,
+              "p50": 2,
+              "p95": 2,
+              "max": 2
+            },
+            "retained": {
+              "count": 3,
+              "min": 0,
+              "p50": 0,
+              "p95": 0,
+              "max": 0
+            },
+            "pages": {
+              "count": 3,
+              "min": 3,
+              "p50": 3,
+              "p95": 3,
+              "max": 3
+            },
+            "trial": {
+              "count": 3,
+              "min": 0,
+              "p50": 1,
+              "p95": 2,
+              "max": 2
+            }
+          }
+        }
+      ]
+    },
+    "phase7-performance-sustained-01/report.json": {
+      "sha256": "c2e8fc106e7cc2b7d5560d4ff73f1c5d589df4beccd892e5ab497aff315eeeb5",
+      "summary": [
+        {
+          "id": "scanned-100"
+        }
+      ],
+      "observations": {
+        "elapsedMs": 175865.331375,
+        "peakRssBytes": 2559836160,
+        "final": {
+          "rss": 2268118024,
+          "heapTotal": 105136128,
+          "heapUsed": 41166696,
+          "external": 405866637,
+          "arrayBuffers": 379339515
+        },
+        "tailGrowthBytes": 248711904,
+        "tailSlopeBytesPerPage": 1269925.6427767354,
+        "boundedGrowthScreenPassed": false,
+        "modelManifest": "e71ba9baa7c08404ad3bd507c7a4330dcc329c7f6eabeda3b18dcfde2e1a1146"
+      }
+    },
+    "phase7-performance-sustained-fixed-01/report.json": {
+      "sha256": "710ec2f29bc3fa5d6e330148dab28a6d355695d950ad984debf2deb74e44e485",
+      "summary": [
+        {
+          "id": "scanned-100"
+        }
+      ],
+      "observations": {
+        "elapsedMs": 172160.56504100002,
+        "peakRssBytes": 2049458176,
+        "final": {
+          "rss": 1499233552,
+          "heapTotal": 103596032,
+          "heapUsed": 32061424,
+          "external": 401050404,
+          "arrayBuffers": 374668105
+        },
+        "tailGrowthBytes": -179647512,
+        "tailSlopeBytesPerPage": -3447389.71782364,
+        "boundedGrowthScreenPassed": true,
+        "modelManifest": "e71ba9baa7c08404ad3bd507c7a4330dcc329c7f6eabeda3b18dcfde2e1a1146"
+      }
+    },
+    "phase7-performance-retrieval-01.json": {
+      "sha256": "de09b4b374e4653fb7a4fe29defe9553b10bffb8921086659723f83bdd3fda36"
+    },
+    "phase7-performance-retrieval-awake-1m-01.json": {
+      "sha256": "8a69fbdc262258e5a17e9a0a46ebea5d9a70c7fa36ff841b86f46cf8c9ed469c"
+    },
+    "phase7-performance-reader-02.json": {
+      "sha256": "958869ec86eb0f2b0abb252e97e19d8d4ccfeab825497f687d45be6b75127602",
+      "summary": [
+        {
+          "id": "400-page-open-close",
+          "summary": {
+            "firstRasterMs": {
+              "count": 3,
+              "min": 95.28354200000012,
+              "p50": 99.42645799999991,
+              "p95": 156.9757499999996,
+              "max": 156.9757499999996
+            },
+            "rasterAllocations": {
+              "count": 3,
+              "min": 1,
+              "p50": 1,
+              "p95": 1,
+              "max": 1
+            },
+            "mainRssBytes": {
+              "count": 3,
+              "min": 498679808,
+              "p50": 500793344,
+              "p95": 502349824,
+              "max": 502349824
+            },
+            "mainExternalBytes": {
+              "count": 3,
+              "min": 84454681,
+              "p50": 85146032,
+              "p95": 85837303,
+              "max": 85837303
+            },
+            "processWorkingSetSumBytes": {
+              "count": 3,
+              "min": 878231552,
+              "p50": 890552320,
+              "p95": 899235840,
+              "max": 899235840
+            }
+          }
+        },
+        {
+          "id": "hidden-parser-ipc-competition",
+          "summary": {
+            "ipcMs": {
+              "count": 3,
+              "min": 1.706250000000182,
+              "p50": 2.0183340000003227,
+              "p95": 2.3132499999992433,
+              "max": 2.3132499999992433
+            }
+          }
+        }
+      ]
+    }
+  },
+  "comparisons": {
+    "retrieval": {
+      "status": "Verified passing",
+      "selectedSamples": 480,
+      "preservedContaminatedSamples": 160,
+      "rows": [
+        {
+          "chunks": 10000,
+          "project": null,
+          "query": "topic7 evidence",
+          "cache": "connection-cold",
+          "p95Ms": 36.446249999999964
+        },
+        {
+          "chunks": 10000,
+          "project": null,
+          "query": "topic7 evidence",
+          "cache": "repeated-connection",
+          "p95Ms": 31.271209000000454
+        },
+        {
+          "chunks": 10000,
+          "project": null,
+          "query": "机器学习 topic7",
+          "cache": "connection-cold",
+          "p95Ms": 39.55225000000064
+        },
+        {
+          "chunks": 10000,
+          "project": null,
+          "query": "机器学习 topic7",
+          "cache": "repeated-connection",
+          "p95Ms": 32.190458999999464
+        },
+        {
+          "chunks": 10000,
+          "project": "project-0",
+          "query": "topic7 evidence",
+          "cache": "connection-cold",
+          "p95Ms": 24.641959000000497
+        },
+        {
+          "chunks": 10000,
+          "project": "project-0",
+          "query": "topic7 evidence",
+          "cache": "repeated-connection",
+          "p95Ms": 16.84833299999991
+        },
+        {
+          "chunks": 10000,
+          "project": "project-0",
+          "query": "机器学习 topic7",
+          "cache": "connection-cold",
+          "p95Ms": 28.33770800000093
+        },
+        {
+          "chunks": 10000,
+          "project": "project-0",
+          "query": "机器学习 topic7",
+          "cache": "repeated-connection",
+          "p95Ms": 20.48412499999904
+        },
+        {
+          "chunks": 100000,
+          "project": null,
+          "query": "topic7 evidence",
+          "cache": "connection-cold",
+          "p95Ms": 252.99250000000757
+        },
+        {
+          "chunks": 100000,
+          "project": null,
+          "query": "topic7 evidence",
+          "cache": "repeated-connection",
+          "p95Ms": 261.27820800000336
+        },
+        {
+          "chunks": 100000,
+          "project": null,
+          "query": "机器学习 topic7",
+          "cache": "connection-cold",
+          "p95Ms": 268.9387080000015
+        },
+        {
+          "chunks": 100000,
+          "project": null,
+          "query": "机器学习 topic7",
+          "cache": "repeated-connection",
+          "p95Ms": 275.05795899999794
+        },
+        {
+          "chunks": 100000,
+          "project": "project-0",
+          "query": "topic7 evidence",
+          "cache": "connection-cold",
+          "p95Ms": 214.46025000000373
+        },
+        {
+          "chunks": 100000,
+          "project": "project-0",
+          "query": "topic7 evidence",
+          "cache": "repeated-connection",
+          "p95Ms": 216.90070800000103
+        },
+        {
+          "chunks": 100000,
+          "project": "project-0",
+          "query": "机器学习 topic7",
+          "cache": "connection-cold",
+          "p95Ms": 264.48433300000033
+        },
+        {
+          "chunks": 100000,
+          "project": "project-0",
+          "query": "机器学习 topic7",
+          "cache": "repeated-connection",
+          "p95Ms": 267.25079199999163
+        },
+        {
+          "chunks": 1000000,
+          "project": null,
+          "query": "topic7 evidence",
+          "cache": "connection-cold",
+          "p95Ms": 2516.7384999999776
+        },
+        {
+          "chunks": 1000000,
+          "project": null,
+          "query": "topic7 evidence",
+          "cache": "repeated-connection",
+          "p95Ms": 2559.4710000000196
+        },
+        {
+          "chunks": 1000000,
+          "project": null,
+          "query": "机器学习 topic7",
+          "cache": "connection-cold",
+          "p95Ms": 2600.6851250000764
+        },
+        {
+          "chunks": 1000000,
+          "project": null,
+          "query": "机器学习 topic7",
+          "cache": "repeated-connection",
+          "p95Ms": 2686.892583000008
+        },
+        {
+          "chunks": 1000000,
+          "project": "project-0",
+          "query": "topic7 evidence",
+          "cache": "connection-cold",
+          "p95Ms": 2001.8008329999866
+        },
+        {
+          "chunks": 1000000,
+          "project": "project-0",
+          "query": "topic7 evidence",
+          "cache": "repeated-connection",
+          "p95Ms": 2016.9219169999706
+        },
+        {
+          "chunks": 1000000,
+          "project": "project-0",
+          "query": "机器学习 topic7",
+          "cache": "connection-cold",
+          "p95Ms": 2549.695000000065
+        },
+        {
+          "chunks": 1000000,
+          "project": "project-0",
+          "query": "机器学习 topic7",
+          "cache": "repeated-connection",
+          "p95Ms": 2607.4725409999955
+        }
+      ],
+      "originalReport": "de09b4b374e4653fb7a4fe29defe9553b10bffb8921086659723f83bdd3fda36",
+      "repeatReport": "8a69fbdc262258e5a17e9a0a46ebea5d9a70c7fa36ff841b86f46cf8c9ed469c"
+    },
+    "paired": {
+      "status": "Verified passing",
+      "runs": 12,
+      "artifactFiles": 114,
+      "reportSha256": "f8d4353a498316fd5f11fd9293bd25b078c9415f3f1574bc058cd91f3ed73965"
+    },
+    "sustained": {
+      "status": "Verified passing",
+      "identicalArtifacts": 437,
+      "beforeReport": "c2e8fc106e7cc2b7d5560d4ff73f1c5d589df4beccd892e5ab497aff315eeeb5",
+      "afterReport": "710ec2f29bc3fa5d6e330148dab28a6d355695d950ad984debf2deb74e44e485"
+    }
+  },
+  "limitations": [
+    "CPU ORT only",
+    "Generated retrieval vectors measure throughput",
+    "No full scientific quality gain asserted",
+    "Reader timing starts at selection",
+    "Single sustained observation is not proof of no leaks"
+  ],
+  "finalChecks": {
+    "phase7-performance-unit-01.log": {
+      "exitCode": 0,
+      "passed": 2175,
+      "sha256": "3a967f6a31d3409470fa9dc082bb7bd05b7d5d063e50379fc72004a027b8ab6a"
+    },
+    "phase7-performance-content-01.log": {
+      "exitCode": 0,
+      "passed": 8,
+      "sha256": "e191179c5780e1656baa7a22fc20ddf7833cf4d64912abed4954ab6cde9cfc2f"
+    },
+    "phase7-performance-build-01.log": {
+      "exitCode": 0,
+      "passed": null,
+      "sha256": "07e78a6038747b6f74439d308ba77d9f2ee9dddc38be091997dc700677a91a65"
+    },
+    "phase7-performance-ipc-01.log": {
+      "exitCode": 0,
+      "passed": null,
+      "sha256": "a6ca3f9de6e5302f8a3d5a561534fae321438dddeceeb54ac28784f3d065acd9"
+    },
+    "migration-and-batch-tests-02.log": {
+      "exitCode": 0,
+      "passed": 10,
+      "sha256": "834a2c7294b65ebc5009fa9b5fce6b81209545faaf0f590fbfa97137de8a9039"
+    }
+  }
+}

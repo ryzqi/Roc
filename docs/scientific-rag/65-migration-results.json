@@ -1,0 +1,53 @@
+{
+  "status": "Verified passing",
+  "results": [
+    {
+      "version": 71,
+      "prepared": "prepared",
+      "startup": "startup-verified",
+      "published": "published",
+      "preservedTables": 129,
+      "originalHash": "d54ed77ec33ec816adfcadda1bbe3505e0089c27db79cdcdfee220d0c0fd44e9",
+      "candidateHash": "ad04c95397765cb5e275e1a492c1146f61f99cc048071c3f95129d06b11d9673",
+      "publicationGuards": [
+        "missing-startup",
+        "changed-candidate-receipt",
+        "changed-build",
+        "wrong-root",
+        "preexisting-staging",
+        "changed-original"
+      ]
+    },
+    {
+      "version": 72,
+      "prepared": "prepared",
+      "startup": "startup-verified",
+      "published": "published",
+      "preservedTables": 133,
+      "originalHash": "a5424dbfb0c2698fd99cb85b91d725b4bae5f573ee270e8b17902a7b02d87f7c",
+      "candidateHash": "d360db7bcf996e9f3bb14b6d56e6ad1439f29af4027b840bcf451596ef25f0a7",
+      "publicationGuards": [
+        "missing-startup",
+        "changed-candidate-receipt",
+        "changed-build",
+        "wrong-root",
+        "preexisting-staging",
+        "changed-original"
+      ]
+    }
+  ],
+  "report": {
+    "path": ".artifacts/scientific-rag/migration-startup-08/report.json",
+    "sha256": "b0b203d3c0a65bc8fde84a5c0f2a83732f190afacf86595eaf6c1fc3c1a0c6eb"
+  },
+  "logs": {
+    "migration-startup-08.log": {
+      "exitCode": 0,
+      "sha256": "e025c0047ab70ade8ccf169eb04178cda29bb51a90069676aa543ae5c96557ab"
+    },
+    "migration-tests-03.log": {
+      "exitCode": 0,
+      "sha256": "f31498979b9f22e6f774ad1e1242388ab133344fafac957d57e9c09bd029e52e"
+    }
+  }
+}

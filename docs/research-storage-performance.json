@@ -1,0 +1,63 @@
+{
+  "contractVersion": 1,
+  "protocol": {
+    "scales": [
+      1000,
+      10000
+    ],
+    "samples": 5,
+    "bytesPerFile": 256,
+    "filesPerDirectory": 100,
+    "scanP95TargetMs": 5000,
+    "percentile": "nearest rank; five descriptive warm filesystem samples",
+    "recipe": "isolated managed index source directories; deterministic bytes; real production schema and lstat"
+  },
+  "protocolSha256": "588214921a3d0c13aa2e2531438cc36335c1997677e1b136fdfe1f285c36dff3",
+  "hardware": {
+    "cpu": "Apple M1 Pro",
+    "memoryBytes": 34359738368,
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v26.13.0"
+  },
+  "sourceHashes": {
+    "src/main/plugins/research/storage-usage.ts": "ef6db1f0884bffed92a249b9c3c28505f26b10a34681b62621b3d61619e046c3",
+    "src/shared/schemas/research-storage.ts": "91f8294be14a338876967ba62c5193a3af6e5fc70befdeff460a968760b4ddac",
+    "tests/unit/fixtures/research-test-kit.mjs": "28551273d1bd6b1eb2fce354fb0546a828efdc079a8c083cd54a8c48c06f6f2d",
+    "scripts/benchmark-research-storage.mjs": "0a3345dfd9f6d1c7aa678697608bd253d7c016ada6b64b7b8bf02de00929313f"
+  },
+  "rows": [
+    {
+      "files": 1000,
+      "corpusSha256": "b74a743b4dc1bf60a6b47648393a830c343e887fa54c3055e525a6e0ae012357",
+      "p95Ms": 16.529042000000004,
+      "peakRssBytes": 247622128,
+      "representativeGroup": {
+        "type": "source",
+        "retention": "traceable_source",
+        "scope": "project",
+        "files": 1000,
+        "bytes": 256000,
+        "allocatedBytes": 4096000
+      }
+    },
+    {
+      "files": 10000,
+      "corpusSha256": "420cb1eabb6ef96d8e42bcffc69c922acaa84b3efa2d3398feb8be73cba86fa3",
+      "p95Ms": 154.0807910000001,
+      "peakRssBytes": 252226344,
+      "representativeGroup": {
+        "type": "source",
+        "retention": "traceable_source",
+        "scope": "project",
+        "files": 10000,
+        "bytes": 2560000,
+        "allocatedBytes": 40960000
+      }
+    }
+  ],
+  "rawReport": {
+    "path": ".artifacts/research-optimization/storage-current.json",
+    "sha256": "dd90f442dd4d4a9931c48caffd2388089e2add0a709dd5fd3a5c055617ae4abe"
+  }
+}

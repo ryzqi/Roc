@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "platform": "darwin",
+  "arch": "arm64",
+  "seed": 19790527,
+  "samples": 20,
+  "ocrSamples": 5,
+  "memory": { "scales": [10000, 100000, 1000000], "namespaces": 1000, "limit": 20 },
+  "app": { "events": [0, 1000, 10000], "idleMinutes": [5, 30, 60], "pdfPages": 400 },
+  "process": { "files": [0, 100, 1000, 10000], "fileBytes": 256, "authoritativeIntervalMs": 100 },
+  "regressionPercent": 5,
+  "measurement": {
+    "rss": "process.memoryUsage().rss; per process, never exclusive application footprint",
+    "workingSet": "Electron app.getAppMetrics().memory.workingSetSize, KiB converted to bytes",
+    "privateMemory": "process.getProcessMemoryInfo().private, KiB converted to bytes; pre-compression private memory, not physical footprint",
+    "privateBytes": "Electron ProcessMetric privateBytes, Windows only; null on macOS",
+    "footprint": "N/A unless independently measured with Instruments/VM Tracker",
+    "gpu": "GPU process working set only; IOSurface allocation N/A",
+    "peakRss": "process.resourceUsage().maxRSS * 1024; includes fixture setup/imports",
+    "cold": "Fresh application/profile/SQLite connection; OS filesystem cache is not flushed",
+    "cpu": "CPU microseconds and Electron interval averages, reported separately from latency"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "scientific-expert-public-v1",
+  "sources": [
+    {
+      "id": "m3sciqa",
+      "revision": "99946c354cad84294766e58558f249f71e8bfffc",
+      "license": "CC-BY-4.0",
+      "homepage": "https://huggingface.co/datasets/yale-nlp/M3SciQA",
+      "annotationProvenance": "Published expert-annotated questions; original values preserved, no local reviewer identities asserted.",
+      "split": "validation",
+      "expectedRows": 452,
+      "scope": "Cross-paper questions with original table/figure crops and reference evidence; no full-PDF locators.",
+      "files": [
+        {
+          "path": "m3sciqa/validation.parquet",
+          "url": "https://huggingface.co/datasets/yale-nlp/M3SciQA/resolve/99946c354cad84294766e58558f249f71e8bfffc/data/validation-00000-of-00001.parquet",
+          "bytes": 45507069,
+          "sha256": "d669168d6280fccdacad25f4563d69e93f084f373a623fccb8a4b78c490160b0"
+        },
+        {
+          "path": "m3sciqa/README.md",
+          "url": "https://huggingface.co/datasets/yale-nlp/M3SciQA/resolve/99946c354cad84294766e58558f249f71e8bfffc/README.md",
+          "bytes": 2785,
+          "sha256": "010f870039c98ab89f72c3621a1bb8b46b41785f9af5ac43121eb3675527c6bc"
+        }
+      ],
+      "publication": null,
+      "repository": "https://github.com/yale-nlp/M3SciQA"
+    }
+  ]
+}

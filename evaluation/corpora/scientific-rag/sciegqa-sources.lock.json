@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "sciegqa-bench",
+  "repository": "https://huggingface.co/datasets/Yuwh07/SciEGQA-Bench",
+  "revision": "9bdca77be633cc3259d7e3739d35b38ab00bf5d9",
+  "split": "test",
+  "expectedRows": 1623,
+  "expectedPapers": 80,
+  "license": null,
+  "annotationProvenance": {
+    "kind": "published-human-benchmark",
+    "publication": "https://arxiv.org/abs/2511.15090",
+    "project": "https://yuwenhan07.github.io/SciEGQA-project/",
+    "trainingSetIncluded": false,
+    "localHumanReview": false
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2223,
+      "sha256": "2bf025f8de69a7652d7e9055e867567b2ee88b13977032ad2bab863164b499c2",
+      "url": "https://huggingface.co/datasets/Yuwh07/SciEGQA-Bench/resolve/9bdca77be633cc3259d7e3739d35b38ab00bf5d9/README.md"
+    },
+    {
+      "path": "SciEGQA_Bench.jsonl",
+      "bytes": 695934,
+      "sha256": "338b701830495b984acca753e5b5065b35a7566c308f2d5c81f76b8401a3053f",
+      "url": "https://huggingface.co/datasets/Yuwh07/SciEGQA-Bench/resolve/9bdca77be633cc3259d7e3739d35b38ab00bf5d9/SciEGQA_Bench.jsonl"
+    },
+    {
+      "path": "PDF.tar",
+      "bytes": 132444160,
+      "sha256": "d15569aefec7339ebd360a19d946b384b5ced07b8ffda941f0dfa3494b9f7a16",
+      "url": "https://huggingface.co/datasets/Yuwh07/SciEGQA-Bench/resolve/9bdca77be633cc3259d7e3739d35b38ab00bf5d9/PDF.tar"
+    },
+    {
+      "path": "Images.tar",
+      "bytes": 1127372800,
+      "sha256": "aa8f7e6f5c27fb914a2b36f6accc63fdd48f549f97c2212e03f2b6a85e67b368",
+      "url": "https://huggingface.co/datasets/Yuwh07/SciEGQA-Bench/resolve/9bdca77be633cc3259d7e3739d35b38ab00bf5d9/Images.tar"
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+# 科研 RAG 与持久 Wiki
+
+本文说明项目内科研检索、论文卡片和 Wiki 的使用合同。管线与所有者见[Scientific RAG 架构](scientific-rag/01-architecture.md)，来源、预算、代次及失效规则见[数据合同](scientific-rag/02-data-contracts.md)，测量方法与资格边界见[专题索引](scientific-rag/README.md)。文献检索后的获取与批次专题就绪由[自动入库合同](research-literature-acquisition.md)定义。
+
+## 原文、检索与证据
+
+原始解析 Block 保留 ID、正文和定位；不可变 Paper IR 固定 source/parse/工件身份，派生结构、对象索引和 Wiki 不改写原文 Evidence。缺少定位或关系不确定时保留 unknown/candidate，不猜测精确证据。
+
+科研查询支持多意图计划、DOI/title/ID 选择和固定项目论文范围；text、metadata、table、equation、figure、citation 六通道消费同一来源快照。可选模型规划补充或精排失败时保留规则/融合结果并记录降级；取消继续传播。模型收到精简命中，完整审计留在工具 artifact。
+
+Agent 使用 `research_search_scientific_knowledge` → `research_read_scientific_context` → `research_validate_scientific_evidence`。句柄仅属于本次运行，项目由宿主绑定；读取和验证均重建快照并检查来源、对象及预算，不能扩大论文范围或替换原文。quote 核对精确原文，table_value 核对原 cell，equation 核对完整原 LaTeX；自由主张和比较不能因此获得科学支持，inference 保留推断标记。
+
+原有 `research_read_knowledge_context` 继续绑定准确 chunk 与 indexedVersion，父块和邻文共用字符预算；它与科研对象上下文的 token/对象预算是不同合同。来源或解析变化拒绝旧上下文读取。来源有效与科学结论已获人工审核分别展示。
+
+## 持久后台任务
+
+向量索引任务保存 queued/running/ready/blocked/failed、generation 和重试次数，重启恢复中断任务。配置缺失显示 blocked，失败可显式重试；来源或配置修订替换 generation，旧任务不能覆盖新状态。候选索引核验后才原子发布，失败保留旧 active，但来源变化仍可使旧引用失效。
+
+Entity / Fact / Relation 抽取使用独立持久任务和发布代次，绑定 source/parse/IR 与真实模型配置。三阶段结构化输出须核验原文、原值、类型、单位和条件证据；未知 dataset version/split/metric/baseline/budget 不补默认值。全部校验通过后事务发布，重启恢复未完成任务；failed/cancelled 才能重试，queued/running 才能取消。读取显示配置缺失、漂移及历史状态，不能把空结果当成功。
+
+科研知识可按实体别名、条件事实和类型关系搜索。`source_validated` 只代表来源合同验证；人工科学批准仍走既有 Evidence、Claim 和关系审核。缓存或历史代次复用不能恢复失效证据与审核。
+
+## 论文卡片与修订
+
+解析成功后通过持久 outbox 自动生成六节 Paper Card：问题、贡献、方法、实验设置、
+结果与消融及局限。输入最多 10000 tokens，引用保存准确原始 chunk、
+解析及来源版本。模型失败有可见状态和显式重试；已解析论文后续关联项目也
+会创建来源页。卡片指纹除标题/正文/metadata 外，还包括 sourceHash、parseId、
+IR hash、chunk version、extractor/prompt/model/output schema 身份。
+卡片只存于 Wiki 派生层，不进入原始知识索引或 Evidence。
+
+六节阅读文字另附独立的完整科研知识视图，固定已发布抽取 job、对应历史 IR、
+table/figure/equation/algorithm 对象与 method components。知识为空、任务失败、
+来源或配置变化均显示实际状态，不把旧对象当作当前结果。
+
+Wiki 章节 owner 为 system/assistant/human，status 为 current/stale。来源重编译
+替换系统章节，保留助手和人工正文及其旧依赖；依据变化使对应章节 stale。
+Revision 不可变，保存继续检查 revision CAS、Basis Digest、项目和有效来源；
+助手不能覆盖人工章节。Wiki 依据还包含 paper knowledge 代次摘要，抽取发布、
+失效或状态变化传播到相关项目；保存与综合后再次核查完整依据。
+回滚新增修订，保留旧依据与 stale 状态。
+
+`research_wiki_read_section` 绑定页面修订，按 offset 分段读取最多 6000 字符；
+一次重新综合最多 3 节 stale 助手章节，只使用当前原文，落库再次检查依据。
+人工章节和科学审核不能由重新综合改写。
+
+科研 topic 与跨论文比较复用现有页面/章节及修订机制。比较保留原值、单位、
+数据集/metric/baseline/split/budget 与显式身份对齐；不可比条件返回原因，
+未综合章节保持草稿，不能自动生成支持结论。
+
+## 章节导航
+
+`research.searchWiki` 返回 pages、命中章节 ID/标题/短摘录、nextOffset 和检索回执。
+空查询分页列举；非空查询使用章节 FTS5 BM25 与语义检索，以 RRF 融合并按页去重。
+中文采用现有汉字位置 token，保留短语顺序。
+
+向量在事务外后台每批 16 节生成，复用现有 embedding 服务及缓存；缓存由
+模型配置 ID/revision、`wiki-section-v1` 和输入 SHA 约束。修订发布事务同步替换
+章节与 FTS；异步检索后再次剔除旧修订。Wiki 向量不进入原始 knowledge embeddings。
+查询向量使用独立 `wiki-query-v1` 缓存。
+
+回执 mode 为 list/bm25/hybrid；degradation 明确区分 config_missing、
+index_pending、embedding_failed。界面和 Agent 都显示实际降级，服务失败
+不会冒充语义检索成功。导航结果保持未审核；事实必须通过原始 Evidence 核查。
+
+## 可选视觉检索与解释
+
+视觉能力需要显式本地模型、已检查环境和真实 table/figure 资产，使用独立视觉
+索引与多向量匹配；它不替代文本索引或原 PDF。图像解释绑定来源字节和模型身份，
+保存架构、趋势、图例及子图等派生描述，保持未审核状态。配置缺失、资产漂移、
+失败或取消必须明确返回；核查仍通过原 PDF/PNG 和当前来源。
+
+## 主张阅读投影
+
+主张及其证据另提供概念阅读投影，分别显示主张声明、当前人工关系审核和来源有效性。
+关联论文优先使用后端来源快照；时间线表示引用文献的最早发表年份。
+共享证据只表示关联，不自动代表科学支持。
+
+投影保存 evidence→claims 邻接索引，仅对选中主张展开邻居，每页最多 50 条；
+命令面板只生成摘要，不物化所有主张对。规模和延迟需按[性能测量方法](research-performance.md)另行验证。
+
+## 版本与验证范围
+
+数据库和阶段输出必须满足当前合同。启动版本校验与旧库离线迁移见
+[数据库存储](database-storage.md)；迁移和启动检查使用隔离数据根，保留来源与历史身份。
+
+离线检查验证检索流程、引用、版本隔离、取消、降级和事务边界；Electron 检查
+验证启动、真实 IPC 及界面行为。真实科研质量、模型延迟和成本需另用匹配运行测量，
+不能由结构检查推导；检查入口见[开发与检查](development.md)，科学评价见[评测流程](../evaluation/README.md)。

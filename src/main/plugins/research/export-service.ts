@@ -1,0 +1,323 @@
+import {assertCurrentExportReviews, captureExportValidation} from './export-validation';
+import {exportValidationPath} from '../../../shared/schemas/research-export-validation';
+import { constants, linkSync } from 'node:fs';
+import { copyFile, mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
+import type { z } from 'zod';
+import { researchExportPrepareSchema, researchExportWriteRequestSchema, type ResearchExportDelivery, type ResearchExportExecution,
+  type ResearchExportFile, type researchExportFileContentSchema, type ResearchExportPrepare, type ResearchExportSources } from '../../../shared/schemas/research-exports';
+import type { RocPluginContext } from '../../kernel/types';
+import { buildExportFiles } from './export-builder';
+import { archiveBuilderProvenance, createExportArchive, exportFileLimit, exportStorage, hashExportArchive, ResearchExportFiles, type ExportToolchain } from './export-files';
+import { exportSourceHash, type ResearchExportSourceService } from './export-sources';
+import { ResearchProcessError } from './process-runner';
+import { ResearchBackgroundJobs, ResearchJobSession } from './research-job-session';
+import { createResearchDirectory, readResearchFile, researchContentHash, researchWorkspace } from './research-files';
+import type { ResearchRepository } from './repository';
+import {captureExportScientificReview, exportScientificReviewPath, serializePublicExportScientificReview} from './export-scientific-review';
+import {RocDomainError} from '../../services/errors';
+import type {ResearchExportInputsRequest} from '../../../shared/schemas/research-exports';
+import type {ResearchExportInputs} from '../../../shared/schemas/research-export-publication';
+import {collectExportInputs, validateExportPublication} from './export-publication';
+import {projectResearchPublicValue, serializeResearchPublicProjection} from './export-public-projection';
+import {buildExportCrate} from './export-crate';
+import {researchCrateMetadataPath, researchCrateProfilePath} from '../../../shared/schemas/research-ro-crate';
+import {researchCrateProfileHtml, serializeResearchCrate} from './export-ro-crate';
+import {researchExportManifestSchema, verifyExportPublicBundle} from './export-public-bundle';
+import {zenodoInputsRequestSchema, zenodoInputsSchema, type ZenodoInputs, type ZenodoInputsRequest, type ZenodoPrepared} from '../../../shared/schemas/research-zenodo';
+import {hashZenodoFile} from './zenodo-file';
+import {uploadZenodoFile} from './zenodo-upload';
+
+export class ResearchExportService {
+  private readonly session = new ResearchJobSession('research_export_closed');
+  private readonly preparing = new ResearchBackgroundJobs<{ projectId: string; scope: string }>(this.session, (exportId, error) => {
+    this.logger.error('Research export could not persist its final state.', { exportId, error: exportError(error) });
+  });
+
+  constructor(private readonly repository: ResearchRepository, private readonly sources: Pick<ResearchExportSourceService, 'capture' | 'assertCurrent' | 'inputs'>,
+    private readonly tools: ExportToolchain, private readonly rootPath: string | null, private readonly logger: RocPluginContext['logger'],
+    private readonly archive: typeof createExportArchive = createExportArchive) {}
+
+  recover(): void { this.repository.exports.recover(); }
+
+  async inputs(request: ResearchExportInputsRequest): Promise<ResearchExportInputs> {
+    return this.session.run(signal => this.sources.inputs(request, signal));
+  }
+
+  async prepare(input: ResearchExportPrepare): Promise<ResearchExportExecution> {
+    const request = researchExportPrepareSchema.parse(input);
+    return await this.session.run(async (signal) => {
+      const existing = this.repository.exports.findRequest(request);
+      if (existing !== null) return existing;
+      const storage = await exportStorage(this.rootPath);
+      this.requireActive(signal);
+      const sources = await this.sources.capture(request, signal);
+      validateExportPublication(request.publicationReview, collectExportInputs(this.repository, sources));
+      this.requireActive(signal);
+      const record = this.repository.exports.create(request, storage);
+      try {
+        this.repository.tasks.linkOwned({ kind: 'export', executionId: record.id, projectId: record.projectId,
+          ownerRunId: record.ownerRunId, goal: request.title, snapshot: record.request });
+      } catch (error) {
+        this.repository.exports.finish(record.projectId, record.id, {
+          ...record, status: 'failed', error: 'research_task_association_failed'
+        });
+        throw error;
+      }
+      if (record.status === 'preparing' && !this.preparing.has(record.id)) this.schedule(record);
+      return record;
+    });
+  }
+
+  abort(id: string): void { this.preparing.abort(id); }
+
+  async cancel(projectId: string, id: string): Promise<ResearchExportExecution> {
+    this.session.requireOpen();
+    const record = this.repository.exports.get(projectId, id);
+    if (record.status !== 'preparing') return record;
+    if (this.preparing.get(id) !== undefined) { this.preparing.abort(id); await this.preparing.wait(id); return this.repository.exports.get(projectId, id); }
+    return this.repository.exports.finish(projectId, id, { ...record, status: 'cancelled', error: 'research_export_cancelled' });
+  }
+
+  releaseProject(projectId: string): void {
+    if (this.session.isClosed) return;
+    this.preparing.abortMatching((_id, task) => task.projectId === projectId);
+  }
+
+  projectChanged(projectId: string): void {
+    if (this.session.isClosed) return;
+    const scope = this.projectScope(projectId);
+    this.preparing.abortMatching((_id, task) => task.projectId === projectId && task.scope !== scope);
+  }
+
+  async publish(projectId: string, id: string, replacesExportId: string | null): Promise<ResearchExportExecution> {
+    return await this.session.run(async (signal) => {
+      const record = this.repository.exports.get(projectId, id);
+      await this.verify(record, signal);
+      this.requireActive(signal);
+      if (record.sources === null) throw new Error('research_export_sources_required');
+      this.sources.assertCurrent(record.request, record.sources);
+      return this.repository.exports.publish(projectId, id, replacesExportId);
+    });
+  }
+
+  async verifyStage(projectId: string): Promise<void> {
+    await this.session.run(async (signal) => {
+      const stage = this.repository.getWorkflow(projectId).stages.find((entry) => entry.stage === 'export');
+      if (stage === undefined) throw new Error('research_stage_not_found');
+      const records = stage.artifactIds.map((id) => this.repository.exports.forArtifact(this.repository.getArtifact(id)));
+      for (const record of records) await this.verify(record, signal);
+      this.requireActive(signal);
+      for (const record of records) {
+        if (record.sources === null) throw new Error('research_export_sources_required');
+        this.sources.assertCurrent(record.request, record.sources);
+        assertCurrentExportReviews(this.repository, record);
+      }
+    });
+  }
+
+  async source(projectId: string, id: string, sha256: string): Promise<Buffer> {
+    const record = this.repository.exports.get(projectId, id);
+    if (record.status !== 'ready') throw new Error('research_export_ready_required');
+    const { file, bytes } = await this.file(record, 'paper.pdf');
+    if (file.sha256 !== sha256) throw new Error('research_export_snapshot_changed');
+    return bytes;
+  }
+
+  async inspect(projectId: string, id: string): Promise<ResearchExportExecution> {
+    return await this.session.run(async (signal) => {
+      const record = this.repository.exports.get(projectId, id);
+      await this.verifyContent(record, signal);
+      return record;
+    });
+  }
+
+  async publicationInputs(input: ZenodoInputsRequest, cancellation?: AbortSignal): Promise<ZenodoInputs> {
+    const request = zenodoInputsRequestSchema.parse(input);
+    return this.session.run(async sessionSignal => {
+      const signal = cancellation === undefined ? sessionSignal : AbortSignal.any([sessionSignal, cancellation]);
+      const record = this.requireApproved(request.projectId, request.exportId);
+      await this.verify(record, signal);
+      if (record.sources === null || record.sourceHash === null || record.artifactId === null) throw new Error('research_export_sources_required');
+      const root = this.repository.exports.root(record.projectId, record.id);
+      const files = [];
+      for (const selection of request.files) {
+        const file = selection.area === 'archive' ? record.archive :
+          record.files.find(value => value.path === selection.path);
+        if (file === null || file === undefined || file.path !== selection.path) throw new Error('research_zenodo_file_not_found');
+        const md5 = await hashZenodoFile(selection.area === 'archive' ? root : join(root, 'bundle'), file.path, file, signal);
+        files.push({...selection, sha256: file.sha256, size: file.size, md5});
+      }
+      if (files.reduce((sum, file) => sum + file.size, 0) > 512 * 1024 * 1024) throw new Error('research_zenodo_upload_limit');
+      this.requireActive(signal);
+      this.sources.assertCurrent(record.request, record.sources);
+      assertCurrentExportReviews(this.repository, record);
+      const exportHash = researchContentHash(JSON.stringify(record));
+      if (researchContentHash(JSON.stringify(this.requireApproved(record.projectId, record.id))) !== exportHash) throw new Error('research_zenodo_inputs_changed');
+      const value = zenodoInputsSchema.omit({contentHash: true}).parse({
+        projectId: record.projectId, exportId: record.id, artifactId: record.artifactId,
+        exportHash, sourceHash: record.sourceHash, files});
+      return {...value, contentHash: researchContentHash(JSON.stringify(value))};
+    });
+  }
+
+  async uploadPublicationFile(preparation: ZenodoPrepared, name: string, signal: AbortSignal,
+    send: (stream: ReadableStream<Uint8Array>, size: number) => Promise<unknown>): Promise<unknown> {
+    const file = preparation.inputs.files.find(value => value.name === name);
+    if (file === undefined) throw new Error('research_zenodo_file_not_found');
+    const verifyCurrent = async () => {
+      const inputs = await this.publicationInputs({projectId: preparation.projectId,
+        exportId: preparation.request.exportId, files: preparation.request.files}, signal);
+      if (inputs.contentHash !== preparation.inputs.contentHash) throw new Error('research_zenodo_inputs_changed');
+    };
+    await verifyCurrent();
+    const root = this.repository.exports.root(preparation.projectId, preparation.request.exportId);
+    return uploadZenodoFile(file.area === 'archive' ? root : join(root, 'bundle'), file, signal, verifyCurrent, send);
+  }
+
+  async read(projectId: string, id: string, path: string): Promise<z.infer<typeof researchExportFileContentSchema>> {
+    const record = this.repository.exports.get(projectId, id);
+    const expected = record.files.find((file) => file.path === path);
+    if (expected !== undefined && expected.size > 4 * 1024 * 1024) throw new Error('research_export_preview_limit');
+    const { file, bytes } = await this.file(record, path);
+    try { return { file, content: new TextDecoder('utf-8', { fatal: true }).decode(bytes), encoding: 'utf8' }; }
+    catch { return { file, content: bytes.toString('base64'), encoding: 'base64' }; }
+  }
+
+  async write(input: z.infer<typeof researchExportWriteRequestSchema>): Promise<ResearchExportDelivery> {
+    const request = researchExportWriteRequestSchema.parse(input);
+    return await this.session.run(async (signal) => {
+      const record = this.requireApproved(request.projectId, request.exportId);
+      await this.verify(record, signal);
+      if (record.archive === null || record.sources === null) throw new Error('research_export_sources_required');
+      const parent = await researchWorkspace(dirname(request.destinationPath));
+      const destinationPath = join(parent, basename(request.destinationPath));
+      const temporary = await mkdtemp(join(parent, '.roc-export-'));
+      try {
+        const staged = join(temporary, 'export.zip');
+        await copyFile(join(this.repository.exports.root(record.projectId, record.id), record.archive.path), staged, constants.COPYFILE_EXCL);
+        await hashExportArchive(temporary, { ...record.archive, path: 'export.zip' }, signal);
+        this.requireActive(signal);
+        this.sources.assertCurrent(record.request, record.sources);
+        assertCurrentExportReviews(this.repository, record);
+        this.requireApproved(record.projectId, record.id);
+        // 最后只执行同一文件系统上的排他链接，已有文件不会被替换；检查与提交之间不让出事件循环。
+        try { linkSync(staged, destinationPath); }
+        catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new Error('research_export_destination_exists');
+          throw error;
+        }
+        return { projectId: record.projectId, exportId: record.id, destinationPath, sha256: record.archive.sha256, size: record.archive.size, createdAt: new Date().toISOString() };
+      } finally { await rm(temporary, { recursive: true, force: true }); }
+    });
+  }
+
+  async shutdown(): Promise<void> {
+    await this.session.shutdown();
+  }
+
+  private schedule(record: ResearchExportExecution): void {
+    this.preparing.start(record.id, { projectId: record.projectId, scope: this.projectScope(record.projectId) }, (signal) => this.execute(record, signal));
+  }
+
+  private async execute(record: ResearchExportExecution, signal: AbortSignal): Promise<void> {
+    const root = this.repository.exports.root(record.projectId, record.id);
+    let scratch: string | null = null;
+    let writer: ResearchExportFiles | null = null;
+    let sources: ResearchExportSources | null = null;
+    let sourceHash: string | null = null;
+    let toolchainHash: string | null = null;
+    let archive: ResearchExportFile | null = null;
+    try {
+      this.requireActive(signal); this.repository.exports.requireCurrent(record.request);
+      await mkdir(root, { mode: 0o700 });
+      writer = new ResearchExportFiles(await createResearchDirectory(root, 'bundle'));
+      scratch = await createResearchDirectory(root, 'scratch');
+      sources = await this.sources.capture(record.request, signal);
+      validateExportPublication(record.request.publicationReview, collectExportInputs(this.repository, sources));
+      sourceHash = exportSourceHash(sources);
+      await writer.write(exportScientificReviewPath, serializePublicExportScientificReview(captureExportScientificReview(this.repository, sources)));
+      toolchainHash = await this.tools.identity();
+      const toolchain = await this.tools.status();
+      if (!toolchain.available || toolchain.versions === null) throw new Error('research_export_toolchain_unavailable');
+      await buildExportFiles({ record: {...record, sourceHash}, sources, writer, repository: this.repository, tools: this.tools, scratch, signal });
+      await writer.write(exportValidationPath, serializeResearchPublicProjection(captureExportValidation(this.repository, sources, record.request, writer.list())));
+      await writer.write(researchCrateProfilePath, researchCrateProfileHtml);
+      await writer.write(researchCrateMetadataPath, serializeResearchCrate(buildExportCrate(this.repository, record, sources, writer.list())));
+      await writer.write('manifest.json', `${JSON.stringify(researchExportManifestSchema.parse({
+        version: 4, exportId: record.id, request: projectResearchPublicValue(record.request), sourceHash, toolchainHash,
+        toolchainVersions: toolchain.versions, archiveBuilder: archiveBuilderProvenance, files: writer.list()
+      }))}\n`);
+      await verifyExportPublicBundle(writer.root, {...record, sources, sourceHash, toolchainHash, files: writer.list()}, signal);
+      archive = await this.archive({ root, bundle: writer, scratch, tools: this.tools, signal });
+      const current = await this.sources.capture(record.request, signal);
+      if (exportSourceHash(current) !== sourceHash || await this.tools.identity() !== toolchainHash) throw new Error('research_export_sources_changed');
+      this.requireActive(signal); this.sources.assertCurrent(record.request, sources);
+      assertCurrentExportReviews(this.repository, {...record, sources, sourceHash, files: writer.list()});
+      this.repository.exports.finish(record.projectId, record.id, { status: 'ready', sources, sourceHash, toolchainHash, files: writer.list(), archive, error: null });
+    } catch (error) {
+      if (writer !== null) {
+        const diagnostics = serializeResearchPublicProjection(error instanceof ResearchProcessError ?
+          {code: error.code, stdout: error.stdout, stderr: error.stderr} : {code: exportError(error)});
+        try { await writer.write('logs/export-error.txt', diagnostics); }
+        catch (failure) { this.logger.warn('Research export diagnostic file could not be saved.', { exportId: record.id, error: exportError(failure) }); }
+      }
+      this.repository.exports.finish(record.projectId, record.id, { status: signal.aborted ? this.session.isClosed ? 'interrupted' : 'cancelled' : 'failed',
+        sources, sourceHash, toolchainHash, files: writer === null ? [] : writer.list(), archive,
+        error: signal.aborted ? this.session.isClosed ? 'research_export_interrupted' : 'research_export_cancelled' : exportError(error) });
+    } finally { if (scratch !== null) await rm(scratch, { recursive: true, force: true }); }
+  }
+
+  private async verify(record: ResearchExportExecution, signal: AbortSignal): Promise<void> {
+    if (record.status !== 'ready' || record.sources === null || record.sourceHash === null || record.archive === null) throw new Error('research_export_ready_required');
+    this.repository.exports.requireCurrent(record.request);
+    const current = await this.sources.capture(record.request, signal);
+    validateExportPublication(record.request.publicationReview, collectExportInputs(this.repository, current));
+    if (exportSourceHash(current) !== record.sourceHash || exportSourceHash(record.sources) !== record.sourceHash) throw new Error('research_export_sources_changed');
+    assertCurrentExportReviews(this.repository, record);
+    await this.verifyContent(record, signal);
+  }
+
+  private async verifyContent(record: ResearchExportExecution, signal: AbortSignal): Promise<void> {
+    if (record.status !== 'ready' || record.sources === null || record.sourceHash === null || record.archive === null) throw new Error('research_export_ready_required');
+    if (exportSourceHash(record.sources) !== record.sourceHash) throw new Error('research_export_sources_changed');
+    for (const file of record.files) { this.requireActive(signal); await this.file(record, file.path); }
+    await verifyExportPublicBundle(join(this.repository.exports.root(record.projectId, record.id), 'bundle'), record, signal);
+    await hashExportArchive(this.repository.exports.root(record.projectId, record.id), record.archive, signal);
+    this.requireActive(signal);
+  }
+
+  private async file(record: ResearchExportExecution, path: string): Promise<{ file: ResearchExportFile; bytes: Buffer }> {
+    const file = record.files.find((file) => file.path === path);
+    if (file === undefined) throw new Error('research_export_file_not_found');
+    const bytes = await readResearchFile(join(this.repository.exports.root(record.projectId, record.id), 'bundle'), file.path, exportFileLimit);
+    if (bytes.length !== file.size || researchContentHash(bytes) !== file.sha256) throw new Error('research_export_snapshot_changed');
+    return { file, bytes };
+  }
+
+  private requireApproved(projectId: string, id: string): ResearchExportExecution {
+    const record = this.repository.exports.get(projectId, id);
+    if (record.status !== 'ready' || record.approval !== 'approved') throw new Error('research_export_approval_required');
+    this.repository.exports.requireCurrent(record.request);
+    return record;
+  }
+
+
+  private projectScope(projectId: string): string {
+    const project = this.repository.getProject(projectId);
+    return JSON.stringify({ title: project.title, description: project.description, workspacePath: project.workspacePath,
+      stage: project.currentStage, status: project.status, review: this.repository.reviews.get(projectId) });
+  }
+
+  private requireActive(signal: AbortSignal): void { this.session.requireOpen(); signal.throwIfAborted(); }
+}
+
+function exportError(error: unknown): string {
+  if (error instanceof RocDomainError) return error.code;
+  if (error instanceof ResearchProcessError) return error.code;
+  // 与 `stage-runtime.ts` 的 `executionErrorCode()` 同一形状：本域的错误信息带 `<码>:<定位>`
+  // （例如 `research_export_figure_claim_in_body:claim_…`），用只接受裸码的正则会把定位丢掉，
+  // 用户就只剩下一句「导出失败」。
+  if (error instanceof Error && /^research_[a-z0-9_]+(?::[a-z0-9_.-]+)*$/iu.test(error.message)) return error.message;
+  return 'research_export_failed';
+}

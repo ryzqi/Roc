@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "id": "scidqa",
+  "dataset": "yale-nlp/SciDQA",
+  "revision": "2e4bfd9cdc4eb3c92a3f5e65b190175beef9b756",
+  "split": "test",
+  "license": "ODC-By-1.0",
+  "expectedRows": 2937,
+  "expectedPapers": 576,
+  "expectedVersions": {
+    "Initial": 2630,
+    "Revised": 307
+  },
+  "annotationProvenance": {
+    "kind": "published-human-expert-revised-qa",
+    "publication": "https://aclanthology.org/2024.emnlp-main.1163/",
+    "sections": ["2.3", "3", "A.1"],
+    "initialExtraction": "PaLM extraction from public reviewer-author discussions",
+    "humanRevision": "Expert relevance filtering, question/answer decontextualization, source-document version annotation and reference editing",
+    "agreementScope": "200 shared relevance-filtering examples; 85 percent agreement before discussion; remaining examples single-annotator",
+    "perRowReviewerIds": null,
+    "completeHumanEvidenceLocations": false
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "url": "https://huggingface.co/datasets/yale-nlp/SciDQA/resolve/2e4bfd9cdc4eb3c92a3f5e65b190175beef9b756/README.md",
+      "bytes": 5243,
+      "sha256": "59d63ebc136a63a88d4c5d9ae7a22efa1e4f9972ed91662f0a2bec92d7bd691e"
+    },
+    {
+      "path": "test.jsonl",
+      "url": "https://huggingface.co/datasets/yale-nlp/SciDQA/resolve/2e4bfd9cdc4eb3c92a3f5e65b190175beef9b756/test.jsonl",
+      "bytes": 2383174,
+      "sha256": "3673729613fd15ca493206e92fe823f635d817a2af4abf8756d83e138dfb14a1"
+    },
+    {
+      "path": "publication.pdf",
+      "url": "https://aclanthology.org/2024.emnlp-main.1163.pdf",
+      "bytes": 722370,
+      "sha256": "e098264a70fdb6a1e9d05daade8015141ed54018eeb196abc1478bfe344b5a20"
+    }
+  ],
+  "limitations": [
+    "Preserve published expert-revised questions and answers; initial PaLM extraction is declared.",
+    "Public JSON has no complete evidence spans, PDF hashes, table/figure/equation targets or per-row scientific task categories.",
+    "OpenReview paper and discussion IDs are source identities, not annotator identities.",
+    "Initial/Revised labels must not be replaced by whichever PDF is currently available.",
+    "Publication-wide modality percentages cannot be assigned to individual rows.",
+    "No upstream model responses or executable pickle files are acquired."
+  ]
+}

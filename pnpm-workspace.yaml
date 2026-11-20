@@ -1,0 +1,58 @@
+strictPeerDependencies: false
+
+overrides:
+  # electron-builder's file filters use the affected minimatch 9 and 10 releases.
+  'minimatch@>=7 <11.0.1': 11.0.9
+  # 仅构建 macOS，移除非目标平台打包器。
+  'app-builder-lib>electron-builder-squirrel-windows': '-'
+
+ignoredOptionalDependencies:
+  - '@esbuild/win32-*'
+  - '@esbuild/linux-*'
+  - '@esbuild/android-*'
+  - '@esbuild/freebsd-*'
+  - '@esbuild/aix-*'
+  - '@esbuild/netbsd-*'
+  - '@esbuild/openbsd-*'
+  - '@esbuild/sunos-*'
+  - '@esbuild/openharmony-*'
+  - '@rolldown/binding-win32-*'
+  - '@rolldown/binding-linux-*'
+  - '@rolldown/binding-android-*'
+  - '@rolldown/binding-openharmony-*'
+  - '@rolldown/binding-freebsd-*'
+  - '@typescript/typescript-win32-*'
+  - '@typescript/typescript-linux-*'
+  - '@typescript/typescript-aix-*'
+  - '@typescript/typescript-freebsd-*'
+  - '@typescript/typescript-netbsd-*'
+  - '@typescript/typescript-openbsd-*'
+  - '@typescript/typescript-sunos-*'
+  - '@typescript/typescript-android-*'
+  - 'lightningcss-win32-*'
+  - 'lightningcss-linux-*'
+  - 'lightningcss-android-*'
+  - 'lightningcss-freebsd-*'
+  - 'sqlite-vec-linux-*'
+  - 'sqlite-vec-windows-*'
+  - '@napi-rs/canvas-win32-*'
+  - '@napi-rs/canvas-linux-*'
+  - '@napi-rs/canvas-android-*'
+
+allowBuilds:
+  better-sqlite3: false
+  esbuild: true
+  node-pty: true
+  onnxruntime-node: false
+
+# pnpm 11+ 只从 workspace/config.yaml 读非鉴权设置。仓库 store 仍放 .runtime。
+storeDir: .runtime/pnpm-store
+cacheDir: .runtime/pnpm-cache
+virtualStoreDir: node_modules/.pnpm
+minimumReleaseAgeExclude:
+  - electron@45.3.4
+  - lucide-react@1.75.0
+  - '@anthropic-ai/sdk@1.10.0'
+  - openai@7.59.0
+  - standardwebhooks@1.3.0
+  - electron-to-chromium@1.5.490

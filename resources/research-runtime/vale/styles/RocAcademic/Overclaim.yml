@@ -1,0 +1,17 @@
+# 声称「已证明」。error 级：这是证据口径被破坏，不是说错了语气。
+#
+# 实证研究几乎不产生 `proves`；`export/SKILL.md` 也要求「准确表达限制、不确定性和反证」。
+# 「首次 / 填补空白」一类的新颖性声称在 OverclaimNovelty 里，级别是 warning —— 它们的
+# 问题往往是检索不足，而不是否定证据，混在同一档会让闸门把可讨论的表述当成错误。
+extends: existence
+message: "“%s” 声称已经证实：改成 supports / is consistent with，并写出限制。"
+level: error
+ignorecase: true
+nonword: true
+tokens:
+  - (?:prove|proves|proved|proven) (?:that|the)
+  - definitively (?:shows|demonstrates|establishes)
+  - undoubtedly
+  - unquestionably
+  - (?:clearly|conclusively|irrefutably) (?:demonstrates|shows)
+  - (?:clearly|conclusively|irrefutably) (?:proves|establishes)

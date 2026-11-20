@@ -1,0 +1,466 @@
+import type {ResearchWikiSnapshot} from '../../shared/schemas/research-wiki';
+import { useMemo, useState } from 'react';
+import { BookMarked, Bot, CalendarClock, Check, ClipboardCopy, Layers, Link2, Search, X } from 'lucide-react';
+import type { ResearchClaim, ResearchEvidence, ResearchLibraryItem } from '../../shared/types';
+import { useCopyFeedback } from '../shared/hooks/use-copy-feedback';
+import { EmptyState } from '../shell/EmptyState';
+import type {RocClient} from '../shared/roc-client';
+import {LazyBoundary, retryableLazy} from '../shell/LazyBoundary';
+import { deriveWiki, wikiNeighbors, WIKI_PAGE_SIZE, type WikiConceptPage, type WikiEvidenceCard } from './derive-wiki';
+
+const ArtifactDocumentSource = retryableLazy(async () => ({
+  default: (await import('../artifacts/ArtifactDocumentSource')).ArtifactDocumentSource
+}));
+
+/** Live claim/evidence projection beside the separately persisted Wiki drafts. */
+
+export type WikiViewProps = {
+  client?: RocClient;
+  projectId?: string | null;
+  snapshot?: ResearchWikiSnapshot;
+  onRefresh?: () => void;
+  claims: readonly ResearchClaim[];
+  evidence: readonly ResearchEvidence[];
+  libraryItems: readonly ResearchLibraryItem[];
+  /** Jump to the graph focused on this claim. */
+  onOpenClaim: (claimId: string) => void;
+  /** Jump to the reader for a library item behind this concept. */
+  onOpenPaper?: (libraryItemId: string) => void;
+  /** Hand the concept to the research assistant. */
+  onAskAssistant?: (prompt: string) => void;
+};
+
+const STATUS_LABELS: Readonly<Record<ResearchClaim['status'], string>> = {
+  supported: '声明有支撑',
+  hypothesis: '假设',
+  pending: '待定'
+};
+
+const REVIEW_LABELS: Record<WikiConceptPage['review'], string> = {
+  unreviewed: '待人工审核', confirmed: '人工确认支持', qualified: '人工确认有条件支持',
+  contradicted: '存在已确认反对', stale: '来源或审核已失效'
+};
+const RELATION_LABELS = {supports: '支持', contradicts: '反对', qualifies: '条件支持', depends_on: '依赖', supersedes: '替代', historical: '历史关联'};
+const DECISION_LABELS = {proposed: '待审核', confirmed: '已人工确认', rejected: '已拒绝', invalidated: '已失效', historical: '未审核的历史关联'};
+const reviewClass = (review: WikiConceptPage['review']): string =>
+  review === 'confirmed' || review === 'qualified' ? 'text-[var(--st-ok)]' : 'text-[var(--st-warn)]';
+
+export function WikiView({
+  client,
+  projectId,
+  snapshot,
+  onRefresh,
+  claims,
+  evidence,
+  libraryItems,
+  onOpenClaim,
+  onOpenPaper,
+  onAskAssistant
+}: WikiViewProps): React.JSX.Element {
+  const projection = useMemo(
+    () => deriveWiki({ claims, evidence, libraryItems, snapshot }),
+    [claims, evidence, libraryItems, snapshot]
+  );
+  const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const copy = useCopyFeedback();
+  const [offsets, setOffsets] = useState({concepts: 0, neighbors: 0, orphans: 0, evidence: 0, papers: 0, years: 0});
+
+  const trimmed = query.trim().toLowerCase();
+  const visiblePages = useMemo(() => projection.pages.filter((page) => {
+    if (trimmed.length === 0) {
+      return true;
+    }
+    const haystack = [
+      page.title,
+      page.content,
+      ...page.evidence.flatMap((card) => [card.title, card.excerpt, card.locator]),
+      ...page.papers.map((paper) => paper.title)
+    ]
+      .join('\n')
+      .toLowerCase();
+    return haystack.includes(trimmed);
+  }), [projection.pages, trimmed]);
+
+  // Selection falls back to the first *visible* page, so filtering cannot leave the
+  // detail pane showing a concept the list no longer offers.
+  const selected =
+    visiblePages.find((page) => page.claimId === selectedClaimId) ?? visiblePages[Math.min(offsets.concepts, Math.max(0, visiblePages.length - 1))] ?? null;
+
+  const neighbors = useMemo(() => {
+    const result = wikiNeighbors(projection, selected?.claimId ?? '', offsets.neighbors);
+    return result.links.length === 0 && result.total > 0 ?
+      wikiNeighbors(projection, selected?.claimId ?? '', pageOffset(offsets.neighbors, result.total)) : result;
+  }, [projection, selected?.claimId, offsets.neighbors]);
+  const slice = <T,>(items: T[], area: keyof typeof offsets): T[] => {
+    const start = pageOffset(offsets[area], items.length);
+    return items.slice(start, start + WIKI_PAGE_SIZE);
+  };
+  const pager = (area: keyof typeof offsets, total: number): React.JSX.Element =>
+    <WikiPager area={area} offset={pageOffset(offsets[area], total)} total={total}
+      onChange={offset => setOffsets(current => ({...current, [area]: offset}))} />;
+  const selectConcept = (claimId: string, follow = false): void => {
+    setSelectedClaimId(claimId);
+    setOffsets(current => ({...current, neighbors: 0, evidence: 0, papers: 0,
+      concepts: follow ? Math.floor(Math.max(0, projection.pages.findIndex(page => page.claimId === claimId)) / WIKI_PAGE_SIZE) * WIKI_PAGE_SIZE : current.concepts}));
+    if (follow) setQuery('');
+  };
+
+  if (projection.pages.length === 0 && projection.orphanEvidence.length === 0) {
+    return (
+      <EmptyState
+        icon={BookMarked}
+        title="尚无概念页"
+        testId="wiki-empty"
+      />
+    );
+  }
+
+  const pageAsMarkdown = (page: (typeof projection.pages)[number]): string => {
+    const lines = [`# ${page.title}`, '', page.content, ''];
+    if (page.evidence.length > 0) {
+      lines.push('## 证据', '');
+      for (const card of page.evidence) {
+        lines.push(`- ${card.title} — ${card.locator}（${card.referenceStatus === 'superseded' ? '来源已失效' : card.referenceStatus === 'recorded' ? '已记录来源' : '来源状态未加载'}）`, `  > ${card.excerpt}`);
+        for (const relation of card.relations) {
+          lines.push(`  ${RELATION_LABELS[relation.kind]}：${DECISION_LABELS[relation.status]}${relation.condition ? `；条件：${relation.condition}` : ''}`);
+        }
+      }
+      lines.push('');
+    }
+    if (page.papers.length > 0) {
+      lines.push('## 相关文献', '');
+      for (const paper of page.papers) {
+        lines.push(`- ${paper.title}${paper.year === null ? '' : ` (${paper.year})`}`);
+      }
+      lines.push('');
+    }
+    lines.push(
+      `声明状态：${STATUS_LABELS[page.status]}`,
+      `审核状态：${REVIEW_LABELS[page.review]}`,
+      '',
+      '来源：当前文献、主张与关联证据'
+    );
+    return lines.join('\n');
+  };
+
+  return (
+    <div className="flex h-full min-h-0 flex-col" data-testid="wiki-view">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b-[0.5px] border-line px-3 py-2 text-[length:var(--font-micro-size)]">
+        <span className="text-muted" data-testid="wiki-counts">
+          {projection.pages.length} 个概念，{projection.timeline.length} 个年份
+        </span>
+        {onRefresh ? <button type="button" onClick={onRefresh} className="rounded-control border-[0.5px] border-line px-2 py-1" data-testid="wiki-refresh">刷新审核状态</button> : null}
+        <div className="ml-auto flex h-[var(--control-height-compact)] min-w-[150px] items-center gap-1.5 rounded-control border-[0.5px] border-line bg-surface px-2 sm:max-w-[240px]">
+          <Search size={11} aria-hidden="true" className="shrink-0 text-subtle" />
+          <input
+            value={query}
+            onChange={(event) => { setQuery(event.target.value); setOffsets(current => ({...current, concepts: 0, neighbors: 0})); }}
+            placeholder="搜索概念、证据、文献…"
+            aria-label="搜索概念页"
+            data-testid="wiki-search"
+            className="min-w-0 flex-1 bg-transparent text-ink text-[length:var(--font-micro-size)] placeholder:text-subtle"
+          />
+          {query.length === 0 ? null : (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              aria-label="清除搜索"
+              data-testid="wiki-search-clear"
+              className="shrink-0 rounded-control text-subtle hover:text-ink"
+            >
+              <X size={11} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="flex min-h-0 flex-1">
+        <aside
+          className="flex w-56 shrink-0 flex-col gap-3 overflow-y-auto border-r-[0.5px] border-line p-2 md:w-64"
+          aria-label="概念列表"
+        >
+          <ul className="flex flex-col gap-0.5" data-testid="wiki-concept-list">
+            {visiblePages.length === 0 ? (
+              <li className="px-2 py-3 text-muted text-[length:var(--font-meta-size)]" data-testid="wiki-no-match">
+                没有匹配的概念。
+              </li>
+            ) : null}
+            {slice(visiblePages, 'concepts').map((page) => {
+              const active = selected !== null && page.claimId === selected.claimId;
+              return (
+                <li key={page.claimId}>
+                  <button
+                    type="button"
+                    onClick={() => selectConcept(page.claimId)}
+                    aria-current={active ? 'true' : undefined}
+                    data-testid={`wiki-concept-${page.claimId}`}
+                    className={`flex w-full flex-col gap-0.5 rounded-card border-[0.5px] px-2 py-1.5 text-left transition-colors duration-[var(--duration-fast)] ${
+                      active
+                        ? 'border-line-strong bg-[var(--surface-card-hover)]'
+                        : 'border-transparent hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]'
+                    }`}
+                  >
+                    <span className="w-full truncate text-ink text-[length:var(--font-meta-size)]">{page.title}</span>
+                    <span className="flex items-center gap-1.5 text-[length:var(--font-micro-size)]">
+                      <span className={reviewClass(page.review)}>{REVIEW_LABELS[page.review]}</span>
+                      <span className="text-subtle">{page.evidence.length} 条证据</span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+
+          {pager('concepts', visiblePages.length)}
+
+          {neighbors.total === 0 ? null : (
+            <section>
+              <h3 className="mb-1 flex items-center gap-1.5 text-muted text-[length:var(--font-micro-size)]">
+                <Link2 size={11} aria-hidden="true" />
+                当前概念的共现（{neighbors.total}）
+              </h3>
+              <ul className="flex flex-col gap-1" data-testid="wiki-backlinks">
+                {neighbors.links.map((link) => (
+                  <li key={`${link.fromClaimId}:${link.toClaimId}`} className="text-[length:var(--font-micro-size)]">
+                    <button
+                      type="button"
+                      onClick={() => selectConcept(link.fromClaimId, true)}
+                      className="max-w-full truncate rounded-control px-1 text-left text-ink hover:bg-[var(--overlay-hover)]"
+                    >
+                      {conceptLabelFor(projection, link.fromClaimId)}
+                    </button>
+                    <span className="mx-0.5 text-subtle">↔</span>
+                    <button
+                      type="button"
+                      onClick={() => selectConcept(link.toClaimId, true)}
+                      className="max-w-full truncate rounded-control px-1 text-left text-ink hover:bg-[var(--overlay-hover)]"
+                    >
+                      {conceptLabelFor(projection, link.toClaimId)}
+                    </button>
+                    <span className="ml-1 text-subtle">共享 {link.sharedEvidenceIds.length} 条证据</span>
+                  </li>
+                ))}
+              </ul>
+              {pager('neighbors', neighbors.total)}
+            </section>
+          )}
+
+          {projection.timeline.length === 0 ? null : (
+            <section>
+              <h3 className="mb-1 flex items-center gap-1.5 text-muted text-[length:var(--font-micro-size)]">
+                <CalendarClock size={11} aria-hidden="true" />
+                引用文献年份
+              </h3>
+              <ol className="flex flex-wrap items-center gap-1.5" data-testid="wiki-timeline">
+                {slice(projection.timeline, 'years').map((entry) => (
+                  <li key={entry.year}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const first = entry.claimIds[0];
+                        if (first !== undefined) {
+                          selectConcept(first, true);
+                        }
+                      }}
+                      data-testid={`wiki-timeline-${entry.year}`}
+                      title="按主张引用文献的最早发表年份归组"
+                      className="rounded-control border-[0.5px] border-line px-2 py-1 text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
+                    >
+                      <span className="font-mono text-ink">{entry.year}</span>{' '}
+                      <span className="text-muted">{entry.claimIds.length} 条主张</span>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+              {pager('years', projection.timeline.length)}
+            </section>
+          )}
+
+          {projection.orphanEvidence.length === 0 ? null : (
+            <section>
+              <h3 className="mb-1 text-muted text-[length:var(--font-micro-size)]">
+                未归类证据（{projection.orphanEvidence.length}）
+              </h3>
+              <ul className="flex flex-col gap-1" data-testid="wiki-orphan-evidence">
+                {slice(projection.orphanEvidence, 'orphans').map((card) => (
+                  <li key={card.id} className="truncate text-[length:var(--font-micro-size)]">
+                    <span className="text-ink">{card.title}</span>
+                    <span className="ml-1.5 font-mono text-subtle">{card.locator}</span>
+                  </li>
+                ))}
+              </ul>
+              {pager('orphans', projection.orphanEvidence.length)}
+            </section>
+          )}
+        </aside>
+
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto break-words p-3" data-testid="wiki-body">
+          {selected === null ? (
+            <EmptyState
+              icon={Layers}
+              title="没有可显示的概念"
+              testId="wiki-detail-empty"
+            />
+          ) : (
+            <article
+              key={selected.claimId}
+              className="rounded-card border-[0.5px] border-line bg-surface px-3 py-2.5"
+              data-testid={`wiki-page-${selected.claimId}`}
+            >
+              <header className="flex flex-wrap items-start gap-2">
+                <h4 className="min-w-0 flex-1 text-ink" data-testid={`wiki-page-title-${selected.claimId}`}>
+                  {selected.title}
+                </h4>
+                <span className={`shrink-0 text-[length:var(--font-micro-size)] ${reviewClass(selected.review)}`}>
+                  {REVIEW_LABELS[selected.review]}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => copy.copy(pageAsMarkdown(selected))}
+                  title="复制这一页为 Markdown"
+                  data-testid="wiki-copy-markdown"
+                  className="flex h-[var(--control-height-compact)] shrink-0 items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
+                >
+                  {copy.copied ? <Check size={11} aria-hidden="true" /> : <ClipboardCopy size={11} aria-hidden="true" />}
+                  {copy.copied ? '已复制' : '复制'}
+                </button>
+              </header>
+
+              <p className="mt-1 text-muted text-[length:var(--font-meta-size)]">声明状态：{STATUS_LABELS[selected.status]}</p>
+              <p
+                className="mt-1.5 whitespace-pre-wrap text-ink text-[length:var(--font-read-size)] leading-[1.7]"
+                data-testid={`wiki-page-content-${selected.claimId}`}
+              >
+                {selected.content}
+              </p>
+
+              {selected.evidence.length === 0 ? (
+                <p className="mt-2 text-subtle text-[length:var(--font-micro-size)]" data-testid={`wiki-page-no-evidence-${selected.claimId}`}>
+                  这条主张还没有引用任何证据。
+                </p>
+              ) : (
+                <ul className="mt-2 flex flex-col gap-1.5" data-testid={`wiki-page-evidence-${selected.claimId}`}>
+                  {slice(selected.evidence, 'evidence').map((card) => (
+                    <li key={card.id} className="rounded-card border-[0.5px] border-line-soft bg-bg-soft px-2.5 py-1.5">
+                      <p className="text-ink text-[length:var(--font-meta-size)]">{card.title}</p>
+                      <p className="text-[var(--st-warn)] text-[length:var(--font-meta-size)]">
+                        {card.referenceStatus === 'superseded' ? '来源已失效，保留历史摘录' : card.referenceStatus === 'unknown' ? '来源状态未加载' : null}
+                      </p>
+                      {card.relations.map(relation => <p key={relation.id} className="break-words text-muted text-[length:var(--font-meta-size)]">
+                        {RELATION_LABELS[relation.kind]}：{DECISION_LABELS[relation.status]}
+                        {relation.condition ? `；条件：${relation.condition}` : ''}
+                        {relation.reviewer ? `；审核人：${relation.reviewer.id}` : ''}
+                      </p>)}
+                      <p className="line-clamp-3 text-muted text-[length:var(--font-micro-size)]">{card.excerpt}</p>
+                      <p className="font-mono text-subtle text-[length:var(--font-micro-size)]">
+                        {card.sourceType}，{card.locator}
+                      </p>
+                      <WikiEvidenceSource key={JSON.stringify([projectId, card.id, card.sourceLocator])}
+                        card={card} client={client} projectId={projectId}/>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {pager('evidence', selected.evidence.length)}
+              {selected.hasMissingEvidence ? (
+                <p className="mt-1.5 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" data-testid={`wiki-page-missing-${selected.claimId}`}>
+                  这条主张引用了当前未加载的证据。
+                </p>
+              ) : null}
+
+              <footer className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t-[0.5px] border-line-soft pt-2">
+                {slice(selected.papers, 'papers').map((paper) =>
+                  onOpenPaper === undefined ? (
+                    <span
+                      key={paper.libraryItemId}
+                      className="rounded-control border-[0.5px] border-line px-1.5 text-muted text-[length:var(--font-micro-size)]"
+                      data-testid={`wiki-page-paper-${paper.libraryItemId}`}
+                    >
+                      {paper.title}
+                      {paper.year === null ? '' : `，${paper.year}`}
+                    </span>
+                  ) : (
+                    <button
+                      key={paper.libraryItemId}
+                      type="button"
+                      onClick={() => onOpenPaper(paper.libraryItemId)}
+                      title="在阅读器里打开这条文献"
+                      data-testid={`wiki-page-paper-${paper.libraryItemId}`}
+                      className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+                    >
+                      {paper.title}
+                      {paper.year === null ? '' : `，${paper.year}`}
+                    </button>
+                  )
+                )}
+                <span className="ml-auto flex items-center gap-1.5">
+                  {onAskAssistant === undefined ? null : (
+                    <button
+                      type="button"
+                      onClick={() => onAskAssistant(`请在对话中分析知识库概念：${selected.title}`)}
+                      data-testid="wiki-ask-assistant"
+                      className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+                    >
+                      <Bot size={11} aria-hidden="true" className="text-[var(--icon-agent)]" />
+                      问助手
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onOpenClaim(selected.claimId)}
+                    data-testid={`wiki-page-graph-${selected.claimId}`}
+                    className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+                  >
+                    <Link2 size={10} aria-hidden="true" />
+                    在图谱里看关系
+                  </button>
+                </span>
+              </footer>
+
+              {pager('papers', selected.papers.length)}
+              <p className="mt-1.5 text-subtle text-[length:var(--font-micro-size)]">
+                来源：当前文献、主张与关联证据
+              </p>
+            </article>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WikiEvidenceSource({card, client, projectId}: {
+  card: WikiEvidenceCard; client?: RocClient; projectId?: string | null
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  return <details onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary className="cursor-pointer text-[length:var(--font-meta-size)]">完整摘录与原始来源</summary>
+    <blockquote className="whitespace-pre-wrap break-words py-2 text-[length:var(--font-meta-size)]">{card.excerpt}</blockquote>
+    {open && client && projectId === card.record.projectId && card.sourceLocator ?
+      <LazyBoundary fallback={<p role="status">加载证据原文…</p>}>
+        <ArtifactDocumentSource client={client} evidence={card.record} locator={card.sourceLocator}/>
+      </LazyBoundary> : null}
+  </details>;
+}
+
+function conceptLabelFor(projection: ReturnType<typeof deriveWiki>, claimId: string): string {
+  return projection.pageById.get(claimId)?.title ?? claimId;
+}
+
+function pageOffset(offset: number, total: number): number {
+  return Math.min(offset, Math.floor(Math.max(0, total - 1) / WIKI_PAGE_SIZE) * WIKI_PAGE_SIZE);
+}
+function WikiPager({area, offset, total, onChange}: {
+  area: string; offset: number; total: number; onChange: (offset: number) => void;
+}): React.JSX.Element {
+  if (total <= WIKI_PAGE_SIZE) return <></>;
+  return <nav aria-label={`${({concepts:'概念',neighbors:'共现',orphans:'未归类证据',evidence:'证据',papers:'文献',years:'年份'} as Record<string,string>)[area]}分页`} className="flex flex-wrap items-center gap-2 py-1 text-[length:var(--font-meta-size)]" data-testid={`wiki-pager-${area}`}>
+    <button type="button" disabled={offset === 0} onClick={() => onChange(Math.max(0, offset - WIKI_PAGE_SIZE))}
+      className="rounded-control border-[0.5px] border-line px-2 disabled:opacity-50">上一页</button>
+    <span>{offset + 1}–{Math.min(total, offset + WIKI_PAGE_SIZE)} / {total}</span>
+    <button type="button" disabled={offset + WIKI_PAGE_SIZE >= total} onClick={() => onChange(offset + WIKI_PAGE_SIZE)}
+      className="rounded-control border-[0.5px] border-line px-2 disabled:opacity-50">下一页</button>
+  </nav>;
+}

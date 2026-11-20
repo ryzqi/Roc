@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "split": "verified",
+  "sourceRevision": "REPLACE_WITH_VERIFIED_UPSTREAM_REVISION",
+  "metadataSha256": "REPLACE_WITH_ACTUAL_SHA256",
+  "bundleSha256": "REPLACE_WITH_ACTUAL_SHA256",
+  "tasks": [
+    {
+      "id": "1",
+      "publicDir": "task-1/public",
+      "hiddenDir": "task-1/hidden",
+      "verifierDir": "task-1/verifier",
+      "calibrationDir": "task-1/calibration",
+      "pythonEnvironment": "../environments/REPLACE/environment.json",
+      "verifierEnvironment": "../environments/REPLACE/environment.json",
+      "outputFiles": [
+        "predictions.csv"
+      ],
+      "license": "REPLACE_WITH_TASK_LICENSE"
+    }
+  ]
+}

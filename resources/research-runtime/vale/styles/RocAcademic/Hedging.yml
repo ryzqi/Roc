@@ -1,0 +1,21 @@
+# 模糊限定词。
+#
+# 这不是「英语写作偏好」，是 Roc 的证据口径在文字上的投影：`review/SKILL.md` 要求区分
+# supported 与 hypothesis，而 `arguably` / `it seems` 这类词把「有没有证据」藏起来了。
+# 规则只提示替换方向，不禁止使用——作者可以写，但要自己知道那句话没有证据。
+extends: existence
+message: "“%s” 把证据强度藏起来了：给出证据，或把这句标为 hypothesis。"
+level: warning
+ignorecase: true
+nonword: true
+tokens:
+  - arguably
+  - presumably
+  - it seems that
+  - it would seem
+  - it is worth noting that
+  - it should be noted that
+  - some might (?:say|argue)
+  - one could argue
+  - there is a tendency
+  - to some extent

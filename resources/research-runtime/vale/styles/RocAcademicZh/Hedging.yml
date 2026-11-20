@@ -1,0 +1,14 @@
+# 中文模糊限定词。与英文 RocAcademic.Hedging 同一条口径。
+extends: existence
+message: "“%s” 把证据强度藏起来了：给出证据，或把这句标为 hypothesis。"
+level: warning
+nonword: true
+tokens:
+  - 可能是
+  - 似乎是
+  - 大概是
+  - 据了解
+  - 众所周知
+  - 不难发现
+  - 显而易见
+  - 在一定程度上

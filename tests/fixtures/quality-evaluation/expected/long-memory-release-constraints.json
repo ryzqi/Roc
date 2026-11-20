@@ -1,0 +1,15 @@
+{
+  "kind": "memory",
+  "requiredPhrases": [
+    "21-day total-protein window",
+    "15-day FGF-2 window",
+    "do not make a clinical recommendation",
+    "preclinical, not human evidence"
+  ],
+  "forbiddenPhrases": [
+    "proven treatment"
+  ],
+  "citations": [
+    "10.1155/2023/6039254"
+  ]
+}

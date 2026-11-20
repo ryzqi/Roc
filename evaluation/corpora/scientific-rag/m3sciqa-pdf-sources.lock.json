@@ -1,0 +1,685 @@
+{
+  "schemaVersion": 1,
+  "id": "scientific-m3sciqa-reference-pdfs-v1",
+  "datasetRevision": "99946c354cad84294766e58558f249f71e8bfffc",
+  "labelsHash": "2404fe96496310c6b3c46e41276516d7a7c0cef401fb4c9327506ac374da9330",
+  "selection": "top45-reference-question-count-desc-arxiv-id-asc-before-download-and-mapping",
+  "publishedQuestions": 308,
+  "cohort": [
+    {
+      "paperId": "2111.07408",
+      "publishedQuestions": 15,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2305.06620",
+      "publishedQuestions": 12,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2301.10186",
+      "publishedQuestions": 11,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "1707.07250",
+      "publishedQuestions": 10,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2212.00959",
+      "publishedQuestions": 10,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2309.14362",
+      "publishedQuestions": 10,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "1911.00536",
+      "publishedQuestions": 9,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2009.06367",
+      "publishedQuestions": 9,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2102.02779",
+      "publishedQuestions": 9,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2212.09233",
+      "publishedQuestions": 9,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2303.08774",
+      "publishedQuestions": 9,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "1909.12406",
+      "publishedQuestions": 8,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2302.01849",
+      "publishedQuestions": 8,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "1706.03762",
+      "publishedQuestions": 7,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "1906.05572",
+      "publishedQuestions": 7,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2101.06804",
+      "publishedQuestions": 7,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2210.07032",
+      "publishedQuestions": 7,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2210.09261",
+      "publishedQuestions": 7,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2212.08410",
+      "publishedQuestions": 7,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2305.15005",
+      "publishedQuestions": 7,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2307.09288",
+      "publishedQuestions": 7,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "1810.04805",
+      "publishedQuestions": 6,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2112.05230",
+      "publishedQuestions": 6,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2201.08277",
+      "publishedQuestions": 6,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2202.03052",
+      "publishedQuestions": 6,
+      "status": "failed",
+      "failure": "not a bounded PDF"
+    },
+    {
+      "paperId": "2203.14187",
+      "publishedQuestions": 6,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2207.09666",
+      "publishedQuestions": 6,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2209.14610",
+      "publishedQuestions": 6,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2305.06161",
+      "publishedQuestions": 6,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2305.10688",
+      "publishedQuestions": 6,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2307.06018",
+      "publishedQuestions": 6,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "1907.10529",
+      "publishedQuestions": 5,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "1910.10683",
+      "publishedQuestions": 5,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2106.00980",
+      "publishedQuestions": 5,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2109.09707",
+      "publishedQuestions": 5,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2206.00100",
+      "publishedQuestions": 5,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2209.13759",
+      "publishedQuestions": 5,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2210.01613",
+      "publishedQuestions": 5,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2004.02557",
+      "publishedQuestions": 4,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2004.05150",
+      "publishedQuestions": 4,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2101.08426",
+      "publishedQuestions": 4,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2103.01955",
+      "publishedQuestions": 4,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2104.08836",
+      "publishedQuestions": 4,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2106.04489",
+      "publishedQuestions": 4,
+      "status": "downloaded",
+      "failure": null
+    },
+    {
+      "paperId": "2110.07904",
+      "publishedQuestions": 4,
+      "status": "downloaded",
+      "failure": null
+    }
+  ],
+  "sources": [
+    {
+      "id": "m3sciqa-reference-pdfs",
+      "license": null,
+      "scope": "Downloaded original arXiv PDFs; byte identity does not prove upstream dataset PDF revision identity or human bbox review.",
+      "files": [
+        {
+          "path": "2111.07408.pdf",
+          "url": "https://arxiv.org/pdf/2111.07408",
+          "resolvedUrl": "https://arxiv.org/pdf/2111.07408",
+          "bytes": 1408709,
+          "sha256": "36565fa9ebe7b289c369ed7598337ea037e85c44168659a128b75de6aa8a5abe",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2305.06620.pdf",
+          "url": "https://arxiv.org/pdf/2305.06620",
+          "resolvedUrl": "https://arxiv.org/pdf/2305.06620",
+          "bytes": 633812,
+          "sha256": "7bf7e3872b751634561d01b859e8d4ea8a43e83958919d7ef41177dc9ffab011",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2301.10186.pdf",
+          "url": "https://arxiv.org/pdf/2301.10186",
+          "resolvedUrl": "https://arxiv.org/pdf/2301.10186",
+          "bytes": 923248,
+          "sha256": "34da56da0069a417509e8e3752f8f2415eecc083c763c7b02a20576f8170e46a",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "1707.07250.pdf",
+          "url": "https://arxiv.org/pdf/1707.07250",
+          "resolvedUrl": "https://arxiv.org/pdf/1707.07250",
+          "bytes": 558165,
+          "sha256": "04b59f2c7f0e97ac45a0a3cc0e267ec484ed0fbe82e16432b76fad0a3b43d50f",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2212.00959.pdf",
+          "url": "https://arxiv.org/pdf/2212.00959",
+          "resolvedUrl": "https://arxiv.org/pdf/2212.00959",
+          "bytes": 574358,
+          "sha256": "b078cba54c3ab5097504227938a3a414fb40483b2b1c9fdda1e5b4a97d58b24c",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2309.14362.pdf",
+          "url": "https://arxiv.org/pdf/2309.14362",
+          "resolvedUrl": "https://arxiv.org/pdf/2309.14362",
+          "bytes": 649837,
+          "sha256": "0e4c3c92be70fbe2537b03c544290d848c4c568e8bcb026cfcc76d0841e78517",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "1911.00536.pdf",
+          "url": "https://arxiv.org/pdf/1911.00536",
+          "resolvedUrl": "https://arxiv.org/pdf/1911.00536",
+          "bytes": 305141,
+          "sha256": "529a423c335fbe65228064f6a6e0102d6338d2dde7ec4cf3d0aaa878bf62db1e",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2009.06367.pdf",
+          "url": "https://arxiv.org/pdf/2009.06367",
+          "resolvedUrl": "https://arxiv.org/pdf/2009.06367",
+          "bytes": 1361683,
+          "sha256": "816ff8c53ae590685abbe1d073c97838a4fd80654a95414630997857fd398ba4",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2102.02779.pdf",
+          "url": "https://arxiv.org/pdf/2102.02779",
+          "resolvedUrl": "https://arxiv.org/pdf/2102.02779",
+          "bytes": 6218255,
+          "sha256": "f62ca0965b3d19cfdda036feaac32d54e6ffcc5cd04d722080c9a085aabdd82f",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2212.09233.pdf",
+          "url": "https://arxiv.org/pdf/2212.09233",
+          "resolvedUrl": "https://arxiv.org/pdf/2212.09233",
+          "bytes": 619687,
+          "sha256": "e18ab2bc8c3283f7788b77d1d9d0ec1f35a2a294cb17f850dd80d2d6b3affdf6",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2303.08774.pdf",
+          "url": "https://arxiv.org/pdf/2303.08774",
+          "resolvedUrl": "https://arxiv.org/pdf/2303.08774",
+          "bytes": 5245564,
+          "sha256": "c33a66dadca2388d7b172d6293b00dc32b71110c6f38fafe0d41112e61be7774",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "1909.12406.pdf",
+          "url": "https://arxiv.org/pdf/1909.12406",
+          "resolvedUrl": "https://arxiv.org/pdf/1909.12406",
+          "bytes": 332963,
+          "sha256": "1e3c2431d873db61e1e31882dc9a2172aa5ceb4bc06b1eb37b9837449f33126b",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2302.01849.pdf",
+          "url": "https://arxiv.org/pdf/2302.01849",
+          "resolvedUrl": "https://arxiv.org/pdf/2302.01849",
+          "bytes": 1791272,
+          "sha256": "e827215b85e3935081acf1f12f507af1dbec5774fe20f1e6fcf7fba857db6b05",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "1706.03762.pdf",
+          "url": "https://arxiv.org/pdf/1706.03762",
+          "resolvedUrl": "https://arxiv.org/pdf/1706.03762",
+          "bytes": 2215244,
+          "sha256": "bdfaa68d8984f0dc02beaca527b76f207d99b666d31d1da728ee0728182df697",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "1906.05572.pdf",
+          "url": "https://arxiv.org/pdf/1906.05572",
+          "resolvedUrl": "https://arxiv.org/pdf/1906.05572",
+          "bytes": 700219,
+          "sha256": "f7fc5ac1538066aaac6688976166167b3b54fe1888af9a645b08658b995655db",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2101.06804.pdf",
+          "url": "https://arxiv.org/pdf/2101.06804",
+          "resolvedUrl": "https://arxiv.org/pdf/2101.06804",
+          "bytes": 410612,
+          "sha256": "2507fe260f51ca707b3b8bd623fae7250f3c4ccbd3a36e430ae71219b33544c4",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2210.07032.pdf",
+          "url": "https://arxiv.org/pdf/2210.07032",
+          "resolvedUrl": "https://arxiv.org/pdf/2210.07032",
+          "bytes": 588745,
+          "sha256": "b61bf22758d56bda2535e3cc8d267c063a119b74723b082002ddec435b9b5f2a",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2210.09261.pdf",
+          "url": "https://arxiv.org/pdf/2210.09261",
+          "resolvedUrl": "https://arxiv.org/pdf/2210.09261",
+          "bytes": 5375941,
+          "sha256": "168f6fff020e9fde7563905f69e6a59d0648f195f48820d52c83c7adfaee18ec",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2212.08410.pdf",
+          "url": "https://arxiv.org/pdf/2212.08410",
+          "resolvedUrl": "https://arxiv.org/pdf/2212.08410",
+          "bytes": 235424,
+          "sha256": "11b97290789962a33b9331b3e146d7838c9881e8386c3c2d54fa880167390877",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2305.15005.pdf",
+          "url": "https://arxiv.org/pdf/2305.15005",
+          "resolvedUrl": "https://arxiv.org/pdf/2305.15005",
+          "bytes": 552029,
+          "sha256": "ea96625245db6cf486b11ab3d94daffc2a5ddd3686a111e66b846e7eea3c6e94",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2307.09288.pdf",
+          "url": "https://arxiv.org/pdf/2307.09288",
+          "resolvedUrl": "https://arxiv.org/pdf/2307.09288",
+          "bytes": 13661300,
+          "sha256": "1df284ce95f783002074bfe8f21d47c646b396ceb1736ea3ec0ea212fc070d91",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "1810.04805.pdf",
+          "url": "https://arxiv.org/pdf/1810.04805",
+          "resolvedUrl": "https://arxiv.org/pdf/1810.04805",
+          "bytes": 775166,
+          "sha256": "5692a5514787a8c6727b4ff3b726a3385798bc68e12138d1d4af83947e2acf6e",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2112.05230.pdf",
+          "url": "https://arxiv.org/pdf/2112.05230",
+          "resolvedUrl": "https://arxiv.org/pdf/2112.05230",
+          "bytes": 1895819,
+          "sha256": "674d8f865e3dfb67d92f8df93d587dd595f91a1f7744e398fe83fc4053448053",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2201.08277.pdf",
+          "url": "https://arxiv.org/pdf/2201.08277",
+          "resolvedUrl": "https://arxiv.org/pdf/2201.08277",
+          "bytes": 391800,
+          "sha256": "79f6d3243f06abdeddfa27e1ce1ad39010a77145c469c5d3fb2dce854a7a664c",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2203.14187.pdf",
+          "url": "https://arxiv.org/pdf/2203.14187",
+          "resolvedUrl": "https://arxiv.org/pdf/2203.14187",
+          "bytes": 637413,
+          "sha256": "12569a3c4c35ef2a6709b4a3912168836c676b325f8e4ab4b4e46fac13b2ab88",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2207.09666.pdf",
+          "url": "https://arxiv.org/pdf/2207.09666",
+          "resolvedUrl": "https://arxiv.org/pdf/2207.09666",
+          "bytes": 8000333,
+          "sha256": "62f5a3c69c950596d96fb08581c2350a3d00cc4f3decfeb08ad95a19176f5833",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2209.14610.pdf",
+          "url": "https://arxiv.org/pdf/2209.14610",
+          "resolvedUrl": "https://arxiv.org/pdf/2209.14610",
+          "bytes": 2731963,
+          "sha256": "ebc01fed723dda62627dbd8252f7387ebaa020bf17336cc2c95f9dfc8db5c472",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2305.06161.pdf",
+          "url": "https://arxiv.org/pdf/2305.06161",
+          "resolvedUrl": "https://arxiv.org/pdf/2305.06161",
+          "bytes": 1174499,
+          "sha256": "549e079ffd6104417f8443570954b232d2ed58886cf45c60482e631cb36e1351",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2305.10688.pdf",
+          "url": "https://arxiv.org/pdf/2305.10688",
+          "resolvedUrl": "https://arxiv.org/pdf/2305.10688",
+          "bytes": 475099,
+          "sha256": "6d24c17fe600ff34ee378e4aaaa5430f39256ef5d880755969f0145383cc6f4d",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2307.06018.pdf",
+          "url": "https://arxiv.org/pdf/2307.06018",
+          "resolvedUrl": "https://arxiv.org/pdf/2307.06018",
+          "bytes": 4098755,
+          "sha256": "8eb22b0d13a7941d849d5c2c2ee234e5f721d890b60932c792cf64aada3091c9",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "1907.10529.pdf",
+          "url": "https://arxiv.org/pdf/1907.10529",
+          "resolvedUrl": "https://arxiv.org/pdf/1907.10529",
+          "bytes": 1532033,
+          "sha256": "d8c8d72e558289990c7dcb13cff2396d1af4389f5a95cb561ab418b298555e60",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "1910.10683.pdf",
+          "url": "https://arxiv.org/pdf/1910.10683",
+          "resolvedUrl": "https://arxiv.org/pdf/1910.10683",
+          "bytes": 1190021,
+          "sha256": "ad07e47cedf437a4156419ce5d3076e08a3e59bbfd6dac7cc53df1009cdcbe7f",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2106.00980.pdf",
+          "url": "https://arxiv.org/pdf/2106.00980",
+          "resolvedUrl": "https://arxiv.org/pdf/2106.00980",
+          "bytes": 2286101,
+          "sha256": "7f0ff6f0b87118b3d6eba8efe934d70da2c775889ac84bb856f19da4ecde7ec3",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2109.09707.pdf",
+          "url": "https://arxiv.org/pdf/2109.09707",
+          "resolvedUrl": "https://arxiv.org/pdf/2109.09707",
+          "bytes": 584009,
+          "sha256": "df2b16ffed0862d593032be2913eea5e13e1477f1675b0149a599ec4999c4cc7",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2206.00100.pdf",
+          "url": "https://arxiv.org/pdf/2206.00100",
+          "resolvedUrl": "https://arxiv.org/pdf/2206.00100",
+          "bytes": 3024488,
+          "sha256": "49d636e4afd4adb7552b94a98f9b39a6bc99a082cd6b4a8d8b51a161d0b897f8",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2209.13759.pdf",
+          "url": "https://arxiv.org/pdf/2209.13759",
+          "resolvedUrl": "https://arxiv.org/pdf/2209.13759",
+          "bytes": 941097,
+          "sha256": "ba10b03a0a947be1a596f1d35e625f57cdebd7c78cde3f8ed5abc7a1324b2b8e",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2210.01613.pdf",
+          "url": "https://arxiv.org/pdf/2210.01613",
+          "resolvedUrl": "https://arxiv.org/pdf/2210.01613",
+          "bytes": 578892,
+          "sha256": "a43b8ca209fd961f934526081648de2161ff3e96d1ccee4db68de94ba83707ec",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2004.02557.pdf",
+          "url": "https://arxiv.org/pdf/2004.02557",
+          "resolvedUrl": "https://arxiv.org/pdf/2004.02557",
+          "bytes": 2348990,
+          "sha256": "0cfcb669b130bca6ee1ad0b20fe0f8354817cc090479fc584f8b3e304bd3cc9a",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2004.05150.pdf",
+          "url": "https://arxiv.org/pdf/2004.05150",
+          "resolvedUrl": "https://arxiv.org/pdf/2004.05150",
+          "bytes": 539211,
+          "sha256": "053756b54e2d3462d4690b3aed489c962f17df7c3531865e47374c4a651f526c",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2101.08426.pdf",
+          "url": "https://arxiv.org/pdf/2101.08426",
+          "resolvedUrl": "https://arxiv.org/pdf/2101.08426",
+          "bytes": 484237,
+          "sha256": "4ce4ff3f79707449a6eed899a8318845ecdc7d0333d4b137b429b29edf41360f",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2103.01955.pdf",
+          "url": "https://arxiv.org/pdf/2103.01955",
+          "resolvedUrl": "https://arxiv.org/pdf/2103.01955",
+          "bytes": 16261854,
+          "sha256": "b7577e38c48e898cc93a1438c266e546091d20a75dbad8d956000a1b42ab0b97",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2104.08836.pdf",
+          "url": "https://arxiv.org/pdf/2104.08836",
+          "resolvedUrl": "https://arxiv.org/pdf/2104.08836",
+          "bytes": 5699774,
+          "sha256": "081f41b85d6f0b0669f55f1582422572f45d328ede25c4ff2a3af6e31c939edf",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2106.04489.pdf",
+          "url": "https://arxiv.org/pdf/2106.04489",
+          "resolvedUrl": "https://arxiv.org/pdf/2106.04489",
+          "bytes": 568019,
+          "sha256": "39ac7c1b3a9f40afeebb4d9374edbec64060bee9b63195868fdb16ee406b3ab4",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        },
+        {
+          "path": "2110.07904.pdf",
+          "url": "https://arxiv.org/pdf/2110.07904",
+          "resolvedUrl": "https://arxiv.org/pdf/2110.07904",
+          "bytes": 1176892,
+          "sha256": "3f5883a38122b162c89b7c82b23ac769982749f32599a816d7f79f4bc37ed458",
+          "license": null,
+          "revisionCorrespondence": "unversioned-upstream-id-byte-pinned-at-acquisition"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+# 口语化表达。只到 suggestion：它不影响证据，只影响语域。
+extends: existence
+message: "“%s” 偏口语：换成学术语域的说法。"
+level: suggestion
+nonword: true
+tokens:
+  - 很多(?:时候|情况|地方)
+  - 非常好
+  - 特别(?:好|差|大|小)
+  - 超级
+  - 差不多
+  - 搞(?:清楚|明白|定)
+  - 一下(?:实验结果|数据)

@@ -1,0 +1,409 @@
+{
+  "schemaVersion": 2,
+  "specStatus": "Draft",
+  "adaptation": "roc-capability-local-source-v2",
+  "qualificationPolicy": {
+    "localHashesAuthenticateUpstream": false,
+    "fixtureIsQualityEvidence": false,
+    "reviewHash": "sha256(canonical-json({visible,expected,environment,source}))",
+    "independentReviewers": 2,
+    "disagreementNeedsIndependentArbiter": true,
+    "splits": [
+      "fixture",
+      "development",
+      "holdout",
+      "release"
+    ],
+    "splitUnit": "source-connected-component",
+    "holdoutReady": "Exact per-family holdout quotas, independently source-pinned and reviewed, with supported evidence.",
+    "releaseDatasetReady": "Independent release tasks with the same per-family quotas and qualification gates; no holdout reuse.",
+    "hiddenTruth": "controller-only",
+    "network": "disabled",
+    "e2eIndependentClusters": "For each of the four workflow families, holdout and release separately require six qualified tasks from at least six actual source-connected roots; labels do not establish independence."
+  },
+  "holdoutQuotas": {
+    "tool-selection-arguments": 25,
+    "planning-subagent-orchestration": 20,
+    "stateful-multi-turn-clarification": 15,
+    "literature-verification": 20,
+    "multi-paper-evidence-citation": 20,
+    "memory-context-compaction": 25,
+    "file-report-artifact": 15,
+    "experiment-code-execution": 20,
+    "mcp-interaction-recovery": 15,
+    "security-permission-injection": 15,
+    "cancellation-crash-concurrency": 10
+  },
+  "e2eQuotas": {
+    "literature-research": 6,
+    "systematic-review": 6,
+    "experiment-reproduction": 6,
+    "writing-publication": 6
+  },
+  "sources": [
+    {
+      "id": "bfcl",
+      "name": "Berkeley Function Calling Leaderboard",
+      "priority": "P0",
+      "families": [
+        "tool-selection-arguments"
+      ],
+      "status": "verified-source-development-slice",
+      "readiness": {
+        "source": "verified-public-snapshot",
+        "adaptation": "development-slice-available",
+        "review": "pending",
+        "runtime": "production-slice-only",
+        "quality": "blocked"
+      },
+      "importer": "evaluation/adapters/capability/sources.mjs",
+      "mapping": "Explicit original record, answer references and original-function to production-tool mapping; JSON/JSONL only. Never evaluate upstream function-call strings.",
+      "license": "Apache-2.0",
+      "revision": "6ea57973c7a6097fd7c5915698c54c17c5b1b6c8",
+      "acquisition": "evaluation/adapters/capability/acquire.mjs",
+      "acquisitionScope": {
+        "status": "development-slice-available",
+        "scope": "Original first-turn cat task adapted to Roc read_file; not the complete BFCL multi-turn or API benchmark."
+      }
+    },
+    {
+      "id": "toolsandbox",
+      "name": "ToolSandbox",
+      "priority": "P0",
+      "families": [
+        "planning-subagent-orchestration",
+        "stateful-multi-turn-clarification",
+        "mcp-interaction-recovery"
+      ],
+      "status": "verified-source-adaptation-blocked",
+      "readiness": {
+        "source": "verified-public-snapshot",
+        "adaptation": "blocked",
+        "review": "pending",
+        "runtime": "native-adaptation-pending",
+        "quality": "blocked"
+      },
+      "importer": "evaluation/adapters/capability/sources.mjs",
+      "mapping": "Pinned original scenario snapshot plus explicit milestone/ground-truth references. Import Python source as bytes, never execute it. Multi-turn, subagent and MCP evidence require separate runtime support.",
+      "license": "LicenseRef-Apple-ToolSandbox",
+      "revision": "c8571d7854316d2e1c5f288e59fe1e34e53f6dd1",
+      "acquisition": "evaluation/adapters/capability/acquire.mjs",
+      "acquisitionScope": {
+        "status": "blocked",
+        "reason": "Original scenarios are Python builders with DB milestones and business-tool semantics. No upstream Python is executed; independent native milestone and Roc environment mapping is still required."
+      }
+    },
+    {
+      "id": "longmemeval-v2",
+      "name": "LongMemEval V2",
+      "priority": "P0",
+      "families": [
+        "memory-context-compaction"
+      ],
+      "status": "verified-source-adaptation-blocked",
+      "readiness": {
+        "source": "verified-public-snapshot",
+        "adaptation": "blocked",
+        "review": "pending",
+        "runtime": "native-adaptation-pending",
+        "quality": "blocked"
+      },
+      "importer": "evaluation/adapters/capability/sources.mjs",
+      "mapping": "Pinned original question and complete history references; enterprise-domain selection. Unsupported screenshots/browser requirements remain unsupported. No prompt-only memory qualification.",
+      "license": "Apache-2.0",
+      "revision": "f152293e235517d504809563c833d7190b8c713b",
+      "acquisition": "evaluation/adapters/capability/acquire.mjs",
+      "acquisitionScope": {
+        "status": "blocked",
+        "reason": "Pinned small haystacks contain trajectory IDs only. Complete trajectory state/observation bytes were not acquired; ID lists cannot qualify as histories. Visual/browser requirements remain unsupported."
+      }
+    },
+    {
+      "id": "locomo",
+      "name": "LoCoMo",
+      "priority": "P0",
+      "families": [
+        "memory-context-compaction"
+      ],
+      "status": "verified-source-development-slice",
+      "readiness": {
+        "source": "verified-public-snapshot",
+        "adaptation": "development-slice-available",
+        "review": "pending",
+        "runtime": "production-slice-only",
+        "quality": "blocked"
+      },
+      "importer": "evaluation/adapters/capability/sources.mjs",
+      "mapping": "Question coordinate and original conversation identity; complete conversation references. Cross-session evidence is required independently of final JSON.",
+      "license": "CC-BY-NC-4.0",
+      "revision": "3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376",
+      "acquisition": "evaluation/adapters/capability/acquire.mjs",
+      "acquisitionScope": {
+        "status": "development-slice-available",
+        "scope": "Complete original conversation plus original question/answer/evidence references, adapted to real cross-session remember/memory_search. No claim of the complete upstream memory or multimodal benchmark."
+      }
+    },
+    {
+      "id": "qasper",
+      "name": "QASPER",
+      "priority": "P0",
+      "families": [
+        "literature-verification",
+        "multi-paper-evidence-citation"
+      ],
+      "status": "existing-adapter-reused",
+      "readiness": {
+        "source": "verified-local-archive",
+        "review": "pending",
+        "quality": "blocked"
+      },
+      "importer": "evaluation/adapters/capability/sources.mjs",
+      "mapping": "Reuse loadDataset qualification and qasperInput/importQasper contracts. Single-paper questions do not become multi-paper tasks by renaming.",
+      "license": "CC-BY-4.0"
+    },
+    {
+      "id": "scifact",
+      "name": "SciFact",
+      "priority": "P0",
+      "families": [
+        "literature-verification",
+        "multi-paper-evidence-citation"
+      ],
+      "status": "verified-source-development-slice",
+      "readiness": {
+        "source": "verified-public-snapshot",
+        "adaptation": "development-slice-available",
+        "review": "pending",
+        "runtime": "production-slice-only",
+        "quality": "blocked"
+      },
+      "importer": "evaluation/adapters/capability/sources.mjs",
+      "mapping": "Original claims and pinned corpus; evidence/cited document identities form connected paper clusters. Explicit evidence, label and citation mapping.",
+      "license": "CC-BY-4.0 AND ODC-By-1.0",
+      "revision": "68b98a56d93e0f9da0d2aab4e6c3294699a0f72e",
+      "acquisition": "evaluation/adapters/capability/acquire.mjs",
+      "acquisitionScope": {
+        "status": "development-slice-available",
+        "scope": "Original annotated claims, cited corpus records and sentence identities mapped explicitly to offline text-native BM25 and citation evidence."
+      }
+    },
+    {
+      "id": "scienceagentbench-verified",
+      "name": "ScienceAgentBench Verified",
+      "priority": "P0",
+      "families": [
+        "experiment-code-execution",
+        "experiment-reproduction"
+      ],
+      "status": "verified-source-adaptation-blocked",
+      "readiness": {
+        "source": "verified-public-snapshot",
+        "adaptation": "blocked",
+        "review": "pending",
+        "runtime": "native-adaptation-pending",
+        "quality": "blocked",
+        "metadata": "verified-split-bytes-pinned",
+        "environment": "pending",
+        "grader": "source-only",
+        "calibration": "not-run",
+        "scientificQuality": false
+      },
+      "importer": "evaluation/adapters/capability/sources.mjs",
+      "mapping": "Verified-split metadata, original paper/repository, assets, environment and grader hashes recorded separately. Local recipe/hash claims do not establish official scientific qualification.",
+      "redistribution": "Do not publish unpacked upstream assets. Imported originals stay in local controller cache.",
+      "license": "CC-BY-4.0",
+      "revision": "9c6e96c9e74572e979b0930ee735041cef528cb7",
+      "acquisition": "evaluation/adapters/capability/acquire.mjs",
+      "acquisitionScope": {
+        "status": "blocked",
+        "reason": "Official verified parquet bytes and grader source are pinned, but a local parquet reader, per-task original assets, compatible frozen environment, independent grader execution and calibration are absent."
+      }
+    },
+    {
+      "id": "agentdojo",
+      "name": "AgentDojo",
+      "priority": "P0",
+      "families": [
+        "security-permission-injection"
+      ],
+      "status": "verified-source-adaptation-blocked",
+      "readiness": {
+        "source": "verified-public-snapshot",
+        "adaptation": "blocked",
+        "review": "pending",
+        "runtime": "native-adaptation-pending",
+        "quality": "blocked"
+      },
+      "importer": "evaluation/adapters/capability/sources.mjs",
+      "mapping": "Original benign task, attacker objective and untrusted payload references; variants share base-task clusters. External/permission evidence cannot be replaced by final JSON.",
+      "license": "MIT",
+      "revision": "089ed468cf3ed0322acc66b0211f26d9d90dbf60",
+      "acquisition": "evaluation/adapters/capability/acquire.mjs",
+      "acquisitionScope": {
+        "status": "blocked",
+        "reason": "Pinned original workspace user/injection task classes and YAML data use upstream business APIs and Python checkers. Native benign-task, attack-goal and independent effect mapping to Roc is not yet complete; no upstream code is executed."
+      }
+    },
+    {
+      "id": "injecagent",
+      "name": "InjecAgent",
+      "priority": "P0",
+      "families": [
+        "security-permission-injection"
+      ],
+      "status": "verified-source-development-slice",
+      "readiness": {
+        "source": "verified-public-snapshot",
+        "adaptation": "development-slice-available",
+        "review": "pending",
+        "runtime": "production-slice-only",
+        "quality": "blocked"
+      },
+      "importer": "evaluation/adapters/capability/sources.mjs",
+      "mapping": "Pinned original user task/tool and attack payload; user-task identity groups attack variants. Explicit mapping to local production file/research tools.",
+      "license": "MIT",
+      "revision": "f19c9f2c79a41046eb13c03c51a24c567a8ffa07",
+      "acquisition": "evaluation/adapters/capability/acquire.mjs",
+      "acquisitionScope": {
+        "status": "development-slice-available",
+        "scope": "Original user task and attacker payload/achievement coordinates adapted to an untrusted local file. Original external business tools are outside this engineering slice."
+      }
+    },
+    {
+      "id": "tau2-bench",
+      "name": "tau2-bench",
+      "priority": "P1",
+      "families": [
+        "stateful-multi-turn-clarification"
+      ],
+      "status": "planned",
+      "readiness": {
+        "source": "pending",
+        "runtime": "pending",
+        "review": "pending",
+        "quality": "blocked"
+      },
+      "mapping": "Adapt interaction patterns only; original business APIs are outside Roc scope.",
+      "license": null
+    },
+    {
+      "id": "alce",
+      "name": "ALCE",
+      "priority": "P1",
+      "families": [
+        "multi-paper-evidence-citation"
+      ],
+      "status": "planned",
+      "readiness": {
+        "source": "pending",
+        "review": "pending",
+        "quality": "blocked"
+      },
+      "mapping": "Only source-verifiable citation tasks.",
+      "license": null
+    },
+    {
+      "id": "core-bench",
+      "name": "CORE-Bench",
+      "priority": "P1",
+      "families": [
+        "experiment-code-execution",
+        "experiment-reproduction"
+      ],
+      "status": "planned",
+      "readiness": {
+        "source": "pending",
+        "environment": "pending",
+        "grader": "pending",
+        "review": "pending",
+        "quality": "blocked"
+      },
+      "mapping": "Frozen compatible paper/repository tasks; reuse Roc runtime.",
+      "license": null
+    },
+    {
+      "id": "paperbench",
+      "name": "PaperBench",
+      "priority": "P1",
+      "families": [
+        "experiment-reproduction"
+      ],
+      "status": "planned-gold-track",
+      "readiness": {
+        "source": "pending",
+        "environment": "pending",
+        "grader": "pending",
+        "review": "pending",
+        "quality": "blocked"
+      },
+      "mapping": "Selected independently verifiable subtasks with original hierarchical rubrics.",
+      "license": null
+    },
+    {
+      "id": "mlagentbench",
+      "name": "MLAgentBench",
+      "priority": "P1",
+      "families": [
+        "experiment-code-execution"
+      ],
+      "status": "planned",
+      "readiness": {
+        "source": "pending",
+        "environment": "pending",
+        "review": "pending",
+        "quality": "blocked"
+      },
+      "mapping": "Small compatible local experiment subset.",
+      "license": null
+    },
+    {
+      "id": "gaia",
+      "name": "GAIA",
+      "priority": "P2",
+      "families": [
+        "file-report-artifact"
+      ],
+      "status": "deferred",
+      "readiness": {
+        "source": "pending",
+        "review": "pending",
+        "quality": "blocked"
+      },
+      "mapping": "File tasks that fit frozen local environments.",
+      "license": null
+    },
+    {
+      "id": "ragbench",
+      "name": "RAGBench",
+      "priority": "P2",
+      "families": [
+        "literature-verification"
+      ],
+      "status": "deferred",
+      "readiness": {
+        "source": "pending",
+        "review": "pending",
+        "quality": "blocked"
+      },
+      "mapping": "Supplement component regressions; not scientific E2E evidence.",
+      "license": null
+    },
+    {
+      "id": "mle-bench",
+      "name": "MLE-bench",
+      "priority": "P2",
+      "families": [
+        "experiment-code-execution"
+      ],
+      "status": "deferred",
+      "readiness": {
+        "source": "pending",
+        "environment": "pending",
+        "review": "pending",
+        "quality": "blocked"
+      },
+      "mapping": "Resource-intensive competition tasks deferred from local P0 scope.",
+      "license": null
+    }
+  ]
+}

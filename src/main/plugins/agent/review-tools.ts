@@ -1,0 +1,293 @@
+import type {StructuredToolInterface} from '@langchain/core/tools';
+import {tool} from 'langchain';
+import {z} from 'zod';
+import type {ResearchToolDescriptor} from './research-tools';
+import type {RocCapabilityRegistry} from '../../kernel/types';
+import {getCapabilityOperationContext} from '../../kernel/capability-operation-context';
+import {
+  researchReviewProtocolGetRequestSchema, researchReviewProtocolListRequestSchema,
+  type ResearchReviewProtocolInspection
+} from '../../../shared/schemas/research-systematic-review';
+import {
+  researchReviewSearchGetSchema, researchReviewSearchListSchema, researchReviewSearchPoolRequestSchema,
+  type ResearchReviewSearchInspection
+} from '../../../shared/schemas/research-review-search';
+import {
+  researchReviewCorpusGetSchema, researchReviewCorpusListSchema, researchReviewCorpusHitRequestSchema,
+  type ResearchReviewCorpusInspection
+} from '../../../shared/schemas/research-review-corpus';
+import {
+  researchReviewScreeningPlanGetSchema, researchReviewScreeningSuggestionCreateSchema,
+  researchReviewScreeningSuggestionListSchema, type ResearchReviewScreeningFrozenPhase
+} from '../../../shared/schemas/research-review-screening';
+import {
+  researchReviewFullTextSuggestionCreateSchema, researchReviewFullTextSuggestionListSchema,
+  type ResearchReviewFullTextFrozenPhase
+} from '../../../shared/schemas/research-review-fulltext-screening';
+import {
+  researchReviewFullTextBindingGetSchema, researchReviewFullTextBindingVerifySchema,
+  type ResearchReviewFullTextBindingInspection
+} from '../../../shared/schemas/research-review-fulltext';
+import type {ResearchDocumentParse} from '../../../shared/types';
+import type {ResearchDocumentPreview} from '../../../shared/schemas/research-document-preview';
+import {
+  researchReviewLinksSchema, reviewLinksPayload, type ResearchReviewLink, type ResearchReviewLinksArtifact
+} from '../../../shared/schemas/research-review-links';
+import {researchReviewExtractionGetSchema} from '../../../shared/schemas/research-review-extraction';
+import {
+  researchReviewQualityPlanGetSchema, researchReviewQualityAssessmentGetSchema
+} from '../../../shared/schemas/research-review-quality';
+import {researchReviewReportGetSchema, type ResearchReviewReportInspection} from '../../../shared/schemas/research-review-report';
+
+export const REVIEW_TOOL_DESCRIPTORS: readonly ResearchToolDescriptor[] = [
+  {name: 'research_review_read', scope: 'app', effectClass: 'none', riskLevel: 'low', executionScopes: ['main', 'subagent']},
+  {name: 'research_review_suggest_title', scope: 'app', effectClass: 'external_call', riskLevel: 'low', executionScopes: ['main']},
+  {name: 'research_review_suggest_fulltext', scope: 'app', effectClass: 'external_call', riskLevel: 'low', executionScopes: ['main']}
+];
+
+const pagination = {
+  offset: z.number().int().nonnegative(),
+  limit: z.number().int().min(1).max(30)
+};
+const corpusTarget = researchReviewCorpusGetSchema.omit({projectId: true});
+const reportSection = z.enum(['counts', 'queries', 'records', 'exclusions', 'evidence']);
+const readSchema = z.discriminatedUnion('kind', [
+  researchReviewProtocolListRequestSchema.omit({projectId: true}).extend({kind: z.literal('protocols')}),
+  researchReviewProtocolGetRequestSchema.omit({projectId: true}).extend({kind: z.literal('protocol')}),
+  researchReviewSearchListSchema.omit({projectId: true}).extend({kind: z.literal('searches')}),
+  researchReviewSearchGetSchema.omit({projectId: true}).extend({kind: z.literal('search')}),
+  researchReviewSearchPoolRequestSchema.omit({projectId: true}).extend({kind: z.literal('search_pool')}),
+  researchReviewCorpusListSchema.omit({projectId: true}).extend({kind: z.literal('corpora')}),
+  corpusTarget.extend({kind: z.literal('corpus'), ...pagination}),
+  researchReviewCorpusHitRequestSchema.omit({projectId: true}).extend({kind: z.literal('hit')}),
+  researchReviewScreeningPlanGetSchema.omit({projectId: true}).extend({kind: z.literal('screening_plan')}),
+  corpusTarget.extend({kind: z.literal('title_phase'), ...pagination}),
+  corpusTarget.extend({kind: z.literal('fulltext_phase'), ...pagination}),
+  researchReviewScreeningSuggestionListSchema.omit({projectId: true, phase: true}).extend({kind: z.literal('title_suggestions')}),
+  researchReviewFullTextSuggestionListSchema.omit({projectId: true, phase: true}).extend({kind: z.literal('fulltext_suggestions')}),
+  researchReviewFullTextBindingGetSchema.omit({projectId: true}).extend({kind: z.literal('fulltext_binding')}),
+  researchReviewFullTextBindingVerifySchema.omit({projectId: true}).extend({kind: z.literal('fulltext_content'), ...pagination}),
+  researchReviewExtractionGetSchema.omit({projectId: true}).extend({kind: z.literal('extraction')}),
+  researchReviewQualityPlanGetSchema.omit({projectId: true}).extend({kind: z.literal('quality_plan')}),
+  researchReviewQualityAssessmentGetSchema.omit({projectId: true}).extend({kind: z.literal('quality_assessment')}),
+  corpusTarget.extend({kind: z.literal('studies')}),
+  researchReviewReportGetSchema.omit({projectId: true}).extend({
+    kind: z.literal('report'), section: reportSection, ...pagination
+  })
+]);
+
+// Provider SDKs need an object root. LangChain sends the input side of the
+// pipe and validates the selected operation with the original union at runtime.
+const readToolSchema = z.strictObject({
+  kind: z.enum(readSchema.options.map(option => option.shape.kind.value)).describe(
+    '按 kind 只传对应的必填字段。' + readSchema.options.map(({shape: {kind, ...fields}}) =>
+      `${kind.value} (${Object.keys(fields).join(', ')})`
+    ).join('；')
+  ),
+  versionId: researchReviewProtocolGetRequestSchema.shape.versionId.optional(),
+  reviewSearchId: researchReviewSearchGetSchema.shape.reviewSearchId.optional(),
+  corpusId: corpusTarget.shape.corpusId.optional(),
+  hitId: researchReviewCorpusHitRequestSchema.shape.hitId.optional(),
+  bindingId: researchReviewFullTextBindingGetSchema.shape.bindingId.optional(),
+  expectedBindingHash: researchReviewFullTextBindingVerifySchema.shape.expectedBindingHash.optional(),
+  extractionId: researchReviewExtractionGetSchema.shape.extractionId.optional(),
+  qualityPlanId: researchReviewQualityAssessmentGetSchema.shape.qualityPlanId.optional(),
+  section: reportSection.optional(),
+  offset: pagination.offset.optional(),
+  limit: researchReviewProtocolListRequestSchema.shape.limit.describe('列表最多 100，分页最多 30。').optional()
+}).pipe(readSchema);
+
+/** The harness owns project and operation identity; every write is only a proposal. */
+export function createReviewTools(input: {
+  capabilities: RocCapabilityRegistry;
+  projectId: string;
+  signal: AbortSignal;
+}): StructuredToolInterface[] {
+  const invoke = async <T>(name: string, request: object): Promise<T> => {
+    input.signal.throwIfAborted();
+    const result = await input.capabilities.invoke<unknown, T>(name, {...request, projectId: input.projectId});
+    input.signal.throwIfAborted();
+    return result;
+  };
+  return [
+    tool(async (target): Promise<[unknown, ResearchReviewLinksArtifact | null]> => {
+      const result = await read(target, invoke), links = reviewLinksPayload(result);
+      return [result, links === undefined ? null : {kind: 'roc_review_receipt_links', links: researchReviewLinksSchema.parse(links)}];
+    }, {
+      name: 'research_review_read',
+      responseFormat: 'content_and_artifact',
+      description: '读取当前项目真实的系统综述协议、查询回执、原始记录、筛选状态、全文绑定、人工提取/质量评价和报表。'
+        + '先列协议，再用返回的精确版本/语料/条目 ID 读取；列表 capped=true 时不能推断遗漏项不存在。'
+        + 'fulltext_content 按准确 binding 哈希读取其原文解析块，核验真实文件与解析工件；尚无解析时明确失败，不替换来源或启动解析。'
+        + '分页 total 是真实总数，page 只是所选部分；snapshotHash/bodyHash 校验完整保存内容，并非分页结果。'
+        + 'missing、null、旧来源、未审核研究数和失败查询都必须保留；建议不算人工决定。counts 是内部计数，不表示正式 PRISMA 模板适用性。',
+      schema: readToolSchema
+    }),
+    tool(async request => await invoke('research.reviewScreening.suggest', {
+      ...request, phase: 'title_abstract', requestId: proposalRequestId('research_review_suggest_title')
+    }), {
+      name: 'research_review_suggest_title',
+      description: '对准确语料条目提出标题/摘要筛选建议。先读冻结协议、筛选计划和原始 hit，按声明准则明确给出 include/exclude/uncertain 与理由。'
+        + '缺失摘要不能补造。来源和幂等身份由主进程记录；不提交人工决定、不仲裁、不冻结。',
+      schema: researchReviewScreeningSuggestionCreateSchema.omit({projectId: true, requestId: true, phase: true})
+    }),
+    tool(async request => await invoke('research.reviewFullTextScreening.suggest', {
+      ...request, phase: 'full_text', requestId: proposalRequestId('research_review_suggest_fulltext')
+    }), {
+      name: 'research_review_suggest_fulltext',
+      description: '对标题轮已纳入、已明确绑定真实原文的准确报告提出全文资格建议。先读取协议、全文状态、精确 binding 和原文，'
+        + '用 research_review_read 的 fulltext_content 逐页核对原文，携带准确计划/标题冻结/绑定哈希及声明准则；'
+        + '来源变化或未取回会失败。人工最终决定、仲裁、冻结由研究者完成。',
+      schema: researchReviewFullTextSuggestionCreateSchema.omit({projectId: true, requestId: true, phase: true})
+    })
+  ];
+}
+
+function proposalRequestId(toolName: string): string {
+  const operation = getCapabilityOperationContext();
+  if (operation === undefined || operation.toolName !== toolName) {
+    throw new Error('research_review_screening_tool_context_required');
+  }
+  return operation.idempotencyKey;
+}
+
+async function read(
+  target: z.infer<typeof readSchema>,
+  invoke: <T>(name: string, request: object) => Promise<T>
+): Promise<unknown> {
+  const {kind, ...request} = target;
+  switch (target.kind) {
+    case 'protocols': {
+      const items = await invoke<ResearchReviewProtocolInspection[]>('research.reviewProtocol.list', request);
+      return {limit: target.limit, capped: items.length === target.limit, items};
+    }
+    case 'protocol': {
+      const inspection = await invoke<ResearchReviewProtocolInspection>('research.reviewProtocol.get', request);
+      const link: ResearchReviewLink = {
+        projectId: inspection.version.projectId, title: '只读核查准确协议',
+        target: {kind: 'protocol', versionId: inspection.version.id, expectedVersionHash: inspection.versionHash, expectedFreezeHash: inspection.freezeHash}
+      };
+      return {...inspection, reviewLinks: [link]};
+    }
+    case 'searches': {
+      const items = await invoke<ResearchReviewSearchInspection[]>('research.reviewSearch.list', request);
+      return {limit: target.limit, capped: items.length === target.limit, items};
+    }
+    case 'search': {
+      const search = await invoke<ResearchReviewSearchInspection>('research.reviewSearch.get', request);
+      const link: ResearchReviewLink = {
+        projectId: search.snapshot.request.projectId, title: '只读核查准确查询回执',
+        target: {kind: 'query', reviewSearchId: search.snapshot.id, expectedSnapshotHash: search.snapshotHash}
+      };
+      return {...search, reviewLinks: [link]};
+    }
+    case 'search_pool': return await invoke('research.reviewSearch.pool', request);
+    case 'corpora': {
+      const items = await invoke<ResearchReviewCorpusInspection[]>('research.reviewCorpus.list', request);
+      return {
+        limit: target.limit, capped: items.length === target.limit,
+        items: items.map(corpus => ({
+          corpusId: corpus.snapshot.id, snapshotHash: corpus.snapshotHash, versionId: corpus.snapshot.request.versionId,
+          currentProtocol: corpus.currentProtocol, identifiedRecords: corpus.identifiedRecords,
+          queryCount: corpus.queryCount, searchCoverageComplete: corpus.searchCoverageComplete
+        }))
+      };
+    }
+    case 'corpus': {
+      const corpus = await invoke<ResearchReviewCorpusInspection>('research.reviewCorpus.get', {corpusId: target.corpusId});
+      const {hits, ...basis} = corpus.snapshot;
+      return {
+        basis, snapshotHash: corpus.snapshotHash, currentProtocol: corpus.currentProtocol,
+        identifiedRecords: corpus.identifiedRecords, queryCount: corpus.queryCount,
+        searchCoverageComplete: corpus.searchCoverageComplete, page: page(hits, target),
+        reviewLinks: [corpusLink(corpus.snapshot.request.projectId, corpus.snapshot.id, corpus.snapshotHash)]
+      };
+    }
+    case 'hit': return await invoke('research.reviewCorpus.hit', request);
+    case 'screening_plan': return await invoke('research.reviewScreening.getPlan', request);
+    case 'title_phase': {
+      const phase = await invoke<ResearchReviewScreeningFrozenPhase>('research.reviewScreening.phase', {
+        corpusId: target.corpusId, phase: 'title_abstract'
+      });
+      return {
+        plan: phase.plan, phase: phase.phase, counts: phase.counts, reviewHash: phase.reviewHash, freezeHash: phase.freezeHash,
+        frozenAt: phase.freeze?.frozenAt ?? null, page: page(phase.items, target),
+        frozenAuthorityPage: phase.freeze === null ? null : page(phase.freeze.authority.items, target),
+        reviewLinks: [corpusLink(phase.plan.snapshot.request.projectId, target.corpusId, phase.plan.snapshot.request.expectedCorpusHash)]
+      };
+    }
+    case 'fulltext_phase': {
+      const phase = await invoke<ResearchReviewFullTextFrozenPhase>('research.reviewFullTextScreening.phase', {
+        corpusId: target.corpusId, phase: 'full_text'
+      });
+      return {
+        plan: phase.plan, phase: phase.phase, titleFreezeHash: phase.titleFreezeHash, counts: phase.counts,
+        reviewHash: phase.reviewHash, freezeHash: phase.freezeHash, frozenAt: phase.freeze?.frozenAt ?? null,
+        page: page(phase.items, target),
+        frozenAuthorityPage: phase.freeze === null ? null : page(phase.freeze.authority.items, target),
+        reviewLinks: [corpusLink(phase.plan.snapshot.request.projectId, target.corpusId, phase.plan.snapshot.request.expectedCorpusHash)]
+      };
+    }
+    case 'title_suggestions': return await invoke('research.reviewScreening.suggestions', {...request, phase: 'title_abstract'});
+    case 'fulltext_suggestions': return await invoke('research.reviewFullTextScreening.suggestions', {...request, phase: 'full_text'});
+    case 'fulltext_binding': return await invoke('research.reviewFullText.get', request);
+    case 'fulltext_content': {
+      const bindingRequest = {corpusId: target.corpusId, bindingId: target.bindingId};
+      const binding = await invoke<ResearchReviewFullTextBindingInspection>('research.reviewFullText.get', bindingRequest);
+      if (binding.snapshotHash !== target.expectedBindingHash) throw new Error('research_review_fulltext_version_conflict');
+      const source = binding.snapshot.source;
+      if (source === null) throw new Error('research_review_fulltext_not_retrieved');
+      if (source.parse === null) throw new Error('research_review_fulltext_parse_required');
+      const selection = {
+        documentId: source.documentId, sourceHash: source.sourceHash, parseId: source.parse.id, parseHash: source.parse.hash
+      };
+      const preview = await invoke<ResearchDocumentPreview>('research.document.preview', selection);
+      const parsed = await invoke<ResearchDocumentParse>('research.document.content', selection);
+      const current = await invoke<ResearchReviewFullTextBindingInspection>('research.reviewFullText.get', bindingRequest);
+      if (current.snapshotHash !== target.expectedBindingHash) throw new Error('research_review_fulltext_version_conflict');
+      return {
+        binding: current, selection, coordinateHash: preview.coordinates === null ? null : preview.coordinates.snapshotHash,
+        run: parsed.run, pageCount: parsed.content.pageCount, page: page(parsed.content.blocks, target)
+      };
+    }
+    case 'extraction': return await invoke('research.reviewExtraction.get', request);
+    case 'quality_plan': return await invoke('research.reviewQuality.getPlan', request);
+    case 'quality_assessment': return await invoke('research.reviewQuality.getAssessment', request);
+    case 'studies': return await invoke('research.reviewStudies.get', request);
+    case 'report': {
+      const report = await invoke<ResearchReviewReportInspection>('research.reviewReport.get', {corpusId: target.corpusId});
+      const basis = {
+        projectId: report.body.projectId, corpusId: report.body.corpusId, bodyHash: report.bodyHash,
+        basis: report.body.basis, counts: report.body.counts, currentProtocol: report.currentProtocol,
+        sourcesCurrent: report.sourcesCurrent, searchCoverageComplete: report.body.searchCoverageComplete,
+        reviewLinks: [{
+          projectId: report.body.projectId, title: '只读核查准确计数与证据报告',
+          target: {kind: 'report', corpusId: report.body.corpusId, expectedBodyHash: report.bodyHash}
+        } satisfies ResearchReviewLink]
+      };
+      switch (target.section) {
+        case 'counts': return basis;
+        case 'queries': return {...basis, section: target.section, page: page(report.body.queries, target)};
+        case 'records': return {...basis, section: target.section, page: page(report.body.records, target)};
+        case 'exclusions': return {...basis, section: target.section, page: page(report.body.exclusions, target)};
+        case 'evidence': return {
+          ...basis, section: target.section,
+          page: page(report.body.evidenceTable.map((item, index) => ({...item, referenceStatus: report.evidenceStatus[index]})), target)
+        };
+      }
+    }
+  }
+}
+
+function corpusLink(projectId: string, corpusId: string, expectedCorpusHash: string): ResearchReviewLink {
+  return {projectId, title: '只读核查准确语料', target: {kind: 'corpus', corpusId, expectedCorpusHash}};
+}
+
+function page<T>(items: T[], request: {offset: number; limit: number}): {
+  offset: number; limit: number; total: number; hasMore: boolean; items: T[]
+} {
+  return {
+    offset: request.offset, limit: request.limit, total: items.length, hasMore: request.offset + request.limit < items.length,
+    items: items.slice(request.offset, request.offset + request.limit)
+  };
+}

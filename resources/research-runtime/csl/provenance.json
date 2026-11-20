@@ -1,0 +1,41 @@
+{
+  "upstreamCommit": "ffd2a7b91280d84c9237ae97f9e5fd1f5abbe756",
+  "styles": [
+    {
+      "file": "american-medical-association.csl",
+      "url": "https://raw.githubusercontent.com/citation-style-language/styles/ffd2a7b91280d84c9237ae97f9e5fd1f5abbe756/american-medical-association.csl",
+      "sha256": "d70f843d93c2b1e8c59c0e26e2396bea4ed99fb4a1aac69b6dddc249a10fadf7",
+      "license": "CC-BY-SA-3.0"
+    },
+    {
+      "file": "apa.csl",
+      "url": "https://raw.githubusercontent.com/citation-style-language/styles/ffd2a7b91280d84c9237ae97f9e5fd1f5abbe756/apa.csl",
+      "sha256": "3917def5fc951b104d64216c3373096042368b9704ba269ca83c14ebaba889fc",
+      "license": "CC-BY-SA-3.0"
+    },
+    {
+      "file": "chicago-author-date.csl",
+      "url": "https://raw.githubusercontent.com/citation-style-language/styles/ffd2a7b91280d84c9237ae97f9e5fd1f5abbe756/chicago-author-date.csl",
+      "sha256": "002fade78d7e4fe9d42936a16b43a8066b097013f6255df40b1bfba6631eff9b",
+      "license": "CC-BY-SA-3.0"
+    },
+    {
+      "file": "china-national-standard-gb-t-7714-2015-numeric.csl",
+      "url": "https://raw.githubusercontent.com/citation-style-language/styles/ffd2a7b91280d84c9237ae97f9e5fd1f5abbe756/china-national-standard-gb-t-7714-2015-numeric.csl",
+      "sha256": "d9cd04f94bc21a99dc320d0a2230d5a1fb47e3634c17c5820cf975c40db3c0c7",
+      "license": "CC-BY-SA-3.0"
+    },
+    {
+      "file": "ieee.csl",
+      "url": "https://raw.githubusercontent.com/citation-style-language/styles/ffd2a7b91280d84c9237ae97f9e5fd1f5abbe756/ieee.csl",
+      "sha256": "b4c7619fc16c45a31e4cc3271eab94ffe83192d3b4c7fc729470a3b459448de3",
+      "license": "CC-BY-SA-3.0"
+    },
+    {
+      "file": "nature.csl",
+      "url": "https://raw.githubusercontent.com/citation-style-language/styles/ffd2a7b91280d84c9237ae97f9e5fd1f5abbe756/nature.csl",
+      "sha256": "15b1272a3c360168e0b51ab9257534b08ced67190ed57be7a1c32cea8fc87be8",
+      "license": "CC-BY-SA-3.0"
+    }
+  ]
+}

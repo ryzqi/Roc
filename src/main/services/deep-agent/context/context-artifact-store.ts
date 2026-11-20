@@ -1,0 +1,218 @@
+import { createHash, randomUUID } from 'node:crypto';
+
+import type { Database as DatabaseConnection } from 'better-sqlite3';
+
+export type ContextArtifactKind = 'tool_result' | 'transcript' | 'summary_index';
+
+export type PersistContextArtifactInput = {
+  content: string;
+  kind: ContextArtifactKind;
+  runId: string;
+  threadId: string;
+  toolCallId?: string | null;
+  toolName?: string | null;
+  workspaceHash: string | null;
+};
+
+export type PersistedContextArtifact = {
+  artifactId: string;
+  content: string;
+  kind: ContextArtifactKind;
+  originalChars: number;
+  preview: string;
+  runId: string;
+  sha256: string;
+  threadId: string;
+  toolCallId: string | null;
+  toolName: string | null;
+  workspaceHash: string | null;
+  expiresAt: string;
+};
+
+export type ReadContextArtifactInput = {
+  artifactId: string;
+  expectedSha256: string;
+  threadId: string;
+  workspaceHash: string | null;
+};
+
+type ContextArtifactRow = {
+  id: string;
+  run_id: string;
+  thread_id: string;
+  kind: ContextArtifactKind;
+  tool_call_id: string | null;
+  tool_name: string | null;
+  sha256: string;
+  original_chars: number;
+  preview: string;
+  content: string;
+  workspace_hash: string | null;
+  created_at: string;
+};
+
+export class ContextArtifactStore {
+  constructor(private readonly db: DatabaseConnection, private readonly retentionDays = 90) {}
+
+  persistArtifact(input: PersistContextArtifactInput): PersistedContextArtifact {
+    const content = requireNonEmpty(input.content, 'context_artifact_content_empty');
+    const artifactId = `ctx_artifact_${randomUUID()}`;
+    const createdAt = new Date().toISOString();
+    const expiresAt = this.expiry(createdAt);
+    const sha256 = hashContent(content);
+    const preview = content.slice(0, 2000);
+    const toolCallId = normalizeOptional(input.toolCallId);
+    const toolName = normalizeOptional(input.toolName);
+    this.db
+      .prepare(
+        `INSERT INTO context_artifacts
+         (id, run_id, thread_id, kind, tool_call_id, tool_name, sha256, original_chars, preview, content, workspace_hash, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        artifactId,
+        requireNonEmpty(input.runId, 'context_artifact_run_id_empty'),
+        requireNonEmpty(input.threadId, 'context_artifact_thread_id_empty'),
+        input.kind,
+        toolCallId,
+        toolName,
+        sha256,
+        content.length,
+        preview,
+        content,
+        input.workspaceHash,
+        createdAt
+      );
+    return {
+      artifactId,
+      expiresAt,
+      content,
+      kind: input.kind,
+      originalChars: content.length,
+      preview,
+      runId: input.runId,
+      sha256,
+      threadId: input.threadId,
+      toolCallId,
+      toolName,
+      workspaceHash: input.workspaceHash
+    };
+  }
+
+  readArtifact(input: ReadContextArtifactInput): PersistedContextArtifact | null {
+    const artifactId = requireNonEmpty(input.artifactId, 'context_artifact_id_empty');
+    const threadId = requireNonEmpty(input.threadId, 'context_artifact_thread_id_empty');
+    const expectedSha256 = requireNonEmpty(input.expectedSha256, 'context_artifact_hash_empty');
+    const row = this.db
+      .prepare(
+        `SELECT id, run_id, thread_id, kind, tool_call_id, tool_name, sha256, original_chars, preview, content, workspace_hash, created_at
+         FROM context_artifacts
+         WHERE id = ? AND thread_id = ? AND workspace_hash IS ?`
+      )
+      .get(artifactId, threadId, input.workspaceHash) as ContextArtifactRow | undefined;
+    if (row === undefined) {
+      return null;
+    }
+    const expiresAt = this.expiry(row.created_at);
+    if (Date.now() >= Date.parse(expiresAt)) throw new Error('context_artifact_expired');
+    if (hashContent(row.content) !== row.sha256 || row.content.length !== row.original_chars) {
+      throw new Error('context_artifact_content_corrupt');
+    }
+    if (expectedSha256 !== row.sha256) {
+      throw new Error('context_artifact_hash_mismatch');
+    }
+    return {
+      artifactId: row.id,
+      expiresAt,
+      content: row.content,
+      kind: row.kind,
+      originalChars: row.original_chars,
+      preview: row.preview,
+      runId: row.run_id,
+      sha256: row.sha256,
+      threadId: row.thread_id,
+      toolCallId: row.tool_call_id,
+      toolName: row.tool_name,
+      workspaceHash: row.workspace_hash
+    };
+  }
+
+  private expiry(createdAt: string): string {
+    if (!Number.isFinite(this.retentionDays) || this.retentionDays <= 0) throw new Error('context_artifact_retention_invalid');
+    return new Date(Date.parse(createdAt) + this.retentionDays * 86400000).toISOString();
+  }
+}
+
+export function formatContextArtifactReference(artifact: PersistedContextArtifact): string {
+  return [
+    ...createContextArtifactLocatorLines(artifact),
+    'preview:',
+    artifact.preview,
+    '</roc_context_artifact>'
+  ].join('\n');
+}
+
+export function isValidContextArtifactLocator(locator: string): boolean {
+  const lines = locator.split('\n');
+  if (lines.length !== 10 || lines[0] !== '<roc_context_artifact>' || lines[9] !== '</roc_context_artifact>') {
+    return false;
+  }
+  const fields = [
+    ['artifactId: ', /^ctx_artifact_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u],
+    ['sha256: ', /^[a-f0-9]{64}$/u],
+    ['originalChars: ', /^[1-9][0-9]*$/u],
+    ['threadId: ', /^.+$/u],
+    ['workspaceHash: ', /^(?:none|[A-Za-z0-9_-]{1,128})$/u],
+    ['expiresAt: ', /^.+$/u],
+    ['source: ', /^.+$/u]
+  ] as const;
+  for (const [index, [prefix, pattern]] of fields.entries()) {
+    const line = lines[index + 1];
+    if (line === undefined || !line.startsWith(prefix) || !pattern.test(line.slice(prefix.length))) {
+      return false;
+    }
+  }
+  return lines[8] === 'retrievalHint: use read_context_artifact with artifactId, sha256, offset, and limit' &&
+    Number.isFinite(Date.parse(lines[6]!.slice('expiresAt: '.length)));
+}
+
+export function formatContextArtifactLocator(artifact: PersistedContextArtifact): string {
+  return [
+    ...createContextArtifactLocatorLines(artifact),
+    '</roc_context_artifact>'
+  ].join('\n');
+}
+
+function createContextArtifactLocatorLines(artifact: PersistedContextArtifact): string[] {
+  return [
+    '<roc_context_artifact>',
+    `artifactId: ${artifact.artifactId}`,
+    `sha256: ${artifact.sha256}`,
+    `originalChars: ${artifact.originalChars}`,
+    `threadId: ${artifact.threadId}`,
+    `workspaceHash: ${artifact.workspaceHash ?? "none"}`,
+    `expiresAt: ${artifact.expiresAt}`,
+    `source: ${artifact.toolName ?? artifact.kind}:${artifact.toolCallId ?? artifact.runId}`,
+    'retrievalHint: use read_context_artifact with artifactId, sha256, offset, and limit'
+  ];
+}
+
+function hashContent(content: string): string {
+  return createHash('sha256').update(content, 'utf8').digest('hex');
+}
+
+function normalizeOptional(value: string | null | undefined): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  const normalized = value.trim();
+  return normalized.length === 0 ? null : normalized;
+}
+
+function requireNonEmpty(value: string, code: string): string {
+  const normalized = value.trim();
+  if (normalized.length === 0) {
+    throw new Error(code);
+  }
+  return value;
+}

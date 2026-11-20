@@ -1,0 +1,9 @@
+# 名词化。动作被包成名词后，句子会变长且看不出主语。
+extends: existence
+message: "名词化 “%s”：用动词直说。"
+level: suggestion
+ignorecase: true
+nonword: true
+tokens:
+  - (?:the|a|an) (?:utilization|utilisation|implementation|application|examination|investigation|consideration|determination|evaluation) of
+  - (?:perform|conduct|carry out) (?:an?|the) (?:analysis|evaluation|investigation|examination|comparison|assessment) of

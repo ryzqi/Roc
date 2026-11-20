@@ -1,0 +1,15 @@
+{
+  "kind": "paper-facts",
+  "studies": [
+    {
+      "doi": "10.1155/2023/6039254",
+      "facts": {
+        "total_protein_day1_ug": 21,
+        "total_protein_next20d_ug": 10,
+        "fgf2_day1_pg": 121,
+        "fgf2_next14d_pg": 75
+      },
+      "tolerance": 0.01
+    }
+  ]
+}

@@ -1,0 +1,215 @@
+import { watch as watchWorkspace } from 'node:fs';
+
+import type { WorkspaceChangedEvent } from '../../shared/types';
+import { hasIgnoredFileNameSearchParentDirectory, isIgnoredFileNameSearchDirectory } from './file-name-search-path-policy';
+
+type WorkspaceWatchHandle = {
+  close(): void;
+  on(event: 'error', listener: (error: Error) => void): void;
+};
+
+type WorkspaceWatchFactory = (
+  path: string,
+  options: { recursive: true },
+  listener: (eventType: string, filename: string | Buffer | null) => void
+) => WorkspaceWatchHandle;
+
+type WorkspaceChangeWatcherLogger = {
+  warn(message: string, metadata?: Record<string, unknown>): void;
+};
+
+type WorkspaceChangeWatcherOptions = {
+  debounceMs?: number;
+  logger: WorkspaceChangeWatcherLogger;
+  /** Reports whether an event filename is represented in the current path snapshot. */
+  isKnownSnapshotPath?: (workspacePath: string, relativePath: string) => boolean;
+  /** Called synchronously for path-structure changes and watcher failures before debounce. */
+  onInvalidate?: (workspacePath: string, reason: string) => void;
+  onChange: (event: WorkspaceChangedEvent) => Promise<void> | void;
+  watch?: WorkspaceWatchFactory;
+};
+
+const defaultDebounceMs = 150;
+const ignoredTopLevelDirectories = new Set([
+  'node_modules',
+  'dist',
+  'out',
+  'release',
+  'coverage',
+  '.cache',
+  '.tmp',
+  '.runtime',
+  '.artifacts'
+]);
+
+export class WorkspaceChangeWatcherService {
+  private readonly debounceMs: number;
+  private readonly watch: WorkspaceWatchFactory;
+  private watcher: WorkspaceWatchHandle | null = null;
+  private watcherGeneration = 0;
+  private workspacePath: string | null = null;
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingEvent: WorkspaceChangedEvent | null = null;
+
+  constructor(private readonly options: WorkspaceChangeWatcherOptions) {
+    this.debounceMs = options.debounceMs === undefined ? defaultDebounceMs : options.debounceMs;
+    this.watch = options.watch === undefined ? watchWorkspace : options.watch;
+  }
+
+  setWorkspace(workspacePath: string | null): void {
+    if (this.workspacePath === workspacePath) {
+      return;
+    }
+    this.closeWatcher();
+    this.workspacePath = workspacePath;
+    if (workspacePath === null) {
+      return;
+    }
+    const generation = this.watcherGeneration;
+    try {
+      this.watcher = this.watch(workspacePath, { recursive: true }, (eventType, filename) => {
+        this.handleFileSystemChange(workspacePath, generation, eventType, filename);
+      });
+      this.watcher.on('error', (error) => {
+        this.handleWatcherError(workspacePath, generation, error);
+      });
+    } catch (error) {
+      this.options.logger.warn('Workspace change watcher failed to start.', {
+        workspacePath,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      this.invalidateSnapshot(workspacePath, 'watcher.start-failed');
+      this.closeWatcher();
+      this.workspacePath = null;
+    }
+  }
+
+  private handleWatcherError(workspacePath: string, generation: number, error: Error): void {
+    if (this.workspacePath !== workspacePath || this.watcherGeneration !== generation) return;
+    this.options.logger.warn('Workspace change watcher failed after start.', {
+      workspacePath,
+      error: error.message
+    });
+    this.closeWatcher();
+    this.invalidateSnapshot(workspacePath, 'watcher.runtime-failed');
+    this.workspacePath = null;
+  }
+
+  shutdown(): void {
+    this.closeWatcher();
+    this.workspacePath = null;
+  }
+
+  private closeWatcher(): void {
+    this.watcherGeneration += 1;
+    if (this.refreshTimer !== null) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = null;
+    }
+    this.pendingEvent = null;
+    if (this.watcher !== null) {
+      this.watcher.close();
+      this.watcher = null;
+    }
+  }
+
+  private handleFileSystemChange(
+    workspacePath: string,
+    generation: number,
+    eventType: string,
+    filename: string | Buffer | null
+  ): void {
+    if (this.workspacePath !== workspacePath || this.watcherGeneration !== generation) {
+      return;
+    }
+    const relativePath = normalizeWatchFilename(filename);
+    if (relativePath !== null && shouldIgnoreRelativePath(relativePath)) {
+      return;
+    }
+    if (relativePath === null || !hasIgnoredFileNameSearchParentDirectory(relativePath)) {
+      const reason = snapshotInvalidationReason(
+        eventType,
+        relativePath,
+        relativePath !== null && this.options.isKnownSnapshotPath?.(workspacePath, relativePath) === true
+      );
+      if (reason !== null) this.invalidateSnapshot(workspacePath, reason);
+    }
+    this.pendingEvent = {
+      workspacePath,
+      relativePath: this.pendingEvent !== null && this.pendingEvent.relativePath !== relativePath ? null : relativePath,
+      eventType: eventType === 'rename' ? 'rename' : 'change'
+    };
+    this.schedulePublish();
+  }
+
+  private invalidateSnapshot(workspacePath: string, reason: string): void {
+    try {
+      this.options.onInvalidate?.(workspacePath, reason);
+    } catch (error) {
+      this.options.logger.warn('Workspace path snapshot invalidation failed.', {
+        workspacePath,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  private schedulePublish(): void {
+    // Publish the leading event before background work can consume the refresh budget.
+    // A fixed window coalesces bursts without indefinitely postponing their final update.
+    if (this.refreshTimer !== null) return;
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = null;
+      if (this.pendingEvent !== null) this.schedulePublish();
+    }, this.debounceMs);
+    void this.publishPendingEvent();
+  }
+
+  private async publishPendingEvent(): Promise<void> {
+    const event = this.pendingEvent;
+    this.pendingEvent = null;
+    if (event === null) {
+      return;
+    }
+    try {
+      await this.options.onChange(event);
+    } catch (error) {
+      this.options.logger.warn('Workspace change event publish failed.', {
+        workspacePath: event.workspacePath,
+        relativePath: event.relativePath,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+}
+
+function snapshotInvalidationReason(
+  eventType: string,
+  relativePath: string | null,
+  isKnownSnapshotPath: boolean
+): string | null {
+  if (relativePath === null) return 'watcher.unknown-filename';
+  if (eventType === 'rename') return 'watcher.path-structure';
+  if (eventType === 'change') {
+    const isIgnoredRootDirectory = !relativePath.includes('/') && isIgnoredFileNameSearchDirectory(relativePath);
+    return isKnownSnapshotPath || isIgnoredRootDirectory ? null : 'watcher.unindexed-content-path';
+  }
+  return 'watcher.unknown-event-type';
+}
+
+function normalizeWatchFilename(filename: string | Buffer | null): string | null {
+  if (filename === null) {
+    return null;
+  }
+  const raw = Buffer.isBuffer(filename) ? filename.toString('utf8') : filename;
+  // Leading/trailing spaces are valid filename characters. Trimming could turn a
+  // real root entry such as " node_modules" into an ignored directory name.
+  return raw.length === 0 ? null : raw;
+}
+
+function shouldIgnoreRelativePath(relativePath: string): boolean {
+  const firstSegment = relativePath.split('/')[0];
+  if (firstSegment === undefined) {
+    return false;
+  }
+  return ignoredTopLevelDirectories.has(firstSegment);
+}

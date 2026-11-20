@@ -1,0 +1,188 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+import { tool } from '@langchain/core/tools';
+import { z } from 'zod';
+import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
+
+const { LangChainModelFactory } = await importTypeScriptModule('src/main/services/langchain-model-factory.ts', {
+  platform: 'node',
+  external: ['@langchain/*', 'p-retry'],
+  tempDir: '.runtime/test-bundles'
+});
+const factory = new LangChainModelFactory({}, { getProviderSecret: async () => 'fixture-key' });
+
+test('compatible SDK requests preserve nullable inputs, impossible choices and record keys in streaming and nonstreaming calls', async () => {
+  const requests = [];
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    const request = JSON.parse(body);
+    requests.push(request);
+    if (request.stream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.end('data: ' + JSON.stringify({ id: 'fixture', object: 'chat.completion.chunk', model: 'fixture-model',
+        choices: [{ index: 0, delta: { role: 'assistant', content: 'done' }, finish_reason: 'stop' }] }) + '\n\ndata: [DONE]\n\n');
+    } else {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ id: 'fixture', object: 'chat.completion', model: 'fixture-model',
+        choices: [{ index: 0, message: { role: 'assistant', content: 'done' }, finish_reason: 'stop' }] }));
+    }
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    const schema = z.strictObject({ runId: z.string().min(1), replacesFigureId: z.string().min(1).nullable(),
+      nested: z.strictObject({ claimId: z.string().nullable(), count: z.number().nullable() }),
+      optional: z.string().optional(), absent: z.enum([]).optional(),
+      attributes: z.record(z.string().min(1).max(2000), z.string()) });
+    const entry = tool(() => 'unused', { name: 'publish_figure', description: 'Publish a completed figure.', schema });
+    for (const streaming of [false, true]) {
+      const config = provider('openai_compatible');
+      config.endpoint = `http://127.0.0.1:${server.address().port}/v1`;
+      const { model } = await factory.createModelForProvider(config, 'fixture-model', { streaming });
+      await model.bindTools([entry]).invoke('Inspect the schema.');
+    }
+    assert.equal(requests.length, 2);
+    for (const request of requests) {
+      const parameters = request.tools[0].function.parameters;
+      assert.deepEqual(parameters.required, ['runId', 'replacesFigureId', 'nested', 'attributes']);
+      assert.deepEqual(parameters.properties.replacesFigureId.anyOf, [{ type: 'string', minLength: 1 }, { type: 'null' }]);
+      assert.deepEqual(parameters.properties.nested.required, ['claimId', 'count']);
+      assert.deepEqual(parameters.properties.nested.properties.claimId.type, ['string', 'null']);
+      assert.deepEqual(parameters.properties.nested.properties.count.type, ['number', 'null']);
+      assert.deepEqual(parameters.properties.absent, { not: {} });
+      assert.deepEqual(parameters.properties.attributes.propertyNames,
+        { type: 'string', minLength: 1, maxLength: 2000 });
+    }
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('DeepSeek compatible thinking switch reaches requests without changing tool choice or other models', async () => {
+  const modelId = 'kedaya-2/deepseek-v4.1-flash-1017';
+  for (const thinking of [false, true]) {
+    const { model } = await factory.createModelForProvider(provider('openai_compatible', { thinking }, modelId), modelId);
+    const params = model.invocationParams({ tool_choice: 'required' });
+    assert.deepEqual(params.thinking, { type: thinking ? 'enabled' : 'disabled' });
+    assert.equal(params.tool_choice, 'required');
+  }
+  const automatic = await factory.createModelForProvider(provider('openai_compatible', {}, modelId), modelId);
+  assert.equal(automatic.model.invocationParams({}).thinking, undefined);
+  const override = await factory.createModelForProvider(provider('openai_compatible', {
+    thinking: false, modelKwargs: { thinking: { type: 'enabled' }, custom_field: 0 }
+  }, modelId), modelId);
+  assert.deepEqual(override.model.invocationParams({}).thinking, { type: 'enabled' });
+  assert.equal(override.model.invocationParams({}).custom_field, 0);
+  const unrelated = await factory.createModelForProvider(provider('openai_compatible', { thinking: false }), 'fixture-model');
+  assert.equal(unrelated.model.invocationParams({}).thinking, undefined);
+});
+
+function provider(type, options = {}, modelId = 'fixture-model') {
+  return {
+    id: 'fixture', name: 'Fixture', type, enabled: true,
+    endpoint: 'http://127.0.0.1:1/v1', credentialRef: 'secret:fixture',
+    models: [{ id: modelId, enabled: true, options }]
+  };
+}
+
+test('default chat model stamp follows selected configuration and emits only a digest', () => {
+  const selected = provider('openai_compatible', {temperature: 0});
+  const unrelated = {...provider('openai_compatible'), id: 'other'};
+  const providers = {providers: [selected, unrelated], defaultModelId: 'fixture-model'};
+  const state = {status: 'ready', providerId: selected.id, modelId: 'fixture-model'};
+  const stamped = new LangChainModelFactory({getProviders: () => providers, getDefaultModelState: () => state}, {});
+  const original = stamped.defaultChatModelStamp();
+  assert.match(original, /^[a-f0-9]{64}$/u);
+  unrelated.endpoint = 'https://unrelated.invalid';
+  assert.equal(stamped.defaultChatModelStamp(), original);
+  selected.models[0].options.temperature = .2;
+  assert.notEqual(stamped.defaultChatModelStamp(), original);
+  const changed = stamped.defaultChatModelStamp();
+  selected.options = {defaultHeaders: {Authorization: 'private-header'}};
+  assert.notEqual(stamped.defaultChatModelStamp(), changed);
+  assert.ok(!stamped.defaultChatModelStamp().includes('private'));
+  state.status = 'disabled';
+  assert.notEqual(stamped.defaultChatModelStamp(), changed);
+});
+
+test('OpenAI model options reach the SDK and preserve explicit zero and false values', async () => {
+  const config = provider('openai_compatible', {
+    temperature: 0, topP: 0.5, presencePenalty: 0, frequencyPenalty: 0.2,
+    seed: 0, parallelToolCalls: false, streamUsage: false,
+    stop: ['END'], reasoning: { effort: 'low' }, modelKwargs: { custom_field: 'fixture' },
+    contextWindowTokens: 8192, maxTokens: 1024
+  });
+  const { model, runtime } = await factory.createModelForProvider(config, 'fixture-model');
+  const params = model.invocationParams({});
+  assert.equal(params.temperature, 0);
+  assert.equal(params.top_p, 0.5);
+  assert.equal(params.presence_penalty, 0);
+  assert.equal(params.frequency_penalty, 0.2);
+  assert.equal(params.seed, 0);
+  assert.equal(params.parallel_tool_calls, false);
+  assert.deepEqual(params.stop, ['END']);
+  assert.equal(params.custom_field, 'fixture');
+  assert.equal(model.streamUsage, false);
+  assert.deepEqual(model.reasoning, { effort: 'low' });
+  assert.equal(runtime.contextWindowTokens, 8192);
+  assert.equal(runtime.maxOutputTokens, 1024);
+});
+
+test('provider-specific options stay scoped to NVIDIA and OpenAI', async () => {
+  const options = {
+    thinking: true, includeReasoning: true, topK: 12, minP: 0.1,
+    repetitionPenalty: 1.1, guidedRegex: '[a-z]+',
+    modelKwargs: { openai_only: true }, seed: 0, parallelToolCalls: false
+  };
+  const nvidia = await factory.createModelForProvider(provider('nvidia', options, 'deepseek-ai/deepseek-r1'), 'deepseek-ai/deepseek-r1', { streaming: false });
+  assert.equal(nvidia.runtime.modelKwargs.reasoning_effort, 'medium');
+  assert.equal(nvidia.runtime.modelKwargs.include_reasoning, true);
+  assert.equal(nvidia.runtime.modelKwargs.top_k, 12);
+  assert.equal(nvidia.runtime.modelKwargs.seed, 0);
+  assert.deepEqual(nvidia.runtime.modelKwargs.nvext, { guided_regex: '[a-z]+' });
+  assert.equal(nvidia.runtime.modelKwargs.openai_only, undefined);
+  const router = await factory.createModelForProvider(provider('openrouter', options), 'fixture-model');
+  assert.deepEqual(router.runtime.modelKwargs, {});
+  assert.equal(router.model.invocationParams({}).seed, undefined);
+  assert.equal(router.model.invocationParams({}).parallel_tool_calls, undefined);
+});
+
+test('NVIDIA uses the user-configured endpoint and preserves explicit endpoint overrides', async () => {
+  const config = provider('nvidia');
+  const configured = await factory.createModelForProvider(config, 'fixture-model');
+  assert.equal(configured.runtime.baseUrl, config.endpoint);
+  config.options = { endpointOverride: 'https://private-gateway.example/v1' };
+  const overridden = await factory.createModelForProvider(config, 'fixture-model');
+  assert.equal(overridden.runtime.baseUrl, config.options.endpointOverride);
+});
+
+test('llama.cpp keeps sampling fallbacks, explicit overrides and forced streaming', async () => {
+  const config = provider('llama_cpp', {
+    temperature: 0, topP: 0.8, presencePenalty: 0,
+    samplingProfileOverrides: { temperature: 0.9, topP: 0.95, topK: 20, minP: 0.05, repeatPenalty: 1.2 },
+    contextWindowTokens: 8192, maxTokens: 2048
+  });
+  config.credentialRef = null;
+  const { model, runtime } = await factory.createModelForProvider(config, 'fixture-model', { streaming: false, maxOutputTokens: 512 });
+  assert.equal(model.temperature, 0);
+  assert.equal(model.topP, 0.8);
+  assert.equal(model.presencePenalty, 0);
+  assert.equal(runtime.streaming, true);
+  assert.equal(model.streamUsage, false);
+  assert.equal(runtime.maxOutputTokens, 512);
+  assert.deepEqual(runtime.modelKwargs, { cache_prompt: true, top_k: 20, min_p: 0.05, repeat_penalty: 1.2 });
+});
+
+test('Anthropic keeps adaptive thinking and stop parameters', async () => {
+  const options = { maxTokens: 4096, topK: 20, stop: ['END'], anthropicThinking: { mode: 'adaptive' } };
+  const { model } = await factory.createModelForProvider(provider('anthropic_compatible', options), 'fixture-model');
+  assert.deepEqual(model.thinking, { type: 'adaptive' });
+  assert.deepEqual(model.stopSequences, ['END']);
+});
+
+test('unsupported providers remain rejected', async () => {
+  await assert.rejects(factory.createModelForProvider(provider('custom'), 'fixture-model'), /尚未支持 LangChain/);
+});
