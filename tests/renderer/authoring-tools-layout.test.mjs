@@ -28,7 +28,8 @@ before(async () => {
     const ok = data => ({ok: true, data});
     const contents = {'main.tex': ${JSON.stringify(formula)}, 'notes.md': ${JSON.stringify(markdown)}};
     const snapshot = {id: 'terminal-fixture', cwd: '/synthetic', shell: '/bin/zsh', status: 'running', exitCode: null};
-    window.writes = []; window.terminalCreates = []; window.terminalInputs = []; window.terminalCloses = [];
+    window.writes = []; window.inlineCommands = []; window.terminalCreates = []; window.terminalInputs = []; window.terminalCloses = [];
+    window.addEventListener('roc:inline-selection-command', event => window.inlineCommands.push(event.detail));
     window.compiles = []; window.exports = []; window.pdfRequests = []; window.compileMode = 'ready'; window.exportPath = null;
     const client = {api: {
       workspace: {onChanged: () => () => {}},
@@ -145,6 +146,41 @@ test('authoring uses real Markdown math previews and protects drafts when changi
   await source.press('Meta+A');
   await expect(page.getByRole('region', {name: '所选公式预览'}).locator('.katex')).toHaveCount(1);
   assert.equal(await page.getByRole('region', {name: 'Markdown 实时预览'}).count(), 0);
+});
+
+test('selected LaTeX exposes scoped commands and applies a confirmed replacement to the saveable draft', async () => {
+  await page.evaluate(() => window.mount('latex'));
+  await selectFile('main.tex');
+  const editor = page.getByTestId('production-latex-content');
+  await editor.click();
+  await page.keyboard.press('Meta+a');
+  await page.keyboard.press('Meta+k');
+  const commands = page.getByTestId('inline-command-bar');
+  await expect(commands).toBeVisible();
+  const writesBeforeCommand = await page.evaluate(() => window.writes.length);
+  await page.getByTestId('inline-command-polish').click();
+  const dispatched = await page.evaluate(() => window.inlineCommands.at(-1));
+  assert.equal(dispatched.action, 'polish');
+  assert.deepEqual(dispatched.context, {
+    filePath: 'main.tex',
+    selectionText: formula,
+    lineRange: {start: 1, end: 1},
+    source: 'workspace-file'
+  });
+  assert.equal(await page.evaluate(() => window.writes.length), writesBeforeCommand, 'an assistant request alone does not write the file');
+
+  await page.getByTestId('inline-command-edit-selection').click();
+  const replacement = String.raw`\section{Reviewed}`;
+  await page.getByTestId('inline-command-replacement-input').fill(replacement);
+  await expect(page.getByTestId('inline-command-replacement')).toHaveText(replacement);
+  await page.getByTestId('inline-command-apply-edit').click();
+  await expect(editor).toHaveText(replacement);
+  await expect(page.getByTestId('latex-dirty-indicator')).toHaveText('未保存');
+  assert.equal(await page.evaluate(() => window.writes.length), writesBeforeCommand, 'confirmed diff updates the draft; save stays explicit');
+
+  await page.getByTestId('production-latex-save').click();
+  await expect(page.getByTestId('latex-dirty-indicator')).toHaveText('已保存');
+  assert.equal(await page.evaluate(() => window.writes.at(-1).content), replacement);
 });
 
 test('file reading view retains unsaved Markdown drafts and line wrapping state', async () => {

@@ -2,10 +2,10 @@ import {useEffect,useRef,useState} from 'react';
 import {TextLayer,type PDFDocumentProxy,type PDFPageProxy} from 'pdfjs-dist';
 import type {ReadingHighlight} from '../../shared/schemas/research-reading';
 import './pdf-reading.css';
-export type PdfTextSelection={text:string;rects:ReadingHighlight['rects']};
-export default function PdfTextLayer({pdf,page,viewport,ratio,disabled,query,highlights,onSelection}: {
+export type PdfTextSelection={text:string;rects:ReadingHighlight['rects'];anchor:{x:number;y:number}};
+export default function PdfTextLayer({pdf,page,viewport,ratio,disabled,query,highlights,onSelection,onCommandSelection}: {
   pdf:PDFDocumentProxy;page:number;viewport:ReturnType<PDFPageProxy['getViewport']>;ratio:number;disabled:boolean;query:string;
-  highlights:ReadingHighlight[];onSelection:(value:PdfTextSelection)=>void;
+  highlights:ReadingHighlight[];onSelection:(value:PdfTextSelection)=>void;onCommandSelection?:()=>void;
 }):React.JSX.Element {
   const element=useRef<HTMLDivElement>(null),[error,setError]=useState<string|null>(null),[rendered,setRendered]=useState(0);
   useEffect(()=>{
@@ -30,8 +30,27 @@ export default function PdfTextLayer({pdf,page,viewport,ratio,disabled,query,hig
       const width=Math.min(1-left,rect.width/bounds.width),height=Math.min(1-top,rect.height/bounds.height);
       return width>0&&height>0?[[left,top,width,height] as [number,number,number,number]]:[];
     });
-    onSelection({text:selection.toString(),rects});
+    const selectionBounds=range.getBoundingClientRect();
+    onSelection({text:selection.toString(),rects,anchor:{x:selectionBounds.left,y:Math.max(12,selectionBounds.top-48)}});
   };
+  const commandSelection=():void=>{
+    const selection=window.getSelection(),container=element.current;
+    if(!container||!selection||selection.isCollapsed||!selection.rangeCount||!container.contains(selection.getRangeAt(0).commonAncestorContainer))return;
+    onCommandSelection?.();
+  };
+  useEffect(()=>{
+    const keydown=(event:KeyboardEvent):void=>{
+      if(!(event.metaKey||event.ctrlKey)||event.altKey||event.shiftKey||event.key.toLowerCase()!=='k')return;
+      const selection=window.getSelection(),container=element.current;
+      if(!container||!selection||selection.isCollapsed||!selection.rangeCount||!container.contains(selection.getRangeAt(0).commonAncestorContainer))return;
+      const active=document.activeElement;
+      const editingField=active instanceof HTMLInputElement||active instanceof HTMLTextAreaElement||active?.getAttribute('contenteditable')==='true';
+      if(editingField&&!container.contains(active))return;
+      event.preventDefault();event.stopPropagation();commandSelection();
+    };
+    document.addEventListener('keydown',keydown,true);
+    return()=>document.removeEventListener('keydown',keydown,true);
+  },[onCommandSelection]);
   return <>
     <div ref={element} className="roc-pdf-text-layer" data-testid="reader-pdf-text" style={{pointerEvents:disabled?'none':'auto'}} onPointerUp={capture} onKeyUp={capture}/>
     {highlights.filter(highlight=>!highlight.archived&&highlight.page===page).flatMap(highlight=>highlight.rects.map(([x,y,w,h],index)=><div key={`${highlight.id}:${index}`} aria-label={highlight.note||highlight.text}

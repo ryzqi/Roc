@@ -10,10 +10,11 @@ type WorkspaceCanvasProps = {
   activeTab: AppViewId;
   subview: AppRoute['subview'];
   onTabChange: (tab: AppViewTarget) => void;
+  selectionBar?: React.ReactNode;
   children: React.ReactNode;
 };
 
-export function WorkspaceCanvas({ activeTab, subview, onTabChange, children }: WorkspaceCanvasProps): React.JSX.Element {
+export function WorkspaceCanvas({ activeTab, subview, onTabChange, selectionBar = null, children }: WorkspaceCanvasProps): React.JSX.Element {
   const sections = activeTab === 'overview' || activeTab === 'library' ? subviews[activeTab] : null;
   return <div className="workspace-canvas-container flex h-full min-h-0 flex-col bg-surface-base text-ink-primary" data-testid="canvas">
     <header className="flex min-h-10 shrink-0 items-center gap-2 border-b-[0.5px] border-line-default px-4 py-1">
@@ -26,6 +27,7 @@ export function WorkspaceCanvas({ activeTab, subview, onTabChange, children }: W
           </button>)}
         </nav>}
     </header>
+    {selectionBar}
     <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
   </div>;
 }

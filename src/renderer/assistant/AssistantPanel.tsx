@@ -2,8 +2,8 @@ import './assistant-workspace.css';
 import type {OpenResearchArtifact, OpenReviewInspector, ReadResearchGateContext} from '../artifacts/artifact-interactions';
 import {ReviewLinkActionsProvider} from './blocks/review-link-actions';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Bot, Loader2, Minimize2, Settings2 } from 'lucide-react';
-import type { ChatRunMode, SettingsSnapshot, TaskAcceptance } from '../../shared/types';
+import { AlertTriangle, Settings2 } from 'lucide-react';
+import type { ChatPendingApproval, ChatRunMode, SettingsSnapshot, TaskAcceptance } from '../../shared/types';
 import { buildProviderModelKey } from '../../shared/provider-model-key';
 import { useAsyncAction, useAsyncResource } from '../app/use-async-resource';
 import { useSettingsRevision, notifySettingsChanged } from '../shared/settings-events';
@@ -14,6 +14,9 @@ import { ErrorBar } from '../shell/ErrorBar';
 import { EmptyState } from '../shell/EmptyState';
 import { AssistantComposer, type ComposerModel, type ComposerSkill } from './composer';
 import { ResearchTaskProgress } from './ResearchTaskProgress';
+import { StatusPillHeader } from './StatusPillHeader';
+import { ExecutionTimelineDrawer } from './ExecutionTimelineDrawer';
+import { HitlApprovalDock } from './HitlApprovalDock';
 import {
   clearAssistantComposerDraft,
   migrateAssistantComposerDraft,
@@ -24,6 +27,7 @@ import { ChatTranscriptPanel } from './transcript-panel';
 import { useChatSession } from './use-chat-session';
 import { RunDiagnostics } from './RunDiagnostics';
 import {recordUxEvent} from '../app/ux-metrics';
+import { hasOpenDialog } from '../shell/overlay-stack';
 
 /**
  * The assistant panel (T4.2–T4.6).
@@ -267,6 +271,10 @@ export function AssistantPanel({
       : latestHistoryEvent?.threadId === threadId ? latestHistoryEvent.runId : null;
   const activeRun = runStatus === 'running' || runStatus === 'recovering';
   useEffect(() => { onRunActivity?.(activeRun); }, [activeRun, onRunActivity]);
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  useEffect(() => {
+    if (runStatus === 'failed' || session.errorMessage !== null) setTimelineOpen(true);
+  }, [runStatus, session.errorMessage]);
   const checkpointReport = useMemo(() => {
     if (diagnosticsRunId === null || threadId === null) return null;
     let report: TaskAcceptance | null = session.runState.activityBlocks
@@ -285,6 +293,8 @@ export function AssistantPanel({
   const pendingQuestion = session.runState.pendingInterrupts.find((interrupt) => interrupt.kind === 'question') ?? null;
   const replyMode = pendingQuestion !== null;
   const waitingUser = session.runState.pendingInterrupts.length > 0;
+  const pendingApprovals = useMemo(() => session.runState.pendingInterrupts.filter((interrupt): interrupt is ChatPendingApproval => interrupt.kind === 'approval'), [session.runState.pendingInterrupts]);
+  const activeApprovalIds = useMemo(() => new Set(pendingApprovals.map(approval => approval.interruptId)), [pendingApprovals]);
   /**
    * Suspended on an approval: the run exists but is waiting, so the input must stay locked and
    * the card is the only way forward. Without this the composer looked idle and a second
@@ -305,11 +315,13 @@ export function AssistantPanel({
               : runStatus === 'cancelled'
                 ? '已取消'
                 : '运行失败';
+  const conversationTitle = session.messages.find(message => message.role === 'user')?.content.trim().replace(/\s+/gu, ' ').slice(0, 72) || null;
 
   const onReadGateContext = useCallback<ReadResearchGateContext>(request => client.api.research.getGateReviewContext(request), [client]);
 
   const onApprovalDecision = useCallback(
     (interruptId: string, decisions: Parameters<typeof session.resumeApproval>[1]) => {
+      if (hasOpenDialog()) return;
       recordUxEvent('action_initiated', 'assistant');
       void session.resumeApproval(interruptId, decisions);
     },
@@ -317,69 +329,18 @@ export function AssistantPanel({
   );
 
   const header = (
-    <div className="assistant-header flex shrink-0 flex-col gap-2 border-b-[0.5px] border-line px-3 py-2">
-      <div className="flex min-w-0 items-center gap-2">
-        <Bot size={14} aria-hidden="true" className="shrink-0 text-[var(--icon-agent)]" />
-        <span className="min-w-0 truncate font-medium text-ink text-[length:var(--font-meta-size)]">研究助手</span>
-        {statusLabel === null ? null : (
-          <span
-            className={
-              runStatus === 'failed'
-                ? 'shrink-0 rounded-control bg-[var(--tool-st-error-bg)] px-2 py-1 text-[var(--tool-st-error-text)] text-[length:var(--font-micro-size)]'
-                : runStatus === 'completed'
-                  ? 'shrink-0 rounded-control bg-[var(--tool-st-end-bg)] px-2 py-1 text-[var(--tool-st-end-text)] text-[length:var(--font-micro-size)]'
-                  : runStatus === 'cancelled'
-                    ? 'shrink-0 rounded-control bg-[var(--overlay-hover)] px-2 py-1 text-muted text-[length:var(--font-micro-size)]'
-                    : 'shrink-0 rounded-control bg-[var(--tool-st-progress-bg)] px-2 py-1 text-[var(--tool-st-progress-text)] text-[length:var(--font-micro-size)]'
-            }
-            data-testid="assistant-run-status"
-            data-status={runStatus}
-          >
-            {runStatus === 'running' || runStatus === 'recovering' ? (
-              <Loader2 size={10} aria-hidden="true" className="mr-1 inline animate-spin" />
-            ) : null}
-            {statusLabel}
-          </span>
+    <div className="relative shrink-0">
+      <StatusPillHeader projectName={projectName} conversationTitle={conversationTitle} stageLabel={stageLabel} runStatus={runStatus} statusLabel={statusLabel}
+        messageCount={session.messages.length} timelineOpen={timelineOpen} onToggleTimeline={() => setTimelineOpen(open => !open)}
+        onNewThread={() => onThreadIdChange(null)} onResetWidth={onResetWidth} />
+      <ExecutionTimelineDrawer open={timelineOpen}>
+        {projectId === null || diagnosticsRunId === null || threadId === null ? null : (
+          <ResearchTaskProgress key={`${projectId}:${threadId}:${diagnosticsRunId}`} client={client} projectId={projectId} threadId={threadId} runId={diagnosticsRunId}
+            runStatus={session.runState.runId === diagnosticsRunId ? runStatus : 'history'} onOpenTask={onOpenTask} onOpenArtifact={onOpenArtifact} />
         )}
-        {onResetWidth === undefined ? null : (
-          <button
-            type="button"
-            onClick={onResetWidth}
-            title="重置助手宽度"
-            aria-label="重置助手宽度"
-            data-testid="assistant-reset-width"
-            className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-muted transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
-          >
-            <Minimize2 size={13} aria-hidden="true" />
-          </button>
-        )}
-      </div>
-      <div className="flex min-w-0 items-center gap-2">
-        <span
-          className="min-w-0 flex-1 truncate text-subtle text-[length:var(--font-micro-size)]"
-          data-testid="assistant-context"
-          title={projectName ?? '未进入项目'}
-        >
-          {stageLabel ?? projectName ?? '未进入项目'}
-        </span>
-        <span className="ml-auto shrink-0 font-mono tabular-nums text-subtle text-[length:var(--font-micro-size)]" data-testid="assistant-message-count">
-          {session.messages.length} 条
-        </span>
-      </div>
-      {projectId === null || diagnosticsRunId === null || threadId === null ? null : (
-        <ResearchTaskProgress key={`${projectId}:${threadId}:${diagnosticsRunId}`}
-          client={client} projectId={projectId} threadId={threadId} runId={diagnosticsRunId}
-          runStatus={session.runState.runId === diagnosticsRunId ? runStatus : 'history'} onOpenTask={onOpenTask} onOpenArtifact={onOpenArtifact} />
-      )}
-      {diagnosticsRunId === null || threadId === null ? null : (
-        <RunDiagnostics
-          key={`${threadId}:${diagnosticsRunId}`}
-          client={client}
-          runId={diagnosticsRunId}
-          threadId={threadId}
-          runStatus={session.runState.runId === diagnosticsRunId ? runStatus : 'history'}
-        />
-      )}
+        {diagnosticsRunId === null || threadId === null ? null : <RunDiagnostics key={`${threadId}:${diagnosticsRunId}`} client={client} runId={diagnosticsRunId} threadId={threadId}
+          runStatus={session.runState.runId === diagnosticsRunId ? runStatus : 'history'} />}
+      </ExecutionTimelineDrawer>
     </div>
   );
 
@@ -449,6 +410,7 @@ export function AssistantPanel({
             onJumpToLatest={session.history.reloadLatest}
             onApprovalDecision={session.runState.runId !== null && waitingUser ? onApprovalDecision : undefined}
             approvalPending={session.sending || session.cancelling}
+            activeApprovalIds={activeApprovalIds}
             onOpenArtifact={onOpenArtifact}
             onReadGateContext={onReadGateContext}
           />
@@ -456,10 +418,11 @@ export function AssistantPanel({
         )}
       </div>
 
-      {waitingUser ? (
+      {pendingApprovals.length > 0 ? <HitlApprovalDock pendingItems={pendingApprovals} pending={session.sending || session.cancelling} onDecide={onApprovalDecision}
+        onOpenArtifact={onOpenArtifact} onReadGateContext={onReadGateContext} /> : waitingUser ? (
         <p className="shrink-0 border-t-[0.5px] border-line px-3 py-1 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" data-testid="assistant-waiting-note">
           <AlertTriangle size={10} aria-hidden="true" className="mr-1 inline" />
-          等待审批，请在上方卡片中处理。
+          等待你的回答。
         </p>
       ) : null}
 

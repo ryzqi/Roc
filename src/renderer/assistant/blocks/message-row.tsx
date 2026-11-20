@@ -60,6 +60,7 @@ export type ChatMessageRowProps = {
   onReadGateContext: ReadResearchGateContext;
   onApprovalDecision?: (approvalId: string, decisions: ChatResumeDecision[]) => void;
   approvalPending?: boolean;
+  activeApprovalIds?: ReadonlySet<string>;
 };
 
 const finishedEnterKeys = new Set<string>();
@@ -126,7 +127,7 @@ function resolveActivityBlocks(
   ];
 }
 
-function ChatMessageRowImpl({ message, onApprovalDecision, approvalPending, onOpenArtifact, onReadGateContext }: ChatMessageRowProps): React.JSX.Element {
+function ChatMessageRowImpl({ message, onApprovalDecision, approvalPending, activeApprovalIds, onOpenArtifact, onReadGateContext }: ChatMessageRowProps): React.JSX.Element {
   const isAssistant = message.role === 'assistant';
   const attachments = message.attachments ?? [];
   const activityBlocks = resolveActivityBlocks(message, message.blocks);
@@ -150,17 +151,18 @@ function ChatMessageRowImpl({ message, onApprovalDecision, approvalPending, onOp
           {message.content.length === 0 ? null : (
             <StreamingText text={message.content} isStreaming={message.isStreaming} />
           )}
-          {message.interrupts.map((interrupt) => (
-            <ChatInterruptView
-              interrupt={interrupt}
-              key={interrupt.interruptId}
-              onApprovalDecision={onApprovalDecision}
-              approvalPending={approvalPending}
-              onOpenArtifact={onOpenArtifact}
-              onReadGateContext={onReadGateContext}
-              source={message.source}
-            />
-          ))}
+          {message.interrupts.map((interrupt) => {
+            if (interrupt.kind === 'approval' && activeApprovalIds?.has(interrupt.interruptId)) {
+              const action = interrupt.actionRequests[0];
+              return <p key={interrupt.interruptId} className="hitl-approval-archive px-2 text-ink-muted text-[length:var(--font-micro-size)]" data-testid="assistant-approval-archive">
+                {action?.name ?? `${interrupt.actionRequests.length} 项工具请求`}等待下方审批。{' '}
+                <button type="button" className="underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-focus-ring"
+                  onClick={() => document.querySelector<HTMLElement>('[data-testid="assistant-hitl-dock"]')?.scrollIntoView({block: 'nearest'})}>查看审批</button>
+              </p>;
+            }
+            return <ChatInterruptView key={interrupt.interruptId} interrupt={interrupt} onApprovalDecision={onApprovalDecision}
+              approvalPending={approvalPending} onOpenArtifact={onOpenArtifact} onReadGateContext={onReadGateContext} source={message.source} />;
+          })}
           {message.isStreaming ? (
             <span
               aria-hidden="true"
@@ -208,6 +210,7 @@ export const ChatMessageRow = memo(
     prev.message.blocks === next.message.blocks &&
     prev.message.interrupts === next.message.interrupts &&
     prev.message.isStreaming === next.message.isStreaming &&
+    prev.activeApprovalIds === next.activeApprovalIds &&
     prev.approvalPending === next.approvalPending &&
     prev.onApprovalDecision === next.onApprovalDecision &&
     prev.onOpenArtifact === next.onOpenArtifact &&

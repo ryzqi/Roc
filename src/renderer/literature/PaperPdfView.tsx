@@ -17,6 +17,7 @@ import type {ResearchDocumentAnnotationTarget} from '../../shared/schemas/resear
 import {openPdfSource, releasePdfSource} from './pdf-source';
 import {useViewActive, useViewSelected} from '../shared/view-activity';
 import {rendererPdfShouldReclaim, subscribeRendererPdfPolicy} from '../shared/renderer-resource-budget';
+import {InlineCommandBar, type InlineCommandAction, type InlineSelectionContext} from '../canvas/InlineCommandBar';
 
 type Location = ResearchDocumentParse['content']['blocks'][number]['locations'][number];
 type Props = {
@@ -26,6 +27,7 @@ type Props = {
   focusLocation?: ResearchSourceLocator['locations'][number] | null;
   onSelectBlock: (selection: {blockId: string; locationIndex: number}) => void
   canAnnotate: boolean;
+  enableInlineCommands?: boolean;
   onNote?: (text: string) => void; onTranslate?: (segments: TranslationSegment[], label: string) => void;
 };
 type OpenDocument = {key: string; preview: ResearchDocumentPreview | null; pdf: PDFDocumentProxy};
@@ -37,7 +39,7 @@ type PageLocation = Pick<ProjectedLocation, 'blockId' | 'locationIndex' | 'label
 const maximumCanvasPixels = 4_000_000;
 
 /** Own one PDF worker and one visible page. All geometry comes from a sealed parse and actual PDF viewport. */
-export default function PaperPdfView({client, projectId, document, parsed, selection, focusLocation = null, onSelectBlock, canAnnotate, onNote, onTranslate}: Props): React.JSX.Element {
+export default function PaperPdfView({client, projectId, document, parsed, selection, focusLocation = null, onSelectBlock, canAnnotate, enableInlineCommands = false, onNote, onTranslate}: Props): React.JSX.Element {
   const viewActive = useViewActive();
   const viewSelected = useViewSelected();
   const reclaim = useSyncExternalStore(subscribeRendererPdfPolicy, rendererPdfShouldReclaim);
@@ -57,6 +59,7 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
   const [height,setHeight]=useState(0),[fitPage,setFitPage]=useState(false);
   const scrollRef=useRef<HTMLDivElement>(null);
   const [textSelection,setTextSelection]=useState<PdfTextSelection|null>(null);
+  const [inlineCommandsOpen,setInlineCommandsOpen]=useState(false);
   const [highlights,setHighlights]=useState<ReadingHighlight[]>([]),[query,setQuery]=useState('');
   const areaRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -191,7 +194,15 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
     query.addEventListener('change', update); window.addEventListener('resize', update);
     return () => {query.removeEventListener('change', update); window.removeEventListener('resize', update);};
   }, [viewActive, pixelRatio]);
-  useEffect(()=>{setTextSelection(null);},[key,pageNumber]);
+  useEffect(()=>{setTextSelection(null);setInlineCommandsOpen(false);},[key,pageNumber]);
+
+  const inlineSelection: InlineSelectionContext | null = enableInlineCommands && textSelection !== null && textSelection.text.trim().length > 0
+    ? {filePath: document.filename, documentId: document.id, selectionText: textSelection.text, lineRange: null, source: 'pdf', page: pageNumber}
+    : null;
+  const runInlineCommand = (action: InlineCommandAction, context: InlineSelectionContext): void => {
+    window.dispatchEvent(new CustomEvent('roc:inline-selection-command', {detail: {action, context}}));
+    setInlineCommandsOpen(false);
+  };
   useEffect(() => {setPageDraft(String(pageNumber)); setPageError(null);}, [pageKey, pageNumber]);
 
   useEffect(() => {
@@ -434,7 +445,8 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
               }}
 />
             {currentPaint && current?<PdfTextLayer pdf={current.pdf} page={pageNumber} viewport={currentPaint.viewport} ratio={currentPaint.ratio}
-              disabled={selecting} query={query} highlights={highlights} onSelection={setTextSelection}/>:null}
+              disabled={selecting} query={query} highlights={highlights} onSelection={setTextSelection}
+              onCommandSelection={enableInlineCommands ? () => setInlineCommandsOpen(true) : undefined}/>:null}
             {currentPaint?.region ? <div data-testid="reader-pdf-region" data-source-block-id={selected?.blockId}
               data-source-location-index={selected?.locationIndex} role="note" aria-label="解析区域" className="pointer-events-none absolute border-2 border-accent bg-[var(--accent-soft)] transition-none"
               style={{left: currentPaint.region[0], top: currentPaint.region[1], width: currentPaint.region[2]-currentPaint.region[0],
@@ -448,6 +460,8 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
           </div>
         </div>
       </div>
+      <InlineCommandBar selection={inlineCommandsOpen ? inlineSelection : null} anchor={inlineCommandsOpen ? textSelection?.anchor ?? null : null}
+        onAction={runInlineCommand} onDismiss={() => setInlineCommandsOpen(false)}/>
     </section>
   );
 }

@@ -11,6 +11,13 @@ import { formatBeijingDateTime, formatBytes } from '../shared/format';
 import { fileName } from '../workspace/paths';
 import { listTree, previewFile, writeTextFile } from '../workspace/workspace-store';
 import { SourceEditor } from './SourceEditor';
+import type { SourceReplacement, SourceSelection } from './SourceEditor';
+import {
+  InlineCommandBar,
+  type InlineCommandAction,
+  type InlineReplacementProposal,
+  type InlineSelectionContext
+} from '../canvas/InlineCommandBar';
 import { WorkspaceCompilePanel } from './WorkspaceCompilePanel';
 import { InlineHint, primaryButtonClass } from './panel-shell';
 import {LazyBoundary, retryableLazy} from '../shell/LazyBoundary';
@@ -70,6 +77,10 @@ export function LatexPanel(): React.JSX.Element {
   const [filesOpen, setFilesOpen] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [selectedFormula, setSelectedFormula] = useState('');
+  const [sourceSelection, setSourceSelection] = useState<SourceSelection | null>(null);
+  const [inlineProposal, setInlineProposal] = useState<InlineReplacementProposal | null>(null);
+  const [replacement, setReplacement] = useState<SourceReplacement | null>(null);
+  const replacementNonce = useRef(0);
   const liveDraft = useDeferredValue(draft ?? '');
   const [note, setNote] = useState<string | null>(null);
 
@@ -161,7 +172,45 @@ export function LatexPanel(): React.JSX.Element {
     setSelectedPath(path);
     setSelectedFormula('');
     setFocusLine(null);
+    setSourceSelection(null);
+    setInlineProposal(null);
+    setReplacement(null);
   }, [save.reset]);
+
+  const inlineSelection = sourceSelection === null || selectedPath === null ? null : {
+    filePath: selectedPath,
+    selectionText: sourceSelection.text,
+    lineRange: sourceSelection.lineRange,
+    source: 'workspace-file' as const
+  } satisfies InlineSelectionContext;
+
+  const applyInlineReplacement = useCallback((selection: InlineSelectionContext, nextText: string): boolean => {
+    if (!canEdit || selectedPath === null || sourceSelection === null || selection.filePath !== selectedPath) return false;
+    const current = (draft ?? previewData?.content ?? '').slice(sourceSelection.from, sourceSelection.to);
+    if (current !== selection.selectionText) {
+      setNote('选区已变化，请重新选择后再应用。');
+      return false;
+    }
+    replacementNonce.current += 1;
+    setReplacement({ from: sourceSelection.from, to: sourceSelection.to, text: nextText, nonce: replacementNonce.current });
+    setSourceSelection(null);
+    return true;
+  }, [canEdit, draft, previewData?.content, selectedPath, sourceSelection]);
+
+  useEffect(() => {
+    const onProposal = (event: Event): void => {
+      const detail = (event as CustomEvent<Partial<InlineReplacementProposal> & { filePath?: string; selectionText?: string }>).detail;
+      if (selectedPath === null || sourceSelection === null || detail.filePath !== selectedPath || detail.selectionText !== sourceSelection.text || typeof detail.replacement !== 'string') return;
+      setInlineProposal({ original: sourceSelection.text, replacement: detail.replacement, requestId: detail.requestId });
+    };
+    window.addEventListener('roc:inline-selection-proposal', onProposal);
+    return () => window.removeEventListener('roc:inline-selection-proposal', onProposal);
+  }, [selectedPath, sourceSelection]);
+
+  const handleInlineAction = (action: InlineCommandAction, selection: InlineSelectionContext): void => {
+    window.dispatchEvent(new CustomEvent('roc:inline-selection-command', { detail: { action, context: selection } }));
+    setNote(action === 'polish' ? '润色请求已发送，结果需确认后应用。' : action === 'send-to-assistant' ? '已将选区发送到助手草稿。' : '已发送选区请求。');
+  };
 
   useEffect(() => {
     if (selectedPath !== null || entries.length === 0) return;
@@ -419,7 +468,11 @@ export function LatexPanel(): React.JSX.Element {
               <>
                 <div className="authoring-editor-layout" data-preview-open={pdfPreview !== null || previewOpen&&(markdownPreview||mathPreview)}>
                   <div className="authoring-source"><SourceEditor key={selectedPath} value={draft ?? previewData.content} readOnly={!canEdit || save.pending || compiling} focusLine={focusLine}
-                    onSelectionChange={setSelectedFormula} onChange={(value) => { setDraft(value); setNote(null); setRecovery(null); }} /></div>
+                    replacement={replacement} onSelectionChange={selection => {
+                      setSourceSelection(selection);
+                      setInlineProposal(null);
+                      setSelectedFormula(selection?.text ?? '');
+                    }} onChange={(value) => { setDraft(value); setNote(null); setRecovery(null); }} /></div>
                   {pdfPreview !== null ? <section className="authoring-live-preview" aria-label="编译 PDF 预览">
                     <LazyBoundary fallback={<p role="status">正在打开 PDF…</p>}><FilePreview client={scope.client} projectId={scope.projectId}
                       workspacePath={scope.workspacePath} relativePath={pdfPreview} writable={canWrite} onClose={() => setPdfPreview(null)} /></LazyBoundary>
@@ -459,6 +512,20 @@ export function LatexPanel(): React.JSX.Element {
       </div>
       </div>
     </div>
+    <InlineCommandBar
+      selection={inlineSelection}
+      anchor={sourceSelection?.anchor ?? null}
+      onAction={handleInlineAction}
+      onDismiss={() => { setSourceSelection(null); setInlineProposal(null); }}
+      onApplyReplacement={applyInlineReplacement}
+      proposal={inlineProposal}
+      onAcceptProposal={() => {
+        if (inlineSelection === null || inlineProposal === null) return;
+        applyInlineReplacement(inlineSelection, inlineProposal.replacement);
+        setInlineProposal(null);
+      }}
+      onRejectProposal={() => setInlineProposal(null)}
+    />
     </>
   );
 }

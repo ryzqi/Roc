@@ -137,6 +137,9 @@ async function mountRunning() {
 test('running correction guards IME, reuses failed submission identity and shows authoritative consumption', async () => {
   await mountRunning();
   const input = page.getByTestId('assistant-composer-input');
+  assert.equal(await page.getByTestId('assistant-status-header').evaluate(element => Math.round(element.getBoundingClientRect().height)), 40);
+  assert.deepEqual(await input.evaluate(element => ({min: getComputedStyle(element).minHeight, max: getComputedStyle(element).maxHeight})),
+    {min: '40px', max: '160px'});
   await input.fill('先核对引用来源');
   await input.evaluate(element => {
     element.dispatchEvent(new CompositionEvent('compositionstart', {bubbles: true}));

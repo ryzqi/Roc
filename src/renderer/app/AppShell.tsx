@@ -392,6 +392,24 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
 
   useMenuIntentBridge(client, handleMenuIntent);
 
+  useEffect(() => {
+    const onInlineSelectionCommand = (event: Event): void => {
+      const detail = (event as CustomEvent<{ action?: string; context?: { filePath?: string; selectionText?: string; lineRange?: { start: number; end: number } | null } }>).detail;
+      const context = detail.context;
+      if (context === undefined || typeof context.filePath !== 'string' || typeof context.selectionText !== 'string' || context.selectionText.trim().length === 0) return;
+      const actionLabel: Record<string, string> = {
+        explain: '解释这段内容', polish: '学术润色这段内容', 'extract-citation': '提取这段内容的引用', 'send-to-assistant': '处理这段内容'
+      };
+      const range = context.lineRange === null || context.lineRange === undefined ? '' : `（第 ${context.lineRange.start}–${context.lineRange.end} 行）`;
+      const prompt = `${actionLabel[detail.action ?? 'send-to-assistant'] ?? '处理这段内容'}。\n文件：${context.filePath}${range}\n\n选中文本：\n${context.selectionText}`;
+      assistantSeedNonceRef.current += 1;
+      setAssistantSeed({ text: prompt, nonce: assistantSeedNonceRef.current });
+      navigate({ ...routeRef.current, assistantOpen: true });
+    };
+    window.addEventListener('roc:inline-selection-command', onInlineSelectionCommand);
+    return () => window.removeEventListener('roc:inline-selection-command', onInlineSelectionCommand);
+  }, [navigate]);
+
   /**
    * The canvas data scope (P3). Memoised because every view reads it and a new
    * identity on each render would re-render them all on unrelated shell state

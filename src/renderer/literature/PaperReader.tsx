@@ -857,6 +857,7 @@ export function PaperReader({
               <LazyBoundary fallback={<p role="status" className="p-2 text-muted">加载原文阅读器…</p>}>
                 <PaperPdfView client={literature.client} projectId={literature.projectId} document={activeDocument} parsed={reader.parsed}
                   onNote={addNote} onTranslate={translate}
+                  enableInlineCommands
                   canAnnotate={scope.writable && scope.projectId === literature.projectId}
                   selection={selectedPdfBlock === null ? null : {blockId: selectedPdfBlock, locationIndex: selectedPdfLocation}}
                   onSelectBlock={selection => {

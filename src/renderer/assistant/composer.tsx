@@ -524,7 +524,7 @@ export function AssistantComposer({
         ].join(' ')}
         data-dragging-files={draggingFiles ? 'true' : 'false'}
       >
-        <div className="flex flex-col gap-3">
+        <div className="flex min-w-0 flex-col gap-2">
           <textarea
             ref={textareaRef}
             value={text}
@@ -600,11 +600,41 @@ export function AssistantComposer({
             }}
             className="assistant-composer-input w-full min-w-0 resize-none bg-transparent p-1 text-ink text-[length:var(--font-body-size)] leading-relaxed placeholder:text-subtle disabled:opacity-60 focus-visible:outline-offset-[-2px]"
           />
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-1">
+              <button
+                type="button"
+                aria-label="添加图片"
+                title={running ? '运行中仅接受文本补充' : replyMode ? '此问题仅接受文本回复' : imageInputSupported ? '添加图片或粘贴图片' : '当前模型不支持图片输入'}
+                data-testid="assistant-composer-attach"
+                disabled={inputLocked || sendPending || readingAttachments || !canAttach}
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = 'image/png,image/jpeg,image/webp';
+                  input.multiple = true;
+                  input.onchange = () => { void addFiles([...(input.files ?? [])], 'drop'); };
+                  input.click();
+                }}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
+              >
+                <Paperclip size={13} aria-hidden="true" />
+              </button>
+              <ModelPicker
+                choices={model.choices} currentKey={model.currentKey} label={model.label}
+                pending={model.pending} error={model.error} onOpenSettings={model.onOpenSettings} onSelect={model.onSelect}
+              />
+              {slashCommand.kind !== 'ok' ? null : (
+                <span className="max-w-[40%] min-w-0 truncate text-subtle text-[length:var(--font-micro-size)]"
+                  data-testid="assistant-composer-skills" title={slashCommand.explicitSkillIds.map((id) => skillById.get(id)?.name ?? id).join('、')}>
+                  技能：{slashCommand.explicitSkillIds.map((id) => skillById.get(id)?.name ?? id).join('、')}
+                </span>
+              )}
+            </div>
             <div
               role="radiogroup"
               aria-label={running ? '补充方式' : '运行模式'}
-              className="flex max-w-full flex-wrap items-center gap-1"
+              className="flex shrink-0 items-center gap-1"
               data-testid="assistant-composer-mode"
               onKeyDown={(event) => {
                 if (inputLocked || sendPending) return;
@@ -647,29 +677,7 @@ export function AssistantComposer({
                 );
               })}
             </div>
-            <div className="flex max-w-full flex-wrap items-center gap-1">
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  aria-label="添加图片"
-                  title={running ? '运行中仅接受文本补充' : replyMode ? '此问题仅接受文本回复' : imageInputSupported ? '添加图片或粘贴图片' : '当前模型不支持图片输入'}
-                  data-testid="assistant-composer-attach"
-                  disabled={inputLocked || sendPending || readingAttachments || !canAttach}
-                  onClick={() => {
-                    const input = document.createElement('input');
-                    input.type = 'file';
-                    input.accept = 'image/png,image/jpeg,image/webp';
-                    input.multiple = true;
-                    input.onchange = () => {
-                      void addFiles([...(input.files ?? [])], 'drop');
-                    };
-                    input.click();
-                  }}
-                  className="flex h-7 w-7 items-center justify-center rounded-control text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
-                >
-                  <Paperclip size={13} aria-hidden="true" />
-                </button>
-              </div>
+            <div className="flex shrink-0 items-center gap-1">
               {suspended && !stopping ? (
                   <span
                     className="flex h-[var(--control-height)] items-center rounded-control border-[0.5px] border-line px-3 text-muted text-[length:var(--font-meta-size)]"
@@ -712,27 +720,6 @@ export function AssistantComposer({
           </div>
         </div>
 
-        {/* Model selection stays near the draft, outside the send action group. */}
-        <div className="flex min-w-0 items-center gap-2 border-t-[0.5px] border-line-soft pt-2">
-          <ModelPicker
-            choices={model.choices}
-            currentKey={model.currentKey}
-            label={model.label}
-            pending={model.pending}
-            error={model.error}
-            onOpenSettings={model.onOpenSettings}
-            onSelect={model.onSelect}
-          />
-          {slashCommand.kind !== 'ok' ? null : (
-            <span
-              className="max-w-[40%] min-w-0 shrink-0 truncate text-subtle text-[length:var(--font-micro-size)]"
-              data-testid="assistant-composer-skills"
-              title={slashCommand.explicitSkillIds.map((id) => skillById.get(id)?.name ?? id).join('、')}
-            >
-              技能：{slashCommand.explicitSkillIds.map((id) => skillById.get(id)?.name ?? id).join('、')}
-            </span>
-          )}
-        </div>
       </div>
     </div>
   );

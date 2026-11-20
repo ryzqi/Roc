@@ -7,6 +7,17 @@ import { HighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/
 import { stex } from '@codemirror/legacy-modes/mode/stex';
 import { useContentPreferences } from '../app/use-content-preferences';
 import { tags } from '@lezer/highlight';
+import type { InlineSelectionAnchor } from '../canvas/InlineCommandBar';
+
+export type SourceSelection = {
+  text: string;
+  from: number;
+  to: number;
+  lineRange: { start: number; end: number };
+  anchor: InlineSelectionAnchor | null;
+};
+
+export type SourceReplacement = { from: number; to: number; text: string; nonce: number };
 
 const sourceHighlight = HighlightStyle.define([
   { tag: [tags.keyword, tags.tagName], color: 'var(--syntax-keyword)' },
@@ -31,12 +42,13 @@ const sourceTheme = EditorView.theme({
 });
 
 /** CodeMirror owns selection, undo, IME and search; React owns saved/draft text. */
-export function SourceEditor({ value, readOnly, onChange, onSelectionChange, focusLine }: {
+export function SourceEditor({ value, readOnly, onChange, onSelectionChange, focusLine, replacement = null }: {
   value: string;
   readOnly: boolean;
   onChange: (value: string) => void;
-  onSelectionChange?: (selection: string) => void;
+  onSelectionChange?: (selection: SourceSelection | null) => void;
   focusLine?: { line: number; nonce: number } | null;
+  replacement?: SourceReplacement | null;
 }): React.JSX.Element {
   const { preferences } = useContentPreferences();
   const host = useRef<HTMLDivElement>(null);
@@ -64,7 +76,19 @@ export function SourceEditor({ value, readOnly, onChange, onSelectionChange, foc
             if (update.docChanged) onChangeRef.current(update.state.doc.toString());
             if (update.selectionSet || update.docChanged) {
               const {from,to}=update.state.selection.main;
-              onSelectionRef.current?.(update.state.sliceDoc(from,Math.min(to,from+10_000)));
+              if (from === to) {
+                onSelectionRef.current?.(null);
+              } else {
+                const end = Math.min(to, from + 10_000);
+                const startLine = update.state.doc.lineAt(from).number;
+                const endLine = update.state.doc.lineAt(to).number;
+                const coords = editor.coordsAtPos(from);
+                onSelectionRef.current?.({
+                  text: update.state.sliceDoc(from, end), from, to: end,
+                  lineRange: { start: startLine, end: endLine },
+                  anchor: coords === null ? null : { x: coords.left, y: Math.max(12, coords.top - 48) }
+                });
+              }
             }
           })
         ]
@@ -91,6 +115,13 @@ export function SourceEditor({ value, readOnly, onChange, onSelectionChange, foc
     editor.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: 'center' }) });
     editor.focus();
   }, [focusLine]);
+
+  useEffect(() => {
+    const editor = view.current;
+    if (editor === null || replacement === null) return;
+    if (replacement.nonce < 1 || replacement.from < 0 || replacement.to < replacement.from || replacement.to > editor.state.doc.length) return;
+    editor.dispatch({ changes: { from: replacement.from, to: replacement.to, insert: replacement.text }, selection: { anchor: replacement.from + replacement.text.length } });
+  }, [replacement]);
 
   useEffect(() => { view.current?.requestMeasure(); }, [preferences.codeSize]);
 

@@ -47,6 +47,7 @@ export type ChatTranscriptPanelProps = {
   onReadGateContext: ReadResearchGateContext;
   onApprovalDecision?: (approvalId: string, decisions: ChatResumeDecision[]) => void;
   approvalPending?: boolean;
+  activeApprovalIds?: ReadonlySet<string>;
 };
 
 export type TranscriptVirtuosoWindow = {
@@ -81,6 +82,7 @@ export function ChatTranscriptPanel({
   onJumpToLatest,
   onApprovalDecision,
   approvalPending = false,
+  activeApprovalIds,
   onOpenArtifact,
   onReadGateContext
 }: ChatTranscriptPanelProps): React.JSX.Element {
@@ -145,7 +147,8 @@ export function ChatTranscriptPanel({
         followOutput={isAtBottom ? 'auto' : false}
         atBottomStateChange={setIsAtBottom}
         itemContent={(_index, message) => (
-          <ChatMessageRow message={message} onOpenArtifact={onOpenArtifact} onReadGateContext={onReadGateContext} onApprovalDecision={onApprovalDecision} approvalPending={approvalPending} />
+          <ChatMessageRow message={message} onOpenArtifact={onOpenArtifact} onReadGateContext={onReadGateContext}
+            onApprovalDecision={onApprovalDecision} approvalPending={approvalPending} activeApprovalIds={activeApprovalIds} />
         )}
         startReached={() => {
           if (hasMoreBefore && !loadingOlder) {
