@@ -7,7 +7,7 @@
   font-size: var(--font-ui-size);
 }
 .memory-page-heading, .memory-document-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
-.memory-page-heading { padding-bottom: var(--space-5); }
+.memory-page-heading { padding-bottom: var(--space-4); }
 .memory-page-heading h2 { font-size: var(--font-h2-size); font-weight: var(--font-weight-semibold); }
 .memory-page-heading p, .memory-document-heading p { margin-top: var(--space-1); color: var(--muted); font-size: var(--font-meta-size); line-height: 1.6; }
 .memory-page button { cursor: pointer; }
@@ -27,7 +27,7 @@
 .memory-empty-indicator { color: var(--subtle); font-size: var(--font-micro-size); font-weight: 400; }
 .memory-navigation-hint { color: var(--subtle); font-size: var(--font-meta-size); line-height: 1.6; padding: var(--space-3) var(--space-2); }
 .memory-document { min-width: 0; padding: var(--space-5) 0 var(--space-6) var(--space-6); }
-.memory-document-heading { margin-bottom: var(--space-6); }
+.memory-document-heading { margin-bottom: var(--space-4); }
 .memory-document-heading h3 { font-size: var(--font-lead-size); font-weight: var(--font-weight-semibold); }
 .memory-scope { display: block; margin-top: var(--space-2); font-size: var(--font-meta-size); color: var(--subtle); overflow-wrap: anywhere; }
 .memory-reading { max-width: 68ch; min-height: 220px; overflow-wrap: anywhere; }
@@ -75,8 +75,10 @@
 .memory-search-results button { margin-left: auto; }
 @container (max-width: 480px) {
   .memory-layout { grid-template-columns: minmax(0, 1fr); }
-  .memory-navigation { display: flex; flex-wrap: wrap; gap: var(--space-4); border-right: 0; border-bottom: 0.5px solid var(--line); padding: var(--space-3) 0; }
-  .memory-navigation-group { flex: 1 1 150px; }
+  .memory-navigation { display: flex; flex-direction: column; gap: var(--space-1); border-right: 0; border-bottom: 0.5px solid var(--line); padding: var(--space-3) 0; }
+  .memory-navigation-group { display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
+  .memory-navigation-group h3 { flex: 0 0 48px; margin: 0; font-size: var(--font-micro-size); }
+  .memory-navigation-group button { width: auto; flex: 1; padding-inline: var(--space-2); justify-content: center; font-size: var(--font-meta-size); }
   .memory-navigation-group + .memory-navigation-group { margin-top: 0; }
   .memory-navigation-hint { padding: 0 var(--space-2); }
   .memory-document { padding: var(--space-5) 0; }

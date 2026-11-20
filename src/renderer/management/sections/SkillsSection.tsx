@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { DownloadCloud, Package, RefreshCw, Trash2 } from 'lucide-react';
+import { DownloadCloud, Package, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { ConfirmDialog } from '../../shell/ConfirmDialog';
 import { FormNote, FormSection, formInputClass, formSecondaryButtonClass } from '../../shared/form-ui';
 import {
@@ -14,6 +14,7 @@ import {
 } from '../skill-model';
 import { SkillFilesModal } from './SkillFilesModal';
 import type { SkillsStore } from '../use-skills';
+import '../management-layout.css';
 
 /**
  * 技能 (P9/T9.2).
@@ -38,6 +39,7 @@ import type { SkillsStore } from '../use-skills';
 
 export function SkillsSection({ store: skills }: { store: SkillsStore }): React.JSX.Element {
   const [importPath, setImportPath] = useState('');
+  const [query, setQuery] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleteAttempted, setDeleteAttempted] = useState(false);
   /**
@@ -51,12 +53,181 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
   const importRequired = validateSkillImportPathRequired(importPath);
   const deleteSkillRecord = skills.skills.find((skill) => skill.id === deleteTarget) ?? null;
 
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const visibleSkills = sortSkills(skills.skills).filter(skill =>
+    `${skill.name} ${skill.id} ${skill.description}`.toLocaleLowerCase().includes(normalizedQuery));
   const builtin = skills.builtin;
   const builtinSnapshot = builtin.snapshot;
   const busy = skills.busy || builtinSnapshot?.updating === true;
 
   return (
-    <div className="flex min-h-0 flex-col gap-3" data-testid="mgmt-skills">
+    <div className="management-skills" data-testid="mgmt-skills">
+      <FormSection
+        title="已安装技能"
+        testId="mgmt-skills-list-section"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-muted text-[length:var(--font-meta-size)]" data-testid="mgmt-skills-summary">
+            {skillSummary(skills.skills)}
+          </span>
+          <button
+            type="button"
+            data-testid="mgmt-skills-reload"
+            disabled={skills.status === 'loading' || busy}
+            onClick={() => skills.reload()}
+            className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
+          >
+            <RefreshCw size={11} aria-hidden="true" />
+            重新读取
+          </button>
+          {skills.error === null ? null : (
+            <FormNote tone="warn" testId="mgmt-skills-error">
+              {skills.error}
+            </FormNote>
+          )}
+          {/*启停 / 导入 / 删除共用一个错误状态：一处渲染，失败不会被吞掉。*/}
+          {skills.toggleEnabled.error === null ? null : (
+            <FormNote tone="warn" testId="mgmt-skills-mutation-error">
+              操作失败：{skills.toggleEnabled.error}
+            </FormNote>
+          )}
+        </div>
+
+        <label className="management-search">
+          <Search size={14} aria-hidden="true" />
+          <span className="sr-only">搜索已安装技能</span>
+          <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索技能名称或用途…" className={formInputClass} data-testid="mgmt-skills-search" />
+        </label>
+        {skills.status === 'loading' && skills.skills.length === 0 ? (
+          <FormNote testId="mgmt-skills-loading">正在读取技能目录…</FormNote>
+        ) : visibleSkills.length === 0 ? <p className="management-list-empty" data-testid="mgmt-skills-empty">{skills.skills.length === 0 ? '还没有技能，可导入本地技能或安装内置技能源。' : '没有符合条件的技能，试试其他关键词。'}</p> : (
+          <ul className="flex flex-col gap-1" data-testid="mgmt-skills-rows">
+            {visibleSkills.map((skill) => {
+              const selected = browserOpen && skill.id === skills.selectedId;
+              return (
+                <li
+                  key={skill.id}
+                  className={
+                    selected
+                      ? 'flex flex-col gap-1 rounded-card bg-accent-soft px-2 py-1.5'
+                      : 'flex flex-col gap-1 rounded-card px-2 py-1.5 hover:bg-[var(--overlay-hover)]'
+                  }
+                  data-testid={`mgmt-skill-${skill.id}`}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      aria-haspopup="dialog"
+                      onClick={() => {
+                        skills.select(skill.id);
+                        setBrowserOpen(true);
+                      }}
+                      data-testid={`mgmt-skill-select-${skill.id}`}
+                      className="min-w-0 flex-1 rounded-control text-left focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                    >
+                      <span className="flex flex-wrap items-center gap-2">
+                        <Package size={12} aria-hidden="true" className="text-muted" />
+                        <span className="text-ink text-[length:var(--font-meta-size)]">{skill.name}</span>
+
+                        <span
+                          className={
+                            skill.status === 'ready'
+                              ? 'text-muted text-[length:var(--font-micro-size)]'
+                              : 'text-[var(--st-bad)] text-[length:var(--font-micro-size)]'
+                          }
+                          data-testid={`mgmt-skill-status-${skill.id}`}
+                        >
+                          {skillStatusLabels[skill.status]}
+                        </span>
+                        <span
+                          className="text-subtle text-[length:var(--font-micro-size)]"
+                          data-testid={`mgmt-skill-origin-${skill.id}`}
+                        >
+                          {skill.origin === 'builtin'
+                            ? `内置 · ${skill.sourceId ?? 'Roc'}`
+                            : '用户导入'}
+                        </span>
+                      </span>
+                      <span className="management-skill-description">{skill.description}</span>
+                    </button>
+                    <label className="flex min-h-6 items-center gap-1 text-[length:var(--font-micro-size)] text-muted">
+                      <input
+                        type="checkbox"
+                        checked={skills.skillEnabled(skill)}
+                        disabled={busy}
+                        onChange={(event) => {
+                          void skills.toggleEnabled.run(skill, event.target.checked);
+                        }}
+                        data-testid={`mgmt-skill-enabled-${skill.id}`}
+                        className="h-3.5 w-3.5 rounded-[3px] border-[0.5px] border-line accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                      />
+                      启用
+                    </label>
+                    <button
+                      type="button"
+                      data-testid={`mgmt-skill-delete-${skill.id}`}
+                      disabled={busy}
+                      onClick={() => {
+                        if (!skills.isBusy()) setDeleteTarget(skill.id);
+                      }}
+                      className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
+                    >
+                      <Trash2 size={11} aria-hidden="true" />
+                      删除
+                    </button>
+                  </div>
+                  {skill.lastError === null || skill.lastError === undefined ? null : (
+                    <FormNote tone="warn" testId={`mgmt-skill-last-error-${skill.id}`}>
+                      {skill.lastError}
+                    </FormNote>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+      </FormSection>
+
+      <FormSection title="导入技能" testId="mgmt-skills-import">
+        <label className="flex flex-col gap-0.5">
+          <span className="text-subtle text-[length:var(--font-micro-size)]">技能目录的绝对路径</span>
+          <input
+            value={importPath}
+            disabled={busy}
+            onChange={(event) => setImportPath(event.target.value)}
+            placeholder="/Users/you/skills/my-skill"
+            data-testid="mgmt-skills-import-path"
+            className={formInputClass}
+          />
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            data-testid="mgmt-skills-import-run"
+            disabled={busy || importRequired !== null}
+            onClick={() => {
+              void skills.importFrom.run(importPath);
+            }}
+            className={formSecondaryButtonClass}
+          >
+            {skills.importFrom.pending ? '导入中…' : '导入'}
+          </button>
+          {skills.importFrom.lastImported === null ? null : (
+            <span className="text-muted text-[length:var(--font-micro-size)]" data-testid="mgmt-skills-import-result">
+              已导入 {skills.importFrom.lastImported.name}（{skills.importFrom.lastImported.path}）
+            </span>
+          )}
+        </div>
+        {importRequired === null ? null : (
+          <FormNote testId="mgmt-skills-import-hint">
+            {importRequired}
+          </FormNote>
+        )}
+      </FormSection>
+
+      <details className="management-disclosure" data-testid="mgmt-skills-sources">
+        <summary data-testid="mgmt-skills-sources-toggle">内置技能源与更新{builtin.error || builtin.check.error || builtinSnapshot?.sources.some(source => source.lastError) ? ' · 需处理' : ''}</summary>
       <FormSection
         title="内置技能源"
         testId="mgmt-skills-builtin"
@@ -169,164 +340,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
 
       </FormSection>
 
-      <FormSection
-        title="已安装技能"
-        testId="mgmt-skills-list-section"
-      >
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-muted text-[length:var(--font-meta-size)]" data-testid="mgmt-skills-summary">
-            {skillSummary(skills.skills)}
-          </span>
-          <button
-            type="button"
-            data-testid="mgmt-skills-reload"
-            disabled={skills.status === 'loading' || busy}
-            onClick={() => skills.reload()}
-            className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
-          >
-            <RefreshCw size={11} aria-hidden="true" />
-            重新读取
-          </button>
-          {skills.error === null ? null : (
-            <FormNote tone="warn" testId="mgmt-skills-error">
-              {skills.error}
-            </FormNote>
-          )}
-          {/*启停 / 导入 / 删除共用一个错误状态：一处渲染，失败不会被吞掉。*/}
-          {skills.toggleEnabled.error === null ? null : (
-            <FormNote tone="warn" testId="mgmt-skills-mutation-error">
-              操作失败：{skills.toggleEnabled.error}
-            </FormNote>
-          )}
-        </div>
-
-        {skills.status === 'loading' && skills.skills.length === 0 ? (
-          <FormNote testId="mgmt-skills-loading">正在读取技能目录…</FormNote>
-        ) : skills.skills.length === 0 ? null : (
-          <ul className="flex flex-col gap-1" data-testid="mgmt-skills-rows">
-            {sortSkills(skills.skills).map((skill) => {
-              const selected = browserOpen && skill.id === skills.selectedId;
-              return (
-                <li
-                  key={skill.id}
-                  className={
-                    selected
-                      ? 'flex flex-col gap-1 rounded-card bg-accent-soft px-2 py-1.5'
-                      : 'flex flex-col gap-1 rounded-card px-2 py-1.5 hover:bg-[var(--overlay-hover)]'
-                  }
-                  data-testid={`mgmt-skill-${skill.id}`}
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      aria-haspopup="dialog"
-                      onClick={() => {
-                        skills.select(skill.id);
-                        setBrowserOpen(true);
-                      }}
-                      data-testid={`mgmt-skill-select-${skill.id}`}
-                      className="min-w-0 flex-1 rounded-control text-left focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
-                    >
-                      <span className="flex flex-wrap items-center gap-2">
-                        <Package size={12} aria-hidden="true" className="text-muted" />
-                        <span className="text-ink text-[length:var(--font-meta-size)]">{skill.name}</span>
-                        <span className="font-mono text-subtle text-[length:var(--font-micro-size)]">{skill.id}</span>
-                        <span
-                          className={
-                            skill.status === 'ready'
-                              ? 'text-muted text-[length:var(--font-micro-size)]'
-                              : 'text-[var(--st-bad)] text-[length:var(--font-micro-size)]'
-                          }
-                          data-testid={`mgmt-skill-status-${skill.id}`}
-                        >
-                          {skillStatusLabels[skill.status]}
-                        </span>
-                        <span
-                          className="text-subtle text-[length:var(--font-micro-size)]"
-                          data-testid={`mgmt-skill-origin-${skill.id}`}
-                        >
-                          {skill.origin === 'builtin'
-                            ? `内置，${skill.sourceId ?? ''}，${shortCommit(skill.upstreamCommit ?? null)}`
-                            : '用户导入'}
-                        </span>
-                      </span>
-                      <span className="block text-muted text-[length:var(--font-micro-size)]">{skill.description}</span>
-                    </button>
-                    <label className="flex min-h-6 items-center gap-1 text-[length:var(--font-micro-size)] text-muted">
-                      <input
-                        type="checkbox"
-                        checked={skills.skillEnabled(skill)}
-                        disabled={busy}
-                        onChange={(event) => {
-                          void skills.toggleEnabled.run(skill, event.target.checked);
-                        }}
-                        data-testid={`mgmt-skill-enabled-${skill.id}`}
-                        className="h-3.5 w-3.5 rounded-[3px] border-[0.5px] border-line accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
-                      />
-                      启用
-                    </label>
-                    <button
-                      type="button"
-                      data-testid={`mgmt-skill-delete-${skill.id}`}
-                      disabled={busy}
-                      onClick={() => {
-                        if (!skills.isBusy()) setDeleteTarget(skill.id);
-                      }}
-                      className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
-                    >
-                      <Trash2 size={11} aria-hidden="true" />
-                      删除
-                    </button>
-                  </div>
-                  {skill.lastError === null || skill.lastError === undefined ? null : (
-                    <FormNote tone="warn" testId={`mgmt-skill-last-error-${skill.id}`}>
-                      {skill.lastError}
-                    </FormNote>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-
-      </FormSection>
-
-      <FormSection title="导入技能" testId="mgmt-skills-import">
-        <label className="flex flex-col gap-0.5">
-          <span className="text-subtle text-[length:var(--font-micro-size)]">技能目录的绝对路径</span>
-          <input
-            value={importPath}
-            disabled={busy}
-            onChange={(event) => setImportPath(event.target.value)}
-            placeholder="/Users/you/skills/my-skill"
-            data-testid="mgmt-skills-import-path"
-            className={formInputClass}
-          />
-        </label>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            data-testid="mgmt-skills-import-run"
-            disabled={busy || importRequired !== null}
-            onClick={() => {
-              void skills.importFrom.run(importPath);
-            }}
-            className={formSecondaryButtonClass}
-          >
-            {skills.importFrom.pending ? '导入中…' : '导入'}
-          </button>
-          {skills.importFrom.lastImported === null ? null : (
-            <span className="text-muted text-[length:var(--font-micro-size)]" data-testid="mgmt-skills-import-result">
-              已导入 {skills.importFrom.lastImported.name}（{skills.importFrom.lastImported.path}）
-            </span>
-          )}
-        </div>
-        {importRequired === null ? null : (
-          <FormNote tone="warn" testId="mgmt-skills-import-hint">
-            {importRequired}
-          </FormNote>
-        )}
-      </FormSection>
+      </details>
 
       <SkillFilesModal
         store={skills}

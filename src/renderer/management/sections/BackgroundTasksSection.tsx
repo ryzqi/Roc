@@ -1,3 +1,4 @@
+import '../management-layout.css';
 import { useState } from 'react';
 import { CalendarClock, Play, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { ConfirmDialog } from '../../shell/ConfirmDialog';
@@ -100,6 +101,8 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
           </button>
         </div>
 
+        <details className="management-disclosure" data-testid="mgmt-tasks-scheduler-details">
+          <summary>调度状态{tasks.scheduler?.lastError ? ' · 需处理' : ''}</summary>
         <dl className="flex flex-col gap-0.5">
           <KeyValueRow
             label="下次触发"
@@ -113,6 +116,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
           />
           <KeyValueRow label="调度错误" value={tasks.scheduler?.lastError ?? '无'} testId="mgmt-tasks-scheduler-error" />
         </dl>
+        </details>
 
         {tasks.action.error === null ? null : (
           <FormNote tone="warn" testId="mgmt-tasks-action-error">

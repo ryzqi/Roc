@@ -28,19 +28,19 @@ export function ManagementView({ view }: ViewProps): React.JSX.Element {
   const [tab, setTab] = useState<ManagementTabId>(() => viewForInitialTab(view));
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-4 leading-normal tabular-nums" data-testid="management-view" data-view={view}>
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="management-surface" data-testid="management-view" data-view={view}>
+      <header className="management-heading">
         <h2 className="text-balance text-ink text-[length:var(--font-h3-size)]">管理</h2>
-      </div>
-      <div className="max-w-[520px]">
-        <ManagementTabStrip
-          activeTab={tab}
-          onTabChange={setTab}
-          summaries={visibleSummaries}
-          idPrefix="mgmt-view"
-          testIdPrefix="mgmt-view"
-        />
-      </div>
+        <div className="management-navigation">
+          <ManagementTabStrip
+            activeTab={tab}
+            onTabChange={setTab}
+            summaries={visibleSummaries}
+            idPrefix="mgmt-view"
+            testIdPrefix="mgmt-view"
+          />
+        </div>
+      </header>
       <p className="shrink-0 text-muted text-[length:var(--font-meta-size)]" data-testid="mgmt-view-summary">
         {managementSummary(tab, visibleSummaries)}
       </p>

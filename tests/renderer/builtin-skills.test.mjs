@@ -67,6 +67,7 @@ before(async () => {
   page = await app.firstWindow();
   page.setDefaultTimeout(5000);
   page.on('pageerror', error => errors.push(error.message));
+  await page.getByTestId('mgmt-skills-sources-toggle').click();
   await expect(page.getByTestId('mgmt-skills-builtin-restore-demo')).toBeVisible();
 });
 

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   LoaderCircle,
@@ -36,6 +36,7 @@ import { RagSection } from './sections/RagSection';
 import { LiteratureSection, SandboxSection } from './sections/ReadOnlySections';
 import { PilotSection } from './sections/PilotSection';
 import { GuardrailSection, MemorySection } from './sections/SecuritySections';
+import './settings-layout.css';
 
 /**
  * Section glyphs.
@@ -66,12 +67,18 @@ const SECTION_ICONS: Readonly<Record<SettingsSectionId, LucideIcon>> = {
   backup: ArchiveRestore
 };
 
+const SECTION_GROUP_STARTS: Partial<Record<SettingsSectionId, string>> = {
+  models: '模型与文献',
+  sandbox: '运行与权限',
+  hooks: '扩展与维护'
+};
+
 /**
  * Settings centre (P8/T8.2–T8.4).
  *
  * ## Fixed shape
  *
- * `min(1100px, 92vw)` × `min(86vh, 760px)`, a 200px section list with 36px rows, an action footer
+ * `min(1100px, 92vw)` × `min(86vh, 760px)`, a 192px grouped section list with 36px rows, an action footer
  * pinned below the scrolling form, and the thirteen sections in their normative order. The height is passed through `widthClassName` because `ModalShell` only caps its panel; a
  * settings window that scrolls the whole modal (header and section list included) loses the
  * dirty bar exactly when it matters.
@@ -288,7 +295,11 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
     const select = (): void => {
       setActiveSection(id);
       if (focusPanel) setFocusIssue(true);
-      else listRef.current?.querySelector<HTMLButtonElement>(`[data-section="${id}"]`)?.focus({ preventScroll: true });
+      else {
+        const button = listRef.current?.querySelector<HTMLButtonElement>(`[data-section="${id}"]`);
+        button?.focus({ preventScroll: true });
+        button?.scrollIntoView({ block: 'nearest' });
+      }
     };
     if (store.save.isPending()) return;
     if (id === activeSection) select();
@@ -362,7 +373,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
         // The left rail brings its own columns; see `bodyPadding` in `ModalShell`.
         bodyPadding="none"
       >
-        <div className="flex h-full flex-col min-[720px]:flex-row">
+        <div className="settings-layout flex h-full flex-col min-[720px]:flex-row">
           {compactNavigation ? (
             <div className="shrink-0 border-b-[0.5px] border-line bg-[var(--material-sidebar)] px-4 py-2">
               <select
@@ -388,7 +399,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
               aria-orientation="vertical"
               aria-label="设置分区"
               onKeyDown={onListKeyDown}
-              className="flex w-[200px] shrink-0 flex-col gap-1 overflow-y-auto border-e-[0.5px] border-line bg-[var(--material-sidebar)] p-3"
+              className="settings-navigation flex w-[200px] shrink-0 flex-col gap-1 overflow-y-auto border-e-[0.5px] border-line bg-[var(--material-sidebar)] p-3"
               data-testid="settings-sections"
             >
               {SETTINGS_SECTIONS.map((section) => {
@@ -396,50 +407,52 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
                 const sectionDirty = store.dirtySections.has(section.id);
                 const Icon = SECTION_ICONS[section.id];
                 return (
-                  <button
-                    key={section.id}
-                    type="button"
-                    ref={selected ? (element) => { activeNavigationRef.current = element; } : undefined}
-                    role="tab"
-                    disabled={busy}
-                    id={`settings-tab-${section.id}`}
-                    data-section={section.id}
-                    data-dirty={sectionDirty ? 'true' : 'false'}
-                    aria-selected={selected}
-                    aria-controls={`settings-panel-${section.id}`}
-                    tabIndex={selected ? 0 : -1}
-                    onClick={() => selectSection(section.id)}
-                    title={sectionDirty ? `${section.label}：有未保存的修改` : section.label}
-                    data-testid={`settings-section-${section.id}`}
-                    className={
-                      selected
-                        ? 'flex h-9 shrink-0 items-center gap-2 rounded-control bg-[var(--overlay-active)] px-3 text-start font-[var(--font-weight-medium)] text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:opacity-50'
-                        : 'flex h-9 shrink-0 items-center gap-2 rounded-control px-3 text-start text-muted enabled:hover:bg-[var(--overlay-hover)] enabled:hover:text-ink enabled:active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:opacity-50'
-                    }
-                  >
-                    <Icon
-                      size={13}
-                      aria-hidden="true"
-                      className={selected ? 'shrink-0 text-ink' : 'shrink-0 text-subtle'}
-                    />
-                    <span className="text-[length:var(--font-meta-size)]">{section.label}</span>
-                    {sectionDirty ? (
-                      <>
-                        <span
-                          aria-hidden="true"
-                          className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--st-warn)] ring-1 ring-[var(--st-warn-line)]"
-                          data-testid={`settings-dirty-dot-${section.id}`}
-                        />
-                        <span className="sr-only">（有未保存的修改）</span>
-                      </>
-                    ) : null}
-                  </button>
+                  <Fragment key={section.id}>
+                    {SECTION_GROUP_STARTS[section.id] ? <span className="settings-navigation-group" role="presentation">{SECTION_GROUP_STARTS[section.id]}</span> : null}
+                    <button
+                      type="button"
+                      ref={selected ? (element) => { activeNavigationRef.current = element; } : undefined}
+                      role="tab"
+                      disabled={busy}
+                      id={`settings-tab-${section.id}`}
+                      data-section={section.id}
+                      data-dirty={sectionDirty ? 'true' : 'false'}
+                      aria-selected={selected}
+                      aria-controls={`settings-panel-${section.id}`}
+                      tabIndex={selected ? 0 : -1}
+                      onClick={() => selectSection(section.id)}
+                      title={sectionDirty ? `${section.label}：有未保存的修改` : section.label}
+                      data-testid={`settings-section-${section.id}`}
+                      className={
+                        selected
+                          ? 'flex h-9 shrink-0 items-center gap-2 rounded-control bg-[var(--overlay-active)] px-3 text-start font-[var(--font-weight-medium)] text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:opacity-50'
+                          : 'flex h-9 shrink-0 items-center gap-2 rounded-control px-3 text-start text-muted enabled:hover:bg-[var(--overlay-hover)] enabled:hover:text-ink enabled:active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:opacity-50'
+                      }
+                    >
+                      <Icon
+                        size={13}
+                        aria-hidden="true"
+                        className={selected ? 'shrink-0 text-ink' : 'shrink-0 text-subtle'}
+                      />
+                      <span className="text-[length:var(--font-meta-size)]">{section.label}</span>
+                      {sectionDirty ? (
+                        <>
+                          <span
+                            aria-hidden="true"
+                            className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--st-warn)] ring-1 ring-[var(--st-warn-line)]"
+                            data-testid={`settings-dirty-dot-${section.id}`}
+                          />
+                          <span className="sr-only">（有未保存的修改）</span>
+                        </>
+                      ) : null}
+                    </button>
+                  </Fragment>
                 );
               })}
             </div>
           )}
 
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col px-4 py-3 min-[720px]:px-6">
+          <div className="settings-content flex min-h-0 min-w-0 flex-1 flex-col px-4 py-3 min-[720px]:px-6">
             {store.save.error === null ? null : (
               <p
                 role="alert"
@@ -493,10 +506,10 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
               aria-labelledby={compactNavigation ? undefined : `settings-tab-${activeSection}`}
               aria-label={compactNavigation ? SETTINGS_SECTIONS.find((section) => section.id === activeSection)?.label : undefined}
               tabIndex={-1}
-              className="ui-scroll-region -mx-1 flex-1 px-1 pt-2 pb-5 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
+              className="settings-form-scroll ui-scroll-region -mx-1 flex-1 px-1 pt-2 pb-5 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
               data-testid="settings-panel"
             >
-              {renderPanel(activeSection, store, props)}
+              <div className="settings-form-content">{renderPanel(activeSection, store, props)}</div>
             </div>
 
             <div className="flex shrink-0 flex-wrap items-center gap-2 border-t-[0.5px] border-line pt-3">

@@ -1,6 +1,6 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp, rm, writeFile} from 'node:fs/promises';
+import {mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import electronPath from 'electron';
@@ -9,6 +9,8 @@ import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 
 let directory, app, page;
 const errors = [];
+const artifacts = join(process.cwd(), '.artifacts/management-layout');
+const clipAudit = await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), 'roc-management-draft-guards-'));
   await buildViteRenderer({directory, style: 'html,body,#root{height:100%;margin:0}', script: `
@@ -22,6 +24,8 @@ before(async () => {
     import {McpSection} from './src/renderer/management/sections/McpSection';
     import {BackgroundTasksSection} from './src/renderer/management/sections/BackgroundTasksSection';
     import {SkillsSection} from './src/renderer/management/sections/SkillsSection';
+    import {ManagementView} from './src/renderer/management/ManagementView';
+    import {ManagementScopeProvider} from './src/renderer/management/management-scope';
     import {MEMORY_SLOTS} from './src/renderer/management/memory-model';
     import {requestNavigation} from './src/renderer/app/navigation-guard';
     const ok = data => ({ok: true, data});
@@ -36,6 +40,12 @@ before(async () => {
     function createClient() {
       const config = {schemaVersion: 1, approvalMode: 'default', servers: []};
       return {api: {
+        research: {
+          getProject: async () => ok({id: 'project-a', title: '研究项目', status: 'active', workspacePath: '/project-a'}),
+          listPythonEnvironmentSelections: async () => ok([]),
+          listTasks: async () => ok({tasks: [], hasMore: false, nextTaskId: null}),
+          onTaskUpdated: () => () => {}
+        },
         memory: {
           status: async () => ok({root: '/memory', workspaceHash: 'workspace-a', workspaceLabel: 'Project A',
             files: MEMORY_SLOTS.map(meta), autoMemory: {recent: []}, snapshot: {enabled: true, totalChars: 5, totalLimit: 20000},
@@ -82,6 +92,8 @@ before(async () => {
     function Harness({client}) {
       const [projectId, setProjectId] = useState('project-a');
       const [tab, setTab] = useState('mcp');
+      const [layout, setLayout] = useState(false);
+      window.showLayout = () => flushSync(() => setLayout(true));
       const scope = {client, projectId, workspacePath: '/project-a', researchTaskId: null,
         onSelectResearchTask: () => {}, onAskAssistant: () => {}, onOpenThread: () => {}, openSettings: () => {}};
       window.setTab = next => flushSync(() => setTab(next));
@@ -89,7 +101,7 @@ before(async () => {
         window.navigations++; setProjectId('project-b');
       });
       return <ManagementStoresProvider enabled scope={scope} scopeKey={projectId}>
-        <main style={{padding: 40}}><Surfaces scope={scope} tab={tab} /></main>
+        <main style={{padding: layout ? 0 : 40, height: layout ? '100%' : undefined}}>{layout ? <ManagementScopeProvider value={scope}><ManagementView view="memory" /></ManagementScopeProvider> : <Surfaces scope={scope} tab={tab} />}</main>
       </ManagementStoresProvider>;
     }
     const root = createRoot(document.getElementById('root'));
@@ -156,6 +168,7 @@ async function mountSkills() {
   await page.evaluate(() => {window.mount(); window.setTab('skills');});
   await page.getByTestId('mgmt-skill-enabled-skill-a').waitFor();
   await page.waitForFunction(() => window.stores.skills.builtin.snapshot !== null);
+  await page.getByTestId('mgmt-skills-sources-toggle').click();
   await page.getByTestId('mgmt-skills-import-path').fill('/imports/skill-b');
 }
 
@@ -444,4 +457,86 @@ test('task selection cannot move during an update started in the same event', as
   await page.evaluate(() => window.finishUpdate({ok: false, error: {message: 'Update refused'}}));
   assert.equal(await page.evaluate(() => window.pendingUpdate), false);
   await expect(page.getByTestId('mgmt-task-select-b')).toBeEnabled();
+});
+
+
+test('task categories retain background drafts and block switching during same-event writes', async () => {
+  await editBackground();
+  await page.evaluate(() => window.showLayout());
+  await page.getByTestId('mgmt-view-tab-tasks').click();
+  await expect(page.getByTestId('mgmt-task-draft-goal')).toHaveValue('Edited task A');
+  await page.getByTestId('mgmt-task-category-research').click();
+  await expect(page.getByTestId('mgmt-research-tasks')).toBeVisible();
+  await expect(page.getByTestId('mgmt-task-draft-goal')).toBeHidden();
+  await page.getByTestId('mgmt-task-category-background').click();
+  await expect(page.getByTestId('mgmt-task-draft-goal')).toHaveValue('Edited task A');
+  await page.evaluate(() => {
+    window.pendingUpdate = window.stores.tasks.update.run();
+    document.querySelector('[data-testid="mgmt-task-category-python"]').click();
+  });
+  await expect(page.getByTestId('mgmt-task-category-background')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('mgmt-task-category-python')).toBeDisabled();
+  await page.evaluate(() => window.finishUpdate({ok: false, error: {message: 'Update refused'}}));
+  await expect(page.getByTestId('mgmt-task-category-python')).toBeEnabled();
+  await page.getByTestId('mgmt-task-category-python').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('mgmt-python-environment')).toBeVisible();
+  await page.getByTestId('mgmt-task-category-python').focus();
+  await page.keyboard.press('Home');
+  await expect(page.getByTestId('mgmt-task-category-background')).toBeFocused();
+  await expect(page.getByTestId('mgmt-task-draft-goal')).toHaveValue('Edited task A');
+});
+
+test('management content is readable in both themes at desktop and drawer widths', async () => {
+  await mkdir(artifacts, {recursive: true});
+  await page.evaluate(() => {window.mount(); window.showLayout();});
+  const audits = [];
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
+    for (const width of [1100, 480]) {
+      await page.setViewportSize({width, height: 800});
+      for (const tab of ['memory', 'skills', 'mcp', 'tasks']) {
+        await page.getByTestId('mgmt-view-tab-' + tab).click();
+        await page.getByTestId('mgmt-' + tab).waitFor();
+        if (tab === 'skills') {
+          await page.getByTestId('mgmt-skills-search').fill('no-match');
+          await expect(page.getByTestId('mgmt-skills-empty')).toContainText('没有符合条件');
+          await page.getByTestId('mgmt-skills-search').fill('Installed');
+          await expect(page.getByTestId('mgmt-skill-skill-a')).toBeVisible();
+          await page.getByTestId('mgmt-skills-search').fill('');
+          await expect(page.getByTestId('mgmt-skills-builtin-check')).toBeHidden();
+        }
+        const layout = await page.getByTestId('mgmt-view-panel-' + tab).evaluate(element => ({
+          overflow: element.scrollWidth > element.clientWidth + 1,
+          height: element.getBoundingClientRect().height
+        }));
+        assert.equal(layout.overflow, false, tab + ' must fit the available width');
+        assert.ok(layout.height > 650, tab + ' must keep most of the window for content');
+        const audit = await page.evaluate('(' + clipAudit + ')({root: ".management-surface", viewport: true})');
+        assert.equal(audit.cut, 0, JSON.stringify(audit));
+        audits.push({theme, width, tab, ...audit});
+        await page.screenshot({path: join(artifacts, tab + '-' + theme + '-' + width + '.png')});
+        if (tab === 'skills') {
+          await page.getByTestId('mgmt-skills-sources-toggle').click();
+          await expect(page.getByTestId('mgmt-skills-builtin-check')).toBeVisible();
+          await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-testid="mgmt-skills-sources"]'), '::details-content').opacity === '1');
+          await page.getByTestId('mgmt-skills-builtin-restore-source-a').hover();
+          const expanded = await page.evaluate('(' + clipAudit + ')({root: ".management-surface", viewport: true})');
+          assert.equal(expanded.cut, 0, JSON.stringify(expanded));
+          audits.push({theme, width, tab: 'skills-expanded', ...expanded});
+          await page.screenshot({path: join(artifacts, 'skills-expanded-' + theme + '-' + width + '.png')});
+        }
+        if (tab === 'tasks') {
+          for (const category of ['research', 'python']) {
+            await page.getByTestId('mgmt-task-category-' + category).click();
+            const changed = await page.evaluate('(' + clipAudit + ')({root: ".management-surface", viewport: true})');
+            assert.equal(changed.cut, 0, JSON.stringify(changed));
+            audits.push({theme, width, tab: category, ...changed});
+            await page.screenshot({path: join(artifacts, category + '-' + theme + '-' + width + '.png')});
+          }
+        }
+      }
+    }
+  }
+  await writeFile(join(artifacts, 'clip-audit.json'), JSON.stringify(audits, null, 2));
 });

@@ -83,7 +83,7 @@ export function ManagementPanel({
       widthClassName="w-[min(720px,92vw)]"
       testId="management-panel"
     >
-      <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-4 leading-normal tabular-nums">
+      <div className="management-surface management-drawer">
         <ManagementTabStrip
           activeTab={tab}
           onTabChange={onTabChange}

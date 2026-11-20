@@ -257,14 +257,22 @@ test('actual shell artifact handoff waits for its inspector guard and returns to
 test('actual canvas management facts veto view navigation and native unload while a save is pending', async () => {
   await page.evaluate(() => mount('memory'));
   await page.getByTestId('mgmt-view-tab-tasks').click();
+  await page.getByTestId('mgmt-task-category-research').click();
   await page.getByTestId('mgmt-task-select').selectOption('task-a');
   await content().fill('画布中未保存的任务事实');
+  await page.getByTestId('mgmt-task-category-background').click();
+  await discard().waitFor();
+  await cancel();
+  await expect(page.getByTestId('mgmt-task-category-research')).toHaveAttribute('aria-selected', 'true');
+  await expect(content()).toHaveValue('画布中未保存的任务事实');
   await page.evaluate(() => workspaceEntries.openView('terminal'));
   await discard().waitFor();
   await cancel();
   await expect(content()).toHaveValue('画布中未保存的任务事实');
   await page.getByTestId('mgmt-task-fact-save').click();
   await expect(content()).toBeDisabled();
+  await page.getByTestId('mgmt-task-category-background').click();
+  await expect(page.getByTestId('mgmt-task-category-research')).toHaveAttribute('aria-selected', 'true');
   await page.evaluate(() => workspaceEntries.openView('terminal'));
   assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('view')), 'memory');
   assert.equal(await page.evaluate(() => !window.dispatchEvent(new Event('beforeunload', {cancelable: true}))), true);

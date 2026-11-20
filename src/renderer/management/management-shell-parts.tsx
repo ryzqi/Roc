@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import type {AppViewId} from '../app/routes';
 import { Brain, Clock, Cpu, Sparkles, type LucideIcon } from 'lucide-react';
 import type { ManagementScope } from './management-scope';
@@ -11,6 +11,7 @@ import { SkillsSection } from './sections/SkillsSection';
 import type { ManagementTabId } from './use-management-stores';
 import { useManagementStores } from './management-stores-provider';
 import { requestManagementEditorChange } from './management-interactions';
+import './management-layout.css';
 
 /**
  * The parts both management shells share (P9/T9.5).
@@ -172,7 +173,7 @@ export function ManagementSectionBody({
       id={`${idPrefix}-panel-${tab}`}
       aria-labelledby={`${idPrefix}-tab-${tab}`}
       tabIndex={-1}
-      className="ui-scroll-region flex-1 p-1"
+      className="management-body ui-scroll-region flex-1 p-1"
       data-testid={`${testIdPrefix}-panel-${tab}`}
     >
       {section}
@@ -195,19 +196,55 @@ function McpSectionContent({ scope }: { scope: ManagementScope }): ReactNode {
   return store === null ? <ManagementSectionLoading /> : <McpSection scope={scope} store={store} />;
 }
 
+type TaskCategory = 'background' | 'research' | 'python';
+
 function TasksSectionContent({ scope, canvasView }: { scope: ManagementScope; canvasView: AppViewId | undefined }): ReactNode {
   const store = useManagementStores((stores) => stores.tasks);
+  const id = useId();
+  const [category, setCategory] = useState<TaskCategory>(() => scope.researchTaskId ? 'research' : 'background');
+  const available: { id: TaskCategory; label: string }[] = scope.projectId === null
+    ? [{ id: 'background', label: '后台任务' }]
+    : [{ id: 'background', label: '后台任务' }, { id: 'research', label: '研究任务' }, { id: 'python', label: 'Python 环境' }];
+  const active = scope.projectId === null ? 'background' : category;
+  useEffect(() => {
+    if (scope.researchTaskId !== null) setCategory('research');
+  }, [scope.researchTaskId]);
+  const selectCategory = (next: TaskCategory, tablist?: HTMLDivElement): void => {
+    if (store?.isBusy()) return;
+    requestManagementEditorChange(() => {
+      setCategory(next);
+      tablist?.querySelector<HTMLButtonElement>(`[data-category="${next}"]`)?.focus();
+    });
+  };
   return (
-    <div className="grid min-w-0 gap-6">
-      {scope.projectId === null ? null : (
-        <div key={scope.projectId} className="grid min-w-0 gap-6">
-          <PythonEnvironmentSection client={scope.client} projectId={scope.projectId} />
-          <ResearchTasksSection client={scope.client} projectId={scope.projectId}
-            canvasView={canvasView}
+    <div className="management-tasks">
+      <div className="management-task-categories" role="tablist" aria-label="任务分类" onKeyDown={(event) => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const index = available.findIndex(entry => entry.id === active);
+        const nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? available.length - 1
+          : (index + (event.key === 'ArrowLeft' ? -1 : 1) + available.length) % available.length;
+        const next = available[nextIndex];
+        if (next) selectCategory(next.id, event.currentTarget);
+      }}>
+        {available.map(entry => <button key={entry.id} type="button" role="tab" id={`${id}-${entry.id}-tab`}
+          aria-selected={active === entry.id} aria-controls={`${id}-${entry.id}-panel`} tabIndex={active === entry.id ? 0 : -1}
+          data-category={entry.id} data-testid={`mgmt-task-category-${entry.id}`} disabled={store?.busy}
+          onClick={() => selectCategory(entry.id)}>{entry.label}</button>)}
+      </div>
+      {/* Keep editors mounted so hidden drafts, pending operations and their navigation guards survive category changes. */}
+      <div role="tabpanel" id={`${id}-background-panel`} aria-labelledby={`${id}-background-tab`} hidden={active !== 'background'}>
+        {store === null ? <ManagementSectionLoading /> : <BackgroundTasksSection store={store} />}
+      </div>
+      {scope.projectId === null ? null : <div key={scope.projectId}>
+        <div role="tabpanel" id={`${id}-research-panel`} aria-labelledby={`${id}-research-tab`} hidden={active !== 'research'}>
+          <ResearchTasksSection client={scope.client} projectId={scope.projectId} canvasView={canvasView}
             selectedTaskId={scope.researchTaskId} onSelectTask={scope.onSelectResearchTask} onOpenArtifact={scope.onOpenArtifact} />
         </div>
-      )}
-      {store === null ? <ManagementSectionLoading /> : <BackgroundTasksSection store={store} />}
+        <div role="tabpanel" id={`${id}-python-panel`} aria-labelledby={`${id}-python-tab`} hidden={active !== 'python'}>
+          <PythonEnvironmentSection client={scope.client} projectId={scope.projectId} />
+        </div>
+      </div>}
     </div>
   );
 }
