@@ -231,6 +231,11 @@ const domainBySection = {
   memory: 'research', tasks: 'research', guardrail: 'security', sandbox: 'security', authorization: 'security',
   hooks: 'advanced', pilot: 'advanced', backup: 'advanced'
 };
+const labelBySection = {
+  app: '应用基础', models: '模型与服务', 'default-model': '默认模型', literature: '文献与解析', rag: '向量与 RAG',
+  memory: '记忆策略', tasks: '任务与调度', guardrail: '智能体安全', sandbox: '编译与沙箱', authorization: '授权与安全',
+  hooks: 'Hooks', pilot: '受限试点', backup: '偏好与备份'
+};
 async function clickSection(section) {
   const domain = domainBySection[section];
   const compactDomain = page.getByTestId('settings-domain-select');
@@ -240,10 +245,11 @@ async function clickSection(section) {
     await compact.selectOption(section);
     return;
   }
+  await page.getByTestId('settings-search').fill(labelBySection[section]);
   const button = page.getByTestId('settings-section-' + section);
-  if (!await button.isVisible()) await page.getByTestId('settings-domain-' + domain).click();
   await button.waitFor({state: 'visible'});
   await button.click();
+  await page.getByTestId('settings-search').fill('');
 }
 async function selectSection(section) {
   await page.waitForFunction(() => window.matchMedia('(max-width: 719px)').matches
