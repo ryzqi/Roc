@@ -32,5 +32,6 @@
 - 翻译渠道的凭据、限流和网络错误会直接影响结果；配置可用不代表翻译准确或外部服务始终可达。
 - 参考文献优先用 Semantic Scholar，首批无结果时回退 Crossref，再提取本地参考文献 DOI；后续被引仍依赖 Semantic Scholar。无可解析标识的条目不能可靠自动入库。
 - arXiv RSS 无当日内容时保留空列表；推荐需实际嵌入配置，受控排序测试不代表在线推荐质量。
+- 每日推荐分别报告嵌入连接探测、arXiv 订阅读取和推荐内容向量计算阶段的失败；已配置模型时不将超时显示成“未启用模型”。配置变化、密钥错误与取消保留原领域语义，不能用网络重试代替处理。
 
 实现入口位于 `src/main/plugins/research/{reading-*,radar-*}`、`src/renderer/literature/`、`src/main/ipc/radar-browser-ipc.ts` 和 `src/shared/schemas/research-reading.ts`。检查方法见[开发与检查](development.md)；公开文献捕获和相关性测量见[文献评测方法](literature-evaluation.md)。

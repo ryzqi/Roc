@@ -7,6 +7,9 @@ import type {ResearchEmbeddingService} from './embedding-service';
 import type {ResearchLibraryService} from './library-service';
 import {fetchReadingText, publicReadingUrl, type ReadingFetch} from './reading-network';
 import {parseRadarFeed, cosineSimilarity} from './radar-parser';
+import {RocDomainError} from '../../services/errors';
+
+type RecommendationStage = 'probe' | 'feed' | 'embedding';
 
 export class RadarService {
   private readonly controller = new AbortController();
@@ -109,7 +112,8 @@ export class RadarService {
     const corpus = this.reading.research.library.list({projectId,includeArchived:false,query:'',limit:500}).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
     if (!corpus.length) throw new Error('项目文献库为空，先导入论文以建立兴趣画像。');
     // Probe even on cache hits: a broken current endpoint must not appear to work from old results.
-    const probe = await this.embeddings.embedTexts(['academic recommendation endpoint probe'],null,this.controller.signal);
+    const probe = await this.recommendationStep('probe','嵌入模型连接探测',() =>
+      this.embeddings.embedTexts(['academic recommendation endpoint probe'],null,this.controller.signal));
     const date = this.reading.now().slice(0,10), sorted = [...new Set(categories)].sort();
     const cacheKey = createHash('sha256').update(JSON.stringify([date,sorted,probe.configId,probe.revision,corpus.map(item=>[item.id,item.revision])])).digest('hex');
     const cached = this.reading.db.prepare('SELECT snapshot_json FROM research_radar_recommendations WHERE project_id=? AND cache_key=?').get(projectId,cacheKey) as {snapshot_json:string}|undefined;
@@ -117,15 +121,18 @@ export class RadarService {
     const candidates = new Map<string,RadarArticle>();
     for (const category of sorted) {
       const url = `https://rss.arxiv.org/rss/${category}`, feedId = `daily:${projectId}:${category}`;
-      for (const article of parseRadarFeed(await this.fetchText(url,{signal:this.controller.signal}),feedId,url)) {
+      const feed = await this.recommendationStep('feed',`arXiv 订阅读取（${category}）`,() =>
+        this.fetchText(url,{signal:this.controller.signal}));
+      for (const article of parseRadarFeed(feed,feedId,url)) {
         if (article.arxivId && !corpus.some(item => item.metadata.source==='arxiv' && item.metadata.externalId.replace(/v\d+$/u,'') === article.arxivId!.replace(/v\d+$/u,'')))
           candidates.set(article.arxivId.replace(/v\d+$/u,''),article);
       }
     }
     if (!candidates.size) throw new Error('所选分类本期没有尚未入库的 arXiv 论文。');
     const papers = [...candidates.values()].slice(0,200);
-    const embedded = await this.embeddings.embedTexts([...corpus.map(item=>`${item.metadata.title}\n${item.metadata.abstract ?? ''}`.slice(0,8000)),
-      ...papers.map(article=>`${article.title}\n${article.summary}`.slice(0,8000))],'reading-discovery-v1',this.controller.signal);
+    const embedded = await this.recommendationStep('embedding','推荐内容向量计算',() =>
+      this.embeddings.embedTexts([...corpus.map(item=>`${item.metadata.title}\n${item.metadata.abstract ?? ''}`.slice(0,8000)),
+        ...papers.map(article=>`${article.title}\n${article.summary}`.slice(0,8000))],'reading-discovery-v1',this.controller.signal));
     if (embedded.configId !== probe.configId || embedded.revision !== probe.revision) throw new Error('推荐期间嵌入配置改变，请重试。');
     const profile = embedded.vectors.slice(0,corpus.length);
     const weights = profile.map((_,index)=>1/(1+Math.log10(index+1)));
@@ -140,5 +147,19 @@ export class RadarService {
         .run(projectId,cacheKey,JSON.stringify(result));
       return result;
     })();
+  }
+
+  /** Report the failed provider boundary without exposing response bodies, URLs or credentials. */
+  private async recommendationStep<T>(stage: RecommendationStage, label: string, work: () => Promise<T>): Promise<T> {
+    try {return await work();}
+    catch (error) {
+      this.controller.signal.throwIfAborted();
+      if (error instanceof RocDomainError) throw error;
+      const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError' ||
+        error.message === 'embedding_provider_timeout');
+      throw new RocDomainError({code: `research_radar_${stage}_${timedOut ? 'timeout' : 'failed'}`,
+        message: `${label}${timedOut ? '超时' : '失败'}。${stage === 'feed' ? '请检查来源网络后重试。' : '请检查嵌入服务与网络后重试。'}`,
+        category: 'external', retryable: true});
+    }
   }
 }

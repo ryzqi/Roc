@@ -165,3 +165,106 @@ test('actual HTTP client limits trigger service splitting and cache only complet
     assert.equal(accepted.length,calls);
   }finally{await service?.shutdown();await f.close();}
 });
+
+test('completed original inputs survive a later timeout and resume without publishing a partial document',async()=>{
+  const f=createResearchFixture(api,'reading');let service;
+  try {
+    const knowledge=f.repository.knowledge;
+    knowledge.saveEmbeddingConfig(config,'test-secret');
+    knowledge.upsertFromSource({id:'resume-document',projectId:f.project.id,sourceType:'file',sourceId:'resume-fixture',
+      title:'Resume source',content:'first second third',chunks:['first','second','third'].map((content,index)=>({content,locator:`block:${index}`})),embeddingPolicy:'none'});
+    const calls=[];let fail=true;
+    service=new api.ResearchEmbeddingService(knowledge,{embed:async({texts})=>{
+      calls.push([...texts]);
+      if(fail && calls.length===2)throw new Error('embedding_provider_timeout');
+      return texts.map(()=>[1,2,3]);
+    }},{secrets:{get:async()=>'test-key'},logger:{warn(){}}},undefined,undefined,{...policy,maxItems:1});
+    await assert.rejects(()=>service.embedDocument('resume-document',null),/embedding_provider_timeout/);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_embedding_cache').pluck().get(),1);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_knowledge_embeddings').pluck().get(),0);
+    fail=false;
+    await service.embedDocument('resume-document',null);
+    assert.equal(calls.length,4);
+    assert.notDeepEqual(calls[2],calls[0]);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_embedding_cache').pluck().get(),3);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_knowledge_embeddings').pluck().get(),3);
+  }finally{await service?.shutdown();await f.close();}
+});
+
+test('checkpoint fences source and config changes before caching provider results',async()=>{
+  for(const change of ['title','section','content','configuration']){
+    const f=createResearchFixture(api,'reading');let service;
+    try{
+      const knowledge=f.repository.knowledge;
+      knowledge.saveEmbeddingConfig(config,'test-secret');
+      knowledge.upsertFromSource({id:'fenced-document',projectId:f.project.id,sourceType:'file',sourceId:'fenced-fixture',
+        title:'Fenced source',content:'first second',chunks:['first','second'].map((content,index)=>({content,section:'Original',locator:`block:${index}`})),embeddingPolicy:'none'});
+      service=new api.ResearchEmbeddingService(knowledge,{embed:async({texts})=>{
+        if(change==='title')f.db.prepare('UPDATE research_knowledge_documents SET title=? WHERE id=?').run('Changed','fenced-document');
+        else if(change==='section')f.db.prepare('UPDATE research_knowledge_chunk_structure SET section=?').run('Changed');
+        else if(change==='content')f.db.prepare('UPDATE research_knowledge_chunks SET content_hash=? WHERE document_id=?').run('changed','fenced-document');
+        else knowledge.saveEmbeddingConfig({...config,model:'changed'},'test-secret');
+        return texts.map(()=>[1,2,3]);
+      }},{secrets:{get:async()=>'test-key'},logger:{warn(){}}},undefined,undefined,{...policy,maxItems:1});
+      await assert.rejects(()=>service.embedDocument('fenced-document',null),error=>/^research_embedding_(source|config)_changed$/u.test(error.code));
+      assert.equal(f.db.prepare('SELECT count(*) FROM research_embedding_cache').pluck().get(),0);
+      assert.equal(f.db.prepare('SELECT count(*) FROM research_knowledge_embeddings').pluck().get(),0);
+    }finally{await service?.shutdown();await f.close();}
+  }
+});
+
+test('provider request grouping stays small without changing semantic fragment or existing cache identity',async()=>{
+  const calls=[];
+  const texts=Array.from({length:12},(_,index)=>`Complete original source ${index}`);
+  await batching.embedTokenBatches(texts,3,async batch=>{calls.push([...batch]);return batch.map(()=>[1,2,3]);},signal(),()=>{});
+  assert.deepEqual(calls.map(batch=>batch.length),[4,4,4]);
+  assert.equal(calls.flat().join(''),texts.join(''));
+  const identity={configId:'test',revision:1,model:'model-one',dimensions:3};
+  const before=JSON.stringify({inputVersion:'original-v1',...identity,algorithm:'roc-embedding-cl100k-exact-spans-weighted-v1',
+    policy:{maxItems:32,maxBatchTokens:16384,maxInputTokens:8192,providerContextTokens:8192}});
+  assert.equal(batching.embeddingCacheVersion(identity,'original-v1'),before);
+});
+
+test('derived embeddings resume only whole inputs and no-version probes never persist checkpoints',async()=>{
+  const f=createResearchFixture(api,'reading');let service;
+  try {
+    const knowledge=f.repository.knowledge;knowledge.saveEmbeddingConfig(config,'test-secret');
+    const calls=[];let fail=true;
+    service=new api.ResearchEmbeddingService(knowledge,{embed:async({texts})=>{
+      calls.push([...texts]);if(fail && calls.length===2)throw new Error('embedding_provider_timeout');
+      return texts.map(()=>[1,2,3]);
+    }},{secrets:{get:async()=>'test-key'},logger:{warn(){}}},undefined,undefined,{...policy,maxItems:1});
+    await assert.rejects(()=>service.embedTexts(['first original','second original'],'derived-resume-v1'),/embedding_provider_timeout/);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_embedding_cache').pluck().get(),1);
+    fail=false;await service.embedTexts(['first original','second original'],'derived-resume-v1');
+    assert.deepEqual(calls.map(batch=>batch[0]),['first original','second original','second original']);
+    await service.embedTexts(['uncached probe'],null);
+    assert.equal(f.db.prepare('SELECT count(*) FROM research_embedding_cache').pluck().get(),2);
+  }finally{await service?.shutdown();await f.close();}
+});
+
+test('later source, config or cancellation changes retain only previously safe checkpoints without partial publication',async()=>{
+  for(const change of ['source','configuration','cancel']){
+    const f=createResearchFixture(api,'reading');let service;
+    try{
+      const knowledge=f.repository.knowledge,controller=new AbortController();let calls=0;
+      knowledge.saveEmbeddingConfig(config,'test-secret');
+      knowledge.upsertFromSource({id:'later-change',projectId:f.project.id,sourceType:'file',sourceId:'later-fixture',
+        title:'Original title',content:'first second third',chunks:['first','second','third'].map((content,index)=>({content,locator:`block:${index}`})),embeddingPolicy:'none'});
+      service=new api.ResearchEmbeddingService(knowledge,{embed:async({texts})=>{
+        if(++calls===2){
+          if(change==='source')f.db.prepare('UPDATE research_knowledge_documents SET title=? WHERE id=?').run('Changed title','later-change');
+          else if(change==='configuration')knowledge.saveEmbeddingConfig({...config,model:'changed'},'test-secret');
+          else controller.abort();
+        }
+        return texts.map(()=>[1,2,3]);
+      }},{secrets:{get:async()=>'test-key'},logger:{warn(){}}},undefined,undefined,{...policy,maxItems:1});
+      await assert.rejects(()=>service.embedDocument('later-change',null,controller.signal),error=>/^research_embedding_(source_changed|config_changed|cancelled)$/u.test(error.code));
+      assert.equal(calls,2);
+      const cached=f.db.prepare('SELECT revision FROM research_embedding_cache').all();
+      assert.equal(cached.length,1);
+      assert.equal(cached[0].revision,1);
+      assert.equal(f.db.prepare('SELECT count(*) FROM research_knowledge_embeddings').pluck().get(),0);
+    }finally{await service?.shutdown();await f.close();}
+  }
+});

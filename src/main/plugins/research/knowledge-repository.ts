@@ -313,24 +313,8 @@ export class ResearchKnowledgeRepository {
   }
 
   storeChunkEmbeddings(input: { configId: string; configRevision: number; chunks: readonly { id: string; contentHash: string; embeddingInput?: string; inputVersion?: string }[]; vectors: readonly Buffer[]; cache?: {version:string; hashes:readonly string[]} }): void {
-    if (input.chunks.length !== input.vectors.length || new Set(input.chunks.map((chunk) => chunk.id)).size !== input.chunks.length) {
-      throw new Error('research_embedding_chunk_count_mismatch');
-    }
     const write = this.db.transaction(() => {
-      const config = this.requireEmbeddingConfig(input.configId, input.configRevision);
-      const vectors: Buffer[] = [];
-      const currentInputs = new Map<string, Map<string, {embeddingInput: string; inputVersion: string}>>();
-      for (const [index, chunk] of input.chunks.entries()) {
-        const current = this.db.prepare('SELECT content_hash,document_id FROM research_knowledge_chunks WHERE id = ?').get(chunk.id) as { content_hash: string; document_id: string } | undefined;
-        if (current === undefined || current.content_hash !== chunk.contentHash) throw new Error('research_embedding_source_changed');
-        if (chunk.embeddingInput !== undefined) {
-          let inputs = currentInputs.get(current.document_id);
-          if (!inputs) {inputs = new Map(this.knowledgeChunks(current.document_id).map(value => [value.id, value])); currentInputs.set(current.document_id, inputs);}
-          const latest = inputs.get(chunk.id);
-          if (latest?.embeddingInput !== chunk.embeddingInput || latest.inputVersion !== chunk.inputVersion) throw new Error('research_embedding_source_changed');
-        }
-        vectors.push(normalizeEmbeddingBlob(input.vectors[index], config.dimensions));
-      }
+      const {config, vectors} = this.validateChunkEmbeddings(input);
       const statement = this.db.prepare(
         `INSERT INTO research_knowledge_embeddings (chunk_id, space_key, dimensions, vector_blob, created_at)
          VALUES (?, ?, ?, ?, ?)
@@ -348,6 +332,39 @@ export class ResearchKnowledgeRepository {
       }
     });
     write();
+  }
+
+  /** Cache only complete original inputs; a later provider failure must not publish a partial index. */
+  cacheChunkEmbeddings(input: {configId: string; configRevision: number;
+    chunks: readonly {id: string; contentHash: string; embeddingInput?: string; inputVersion?: string}[];
+    vectors: readonly Buffer[]; version: string; hashes: string[]}): void {
+    this.db.transaction(() => {
+      this.validateChunkEmbeddings(input);
+      this.cacheEmbeddings(input.configId, input.configRevision, input.version, input.hashes, [...input.vectors]);
+    })();
+  }
+
+  private validateChunkEmbeddings(input: {configId: string; configRevision: number;
+    chunks: readonly {id: string; contentHash: string; embeddingInput?: string; inputVersion?: string}[];
+    vectors: readonly Buffer[]}): {config: EmbeddingConfigRow; vectors: Buffer[]} {
+    if (input.chunks.length !== input.vectors.length || new Set(input.chunks.map(chunk => chunk.id)).size !== input.chunks.length) {
+      throw new Error('research_embedding_chunk_count_mismatch');
+    }
+    const config = this.requireEmbeddingConfig(input.configId, input.configRevision);
+    const vectors: Buffer[] = [];
+    const currentInputs = new Map<string, Map<string, {embeddingInput: string; inputVersion: string}>>();
+    for (const [index, chunk] of input.chunks.entries()) {
+      const current = this.db.prepare('SELECT content_hash,document_id FROM research_knowledge_chunks WHERE id = ?').get(chunk.id) as { content_hash: string; document_id: string } | undefined;
+      if (current === undefined || current.content_hash !== chunk.contentHash) throw new Error('research_embedding_source_changed');
+      if (chunk.embeddingInput !== undefined) {
+        let inputs = currentInputs.get(current.document_id);
+        if (!inputs) {inputs = new Map(this.knowledgeChunks(current.document_id).map(value => [value.id, value])); currentInputs.set(current.document_id, inputs);}
+        const latest = inputs.get(chunk.id);
+        if (latest?.embeddingInput !== chunk.embeddingInput || latest.inputVersion !== chunk.inputVersion) throw new Error('research_embedding_source_changed');
+      }
+      vectors.push(normalizeEmbeddingBlob(input.vectors[index], config.dimensions));
+    }
+    return {config, vectors};
   }
 
   cachedEmbedding(configId: string, revision: number, version: string, hash: string): Buffer | null {

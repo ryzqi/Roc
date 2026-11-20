@@ -4,7 +4,8 @@ import { vectorToBlob } from './embedding-vectors';
 export type EmbeddingFetch = (input: string, init: RequestInit) => Promise<Response>;
 
 export class OpenAICompatibleEmbeddingClient {
-  constructor(private readonly fetchImpl: EmbeddingFetch = (input, init) => fetch(input, init)) {}
+  constructor(private readonly fetchImpl: EmbeddingFetch = (input, init) => fetch(input, init),
+    private readonly requestTimeoutMs = 60_000) {}
 
   /**
    * 探一次真实向量，读回它的长度（P10：维度自动探测）。
@@ -68,39 +69,46 @@ export class OpenAICompatibleEmbeddingClient {
     const endpoint = input.baseUrl.replace(/\/+$/u, '').endsWith('/embeddings')
       ? input.baseUrl.replace(/\/+$/u, '')
       : `${input.baseUrl.replace(/\/+$/u, '')}/embeddings`;
-    const signal = input.signal === undefined ? AbortSignal.timeout(60_000) : AbortSignal.any([input.signal, AbortSignal.timeout(60_000)]);
+    const deadline = AbortSignal.timeout(this.requestTimeoutMs);
+    const signal = input.signal === undefined ? deadline : AbortSignal.any([input.signal, deadline]);
     signal.throwIfAborted();
-    const response = await this.fetchImpl(endpoint, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${input.apiKey}`,
-        'content-type': 'application/json'
-      },
-      body: JSON.stringify({ model: input.model, input: input.texts, encoding_format: 'float' }), signal
-    });
-    if (!response.ok) {
-      if (response.status===413) {
+    try {
+      const response = await this.fetchImpl(endpoint, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${input.apiKey}`,
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({ model: input.model, input: input.texts, encoding_format: 'float' }), signal
+      });
+      if (!response.ok) {
+        if (response.status===413) {
+          await response.body?.cancel();
+          throw new Error('embedding_provider_input_limit');
+        }
+        if (response.status===400) {
+          let limited=false;
+          try {
+            const payload=await readPayload(response,signal,64*1024);
+            if (typeof payload==='object' && payload!==null && 'error' in payload &&
+              typeof payload.error==='object' && payload.error!==null) {
+              const error=payload.error as Record<string,unknown>;
+              limited=[error.code,error.type,error.message].some(value=>typeof value==='string' &&
+                /context_length_exceeded|max_tokens_per_request|input_too_long|maximum context length|maximum.*tokens|token limit|maximum.*sequence length/iu.test(value));
+            }
+          } catch {signal.throwIfAborted();}
+          if (limited) throw new Error('embedding_provider_input_limit');
+        }
         await response.body?.cancel();
-        throw new Error('embedding_provider_input_limit');
+        throw new Error(`embedding_provider_http_${response.status}`);
       }
-      if (response.status===400) {
-        let limited=false;
-        try {
-          const payload=await readPayload(response,signal,64*1024);
-          if (typeof payload==='object' && payload!==null && 'error' in payload &&
-            typeof payload.error==='object' && payload.error!==null) {
-            const error=payload.error as Record<string,unknown>;
-            limited=[error.code,error.type,error.message].some(value=>typeof value==='string' &&
-              /context_length_exceeded|max_tokens_per_request|input_too_long|maximum context length|maximum.*tokens|token limit|maximum.*sequence length/iu.test(value));
-          }
-        } catch {signal.throwIfAborted();}
-        if (limited) throw new Error('embedding_provider_input_limit');
-      }
-      await response.body?.cancel();
-      throw new Error(`embedding_provider_http_${response.status}`);
+      const payload = await readPayload(response, signal);
+      return parseEmbeddingResponse(payload);
+    } catch (error) {
+      input.signal?.throwIfAborted();
+      if (deadline.aborted) throw new Error('embedding_provider_timeout');
+      throw error;
     }
-    const payload = await readPayload(response, signal);
-    return parseEmbeddingResponse(payload);
   }
 }
 
@@ -131,6 +139,8 @@ function parseEmbeddingResponse(payload: unknown): number[][] {
 async function readPayload(response: Response, signal: AbortSignal, maximumBytes=32*1024*1024): Promise<unknown> {
   if (response.body === null) throw new Error('embedding_provider_response_invalid');
   const reader = response.body.getReader();
+  const abort = (): void => {void reader.cancel(signal.reason).catch(() => {});};
+  signal.addEventListener('abort', abort, {once: true});
   const buffers: Uint8Array[] = [];
   let size = 0;
   try {
@@ -145,6 +155,7 @@ async function readPayload(response: Response, signal: AbortSignal, maximumBytes
     signal.throwIfAborted();
     return JSON.parse(Buffer.concat(buffers).toString('utf8')) as unknown;
   } finally {
+    signal.removeEventListener('abort', abort);
     try {await reader.cancel();}
     finally {reader.releaseLock();}
   }

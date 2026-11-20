@@ -10,7 +10,9 @@
 
 正文、表格行组和算法的默认分块预算均为 450 tokens；`oversized` 标记序列化输入超过对应预算的块，不表示内容已被截断，也不保证 provider 能直接接受。
 
-[embedding-batches.ts](../../src/main/plugins/research/embedding-batches.ts) 默认每批 32 条、16384 tokens，单条及 provider context 各 8192 tokens。cl100k 是本地预算估计。超长输入在 provider 边界分成连续原文片段，按 token 加权合并归一化向量，存储对象与定位保持完整；该合并不保证与模型直接编码整对象语义等价。
+[embedding-batches.ts](../../src/main/plugins/research/embedding-batches.ts) 语义分片策略上限为每批 32 条、16384 tokens，单条及 provider context 各 8192 tokens；实际 HTTP 传输每次最多 4 条，避免冷批次越过网关时限。该传输分组不改变分片、加权合并或既有缓存身份。cl100k 是本地预算估计。超长输入在 provider 边界分成连续原文片段，按 token 加权合并归一化向量，存储对象与定位保持完整；该合并不保证与模型直接编码整对象语义等价。
+
+每个原始输入的全部片段完成并归一化后，才保存可续跑缓存；后续批次失败不会丢失已完成输入。缓存写入前重新核对配置与来源，完整索引仍经原事务一次发布，不发布半份文档。HTTP 请求的 60 秒期限覆盖响应体读取，超时标为 `embedding_provider_timeout`，外部取消原样传播。超时不自动二分或无限重试。
 
 只有明确的 `embedding_provider_input_limit` 才触发有界二分重试。数量、维度、有限值、非零向量及配置身份均需验证，全部片段成功后才能缓存。缓存同时绑定原输入 hash、serializer、模型配置修订、分片算法与预算。
 
@@ -36,6 +38,8 @@
 共享文献库的 `projectId:null` 是存储范围，项目请求仍须检查成员关系。返回前重查原件大小/hash、IR、parse、active generation 与所有者，跨越异步调用的版本变化必须拒绝。
 
 融合使用 [scientific-retrieval-fusion.ts](../../src/main/plugins/research/scientific-retrieval-fusion.ts) 的等权 RRF；同通道/方法的重复项不能重复加分，分数优先于角色偏好。精排见 [scientific-reranker.ts](../../src/main/plugins/research/scientific-reranker.ts)：provider 只能返回候选 index 的分数，不能改来源对象。预算最多 200 候选、单对象 4096 tokens、总计 64000 tokens；不截断公式或单元格以迁就预算。
+
+精排超时设置为 100–120000 毫秒，新配置默认 30000 毫秒；已有配置保持原值，需按真实候选池延迟明确调整。短查询样例可用不证明完整池能在同一期限完成。
 
 缺配置、服务失败或预算不足时保留实际 RRF/词法结果与降级原因；取消、来源或配置竞态继续拒绝。精排输入的 dataset/metric 仍取原文中出现的查询条件，methods 为空；已有 typed extraction 不等于该精排输入已消费抽取知识。
 

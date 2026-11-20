@@ -12,7 +12,7 @@ import type { ResearchReadonlySearchService } from './readonly-search-service';
 import type {ResearchProcessingTrace} from './processing-trace';
 import {knowledgeSourceEmbeddingInputs, type KnowledgeEmbeddingInput} from './knowledge-source-plan';
 import type {ScientificEmbeddingIdentity} from './scientific-index-repository';
-import {embedTokenBatches, embeddingCacheVersion, embeddingBatchDefaults, type EmbeddingBatchPolicy} from './embedding-batches';
+import {embedTokenBatches, embeddingCacheVersion, embeddingBatchDefaults, type EmbeddingBatchPolicy, type CompletedEmbedding} from './embedding-batches';
 
 type EmbeddingTask = { configId: string | null; controller: AbortController; promise: Promise<unknown> };
 export type ResearchEmbeddingReceipt = { configId: string; revision: number } | null;
@@ -155,11 +155,12 @@ export class ResearchEmbeddingService {
         const cacheVersion=this.cacheVersion(row,version);
         const blobs = this.knowledge.cachedEmbeddings(row.id, row.revision, cacheVersion, group.map(input => input.hash));
         const missing = [...new Map(group.filter(input => !blobs.has(input.hash)).map(input => [input.hash, input.text]))];
-        const values=await this.embedMissing(missing.map(([,text])=>text),row,active);
+        const values=await this.embedMissing(missing.map(([,text])=>text),row,active,completed=>{
+          this.knowledge.cacheEmbeddings(row.id,row.revision,cacheVersion,
+            completed.map(value=>missing[value.index]![0]),completed.map(value=>value.vector));
+        });
         missing.forEach(([hash],index)=>blobs.set(hash,values[index]!));
         this.requireActive(active); this.knowledge.requireEmbeddingConfig(row.id, row.revision);
-        this.knowledge.cacheEmbeddings(row.id, row.revision, cacheVersion, missing.map(([hash]) => hash),
-          missing.map(([hash]) => blobs.get(hash)!));
         vectors.set(version, blobs);
       }
       this.requireActive(active); this.knowledge.requireEmbeddingConfig(row.id, row.revision);
@@ -182,11 +183,13 @@ export class ResearchEmbeddingService {
         if (!blobs.has(hashes[index]!)) missing.set(hashes[index]!, text);
       });
       const inputs = [...missing];
-      const values=await this.embedMissing(inputs.map(([,text])=>text),row,active);
+      const values=await this.embedMissing(inputs.map(([,text])=>text),row,active,cacheVersion===null ? undefined : completed=>{
+        this.knowledge.cacheEmbeddings(row.id,row.revision,cacheVersion,
+          completed.map(value=>inputs[value.index]![0]),completed.map(value=>value.vector));
+      });
       inputs.forEach(([hash],index)=>blobs.set(hash,values[index]!));
       this.requireActive(active);
       this.knowledge.requireEmbeddingConfig(row.id, row.revision);
-      if (cacheVersion !== null) this.knowledge.cacheEmbeddings(row.id, row.revision, cacheVersion, [...missing.keys()], [...missing.keys()].map(hash => blobs.get(hash)!));
       const vectors = hashes.map(hash => {
         const blob = blobs.get(hash)!;
         return Array.from({length: blob.length / 4}, (_, index) => blob.readFloatLE(index * 4));
@@ -233,7 +236,12 @@ export class ResearchEmbeddingService {
       if(!byHash.has(hashes[index]!)) missing.set(hashes[index]!,chunk.embeddingInput);
     });
     const inputs=[...missing.entries()];
-    const values=await this.embedMissing(inputs.map(([,text])=>text),row,signal);
+    const byInputHash=new Map(chunks.map((chunk,index)=>[hashes[index]!,chunk]));
+    const values=await this.embedMissing(inputs.map(([,text])=>text),row,signal,completed=>{
+      const completedHashes=completed.map(value=>inputs[value.index]![0]);
+      this.knowledge.cacheChunkEmbeddings({configId:row.id,configRevision:row.revision,version,hashes:completedHashes,
+        chunks:completedHashes.map(hash=>byInputHash.get(hash)!),vectors:completed.map(value=>value.vector)});
+    });
     inputs.forEach(([hash],index)=>byHash.set(hash,values[index]!));
     this.requireActive(signal);
     this.knowledge.storeChunkEmbeddings({configId:row.id,configRevision:row.revision,chunks,
@@ -246,10 +254,11 @@ export class ResearchEmbeddingService {
       inputVersion,this.batchPolicy);
   }
 
-  private async embedMissing(texts: string[], row: EmbeddingConfigRow, signal: AbortSignal): Promise<Buffer[]> {
+  private async embedMissing(texts: string[], row: EmbeddingConfigRow, signal: AbortSignal,
+    onComplete?: (completed: CompletedEmbedding[]) => void): Promise<Buffer[]> {
     return await embedTokenBatches(texts,row.dimensions,async batch=>await this.client.embed({
       config:await this.config(row),apiKey:await this.apiKey(row),texts:batch,signal
-    }),signal,()=>{this.requireActive(signal);this.knowledge.requireEmbeddingConfig(row.id,row.revision);},this.batchPolicy);
+    }),signal,()=>{this.requireActive(signal);this.knowledge.requireEmbeddingConfig(row.id,row.revision);},this.batchPolicy,onComplete);
   }
 
   /** Scientific search uses the same token budgets, cancellation and credential boundary as generic search. */
@@ -409,7 +418,7 @@ export class ResearchEmbeddingService {
 
 function transientEmbeddingFailure(error: unknown): 'timeout'|'network'|'rate_limit'|'provider_unavailable'|null {
   if (!(error instanceof Error)) return null;
-  if(error.name==='TimeoutError') return 'timeout';
+  if(error.name==='TimeoutError' || error.message==='embedding_provider_timeout') return 'timeout';
   if(error instanceof TypeError && /fetch failed|network|failed to fetch/i.test(error.message)) return 'network';
   if(error.message==='embedding_provider_http_429') return 'rate_limit';
   if(/^embedding_provider_http_5\d\d$/u.test(error.message)) return 'provider_unavailable';

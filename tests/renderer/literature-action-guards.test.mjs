@@ -23,7 +23,7 @@ before(async () => {
     import {LiteratureScopeProvider} from './src/renderer/literature/literature-scope';
     import {readingDiscoveryRequestSchema, readingDiscoveryResultSchema, radarArticleSchema,
       radarFeedSchema, radarFeedSaveSchema, radarImportSchema, radarRefreshSchema,radarBrowserRequestSchema,
-      radarCapturePageSchema}
+      radarCapturePageSchema,radarRecommendSchema}
       from './src/shared/schemas/research-reading';
     const root = createRoot(document.getElementById('root'));
     const ok = data => ({ok:true, data});
@@ -37,7 +37,7 @@ before(async () => {
       fetchedAt:'2026-11-12',cached:false,nextOffset:null,warnings:[]});
     const schemas = {discoverReadingRelations:readingDiscoveryRequestSchema, importRadarArticle:radarImportSchema,
       saveRadarFeed:radarFeedSaveSchema, refreshRadarFeed:radarRefreshSchema,radarBrowser:radarBrowserRequestSchema,
-      captureRadarPage:radarCapturePageSchema};
+      captureRadarPage:radarCapturePageSchema,recommendRadar:radarRecommendSchema};
     function call(method,input,data) {
       schemas[method]?.parse(input);
       calls.push({method,input});
@@ -55,6 +55,7 @@ before(async () => {
         }),
       refreshRadarFeed:input => call('refreshRadarFeed',input,{}),
       markRadarArticle:input => call('markRadarArticle',input,{}),
+      recommendRadar:input => call('recommendRadar',input,{date:'2026-11-20',cached:false,corpusSize:3,configId:'fixture',articles:[]}),
       radarBrowser:input => call('radarBrowser',input,{url:'https://papers.cool/arxiv/cs.AI',
         papers:[{title:'Browser paper',url:'https://papers.cool/arxiv/2601.12345',doi:null,arxivId:'2601.12345'}]}),
       captureRadarPage:input => call('captureRadarPage',input,article('captured-paper'))
@@ -345,4 +346,17 @@ test('library citation copy exposes clipboard rejection and clears it after a su
   await page.getByRole('button',{name:'复制引用键 author2026paper',exact:true}).click();
   await expect(page.getByRole('button',{name:'已复制引用键 author2026paper',exact:true})).toBeVisible();
   assert.equal(await page.evaluate(()=>copiedKey),'author2026paper');await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+
+test('daily recommendation failures retain their actual stage without an enable-model empty-state diagnosis',async()=>{
+  await mount('radar');
+  await page.getByRole('tab',{name:'每日 arXiv',exact:true}).click();
+  await page.evaluate(()=>held.add('recommendRadar'));
+  await page.getByRole('button',{name:'获取今日推荐',exact:true}).click();
+  await page.evaluate(()=>resolveNext('recommendRadar',{ok:false,error:{
+    code:'research_radar_embedding_timeout',message:'推荐内容向量计算超时。请检查嵌入服务与网络后重试。',category:'external',retryable:true}}));
+  await expect(page.getByRole('alert')).toContainText('推荐内容向量计算超时');
+  await expect(page.getByText('根据项目文献生成今日推荐。需先启用嵌入模型。',{exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'重新计算',exact:true})).toBeEnabled();
 });

@@ -137,7 +137,8 @@ test('transient query failures explicitly degrade while permission, integrity an
     service=new ResearchEmbeddingService(knowledge,{embed:async()=>{throw failure;}},{secrets:{get:async()=> 'synthetic-key'},logger:{warn(){}}});
     const request={query:'old',projectId:null,limit:10,embeddingConfigId:null};
     for(const [error,reason] of [[new Error('embedding_provider_http_429'),'rate_limit'],[new Error('embedding_provider_http_503'),'provider_unavailable'],
-      [new TypeError('fetch failed'),'network'],[new DOMException('timeout','TimeoutError'),'timeout']]) {
+      [new TypeError('fetch failed'),'network'],[new DOMException('timeout','TimeoutError'),'timeout'],
+      [new Error('embedding_provider_timeout'),'timeout']]) {
       failure=error;const result=await service.search(request);
       assert.equal(result.hits.length,1);assert.equal(result.ranking.degradation,reason);
       assert.equal(result.ranking.coverage.vector,'not_searched');knowledge.assertSearchCurrent(result);

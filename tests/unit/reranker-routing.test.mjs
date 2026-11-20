@@ -38,3 +38,28 @@ test('semantic provider validates scores, preserves cancellation and falls back 
   const hits=['a','a','a','b','c'].map(documentId=>({documentId}));
   assert.deepEqual(selectDiverse(hits,4,true).map(hit=>hit.documentId),['a','a','b','c']);
 });
+
+test('semantic provider accepts an explicit latency budget for a full candidate pool', async () => {
+  const values = new Map(), secrets = new Map();
+  const context = {config: {get: key => values.get(key) ?? null, set: (key, value) => values.set(key, value)},
+    secrets: {get: async key => secrets.get(key) ?? null, set: async (key, value) => secrets.set(key, value), clear: key => secrets.delete(key)},
+    logger: {warn() {}}};
+  const documents = Array.from({length: 154}, (_, index) => `Candidate ${index}: multi-agent security evidence`);
+  const service = new ResearchRerankerService(context, async (_url, init) => {
+    const input = JSON.parse(init.body);
+    assert.deepEqual(input.documents, documents);
+    assert.equal(input.top_n, documents.length);
+    assert.equal(init.signal.aborted, false);
+    return Response.json({results: documents.map((_, index) => ({index, relevance_score: index / documents.length}))});
+  });
+  const settings = {endpoint: 'https://fixture.invalid/rerank', model: 'cross-encoder', enabled: true,
+    timeoutMs: 60_000, apiKey: 'fixture-reranker-key'};
+  await service.saveConfig(settings);
+  assert.equal((await service.readConfig()).timeoutMs, 60_000);
+  const result = await service.rank('security', documents, new AbortController().signal);
+  assert.equal(result.receipt.status, 'succeeded');
+  assert.equal(result.scores.length, documents.length);
+  await assert.rejects(service.saveConfig({...settings, timeoutMs: 120_001}));
+  await service.saveConfig({...settings, timeoutMs: 3_000});
+  assert.equal((await service.readConfig()).timeoutMs, 3_000);
+});

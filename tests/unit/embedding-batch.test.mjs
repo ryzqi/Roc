@@ -92,7 +92,7 @@ test('real embedding service deduplicates imports and preserves cancellation and
       calls++; return texts.map(() => Array.from({ length: 384 }, (_, index) => index + 1));
     } }, context);
     await service.embedDocument('document', null);
-    const first = calls; assert.equal(first, 2, '40 unique inputs in batches of 32');
+    const first = calls; assert.equal(first, 10, '40 unique inputs with a transport ceiling of four');
     await service.embedDocument('document', null); assert.equal(calls, first);
     const text = await service.embedTexts(['repeat', 'repeat'], 'derived-v1');
     assert.deepEqual(text.vectors[0], text.vectors[1]);

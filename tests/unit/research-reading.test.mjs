@@ -82,7 +82,7 @@ test('daily recommendations rank corpus similarity, cache identities and preserv
    radar.mark(f.project.id,first.articles[0].id,true);
    const cached=await radar.recommend(f.project.id,['cs.AI'],false);assert.equal(cached.cached,true);assert.equal(cached.articles[0].read,true);assert.equal(fetched,1);assert.equal(embedded,3);
    revision++;const refreshed=await radar.recommend(f.project.id,['cs.AI'],false);assert.equal(refreshed.cached,false);assert.equal(refreshed.articles[0].read,true);assert.equal(fetched,2);
-   broken=true;await assert.rejects(()=>radar.recommend(f.project.id,['cs.AI'],false),/unavailable/);broken=false;
+   broken=true;await assert.rejects(()=>radar.recommend(f.project.id,['cs.AI'],false),error=>error.code==='research_radar_probe_failed'&&error.retryable);broken=false;
    drift=true;await assert.rejects(()=>radar.recommend(f.project.id,['cs.AI'],true),/配置改变/);
    assert.equal(radar.articles(f.project.id,null).length,2,'failed recomputation retains prior articles');
  }finally{await radar.shutdown();f.close();}
@@ -97,4 +97,68 @@ test('bulk discovery imports persist original scholarly metadata and avoid dupli
    for(const article of result.articles){const added=await radar.importArticle(f.project.id,article.id);const stored=f.repository.library.get(added.itemId);assert.equal(stored.metadata.source,'arxiv');assert.equal(stored.metadata.externalId,article.arxivId);assert.equal(stored.metadata.abstract,'Citing abstract');assert.deepEqual(stored.metadata.authors,['Fixture author']);await radar.importArticle(f.project.id,article.id);}
    assert.equal(imports,2);assert.equal(f.repository.library.list({projectId:f.project.id,includeArchived:false,query:'',limit:100}).length,3);
  }finally{await discovery.shutdown();await radar.shutdown();f.close();}
+});
+
+test('daily recommendation timeouts identify probe, feed and ranking stages without leaking provider details',async()=>{
+ const f=scene();paper(f);let failure='probe',fetches=0,normalized=false;
+ const timeout=()=>new DOMException('https://provider.invalid/private?token=fixture-sensitive-provider-detail','TimeoutError');
+ const embeddings={embedTexts:async texts=>{
+   if(failure==='probe'&&texts.length===1||failure==='embedding'&&texts.length>1)
+     throw normalized ? new Error('embedding_provider_timeout') : timeout();
+   return {configId:'fixture',revision:1,vectors:texts.map(()=>[1,0])};
+ }};
+ const radar=new api.RadarService(f.reading,embeddings,{},async()=>{fetches++;if(failure==='feed')throw timeout();return rss();});
+ try{
+   for(const [stage,label] of [['probe','嵌入模型连接探测'],['feed','arXiv 订阅读取（cs.AI）'],['embedding','推荐内容向量计算']]){
+     failure=stage;
+     await assert.rejects(()=>radar.recommend(f.project.id,['cs.AI'],true),error=>{
+       assert.equal(error.code,`research_radar_${stage}_timeout`);assert.equal(error.retryable,true);
+       assert.match(error.message,new RegExp(label.replace(/[（）]/gu,'\\$&')));
+       assert.equal(error.message.includes('fixture-sensitive-provider-detail'),false);return true;
+     });
+     assert.equal(radar.articles(f.project.id,null).length,0,'failed recommendation stages publish no article or cache');
+   }
+   assert.equal(fetches,2,'failed embedding probe never fetches the RSS source');
+   normalized=true;failure='embedding';
+   await assert.rejects(()=>radar.recommend(f.project.id,['cs.AI'],true),error=>error.code==='research_radar_embedding_timeout');
+   failure='none';const recovered=await radar.recommend(f.project.id,['cs.AI'],false);assert.equal(recovered.articles.length,1);
+ }finally{await radar.shutdown();f.close();}
+});
+
+test('daily recommendation shutdown preserves cancellation instead of reporting a provider timeout',async()=>{
+ const f=scene();paper(f);let started;
+ const running=new Promise(resolve=>{started=resolve;});
+ const embeddings={embedTexts:async (_texts,_version,signal)=>{started();return new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(signal.reason),{once:true}));}};
+ const radar=new api.RadarService(f.reading,embeddings,{},async()=>rss());
+ try{
+   const pending=radar.recommend(f.project.id,['cs.AI'],true);await running;const stopped=radar.shutdown();
+   await assert.rejects(()=>pending,error=>error.name==='AbortError'&&error.code!=='research_radar_probe_timeout');await stopped;
+ }finally{await radar.shutdown();f.close();}
+});
+
+test('daily recommendations preserve safe embedding domain errors and their non-retryable semantics',async()=>{
+ const f=scene();paper(f);let failedStage='probe',domainError;
+ const embeddings={embedTexts:async texts=>{
+   if(failedStage==='probe'&&texts.length===1||failedStage==='embedding'&&texts.length>1)throw domainError;
+   return {configId:'fixture',revision:1,vectors:texts.map(()=>[1,0])};
+ }};
+ const radar=new api.RadarService(f.reading,embeddings,{},async()=>rss());
+ try{
+   for(const [code,category,message] of [
+     ['research_embedding_config_changed','conflict','嵌入配置已变化，请重试。'],
+     ['research_embedding_cancelled','conflict','嵌入任务已取消。'],
+     ['research_embedding_key_unavailable','validation','嵌入密钥不可用。']
+   ]){
+     domainError=new api.RocDomainError({code,category,message,retryable:false,userAction:'请在设置中核对嵌入配置。'});
+     for(const stage of ['probe','embedding']){
+       failedStage=stage;
+       await assert.rejects(()=>radar.recommend(f.project.id,['cs.AI'],true),error=>{
+         assert.equal(error,domainError,'do not reinterpret a classified domain error as a provider failure');
+         assert.equal(error.code,code);assert.equal(error.category,category);assert.equal(error.retryable,false);
+         assert.equal(error.userAction,'请在设置中核对嵌入配置。');return true;
+       });
+     }
+   }
+   assert.equal(radar.articles(f.project.id,null).length,0);
+ }finally{await radar.shutdown();f.close();}
 });

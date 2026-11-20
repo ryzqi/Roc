@@ -1,6 +1,6 @@
 import {useRef, useState} from 'react';
 import type {z} from 'zod';
-import type {rerankerConfigSchema} from '../../../shared/schemas/research-reranker';
+import {rerankerTimeoutMs, type rerankerConfigSchema} from '../../../shared/schemas/research-reranker';
 import type {RocClient} from '../../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../../app/use-async-resource';
 import {useTransientSettingsEditor} from '../settings-editor-guard';
@@ -8,7 +8,7 @@ import {CheckboxField, TextField, NumberField, FormNote, formButtonClass} from '
 
 type Config = z.infer<typeof rerankerConfigSchema>;
 const defaults: Config = {endpoint: 'https://api.cohere.com/v2/rerank', model: 'rerank-v3.5',
-  timeoutMs: 3000, enabled: false, keyConfigured: false};
+  timeoutMs: rerankerTimeoutMs.default, enabled: false, keyConfigured: false};
 
 export function RerankerSettings({client}: {client: RocClient}): React.JSX.Element {
   const resource = useAsyncResource('settings:reranker', () => client.api.research.readRerankerConfig(), {label: '读取精排配置'});
@@ -30,11 +30,11 @@ function RerankerEditor({client, initial}: {client: RocClient; initial: Config})
     busy: save.pending, pendingRef, discard: () => {setForm(base); setApiKey('');}});
   return <fieldset disabled={save.pending} className="flex flex-col gap-2 border-t-[0.5px] border-line pt-2">
     <legend className="text-ink">语义精排（可选）</legend>
-    <FormNote>使用支持 Cohere Rerank 协议的模型。超时或不可用时使用融合排序。</FormNote>
+    <FormNote>使用支持 Cohere Rerank 协议的模型。完整候选集可能需要数十秒，可设置 100–120000 毫秒；超时或不可用时使用融合排序。</FormNote>
     <div className="form-grid">
       <TextField testId="settings-reranker-endpoint" label="精排接口完整地址" value={form.endpoint} onChange={endpoint => setForm({...form, endpoint})} />
       <TextField testId="settings-reranker-model" label="精排模型" value={form.model} onChange={model => setForm({...form, model})} />
-      <NumberField testId="settings-reranker-timeout" label="超时（毫秒）" value={form.timeoutMs} min={100} max={10000}
+      <NumberField testId="settings-reranker-timeout" label="超时（毫秒）" value={form.timeoutMs} min={rerankerTimeoutMs.min} max={rerankerTimeoutMs.max}
         onChange={timeoutMs => setForm({...form, timeoutMs: Number(timeoutMs)})} />
       <TextField testId="settings-reranker-key" label="精排 API Key（每次保存需要填写）" type="password" value={apiKey} onChange={setApiKey} />
     </div>
