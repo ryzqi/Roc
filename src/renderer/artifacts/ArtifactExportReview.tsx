@@ -45,7 +45,7 @@ export function ArtifactExportReview({client, snapshot, writable, locked, onDirt
         {figures.status !== 'error' ? null : <button type="button" className={`${button} self-start`} onClick={figures.reload}>重试读取图稿</button>}
         {approvedFigures.map(figure => <label className="flex min-w-0 items-start gap-2" key={figure.id}>
           <input type="checkbox" disabled={selection !== null} checked={figureIds.includes(figure.id)}
-            className="mt-1 accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-accent" onChange={event => {
+            className="mt-1 accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-focus-ring" onChange={event => {
               setFigureIds(event.target.checked ? [...figureIds, figure.id] : figureIds.filter(id => id !== figure.id)); changeSelection();
             }}/>
           <span className="break-words">{figure.title}</span>

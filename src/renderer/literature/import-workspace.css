@@ -6,7 +6,7 @@
 .literature-import-method:hover { background: var(--overlay-hover); color: var(--ink); }
 .literature-import-method:active, .literature-import-method[aria-selected="true"] { background: var(--overlay-active); color: var(--ink); }
 .literature-import-method:disabled { opacity: .5; }
-.literature-import-method:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.literature-import-method:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 .literature-import-other { font-size: var(--font-meta-size); color: var(--muted); }
 .literature-import-other > summary { width: fit-content; min-height: var(--control-height-compact); padding: 4px; cursor: pointer; }
 .literature-import-other > button { margin-block-start: 4px; }

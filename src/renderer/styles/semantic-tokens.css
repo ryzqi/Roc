@@ -1,0 +1,138 @@
+/* Surface, ink and interaction roles. Muted and accent ink stay legible on raised surfaces. */
+:root,
+:root[data-theme='dark'] {
+  --color-scheme: dark;
+  --surface-base: #0b0c0f;
+  --surface-rail: #13151a;
+  --surface-raised: #1a1d24;
+  --surface-overlay: #232833;
+  --ink-primary: #f1f5f9;
+  --ink-secondary: #cbd5e1;
+  --ink-muted: #94a3b8;
+  --border-subtle: rgb(255 255 255 / 6%);
+  --border-default: rgb(255 255 255 / 11%);
+  --border-strong: rgb(255 255 255 / 18%);
+  --accent-primary: #3b82f6;
+  --accent-ink: #93c5fd;
+  --accent-soft: rgb(59 130 246 / 14%);
+  --focus-ring: #60a5fa;
+  --on-accent: #0b0c0f;
+  --accent-hover: #60a5fa;
+  --status-success: #10b981;
+  --status-warning: #f59e0b;
+  --status-danger: #ef4444;
+  --status-success-ink: #6ee7b7;
+  --status-warning-ink: #fcd34d;
+  --status-danger-ink: #fca5a5;
+  --font-weight-medium: 400;
+  --font-weight-semibold: 500;
+  --scrollbar-thumb: rgb(255 255 255 / 16%);
+  --scrollbar-thumb-hover: rgb(255 255 255 / 32%);
+}
+
+:root[data-theme='light'],
+:root[data-theme='paper'] {
+  --color-scheme: light;
+  --on-accent: #ffffff;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --scrollbar-thumb: rgb(0 0 0 / 18%);
+  --scrollbar-thumb-hover: rgb(0 0 0 / 35%);
+}
+
+:root[data-theme='light'] {
+  --surface-base: #ffffff;
+  --surface-rail: #f4f6f8;
+  --surface-raised: #f8fafc;
+  --surface-overlay: #ffffff;
+  --ink-primary: #0f172a;
+  --ink-secondary: #334155;
+  --ink-muted: #536176;
+  --border-subtle: rgb(15 23 42 / 6%);
+  --border-default: rgb(15 23 42 / 11%);
+  --border-strong: rgb(15 23 42 / 18%);
+  --accent-primary: #2563eb;
+  --accent-ink: #1e40af;
+  --accent-soft: rgb(37 99 235 / 10%);
+  --focus-ring: #2563eb;
+  --accent-hover: #1d4ed8;
+  --status-success: #059669;
+  --status-warning: #d97706;
+  --status-danger: #dc2626;
+  --status-success-ink: #166534;
+  --status-warning-ink: #854d0e;
+  --status-danger-ink: #991b1b;
+}
+
+:root[data-theme='paper'] {
+  --surface-base: #f7f4ec;
+  --surface-rail: #efece3;
+  --surface-raised: #fcfaf4;
+  --surface-overlay: #fffdf8;
+  --ink-primary: #1c1917;
+  --ink-secondary: #44403c;
+  --ink-muted: #605a54;
+  --border-subtle: rgb(28 25 23 / 7%);
+  --border-default: rgb(28 25 23 / 13%);
+  --border-strong: rgb(28 25 23 / 22%);
+  --accent-primary: #1d4ed8;
+  --accent-ink: #1e40af;
+  --accent-soft: rgb(29 78 216 / 9%);
+  --focus-ring: #1d4ed8;
+  --accent-hover: #1e40af;
+  --status-success: #0f766e;
+  --status-warning: #b45309;
+  --status-danger: #b91c1c;
+  --status-success-ink: #115e59;
+  --status-warning-ink: #92400e;
+  --status-danger-ink: #991b1b;
+}
+
+:root[data-forced-colors='true'] {
+  --surface-base: Canvas;
+  --surface-rail: Canvas;
+  --surface-raised: Canvas;
+  --surface-overlay: Canvas;
+  --ink-primary: CanvasText;
+  --ink-secondary: CanvasText;
+  --ink-muted: CanvasText;
+  --border-subtle: GrayText;
+  --border-default: GrayText;
+  --border-strong: CanvasText;
+  --accent-primary: Highlight;
+  --accent-ink: LinkText;
+  --accent-hover: Highlight;
+  --accent-soft: Canvas;
+  --focus-ring: Highlight;
+  --on-accent: HighlightText;
+  --status-success: CanvasText;
+  --status-warning: CanvasText;
+  --status-danger: CanvasText;
+  --status-success-ink: CanvasText;
+  --status-warning-ink: CanvasText;
+  --status-danger-ink: CanvasText;
+}
+
+/* Density changes controls and rows independently of reading and code sizes. */
+:root,
+:root[data-density='compact'] {
+  --control-height: 32px;
+  --control-height-compact: 28px;
+  --control-height-input: 32px;
+  --control-hit: 32px;
+  --list-row-height: 30px;
+  --file-row-height: 24px;
+  --panel-padding: 12px;
+  --panel-padding-wide: 16px;
+}
+
+:root[data-density='comfortable'] {
+  --control-height: 36px;
+  --control-height-compact: 32px;
+  --control-height-input: 36px;
+  --control-hit: 36px;
+  --list-row-height: 36px;
+  --file-row-height: 28px;
+  --panel-padding: 16px;
+  --panel-padding-wide: 24px;
+}

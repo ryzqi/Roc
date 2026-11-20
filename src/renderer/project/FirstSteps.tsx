@@ -15,7 +15,7 @@ export function FirstSteps({writable, requestId, onDismiss, onDiscover, onImport
   return <section aria-labelledby="overview-first-steps-heading" data-testid="overview-first-steps"
     className="grid min-w-0 gap-3 border-t-[0.5px] border-line pt-4">
     <header className="flex items-center justify-between gap-3">
-      <h2 ref={heading} tabIndex={-1} id="overview-first-steps-heading" className="rounded-control font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">开始使用</h2>
+      <h2 ref={heading} tabIndex={-1} id="overview-first-steps-heading" className="rounded-control font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring">开始使用</h2>
       <button type="button" className={formSecondaryButtonClass} data-testid="overview-first-steps-skip" onClick={onDismiss}>跳过引导</button>
     </header>
     <ol className="grid list-decimal gap-3 pl-5 text-muted">

@@ -22,7 +22,7 @@
 .artifact-workspace :where(pre) { max-width: 100%; }
 .artifact-workspace :where([data-testid="artifact-inspector-content"]) { gap: 16px; }
 .artifact-protocol-list { max-height: 220px; overflow-y: auto; padding: 4px; border: .5px solid var(--line); border-radius: var(--radius-control); }
-.artifact-protocol-list button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.artifact-protocol-list button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent-ink); }
 .artifact-protocol-list button { min-height: 40px; }
 @container artifact-inspector (max-width: 580px) {
   .artifact-workspace { padding-inline: 0; gap: 16px; }

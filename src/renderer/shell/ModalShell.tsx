@@ -196,8 +196,8 @@ export function ModalShell({
             transition={kind === 'drawer' ? drawerTransition : modalPopTransition}
             className={
               kind === 'drawer'
-                ? `relative z-10 ml-auto flex h-full max-w-[calc(100vw-var(--shadow-modal-gutter-inline))] flex-col border-l-[0.5px] border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[520px]'}`
-                : `relative z-10 row-start-2 mx-auto flex max-h-[min(86vh,calc(100dvh-2*var(--shadow-modal-gutter-block)))] max-w-[min(92vw,calc(100vw-2*var(--shadow-modal-gutter-inline)))] flex-col overflow-clip rounded-window border-[0.5px] border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[680px]'}`
+                ? `relative z-10 ml-auto flex h-full max-w-[calc(100vw-var(--shadow-modal-gutter-inline))] flex-col border-l-[0.5px] border-line-default bg-surface-overlay shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[520px]'}`
+                : `relative z-10 row-start-2 mx-auto flex max-h-[min(86vh,calc(100dvh-2*var(--shadow-modal-gutter-block)))] max-w-[min(92vw,calc(100vw-2*var(--shadow-modal-gutter-inline)))] flex-col overflow-clip rounded-window border-[0.5px] border-line-default bg-surface-overlay shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[680px]'}`
             }
           >
             {hideHeader ? <h2 id={titleId} className="sr-only">{title}</h2> : (

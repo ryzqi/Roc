@@ -403,7 +403,7 @@ export function AssistantComposer({
 
   return (
     <div
-      className="min-w-0 shrink-0 border-t-[0.5px] border-line p-3"
+      className="assistant-composer min-w-0 shrink-0 border-t-[0.5px] border-line-default"
       data-testid="assistant-composer"
       onDragEnter={(event) => {
         if (!Array.from(event.dataTransfer.types).includes('Files')) return;
@@ -518,9 +518,9 @@ export function AssistantComposer({
       <span id="assistant-composer-hint" className="sr-only">Enter 或 Command+Enter 发送，Shift+Enter 换行</span>
       <div
         className={[
-          'flex min-w-0 flex-col gap-2 rounded-window border-[0.5px] bg-surface p-2 transition-colors duration-[var(--duration-fast)]',
+          'flex min-w-0 flex-col gap-2 rounded-window border-[0.5px] bg-surface-raised p-2 transition-colors duration-[var(--duration-fast)]',
           'focus-within:border-[var(--composer-border-focus)] focus-within:ring-1 focus-within:ring-accent-soft',
-          draggingFiles ? 'border-accent outline outline-2 outline-accent-soft-strong outline-offset-1' : 'border-line'
+          draggingFiles ? 'border-accent outline outline-2 outline-accent-soft-strong outline-offset-1' : 'border-line-default'
         ].join(' ')}
         data-dragging-files={draggingFiles ? 'true' : 'false'}
       >
@@ -665,7 +665,7 @@ export function AssistantComposer({
                     };
                     input.click();
                   }}
-                  className="flex h-7 w-7 items-center justify-center rounded-control text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
+                  className="flex h-7 w-7 items-center justify-center rounded-control text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
                 >
                   <Paperclip size={13} aria-hidden="true" />
                 </button>

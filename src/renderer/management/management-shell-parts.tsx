@@ -123,8 +123,8 @@ export function ManagementTabStrip({
             data-testid={`${testIdPrefix}-tab-${tab.id}`}
             className={
               selected
-                ? 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1 rounded-[calc(var(--r-card)-var(--space-1))] bg-surface px-2 font-[var(--font-weight-medium)] text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent'
-                : 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1 rounded-[calc(var(--r-card)-var(--space-1))] px-2 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent'
+                ? 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1 rounded-[calc(var(--r-card)-var(--space-1))] bg-surface px-2 font-[var(--font-weight-medium)] text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring'
+                : 'flex h-[var(--control-height-compact)] flex-1 items-center justify-center gap-1 rounded-[calc(var(--r-card)-var(--space-1))] px-2 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring'
             }
           >
             <Icon size={12} aria-hidden="true" className={selected ? tab.iconClass : 'text-subtle'} />

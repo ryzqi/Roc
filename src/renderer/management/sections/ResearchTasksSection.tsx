@@ -70,7 +70,7 @@ function ExecutionTree({ executions, client, onOpenArtifact }: { executions: Res
               <ul className="grid gap-1 text-subtle" aria-label="工件">
                 {execution.artifacts.map(artifact => <li key={artifact.id} className="grid gap-1 break-all font-mono">
                   {artifact.state === 'present' && onOpenArtifact !== undefined ? <button type="button"
-                    className="text-left underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-accent"
+                    className="text-left underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-focus-ring"
                     data-testid={`mgmt-task-artifact-${artifact.id}`} onClick={() => onOpenArtifact({projectId: association.projectId,
                       artifactId: artifact.id, expectedVersion: artifact.version}, () => undefined)}>工件 {artifact.id}</button> : <span>工件 {artifact.id}</span>}
                   <span className="text-subtle">{artifact.state === 'missing' ? '工件已缺失' : `当前版本 ${artifact.version}`} / 执行时版本未知</span>
@@ -137,7 +137,7 @@ function TaskDetail({ client, projectId, taskId, onOpenArtifact }: {
         )}
       <TaskFactsPanel client={client} projectId={projectId} taskId={taskId} />
       <details className="task-usage-disclosure" data-testid="mgmt-task-diagnostics">
-        <summary className="min-h-7 cursor-pointer py-1 text-muted focus-visible:outline-2 focus-visible:outline-accent">执行过程与诊断</summary>
+        <summary className="min-h-7 cursor-pointer py-1 text-muted focus-visible:outline-2 focus-visible:outline-focus-ring">执行过程与诊断</summary>
         <div className="grid min-w-0 gap-4 py-2">
           {resource.data === null ? null : <>
             <p className="break-all font-mono text-subtle">任务 {resource.data.task.id}</p>

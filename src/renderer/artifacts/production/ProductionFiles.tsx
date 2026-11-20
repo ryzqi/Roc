@@ -65,7 +65,7 @@ export function ProductionFiles({client,input,request,initialLocation,onLocation
       <p className="break-all font-mono text-muted text-[length:var(--font-meta-size)]">已校验 SHA-256 {content.file.sha256}</p>
       {content.encoding==='utf8'?<pre tabIndex={0} aria-label="保存的生产文件正文" data-testid="artifact-production-text"
         data-reading-key="production-text"
-        className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words font-mono text-[length:var(--font-meta-size)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]">{content.content}</pre>:
+        className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words font-mono text-[length:var(--font-meta-size)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring">{content.content}</pre>:
         rasterTypes.get(extension(content.file.path))===undefined?<p className="text-muted">文件是二进制内容，当前没有对应预览类型。</p>:
           <img data-testid="artifact-production-image" className="max-h-[480px] max-w-full self-start object-contain"
             alt={`${input.artifact.title} ${content.file.path}`} src={`data:${rasterTypes.get(extension(content.file.path))};base64,${content.content}`}/>}

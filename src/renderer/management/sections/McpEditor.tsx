@@ -102,7 +102,7 @@ export function McpEditor({
           className="border-t-[0.5px] border-line pt-3"
           open={advancedIssue || undefined}
         >
-          <summary className="cursor-pointer rounded-control text-muted focus-visible:outline-2 focus-visible:outline-accent">
+          <summary className="cursor-pointer rounded-control text-muted focus-visible:outline-2 focus-visible:outline-focus-ring">
             高级设置
           </summary>
           <div className="mt-3 flex flex-col gap-4">

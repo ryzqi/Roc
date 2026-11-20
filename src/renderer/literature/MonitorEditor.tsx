@@ -38,7 +38,7 @@ async function execute(client: RocClient, command: Command): Promise<IpcLikeResu
     }
   }
 }
-const fieldStyle = 'w-full min-w-0 rounded-control border-[0.5px] border-line bg-surface px-2 py-1 text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:opacity-50';
+const fieldStyle = 'w-full min-w-0 rounded-control border-[0.5px] border-line bg-surface px-2 py-1 text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring disabled:opacity-50';
 const sources: Array<{id: Extract<MonitorQuery, {kind: 'search'}>['search']['sources'][number]; label: string}> = [
   {id: 'openalex', label: 'OpenAlex'}, {id: 'crossref', label: 'Crossref'}, {id: 'semantic_scholar', label: 'Semantic Scholar'},
   {id: 'arxiv', label: 'arXiv'}, {id: 'pubmed', label: 'PubMed'}, {id: 'europe_pmc', label: 'Europe PMC'},

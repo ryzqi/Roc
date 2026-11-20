@@ -20,7 +20,7 @@ export type ProjectRowProps = {
 };
 
 const ROW_ACTION =
-  'flex h-7 w-7 items-center justify-center rounded-control text-subtle hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-50';
+  'flex h-7 w-7 items-center justify-center rounded-control text-subtle hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring disabled:pointer-events-none disabled:opacity-50';
 
 export function ProjectRow({
   project,
@@ -63,12 +63,12 @@ export function ProjectRow({
         onClick={onOpen}
         aria-label={`打开项目 ${project.title}`}
         data-testid={`portal-card-open-${project.id}`}
-        className="flex min-w-0 flex-1 items-start rounded-control px-3 py-3 text-left hover:bg-[var(--surface-card-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
+        className="flex min-w-0 flex-1 items-start rounded-control px-3 py-3 text-left hover:bg-[var(--surface-card-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-ring"
       >
         <span className="flex min-w-0 flex-1 flex-col gap-2">
           <span className="flex min-w-0 items-center gap-1.5">
             {pinned ? (
-              <Pin size={12} aria-hidden="true" className="shrink-0 fill-current text-accent" data-testid="portal-card-pinned" />
+              <Pin size={12} aria-hidden="true" className="shrink-0 fill-current text-accent-ink" data-testid="portal-card-pinned" />
             ) : null}
             <span className="project-row-title text-[length:var(--font-ui-size)] font-medium text-ink" title={project.title}>
               {project.title}
@@ -107,7 +107,7 @@ export function ProjectRow({
           aria-label={pinned ? `取消置顶 ${project.title}` : `本机置顶 ${project.title}`}
           title={pinned ? '取消置顶' : '本机置顶'}
           data-testid={`portal-card-pin-${project.id}`}
-          className={pinned ? `${ROW_ACTION} bg-accent-soft text-accent` : ROW_ACTION}
+          className={pinned ? `${ROW_ACTION} bg-accent-soft text-accent-ink` : ROW_ACTION}
         >
           <Pin size={14} aria-hidden="true" />
         </button>
@@ -143,7 +143,7 @@ export function ProjectRow({
           aria-label={`删除 ${project.title}`}
           title="删除"
           data-testid={`portal-card-delete-${project.id}`}
-          className="flex h-7 w-7 items-center justify-center rounded-control text-subtle hover:bg-[var(--overlay-hover)] hover:text-[var(--st-bad)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-50"
+          className="flex h-7 w-7 items-center justify-center rounded-control text-subtle hover:bg-[var(--overlay-hover)] hover:text-[var(--st-bad)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring disabled:pointer-events-none disabled:opacity-50"
         >
           <Trash2 size={14} aria-hidden="true" />删除
         </button>

@@ -3,7 +3,7 @@ import type {MonitorAlert, MonitorCheck, MonitorQuery, MonitorSource} from '../.
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncResource, type AsyncResource} from '../app/use-async-resource';
 
-export const monitorButton = 'inline-flex flex-wrap items-center gap-2 rounded-control border-[0.5px] border-line px-2 py-1 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:opacity-50';
+export const monitorButton = 'inline-flex flex-wrap items-center gap-2 rounded-control border-[0.5px] border-line px-2 py-1 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring disabled:opacity-50';
 export const monitorStatus = {running: '检查中', complete: '检查完成', partial: '部分完成', failed: '检查失败', cancelled: '已取消', interrupted: '已中断'};
 const eventLabels = {new_paper: '新论文', retraction: '撤稿', correction: '勘误', other_update: '其他更新'};
 const coverageLabels = {unknown: '覆盖范围未知', limited: '有限覆盖', reported_end: '来源报告结束', failed: '读取失败'};

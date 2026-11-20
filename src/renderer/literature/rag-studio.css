@@ -6,11 +6,11 @@
 .rag-button:hover, .rag-expand:hover { background: var(--overlay-hover); color: var(--ink); }
 .rag-button:active, .rag-expand:active { background: var(--overlay-active); }
 .rag-button:disabled { opacity: .45; }
-.rag-studio :is(button, input, select, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rag-studio :is(button, input, select, summary):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .rag-search-header { flex: 0 0 auto; padding: 20px 24px 12px; border-bottom: .5px solid var(--line); }
 .rag-query-form { display: flex; align-items: stretch; gap: 8px; }
 .rag-query-field { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; padding: 0 12px; border: .5px solid var(--line-strong); border-radius: var(--radius-control); background: var(--surface); }
-.rag-query-field:focus-within { border-color: var(--accent); }
+.rag-query-field:focus-within { border-color: var(--accent-ink); }
 .rag-query-field input { width: 100%; min-width: 0; min-height: 40px; background: transparent; color: var(--ink); font-size: var(--font-body-size); }
 .rag-query-field input::placeholder { color: var(--muted); }
 .rag-query-field input:focus-visible { outline-offset: 0; }
@@ -26,7 +26,7 @@
 .rag-options[open] summary > svg:last-child { transform: rotate(180deg); }
 .rag-options label { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 4px; }
 .rag-options fieldset { display: flex; flex-wrap: wrap; gap: 4px 8px; padding-block: 8px; }
-.rag-options input[type='radio'] { accent-color: var(--accent); }
+.rag-options input[type='radio'] { accent-color: var(--accent-ink); }
 .rag-options p { padding: 4px; color: var(--muted); }
 .rag-availability { margin-top: 4px; font-size: var(--font-meta-size); font-variant-numeric: tabular-nums; }
 .rag-source-unavailable { padding: 4px 8px; color: var(--muted); font-size: var(--font-meta-size); }

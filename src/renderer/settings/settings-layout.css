@@ -1,8 +1,10 @@
 .settings-layout { min-height: 0; }
+.settings-content { padding: var(--panel-padding); }
+.settings-navigation [role='tab'] { min-block-size: var(--list-row-height); }
 .settings-navigation-group { flex-shrink: 0; padding: var(--space-4) var(--space-3) var(--space-1); color: var(--subtle); font-size: var(--font-micro-size); font-weight: var(--font-weight-medium); }
 .settings-navigation-group:first-child { padding-top: var(--space-1); }
 .settings-form-content { width: 100%; max-width: 760px; margin-inline: auto; padding-block: var(--space-2) var(--space-4); overflow-wrap: anywhere; }
-.settings-form-content > .form-section { gap: var(--space-5); }
+.settings-form-content > .form-section { gap: var(--panel-padding-wide); }
 .settings-form-content .form-section > header { padding-bottom: var(--space-3); }
 .settings-form-content .form-section > header h3 { font-size: var(--font-lead-size); font-weight: var(--font-weight-semibold); }
 .settings-form-content .form-section .form-section { padding-top: var(--space-4); }
@@ -10,10 +12,10 @@
 .settings-form-content textarea { line-height: 1.65; }
 .settings-form-content input, .settings-form-content select, .settings-form-content textarea { max-width: 100%; }
 @media (min-width: 720px) {
-  .settings-content { padding-inline: var(--space-6); }
-  .settings-navigation { width: 192px; gap: 2px; }
+  .settings-content { padding-inline: var(--panel-padding-wide); }
+  .settings-navigation { width: 192px; gap: var(--space-1); }
 }
 @media (max-width: 719px) {
   .settings-form-content { padding-top: var(--space-1); }
-  .settings-form-content > .form-section { gap: var(--space-4); }
+  .settings-form-content > .form-section { gap: var(--panel-padding); }
 }

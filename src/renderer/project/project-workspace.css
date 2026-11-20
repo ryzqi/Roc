@@ -14,7 +14,7 @@
 .project-row-more summary:active { background: var(--overlay-active); }
 .project-row-action-list { display: flex; flex-wrap: wrap; gap: 4px; padding-top: 4px; }
 .project-row-action-list button { width: auto; gap: 4px; padding-inline: 8px; font-size: var(--font-meta-size); }
-.project-portal :is(button, input, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.project-portal :is(button, input, summary):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 @container project-portal (max-width: 560px) {
   .project-portal-content { padding: 16px; gap: 20px; }
   .project-row[data-variant=list] > button { flex-basis: 100%; }

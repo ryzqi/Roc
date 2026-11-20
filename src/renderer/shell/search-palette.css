@@ -1,4 +1,4 @@
 .search-palette-results { max-height: 56vh; overscroll-behavior: contain; }
 .search-palette-group-heading { display: flex; justify-content: space-between; gap: 8px; padding: 8px; border-bottom: .5px solid var(--line-soft); margin-bottom: 4px; color: var(--muted); font-size: var(--font-meta-size); }
 .search-palette-result-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; width: 100%; overflow: hidden; overflow-wrap: anywhere; line-height: 1.5; }
-.search-palette-content :is(input,button):focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.search-palette-content :is(input,button):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }

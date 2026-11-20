@@ -41,7 +41,7 @@ export function WindowChrome({
   const gitLabel = gitChangeCount === null ? branch : `${branch}，${gitChangeCount.toLocaleString('zh-CN')} 项变更`;
 
   return (
-    <header className="drag-region grid h-[38px] shrink-0 grid-cols-[minmax(0,1fr)_min(320px,35vi)_minmax(0,1fr)] items-center gap-2 border-b-[0.5px] border-line bg-[var(--material-titlebar)] px-3 text-[length:var(--font-meta-size)]"
+    <header className="drag-region grid h-[38px] shrink-0 grid-cols-[minmax(0,1fr)_min(320px,35vi)_minmax(0,1fr)] items-center gap-2 border-b-[0.5px] border-line-default bg-surface-rail px-3 text-[length:var(--font-meta-size)]"
       data-testid="titlebar">
       {/* Native hiddenInset traffic lights reserve 74px plus the toolbar's 12px padding. */}
       <div className="flex min-w-0 items-center gap-1 ps-[74px]">
@@ -82,7 +82,7 @@ export function WindowChrome({
       </div>
 
       <button type="button" onClick={onOpenSearch} aria-keyshortcuts="Meta+K" data-testid="titlebar-search"
-        className="no-drag chrome-control min-w-0 justify-between border-[0.5px] border-line bg-surface px-3">
+        className="no-drag chrome-control min-w-0 justify-between border-[0.5px] border-line-default bg-surface-raised px-3">
         <span className="flex min-w-0 items-center gap-2">
           <Search size={14} aria-hidden="true" className="shrink-0" />
           <span className="truncate">搜索文献、文件或命令…</span>

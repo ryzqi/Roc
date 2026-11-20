@@ -246,8 +246,8 @@ export function ContextDrawer(props: ContextDrawerProps): React.JSX.Element {
     onOpenTerminal, onOpenTasks, onOpenManagement, onOpenHelp, taskLabel, taskSummary } = props;
   return (
     <aside aria-label={headings[view]} data-testid="context-drawer"
-      className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--material-sidebar)] text-[length:var(--font-meta-size)] text-text">
-      <h2 className="shrink-0 border-b-[0.5px] border-line px-4 py-2 font-medium text-ink">{headings[view]}</h2>
+      className="flex h-full min-h-0 flex-col overflow-hidden bg-surface-rail text-[length:var(--font-meta-size)] text-ink-secondary">
+      <h2 className="shrink-0 border-b-[0.5px] border-line-default px-4 py-2 font-medium text-ink-primary">{headings[view]}</h2>
       {view === 'overview' ? <OverviewResources {...props} /> : view === 'library' ? <LiteratureResources {...props} /> :
         view === 'writing' ? <>
           <div className="min-h-0 flex-1 overflow-y-auto"><WritingFiles {...props} /></div>

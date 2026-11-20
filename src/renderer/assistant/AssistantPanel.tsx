@@ -395,7 +395,7 @@ export function AssistantPanel({
     // `bg-bg`, not `--bg-soft`: all three columns share one colour and are separated by
     // hairlines only. Tinting the transcript wrapper the same colour keeps it deliberately
     // invisible.
-    <div className="flex h-full min-h-0 flex-col bg-bg" data-testid="assistant-panel">
+    <div className="flex h-full min-h-0 flex-col bg-surface-rail text-ink-primary" data-testid="assistant-panel">
       {header}
 
       {!session.runState.historyComplete ? (
@@ -467,7 +467,7 @@ export function AssistantPanel({
         <div className="shrink-0 border-t-[0.5px] border-line px-3 py-2 text-[length:var(--font-micro-size)]" data-testid="assistant-run-inputs">
           {session.runInputs.length === 0 ? null : (
             <details>
-              <summary className="cursor-pointer text-muted focus-visible:outline-2 focus-visible:outline-accent">
+              <summary className="cursor-pointer text-muted focus-visible:outline-2 focus-visible:outline-focus-ring">
                 补充指令 {session.runInputs.length} 条
                 {session.runInputs.some(item => item.status === 'queued') ? '，有指令尚未送入上下文' : '，已送入上下文'}
               </summary>
@@ -545,7 +545,7 @@ export function AssistantPanel({
         <button
           type="button"
           onClick={onOpenSettings}
-          className="shrink-0 px-3 pb-2 text-left text-accent text-[length:var(--font-micro-size)]"
+          className="shrink-0 px-3 pb-2 text-left text-accent-ink text-[length:var(--font-micro-size)]"
           data-testid="assistant-open-settings-hint"
         >
           <Settings2 size={10} aria-hidden="true" className="mr-1 inline" />

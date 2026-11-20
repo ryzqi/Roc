@@ -474,7 +474,7 @@ export function FileTreeView({
         aria-label="文件树"
         aria-activedescendant={activeDescendantId}
         data-testid="file-tree-scroll"
-        className="min-h-0 flex-1 overflow-y-auto py-1 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
+        className="min-h-0 flex-1 overflow-y-auto py-1 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-ring"
       >
         {activeRow === undefined ? null : (
           <div
@@ -553,7 +553,7 @@ function TreeRow({
 }): React.JSX.Element {
   const directory = row.entry.type === 'directory';
   const activeOutline = active && treeFocused
-    ? 'outline-2 outline-offset-[-2px] outline-accent'
+    ? 'outline-2 outline-offset-[-2px] outline-focus-ring'
     : '';
   return (
     <div>

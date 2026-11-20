@@ -48,7 +48,7 @@ export function isTaskApproval(approval: ChatPendingApproval): boolean {
 
 // Approval choices carry equal emphasis; the labels describe the decision.
 function approvalButtonClass(_kind: 'approve' | 'neutral' | 'reject' | 'edit'): string {
-  return 'min-h-[var(--control-height)] rounded-control border-[0.5px] border-line px-3 text-ink hover:border-line-strong hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-accent';
+  return 'min-h-[var(--control-height)] rounded-control border-[0.5px] border-line px-3 text-ink hover:border-line-strong hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-focus-ring';
 }
 
 function ApprovalShell({
@@ -100,7 +100,7 @@ function ApprovalImpact({args}: {args: Record<string, unknown>}): React.JSX.Elem
 
 function ApprovalParameters({args}: {args: Record<string, unknown> | null}): React.JSX.Element {
   return <details className="mt-2 text-[length:var(--font-meta-size)]">
-    <summary className="min-h-7 cursor-pointer py-1 text-muted focus-visible:outline-2 focus-visible:outline-accent">完整参数</summary>
+    <summary className="min-h-7 cursor-pointer py-1 text-muted focus-visible:outline-2 focus-visible:outline-focus-ring">完整参数</summary>
     <pre className="mt-1 max-h-[220px] overflow-auto whitespace-pre-wrap break-words font-mono text-[var(--code-text)] text-[length:var(--font-code-size)]">{JSON.stringify(args, null, 2)}</pre>
   </details>;
 }
@@ -309,14 +309,14 @@ export function ResearchGateApprovalCard({
       </p>}
       {links.success ? <ul className="mt-2 flex flex-col gap-1" data-testid="assistant-gate-artifacts">
         {links.data.map(link => <li key={link.artifactId}>
-          <button type="button" className="break-words text-left text-ink underline decoration-line underline-offset-2 hover:decoration-current focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
+          <button type="button" className="break-words text-left text-ink underline decoration-line underline-offset-2 hover:decoration-current focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring"
             aria-disabled={approvalPending} data-testid="assistant-gate-artifact" onClick={() => { if (!approvalPending) onOpenArtifact({projectId: link.projectId, artifactId: link.artifactId, expectedVersion: link.expectedVersion}, acceptContext); }}>
             {link.title}
           </button>
         </li>)}
       </ul> : <p role="alert" className="mt-2 text-[var(--st-bad)]">真实工件标识缺失或无效，闸门决定已禁用。请重新读取本阶段审核上下文。</p>}
       {isDiscovery ? plan?.success && /^[a-f0-9]{64}$/u.test(planHash) ? (
-        <div className="mt-2 max-h-[320px] overflow-auto break-words text-ink text-[length:var(--font-meta-size)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
+        <div className="mt-2 max-h-[320px] overflow-auto break-words text-ink text-[length:var(--font-meta-size)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring"
           tabIndex={0} aria-label="待确认检索计划" data-testid="assistant-gate-search-plan">
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
             <dt className="text-muted">原始研究指令</dt><dd>{plan.data.researchQuestion}</dd>

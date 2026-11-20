@@ -202,7 +202,7 @@ function ProviderEditor({ provider, store }: { provider: ProviderConfig; store: 
                 </button>
               </div>
               <details className="group" data-testid={`settings-model-advanced-${modelIndex}`}>
-                <summary className="flex w-fit cursor-pointer list-none items-center gap-1 rounded-control py-1 text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent">
+                <summary className="flex w-fit cursor-pointer list-none items-center gap-1 rounded-control py-1 text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring">
                   <ChevronRight size={14} aria-hidden="true" className="group-open:rotate-90" />参数与能力
                 </summary>
                 <div className="flex flex-col gap-3 p-1 pt-3">

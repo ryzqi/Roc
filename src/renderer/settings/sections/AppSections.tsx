@@ -5,7 +5,7 @@ import { PreferenceRow } from '../PreferenceRow';
 import { useAsyncAction, useAsyncResource } from '../../app/use-async-resource';
 import type { ThemeOverride } from '../../app/ui-state';
 import {exportUxMetrics} from '../../app/ux-metrics';
-import { themeOverrideLabel } from '../../shell/appearance';
+import { THEME_LABELS, THEME_OVERRIDES } from '../../app/hooks/useThemeSync';
 import type { SettingsStore } from '../settings-scope';
 import {
   getAppStatus,
@@ -133,12 +133,12 @@ export function AppSection({
 
       <section className="flex flex-col gap-4 border-t-[0.5px] border-line pt-4" aria-label="外观">
         <PreferenceRow label="外观" value={themeOverride}
-          options={(['system', 'light', 'dark'] as const).map((value) => ({ value, label: themeOverrideLabel(value) }))}
+          options={THEME_OVERRIDES.map(value => ({ value, label: THEME_LABELS[value] }))}
           onChange={onThemeOverrideChange} testId="settings-theme" />
         <ContentPreferences />
       </section>
       <details className="border-t-[0.5px] border-line pt-4" data-testid="settings-session-diagnostics">
-        <summary className="min-h-7 cursor-pointer py-1 text-muted focus-visible:outline-2 focus-visible:outline-accent">本次会话诊断</summary>
+        <summary className="min-h-7 cursor-pointer py-1 text-muted">本次会话诊断</summary>
         <div className="grid justify-items-start gap-2 pt-2">
           <p className="text-muted text-[length:var(--font-meta-size)]">最多 500 条页面访问与操作记录，仅保留事件类型、界面和相对时间。</p>
           <button type="button" className={formSecondaryButtonClass} disabled={copyMetrics.pending}

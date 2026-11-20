@@ -11,7 +11,7 @@ import { AlertTriangle, Info } from 'lucide-react';
  *
  * Presentation only: no IPC, no rules, no draft access. The class strings are the same
  * vocabulary the P3–P8 panels use (`--control-height`, `--font-meta-size`, `--overlay-hover`,
- * `focus-visible:outline-accent`).
+ * `focus-visible:outline-focus-ring`).
  *
  * Three accessibility rules are structural, not conventional:
  *
@@ -24,12 +24,12 @@ import { AlertTriangle, Info } from 'lucide-react';
  */
 
 export const formInputClass =
-  'h-[var(--control-height)] min-w-0 w-full rounded-control border-[0.5px] border-line bg-bg px-2.5 text-ink transition-colors hover:border-line-strong disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+  'h-[var(--control-height)] min-w-0 w-full rounded-control border-[0.5px] border-line bg-bg px-2.5 text-ink transition-colors hover:border-line-strong disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring';
 export const formSelectClass = formInputClass;
 export const formTextAreaClass =
-  'w-full min-w-0 min-h-[72px] resize-y rounded-control border-[0.5px] border-line bg-bg px-2 py-1 font-mono text-[length:var(--font-code-size)] text-ink disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+  'w-full min-w-0 min-h-[72px] resize-y rounded-control border-[0.5px] border-line bg-bg px-2 py-1 font-mono text-[length:var(--font-code-size)] text-ink disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring';
 export const formSecondaryButtonClass =
-  'inline-flex min-h-[var(--control-height-compact)] shrink-0 items-center justify-center gap-1.5 rounded-control border-[0.5px] border-line px-2 text-muted text-[length:var(--font-meta-size)] hover:text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+  'inline-flex min-h-[var(--control-height-compact)] shrink-0 items-center justify-center gap-1.5 rounded-control border-[0.5px] border-line px-2 text-muted text-[length:var(--font-meta-size)] hover:text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring';
 /**
  * 与输入框同高的按钮（P10）。
  *
@@ -38,10 +38,10 @@ export const formSecondaryButtonClass =
  * 高度不一致也让 hover 区域与输入框不是同一条水平带。所以凡是与输入框同排的动作按钮用这个。
  */
 export const formButtonClass =
-  'inline-flex min-h-[var(--control-height)] shrink-0 items-center justify-center gap-1.5 rounded-control border-[0.5px] border-line px-2.5 text-muted text-[length:var(--font-meta-size)] hover:text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+  'inline-flex min-h-[var(--control-height)] shrink-0 items-center justify-center gap-1.5 rounded-control border-[0.5px] border-line px-2.5 text-muted text-[length:var(--font-meta-size)] hover:text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring';
 /** 与输入框同高的主按钮（保存/确认）。 */
 export const formPrimaryButtonClass =
-  'inline-flex min-h-[var(--control-height)] shrink-0 items-center justify-center gap-1.5 rounded-control border-[0.5px] border-transparent bg-[var(--fill-strong)] px-3 font-medium text-[var(--fill-strong-text)] text-[length:var(--font-meta-size)] hover:bg-[var(--fill-strong-hover)] active:opacity-90 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+  'inline-flex min-h-[var(--control-height)] shrink-0 items-center justify-center gap-1.5 rounded-control border-[0.5px] border-transparent bg-[var(--fill-strong)] px-3 font-medium text-[var(--fill-strong-text)] text-[length:var(--font-meta-size)] hover:bg-[var(--fill-strong-hover)] active:opacity-90 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring';
 
 export function FormSection({
   title,
@@ -267,7 +267,7 @@ export function CheckboxField({
         disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}
         data-testid={testId}
-        className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded-[3px] border-[0.5px] border-line accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+        className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded-[3px] border-[0.5px] border-line accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
       />
       <span className="min-w-0">
         <span className="block text-ink text-[length:var(--font-meta-size)]">{label}</span>

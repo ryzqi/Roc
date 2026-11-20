@@ -17,7 +17,7 @@ const sourceHighlight = HighlightStyle.define([
 
 const sourceTheme = EditorView.theme({
   '&': { height: '100%', color: 'var(--ink)', backgroundColor: 'var(--bg)' },
-  '&.cm-focused': { outline: '2px solid var(--accent)', outlineOffset: '-2px' },
+  '&.cm-focused': { outline: '2px solid var(--focus-ring)', outlineOffset: '-2px' },
   '.cm-scroller': { overflow: 'auto', fontFamily: 'var(--font-mono)', fontSize: 'var(--font-code-size)', lineHeight: '1.65' },
   '.cm-content': { padding: '12px 0', caretColor: 'var(--ink)' },
   '.cm-line': { padding: '0 12px' },

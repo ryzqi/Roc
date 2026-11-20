@@ -31,7 +31,7 @@ export const uiStateKeys = {
 
 export type UiStateKey = (typeof uiStateKeys)[keyof typeof uiStateKeys];
 
-export type ThemeOverride = 'system' | 'light' | 'dark';
+export type ThemeOverride = 'system' | 'light' | 'dark' | 'paper';
 
 /*
  * Deliberately NOT stored here:
@@ -190,7 +190,7 @@ export function writeStarredProjectIds(ids: readonly string[]): void {
 
 export function readThemeOverride(): ThemeOverride {
   const raw = readRaw(uiStateKeys.themeOverride);
-  if (raw === 'light' || raw === 'dark') {
+  if (raw === 'light' || raw === 'dark' || raw === 'paper') {
     return raw;
   }
   return 'system';

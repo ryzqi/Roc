@@ -155,7 +155,7 @@ export function RadixSettingsDialogShell({
                   exit="exit"
                   transition={modalPopTransition}
                   data-testid={testId === undefined ? undefined : `${testId}-panel`}
-                  className={`relative z-10 row-start-2 mx-auto flex max-h-[min(86vh,calc(100dvh-2*var(--shadow-modal-gutter-block)))] max-w-[min(92vw,calc(100vw-2*var(--shadow-modal-gutter-inline)))] flex-col overflow-hidden rounded-window border-[0.5px] border-line bg-surface shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[680px]'}`}
+                  className={`relative z-10 row-start-2 mx-auto flex max-h-[min(86vh,calc(100dvh-2*var(--shadow-modal-gutter-block)))] max-w-[min(92vw,calc(100vw-2*var(--shadow-modal-gutter-inline)))] flex-col overflow-hidden rounded-window border-[0.5px] border-line-default bg-surface-overlay shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[680px]'}`}
                 >
                   <div className="flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-4 py-2">
                     <Dialog.Title asChild>
@@ -167,7 +167,7 @@ export function RadixSettingsDialogShell({
                       disabled={closeDisabled}
                       aria-label={`关闭${title}`}
                       data-testid={testId === undefined ? undefined : `${testId}-close`}
-                      className="flex size-7 shrink-0 items-center justify-center rounded-control text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                      className="flex size-7 shrink-0 items-center justify-center rounded-control text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
                     >
                       <X size={14} aria-hidden="true" />
                     </button>
@@ -215,7 +215,7 @@ export function RadixSettingsConfirmDialog({
 }: ConfirmDialogProps & { error?: string | null }): React.JSX.Element {
   const cancelRef = useRef<HTMLButtonElement>(null);
   const messageId = useId();
-  const actionClass = 'inline-flex min-h-[var(--control-height)] items-center justify-center gap-2 rounded-control border-[0.5px] px-3 text-[length:var(--font-meta-size)] enabled:active:translate-y-px disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+  const actionClass = 'inline-flex min-h-[var(--control-height)] items-center justify-center gap-2 rounded-control border-[0.5px] px-3 text-[length:var(--font-meta-size)] enabled:active:translate-y-px disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring';
 
   return (
     <RadixSettingsDialogShell

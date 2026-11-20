@@ -95,7 +95,7 @@ function DiagnosticsContent({ data }: { data: RunDiagnosticsData }): React.JSX.E
         </dl>
       </section>
       <details className="border-t-[0.5px] border-line pt-2" data-testid="assistant-diagnostics-spans">
-        <summary className="cursor-pointer rounded-control text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent">
+        <summary className="cursor-pointer rounded-control text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring">
           本地 trace：{formatCount(data.trace.spans.length)} spans
           {data.trace.droppedSpanCount > 0 ? ` / 超限未保留 ${formatCount(data.trace.droppedSpanCount)}` : ''}
         </summary>
@@ -143,7 +143,7 @@ function EffectRecovery({client, runId, threadId, onChanged}: {
   }, {label: '核对文件结果'});
   const resume = useAsyncAction(() => client.api.chat.resumeRun({kind: 'checkpoint', runId, threadId}), {label: '继续运行'});
   const pending = reconcile.pending || resume.pending;
-  const buttonClass = 'rounded-control border-[0.5px] border-line px-2 py-1 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] disabled:cursor-default disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+  const buttonClass = 'rounded-control border-[0.5px] border-line px-2 py-1 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] disabled:cursor-default disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring';
   return (
     <div className="mb-3 space-y-2" data-testid="assistant-effect-recovery" aria-busy={pending}>
       <p className="text-subtle">运行意外中断。先核对已写入的文件，再继续未完成步骤。</p>
@@ -203,7 +203,7 @@ export function RunDiagnostics({
           aria-controls={regionId}
           onClick={() => setOpen((value) => !value)}
           data-testid="assistant-diagnostics-toggle"
-          className="flex min-w-0 items-center gap-1 rounded-control px-1 py-1 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+          className="flex min-w-0 items-center gap-1 rounded-control px-1 py-1 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
         >
           {open ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
           运行诊断
@@ -215,7 +215,7 @@ export function RunDiagnostics({
             disabled={resource.status === 'loading'}
             aria-label="刷新运行诊断"
             data-testid="assistant-diagnostics-refresh"
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] disabled:cursor-default disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] disabled:cursor-default disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
           >
             <RefreshCw size={12} aria-hidden="true" />
           </button>
@@ -228,7 +228,7 @@ export function RunDiagnostics({
           aria-busy={resource.status === 'loading'}
           tabIndex={0}
           data-testid="assistant-diagnostics-region"
-          className="mt-1 max-h-[min(45vh,24rem)] overflow-y-auto rounded-control border-[0.5px] border-line p-2 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+          className="mt-1 max-h-[min(45vh,24rem)] overflow-y-auto rounded-control border-[0.5px] border-line p-2 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
         >
           <p className="mb-2 text-subtle">仅本地脱敏数据，终态保留 30 天。未知 usage 不按零计算。</p>
           {runStatus === 'interrupted' || resource.data?.terminalStatus === 'interrupted'

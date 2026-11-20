@@ -295,7 +295,7 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
     viewportRegion(shownLocation.bbox, currentPaint.viewport, currentPaint.ratio) : null;
   const resetDrag = (): void => {drag.current = null; if (dragOverlayRef.current !== null) dragOverlayRef.current.style.display = 'none';};
   return (
-    <section className="flex h-full min-h-0 min-w-0 flex-col focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-[-2px]" data-testid="reader-pdf" tabIndex={0} aria-label="原 PDF 阅读"
+    <section className="flex h-full min-h-0 min-w-0 flex-col focus-visible:outline-2 focus-visible:outline-focus-ring focus-visible:outline-offset-[-2px]" data-testid="reader-pdf" tabIndex={0} aria-label="原 PDF 阅读"
       onKeyDown={event => {
         if (event.key === 'Escape' && selecting) {event.preventDefault(); resetDrag(); setRegionMode(null); annotationButtonRef.current?.focus(); return;}
         if (current === null || ['INPUT', 'TEXTAREA', 'SELECT'].includes((event.target as HTMLElement).tagName)) return;

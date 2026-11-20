@@ -13,7 +13,7 @@ import {useViewActive} from '../shared/view-activity';
 import {projectStatusLabel} from './project-store';
 import {FirstSteps} from './FirstSteps';
 
-const rowClass = 'flex min-h-12 w-full min-w-0 items-center gap-3 rounded-control px-3 py-3 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent';
+const rowClass = 'flex min-h-12 w-full min-w-0 items-center gap-3 rounded-control px-3 py-3 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-ring';
 const sectionClass = 'grid min-w-0 gap-3 border-t-[0.5px] border-line pt-4';
 
 export function OverviewView(): React.JSX.Element {

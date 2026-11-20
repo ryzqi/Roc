@@ -126,7 +126,7 @@ function RecordedKnowledgeGraph({
             placeholder="过滤节点…"
             aria-label="过滤图谱节点"
             data-testid="graph-filter-text"
-            className="min-w-0 flex-1 bg-transparent text-ink text-[length:var(--font-meta-size)] placeholder:text-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            className="min-w-0 flex-1 bg-transparent text-ink text-[length:var(--font-meta-size)] placeholder:text-subtle focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring"
           />
           {filterText.length === 0 ? null : (
             <button
@@ -134,7 +134,7 @@ function RecordedKnowledgeGraph({
               onClick={() => changeText('')}
               aria-label="清除节点过滤"
               data-testid="graph-filter-clear"
-              className="shrink-0 rounded-control text-subtle hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              className="shrink-0 rounded-control text-subtle hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring"
             >
               <X size={11} aria-hidden="true" />
             </button>
@@ -148,8 +148,8 @@ function RecordedKnowledgeGraph({
             data-testid="graph-filter-all"
             className={
               kindFilter === 'all'
-                ? 'h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent bg-accent-soft px-2 text-ink text-[length:var(--font-meta-size)]'
-                : 'h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)]'
+                ? 'h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring bg-accent-soft px-2 text-ink text-[length:var(--font-meta-size)]'
+                : 'h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)]'
             }
           >
             全部
@@ -163,8 +163,8 @@ function RecordedKnowledgeGraph({
               data-testid={`graph-filter-${kind}`}
               className={
                 kindFilter === kind
-                  ? 'h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent bg-accent-soft px-2 text-ink text-[length:var(--font-meta-size)]'
-                  : 'h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)]'
+                  ? 'h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring bg-accent-soft px-2 text-ink text-[length:var(--font-meta-size)]'
+                  : 'h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)]'
               }
             >
               {KIND_LABELS[kind]} {kindCounts[kind]}
@@ -192,7 +192,7 @@ function RecordedKnowledgeGraph({
                   onClick={() => selectNode(node.id)}
                   aria-current={active ? 'true' : undefined}
                   data-testid={`graph-node-${node.id}`}
-                  className={`flex w-full flex-col gap-0.5 rounded-control px-2 py-1 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${
+                  className={`flex w-full flex-col gap-0.5 rounded-control px-2 py-1 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring ${
                     active ? 'bg-accent-soft active:bg-[var(--accent-soft-strong)]' : 'hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]'
                   }`}
                 >
@@ -266,7 +266,7 @@ function GraphPagination({ area, page, total, onPage }: {
 }): React.JSX.Element {
   const pages = Math.max(1, Math.ceil(total / GRAPH_PAGE_SIZE));
   const label = area === 'nodes' ? '节点' : '邻域';
-  const control = 'h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40 disabled:pointer-events-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent';
+  const control = 'h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40 disabled:pointer-events-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring';
   return (
     <nav aria-label={`${label}分页`} className="flex shrink-0 flex-wrap items-center gap-2 py-2" data-testid={`graph-${area}-pagination`}>
       <button type="button" className={control} disabled={page === 0} onClick={() => onPage(page - 1)} aria-label={`上一页${label}`}>上一页</button>

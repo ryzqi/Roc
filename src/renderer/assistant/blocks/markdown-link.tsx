@@ -23,7 +23,7 @@ export function MarkdownLink({ children, href }: ComponentPropsWithoutRef<'a'>):
     <a
       href={safeHref}
       rel="noreferrer noopener"
-      className="text-accent underline decoration-[var(--line-strong)] underline-offset-2 hover:decoration-current"
+      className="text-accent-ink underline decoration-[var(--line-strong)] underline-offset-2 hover:decoration-current"
       onClick={(event) => {
         event.preventDefault();
         window.open(safeHref, '_blank', 'noopener,noreferrer');

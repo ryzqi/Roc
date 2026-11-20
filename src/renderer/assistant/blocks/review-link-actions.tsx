@@ -15,7 +15,7 @@ export function ReviewLinkActions({output}: {output: unknown}): React.JSX.Elemen
   return <ul className="flex flex-col gap-1" data-testid="assistant-review-links">
     {links.data.map(link => <li key={JSON.stringify([link.projectId, link.target])}>
       <button type="button" data-testid="assistant-review-link" disabled={link.projectId !== scope.projectId}
-        className="break-words text-left text-ink underline decoration-line underline-offset-2 hover:decoration-current disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
+        className="break-words text-left text-ink underline decoration-line underline-offset-2 hover:decoration-current disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring"
         onClick={() => scope.open({...link, mode: 'readonly'})}>{link.title}</button>
       {link.projectId === scope.projectId ? null : <p className="text-muted">回执属于其他项目。</p>}
     </li>)}

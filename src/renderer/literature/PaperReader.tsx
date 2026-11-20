@@ -683,7 +683,7 @@ export function PaperReader({
                       disabled={literature.parseInFlight !== null || literature.projectId === null}
                       onChange={(event) => setParseTier(event.target.value as ResearchParseTier)}
                       data-testid="reader-parse-tier"
-                      className="h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line bg-surface px-1 text-ink text-[length:var(--font-micro-size)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:opacity-40"
+                      className="h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line bg-surface px-1 text-ink text-[length:var(--font-micro-size)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring disabled:opacity-40"
                     >
                       {TIER_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value} title={option.title}>
@@ -925,7 +925,7 @@ export function PaperReader({
                     tabIndex={-1}
                     className={`${BLOCK_STYLES[block.kind]} ${
                       block.id === selectedPdfBlock ? 'rounded-control bg-[var(--accent-soft)] px-2 py-1' : ''
-                    } focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-[-2px]`}
+                    } focus-visible:outline-2 focus-visible:outline-focus-ring focus-visible:outline-offset-[-2px]`}
                   >
                     <div className={comparingAsset ? 'grid grid-cols-2 items-start gap-2' : undefined}>
                     {block.kind === 'heading' ? (

@@ -94,7 +94,7 @@ function MigrationCandidate({client, inspection, canDecide, onChanged}: {
               checked={chunkId === target.chunkId || decision?.request.action === 'capture' && decision.request.chunkId === target.chunkId}
               onChange={() => setChunkId(target.chunkId)} data-testid={`artifact-source-migration-target-${index}`}
               data-reading-key={`source-migration-target:${proposal.id}:${target.chunkId}`}
-              className="mt-1 shrink-0 accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-accent"/>
+              className="mt-1 shrink-0 accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-focus-ring"/>
             <span className="min-w-0 flex-1">
               <span className="block break-words">{target.block.locator}{target.textSpan ? `；原文字符 ${target.textSpan.start + 1}–${target.textSpan.end}` : ''}</span>
               <span className="block text-muted">{target.block.locations.length === 0 ? '未提供页或区域' :

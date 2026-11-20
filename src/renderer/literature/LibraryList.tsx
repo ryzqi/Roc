@@ -200,7 +200,7 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
                   }}
                   aria-current={selected ? 'true' : undefined}
                   data-testid={`literature-row-${item.id}`}
-                  className={`flex min-w-0 w-full flex-col gap-2 rounded-control pr-8 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent ${rowPad} ${
+                  className={`flex min-w-0 w-full flex-col gap-2 rounded-control pr-8 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-ring ${rowPad} ${
                     selected
                       ? 'bg-accent-soft active:bg-[var(--accent-soft-strong)]'
                       : 'hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]'
@@ -261,7 +261,7 @@ function CitationKeyCopy({itemId, citationKey}: {itemId: string; citationKey: st
     <button type="button" onClick={() => copy(citationKey)}
       aria-label={`${copied ? '已复制引用键' : '复制引用键'} ${citationKey}`}
       title={copied ? '已复制' : '复制引用键'} data-testid={`literature-citekey-copy-${itemId}`}
-      className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-control text-subtle hover:bg-[var(--overlay-hover)] hover:text-ink focus-visible:bg-[var(--overlay-hover)] focus-visible:outline-2 focus-visible:outline-accent active:bg-[var(--overlay-active)]">
+      className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-control text-subtle hover:bg-[var(--overlay-hover)] hover:text-ink focus-visible:bg-[var(--overlay-hover)] focus-visible:outline-2 focus-visible:outline-focus-ring active:bg-[var(--overlay-active)]">
       {copied ? <Check size={11} aria-hidden="true"/> : <Copy size={11} aria-hidden="true"/>}
     </button>
     {error ? <p role="alert" className="px-2 py-1 text-[var(--st-bad)] text-[length:var(--font-meta-size)]">{error}</p> : null}

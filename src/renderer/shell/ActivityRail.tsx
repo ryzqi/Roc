@@ -1,7 +1,10 @@
-import { Moon, RotateCcw, Settings, Sun, SunMoon } from 'lucide-react';
+import { FileText, Moon, RotateCcw, Settings, Sun, SunMoon } from 'lucide-react';
+import { THEME_LABELS } from '../app/hooks/useThemeSync';
 import type { AppViewId } from '../app/routes';
 import type { ThemeOverride } from '../app/ui-state';
 import { AppNavigation, type WorkspaceMode } from './AppNavigation';
+
+const themeIcons = { system: SunMoon, dark: Moon, light: Sun, paper: FileText };
 
 export function ActivityRail({ view, onNavigate, themeOverride, onCycleTheme, onResetLayout, onOpenSettings }: {
   view: AppViewId | null;
@@ -11,11 +14,11 @@ export function ActivityRail({ view, onNavigate, themeOverride, onCycleTheme, on
   onResetLayout: () => void;
   onOpenSettings: () => void;
 }): React.JSX.Element {
-  const themeLabel = themeOverride === 'light' ? '浅色' : themeOverride === 'dark' ? '深色' : '跟随系统';
-  const ThemeIcon = themeOverride === 'light' ? Sun : themeOverride === 'dark' ? Moon : SunMoon;
+  const themeLabel = THEME_LABELS[themeOverride];
+  const ThemeIcon = themeIcons[themeOverride];
   return (
     <aside aria-label="活动栏" data-testid="activity-rail"
-      className="flex w-[52px] shrink-0 flex-col justify-between gap-2 border-e-[0.5px] border-line bg-[var(--material-sidebar)] p-2">
+      className="flex w-[52px] shrink-0 flex-col justify-between gap-2 border-e-[0.5px] border-line-default bg-surface-rail p-2">
       {view === null ? null : <AppNavigation view={view} onNavigate={onNavigate} />}
       <div className="mt-auto grid gap-1">
         <button type="button" onClick={onCycleTheme} className="chrome-control size-9"

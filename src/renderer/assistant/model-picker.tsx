@@ -177,7 +177,7 @@ export function ModelPicker({
         aria-label={`默认模型：${label}`}
         title="切换默认模型"
         data-testid="assistant-model-settings"
-        className="flex h-[var(--control-height-compact)] w-full min-w-0 items-center gap-1 rounded-control px-1 text-left text-text text-[length:var(--font-micro-size)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+        className="flex h-[var(--control-height-compact)] w-full min-w-0 items-center gap-1 rounded-control px-1 text-left text-text text-[length:var(--font-micro-size)] transition-colors duration-[var(--duration-fast)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
       >
         {pending ? (
           <Loader2 size={12} aria-hidden="true" className="shrink-0 animate-spin text-muted" />
@@ -225,7 +225,7 @@ export function ModelPicker({
               setOpen(false);
             }
           }}
-          className="absolute bottom-[calc(100%+6px)] left-0 z-30 flex max-h-[320px] w-[min(320px,calc(100vw-24px))] max-w-full flex-col overflow-hidden rounded-card border-[0.5px] border-line bg-surface shadow-[var(--shadow-popover)]"
+          className="absolute bottom-[calc(100%+6px)] left-0 z-30 flex max-h-[320px] w-[min(320px,calc(100vw-24px))] max-w-full flex-col overflow-hidden rounded-card border-[0.5px] border-line-default bg-surface-overlay shadow-[var(--shadow-popover)]"
         >
           <div className="flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-2 py-1.5">
             <span className="text-subtle text-[length:var(--font-micro-size)]">默认模型</span>
@@ -237,7 +237,7 @@ export function ModelPicker({
                 onOpenSettings();
               }}
               data-testid="assistant-model-picker-manage"
-              className="ml-auto flex min-h-6 items-center gap-1 rounded-control px-2 text-muted text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+              className="ml-auto flex min-h-6 items-center gap-1 rounded-control px-2 text-muted text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
             >
               <Settings2 size={10} aria-hidden="true" />
               管理模型
@@ -279,15 +279,15 @@ export function ModelPicker({
                         data-testid={`assistant-model-picker-option-${choice.key}`}
                         className={
                           selected
-                            ? 'flex items-center gap-2 bg-accent-soft px-2 py-1 text-left text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent'
-                            : 'flex items-center gap-2 px-2 py-1 text-left text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent disabled:opacity-40'
+                            ? 'flex items-center gap-2 bg-accent-soft px-2 py-1 text-left text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-ring'
+                            : 'flex items-center gap-2 px-2 py-1 text-left text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-ring disabled:opacity-40'
                         }
                       >
                         <span className="min-w-0 flex-1 truncate text-[length:var(--font-meta-size)]">{choice.label}</span>
                         {choice.enabled ? null : (
                           <span className="shrink-0 text-subtle text-[length:var(--font-micro-size)]">已停用</span>
                         )}
-                        {selected ? <Check size={11} aria-hidden="true" className="shrink-0 text-accent" /> : null}
+                        {selected ? <Check size={11} aria-hidden="true" className="shrink-0 text-accent-ink" /> : null}
                       </button>
                     );
                   })}

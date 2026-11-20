@@ -48,7 +48,7 @@ export function PythonEnvironmentSection({ client, projectId }: {
             : data.project.workspacePath === null ? <p className="text-subtle">请先为项目设置工作目录。</p> : null}
           {data.selections.length === 0 ? <p className="text-subtle">尚未选择 Python 环境。</p> : (
             <details data-testid="mgmt-python-environment-history">
-              <summary className="cursor-pointer text-muted focus-visible:outline-2 focus-visible:outline-accent">
+              <summary className="cursor-pointer text-muted focus-visible:outline-2 focus-visible:outline-focus-ring">
                 选择记录（{data.selections.length}）
               </summary>
               <ol className="mt-2 grid gap-3 text-[length:var(--font-meta-size)]">

@@ -425,8 +425,8 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
                       data-testid={`settings-section-${section.id}`}
                       className={
                         selected
-                          ? 'flex h-9 shrink-0 items-center gap-2 rounded-control bg-[var(--overlay-active)] px-3 text-start font-[var(--font-weight-medium)] text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:opacity-50'
-                          : 'flex h-9 shrink-0 items-center gap-2 rounded-control px-3 text-start text-muted enabled:hover:bg-[var(--overlay-hover)] enabled:hover:text-ink enabled:active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:opacity-50'
+                          ? 'flex shrink-0 items-center gap-2 rounded-control bg-[var(--overlay-active)] px-3 text-start font-[var(--font-weight-medium)] text-ink-primary focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring disabled:opacity-50'
+                          : 'flex shrink-0 items-center gap-2 rounded-control px-3 text-start text-ink-muted enabled:hover:bg-[var(--overlay-hover)] enabled:hover:text-ink-primary enabled:active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring disabled:opacity-50'
                       }
                     >
                       <Icon
@@ -452,7 +452,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
             </div>
           )}
 
-          <div className="settings-content flex min-h-0 min-w-0 flex-1 flex-col px-4 py-3 min-[720px]:px-6">
+          <div className="settings-content flex min-h-0 min-w-0 flex-1 flex-col">
             {store.save.error === null ? null : (
               <p
                 role="alert"
@@ -506,7 +506,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
               aria-labelledby={compactNavigation ? undefined : `settings-tab-${activeSection}`}
               aria-label={compactNavigation ? SETTINGS_SECTIONS.find((section) => section.id === activeSection)?.label : undefined}
               tabIndex={-1}
-              className="settings-form-scroll ui-scroll-region -mx-1 flex-1 px-1 pt-2 pb-5 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
+              className="settings-form-scroll ui-scroll-region -mx-1 flex-1 px-1 pt-2 pb-5 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-ring"
               data-testid="settings-panel"
             >
               <div className="settings-form-content">{renderPanel(activeSection, store, props)}</div>
@@ -522,7 +522,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
                 onClick={() => setDiscardIntent('reset')}
                 disabled={(!dirty && !transientDirty) || busy}
                 data-testid="settings-discard-draft"
-                className="min-h-[var(--control-height)] rounded-control px-3 text-muted enabled:hover:bg-[var(--overlay-hover)] enabled:hover:text-ink enabled:active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                className="min-h-[var(--control-height)] rounded-control px-3 text-muted enabled:hover:bg-[var(--overlay-hover)] enabled:hover:text-ink enabled:active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
               >
                 放弃修改
               </button>

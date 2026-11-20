@@ -51,11 +51,11 @@
   max-block-size: calc(100dvb - 88px);
   overflow: auto;
   scrollbar-gutter: stable;
-  border: 0.5px solid var(--line);
+  border: 0.5px solid var(--border-default);
   border-radius: var(--r-card);
   padding: 4px;
-  color: var(--ink);
-  background: var(--surface-strong);
+  color: var(--ink-primary);
+  background: var(--surface-overlay);
   box-shadow: var(--shadow-popover);
 }
 

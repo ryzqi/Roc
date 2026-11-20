@@ -123,7 +123,7 @@ function AcademicRadarContent({client,projectId,writable,active,onImported}:Prop
   const loading=source==='feeds'&&(feeds.status==='loading'||articles.status==='loading');
   return <section className="radar-workspace flex h-full min-h-0 flex-col" data-detail={article!==null} data-testid="radar-panel" aria-label="学术雷达">
     <div className="reading-toolbar" role="tablist" aria-label="发现来源"><Radar size={15} aria-hidden="true"/>{tabs.map((tab,index)=><button type="button" role="tab" aria-selected={source===tab.id} tabIndex={source===tab.id?0:-1} key={tab.id}
-      disabled={busy} className={source===tab.id?'bg-[var(--accent-soft)] text-accent':''} onClick={()=>selectSource(tab.id)}
+      disabled={busy} className={source===tab.id?'bg-[var(--accent-soft)] text-accent-ink':''} onClick={()=>selectSource(tab.id)}
       onKeyDown={event=>{
         if(pending.current||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey)return;
         const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:event.key==='ArrowRight'?(index+1)%tabs.length:event.key==='ArrowLeft'?(index+tabs.length-1)%tabs.length:null;
@@ -177,7 +177,7 @@ function AcademicRadarContent({client,projectId,writable,active,onImported}:Prop
               <button type="button" disabled={busy} className={`text-left ${row.read?'text-muted':'font-medium text-ink'}`} onClick={event=>{if(pending.current)return;articleOpener.current=event.currentTarget;setArticle(row);if(writable)void run(async()=>{const result=await client.api.research.markRadarArticle({projectId,articleId:row.id,read:true});if(!mounted.current)return;if(!result.ok)throw new Error(result.error.message);articles.reload();});}}>{row.title}</button></div>
             <p className="mt-1 line-clamp-2 text-muted">{row.summary}</p><div className="mt-2 flex flex-wrap items-center gap-3 text-[length:var(--font-meta-size)] text-muted"><span>{row.publishedAt?.slice(0,10)??'日期未知'}</span>
               {row.score!==null?<span className="tabular-nums">相关度 {row.score.toFixed(3)}</span>:null}<span>{row.read?'已读':'未读'}</span>
-              {row.importedItemId?<span className="inline-flex items-center gap-1"><Check size={12}/>已入库</span>:<button className="text-accent" type="button" disabled={busy||!writable} onClick={()=>void run(()=>importSelected([row.id]))}>加入文献库</button>}
+              {row.importedItemId?<span className="inline-flex items-center gap-1"><Check size={12}/>已入库</span>:<button className="text-accent-ink" type="button" disabled={busy||!writable} onClick={()=>void run(()=>importSelected([row.id]))}>加入文献库</button>}
             </div>
           </article>)}
         </div>

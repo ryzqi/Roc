@@ -20,7 +20,7 @@ type Props = {
   onOpenItem: (libraryItemId: string) => void;
   onDocumentsChanged: () => void;
 };
-const buttonClass = 'min-h-7 rounded-control px-2 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:opacity-50';
+const buttonClass = 'min-h-7 rounded-control px-2 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring disabled:opacity-50';
 
 /** Mounted once in the existing project canvas, never duplicated in the sidebar. */
 export function LiteratureProcessingPanel(props: Props): React.JSX.Element {

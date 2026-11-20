@@ -1,12 +1,11 @@
 /*
  * Tailwind 4 entry for the Roc renderer shell.
  *
- * Single chain, no parallel systems (R5): Tailwind `@theme` -> CSS variables
- * (tokens.css) -> component classes. The legacy `src/renderer/styles/**`
- * stylesheets are never imported here.
+ * Tailwind utilities read Roc's semantic roles and foundation tokens.
  */
 
 @import 'tailwindcss';
+@import './semantic-tokens.css';
 @import './tokens.css';
 
 .workspace-canvas-container {
@@ -50,34 +49,20 @@
   }
 }
 
-@theme {
-  /* The palette is theme-flipped (see tokens.css), so `bg-zinc-900` means
-     "surface" in both themes. */
-  --color-zinc-50: var(--app-zinc-50);
-  --color-zinc-100: var(--app-zinc-100);
-  --color-zinc-200: var(--app-zinc-200);
-  --color-zinc-300: var(--app-zinc-300);
-  --color-zinc-400: var(--app-zinc-400);
-  --color-zinc-500: var(--app-zinc-500);
-  --color-zinc-600: var(--app-zinc-600);
-  --color-zinc-700: var(--app-zinc-700);
-  --color-zinc-800: var(--app-zinc-800);
-  --color-zinc-850: var(--app-zinc-850);
-  --color-zinc-900: var(--app-zinc-900);
-  --color-zinc-950: var(--app-zinc-950);
+@theme inline {
+  --color-surface-base: var(--surface-base);
+  --color-surface-rail: var(--surface-rail);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-ink-primary: var(--ink-primary);
+  --color-ink-secondary: var(--ink-secondary);
+  --color-ink-muted: var(--ink-muted);
+  --color-line-subtle: var(--border-subtle);
+  --color-line-default: var(--border-default);
+  --color-focus-ring: var(--focus-ring);
+  --color-accent-ink: var(--accent-ink);
 
-  --color-slate-50: var(--app-slate-50);
-  --color-slate-100: var(--app-slate-100);
-  --color-slate-200: var(--app-slate-200);
-  --color-slate-300: var(--app-slate-300);
-  --color-slate-400: var(--app-slate-400);
-  --color-slate-500: var(--app-slate-500);
-  --color-slate-600: var(--app-slate-600);
-  --color-slate-700: var(--app-slate-700);
-  --color-slate-800: var(--app-slate-800);
-  --color-slate-900: var(--app-slate-900);
-
-  /* Semantic color tokens: preferred over the raw palette in new code. */
+  /* Existing semantic class names remain aliases for unmigrated surfaces. */
   --color-ink: var(--ink);
   --color-text: var(--text);
   --color-muted: var(--muted);
@@ -103,11 +88,9 @@
   --radius-control: var(--r-control);
   --radius-card: var(--r-card);
   --radius-window: var(--r-window);
+}
 
-  /* Written as literals, not `var(--font-sans)`: a `@theme` entry that reads
-     its own name is a cycle that only resolves because tokens.css is
-     imported unlayered and therefore outranks `@layer theme`. Keep the two
-     definitions in sync by hand if the stack ever changes. */
+@theme {
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', sans-serif;
   --font-mono: 'SFMono-Regular', Menlo, Monaco, monospace;
 }
@@ -211,7 +194,7 @@
 
   /* One visible focus ring for every focusable thing. Never removed. */
   :focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--focus-ring);
     outline-offset: 1px;
     border-radius: var(--r-control);
   }
@@ -234,7 +217,7 @@
   }
 
   a {
-    color: var(--accent);
+    color: var(--accent-ink);
   }
 
   @media (prefers-reduced-motion: reduce) {

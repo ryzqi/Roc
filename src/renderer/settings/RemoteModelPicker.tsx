@@ -224,7 +224,7 @@ export function RemoteModelPicker({
         {entries === null ? null : (
           <>
             <div className="form-action-row">
-              <label className="flex h-[var(--control-height)] min-w-0 flex-1 items-center gap-1.5 rounded-control border-[0.5px] border-line bg-bg px-2 focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-accent">
+              <label className="flex h-[var(--control-height)] min-w-0 flex-1 items-center gap-1.5 rounded-control border-[0.5px] border-line bg-bg px-2 focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-focus-ring">
                 <Search size={11} aria-hidden="true" className="shrink-0 text-subtle" />
                 <input
                   value={filter}

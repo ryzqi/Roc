@@ -25,7 +25,7 @@ function WorkspacePane({ open, floating, side, title, testId, trigger, width, on
   });
   return <aside ref={ref} data-testid={open ? `${testId}-${floating ? 'drawer' : 'column'}` : undefined} aria-label={title}
     role={floating ? 'dialog' : undefined} hidden={!open} inert={!open}
-    className={`${open ? 'flex' : 'hidden'} min-h-0 shrink-0 flex-col bg-[var(--material-sidebar)] ${floating ? 'absolute inset-y-0' : ''}`}
+    className={`${open ? 'flex' : 'hidden'} min-h-0 shrink-0 flex-col ${floating ? 'absolute inset-y-0 bg-surface-overlay' : 'bg-surface-rail'}`}
     style={floating ? {
       width, maxWidth: `calc(100% - ${ACTIVITY_RAIL_WIDTH + 32}px)`, zIndex: OVERLAY_Z_INDEX.ambient + 1,
       ...(side === 'start' ? { insetInlineStart: ACTIVITY_RAIL_WIDTH } : { insetInlineEnd: 0 })

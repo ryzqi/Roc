@@ -41,7 +41,7 @@ import { SearchPaletteModal } from '../shell/SearchPaletteModal';
 import { useSearchGroups } from '../shell/use-search-groups';
 import { StartupFailure, StartupLoading } from '../shell/StartupSurface';
 import { WindowChrome } from '../shell/WindowChrome';
-import { useAppearanceOverride, useAppearanceSync } from '../shell/appearance';
+import { useThemeSync } from './hooks/useThemeSync';
 import { useTaskCenter } from '../management/use-task-center';
 import { recordUxEvent } from './ux-metrics';
 import { useWindowState, type WindowStateResource } from '../shell/use-window-state';
@@ -164,7 +164,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
   const [firstStepsVisible, setFirstStepsVisible] = useState(() => !readOnboardingDismissed());
   const [firstStepsRequestId, setFirstStepsRequestId] = useState(0);
 
-  const { override, setOverride, cycle: cycleTheme } = useAppearanceOverride();
+  const { override, setOverride, cycle: cycleTheme } = useThemeSync(client, boot.status === 'ready' ? boot.appStatus.appearance : null);
   const { route, navigate } = useAppRoute();
   useEffect(() => {
     const guardGit = (event: Event): void => {
@@ -220,9 +220,6 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
   const currentProject = useCurrentProject(client, route.projectId);
   const projects = useProjectList(client).data ?? [];
   const [assistantRunning, setAssistantRunning] = useState(false);
-
-  useAppearanceSync(client, boot.status === 'ready' ? boot.appStatus.appearance : null, override);
-
 
   const inProject = route.projectId !== null;
   const settingsOpen = route.page === 'settings';
@@ -675,7 +672,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
         scopeKey={managementStoresScopeKey}
       >
     <div
-      className="app-shell flex h-full w-full flex-col bg-bg text-ink"
+      className="app-shell flex h-full w-full flex-col bg-surface-base text-ink-primary"
       data-testid="roc-app"
       data-mode={boot.appStatus.mode}
     >

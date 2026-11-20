@@ -50,7 +50,7 @@ export function ExportExecutionReceipt({client, record, writable, onPending, onD
         }}>取消生成</button>}
     </div>
     <details className="min-w-0">
-      <summary className="cursor-pointer focus-visible:outline-2 focus-visible:outline-accent">查看已提交的公开交付清单</summary>
+      <summary className="cursor-pointer focus-visible:outline-2 focus-visible:outline-focus-ring">查看已提交的公开交付清单</summary>
       <ExportPublicationReceipt review={record.request.publicationReview}/>
     </details>
     {current?.status !== 'ready' ? null : <>

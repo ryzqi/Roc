@@ -90,7 +90,7 @@ function ChangeRow({
           className="flex h-6 w-6 shrink-0 items-center justify-center text-muted disabled:opacity-40"
         >
           {checked ? (
-            <CheckSquare size={12} aria-hidden="true" className="text-accent" />
+            <CheckSquare size={12} aria-hidden="true" className="text-accent-ink" />
           ) : (
             <Square size={12} aria-hidden="true" />
           )}

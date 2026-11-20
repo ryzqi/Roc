@@ -244,7 +244,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
         <button type="button" onClick={() => setNavigationOverride(!navigationOpen)}
           aria-label={navigationOpen ? '收起文献列表' : '展开文献列表'} aria-expanded={navigationOpen}
           aria-controls="literature-navigation" data-testid="literature-toggle-navigation"
-          className="flex h-7 shrink-0 items-center justify-center gap-1 rounded-control px-2 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] focus-visible:outline-2 focus-visible:outline-accent">
+          className="flex h-7 shrink-0 items-center justify-center gap-1 rounded-control px-2 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] focus-visible:outline-2 focus-visible:outline-focus-ring">
           <PanelLeft size={14} aria-hidden="true" />
           文献列表
         </button>
@@ -254,7 +254,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
               value={store.selectedId ?? ""}
               disabled={store.items.length === 0 && store.selected === null}
               onChange={(event) => selectPaper(event.target.value || null)}
-              className="h-8 min-w-0 flex-1 rounded-control border-[0.5px] border-line bg-surface px-2 text-ink text-[length:var(--font-meta-size)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:opacity-50"
+              className="h-8 min-w-0 flex-1 rounded-control border-[0.5px] border-line bg-surface px-2 text-ink text-[length:var(--font-meta-size)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring disabled:opacity-50"
             >
               <option value="">选择一篇文献</option>
               {store.selected !== null && !store.items.some(item => item.id === store.selected?.id) ?

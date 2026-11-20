@@ -339,6 +339,25 @@ try {
   assertCheck('3 助手', '一轮 run 渲染出回答并回到 idle', transcript.trim().length > 0, transcript.slice(0, 60));
   await page.screenshot({ path: join(artifactDir, 'assistant.png') });
 
+  const themeControl = page.getByTestId('activity-theme');
+  for (const theme of ['dark', 'light', 'paper']) {
+    await themeControl.click();
+    await page.waitForFunction(next => document.documentElement.dataset.theme === next, theme);
+  }
+  await page.reload();
+  await waitForAppReady(page, 'smoke-paper-theme', artifactDir);
+  await page.getByTestId('assistant-composer-input').waitFor();
+  await themeControl.focus();
+  await page.keyboard.press('Tab');
+  const appearance = await page.evaluate(() => {
+    const focus = getComputedStyle(document.activeElement);
+    return { theme: document.documentElement.dataset.theme, scheme: getComputedStyle(document.documentElement).colorScheme,
+      focusWidth: focus.outlineWidth, focusStyle: focus.outlineStyle };
+  });
+  assertCheck('外观', '深色、浅色、暖纸可切换，暖纸刷新后保留并显示键盘焦点',
+    appearance.theme === 'paper' && appearance.scheme === 'light' && appearance.focusWidth === '2px' && appearance.focusStyle === 'solid',
+    JSON.stringify(appearance));
+
   // ---- 5 设置打开 → 改一个真字段 → 保存 ------------------------------------------
   await page.click('[data-testid="activity-settings"]');
   await page.waitForSelector('[data-testid="settings-modal-panel"]', { timeout: 20_000 });

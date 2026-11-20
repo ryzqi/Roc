@@ -321,7 +321,7 @@ export function LatexPanel(): React.JSX.Element {
           value={selectedPath ?? ""}
           disabled={compiling || save.pending}
           onChange={(event) => onSelect(event.target.value === "" ? null : event.target.value)}
-          className="h-8 min-w-0 flex-1 rounded-control border-[0.5px] border-line bg-surface px-2 text-ink text-[length:var(--font-meta-size)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+          className="h-8 min-w-0 flex-1 rounded-control border-[0.5px] border-line bg-surface px-2 text-ink text-[length:var(--font-meta-size)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
         >
           <option value="">选择文稿文件</option>
           {entries.map((file) => (
@@ -353,7 +353,7 @@ export function LatexPanel(): React.JSX.Element {
                   disabled={compiling || save.pending}
                   className={[
                     'flex w-full min-w-0 flex-col items-start rounded-control px-2 py-1 text-left',
-                    'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent',
+                    'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring',
                     file.path === selectedPath
                       ? 'bg-[var(--overlay-active)] text-ink'
                       : 'text-muted hover:bg-[var(--overlay-hover)] hover:text-ink'

@@ -69,7 +69,7 @@ export function SkillFilesModal({
               type="button"
               onClick={() => skills.setDirPath('')}
               data-testid="mgmt-skill-crumb-root"
-              className="min-h-6 min-w-6 shrink-0 rounded-control px-1 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+              className="min-h-6 min-w-6 shrink-0 rounded-control px-1 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
             >
               {selected.name}
             </button>
@@ -82,7 +82,7 @@ export function SkillFilesModal({
                     type="button"
                     onClick={() => skills.setDirPath(path)}
                     data-testid={`mgmt-skill-crumb-${path}`}
-                    className="min-h-6 min-w-6 shrink-0 rounded-control px-1 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                    className="min-h-6 min-w-6 shrink-0 rounded-control px-1 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
                   >
                     {segment}
                   </button>
@@ -113,7 +113,7 @@ export function SkillFilesModal({
                         onClick={() => skills.setDirPath(parentRelativePath(skills.dirPath))}
                         data-testid="mgmt-skill-up"
                         aria-label="返回上级目录"
-                        className="flex min-h-6 w-full items-center gap-1 rounded-control px-1 text-start text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                        className="flex min-h-6 w-full items-center gap-1 rounded-control px-1 text-start text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
                       >
                         <Folder size={11} aria-hidden="true" />
                         ..
@@ -135,7 +135,7 @@ export function SkillFilesModal({
                             }
                             skills.openFile(path);
                           }}
-                          className="flex min-h-6 w-full items-center gap-1 rounded-control px-1 text-start hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] aria-[current=true]:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                          className="flex min-h-6 w-full items-center gap-1 rounded-control px-1 text-start hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] aria-[current=true]:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
                         >
                           {entry.type === 'directory' ? (
                             <Folder size={11} aria-hidden="true" className="shrink-0 text-muted" />

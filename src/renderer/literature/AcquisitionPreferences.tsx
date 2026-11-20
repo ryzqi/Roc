@@ -3,7 +3,7 @@ import type {LiteratureAcquisitionSettings} from '../../shared/schemas/literatur
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 
-const control = 'min-h-7 min-w-0 rounded-control border-[0.5px] border-line bg-surface px-2 py-1 text-ink focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50';
+const control = 'min-h-7 min-w-0 rounded-control border-[0.5px] border-line bg-surface px-2 py-1 text-ink focus-visible:outline-2 focus-visible:outline-focus-ring disabled:opacity-50';
 
 export function AcquisitionPreferences({client, writable}: {client: RocClient; writable: boolean}): React.JSX.Element {
   const resource = useAsyncResource('acquisition-preferences', () => client.api.research.acquisitionSettings({}), {label: '读取全文获取偏好'});

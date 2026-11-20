@@ -65,7 +65,7 @@ export function ArtifactRelations({client, snapshot, current, onChanged}: {
         </tr></thead>
         <tbody>{visible.map(({claim, active}) => <tr key={claim.id} className="border-t-[0.5px] border-line">
           <th scope="row" className="py-2 pr-2 align-top font-normal">
-            <button type="button" className="w-full break-words text-left underline decoration-line underline-offset-2 focus-visible:outline-2 focus-visible:outline-accent"
+            <button type="button" className="w-full break-words text-left underline decoration-line underline-offset-2 focus-visible:outline-2 focus-visible:outline-focus-ring"
               data-testid={`artifact-relations-claim-${claim.id}`} data-reading-key={`relation-claim-link:${claim.id}`}
               onClick={() => {
                 const details = document.getElementById(`relation-claim-${claim.id}`) as HTMLDetailsElement;
@@ -81,7 +81,7 @@ export function ArtifactRelations({client, snapshot, current, onChanged}: {
       </table>
       {visible.map(({claim, relations}) => <details key={claim.id} id={`relation-claim-${claim.id}`}
         tabIndex={-1} data-reading-key={`relation-claim:${claim.id}`}
-        className="border-t-[0.5px] border-line py-2 focus-visible:outline-2 focus-visible:outline-accent">
+        className="border-t-[0.5px] border-line py-2 focus-visible:outline-2 focus-visible:outline-focus-ring">
         <summary data-reading-key={`relation-claim-summary:${claim.id}`} className="cursor-pointer break-words">{claim.content}</summary>
         <div className="mt-2 flex flex-col gap-3">
           <p className="text-muted">{claimStatuses[claim.status]}，版本 {claim.version}</p>

@@ -145,7 +145,7 @@ export function McpSection({
         void mcp.toggle.run(server.id, !mcp.serverEnabled(server));
       }}
       data-testid={`mgmt-mcp-enabled-${server.id}`}
-      className="inline-flex shrink-0 items-center gap-2 rounded-control px-2 py-2 text-[length:var(--font-meta-size)] text-muted hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-accent"
+      className="inline-flex shrink-0 items-center gap-2 rounded-control px-2 py-2 text-[length:var(--font-meta-size)] text-muted hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-focus-ring"
     >
       {mcp.serverEnabled(server) ? '已启用' : '已停用'}
       <span
@@ -321,7 +321,7 @@ export function McpSection({
           {issueCount === 0 ? null : (
             <button
               type="button"
-              className="inline-flex items-center gap-1.5 self-start rounded-control text-[var(--st-warn)] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+              className="inline-flex items-center gap-1.5 self-start rounded-control text-[var(--st-warn)] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-focus-ring"
               onClick={() => {
                 setQuery('');
                 setFilter('issues');
@@ -353,7 +353,7 @@ export function McpSection({
                         rememberList(server.id);
                         setSelectedId(server.id);
                       }}
-                      className="group flex min-w-0 flex-1 items-center gap-3 rounded-control px-2 py-3 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-accent"
+                      className="group flex min-w-0 flex-1 items-center gap-3 rounded-control px-2 py-3 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-focus-ring"
                     >
                       <Server
                         size={18}
@@ -694,7 +694,7 @@ export function McpSection({
           className="text-[length:var(--font-meta-size)] text-muted"
           data-testid="mgmt-mcp-preview"
         >
-          <summary className="cursor-pointer rounded-control py-1 focus-visible:outline-2 focus-visible:outline-accent">
+          <summary className="cursor-pointer rounded-control py-1 focus-visible:outline-2 focus-visible:outline-focus-ring">
             查看助手全部能力
           </summary>
           <div className="mt-3 flex flex-col gap-3">

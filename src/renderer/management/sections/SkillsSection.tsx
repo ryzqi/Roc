@@ -123,7 +123,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
                         setBrowserOpen(true);
                       }}
                       data-testid={`mgmt-skill-select-${skill.id}`}
-                      className="min-w-0 flex-1 rounded-control text-left focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                      className="min-w-0 flex-1 rounded-control text-left focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
                     >
                       <span className="flex flex-wrap items-center gap-2">
                         <Package size={12} aria-hidden="true" className="text-muted" />
@@ -159,7 +159,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
                           void skills.toggleEnabled.run(skill, event.target.checked);
                         }}
                         data-testid={`mgmt-skill-enabled-${skill.id}`}
-                        className="h-3.5 w-3.5 rounded-[3px] border-[0.5px] border-line accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                        className="h-3.5 w-3.5 rounded-[3px] border-[0.5px] border-line accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
                       />
                       启用
                     </label>
@@ -261,7 +261,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
                 void builtin.autoUpdate.run(event.target.checked);
               }}
               data-testid="mgmt-skills-builtin-auto-update"
-              className="h-3.5 w-3.5 rounded-[3px] border-[0.5px] border-line accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+              className="h-3.5 w-3.5 rounded-[3px] border-[0.5px] border-line accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
             />
             每天自动检查
           </label>

@@ -76,7 +76,7 @@ export function ArtifactDocumentSource({client, evidence, locator}: {
           </LazyBoundary>
         </div>}
       <div ref={blockRef} tabIndex={-1} data-testid="artifact-document-source-block"
-        className="min-w-0 focus-visible:outline-2 focus-visible:outline-accent">
+        className="min-w-0 focus-visible:outline-2 focus-visible:outline-focus-ring">
         <p className="break-words text-muted">{block.label}，{block.locator}</p>
         <div className={comparingAsset ? 'grid grid-cols-2 items-start gap-2' : undefined}>
         <p className="whitespace-pre-wrap break-words text-ink">{block.text}</p>

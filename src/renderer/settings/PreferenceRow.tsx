@@ -23,7 +23,7 @@ export function PreferenceRow<T extends string | number>({
             aria-pressed={value === option.value}
             data-testid={`${testId}-${option.value}`}
             onClick={() => onChange(option.value)}
-            className="min-h-[var(--control-height-compact)] rounded-control px-3 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] aria-pressed:bg-[var(--overlay-active)] aria-pressed:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+            className="min-h-[var(--control-height-compact)] rounded-control px-3 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] aria-pressed:bg-[var(--overlay-active)] aria-pressed:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
           >
             {option.label}
           </button>
