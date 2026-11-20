@@ -313,7 +313,7 @@ try {
   // ---- 闸门 1：每个分区读回保存值 ------------------------------------------------
   // 先进入项目：索引配置按项目读写（`research.index.configure` 要 projectId），导出快照的落盘
   // 也需要绑定的工作目录 —— 二者都来自当前路由里的项目。
-  await navigate(page, `page=research&project=${projectId}&view=latex`);
+  await navigate(page, `page=research&project=${projectId}&view=writing`);
   await waitForProjectRoute();
   await openSettingsViaShortcut();
   assertCheck(
@@ -707,7 +707,7 @@ try {
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('[data-testid="roc-app"]', { timeout: 30_000 });
-  await navigate(page, `page=research&project=${projectId}&view=latex`);
+  await navigate(page, `page=research&project=${projectId}&view=writing`);
   await openSettingsViaShortcut();
   await openSection('models');
   await page.selectOption('[data-testid="settings-provider-select"]', 'p8-broken-provider');
@@ -734,7 +734,7 @@ try {
   // ---- 闸门 4：未保存关闭有确认 + 脏分区警告点 + 关闭后焦点回齿轮 ------------------
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('[data-testid="roc-app"]', { timeout: 30_000 });
-  await navigate(page, `page=research&project=${projectId}&view=latex`);
+  await navigate(page, `page=research&project=${projectId}&view=writing`);
   await openSettingsViaShortcut();
   await openSection('guardrail');
   await page.fill('[data-testid="settings-char-limit-agents"]', '26000');
@@ -794,7 +794,7 @@ try {
   assertCheck('4 关闭确认', '放弃修改没有写入后端', roleAfter !== 27000, `agents=${String(roleAfter)}`);
 
   // ---- 闸门 5：设置改完助手 / RAG / 阶段策略立即生效（无需重启） -------------------
-  await navigate(page, `page=research&project=${projectId}&view=latex&assistant=1`);
+  await navigate(page, `page=research&project=${projectId}&view=writing&assistant=1`);
   await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 20_000 });
   await page.waitForFunction(
     () => (document.querySelector('[data-testid="assistant-model-settings"]')?.textContent ?? '').includes('P8 Smoke Model TAG'),
@@ -821,7 +821,7 @@ try {
   // RAG Studio：索引配置改完 revision 与 include 立即变化
   // The literature sub-view is component state, not a URL parameter (P5 deviation), so the
   // gate drives it the way a user does: hub → RAG 子视图.
-  await navigate(page, `page=research&project=${projectId}&view=literature`);
+  await navigate(page, `page=research&project=${projectId}&view=library`);
   await page.waitForSelector('[data-testid="literature-hub"]', { timeout: 20_000 });
   await page.click('[data-testid="literature-subview-rag"]');
   await page.waitForSelector('[data-testid="rag-settings"]', { timeout: 20_000 });
@@ -856,7 +856,7 @@ try {
   // 工具链可用性现在只由设置中心的只读分区读 `research.toolchain.status`（闸门 1 已断言
   // `settings-toolchain-*`）。这里改为断言文稿视图自己读的是后端文件列表，
   // 而不是本地的配置判断。
-  await navigate(page, `page=research&project=${projectId}&view=latex`);
+  await navigate(page, `page=research&project=${projectId}&view=writing`);
   await page.waitForSelector('[data-testid="production-latex"]', { timeout: 20_000 });
   // 断言的是后端真读回来的那个文件行（种子文件见闸门 0），不是面板表头里的「文稿文件（N）」：
   // 表头无论后端返回什么都有文字。
@@ -883,7 +883,7 @@ try {
   // 后端**，而不是按钮能点。模型端点由 smoke provider 提供（`GET /v1/models`），嵌入维度用它
   // 的 `/v1/embeddings` 回 8 维向量——8 与任何内置默认值都不同，所以「存的维度＝探测结果」
   // 不会被一个碰巧相同的默认值做成假通过。
-  await navigate(page, `page=research&project=${projectId}&view=latex`);
+  await navigate(page, `page=research&project=${projectId}&view=writing`);
   await waitForProjectRoute();
   await ensureSettingsOpen();
   await openSection('models');
@@ -987,7 +987,7 @@ try {
   //
   // 断言的是几何与命中测试（elementFromPoint），不是 class 名：只看 class 会允许下一个组件
   // 再随手写一个同层 z-index 把问题带回来。
-  await navigate(page, `page=research&project=${projectId}&view=latex`);
+  await navigate(page, `page=research&project=${projectId}&view=writing`);
   await waitForProjectRoute();
   await ensureSettingsOpen();
   await openSection('guardrail');
@@ -1063,7 +1063,7 @@ try {
     assertCheck('6 无内联配置', `业务页没有 ${label}`, hits.length === 0, hits.slice(0, 3).join(', '));
   }
   // 这一条要在 RAG Studio 真的挂载时读（上一条闸门把画布留在了文稿视图）。
-  await navigate(page, `page=research&project=${projectId}&view=literature`);
+  await navigate(page, `page=research&project=${projectId}&view=library`);
   await page.waitForSelector('[data-testid="literature-hub"]', { timeout: 20_000 });
   await page.click('[data-testid="literature-subview-rag"]');
   await page.waitForSelector('[data-testid="rag-open-settings"]', { timeout: 20_000 });
@@ -1101,7 +1101,7 @@ try {
   //
   // 76d9ad0f 移除了面板里「不做本地编译」的说明与引擎行，所以这里断言的是结构：
   // 面板里没有引擎控件、也没有编译按钮；真正的编译只发生在模板/导出链路。
-  await navigate(page, `page=research&project=${projectId}&view=latex`);
+  await navigate(page, `page=research&project=${projectId}&view=writing`);
   await page.waitForSelector('[data-testid="production-latex"]', { timeout: 20_000 });
   const latexText = ((await page.locator('[data-testid="production-latex"]').textContent()) ?? '').replace(/\s+/gu, ' ');
   const latexEngineControls = await page
@@ -1149,7 +1149,7 @@ try {
   );
   assertCheck('1b 重启保持', '重启后密钥仍然是「已配置」（safeStorage 持久）', afterRestart.secretStored === true, JSON.stringify(afterRestart));
 
-  await navigate(page, `page=research&project=${projectId}&view=latex`);
+  await navigate(page, `page=research&project=${projectId}&view=writing`);
   await ensureSettingsOpen();
   await openSection('app');
   assertCheck('1b 重启保持', '重启后界面仍读回保存的值', (await isChecked('settings-open-at-login')) === true && (await readInput('settings-global-hotkey')) === hotkeyTag);

@@ -38,6 +38,8 @@ before(async () => {
     // The shared hub also mounts the processing panel; this monitor fixture has no acquisition jobs.
     client.api.research.listAcquisition=async()=>({ok:true,data:{jobs:[],total:0,nextOffset:null}});
     client.api.research.onLibraryChanged=()=>()=>{};
+    client.api.research.listRadarFeeds=async()=>({ok:true,data:[]});
+    client.api.research.listRadarArticles=async()=>({ok:true,data:[]});
     const root=createRoot(document.getElementById('root'));let generation=0;
     window.unmountHarness=()=>flushSync(()=>root.unmount());
     window.navigateAway=()=>requestNavigation({page:'project',projectId:'another-project'},()=>window.navigations++);
@@ -47,7 +49,7 @@ before(async () => {
         claims:[],evidence:[],derivedStatus:'ready',derivedError:null,reload(){},reloadDerived(){},select(){},setQuery(){},setIncludeArchived(){}};
       const scope={client,projectId:state.projectId,writable:state.writable,workspacePath:'/synthetic',workspaceStatus:'ready',workspaceError:null};
       return <WorkspaceScopeProvider value={scope}><LiteratureScopeProvider value={store}>
-        <LiteratureHubView/></LiteratureScopeProvider></WorkspaceScopeProvider>;
+        <LiteratureHubView view="discover" projectId={state.projectId}/></LiteratureScopeProvider></WorkspaceScopeProvider>;
     }
     window.mountHub=initial=>{window.navigations=0;flushSync(()=>root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict>
       <Harness key={++generation} initial={initial}/></LazyMotion></MotionConfig>));};
@@ -275,7 +277,7 @@ test('monitor drafts protect native unload and project navigation and explicit d
 test('existing hub loads monitor reads only on first visit and creates real search baseline and new-paper alerts', async () => {
   const f = scene(), workflow = f.repository.getWorkflow(f.project.id);
   await mount(f); assert.equal(calls.filter(call => call.projectId === f.project.id).length, 0);
-  await page.getByTestId('literature-subview-reader').focus(); await page.keyboard.press('End');
+  await page.getByTestId('literature-subview-radar').focus(); await page.keyboard.press('End');
   await page.getByText('尚无文献监控', {exact: true}).waitFor();
   await expect(page.getByTestId('literature-subview-monitors')).toBeFocused();
   await create(); await expect(page.getByRole('button', {name: '立即检查', exact: true})).toBeEnabled(); await check();
@@ -387,17 +389,17 @@ test('dirty and uncertain editors lock selection/tabs and retain drafts when pro
   const f = scene(); f.save(); f.save('Other monitor');
   await mount(f); await open(); await select('Synthetic monitor');
   await page.getByRole('textbox', {name: '监控名称', exact: true}).fill('Retained draft');
-  await expect(page.getByTestId('literature-subview-reader')).toBeDisabled();
+  await expect(page.getByTestId('literature-subview-radar')).toBeDisabled();
   await expect(page.getByTestId('literature-monitor-list').getByRole('button', {name: /Other monitor/})).toBeDisabled();
   await page.evaluate(value => window.updateHub(value), state(f, {writable: false}));
   await expect(page.getByRole('textbox', {name: '监控名称', exact: true})).toHaveValue('Retained draft');
   await expect(page.getByRole('button', {name: '保存查询版本', exact: true})).toBeDisabled();
   await page.getByRole('button', {name: '放弃监控修改', exact: true}).click();
   await page.getByTestId('literature-editor-discard-confirm').click();
-  await expect(page.getByTestId('literature-subview-reader')).toBeEnabled();
+  await expect(page.getByTestId('literature-subview-radar')).toBeEnabled();
   await expect(page.getByRole('textbox', {name: '监控名称', exact: true})).toHaveValue('Synthetic monitor');
   await page.getByTestId('literature-subview-monitors').focus(); await page.keyboard.press('Home');
-  await expect(page.getByTestId('literature-subview-reader')).toBeFocused();
+  await expect(page.getByTestId('literature-subview-radar')).toBeFocused();
 });
 
 test('late project reads and successful writes cannot overwrite current project selection or history', async () => {

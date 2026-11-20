@@ -7,7 +7,7 @@ import {BEFORE_NAVIGATE, type NavigationRequest} from './navigation-guard';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
 import type { AppStatus } from '../../shared/types';
-import { canvasViewForDrawerSection, isCanvasTabId, isDrawerSectionId, type DrawerSectionId, type MenuIntent } from '../../shared/surfaces';
+import { isCanvasTabId, isDrawerSectionId, type DrawerSectionId, type MenuIntent } from '../../shared/surfaces';
 import { errorMessage } from './loaded-state';
 import { DEFAULT_VIEW, routeForMenuIntent, type AppViewId } from './routes';
 import { useMenuIntentBridge, useAppRoute } from './use-app-route';
@@ -207,26 +207,24 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
    * *transition* into `files`, not on the value: forcing the tab while the parameter is present
    * would make 会话 unreachable until the URL changed.
    */
+  useEffect(() => {
+    if (route.tool !== null && isDrawerSectionId(route.tool)) {
+      setManagementTab(route.tool);
+      setManagementOpen(true);
+    }
+  }, [route.tool]);
+  const closeManagement = (): void => {
+    requestManagementEditorChange(() => {
+      setManagementOpen(false);
+      if (route.tool !== null && isDrawerSectionId(route.tool)) navigate({...route, tool: null});
+    });
+  };
   const previousToolRef = useRef(route.tool);
-  const previousViewRef = useRef(route.view);
   useEffect(() => {
     if (route.tool === 'files' && previousToolRef.current !== 'files') {
       layout.setSidebarTab('files');
     }
-    /**
-     * Changing the canvas view dismisses the drawer.
-     *
-     * The scrim covers the canvas, so a view change while it is up can only come from outside
-     * the drawer — a tab click, a deep link, another surface's navigation. Leaving the drawer
-     * open would put it on top of the view the user just asked for, with the canvas unreachable
-     * behind it and nothing on screen explaining why. Same reasoning as the canvas tab strip's
-     * own 「clear the tool on tab change」.
-     */
-    if (route.view !== previousViewRef.current && route.tool !== null) {
-      navigate({ ...route, tool: null });
-    }
     previousToolRef.current = route.tool;
-    previousViewRef.current = route.view;
   }, [route, layout, navigate]);
 
   // The chrome and the read-only gate need the real project, not the raw id.
@@ -325,13 +323,10 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
   const openManagementSection = useCallback(
     (section: DrawerSectionId): void => {
       requestManagementEditorChange(() => {
-        const canvasView = canvasViewForDrawerSection(section);
-        if (canvasView === null) {
+        navigate({ ...routeRef.current, tool: section }, {onNavigated: () => {
           setManagementTab(section);
           setManagementOpen(true);
-          return;
-        }
-        navigate({ ...routeRef.current, view: canvasView }, {onNavigated: () => setManagementOpen(false)});
+        }});
       });
     },
     [navigate]
@@ -400,13 +395,24 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
       openFile: route.openFile,
       openFileInCanvas,
       openSettings,
-      openView: (view) => navigate({ ...routeRef.current, view }),
-      openReviewInspector
+      openView: (view) => navigate({ ...routeRef.current, view, tool: null }, {mode: 'push'}),
+      tool: route.tool,
+      openTool: (tool) => navigate({ ...routeRef.current, tool }),
+      openAssistant: () => navigate({ ...routeRef.current, assistantOpen: true }),
+      openTasks: (taskId) => {
+        if (taskId !== undefined && route.projectId !== null) openTask(route.projectId, taskId);
+        else openManagementSection('tasks');
+      },
+      openReviewInspector,
+      openArtifact
     }),
     [
       client,
       route.projectId,
       route.openFile,
+      route.tool,
+      openTask,
+      openManagementSection,
       navigate,
       projectName,
       projectWritable,
@@ -415,7 +421,8 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
       boundWorkspace.error,
       boundWorkspace.rebind,
       openSettings,
-      openReviewInspector
+      openReviewInspector,
+      openArtifact
     ]
   );
 
@@ -468,7 +475,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
   const managementStoresScopeKey = JSON.stringify([managementScope.projectId, managementScope.workspacePath]);
   const managementStoresEnabled =
     managementMounted ||
-    (isDrawerSectionId(route.view) && canvasViewForDrawerSection(route.view) !== null);
+    (route.tool !== null && isDrawerSectionId(route.tool));
 
   /**
    * Concept rows for the ⌘K 概念 group.
@@ -498,10 +505,10 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
     conceptsLoaded: literature.claims !== null && literature.evidence !== null,
     onOpenLiterature: (libraryItemId) => {
       literature.select(libraryItemId);
-      navigate({ ...route, view: 'literature' });
+      navigate({ ...route, view: 'library' });
     },
     onOpenConcept: () => {
-      navigate({ ...route, view: 'literature' });
+      navigate({ ...route, view: 'knowledge' });
     },
     onOpenProject: (projectId) => {
       navigate({ ...route, projectId, view: DEFAULT_VIEW }, { mode: 'push' });
@@ -511,7 +518,8 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
       setAssistantThreadId(threadId);
       navigate({ ...route, assistantOpen: true });
     },
-    searchToken
+    searchToken,
+    onOpenView: (view) => navigate({...route, view, tool: null}, {mode: 'push'})
   });
 
   /**
@@ -699,6 +707,13 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
           assistantAvailable
           sidebar={
             <LeftSidebar
+              activeView={route.view}
+              onNavigate={(view) => navigate({ ...route, view, tool: null }, {mode: 'push', onNavigated: () => {
+                if (layout.sidebarAsDrawer && !layout.sidebarCollapsed) layout.toggleSidebar();
+              }})}
+              onOpenTerminal={() => navigate({...route, view: 'writing', tool: 'terminal'}, {mode: 'push', onNavigated: () => {
+                if (layout.sidebarAsDrawer && !layout.sidebarCollapsed) layout.toggleSidebar();
+              }})}
               activeTab={layout.sidebarTab}
               onTabChange={layout.setSidebarTab}
               client={client}
@@ -733,7 +748,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
                 if (libraryItemId !== null) {
                   literature.select(libraryItemId);
                 }
-                navigate({ ...route, view: 'literature' });
+                navigate({ ...route, view: 'library' });
               }}
               themeOverride={override}
               onCycleTheme={cycleTheme}
@@ -770,7 +785,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
                   // behind an unrelated view — a `?tool=git` that survived a tab click would sit
                   // over the terminal with no way to tell why. No canvas tab is the files view,
                   // so this cannot drop an open file.
-                  navigate({ ...route, view: tab, tool: null })
+                  navigate({ ...route, view: tab, tool: null }, {mode: 'push'})
                 }
               >
                 {/* The scope is what lazily loaded views read; the routing
@@ -870,10 +885,10 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
       {managementMounted ? (
         <LazyBoundary active={managementOpen} label="管理面板加载失败" fallback={<DelayedFallback label="正在加载管理面板…" />}
           renderError={content => <ModalShell open={managementOpen} kind="drawer" title="管理" testId="mgmt-load"
-            onClose={() => setManagementOpen(false)}>{content}</ModalShell>}>
+            onClose={closeManagement}>{content}</ModalShell>}>
           <ManagementPanel
             open={managementOpen}
-            onClose={() => setManagementOpen(false)}
+            onClose={closeManagement}
             activeTab={managementTab}
             onTabChange={setManagementTab}
           />

@@ -39,6 +39,8 @@ before(async () => {
     const scope={client,projectId:'fixture',workspacePath:'/synthetic',writable:true,workspaceStatus:'ready',workspaceError:null,openFileInCanvas(){}};
     function Harness(){
       const [selectedId,setSelected]=useState('paper');
+      const [view,setView]=useState('library');
+      window.selectWorkspace=setView;
       const selected=selectedId==='paper'?item:second;
       const store={client,projectId:'fixture',items:[item,second],selected,selectedId,documents:selectedId==='paper'?[paperDocument]:[],
         status:'ready',selectedStatus:'ready',query:'',includeArchived:false,importRequestId:0,
@@ -46,7 +48,7 @@ before(async () => {
         action:{pending:false,error:null},assistant:{pending:false,error:null},parseInFlight:null,
         select:setSelected,reload(){},reloadDocuments(){},reloadDerived(){},setQuery(){},setIncludeArchived(){},
         loadDocumentContent:async()=>ok({run:{id:'parse',documentId:'document'},content:{sourceHash:'source',pageCount:1,parseMode:'native-text',warnings:[],assets:[],blocks}})};
-      return <WorkspaceScopeProvider value={scope}><LiteratureScopeProvider value={store}><LiteratureHubView/></LiteratureScopeProvider></WorkspaceScopeProvider>;
+      return <WorkspaceScopeProvider value={{...scope,openView:setView}}><LiteratureScopeProvider value={store}><LiteratureHubView view={view} projectId="fixture"/></LiteratureScopeProvider></WorkspaceScopeProvider>;
     }
     const root=createRoot(document.getElementById('root'));
     window.mount=()=>flushSync(()=>root.render(<Harness/>));
@@ -88,6 +90,7 @@ test('other tasks occupy full canvas without unrelated paper selection, in both 
     for(const width of [440,820,1280]) {
       await page.evaluate(width=>document.getElementById('root').style.width=width+'px',width);
       for(const tab of ['notes','rag','wiki','graph','reader']) {
+        await page.evaluate(view=>window.selectWorkspace(view), ['rag','wiki','graph'].includes(tab)?'knowledge':'library');
         await page.getByTestId('literature-subview-'+tab).click();
         await expect(page.getByTestId('literature-panel-'+tab)).toBeVisible();
         if(tab!=='reader') {

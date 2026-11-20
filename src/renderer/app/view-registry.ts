@@ -2,32 +2,7 @@ import { lazy, useSyncExternalStore, type ComponentType } from 'react';
 import type { AppViewId } from './routes';
 import { errorMessage } from './loaded-state';
 
-/**
- * View module registry: lazy loading plus *resolution tracking*.
- *
- * Two behaviours need to know whether a view's chunk has ever loaded:
- *
- *   1. **Hysteresis** — when switching to a view whose chunk is not resident,
- *      the canvas must keep showing the previous view instead of blanking, then
- *      swap when the new one is ready (the legacy shell's `useShownView`).
- *   2. **State retention** — the canvas host reveals a resident primary view
- *      without remounting it, preserving its own scroll and editing state.
- *
- * Both need the resolution moment to be observable from React, so the loader
- * notifies subscribers when a module resolves. View components need no extra
- * props for this.
- *
- * P0–P9 register placeholders through `viewLoaders`; each phase replaces its
- * entry with a real `() => import('...')`. Until then the factories live in the
- * eager entry, which is fine for placeholders but **the assistant, settings, the
- * terminal, the diff view and the Markdown family must stay real dynamic
- * imports**, or `check-renderer-chunks.mjs`'s `forbidden` guard (or the eager
- * budget) fails.
- *
- * P3 turned `files` / `terminal` / `changes` into real imports. They no longer
- * have a same-name placeholder factory in this file, so nothing keeps
- * `@xterm/xterm` or `react-diff-view` reachable from the entry by accident.
- */
+/** Lazy modules are cached by host so related literature destinations share one instance. */
 
 export type ViewProps = {
   view: AppViewId;
@@ -36,26 +11,16 @@ export type ViewProps = {
 
 export type ViewModule = { default: ComponentType<ViewProps> };
 
+export function viewHostFor(view: AppViewId): AppViewId {
+  return view === 'discover' || view === 'knowledge' ? 'library' : view;
+}
+
 const viewLoaders: Record<AppViewId, () => Promise<ViewModule>> = {
-  // Every canvas view is a real `import()`, not a factory, so `react-diff-view` and `@xterm/*`
-  // stay out of the eager graph while the terminal and the Git drawer still get theirs.
-  //
-  // The three primary tabs (文献 / LaTeX / 终端) come first; the rest are the project views this
-  // build adds. `changes`, `files` and `tasks` used to be among them and are gone: files open from
-  // the sidebar tree and Git from a drawer, and there are no canvas pages for
-  // either remaining.
-  literature: async () => ({ default: (await import('../literature/LiteratureHubView')).LiteratureHubView }),
-  latex: async () => ({ default: (await import('../latex/LatexPanel')).LatexPanel }),
-  terminal: async () => ({ default: (await import('../canvas/terminal/TerminalView')).TerminalView }),
-  // P9 made these three real. One component serves all of them: it picks its initial tab from the
-  // view id, and `management-shell-parts` holds the tab strip and the bodies so the canvas and the
-  // drawer cannot drift apart.
-  //
-  // 后台任务 has exactly one home — the management drawer's 任务 tab — and two
-  // surfaces over one dataset is the drift P9 built `management-shell-parts` to prevent.
-  mcp: async () => ({ default: (await import('../management/ManagementView')).ManagementView }),
-  skills: async () => ({ default: (await import('../management/ManagementView')).ManagementView }),
-  memory: async () => ({ default: (await import('../management/ManagementView')).ManagementView })
+  overview: async () => ({ default: (await import('../project/OverviewView')).OverviewView }),
+  discover: async () => ({ default: (await import('../literature/LiteratureHubView')).LiteratureHubView }),
+  library: async () => ({ default: (await import('../literature/LiteratureHubView')).LiteratureHubView }),
+  knowledge: async () => ({ default: (await import('../literature/LiteratureHubView')).LiteratureHubView }),
+  writing: async () => ({ default: (await import('../latex/WritingView')).WritingView })
 };
 
 const resolvedViews = new Set<AppViewId>();
@@ -80,10 +45,12 @@ function markResolved(view: AppViewId): void {
 }
 
 export function isViewResolved(view: AppViewId): boolean {
+  view = viewHostFor(view);
   return resolvedViews.has(view);
 }
 
 export function viewLoadError(view: AppViewId): string | null {
+  view = viewHostFor(view);
   return loadErrors.get(view) ?? null;
 }
 
@@ -102,6 +69,7 @@ function getResolutionVersion(): number {
 }
 
 function requestViewModule(view: AppViewId): Promise<ViewModule> {
+  view = viewHostFor(view);
   const cached = moduleRequests.get(view);
   if (cached !== undefined) return cached;
   const request = Promise.resolve().then(() => viewLoaders[view]()).then(
@@ -120,6 +88,7 @@ function requestViewModule(view: AppViewId): Promise<ViewModule> {
 }
 
 export function loadView(view: AppViewId): ComponentType<ViewProps> {
+  view = viewHostFor(view);
   const cached = viewCache.get(view);
   if (cached !== undefined) {
     return cached;
@@ -138,6 +107,7 @@ export function loadView(view: AppViewId): ComponentType<ViewProps> {
  * round-trips per first visit. Fetching the module instead is side-effect free.
  */
 export function preloadView(view: AppViewId): void {
+  view = viewHostFor(view);
   if (resolvedViews.has(view)) {
     return;
   }
@@ -146,6 +116,7 @@ export function preloadView(view: AppViewId): void {
 }
 
 export function retryView(view: AppViewId): void {
+  view = viewHostFor(view);
   // A nested module can fail after the view importer has already resolved.
   resolvedViews.delete(view);
   loadErrors.delete(view);

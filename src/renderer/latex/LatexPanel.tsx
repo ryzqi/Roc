@@ -189,7 +189,7 @@ export function LatexPanel(): React.JSX.Element {
   useEffect(() => {
     const guard = (event: Event): void => {
       const request = event as CustomEvent<NavigationRequest>;
-      if (request.detail.next.projectId === scope.projectId && request.detail.next.view === 'latex') return;
+      if (request.detail.next.projectId === scope.projectId && request.detail.next.view === 'writing') return;
       if (!dirtyRef.current && !savingRef.current) return;
       if (savingRef.current) {
         event.preventDefault();

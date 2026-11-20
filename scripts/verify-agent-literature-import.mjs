@@ -107,7 +107,7 @@ try {
     if (!saved.ok) return saved;
     return window.roc.settings.setProviderSecret({ providerId: 'import-fixture', plaintext: 'fixture-only' });
   }, endpoint));
-  await navigate(page, `page=research&project=${project.id}&view=literature&assistant=1`);
+  await navigate(page, `page=research&project=${project.id}&view=library&assistant=1`);
   await page.waitForSelector('[data-testid="literature-hub"]');
   await page.evaluate(() => { window.__importEvents = []; window.roc.chat.onRunEvent((raw) => { const event = raw.event ?? raw; window.__importEvents.push(event); }); });
   const list = async () => unwrap(await page.evaluate((projectId) => window.roc.research.listLibrary({ projectId, query: '', limit: 100, includeArchived: false }), project.id));

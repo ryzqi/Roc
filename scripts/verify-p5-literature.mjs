@@ -92,7 +92,7 @@ if (!existsSync(jobCliPath) && existsSync(jobCliDisabledPath)) {
 let jobCliDisabledByRun = false;
 
 async function openLiteratureHub(page, projectId) {
-  await navigate(page, `page=research&project=${projectId}&view=literature`);
+  await navigate(page, `page=research&project=${projectId}&view=library`);
   await page.waitForSelector('[data-testid="literature-hub"]', { timeout: 30_000 });
   await page.waitForSelector('[data-testid="literature-list"]', { timeout: 30_000 });
 }
@@ -606,7 +606,7 @@ try {
   if (libraryItemId === null) {
     fail('1 真解析', '导入创建了文献库条目', 'libraryItemId=null');
   }
-  await navigate(page, `page=research&project=${projectId}&view=literature`);
+  await navigate(page, `page=research&project=${projectId}&view=library`);
   await page.waitForSelector('[data-testid="literature-hub"]', { timeout: 30_000 });
   // 这次导入是 harness 直接调的 IPC（不是列表的导入按钮），所以 store 里的列表还是旧的：
   // 点一次真实的「重新读取文献库」，而不是假设它会自己刷新。
@@ -756,7 +756,7 @@ try {
   await page.screenshot({ path: join(artifactDir, '04-empty-state.png') });
 
   // ---- 回到闸门 1：等真解析完成 -------------------------------------------------
-  await navigate(page, `page=research&project=${projectId}&view=literature`);
+  await navigate(page, `page=research&project=${projectId}&view=library`);
   await page.waitForSelector('[data-testid="literature-hub"]', { timeout: 30_000 });
   // 切项目不会重置子视图选择（它是组件状态），刚才停在 RAG：显式回到阅读器。
   await page.click('[data-testid="literature-subview-reader"]');
@@ -968,7 +968,7 @@ try {
   // 这一轮**不新开对话**：可检索的那条会话在闸门 0 末尾就造好了（那时 app 还没做过
   // 解析/索引这类重活 —— 见 B18），palette 分组只需要那条已持久化的消息。
   // 这样闸门 6 的判定与 B18 的偶发性解耦，B18 本身由后面那条 info 探针单独盯着。
-  await navigate(page, `page=research&project=${projectId}&view=literature`);
+  await navigate(page, `page=research&project=${projectId}&view=library`);
   await page.waitForSelector('[data-testid="literature-hub"]', { timeout: 30_000 });
   await page.keyboard.press('Meta+k');
   await page.waitForSelector('[data-testid="search-palette-input"]', { timeout: 20_000 });

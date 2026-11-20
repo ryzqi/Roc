@@ -307,14 +307,14 @@ try {
   // 这一步以前走画布 `view=files`（它的 `data-state=rejected` 就是这条闸门的判据）。画布文件视图
   // 已删（文件在左栏树 + 预览浮层），越界拒绝的真身移到左栏树自己：
   // 同一段 `checkRelativePath` + `pathRejectionMessage`，所以文案没变，只是显示在树里。
-  await navigate(page, `page=research&project=${first.data.id}&view=literature&file=${encodeURIComponent('../../etc/passwd')}`);
+  await navigate(page, `page=research&project=${first.data.id}&view=library&file=${encodeURIComponent('../../etc/passwd')}`);
   await page.waitForSelector('[data-testid="file-tree-rejected"]', { timeout: 10_000 });
   const rejectionText = (await page.locator('[data-testid="file-tree-rejected"]').textContent()) ?? '';
   assertCheck('3 路径越界（R10）', '深链越界路径在渲染前被拒绝', rejectionText.includes('不能越出工作目录'), rejectionText.trim().slice(0, 80));
   assertCheck('3 路径越界（R10）', '拒绝时不产生预览请求', (await page.locator('[data-testid="file-preview"]').count()) === 0);
 
   // ---- 闸门 4：Git 全流程（改动列表 → stage → commit + discard 二次确认） -------
-  await navigate(page, `page=research&project=${first.data.id}&view=literature&tool=git`);
+  await navigate(page, `page=research&project=${first.data.id}&view=library&tool=git`);
   await page.waitForSelector('[data-testid="git-drawer-panel"] [data-testid="git-panel"][data-state="ready"]', { timeout: 20_000 });
   await page.waitForSelector('[data-testid="git-change-phase-three-notes.txt"]', { timeout: 15_000 });
   assertCheck('4 Git', '改动列表显示真实未暂存改动', true, 'phase-three-notes.txt');
@@ -377,7 +377,7 @@ try {
   await page.waitForSelector('[data-testid="git-drawer"]', { state: 'detached', timeout: 15_000 });
 
   // ---- 闸门 5：终端能跑 ls / pwd / python --version，且 resize 同步给 PTY ------
-  await navigate(page, `page=research&project=${first.data.id}&view=terminal`);
+  await navigate(page, `page=research&project=${first.data.id}&view=writing&tool=terminal`);
   await page.waitForSelector('[data-testid="terminal-view"][data-phase="ready"]', { timeout: 30_000 });
   assertCheck('5 终端', 'pty 会话进入 ready', true, '');
 
@@ -432,7 +432,7 @@ try {
   });
   const rtkLabel = (await page.getByTestId('git-rtk-status').textContent()) ?? '';
   assertCheck('7 RTK', 'Git 面板显示 rtk.status 一行', rtkLabel.includes('RTK'), rtkLabel);
-  await navigate(page, `page=research&project=${first.data.id}&view=terminal`);
+  await navigate(page, `page=research&project=${first.data.id}&view=writing&tool=terminal`);
   await page.waitForSelector('[data-testid="terminal-view"][data-phase="ready"]', { timeout: 30_000 });
   await page.screenshot({ path: join(artifactDir, '05-terminal.png') });
 
@@ -457,7 +457,7 @@ try {
     (await page.locator('[data-testid="git-changes-clean"]').count()) === 1
   );
 
-  await navigate(page, `page=research&project=${second.data.id}&view=terminal`);
+  await navigate(page, `page=research&project=${second.data.id}&view=writing&tool=terminal`);
   await page.waitForSelector('[data-testid="terminal-view"][data-phase="ready"]', { timeout: 30_000 });
   const secondCwd = (await page.locator('[data-testid="terminal-cwd"]').textContent()) ?? '';
   assertCheck('6 项目隔离', '切项目后终端在新工作目录重建', secondCwd.includes(secondWorkspace), secondCwd);
@@ -473,7 +473,7 @@ try {
   if (!archive.ok) {
     fail('只读闸门', '归档项目', archive.error.message);
   }
-  await navigate(page, `page=research&project=${first.data.id}&view=terminal`);
+  await navigate(page, `page=research&project=${first.data.id}&view=writing&tool=terminal`);
   await page.waitForSelector('[data-testid="terminal-readonly"]', { timeout: 20_000 });
   assertCheck('只读闸门', '归档项目不提供交互式终端', true, 'terminal-readonly');
   await navigate(page, `page=research&project=${first.data.id}&tool=git`);

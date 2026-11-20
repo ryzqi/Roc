@@ -39,30 +39,20 @@ test('exactly one surface is the default view, and it is a canvas view', () => {
   );
 });
 
-test('the derived sets are the ones the shell used to keep by hand', () => {
-  // These three assertions are the migration guard: each array replaced a hand-written copy.
-  //   canvasTabIds    <- AppShell PRIMARY_TABS + WorkspaceCanvas TABS + CanvasTabId's Extract<>
-  //   drawerSectionIds<- ManagementTabId + two inline `'memory' | 'skills' | 'mcp' | 'tasks'`
-  //   canvasViewIds   <- routes.APP_VIEW_IDS
-  assert.deepEqual([...surfaces.canvasTabIds], ['literature', 'latex', 'terminal']);
+test('the canvas has five research destinations and management stays in the drawer', () => {
+  const destinations = ['overview', 'discover', 'library', 'knowledge', 'writing'];
+  assert.deepEqual([...surfaces.canvasTabIds], destinations);
+  assert.deepEqual([...surfaces.canvasViewIds], destinations);
   assert.deepEqual([...surfaces.drawerSectionIds], ['memory', 'skills', 'mcp', 'tasks']);
-  assert.deepEqual(
-    [...surfaces.canvasViewIds],
-    ['literature', 'latex', 'terminal', 'memory', 'skills', 'mcp']
-  );
-});
-
-test('canvas tabs are canvas views, and the two sets differ by exactly the drawer sections', () => {
-  for (const tab of surfaces.canvasTabIds) {
-    assert.ok(surfaces.isCanvasViewId(tab), `${tab} is a tab but not a view`);
+  assert.equal(surfaces.defaultViewId, 'overview');
+  for (const id of destinations) {
+    assert.equal(surfaces.isDrawerSectionId(id), false);
   }
-  // 记忆 / 技能 / MCP are the three canvas views that are *also* drawer sections; 任务 is the one
-  // drawer section with no canvas host (ADR 0024: two interfaces over one dataset diverge).
-  const viewsThatAreNotTabs = surfaces.canvasViewIds.filter((id) => !surfaces.isCanvasTabId(id));
-  assert.deepEqual([...viewsThatAreNotTabs], ['memory', 'skills', 'mcp']);
-  for (const id of viewsThatAreNotTabs) {
-    assert.ok(surfaces.isDrawerSectionId(id), `${id} is a non-tab canvas view but not a drawer section`);
+  for (const id of surfaces.drawerSectionIds) {
+    assert.equal(surfaces.isCanvasViewId(id), false);
   }
+  assert.equal(surfaces.resolveSurface('terminal').surface.canvas, 'none');
+  assert.equal(surfaces.resolveSurface('terminal').surface.drawer, false);
 });
 
 test('a parked capability cannot collide with a live surface id', () => {
@@ -108,8 +98,6 @@ test('a drawer-only section resolves to a surface that has no canvas host', () =
   assert.equal(resolution.kind, 'surface');
   assert.equal(resolution.surface.canvas, 'none');
   assert.equal(resolution.surface.drawer, true);
-  assert.equal(surfaces.canvasViewForDrawerSection('tasks'), null);
-  assert.equal(surfaces.drawerSectionForCanvasView('tasks'), null);
 });
 
 test('a preserved-but-unbuilt domain resolves to parked, not unknown', () => {
@@ -118,9 +106,10 @@ test('a preserved-but-unbuilt domain resolves to parked, not unknown', () => {
   assert.equal(resolution.parked.capability, 'research.manuscript');
 });
 
-test('the surfaces retired in P10 resolve to unknown', () => {
+test('retired view ids are absent from the canonical surface table', () => {
   const retired = [
-    'overview',
+    'latex',
+    'literature',
     'stage',
     'activity',
     'provenance',
@@ -240,9 +229,9 @@ test('every ?view= in a gate script resolves to a real canvas view', () => {
 });
 
 test('the gate guard refuses parked and unknown views rather than normalising them', () => {
-  assert.equal(assertKnownView('latex'), 'latex');
+  assert.equal(assertKnownView('writing'), 'writing');
   assert.throws(() => assertKnownView('manuscript'), /gate_view_parked/u);
-  assert.throws(() => assertKnownView('overview'), /gate_view_unknown/u);
+  assert.throws(() => assertKnownView('latex'), /gate_view_unknown/u);
   assert.throws(() => assertKnownView('tasks'), /gate_view_without_canvas/u);
 });
 

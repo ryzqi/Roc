@@ -46,7 +46,7 @@ try {
   const project = unwrap(await page.evaluate((workspacePath) => window.roc.research.createProject({
     title: 'Parser content regression', description: 'Disposable real-model fixture', workspacePath
   }), workspacePath));
-  await navigate(page, `page=research&project=${project.id}&view=literature`);
+  await navigate(page, `page=research&project=${project.id}&view=library`);
   await page.getByTestId('literature-hub').waitFor();
   const document = unwrap(await page.evaluate(({ sourcePath, projectId }) => window.roc.research.importDocument({
     target: 'new-item', sourcePath, title: 'PDF table and formula regression', citationKey: 'parserFixture', projectId

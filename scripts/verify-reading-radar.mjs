@@ -57,7 +57,7 @@ try{
  const sourceUrl=`roc-preview://research/projects/${project.id}/documents/${doc.id}/source/${doc.sourceHash}`;
  const original=await page.evaluate(async url=>{const response=await fetch(url);return {status:response.status,bytes:(await response.arrayBuffer()).byteLength};},sourceUrl);
  assert.equal(original.status,200);assert.equal(original.bytes,doc.size);check('cold-start preview protocol serves original PDF bytes');
- await navigate(page,`page=research&project=${project.id}&view=literature`);
+ await navigate(page,`page=research&project=${project.id}&view=library`);
  await page.waitForSelector('[data-testid="literature-hub"]');
  await page.getByRole('tab',{name:'笔记',exact:true}).click();
  await page.getByTestId('notes-create').click();await page.getByLabel('笔记标题',{exact:true}).fill('Runtime note');

@@ -1,5 +1,7 @@
 import { useRef } from 'react';
 import { BookOpen, FolderGit2, FolderTree, Loader2, MessagesSquare, Moon, RotateCcw, Sliders, Sun, SunMoon } from 'lucide-react';
+import { AppNavigation } from './AppNavigation';
+import type { CanvasTabId } from '../../shared/surfaces';
 import type { SidebarTab } from '../app/ui-state';
 import { SessionListView } from '../assistant/SessionListView';
 import { FileSidebarPanel } from '../canvas/files/FileSidebarPanel';
@@ -46,6 +48,9 @@ import { EmptyState } from './EmptyState';
  */
 
 export type LeftSidebarProps = {
+  activeView: CanvasTabId;
+  onNavigate: (view: CanvasTabId) => void;
+  onOpenTerminal: () => void;
   activeTab: SidebarTab;
   onTabChange: (tab: SidebarTab) => void;
   client: RocClient;
@@ -301,6 +306,9 @@ function SidebarFilesTab({
 }
 
 export function LeftSidebar({
+  activeView,
+  onNavigate,
+  onOpenTerminal,
   activeTab,
   onTabChange,
   client,
@@ -372,7 +380,9 @@ export function LeftSidebar({
         </button>
       </div>
 
-      {/* Band 2 — the segmented tab track. */}
+      <AppNavigation view={activeView} onNavigate={onNavigate} />
+
+      {/* Project resources remain secondary to task navigation. */}
       <div className="shrink-0 px-2 py-2.5">
         <div
           role="tablist"
@@ -453,7 +463,9 @@ export function LeftSidebar({
         )}
       </div>
 
-      {/* Band 4 — theme + management. */}
+      <button type="button" onClick={onOpenTerminal} data-testid="sidebar-terminal"
+        className="mx-2 mb-2 min-h-8 rounded-control px-3 text-start text-muted hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]">终端</button>
+      {/* Theme and advanced tools. */}
       <div className="flex shrink-0 items-center gap-1.5 border-t-[0.5px] border-line p-2">
         <button
           type="button"
@@ -469,7 +481,7 @@ export function LeftSidebar({
         <button
           type="button"
           onClick={onOpenManagement}
-          title="管理（记忆 / 技能 / MCP / 任务）"
+          title="工具与扩展"
           aria-label="打开管理面板"
           data-testid="sidebar-management"
           className="flex h-[var(--control-height-compact)] items-center gap-1.5 rounded-control px-2 text-muted transition-colors duration-[var(--duration-fast)] hover:bg-[var(--surface-card-hover)] hover:text-ink active:bg-[var(--overlay-active)]"

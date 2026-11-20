@@ -23,7 +23,7 @@ try{
  await app.evaluate(({session,BrowserWindow})=>{
    session.fromPartition(`radar-${BrowserWindow.getAllWindows()[0].id}`).protocol.handle('https',request=>new Response(`<!doctype html><html><head><title>Radar fixture</title></head><body><h1>${new URL(request.url).hostname}</h1><article class="paper"><h2>Native discovery fixture</h2><a href="https://arxiv.org/abs/2611.00001">Paper</a><a href="https://doi.org/10.1234/fixture">DOI</a></article>${new URL(request.url).hostname==='modelscope.cn'?'<a href="/papers/2611.00002" data-autolog="c4=123%2FNative%20card%20title"><div>Native card title</div><div>Fixture abstract and tags must not become the title.</div></a>':''}</body></html>`,{headers:{'content-type':'text/html'}}));
  });
- await navigate(page,`page=research&project=${project.id}&view=literature`);
+ await navigate(page,`page=research&project=${project.id}&view=library`);
  await page.getByRole('tab',{name:'学术雷达',exact:true}).click();
  await page.getByRole('tab',{name:'Cool Papers',exact:true}).click();
  await expect.poll(nativeState).toMatchObject([{url:'https://papers.cool/arxiv/cs.AI',visible:true}]);

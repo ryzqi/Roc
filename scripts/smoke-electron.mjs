@@ -170,7 +170,7 @@ try {
   assertCheck('2 门户', '进入项目后画布渲染出来', true, '');
   await page.screenshot({ path: join(artifactDir, 'canvas.png') });
 
-  await navigate(page, `page=research&project=${preflight.projectId}&view=literature`);
+  await navigate(page, `page=research&project=${preflight.projectId}&view=library`);
   await page.waitForSelector('[data-testid="literature-review-inspect"]', {timeout: 20_000});
   const reviewUrl = page.url();
   await page.locator('[data-testid="literature-review-inspect"]').focus();
@@ -198,7 +198,7 @@ try {
   const branch = (await page.locator('[data-testid="git-current-branch"]').textContent()) ?? '';
   assertCheck('6 工作区', 'Git 面板读到真实分支名', branch.trim().length > 0, branch.trim().slice(0, 40));
 
-  await navigate(page, `page=research&project=${preflight.projectId}&view=terminal`);
+  await navigate(page, `page=research&project=${preflight.projectId}&view=writing&tool=terminal`);
   await page.waitForSelector('[data-testid="terminal-xterm"]', { timeout: 20_000 });
   await page.click('[data-testid="terminal-xterm"]');
   await page.keyboard.type("printf 'ROC_SMOKE_PTY_OK\\n'");
@@ -264,7 +264,7 @@ try {
   }
   assertCheck('3 助手', '默认模型指向 stub provider 且密钥进了 safeStorage', configured.defaultModelId === smokeModelKey && configured.secretStored, JSON.stringify(configured));
 
-  await navigate(page, `page=research&project=${preflight.projectId}&view=latex&assistant=1`);
+  await navigate(page, `page=research&project=${preflight.projectId}&view=writing&assistant=1`);
   await page.waitForSelector('[data-testid="assistant-composer-input"]', { timeout: 20_000 });
   await page.fill('[data-testid="assistant-composer-input"]', '用一句话说明这次 smoke 在验证什么。');
   await page.focus('[data-testid="assistant-composer-input"]');

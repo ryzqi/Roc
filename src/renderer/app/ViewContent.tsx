@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
-import { isCanvasTabId } from '../../shared/surfaces';
 import type { AppViewId } from './routes';
 import { DelayedFallback } from '../shell/DelayedFallback';
 import { ErrorBar } from '../shell/ErrorBar';
 import { LazyBoundary } from '../shell/LazyBoundary';
 import { ViewActivity } from '../shared/view-activity';
-import { isViewResolved, loadView, preloadView, retryView, useViewResolution, viewLoadError, type ViewProps } from './view-registry';
+import { isViewResolved, loadView, preloadView, retryView, useViewResolution, viewLoadError, viewHostFor, type ViewProps } from './view-registry';
 
 export type { ViewProps };
 
@@ -30,8 +29,10 @@ export function ViewContent({ view, projectId }: ViewProps): React.JSX.Element {
     }
     if (warming && requestedResident) {
       setVisited(current => {
-        const retained = current.filter(id => isCanvasTabId(id) || id === view);
-        return retained.includes(view) ? retained : [...retained, view];
+        const host = viewHostFor(view);
+        return current.some(id => viewHostFor(id) === host)
+          ? current.map(id => viewHostFor(id) === host ? view : id)
+          : [...current, view];
       });
       setShownView(view);
     }
@@ -46,9 +47,9 @@ export function ViewContent({ view, projectId }: ViewProps): React.JSX.Element {
         <p role="status" className="shrink-0 px-3 py-1.5 text-muted text-[length:var(--font-meta-size)]">正在加载视图…</p>}
       {visited.map(id => {
         const View = loadView(id);
-        const active = id === shownView;
+        const active = viewHostFor(id) === viewHostFor(shownView);
         return (
-          <div key={id} className="min-h-0 w-full flex-1 overflow-y-auto" style={{ display: active ? 'block' : 'none' }}
+          <div key={viewHostFor(id)} className="min-h-0 w-full flex-1 overflow-y-auto" style={{ display: active ? 'block' : 'none' }}
             data-view={active ? view : undefined}
             data-shown-view={active ? shownView : undefined}
             data-project={projectId ?? ''}>

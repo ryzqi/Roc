@@ -17,7 +17,7 @@ import type { LayoutState } from './use-layout-state';
  * writing: the canvas keeps `flex-1` and stays the widest surface, and dragging the
  * assistant's divider right grows the assistant.
  *
- * At `<= 1099px` the sidebar and assistant become drawers instead of
+ * At `< 1200px` the sidebar and assistant become drawers instead of
  * columns. The window's own minimum is 1184px, so that mode mainly exists for
  * the layout audit and for a future lower minimum — it is implemented rather
  * than left as a TODO so the canvas never collapses if it is reached.

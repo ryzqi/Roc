@@ -111,12 +111,11 @@ before(async () => {
           const contents = (await readFile(path, 'utf8')).replace(
             /const viewLoaders: Record<AppViewId, \(\) => Promise<ViewModule>> = \{[\s\S]*?\n\};/u,
             `const viewLoaders: Record<AppViewId, () => Promise<ViewModule>> = {
-              literature: () => window.fixtureView('literature'),
-              latex: () => window.fixtureView('latex'),
-              terminal: () => window.fixtureView('terminal'),
-              mcp: () => window.fixtureView('mcp'),
-              skills: () => window.fixtureView('skills'),
-              memory: () => window.fixtureView('memory')
+              library: () => window.fixtureView('library'),
+              writing: () => window.fixtureView('writing'),
+              overview: () => window.fixtureView('overview'),
+              discover: () => window.fixtureView('library'),
+              knowledge: () => window.fixtureView('library')
             };`
           );
           return {contents, loader: 'ts'};
@@ -157,73 +156,73 @@ async function fresh() {
 
 test('failed cold navigation preserves the current editor and offers a working retry', async () => {
   await fresh();
-  await page.evaluate(() => window.mountFixture('literature'));
-  await page.getByLabel('Draft for literature').fill('Unsaved literature draft');
-  await page.evaluate(() => {window.modes.terminal = 'fail'; window.selectView('terminal');});
+  await page.evaluate(() => window.mountFixture('library'));
+  await page.getByLabel('Draft for library').fill('Unsaved library draft');
+  await page.evaluate(() => {window.modes.overview = 'fail'; window.selectView('overview');});
   await expect(page.getByTestId('view-load-error')).toContainText('Synthetic chunk load failure');
-  await expect(page.getByLabel('Draft for literature')).toHaveValue('Unsaved literature draft');
-  await page.evaluate(() => {window.modes.terminal = 'ready';});
+  await expect(page.getByLabel('Draft for library')).toHaveValue('Unsaved library draft');
+  await page.evaluate(() => {window.modes.overview = 'ready';});
   await page.getByTestId('view-load-error').getByRole('button', {name: '重试', exact: true}).click();
-  await expect(page.getByTestId('fixture-terminal')).toBeVisible();
-  assert.equal(await page.evaluate(() => window.loadCalls.filter(view => view === 'terminal').length), 2);
-  await page.evaluate(() => window.selectView('literature'));
-  await expect(page.getByLabel('Draft for literature')).toHaveValue('Unsaved literature draft');
+  await expect(page.getByTestId('fixture-overview')).toBeVisible();
+  assert.equal(await page.evaluate(() => window.loadCalls.filter(view => view === 'overview').length), 2);
+  await page.evaluate(() => window.selectView('library'));
+  await expect(page.getByLabel('Draft for library')).toHaveValue('Unsaved library draft');
   assert.deepEqual(pageErrors, []);
 });
 
 test('the first view catches synchronous import failures and can recover in the same shell', async () => {
   await fresh();
-  await page.evaluate(() => {window.modes.latex = 'throw'; window.mountFixture('latex');});
+  await page.evaluate(() => {window.modes.writing = 'throw'; window.mountFixture('writing');});
   await expect(page.getByTestId('view-load-error')).toContainText('Synthetic chunk load failure');
-  await page.evaluate(() => {window.modes.latex = 'ready';});
+  await page.evaluate(() => {window.modes.writing = 'ready';});
   await page.getByTestId('view-load-error').getByRole('button', {name: '重试', exact: true}).click();
-  await expect(page.getByTestId('fixture-latex')).toBeVisible();
-  assert.equal(await page.evaluate(() => window.loadCalls.filter(view => view === 'latex').length), 2);
+  await expect(page.getByTestId('fixture-writing')).toBeVisible();
+  assert.equal(await page.evaluate(() => window.loadCalls.filter(view => view === 'writing').length), 2);
   assert.deepEqual(pageErrors, []);
 });
 
 test('a stale chunk failure cannot replace the newly selected view or reveal hidden editors', async () => {
   await fresh();
-  await page.evaluate(() => window.mountFixture('literature'));
-  await expect(page.getByTestId('fixture-literature')).toBeVisible();
-  await page.evaluate(() => {window.modes.terminal = 'defer'; window.selectView('terminal');});
-  await page.waitForFunction(() => typeof window.finishView.terminal === 'function');
-  await page.evaluate(() => window.selectView('latex'));
-  await expect(page.getByTestId('fixture-latex')).toBeVisible();
-  await page.evaluate(() => window.finishView.terminal(false));
+  await page.evaluate(() => window.mountFixture('library'));
+  await expect(page.getByTestId('fixture-library')).toBeVisible();
+  await page.evaluate(() => {window.modes.overview = 'defer'; window.selectView('overview');});
+  await page.waitForFunction(() => typeof window.finishView.overview === 'function');
+  await page.evaluate(() => window.selectView('writing'));
+  await expect(page.getByTestId('fixture-writing')).toBeVisible();
+  await page.evaluate(() => window.finishView.overview(false));
   await expect(page.getByTestId('view-load-error')).toHaveCount(0);
-  await expect(page.getByTestId('fixture-latex')).toBeVisible();
-  await expect(page.getByLabel('Draft for literature')).toBeHidden();
-  assert.equal(await page.evaluate(() => window.loadCalls.filter(view => view === 'latex').length), 1);
+  await expect(page.getByTestId('fixture-writing')).toBeVisible();
+  await expect(page.getByLabel('Draft for library')).toBeHidden();
+  assert.equal(await page.evaluate(() => window.loadCalls.filter(view => view === 'writing').length), 1);
   assert.deepEqual(pageErrors, []);
 });
 
 test('a nested chunk failure stays inside its canvas and recovery retains the other visited editor', async () => {
   await fresh();
-  await page.evaluate(() => window.mountFixture('literature'));
-  await page.getByLabel('Draft for literature').fill('Retained beside a failed nested view');
-  await page.evaluate(() => {window.modes.terminal = 'nested-fail'; window.selectView('terminal');});
+  await page.evaluate(() => window.mountFixture('library'));
+  await page.getByLabel('Draft for library').fill('Retained beside a failed nested view');
+  await page.evaluate(() => {window.modes.overview = 'nested-fail'; window.selectView('overview');});
   await expect(page.getByTestId('view-content-error')).toContainText('Synthetic nested chunk failure');
-  await page.evaluate(() => window.selectView('literature'));
-  await expect(page.getByLabel('Draft for literature')).toHaveValue('Retained beside a failed nested view');
-  await page.evaluate(() => {window.modes.terminal = 'ready'; window.selectView('terminal');});
+  await page.evaluate(() => window.selectView('library'));
+  await expect(page.getByLabel('Draft for library')).toHaveValue('Retained beside a failed nested view');
+  await page.evaluate(() => {window.modes.overview = 'ready'; window.selectView('overview');});
   await page.getByTestId('view-content-error').getByRole('button', {name: '重试', exact: true}).click();
-  await expect(page.getByLabel('Draft for terminal')).toBeVisible();
-  assert.equal(await page.evaluate(() => window.loadCalls.filter(view => view === 'terminal').length), 2);
-  await page.evaluate(() => window.selectView('literature'));
-  await expect(page.getByLabel('Draft for literature')).toHaveValue('Retained beside a failed nested view');
+  await expect(page.getByLabel('Draft for overview')).toBeVisible();
+  assert.equal(await page.evaluate(() => window.loadCalls.filter(view => view === 'overview').length), 2);
+  await page.evaluate(() => window.selectView('library'));
+  await expect(page.getByLabel('Draft for library')).toHaveValue('Retained beside a failed nested view');
   assert.deepEqual(pageErrors, []);
 });
 
 test('a delayed nested rejection in a hidden canvas cannot dismiss the active view', async () => {
   await fresh();
-  await page.evaluate(() => {window.modes.terminal = 'nested-defer'; window.mountFixture('terminal');});
-  await page.waitForFunction(() => typeof window.finishView['nested-terminal'] === 'function');
-  await page.evaluate(() => window.selectView('latex'));
-  await page.getByLabel('Draft for latex').fill('Active canvas remains intact');
-  await page.evaluate(() => window.finishView['nested-terminal'](false));
+  await page.evaluate(() => {window.modes.overview = 'nested-defer'; window.mountFixture('overview');});
+  await page.waitForFunction(() => typeof window.finishView['nested-overview'] === 'function');
+  await page.evaluate(() => window.selectView('writing'));
+  await page.getByLabel('Draft for writing').fill('Active canvas remains intact');
+  await page.evaluate(() => window.finishView['nested-overview'](false));
   await expect(page.getByTestId('view-content-error')).toBeHidden();
-  await expect(page.getByLabel('Draft for latex')).toHaveValue('Active canvas remains intact');
+  await expect(page.getByLabel('Draft for writing')).toHaveValue('Active canvas remains intact');
   assert.deepEqual(pageErrors, []);
 });
 
@@ -259,4 +258,18 @@ test('answer formatting failure retains received text and retries locally withou
   await expect(page.getByLabel('Adjacent draft')).toHaveValue('Unsaved beside the received answer');
   assert.equal(await page.evaluate(() => window.markdownCalls), 2);
   assert.deepEqual(pageErrors, []);
+});
+
+
+test('discovery, library and knowledge retain one shared host and one draft', async () => {
+  await fresh();
+  await page.evaluate(() => window.mountFixture('discover'));
+  await page.getByLabel('Draft for library').fill('Shared reading context');
+  for (const view of ['knowledge', 'library', 'discover']) {
+    await page.evaluate(view => window.selectView(view), view);
+    await expect(page.locator('[data-shown-view="'+view+'"]')).toBeVisible();
+    await expect(page.getByLabel('Draft for library')).toHaveValue('Shared reading context');
+  }
+  assert.equal(await page.getByTestId('fixture-library').count(), 1);
+  assert.deepEqual(await page.evaluate(() => window.loadCalls), ['library']);
 });

@@ -3,3 +3,11 @@ export type LiteratureSubView = 'reader' | 'rag' | 'wiki' | 'graph' | 'monitors'
 
 /** The import dialog's tabs; `?import=`-style deep links are deliberately absent. */
 export type ImportTabRequest = 'document' | 'doi' | 'bibliography' | 'manual' | 'search' | 'zotero';
+
+export type LiteratureWorkspace = 'discover' | 'library' | 'knowledge';
+
+export function workspaceForSubView(view: LiteratureSubView): LiteratureWorkspace {
+  if (view === 'radar' || view === 'monitors') return 'discover';
+  if (view === 'rag' || view === 'wiki' || view === 'graph') return 'knowledge';
+  return 'library';
+}

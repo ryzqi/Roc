@@ -348,7 +348,7 @@ try {
     );
   }
 
-  await navigate(page, `page=research&project=${projectId}&view=latex`);
+  await navigate(page, `page=research&project=${projectId}&view=writing`);
   await waitForProjectRoute();
 
   // ---- 闸门 1：记忆（五份 markdown 内容：读 / 改 / 存 / 快照 / 拒写） -------------
@@ -686,7 +686,7 @@ try {
   await page.waitForSelector('[data-testid="mgmt-skill-files"]', { state: 'detached' });
 
   // 启停 → 影响助手 composer 的候选
-  await navigate(page, `page=research&project=${projectId}&view=latex&assistant=1`);
+  await navigate(page, `page=research&project=${projectId}&view=writing&assistant=1`);
   await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 20_000 });
   const composerProbe = async () => {
     await page.fill('[data-testid="assistant-composer-input"]', '/smoke');
@@ -1139,7 +1139,7 @@ try {
   assertCheck('6 重启保持', '重启后记忆文件内容逐字保持', afterRestart.file === memoryBody, JSON.stringify(afterRestart.file).slice(0, 80));
   assertCheck('6 重启保持', '重启后技能目录与 MCP 配置仍在', afterRestart.skills.some((skill) => skill.id === skillId) && afterRestart.mcpIds.includes('p9-stdio'), JSON.stringify(afterRestart.mcpIds));
 
-  await navigate(page, `page=research&project=${projectId}&view=latex`);
+  await navigate(page, `page=research&project=${projectId}&view=writing`);
   await waitForProjectRoute();
   await openManagement('memory');
   await page.click('[data-testid="mgmt-memory-slot-global-user"]');

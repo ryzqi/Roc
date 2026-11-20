@@ -103,7 +103,7 @@ try {
     return project.ok ? {projectId: project.data.id} : {error: project.error.message};
   }, {endpoint: provider.endpoint, workspacePath: paths.workspaceRoot});
   assertCheck('runtime', 'Local fixture provider and isolated project configured', !setup.error, setup.error ?? '');
-  await navigate(page, `page=research&project=${setup.projectId}&view=latex&assistant=1`);
+  await navigate(page, `page=research&project=${setup.projectId}&view=writing&assistant=1`);
   await page.getByTestId('assistant-composer-input').waitFor({timeout: 30_000});
   assertCheck('runtime', 'No diagnostics action before a run exists',
     await page.getByTestId('assistant-diagnostics-toggle').count() === 0);

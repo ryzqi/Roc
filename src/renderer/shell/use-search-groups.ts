@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import useSWR from 'swr';
-import type { DrawerSectionId } from '../../shared/surfaces';
+import {canvasTabIds, surfaceFor, type CanvasTabId, type DrawerSectionId} from '../../shared/surfaces';
 import type { ResearchLibraryItem, SkillSnapshot } from '../../shared/types';
 import { IpcResourceError } from '../app/ipc-resource';
 import { useAsyncResource, type AsyncStatus } from '../app/use-async-resource';
@@ -74,6 +74,7 @@ export type SearchGroupSources = {
    * ⌘K 永远搜不到它（同一个“读一次就不管”缺陷，P4 在会话列表上踩过一次）。
    */
   searchToken: number;
+  onOpenView: (view: CanvasTabId) => void;
 };
 
 const UNAVAILABLE_GROUPS: Array<{ id: string; label: string; reason: string }> = [
@@ -120,7 +121,8 @@ export function useSearchGroups({
   onOpenProject,
   onOpenSession,
   onOpenManagementView,
-  searchToken
+  searchToken,
+  onOpenView
 }: SearchGroupSources): SearchGroup[] {
   const files = useFileSearchGroups(client, workspacePath, query);
 
@@ -295,7 +297,7 @@ export function useSearchGroups({
     // 「管理」 is a command group: the same three canvas views the drawer can open, reachable from ⌘K.
     const managementGroup: SearchGroup = {
       id: 'management',
-      label: '管理',
+      label: '工具与扩展',
       status: 'ready',
       emptyLabel: '没有匹配的管理入口',
       items: [
@@ -319,12 +321,18 @@ export function useSearchGroups({
     // Order mirrors the P1 palette: project-ish first, then the domain groups,
     // then files, then the later phases. Inserting at fixed positions keeps the
     // order stable even when a group is unavailable.
-    return [projectsGroup, literatureGroup, conceptGroup, sessionGroup, skillsGroup, managementGroup, ...fileGroups, ...unavailable];
+    const navigationGroup: SearchGroup = {
+      id: 'navigation', label: '导航', status: 'ready', items: projectId === null ? [] : canvasTabIds
+        .filter(id => trimmed.length === 0 || surfaceFor(id).label.includes(trimmed))
+        .map(id => ({id: `navigate:${id}`, title: surfaceFor(id).label, subtitle: '当前项目', onOpen: () => onOpenView(id)}))
+    };
+    return [navigationGroup, projectsGroup, literatureGroup, conceptGroup, sessionGroup, ...fileGroups, managementGroup, skillsGroup, ...unavailable];
   }, [
     concepts,
     conceptsLoaded,
     files,
     onOpenManagementView,
+    onOpenView,
     libraryItems,
     onOpenConcept,
     onOpenLiterature,

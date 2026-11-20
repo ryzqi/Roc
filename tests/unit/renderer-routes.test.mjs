@@ -1,50 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-
 import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 
-/**
- * Round-trip guard for the renderer URL contract.
- *
- * `routes.ts` is TypeScript with extension-less relative imports, so it is bundled before import —
- * `scripts/lib/bundle-ts.mjs` is that helper, shared with the other unit tests instead of the
- * `mkdtempSync` + `rmSync` copy each of them used to carry. No new test framework is introduced;
- * `node --test` is enough.
- *
- * Why this exists: the legacy shell made `view=changes` implicit while its parser defaulted to
- * `changes`, and the new shell initially inherited the implicit write while defaulting to
- * `overview`. That pair silently rewrote `changes -> overview` on every reload and orphaned
- * `tool=git`. The invariant enforced here is the one that failure violated.
- *
- * The native-menu mapping used to be tested here too. It moved: the page set and its meaning live in
- * `src/shared/surfaces.ts` (asserted in `surfaces.test.mjs`), and the part a route can carry is
- * `routeForMenuIntent` below. What remains here is the URL contract itself.
- */
-
 const routes = await importTypeScriptModule('src/renderer/app/routes.ts');
-/** Loaded separately because the menu assertions read the table itself, not only what routes re-exports. */
 const surfaces = await importTypeScriptModule('src/shared/surfaces.ts');
-
-const ALL_VIEWS = [
-  'literature',
-  'latex',
-  'terminal',
-  'mcp',
-  'skills',
-  'memory'
-];
-
-// `terminal` left the tool union: the terminal is a canvas tab, so `view=terminal` is what
-// selects it (a separate sticky marker could not also mean “close the Git drawer”).
-const ALL_TOOLS = [null, 'files', 'git'];
-/**
- * `?file=` no longer names a view — the canvas `files` view is gone and the sidebar tree reads the
- * parameter — so every view drops it. The sweep still varies it, because “dropped everywhere” is
- * the invariant now.
- */
+const ALL_VIEWS = ['overview', 'discover', 'library', 'knowledge', 'writing'];
+const ALL_TOOLS = [null, 'files', 'git', 'terminal', 'memory', 'skills', 'mcp', 'tasks'];
 const ALL_OPEN_FILES = [null, 'src/a.ts', '目录/含 空格.md'];
 
-/** Every route the app can actually construct: normalised inputs only. */
 function* allRoutes() {
   for (const page of ['research', 'settings']) {
     for (const projectId of [null, 'p1']) {
@@ -53,19 +16,11 @@ function* allRoutes() {
           for (const openFile of ALL_OPEN_FILES) {
             for (const assistantOpen of [false, true]) {
               for (const newProject of [false, true]) {
-                yield routes.normalizeAppRoute({
-                  page,
-                  projectId,
-                  view,
-                  tool,
-                  openFile,
-                  assistantOpen,
-                      newProject
-                    });
-                  }
-                }
+                yield routes.normalizeAppRoute({ page, projectId, view, tool, openFile, assistantOpen, newProject });
               }
             }
+          }
+        }
       }
     }
   }
@@ -75,144 +30,122 @@ function toSearch(route) {
   return new URLSearchParams(routes.appRouteToSearch(route));
 }
 
-test('parse(write(route)) preserves every field of a normalised route', () => {
-  const failures = [];
+const parse = search => routes.parseAppRoute(new URLSearchParams(search));
+
+test('parse(write(route)) preserves every canonical destination, tool and scope', () => {
   let checked = 0;
   for (const route of allRoutes()) {
+    assert.deepEqual(routes.parseAppRoute(toSearch(route)), route);
     checked += 1;
-    const reparsed = routes.parseAppRoute(toSearch(route));
-    if (!routes.sameAppRoute(route, reparsed)) {
-      failures.push({ route, reparsed });
-    }
   }
-  assert.equal(failures.length, 0, `round-trip failures: ${JSON.stringify(failures.slice(0, 3), null, 2)}`);
-  // 2 pages × 2 projects × 6 views × 3 tools × 3 open files × 2 × 2 = 864. The sweep used to be an
-  // order of magnitude wider: the stage-group dimension left with the stage surface, `tasks` with
-  // the task board, and `terminal` with the tool union.
-  assert.ok(checked > 800, `expected a broad sweep, checked only ${checked}`);
+  assert.equal(checked, 1920);
 });
 
-test('normalizeAppRoute is idempotent', () => {
-  for (const route of allRoutes()) {
-    assert.deepEqual(routes.normalizeAppRoute(routes.normalizeAppRoute(route)), route);
-  }
+test('normalization is idempotent', () => {
+  for (const route of allRoutes()) assert.deepEqual(routes.normalizeAppRoute(route), route);
 });
 
-test('a tool survives next to canvas views because it selects a drawer', () => {
-  for (const view of ['literature', 'latex']) {
-    for (const tool of ['git', 'files']) {
-      const route = routes.parseAppRoute(
-        new URLSearchParams(`page=research&project=p1&view=${view}&tool=${tool}`)
-      );
-      assert.equal(route.view, view, tool);
+test('terminal selects writing while other tools retain their project destination', () => {
+  for (const view of ALL_VIEWS) {
+    for (const tool of ALL_TOOLS.filter(Boolean)) {
+      const route = parse(`page=research&project=p1&view=${view}&tool=${tool}`);
+      assert.equal(route.view, tool === 'terminal' ? 'writing' : view);
       assert.equal(route.tool, tool);
-      assert.equal(toSearch(route).get('tool'), tool);
-      assert.ok(routes.sameAppRoute(route, routes.parseAppRoute(toSearch(route))));
+      assert.deepEqual(parse(toSearch(route)), route);
     }
   }
 });
 
-test('every menu intent either produces a round-tripping route or is the drawer one', () => {
-  // The producers are application-menu.ts, macos-host-service.ts and the open-settings handler;
-  // src/shared/surfaces.ts owns the closed list. Three of the four intents are route changes and
-  // must survive normalization from both a project route and the portal. 打开任务 is not routable at
-  // all, which `RoutableMenuIntent` enforces by excluding it — the old `routeForNavigate` expressed
-  // it as "return the current route", which `navigate` then dropped as a no-op.
-  const base = routes.parseAppRoute(new URLSearchParams('page=research&project=p1'));
-  const portal = routes.parseAppRoute(new URLSearchParams('page=research'));
-  let routable = 0;
+test('normalization opens the terminal in its writing host', () => {
+  const route = parse('page=research&project=p1&view=overview&file=main.tex&assistant=1');
+  const terminal = routes.normalizeAppRoute({...route, tool: 'terminal'});
+  assert.deepEqual(terminal, {...route, view: 'writing', tool: 'terminal'});
+  assert.deepEqual(parse(toSearch(terminal)), terminal);
+});
+
+test('previous-release bookmarks migrate once and preserve project, file and assistant', () => {
+  const migrations = [
+    ['latex', 'writing', null],
+    ['literature', 'library', null],
+    ['terminal', 'writing', 'terminal'],
+    ['memory', 'overview', 'memory'],
+    ['skills', 'overview', 'skills'],
+    ['mcp', 'overview', 'mcp']
+  ];
+  for (const [previous, view, tool] of migrations) {
+    const route = parse(`page=research&project=p1&view=${previous}&file=目录%2Fa%20b.tex&assistant=1`);
+    assert.deepEqual(route, {
+      page: 'research', projectId: 'p1', view, tool,
+      openFile: '目录/a b.tex', assistantOpen: true, newProject: false
+    });
+    assert.equal(toSearch(route).get('view'), view);
+    assert.deepEqual(parse(toSearch(route)), route);
+  }
+});
+
+test('an explicit tool in a legacy bookmark takes precedence over an inferred tool', () => {
+  const route = parse('page=research&project=p1&view=terminal&tool=git');
+  assert.equal(route.view, 'writing');
+  assert.equal(route.tool, 'git');
+  assert.equal(parse('page=research&project=p1&view=mcp&tool=invalid').tool, 'mcp');
+});
+
+test('settings preserves a migrated project route under the overlay', () => {
+  const route = parse('page=settings&project=p1&view=latex&file=main.tex&assistant=1');
+  assert.equal(route.page, 'settings');
+  assert.equal(route.view, 'writing');
+  assert.equal(route.openFile, 'main.tex');
+  assert.deepEqual(parse(toSearch(route)), route);
+});
+
+test('menu intents produce round-tripping routes and opening the assistant preserves the canvas', () => {
+  const base = parse('page=research&project=p1&view=writing&file=main.tex');
+  const portal = parse('page=research');
   for (const page of surfaces.menuPages) {
     const intent = surfaces.menuIntentForPage(page);
-    assert.notEqual(intent, null, page);
-    if (intent.kind === 'management') {
-      continue;
-    }
-    routable += 1;
+    if (intent.kind === 'management') continue;
     for (const from of [base, portal]) {
       const next = routes.routeForMenuIntent(intent, from);
-      assert.ok(
-        routes.sameAppRoute(next, routes.parseAppRoute(toSearch(next))),
-        `${page} does not round-trip`
-      );
+      assert.deepEqual(parse(toSearch(next)), next);
     }
   }
-  assert.equal(routable, 3, 'expected three routable menu intents');
+  const assistant = routes.routeForMenuIntent({kind: 'assistant'}, base);
+  assert.equal(assistant.view, 'writing');
+  assert.equal(assistant.openFile, 'main.tex');
+  assert.equal(assistant.assistantOpen, true);
 });
 
-test('no project means the portal: no view, tool, file or assistant leaks into the URL', () => {
-  const search = toSearch({
-    page: 'research',
-    projectId: null,
-    view: 'memory',
-    tool: 'git',
-    openFile: 'a.md',
-    assistantOpen: true,
-    newProject: false
+test('the portal drops project-only state, including migrated tools', () => {
+  const route = parse('page=research&view=memory&tool=terminal&file=main.tex&assistant=1');
+  assert.deepEqual(route, {
+    page: 'research', projectId: null, view: 'overview', tool: null,
+    openFile: null, assistantOpen: false, newProject: false
   });
-  assert.equal(search.get('view'), null);
-  assert.equal(search.get('tool'), null);
-  assert.equal(search.get('file'), null);
-  assert.equal(search.get('assistant'), null);
-  assert.equal(search.get('stage'), null);
-  assert.equal(search.get('project'), null);
+  const search = toSearch(route);
+  for (const key of ['view', 'tool', 'file', 'assistant', 'project']) assert.equal(search.get(key), null);
 });
 
-// 注：“无项目时 tool 被清掉”这条断言仍然在守：portal 态的顶栏根本没有 Git/文件抽屉可开。
-
-test('a missing view defaults to latex, the canvas default', () => {
-  assert.equal(routes.parseAppRoute(new URLSearchParams('page=research&project=p1')).view, 'latex');
+test('a project without a view opens the overview', () => {
+  assert.equal(parse('page=research&project=p1').view, 'overview');
 });
 
-test('an incoming ?stage= is ignored, never read and never re-written', () => {
-  // The stage surface is gone but the parameter is still tolerated: the native menu and any stale
-  // deep link keep working, and the URL is cleaned up on the next normalise rather than breaking.
-  const withStage = routes.parseAppRoute(new URLSearchParams('page=research&project=p1&stage=write&view=literature'));
-  assert.equal(withStage.view, 'literature');
-  assert.equal(toSearch(withStage).get('stage'), null);
+test('retired stage parameters are neither consumed nor written', () => {
+  const route = parse('page=research&project=p1&stage=write&view=library');
+  assert.equal(route.view, 'library');
+  assert.equal(toSearch(route).get('stage'), null);
 });
 
-test('a retired or parked view id falls back instead of leaking into the URL', () => {
-  // Everything except the three canvas tabs and the three management views has been
-  // retired (`overview`/`stage`/`activity`/`provenance`/`diagnostics` with the stage surface,
-  // `tasks` with the task board, `files`/`changes` with the view-to-drawer move). A bookmark to any
-  // of them must land somewhere real rather than render nothing.
-  //
-  // The parked domains (ADR 0024: 契约与数据库保留、界面删除) fall back **too**, and that is
-  // correct here: the parser has to answer deterministically for any input. The place
-  // that refuses them is the gate guard, which is where a wrong page would otherwise pass an
-  // assertion — see `surfaces.test.mjs`.
-  const retired = [
-    'overview',
-    'stage',
-    'activity',
-    'provenance',
-    'diagnostics',
-    'tasks',
-    'files',
-    'changes',
-    ...surfaces.PARKED_CAPABILITIES.map((parked) => parked.id)
-  ];
-  for (const id of retired) {
-    const parsed = routes.parseAppRoute(new URLSearchParams(`page=research&project=p1&view=${id}`));
-    assert.equal(parsed.view, routes.DEFAULT_VIEW, id);
+test('unsupported views normalize without becoming registered canvas destinations', () => {
+  for (const id of ['stage', 'activity', 'provenance', 'diagnostics', 'tasks', 'files', 'changes',
+    ...surfaces.PARKED_CAPABILITIES.map(parked => parked.id)]) {
+    assert.equal(routes.APP_VIEW_IDS.has(id), false);
+    assert.equal(parse(`page=research&project=p1&view=${id}`).view, routes.DEFAULT_VIEW);
   }
 });
 
-test('?file= is carried but names no view', () => {
-  // It is what the sidebar tree reveals and selects, so it must survive the URL round-trip...
-  const deepLink = routes.parseAppRoute(
-    new URLSearchParams('page=research&project=p1&view=literature&file=a%20b/%E7%9B%AE.md')
-  );
+test('file selection survives destination changes and blank paths normalize to null', () => {
+  const deepLink = parse('page=research&project=p1&view=library&file=a%20b/%E7%9B%AE.md');
   assert.equal(deepLink.openFile, 'a b/目.md');
-  assert.equal(toSearch(deepLink).get('file'), 'a b/目.md');
-  assert.ok(routes.sameAppRoute(deepLink, routes.parseAppRoute(toSearch(deepLink))));
-
-  // ...and it must not drag a view along: the canvas `files` host is gone.
-  const viaFiles = routes.parseAppRoute(new URLSearchParams('page=research&project=p1&view=files&file=a.md'));
-  assert.equal(viaFiles.view, routes.DEFAULT_VIEW);
-  assert.equal(viaFiles.openFile, 'a.md');
-
-  // Blank is nothing, not a path of spaces.
-  const blank = routes.parseAppRoute(new URLSearchParams('page=research&project=p1&file=%20%20'));
-  assert.equal(blank.openFile, null);
+  assert.deepEqual(parse(toSearch({...deepLink, view: 'writing'})), {...deepLink, view: 'writing'});
+  assert.equal(parse('page=research&project=p1&file=%20%20').openFile, null);
 });

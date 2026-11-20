@@ -299,6 +299,10 @@
   --font-mono: 'SFMono-Regular', Menlo, Monaco, monospace;
   --font-weight-medium: 400;
   --font-weight-semibold: 500;
+  --spacing-page: 24px;
+  --content-readable-max: 800px;
+  --nav-width: 232px;
+  --inspector-width: 320px;
   --font-body-size: 13px;
   --font-ui-size: 13px;
   --font-meta-size: 12px;

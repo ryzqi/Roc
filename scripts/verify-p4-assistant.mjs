@@ -95,7 +95,7 @@ async function openAssistant(page, projectId) {
   // 视图写死为 `latex`：这里需要的只是「进入项目 + 助手打开」，而 `latex` 是 `?view=` 缺省时的
   // 落点。之前是一个 `view = 'overview'` 的参数，而那个面在 P10 已删——导航被静默归一成 `latex`，
   // 而调用方只传两个参数，所以那个参数从来没用过。删掉它，而不是把默认值换成另一个面。
-  await navigate(page, `page=research&project=${projectId}&view=latex&assistant=1`);
+  await navigate(page, `page=research&project=${projectId}&view=writing&assistant=1`);
   await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 20_000 });
   await page.waitForSelector('[data-testid="assistant-composer-input"]', { timeout: 20_000 });
 }
@@ -715,7 +715,7 @@ try {
   if (!secondProject.ok) {
     fail('5 恢复', '创建项目 2', secondProject.error.message);
   }
-  await navigate(page, `page=research&project=${secondProject.data.id}&view=latex&assistant=1`);
+  await navigate(page, `page=research&project=${secondProject.data.id}&view=writing&assistant=1`);
   await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 20_000 });
   await page.waitForTimeout(500);
   // 切项目会清空 threadId，所以“看不到转录”必须是**主动**结果：助手还在、输入区可用、
@@ -732,7 +732,7 @@ try {
   );
   await page.click('[data-testid="sidebar-tab-sessions"]');
   const listedInSecondProject = await describeSessionList(page, threadId);
-  await navigate(page, `page=research&project=${projectId}&view=latex&assistant=1`);
+  await navigate(page, `page=research&project=${projectId}&view=writing&assistant=1`);
   await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 20_000 });
   await page.click('[data-testid="sidebar-tab-sessions"]');
   await waitForSessionRow(page, threadId, '5 恢复');
@@ -755,7 +755,7 @@ try {
   await verifyCrashCheckpointResume(threadId, projectId);
 
   // ---- 闸门 6：500 条消息时虚拟化仍生效 ----------------------------------------
-  await navigate(page, `page=research&project=${projectId}&view=latex&assistant=1`);
+  await navigate(page, `page=research&project=${projectId}&view=writing&assistant=1`);
   await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 20_000 });
   const seeding = await seedManyRuns(page, { threadId, projectId, runs: gate6Runs });
   assertCheck(

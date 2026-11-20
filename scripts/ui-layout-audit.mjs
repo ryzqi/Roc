@@ -44,11 +44,12 @@ const smokeApiKey = 'smoke-test-key';
 
 const VIEWPORTS = [
   { id: 'wide', width: 1440, height: 900 },
-  { id: 'columns-edge', width: 1100, height: 820 },
-  { id: 'drawers-edge', width: 1099, height: 820 },
+  { id: 'columns-edge', width: 1200, height: 820 },
+  { id: 'drawers-edge', width: 1199, height: 820 },
+  { id: 'native-minimum', width: 1184, height: 820 },
   { id: 'narrow', width: 720, height: 760 },
   { id: 'small', width: 380, height: 760 },
-  { id: 'short', width: 1100, height: 540 }
+  { id: 'short', width: 1200, height: 540 }
 ];
 
 async function capture(page, id) {
@@ -85,6 +86,15 @@ async function navigate(page, search) {
     window.history.pushState({}, '', url);
     window.dispatchEvent(new PopStateEvent('popstate'));
   }, search);
+}
+
+async function selectDestination(page, view) {
+  const navigation = page.getByTestId(`sidebar-nav-${view}`);
+  if (!await navigation.isVisible()) await page.getByTestId('titlebar-toggle-sidebar').click();
+  await navigation.click();
+  await page.getByTestId('sidebar-drawer').waitFor({state: 'detached'});
+  await page.waitForFunction(destination =>
+    document.querySelector('[data-testid="literature-hub"]')?.getAttribute('data-workspace') === destination, view);
 }
 
 async function assertControlVisible(control) {
@@ -265,7 +275,7 @@ try {
     await page.getByTestId('project-form-cancel').click();
     await page.getByTestId('portal-create-dialog-panel').waitFor({state: 'detached'});
 
-    await navigate(page, `${projectQuery}&view=latex`);
+    await navigate(page, `${projectQuery}&view=writing`);
     await page.waitForSelector('[data-testid="canvas"]', { timeout: 15_000 });
     await capture(page, `canvas-${viewport.id}`);
 
@@ -343,17 +353,23 @@ try {
       await page.getByTestId('sidebar-drawer-close').click();
       await sidebarDrawer.waitFor({state: 'detached'});
     }
-    for (const view of ['memory', 'skills', 'mcp', 'terminal', 'literature']) {
-      await navigate(page, `${projectQuery}&view=${view}`);
-      await page.getByTestId(view === 'literature' ? 'literature-hub' : view === 'terminal' ? 'terminal-view' : `mgmt-view-panel-${view}`).waitFor({state: 'visible'});
-      await capture(page, `view-${view}-${viewport.id}`);
+    await navigate(page, `${projectQuery}&view=writing&tool=terminal`);
+    await page.getByTestId('terminal-view').waitFor({state: 'visible'});
+    await capture(page, `terminal-${viewport.id}`);
+    for (const {view, tabs} of [
+      {view: 'library', tabs: ['reader', 'notes']},
+      {view: 'discover', tabs: ['radar', 'monitors']},
+      {view: 'knowledge', tabs: ['rag', 'wiki', 'graph']}
+    ]) {
+      await selectDestination(page, view);
+      for (const tab of tabs) {
+        await page.getByTestId(`literature-subview-${tab}`).click();
+        await page.getByTestId(`literature-panel-${tab}`).waitFor({state: 'visible'});
+        await assertControlVisible(page.getByTestId('literature-hub-import'));
+        await capture(page, `${view}-${tab}-${viewport.id}`);
+      }
     }
-    for (const tab of ['reader', 'notes', 'radar', 'rag', 'wiki', 'graph', 'monitors']) {
-      await page.getByTestId(`literature-subview-${tab}`).click();
-      await page.getByTestId(`literature-panel-${tab}`).waitFor({state: 'visible'});
-      await assertControlVisible(page.getByTestId('literature-hub-import'));
-      await capture(page, `literature-${tab}-${viewport.id}`);
-    }
+    await selectDestination(page, 'library');
     await page.getByTestId('literature-hub-import').click();
     await page.getByTestId('literature-import-dialog-panel').waitFor();
     await page.getByTestId('literature-import-tab-manual').click();
@@ -365,7 +381,7 @@ try {
 
     // 助手在宽窗是**中列**（左栏 | 助手 | 画布，见 ADR 0023），在窄窗是抽屉；
     // 两种形态都要审。
-    await navigate(page, `${projectQuery}&view=latex&assistant=1`);
+    await navigate(page, `${projectQuery}&view=writing&assistant=1`);
     await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 15_000 });
     await page.waitForSelector('[data-testid="assistant-composer-input"]', { timeout: 15_000 });
     const layout = await page.evaluate(() => ({
@@ -375,14 +391,14 @@ try {
       sidebarDrawer: document.querySelector('[data-testid="sidebar-drawer"]') !== null,
       assistantDrawer: document.querySelector('[data-testid="assistant-drawer"]') !== null
     }));
-    const expectedMode = viewport.width < 1100 ? 'drawers' : 'columns';
+    const expectedMode = viewport.width < 1200 ? 'drawers' : 'columns';
     if (layout.mode !== expectedMode) {
       throw new Error(`assistant layout mode ${layout.mode} at ${viewport.width}px; expected ${expectedMode}`);
     }
-    if (viewport.width < 1100 && (layout.sidebarColumn || layout.assistantColumn || !layout.sidebarDrawer || !layout.assistantDrawer)) {
+    if (viewport.width < 1200 && (layout.sidebarColumn || layout.assistantColumn || !layout.sidebarDrawer || !layout.assistantDrawer)) {
       throw new Error(`assistant drawers are incomplete at ${viewport.width}px: ${JSON.stringify(layout)}`);
     }
-    if (viewport.width >= 1100 && (!layout.sidebarColumn || !layout.assistantColumn || layout.sidebarDrawer || layout.assistantDrawer)) {
+    if (viewport.width >= 1200 && (!layout.sidebarColumn || !layout.assistantColumn || layout.sidebarDrawer || layout.assistantDrawer)) {
       throw new Error(`assistant columns are incomplete at ${viewport.width}px: ${JSON.stringify(layout)}`);
     }
     await capture(page, `assistant-${viewport.id}`);
@@ -422,7 +438,7 @@ try {
     await composerInput.fill('');
 
     // Native menu navigation remains reachable while ambient drawers cover the titlebar.
-    await navigate(page, `page=settings&project=${project.id}&view=latex&assistant=1`);
+    await navigate(page, `page=settings&project=${project.id}&view=writing&assistant=1`);
     await page.waitForSelector('[data-testid="settings-modal-panel"]', { timeout: 15_000 });
     await page.keyboard.press('Tab');
     assert.equal(await page.getByTestId('settings-modal-panel').evaluate(panel => panel.contains(document.activeElement)), true);
@@ -473,7 +489,7 @@ try {
   await browserWindow.evaluate(window => window.setBounds({...window.getBounds(), width: 1440, height: 900}));
   await page.setViewportSize({width: 1440, height: 900});
   await page.evaluate(() => window.dispatchEvent(new Event('resize')));
-  await navigate(page, `${projectQuery}&view=latex&assistant=1`);
+  await navigate(page, `${projectQuery}&view=writing&assistant=1`);
   await page.getByTestId('assistant-panel').waitFor();
   await capture(page, 'normal-motion-default');
   await page.getByTestId('assistant-model-settings').hover();
@@ -483,7 +499,7 @@ try {
   await capture(page, 'normal-motion-expanded');
   await page.keyboard.press('Escape');
   await page.getByTestId('assistant-model-picker').waitFor({state: 'detached'});
-  await navigate(page, `page=settings&project=${project.id}&view=latex&assistant=1`);
+  await navigate(page, `page=settings&project=${project.id}&view=writing&assistant=1`);
   await page.getByTestId('settings-modal-panel').waitFor();
   await capture(page, 'normal-motion-final-position');
   await page.keyboard.press('Escape');

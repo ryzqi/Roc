@@ -12,7 +12,7 @@ const results=[];mkdirSync('.artifacts/reading-radar',{recursive:true});
 try{
  const page=await app.firstWindow();await page.waitForSelector('[data-testid="roc-app"]');
  const project=await page.evaluate(async workspacePath=>{const result=await window.roc.research.createProject({title:'Live radar acceptance',description:'Public sources',workspacePath});if(!result.ok)throw new Error(result.error.message);return result.data;},paths.workspaceRoot);
- await navigate(page,`page=research&project=${project.id}&view=literature`);
+ await navigate(page,`page=research&project=${project.id}&view=library`);
  await page.getByRole('tab',{name:'学术雷达',exact:true}).click();
  for(const [source,label,origin] of [['cool','Cool Papers','https://papers.cool'],['modelscope','魔搭论文','https://modelscope.cn']]){
   try{

@@ -124,7 +124,7 @@ function readStringList(key: UiStateKey): string[] {
 /* Layout                                                              */
 /* ------------------------------------------------------------------ */
 
-export const SIDEBAR_WIDTH = { min: 180, max: 400, default: 256 } as const;
+export const SIDEBAR_WIDTH = { min: 180, max: 400, default: 232 } as const;
 export const ASSISTANT_WIDTH = { min: 280, default: 440 } as const;
 
 export function readSidebarWidth(): number {

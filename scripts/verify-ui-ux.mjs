@@ -33,7 +33,7 @@ try {
   const project = await page.evaluate(async workspacePath => window.roc.research.createProject({ title: 'UI acceptance', description: 'UI UX acceptance project', workspacePath }), paths.workspaceRoot);
   console.log('fixture', paths.dataRoot);
   if (!project.ok) throw new Error(project.error.message);
-  await navigate(page, `page=research&project=${project.data.id}&view=latex`);
+  await navigate(page, `page=research&project=${project.data.id}&view=writing`);
   async function audit(state) {
     if (!process.env.ROC_CLIP_AUDIT) return;
     const source = readFileSync(process.env.ROC_CLIP_AUDIT, 'utf8');
@@ -118,22 +118,26 @@ try {
     });
   }
   if (process.env.ROC_UI_PHASE === 'transitions') {
-    await check('Canvas switches preserve editor and terminal instances', async () => {
+    await check('Writing tools and destination switches preserve editor and terminal instances', async () => {
       await editor.evaluate(el => { el.dataset.instance = 'original-editor'; });
-      await page.getByTestId('canvas-tab-terminal').click();
+      await page.getByTestId('sidebar-terminal').click();
       const terminal = page.getByTestId('terminal-xterm');
       await terminal.waitFor();
       await terminal.evaluate(el => { el.dataset.instance = 'original-terminal'; });
       await terminal.click(); await page.keyboard.type('echo ROC_KEEP_SESSION'); await page.keyboard.press('Enter');
       await expect(page.locator('.xterm-rows')).toContainText('ROC_KEEP_SESSION');
-      await page.getByTestId('canvas-tab-latex').click();
+      await page.getByTestId('sidebar-nav-writing').click();
       await expect(editor).toBeVisible(); await expect(editor).toHaveAttribute('data-instance', 'original-editor');
       await expect(editor).toHaveText('keyboard save');
-      await page.getByTestId('canvas-tab-terminal').click();
+      await page.getByTestId('sidebar-terminal').click();
       await expect(terminal).toHaveAttribute('data-instance', 'original-terminal');
       await expect(page.locator('.xterm-rows')).toContainText('ROC_KEEP_SESSION');
-      await page.getByTestId('canvas-tab-latex').click();
+      await page.getByTestId('sidebar-nav-writing').click();
       await expect(editor).toBeVisible();
+      await page.getByTestId('sidebar-nav-library').click();
+      await expect(page.getByTestId('literature-hub')).toHaveAttribute('data-workspace', 'library');
+      await page.getByTestId('sidebar-nav-writing').click();
+      await expect(editor).toHaveAttribute('data-instance', 'original-editor');
     });
     await check('Warm switches have no blank exit phase, including reduced motion', async () => {
       await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -146,8 +150,13 @@ try {
         window.__canvasObserver = new MutationObserver(inspect);
         window.__canvasObserver.observe(document.querySelector('[data-testid="canvas"]'), { subtree: true, attributes: true, childList: true });
       });
-      await page.getByTestId('canvas-tab-terminal').click();
-      await page.getByTestId('canvas-tab-latex').click();
+      await page.getByTestId('sidebar-terminal').click();
+      await expect(page.getByTestId('terminal-xterm')).toBeVisible();
+      await page.getByTestId('sidebar-nav-writing').click();
+      await page.getByTestId('sidebar-nav-library').click();
+      await expect(page.getByTestId('literature-hub')).toBeVisible();
+      await page.getByTestId('sidebar-nav-writing').click();
+      await expect(editor).toBeVisible();
       expect(await page.evaluate(() => { window.__canvasObserver.disconnect(); return window.__canvasGaps; })).toEqual([]);
       await expect(editor).toHaveAttribute('data-instance', 'original-editor');
     });
@@ -158,10 +167,10 @@ try {
       writeFileSync(join(otherPath, 'main.tex'), 'other project content');
       const other = await page.evaluate(workspacePath => window.roc.research.createProject({ title: 'Other', description: 'Other project', workspacePath }), otherPath);
       expect(other.ok).toBe(true);
-      await navigate(page, `page=research&project=${other.data.id}&view=latex`);
+      await navigate(page, `page=research&project=${other.data.id}&view=writing`);
       await page.getByTestId('production-latex-no-file').waitFor(); await file('main.tex').click();
       await expect(editor).toHaveText('other project content');
-      await navigate(page, `page=research&project=${project.data.id}&view=latex`);
+      await navigate(page, `page=research&project=${project.data.id}&view=writing`);
       await page.getByTestId('production-latex-no-file').waitFor(); await file('main.tex').click();
       await expect(editor).toHaveText('keyboard save');
     });
@@ -175,9 +184,9 @@ try {
     await modal.getByRole('button', { name: '取消', exact: true }).click();
   });
   await check('Canvas navigation cancelled keeps route and draft', async () => {
-    await navigate(page, `page=research&project=${project.data.id}&view=literature`);
+    await navigate(page, `page=research&project=${project.data.id}&view=library`);
     await expect(modal).toBeVisible(); await modal.getByRole('button', { name: '取消', exact: true }).click();
-    await expect(editor).toHaveText('must survive failed write'); expect(page.url()).toContain('view=latex');
+    await expect(editor).toHaveText('must survive failed write'); expect(page.url()).toContain('view=writing');
   });
   await check('Window unload is blocked until decision', async () => {
     await app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].webContents.reload(); });
@@ -213,7 +222,7 @@ try {
   if (process.env.ROC_UI_PHASE === 'drawers') {
     await check('Drawer shells survive closing for complete exit', async () => {
       await app.evaluate(({ BrowserWindow }) => { const w = BrowserWindow.getAllWindows()[0]; w.setMinimumSize(800, 600); w.setSize(980, 760); });
-      await navigate(page, `page=research&project=${project.data.id}&view=latex&assistant=1`);
+      await navigate(page, `page=research&project=${project.data.id}&view=writing&assistant=1`);
       await page.getByTestId('assistant-drawer-close').click();
       await expect(page.getByTestId('assistant-drawer')).toHaveCount(1);
       await expect(page.getByTestId('assistant-drawer')).toHaveCount(0);
@@ -234,32 +243,43 @@ try {
     });
   }
   if (process.env.ROC_UI_PHASE === 'literature') {
-    await navigate(page, `page=research&project=${project.data.id}&view=literature`);
-    await check('Literature tabs activate, wrap and move focus with arrows/Home/End', async () => {
-      const reader = page.getByTestId('literature-subview-reader');
-      await reader.click(); await reader.press('ArrowRight');
-      await expect(page.getByTestId('literature-subview-rag')).toBeFocused();
-      await expect(page.getByTestId('literature-subview-rag')).toHaveAttribute('aria-selected', 'true');
-      await page.keyboard.press('End'); await expect(page.getByTestId('literature-subview-graph')).toBeFocused();
-      await page.keyboard.press('ArrowRight'); await expect(reader).toBeFocused();
-      await page.keyboard.press('ArrowLeft'); await expect(page.getByTestId('literature-subview-graph')).toBeFocused();
-      await page.keyboard.press('Home'); await expect(reader).toBeFocused();
+    await navigate(page, `page=research&project=${project.data.id}&view=library`);
+    await check('Each research destination exposes keyboard-operable local tabs', async () => {
+      for (const {view, tabs} of [
+        {view: 'library', tabs: ['reader', 'notes']},
+        {view: 'discover', tabs: ['radar', 'monitors']},
+        {view: 'knowledge', tabs: ['rag', 'wiki', 'graph']}
+      ]) {
+        await page.getByTestId(`sidebar-nav-${view}`).click();
+        await expect(page.getByTestId('literature-hub')).toHaveAttribute('data-workspace', view);
+        const first = page.getByTestId(`literature-subview-${tabs[0]}`);
+        const next = page.getByTestId(`literature-subview-${tabs[1]}`);
+        const last = page.getByTestId(`literature-subview-${tabs.at(-1)}`);
+        await first.click(); await first.press('ArrowRight');
+        await expect(next).toBeFocused(); await expect(next).toHaveAttribute('aria-selected', 'true');
+        await page.keyboard.press('End'); await expect(last).toBeFocused();
+        await page.keyboard.press('ArrowRight'); await expect(first).toBeFocused();
+        await page.keyboard.press('ArrowLeft'); await expect(last).toBeFocused();
+        await page.keyboard.press('Home'); await expect(first).toBeFocused();
+      }
     });
-    await check('Search query survives reading and navigation list toggles at narrow widths', async () => {
+    await check('Knowledge query survives reading and the library list remains controllable', async () => {
+      await page.getByTestId('sidebar-nav-knowledge').click();
       await page.getByTestId('literature-subview-rag').click();
       await page.getByTestId('rag-query').fill('persistent research query');
+      await page.getByTestId('sidebar-nav-library').click();
       await page.getByTestId('literature-subview-reader').click();
-      await page.getByTestId('literature-subview-rag').click();
-      await expect(page.getByTestId('rag-query')).toHaveValue('persistent research query');
       const toggle = page.getByTestId('literature-toggle-navigation');
       if (await toggle.getAttribute('aria-expanded') === 'true') await toggle.click();
       await expect(page.locator('#literature-navigation')).toBeHidden();
       await toggle.click(); await expect(page.locator('#literature-navigation')).toBeVisible();
       await page.screenshot({ path: join(artifact, 'navigation.png') });
+      await page.getByTestId('sidebar-nav-knowledge').click();
+      await expect(page.getByTestId('rag-query')).toHaveValue('persistent research query');
     });
   }
   if (process.env.ROC_UI_PHASE === 'preferences') {
-    await navigate(page, `page=research&project=${project.data.id}&view=latex`);
+    await navigate(page, `page=research&project=${project.data.id}&view=writing`);
     await file('refs.bib').click();
     await page.getByTestId('titlebar-settings').click();
     await page.getByTestId('settings-section-app').click();

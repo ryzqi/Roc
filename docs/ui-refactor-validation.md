@@ -13,3 +13,11 @@ macOS 27.2.1 arm64，Electron 45，基线提交 `dd7511a`。隔离数据根启�
 导航诊断仅在当前窗口内存保留最近 500 个事件，记录页面类别和相对耗时，不含项目标识、查询、文件路径或凭据，不自动上传。任务事件继续使用实际运行事件；本地诊断不构成第二套任务状态。
 
 用户访谈、T1–T3 真实外部服务任务、SUS 与灰度发布尚无证据；工程检查不能代替这些验收。临时截图和隔离运行数据在检查后清理，不进入版本库。
+
+## P2 壳体与系统
+
+五目的地、工作台、集中旧深链迁移、写作内终端、共享文献宿主与 1200px 抽屉阈值已接入。仓库根 `pnpm build`、`pnpm check:renderer-chunks`、设计规则审计通过；eager JS 482999 bytes / 10 files。
+
+`node --test tests/unit/renderer-routes.test.mjs tests/unit/surfaces.test.mjs`：29/29，通过 1920 路由组合。`node --test --test-concurrency=1 tests/renderer/canvas-view-loading.test.mjs tests/renderer/literature-workspace-layout.test.mjs`：10/10，覆盖共享宿主与草稿保留。
+
+隔离 Electron 实窗完成默认工作台、冷入口导入、五目的地、终端、管理深链、1280px 列布局及 1184px 抽屉检查；浅/深主题无 pageerror、无横溢出，`clip.cut=0`。

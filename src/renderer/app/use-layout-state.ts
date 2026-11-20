@@ -32,21 +32,10 @@ import {
 /** Width the canvas must retain when sizing the assistant. */
 const CANVAS_MIN_WIDTH = 360;
 
-/**
- * Breakpoint policy.
- *
- * The window's own minimum is 1184px (`src/main/window-shell.ts`), so `drawers`
- * is not reachable by user resizing today — it appears only if that minimum is
- * ever lowered (the layout audit also exercises it via `setBounds`). It is
- * implemented rather than left as a TODO so a narrower window degrades into
- * drawers instead of collapsing the canvas.
- *
- * The "assistant collapsed by default" case needs no mode of its own: the
- * assistant already defaults to closed because `?assistant` is absent.
- */
+/** Drawers are reachable at the native 1184px minimum window width. */
 export type LayoutMode = 'columns' | 'drawers';
 
-const DRAWER_THRESHOLD = 1100;
+const DRAWER_THRESHOLD = 1200;
 
 export function layoutModeForWidth(width: number): LayoutMode {
   return width < DRAWER_THRESHOLD ? 'drawers' : 'columns';
