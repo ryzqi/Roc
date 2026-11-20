@@ -11,6 +11,7 @@ import {formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-u
 import {formatBeijingDateTime} from '../shared/format';
 import {useViewActive} from '../shared/view-activity';
 import {projectStatusLabel} from './project-store';
+import {FirstSteps} from './FirstSteps';
 
 const rowClass = 'flex min-h-12 w-full min-w-0 items-center gap-3 rounded-control px-3 py-3 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent';
 const sectionClass = 'grid min-w-0 gap-3 border-t-[0.5px] border-line pt-4';
@@ -89,6 +90,11 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
       {project.error === null ? null : <ErrorBar error={{level: 'page', message: project.error, retry: project.reload}}/>}
       {scope.workspaceError === null ? null : <ErrorBar error={{level: 'blocked', message: scope.workspaceError, retry: scope.rebindWorkspace}}/>}
       {!scope.writable ? <p role="note" className="text-muted">项目已归档，现有文献与成果仍可查看。</p> : null}
+
+      {scope.firstStepsVisible ? <FirstSteps writable={scope.writable} requestId={scope.firstStepsRequestId} onDismiss={scope.dismissFirstSteps}
+        onDiscover={() => scope.openView('discover')} onImport={addLiterature}
+        onRead={() => scope.openLiterature({kind: 'reader', libraryItemId: literature.selectedId})}
+        onAsk={scope.openAssistant} onWrite={() => scope.openView('writing')}/> : null}
 
       <section className={sectionClass} aria-labelledby="overview-task-heading">
         <header className="flex items-center justify-between gap-3">

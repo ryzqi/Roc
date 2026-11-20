@@ -144,7 +144,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
                           data-testid={`mgmt-skill-origin-${skill.id}`}
                         >
                           {skill.origin === 'builtin'
-                            ? `内置 · ${skill.sourceId ?? 'Roc'}`
+                            ? <>内置<span className="ml-2">{skill.sourceId ?? 'Roc'}</span></>
                             : '用户导入'}
                         </span>
                       </span>
@@ -227,7 +227,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
       </FormSection>
 
       <details className="management-disclosure" data-testid="mgmt-skills-sources">
-        <summary data-testid="mgmt-skills-sources-toggle">内置技能源与更新{builtin.error || builtin.check.error || builtinSnapshot?.sources.some(source => source.lastError) ? ' · 需处理' : ''}</summary>
+        <summary data-testid="mgmt-skills-sources-toggle">内置技能源与更新{builtin.error || builtin.check.error || builtinSnapshot?.sources.some(source => source.lastError) ? <span className="ml-2">需处理</span> : null}</summary>
       <FormSection
         title="内置技能源"
         testId="mgmt-skills-builtin"

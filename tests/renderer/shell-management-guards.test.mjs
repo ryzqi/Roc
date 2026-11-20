@@ -21,6 +21,10 @@ before(async () => {
       import {AppShell} from './src/renderer/app/AppShell';
       import {BEFORE_NAVIGATE} from './src/renderer/app/navigation-guard';
       import {BEFORE_ARTIFACT_CHANGE} from './src/renderer/artifacts/artifact-interactions';
+      import {readOnboardingDismissed} from './src/renderer/app/ui-state';
+      import {exportUxMetrics} from './src/renderer/app/ux-metrics';
+      window.onboardingDismissed=readOnboardingDismissed;
+      window.uxMetrics=()=>JSON.parse(exportUxMetrics());
       const ok = data => ({ok: true, data});
       const task = id => ({id, projectId: 'project-a', goal: id, status: 'active', statusReason: null,
         updatedAt: '2026-11-20T00:00:00.000Z'});
@@ -121,9 +125,14 @@ before(async () => {
           '/app/ViewContent.tsx': `import React from 'react';
             import {useWorkspaceScope} from './workspace-scope';
             import {useManagement} from '../management/management-scope';
+            import {FirstSteps} from '../project/FirstSteps';
             export function ViewContent(props) {
-              window.workspaceEntries = useWorkspaceScope(); window.managementEntries = useManagement();
-              return <section data-testid="shell-canvas-content">{props.view}</section>;
+              const scope=useWorkspaceScope();window.workspaceEntries = scope;window.managementEntries = useManagement();
+              return <><section data-testid="shell-canvas-content">{props.view}</section>
+                {props.view==='overview' && scope.firstStepsVisible ? <FirstSteps writable requestId={scope.firstStepsRequestId}
+                  onDismiss={scope.dismissFirstSteps} onDiscover={()=>scope.openView('discover')}
+                  onImport={()=>scope.openView('library')} onRead={()=>scope.openView('library')}
+                  onAsk={scope.openAssistant} onWrite={()=>scope.openView('writing')}/> : null}</>;
             }`,
           '/assistant/AssistantPanel.tsx': `import React from 'react';
             export function AssistantPanel(props) {window.assistantEntries = props;
@@ -299,6 +308,39 @@ test('titlebar and workspace task entries open the same task center without repl
   await expect(page.getByTestId('mgmt-task-center')).toBeVisible();
   await expect(page.getByTestId('management-panel')).toHaveCount(1);
   await expect(page.getByTestId('shell-canvas-content')).toHaveText('writing');
+});
+
+test('first steps can be skipped, persist only dismissal and reopen after navigation accepts',async()=>{
+  await page.evaluate(()=>mount('overview'));
+  await expect(page.getByTestId('overview-first-steps')).toBeVisible();
+  await expect(page.getByTestId('overview-first-steps').locator('ol > li')).toHaveCount(3);
+  await page.getByTestId('overview-first-steps-skip').click();
+  await expect(page.getByTestId('overview-first-steps')).toHaveCount(0);
+  assert.equal(await page.evaluate(()=>window.onboardingDismissed()),true);
+  const dismissal=await page.evaluate(()=>window.uxMetrics().events.filter(event=>event.event==='onboarding_dismissed'));
+  assert.equal(dismissal.length,1);
+  assert.deepEqual(Object.keys(dismissal[0]).sort(),['elapsedMs','event','surface']);
+  assert.equal(dismissal[0].surface,'overview');
+
+  await page.evaluate(()=>mount('writing'));
+  await expect(page.getByTestId('titlebar-help')).toBeVisible();
+  await page.evaluate(()=>setVeto('navigation',true));
+  await page.getByTestId('titlebar-help').click();
+  await expect(page.getByTestId('shell-canvas-content')).toHaveText('writing');
+  assert.equal(await page.evaluate(()=>window.workspaceEntries.firstStepsVisible),false);
+  await page.evaluate(()=>setVeto('navigation',false));
+  await page.getByTestId('titlebar-help').click();
+  await expect(page.getByTestId('overview-first-steps')).toBeVisible();
+  await expect(page.locator('#overview-first-steps-heading')).toBeFocused();
+  assert.equal(await page.evaluate(()=>window.onboardingDismissed()),true);
+  await page.evaluate(()=>setVeto('navigation',true));
+  await page.getByTestId('overview-first-steps-discover').click();
+  await expect(page.getByTestId('shell-canvas-content')).toHaveText('overview');
+  await page.evaluate(()=>setVeto('navigation',false));
+  await page.getByTestId('overview-first-steps-discover').click();
+  await expect(page.getByTestId('shell-canvas-content')).toHaveText('discover');
+  await page.evaluate(()=>mount('overview'));
+  await expect(page.getByTestId('overview-first-steps')).toHaveCount(0);
 });
 
 async function openGit() {

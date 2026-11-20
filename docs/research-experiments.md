@@ -41,7 +41,7 @@ R/Julia 环境身份包含解释器、包元数据、锁文件及声明代码树
 
 阶段 Agent 的写工具绑定当前项目和实际 owner，脚本修改须传 `expectedHash`。取消/替换阶段后拒绝迟到写入及发布；阶段输出必须关联本次运行链真实发布工件，元数据不能代替执行。失败记录保留，重试接续来源；完整所有权合同见 [ADR 0028](adr/0028-execution-task-ownership.md)。
 
-实验域没有独立阶段页面（[ADR 0024](adr/0024-stage-surface-removed.md)）：对话代理调用 `research.experiment.startOwned` / `publishOwned`，日志、来源和指标审核在[工件检查器](research-artifact-inspector.md)展示。旧 `?view=experiments` 回到默认 LaTeX。Python 环境选择位于管理任务区，由用户发起；`inspectExperimentEnvironment` 提供真实预检。原生包代码身份被完整核对，但运行时和包原件不因此全部随实验打包。
+实验域没有独立阶段页面（[ADR 0024](adr/0024-stage-surface-removed.md)）：对话代理调用 `research.experiment.startOwned` / `publishOwned`，日志、来源和指标审核在[工件检查器](research-artifact-inspector.md)展示。旧 `?view=experiments` 回到默认工作台。Python 环境选择位于管理任务区，由用户发起；`inspectExperimentEnvironment` 提供真实预检。原生包代码身份被完整核对，但运行时和包原件不因此全部随实验打包。
 
 修改 R 进程适配器时，构建机需要 macOS 的 Command Line Tools；以下命令只构建 arm64 库，并更新源码与二进制哈希。应用运行时直接使用已构建资源。
 

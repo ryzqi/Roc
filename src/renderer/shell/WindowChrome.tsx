@@ -1,4 +1,4 @@
-import { ArrowLeft, Bot, ClipboardList, GitBranch, PanelLeft, PanelLeftClose, Search, Settings, Sliders } from 'lucide-react';
+import { ArrowLeft, Bot, CircleHelp, ClipboardList, GitBranch, PanelLeft, PanelLeftClose, Search, Settings, Sliders } from 'lucide-react';
 
 /**
  * The one global toolbar.
@@ -40,6 +40,7 @@ export type WindowChromeProps = {
   onOpenManagement: () => void;
   onOpenTasks: () => void;
   onOpenSettings: () => void;
+  onOpenHelp: () => void;
   /** Current git branch, when a project workspace is bound (P3). */
   branchLabel?: string | null;
   taskLabel: string;
@@ -65,6 +66,7 @@ export function WindowChrome({
   onOpenManagement,
   onOpenTasks,
   onOpenSettings,
+  onOpenHelp,
   branchLabel = null,
   taskLabel,
   taskSummary
@@ -207,6 +209,11 @@ export function WindowChrome({
           <GitBranch size={13} aria-hidden="true" className="text-[var(--icon-git)]" />
           <span>Git</span>
         </button>
+
+        {inProject ? <button type="button" onClick={onOpenHelp} aria-label="打开开始引导" title="开始引导"
+          data-testid="titlebar-help" className={ICON_BUTTON}>
+          <CircleHelp size={14} aria-hidden="true"/>
+        </button> : null}
 
         <button
           type="button"

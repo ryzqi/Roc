@@ -14,6 +14,10 @@ macOS 27.2.1 arm64，Electron 45，基线提交 `dd7511a`。隔离数据根启�
 
 用户访谈、T1–T3 真实外部服务任务、SUS 与灰度发布尚无证据；工程检查不能代替这些验收。临时截图和隔离运行数据在检查后清理，不进入版本库。
 
+## P1 信息架构与设计契约
+
+[设计契约](design-system.md)固定五目的地、对象与动作归属、十个关键状态的文字线框、集中旧深链迁移、抽屉与原生窗口边界及组件 Do/Don't。复用现有 token、组件和单壳，草稿与业务事实保持原有权威来源。文档与本地引用已检查；这些线框未冒充真人可用性测试结论。
+
 ## P2 壳体与系统
 
 五目的地、工作台、集中旧深链迁移、写作内终端、共享文献宿主与 1200px 抽屉阈值已接入。仓库根 `pnpm build`、`pnpm check:renderer-chunks`、设计规则审计通过；eager JS 482999 bytes / 10 files。
@@ -52,3 +56,35 @@ macOS 27.2.1 arm64，Electron 45，基线提交 `dd7511a`。隔离数据根启�
 - `node --test tests/renderer/native-state-guards.test.mjs`：7/7，原生窗口与项目绑定保护。已删除被任务中心替代的顶栏轮询 hook。
 - `node --test tests/renderer/assistant-panel-guards.test.mjs`：15/15，IME、草稿隔离、停止、检查点恢复和三类审批。
 - `node --test tests/renderer/research-tasks.test.mjs`：23 项均通过；首次 20/23，更新阶段文案断言和原生折叠展开等待后定向 3/3。覆盖真实成果、停止清理、恢复能力、诊断与草稿保护。
+
+## P6 引导、可读性与交付检查
+
+工作台加入三步内联引导，可跳过并从帮助重开，沿用导航守卫。只保存版本化关闭偏好，不保存业务进度。设置提供本次窗口匿名诊断的显式复制出口；复制失败可重试，提交中锁定按钮。界面中点分隔文案已移除。
+
+弱化文字使用同一语义 token 修正。按 sRGB 相对亮度计算：暗色 `#909099` 在最弱的已检查面板 `#27272a` 上为 4.71:1；浅色 muted `#596579`、subtle `#606774` 在 `#e2e8f0` 上分别为 4.78:1、4.62:1。该结果限定这些文字/背景组合，不等同整应用 WCAG 认证。
+
+以下命令均在仓库根 `/Users/Apple_501/Desktop/Roc/Roc` 执行：
+
+- `pnpm build`、`pnpm typecheck`、`pnpm check:ipc`：通过。
+- `pnpm check:renderer-chunks`：493155 bytes / 10 eager files，低于 500000 bytes 预算；相对 P0 增加约 2.4%。大型编辑器、PDF、终端和图谱仍按需加载。
+- `python3 .agents/skills/b-end-design-system/scripts/audit-design-rules.py src/renderer`：247 个组件通过脚本已实现的规则。
+- `node --test --test-name-pattern='first steps' tests/renderer/shell-management-guards.test.mjs`：1/1，覆盖关闭偏好、重新挂载、导航拒绝、重开后的焦点及匿名事件字段。
+- `node --test --test-name-pattern='application session diagnostics' tests/renderer/settings-write-guards.test.mjs`：1/1，覆盖 500 条上限、字段白名单、复制 pending/失败/重试；480px 浅深主题无横溢出、`clip.cut=0`。
+
+`ROC_SMOKE_TARGET=dist ROC_UI_AUDIT_DIR=/tmp/roc-p6-layout-XC81zK/retry pnpm audit:layout`：762 个状态通过，2063 次控件焦点与无遮挡检查通过；浅/深主题各覆盖 1440×900、1280×820、1200×820、1199×820、1184×820、720×760、380×760、1200×540，并检查减弱动效与普通动效的最终落点。原生最小窗口保持 1184×640；窄尺寸通过可丢弃 Electron 窗口的 renderer viewport 模拟，不宣称原生窗口可缩至 380px。无页面横溢出、低于 12px 字体、低于 24px 点击目标，阴影审计最大 `cut=0`。浅深引导、1184 抽屉、1280 任务中心与发现页截图已人工检查。
+
+首轮布局在知识页面发现搜索输入框仅高 19px；为共享知识搜索框设置 24px 最小高度，运行 `pnpm exec electron-vite build` 后再完成上述全矩阵。没有降低审计门槛或跳过该控件。
+
+`ROC_SMOKE_TARGET=dist ROC_SMOKE_ARTIFACT_DIR=/tmp/roc-p6-smoke-xyadu1 node scripts/smoke-electron.mjs` 的核心 16 项通过，包括首次引导、统一任务入口、真实工作区文件/Git/PTY、本地受控 provider 的运行和设置保存。新增缩放段最初因自动化在响应式抽屉落地前检查侧栏而失败；修复脚本等待布局与引导焦点的时机，未改应用代码。修复后未重复整轮 smoke，不能将本轮记作整套脚本全绿。
+
+随后在仓库根通过 `ROC_SMOKE_TARGET=dist node --input-type=module` 的隔离 harness，直接读取并执行 `scripts/smoke-electron.mjs` 中 `// One real zoom pass` 开始的最新缩放段，工作台/设置 2/2 通过。真实窗口 1280×820、倍率 1.25、CSS 视口 1024×656；关键控件获得键盘焦点且 `elementFromPoint` 命中，字号、目标尺寸、溢出和裁切均通过。脚本等待响应式布局完成后关闭导航抽屉，最终恢复倍率和窗口尺寸。该倍率的实际鼠标点击尚未验证。Playwright 缩放截图存在导出裁切，改用 Electron `capturePage()` 获取完整 2560×1640 原生截图，人工检查通过后删除。
+
+最终 `node --check scripts/smoke-electron.mjs`、`node --check scripts/ui-layout-audit.mjs`、`git diff --check` 通过。检查脚本在结束时清理自己创建的隔离数据根，截图目录可通过环境变量指定。
+
+## 验收边界与回滚
+
+本轮完成本地工程实施和已记录的工程检查，不声明用户研究或发布门槛全部达成。5–8 名真实目标用户的 T1–T3 测试、SUS、真实外部搜索/下载与模型质量、人工 VoiceOver、操作系统输入法和滚轮体验、长期 CPU/内存及崩溃恢复、安装包分发和灰度发布尚未完成。受控 IPC 与本地 smoke provider 的通过只证明相应工程通路，不代替外部服务和用户体验结果。
+
+每阶段使用独立本地提交：P0 `243720b`、P1 `39d940b`、P2 `cec5f23`、P3 `cb8644b`、P4 `e13e0e9`、P5 `320766b`，P6 为本节及最终收尾所在提交。需要回滚时，从目标阶段的后续提交开始逆序 `git revert`，再构建并运行受影响的检查；不使用 reset 清除历史。本轮未执行回滚或远端发布。回滚代码不会删除已有文献、项目文件、编译 PDF 或用户数据，也不应为回滚界面而重置数据库。
+
+工程截图、隔离 smoke 数据和临时计划在检查后清理；保留本记录、设计契约、回归检查及用户原始方案。

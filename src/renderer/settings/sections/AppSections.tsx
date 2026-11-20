@@ -1,7 +1,10 @@
 import { ContentPreferences } from './ContentPreferences';
+import {useState} from 'react';
+import {Check, ClipboardCopy, Loader2} from 'lucide-react';
 import { PreferenceRow } from '../PreferenceRow';
 import { useAsyncAction, useAsyncResource } from '../../app/use-async-resource';
 import type { ThemeOverride } from '../../app/ui-state';
+import {exportUxMetrics} from '../../app/ux-metrics';
 import { themeOverrideLabel } from '../../shell/appearance';
 import type { SettingsStore } from '../settings-scope';
 import {
@@ -45,6 +48,11 @@ export function AppSection({
 }): React.JSX.Element {
   const draft = store.draft;
   const app = useAsyncResource('settings:app-status', () => getAppStatus(store.client), { label: '读取应用状态' });
+  const [metricsCopied, setMetricsCopied] = useState(false);
+  const copyMetrics = useAsyncAction(async () => {
+    await navigator.clipboard.writeText(exportUxMetrics());
+    return {ok: true as const, data: null};
+  }, {label: '复制会话诊断'});
 
   if (draft === null) {
     return <FormNote testId="settings-app-unavailable">设置尚未读取完成。</FormNote>;
@@ -62,7 +70,7 @@ export function AppSection({
           {app.error}
         </FormNote>
       )}
-      <dl className="flex flex-col gap-0.5">
+      <dl className="flex flex-col gap-1">
         <KeyValueRow
           label="应用"
           value={status === null ? '读取中…' : `${status.appName} ${status.version}`}
@@ -103,7 +111,7 @@ export function AppSection({
             testId="settings-global-hotkey"
           />
         </div>
-        <dl className="flex flex-col gap-0.5">
+        <dl className="flex flex-col gap-1">
           <KeyValueRow
             label="注册状态"
             value={
@@ -129,6 +137,21 @@ export function AppSection({
           onChange={onThemeOverrideChange} testId="settings-theme" />
         <ContentPreferences />
       </section>
+      <details className="border-t-[0.5px] border-line pt-4" data-testid="settings-session-diagnostics">
+        <summary className="min-h-7 cursor-pointer py-1 text-muted focus-visible:outline-2 focus-visible:outline-accent">本次会话诊断</summary>
+        <div className="grid justify-items-start gap-2 pt-2">
+          <p className="text-muted text-[length:var(--font-meta-size)]">最多 500 条页面访问与操作记录，仅保留事件类型、界面和相对时间。</p>
+          <button type="button" className={formSecondaryButtonClass} disabled={copyMetrics.pending}
+            data-testid="settings-copy-ux-metrics" onClick={() => {
+              setMetricsCopied(false);
+              void copyMetrics.run().then(result => setMetricsCopied(result.ok));
+            }}>
+            {copyMetrics.pending ? <Loader2 size={14} aria-hidden="true" className="animate-spin" /> : metricsCopied ? <Check size={14} aria-hidden="true" /> : <ClipboardCopy size={14} aria-hidden="true" />}
+            {copyMetrics.pending ? '正在复制' : metricsCopied ? '已复制诊断' : '复制诊断记录'}
+          </button>
+          {copyMetrics.error ? <p role="alert" className="break-words text-[var(--st-bad)] text-[length:var(--font-meta-size)]">复制失败：{copyMetrics.error}</p> : null}
+        </div>
+      </details>
     </FormSection>
   );
 }
@@ -229,7 +252,7 @@ export function TasksSection({ store }: { store: SettingsStore }): React.JSX.Ele
             {scheduler.error}
           </FormNote>
         )}
-        <dl className="flex flex-col gap-0.5">
+        <dl className="flex flex-col gap-1">
           <KeyValueRow
             label="调度器"
             value={schedulerStatus === null ? '读取中…' : schedulerStatus.running ? '运行中' : '已停止'}
@@ -260,7 +283,7 @@ export function TasksSection({ store }: { store: SettingsStore }): React.JSX.Ele
             {tray.error}
           </FormNote>
         )}
-        <dl className="flex flex-col gap-0.5">
+        <dl className="flex flex-col gap-1">
           <KeyValueRow
             label="后台执行"
             value={

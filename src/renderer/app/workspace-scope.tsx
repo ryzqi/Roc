@@ -61,6 +61,10 @@ export type WorkspaceScope = {
    * writer.
    */
   openSettings: () => void;
+  firstStepsVisible: boolean;
+  firstStepsRequestId: number;
+  openFirstSteps: () => void;
+  dismissFirstSteps: () => void;
   /**
    * Navigates the canvas to another view in the same project.
    *

@@ -1,6 +1,6 @@
 # Idea Canvas、方法计划与结果评估
 
-构思能力由对话代理调用，方法计划与结果评估在[工件检查器](research-artifact-inspector.md)编辑和审核；没有独立构思页面，旧 `?view=ideas` 回到默认 LaTeX 视图（[ADR 0024](adr/0024-stage-surface-removed.md)）。
+构思能力由对话代理调用，方法计划与结果评估在[工件检查器](research-artifact-inspector.md)编辑和审核；没有独立构思页面，旧 `?view=ideas` 回到默认工作台视图（[ADR 0024](adr/0024-stage-surface-removed.md)）。
 
 ## 项目语言与 Canvas
 

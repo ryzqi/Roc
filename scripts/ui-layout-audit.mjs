@@ -11,6 +11,7 @@
  */
 import { _electron as electron } from '@playwright/test';
 import { mkdirSync, readFileSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
@@ -22,14 +23,11 @@ const artifactDir = resolve(process.env.ROC_UI_AUDIT_DIR ?? '.artifacts/layout-a
 mkdirSync(artifactDir, { recursive: true });
 process.env.ROC_UI_AUDIT_DIR = artifactDir;
 
-const { dataRoot, workspaceRoot, skillSourceRoot, remoteRoot } = await createSmokePaths();
-seedSmokeWorkspace(workspaceRoot, remoteRoot);
-seedSmokeSkillSource(skillSourceRoot);
-
 const { resolveSmokeTarget } = await import('../tests/smoke/lib/smoke-target.mjs');
 // 默认量 `dist`：布局审查是源码级检查，`release/` 里可能是**上一次**打包的产物（切壳前就是这种坑）。
 // 想看打包形态就显式 `ROC_SMOKE_TARGET=packaged pnpm audit:layout`。
 const smokeTarget = resolveSmokeTarget({ env: { ...process.env, ROC_SMOKE_TARGET: process.env.ROC_SMOKE_TARGET ?? 'dist' } });
+const { dataRoot, workspaceRoot, skillSourceRoot, remoteRoot } = await createSmokePaths();
 
 let app;
 let smokeProvider;
@@ -44,6 +42,7 @@ const smokeApiKey = 'smoke-test-key';
 
 const VIEWPORTS = [
   { id: 'wide', width: 1440, height: 900 },
+  { id: 'desktop', width: 1280, height: 820 },
   { id: 'columns-edge', width: 1200, height: 820 },
   { id: 'drawers-edge', width: 1199, height: 820 },
   { id: 'native-minimum', width: 1184, height: 820 },
@@ -163,6 +162,8 @@ async function selectSettingsSection(page, section) {
 }
 
 try {
+  seedSmokeWorkspace(workspaceRoot, remoteRoot);
+  seedSmokeSkillSource(skillSourceRoot);
   smokeProvider = await startSmokeProvider({});
   app = await electron.launch({
     executablePath: smokeTarget.executablePath,
@@ -275,18 +276,34 @@ try {
     await page.getByTestId('project-form-cancel').click();
     await page.getByTestId('portal-create-dialog-panel').waitFor({state: 'detached'});
 
+    await navigate(page, `${projectQuery}&view=overview`);
+    await page.getByTestId('overview').waitFor();
+    const overviewSidebarOpen = await page.getByTestId('sidebar-drawer').count() > 0;
+    if (overviewSidebarOpen) {
+      await page.getByTestId('sidebar-drawer-close').click();
+      await page.getByTestId('sidebar-drawer').waitFor({state: 'detached'});
+    }
+    await page.getByTestId('titlebar-help').click();
+    await page.getByTestId('overview-first-steps').waitFor();
+    await capture(page, `overview-first-steps-${viewport.id}`);
+    await page.getByTestId('overview-first-steps-skip').click();
+    await page.getByTestId('overview-first-steps').waitFor({state: 'detached'});
+    await capture(page, `overview-${viewport.id}`);
+    if (overviewSidebarOpen) await page.getByTestId('titlebar-toggle-sidebar').click();
+
     await navigate(page, `${projectQuery}&view=writing`);
     await page.waitForSelector('[data-testid="canvas"]', { timeout: 15_000 });
     await capture(page, `canvas-${viewport.id}`);
 
-    const managementOpener = page.getByTestId('titlebar-management');
+    const managementOpener = page.getByTestId('titlebar-tasks');
     await managementOpener.focus();
     await page.keyboard.press('Enter');
     const management = page.getByTestId('management-panel-panel');
     await management.waitFor({state: 'visible'});
-    await page.getByTestId('mgmt-tab-tasks').focus();
-    await page.keyboard.press('Enter');
     await page.getByTestId('mgmt-panel-tasks').waitFor({state: 'visible'});
+    await page.getByTestId('mgmt-task-center').waitFor({state: 'visible'});
+    await capture(page, `task-center-${viewport.id}`);
+    await page.getByTestId('mgmt-task-category-research').click();
     await page.getByTestId('mgmt-research-tasks').waitFor();
     await page.getByTestId('mgmt-research-tasks').getByText('当前项目还没有科研任务。', {exact: true}).waitFor();
     await assertControlVisible(page.getByTestId('mgmt-task-select'));
@@ -311,6 +328,7 @@ try {
         await panel.getByTestId('mgmt-mcp-cancel').click();
       }
       if (tab === 'tasks') {
+        await panel.getByTestId('mgmt-task-category-background').click();
         await panel.getByTestId('mgmt-tasks-create').click();
         await assertFormLayout(panel.getByTestId('mgmt-task-editor'));
         await capture(page, `management-task-editor-${viewport.id}`);
@@ -358,7 +376,7 @@ try {
     await capture(page, `terminal-${viewport.id}`);
     for (const {view, tabs} of [
       {view: 'library', tabs: ['reader', 'notes']},
-      {view: 'discover', tabs: ['radar', 'monitors']},
+      {view: 'discover', tabs: ['search', 'radar', 'monitors']},
       {view: 'knowledge', tabs: ['rag', 'wiki', 'graph']}
     ]) {
       await selectDestination(page, view);
@@ -519,20 +537,24 @@ try {
     target: smokeTarget, reducedMotion: ['reduce', 'no-preference'],
     narrowScope: 'emulated renderer viewport in disposable Electron window; native minimum and display correction remain enforced',
     audits, viewports: VIEWPORTS});
-  if (app !== undefined) {
-    if (failure !== null) {
-      await app.evaluate(({BrowserWindow}) => {
-        for (const window of BrowserWindow.getAllWindows()) window.destroy();
-      }).catch(error => console.error('[layout:teardown]', error.message));
+  try {
+    if (app !== undefined) {
+      if (failure !== null) {
+        await app.evaluate(({BrowserWindow}) => {
+          for (const window of BrowserWindow.getAllWindows()) window.destroy();
+        }).catch(error => console.error('[layout:teardown]', error.message));
+      }
+      await app.close();
     }
-    await app.close();
+  } finally {
+    try { await smokeProvider?.close(); }
+    finally {
+      await Promise.all([dataRoot, workspaceRoot, skillSourceRoot, remoteRoot].map(path => rm(path, {recursive: true, force: true})));
+      spawnSync('pnpm', ['rebuild', 'better-sqlite3', '--pending=false'], {
+        cwd: resolve('.'),
+        stdio: 'inherit',
+        shell: false
+      });
+    }
   }
-  if (smokeProvider !== undefined) {
-    await smokeProvider.close();
-  }
-  spawnSync('pnpm', ['rebuild', 'better-sqlite3', '--pending=false'], {
-    cwd: resolve('.'),
-    stdio: 'inherit',
-    shell: false
-  });
 }

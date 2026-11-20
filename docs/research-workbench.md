@@ -1,7 +1,7 @@
 # 科研工作台
 
 Roc 默认打开**项目门户**（`page=research`，未选项目）。进入某一个研究项目后才打开该项目的**三栏工作台**。
-左栏的会话、文献、文件与画布上的服务都属于**当前项目**，不是全局导航。
+左栏先提供工作台、发现、文献、知识、写作五个目的地；会话、文献、文件仍属于**当前项目**的上下文。助手默认按需打开。
 
 术语边界见 [CONTEXT.md](../CONTEXT.md)。
 
@@ -20,8 +20,8 @@ Roc 默认打开**项目门户**（`page=research`，未选项目）。进入某
 
 无项目 id 时停在项目门户，不自动进入上次或第一个项目。门户默认用卡片网格（`portal-grid`），可切换紧凑列表；空态只显示
 「新建研究项目」（`portal-new-project`），点新建才出标题、研究目标、语言和工作目录（`project-form-*`）。
-创建必须选择目录，一个目录同时只属于一个研究项目。创建后进入该项目的工作台，默认落 `view=latex`。
-顶栏「所有项目」返回门户并卸掉当前项目。缺目录的旧项目可以进入，但打开文件与代码前必须先绑定工作目录——
+创建必须选择目录，一个目录同时只属于一个研究项目。创建后进入该项目的工作台，默认落 `view=overview`。
+顶栏「项目」返回门户并卸掉当前项目。缺目录的旧项目可以进入，但打开文件与代码前必须先绑定工作目录——
 绑定入口在左栏（`sidebar-files-binding`）。已归档项目只读（`project-readonly-banner`）：不能开新运行、
 不能改产物、不能写文件。
 
@@ -33,17 +33,17 @@ Roc 默认打开**项目门户**（`page=research`，未选项目）。进入某
 
 | 落点 | 面 | 说明 |
 | --- | --- | --- |
-| 画布一级 tab | 文献 / LaTeX / 终端 | `canvasTabIds`，顺序即 tab 条顺序 |
-| 画布视图（`?view=`） | 记忆 / 技能 / MCP | `canvasViewIds`；与抽屉共用同一组面板（`management-shell-parts`） |
+| 侧栏目的地 / 画布视图（`?view=`） | 工作台 / 发现 / 文献 / 知识 / 写作 | `overview/discover/library/knowledge/writing`；画布只显示当前标题 |
+| 写作工具 | 终端 | `view=writing&tool=terminal`，保留同一写作上下文 |
 | 抽屉分区 | 记忆 / 技能 / MCP / 任务 | `drawerSectionIds`；**任务只有抽屉一个落点**（两份界面盯一个数据集是发散） |
 | 浮层 | ⌘K 搜索 / 设置 | 不进 URL 的瞬时选择器另计 |
 
-缺少画布视图是 `latex`（`defaultViewId`）。
+缺少画布视图时使用 `overview`（`defaultViewId`）。管理仅有抽屉，不存在管理画布或第二套壳。
 
 **没有画布落点的东西**：文件由左栏文件树 + 预览浮层承载（`?tool=files` 只把左栏切到文件 tab）；
 工作区 diff 由顶栏 Git 抽屉承载（`?tool=git`，`git-panel`）；后台任务只有管理抽屉。
 
-分类在面表，URL形状在routes.ts，图标与色相在WorkspaceCanvas；视觉token和动效规范见 [ADR0023](adr/0023-visual-and-motion-spec.md)。
+分类在面表，URL形状在routes.ts，导航图标与色相在AppNavigation；视觉token和动效规范见 [ADR0023](adr/0023-visual-and-motion-spec.md)。
 
 ## 文稿与文件工具布局
 
@@ -55,7 +55,7 @@ LaTeX 画布按可用宽度切换文件目录与文件选择器，可筛选文�
 
 设置按「模型与文献」「运行与权限」「扩展与维护」分组；窄窗口使用分区选择器，正文独立滚动，保存区保持可见。切换分区与关闭仍遵循原草稿及写入锁。
 
-记忆、技能和 MCP 的画布／抽屉共用管理布局。技能以可搜索的已安装列表为主，来源与许可详情按需展开。任务分为「后台任务」「研究任务」「Python 环境」，切换分类保留已挂载的编辑器；未保存事实需要明确处理，进行中的写入阻止切换。
+记忆、工作技能和外部工具连接使用管理抽屉。技能以可搜索的已安装列表为主，来源与许可详情按需展开。顶栏任务按钮打开同一个任务中心，按当前、待处理、最近结束、失败聚合研究任务、当前工作区后台任务与文献处理；分页数据标为近期，来源失败单独显示。后台配置、科研详情与高级 Python 环境仍可进入，切换保留编辑器和草稿守卫。
 
 ## 项目、会话与搜索布局
 
@@ -71,7 +71,7 @@ LaTeX 画布按可用宽度切换文件目录与文件选择器，可筛选文�
 ?page=research|settings          外层
   ?project=<id>                   有值即「在项目内」
   ?view=<canvas view>             画布视图
-  ?tool=files|git                 抽屉 / 左栏的辅助面
+  ?tool=files|git|terminal|memory|skills|mcp|tasks  项目工具
   ?file=<workspace 相对路径>      左栏文件树里选中并预览的文件
   ?assistant=1                    助手列打开
 ```
@@ -99,7 +99,7 @@ LaTeX 画布按可用宽度切换文件目录与文件选择器，可筛选文�
 ## 助手与阶段
 
 研究助手是**唯一执行入口**（[ADR 0020](adr/0020-conversation-drives-stages.md)）。它在助手列
-（`assistant-panel`；≤1099px 是抽屉 `assistant-drawer`，⌘J / `titlebar-toggle-assistant` 开关），
+（`assistant-panel`；<1200px 是抽屉 `assistant-drawer`，⌘J / `titlebar-toggle-assistant` 开关），
 拿到的科研工具按当前项目绑定（`src/main/plugins/agent/research-tools.ts`；工具名与权限的唯一来源是
 `RESEARCH_TOOL_DESCRIPTORS`）：
 
@@ -114,7 +114,7 @@ LaTeX 画布按可用宽度切换文件目录与文件选择器，可筛选文�
   批准携带所见版本的内容 hash。retrieval 只执行已批准计划的查询编号，不能自行扩大检索范围。
   合同与失败语义见 [学术检索融合](research-literature-fusion.md)。
 - 论文正文的真身是项目工作目录里的 `.tex` / `.bib` 文件；对话代理用文件工具改、用 shell 编译。
-  LaTeX 画布 tab 编辑的是同一批工作区文件（保存走 `files.writeText`，留 recovery point）。
+  写作画布编辑的是同一批工作区文件（保存走 `files.writeText`，留 recovery point）。
   阶段正文与导出另行冻结主张及来源版本；工作区编辑不会自动修改已批准工件。
 
 历史会话属于当前项目，列在左栏的会话 tab（`sidebar-tab-sessions`），行是 `session-row-<threadId>`。
@@ -140,7 +140,7 @@ LaTeX 画布扫描工作目录根层及一层子目录中的可编辑文稿文�
 
 LaTeX 文件预览按工作目录与相对路径缓存。只有可写项目中读取成功且未截断的文本才能编辑保存；片段预览不可覆盖原文件。保存通过 `files.writeText` 留下写入前恢复点，不提供 `expectedHash` 乐观并发校验。切文件、离开文稿视图或关闭窗口时，未保存修改需要先保存或明确放弃；保存期间阻止离开。
 
-LaTeX 画布编辑真实工作区文件，没有模拟编译按钮。助手可用 shell 编译工作区文稿；受控模板编译与最终交付使用科研模板／导出服务，工件批准仍绑定具体版本。
+写作画布默认打开主文件，编译前保存当前草稿，再用工作区快照调用现有离线 Tectonic。编译支持取消、文件与行号诊断，同页 PDF 预览使用 `files.preview` 协议；原生另存框导出经过哈希核验的 PDF。成果保留在 `.roc-build/latex/<requestId>.pdf`，任务快照和日志在结束后清理。编译中阻止切换项目或丢失草稿。受控模板编译与最终交付仍使用科研模板／导出服务，工件批准绑定具体版本。
 
 ## 异步表单与确认
 
@@ -171,7 +171,7 @@ LaTeX 画布编辑真实工作区文件，没有模拟编译按钮。助手可�
 
 七个域**保留服务合同和数据，没有独立阶段路由**（[ADR 0024](adr/0024-stage-surface-removed.md) 有意保留），
 声明在 `src/shared/surfaces.ts` 的 `PARKED_CAPABILITIES`：**构思、实验、图稿、正文、导出、模板包、阶段策略**。
-`resolveSurface` 将这些独立页面标记为 `parked`；验证脚手架拒绝将它们当作可用页面。用户 URL 中的这些 `?view=` 值由路由解析器归一到默认 `latex` 视图。
+`resolveSurface` 将这些独立页面标记为 `parked`；验证脚手架拒绝将它们当作可用页面。用户 URL 中的这些 `?view=` 值由路由解析器归一到默认 `overview` 视图。
 能力由助手调度，已有工件可在[工件检查器](research-artifact-inspector.md)查看来源、结果并进行人工审核；这些检查器没有新增阶段页面。专题合同见[文档索引](README.md)。
 
 ## 快捷键
@@ -192,6 +192,12 @@ LaTeX 画布编辑真实工作区文件，没有模拟编译按钮。助手可�
 
 原生菜单注册 ⌘, 与 ⌘N，Electron 先消费，所以渲染层不重复实现。浮层打开时面板与导航键被抑制，⌘K 保持可用。
 渲染层快捷键由 `src/renderer/app/shortcuts.ts` 注册；浮层的 Esc 行为由 `useOverlayBehavior` 管理。
+
+## 引导与本地诊断
+
+首次进入项目可查看三步内联引导，随时跳过；顶栏帮助重新打开。引导只保存是否关闭的本机展示偏好，不保存业务进度或替用户执行任务。设置的本地诊断可复制当前窗口最近 500 个匿名导航与任务事件，不含项目 ID、查询、文稿或凭据，不自动上传。
+
+完整导航迁移、组件约束与关键状态见[设计契约](design-system.md)，工程证据及未覆盖验收见[重构验证](ui-refactor-validation.md)。
 
 ## 相关文档
 

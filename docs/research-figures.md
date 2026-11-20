@@ -44,7 +44,7 @@ pipeline/6先生成完整SVG布局，再等比缩放、居中到指定物理画�
 
 退回后修改并重绘，以replacesFigureId原子替换当前审核集合，旧图标为superseded，来源/主张/事件保留。新图重新关联主张，不继承科学审核；待批准/批准版本须先按流程退回，不直接覆盖。
 
-没有独立路由（[ADR0024](adr/0024-stage-surface-removed.md)），旧?view=figures回到默认LaTeX。检查与数据映射在[工件抽屉](research-artifact-inspector.md)，人工决定仍走助手闸门。登记图稿可按hash读取PNG/SVG/PDF，禁脚本/网络，仅允许SVG内嵌data图片：
+没有独立路由（[ADR0024](adr/0024-stage-surface-removed.md)），旧?view=figures回到默认工作台。检查与数据映射在[工件抽屉](research-artifact-inspector.md)，人工决定仍走助手闸门。登记图稿可按hash读取PNG/SVG/PDF，禁脚本/网络，仅允许SVG内嵌data图片：
 
 ```text
 roc-preview://research/figures/{encodedProjectId}/{encodedFigureId}/{png|svg|pdf}/{sha256}

@@ -25,7 +25,9 @@ export const uiStateKeys = {
   /** Per-project file-tree expansion, bucketed by project id. */
   fileTreeExpanded: `${UI_STATE_PREFIX}files.expanded`,
   /** Last viewed memory category; never stores memory content. */
-  memoryCategory: `${UI_STATE_PREFIX}memory.category`
+  memoryCategory: `${UI_STATE_PREFIX}memory.category`,
+  /** Versioned visibility preference; never records completion of project work. */
+  onboardingDismissed: `${UI_STATE_PREFIX}onboarding.dismissed`
 } as const;
 
 export type UiStateKey = (typeof uiStateKeys)[keyof typeof uiStateKeys];
@@ -165,6 +167,14 @@ export function writeMemoryCategory(category: string): void {
   if (/^(global:(user|agents|memory)|workspace:(agents|memory))$/u.test(category)) {
     writeRaw(uiStateKeys.memoryCategory, category);
   }
+}
+
+export function readOnboardingDismissed(): boolean {
+  return readRaw(uiStateKeys.onboardingDismissed) === 'v1';
+}
+
+export function dismissOnboarding(): void {
+  writeRaw(uiStateKeys.onboardingDismissed, 'v1');
 }
 
 export function readAssistantWidth(): number {

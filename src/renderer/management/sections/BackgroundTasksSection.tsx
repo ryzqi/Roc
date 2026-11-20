@@ -102,7 +102,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
         </div>
 
         <details className="management-disclosure" data-testid="mgmt-tasks-scheduler-details">
-          <summary>调度状态{tasks.scheduler?.lastError ? ' · 需处理' : ''}</summary>
+          <summary>调度状态{tasks.scheduler?.lastError ? <span className="ml-2">需处理</span> : null}</summary>
         <dl className="flex flex-col gap-0.5">
           <KeyValueRow
             label="下次触发"

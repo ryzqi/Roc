@@ -1,6 +1,6 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp, rm, writeFile} from 'node:fs/promises';
+import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import electronPath from 'electron';
@@ -17,6 +17,11 @@ before(async () => {
     import {flushSync} from 'react-dom';
     import {LazyMotion, domMax, MotionConfig} from 'motion/react';
     import {ModelsSection} from './src/renderer/settings/sections/ModelsSection';
+    import {AppSection} from './src/renderer/settings/sections/AppSections';
+    import {recordUxEvent} from './src/renderer/app/ux-metrics';
+    window.addMetrics = count => {for(let i=0;i<count;i++) recordUxEvent('screen_open', 'overview');};
+    Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:text=>{window.clipboardCalls.push(text);
+      return new Promise((resolve,reject)=>{window.finishCopy=resolve;window.refuseCopy=()=>reject(new Error('Clipboard denied'));});}}});
     import {RagSection} from './src/renderer/settings/sections/RagSection';
     import {LiteratureSection} from './src/renderer/settings/sections/ReadOnlySections';
     const ok = data => ({ok: true, data});
@@ -27,6 +32,7 @@ before(async () => {
     const models = {ready: true, downloading: false, selectedPack: 'compact', job: null, error: null,
       packs: [{pack: 'compact', ready: true, bytes: 20000000, installedBytes: 20000000, state: 'ready', error: null, models: []}], models: []};
     const client = {api: {
+      app: {getStatus: async () => ok({appName: 'Roc', version: '0.1.0'})},
       settings: {
         setProviderSecret: request => {
           window.secrets.push(request);
@@ -48,19 +54,19 @@ before(async () => {
       }
     }};
     function Harness({mode}) {
-      const [draft, setDraft] = useState({providers: [provider], index: null});
+      const [draft, setDraft] = useState({providers: [provider], index: null, settings: {startup: {openAtLogin: false}, globalHotkey: null}});
       const store = {client, draft, base: {providers: [provider]}, snapshot: {providerSecretStatus: []},
         update: mutator => setDraft(current => {const next = structuredClone(current); mutator(next); return next;}),
         reload: () => {window.reloads++;}, indexStatus: null};
       return <main style={{padding: 40}}>
-        {mode === 'provider' ? <ModelsSection store={store} /> :
+        {mode === 'app' ? <AppSection store={store} themeOverride="system" onThemeOverrideChange={() => {}} /> : mode === 'provider' ? <ModelsSection store={store} /> :
           mode === 'embedding' ? <RagSection store={store} /> : <LiteratureSection store={store} />}
       </main>;
     }
     const root = createRoot(document.getElementById('root'));
     let instance = 0;
     window.mount = mode => {
-      window.secrets = []; window.embeddings = []; window.removals = []; window.reloads = 0;
+      window.secrets = []; window.embeddings = []; window.removals = []; window.reloads = 0; window.clipboardCalls=[];
       flushSync(() => root.render(<MotionConfig reducedMotion="always"><LazyMotion features={domMax} strict>
         <Harness key={++instance} mode={mode} />
       </LazyMotion></MotionConfig>));
@@ -139,4 +145,38 @@ test('uninstalling a parsing pack requires confirmation and reports a refused re
   await page.evaluate(() => window.finishRemoval({ok: false, error: {message: 'Model pack in use'}}));
   await expect(page.getByTestId('settings-models-remove-error')).toContainText('Model pack in use');
   await expect(page.getByTestId('settings-models-remove')).toBeEnabled();
+});
+
+
+test('application session diagnostics copy only the bounded anonymous events and expose clipboard failure', async () => {
+  await page.evaluate(() => {window.mount('app'); window.addMetrics(510);});
+  const disclosure = page.getByTestId('settings-session-diagnostics');
+  const copy = page.getByTestId('settings-copy-ux-metrics');
+  await expect(copy).toBeHidden();
+  await disclosure.locator('summary').focus();
+  await page.keyboard.press('Enter');
+  await copy.click();
+  await expect(copy).toBeDisabled();
+  await expect(copy).toContainText('正在复制');
+  const payload = JSON.parse(await page.evaluate(() => window.clipboardCalls[0]));
+  assert.equal(payload.events.length, 500);
+  assert.ok(payload.events.every(event => Object.keys(event).sort().join(',') === 'elapsedMs,event,surface'));
+  assert.ok(payload.events.every(event => event.event === 'screen_open' && event.surface === 'overview'));
+  await page.evaluate(() => window.refuseCopy());
+  await expect(disclosure.getByRole('alert')).toContainText('Clipboard denied');
+  await copy.click();
+  await page.evaluate(() => window.finishCopy());
+  await expect(copy).toContainText('已复制诊断');
+  await expect(disclosure.getByRole('alert')).toHaveCount(0);
+  const auditSource = await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+  for (const theme of ['light','dark']) {
+    await page.evaluate(theme => document.documentElement.dataset.theme=theme, theme);
+    await page.setViewportSize({width:480,height:800});
+    await copy.hover();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    assert.ok(await copy.evaluate(element => parseFloat(getComputedStyle(element).fontSize) >= 12));
+    const audit = await page.evaluate(`(${auditSource})({root:'body',viewport:true})`);
+    assert.equal(audit.cut,0);
+    if(process.env.ROC_UI_CAPTURE_DIR) await page.screenshot({path:join(process.env.ROC_UI_CAPTURE_DIR,`session-diagnostics-${theme}.png`)});
+  }
 });

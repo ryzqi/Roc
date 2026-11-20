@@ -25,19 +25,21 @@
  * 结果写入 `.artifacts/smoke-electron/`（result.json + 截图）。
  */
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { _electron as electron } from '@playwright/test';
 import { waitForAppReady } from '../tests/smoke/lib/assertions.mjs';
 import { createSmokePaths, seedSmokeSkillSource, seedSmokeWorkspace, startSmokeProvider } from '../tests/smoke/lib/fixtures.mjs';
 import { resolveSmokeTarget } from '../tests/smoke/lib/smoke-target.mjs';
+import { auditLayout } from '../tests/smoke/lib/electron-smoke-layout-audit.mjs';
 
 const smokeProviderId = 'p10-smoke-provider';
 const smokeModelId = 'p10-smoke-model';
 const smokeModelKey = `${smokeProviderId}:${smokeModelId}`;
 
 const full = process.argv.includes('--full');
-const artifactDir = resolve('.artifacts/smoke-electron');
+const artifactDir = resolve(process.env.ROC_SMOKE_ARTIFACT_DIR ?? '.artifacts/smoke-electron');
 mkdirSync(artifactDir, { recursive: true });
 
 const results = [];
@@ -57,14 +59,11 @@ function assertCheck(gate, name, condition, detail = '') {
   record(gate, name, true, detail);
 }
 
-const { dataRoot, workspaceRoot, skillSourceRoot, remoteRoot } = await createSmokePaths();
-seedSmokeWorkspace(workspaceRoot, remoteRoot);
-seedSmokeSkillSource(skillSourceRoot);
-const smokeProvider = await startSmokeProvider({});
 const target = resolveSmokeTarget({ env: { ...process.env, ROC_SMOKE_TARGET: process.env.ROC_SMOKE_TARGET ?? 'dist' } });
-console.log(`新壳 smoke · target=${target.kind} · provider=${smokeProvider.endpoint} · workspace=${workspaceRoot}\n`);
+const { dataRoot, workspaceRoot, skillSourceRoot, remoteRoot } = await createSmokePaths();
 
 let app;
+let smokeProvider;
 const rendererErrors = [];
 
 async function navigate(page, search) {
@@ -99,6 +98,10 @@ async function waitForTerminalText(page, needle, timeoutMs = 20_000) {
 }
 
 try {
+  seedSmokeWorkspace(workspaceRoot, remoteRoot);
+  seedSmokeSkillSource(skillSourceRoot);
+  smokeProvider = await startSmokeProvider({});
+  console.log(`新壳 smoke: target=${target.kind}, provider=${smokeProvider.endpoint}, workspace=${workspaceRoot}\n`);
   // ---- 1 启动 -------------------------------------------------------------------
   app = await electron.launch({
     executablePath: target.executablePath,
@@ -168,6 +171,23 @@ try {
   await page.click(`[data-testid="portal-card-open-${preflight.projectId}"]`);
   await page.waitForSelector('[data-testid="canvas"]', { timeout: 20_000 });
   assertCheck('2 门户', '进入项目后画布渲染出来', true, '');
+  await page.getByTestId('overview').waitFor();
+  await page.getByTestId('overview-first-steps').waitFor();
+  await page.getByTestId('overview-first-steps-skip').click();
+  await page.getByTestId('overview-first-steps').waitFor({state: 'detached'});
+  await page.reload();
+  await waitForAppReady(page, 'smoke-onboarding-dismissed', artifactDir);
+  await page.getByTestId('overview').waitFor();
+  assertCheck('2 门户', '首次引导可跳过且刷新后保持关闭', await page.getByTestId('overview-first-steps').count() === 0);
+  await page.getByTestId('titlebar-help').click();
+  await page.getByTestId('overview-first-steps').waitFor();
+  assertCheck('2 门户', '帮助入口在同一项目重开首次引导', new URL(page.url()).searchParams.get('project') === preflight.projectId);
+  await page.getByTestId('overview-first-steps-skip').click();
+  await page.getByTestId('titlebar-tasks').click();
+  await page.getByTestId('mgmt-task-center').waitFor();
+  assertCheck('2 门户', '顶栏任务入口打开统一任务总览', await page.getByTestId('management-panel').count() === 1);
+  await page.keyboard.press('Escape');
+  await page.getByTestId('management-panel').waitFor({state: 'detached'});
   await page.screenshot({ path: join(artifactDir, 'canvas.png') });
 
   await navigate(page, `page=research&project=${preflight.projectId}&view=library`);
@@ -345,15 +365,77 @@ try {
   await page.click('[data-testid="settings-modal-close"]');
   await page.waitForSelector('[data-testid="settings-modal-panel"]', { state: 'detached', timeout: 15_000 });
 
+  // One real zoom pass supplements the renderer viewport matrix without repeating it.
+  const browserWindow = await app.browserWindow(page);
+  const originalWindow = await browserWindow.evaluate(window => ({bounds: window.getBounds(), zoom: window.webContents.getZoomFactor()}));
+  const clipSource = readFileSync('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+  try {
+    await browserWindow.evaluate(window => {
+      window.setBounds({...window.getBounds(), width: 1280, height: 820});
+    });
+    await navigate(page, `page=research&project=${preflight.projectId}&view=overview`);
+    await page.getByTestId('overview').waitFor();
+    await browserWindow.evaluate(window => window.webContents.setZoomFactor(1.25));
+    await page.waitForFunction(() => document.querySelector('[data-testid="workspace-layout"]')?.getAttribute('data-layout-mode') === 'drawers');
+    if (await page.getByTestId('sidebar-drawer').count() > 0) {
+      await page.getByTestId('sidebar-drawer-close').focus();
+      await page.keyboard.press('Enter');
+      await page.getByTestId('sidebar-drawer').waitFor({state: 'detached'});
+    }
+    await page.getByTestId('titlebar-help').focus();
+    await page.keyboard.press('Enter');
+    await page.getByTestId('overview-first-steps').waitFor();
+    await page.waitForFunction(() => document.activeElement?.id === 'overview-first-steps-heading');
+    for (const surface of ['overview', 'settings']) {
+      if (surface === 'settings') {
+        await navigate(page, `page=settings&project=${preflight.projectId}&view=overview`);
+        await page.getByTestId('settings-modal-panel').waitFor();
+      }
+      // Electron stores file URL zoom separately; apply after each route change.
+      await browserWindow.evaluate(window => window.webContents.setZoomFactor(1.25));
+      const control = page.getByTestId(surface === 'overview' ? 'overview-first-steps-write' : 'settings-modal-close');
+      await control.scrollIntoViewIfNeeded();
+      await control.focus();
+      const reachability = await control.evaluate(element => {
+        const rect = element.getBoundingClientRect();
+        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        return {focused: element === document.activeElement, unobscured: hit !== null && element.contains(hit),
+          covering: hit?.getAttribute('data-testid') ?? hit?.tagName ?? null};
+      });
+      const audit = await auditLayout(page, `zoom-${surface}`);
+      const clip = await page.evaluate(`(${clipSource})({viewport: true})`);
+      const native = await browserWindow.evaluate(window => ({bounds: window.getBounds(), minimum: window.getMinimumSize(), zoom: window.webContents.getZoomFactor()}));
+      assertCheck('缩放', `${surface} 在 1280px / 125% 下可用且无裁切`, reachability.focused && reachability.unobscured && audit.viewportOverflow.length === 0 &&
+        audit.fontSizeViolations.length === 0 && audit.smallTargets.length === 0 && clip.cut === 0 &&
+        native.bounds.width >= native.minimum[0] && native.zoom === 1.25, JSON.stringify({viewport: audit.viewport, native, reachability, clip: clip.cut,
+          overflow: audit.viewportOverflow, smallTargets: audit.smallTargets}));
+      const screenshot = await browserWindow.evaluate(async window => (await window.webContents.capturePage()).toPNG().toString('base64'));
+      writeFileSync(join(artifactDir, `zoom-${surface}.png`), Buffer.from(screenshot, 'base64'));
+    }
+    await page.keyboard.press('Escape');
+    await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
+  } finally {
+    await browserWindow.evaluate((window, previous) => {
+      window.webContents.setZoomFactor(previous.zoom);
+      window.setBounds(previous.bounds);
+    }, originalWindow);
+  }
   assertCheck('1 启动', '整轮没有 renderer error', rendererErrors.length === 0, rendererErrors.slice(0, 2).join(' | '));
 } catch (error) {
   record('执行', '流程未完成', false, error instanceof Error ? error.message : String(error));
   throw error;
 } finally {
-  if (app !== undefined) {
-    await app.close().catch(() => {});
+  try {
+    if (app !== undefined) {
+      if (results.some(entry => !entry.ok)) await app.evaluate(({BrowserWindow}) => {
+        for (const window of BrowserWindow.getAllWindows()) window.destroy();
+      }).catch(error => console.error('[smoke:teardown]', error.message));
+      await app.close();
+    }
+  } finally {
+    try { await smokeProvider?.close(); }
+    finally { await Promise.all([dataRoot, workspaceRoot, skillSourceRoot, remoteRoot].map(path => rm(path, {recursive: true, force: true}))); }
   }
-  await smokeProvider.close?.();
   const failed = results.filter((entry) => !entry.ok);
   const payload = {
     target: target.kind,

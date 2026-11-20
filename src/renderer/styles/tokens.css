@@ -95,15 +95,16 @@
      dark and the darkest stop in light, thanks to the palette flip above.
 
      `--muted` and `--subtle` are both usable for body-position text, so both
-     clear 4.5:1 on `--bg`. Measured (WCAG 2.1 relative luminance):
-       dark  — muted #a1a1aa on #0e0e11 = 8.4:1, subtle #7c7c86 = 4.68:1
-       light — muted #64748b on #fcfcfd = 4.98:1, subtle #6b7280 = 5.06:1
+     clear 4.5:1 on the background and elevated surfaces. Measured (WCAG
+     relative luminance) at the weakest surface combinations:
+       dark  — subtle #909099 on #27272a = 4.71:1
+       light — muted #596579 on #e2e8f0 = 4.78:1, subtle #606774 = 4.62:1
      `--subtle` is the weakest tier; do not use it below body size without a
      second non-color signal. */
   --ink: var(--app-zinc-100);
   --text: var(--app-zinc-200);
   --muted: var(--app-zinc-400);
-  --subtle: #7c7c86;
+  --subtle: #909099;
 
   /* Background ramp */
   --bg: var(--app-zinc-950);
@@ -384,8 +385,8 @@
   --font-weight-semibold: 600;
   --ink: #0f172a;
   --text: #1e293b;
-  --muted: #64748b;
-  --subtle: #6b7280;
+  --muted: #596579;
+  --subtle: #606774;
   --bg: #fcfcfd;
   --bg-soft: #f1f5f9;
   --surface: #ffffff;

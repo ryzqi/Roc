@@ -14,7 +14,7 @@ import { useMenuIntentBridge, useAppRoute } from './use-app-route';
 import { useContentPreferenceSync } from './use-content-preferences';
 import { useLayoutState, type LayoutPreset } from './use-layout-state';
 import { useKeyboardShortcuts } from './shortcuts';
-import { clearUiState, recordProjectVisit, CONTENT_PREFERENCES_CHANGED } from './ui-state';
+import { clearUiState, dismissOnboarding, readOnboardingDismissed, recordProjectVisit, CONTENT_PREFERENCES_CHANGED } from './ui-state';
 import { ViewContent } from './ViewContent';
 import { WorkspaceLayout } from './WorkspaceLayout';
 import { WorkspaceScopeProvider, type WorkspaceScope, type LiteratureOpenRequest, type LiteratureOpenTarget } from './workspace-scope';
@@ -170,6 +170,8 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
   const literatureRequestNonce = useRef(0);
   const [managementMounted, setManagementMounted] = useState(false);
   const [settingsMounted, setSettingsMounted] = useState(false);
+  const [firstStepsVisible, setFirstStepsVisible] = useState(() => !readOnboardingDismissed());
+  const [firstStepsRequestId, setFirstStepsRequestId] = useState(0);
 
   const { override, setOverride, cycle: cycleTheme } = useAppearanceOverride();
   const { route, navigate } = useAppRoute();
@@ -291,6 +293,22 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
    */
   const routeRef = useRef(route);
   routeRef.current = route;
+
+  const openFirstSteps = useCallback((): void => {
+    const current = routeRef.current;
+    if (current.projectId === null) return;
+    navigate({...current, page: 'research', view: 'overview', tool: null}, {
+      mode: 'push', onNavigated: () => {
+        setFirstStepsVisible(true);
+        setFirstStepsRequestId(current => current + 1);
+      }
+    });
+  }, [navigate]);
+  const dismissFirstSteps = useCallback((): void => {
+    dismissOnboarding();
+    setFirstStepsVisible(false);
+    recordUxEvent('onboarding_dismissed', 'overview');
+  }, []);
 
   const consumeLiteratureRequest = useCallback((nonce: number): void => {
     setLiteratureRequest(current => current?.nonce === nonce ? null : current);
@@ -425,6 +443,10 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
       openFile: route.openFile,
       openFileInCanvas,
       openSettings,
+      firstStepsVisible,
+      firstStepsRequestId,
+      openFirstSteps,
+      dismissFirstSteps,
       openView: (view, onNavigated) => navigate({ ...routeRef.current, view, tool: null }, {mode: 'push', onNavigated}),
       openLiterature,
       literatureRequest: literatureRequest?.projectId === route.projectId ? literatureRequest : null,
@@ -457,6 +479,10 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
       boundWorkspace.error,
       boundWorkspace.rebind,
       openSettings,
+      firstStepsVisible,
+      firstStepsRequestId,
+      openFirstSteps,
+      dismissFirstSteps,
       openReviewInspector,
       openArtifact
     ]
@@ -697,6 +723,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
         onOpenManagement={openManagementDrawer}
         onOpenTasks={() => openManagementSection('tasks')}
         onOpenSettings={openSettings}
+        onOpenHelp={openFirstSteps}
         taskLabel={taskCenter.label}
         taskSummary={taskCenter.summary}
       />
@@ -878,6 +905,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
               clearUiState();
               window.dispatchEvent(new Event(CONTENT_PREFERENCES_CHANGED));
               setOverride('system');
+              setFirstStepsVisible(true);
             }}
             onClose={() => navigate({ ...route, page: 'research' })}
           />
