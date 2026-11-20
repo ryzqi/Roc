@@ -16,6 +16,7 @@ import {useReaderDocument} from './use-reader-document';
 import type {ReadingTranslationGuard} from './ReadingTranslationPanel';
 import {requestReadingChange} from './reading-interactions';
 import './reading.css';
+import {ResourceStatus} from './ResourceStatus';
 
 const ReadingDiscoveryPanel = retryableLazy(() => import('./ReadingDiscoveryPanel'));
 const ReadingNotesPanel = retryableLazy(() => import('./ReadingNotesPanel'));
@@ -389,6 +390,7 @@ export function PaperReader({
 
   return (
     <div className="reading-paper flex h-full min-h-0 min-w-0 flex-col" data-testid="paper-reader" data-library-item={selected.id} data-notes-open={notesOpen}>
+      <ResourceStatus itemId={selected.id} document={activeDocument}/>
       <header className="reading-paper-header">
         <div className="reading-paper-heading">
         <h2 className="text-ink" data-testid="reader-title">

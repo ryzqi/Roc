@@ -1,5 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import {ChevronDown, ChevronRight, RefreshCw} from 'lucide-react';
+import {PipelineProgress} from './PipelineProgress';
+import {literaturePipeline} from './pipeline-state';
 import {AcquisitionPreferences} from './AcquisitionPreferences';
 import type {PaperAcquisitionJob} from '../../shared/schemas/literature-acquisition';
 import {useAsyncResource} from '../app/use-async-resource';
@@ -117,16 +119,17 @@ function ProcessingSession({client, projectId, writable, pickFile, addPdfToItem,
           <div className="min-w-0 flex-[1_1_240px]">
             <button type="button" onClick={() => onOpenItem(job.libraryItemId)} className={`${buttonClass} max-w-full break-words text-left text-ink`}>{job.title}</button>
             <p className="px-2 text-muted">{acquisitionStageLabels[job.stage]}：{acquisitionStatusLabels[job.status]}</p>
+            <div className="p-2"><PipelineProgress stages={literaturePipeline(null, job)}/></div>
             {job.receipt ? <div className="break-words px-2 text-muted">
-              <p>全文来源：{job.receipt.provider} · 版本：{{published: '正式发表版', accepted: '接受稿', preprint: '预印本', unknown: '未标注'}[job.receipt.version]} · 许可证：{job.receipt.license ?? '未标注'}</p>
+              <p>全文来源：{job.receipt.provider}，版本：{{published: '正式发表版', accepted: '接受稿', preprint: '预印本', unknown: '未标注'}[job.receipt.version]}，许可证：{job.receipt.license ?? '未标注'}</p>
               <details><summary className="cursor-pointer">下载凭证</summary>
                 <p className="break-all">SHA-256：{job.receipt.sha256}</p>
                 <p className="break-all">地址：{job.receipt.sourceUrl ?? '本地副本'}</p>
-                <p className="break-all">文件：{job.receipt.relativePath ?? '未发布'} · {job.receipt.bytes} 字节</p>
+                <p className="break-all">文件：{job.receipt.relativePath ?? '未发布'}，{job.receipt.bytes} 字节</p>
               </details>
             </div> : null}
             {job.errorCode === null ? null : <p className="break-words px-2 text-[var(--st-bad)]">错误：{job.errorCode}</p>}
-            {job.lastFailure ? <p className="break-words px-2 text-muted">最近下载失败：{job.lastFailure.provider} · {{rate_limited: '来源限流', temporary: '暂时不可用', permanent: '地址不可用', restricted: '访问受限', invalid_content: '内容校验失败'}[job.lastFailure.category]}</p> : null}
+            {job.lastFailure ? <p className="break-words px-2 text-muted">最近下载失败：{job.lastFailure.provider}，{{rate_limited: '来源限流', temporary: '暂时不可用', permanent: '地址不可用', restricted: '访问受限', invalid_content: '内容校验失败'}[job.lastFailure.category]}</p> : null}
             {job.nextRetryAt === null ? null : <p className="break-words px-2 text-muted">计划重试：{job.nextRetryAt}</p>}
           </div>
           <div className="flex flex-wrap gap-1">

@@ -34,7 +34,7 @@ before(async () => {
   bundle: true, platform: 'browser', format: 'iife', logLevel: 'silent'});
   const assets = join(process.cwd(), 'dist/renderer/assets');
   writeFileSync(join(directory, 'app.css'), readdirSync(assets).filter(name => name.endsWith('.css'))
-    .map(name => readFileSync(join(assets, name), 'utf8')).join('\n'));
+    .map(name => readFileSync(join(assets, name), 'utf8')).join('\n') + '\n' + readFileSync(join(directory, 'app.css'), 'utf8'));
   writeFileSync(join(directory, 'index.html'), '<html data-theme="light"><link rel="stylesheet" href="app.css"><div id="root"></div><script src="app.js"></script></html>');
   writeFileSync(join(directory, 'main.cjs'), `
     const {app,BrowserWindow} = require('electron');
@@ -55,6 +55,8 @@ after(async () => {
 });
 
 test('same literature identity preserves selected PDF and typed DOI across parent refreshes', async () => {
+  assert.equal(await page.getByRole('tablist', {name: '导入方式'}).getByRole('tab').count(), 4);
+  assert.equal(await page.getByTestId('literature-import-tab-manual').isVisible(), false);
   await page.getByTestId('literature-import-pick-document').click();
   assert.equal(await page.getByTestId('literature-import-document-path').innerText(), '/fixture/source.pdf（PDF）');
   await refreshItem();
@@ -63,6 +65,10 @@ test('same literature identity preserves selected PDF and typed DOI across paren
   await page.getByTestId('literature-import-tab-doi').click();
   await page.getByTestId('literature-import-doi').fill('10.1234/retained');
   await refreshItem();
+  assert.equal(await page.getByTestId('literature-import-doi').inputValue(), '10.1234/retained');
+  await page.getByTestId('literature-import-tab-document').click();
+  assert.equal(await page.getByTestId('literature-import-document-path').innerText(), '/fixture/source.pdf（PDF）');
+  await page.getByTestId('literature-import-tab-doi').click();
   assert.equal(await page.getByTestId('literature-import-doi').inputValue(), '10.1234/retained');
 });
 
@@ -86,6 +92,7 @@ async function refreshItem(id) {
 
 
 test('manual import keeps navigation visible and the unsaved draft across wide and narrow windows', async () => {
+  await page.getByTestId('literature-import-other').click();
   await page.getByTestId('literature-import-tab-manual').click();
   const title='A retained scientific title with a long description of the research question';
   await page.getByTestId('literature-import-manual-title').fill(title);

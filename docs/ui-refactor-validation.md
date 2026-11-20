@@ -21,3 +21,9 @@ macOS 27.2.1 arm64，Electron 45，基线提交 `dd7511a`。隔离数据根启�
 `node --test tests/unit/renderer-routes.test.mjs tests/unit/surfaces.test.mjs`：29/29，通过 1920 路由组合。`node --test --test-concurrency=1 tests/renderer/canvas-view-loading.test.mjs tests/renderer/literature-workspace-layout.test.mjs`：10/10，覆盖共享宿主与草稿保留。
 
 隔离 Electron 实窗完成默认工作台、冷入口导入、五目的地、终端、管理深链、1280px 列布局及 1184px 抽屉检查；浅/深主题无 pageerror、无横溢出，`clip.cut=0`。
+
+## P3 文献与发现
+
+发现页默认搜索，来源部分失败保留结果，批量收录展示后端原始分项回执。导入四入口、六能力；阅读器与后台处理展示五阶段，解析不推断索引，缺记录明确待核验。列表增加当前结果排序与批量引用导出。
+
+仓库根 `pnpm typecheck`、设计规则审计通过。`node --test tests/unit/literature-pipeline-state.test.mjs` 5/5；发现 Electron 回归 1/1；导入状态与编辑保护 12/12；阅读与后台处理 20 项均通过（修正旧文案断言后单独复跑失败项）；文献列表与复制动作测试通过。外部搜索和下载未以 fixture 冒充验收。

@@ -137,7 +137,7 @@ test('acquisition preferences save explicit consent and receipt shows actual ver
   await expect(page.getByText('获取偏好已保存。')).toBeVisible();
   assert.deepEqual(await page.evaluate(() => calls.find(call=>call.method==='saveAcquisitionSettings').input),
     {versionPreference:'published',unpaywallEmail:'contact@example.org'});
-  await expect(page.getByText('全文来源：synthetic · 版本：正式发表版 · 许可证：未标注')).toBeVisible();
+  await expect(page.getByText('全文来源：synthetic，版本：正式发表版，许可证：未标注')).toBeVisible();
   await page.setViewportSize({width:1000,height:700});
   if (process.env.ROC_P5_SCREENSHOT_DIR) {
     const {mkdir} = await import('node:fs/promises');

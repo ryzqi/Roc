@@ -150,7 +150,7 @@ test('local imports freeze their submitted fields, reject repeat clicks and reta
   await page.evaluate(() => {window.throwImport = false;});
   await submit.click();
   await page.evaluate(() => window.finishImport({ok: true, createdCount: 1, duplicateCount: 0}));
-  await expect(page.getByTestId('literature-import-message')).toContainText('已导入 1 条');
+  await expect(page.getByTestId('literature-import-message')).toContainText('已收录 1 条论文信息');
   await page.getByTestId('literature-import-dialog-close').click();
   await page.getByTestId('literature-import-dialog').waitFor({state: 'hidden'});
   assert.equal(await page.getByTestId('literature-import-discard').count(), 0);

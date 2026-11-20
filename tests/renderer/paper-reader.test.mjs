@@ -79,6 +79,8 @@ before(async () => {
     window.navigateReader=projectId=>requestNavigation(parseAppRoute(new URLSearchParams({project:projectId,view:'literature'})),
       ()=>{window.readerNavigationCount++;});
     const client={api:{window:window.nativeWindow,research:{
+      listAcquisition:async()=>({ok:true,data:{jobs:[],total:0,nextOffset:null}}),
+      onLibraryChanged:()=>()=>{},
       resolveDocumentParse:input=>window.readFromHost('resolveDocumentParse',input),
       previewDocument:input=>window.readFromHost('previewDocument',input),
       createDocumentAnnotation:input=>window.readFromHost('createDocumentAnnotation',input),

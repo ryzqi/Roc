@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
-import { AlertCircle, NotebookPen, Radar, Bell, BookOpen, Database, Layers, Loader2, PanelLeft, Plus, Share2 } from 'lucide-react';
+import { AlertCircle, NotebookPen, Radar, Bell, BookOpen, Database, Layers, Loader2, PanelLeft, Plus, Search, Share2 } from 'lucide-react';
 import { ViewActivity, useViewActive } from '../shared/view-activity';
 import { useWorkspaceScope } from '../app/workspace-scope';
 import { EmptyState } from '../shell/EmptyState';
@@ -25,11 +25,13 @@ import {LiteratureProcessingPanel} from './LiteratureProcessingPanel';
  */
 
 type SubViewId = LiteratureSubView;
+const DiscoverySearch = retryableLazy(() => import('./DiscoverySearch'));
 const ReadingNotesPanel = retryableLazy(() => import('./ReadingNotesPanel'));
 const AcademicRadarPanel = retryableLazy(() => import('./AcademicRadarPanel'));
 const MonitorsPanel = retryableLazy(() => import('./MonitorsPanel'));
 
 const SUB_VIEWS: Array<{ id: SubViewId; label: string; icon: typeof BookOpen; iconClass: string }> = [
+  { id: 'search', label: '学术搜索', icon: Search, iconClass: 'text-[var(--icon-literature)]' },
   { id: 'reader', label: '阅读', icon: BookOpen, iconClass: 'text-[var(--icon-literature)]' },
   { id: 'notes', label: '笔记', icon: NotebookPen, iconClass: 'text-[var(--icon-literature)]' },
   { id: 'radar', label: '推荐与趋势', icon: Radar, iconClass: 'text-[var(--icon-literature)]' },
@@ -48,7 +50,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
   const scope = useWorkspaceScope();
   const workspace: LiteratureWorkspace = view === 'discover' || view === 'knowledge' ? view : 'library';
   const [selectedViews, setSelectedViews] = useState<Record<LiteratureWorkspace, SubViewId>>({
-    discover: 'radar', library: 'reader', knowledge: 'rag'
+    discover: 'search', library: 'reader', knowledge: 'rag'
   });
   const subView = selectedViews[workspace];
   const subViews = SUB_VIEWS.filter(entry => workspaceForSubView(entry.id) === workspace);
@@ -343,6 +345,13 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
               {scope.projectId===null?<p className="p-3 text-muted">选择项目后使用阅读笔记</p>:<ReadingNotesPanel key={scope.projectId}
                 client={scope.client} projectId={scope.projectId} items={store.items} writable={scope.writable}/>}
             </LazyBoundary></div></ViewActivity>:null}
+          {(visited.has('search') || subView === 'search') ? <ViewActivity active={subView === 'search'}>
+            <div className="min-h-0 flex-1" hidden={subView !== 'search'}>
+              <LazyBoundary fallback={<p role="status" className="p-3">加载学术搜索…</p>}>
+                <DiscoverySearch store={store} actions={actions} writable={scope.writable} onOpenLibrary={() => scope.openView('library')} />
+              </LazyBoundary>
+            </div>
+          </ViewActivity> : null}
           {(visited.has('radar') || subView === 'radar') ? <ViewActivity active={subView === 'radar'}><div style={{display:subView==='radar'?'contents':'none'}}>
             <LazyBoundary fallback={<p role="status" className="p-3">加载学术雷达…</p>}>
               {scope.projectId===null?<p className="p-3 text-muted">选择项目后使用学术雷达</p>:<AcademicRadarPanel key={scope.projectId}

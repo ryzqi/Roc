@@ -33,6 +33,8 @@ before(async () => {
     import {PaperReader} from ${JSON.stringify(join(process.cwd(), 'src/renderer/literature/PaperReader'))};
     import {WorkspaceScopeProvider} from ${JSON.stringify(join(process.cwd(), 'src/renderer/app/workspace-scope'))};
     const client={api:{research:Object.fromEntries(${JSON.stringify(Object.keys(channels))}.map(method=>[method,input=>window.callMain(method,input)]))}};
+    client.api.research.listAcquisition=async()=>({ok:true,data:{jobs:[],total:0,nextOffset:null}});
+    client.api.research.onLibraryChanged=()=>()=>{};
     client.api.research.getModelsStatus=async()=>({ok:true,data:{ready:false,error:null,models:[],downloading:false,selectedPack:'compact'}});
     const root=createRoot(document.getElementById('root'));let generation=0;
     window.unmountHarness=()=>flushSync(()=>root.unmount());

@@ -27,6 +27,8 @@ before(async () => {
     const root=createRoot(document.getElementById('root'));
     const notes=[];
     const client={api:{research:{
+      listAcquisition:async()=>({ok:true,data:{jobs:[],total:0,nextOffset:null}}),
+      onLibraryChanged:()=>()=>{},
       getModelsStatus:async()=>({ok:true,data:{ready:false,error:null,models:[],downloading:false,selectedPack:'compact'}}),
       getReadingTranslationSettings:async()=>({ok:true,data:{provider:'google',target:'zh-CN',keyConfigured:false,baseUrl:'',model:'',region:''}}),
       translateReading:async()=>({ok:true,data:{text:'Explicit synthetic translation. '.repeat(500)}}),

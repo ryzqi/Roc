@@ -537,6 +537,7 @@ try {
     pickedPath.trim()
   );
   // 手工录入：真写库，且必须出现在**共享 store** 的两个界面里（侧栏 tab + 画布列表）。
+  await page.click('[data-testid="literature-import-other"]');
   await page.click('[data-testid="literature-import-tab-manual"]');
   await page.fill('[data-testid="literature-import-manual-title"]', 'ROC-P5-MANUAL-RECORD 手工录入');
   await page.fill('[data-testid="literature-import-manual-year"]', '2024');

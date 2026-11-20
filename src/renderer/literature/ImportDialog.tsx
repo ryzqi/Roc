@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, FileText, Loader2, Search, TriangleAlert } from 'lucide-react';
+import { CheckCircle2, Loader2, Search, TriangleAlert } from 'lucide-react';
 import type { LiteratureSearchResult, LiteratureCandidate } from '../../shared/schemas/literature-import';
 import type { LiteratureImportActions } from './use-literature-import-actions';
 import type { ResearchBibliographyFormat, ResearchLiterature } from '../../shared/types';
@@ -7,7 +7,7 @@ import { ModalShell } from '../shell/ModalShell';
 import { ConfirmDialog } from '../shell/ConfirmDialog';
 import { BEFORE_NAVIGATE, type NavigationRequest } from '../app/navigation-guard';
 import { runIpcAction } from '../app/loaded-state';
-import { formInputClass } from '../shared/form-ui';
+import { formInputClass, formPrimaryButtonClass, formSecondaryButtonClass } from '../shared/form-ui';
 import type { ImportTabRequest } from './hub-route';
 import type { LiteratureSearchSource } from './library-store';
 import type { LiteratureImportOutcome } from './use-literature-store';
@@ -31,24 +31,10 @@ import {
 import './import-workspace.css';
 
 /**
- * Import dialog (P5/T5.2).
- *
- * Four paths, each mapping to exactly one backend capability — no path invents a
- * step that does not exist:
- *
- *   | tab      | capability                            | notes |
- *   |----------|---------------------------------------|-------|
- *   | 文档      | `files.selectFromDialog` → `research.document.import` | needs a title + citation key for `target:'new-item'`, or attaches to the selected item |
- *   | DOI      | `research.library.importDoi`          | DOI is normalized locally first |
- *   | 参考文献   | `files.selectFromDialog` → `research.library.importFile` | **no RIS** — the contract's formats are bibtex/biblatex/csl-json |
- *   | 手工录入   | `research.library.importRecord`       | the record is built by a pure helper; the *random arXiv id* of the legacy form is gone |
- *   | 检索      | `research.literature.search` → `addLiterature` | 导入已保存候选 |
- *
- * Deliberately absent: the legacy form's MinerU mode and formula/table switches.
- * Those are settings, and the parse step reads them from the settings
- * centre; a dialog-local copy would be a second source of truth.
+ * Four entry choices disclose six existing import paths. Drafts stay in this
+ * dialog when switching methods; Zotero checkpoint edits retain their own guard.
+ * Success reports metadata or document receipt, never inferred indexing progress.
  */
-
 export type ImportDialogProps = {
   client: RocClient;
   projectId: string | null;
@@ -76,13 +62,11 @@ export type ImportDialogProps = {
 
 
 
-const TABS: Array<{ id: ImportTabRequest; label: string }> = [
-  { id: 'document', label: '文档' },
-  { id: 'doi', label: 'DOI' },
-  { id: 'bibliography', label: '参考文献文件' },
-  { id: 'manual', label: '手工录入' },
-  { id: 'search', label: '检索' },
-  { id: 'zotero', label: 'Zotero' }
+const METHODS: Array<{ id: ImportTabRequest; label: string }> = [
+  { id: 'document', label: '从 PDF' },
+  { id: 'doi', label: 'DOI / 链接' },
+  { id: 'search', label: '学术搜索' },
+  { id: 'zotero', label: 'Zotero / 引用文件' }
 ];
 
 const BIBLIOGRAPHY_FORMATS: Array<{ id: ResearchBibliographyFormat; label: string }> = [
@@ -110,7 +94,7 @@ const operationLabels: Record<LocalOperation, string> = {
   search: '正在检索…'
 };
 
-function outcomeMessage(outcome: LiteratureImportOutcome): { tone: 'ok' | 'bad'; text: string } {
+function outcomeMessage(outcome: LiteratureImportOutcome, tab: ImportTabRequest): { tone: 'ok' | 'bad'; text: string } {
   if (!outcome.ok) {
     return { tone: 'bad', text: outcome.message };
   }
@@ -119,7 +103,7 @@ function outcomeMessage(outcome: LiteratureImportOutcome): { tone: 'ok' | 'bad';
   }
   return {
     tone: 'ok',
-    text: `已导入 ${outcome.createdCount} 条${outcome.duplicateCount > 0 ? `，跳过重复 ${outcome.duplicateCount} 条` : ''}`
+    text: `${tab === 'document' ? `已添加 ${outcome.createdCount} 份文档` : `已收录 ${outcome.createdCount} 条论文信息`}${outcome.duplicateCount > 0 ? `，跳过重复 ${outcome.duplicateCount} 条` : ''}。处理状态见文献库。`
   };
 }
 
@@ -128,6 +112,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
   const zoteroJob = useZoteroImportJob(props.client, props.projectId, props.onZoteroImported);
   const attachmentJobs = useZoteroAttachmentJobs(props.client, props.projectId, props.onZoteroImported);
   const [tab, setTab] = useState<ImportTabRequest>(props.initialTab ?? 'document');
+  const method = tab === 'bibliography' ? 'zotero' : tab === 'manual' ? null : tab;
   const [operation, setOperation] = useState<LocalOperation | null>(null);
   const pending = operation !== null;
   const [message, setMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
@@ -307,7 +292,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
   const run = async (action: () => Promise<LiteratureImportOutcome>): Promise<void> => {
     const submittedTab = tab, signature = draftSignatures[tab];
     await perform('import', action, outcome => {
-      setMessage(outcomeMessage(outcome));
+      setMessage(outcomeMessage(outcome, submittedTab));
       if (outcome.ok && signature !== undefined) setSavedDrafts(current => ({ ...current, [submittedTab]: signature }));
     });
   };
@@ -328,7 +313,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
     <ModalShell
       closeOnBackdrop={false}
       open={open}
-      title="导入文献"
+      title="添加文献"
       onClose={onClose}
       beforeClose={() => {
         if (busy.current !== null) return false;
@@ -343,41 +328,46 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
       footer={null}
     >
       <fieldset disabled={pending} className="literature-import-layout" data-testid="literature-import-body">
-        <div role="tablist" aria-label="导入方式" className="literature-import-navigation"
-          onKeyDown={event => {
-            if (busy.current !== null) return;
-            if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
-            event.preventDefault();
-            const index = TABS.findIndex(entry => entry.id === tab);
-            const next = event.key === 'Home' ? 0 : event.key === 'End' ? TABS.length - 1 :
-              (index + (event.key === 'ArrowRight' ? 1 : -1) + TABS.length) % TABS.length;
-            selectTab(TABS[next].id, true);
-          }}>
-          {TABS.map((entry) => (
-            <button
-              key={entry.id}
-              type="button"
-              role="tab"
-              aria-selected={entry.id === tab}
-              tabIndex={entry.id === tab ? 0 : -1}
-              onClick={() => selectTab(entry.id)}
-              data-testid={`literature-import-tab-${entry.id}`}
-              className={
-                entry.id === tab
-                  ? 'h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line bg-accent-soft px-2.5 text-ink text-[length:var(--font-meta-size)]'
-                  : 'h-[var(--control-height-compact)] rounded-control border-[0.5px] border-transparent px-2.5 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] hover:text-ink'
-              }
-            >
-              {entry.label}
+        <div className="literature-import-navigation">
+          <div role="tablist" aria-label="导入方式" className="literature-import-methods"
+            onKeyDown={event => {
+              if (busy.current !== null || !['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+              event.preventDefault();
+              const index = METHODS.findIndex(entry => entry.id === method);
+              const next = event.key === 'Home' ? 0 : event.key === 'End' ? METHODS.length - 1 :
+                (index + (event.key === 'ArrowRight' ? 1 : -1) + METHODS.length) % METHODS.length;
+              selectTab(METHODS[next]!.id, true);
+            }}>
+            {METHODS.map((entry, index) => (
+              <button key={entry.id} type="button" role="tab" aria-selected={entry.id === method}
+                tabIndex={entry.id === method || (method === null && index === 0) ? 0 : -1}
+                onClick={() => selectTab(entry.id)} data-testid={`literature-import-tab-${entry.id}`}
+                className="literature-import-method">
+                {entry.label}
+              </button>
+            ))}
+          </div>
+          <details className="literature-import-other" open={tab === 'manual' ? true : undefined}>
+            <summary data-testid="literature-import-other">其他方式</summary>
+            <button type="button" onClick={() => selectTab('manual')} aria-pressed={tab === 'manual'}
+              data-testid="literature-import-tab-manual" className={formSecondaryButtonClass}>
+              手工录入
             </button>
-          ))}
+          </details>
         </div>
 
         <div className="literature-import-content">
+        {method === 'zotero' ? <div className="flex flex-wrap gap-2" role="group" aria-label="引用来源">
+          <button type="button" className={formSecondaryButtonClass} aria-pressed={tab === 'zotero'}
+            onClick={() => selectTab('zotero')} data-testid="literature-import-source-zotero">Zotero</button>
+          <button type="button" className={formSecondaryButtonClass} aria-pressed={tab === 'bibliography'}
+            onClick={() => selectTab('bibliography')} data-testid="literature-import-tab-bibliography">引用文件</button>
+        </div> : null}
+        {tab === 'manual' ? <h3 className="font-medium text-[length:var(--font-ui-size)]">手工录入</h3> : null}
         {tab === 'document' ? (
           <div className="flex flex-col gap-2" data-testid="literature-import-panel-document">
             <div className="flex flex-wrap gap-3">
-              <label className="flex items-center gap-1.5 text-[length:var(--font-meta-size)]">
+              <label className="flex items-center gap-2 text-[length:var(--font-meta-size)]">
                 <input
                   type="radio"
                   name="document-target"
@@ -387,7 +377,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 />
                 作为新条目
               </label>
-              <label className="flex items-center gap-1.5 text-[length:var(--font-meta-size)]">
+              <label className="flex items-center gap-2 text-[length:var(--font-meta-size)]">
                 <input
                   type="radio"
                   name="document-target"
@@ -404,17 +394,19 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 type="button"
                 onClick={() => void pick(setDocumentPath)}
                 data-testid="literature-import-pick-document"
-                className="h-[var(--control-height)] shrink-0 rounded-control border-[0.5px] border-line px-3 text-ink text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+                className={`${formSecondaryButtonClass} min-h-[var(--control-height)] px-3`}
               >
+                {operation === 'pick' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : null}
                 选择文件…
               </button>
               <span className="min-w-0 flex-1 truncate font-mono text-muted text-[length:var(--font-micro-size)]" data-testid="literature-import-document-path">
                 {documentPath === null ? '未选择' : `${documentPath}（${documentKindLabel(documentPath)}）`}
               </span>
             </div>
-            <p className={labelClass}>
-              支持 {DOCUMENT_EXTENSIONS.join(' / ')}；单文件最大 512 MB。
-            </p>
+            <details className={labelClass}>
+              <summary>支持的文件格式</summary>
+              <p>支持 {DOCUMENT_EXTENSIONS.join(' / ')}；单文件最大 512 MB。</p>
+            </details>
             {documentTarget === 'new-item' ? (
               <>
                 <label className={labelClass} htmlFor="literature-import-document-title">
@@ -447,7 +439,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                   </p>
                 ) : null}
                 {documentDerivedKey === null && documentKey.trim().length === 0 && documentTitle.trim().length > 0 ? (
-                  <p className="text-muted text-[length:var(--font-micro-size)]">题名里没有可用的词，请自己指定一个 key。</p>
+                  <p className="text-muted text-[length:var(--font-micro-size)]">无法从题名生成引用键，请填写引用键。</p>
                 ) : null}
               </>
             ) : null}
@@ -471,9 +463,10 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 });
               }}
               data-testid="literature-import-document-submit"
-              className="mt-1 h-[var(--control-height)] shrink-0 self-start rounded-control bg-accent-soft px-3 text-ink text-[length:var(--font-meta-size)] active:bg-[var(--accent-soft-strong)] disabled:opacity-40"
+              className={`${formPrimaryButtonClass} mt-1 self-start`}
             >
-              导入文档
+              {operation === 'import' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : null}
+              添加文档
             </button>
           </div>
         ) : null}
@@ -481,7 +474,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
         {tab === 'doi' ? (
           <div className="flex flex-col gap-2" data-testid="literature-import-panel-doi">
             <label className={labelClass} htmlFor="literature-import-doi">
-              DOI（可粘贴 https://doi.org/… 或 doi:…）
+              DOI 或 doi.org 链接
             </label>
             <input
               id="literature-import-doi"
@@ -493,7 +486,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
             />
             {doiInput.trim().length > 0 && normalizedDoi === null ? (
               <p role="alert" className="text-[var(--st-bad)] text-[length:var(--font-micro-size)]">
-                这不是一个 DOI（形如 10.xxxx/yyyy）。
+                请输入有效 DOI 或 doi.org 链接，例如 10.xxxx/yyyy。
               </p>
             ) : null}
             <button
@@ -506,9 +499,10 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 void run(() => props.importDoi(normalizedDoi));
               }}
               data-testid="literature-import-doi-submit"
-              className="mt-1 h-[var(--control-height)] self-start rounded-control bg-accent-soft px-3 text-ink text-[length:var(--font-meta-size)] active:bg-[var(--accent-soft-strong)] disabled:opacity-40"
+              className={`${formPrimaryButtonClass} mt-1 self-start`}
             >
-              从 DOI 导入
+              {operation === 'import' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : null}
+              添加文献
             </button>
           </div>
         ) : null}
@@ -516,7 +510,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
         {tab === 'bibliography' ? (
           <div className="flex flex-col gap-2" data-testid="literature-import-panel-bibliography">
             <span className={labelClass}>参考文献格式</span>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-2">
               {BIBLIOGRAPHY_FORMATS.map((entry) => (
                 <button
                   key={entry.id}
@@ -526,8 +520,8 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                   data-testid={`literature-import-format-${entry.id}`}
                   className={
                     entry.id === bibliographyFormat
-                      ? 'h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line bg-accent-soft px-2.5 text-ink text-[length:var(--font-meta-size)]'
-                      : 'h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2.5 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)]'
+                      ? `${formSecondaryButtonClass} bg-[var(--overlay-active)] text-ink`
+                      : formSecondaryButtonClass
                   }
                 >
                   {entry.label}
@@ -539,8 +533,9 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 type="button"
                 onClick={() => void pick(setBibliographyPath)}
                 data-testid="literature-import-pick-bibliography"
-                className="h-[var(--control-height)] shrink-0 rounded-control border-[0.5px] border-line px-3 text-ink text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+                className={`${formSecondaryButtonClass} min-h-[var(--control-height)] px-3`}
               >
+                {operation === 'pick' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : null}
                 选择文件…
               </button>
               <span className="min-w-0 flex-1 truncate font-mono text-muted text-[length:var(--font-micro-size)]" data-testid="literature-import-bibliography-path">
@@ -558,9 +553,10 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 void run(() => props.importBibliographyFile(path, bibliographyFormat));
               }}
               data-testid="literature-import-bibliography-submit"
-              className="mt-1 h-[var(--control-height)] self-start rounded-control bg-accent-soft px-3 text-ink text-[length:var(--font-meta-size)] active:bg-[var(--accent-soft-strong)] disabled:opacity-40"
+              className={`${formPrimaryButtonClass} mt-1 self-start`}
             >
-              导入参考文献
+              {operation === 'import' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : null}
+              添加引用文件
             </button>
           </div>
         ) : null}
@@ -637,13 +633,13 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
               data-testid="literature-import-manual-abstract"
             />
             <label className={labelClass} htmlFor="literature-import-manual-key">
-              引用 key（必填；留空则用推导值）
+              引用键（留空自动生成）
             </label>
             <input
               id="literature-import-manual-key"
               value={manualKey}
               onChange={(event) => setManualKey(event.target.value)}
-              placeholder={manualDerivedKey ?? '请自己指定一个'}
+              placeholder={manualDerivedKey ?? '填写引用键'}
               className={fieldClass}
               data-testid="literature-import-manual-key"
             />
@@ -675,9 +671,10 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                 );
               }}
               data-testid="literature-import-manual-submit"
-              className="mt-1 h-[var(--control-height)] self-start rounded-control bg-accent-soft px-3 text-ink text-[length:var(--font-meta-size)] active:bg-[var(--accent-soft-strong)] disabled:opacity-40"
+              className={`${formPrimaryButtonClass} mt-1 self-start`}
             >
-              录入
+              {operation === 'import' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : null}
+              添加文献
             </button>
           </div>
         ) : null}
@@ -688,7 +685,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
         {tab === 'search' ? (
           <div className="flex flex-col gap-2" data-testid="literature-import-panel-search">
             <label className={labelClass} htmlFor="literature-import-search">
-              检索（arXiv 可直接粘贴 id 或 abs/pdf 链接）
+              关键词或 arXiv 链接
             </label>
             <div className="flex gap-2">
               <input
@@ -719,9 +716,9 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
                     });
                 }}
                 data-testid="literature-import-search-submit"
-                className="flex h-[var(--control-height)] shrink-0 items-center gap-1 rounded-control border-[0.5px] border-line px-3 text-ink text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+                className={formPrimaryButtonClass}
               >
-                <Search size={12} aria-hidden="true" />
+                {operation === 'search' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : <Search size={12} aria-hidden="true" />}
                 检索
               </button>
             </div>
@@ -742,7 +739,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
               </p>
             )}
             {searchHits.length === 0 ? null : (
-              <ul className="flex flex-col pr-1" aria-label="检索结果" tabIndex={0}>
+              <ul className="flex flex-col pe-1" aria-label="检索结果" tabIndex={0}>
                 {searchHits.map(candidate => <LiteratureCandidateReview key={candidate.candidateId}
                   candidate={candidate} pending={pending || searchResult === null}
                   onAdd={() => {
@@ -755,7 +752,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
         ) : null}
 
         {pending ? (
-          <p role="status" className="flex items-center gap-1.5 text-muted text-[length:var(--font-micro-size)]" data-testid="literature-import-pending">
+          <p role="status" className="flex items-center gap-2 text-muted text-[length:var(--font-micro-size)]" data-testid="literature-import-pending">
             <Loader2 size={12} aria-hidden="true" className="animate-spin" />
             {operationLabels[operation!]}
           </p>
@@ -765,7 +762,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
           <p
             role={message.tone === 'ok' ? 'status' : 'alert'}
             data-testid="literature-import-message"
-            className={`flex items-center gap-1.5 text-[length:var(--font-meta-size)] ${
+            className={`flex items-center gap-2 text-[length:var(--font-meta-size)] ${
               message.tone === 'ok' ? 'text-[var(--st-ok)]' : 'text-[var(--st-bad)]'
             }`}
           >
@@ -774,10 +771,6 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
           </p>
         )}
 
-        <p className={labelClass}>
-          <FileText size={10} aria-hidden="true" className="mr-1 inline" />
-          添加文档后，在阅读器中选择「解析」即可提取可检索内容。
-        </p>
         </div>
       </fieldset>
     </ModalShell>

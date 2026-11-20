@@ -372,6 +372,7 @@ try {
     await selectDestination(page, 'library');
     await page.getByTestId('literature-hub-import').click();
     await page.getByTestId('literature-import-dialog-panel').waitFor();
+    await page.getByTestId('literature-import-other').click();
     await page.getByTestId('literature-import-tab-manual').click();
     await assertFormLayout(page.getByTestId('literature-import-dialog-panel'));
     await capture(page, `literature-import-${viewport.id}`);

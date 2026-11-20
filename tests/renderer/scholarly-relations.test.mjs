@@ -25,6 +25,8 @@ before(async () => {
     import {WorkspaceScopeProvider} from ${JSON.stringify(join(process.cwd(), 'src/renderer/app/workspace-scope'))};
     const methods=${JSON.stringify(Object.keys(channels))};
     const client={api:{research:Object.fromEntries(methods.map(method=>[method,input=>window.readHost(method,input)]))}};
+    client.api.research.listAcquisition=async()=>({ok:true,data:{jobs:[],total:0,nextOffset:null}});
+    client.api.research.onLibraryChanged=()=>()=>{};
     client.api.research.getModelsStatus=async()=>({ok:true,data:{ready:false,error:null,models:[],downloading:false,selectedPack:'compact'}});
     const root=createRoot(document.getElementById('root'));let generation=0;
     function Harness({initial}){const [state,setState]=useState(initial);
