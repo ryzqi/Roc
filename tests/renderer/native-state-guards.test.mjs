@@ -17,11 +17,10 @@ before(async () => {
     import {flushSync} from 'react-dom';
     import {SWRConfig} from 'swr';
     import {useWindowState} from './src/renderer/shell/use-window-state';
-    import {useTraySummaryLabel} from './src/renderer/shell/use-tray-summary';
     import {useProjectWorkspace} from './src/renderer/project/use-project-workspace';
     import {ErrorBar} from './src/renderer/shell/ErrorBar';
     const ok=data=>({ok:true,data});
-    const requests={window:[],tray:[],pick:[],update:[]};
+    const requests={window:[],pick:[],update:[]};
     const invoke=kind=>{
       window.calls[kind]++;
       if(window.failures[kind]==='throw')throw new Error(kind+' bridge disconnected');
@@ -32,7 +31,6 @@ before(async () => {
     const client={api:{
       window:{getState:()=>invoke('window'),onHidden:callback=>{window.hiddenListener=callback;return()=>{window.hiddenListener=null;};},
         onResourcePressure:callback=>{window.pressureListener=callback;return()=>{window.pressureListener=null;};}},
-      lifecycle:{getTraySummary:()=>invoke('tray')},
       workspace:{selectFromDialog:()=>invoke('pick')},
       research:{updateProject:input=>{window.updates.push(input);return invoke('update');}}
     }};
@@ -40,13 +38,6 @@ before(async () => {
       const state=useWindowState(client);
       return <><output data-testid="window-state">{JSON.stringify(state)}</output>
         {state.error?<ErrorBar error={{level:'page',message:state.error,retry:state.reload}}/>:null}</>;
-    }
-    function TrayProbe(){
-      const [hidden,setHidden]=useState(false);window.setHidden=value=>flushSync(()=>setHidden(value));
-      const tray=useTraySummaryLabel(client,hidden);
-      const label=typeof tray==='string'?tray:tray?.label;
-      return <><output data-testid="tray-state">{label}</output>
-        {tray?.error?<ErrorBar error={{level:'page',message:tray.error,retry:tray.reload}}/>:null}</>;
     }
     function ProjectProbe(){
       const [projectId,setProjectId]=useState('a');window.selectProject=id=>flushSync(()=>setProjectId(id));
@@ -58,11 +49,11 @@ before(async () => {
     const root=createRoot(document.getElementById('root'));let nonce=0;
     window.unmount=()=>flushSync(()=>root.render(null));
     window.mount=(mode,failure=null)=>{
-      window.unmount();window.calls={window:0,tray:0,pick:0,update:0};
-      window.failures={window:null,tray:null,pick:null,update:null};window.failures[mode==='project'?'pick':mode]=failure;
+      window.unmount();window.calls={window:0,pick:0,update:0};
+      window.failures={window:null,pick:null,update:null};window.failures[mode==='project'?'pick':mode]=failure;
       for(const kind of Object.keys(requests))requests[kind]=[];
       window.updates=[];window.bound=[];
-      const child=mode==='window'?<WindowProbe/>:mode==='tray'?<TrayProbe/>:<ProjectProbe/>;
+      const child=mode==='window'?<WindowProbe/>:<ProjectProbe/>;
       flushSync(()=>root.render(<SWRConfig value={{provider:()=>new Map()}} key={++nonce}>{child}</SWRConfig>));
     };
     window.resolve=(kind,index,data)=>requests[kind][index](ok(data));
@@ -88,9 +79,6 @@ after(async () => {
 });
 
 const snapshot = maximized => ({maximized, minimized:false, fullscreen:false});
-const traySummary = running => ({backgroundPaused:false, backgroundTasks:{running, pendingConfirmation:0, failed:0},
-  researchTasks:{running:0, pendingConfirmation:0, failed:0}});
-
 test('window state keeps the newest native response when resize reads resolve out of order', async () => {
   await page.evaluate(() => window.mount('window'));
   await page.evaluate(() => window.dispatchEvent(new Event('resize')));
@@ -102,7 +90,7 @@ test('window state keeps the newest native response when resize reads resolve ou
   await expect(page.getByTestId('window-state')).toContainText('"maximized":true');
 });
 
-for (const mode of ['window', 'tray']) {
+for (const mode of ['window']) {
   for (const failure of ['throw', 'reject', 'error']) {
     test(`${mode} state reports ${failure} failures and retries without an unhandled rejection`, async () => {
       await page.evaluate(({mode, failure}) => window.mount(mode, failure), {mode, failure});
@@ -112,27 +100,13 @@ for (const mode of ['window', 'tray']) {
       await page.getByRole('button', {name:'重试'}).click();
       await expect.poll(() => page.evaluate(mode => window.calls[mode], mode)).toBe(2);
       await page.evaluate(({mode, value}) => window.resolve(mode, 0, value), {
-        mode, value:mode === 'window' ? snapshot(true) : traySummary(2)
+        mode, value:snapshot(true)
       });
       await expect(page.getByRole('alert')).toHaveCount(0);
-      await expect(page.getByTestId(`${mode}-state`)).toContainText(mode === 'window' ? '"maximized":true' : '后台 2 项运行中');
+      await expect(page.getByTestId(`${mode}-state`)).toContainText('"maximized":true');
     });
   }
 }
-
-test('tray state ignores superseded polls and stops periodic reads while hidden', async () => {
-  await page.evaluate(() => window.mount('tray'));
-  await page.clock.runFor(30_001);
-  assert.equal(await page.evaluate(() => window.calls.tray), 2);
-  await page.evaluate(value => window.resolve('tray', 1, value), traySummary(2));
-  await expect(page.getByTestId('tray-state')).toHaveText('后台 2 项运行中');
-  await page.evaluate(value => window.resolve('tray', 0, value), traySummary(1));
-  await expect(page.getByTestId('tray-state')).toHaveText('后台 2 项运行中');
-  await page.evaluate(() => window.setHidden(true));
-  const hidden = await page.evaluate(() => window.calls.tray);
-  await page.clock.runFor(90_001);
-  assert.equal(await page.evaluate(() => window.calls.tray), hidden);
-});
 
 test('project binding catches a synchronous native picker failure and allows another selection', async () => {
   await page.evaluate(() => window.mount('project', 'throw'));

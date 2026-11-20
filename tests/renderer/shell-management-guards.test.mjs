@@ -22,7 +22,8 @@ before(async () => {
       import {BEFORE_NAVIGATE} from './src/renderer/app/navigation-guard';
       import {BEFORE_ARTIFACT_CHANGE} from './src/renderer/artifacts/artifact-interactions';
       const ok = data => ({ok: true, data});
-      const task = id => ({id, projectId: 'project-a', goal: id, status: 'active', statusReason: null});
+      const task = id => ({id, projectId: 'project-a', goal: id, status: 'active', statusReason: null,
+        updatedAt: '2026-11-20T00:00:00.000Z'});
       const diagnostics = id => ({
         task: task(id), executions: [], graph: {revision: 0, nodes: [], edges: []}, recoveryIssues: [],
         eventDelivery: {pending: 0, failed: 0}, canRestoreApproval: false, continuationRunId: null,
@@ -49,6 +50,7 @@ before(async () => {
           backgroundTasks: {running: 0, pendingConfirmation: 0, failed: 0},
           researchTasks: {running: 0, pendingConfirmation: 0, failed: 0}})},
         workspace:{onChanged:()=>()=>{}},
+        tasks: {listBackgroundTasks: async () => ok([]), onUpdated: () => () => {}},
         rtk:{status:async()=>({ok:false,error:{message:'Synthetic RTK unavailable'}})},
         git:{
           status:async()=>ok(gitSnapshot()),diffStat:async()=>ok({workspacePath:gitSnapshot().workspacePath,stat:''}),
@@ -59,6 +61,8 @@ before(async () => {
           getProject: async ({id}) => ok({id, title: id, status: 'active', workspacePath: '/workspace'}),
           listPythonEnvironmentSelections: async () => ok([]),
           listTasks: async () => ok({tasks: [task('task-a'), task('task-b')], nextTaskId: 'task-b', hasMore: false}),
+          listAcquisition: async () => ok({jobs: [], total: 0, nextOffset: null}),
+          onLibraryChanged: () => () => {},
           getTaskDiagnostics: async ({taskId}) => ok(diagnostics(taskId)),
           getTaskEvents: async () => ok({events: [], hasMore: false, nextSequence: 0, gap: null}),
           getTaskFacts: async () => ok({snapshot: null, freshness: [], authority: 'research_data_only'}),
@@ -75,7 +79,7 @@ before(async () => {
       window.setVeto = (kind, enabled) => window[enabled ? 'addEventListener' : 'removeEventListener'](
         kind === 'navigation' ? BEFORE_NAVIGATE : BEFORE_ARTIFACT_CHANGE, veto);
       window.unmount = () => flushSync(() => root.render(null));
-      window.mount = (view = 'literature') => {
+      window.mount = (view = 'library') => {
         unmount(); setVeto('navigation', false); setVeto('artifact', false);
         window.gitCalls=[];window.boundPath='/workspace';
         history.replaceState(null, '', '?project=project-a&view=' + view + '&assistant=1');
@@ -115,13 +119,11 @@ before(async () => {
           '/management/management-stores-provider.tsx': `export const ManagementStoresProvider = ({children}) => children;
             export const useManagementStores = () => null;`,
           '/app/ViewContent.tsx': `import React from 'react';
-            import {ManagementView} from '../management/ManagementView';
             import {useWorkspaceScope} from './workspace-scope';
             import {useManagement} from '../management/management-scope';
             export function ViewContent(props) {
               window.workspaceEntries = useWorkspaceScope(); window.managementEntries = useManagement();
-              return ['memory', 'skills', 'mcp'].includes(props.view)
-                ? <ManagementView {...props}/> : <section data-testid="shell-canvas-content">{props.view}</section>;
+              return <section data-testid="shell-canvas-content">{props.view}</section>;
             }`,
           '/assistant/AssistantPanel.tsx': `import React from 'react';
             export function AssistantPanel(props) {window.assistantEntries = props;
@@ -182,8 +184,8 @@ const discard = () => page.getByTestId('mgmt-editor-discard');
 const cancel = () => discard().getByRole('button', {name: '继续编辑', exact: true}).click();
 const confirm = () => discard().getByRole('button', {name: '放弃修改并继续', exact: true}).click();
 
-async function openTask() {
-  await page.evaluate(() => {mount();});
+async function openTask(view = 'library') {
+  await page.evaluate(view => {mount(view);}, view);
   await page.getByTestId('shell-assistant-content').waitFor();
   await page.evaluate(() => assistantEntries.onOpenTask('task-a'));
   await page.getByTestId('mgmt-task-select').waitFor();
@@ -211,7 +213,7 @@ test('actual shell assistant and management selections preserve facts until the 
 });
 
 test('actual shell management exits keep the drawer until facts and navigation guards have both released', async () => {
-  for (const entry of ['settings', 'workspace-settings', 'thread', 'assistant', 'canvas']) {
+  for (const entry of ['settings', 'workspace-settings', 'thread', 'assistant', 'palette']) {
     await openTask();
     await page.evaluate(entry => {
       setVeto('navigation', true);
@@ -224,7 +226,7 @@ test('actual shell management exits keep the drawer until facts and navigation g
     await discard().waitFor();
     await confirm();
     await expect(page.getByTestId('management-panel')).toBeVisible();
-    assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('view')), 'literature');
+    assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('view')), 'library');
     assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('page')), 'research');
     assert.equal(await page.evaluate(() => assistantEntries.threadId), null);
     assert.equal(await page.evaluate(() => assistantEntries.composerSeed), null);
@@ -254,33 +256,49 @@ test('actual shell artifact handoff waits for its inspector guard and returns to
   await expect(page.getByTestId('shell-artifact')).toHaveCount(0);
 });
 
-test('actual canvas management facts veto view navigation and native unload while a save is pending', async () => {
-  await page.evaluate(() => mount('memory'));
-  await page.getByTestId('mgmt-view-tab-tasks').click();
-  await page.getByTestId('mgmt-task-category-research').click();
-  await page.getByTestId('mgmt-task-select').selectOption('task-a');
-  await content().fill('画布中未保存的任务事实');
+test('management facts over writing veto project navigation and native unload while a save is pending', async () => {
+  await openTask('writing');
+  await content().fill('写作任务中未保存的事实');
   await page.getByTestId('mgmt-task-category-background').click();
   await discard().waitFor();
   await cancel();
   await expect(page.getByTestId('mgmt-task-category-research')).toHaveAttribute('aria-selected', 'true');
-  await expect(content()).toHaveValue('画布中未保存的任务事实');
-  await page.evaluate(() => workspaceEntries.openView('terminal'));
+  await expect(content()).toHaveValue('写作任务中未保存的事实');
+  await page.evaluate(() => searchEntries.onOpenProject('project-b'));
   await discard().waitFor();
   await cancel();
-  await expect(content()).toHaveValue('画布中未保存的任务事实');
+  await expect(content()).toHaveValue('写作任务中未保存的事实');
   await page.getByTestId('mgmt-task-fact-save').click();
   await expect(content()).toBeDisabled();
   await page.getByTestId('mgmt-task-category-background').click();
   await expect(page.getByTestId('mgmt-task-category-research')).toHaveAttribute('aria-selected', 'true');
-  await page.evaluate(() => workspaceEntries.openView('terminal'));
-  assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('view')), 'memory');
+  await page.evaluate(() => searchEntries.onOpenProject('project-b'));
+  assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('view')), 'writing');
+  assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('project')), 'project-a');
   assert.equal(await page.evaluate(() => !window.dispatchEvent(new Event('beforeunload', {cancelable: true}))), true);
   await page.evaluate(() => finishSave({ok: false, error: {message: '保留事实以重试'}}));
   await expect(content()).toBeEnabled();
-  await page.evaluate(() => workspaceEntries.openView('terminal'));
+  await page.evaluate(() => searchEntries.onOpenProject('project-b'));
   await confirm();
-  await expect(page.getByTestId('shell-canvas-content')).toHaveText('terminal');
+  await expect(page.getByTestId('shell-canvas-content')).toHaveText('overview');
+  assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('project')), 'project-b');
+});
+
+test('titlebar and workspace task entries open the same task center without replacing the canvas', async () => {
+  await page.evaluate(() => mount('writing'));
+  await expect(page.getByTestId('titlebar-tasks')).toContainText('执行 2');
+  await page.getByTestId('titlebar-tasks').click();
+  await expect(page.getByTestId('mgmt-task-center')).toBeVisible();
+  await expect(page.getByTestId('mgmt-task-category-overview')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('management-panel')).toHaveCount(1);
+  await expect(page.getByTestId('mgmt-task-open-research:task-a')).toContainText('task-a');
+  assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('view')), 'writing');
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('management-panel')).toHaveCount(0);
+  await page.evaluate(() => workspaceEntries.openTasks());
+  await expect(page.getByTestId('mgmt-task-center')).toBeVisible();
+  await expect(page.getByTestId('management-panel')).toHaveCount(1);
+  await expect(page.getByTestId('shell-canvas-content')).toHaveText('writing');
 });
 
 async function openGit() {

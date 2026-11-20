@@ -24,7 +24,7 @@ before(async () => {
     import {McpSection} from './src/renderer/management/sections/McpSection';
     import {BackgroundTasksSection} from './src/renderer/management/sections/BackgroundTasksSection';
     import {SkillsSection} from './src/renderer/management/sections/SkillsSection';
-    import {ManagementView} from './src/renderer/management/ManagementView';
+    import {ManagementPanel} from './src/renderer/management/ManagementPanel';
     import {ManagementScopeProvider} from './src/renderer/management/management-scope';
     import {MEMORY_SLOTS} from './src/renderer/management/memory-model';
     import {requestNavigation} from './src/renderer/app/navigation-guard';
@@ -95,13 +95,15 @@ before(async () => {
       const [layout, setLayout] = useState(false);
       window.showLayout = () => flushSync(() => setLayout(true));
       const scope = {client, projectId, workspacePath: '/project-a', researchTaskId: null,
+        taskCenter: {rows:[],sources:[],counts:{current:0,pending:0,completed:0,failed:0},partial:false,loading:false,label:'任务中心',summary:'',reload(){}},
+        taskCenterRequestId:0,onOpenLiteratureTask() {},
         onSelectResearchTask: () => {}, onAskAssistant: () => {}, onOpenThread: () => {}, openSettings: () => {}};
       window.setTab = next => flushSync(() => setTab(next));
       window.navigate = () => requestNavigation({page: 'project', projectId: 'project-b'}, () => {
         window.navigations++; setProjectId('project-b');
       });
       return <ManagementStoresProvider enabled scope={scope} scopeKey={projectId}>
-        <main style={{padding: layout ? 0 : 40, height: layout ? '100%' : undefined}}>{layout ? <ManagementScopeProvider value={scope}><ManagementView view="memory" /></ManagementScopeProvider> : <Surfaces scope={scope} tab={tab} />}</main>
+        <main style={{padding: layout ? 0 : 40, height: layout ? '100%' : undefined}}>{layout ? <ManagementScopeProvider value={scope}><ManagementPanel open activeTab={tab} onTabChange={setTab} onClose={()=>setLayout(false)}/></ManagementScopeProvider> : <Surfaces scope={scope} tab={tab} />}</main>
       </ManagementStoresProvider>;
     }
     const root = createRoot(document.getElementById('root'));
@@ -463,7 +465,8 @@ test('task selection cannot move during an update started in the same event', as
 test('task categories retain background drafts and block switching during same-event writes', async () => {
   await editBackground();
   await page.evaluate(() => window.showLayout());
-  await page.getByTestId('mgmt-view-tab-tasks').click();
+  await page.getByTestId('mgmt-tab-tasks').click();
+  await page.getByTestId('mgmt-task-category-background').click();
   await expect(page.getByTestId('mgmt-task-draft-goal')).toHaveValue('Edited task A');
   await page.getByTestId('mgmt-task-category-research').click();
   await expect(page.getByTestId('mgmt-research-tasks')).toBeVisible();
@@ -483,6 +486,8 @@ test('task categories retain background drafts and block switching during same-e
   await expect(page.getByTestId('mgmt-python-environment')).toBeVisible();
   await page.getByTestId('mgmt-task-category-python').focus();
   await page.keyboard.press('Home');
+  await expect(page.getByTestId('mgmt-task-category-overview')).toBeFocused();
+  await page.keyboard.press('ArrowRight');
   await expect(page.getByTestId('mgmt-task-category-background')).toBeFocused();
   await expect(page.getByTestId('mgmt-task-draft-goal')).toHaveValue('Edited task A');
 });
@@ -496,8 +501,9 @@ test('management content is readable in both themes at desktop and drawer widths
     for (const width of [1100, 480]) {
       await page.setViewportSize({width, height: 800});
       for (const tab of ['memory', 'skills', 'mcp', 'tasks']) {
-        await page.getByTestId('mgmt-view-tab-' + tab).click();
-        await page.getByTestId('mgmt-' + tab).waitFor();
+        await page.getByTestId('mgmt-tab-' + tab).click();
+        if (tab === 'tasks') await page.getByTestId('mgmt-task-category-overview').click();
+        await page.getByTestId(tab === 'tasks' ? 'mgmt-task-center' : 'mgmt-' + tab).waitFor();
         if (tab === 'skills') {
           await page.getByTestId('mgmt-skills-search').fill('no-match');
           await expect(page.getByTestId('mgmt-skills-empty')).toContainText('没有符合条件');
@@ -506,12 +512,12 @@ test('management content is readable in both themes at desktop and drawer widths
           await page.getByTestId('mgmt-skills-search').fill('');
           await expect(page.getByTestId('mgmt-skills-builtin-check')).toBeHidden();
         }
-        const layout = await page.getByTestId('mgmt-view-panel-' + tab).evaluate(element => ({
+        const layout = await page.getByTestId('mgmt-panel-' + tab).evaluate(element => ({
           overflow: element.scrollWidth > element.clientWidth + 1,
           height: element.getBoundingClientRect().height
         }));
         assert.equal(layout.overflow, false, tab + ' must fit the available width');
-        assert.ok(layout.height > 650, tab + ' must keep most of the window for content');
+        assert.ok(layout.height > 550, tab + ' must keep most of the drawer for content');
         const audit = await page.evaluate('(' + clipAudit + ')({root: ".management-surface", viewport: true})');
         assert.equal(audit.cut, 0, JSON.stringify(audit));
         audits.push({theme, width, tab, ...audit});

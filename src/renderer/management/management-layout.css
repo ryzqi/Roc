@@ -8,7 +8,7 @@
 .management-body .form-section > header h3 { font-size: var(--font-lead-size); font-weight: var(--font-weight-semibold); }
 .management-body .form-section { gap: var(--space-4); }
 .management-tasks { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
-.management-task-categories { display: flex; gap: var(--space-5); border-bottom: .5px solid var(--line); }
+.management-task-categories { display: flex; flex-wrap: wrap; gap: var(--space-5); border-bottom: .5px solid var(--line); }
 .management-task-categories button { min-height: 36px; border-bottom: 2px solid transparent; margin-bottom: -.5px; color: var(--muted); font-size: var(--font-meta-size); }
 .management-task-categories button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: var(--font-weight-semibold); }
 .management-task-categories button:hover { color: var(--ink); }
@@ -20,6 +20,20 @@
 .management-disclosure > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .management-disclosure[open] > summary { margin-bottom: var(--space-4); color: var(--ink); }
 .management-body input, .management-body select, .management-body textarea { max-width: 100%; }
+.task-center { display: flex; min-width: 0; flex-direction: column; gap: var(--space-4); }
+.task-center-sources { display: flex; flex-direction: column; gap: var(--space-1); color: var(--muted); font-size: var(--font-meta-size); }
+.task-center-group { min-width: 0; }
+.task-center-group > h4 { padding-block: var(--space-2); font-size: var(--font-meta-size); font-weight: var(--font-weight-medium); }
+.task-center-list { border-top: .5px solid var(--line); }
+.task-center-list > li { border-bottom: .5px solid var(--line); }
+.task-center-row { display: flex; width: 100%; min-width: 0; flex-direction: column; gap: var(--space-1); padding: var(--space-3) var(--space-2); border-radius: var(--r-control); text-align: start; }
+.task-center-row:hover { background: var(--overlay-hover); }
+.task-center-row:active { background: var(--overlay-active); }
+.task-center-row:disabled { opacity: .5; cursor: default; }
+.task-center-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.task-center-row-title { display: flex; width: 100%; align-items: start; justify-content: space-between; gap: var(--space-2); font-size: var(--font-ui-size); }
+.task-center-row-meta { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); color: var(--muted); font-size: var(--font-meta-size); }
+.task-center-empty { padding: var(--space-2); color: var(--subtle); font-size: var(--font-meta-size); }
 @container (max-width: 480px) {
   .management-heading { gap: var(--space-3); }
   .management-heading h2 { display: none; }

@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
+import {Loader2} from 'lucide-react';
 import type { ResearchTaskDiagnostics } from '../../../shared/schemas/research-task-diagnostics';
 import { useAsyncAction } from '../../app/use-async-resource';
 import { formSecondaryButtonClass } from '../../shared/form-ui';
 import type { RocClient } from '../../shared/roc-client';
+import {recordUxEvent} from '../../app/ux-metrics';
 
 type TaskAction = 'pause' | 'cancel' | 'continue' | 'restoreApproval';
 
-export function TaskControls({ client, data, onChanged }: {
-  client: RocClient; data: ResearchTaskDiagnostics; onChanged: () => void;
+export function TaskControls({ client, data, onChanged, surface = 'tasks' }: {
+  client: RocClient; data: ResearchTaskDiagnostics; onChanged: () => void; surface?: 'assistant' | 'tasks';
 }): React.JSX.Element {
   const [intent, setIntent] = useState<TaskAction | null>(null);
   const running = useRef(false);
@@ -38,6 +40,7 @@ export function TaskControls({ client, data, onChanged }: {
   const run = (type: TaskAction): void => {
     if (running.current) return;
     running.current = true;
+    recordUxEvent('action_initiated', surface);
     setIntent(type);
     void action.run(type).then(() => {
       // Cleanup failures can still change the authoritative task state.
@@ -49,19 +52,19 @@ export function TaskControls({ client, data, onChanged }: {
       <div className="flex flex-wrap gap-2">
         {status === 'active' || status === 'waiting_approval' ? (
           <button type="button" className={formSecondaryButtonClass} disabled={action.pending}
-            data-testid="task-pause" onClick={() => run('pause')}>暂停任务</button>
+            data-testid="task-pause" onClick={() => run('pause')}>{action.pending && intent === 'pause' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : null}暂停任务</button>
         ) : null}
         {status !== 'completed' && status !== 'cancelled' ? (
           <button type="button" className={formSecondaryButtonClass} disabled={action.pending}
-            data-testid="task-cancel" onClick={() => run('cancel')}>取消整个任务</button>
+            data-testid="task-cancel" onClick={() => run('cancel')}>{action.pending && intent === 'cancel' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : null}取消整个任务</button>
         ) : null}
         {canContinue ? (
           <button type="button" className={formSecondaryButtonClass} disabled={action.pending}
-            data-testid="task-continue" onClick={() => run('continue')}>继续任务</button>
+            data-testid="task-continue" onClick={() => run('continue')}>{action.pending && intent === 'continue' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : null}继续任务</button>
         ) : null}
         {data.canRestoreApproval && !unconfirmed ? (
           <button type="button" className={formSecondaryButtonClass} disabled={action.pending}
-            data-testid="task-restore-approval" onClick={() => run('restoreApproval')}>恢复审批</button>
+            data-testid="task-restore-approval" onClick={() => run('restoreApproval')}>{action.pending && intent === 'restoreApproval' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : null}恢复审批</button>
         ) : null}
       </div>
       {action.pending ? (

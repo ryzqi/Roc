@@ -39,7 +39,8 @@ import { useSearchGroups } from '../shell/use-search-groups';
 import { StartupFailure, StartupLoading } from '../shell/StartupSurface';
 import { WindowChrome } from '../shell/WindowChrome';
 import { useAppearanceOverride, useAppearanceSync } from '../shell/appearance';
-import { useTraySummaryLabel } from '../shell/use-tray-summary';
+import { useTaskCenter } from '../management/use-task-center';
+import { recordUxEvent } from './ux-metrics';
 import { useWindowState, type WindowStateResource } from '../shell/use-window-state';
 import { useBoundWorkspace } from '../workspace/use-bound-workspace';
 import { LiteratureScopeProvider } from '../literature/literature-scope';
@@ -147,6 +148,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
   const [managementOpen, setManagementOpen] = useState(false);
   const [managementTab, setManagementTab] = useState<ManagementTabId>('memory');
   const [researchTaskSelection, setResearchTaskSelection] = useState<{ projectId: string; taskId: string } | null>(null);
+  const [taskCenterRequestId, setTaskCenterRequestId] = useState(0);
   /**
    * A prompt handed to the assistant's composer by the management drawer (P9/T9.1).
    *
@@ -234,7 +236,6 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
 
   useAppearanceSync(client, boot.status === 'ready' ? boot.appStatus.appearance : null, override);
 
-  const backgroundRun = useTraySummaryLabel(client, windowState.hidden);
 
   const inProject = route.projectId !== null;
   const settingsOpen = route.page === 'settings';
@@ -264,6 +265,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
   // scopes the backend to it. Every file/Git/terminal call is keyed on the
   // **bound** path, so a project switch rebuilds all three (gate 6).
   const boundWorkspace = useBoundWorkspace(client, project);
+  const taskCenter = useTaskCenter(client, route.projectId, boundWorkspace.path);
 
   /**
    * The literature store lives here, not in the literature view.
@@ -293,7 +295,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
   const consumeLiteratureRequest = useCallback((nonce: number): void => {
     setLiteratureRequest(current => current?.nonce === nonce ? null : current);
   }, []);
-  const openLiterature = useCallback((target: LiteratureOpenTarget): void => {
+  const openLiterature = useCallback((target: LiteratureOpenTarget, onOpened?: () => void): void => {
     const projectId = routeRef.current.projectId;
     if (projectId === null) return;
     const proceed = (commitSelection?: () => void): void => {
@@ -303,6 +305,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
         onNavigated: () => {
           commitSelection?.();
           setLiteratureRequest({projectId, nonce: ++literatureRequestNonce.current, target});
+          onOpened?.();
         }
       });
     };
@@ -346,6 +349,11 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
     (section: DrawerSectionId): void => {
       requestManagementEditorChange(() => {
         navigate({ ...routeRef.current, tool: section }, {onNavigated: () => {
+          if (section === 'tasks') {
+            setResearchTaskSelection(null);
+            setTaskCenterRequestId(current => current + 1);
+            recordUxEvent('action_initiated', 'tasks');
+          }
           setManagementTab(section);
           setManagementOpen(true);
         }});
@@ -467,6 +475,11 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
       client,
       projectId: route.projectId,
       workspacePath: boundWorkspace.path,
+      taskCenter,
+      taskCenterRequestId,
+      onOpenLiteratureTask: (libraryItemId) => {
+        requestManagementEditorChange(() => openLiterature({kind: 'reader', libraryItemId}, () => setManagementOpen(false)));
+      },
       researchTaskId: researchTaskSelection?.projectId === route.projectId ? researchTaskSelection.taskId : null,
       onSelectResearchTask: (taskId) => {
         const projectId = routeRef.current.projectId;
@@ -498,7 +511,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
       },
       openSettings
     }),
-    [client, route.projectId, boundWorkspace.path, navigate, researchTaskSelection, showArtifactSelection, openSettings]
+    [client, route.projectId, boundWorkspace.path, taskCenter, taskCenterRequestId, openLiterature, navigate, researchTaskSelection, showArtifactSelection, openSettings]
   );
   const managementStoresScopeKey = JSON.stringify([managementScope.projectId, managementScope.workspacePath]);
   const managementStoresEnabled =
@@ -682,18 +695,15 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
         onToggleAssistant={toggleAssistant}
         onOpenGit={() => navigate({ ...route, tool: 'git' })}
         onOpenManagement={openManagementDrawer}
+        onOpenTasks={() => openManagementSection('tasks')}
         onOpenSettings={openSettings}
-        backgroundRunLabel={backgroundRun.label}
+        taskLabel={taskCenter.label}
+        taskSummary={taskCenter.summary}
       />
 
       {windowState.error === null ? null : (
         <div className="shrink-0 px-4 pt-2" data-testid="shell-window-state-error">
           <ErrorBar error={{level: 'page', message: `读取窗口状态失败：${windowState.error}`, retry: windowState.reload}} />
-        </div>
-      )}
-      {backgroundRun.error === null ? null : (
-        <div className="shrink-0 px-4 pt-2" data-testid="shell-tray-state-error">
-          <ErrorBar error={{level: 'page', message: `读取后台状态失败：${backgroundRun.error}`, retry: backgroundRun.reload}} />
         </div>
       )}
 

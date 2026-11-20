@@ -391,7 +391,7 @@ test('persisted checkpoint continuation guards duplicate requests, preserves ref
 
 for (const approval of [
   {kind: 'tool', name: 'shell_command', args: {command: 'pwd'}, testId: 'assistant-approval'},
-  {kind: 'task', name: 'update_background_task', args: {goal: '更新本地任务'}, testId: 'assistant-task-approval'},
+  {kind: 'task', name: 'update_background_task', args: {taskId: 'task-42', reason: '更新目标', patch: {goal: '更新本地任务'}}, testId: 'assistant-task-approval'},
    {kind: 'gate', name: 'research_approve_gate', args: {projectId: 'fixture-project', stage: 'reading', artifactLinks: [{
      projectId: 'fixture-project', artifactId: 'reading-a', expectedVersion: 'a'.repeat(64),
      title: '阅读笔记', kind: 'reading_notes'
@@ -409,6 +409,12 @@ test(`actual assistant ${approval.kind} approval retains focus and shows pending
   await expect(page.getByTestId('assistant-composer-input')).toBeDisabled();
   await expect(page.getByTestId('assistant-composer-mode-steer')).toHaveCount(0);
   assert.equal(await page.evaluate(() => correctCalls.length), 0);
+  if (approval.kind !== 'gate') {
+    const card = page.getByTestId(approval.kind === 'tool' ? 'assistant-approval-card' : 'assistant-task-approval-card');
+    await expect(card.locator('pre')).toBeHidden();
+    await expect(card).toContainText(approval.kind === 'tool' ? 'pwd' : '更新本地任务');
+    if (approval.kind === 'task') await expect(card).toContainText('确认修改任务');
+  }
   const approve = page.getByTestId(`${approval.testId}-approve`);
   await approve.click();
   await page.waitForFunction(() => resumeCalls.length === 1);

@@ -1,12 +1,15 @@
 import { useTaskDiagnostics } from '../research/tasks/use-task-diagnostics';
-import { TaskSummary } from '../research/tasks/TaskSummary';
+import { TaskSummary, TaskUsage } from '../research/tasks/TaskSummary';
 import { TaskControls } from '../research/tasks/TaskControls';
 import { formSecondaryButtonClass } from '../shared/form-ui';
 import type { RocClient } from '../shared/roc-client';
+import type {OpenResearchArtifact} from '../artifacts/artifact-interactions';
+import {recordUxEvent} from '../app/ux-metrics';
 
-export function ResearchTaskProgress({ client, projectId, threadId, runId, runStatus, onOpenTask }: {
+export function ResearchTaskProgress({ client, projectId, threadId, runId, runStatus, onOpenTask, onOpenArtifact }: {
   client: RocClient; projectId: string; threadId: string; runId: string; runStatus: string;
   onOpenTask: (taskId: string) => void;
+  onOpenArtifact?: OpenResearchArtifact | undefined;
 }): React.JSX.Element | null {
   const resource = useTaskDiagnostics(client, { projectId, threadId, runId }, runStatus);
   const data = resource.data;
@@ -23,10 +26,11 @@ export function ResearchTaskProgress({ client, projectId, threadId, runId, runSt
         resource.status === 'loading' ? <p role="status" className="text-subtle">读取任务中…</p> : null
       ) : (
         <>
-          <TaskSummary data={data} compactUsage />
-          <TaskControls key={data.task.id} client={client} data={data} onChanged={resource.reload} />
+          <TaskSummary data={data} onOpenArtifact={onOpenArtifact} surface="assistant" />
+          <TaskControls key={data.task.id} client={client} data={data} onChanged={resource.reload} surface="assistant" />
           <button type="button" className={`${formSecondaryButtonClass} justify-self-start`}
-            data-testid="assistant-task-details" onClick={() => onOpenTask(data.task.id)}>查看任务详情</button>
+            data-testid="assistant-task-details" onClick={() => {recordUxEvent('action_initiated', 'assistant'); onOpenTask(data.task.id);}}>查看任务详情</button>
+          <details className="task-usage-disclosure"><summary>用量与调用</summary><TaskUsage usage={data.usage} /></details>
         </>
       )}
     </section>

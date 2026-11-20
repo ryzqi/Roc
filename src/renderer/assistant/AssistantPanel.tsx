@@ -23,6 +23,7 @@ import { isImageInputSupported, type ImageSupportSnapshot } from './image-attach
 import { ChatTranscriptPanel } from './transcript-panel';
 import { useChatSession } from './use-chat-session';
 import { RunDiagnostics } from './RunDiagnostics';
+import {recordUxEvent} from '../app/ux-metrics';
 
 /**
  * The assistant panel (T4.2–T4.6).
@@ -247,6 +248,16 @@ export function AssistantPanel({
   );
 
   const runStatus = session.runState.status;
+  const previousRun = useRef({threadId, status: runStatus});
+  useEffect(() => {
+    if (previousRun.current.threadId === threadId && previousRun.current.status !== runStatus) {
+      recordUxEvent('task_state_changed', 'assistant');
+      if (['failed', 'recovering'].includes(previousRun.current.status) && ['running', 'completed'].includes(runStatus)) {
+        recordUxEvent('error_recovered', 'assistant');
+      }
+    }
+    previousRun.current = {threadId, status: runStatus};
+  }, [runStatus, threadId]);
   const latestHistoryEvent = session.history.events.at(-1);
   const diagnosticsRunId = threadId === null ? null :
     session.runState.threadId === threadId && session.runState.runId !== null
@@ -296,13 +307,14 @@ export function AssistantPanel({
 
   const onApprovalDecision = useCallback(
     (interruptId: string, decisions: Parameters<typeof session.resumeApproval>[1]) => {
+      recordUxEvent('action_initiated', 'assistant');
       void session.resumeApproval(interruptId, decisions);
     },
     [session]
   );
 
   const header = (
-    <div className="assistant-header flex shrink-0 flex-col gap-1.5 border-b-[0.5px] border-line px-3 py-2">
+    <div className="assistant-header flex shrink-0 flex-col gap-2 border-b-[0.5px] border-line px-3 py-2">
       <div className="flex min-w-0 items-center gap-2">
         <Bot size={14} aria-hidden="true" className="shrink-0 text-[var(--icon-agent)]" />
         <span className="min-w-0 truncate font-medium text-ink text-[length:var(--font-meta-size)]">研究助手</span>
@@ -310,12 +322,12 @@ export function AssistantPanel({
           <span
             className={
               runStatus === 'failed'
-                ? 'shrink-0 rounded-control bg-[var(--tool-st-error-bg)] px-1.5 py-0.5 text-[var(--tool-st-error-text)] text-[length:var(--font-micro-size)]'
+                ? 'shrink-0 rounded-control bg-[var(--tool-st-error-bg)] px-2 py-1 text-[var(--tool-st-error-text)] text-[length:var(--font-micro-size)]'
                 : runStatus === 'completed'
-                  ? 'shrink-0 rounded-control bg-[var(--tool-st-end-bg)] px-1.5 py-0.5 text-[var(--tool-st-end-text)] text-[length:var(--font-micro-size)]'
+                  ? 'shrink-0 rounded-control bg-[var(--tool-st-end-bg)] px-2 py-1 text-[var(--tool-st-end-text)] text-[length:var(--font-micro-size)]'
                   : runStatus === 'cancelled'
-                    ? 'shrink-0 rounded-control bg-[var(--overlay-hover)] px-1.5 py-0.5 text-muted text-[length:var(--font-micro-size)]'
-                    : 'shrink-0 rounded-control bg-[var(--tool-st-progress-bg)] px-1.5 py-0.5 text-[var(--tool-st-progress-text)] text-[length:var(--font-micro-size)]'
+                    ? 'shrink-0 rounded-control bg-[var(--overlay-hover)] px-2 py-1 text-muted text-[length:var(--font-micro-size)]'
+                    : 'shrink-0 rounded-control bg-[var(--tool-st-progress-bg)] px-2 py-1 text-[var(--tool-st-progress-text)] text-[length:var(--font-micro-size)]'
             }
             data-testid="assistant-run-status"
             data-status={runStatus}
@@ -351,6 +363,11 @@ export function AssistantPanel({
           {session.messages.length} 条
         </span>
       </div>
+      {projectId === null || diagnosticsRunId === null || threadId === null ? null : (
+        <ResearchTaskProgress key={`${projectId}:${threadId}:${diagnosticsRunId}`}
+          client={client} projectId={projectId} threadId={threadId} runId={diagnosticsRunId}
+          runStatus={session.runState.runId === diagnosticsRunId ? runStatus : 'history'} onOpenTask={onOpenTask} onOpenArtifact={onOpenArtifact} />
+      )}
       {diagnosticsRunId === null || threadId === null ? null : (
         <RunDiagnostics
           key={`${threadId}:${diagnosticsRunId}`}
@@ -359,11 +376,6 @@ export function AssistantPanel({
           threadId={threadId}
           runStatus={session.runState.runId === diagnosticsRunId ? runStatus : 'history'}
         />
-      )}
-      {projectId === null || diagnosticsRunId === null || threadId === null ? null : (
-        <ResearchTaskProgress key={`${projectId}:${threadId}:${diagnosticsRunId}`}
-          client={client} projectId={projectId} threadId={threadId} runId={diagnosticsRunId}
-          runStatus={session.runState.runId === diagnosticsRunId ? runStatus : 'history'} onOpenTask={onOpenTask} />
       )}
     </div>
   );
@@ -405,7 +417,7 @@ export function AssistantPanel({
             data-testid="assistant-task-resume-checkpoint"
             disabled={session.sending || session.cancelling || session.runState.resumeBusy}
             aria-busy={session.sending}
-            onClick={() => {void session.resumeCheckpoint(checkpointReport.runId);}}>
+            onClick={() => {recordUxEvent('action_initiated', 'assistant'); void session.resumeCheckpoint(checkpointReport.runId);}}>
             从检查点继续
           </button>
         </div>
@@ -502,6 +514,7 @@ export function AssistantPanel({
         seed={composerSeed}
         onSeedConsumed={onComposerSeedConsumed}
         onSend={async (input) => {
+          recordUxEvent('action_initiated', 'assistant');
           const submittedDraft = composerDraft;
           // Preserve the submit intent even if the current run finishes before this request arrives.
           const sent =
@@ -522,7 +535,7 @@ export function AssistantPanel({
           }
           return sent;
         }}
-        onStop={() => void session.cancel()}
+        onStop={() => {recordUxEvent('action_initiated', 'assistant'); void session.cancel();}}
       />
 
       {settings.status === 'error' ? (

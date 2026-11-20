@@ -11,6 +11,8 @@ import { SkillsSection } from './sections/SkillsSection';
 import type { ManagementTabId } from './use-management-stores';
 import { useManagementStores } from './management-stores-provider';
 import { requestManagementEditorChange } from './management-interactions';
+import {TaskCenterOverview} from './TaskCenterOverview';
+import type {TaskCenterRow} from './use-task-center';
 import './management-layout.css';
 
 /**
@@ -196,24 +198,36 @@ function McpSectionContent({ scope }: { scope: ManagementScope }): ReactNode {
   return store === null ? <ManagementSectionLoading /> : <McpSection scope={scope} store={store} />;
 }
 
-type TaskCategory = 'background' | 'research' | 'python';
+type TaskCategory = 'overview' | 'background' | 'research' | 'python';
 
 function TasksSectionContent({ scope, canvasView }: { scope: ManagementScope; canvasView: AppViewId | undefined }): ReactNode {
   const store = useManagementStores((stores) => stores.tasks);
   const id = useId();
-  const [category, setCategory] = useState<TaskCategory>(() => scope.researchTaskId ? 'research' : 'background');
+  const [category, setCategory] = useState<TaskCategory>(() => scope.researchTaskId ? 'research' : 'overview');
   const available: { id: TaskCategory; label: string }[] = scope.projectId === null
-    ? [{ id: 'background', label: '后台任务' }]
-    : [{ id: 'background', label: '后台任务' }, { id: 'research', label: '研究任务' }, { id: 'python', label: 'Python 环境' }];
-  const active = scope.projectId === null ? 'background' : category;
+    ? [{id: 'overview', label: '总览'}, { id: 'background', label: '后台配置' }]
+    : [{id: 'overview', label: '总览'}, { id: 'background', label: '后台配置' }, { id: 'research', label: '科研详情' }, { id: 'python', label: '高级' }];
+  const active = scope.projectId === null && (category === 'research' || category === 'python') ? 'overview' : category;
   useEffect(() => {
-    if (scope.researchTaskId !== null) setCategory('research');
-  }, [scope.researchTaskId]);
+    setCategory(scope.researchTaskId !== null ? 'research' : 'overview');
+  }, [scope.researchTaskId, scope.taskCenterRequestId]);
   const selectCategory = (next: TaskCategory, tablist?: HTMLDivElement): void => {
     if (store?.isBusy()) return;
     requestManagementEditorChange(() => {
       setCategory(next);
       tablist?.querySelector<HTMLButtonElement>(`[data-category="${next}"]`)?.focus();
+    });
+  };
+  const openTask = (row: TaskCenterRow): void => {
+    if (store?.isBusy()) return;
+    requestManagementEditorChange(() => {
+      if (row.source === 'research') {
+        scope.onSelectResearchTask(row.id);
+        setCategory('research');
+      } else if (row.source === 'background') {
+        store?.select(row.id);
+        setCategory('background');
+      } else if (row.libraryItemId !== null) scope.onOpenLiteratureTask(row.libraryItemId);
     });
   };
   return (
@@ -229,10 +243,14 @@ function TasksSectionContent({ scope, canvasView }: { scope: ManagementScope; ca
       }}>
         {available.map(entry => <button key={entry.id} type="button" role="tab" id={`${id}-${entry.id}-tab`}
           aria-selected={active === entry.id} aria-controls={`${id}-${entry.id}-panel`} tabIndex={active === entry.id ? 0 : -1}
+          title={entry.id === 'python' ? 'Python 环境' : undefined}
           data-category={entry.id} data-testid={`mgmt-task-category-${entry.id}`} disabled={store?.busy}
           onClick={() => selectCategory(entry.id)}>{entry.label}</button>)}
       </div>
       {/* Keep editors mounted so hidden drafts, pending operations and their navigation guards survive category changes. */}
+      <div role="tabpanel" id={`${id}-overview-panel`} aria-labelledby={`${id}-overview-tab`} hidden={active !== 'overview'}>
+        <TaskCenterOverview center={scope.taskCenter} onOpen={openTask} disabled={store === null || store.busy}/>
+      </div>
       <div role="tabpanel" id={`${id}-background-panel`} aria-labelledby={`${id}-background-tab`} hidden={active !== 'background'}>
         {store === null ? <ManagementSectionLoading /> : <BackgroundTasksSection store={store} />}
       </div>

@@ -49,7 +49,7 @@ export function ManagementPanel({
   const summaries = useManagementStores((stores) => stores.summaries);
   const stores = useManagementStores((stores) => stores);
   const drafts = managementDraftState(stores);
-  const visibleSummaries = summaries ?? MANAGEMENT_LOADING_SUMMARIES;
+  const visibleSummaries = {...(summaries ?? MANAGEMENT_LOADING_SUMMARIES), tasks: scope.taskCenter.summary};
   const tab = MANAGEMENT_TABS.some((entry) => entry.id === activeTab) ? activeTab : 'memory';
   const [discardOpen, setDiscardOpen] = useState(false);
 
@@ -92,9 +92,9 @@ export function ManagementPanel({
           testIdPrefix="mgmt"
         />
 
-        <p className="shrink-0 text-muted text-[length:var(--font-meta-size)]" data-testid="mgmt-summary">
+        {tab === 'tasks' ? null : <p className="shrink-0 text-muted text-[length:var(--font-meta-size)]" data-testid="mgmt-summary">
           {managementSummary(tab, visibleSummaries)}
-        </p>
+        </p>}
 
         <ManagementSectionBody tab={tab} scope={scope} idPrefix="mgmt-drawer" testIdPrefix="mgmt" />
       </div>

@@ -1,4 +1,4 @@
-import { ArrowLeft, Bot, GitBranch, PanelLeft, PanelLeftClose, Search, Settings, Sliders } from 'lucide-react';
+import { ArrowLeft, Bot, ClipboardList, GitBranch, PanelLeft, PanelLeftClose, Search, Settings, Sliders } from 'lucide-react';
 
 /**
  * The one global toolbar.
@@ -38,11 +38,12 @@ export type WindowChromeProps = {
   onToggleAssistant: () => void;
   onOpenGit: () => void;
   onOpenManagement: () => void;
+  onOpenTasks: () => void;
   onOpenSettings: () => void;
   /** Current git branch, when a project workspace is bound (P3). */
   branchLabel?: string | null;
-  /** Background-run hint from `lifecycle.getTraySummary` (P9). */
-  backgroundRunLabel?: string | null;
+  taskLabel: string;
+  taskSummary: string;
 };
 
 /** Every chrome button uses the 8px control radius. */
@@ -62,9 +63,11 @@ export function WindowChrome({
   onToggleAssistant,
   onOpenGit,
   onOpenManagement,
+  onOpenTasks,
   onOpenSettings,
   branchLabel = null,
-  backgroundRunLabel = null
+  taskLabel,
+  taskSummary
 }: WindowChromeProps): React.JSX.Element {
   const inProject = projectName !== null;
 
@@ -157,14 +160,11 @@ export function WindowChrome({
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5">
-        {backgroundRunLabel === null ? null : (
-          <span
-            className="hidden items-center gap-1.5 px-1 text-muted text-[length:var(--font-micro-size)] md:flex"
-            data-testid="titlebar-background-runs"
-          >
-            {backgroundRunLabel}
-          </span>
-        )}
+        <button type="button" className={`${LABELED_BUTTON} tabular-nums`} onClick={onOpenTasks}
+          data-testid="titlebar-tasks" aria-label={`打开任务中心，${taskSummary}`} title={taskSummary}>
+          <ClipboardList size={14} aria-hidden="true" className="text-[var(--icon-task)]" />
+          <span>{taskLabel}</span>
+        </button>
 
         {/* A selected utility stays at navigation emphasis. */}
         <button

@@ -62,12 +62,10 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
   const recentArtifacts = [...(artifacts.data ?? [])].filter(artifact => artifact.status !== 'superseded')
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 3);
   const openLiterature = (id: string): void => {
-    literature.select(id);
-    scope.openView('library');
+    scope.openLiterature({kind: 'reader', libraryItemId: id});
   };
   const addLiterature = (): void => {
-    literature.requestImport();
-    scope.openView('library');
+    scope.openView('library', literature.requestImport);
   };
 
   return <div data-testid="overview" className="h-full min-h-0 overflow-y-auto">

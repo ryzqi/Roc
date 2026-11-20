@@ -39,3 +39,16 @@ macOS 27.2.1 arm64，Electron 45，基线提交 `dd7511a`。隔离数据根启�
 `ROC_WORKSPACE_LATEX_TOOLCHAIN=.runtime/research-toolchain/darwin-arm64 node --test tests/unit/research-workspace-latex.test.mjs` 4/4：含本机真实离线编译，验证有效 PDF、保存内容快照、失败/取消清理及越界/归档/符号链接拒绝。知识问答的模型回答仍需真实模型配置后的 T2 任务验收，不将受控 IPC 测试计为模型质量结果。
 
 `node --test tests/renderer/authoring-tools-layout.test.mjs` 6/6，含保存→编译、构建问题行定位、PDF 预览、导出取消和取消等待回执；浅深色 440/820/1200px 均 `clip.cut=0`。原生另存对话框未手工操作，受控 IPC 只证明界面正确处理成功/取消回执。`node --test --test-concurrency=1 tests/renderer/literature-workspace-layout.test.mjs tests/renderer/literature-retention.test.mjs` 相关 4 项通过（旧 fixture 补齐 `updatedAt` 后复跑）：覆盖双守卫、笔记页跳阅读器、重复概念/证据定位、查询保留。
+
+## P5 助手与任务中心
+
+顶栏和管理抽屉共享一次读取的任务投影；研究任务、后台任务、文献处理各自保留权威来源与错误。分页结果明确标为近期，项目后台任务按工作区筛选。总览提供当前、待处理、最近结束及失败分组，打开原有详情与恢复操作。助手优先展示任务阶段、最近完成与真实成果，完整参数、用量和诊断按需展开。批准/拒绝保持同等视觉权重；停止请求保留等待清理回执，失败不冒充已停止。
+
+仓库根 `pnpm build`、`pnpm typecheck`、设计规则审计、`git diff --check` 通过。`pnpm check:renderer-chunks` 为 491998 bytes / 10 eager files。
+
+- `node --test tests/renderer/task-center.test.mjs`：2/2，覆盖三来源、作用域、分页口径、失败与晚回包、键盘打开；440/720px 浅深主题与 hover 均 `clip.cut=0`。
+- `node --test tests/renderer/shell-management-guards.test.mjs`：8/8，顶栏与工作区进入同一任务中心，保留管理草稿、导航、工件与 Git 保护。
+- `node --test --test-name-pattern='task categories' tests/renderer/management-draft-guards.test.mjs`：1/1。
+- `node --test tests/renderer/native-state-guards.test.mjs`：7/7，原生窗口与项目绑定保护。已删除被任务中心替代的顶栏轮询 hook。
+- `node --test tests/renderer/assistant-panel-guards.test.mjs`：15/15，IME、草稿隔离、停止、检查点恢复和三类审批。
+- `node --test tests/renderer/research-tasks.test.mjs`：23 项均通过；首次 20/23，更新阶段文案断言和原生折叠展开等待后定向 3/3。覆盖真实成果、停止清理、恢复能力、诊断与草稿保护。

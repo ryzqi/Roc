@@ -1,6 +1,7 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import type { RocClient } from '../shared/roc-client';
 import type {OpenResearchArtifact} from '../artifacts/artifact-interactions';
+import type {TaskCenter} from './use-task-center';
 
 /**
  * Management context (P9/T9.5).
@@ -27,6 +28,9 @@ export type ManagementScope = {
   /** Bound working directory: needed for the workspace memory slots and for a task's workspacePath. */
   workspacePath: string | null;
   researchTaskId: string | null;
+  taskCenter: TaskCenter;
+  taskCenterRequestId: number;
+  onOpenLiteratureTask: (libraryItemId: string) => void;
   onSelectResearchTask: (taskId: string) => void;
   onOpenArtifact?: OpenResearchArtifact | undefined;
   onOpenThread: (threadId: string) => void;

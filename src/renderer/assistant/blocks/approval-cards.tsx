@@ -3,7 +3,7 @@ import {researchArtifactLinksSchema} from '../../../shared/schemas/research-arti
 import {researchGateReviewRequestSchema, type ResearchGateReviewContext} from '../../../shared/schemas/research-gate-review';
 import type {OpenResearchArtifact, ReadResearchGateContext} from '../../artifacts/artifact-interactions';
 import {useAsyncResource} from '../../app/use-async-resource';
-import { ShieldCheck } from 'lucide-react';
+import { Loader2, ShieldCheck } from 'lucide-react';
 import type { ChatPendingApproval, ChatResumeDecision } from '../../../shared/types';
 import { researchSearchPlanSchema } from '../../../shared/schemas/research-search-plan';
 
@@ -48,7 +48,7 @@ export function isTaskApproval(approval: ChatPendingApproval): boolean {
 
 // Approval choices carry equal emphasis; the labels describe the decision.
 function approvalButtonClass(_kind: 'approve' | 'neutral' | 'reject' | 'edit'): string {
-  return 'min-h-[var(--control-height)] rounded-control border-[0.5px] border-line px-3 text-ink hover:border-line-strong hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50';
+  return 'min-h-[var(--control-height)] rounded-control border-[0.5px] border-line px-3 text-ink hover:border-line-strong hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-accent';
 }
 
 function ApprovalShell({
@@ -66,21 +66,43 @@ function ApprovalShell({
 }): React.JSX.Element {
   return (
     <section
-      className="my-2 rounded-card border-[0.5px] border-[var(--st-warn-line)] bg-surface px-3 py-2"
+      className="my-2 rounded-card border-[0.5px] border-line bg-surface p-3"
       data-testid={testId}
       aria-busy={pending || undefined}
     >
-      <header className="mb-1 flex flex-col gap-0.5">
-        <span className="flex items-center gap-1.5 text-[var(--st-warn)] text-[length:var(--font-micro-size)]">
+      <header className="mb-2 flex flex-col gap-1">
+        <span className="flex flex-wrap items-center gap-2 text-muted text-[length:var(--font-meta-size)]">
           <ShieldCheck size={12} aria-hidden="true" />
           {eyebrow}
         </span>
-        <strong className="text-ink text-[length:var(--font-h3-size)]">{title}</strong>
+        <strong className="text-ink text-[length:var(--font-body-size)]" style={{textWrap: 'balance', fontWeight: 'var(--font-weight-semibold)'}}>{title}</strong>
       </header>
       {children}
-      {pending ? <p role="status" className="mt-1.5 text-muted text-[length:var(--font-meta-size)]" data-testid="assistant-approval-pending">正在提交审批决定…</p> : null}
+      {pending ? <p role="status" className="mt-2 flex flex-wrap items-center gap-2 text-muted text-[length:var(--font-meta-size)]" data-testid="assistant-approval-pending"><Loader2 size={12} aria-hidden="true" className="animate-spin" />正在提交审批决定…</p> : null}
     </section>
   );
+}
+
+const impactLabels: Readonly<Record<string, string>> = {
+  command: '执行命令', path: '目标路径', file_path: '目标文件', filePath: '目标文件',
+  cwd: '工作目录', workspacePath: '工作目录', url: '访问地址', taskId: '任务', projectId: '项目',
+  goal: '目标', reason: '原因', trigger: '触发条件', allowedActions: '允许操作', forbiddenActions: '禁止操作'
+};
+
+function ApprovalImpact({args}: {args: Record<string, unknown>}): React.JSX.Element {
+  const fields = Object.entries(args).filter(([key]) => key in impactLabels);
+  return fields.length === 0 ? <p className="mt-1 text-muted">未提供可识别的影响范围，请核对完整参数。</p> :
+    <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[length:var(--font-meta-size)]">
+      {fields.map(([key, value]) => <div className="contents" key={key}><dt className="text-muted">{impactLabels[key]}</dt>
+        <dd className="min-w-0 whitespace-pre-wrap break-words text-ink">{typeof value === 'string' ? value : JSON.stringify(value, null, 2)}</dd></div>)}
+    </dl>;
+}
+
+function ApprovalParameters({args}: {args: Record<string, unknown> | null}): React.JSX.Element {
+  return <details className="mt-2 text-[length:var(--font-meta-size)]">
+    <summary className="min-h-7 cursor-pointer py-1 text-muted focus-visible:outline-2 focus-visible:outline-accent">完整参数</summary>
+    <pre className="mt-1 max-h-[220px] overflow-auto whitespace-pre-wrap break-words font-mono text-[var(--code-text)] text-[length:var(--font-code-size)]">{JSON.stringify(args, null, 2)}</pre>
+  </details>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -113,27 +135,27 @@ export function ChatApprovalCard({
       title="助手请求执行工具"
       pending={approvalPending && onApprovalDecision !== undefined}
     >
-      <ul className="flex flex-col gap-1.5">
+      <ul className="flex flex-col gap-2">
         {approval.actionRequests.map((request, index) => {
           const reviewConfig = approval.reviewConfigs.find((config) => config.actionName === request.name);
           return (
-            <li key={`${request.name}-${index}`} className="rounded-control bg-bg-soft px-2 py-1.5">
+            <li key={`${request.name}-${index}`} className="border-t-[0.5px] border-line py-2">
               <span className="font-mono text-ink text-[length:var(--font-meta-size)]" data-testid="assistant-approval-tool-name">
                 {request.name}
               </span>
-              <pre className="mt-1 max-h-[220px] overflow-auto whitespace-pre-wrap font-mono text-[var(--code-text)] text-[length:var(--font-code-size)]">
-                {JSON.stringify(request.args, null, 2)}
-              </pre>
+              {request.description ? <p className="mt-1 break-words text-ink">{request.description}</p> : null}
+              <ApprovalImpact args={request.args} />
+              <ApprovalParameters args={request.args} />
               {reviewConfig === undefined ? null : (
                 <span className="text-subtle text-[length:var(--font-micro-size)]" data-testid="assistant-approval-decisions">
-                  {reviewConfig.allowedDecisions.join(' / ')}
+                  {reviewConfig.allowedDecisions.map(decision => ({approve: '可批准', reject: '可拒绝', revise: '可要求修订', edit: '可按原文执行'})[decision]).join(' / ')}
                 </span>
               )}
             </li>
           );
         })}
       </ul>
-      <div className="mt-2 flex items-center gap-2">
+      <div className="mt-2 flex flex-wrap items-center gap-2">
         <button
           type="button"
           data-testid="assistant-approval-approve"
@@ -178,7 +200,7 @@ export function ChatApprovalCard({
         ) : null}
       </div>
       {onApprovalDecision === undefined ? (
-        <p role="note" className="mt-1.5 text-subtle text-[length:var(--font-micro-size)]">当前审批仅供查看。</p>
+        <p role="note" className="mt-2 text-subtle text-[length:var(--font-micro-size)]">当前审批仅供查看。</p>
       ) : null}
     </ApprovalShell>
   );
@@ -285,7 +307,7 @@ export function ResearchGateApprovalCard({
       {reviewError === '' ? null : <p role="alert" className="mt-2 text-[var(--st-bad)]" data-testid="assistant-gate-review-error">
         上次决定未执行：{reviewError} 请核对下面的完整阶段上下文，再重新确认。
       </p>}
-      {links.success ? <ul className="mt-1.5 flex flex-col gap-1" data-testid="assistant-gate-artifacts">
+      {links.success ? <ul className="mt-2 flex flex-col gap-1" data-testid="assistant-gate-artifacts">
         {links.data.map(link => <li key={link.artifactId}>
           <button type="button" className="break-words text-left text-ink underline decoration-line underline-offset-2 hover:decoration-current focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
             aria-disabled={approvalPending} data-testid="assistant-gate-artifact" onClick={() => { if (!approvalPending) onOpenArtifact({projectId: link.projectId, artifactId: link.artifactId, expectedVersion: link.expectedVersion}, acceptContext); }}>
@@ -337,7 +359,7 @@ export function ResearchGateApprovalCard({
       </div>
       {refreshNonce > 0 && refreshed.error !== null ? <p role="alert" className="mt-2 text-[var(--st-bad)]">{refreshed.error}</p> : null}
       {!gateRequest.success ? <p className="mt-1 text-muted">项目或阶段标识无效，请在助手中重新请求人工闸门。</p> : null}
-      <div className="mt-2 flex items-center gap-2">
+      <div className="mt-2 flex flex-wrap items-center gap-2">
         {decisions.includes('approve') ? (
           <button
             type="button"
@@ -396,29 +418,21 @@ export function TaskApprovalCard({
   const name = request?.name ?? '';
   const args = request?.args ?? null;
   const isCancel = name === 'cancel_background_task';
-  const goal =
-    readString(args, 'goal') === ''
-      ? readString(args, 'taskId') === ''
-        ? '（未提供任务描述）'
-        : readString(args, 'taskId')
-      : readString(args, 'goal');
-  const schedule = readString(args, 'cronExpression');
+  const patch = args?.patch;
 
   return (
     <ApprovalShell
       testId="assistant-task-approval-card"
       eyebrow="任务审批"
-      title={isCancel ? '取消后台任务' : '新建 / 修改后台任务'}
+      title={isCancel ? '取消后台任务' : '修改后台任务'}
       pending={approvalPending && onApprovalDecision !== undefined}
     >
-      <p className="text-ink text-[length:var(--font-read-size)]">{goal}</p>
-      {schedule === '' ? null : (
-        <p className="mt-0.5 font-mono text-muted text-[length:var(--font-meta-size)]">计划：{schedule}</p>
-      )}
-      <pre className="mt-1.5 max-h-[220px] overflow-auto whitespace-pre-wrap rounded-control bg-code-surface px-2 py-1 font-mono text-[var(--code-text)] text-[length:var(--font-code-size)]">
-        {JSON.stringify(args, null, 2)}
-      </pre>
-      <div className="mt-2 flex items-center gap-2">
+      <ApprovalImpact args={args ?? {}} />
+      {patch !== null && typeof patch === 'object' && !Array.isArray(patch) ? <div className="mt-2 border-t-[0.5px] border-line pt-2">
+        <p className="text-muted">拟修改内容</p><ApprovalImpact args={patch} />
+      </div> : null}
+      <ApprovalParameters args={args} />
+      <div className="mt-2 flex flex-wrap items-center gap-2">
         <button
           type="button"
           data-testid="assistant-task-approval-approve"
@@ -427,7 +441,7 @@ export function TaskApprovalCard({
           className={approvalButtonClass('approve')}
           onClick={() => { if (!approvalPending) onApprovalDecision?.(approval.interruptId, [{ type: 'approve' }]); }}
         >
-          {isCancel ? '确认取消任务' : '确认创建任务'}
+          {isCancel ? '确认取消任务' : '确认修改任务'}
         </button>
         <button
           type="button"
@@ -441,7 +455,7 @@ export function TaskApprovalCard({
         </button>
       </div>
       {onApprovalDecision === undefined ? (
-        <p role="note" className="mt-1.5 text-subtle text-[length:var(--font-micro-size)]">当前审批仅供查看。</p>
+        <p role="note" className="mt-2 text-subtle text-[length:var(--font-micro-size)]">当前审批仅供查看。</p>
       ) : null}
     </ApprovalShell>
   );

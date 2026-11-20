@@ -4,7 +4,7 @@ import type { ResearchTask, ResearchTaskEvent } from '../../../shared/schemas/re
 import { useAsyncResource } from '../../app/use-async-resource';
 import type {AppViewId} from '../../app/routes';
 import { STAGE_LABELS } from '../../project/project-store';
-import { TaskSummary, researchTaskStatusLabels } from '../../research/tasks/TaskSummary';
+import { TaskSummary, TaskUsage, researchTaskStatusLabels } from '../../research/tasks/TaskSummary';
 import { TaskControls } from '../../research/tasks/TaskControls';
 import {TaskExecutionObservations} from '../../research/tasks/TaskExecutionObservations';
 import {TaskDiagnosticsExportButton} from '../../research/tasks/TaskDiagnosticsExportButton';
@@ -118,7 +118,7 @@ function TaskDetail({ client, projectId, taskId, onOpenArtifact }: {
       {resource.status === 'error' ? <p role="alert" className="break-words text-[var(--st-bad)]">{resource.error}</p> :
         resource.data === null ? <p role="status" className="text-subtle">读取任务详情中…</p> : (
           <>
-            <TaskSummary data={resource.data} details />
+            <TaskSummary data={resource.data} onOpenArtifact={onOpenArtifact} />
             {resource.data.recoveryIssues.length === 0 ? null : <ul role="status" className="grid gap-1 text-subtle">
               {resource.data.recoveryIssues.map(issue => <li key={issue}>{({
                 historical_execution_not_resumable: '历史执行仅供查看，请新建任务以重新执行。',
@@ -133,14 +133,21 @@ function TaskDetail({ client, projectId, taskId, onOpenArtifact }: {
               {number.format(resource.data.eventDelivery.pending)} 条事件等待同步，其中 {number.format(resource.data.eventDelivery.failed)} 条投递失败。刷新详情可重试。
             </p>}
             <TaskControls client={client} data={resource.data} onChanged={refresh} />
-            <TaskGraph graph={resource.data.graph} />
-            <FormSection title="执行树与工件" testId="mgmt-task-executions">
-              <ExecutionTree client={client} executions={resource.data.executions} onOpenArtifact={onOpenArtifact}/>
-            </FormSection>
           </>
         )}
-      <TaskDiagnosticsExportButton client={client} projectId={projectId} taskId={taskId} />
       <TaskFactsPanel client={client} projectId={projectId} taskId={taskId} />
+      <details className="task-usage-disclosure" data-testid="mgmt-task-diagnostics">
+        <summary className="min-h-7 cursor-pointer py-1 text-muted focus-visible:outline-2 focus-visible:outline-accent">执行过程与诊断</summary>
+        <div className="grid min-w-0 gap-4 py-2">
+          {resource.data === null ? null : <>
+            <p className="break-all font-mono text-subtle">任务 {resource.data.task.id}</p>
+            <TaskUsage usage={resource.data.usage} />
+            <TaskGraph graph={resource.data.graph} />
+            <FormSection title="执行记录与成果来源" testId="mgmt-task-executions">
+              <ExecutionTree client={client} executions={resource.data.executions} onOpenArtifact={onOpenArtifact}/>
+            </FormSection>
+          </>}
+          <TaskDiagnosticsExportButton client={client} projectId={projectId} taskId={taskId} />
       <FormSection title="持久事件" testId="mgmt-task-events">
         {events.status === 'error' ? <p role="alert" className="break-words text-[var(--st-bad)]">{events.error}</p> : (
           <>
@@ -176,6 +183,8 @@ function TaskDetail({ client, projectId, taskId, onOpenArtifact }: {
           </>
         )}
       </FormSection>
+        </div>
+      </details>
     </div>
   );
 }

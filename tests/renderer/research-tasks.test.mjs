@@ -9,7 +9,7 @@ import { _electron, expect } from '@playwright/test';
 
 let directory, app, page;
 const rendererErrors = [];
-const artifacts = join(process.cwd(), '.artifacts/research-optimization/task-ui');
+const artifacts = process.env.ROC_UI_CAPTURE_DIR ?? join(process.cwd(), '.artifacts/research-optimization/task-ui');
 
 before(async () => {
   directory = mkdtempSync(join(tmpdir(), 'roc-renderer-research-tasks-'));
@@ -25,9 +25,12 @@ before(async () => {
         import { ResearchTasksSection } from './src/renderer/management/sections/ResearchTasksSection';
         import { ManagementSectionBody } from './src/renderer/management/management-shell-parts';
         import { ManagementPanel } from './src/renderer/management/ManagementPanel';
-        import { ManagementView } from './src/renderer/management/ManagementView';
         import { ManagementScopeProvider } from './src/renderer/management/management-scope';
         import { TaskControls } from './src/renderer/research/tasks/TaskControls';
+        import {exportUxMetrics} from './src/renderer/app/ux-metrics';
+        window.metrics = () => JSON.parse(exportUxMetrics()).events;
+        const taskCenter = {rows: [], sources: [], counts: {current: 0, pending: 0, completed: 0, failed: 0},
+          pendingApprovalCount: 0, partial: false, loading: false, label: '任务', summary: '暂无任务', reload: () => {}};
         import { PilotSection } from './src/renderer/settings/sections/PilotSection';
         import { BEFORE_NAVIGATE, requestNavigation } from './src/renderer/app/navigation-guard';
         const root = createRoot(document.getElementById('root'));
@@ -137,12 +140,13 @@ before(async () => {
         window.mount = (projectId = 'project-a', threadId = 'thread-a', runId = 'chat-a', runStatus = 'running') => flushSync(() => render(
           React.createElement(React.StrictMode, null, React.createElement(ResearchTaskProgress, {
             key: projectId + ':' + threadId + ':' + runId, client, projectId, threadId, runId, runStatus,
-            onOpenTask: taskId => opened.push(taskId)
+            onOpenTask: taskId => opened.push(taskId), onOpenArtifact: request => calls.push({method: 'artifact-open', request})
           }))
         ));
         window.mountDrawer = (taskId = 'task-a', projectId = 'project-a') => flushSync(() => render(
           React.createElement(React.StrictMode, null, React.createElement(ResearchTasksSection, {
             key: projectId, client, projectId, selectedTaskId: taskId,
+            onOpenArtifact: request => calls.push({method: 'artifact-open', request}),
             onSelectTask: taskId => {
               opened.push(taskId);
               response = {ok: true, data: makeData(projectId, taskId)};
@@ -153,28 +157,26 @@ before(async () => {
         window.mountManagementTasks = (projectId = 'project-a') => flushSync(() => render(
           React.createElement(React.StrictMode, null, React.createElement(ManagementSectionBody, {
             tab: 'tasks', idPrefix: 'mgmt', testIdPrefix: 'mgmt',
-            scope: {client, projectId, workspacePath: '/workspace', researchTaskId: 'task-a',
+            scope: {client, projectId, taskCenter, onOpenLiteratureTask: () => {}, workspacePath: '/workspace', researchTaskId: 'task-a',
               onSelectResearchTask: taskId => opened.push(taskId), onOpenThread: () => {},
               onAskAssistant: () => {}, openSettings: () => {}}
           }))
         ));
-        function ManagementHost({surface, projectId}) {
+        function ManagementHost({projectId}) {
           const [open, setOpen] = React.useState(true);
           const [tab, setTab] = React.useState('tasks');
           const [taskId, setTaskId] = React.useState('task-a');
-          const scope = {client, projectId, workspacePath: '/workspace', researchTaskId: taskId,
+          const scope = {client, projectId, taskCenter, onOpenLiteratureTask: () => {}, workspacePath: '/workspace', researchTaskId: taskId,
             onSelectResearchTask: next => {
               response = {ok: true, data: makeData(projectId, next)}; setTaskId(next);
             }, onOpenThread: () => {}, onAskAssistant: () => {}, openSettings: () => {}};
           return React.createElement(ManagementScopeProvider, {value: scope},
-            surface === 'drawer'
-              ? React.createElement(ManagementPanel, {open, activeTab: tab, onTabChange: setTab,
-                  onClose: () => {opened.push('closed'); setOpen(false);}})
-              : React.createElement(ManagementView, {view: 'memory', projectId}));
+            React.createElement(ManagementPanel, {open, activeTab: tab, onTabChange: setTab,
+              onClose: () => {opened.push('closed'); setOpen(false);}}));
         }
-        window.mountManagementHost = (surface = 'drawer', projectId = 'project-a') => flushSync(() => render(
+        window.mountManagementHost = (projectId = 'project-a') => flushSync(() => render(
           React.createElement(React.StrictMode, null, React.createElement(ManagementHost, {
-            key: surface + ':' + projectId, surface, projectId
+            key: projectId, projectId
           }))
         ));
         window.mountControls = () => flushSync(() => render(
@@ -262,6 +264,7 @@ after(async () => {
 });
 
 const ready = () => page.getByTestId('task-status').waitFor();
+const openDiagnostics = () => page.getByTestId('mgmt-task-diagnostics').locator(':scope > summary').click();
 
 test('task controls serialize same-event opposing actions and ignore completion after unmount', async () => {
   for (const [button, status, restore] of [
@@ -352,35 +355,31 @@ test('facts draft protects task selection, native unload and composed project na
   assert.equal(await page.getByTestId('mgmt-task-fact-content').inputValue(), '');
 });
 
-test('actual management drawer and canvas tabs preserve facts until an explicit discard', async () => {
-  for (const surface of ['drawer', 'canvas']) {
-    await page.evaluate(surface => {reset(); mountManagementHost(surface);}, surface);
-    if (surface === 'canvas') await page.getByTestId('mgmt-view-tab-tasks').click();
-    await page.getByTestId('mgmt-task-fact-content').fill('管理分区内的任务事实');
-    const tab = page.getByTestId(surface === 'drawer' ? 'mgmt-tab-memory' : 'mgmt-view-tab-memory');
-    await tab.focus();
-    await page.keyboard.press('Home');
-    const discard = page.getByTestId('mgmt-editor-discard');
-    await discard.waitFor();
-    await discard.getByRole('button', {name: '继续编辑', exact: true}).click();
-    assert.equal(await page.getByTestId('mgmt-task-fact-content').inputValue(), '管理分区内的任务事实');
-    if (surface === 'drawer') {
-      await page.keyboard.press('Escape');
-      await discard.waitFor();
-      assert.deepEqual(await page.evaluate(() => opened), []);
-      await discard.getByRole('button', {name: '继续编辑', exact: true}).click();
-    }
-    await tab.click();
-    await discard.waitFor();
-    await discard.getByRole('button', {name: '放弃修改并继续', exact: true}).click();
-    await page.waitForFunction(() => !document.querySelector('[data-testid="mgmt-task-fact-content"]'));
-    await page.getByTestId(surface === 'drawer' ? 'mgmt-tab-tasks' : 'mgmt-view-tab-tasks').click();
-    assert.equal(await page.getByTestId('mgmt-task-fact-content').inputValue(), '');
-  }
+test('actual management drawer tabs preserve facts until an explicit discard', async () => {
+  await page.evaluate(() => {reset(); mountManagementHost();});
+  await page.getByTestId('mgmt-task-fact-content').fill('管理分区内的任务事实');
+  const tab = page.getByTestId('mgmt-tab-memory');
+  await tab.focus();
+  await page.keyboard.press('Home');
+  const discard = page.getByTestId('mgmt-editor-discard');
+  await discard.waitFor();
+  await discard.getByRole('button', {name: '继续编辑', exact: true}).click();
+  assert.equal(await page.getByTestId('mgmt-task-fact-content').inputValue(), '管理分区内的任务事实');
+  await page.keyboard.press('Escape');
+  await discard.waitFor();
+  assert.deepEqual(await page.evaluate(() => opened), []);
+  await discard.getByRole('button', {name: '继续编辑', exact: true}).click();
+  await tab.click();
+  await discard.waitFor();
+  await discard.getByRole('button', {name: '放弃修改并继续', exact: true}).click();
+  await page.waitForFunction(() => !document.querySelector('[data-testid="mgmt-task-fact-content"]'));
+  await page.getByTestId('mgmt-tab-tasks').click();
+  assert.equal(await page.getByTestId('mgmt-task-fact-content').inputValue(), '');
 });
 
 test('task and event cursor pages reject repeated same-event loads and manual refresh starts from the first page', async () => {
   await page.evaluate(() => {reset(); listResponse.data.hasMore = true; mountDrawer();});
+  await openDiagnostics();
   await page.getByTestId('mgmt-task-events-more').waitFor();
   await page.evaluate(() => {
     listResponse = {ok: true, data: {tasks: [makeData('project-a', 'task-b').task], nextTaskId: 'task-b', hasMore: false}};
@@ -428,6 +427,12 @@ test('assistant reads authoritative usage and progress, handles keyboard detail 
   await page.evaluate(() => { reset(); mount(); });
   await ready();
   assert.equal(await page.getByTestId('task-progress').innerText(), '执行已完成 2 / 3 次');
+  await expect(page.getByTestId('task-current-stage')).toContainText('发现');
+  await expect(page.getByTestId('task-latest-progress')).toContainText('绘图');
+  await expect(page.getByTestId('task-usage')).toBeHidden();
+  await page.getByTestId('task-outcome-artifact-figure').click();
+  assert.deepEqual(await page.evaluate(() => calls.find(row => row.method === 'artifact-open').request),
+    {projectId: 'project-a', artifactId: 'artifact-figure', expectedVersion: 'a'.repeat(64)});
   await page.getByText('用量与调用', {exact: true}).click();
   await expect(page.getByTestId('task-usage')).toBeVisible();
   await expect.poll(() => page.getByTestId('task-usage').innerText()).toContain('已知 80');
@@ -448,6 +453,21 @@ test('assistant reads authoritative usage and progress, handles keyboard detail 
   await page.getByText('已知 95 tokens', {exact: true}).waitFor();
   await page.evaluate(() => clear());
   assert.equal(await page.evaluate(() => listeners.size), 0);
+});
+
+
+test('task telemetry records anonymous transitions and actual recovery without private identities', async () => {
+  await page.evaluate(() => {reset(); mount();});
+  await ready();
+  const initial = await page.evaluate(() => metrics().length);
+  await page.evaluate(() => {response.data.task.status='failed'; response.data.task.statusReason='synthetic failure'; emit();});
+  await expect(page.getByTestId('task-status')).toHaveAttribute('data-status','failed');
+  await page.evaluate(() => {response.data.task.status='active'; response.data.task.statusReason=null; emit();});
+  await expect(page.getByTestId('task-status')).toHaveAttribute('data-status','active');
+  const events = await page.evaluate(start => metrics().slice(start), initial);
+  assert.deepEqual(events.map(event => event.event),['task_state_changed','task_state_changed','error_recovered']);
+  assert.ok(events.every(event => event.surface==='assistant' && Object.keys(event).sort().join(',')==='elapsedMs,event,surface'));
+  assert.doesNotMatch(JSON.stringify(events),/task-a|project-a|synthetic failure/);
 });
 
 test('first trusted task linkage refreshes an unlinked chat and stale project responses never appear', async () => {
@@ -523,8 +543,12 @@ test('continuation and approval restoration only dispatch explicit actions with 
 test('management renders parent execution tree, artifact IDs and cursor event replay without duplicate calls', async () => {
   await page.evaluate(() => { reset(); mountDrawer(); });
   await ready();
+  await expect(page.getByTestId('mgmt-task-tree')).toBeHidden();
+  await expect(page.getByTestId('task-outcome-artifact-figure')).toBeVisible();
+  await openDiagnostics();
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="mgmt-task-event"]').length === 50);
   assert.equal(await page.getByTestId('mgmt-task-execution').count(), 3);
+  await expect(page.getByTestId('mgmt-task-tree')).toContainText('fixture-provider / fixture-model', {useInnerText: true});
   const tree = await page.getByTestId('mgmt-task-tree').innerText();
   assert.ok(tree.includes('fixture-provider / fixture-model'));
   assert.ok(tree.includes('artifact-figure'));
@@ -591,10 +615,13 @@ test('project task cursor loads another page and new-task invalidation refreshes
 
 test('management tasks load without project model budget controls and retain task usage', async () => {
   await page.evaluate(() => { reset(); mountManagementTasks(); });
+  await ready();
+  await openDiagnostics();
   await page.getByTestId('mgmt-task-tree').waitFor();
   await page.getByTestId('mgmt-task-category-python').click();
   await page.getByText('尚未选择 Python 环境。', {exact: true}).waitFor();
   await page.getByTestId('mgmt-task-category-research').click();
+  await openDiagnostics();
   assert.equal(await page.getByTestId('mgmt-project-budget').count(), 0);
   assert.equal(await page.getByText('项目模型预算', {exact: true}).count(), 0);
   const usage = await page.getByTestId('task-usage').innerText();
@@ -620,6 +647,7 @@ test('light and dark task layouts remain readable in narrow assistant and scroll
     await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setSize(720, 560));
     await page.evaluate(() => mountDrawer());
     await ready();
+    await openDiagnostics();
     await page.getByTestId('mgmt-task-events-more').scrollIntoViewIfNeeded();
     await page.screenshot({path: join(artifacts, 'drawer-' + theme + '.png')});
     receipts.push({theme, surface: 'drawer', ...await page.evaluate(`(${auditSource})({viewport: true, root: '#root'})`)});
@@ -646,6 +674,7 @@ test('review queries show truthful task execution status and only complete cover
       response = {ok: true, data};
       mountDrawer();
     }, status);
+    await openDiagnostics();
     const execution = page.getByText('actual-query-id', {exact: true}).locator('..');
     await execution.getByText('综述查询', {exact: true}).waitFor();
     assert.ok((await execution.innerText()).includes(label));
@@ -720,8 +749,10 @@ test('facts conflict keeps draft; pending save and late reads cannot cross task/
 test('execution drill is lazy and keyboard accessible, pages calls/events independently and refreshes true telemetry', async () => {
   await page.evaluate(() => {reset(); mountDrawer();});
   await ready();
+  await openDiagnostics();
   assert.equal(await page.evaluate(() => calls.filter(row => row.method === 'observations').length), 0);
   const summary = page.getByText('调用与观测', {exact: true}).first();
+  await summary.scrollIntoViewIfNeeded();
   await summary.focus(); await page.keyboard.press('Enter');
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="mgmt-task-call"]').length === 50);
   const panel = page.getByTestId('mgmt-task-observations');
@@ -757,6 +788,7 @@ test('execution drill is lazy and keyboard accessible, pages calls/events indepe
 
 test('diagnostic errors, pending exports and late replies stay within the selected task', async () => {
   await page.evaluate(() => {reset(); observationResponse = {ok: false, error: {message: 'resource_report_changed'}}; mountDrawer();});
+  await openDiagnostics();
   await page.getByText('调用与观测', {exact: true}).first().click();
   await page.getByRole('alert').filter({hasText: 'resource_report_changed'}).waitFor();
   await page.evaluate(() => {observationResponse = null;});
@@ -781,6 +813,7 @@ test('diagnostic errors, pending exports and late replies stay within the select
     exportResponse = {ok: false, error: {message: 'diagnostics_source_changed'}};
   });
   await page.getByText('验证科研任务 task-b', {exact: true}).waitFor();
+  await openDiagnostics();
   assert.equal(await page.getByText('OLD PRIVATE CALL').count(), 0);
   assert.equal(await page.getByText('OLD PRIVATE EXPORT').count(), 0);
   await page.getByTestId('mgmt-task-diagnostics-export').getByRole('button').click();
@@ -803,6 +836,7 @@ test('expanded diagnostics and export receipts fit light/dark narrow desktop lay
       await app.evaluate(({BrowserWindow}, width) => BrowserWindow.getAllWindows()[0].setSize(width, 680), width);
       await page.evaluate(theme => {document.documentElement.dataset.theme = theme; reset(); mountDrawer();}, theme);
       await ready();
+      await openDiagnostics();
       const summary = page.getByText('调用与观测', {exact: true}).first();
       receipts.push({theme, width, state: 'closed', ...await page.evaluate(`(${auditSource})({viewport: true, root: '#root'})`)});
       await summary.click();
@@ -846,6 +880,7 @@ test('task drawer shows dependency waits and keyboard-accessible lease and resul
       ], edges: [{prerequisite: 'reviewer', dependent: 'reducer'}]};
       response = {ok: true, data}; mountDrawer();
     }, theme);
+    await openDiagnostics();
     const graph = page.getByTestId('mgmt-task-graph');
     await graph.getByText('等待前置结果被接受').waitFor();
     assert.equal(await graph.getByTestId('mgmt-task-node').count(), 2);
