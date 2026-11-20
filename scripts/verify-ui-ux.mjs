@@ -287,6 +287,7 @@ try {
     await navigate(page, `page=research&project=${project.data.id}&view=writing`);
     await file('refs.bib').click();
     await page.getByTestId('activity-settings').click();
+    await page.getByTestId('settings-domain-general').click();
     await page.getByTestId('settings-section-app').click();
     await check('Density and content sizes apply separately from UI typography', async () => {
       await page.getByTestId('settings-density-comfortable').click();
@@ -325,7 +326,8 @@ try {
   if (process.env.ROC_UI_PHASE === 'preferences') {
     await check('Reset local preferences updates mounted content immediately', async () => {
       await page.getByTestId('activity-settings').click();
-      await page.getByTestId('settings-section-backup').click();
+      await page.getByTestId('settings-domain-advanced').click();
+    await page.getByTestId('settings-section-backup').click();
       await page.getByTestId('settings-reset-ui').click();
       await page.getByTestId('settings-reset-confirm-confirm').click();
       await expect(page.getByTestId('settings-reset-confirm')).toHaveCount(0);

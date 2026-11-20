@@ -361,6 +361,7 @@ try {
   // ---- 5 设置打开 → 改一个真字段 → 保存 ------------------------------------------
   await page.click('[data-testid="activity-settings"]');
   await page.waitForSelector('[data-testid="settings-modal-panel"]', { timeout: 20_000 });
+  await page.click('[data-testid="settings-domain-research"]');
   await page.click('[data-testid="settings-section-tasks"]');
   await page.waitForSelector('[data-testid="settings-long-running-seconds"]', { timeout: 20_000 });
   // 勾选框比数字输入更直接：一次点击就是一次 store.update。

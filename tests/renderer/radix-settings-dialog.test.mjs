@@ -17,8 +17,8 @@ const clipAudit = readFileSync('.agents/skills/desktop-agent-ui/scripts/clip-aud
 for (const field of ['settings', 'providers', 'permissions', 'hooks']) {
   test(`settings import rejects incomplete ${field} before replacing the live draft`, async () => {
     await page.evaluate(() => window.mount());
-    await page.getByTestId('titlebar-settings').click();
-    await page.getByTestId('settings-section-backup').click();
+    await page.getByTestId('activity-settings').click();
+    await clickSection('backup');
     await page.getByTestId('settings-export-generate').click();
     const text = await page.getByTestId('settings-export-text').inputValue();
     const document = JSON.parse(text);
@@ -37,13 +37,13 @@ for (const field of ['settings', 'providers', 'permissions', 'hooks']) {
     const original = JSON.parse(text);
     delete original.exportedAt;
     assert.deepEqual(unchanged, original, 'a refused import must retain the whole current document');
-    await page.getByTestId('settings-section-app').click();
+    await clickSection('app');
     const discard = page.getByTestId('settings-editor-discard-panel');
     await discard.waitFor();
     await page.getByTestId('settings-editor-discard-cancel').click();
     await discard.waitFor({state: 'detached'});
     assert.equal(await page.getByTestId('settings-import-text').inputValue(), JSON.stringify(document));
-    await page.getByTestId('settings-section-app').click();
+    await clickSection('app');
     await page.getByTestId('settings-editor-discard-confirm').click();
     await discard.waitFor({state: 'detached'});
     await page.getByTestId('settings-section-app-body').waitFor();
@@ -136,7 +136,7 @@ before(async () => {
           window.setAmbientOpen = setAmbientOpen;
           return React.createElement(React.Fragment, null,
             React.createElement('button', {
-              type: 'button', 'data-testid': 'titlebar-settings',
+              type: 'button', 'data-testid': 'activity-settings',
               onClick: () => routeClose ? navigate({...route, page: 'settings'}) : setOpen(true)
             }, '设置'),
             React.createElement(SettingsModal, {
@@ -210,7 +210,7 @@ before(async () => {
   app = await _electron.launch({ executablePath: electronPath, args: [join(tempDir, 'main.cjs')] });
   page = await app.firstWindow();
   page.setDefaultTimeout(8000);
-  page.on('pageerror', (error) => rendererErrors.push(error.message));
+  page.on('pageerror', (error) => rendererErrors.push(error.stack ?? error.message));
   await page.waitForFunction(() => typeof window.mount === 'function');
   await page.emulateMedia({reducedMotion: 'no-preference'});
   await page.evaluate(() => window.mount());
@@ -226,13 +226,30 @@ after(async () => {
   assert.deepEqual(rendererErrors, [], 'renderer must not throw during the Radix dialog pilot');
 });
 
+const domainBySection = {
+  app: 'general', models: 'models', 'default-model': 'models', literature: 'research', rag: 'research',
+  memory: 'research', tasks: 'research', guardrail: 'security', sandbox: 'security', authorization: 'security',
+  hooks: 'advanced', pilot: 'advanced', backup: 'advanced'
+};
+async function clickSection(section) {
+  const domain = domainBySection[section];
+  const compactDomain = page.getByTestId('settings-domain-select');
+  const compact = page.getByTestId('settings-section-select');
+  if (await compact.count()) {
+    if (await compactDomain.inputValue() !== domain) await compactDomain.selectOption(domain);
+    await compact.selectOption(section);
+    return;
+  }
+  const button = page.getByTestId('settings-section-' + section);
+  if (!await button.isVisible()) await page.getByTestId('settings-domain-' + domain).click();
+  await button.waitFor({state: 'visible'});
+  await button.click();
+}
 async function selectSection(section) {
   await page.waitForFunction(() => window.matchMedia('(max-width: 719px)').matches
     ? document.querySelector('[data-testid="settings-section-select"]') !== null
     : document.querySelector('[data-testid="settings-sections"]') !== null);
-  const compact = page.getByTestId('settings-section-select');
-  if (await compact.count()) await compact.selectOption(section);
-  else await page.getByTestId('settings-section-' + section).click();
+  await clickSection(section);
   await page.getByTestId('settings-section-' + section + '-body').waitFor();
 }
 
@@ -246,12 +263,12 @@ async function auditLayout(state) {
 
 test('settings dialog layers focus, Escape, animations, shortcuts, and ambient drawers correctly', async () => {
   await page.evaluate(() => window.mount());
-  const opener = page.getByTestId('titlebar-settings');
+  const opener = page.getByTestId('activity-settings');
   await opener.click();
   await page.getByTestId('settings-modal-panel').waitFor();
   await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'settings-section-models');
 
-  await page.getByTestId('settings-section-app').click();
+  await clickSection('app');
   await page.getByTestId('settings-open-at-login').click();
   await page.keyboard.press('Escape');
   await page.getByTestId('settings-discard-panel').waitFor();
@@ -269,7 +286,7 @@ test('settings dialog layers focus, Escape, animations, shortcuts, and ambient d
     'focus stays inside the dialog while it animates out');
   await page.keyboard.up('Escape');
   await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
-  await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'titlebar-settings');
+  await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'activity-settings');
 
   await opener.click();
   await page.getByTestId('settings-modal-panel').waitFor();
@@ -294,8 +311,8 @@ test('settings dialog layers focus, Escape, animations, shortcuts, and ambient d
 
 
 test('reset confirmation accepts real pointer clicks and Escape leaves settings open', async () => {
-  await page.getByTestId('titlebar-settings').click();
-  await page.getByTestId('settings-section-backup').click();
+  await page.getByTestId('activity-settings').click();
+  await clickSection('backup');
   await page.getByTestId('settings-reset-ui').click();
   await page.getByTestId('settings-reset-confirm-panel').waitFor();
   await page.keyboard.press('Escape');
@@ -315,11 +332,11 @@ test('reset confirmation accepts real pointer clicks and Escape leaves settings 
 });
 
 test('discard requires confirmation, retains settings, and appearance changes apply immediately', async () => {
-  await page.getByTestId('titlebar-settings').click();
-  await page.getByTestId('settings-section-app').click();
+  await page.getByTestId('activity-settings').click();
+  await clickSection('app');
   await page.getByTestId('settings-open-at-login').check();
-  await page.getByTestId('settings-section-backup').click();
-  await page.getByTestId('settings-section-app').click();
+  await clickSection('backup');
+  await clickSection('app');
   assert.equal(await page.getByTestId('settings-open-at-login').isChecked(), true, 'tab navigation retains the draft');
   await page.getByTestId('settings-discard-draft').click();
   await page.getByTestId('settings-discard-cancel').click();
@@ -338,8 +355,8 @@ test('discard requires confirmation, retains settings, and appearance changes ap
 });
 
 test('backup preview, import validation and settings layout work in both themes with zero shadow cuts', async () => {
-  await page.getByTestId('titlebar-settings').click();
-  await page.getByTestId('settings-section-backup').click();
+  await page.getByTestId('activity-settings').click();
+  await clickSection('backup');
   assert.equal(await page.getByTestId('settings-export-text').count(), 0);
   await page.getByTestId('settings-export-generate').click();
   assert.equal(JSON.parse(await page.getByTestId('settings-export-text').inputValue()).schemaVersion, 1);
@@ -353,7 +370,7 @@ test('backup preview, import validation and settings layout work in both themes 
   await page.getByTestId('settings-import-text').fill(JSON.stringify(exported));
   await page.getByTestId('settings-import-apply').click();
   await page.getByTestId('settings-import-ok').waitFor();
-  await page.getByTestId('settings-section-app').click();
+  await clickSection('app');
   assert.equal(await page.getByTestId('settings-open-at-login').isChecked(), true);
   await page.getByTestId('settings-discard-draft').click();
   await page.getByTestId('settings-discard-confirm').click();
@@ -392,7 +409,7 @@ test('backup preview, import validation and settings layout work in both themes 
 test('compact navigation keeps all sections, drafts and keyboard focus across window resizing', async () => {
   await page.setViewportSize({width: 640, height: 850});
   await page.evaluate(() => window.mount());
-  await page.getByTestId('titlebar-settings').click();
+  await page.getByTestId('activity-settings').click();
   await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'settings-section-select');
   assert.equal(await page.getByTestId('settings-section-select').locator('option').count(), 13);
   await selectSection('app');
@@ -405,10 +422,10 @@ test('compact navigation keeps all sections, drafts and keyboard focus across wi
   await page.setViewportSize({width: 900, height: 850});
   await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'settings-section-app');
   await page.keyboard.press('Home');
-  await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'settings-section-models');
+  await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'settings-section-app');
   await page.setViewportSize({width: 640, height: 850});
   await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'settings-section-select');
-  assert.equal(await page.getByTestId('settings-section-select').inputValue(), 'models');
+  assert.equal(await page.getByTestId('settings-section-select').inputValue(), 'app');
   await page.getByTestId('settings-discard-draft').click();
   await page.getByTestId('settings-discard-confirm').click();
   await page.getByTestId('settings-discard-panel').waitFor({state: 'detached'});
@@ -426,7 +443,7 @@ test('transient provider drafts survive settings close, section and provider cha
   const providers = [...modelProviders, {...modelProviders[0], id: 'provider-two', name: 'Second provider'}];
   await page.setViewportSize({width: 900, height: 850});
   await page.evaluate(providers => window.mount(providers), providers);
-  await page.getByTestId('titlebar-settings').click();
+  await page.getByTestId('activity-settings').click();
   const input = page.getByTestId('settings-provider-secret-input');
   await input.fill('transient fixture credential');
   await page.keyboard.press('Escape');
@@ -434,7 +451,7 @@ test('transient provider drafts survive settings close, section and provider cha
   await page.getByTestId('settings-discard-cancel').click();
   await page.getByTestId('settings-discard-panel').waitFor({state: 'detached'});
   assert.equal(await input.inputValue(), 'transient fixture credential');
-  await page.getByTestId('settings-section-app').click();
+  await clickSection('app');
   await page.getByTestId('settings-editor-discard-panel').waitFor();
   await page.getByTestId('settings-editor-discard-cancel').click();
   await page.getByTestId('settings-editor-discard-panel').waitFor({state: 'detached'});
@@ -453,11 +470,11 @@ test('transient provider drafts survive settings close, section and provider cha
 test('transient settings writes block unmount and expose failure without losing input', async () => {
   const providers = [...modelProviders, {...modelProviders[0], id: 'provider-two', name: 'Second provider'}];
   await page.evaluate(providers => window.mount(providers), providers);
-  await page.getByTestId('titlebar-settings').click();
+  await page.getByTestId('activity-settings').click();
   await page.getByTestId('settings-provider-secret-input').fill('pending fixture credential');
   await page.getByTestId('settings-provider-secret-save').click();
   await page.waitForFunction(() => window.secretRequests.length === 1);
-  assert.equal(await page.getByTestId('settings-section-app').isDisabled(), true);
+  assert.equal(await page.getByTestId('settings-domain-general').isDisabled(), true);
   assert.equal(await page.getByTestId('settings-section-models-body').count(), 1);
   assert.equal(await page.getByTestId('settings-provider-select').isDisabled(), true);
   await page.keyboard.press('Escape');
@@ -475,7 +492,7 @@ test('transient settings writes block unmount and expose failure without losing 
 
 test('embedding drafts are protected across configuration, section and close transitions', async () => {
   await page.evaluate(() => window.mount());
-  await page.getByTestId('titlebar-settings').click();
+  await page.getByTestId('activity-settings').click();
   await selectSection('rag');
   await page.getByTestId('settings-embedding-name').fill('Retained embedding');
   await page.getByTestId('settings-embedding-select-embedding-two').click();
@@ -486,7 +503,7 @@ test('embedding drafts are protected across configuration, section and close tra
   await page.getByTestId('settings-embedding-apikey').fill('embedding fixture credential');
   await page.getByTestId('settings-embedding-save').click();
   await page.waitForFunction(() => window.embeddingRequests.length === 1);
-  assert.equal(await page.getByTestId('settings-section-app').isDisabled(), true);
+  assert.equal(await page.getByTestId('settings-domain-general').isDisabled(), true);
   assert.equal(await page.getByTestId('settings-section-rag-body').count(), 1);
   await page.keyboard.press('Escape');
   assert.equal(await page.getByTestId('settings-modal-panel').count(), 1);
@@ -497,7 +514,7 @@ test('embedding drafts are protected across configuration, section and close tra
   await page.getByTestId('settings-discard-cancel').click();
   await page.getByTestId('settings-discard-panel').waitFor({state: 'detached'});
   assert.equal(await page.getByTestId('settings-embedding-name').inputValue(), 'Retained embedding');
-  await page.getByTestId('settings-section-app').click();
+  await clickSection('app');
   await page.getByTestId('settings-editor-discard-confirm').click();
   await page.getByTestId('settings-editor-discard-panel').waitFor({state: 'detached'});
   await page.getByTestId('settings-section-app-body').waitFor();
@@ -509,7 +526,7 @@ test('remote model fetch freezes request fields until it completes', async () =>
   await page.setViewportSize({width: 900, height: 850});
   await page.evaluate(providers => window.mount(providers), modelProviders);
   await page.evaluate(() => { window.deferRemoteModels = true; });
-  await page.getByTestId('titlebar-settings').click();
+  await page.getByTestId('activity-settings').click();
   await page.getByTestId('settings-model-pull').click();
   await page.getByTestId('settings-provider-models-pull-fetch').click();
   await page.waitForFunction(() => window.remoteModelRequests.length === 1);
@@ -531,7 +548,7 @@ test('remote model fetch freezes request fields until it completes', async () =>
 test('remote model results and errors cannot enter a reopened picker', async () => {
   await page.evaluate(providers => window.mount(providers), modelProviders);
   await page.evaluate(() => { window.deferRemoteModels = true; });
-  await page.getByTestId('titlebar-settings').click();
+  await page.getByTestId('activity-settings').click();
   await page.getByTestId('settings-model-pull').click();
   await page.getByTestId('settings-provider-models-pull-fetch').click();
   await page.waitForFunction(() => window.remoteModelRequests.length === 1);
@@ -562,7 +579,7 @@ test('remote model results and errors cannot enter a reopened picker', async () 
 test('Escape cancels model, provider and secret confirmations without closing settings or losing focus', async () => {
   await page.setViewportSize({width: 900, height: 850});
   await page.evaluate(providers => window.mount(providers), modelProviders);
-  await page.getByTestId('titlebar-settings').click();
+  await page.getByTestId('activity-settings').click();
   for (const [trigger, dialog] of [
     ['settings-model-remove-0', 'settings-model-remove-confirm'],
     ['settings-provider-remove', 'settings-provider-remove-confirm'],
@@ -582,7 +599,7 @@ test('Escape cancels model, provider and secret confirmations without closing se
 
 test('validation jumps to its section and a failed save retains the draft for retry', async () => {
   await page.evaluate(providers => window.mount(providers), modelProviders);
-  await page.getByTestId('titlebar-settings').click();
+  await page.getByTestId('activity-settings').click();
   await page.getByTestId('settings-provider-name').fill('');
   await selectSection('app');
   await page.getByTestId('settings-save').click();
@@ -605,7 +622,7 @@ test('validation jumps to its section and a failed save retains the draft for re
 
 test('populated model settings, expanded controls and nested dialogs have zero shadow cuts', async () => {
   await page.evaluate(providers => window.mount(providers), modelProviders);
-  await page.getByTestId('titlebar-settings').click();
+  await page.getByTestId('activity-settings').click();
   const audits = [];
   for (const theme of ['light', 'dark']) {
     await selectSection('app');
@@ -653,7 +670,7 @@ for (const draft of ['shared', 'credential']) {
   test(`settings routed discard closes ${draft} edits after one confirmation`, async () => {
     await page.setViewportSize({width: 900, height: 700});
     await page.evaluate(providers => window.mount(providers, true), draft === 'credential' ? modelProviders : []);
-    await page.getByTestId('titlebar-settings').click();
+    await page.getByTestId('activity-settings').click();
     const input = draft === 'shared'
       ? page.getByTestId('settings-open-at-login')
       : page.getByTestId('settings-provider-secret-input');
@@ -674,8 +691,8 @@ for (const draft of ['shared', 'credential']) {
     assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('page')), 'research');
     assert.deepEqual(await page.evaluate(() => window.settingsSaveRequests), [], 'discard never writes settings');
     assert.equal(await page.evaluate(() => window.secretRequests.length), 0, 'discard never writes a credential');
-    await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'titlebar-settings');
-    await page.getByTestId('titlebar-settings').click();
+    await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'activity-settings');
+    await page.getByTestId('activity-settings').click();
     if (draft === 'shared') {
       await selectSection('app');
       assert.equal(await input.isChecked(), false);
@@ -691,7 +708,7 @@ for (const guard of ['defer', 'veto']) {
   test(`settings routed discard respects another surface's ${guard}`, async () => {
     await page.setViewportSize({width: 900, height: 700});
     await page.evaluate(() => window.mount([], true));
-    await page.getByTestId('titlebar-settings').click();
+    await page.getByTestId('activity-settings').click();
     await selectSection('app');
     await page.getByTestId('settings-open-at-login').check();
     await page.evaluate(guard => window.setNavigationGuard(guard), guard);

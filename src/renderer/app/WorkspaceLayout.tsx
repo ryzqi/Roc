@@ -4,7 +4,7 @@ import { OVERLAY_Z_INDEX } from '../shell/overlay-stack';
 import { ResizableDivider } from '../shell/ResizableDivider';
 import { OverlayFocusRestore, useOverlayBehavior } from '../shell/use-overlay-behavior';
 import { ASSISTANT_WIDTH, SIDEBAR_WIDTH } from './ui-state';
-import { ACTIVITY_RAIL_WIDTH, CANVAS_MIN_WIDTH, type LayoutState } from './use-layout-state';
+import { ACTIVITY_RAIL_WIDTH, CANVAS_MIN_WIDTH, type LayoutPersistence } from './useLayoutPersistence';
 
 function WorkspacePane({ open, floating, side, title, testId, trigger, width, onClose, children }: {
   open: boolean;
@@ -45,7 +45,7 @@ function WorkspacePane({ open, floating, side, title, testId, trigger, width, on
 }
 
 export function WorkspaceLayout({ layout, assistantOpen, onCloseAssistant, activityRail, contextDrawer, canvas, assistant }: {
-  layout: LayoutState;
+  layout: LayoutPersistence;
   assistantOpen: boolean;
   onCloseAssistant: () => void;
   activityRail: ReactNode;

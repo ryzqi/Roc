@@ -1,6 +1,11 @@
 .settings-layout { min-height: 0; }
 .settings-content { padding: var(--panel-padding); }
 .settings-navigation [role='tab'] { min-block-size: var(--list-row-height); }
+.settings-search input { min-block-size: 28px; }
+.settings-search:focus-within { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.settings-domain-item { font-weight: var(--font-weight-medium); }
+.settings-subsections button[role='tab'] { min-block-size: 30px; padding-block: var(--space-1); padding-inline: var(--space-2); font-size: var(--font-meta-size); }
+.sticky-save-bar { background: var(--surface-rail); }
 .settings-navigation-group { flex-shrink: 0; padding: var(--space-4) var(--space-3) var(--space-1); color: var(--subtle); font-size: var(--font-micro-size); font-weight: var(--font-weight-medium); }
 .settings-navigation-group:first-child { padding-top: var(--space-1); }
 .settings-form-content { width: 100%; max-width: 760px; margin-inline: auto; padding-block: var(--space-2) var(--space-4); overflow-wrap: anywhere; }

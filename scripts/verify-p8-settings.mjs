@@ -145,7 +145,11 @@ async function closeSettings() {
   await page.waitForSelector('[data-testid="settings-modal-panel"]', { state: 'detached', timeout: 15_000 });
 }
 
+const settingsDomainBySection = {app:'general',models:'models','default-model':'models',literature:'research',rag:'research',memory:'research',tasks:'research',guardrail:'security',sandbox:'security',authorization:'security',hooks:'advanced',pilot:'advanced',backup:'advanced'};
 async function openSection(id) {
+  const section = page.getByTestId(`settings-section-${id}`);
+  if (await section.count() === 0 || !await section.isVisible()) await page.click(`[data-testid="settings-domain-${settingsDomainBySection[id]}"]`);
+  await section.waitFor({state: 'visible'});
   await page.click(`[data-testid="settings-section-${id}"]`);
   await page.waitForSelector(`[data-testid="settings-section-${id}-body"]`, { timeout: 15_000 });
 }

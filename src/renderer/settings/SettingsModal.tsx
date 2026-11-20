@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
-  LoaderCircle,
   ArchiveRestore,
   BookOpen,
   Brain,
@@ -18,7 +17,7 @@ import {
   type LucideIcon
 } from 'lucide-react';
 import { RadixSettingsConfirmDialog, RadixSettingsDialogShell } from './radix-dialog-pilot';
-import { formInputClass, formPrimaryButtonClass } from '../shared/form-ui';
+import { formInputClass } from '../shared/form-ui';
 import { EmptyState } from '../shell/EmptyState';
 import type { ThemeOverride } from '../app/ui-state';
 import type { RocClient } from '../shared/roc-client';
@@ -36,6 +35,8 @@ import { RagSection } from './sections/RagSection';
 import { LiteratureSection, SandboxSection } from './sections/ReadOnlySections';
 import { PilotSection } from './sections/PilotSection';
 import { GuardrailSection, MemorySection } from './sections/SecuritySections';
+import { SETTINGS_DOMAINS, domainForSection, settingsSearchText, type SettingsDomainId } from './settingsRegistry';
+import { StickySaveBar } from './StickySaveBar';
 import './settings-layout.css';
 
 /**
@@ -65,12 +66,6 @@ const SECTION_ICONS: Readonly<Record<SettingsSectionId, LucideIcon>> = {
   memory: Brain,
   pilot: FlaskConical,
   backup: ArchiveRestore
-};
-
-const SECTION_GROUP_STARTS: Partial<Record<SettingsSectionId, string>> = {
-  models: '模型与文献',
-  sandbox: '运行与权限',
-  hooks: '扩展与维护'
 };
 
 /**
@@ -187,16 +182,11 @@ function renderPanel(
   return renderSection(id, store, props);
 }
 
-function dirtyBarText(dirty: boolean, dirtyCount: number, savedOnce: boolean): string {
-  if (dirty) {
-    return `未保存 ${dirtyCount} 项`;
-  }
-  return savedOnce ? '所有修改已保存' : '';
-}
-
 export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
   const store = useSettingsStore(props.client, props.projectId);
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('models');
+  const [activeDomain, setActiveDomain] = useState<SettingsDomainId>(() => domainForSection('models').id);
+  const [searchQuery, setSearchQuery] = useState('');
   const [discardIntent, setDiscardIntent] = useState<'close' | 'reset' | 'navigate' | null>(null);
   const [closeAfterDiscard, setCloseAfterDiscard] = useState(false);
   const editorGuard = useSettingsEditorGuards();
@@ -294,6 +284,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
   const selectSection = (id: SettingsSectionId, focusPanel = false): void => {
     const select = (): void => {
       setActiveSection(id);
+      setActiveDomain(domainForSection(id).id);
       if (focusPanel) setFocusIssue(true);
       else {
         const button = listRef.current?.querySelector<HTMLButtonElement>(`[data-section="${id}"]`);
@@ -307,9 +298,10 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
   };
 
   const onListKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (visibleSections.length === 0) return;
     if (event.key === 'Home' || event.key === 'End') {
       event.preventDefault();
-      const target = event.key === 'Home' ? SETTINGS_SECTIONS[0] : SETTINGS_SECTIONS[SETTINGS_SECTIONS.length - 1];
+      const target = event.key === 'Home' ? visibleSections[0] : visibleSections[visibleSections.length - 1];
       if (target !== undefined) {
         selectSection(target.id);
       }
@@ -319,9 +311,9 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
       return;
     }
     event.preventDefault();
-    const index = SETTINGS_SECTIONS.findIndex((section) => section.id === activeSection);
+    const index = visibleSections.findIndex((section) => section.id === activeSection);
     const delta = event.key === 'ArrowDown' ? 1 : -1;
-    const next = SETTINGS_SECTIONS[(index + delta + SETTINGS_SECTIONS.length) % SETTINGS_SECTIONS.length];
+    const next = visibleSections[(index + delta + visibleSections.length) % visibleSections.length];
     if (next !== undefined) {
       selectSection(next.id);
     }
@@ -356,6 +348,10 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
    * between the user and a backend rejection.
    */
   const issueEntries = store.issues.map((issue) => ({ issue, section: sectionForDraftPath(issue.path) }));
+  const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
+  const visibleSections = SETTINGS_SECTIONS.filter(section => normalizedSearch.length === 0
+    ? domainForSection(section.id).id === activeDomain
+    : settingsSearchText(section.id).includes(normalizedSearch));
 
   return (
     <SettingsEditorGuardContext.Provider value={editorGuard.context}>
@@ -375,7 +371,18 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
       >
         <div className="settings-layout flex h-full flex-col min-[720px]:flex-row">
           {compactNavigation ? (
-            <div className="shrink-0 border-b-[0.5px] border-line bg-[var(--material-sidebar)] px-4 py-2">
+            <div className="settings-compact-navigation shrink-0 border-b-[0.5px] border-line-default bg-surface-rail px-4 py-2">
+              <label className="settings-search mb-2 flex min-h-8 items-center rounded-control border-[0.5px] border-line-default bg-surface-raised px-2">
+                <span className="sr-only">搜索设置</span>
+                <input type="search" value={searchQuery} onChange={event => setSearchQuery(event.target.value)} placeholder="搜索设置" aria-label="搜索设置" data-testid="settings-search"
+                  className="min-w-0 flex-1 bg-transparent py-1.5 text-ink-primary placeholder:text-ink-muted" />
+              </label>
+              <label className="sr-only" htmlFor="settings-domain-select">设置领域</label>
+              <select id="settings-domain-select" aria-label="设置领域" value={activeDomain} disabled={busy}
+                onChange={event => setActiveDomain(event.target.value as SettingsDomainId)}
+                className={`${formInputClass} mb-2 w-full`} data-testid="settings-domain-select">
+                {SETTINGS_DOMAINS.map(domain => <option key={domain.id} value={domain.id}>{domain.label}</option>)}
+              </select>
               <select
                 ref={(element) => { activeNavigationRef.current = element; }}
                 aria-label="设置分区"
@@ -385,7 +392,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
                 className={`${formInputClass} w-full`}
                 data-testid="settings-section-select"
               >
-                {SETTINGS_SECTIONS.map((section) => (
+                {SETTINGS_SECTIONS.filter(section => normalizedSearch.length === 0 || settingsSearchText(section.id).includes(normalizedSearch)).map((section) => (
                   <option key={section.id} value={section.id}>
                     {section.label}{store.dirtySections.has(section.id) ? '（未保存）' : ''}
                   </option>
@@ -399,16 +406,28 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
               aria-orientation="vertical"
               aria-label="设置分区"
               onKeyDown={onListKeyDown}
-              className="settings-navigation flex w-[200px] shrink-0 flex-col gap-1 overflow-y-auto border-e-[0.5px] border-line bg-[var(--material-sidebar)] p-3"
+              className="settings-navigation flex w-[224px] shrink-0 flex-col gap-1 overflow-y-auto border-e-[0.5px] border-line bg-surface-rail p-3"
               data-testid="settings-sections"
             >
-              {SETTINGS_SECTIONS.map((section) => {
+              <label className="settings-search flex shrink-0 items-center gap-2 rounded-control border-[0.5px] border-line-default bg-surface-raised px-2">
+                <span className="sr-only">搜索设置</span>
+                <input type="search" value={searchQuery} onChange={event => setSearchQuery(event.target.value)} placeholder="搜索设置" aria-label="搜索设置" data-testid="settings-search"
+                  className="min-w-0 flex-1 bg-transparent py-1.5 text-ink-primary placeholder:text-ink-muted" />
+              </label>
+              <nav aria-label="设置领域" className="settings-domains mt-2 grid gap-1">
+                {SETTINGS_DOMAINS.map(domain => <button key={domain.id} type="button" disabled={busy} data-testid={`settings-domain-${domain.id}`} aria-pressed={activeDomain === domain.id}
+                  onClick={() => { setSearchQuery(''); setActiveDomain(domain.id); }}
+                  className="settings-domain-item flex min-h-8 items-center justify-between rounded-control px-2 text-start text-ink-muted enabled:hover:bg-[var(--overlay-hover)] aria-[pressed=true]:bg-[var(--overlay-active)] aria-[pressed=true]:text-ink-primary focus-visible:outline-2 focus-visible:outline-focus-ring">
+                  <span>{domain.label}</span><span className="text-[length:var(--font-micro-size)] tabular-nums">{domain.sectionIds.length}</span>
+                </button>)}
+              </nav>
+              <div className="settings-subsections mt-2 grid gap-1 border-t-[0.5px] border-line-default pt-2">
+              {visibleSections.map((section) => {
                 const selected = section.id === activeSection;
                 const sectionDirty = store.dirtySections.has(section.id);
                 const Icon = SECTION_ICONS[section.id];
                 return (
                   <Fragment key={section.id}>
-                    {SECTION_GROUP_STARTS[section.id] ? <span className="settings-navigation-group" role="presentation">{SECTION_GROUP_STARTS[section.id]}</span> : null}
                     <button
                       type="button"
                       ref={selected ? (element) => { activeNavigationRef.current = element; } : undefined}
@@ -449,6 +468,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
                   </Fragment>
                 );
               })}
+              </div>
             </div>
           )}
 
@@ -512,32 +532,8 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
               <div className="settings-form-content">{renderPanel(activeSection, store, props)}</div>
             </div>
 
-            <div className="flex shrink-0 flex-wrap items-center gap-2 border-t-[0.5px] border-line pt-3">
-              <span className="min-w-0 flex-1 text-muted text-[length:var(--font-meta-size)] tabular-nums" role="status" data-testid="settings-dirty-bar">
-                {dirtyBarText(dirty, dirtyCount, store.savedAt !== null)}
-                {transientDirty ? `${dirty ? '，' : ''}${editorGuard.labels.join('、')}尚未保存` : ''}
-              </span>
-              <button
-                type="button"
-                onClick={() => setDiscardIntent('reset')}
-                disabled={(!dirty && !transientDirty) || busy}
-                data-testid="settings-discard-draft"
-                className="min-h-[var(--control-height)] rounded-control px-3 text-muted enabled:hover:bg-[var(--overlay-hover)] enabled:hover:text-ink enabled:active:bg-[var(--overlay-active)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
-              >
-                放弃修改
-              </button>
-              <button
-                type="button"
-                onClick={requestSave}
-                disabled={!dirty || busy}
-                aria-busy={store.save.pending || undefined}
-                data-testid="settings-save"
-                className={formPrimaryButtonClass}
-              >
-                {store.save.pending ? <LoaderCircle size={12} aria-hidden="true" className="motion-safe:animate-spin" /> : null}
-                {store.save.pending ? '保存中…' : '保存设置'}
-              </button>
-            </div>
+            <StickySaveBar dirtyCount={dirtyCount} savedOnce={store.savedAt !== null} highImpactCount={impacts.length} busy={busy} saving={store.save.pending} transientDirty={transientDirty}
+              onDiscard={() => setDiscardIntent('reset')} onSave={requestSave} />
           </div>
         </div>
 
