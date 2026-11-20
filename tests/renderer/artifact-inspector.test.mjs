@@ -482,11 +482,11 @@ test('late real bridge response cannot replace another artifact selection',async
   assert.doesNotMatch(await page.getByTestId('artifact-inspector-panel').innerText(),/Actual persisted markdown/u);
 });
 
-test('source drawer supports keyboard reading and fixed chrome at light dark 1100 1099 and 800 with reduced motion',async()=>{
+test('source drawer supports keyboard reading and fixed chrome at light dark 1100 1099 800 and 420 with reduced motion',async()=>{
   await scene({long:true});await openArtifact();
   await page.locator('details > summary').filter({hasText:'Original synthetic source'}).click();
-  for(const theme of ['light','dark'])for(const width of [1100,1099,800]){
-    await app.evaluate(({BrowserWindow},width)=>BrowserWindow.getAllWindows()[0].setSize(width,900),width);
+  for(const theme of ['light','dark'])for(const width of [1100,1099,800,420]){
+    await page.setViewportSize({width,height:900});
     await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
     await page.getByTestId('artifact-inspector-refresh').scrollIntoViewIfNeeded();
     await page.getByTestId('artifact-inspector-refresh').hover();await audit(theme+'-'+width);
@@ -498,7 +498,7 @@ test('source drawer supports keyboard reading and fixed chrome at light dark 110
     assert.equal(layout.scroll,0);assert.equal(layout.overflow,false);assert.ok(layout.title>=0);assert.equal(layout.small,false);
   }
   await page.keyboard.press('Escape');await page.getByTestId('artifact-inspector-panel').waitFor({state:'detached'});
-  await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1100,900));
+  await page.setViewportSize({width:1100,height:900});
   await page.evaluate(()=>document.documentElement.dataset.theme='light');
 });
 

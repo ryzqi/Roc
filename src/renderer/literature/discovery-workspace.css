@@ -1,0 +1,55 @@
+.radar-workspace { container: radar / inline-size; }
+.radar-controls { flex-shrink: 0; max-height: 42%; overflow: auto; }
+.radar-add-feed { border-bottom: .5px solid var(--line); }
+.radar-add-feed > summary { color: var(--ink); }
+.radar-add-feed .reading-toolbar { border-bottom: 0; }
+.radar-columns { display: flex; min-height: 0; min-width: 0; flex: 1; overflow: hidden; }
+.radar-articles { flex: 1; min-width: 0; overflow: auto; padding: 0 20px 20px; scrollbar-gutter: stable; }
+.radar-articles article { padding-block: 16px; }
+.radar-articles article > p { line-height: 1.65; }
+.radar-articles article > div > button { line-height: 1.6; overflow-wrap: anywhere; }
+.radar-articles input[type="checkbox"] { margin-top: 5px; flex-shrink: 0; }
+.radar-detail { width: 54%; min-width: 0; overflow: auto; padding: 16px 24px; border-inline-start: .5px solid var(--line); line-height: 1.8; overflow-wrap: anywhere; }
+.radar-detail h3 { font-size: var(--font-read-large-size); line-height: 1.5; }
+.radar-detail .reading-toolbar { border: 0; padding: 16px 0; }
+.radar-detail-back { min-height: 28px; padding: 4px 8px; border: .5px solid var(--line); border-radius: var(--radius-control); font-size: var(--font-meta-size); }
+.radar-detail-back:hover { background: var(--overlay-hover); }
+.radar-detail h3:focus-visible, .monitor-workspace h3:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.monitor-workspace { display: flex; flex: 1; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; container: monitors / inline-size; font-size: var(--font-body-size); }
+.monitor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 16px 20px; border-bottom: .5px solid var(--line); flex-shrink: 0; }
+.monitor-toolbar > div { flex: 1 1 200px; }
+.monitor-toolbar h2 { font-weight: 600; }
+.monitor-columns { display: flex; flex: 1; min-height: 0; min-width: 0; }
+.monitor-index { width: 260px; min-width: 0; flex-shrink: 0; overflow: auto; padding: 12px; border-inline-end: .5px solid var(--line); }
+.monitor-index h3 { padding: 4px 8px 12px; color: var(--muted); font-size: var(--font-meta-size); }
+.monitor-index-item { display: flex; flex-wrap: wrap; width: 100%; gap: 4px 12px; padding: 12px; text-align: start; border-radius: var(--radius-control); margin-block: 4px; }
+.monitor-index-item > span:first-child { width: 100%; font-weight: 500; overflow-wrap: anywhere; }
+.monitor-index-item > span:not(:first-child) { color: var(--muted); font-size: var(--font-meta-size); }
+.monitor-index-item:hover { background: var(--overlay-hover); }
+.monitor-index-item[aria-pressed="true"] { background: var(--accent-soft); box-shadow: inset 2px 0 var(--accent); }
+.monitor-index-item:disabled { opacity: .5; }
+.monitor-detail { flex: 1; min-width: 0; overflow: auto; padding: 20px clamp(16px, 3cqw, 32px) 32px; scrollbar-gutter: stable; container: monitor-detail / inline-size; }
+.monitor-detail-header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 20px; }
+.monitor-detail-header h3 { font-size: var(--font-read-large-size); font-weight: 600; overflow-wrap: anywhere; }
+.monitor-back { display: none; }
+.monitor-editor { max-width: 760px; margin-inline: auto; line-height: 1.65; }
+.monitor-editor :where(label, fieldset, dl, dd, div) { min-width: 0; }
+.monitor-editor :where(input, select) { max-width: 100%; }
+.monitor-editor > dl { padding: 12px; background: var(--overlay-hover); border-radius: var(--radius-control); }
+.monitor-empty { display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 240px; height: 100%; gap: 8px; color: var(--muted); text-align: center; }
+.monitor-empty h3 { font-size: var(--font-read-large-size); color: var(--ink); }
+@container radar (max-width: 720px) {
+  .radar-workspace[data-detail="true"] .radar-articles { display: none; }
+  .radar-detail { width: 100%; border-inline-start: 0; padding-inline: 20px; }
+}
+@container monitors (max-width: 720px) {
+  .monitor-index { width: 100%; border-inline-end: 0; }
+  .monitor-workspace[data-detail="true"] .monitor-index { display: none; }
+  .monitor-workspace[data-detail="false"] .monitor-detail { display: none; }
+  .monitor-back { display: inline-flex; }
+  .monitor-toolbar { padding: 12px 16px; }
+}
+@container monitor-detail (max-width: 420px) {
+  .monitor-editor > .grid, .monitor-editor details .grid { grid-template-columns: minmax(0, 1fr); }
+  .monitor-editor details .grid > .col-span-2 { grid-column: auto; }
+}

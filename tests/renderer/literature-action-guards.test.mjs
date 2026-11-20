@@ -1,6 +1,6 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp, rm, writeFile} from 'node:fs/promises';
+import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import electronPath from 'electron';
@@ -30,7 +30,7 @@ before(async () => {
     const feed = id => radarFeedSchema.parse({id,projectId:'project-a',title:id,url:'https://example.invalid/'+id,
       pinned:false,archived:false,revision:1,refreshedAt:null,error:null});
     const article = (id, importedItemId = null) => radarArticleSchema.parse({id,feedId:'feed-a',
-      title:id,url:'https://example.invalid/'+id,summary:'Source '+id,authors:[],publishedAt:null,
+      title:id,url:'https://example.invalid/'+id,summary:('Evidence from a long scientific abstract, with methods and observed limitations. '.repeat(25))+id,authors:[],publishedAt:null,
       arxivId:null,doi:null,read:false,importedItemId,score:null});
     const rows = [article('paper-a'), article('paper-b'), article('paper-saved','saved-item')];
     window.discovery = readingDiscoveryResultSchema.parse({articles:rows,source:'Synthetic source',
@@ -109,7 +109,10 @@ const count = method => page.evaluate(method => calls.filter(call => call.method
 const settle = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 async function mount(kind) {
   await page.evaluate(kind => mountPanels(kind),kind);
-  if (kind==='radar') await expect(page.getByRole('button',{name:'paper-a',exact:true})).toBeVisible();
+  if (kind==='radar') {
+    await expect(page.getByRole('button',{name:'paper-a',exact:true})).toBeVisible();
+    await page.getByText('添加 RSS 订阅',{exact:true}).click();
+  }
 }
 async function discovery() {
   await mount('discovery');
@@ -359,4 +362,30 @@ test('daily recommendation failures retain their actual stage without an enable-
   await expect(page.getByRole('alert')).toContainText('推荐内容向量计算超时');
   await expect(page.getByText('根据项目文献生成今日推荐。需先启用嵌入模型。',{exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'重新计算',exact:true})).toBeEnabled();
+});
+
+
+test('radar detail uses the narrow workspace and returns keyboard focus without losing the subscription draft', async () => {
+  await mount('radar');
+  await page.getByLabel('订阅名称',{exact:true}).fill('Retained subscription');
+  await page.locator('.radar-add-feed > summary').click();
+  const source=await readFile(join(process.cwd(),'.agents/skills/desktop-agent-ui/scripts/clip-audit.js'),'utf8');
+  for(const theme of ['light','dark']) for(const width of [1100,420]) {
+    await page.setViewportSize({width,height:850});
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    const opener=page.getByRole('button',{name:'paper-a',exact:true});
+    await opener.click();
+    await expect(page.getByRole('heading',{name:'paper-a',exact:true})).toBeFocused();
+    const detail=page.getByRole('complementary',{name:'文章详情'});
+    const box=await detail.boundingBox();
+    assert.ok(box.width> (width===420?width-45:width*.45),JSON.stringify(box));
+    if(width===420) await expect(page.getByTestId('radar-articles')).toBeHidden();
+    const audit=await page.evaluate(source=>(0,eval)(`(${source})`)({root:'body',viewport:true}),source);
+    assert.equal(audit.cut,0,JSON.stringify(audit));
+    if(process.env.ROC_REDESIGN_SCREENSHOTS) await page.screenshot({path:join(process.env.ROC_REDESIGN_SCREENSHOTS,`radar-${theme}-${width}.png`)});
+    await page.getByRole('button',{name:'关闭详情',exact:true}).click();
+    await expect(opener).toBeFocused();
+    await expect(page.getByLabel('订阅名称',{exact:true})).toHaveValue('Retained subscription');
+  }
+  await page.setViewportSize({width:1100,height:850});
 });

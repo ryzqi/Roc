@@ -9,6 +9,7 @@ import {formSecondaryButtonClass} from '../shared/form-ui';
 import type {ArtifactReadingLocations} from './artifact-reading-location';
 import {useArtifactReadingLocation} from './use-artifact-reading-location';
 import {ArtifactEvidenceSource} from './ArtifactEvidenceSource';
+import './artifact-workspace.css';
 
 const StageContent = retryableLazy(async () => ({default: (await import('./ArtifactStageContent')).ArtifactStageContent}));
 const ProductionView = retryableLazy(async () => ({default: (await import('./ArtifactProductionView')).ArtifactProductionView}));
@@ -85,8 +86,8 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
   }, [result]);
   const statuses = {draft: '草稿', approved: '已批准', superseded: '已被替代'};
   return <ModalShell open kind="drawer" title={snapshot?.artifact.title ?? '科研工件'} onClose={close} bodyRef={reading.bodyRef}
-    widthClassName="w-[560px]" testId="artifact-inspector" beforeClose={() => !guard.busy()}>
-    <div className="flex flex-col gap-3 text-[length:var(--font-body-size)]">
+    widthClassName="artifact-inspector-window" testId="artifact-inspector" beforeClose={() => !guard.busy()}>
+    <div className="artifact-workspace flex flex-col gap-3 text-[length:var(--font-body-size)]">
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={button} disabled={read.status === 'loading' || planLocked}
           data-testid="artifact-inspector-refresh" data-reading-key="refresh" onClick={()=>{if (guard.locked()) return; reading.save(); read.reload();}}>刷新工件</button>

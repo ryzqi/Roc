@@ -5,6 +5,7 @@ import {useAsyncResource} from '../app/use-async-resource';
 import MonitorEditor from './MonitorEditor';
 import {monitorButton, MonitorReadState, MonitorPager} from './MonitorHistory';
 import {LiteratureEditorBoundary} from './literature-editor-guard';
+import './discovery-workspace.css';
 
 type Props = {
   client: RocClient; projectId: string; items: ResearchLibraryItem[]; writable: boolean; active: boolean;
@@ -22,6 +23,9 @@ function MonitorsContent({client, projectId, items, writable, active, onLockChan
   const [creating, setCreating] = useState(false);
   const [locked, setLocked] = useState(false);
   const lockRef = useRef(false);
+  const detailHeading = useRef<HTMLHeadingElement>(null);
+  const listHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {if (selected !== null || creating) detailHeading.current?.focus({preventScroll:true});}, [selected, creating]);
   const lock = useCallback((value: boolean) => {lockRef.current = value; setLocked(value); onLockChange(value);}, [onLockChange]);
   useEffect(() => () => onLockChange(false), [onLockChange]);
   const list = useAsyncResource(JSON.stringify([projectId, offset]),
@@ -36,20 +40,22 @@ function MonitorsContent({client, projectId, items, writable, active, onLockChan
     if (lockRef.current) return;
     setSelected(id); setCreating(id === null);
   };
-  return <section aria-label="文献监控" data-testid="literature-monitors" className="min-h-0 flex-1 overflow-y-auto p-3 text-[length:var(--font-body-size)]">
-    <div className="flex flex-wrap items-center gap-2">
+  return <section aria-label="文献监控" data-testid="literature-monitors" className="monitor-workspace" data-detail={selected !== null || creating}>
+    <header className="monitor-toolbar">
+      <div><h2>文献监控</h2></div>
       <button className={monitorButton} type="button" disabled={!writable || locked}
         onClick={() => select(null)}>新建监控</button>
       <button className={monitorButton} type="button" disabled={locked} onClick={() => {if (!lockRef.current) refresh();}}>刷新监控</button>
       {!writable ? <span className="text-muted">项目只读</span> : null}
-    </div>
-    <details open data-testid="literature-monitor-list" className="my-3">
-      <summary className="cursor-pointer text-muted">监控列表{list.data === null ? '' : `（${list.data.total}）`}</summary>
+    </header>
+    <div className="monitor-columns">
+    <section data-testid="literature-monitor-list" className="monitor-index" aria-label="监控列表">
+      <h3 ref={listHeading} tabIndex={-1}>监控列表{list.data === null ? '' : `（${list.data.total}）`}</h3>
       <MonitorReadState resource={list} label="监控列表"/>
       {list.data === null ? null : <>
         {list.data.records.length === 0 ? <p className="py-2 text-muted">尚无文献监控</p> :
           <ul className="divide-y divide-line">
-            {list.data.records.map(value => <li key={value.id}><button type="button" className={`${monitorButton} my-1 max-w-full text-left`}
+            {list.data.records.map(value => <li key={value.id}><button type="button" className="monitor-index-item"
               disabled={locked} aria-pressed={selected === value.id} onClick={() => select(value.id)}>
               <span className="break-words">{value.title}</span><span>{value.status === 'active' ? '已启用' : '已暂停'}</span>
               <span>查询版本 {value.queryVersion}</span><span>{value.cadence === 'daily' ? '每日' : '每周'}</span>
@@ -57,7 +63,15 @@ function MonitorsContent({client, projectId, items, writable, active, onLockChan
           </ul>}
         <MonitorPager label="监控列表" offset={offset} nextOffset={list.data.nextOffset} setOffset={setOffset} disabled={locked || list.status === 'loading'}/>
       </>}
-    </details>
+    </section>
+    <div className="monitor-detail">
+      {selected !== null || creating ? <div className="monitor-detail-header">
+        <button type="button" className={`${monitorButton} monitor-back`} disabled={locked} onClick={() => {
+          if(lockRef.current)return;setSelected(null);setCreating(false);
+          requestAnimationFrame(() => listHeading.current?.focus({preventScroll:true}));
+        }}>返回监控列表</button>
+        <h3 ref={detailHeading} tabIndex={-1}>{creating ? '设置监控' : monitor.data?.title ?? '监控详情'}</h3>
+      </div> : <div className="monitor-empty"><h3>选择一项监控</h3><p>查看查询条件、检查记录和文献提醒，或新建一项监控。</p></div>}
     {creating ? <MonitorEditor key="new" client={client} projectId={projectId} items={items} writable={writable}
       active={active} monitor={null} version={null} onLockChange={lock}
       onSaved={value => {setCreating(false); setSelected(value.id); refresh();}}/> : null}
@@ -71,5 +85,7 @@ function MonitorsContent({client, projectId, items, writable, active, onLockChan
           client={client} projectId={projectId} items={items} writable={writable} active={active}
           monitor={monitor.data} version={currentVersion} onLockChange={lock} onSaved={refresh}/>}
     </>}
+    </div>
+    </div>
   </section>;
 }

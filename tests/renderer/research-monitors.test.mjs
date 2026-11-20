@@ -434,20 +434,26 @@ test('partial provider errors retain real unknown observations and old safety al
   await expect(page.getByRole('button', {name: '标为已读', exact: true}).first()).toBeDisabled();
 });
 
-test('650px light/dark monitor layouts preserve keyboard, real hover and disclosure without clipped shadows', async () => {
+test('wide and narrow light/dark monitor layouts preserve drafts, keyboard and disclosure without clipped shadows', async () => {
   const f = scene(); const monitor = f.save(); await f.check(monitor);
   await mount(f); await open(); await select();
   await page.getByText('检索范围', {exact: true}).click();
   const audit = await readFile(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
   const receipts = [];
-  for (const theme of ['light', 'dark']) {
-    await page.setViewportSize({width: 650, height: 800});
+  await page.getByRole('textbox',{name:'监控名称',exact:true}).fill('Retained monitor draft');
+  for (const theme of ['light', 'dark']) for(const width of [1100,650,420]) {
+    await page.setViewportSize({width, height: 800});
+    await expect(page.getByRole('textbox',{name:'监控名称',exact:true})).toHaveValue('Retained monitor draft');
+    if(width<=650) {
+      await expect(page.getByTestId('literature-monitor-list')).toBeHidden();
+      await expect(page.getByRole('button',{name:'返回监控列表',exact:true})).toBeDisabled();
+    }
     await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
     for (const phase of ['default', 'hover', 'disclosure', 'settled']) {
       if (phase === 'hover') await page.getByRole('button', {name: '立即检查', exact: true}).hover();
       if (phase === 'disclosure') await page.getByTestId('literature-monitor-check').first().locator('summary').first().click();
       if (phase === 'settled') await page.getByRole('button', {name: '刷新检查与提醒', exact: true}).click();
-      await page.getByTestId('literature-monitors').evaluate(element => element.scrollTop = 0);
+      await page.locator('.monitor-detail').evaluate(element => element.scrollTop = 0);
       const receipt = await page.evaluate(source => (0, eval)(`(${source})`)({root: '[data-testid="literature-hub"]', viewport: true}), audit);
       assert.equal(receipt.cut, 0, JSON.stringify(receipt)); receipts.push({theme, phase, receipt});
     }
@@ -456,7 +462,14 @@ test('650px light/dark monitor layouts preserve keyboard, real hover and disclos
     await page.getByLabel('起始日期', {exact: true}).focus();
     assert.notEqual(await page.getByLabel('起始日期', {exact: true}).evaluate(element => getComputedStyle(element).outlineWidth), '0px');
     await page.getByLabel('结果排序', {exact: true}).scrollIntoViewIfNeeded();
-    await page.screenshot({path: join(artifacts, `${theme}-650.png`)});
+    await page.screenshot({path: join(artifacts, `${theme}-${width}.png`)});
   }
+  await page.getByRole('button',{name:'放弃监控修改',exact:true}).click();
+  await page.getByTestId('literature-editor-discard-confirm').click();
+  await page.getByRole('button',{name:'返回监控列表',exact:true}).click();
+  await expect(page.getByTestId('literature-monitor-list')).toBeVisible();
+  await expect(page.getByTestId('literature-monitor-list').getByRole('heading')).toBeFocused();
+  await select();
+  await expect(page.getByRole('textbox',{name:'监控名称',exact:true})).toHaveValue('Synthetic monitor');
   await writeFile(join(artifacts, 'clip-audits.json'), JSON.stringify(receipts, null, 2) + '\n');
 });

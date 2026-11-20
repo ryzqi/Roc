@@ -166,7 +166,7 @@ export default function MonitorEditor({client, projectId, items, writable, activ
     !target.data.archived && target.data.projectIds.includes(projectId) && target.data.revision === draft.target.itemRevision);
   const targetChanged = draft.target !== null && target.status === 'ready' && !targetCurrent;
   const editable = writable && !busy && command === null;
-  return <div className="space-y-3" data-testid="literature-monitor-editor">
+  return <div className="monitor-editor space-y-3" data-testid="literature-monitor-editor">
     {monitor === null ? <p className="font-medium">新建文献监控</p> : <dl className="flex flex-wrap gap-x-4 gap-y-1 text-muted">
       <dt>状态</dt><dd>{monitor.status === 'active' ? '已启用' : '已暂停'}</dd>
       <dt>查询版本</dt><dd>{monitor.queryVersion}</dd><dt>控制版本</dt><dd>{monitor.revision}</dd>

@@ -690,7 +690,7 @@ test('local/source differences retain both sides and stale or failed comparison 
   await page.getByTestId('literature-zotero-previous-source').locator('pre').waitFor({state:'visible'});
   assert.match(await reviewed.innerText(),/来源版本 7/u);
   const scrollLayout=await page.getByRole('dialog').evaluate(panel=>{
-    const body=panel.children[1];
+    const body=panel.querySelector('.literature-import-content');
     const header=panel.children[0];
     return {panelScroll:panel.scrollTop,bodyScroll:body.scrollTop,
       panelTop:panel.getBoundingClientRect().top,headerTop:header.getBoundingClientRect().top,
@@ -703,12 +703,12 @@ test('local/source differences retain both sides and stale or failed comparison 
   assert.equal(scrollLayout.panelScroll,0);
   assert.equal(scrollLayout.headerTop,scrollLayout.panelTop+scrollLayout.borderTop);
   assert.ok(scrollLayout.bodyScroll>0);
-  const dialogBody=page.getByRole('dialog').locator(':scope > div').nth(1);
+  const dialogBody=page.getByRole('dialog').locator('.literature-import-content');
   await dialogBody.evaluate(body=>{body.scrollTop=0;});
   const bodyBox=await dialogBody.boundingBox();
   await page.mouse.move(bodyBox.x+2,bodyBox.y+40);
   await page.mouse.wheel(0,300);
-  await page.waitForFunction(()=>document.querySelector('[role="dialog"]').children[1].scrollTop>0);
+  await page.waitForFunction(()=>document.querySelector('.literature-import-content').scrollTop>0);
   assert.equal(await page.getByRole('dialog').evaluate(panel=>panel.scrollTop),0);
   await reviewed.locator(':scope > summary').focus();
   await page.getByTestId('literature-import-dialog-close').isVisible().then(visible=>assert.equal(visible,true));

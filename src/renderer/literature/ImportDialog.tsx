@@ -28,6 +28,7 @@ import {
   parseAuthorsInput,
   parseYearInput
 } from './format';
+import './import-workspace.css';
 
 /**
  * Import dialog (P5/T5.2).
@@ -337,11 +338,12 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
         return false;
       }}
       testId="literature-import-dialog"
-      widthClassName="w-[672px]"
+      widthClassName="literature-import-window"
+      bodyPadding="none"
       footer={null}
     >
-      <fieldset disabled={pending} className="m-0 flex min-w-0 flex-col gap-3 border-0 p-0" data-testid="literature-import-body">
-        <div role="tablist" aria-label="导入方式" className="flex flex-wrap items-center gap-1"
+      <fieldset disabled={pending} className="literature-import-layout" data-testid="literature-import-body">
+        <div role="tablist" aria-label="导入方式" className="literature-import-navigation"
           onKeyDown={event => {
             if (busy.current !== null) return;
             if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
@@ -371,6 +373,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
           ))}
         </div>
 
+        <div className="literature-import-content">
         {tab === 'document' ? (
           <div className="flex flex-col gap-2" data-testid="literature-import-panel-document">
             <div className="flex flex-wrap gap-3">
@@ -739,7 +742,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
               </p>
             )}
             {searchHits.length === 0 ? null : (
-              <ul className="flex max-h-80 flex-col overflow-y-auto pr-1" aria-label="检索结果" tabIndex={0}>
+              <ul className="flex flex-col pr-1" aria-label="检索结果" tabIndex={0}>
                 {searchHits.map(candidate => <LiteratureCandidateReview key={candidate.candidateId}
                   candidate={candidate} pending={pending || searchResult === null}
                   onAdd={() => {
@@ -775,6 +778,7 @@ export function ImportDialog(props: ImportDialogProps): React.JSX.Element | null
           <FileText size={10} aria-hidden="true" className="mr-1 inline" />
           添加文档后，在阅读器中选择「解析」即可提取可检索内容。
         </p>
+        </div>
       </fieldset>
     </ModalShell>
     <ConfirmDialog

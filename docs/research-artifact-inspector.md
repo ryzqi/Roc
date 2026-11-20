@@ -2,6 +2,8 @@
 
 助手人工闸门的真实工件链接在唯一 AppShell 中按需打开抽屉，供读取保存内容、原文与生产文件，再返回助手作明确决定。没有独立阶段页或 renderer 直接批准入口。
 
+检查器使用 920px 的自适应抽屉，窄窗口受现有 ModalShell 可用宽度约束。正文、编辑表单与来源元数据共用阅读布局；窄窗口将双列信息排成单列。综述协议列表独立滚动，为当前协议内容保留空间；关闭、焦点恢复、草稿与进行中操作仍由原边界管理。
+
 ## 保存快照
 
 `research.artifacts.inspect` / `research.inspectArtifact` 输入显式 projectId、artifactId、nullable expectedVersion；初读为 null。ID 必须属于项目，不接受标题、任意路径或旧时间戳代替。

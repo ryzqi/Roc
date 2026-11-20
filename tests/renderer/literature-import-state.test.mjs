@@ -49,6 +49,7 @@ before(async () => {
   await page.getByTestId('literature-import-pick-document').waitFor();
 });
 after(async () => {
+  await page?.evaluate(() => window.setImportOpen(false)).catch(() => {});
   try {await app?.close();} finally {if (directory) rmSync(directory, {recursive: true, force: true});}
   assert.deepEqual(errors, []);
 });
@@ -82,3 +83,27 @@ async function refreshItem(id) {
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   }, id);
 }
+
+
+test('manual import keeps navigation visible and the unsaved draft across wide and narrow windows', async () => {
+  await page.getByTestId('literature-import-tab-manual').click();
+  const title='A retained scientific title with a long description of the research question';
+  await page.getByTestId('literature-import-manual-title').fill(title);
+  await page.getByTestId('literature-import-manual-abstract').fill('Long abstract with results and limitations. '.repeat(40));
+  const source=readFileSync(join(process.cwd(),'.agents/skills/desktop-agent-ui/scripts/clip-audit.js'),'utf8');
+  for(const theme of ['light','dark']) for(const width of [1100,420]) {
+    await page.setViewportSize({width,height:800});
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    await page.getByTestId('literature-import-manual-submit').scrollIntoViewIfNeeded();
+    const nav=await page.getByRole('tablist',{name:'导入方式'}).boundingBox();
+    assert.ok(nav.y>=0&&nav.y+nav.height<250,JSON.stringify(nav));
+    assert.equal(await page.getByTestId('literature-import-manual-title').inputValue(),title);
+    const audit=await page.evaluate(source=>(0,eval)(`(${source})`)({root:'body',viewport:true}),source);
+    assert.equal(audit.cut,0,JSON.stringify(audit));
+    if(process.env.ROC_REDESIGN_SCREENSHOTS) await page.screenshot({path:join(process.env.ROC_REDESIGN_SCREENSHOTS,`import-${theme}-${width}.png`)});
+  }
+  await page.getByTestId('literature-import-dialog-close').click();
+  await page.getByTestId('literature-import-discard').waitFor();
+  await page.getByRole('button',{name:'继续录入',exact:true}).click();
+  assert.equal(await page.getByTestId('literature-import-manual-title').inputValue(),title);
+});

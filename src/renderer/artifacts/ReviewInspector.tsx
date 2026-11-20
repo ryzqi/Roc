@@ -9,6 +9,7 @@ import {ReviewProtocolEditor} from './ReviewProtocolEditor';
 import {ReviewSearchCorpus} from './ReviewSearchCorpus';
 import {ReviewReadonlyContent} from './ReviewReadonlyContent';
 import {useArtifactEditorGuard} from './artifact-editor-guard';
+import './artifact-workspace.css';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 type Selection = {kind: 'new'} | {kind: 'version'; versionId: string} | null;
@@ -40,8 +41,8 @@ export function ReviewInspector({client, request, writable, drafts, onClose}: {
       return client.api.research.getReviewProtocolHistory({projectId: request.projectId, protocolId: current.version.protocolId});
     }, {label: '读取协议修订历史'});
   return <ModalShell open kind="drawer" title="综述核查" onClose={onClose} beforeClose={() => !guard.busy()}
-    widthClassName="w-[560px]" testId="artifact-inspector">
-    <div className="flex min-w-0 flex-col gap-3 text-[length:var(--font-body-size)]" data-testid="artifact-review">
+    widthClassName="artifact-inspector-window" testId="artifact-inspector">
+    <div className="artifact-workspace flex min-w-0 flex-col gap-3 text-[length:var(--font-body-size)]" data-testid="artifact-review">
       {request.mode === 'readonly' ? <ReviewReadonlyContent client={client} link={request} /> : <>
       <div className="flex flex-wrap gap-2">
         <button type="button" className={button} disabled={pending || locked || protocols.status === 'loading' || protocol.status === 'loading'}
@@ -53,7 +54,7 @@ export function ReviewInspector({client, request, writable, drafts, onClose}: {
       {pending ? <p role="status">正在保存人工操作…</p> : null}
       {protocols.status === 'loading' ? <p role="status">正在读取综述协议…</p> : null}
       {protocols.error === null ? null : <p role="alert" className="break-words text-[var(--st-warn)]">{protocols.error}</p>}
-      {protocols.status !== 'ready' ? null : <section className="flex flex-col gap-1" aria-label="最近100份综述协议">
+      {protocols.status !== 'ready' ? null : <section className="artifact-protocol-list flex flex-col gap-1" aria-label="最近100份综述协议" tabIndex={0}>
         {protocols.data!.length === 0 ? <p className="text-muted">尚无综述协议。</p> :
           <ul className="flex flex-col gap-1">{protocols.data!.map(item => <li key={item.version.protocolId}>
             <button type="button" className={`${button} h-auto w-full py-1 text-left break-words`}

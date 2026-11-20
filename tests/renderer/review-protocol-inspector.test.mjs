@@ -208,6 +208,19 @@ test('lost save/freeze replies retry the exact original requests and do not appe
 test('window-local draft survives close/reopen; invalid years refuse before any write; native Escape restores opener focus', async () => {
   const f = fixture(); await mount(f); await fillNew();
   await page.getByLabel('发表起始年', {exact: true}).fill('2027');
+  for(const theme of ['light','dark']) for(const width of [1100,420]) {
+    await page.setViewportSize({width,height:800});
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    await page.getByLabel('研究问题',{exact:true}).scrollIntoViewIfNeeded();
+    assert.equal(await page.getByLabel('发表起始年',{exact:true}).inputValue(),'2027');
+    assert.equal(await page.getByLabel('研究问题',{exact:true}).inputValue(),reviewProtocolBodyFixture().question);
+    const box=await tid('artifact-inspector-panel').boundingBox();
+    assert.ok(box.width<=width && box.width>width-200,JSON.stringify(box));
+    await audit(`draft-${theme}-${width}`);
+  }
+  await page.setViewportSize({width:1100,height:900});
+  await page.evaluate(()=>document.documentElement.dataset.theme='light');
+
   await tid('artifact-review-save').click();
   await page.getByRole('alert').filter({hasText: 'review_publication_window_invalid'}).waitFor();
   assert.equal(f.db.prepare('SELECT count(*) FROM research_review_protocol_versions').pluck().get(), 0);
