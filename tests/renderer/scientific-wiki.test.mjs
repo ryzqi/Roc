@@ -276,6 +276,7 @@ test('complete equation/figure inspectors preserve raw LaTeX, original captions 
   const object = page.getByTestId('wiki-scientific-object');
   await page.getByTestId('wiki-scientific-latex').waitFor();
   assert.equal(await page.getByTestId('wiki-scientific-latex').innerText(), f.ir.equations[0].data.rawLatex);
+  await page.getByTestId('wiki-scientific-formula').locator('.katex').waitFor();
   await object.getByText('规范化 LaTeX', {exact: true}).click();
   await object.locator('details').filter({has: page.locator('summary', {hasText: '规范化 LaTeX'})})
     .getByText(f.ir.equations[0].data.normalizedLatex, {exact: true}).waitFor();
@@ -387,7 +388,13 @@ test('light/dark, wide/narrow, keyboard focus and clip audit cover collapsed/exp
     assert.equal(await page.getByLabel('搜索科研知识').evaluate(input => {
       const rect = input.getBoundingClientRect(); return document.activeElement === input && rect.left >= 0 && rect.right <= innerWidth;
     }), true);
-    await rows().first().hover();
+    if (width <= 680) {
+      assert.equal(await rows().first().isVisible(), false);
+      await page.getByRole('button', {name: '返回知识目录', exact: true}).click();
+      await rows().first().hover();
+      await rows().filter({hasText: 'Reported F1'}).click();
+      await page.getByTestId('wiki-scientific-table').waitFor();
+    } else await rows().first().hover();
     const audit = await page.evaluate(`(${auditSource})({root:'body',viewport:true})`);
     assert.equal(audit.cut, 0); assert.equal(await page.evaluate(() => document.body.scrollWidth > innerWidth), false);
     await writeFile(join(artifacts, `${theme}-${width}.json`), JSON.stringify(audit));

@@ -22,25 +22,6 @@
   container: skill-files / inline-size;
 }
 
-.wiki-pages-container {
-  container: wiki-pages / inline-size;
-}
-
-@container wiki-pages (max-width: 560px) {
-  .wiki-pages-layout {
-    flex-direction: column;
-    flex-wrap: nowrap;
-  }
-
-  .wiki-page-list {
-    width: 100%;
-    max-height: 220px;
-    overflow-y: auto;
-    border-right-width: 0;
-    border-bottom-width: 0.5px;
-  }
-}
-
 @container skill-files (max-width: 540px) {
   .skill-files-layout {
     grid-template-columns: minmax(0, 1fr);

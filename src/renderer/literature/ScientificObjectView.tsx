@@ -1,10 +1,13 @@
 import {useState} from 'react';
+import {LazyBoundary, retryableLazy} from '../shell/LazyBoundary';
 import type {PaperCardKnowledge} from '../../shared/schemas/research-paper-card-knowledge';
 import type {WikiPaperKnowledgeSource} from '../../shared/schemas/research-wiki-pages';
 import type {RocClient} from '../shared/roc-client';
 import {formSecondaryButtonClass} from '../shared/form-ui';
 import {scientificObject, scientificEntityLabels} from './scientific-wiki';
 import {ScientificDocumentSource} from './ScientificDocumentSource';
+
+const ReadingFormula = retryableLazy(() => import('./ReadingFormula'));
 
 const objectWarningLabels: Readonly<Record<string, string>> = {
   research_table_structure_missing: '未提取到表格结构，请核对原文。',
@@ -57,6 +60,9 @@ export function ScientificObjectView({client, projectId, reference, card, object
       </details>
     </> : object.kind === 'Equation' ? <>
       <p className="text-xs text-muted">公式 {object.value.data.equationNumber ?? '未编号'}，{object.value.data.status === 'parsed' ? '已解析' : object.value.data.status === 'missing' ? '缺失' : '无效'}</p>
+      {object.value.data.rawLatex ? <div className="min-w-0 overflow-x-auto py-3" data-testid="wiki-scientific-formula">
+        <LazyBoundary fallback={<p role="status">正在排版公式…</p>}><ReadingFormula text={object.value.data.rawLatex}/></LazyBoundary>
+      </div> : null}
       <label className="block space-y-1 text-xs"><span>原始 LaTeX</span>
         <pre className="ui-scroll-region max-h-72 whitespace-pre-wrap break-words" data-testid="wiki-scientific-latex">{object.value.data.rawLatex ?? '未记录'}</pre>
       </label>

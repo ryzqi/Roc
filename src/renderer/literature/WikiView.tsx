@@ -1,12 +1,15 @@
 import type {ResearchWikiSnapshot} from '../../shared/schemas/research-wiki';
 import { useMemo, useState } from 'react';
-import { BookMarked, Bot, CalendarClock, Check, ClipboardCopy, Layers, Link2, Search, X } from 'lucide-react';
+import { ArrowLeft, BookMarked, Bot, CalendarClock, Check, ClipboardCopy, Layers, Link2, Search, X } from 'lucide-react';
 import type { ResearchClaim, ResearchEvidence, ResearchLibraryItem } from '../../shared/types';
 import { useCopyFeedback } from '../shared/hooks/use-copy-feedback';
 import { EmptyState } from '../shell/EmptyState';
+import './knowledge-workspace.css';
 import type {RocClient} from '../shared/roc-client';
 import {LazyBoundary, retryableLazy} from '../shell/LazyBoundary';
 import { deriveWiki, wikiNeighbors, WIKI_PAGE_SIZE, type WikiConceptPage, type WikiEvidenceCard } from './derive-wiki';
+
+const ScientificMarkdown = retryableLazy(() => import('./ScientificMarkdown'));
 
 const ArtifactDocumentSource = retryableLazy(async () => ({
   default: (await import('../artifacts/ArtifactDocumentSource')).ArtifactDocumentSource
@@ -63,6 +66,7 @@ export function WikiView({
   );
   const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [browsing, setBrowsing] = useState(false);
   const copy = useCopyFeedback();
   const [offsets, setOffsets] = useState({concepts: 0, neighbors: 0, orphans: 0, evidence: 0, papers: 0, years: 0});
 
@@ -101,6 +105,7 @@ export function WikiView({
       onChange={offset => setOffsets(current => ({...current, [area]: offset}))} />;
   const selectConcept = (claimId: string, follow = false): void => {
     setSelectedClaimId(claimId);
+    setBrowsing(false);
     setOffsets(current => ({...current, neighbors: 0, evidence: 0, papers: 0,
       concepts: follow ? Math.floor(Math.max(0, projection.pages.findIndex(page => page.claimId === claimId)) / WIKI_PAGE_SIZE) * WIKI_PAGE_SIZE : current.concepts}));
     if (follow) setQuery('');
@@ -145,8 +150,8 @@ export function WikiView({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col" data-testid="wiki-view">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b-[0.5px] border-line px-3 py-2 text-[length:var(--font-micro-size)]">
+    <div className="knowledge-concepts flex h-full min-h-0 min-w-0 flex-col" data-testid="wiki-view" data-browsing={browsing || selected === null}>
+      <div className="knowledge-toolbar">
         <span className="text-muted" data-testid="wiki-counts">
           {projection.pages.length} 个概念，{projection.timeline.length} 个年份
         </span>
@@ -155,7 +160,7 @@ export function WikiView({
           <Search size={11} aria-hidden="true" className="shrink-0 text-subtle" />
           <input
             value={query}
-            onChange={(event) => { setQuery(event.target.value); setOffsets(current => ({...current, concepts: 0, neighbors: 0})); }}
+            onChange={(event) => { setQuery(event.target.value); setBrowsing(true); setOffsets(current => ({...current, concepts: 0, neighbors: 0})); }}
             placeholder="搜索概念、证据、文献…"
             aria-label="搜索概念页"
             data-testid="wiki-search"
@@ -175,11 +180,13 @@ export function WikiView({
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="knowledge-browser">
         <aside
-          className="flex w-56 shrink-0 flex-col gap-3 overflow-y-auto border-r-[0.5px] border-line p-2 md:w-64"
+          className="knowledge-directory knowledge-concept-directory"
           aria-label="概念列表"
         >
+          <div className="knowledge-directory-heading"><span>概念目录</span><span>{visiblePages.length} 项</span></div>
+          <div className="knowledge-directory-scroll">
           <ul className="flex flex-col gap-0.5" data-testid="wiki-concept-list">
             {visiblePages.length === 0 ? (
               <li className="px-2 py-3 text-muted text-[length:var(--font-meta-size)]" data-testid="wiki-no-match">
@@ -201,7 +208,7 @@ export function WikiView({
                         : 'border-transparent hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]'
                     }`}
                   >
-                    <span className="w-full truncate text-ink text-[length:var(--font-meta-size)]">{page.title}</span>
+                    <span className="knowledge-row-title text-ink">{page.title}</span>
                     <span className="flex items-center gap-1.5 text-[length:var(--font-micro-size)]">
                       <span className={reviewClass(page.review)}>{REVIEW_LABELS[page.review]}</span>
                       <span className="text-subtle">{page.evidence.length} 条证据</span>
@@ -215,11 +222,11 @@ export function WikiView({
           {pager('concepts', visiblePages.length)}
 
           {neighbors.total === 0 ? null : (
-            <section>
-              <h3 className="mb-1 flex items-center gap-1.5 text-muted text-[length:var(--font-micro-size)]">
+            <details className="knowledge-auxiliary">
+              <summary>
                 <Link2 size={11} aria-hidden="true" />
-                当前概念的共现（{neighbors.total}）
-              </h3>
+                共享证据的概念（{neighbors.total}）
+              </summary>
               <ul className="flex flex-col gap-1" data-testid="wiki-backlinks">
                 {neighbors.links.map((link) => (
                   <li key={`${link.fromClaimId}:${link.toClaimId}`} className="text-[length:var(--font-micro-size)]">
@@ -243,15 +250,15 @@ export function WikiView({
                 ))}
               </ul>
               {pager('neighbors', neighbors.total)}
-            </section>
+            </details>
           )}
 
           {projection.timeline.length === 0 ? null : (
-            <section>
-              <h3 className="mb-1 flex items-center gap-1.5 text-muted text-[length:var(--font-micro-size)]">
+            <details className="knowledge-auxiliary">
+              <summary>
                 <CalendarClock size={11} aria-hidden="true" />
                 引用文献年份
-              </h3>
+              </summary>
               <ol className="flex flex-wrap items-center gap-1.5" data-testid="wiki-timeline">
                 {slice(projection.timeline, 'years').map((entry) => (
                   <li key={entry.year}>
@@ -274,14 +281,14 @@ export function WikiView({
                 ))}
               </ol>
               {pager('years', projection.timeline.length)}
-            </section>
+            </details>
           )}
 
           {projection.orphanEvidence.length === 0 ? null : (
-            <section>
-              <h3 className="mb-1 text-muted text-[length:var(--font-micro-size)]">
+            <details className="knowledge-auxiliary">
+              <summary>
                 未归类证据（{projection.orphanEvidence.length}）
-              </h3>
+              </summary>
               <ul className="flex flex-col gap-1" data-testid="wiki-orphan-evidence">
                 {slice(projection.orphanEvidence, 'orphans').map((card) => (
                   <li key={card.id} className="truncate text-[length:var(--font-micro-size)]">
@@ -291,11 +298,14 @@ export function WikiView({
                 ))}
               </ul>
               {pager('orphans', projection.orphanEvidence.length)}
-            </section>
+            </details>
           )}
+          </div>
         </aside>
 
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto break-words p-3" data-testid="wiki-body">
+        <div className="knowledge-detail" data-testid="wiki-body">
+          <button type="button" className="knowledge-back knowledge-view-button" onClick={() => setBrowsing(true)}><ArrowLeft size={14} aria-hidden="true"/>返回概念目录</button>
+          <div className="knowledge-detail-scroll"><div className="knowledge-reading-column">
           {selected === null ? (
             <EmptyState
               icon={Layers}
@@ -305,11 +315,11 @@ export function WikiView({
           ) : (
             <article
               key={selected.claimId}
-              className="rounded-card border-[0.5px] border-line bg-surface px-3 py-2.5"
+              className="knowledge-concept-article"
               data-testid={`wiki-page-${selected.claimId}`}
             >
               <header className="flex flex-wrap items-start gap-2">
-                <h4 className="min-w-0 flex-1 text-ink" data-testid={`wiki-page-title-${selected.claimId}`}>
+                <h4 className="min-w-0 flex-1 text-ink text-[length:var(--font-h2-size)]" data-testid={`wiki-page-title-${selected.claimId}`}>
                   {selected.title}
                 </h4>
                 <span className={`shrink-0 text-[length:var(--font-micro-size)] ${reviewClass(selected.review)}`}>
@@ -328,12 +338,12 @@ export function WikiView({
               </header>
 
               <p className="mt-1 text-muted text-[length:var(--font-meta-size)]">声明状态：{STATUS_LABELS[selected.status]}</p>
-              <p
-                className="mt-1.5 whitespace-pre-wrap text-ink text-[length:var(--font-read-size)] leading-[1.7]"
+              <div
+                className="knowledge-section-body"
                 data-testid={`wiki-page-content-${selected.claimId}`}
               >
-                {selected.content}
-              </p>
+                <LazyBoundary fallback={<p className="whitespace-pre-wrap">{selected.content}</p>}><ScientificMarkdown text={selected.content}/></LazyBoundary>
+              </div>
 
               {selected.evidence.length === 0 ? (
                 <p className="mt-2 text-subtle text-[length:var(--font-micro-size)]" data-testid={`wiki-page-no-evidence-${selected.claimId}`}>
@@ -342,7 +352,7 @@ export function WikiView({
               ) : (
                 <ul className="mt-2 flex flex-col gap-1.5" data-testid={`wiki-page-evidence-${selected.claimId}`}>
                   {slice(selected.evidence, 'evidence').map((card) => (
-                    <li key={card.id} className="rounded-card border-[0.5px] border-line-soft bg-bg-soft px-2.5 py-1.5">
+                    <li key={card.id} className="knowledge-evidence-row">
                       <p className="text-ink text-[length:var(--font-meta-size)]">{card.title}</p>
                       <p className="text-[var(--st-warn)] text-[length:var(--font-meta-size)]">
                         {card.referenceStatus === 'superseded' ? '来源已失效，保留历史摘录' : card.referenceStatus === 'unknown' ? '来源状态未加载' : null}
@@ -425,6 +435,7 @@ export function WikiView({
               </p>
             </article>
           )}
+          </div></div>
         </div>
       </div>
     </div>

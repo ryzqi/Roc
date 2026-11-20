@@ -90,22 +90,48 @@ test('50k high-degree data paints bounded lists with first-frame evidence', asyn
 test('light/dark wide/narrow views retain visible details, controls, focus and unclipped states', async () => {
   const clip = readFileSync(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
   const evidence = [];
-  for (const width of [1250, 1099, 650]) for (const theme of ['light', 'dark']) {
+  for (const width of [1250, 1099, 650, 420]) for (const theme of ['light', 'dark']) {
     await page.setViewportSize({ width, height: 900 }); await page.evaluate(value => document.documentElement.dataset.theme = value, theme); await mount(1000, true, 'c-0');
     for (const state of ['static', 'hover', 'expanded', 'focus']) {
       const target = button('下一页邻域');
       if (state === 'hover') await target.hover(); if (state === 'expanded') await target.click(); if (state === 'focus') { await target.focus(); await page.keyboard.press('Tab'); }
-      await expect(page.getByTestId('graph-detail-id')).toBeVisible(); await expect(page.getByTestId('graph-ask-assistant')).toBeVisible();
+      await expect(page.getByTestId('graph-detail-label')).toBeVisible(); await expect(page.getByTestId('graph-ask-assistant')).toBeVisible();
+      await expect(page.getByTestId('graph-neighborhood-map')).toBeVisible();
       const audit = await page.evaluate(clip => eval(clip)({ root: '[data-testid="fixture-container"]', viewport: true }), clip);
       assert.equal(audit.cut, 0, JSON.stringify(audit));
       const layout = await page.evaluate(() => {
-        const visible = ['graph-nodes-pagination', 'graph-neighbours-pagination', 'graph-ask-assistant', 'graph-detail-id'].every(id => {
+        const ids = ['graph-neighbours-pagination', 'graph-ask-assistant', 'graph-detail-label'];
+        if(innerWidth>680)ids.push('graph-nodes-pagination');
+        const visible = ids.every(id => {
           const r = document.querySelector(`[data-testid="${id}"]`).getBoundingClientRect(); return r.x >= 0 && r.y >= 0 && r.right <= innerWidth && r.bottom <= innerHeight;
         }); return { visible, overflow: document.documentElement.scrollWidth > innerWidth };
       });
       assert.deepEqual(layout, { visible: true, overflow: false }); evidence.push({ width, theme, state, ...audit });
     }
     await page.screenshot({ path: join(artifacts, `${theme}-${width}.png`) });
+    if(width<=680){
+      await expect(page.getByTestId('graph-node-list')).toBeHidden();
+      await button('返回关系目录').click();
+      await expect(page.getByTestId('graph-node-list')).toBeVisible();
+      await expect(page.getByTestId('graph-detail-label')).toBeHidden();
+      await page.getByTestId('graph-node-claim:c-1').click();
+      await expect(page.getByTestId('graph-detail-label')).toHaveText('Claim 1');
+    }
   }
   writeFileSync(join(artifacts, 'clip-states.json'), JSON.stringify(evidence, null, 2));
+});
+
+
+test('a new concept focus opens its graph detail after browsing a different neighborhood', async () => {
+  await page.setViewportSize({width:420,height:820});
+  await mount(1000,true,'c-0');
+  await button('返回关系目录').click();
+  await expect(page.getByTestId('graph-node-list')).toBeVisible();
+  await mount(1000,false,'c-20');
+  await expect(page.getByTestId('graph-detail-label')).toHaveText('Claim 20');
+  await expect(page.getByTestId('graph-detail-label')).toBeVisible();
+  await expect(page.getByTestId('graph-node-list')).toBeHidden();
+  await page.setViewportSize({width:420,height:600});
+  assert.ok((await page.getByTestId('graph-neighbours').boundingBox()).height>=112);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
 });

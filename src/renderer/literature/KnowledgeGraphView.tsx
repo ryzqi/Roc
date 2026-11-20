@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Bot, Compass, Search, X } from 'lucide-react';
+import { ArrowLeft, Bot, Compass, Search, X } from 'lucide-react';
 import type { ResearchClaim, ResearchEvidence } from '../../shared/types';
 import type { ResearchLibraryItem } from '../../shared/types';
 import { EmptyState } from '../shell/EmptyState';
 import { deriveGraph, graphNeighborIds, GRAPH_PAGE_SIZE, type GraphNode, type GraphNodeKind } from './derive-graph';
 import type {RocClient} from '../shared/roc-client';
-import {formSecondaryButtonClass} from '../shared/form-ui';
+import {GraphNeighborhood, graphRelationLabel} from './GraphNeighborhood';
+import './knowledge-workspace.css';
 import {ScientificKnowledgePanel} from './ScientificKnowledgePanel';
 
 /** Recorded relations with bounded node and selected-neighborhood lists. */
@@ -29,13 +30,18 @@ const KIND_LABELS: Readonly<Record<GraphNodeKind, string>> = {
   file: '文件'
 };
 
+function nodeDetail(node: GraphNode): string {
+  if (node.kind !== 'claim') return node.detail;
+  return ({supported: '声明有支撑', hypothesis: '假设', pending: '待定'} as Record<string, string>)[node.detail] ?? node.detail;
+}
+
 export function KnowledgeGraphView(props: KnowledgeGraphViewProps): React.JSX.Element {
   const [scientific, setScientific] = useState(false);
   if (!props.client || !props.projectId) return <RecordedKnowledgeGraph {...props}/>;
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-    <nav className="flex flex-wrap gap-2 border-b-[0.5px] border-line px-3 py-2" aria-label="知识关系视图">
-      <button type="button" className={formSecondaryButtonClass} aria-pressed={!scientific} onClick={() => setScientific(false)}>引用与来源关系</button>
-      <button type="button" className={formSecondaryButtonClass} aria-pressed={scientific} onClick={() => setScientific(true)}>科研实体关系</button>
+    <nav className="knowledge-view-switch" aria-label="知识关系视图">
+      <button type="button" className="knowledge-view-button" aria-pressed={!scientific} onClick={() => setScientific(false)}>引用与来源关系</button>
+      <button type="button" className="knowledge-view-button" aria-pressed={scientific} onClick={() => setScientific(true)}>科研实体关系</button>
     </nav>
     {scientific ? <ScientificKnowledgePanel client={props.client} projectId={props.projectId} graph/> : <RecordedKnowledgeGraph {...props}/>}
   </div>;
@@ -52,14 +58,15 @@ function RecordedKnowledgeGraph({
     () => deriveGraph({ claims, evidence, libraryItems }),
     [claims, evidence, libraryItems]
   );
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<{nodeId: string; focusClaimId: string | null} | null>(null);
+  const [browsing, setBrowsing] = useState({open: false, focusClaimId});
   const [kindFilter, setKindFilter] = useState<GraphNodeKind | 'all'>('all');
   const [filterText, setFilterText] = useState('');
   const [requestedPage, setPage] = useState(0);
   const [neighbourPaging, setNeighbourPaging] = useState({ nodeId: '', page: 0 });
 
   const focusNodeId = focusClaimId === null ? null : `claim:${focusClaimId}`;
-  const effectiveSelected = selectedNodeId ?? focusNodeId;
+  const effectiveSelected = selection?.focusClaimId === focusClaimId ? selection.nodeId : focusNodeId;
 
   const query = filterText.trim().toLowerCase();
   const visibleNodes = useMemo(
@@ -86,9 +93,9 @@ function RecordedKnowledgeGraph({
     for (const node of graph.nodes) counts[node.kind] += 1;
     return counts;
   }, [graph.nodes]);
-  const changeText = (text: string): void => { setFilterText(text); setPage(0); };
-  const changeKind = (kind: GraphNodeKind | 'all'): void => { setKindFilter(kind); setPage(0); };
-  const selectNode = (nodeId: string): void => { setSelectedNodeId(nodeId); setNeighbourPaging({ nodeId, page: 0 }); };
+  const changeText = (text: string): void => { setFilterText(text); setPage(0); setBrowsing({open: true, focusClaimId}); };
+  const changeKind = (kind: GraphNodeKind | 'all'): void => { setKindFilter(kind); setPage(0); setBrowsing({open: true, focusClaimId}); };
+  const selectNode = (nodeId: string): void => { setSelection({nodeId, focusClaimId}); setBrowsing({open: false, focusClaimId}); setNeighbourPaging({ nodeId, page: 0 }); };
 
   if (graph.nodes.length === 0) {
     return (
@@ -101,12 +108,12 @@ function RecordedKnowledgeGraph({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col" data-testid="knowledge-graph">
-      <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b-[0.5px] border-line px-3 py-2">
+    <div className="knowledge-graph flex h-full min-h-0 min-w-0 flex-col" data-testid="knowledge-graph" data-browsing={(browsing.open && browsing.focusClaimId === focusClaimId) || selectedNode === undefined}>
+      <div className="knowledge-toolbar">
         <span className="text-muted text-[length:var(--font-meta-size)]" data-testid="graph-counts">
           {graph.nodes.length} 节点 / {graph.links.length} 引用与来源关系
         </span>
-        <div className="ml-1 flex h-[var(--control-height-compact)] min-w-[150px] flex-1 items-center gap-1.5 rounded-control border-[0.5px] border-line bg-surface px-2 sm:max-w-[220px]">
+        <div className="knowledge-search">
           <Search size={11} aria-hidden="true" className="shrink-0 text-subtle" />
           <input
             value={filterText}
@@ -162,9 +169,10 @@ function RecordedKnowledgeGraph({
 
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <section className="flex min-h-0 flex-1 flex-col px-2" aria-label="图谱节点浏览">
-        <ul className="min-h-0 flex-1 overflow-y-auto p-2" aria-label="图谱节点" data-testid="graph-node-list">
+      <div className="knowledge-browser knowledge-graph-browser">
+        <section className="knowledge-directory" aria-label="图谱节点浏览">
+        <div className="knowledge-directory-heading"><span>关系目录</span><span>{visibleNodes.length} 项</span></div>
+        <ul className="knowledge-directory-scroll" aria-label="图谱节点" data-testid="graph-node-list">
           {visibleNodes.length === 0 ? (
             <li className="px-2 py-4 text-muted text-[length:var(--font-meta-size)]" data-testid="graph-no-match">
               没有匹配的节点。
@@ -187,66 +195,58 @@ function RecordedKnowledgeGraph({
                     <span className="shrink-0 rounded-control border-[0.5px] border-line px-1 text-subtle text-[length:var(--font-meta-size)]">
                       {KIND_LABELS[node.kind]}
                     </span>
-                    <span className="truncate text-ink text-[length:var(--font-meta-size)]">{node.label}</span>
+                    <span className="knowledge-row-title min-w-0 text-ink">{node.label}</span>
                   </span>
                   {node.detail.length === 0 ? null : (
-                    <span className="truncate text-muted text-[length:var(--font-meta-size)]">{node.detail}</span>
+                    <span className="truncate text-muted text-[length:var(--font-meta-size)]">{nodeDetail(node)}</span>
                   )}
                 </button>
               </li>
             );
           })}
         </ul>
-        <GraphPagination area="nodes" page={page} total={visibleNodes.length} onPage={setPage} />
+        <div className="px-3"><GraphPagination area="nodes" page={page} total={visibleNodes.length} onPage={setPage} /></div>
         </section>
-        <aside className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 border-t-[0.5px] border-line p-3 lg:w-72 lg:flex-none lg:border-l-[0.5px] lg:border-t-0" aria-label="节点详情">
+        <aside className="knowledge-detail knowledge-graph-detail" aria-label="节点详情">
           {selectedNode === undefined ? (
-            <p className="text-muted text-[length:var(--font-meta-size)]" data-testid="graph-no-selection">
-              选一个节点查看它的关系。
-            </p>
+            <div className="knowledge-graph-prompt" data-testid="graph-no-selection">
+              <Compass size={32} strokeWidth={1.5} aria-hidden="true"/>
+              <h3 className="text-ink">从一个节点开始探索</h3>
+              <p>选择文献、主张或证据，查看它们如何关联。</p>
+              <p className="knowledge-relation-key"><span>主张</span><span>→ 引用 →</span><span>证据</span><span>→ 来源 →</span><span>文献</span></p>
+            </div>
           ) : (
             <>
-              <h3 className="shrink-0 break-words text-ink text-[length:var(--font-meta-size)]" data-testid="graph-detail-label">
-                {selectedNode.label}
-              </h3>
-              <p className="text-muted text-[length:var(--font-meta-size)]">
-                {KIND_LABELS[selectedNode.kind]}
-                {selectedNode.detail.length === 0 ? '' : ` / ${selectedNode.detail}`}
-              </p>
-              <p className="shrink-0 break-all text-subtle text-[length:var(--font-meta-size)]" data-testid="graph-detail-id">
-                {selectedNode.id}
-              </p>
-              <h4 className="mt-1 shrink-0 text-muted text-[length:var(--font-meta-size)]" data-testid="graph-neighbour-count">相连及共享证据（{neighbourIds.length}）</h4>
+              <button type="button" className="knowledge-back knowledge-view-button" onClick={() => setBrowsing({open: true, focusClaimId})}><ArrowLeft size={14} aria-hidden="true"/>返回关系目录</button>
+              <header className="knowledge-graph-detail-header">
+                <div className="min-w-0">
+                  <h3 className="break-words text-ink" data-testid="graph-detail-label">{selectedNode.label}</h3>
+                  <p>{KIND_LABELS[selectedNode.kind]}{selectedNode.detail.length === 0 ? '' : ` / ${nodeDetail(selectedNode)}`}</p>
+                </div>
+                {onAskAssistantAboutNode === undefined ? null : (
+                  <button type="button" onClick={() => onAskAssistantAboutNode(selectedNode)} data-testid="graph-ask-assistant"
+                    className="knowledge-view-button shrink-0 border-[0.5px] border-line">
+                    <Bot size={14} aria-hidden="true" className="text-[var(--icon-agent)]"/>问助手
+                  </button>
+                )}
+              </header>
+              <GraphNeighborhood selected={selectedNode} neighbors={neighbours} total={neighbourIds.length}/>
+              <h4 className="shrink-0 text-muted text-[length:var(--font-meta-size)]" data-testid="graph-neighbour-count">相连及共享证据（{neighbourIds.length}）</h4>
               {neighbourIds.length === 0 ? (
-                <p className="text-subtle text-[length:var(--font-meta-size)]" data-testid="graph-no-neighbours">
-                  这个节点没有任何已记录的关系。
-                </p>
+                <p className="text-subtle" data-testid="graph-no-neighbours">这个节点没有任何已记录的关系。</p>
               ) : (
-                <ul className="min-h-0 flex-1 overflow-y-auto" aria-label="节点邻域" data-testid="graph-neighbours">
-                  {neighbours.map((node) => (
-                    <li key={node.id}>
-                      <button type="button" onClick={() => selectNode(node.id)} data-testid={`graph-neighbour-${node.id}`}
-                        className="flex w-full items-start gap-1.5 rounded-control px-2 py-1 text-left text-ink text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
-                        <span className="shrink-0 rounded-control border-[0.5px] border-line px-1 text-subtle">{KIND_LABELS[node.kind]}</span>
-                        <span className="min-w-0 break-words">{node.label}</span>
-                      </button>
-                    </li>
-                  ))}
+                <ul className="knowledge-neighbor-list flex-1 overflow-y-auto" aria-label="节点邻域" data-testid="graph-neighbours">
+                  {neighbours.map(node => <li key={node.id}>
+                    <button type="button" onClick={() => selectNode(node.id)} data-testid={`graph-neighbour-${node.id}`} className="knowledge-neighbor-button">
+                      <span className="knowledge-relation-label">{graphRelationLabel(selectedNode, node)}</span>
+                      <span className="min-w-0 break-words">{node.label}<span className="ml-2 text-muted text-[length:var(--font-meta-size)]">{KIND_LABELS[node.kind]}</span></span>
+                    </button>
+                  </li>)}
                 </ul>
               )}
               <GraphPagination area="neighbours" page={neighbourPage} total={neighbourIds.length}
-                onPage={value => setNeighbourPaging({ nodeId: selectedNode.id, page: value })} />
-              {onAskAssistantAboutNode === undefined ? null : (
-                <button
-                  type="button"
-                  onClick={() => onAskAssistantAboutNode(selectedNode)}
-                  data-testid="graph-ask-assistant"
-                  className="flex shrink-0 h-[var(--control-height-compact)] items-center gap-1 self-start rounded-control border-[0.5px] border-line bg-surface px-2 font-medium text-ink text-[length:var(--font-meta-size)] hover:bg-[var(--surface-card-hover)] active:bg-[var(--overlay-active)]"
-                >
-                  <Bot size={11} aria-hidden="true" className="text-[var(--icon-agent)]" />
-                  让助手扩展这个节点
-                </button>
-              )}
+                onPage={value => setNeighbourPaging({nodeId: selectedNode.id, page: value})}/>
+              <details className="knowledge-node-id shrink-0"><summary>节点标识</summary><p className="break-all" data-testid="graph-detail-id">{selectedNode.id}</p></details>
             </>
           )}
         </aside>

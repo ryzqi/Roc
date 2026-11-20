@@ -57,7 +57,7 @@ afterEach(async context=>{
     writeFileSync(join(artifacts,`${context.name.replace(/[^a-z0-9]+/gi,'-').slice(0,100)}.txt`),await page.locator('body').ariaSnapshot());
   }
 });
-after(async()=>{try{for(const hold of holds)hold.release();await app?.close();}finally{for(const f of fixtures){await f.repository.wiki.shutdown();f.close();}api?.dispose();if(directory)rmSync(directory,{recursive:true,force:true});}assert.deepEqual(errors,[]);});
+after(async()=>{try{for(const hold of holds)hold.release();if(page&&!page.isClosed())await page.evaluate(()=>window.mount(null,{claims:[],sources:[],relations:[],papers:[]}));await app?.close();}finally{for(const f of fixtures){await f.repository.wiki.shutdown();f.close();}api?.dispose();if(directory)rmSync(directory,{recursive:true,force:true});}assert.deepEqual(errors,[]);});
 async function scene() {
   const f=createResearchFixture(api,'reading');fixtures.push(f);active=f;
   f.repository.knowledge.upsertFromSource({id:'source',projectId:f.project.id,sourceType:'experiment',sourceId:'source',title:'Synthetic original source',
@@ -94,6 +94,7 @@ test('real Electron/IPC: capture → create theme → edit human section → inv
   f.repository.wiki.wake();await f.repository.wiki.idle();await detail.getByRole('button',{name:'刷新页面',exact:true}).click();
   await detail.getByTestId('wiki-page-lint').getByText(/原始证据已失效/).waitFor();
   assert.match(await detail.getByTestId('wiki-section-body').innerText(),/人工维护的比较/);
+  await detail.locator('summary').filter({hasText:'页面操作'}).click();
   await detail.getByRole('button',{name:'修订历史',exact:true}).click();
   const revision = page.getByTestId('wiki-history').getByRole('button',{name:'r1 来源编译',exact:true});
   await revision.click();
@@ -129,6 +130,7 @@ test('real Electron/IPC: capture → create theme → edit human section → inv
   assert.match(await comparison.innerText(),/Dataset X/);
   assert.match(await comparison.innerText(),/Dataset Y/);
   assert.equal(f.db.prepare("SELECT COUNT(*) FROM research_evidence_relations WHERE status='confirmed'").pluck().get(),0);
+  await page.getByTestId('wiki-page-row').filter({hasText:'跨文献比较草稿'}).click();
   const auditSource=readFileSync('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8');
   for(const theme of ['light','dark'])for(const width of [380,560,800,1100]){
     await page.setViewportSize({width,height:800});await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
@@ -250,11 +252,13 @@ for(const kind of ['compile','history']){
       const editor=await openEditor('section');f=editor.fixture;
       await page.getByRole('button',{name:'保存人工章节',exact:true}).click();
       await page.getByTestId(editor.form).waitFor({state:'detached'});
+      await page.getByTestId('wiki-page-detail').locator('summary').filter({hasText:'页面操作'}).click();
       await page.getByRole('button',{name:'修订历史',exact:true}).click();
       await page.getByRole('button',{name:'r1 来源编译',exact:true}).click();
       await page.getByTestId('wiki-history-content').waitFor();
     }else{
       f=await scene();await page.getByTestId('wiki-page-row').click();
+      await page.getByTestId('wiki-page-detail').locator('summary').filter({hasText:'页面操作'}).click();
       await page.getByRole('button',{name:'重新编译',exact:true}).waitFor();
     }
     const method=kind==='compile'?'compileWiki':'rollbackWiki';
@@ -275,3 +279,33 @@ for(const kind of ['compile','history']){
     assert.equal(await unloadPrevented(),false);
   });
 }
+
+
+test('narrow knowledge pages devote the canvas to reading and preview LaTeX before saving',async()=>{
+  await page.setViewportSize({width:440,height:820});
+  await scene();
+  const directory=page.getByRole('complementary',{name:'持久页面列表'});
+  await page.getByTestId('wiki-page-row').click();
+  assert.equal(await directory.isVisible(),false);
+  const body=page.locator('.knowledge-detail-scroll');
+  const bounds=await body.boundingBox();
+  assert.ok(bounds.width>=400 && bounds.height>=560,JSON.stringify(bounds));
+  await page.getByRole('button',{name:'编辑章节',exact:true}).click();
+  const input=page.getByLabel('章节正文',{exact:true});
+  await input.fill('行内 $E=mc^2$。\n\n$$\n\\int_0^1 x^2\\,dx = \\frac{1}{3}\n$$');
+  const preview=page.getByTestId('wiki-section-preview');
+  await preview.locator('.katex-display').waitFor();
+  assert.equal(await preview.locator('.katex').count(),2);
+  assert.equal(await page.evaluate(()=>window.wikiCalls.filter(call=>call.method==='saveWiki').length),0);
+  await input.fill('继续编辑 $\\frac{1}{$');
+  assert.equal(await input.inputValue(),'继续编辑 $\\frac{1}{$');
+  assert.equal(await page.getByRole('button',{name:'主张与证据',exact:true}).isDisabled(),true);
+  await page.getByRole('button',{name:'取消编辑',exact:true}).click();
+  await discard().getByRole('button',{name:'放弃录入并继续',exact:true}).click();
+  await page.getByTestId('wiki-section-editor').waitFor({state:'detached'});
+  await page.getByRole('button',{name:'返回页面目录',exact:true}).click();
+  assert.equal(await directory.isVisible(),true);
+  assert.equal(await page.getByTestId('wiki-page-detail').isVisible(),false);
+  assert.equal(await page.evaluate(()=>document.body.scrollWidth>innerWidth),false);
+  await page.setViewportSize({width:1100,height:800});
+});

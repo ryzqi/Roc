@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 import electronPath from 'electron';
-import {_electron} from '@playwright/test';
+import {_electron, expect} from '@playwright/test';
 
 let directory, app, page;
 const errors = [];
@@ -169,7 +169,10 @@ test('PDF paper navigation and publication years survive an empty filtered libra
   props.evidence[0].sourceType = 'file';
   props.snapshot.papers = [{evidenceId:'e1',libraryItemId:'paper-1',title:'Associated managed PDF',year:2025}];
   await page.evaluate(props => window.mount(props), props);
-  assert.match(await page.locator('[data-testid="wiki-timeline"]').innerText(), /2025/u);
+  const years=page.locator('details').filter({has:page.getByTestId('wiki-timeline')});
+  if(!(await years.evaluate(element=>element.open)))await years.locator(':scope > summary').click();
+  await expect(page.getByTestId('wiki-timeline-2025')).toBeVisible();
+  await expect(page.getByTestId('wiki-timeline')).toContainText('2025');
   await page.locator('[data-testid="wiki-page-paper-paper-1"]').focus();
   await page.keyboard.press('Enter');
   assert.equal(await page.evaluate(() => window.paper), 'paper-1');
@@ -195,9 +198,11 @@ test('large Wiki lists and shared neighborhoods are paged, searchable and naviga
   const list = page.locator('[data-testid="wiki-concept-list"]');
   assert.equal(await list.locator('li').count(),50);
   assert.equal(await page.locator('[data-testid="wiki-backlinks"] li').count(),50);
+  await page.getByText('共享证据的概念（999）', {exact:true}).click();
+  await page.locator('[data-testid="wiki-pager-neighbors"]').getByText('下一页').waitFor({state:'visible'});
   await page.locator('[data-testid="wiki-pager-neighbors"]').getByText('下一页').focus();
   await page.keyboard.press('Enter');
-  assert.match(await page.locator('[data-testid="wiki-pager-neighbors"]').innerText(), /51–100 \/ 999/u);
+  await expect(page.getByTestId('wiki-pager-neighbors')).toContainText('51–100 / 999');
   await page.locator('[data-testid="wiki-backlinks"]').getByRole('button', {name:'Concept 100',exact:true}).click();
   assert.equal(await page.locator('[data-testid="wiki-page-title-c-100"]').innerText(),'Concept 100');
   assert.equal(await page.locator('[data-testid="wiki-concept-c-100"]').getAttribute('aria-current'),'true');

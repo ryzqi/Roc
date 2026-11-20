@@ -1,4 +1,7 @@
 import {useState} from 'react';
+import {ArrowLeft, Network} from 'lucide-react';
+import {EmptyState} from '../shell/EmptyState';
+import './knowledge-workspace.css';
 import type {RocClient} from '../shared/roc-client';
 import type {ScientificEntity} from '../../shared/schemas/research-scientific-entities';
 import type {ScientificKnowledgeSearchHit, ScientificKnowledgeSearchRequest} from '../../shared/schemas/research-scientific-knowledge-search';
@@ -40,11 +43,11 @@ function KnowledgeScope({client, projectId, documentIds = noDocuments, graph = f
   const chooseFilter = (entity: ScientificEntity): void => {
     setFilter(entity); setKind('fact'); setType(''); setQuery('');
   };
-  return <section className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="wiki-scientific-panel" aria-label={graph ? '科研知识关系' : '结构化知识'}>
-    <div className="flex flex-wrap items-center gap-2 border-b-[0.5px] border-line p-3">
+  return <section className="knowledge-scientific flex min-h-0 min-w-0 flex-1 flex-col" data-testid="wiki-scientific-panel" aria-label={graph ? '科研知识关系' : '结构化知识'}>
+    <div className="knowledge-toolbar">
       <div className="flex flex-wrap gap-2" aria-label="科研知识种类">{Object.entries(kinds).map(([value, label]) =>
         <button type="button" key={value} aria-pressed={kind === value}
-          className={`${formSecondaryButtonClass} aria-pressed:bg-[var(--overlay-active)]`}
+          className="knowledge-view-button"
           onClick={() => {setKind(value as typeof kind); setType(''); setFilter(null); setVersion(''); setSplit('');}}>{label}</button>)}</div>
       <label className="flex min-w-0 flex-1 basis-48 items-center gap-2 text-xs">
         <span>搜索</span><input type="search" aria-label="搜索科研知识" className={`${formInputClass} min-w-0 flex-1`}
@@ -83,40 +86,50 @@ function KnowledgePage({client, request, graph, onFactFilter}: {
   const restart = (): void => {setSelected(null); setPaging({offset: 0, basisDigest: null}); setAttempt(value => value + 1);};
   const selectEntity = (entity: ScientificEntity, source: WikiPaperKnowledgeSource): void =>
     setSelected({kind: 'entity', value: entity, source, exactMatch: false});
-  return <div className="ui-scroll-region min-h-0 min-w-0 flex-1 p-3">
-    {read.status === 'loading' ? <p role="status" className="text-xs">核对科研知识与原始来源…</p> : null}
-    {read.error ? <ErrorBar error={{level: 'blocked', message: read.error, retry: restart}}/> : null}
+  return <div className="knowledge-scientific-results flex min-h-0 min-w-0 flex-1 flex-col" data-browsing={selected === null}>
+    {read.status === 'loading' ? <p role="status" className="p-4 text-xs">核对科研知识与原始来源…</p> : null}
+    {read.error ? <><ErrorBar error={{level: 'blocked', message: read.error, retry: restart}}/><button type="button" className={`${formSecondaryButtonClass} self-start m-3`} onClick={restart}>重新检索科研知识</button></> : null}
     {data ? <>
-      <p className="pb-2 text-xs text-muted">科学支持未审核</p>
-      {data.unavailable.map(source => <p key={source.documentId} role="status" className="break-words text-xs text-muted">
-        {source.state === 'missing' ? '部分来源的科研知识尚未生成' : '部分科研来源已失效'}
-        {source.configurationError ? `：${source.configurationError}` : ''}
-      </p>)}
-      {rows.length === 0 ? <p className="text-xs text-muted">没有当前有效的匹配记录。</p> : null}
-      <div className="flex min-w-0 flex-wrap gap-3">
-        <div className="min-w-0 flex-1 basis-52">
-          <ul className="space-y-1" aria-label="科研知识搜索结果">{rows.map((row, index) => <li key={row.id}>
-            <button type="button" data-testid="wiki-scientific-row" aria-pressed={selected !== null && scientificHitKey(selected) === row.id}
-              className="w-full rounded-control p-2 text-left hover:bg-[var(--overlay-hover)] aria-pressed:bg-[var(--overlay-active)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-              onClick={() => setSelected(data.hits[index]!)}>
-              <span className="block whitespace-pre-wrap break-words">{row.label}</span>
-              <span className="block whitespace-pre-wrap break-words text-xs text-muted">{row.subtitle}</span>
-            </button>
-          </li>)}</ul>
-          <nav className="flex flex-wrap gap-2 py-3" aria-label="科研知识分页">
+      <div className="knowledge-scientific-status flex flex-wrap items-center justify-between gap-2">
+        <span>当前结果 {rows.length} 项，科学支持未审核</span>
+        <button type="button" className={formSecondaryButtonClass} onClick={restart}>重新检索科研知识</button>
+        {data.unavailable.map(source => <p key={source.documentId} role="status" className="w-full break-words">
+          {source.state === 'missing' ? '部分来源的科研知识尚未生成' : '部分科研来源已失效'}
+          {source.configurationError ? `：${source.configurationError}` : ''}
+        </p>)}
+      </div>
+      <div className="knowledge-browser">
+        <div className="knowledge-directory">
+          <div className="knowledge-directory-heading"><span>{graph ? '关系节点' : '知识目录'}</span></div>
+          <div className="knowledge-directory-scroll">
+            {rows.length === 0 ? <p className="p-3 text-xs text-muted">没有当前有效的匹配记录。</p> : null}
+            <ul className="space-y-1" aria-label="科研知识搜索结果">{rows.map((row, index) => <li key={row.id}>
+              <button type="button" data-testid="wiki-scientific-row" aria-pressed={selected !== null && scientificHitKey(selected) === row.id}
+                className="knowledge-page-row aria-pressed:bg-[var(--overlay-active)]"
+                onClick={() => setSelected(data.hits[index]!)}>
+                <span className="knowledge-row-title break-words">{row.label}</span>
+                <span className="block break-words text-xs text-muted">{row.subtitle}</span>
+              </button>
+            </li>)}</ul>
+          </div>
+          <nav className="knowledge-directory-footer" aria-label="科研知识分页">
             <button type="button" className={formSecondaryButtonClass} disabled={paging.offset === 0}
               onClick={() => {setSelected(null); setPaging({offset: Math.max(0, paging.offset - 20), basisDigest: data.basisDigest});}}>前 20 条</button>
             <button type="button" className={formSecondaryButtonClass} disabled={data.nextOffset === null}
               onClick={() => {setSelected(null); setPaging({offset: data.nextOffset!, basisDigest: data.basisDigest});}}>后 20 条</button>
           </nav>
         </div>
-        {selected ? <div className="min-w-0 flex-[2] basis-80 border-t-[0.5px] border-line pt-3">
-          <ScientificPaperKnowledge key={scientificHitKey(selected)} client={client} projectId={request.projectId}
-            reference={selected.source} record={{kind: selected.kind, id: selected.value.id, candidateId: selected.value.candidateId}}
-            onSelectEntity={selectEntity} onFactFilter={onFactFilter} graph={graph}/>
-        </div> : null}
+        <div className="knowledge-detail">
+          {selected ? <>
+            <button type="button" className={`knowledge-back ${formSecondaryButtonClass}`} onClick={() => setSelected(null)}><ArrowLeft size={14} aria-hidden="true"/>返回知识目录</button>
+            <div className="knowledge-detail-scroll"><div className="knowledge-reading-column">
+              <ScientificPaperKnowledge key={scientificHitKey(selected)} client={client} projectId={request.projectId}
+                reference={selected.source} record={{kind: selected.kind, id: selected.value.id, candidateId: selected.value.candidateId}}
+                onSelectEntity={selectEntity} onFactFilter={onFactFilter} graph={graph}/>
+            </div></div>
+          </> : <EmptyState icon={Network} title="选择一个知识条目" description="查看实验事实、关系和原始出处。"/>}
+        </div>
       </div>
     </> : null}
-    <button type="button" className={formSecondaryButtonClass} onClick={restart}>重新检索科研知识</button>
   </div>;
 }
