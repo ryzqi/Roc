@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
-import { AlertCircle, NotebookPen, Radar, Bell, BookOpen, Database, Layers, Loader2, PanelLeft, Plus, Search, Share2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, NotebookPen, Radar, Bell, BookOpen, Database, Layers, Loader2, PanelLeft, Plus, Search, Share2 } from 'lucide-react';
 import { ViewActivity, useViewActive } from '../shared/view-activity';
 import { useWorkspaceScope } from '../app/workspace-scope';
 import { EmptyState } from '../shell/EmptyState';
@@ -35,9 +35,8 @@ const SUB_VIEWS: Array<{ id: SubViewId; label: string; icon: typeof BookOpen; ic
   { id: 'reader', label: '阅读', icon: BookOpen, iconClass: 'text-[var(--icon-literature)]' },
   { id: 'notes', label: '笔记', icon: NotebookPen, iconClass: 'text-[var(--icon-literature)]' },
   { id: 'radar', label: '推荐与趋势', icon: Radar, iconClass: 'text-[var(--icon-literature)]' },
-  { id: 'rag', label: '问我的资料', icon: Database, iconClass: 'text-[var(--icon-rag)]' },
+  { id: 'rag', label: '问答', icon: Database, iconClass: 'text-[var(--icon-rag)]' },
   { id: 'wiki', label: '知识页', icon: Layers, iconClass: 'text-[var(--icon-wiki)]' },
-  { id: 'graph', label: '图谱', icon: Share2, iconClass: 'text-[var(--icon-graph)]' },
   { id: 'monitors', label: '已保存追踪', icon: Bell, iconClass: 'text-[var(--icon-literature)]' }
 ];
 
@@ -53,6 +52,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
     discover: 'search', library: 'reader', knowledge: 'rag'
   });
   const subView = selectedViews[workspace];
+  const selectedTab = subView === 'graph' ? 'wiki' : subView;
   const subViews = SUB_VIEWS.filter(entry => workspaceForSubView(entry.id) === workspace);
   const [visited, setVisited] = useState<ReadonlySet<SubViewId>>(() => new Set([subView]));
   useEffect(() => {
@@ -68,12 +68,16 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
   const hubRef = useRef<HTMLDivElement>(null);
   const paperPickerRef = useRef<HTMLSelectElement>(null);
   const navigationOpen = subView === 'reader' && (navigationOverride ?? (!narrow && store.selected === null));
-  const selectSubView = (id: SubViewId): void => {
+  const selectSubView = (id: SubViewId, onSelected?: () => void): void => {
     if (monitorLockRef.current && id !== 'monitors') return;
-    setVisited(current => current.has(id) ? current : new Set([...current, id]));
     const destination = workspaceForSubView(id);
-    setSelectedViews(current => ({ ...current, [destination]: id }));
-    if (destination !== workspace) scope.openView(destination);
+    const proceed = (): void => {
+      setVisited(current => current.has(id) ? current : new Set([...current, id]));
+      setSelectedViews(current => ({ ...current, [destination]: id }));
+      onSelected?.();
+    };
+    if (destination !== workspace) scope.openView(destination, proceed);
+    else proceed();
   };
   useEffect(() => {
     const element = hubRef.current;
@@ -93,8 +97,39 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
     parseId: null,
     locator: null
   });
+  const selectPaper = (id: string | null): void => {
+    store.select(id, commitSelection => {
+      commitSelection();
+      setNavigationOverride(false);
+      setFocus({parseId: null, locator: null});
+      setReturnToSearch(false);
+      requestAnimationFrame(() => paperPickerRef.current?.focus());
+    });
+  };
   /** Set when the user arrives at the graph from a wiki concept page. */
-  const [graphClaimFocusId, setGraphClaimFocusId] = useState<string | null>(null);
+  const [graphFocus, setGraphFocus] = useState<{claimId: string; nonce: number} | null>(null);
+
+  const consumedOpenRequest = useRef(0);
+  useEffect(() => {
+    const request = scope.literatureRequest;
+    if (!hubActive || !request || request.projectId !== store.projectId || consumedOpenRequest.current === request.nonce) return;
+    const {target} = request;
+    const destination = target.kind === 'concept' ? 'knowledge' : 'library';
+    if (workspace !== destination) return;
+    consumedOpenRequest.current = request.nonce;
+    const next = target.kind === 'concept' ? 'graph' : 'reader';
+    setSelectedViews(current => ({...current, [destination]: next}));
+    setVisited(current => current.has(next) ? current : new Set([...current, next]));
+    if (target.kind === 'concept') {
+      setGraphFocus({claimId: target.claimId, nonce: request.nonce});
+    } else {
+      setFocus({parseId: target.parseId ?? null, locator: target.locator ?? null, text: target.text});
+      setReaderFocusRequestId(request.nonce);
+      setNavigationOverride(false);
+      setReturnToSearch(target.returnToSearch ?? false);
+    }
+    scope.consumeLiteratureRequest(request.nonce);
+  }, [hubActive, workspace, store.projectId, scope.literatureRequest, scope.consumeLiteratureRequest]);
 
   const actions = useLiteratureImportActions({ store });
 
@@ -136,7 +171,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
           role="tablist"
           aria-label={workspace === 'discover' ? '发现工作区' : workspace === 'knowledge' ? '知识工作区' : '文献工作区'}
           onKeyDown={(event) => {
-            const index = subViews.findIndex(entry => entry.id === subView);
+            const index = subViews.findIndex(entry => entry.id === selectedTab);
             const next = event.key === 'Home' ? 0 : event.key === 'End' ? subViews.length - 1
               : event.key === 'ArrowRight' ? (index + 1) % subViews.length
               : event.key === 'ArrowLeft' ? (index + subViews.length - 1) % subViews.length : null;
@@ -149,7 +184,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
           className="literature-tabs no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto rounded-control border-[0.5px] border-line bg-surface p-1"
         >
           {subViews.map((entry) => {
-            const selected = entry.id === subView;
+            const selected = entry.id === selectedTab;
             const Icon = entry.icon;
             return (
               <button
@@ -184,7 +219,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
               scope.openReviewInspector({mode: 'manage', projectId: scope.projectId, versionId: null});
             }}>综述核查</button>
           {subView === 'reader' && returnToSearch ? (
-            <button type="button" data-testid="literature-return-search" onClick={() => { selectSubView('rag'); setReturnToSearch(false); }}
+            <button type="button" data-testid="literature-return-search" onClick={() => selectSubView('rag', () => setReturnToSearch(false))}
               className="h-7 rounded-control px-2 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)]">返回检索结果</button>
           ) : null}
           {workspace === 'library' ? <button
@@ -203,7 +238,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
       {store.projectId === null || workspace !== 'library' ? null : <LiteratureProcessingPanel client={store.client} projectId={store.projectId}
         writable={scope.writable} pickFile={actions.pickFile} addPdfToItem={store.addPdfToItem}
         onOpenPdf={scope.openFileInCanvas} onDocumentsChanged={store.reloadDocuments}
-        onOpenItem={libraryItemId => {store.select(libraryItemId); selectSubView('reader');}}/>}
+        onOpenItem={libraryItemId => scope.openLiterature({kind: 'reader', libraryItemId})}/>}
 
       {subView === 'reader' ? <div className="literature-paper-picker flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-3 py-1">
         <button type="button" onClick={() => setNavigationOverride(!navigationOpen)}
@@ -218,15 +253,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
               aria-label="选择当前文献"
               value={store.selectedId ?? ""}
               disabled={store.items.length === 0 && store.selected === null}
-              onChange={(event) => {
-                const id = event.target.value || null;
-                store.select(id);
-                setNavigationOverride(false);
-                if (id !== null) {
-                  setFocus({ parseId: null, locator: null });
-                  selectSubView('reader');
-                }
-              }}
+              onChange={(event) => selectPaper(event.target.value || null)}
               className="h-8 min-w-0 flex-1 rounded-control border-[0.5px] border-line bg-surface px-2 text-ink text-[length:var(--font-meta-size)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:opacity-50"
             >
               <option value="">选择一篇文献</option>
@@ -240,14 +267,10 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
 
       <div className="flex min-h-0 flex-1">
         <aside id="literature-navigation" style={{ display: navigationOpen ? 'flex' : 'none', width: narrow ? '100%' : 240 }} className="literature-library-column min-h-0 min-w-0 shrink-0 border-r-[0.5px] border-line" aria-label="文献列表">
-          <LibraryList onRequestImport={() => openImport('document')} onOpenItem={() => {
-            setNavigationOverride(false);
-            setFocus({parseId: null, locator: null});
-            requestAnimationFrame(() => paperPickerRef.current?.focus());
-          }} />
+          <LibraryList onRequestImport={() => openImport('document')} onOpenItem={selectPaper} />
         </aside>
 
-        <div id="literature-active-panel" role="tabpanel" aria-labelledby={`literature-tab-${subView}`} tabIndex={0} style={navigationOpen && narrow ? {display: 'none'} : undefined} className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid={`literature-panel-${subView}`}>
+        <div id="literature-active-panel" role="tabpanel" aria-labelledby={`literature-tab-${selectedTab}`} tabIndex={0} style={navigationOpen && narrow ? {display: 'none'} : undefined} className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid={`literature-panel-${subView}`}>
           {(visited.has('reader') || subView === 'reader') ? (
             <ViewActivity active={subView === 'reader'}><div style={{ display: subView === 'reader' ? 'contents' : 'none' }}>
             <div className="flex min-h-0 flex-1 flex-col">
@@ -271,15 +294,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
             <RagStudio
               literature={store}
               openInFilesView={scope.openFileInCanvas}
-              onOpenInReader={(target) => {
-                setReaderFocusRequestId(current => current + 1);
-                setReturnToSearch(true);
-                setFocus({ parseId: target.parseId, locator: target.locator, text: target.text });
-                if (target.libraryItemId !== null) {
-                  store.select(target.libraryItemId);
-                }
-                selectSubView('reader');
-              }}
+              onOpenInReader={(target) => scope.openLiterature({kind: 'reader', ...target, returnToSearch: true})}
             />
             </div>
             </div></ViewActivity>
@@ -288,6 +303,12 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
           {(visited.has('wiki') || subView === 'wiki') ? (
             <ViewActivity active={subView === 'wiki'}><div style={{ display: subView === 'wiki' ? 'contents' : 'none' }}>
             <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex shrink-0 justify-end border-b-[0.5px] border-line px-3 py-1">
+              <button type="button" data-testid="literature-open-graph" onClick={() => selectSubView('graph')}
+                className="flex h-7 items-center gap-1 rounded-control px-2 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)]">
+                <Share2 size={13} aria-hidden="true" className="text-[var(--icon-graph)]"/>关系图
+              </button>
+            </div>
             {derivedReady ? (
               <WikiWorkspace
                 client={store.client}
@@ -298,18 +319,8 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
                 claims={claims}
                 evidence={evidence}
                 libraryItems={store.items}
-                onOpenClaim={(claimId) => {
-                  setGraphClaimFocusId(claimId);
-                  setFocus({ parseId: null, locator: null });
-                  selectSubView('graph');
-                }}
-                onOpenPaper={(libraryItemId) => {
-                  // Select the item, then land in the reader: selecting first is what makes the
-                  // reader show *this* paper.
-                  store.select(libraryItemId);
-                  setFocus({ parseId: null, locator: null });
-                  selectSubView('reader');
-                }}
+                onOpenClaim={(claimId) => scope.openLiterature({kind: 'concept', claimId})}
+                onOpenPaper={(libraryItemId) => scope.openLiterature({kind: 'reader', libraryItemId})}
                 onAskAssistant={(prompt) => void store.askAssistant(prompt)}
               />
             ) : (
@@ -322,6 +333,12 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
           {(visited.has('graph') || subView === 'graph') ? (
             <ViewActivity active={subView === 'graph'}><div style={{ display: subView === 'graph' ? 'contents' : 'none' }}>
             <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex shrink-0 border-b-[0.5px] border-line px-3 py-1">
+              <button type="button" data-testid="literature-return-wiki" onClick={() => selectSubView('wiki')}
+                className="flex h-7 items-center gap-1 rounded-control px-2 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)]">
+                <ArrowLeft size={13} aria-hidden="true"/>返回知识页
+              </button>
+            </div>
             {derivedReady ? (
               <KnowledgeGraphView
                 client={store.client}
@@ -329,7 +346,8 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
                 claims={claims}
                 evidence={evidence}
                 libraryItems={store.items}
-                focusClaimId={graphClaimFocusId}
+                focusClaimId={graphFocus?.claimId ?? null}
+                focusRequestId={graphFocus?.nonce ?? 0}
                 onAskAssistantAboutNode={(node) =>
                   void store.askAssistant(`请围绕实体 “${node.label}” 扩展相关原理、算法演进与代表论文。`)
                 }

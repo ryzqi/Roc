@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { researchTemplateCompileRequestSchema } from './research';
+import { researchLatexDiagnosticSchema, researchTemplateCompileRequestSchema } from './research';
 import {researchBlockReadingSchema} from './research-document-reading';
 import {paperStructureSchema} from './research-paper-structure';
 import {paperTableSchema, assertPaperTableBlock} from './research-paper-table';
@@ -62,6 +62,23 @@ export const researchModelsImportRequestSchema = z.object({
   pack: z.enum(researchModelPacks)
 }).strict();
 export const researchModelsRemoveRequestSchema = z.object({ pack: z.enum(researchModelPacks) }).strict();
+
+export const workspaceLatexCompileRequestSchema = z.object({
+  projectId: z.string().min(1), entryPath: z.string().min(1).max(1000), requestId: z.uuid()
+}).strict();
+export const workspaceLatexCancelRequestSchema = workspaceLatexCompileRequestSchema.pick({ projectId: true, requestId: true });
+export const workspaceLatexCompileResultSchema = z.object({
+  requestId: z.uuid(), entryPath: z.string(), status: z.enum(['ready', 'failed', 'cancelled']),
+  outputPath: z.string().nullable(), pdfHash: z.string().nullable(), diagnostics: z.array(researchLatexDiagnosticSchema)
+}).strict();
+export const workspaceLatexExportRequestSchema = z.object({
+  projectId: z.string().min(1), outputPath: z.string().min(1), pdfHash: z.string().regex(/^[a-f0-9]{64}$/u)
+}).strict();
+export const workspaceLatexExportResultSchema = z.object({ path: z.string().nullable() }).strict();
+export const workspaceLatexCancelResultSchema = z.object({ requested: z.boolean() }).strict();
+export type WorkspaceLatexCompileRequest = z.infer<typeof workspaceLatexCompileRequestSchema>;
+export type WorkspaceLatexCompileResult = z.infer<typeof workspaceLatexCompileResultSchema>;
+export type WorkspaceLatexExportRequest = z.infer<typeof workspaceLatexExportRequestSchema>;
 
 export const researchTemplateListRequestSchema = z.object({ projectId: z.string().min(1) }).strict();
 export const researchTemplateFileSchema = z.object({

@@ -22,6 +22,22 @@
 .authoring-panel[data-files-open=false] .authoring-file-state { display: block; }
 .authoring-panel[data-files-open=false] .authoring-layout { flex-direction: column; }
 .authoring-file-picker { align-items: center; gap: 8px; flex-shrink: 0; padding: 8px 12px; border-bottom: .5px solid var(--line); }
+.authoring-compile { flex-shrink: 0; min-width: 0; padding: 8px 12px; border-bottom: .5px solid var(--line); font-size: var(--font-meta-size); }
+.authoring-compile-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.authoring-entry { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.authoring-entry select { min-width: 0; max-width: 100%; flex: 1; border: .5px solid var(--line); border-radius: var(--r-control); padding: 4px 8px; background: var(--surface); color: var(--ink); }
+.authoring-compile button, .authoring-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+.authoring-secondary { min-height: 28px; padding: 4px 8px; border: .5px solid var(--line); border-radius: var(--r-control); color: var(--muted); }
+.authoring-secondary:hover:not(:disabled) { background: var(--overlay-hover); color: var(--ink); }
+.authoring-secondary:active:not(:disabled) { background: var(--overlay-active); }
+.authoring-secondary:disabled { opacity: .5; }
+.authoring-compile > p { margin-top: 8px; color: var(--muted); overflow-wrap: anywhere; }
+.authoring-output-path { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
+.authoring-diagnostics { margin-top: 8px; }
+.authoring-diagnostics summary { cursor: pointer; }
+.authoring-diagnostics ul { max-height: 160px; overflow: auto; margin-top: 8px; }
+.authoring-diagnostics li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding-block: 4px; overflow-wrap: anywhere; }
+.authoring-diagnostic-link { text-decoration: underline; text-underline-offset: 2px; font-family: var(--font-mono); }
 @container authoring (max-width: 900px) {
   .authoring-toggle-files { display: none; }
   .authoring-layout { flex-direction: column; }

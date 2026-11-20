@@ -17,7 +17,7 @@ import { useKeyboardShortcuts } from './shortcuts';
 import { clearUiState, recordProjectVisit, CONTENT_PREFERENCES_CHANGED } from './ui-state';
 import { ViewContent } from './ViewContent';
 import { WorkspaceLayout } from './WorkspaceLayout';
-import { WorkspaceScopeProvider, type WorkspaceScope } from './workspace-scope';
+import { WorkspaceScopeProvider, type WorkspaceScope, type LiteratureOpenRequest, type LiteratureOpenTarget } from './workspace-scope';
 import { WorkspaceCanvas, type CanvasTabId } from '../canvas/WorkspaceCanvas';
 import { clearAssistantComposerDraft } from '../assistant/composer-draft';
 import type { ManagementTabId } from '../management/use-management-stores';
@@ -164,6 +164,8 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
   /** A file another surface asked the 文件 tab to preview (see `openFileInCanvas`). */
   const [filePreview, setFilePreview] = useState<{ relativePath: string; nonce: number } | null>(null);
   const previewNonceRef = useRef(0);
+  const [literatureRequest, setLiteratureRequest] = useState<LiteratureOpenRequest | null>(null);
+  const literatureRequestNonce = useRef(0);
   const [managementMounted, setManagementMounted] = useState(false);
   const [settingsMounted, setSettingsMounted] = useState(false);
 
@@ -288,6 +290,26 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
   const routeRef = useRef(route);
   routeRef.current = route;
 
+  const consumeLiteratureRequest = useCallback((nonce: number): void => {
+    setLiteratureRequest(current => current?.nonce === nonce ? null : current);
+  }, []);
+  const openLiterature = useCallback((target: LiteratureOpenTarget): void => {
+    const projectId = routeRef.current.projectId;
+    if (projectId === null) return;
+    const proceed = (commitSelection?: () => void): void => {
+      if (routeRef.current.projectId !== projectId) return;
+      navigate({...routeRef.current, view: target.kind === 'concept' ? 'knowledge' : 'library', tool: null}, {
+        mode: 'push',
+        onNavigated: () => {
+          commitSelection?.();
+          setLiteratureRequest({projectId, nonce: ++literatureRequestNonce.current, target});
+        }
+      });
+    };
+    if (target.kind === 'reader') literature.select(target.libraryItemId ?? literature.selectedId, proceed);
+    else proceed();
+  }, [literature.select, literature.selectedId, navigate]);
+
   /**
    * Asks the 文件 tab to reveal a file **and open its preview**.
    *
@@ -395,7 +417,10 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
       openFile: route.openFile,
       openFileInCanvas,
       openSettings,
-      openView: (view) => navigate({ ...routeRef.current, view, tool: null }, {mode: 'push'}),
+      openView: (view, onNavigated) => navigate({ ...routeRef.current, view, tool: null }, {mode: 'push', onNavigated}),
+      openLiterature,
+      literatureRequest: literatureRequest?.projectId === route.projectId ? literatureRequest : null,
+      consumeLiteratureRequest,
       tool: route.tool,
       openTool: (tool) => navigate({ ...routeRef.current, tool }),
       openAssistant: () => navigate({ ...routeRef.current, assistantOpen: true }),
@@ -411,6 +436,9 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
       route.projectId,
       route.openFile,
       route.tool,
+      openLiterature,
+      literatureRequest,
+      consumeLiteratureRequest,
       openTask,
       openManagementSection,
       navigate,
@@ -503,13 +531,8 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
     libraryItems: literature.items,
     concepts: conceptRows,
     conceptsLoaded: literature.claims !== null && literature.evidence !== null,
-    onOpenLiterature: (libraryItemId) => {
-      literature.select(libraryItemId);
-      navigate({ ...route, view: 'library' });
-    },
-    onOpenConcept: () => {
-      navigate({ ...route, view: 'knowledge' });
-    },
+    onOpenLiterature: (libraryItemId) => openLiterature({kind: 'reader', libraryItemId}),
+    onOpenConcept: (claimId) => openLiterature({kind: 'concept', claimId}),
     onOpenProject: (projectId) => {
       navigate({ ...route, projectId, view: DEFAULT_VIEW }, { mode: 'push' });
     },
@@ -740,16 +763,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
               workspacePending={workspaceBinding.pending}
               workspaceError={workspaceBinding.error}
               onBackToPortal={() => navigate({ ...route, projectId: null, view: DEFAULT_VIEW })}
-              onOpenLiterature={(libraryItemId) => {
-                // The sidebar tab has already selected the row in the shared store;
-                // re-selecting is a no-op (`setState` with the same value bails out)
-                // and keeps this callback correct if it is ever called without that
-                // first step.
-                if (libraryItemId !== null) {
-                  literature.select(libraryItemId);
-                }
-                navigate({ ...route, view: 'library' });
-              }}
+              onOpenLiterature={(libraryItemId) => openLiterature({kind: 'reader', libraryItemId})}
               themeOverride={override}
               onCycleTheme={cycleTheme}
                onOpenManagement={openManagementDrawer}

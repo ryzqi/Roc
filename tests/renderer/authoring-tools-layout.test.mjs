@@ -29,6 +29,7 @@ before(async () => {
     const contents = {'main.tex': ${JSON.stringify(formula)}, 'notes.md': ${JSON.stringify(markdown)}};
     const snapshot = {id: 'terminal-fixture', cwd: '/synthetic', shell: '/bin/zsh', status: 'running', exitCode: null};
     window.writes = []; window.terminalCreates = []; window.terminalInputs = []; window.terminalCloses = [];
+    window.compiles = []; window.exports = []; window.pdfRequests = []; window.compileMode = 'ready'; window.exportPath = null;
     const client = {api: {
       workspace: {onChanged: () => () => {}},
       files: {
@@ -36,9 +37,23 @@ before(async () => {
           ({name, relativePath: name, type: 'file', size: contents[name].length, updatedAt: '2026-11-12T00:00:00.000Z'}))}),
         preview: async ({relativePath}) => ok({relativePath, kind: 'text', content: contents[relativePath],
           sizeBytes: contents[relativePath].length, truncated: false, mediaType: 'text/plain'}),
+        previewPdf: async request => {window.pdfRequests.push(request); return ok({relativePath: request.relativePath, resourceUrl: 'about:blank', sizeBytes: 1024});},
         writeText: async request => {window.writes.push(request); contents[request.relativePath] = request.content;
           return ok({relativePath: request.relativePath, bytesWritten: request.content.length,
             recoveryPoint: {createdAt: '2026-11-12T00:00:00.000Z'}});}
+      },
+      research: {
+        compileWorkspaceLatex: async request => {
+          window.compiles.push({...request, content: contents[request.entryPath]});
+          const result = {requestId: request.requestId, entryPath: request.entryPath, status: window.compileMode,
+            outputPath: '.roc-build/latex/' + request.requestId + '.pdf', pdfHash: 'a'.repeat(64), diagnostics: []};
+          if (window.compileMode === 'pending') return await new Promise(resolve => {window.finishCompile = () => resolve(ok({...result, status: 'cancelled', outputPath: null, pdfHash: null}));});
+          if (window.compileMode === 'failed') return ok({...result, outputPath: null, pdfHash: null,
+            diagnostics: [{severity: 'error', file: 'main.tex', line: 3, message: 'Undefined control sequence'}]});
+          return ok(result);
+        },
+        cancelWorkspaceLatex: async () => ok({requested: true}),
+        exportWorkspaceLatex: async request => {window.exports.push(request); return ok({path: window.exportPath});}
       },
       git: {
         status: async () => ok({branch: 'main', changedFiles: 1, changes: [{relativePath: 'notes.md', index: ' ', worktree: 'M'}]}),
@@ -147,6 +162,46 @@ test('file reading view retains unsaved Markdown drafts and line wrapping state'
   await expect(editor).toHaveAttribute('wrap', 'off');
   await page.getByTestId('file-preview-save').click();
   await expect(page.getByTestId('file-preview-saved')).toBeVisible();
+});
+
+test('writing saves before compiling, previews and exports the result, and waits for cancellation', async () => {
+  await page.evaluate(() => window.mount('latex'));
+  await selectFile('main.tex');
+  const editor = page.getByTestId('production-latex-content');
+  const draft = '\\documentclass{article}\n\\begin{document}\nCurrent saved draft\n\\end{document}';
+  await editor.fill(draft);
+  await page.getByTestId('writing-compile').click();
+  await expect(page.getByTestId('writing-compile-result')).toContainText('上次编译成功');
+  assert.equal(await page.evaluate(() => window.compiles.at(-1).content), draft);
+  await expect(page.getByTestId('latex-dirty-indicator')).toHaveText('已保存');
+  await page.getByRole('button', {name: '预览 PDF', exact: true}).click();
+  await expect(page.getByRole('region', {name: '编译 PDF 预览'}).locator('iframe')).toHaveAttribute('src', 'about:blank');
+  await expect(page.getByText('项目已归档，仅可阅读。')).toHaveCount(0);
+  assert.match(await page.evaluate(() => window.pdfRequests.at(-1).relativePath), /^\.roc-build\/latex\/.+\.pdf$/);
+  await expect(editor).toContainText('Current saved draft');
+  await page.getByTestId('writing-export').click();
+  await expect(page.getByTestId('writing-export')).toBeEnabled();
+  await expect(page.getByText('已导出至', {exact: false})).toHaveCount(0);
+  await page.evaluate(() => {window.exportPath = '/chosen/manuscript.pdf';});
+  await page.getByTestId('writing-export').click();
+  await expect(page.getByText('已导出至 /chosen/manuscript.pdf')).toBeVisible();
+  await audit();
+  if (process.env.ROC_AUTHORING_SCREENSHOTS) await page.screenshot({path: join(process.env.ROC_AUTHORING_SCREENSHOTS, 'writing-compiled.png')});
+  await page.evaluate(() => {window.compileMode = 'failed';});
+  await page.getByTestId('writing-compile').click();
+  await expect(page.getByTestId('writing-compile-result')).toHaveText('编译失败');
+  await page.getByRole('button', {name: 'main.tex:3', exact: true}).click();
+  await expect(page.locator('.cm-activeLine')).toHaveText('Current saved draft');
+  await page.evaluate(() => {window.compileMode = 'pending';});
+  await page.getByTestId('writing-compile').click();
+  await page.getByTestId('writing-compile-cancel').click();
+  await expect(page.getByTestId('writing-compile-cancel')).toHaveText('正在取消…');
+  await expect(page.getByTestId('writing-compile')).toBeDisabled();
+  await expect(page.getByTestId('writing-compile-result')).toHaveCount(0);
+  await page.evaluate(() => window.finishCompile());
+  await expect(page.getByTestId('writing-compile-result')).toHaveText('编译已取消');
+  await expect(page.getByTestId('writing-compile')).toBeEnabled();
+  await page.evaluate(() => {window.compileMode = 'ready';});
 });
 
 test('Git gives the diff more space without losing the commit draft or file selection', async () => {

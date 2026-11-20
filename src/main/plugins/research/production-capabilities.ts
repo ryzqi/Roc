@@ -1,6 +1,10 @@
 import { z } from 'zod';
+import { dialog } from 'electron';
+import { writeFile } from 'node:fs/promises';
 import { researchTemplateCompileRequestSchema, researchTemplateImportRequestSchema, researchTemplateSchema } from '../../../shared/schemas/research';
 import {
+  workspaceLatexCompileRequestSchema, workspaceLatexCompileResultSchema, workspaceLatexCancelRequestSchema, workspaceLatexCancelResultSchema,
+  workspaceLatexExportRequestSchema, workspaceLatexExportResultSchema,
   researchTemplateEntryRequestSchema, researchTemplateFileContentSchema, researchTemplateFileRequestSchema,
   researchTemplateFileSaveRequestSchema, researchTemplateFileSchema, researchTemplateListRequestSchema,
   researchTemplatePreviewRequestSchema, researchToolchainStatusSchema, researchModelsStatusSchema,
@@ -13,6 +17,9 @@ import type { ResearchTemplateService } from './template-service';
 import type { ResearchToolchain } from './toolchain';
 
 const capabilities = {
+  workspaceCompile: descriptor('research.workspace.compileLatex', workspaceLatexCompileRequestSchema, workspaceLatexCompileResultSchema),
+  workspaceCancel: descriptor('research.workspace.cancelLatex', workspaceLatexCancelRequestSchema, workspaceLatexCancelResultSchema),
+  workspaceExport: descriptor('research.workspace.exportLatex', workspaceLatexExportRequestSchema, workspaceLatexExportResultSchema),
   status: descriptor('research.toolchain.status', z.object({}).strict(), researchToolchainStatusSchema),
   modelsStatus: descriptor('research.models.status', z.object({}).strict(), researchModelsStatusSchema),
   modelsSelect: descriptor('research.models.select', researchModelsSelectRequestSchema, researchModelsStatusSchema),
@@ -52,6 +59,15 @@ export function registerResearchProductionCapabilities(context: RocPluginContext
   registerModels(capabilities.modelsImport, (input) => tools.importModels(input.directory, input.pack));
   registerModels(capabilities.modelsRemove, (input) => tools.removeModels(input.pack));
   registerModels(capabilities.modelsCancel, () => tools.cancelModelsDownload());
+  register(capabilities.workspaceCompile, input => templates.compileWorkspace(input));
+  register(capabilities.workspaceCancel, input => templates.cancelWorkspace(input));
+  register(capabilities.workspaceExport, async input => {
+    const bytes = await templates.workspacePdf(input);
+    const selection = await dialog.showSaveDialog({ defaultPath: 'manuscript.pdf', filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+    if (selection.canceled || selection.filePath === undefined) return { path: null };
+    await writeFile(selection.filePath, bytes);
+    return { path: selection.filePath };
+  });
   register(capabilities.import, (input) => templates.importTemplate(input));
   register(capabilities.compile, (input) => templates.compile(input));
   register(capabilities.get, (input) => templates.get(input));

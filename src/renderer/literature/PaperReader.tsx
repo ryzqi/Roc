@@ -110,6 +110,11 @@ export function PaperReader({
   const translate=(segments:{label:string;text:string}[],label:string):void=>
     changeTranslation(()=>setTranslation({id:crypto.randomUUID(),segments,label}));
   const [pdfSelection, setPdfSelection] = useState<{parseId: string; blockId: string; locationIndex: number} | null>(null);
+  useEffect(() => {
+    if (focusRequestId === 0) return;
+    setPdfSelection(null);
+    setBlockFilter('all');
+  }, [focusRequestId]);
   const [openAsset, setOpenAsset] = useState<string | null>(null);
   const [discoveryOpen,setDiscoveryOpen]=useState(false);
   useEffect(()=>{changeTranslation(()=>setTranslation(null));setSelectedText('');setNoteSeed(null);},[selected?.id]);
@@ -195,9 +200,7 @@ export function PaperReader({
   /**
    * Jump to the locator from a retrieval hit.
    *
-   * Runs once per (document, locator) pair: re-scrolling on every render would
-   * fight the user's own scrolling, and a repeated deep link is handled by the ref
-   * key rather than by a timer.
+   * Runs once per accepted request and document target, preserving ordinary scrolling.
    */
   const matchedBlockId = useMemo(() => {
     if (content === null || focusLocator === null) {
@@ -219,15 +222,15 @@ export function PaperReader({
     if (matchedBlockId === null || activeDocumentId === null) {
       return;
     }
-    const key = `${activeDocumentId}:${reader.parsed?.run.id}:${focusLocator ?? ''}:${matchedBlockId}`;
+    const key = `${focusRequestId}:${activeDocumentId}:${reader.parsed?.run.id}:${focusLocator ?? ''}:${matchedBlockId}`;
     if (jumpHandledFor.current === key) {
       return;
     }
+    const target = document.querySelector(`[data-block-id="${CSS.escape(matchedBlockId)}"]`);
+    if (target === null) return;
     jumpHandledFor.current = key;
-    document
-      .querySelector(`[data-block-id="${CSS.escape(matchedBlockId)}"]`)
-      ?.scrollIntoView({ block: 'center' });
-  }, [activeDocumentId, focusLocator, matchedBlockId, reader.parsed?.run.id]);
+    target.scrollIntoView({ block: 'center' });
+  }, [activeDocumentId, blockFilter, focusRequestId, focusLocator, matchedBlockId, reader.parsed?.run.id]);
 
   if (selected === null) {
     return (

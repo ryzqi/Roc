@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Bot, Compass, Search, X } from 'lucide-react';
 import type { ResearchClaim, ResearchEvidence } from '../../shared/types';
 import type { ResearchLibraryItem } from '../../shared/types';
@@ -19,6 +19,8 @@ export type KnowledgeGraphViewProps = {
   libraryItems: readonly ResearchLibraryItem[];
   /** Highlight this node's neighbourhood; set when arriving from the wiki. */
   focusClaimId?: string | null;
+  /** A repeated open of the same claim still reveals its neighbourhood. */
+  focusRequestId?: number;
   /** Hands the node to the research assistant. */
   onAskAssistantAboutNode?: (node: GraphNode) => void;
 };
@@ -37,6 +39,7 @@ function nodeDetail(node: GraphNode): string {
 
 export function KnowledgeGraphView(props: KnowledgeGraphViewProps): React.JSX.Element {
   const [scientific, setScientific] = useState(false);
+  useEffect(() => { setScientific(false); }, [props.focusClaimId, props.focusRequestId]);
   if (!props.client || !props.projectId) return <RecordedKnowledgeGraph {...props}/>;
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col">
     <nav className="knowledge-view-switch" aria-label="知识关系视图">
@@ -52,21 +55,23 @@ function RecordedKnowledgeGraph({
   evidence,
   libraryItems,
   focusClaimId = null,
+  focusRequestId = 0,
   onAskAssistantAboutNode
 }: KnowledgeGraphViewProps): React.JSX.Element {
   const graph = useMemo(
     () => deriveGraph({ claims, evidence, libraryItems }),
     [claims, evidence, libraryItems]
   );
-  const [selection, setSelection] = useState<{nodeId: string; focusClaimId: string | null} | null>(null);
-  const [browsing, setBrowsing] = useState({open: false, focusClaimId});
+  const focusKey = `${focusRequestId}:${focusClaimId ?? ''}`;
+  const [selection, setSelection] = useState<{nodeId: string; focusKey: string} | null>(null);
+  const [browsing, setBrowsing] = useState({open: false, focusKey});
   const [kindFilter, setKindFilter] = useState<GraphNodeKind | 'all'>('all');
   const [filterText, setFilterText] = useState('');
   const [requestedPage, setPage] = useState(0);
   const [neighbourPaging, setNeighbourPaging] = useState({ nodeId: '', page: 0 });
 
   const focusNodeId = focusClaimId === null ? null : `claim:${focusClaimId}`;
-  const effectiveSelected = selection?.focusClaimId === focusClaimId ? selection.nodeId : focusNodeId;
+  const effectiveSelected = selection?.focusKey === focusKey ? selection.nodeId : focusNodeId;
 
   const query = filterText.trim().toLowerCase();
   const visibleNodes = useMemo(
@@ -93,9 +98,9 @@ function RecordedKnowledgeGraph({
     for (const node of graph.nodes) counts[node.kind] += 1;
     return counts;
   }, [graph.nodes]);
-  const changeText = (text: string): void => { setFilterText(text); setPage(0); setBrowsing({open: true, focusClaimId}); };
-  const changeKind = (kind: GraphNodeKind | 'all'): void => { setKindFilter(kind); setPage(0); setBrowsing({open: true, focusClaimId}); };
-  const selectNode = (nodeId: string): void => { setSelection({nodeId, focusClaimId}); setBrowsing({open: false, focusClaimId}); setNeighbourPaging({ nodeId, page: 0 }); };
+  const changeText = (text: string): void => { setFilterText(text); setPage(0); setBrowsing({open: true, focusKey}); };
+  const changeKind = (kind: GraphNodeKind | 'all'): void => { setKindFilter(kind); setPage(0); setBrowsing({open: true, focusKey}); };
+  const selectNode = (nodeId: string): void => { setSelection({nodeId, focusKey}); setBrowsing({open: false, focusKey}); setNeighbourPaging({ nodeId, page: 0 }); };
 
   if (graph.nodes.length === 0) {
     return (
@@ -108,7 +113,7 @@ function RecordedKnowledgeGraph({
   }
 
   return (
-    <div className="knowledge-graph flex h-full min-h-0 min-w-0 flex-col" data-testid="knowledge-graph" data-browsing={(browsing.open && browsing.focusClaimId === focusClaimId) || selectedNode === undefined}>
+    <div className="knowledge-graph flex h-full min-h-0 min-w-0 flex-col" data-testid="knowledge-graph" data-browsing={(browsing.open && browsing.focusKey === focusKey) || selectedNode === undefined}>
       <div className="knowledge-toolbar">
         <span className="text-muted text-[length:var(--font-meta-size)]" data-testid="graph-counts">
           {graph.nodes.length} 节点 / {graph.links.length} 引用与来源关系
@@ -217,7 +222,7 @@ function RecordedKnowledgeGraph({
             </div>
           ) : (
             <>
-              <button type="button" className="knowledge-back knowledge-view-button" onClick={() => setBrowsing({open: true, focusClaimId})}><ArrowLeft size={14} aria-hidden="true"/>返回关系目录</button>
+              <button type="button" className="knowledge-back knowledge-view-button" onClick={() => setBrowsing({open: true, focusKey})}><ArrowLeft size={14} aria-hidden="true"/>返回关系目录</button>
               <header className="knowledge-graph-detail-header">
                 <div className="min-w-0">
                   <h3 className="break-words text-ink" data-testid="graph-detail-label">{selectedNode.label}</h3>

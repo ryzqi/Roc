@@ -248,7 +248,7 @@ try {
       for (const {view, tabs} of [
         {view: 'library', tabs: ['reader', 'notes']},
         {view: 'discover', tabs: ['radar', 'monitors']},
-        {view: 'knowledge', tabs: ['rag', 'wiki', 'graph']}
+        {view: 'knowledge', tabs: ['rag', 'wiki']}
       ]) {
         await page.getByTestId(`sidebar-nav-${view}`).click();
         await expect(page.getByTestId('literature-hub')).toHaveAttribute('data-workspace', view);

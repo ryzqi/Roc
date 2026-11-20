@@ -45,6 +45,7 @@ before(async () => {
       }
     }};
     const literature = {client, projectId: 'project-a', status: 'ready', items: [],
+      assistant: {pending: false, error: null, threadId: null}, askAssistant: async () => {},
       action: {error: null, pending: false}, clearActionError: () => {}};
     const scope = {client, projectId: 'project-a', writable: true, openSettings: () => {}};
     function BranchHarness() {

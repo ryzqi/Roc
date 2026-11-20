@@ -100,6 +100,8 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
   const backRef = useRef<HTMLButtonElement>(null);
   const indexVisited = useRef(false);
   const [rerank,setRerank]=useState<'none'|'semantic'>('semantic');
+  const [asking, setAsking] = useState(false);
+  const [controlIntent, setControlIntent] = useState<IndexIntent | null>(null);
   const [result, setResult] = useState<ResearchKnowledgeSearchResult | null>(null);
   const searchAction = useAsyncAction(
     (request: Parameters<typeof searchKnowledge>[1]) => searchKnowledge(client, request),
@@ -112,10 +114,10 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
   const searching = searchAction.pending;
   const searchError = searchAction.error;
   const searchInFlight = useRef(false);
+  const askInFlight = useRef(false);
   const controlInFlight = useRef(false);
   const mounted = useRef(true);
   const ime = useImeGuard();
-  const [jumpError, setJumpError] = useState<string | null>(null);
   const [fileQuery, setFileQuery] = useState('');
   const actionPending = controlAction.pending;
   const [note, setNote] = useState<string | null>(null);
@@ -154,7 +156,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
   const settingsRevision = useSettingsRevision();
   const statusResource = useAsyncResource(
     projectId === null ? null : `index-status:${projectId}:${settingsRevision}`,
-    () => getIndexStatusSafely(client, projectId ?? ''),
+    () => client.api.research.getIndexStatus({projectId: projectId ?? ''}),
     { label: '读取索引状态' }
   );
   const status = statusResource.data;
@@ -197,11 +199,13 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
       return;
     }
     controlInFlight.current = true;
+    setControlIntent(intent);
     const result = await controlAction.run({
       projectId, ...intent, expectedRevision: revision
     });
     controlInFlight.current = false;
     if (!mounted.current) return;
+    setControlIntent(null);
     if (!result.ok) {
       literature.clearActionError();
       return;
@@ -211,14 +215,13 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
     reloadJobs();
   };
 
-  const runSearch = async (): Promise<void> => {
+  const runSearch = async (): Promise<ResearchKnowledgeSearchResult | null> => {
     const trimmed = query.trim();
     if (searchInFlight.current || trimmed.length === 0 || projectId === null) {
-      return;
+      return null;
     }
     searchInFlight.current = true;
     setNote(null);
-    setJumpError(null);
     const result = await searchAction.run({
       query: trimmed,
       projectId,
@@ -227,9 +230,32 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
       embeddingConfigId: status?.settings.embeddingConfigId ?? null
     });
     searchInFlight.current = false;
-    if (!mounted.current) return;
+    if (!mounted.current) return null;
     setResult(result.ok ? result.data : null);
     setExpandedHits(new Set());
+    return result.ok ? result.data : null;
+  };
+
+  const runAsk = async (): Promise<void> => {
+    if (askInFlight.current || searchInFlight.current || literature.assistant.pending || !query.trim()) return;
+    askInFlight.current = true;
+    setAsking(true);
+    try {
+      const evidence = await runSearch();
+      if (evidence === null || !mounted.current) return;
+      await literature.askAssistant([
+        '请依据当前项目的资料回答以下问题，并在助手中给出答案。',
+        `问题：${evidence.query}`,
+        '以下是本次检索返回的来源标识。请核验原文后引用来源与页码；证据不足时明确说明，不要把检索片段当作已验证结论。',
+        JSON.stringify(evidence.hits.map(hit => ({
+          title: hit.title, documentId: hit.documentId, sourceId: hit.sourceId,
+          chunkId: hit.chunkId, locator: hit.locator
+        })))
+      ].join('\n'));
+    } finally {
+      askInFlight.current = false;
+      if (mounted.current) setAsking(false);
+    }
   };
 
   /**
@@ -247,27 +273,8 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
    *     so the only honest jump is opening the file.
    */
   const openHit = (hit: ResearchKnowledgeSearchHit): void => {
-    setJumpError(null);
     setNote(null);
-    /**
-     * Library-item hits have to be selectable to be readable.
-     *
-     * `knowledge.search` deliberately includes documents with `project_id = NULL`
-     * (parsed documents are stored that way), while `library.list` only returns
-     * items **linked** to the current project. Without this check a hit from another
-     * project would look clickable and then leave the reader on 「尚未选择文献」 —
-     * a no-op that explains nothing. The list is only consulted once it is
-     * `ready`, so a still-loading list cannot produce a false refusal.
-     */
-    const opensInReader = hit.documentId.startsWith('document:') || hit.documentId.startsWith('library:');
-    if (opensInReader && literature.status === 'ready' && !literature.items.some((item) => item.id === hit.sourceId)) {
-      setJumpError(
-        `这条命中来自未关联本项目的文献（${hit.sourceId}），无法在这里打开。`
-      );
-      return;
-    }
     if (hit.documentId.startsWith('document:')) {
-      literature.select(hit.sourceId);
       onOpenInReader({
         parseId: hit.documentId.slice('document:'.length),
         libraryItemId: hit.sourceId,
@@ -277,7 +284,6 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
       return;
     }
     if (hit.documentId.startsWith('library:')) {
-      literature.select(hit.sourceId);
       onOpenInReader({ parseId: null, libraryItemId: hit.sourceId, locator: null, text: null });
       return;
     }
@@ -285,9 +291,6 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
       openInFilesView(hit.sourceId);
       return;
     }
-    setJumpError(
-      `这条命中来自「${hit.documentId.split(':', 1)[0]}」，无法定位到具体位置。`
-    );
   };
 
   const captureHit = (hit: ResearchKnowledgeSearchHit): void => {
@@ -337,12 +340,12 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
           {indexOpen ? <button ref={backRef} type="button" className="rag-button" aria-label="返回检索" onClick={() => setIndexOpen(false)}>
             <ArrowLeft size={16} aria-hidden="true" />
           </button> : <Search size={18} aria-hidden="true" className="text-muted" />}
-          <h2>{indexOpen ? '管理索引' : '检索项目知识'}</h2>
+          <h2>{indexOpen ? '管理索引' : '问我的资料'}</h2>
         </div>
         {indexOpen ? null : <button type="button" className="rag-button" onClick={() => setIndexOpen(true)} data-testid="rag-index-toggle">
           {busy ? <Loader2 size={14} aria-hidden="true" className="animate-spin" /> : <DatabaseZap size={14} aria-hidden="true" />}
           管理索引
-          {counts && counts.failed > 0 ? <span className="text-[var(--st-warn)]">{counts.failed} 项失败</span> : null}
+          {counts && counts.failed > 0 ? <span className="text-[var(--st-warn)] tabular-nums">{counts.failed.toLocaleString()} 项失败</span> : null}
         </button>}
       </header>
 
@@ -355,7 +358,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
                 {status === null ? statusResource.status === 'error' ? '索引状态不可用' : '读取索引状态…' : PHASE_LABELS[status.phase]}
               </span>
               {counts === null ? null : <span className="text-muted tabular-nums" data-testid="rag-counts">
-                {counts.total} 个文件，已索引 {counts.ready}，排队 {counts.queued}，进行中 {counts.running}，失败 {counts.failed}
+                {counts.total.toLocaleString()} 个工作区文件，已索引 {counts.ready.toLocaleString()}，排队 {counts.queued.toLocaleString()}，进行中 {counts.running.toLocaleString()}，失败 {counts.failed.toLocaleString()}
               </span>}
             </div>
         <div className="ml-auto flex items-center gap-1">
@@ -364,9 +367,9 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
             disabled={revision === null || actionPending}
             onClick={() => void runControl({ action: 'scan' })}
             data-testid="rag-scan"
-            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+            className="rag-button rag-open-source"
           >
-            <RefreshCw size={11} aria-hidden="true" />
+            {controlIntent?.action === 'scan' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : <RefreshCw size={12} aria-hidden="true" />}
             增量扫描
           </button>
           <button
@@ -374,9 +377,9 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
             disabled={revision === null || actionPending}
             onClick={() => void runControl({ action: 'rebuild' })}
             data-testid="rag-rebuild"
-            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+            className="rag-button rag-open-source"
           >
-            <Play size={11} aria-hidden="true" />
+            {controlIntent?.action === 'rebuild' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : <Play size={12} aria-hidden="true" />}
             重建
           </button>
           <button
@@ -384,9 +387,9 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
             disabled={revision === null || actionPending}
             onClick={() => void runControl({ action: status?.phase === 'paused' ? 'resume' : 'pause' })}
             data-testid="rag-toggle-pause"
-            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-[var(--st-warn)] text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+            className="rag-button rag-open-source"
           >
-            <Square size={11} aria-hidden="true" />
+            {controlIntent?.action === 'pause' || controlIntent?.action === 'resume' ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : <Square size={12} aria-hidden="true" />}
             {status?.phase === 'paused' ? '继续' : '暂停'}
           </button>
         </div>
@@ -395,7 +398,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
           {controlAction.error === null ? null : <ErrorBar error={{level: 'page', message: controlAction.error}} onDismiss={controlAction.reset} />}
           <KnowledgeJobs client={client} projectId={projectId} />
         <section className="mb-4">
-          <div className="mb-1.5 flex items-center gap-2">
+          <div className="mb-2 flex items-center gap-2">
             <h3 className="text-muted text-[length:var(--font-meta-size)]">已索引文件</h3>
             <input
               value={fileQuery}
@@ -417,10 +420,10 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
               <table className="w-full min-w-[36rem] table-fixed border-collapse text-[length:var(--font-meta-size)]" data-testid="rag-files">
                 <thead>
                   <tr className="text-left text-subtle text-[length:var(--font-micro-size)]">
-                    <th scope="col" className="w-2/5 py-0.5 pr-3 font-normal">路径</th>
-                    <th scope="col" className="w-24 py-0.5 pr-3 font-normal">类型</th>
-                    <th scope="col" className="py-0.5 pr-3 font-normal">状态</th>
-                    <th scope="col" className="w-24 py-0.5 font-normal">文本</th>
+                    <th scope="col" className="w-2/5 py-1 pr-3 font-normal">路径</th>
+                    <th scope="col" className="w-24 py-1 pr-3 font-normal">类型</th>
+                    <th scope="col" className="py-1 pr-3 font-normal">状态</th>
+                    <th scope="col" className="w-24 py-1 font-normal">文本</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -444,7 +447,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
         </section>
 
         <section className="mb-4">
-          <h3 className="mb-1.5 text-muted text-[length:var(--font-meta-size)]">索引作业</h3>
+          <h3 className="mb-2 text-muted text-[length:var(--font-meta-size)]">索引作业</h3>
           {jobsResource.error ? (
             <ErrorBar error={{level: 'page', message: jobsResource.error, retry: reloadJobs}} />
           ) : jobsResource.status === 'loading' ? <p role="status">正在读取索引作业…</p> : jobs.length === 0 ? (
@@ -460,7 +463,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
                       <span className="shrink-0 text-muted">{JOB_STATUS_LABELS[job.status]}</span>
                       <span title={job.path} className="min-w-0 flex-1 break-all font-mono text-ink">{job.path}</span>
                     </div>
-                    <span className="mt-0.5 flex flex-wrap gap-x-2 font-mono tabular-nums text-subtle text-[length:var(--font-micro-size)]">
+                    <span className="mt-1 flex flex-wrap gap-x-2 font-mono tabular-nums text-subtle text-[length:var(--font-micro-size)]">
                       <span>gen {job.generation}</span>
                       {job.finishedAt === null ? null : <time dateTime={job.finishedAt} className="break-all">{job.finishedAt}</time>}
                     </span>
@@ -470,8 +473,9 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
                     disabled={revision === null || actionPending}
                     onClick={() => void runControl({ action: 'retry', fileId: job.fileId })}
                     data-testid={`rag-job-retry-${job.id}`}
-                    className="h-[var(--control-height-compact)] shrink-0 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+                    className="rag-button rag-open-source"
                   >
+                    {controlIntent?.action === 'retry' && controlIntent.fileId === job.fileId ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : null}
                     重试
                   </button>
                 </li>
@@ -481,13 +485,13 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
         </section>
 
         <section>
-          <h3 className="mb-1.5 flex items-center gap-2 text-muted text-[length:var(--font-meta-size)]">
+          <h3 className="mb-2 flex items-center gap-2 text-muted text-[length:var(--font-meta-size)]">
             索引设置
             <button
               type="button"
               onClick={() => scope.openSettings()}
               data-testid="rag-open-settings"
-              className="ml-auto flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)]"
+              className="rag-button rag-open-source ml-auto"
             >
               <Settings2 size={10} aria-hidden="true" />
               打开设置中心
@@ -527,31 +531,43 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
       ) : (
         <>
           <section className="rag-search-header" aria-label="检索条件">
-            <form className="rag-query-form" onSubmit={event => {event.preventDefault(); void runSearch();}}>
+            <form className="rag-query-form" onSubmit={event => {event.preventDefault(); void runAsk();}}>
               <label className="rag-query-field">
                 <Search size={16} aria-hidden="true" className="shrink-0 text-muted" />
-                <span className="sr-only">检索知识库</span>
+                <span className="sr-only">向项目资料提问</span>
                 <input ref={queryRef} type="search" value={query} onChange={event => setQuery(event.target.value)}
                   onCompositionStart={ime.onCompositionStart} onCompositionEnd={ime.onCompositionEnd}
                   onKeyDown={event => {if (event.key === 'Enter' && ime.shouldIgnoreKeyDown(event)) event.preventDefault();}}
                   placeholder="输入问题、关键词或原文片段" data-testid="rag-query" />
               </label>
-              <button type="submit" disabled={!query.trim() || searching} data-testid="rag-search" className="rag-search-button">
-                {searching ? <Loader2 size={14} aria-hidden="true" className="animate-spin" /> : null}
-                {searching ? '检索中' : '检索'}
+              <button type="submit" disabled={!query.trim() || searching || asking || literature.assistant.pending} data-testid="rag-ask" className="rag-search-button" title="检索证据并在助手中回答">
+                {asking ? <Loader2 size={14} aria-hidden="true" className="animate-spin" /> : null}
+                {asking ? '提交中' : '提问'}
               </button>
             </form>
             <div className="rag-search-options">
-              <span className="text-muted">范围：项目文献、笔记与工作区文件</span>
+              <button type="button" disabled={!query.trim() || searching || asking} onClick={() => {void runSearch();}} data-testid="rag-search" className="rag-button">
+                {searching && !asking ? <Loader2 size={14} aria-hidden="true" className="animate-spin" /> : <Search size={14} aria-hidden="true" />}
+                {searching && !asking ? '检索中' : '检索证据'}
+              </button>
+              <span className="text-muted">答案在助手中生成</span>
               <details className="rag-options" data-testid="rag-search-options">
                 <summary><Settings2 size={13} aria-hidden="true" />检索选项<ChevronDown size={12} aria-hidden="true" /></summary>
-                <label>排序方式
-                  <select aria-label="排序方式" value={rerank} disabled={searching} onChange={event => setRerank(event.target.value as 'none' | 'semantic')}>
-                    <option value="semantic">语义精排</option><option value="none">关键词与语义融合</option>
-                  </select>
-                </label>
+                <fieldset disabled={searching || asking}>
+                  <legend>排序方式</legend>
+                  <label><input type="radio" name="rag-ranking" value="semantic" checked={rerank === 'semantic'} onChange={() => setRerank('semantic')} />语义精排</label>
+                  <label><input type="radio" name="rag-ranking" value="none" checked={rerank === 'none'} onChange={() => setRerank('none')} />关键词与语义融合</label>
+                </fieldset>
+                <p>检索范围：项目文献、笔记与工作区文件</p>
               </details>
             </div>
+            <p className="rag-availability text-muted" data-testid="rag-availability" role="status">
+              {statusResource.error ? '工作区文件索引状态读取失败，可在管理索引中重试。'
+                : status === null ? '正在读取工作区文件可用性…'
+                  : status.phase === 'unavailable' ? '未绑定工作目录，可检索已收录的文献与笔记。'
+                    : `工作区文件可检索 ${status.counts.ready.toLocaleString()} 个${busy ? '，索引处理中' : status.counts.failed > 0 ? `，${status.counts.failed.toLocaleString()} 个失败` : ''}`}
+            </p>
+            {literature.assistant.error ? <p role="alert" className="rag-feedback text-[var(--st-bad)]" data-testid="rag-ask-error">{literature.assistant.error}</p> : null}
             {result?.ranking?.degradation ? <p role="status" className="rag-feedback" data-testid="rag-degraded">
               <AlertCircle size={14} aria-hidden="true" />
               语义检索暂不可用，本次仅返回关键词结果（{{timeout:'请求超时',network:'网络故障',rate_limit:'服务限流',provider_unavailable:'服务暂不可用'}[result.ranking.degradation]}）。可稍后重试。
@@ -559,15 +575,13 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
             {searchError === null ? null : <p role="alert" className="rag-feedback text-[var(--st-bad)]" data-testid="rag-search-error">
               <AlertCircle size={14} aria-hidden="true" />{searchError}
             </p>}
-            {jumpError === null ? null : <p role="alert" className="rag-feedback text-[var(--st-warn)]" data-testid="rag-jump-error">{jumpError}</p>}
             {note === null && literature.action.error === null ? null : <p role="status" className="rag-feedback" data-testid="rag-note">{note ?? literature.action.error}</p>}
             {hitCopy.error ? <p role="alert" className="rag-feedback text-[var(--st-bad)]">{hitCopy.error}</p> : null}
           </section>
 
           <section className="rag-body rag-results" aria-label="检索结果" aria-busy={searching} data-testid="rag-results">
             {result === null ? (
-              <EmptyState icon={Search} title={searching ? '正在查找相关内容…' : '从项目知识中寻找答案'}
-                description={searching ? undefined : '输入问题或关键词，查看相关原文和来源。'} testId="rag-search-empty" />
+              <EmptyState icon={Search} title={searching ? '正在查找相关内容…' : '输入问题，查找项目资料'} testId="rag-search-empty" />
             ) : <>
               <div className="rag-results-heading">
                 <p role="status" className="min-w-0 break-words"><strong>{result.hits.length} 条结果</strong><span className="ml-2 text-muted">“{result.query}”</span></p>
@@ -600,9 +614,9 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
                         const next = new Set(current); if (next.has(hit.chunkId)) next.delete(hit.chunkId); else next.add(hit.chunkId); return next;
                       })}>{expanded ? '收起原文' : '展开原文'}</button> : null}
                       <footer className="rag-hit-actions">
-                        <button type="button" onClick={() => openHit(hit)} data-testid={`rag-hit-open-${hit.chunkId}`} className="rag-button rag-open-source">
-                          <ExternalLink size={13} aria-hidden="true" />{hit.documentId.startsWith('project-index:') ? '打开来源文件' : '在阅读器里定位'}
-                        </button>
+                        {['document:', 'library:', 'project-index:'].some(prefix => hit.documentId.startsWith(prefix)) ? <button type="button" onClick={() => openHit(hit)} data-testid={`rag-hit-open-${hit.chunkId}`} className="rag-button rag-open-source">
+                          <ExternalLink size={13} aria-hidden="true" />{hit.documentId.startsWith('project-index:') ? '打开来源文件' : hit.documentId.startsWith('library:') ? '查看文献信息' : '在阅读器里定位'}
+                        </button> : <span className="rag-source-unavailable">此来源暂无可定位原文</span>}
                         <button type="button" onClick={() => {hitCopy.copy(hit.content); setCopiedChunkId(hit.chunkId);}}
                           data-testid={`rag-hit-copy-${hit.chunkId}`} className="rag-button">
                           {hitCopy.copied && copiedChunkId === hit.chunkId ? <Check size={13} aria-hidden="true" /> : <ClipboardCopy size={13} aria-hidden="true" />}
@@ -628,23 +642,4 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
       )}
     </div>
   );
-}
-
-/**
- * `index.status` fails with `workspace_path_missing` when the project has no bound
- * directory. That is an expected state, not a page error, so it is turned into an
- * explanatory `available: false` payload instead of an error bar the user cannot act on.
- */
-async function getIndexStatusSafely(
-  client: LiteratureStore['client'],
-  projectId: string
-): Promise<{ ok: true; data: ResearchIndexStatus } | { ok: false; error: { message: string; code?: string } }> {
-  const result = await client.api.research.getIndexStatus({ projectId });
-  if (result.ok) {
-    return result;
-  }
-  if (result.error.code === 'workspace_path_missing') {
-    return result;
-  }
-  return result;
 }

@@ -13,7 +13,7 @@ const errors = [];
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), 'roc-literature-workspace-'));
   await buildViteRenderer({directory, plugins: [tailwindcss()], script: `
-    import React,{useState} from 'react';
+    import React,{useRef,useState} from 'react';
     import {createRoot} from 'react-dom/client';
     import {flushSync} from 'react-dom';
     import {LiteratureHubView} from './src/renderer/literature/LiteratureHubView';
@@ -21,7 +21,7 @@ before(async () => {
     import {WorkspaceScopeProvider} from './src/renderer/app/workspace-scope';
     import './src/renderer/styles/index.css';
     const ok=data=>({ok:true,data});
-    const item={id:'paper',revision:1,archived:false,projectIds:['fixture'],
+    const item={id:'paper',revision:1,archived:false,projectIds:['fixture'],updatedAt:'2026-11-20T00:00:00.000Z',
       metadata:{title:'Understanding how scientific evidence supports a research claim',authors:['Fixture Author'],publishedYear:2026,citationCount:null,doi:null,url:null,openAccessUrl:null,source:'local'},
       bibliography:{title:'Understanding scientific evidence',citationKey:'fixture2026',fields:{}}};
     const second={...item,id:'second',metadata:{...item.metadata,title:'Second paper for navigation'}};
@@ -31,6 +31,7 @@ before(async () => {
     const client={api:{research:{
       getModelsStatus:async()=>ok({ready:false,error:null,models:[],downloading:false,selectedPack:'compact'}),
       listAcquisition:async()=>ok({jobs:[],total:0,nextOffset:null}),onLibraryChanged:()=>()=>{},
+      resolveDocumentParse:async()=>ok(paperDocument),
       listReadingNotes:async()=>ok([]),searchWiki:async()=>ok({pages:[],nextOffset:null,mode:'keyword',degradation:null}),
       knowledgeJobs:async()=>ok([]),listIndexedFiles:async()=>ok([]),listIndexJobs:async()=>ok([]),
       getIndexStatus:async()=>ok({phase:'idle',generation:1,error:null,workspacePath:'/synthetic',lastScanAt:null,
@@ -40,15 +41,25 @@ before(async () => {
     function Harness(){
       const [selectedId,setSelected]=useState('paper');
       const [view,setView]=useState('library');
+      const [literatureRequest,setLiteratureRequest]=useState(null);
+      const requestNonce=useRef(0);
       window.selectWorkspace=setView;
+      const openLiterature=target=>{
+        if(target.kind==='reader')setSelected(target.libraryItemId??selectedId);
+        setView(target.kind==='concept'?'knowledge':'library');
+        setLiteratureRequest({projectId:'fixture',nonce:++requestNonce.current,target});
+      };
+      window.openObject=openLiterature;
       const selected=selectedId==='paper'?item:second;
       const store={client,projectId:'fixture',items:[item,second],selected,selectedId,documents:selectedId==='paper'?[paperDocument]:[],
         status:'ready',selectedStatus:'ready',query:'',includeArchived:false,importRequestId:0,
-        claims:[],evidence:[],derivedStatus:'ready',derivedError:null,
+        claims:Array.from({length:3},(_,i)=>({id:'c-'+i,content:'Claim '+i,status:'supported',evidenceIds:['shared']})),
+        evidence:[{id:'shared',title:'Shared evidence',locator:'page:1',sourceType:'file',sourceId:'unloaded'}],derivedStatus:'ready',derivedError:null,
         action:{pending:false,error:null},assistant:{pending:false,error:null},parseInFlight:null,
-        select:setSelected,reload(){},reloadDocuments(){},reloadDerived(){},setQuery(){},setIncludeArchived(){},
+        select:(id,whenReady)=>whenReady?whenReady(()=>setSelected(id)):setSelected(id),reload(){},reloadDocuments(){},reloadDerived(){},setQuery(){},setIncludeArchived(){},
         loadDocumentContent:async()=>ok({run:{id:'parse',documentId:'document'},content:{sourceHash:'source',pageCount:1,parseMode:'native-text',warnings:[],assets:[],blocks}})};
-      return <WorkspaceScopeProvider value={{...scope,openView:setView}}><LiteratureScopeProvider value={store}><LiteratureHubView view={view} projectId="fixture"/></LiteratureScopeProvider></WorkspaceScopeProvider>;
+      return <WorkspaceScopeProvider value={{...scope,openView:(view,onNavigated)=>{setView(view);onNavigated?.();},openLiterature,literatureRequest,
+        consumeLiteratureRequest:nonce=>setLiteratureRequest(current=>current?.nonce===nonce?null:current)}}><LiteratureScopeProvider value={store}><LiteratureHubView view={view} projectId="fixture"/></LiteratureScopeProvider></WorkspaceScopeProvider>;
     }
     const root=createRoot(document.getElementById('root'));
     window.mount=()=>flushSync(()=>root.render(<Harness/>));
@@ -91,7 +102,8 @@ test('other tasks occupy full canvas without unrelated paper selection, in both 
       await page.evaluate(width=>document.getElementById('root').style.width=width+'px',width);
       for(const tab of ['notes','rag','wiki','graph','reader']) {
         await page.evaluate(view=>window.selectWorkspace(view), ['rag','wiki','graph'].includes(tab)?'knowledge':'library');
-        await page.getByTestId('literature-subview-'+tab).click();
+        if(tab==='graph') await page.getByTestId('literature-open-graph').click();
+        else await page.getByTestId('literature-subview-'+tab).click();
         await expect(page.getByTestId('literature-panel-'+tab)).toBeVisible();
         if(tab!=='reader') {
           await expect(page.getByLabel('选择当前文献')).toBeHidden();
@@ -106,4 +118,37 @@ test('other tasks occupy full canvas without unrelated paper selection, in both 
       }
     }
   }
+});
+
+test('object navigation opens the requested paper or claim and returns to the retained query',async()=>{
+  await page.evaluate(()=>window.selectWorkspace('library'));
+  await page.getByTestId('literature-subview-notes').click();
+  await page.evaluate(()=>window.openObject({kind:'reader',libraryItemId:'second'}));
+  await expect(page.getByTestId('literature-hub')).toHaveAttribute('data-sub-view','reader');
+  await expect(page.getByTestId('reader-title')).toHaveText('Second paper for navigation');
+
+  await page.evaluate(()=>window.openObject({kind:'concept',claimId:'c-0'}));
+  await expect(page.getByTestId('literature-hub')).toHaveAttribute('data-sub-view','graph');
+  await expect(page.getByTestId('literature-subview-wiki')).toHaveAttribute('aria-selected','true');
+  await expect(page.getByTestId('literature-subview-graph')).toHaveCount(0);
+  await expect(page.getByTestId('graph-detail-id')).toHaveText('claim:c-0');
+  await page.getByTestId('graph-neighbour-claim:c-1').click();
+  await expect(page.getByTestId('graph-detail-id')).toHaveText('claim:c-1');
+  await page.evaluate(()=>window.openObject({kind:'concept',claimId:'c-0'}));
+  await expect(page.getByTestId('graph-detail-id')).toHaveText('claim:c-0');
+  await page.getByTestId('literature-return-wiki').click();
+  await expect(page.getByTestId('literature-panel-wiki')).toBeVisible();
+
+  await page.getByTestId('literature-subview-rag').click();
+  await page.getByTestId('rag-query').fill('How does the evidence support this claim?');
+  await page.evaluate(()=>window.openObject({kind:'reader',libraryItemId:'paper',parseId:'parse',locator:'page:1',text:'Evidence and understanding',returnToSearch:true}));
+  await expect(page.getByTestId('reader-title')).toContainText('Understanding');
+  await expect(page.locator('[data-block-id="heading"]')).toHaveAttribute('data-focused','true');
+  await expect(page.getByTestId('reader-jump-missed')).toHaveCount(0);
+  await page.getByTestId('reader-content-area').evaluate(element=>{element.scrollTop=element.scrollHeight;});
+  await page.evaluate(()=>window.openObject({kind:'reader',libraryItemId:'paper',parseId:'parse',locator:'page:1',text:'Evidence and understanding',returnToSearch:true}));
+  await expect.poll(()=>page.getByTestId('reader-content-area').evaluate(element=>element.scrollTop)).toBe(0);
+  await page.getByTestId('literature-return-search').click();
+  await expect(page.getByTestId('literature-hub')).toHaveAttribute('data-workspace','knowledge');
+  await expect(page.getByTestId('rag-query')).toHaveValue('How does the evidence support this claim?');
 });

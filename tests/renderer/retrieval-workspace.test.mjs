@@ -21,8 +21,9 @@ before(async () => {
     const root=createRoot(document.getElementById('root'));
     let session=0;
     window.mount=()=>{
-      window.calls={files:0,jobs:0,sourceJobs:0,search:[],opened:[],selected:[],notes:[],evidence:[],controls:[]};
+      window.calls={files:0,jobs:0,sourceJobs:0,search:[],opened:[],selected:[],notes:[],evidence:[],controls:[],questions:[]};
       window.emptyResults=false;
+      window.holdAssistant=false;
       const status={phase:'idle',generation:2,workspacePath:'/tmp/synthetic-retrieval',error:null,lastScanAt:null,
         counts:{total:2,ready:2,queued:0,running:0,failed:0},
         settings:{projectId:'p1',revision:7,kinds:['markdown'],include:['**/*'],exclude:[],watch:true,paused:false,embeddingConfigId:null}};
@@ -39,15 +40,18 @@ before(async () => {
               content:'The energy relation is $E=mc^2$. '+ 'Evidence from the measured scientific experiment. '.repeat(28),
               locator:'page:2',semantic:null,rrfScore:0.035,keywordRank:1,vectorRank:2},
             {chunkId:'file-hit',documentId:'project-index:file-one',sourceId:'notes/experiment.md',sourceType:'file',
-              title:'Experiment notes',content:'A concise observation.',locator:null,semantic:null,rrfScore:0.02,keywordRank:2,vectorRank:null}
+              title:'Experiment notes',content:'A concise observation.',locator:null,semantic:null,rrfScore:0.02,keywordRank:2,vectorRank:null},
+            {chunkId:'note-hit',documentId:'note:note-one',sourceId:'note-one',sourceType:'note',
+              title:'Knowledge note',content:'A recorded observation.',locator:null,semantic:null,rrfScore:0.01,keywordRank:3,vectorRank:null}
           ],keywordCount:2,vectorCount:1,embeddingModel:null,generatedAt:'2026-11-20T12:00:00.000Z',
           ranking:{schemaVersion:3,ranker:'rrf-v1-k60',candidateLimit:80,route:{intent:'general',documentId:null,diversify:false},
             reranker:{status:'not_requested',model:null,configHash:null,elapsedMs:0},degradation:null,inputHash:'0'.repeat(64),
             projectId:'p1',limit:20,embedding:null,coverage:{keyword:'results',vector:'not_searched'},candidates:[]}
         })};}
       }}};
-      const literature={client,projectId:'p1',status:'ready',items:[{id:'paper-one'}],action:{error:null,pending:false},
+      const literature={client,projectId:'p1',status:'ready',items:[],assistant:{pending:false,error:null,threadId:null},action:{error:null,pending:false},
         select:id=>window.calls.selected.push(id),clearActionError:()=>{},
+        askAssistant:async prompt=>{window.calls.questions.push(prompt);if(window.holdAssistant)await new Promise(resolve=>{window.finishAssistant=resolve;});},
         captureChunkEvidence:async id=>{window.calls.evidence.push(id);return true;},
         saveKnowledgeNote:async input=>{window.calls.notes.push(input);return true;}};
       const scope={client,projectId:'p1',writable:true,workspacePath:'/tmp/synthetic-retrieval',openSettings:()=>{}};
@@ -74,13 +78,17 @@ test('query is primary, management loads on demand and returning keeps search re
   assert.deepEqual(await page.evaluate(()=>[window.calls.files,window.calls.jobs,window.calls.sourceJobs]),[0,0,0]);
   await expect(page.getByTestId('rag-index-panel')).toHaveCount(0);
   await page.getByTestId('rag-search-options').locator('summary').click();
-  await page.getByLabel('排序方式').selectOption('none');
+  await page.getByRole('radio',{name:'关键词与语义融合'}).check();
   await page.getByTestId('rag-search-options').locator('summary').click();
   await page.getByTestId('rag-query').fill('attention energy');
   await page.getByTestId('rag-query').press('Enter');
   await expect(page.getByTestId('rag-hit-paper-hit')).toBeVisible();
   await expect(page.getByTestId('rag-hit-paper-hit').locator('.katex').first()).toBeVisible();
   assert.equal(await page.evaluate(()=>window.calls.search[0].rerank),'none');
+  await page.waitForFunction(()=>window.calls.questions.length===1);
+  assert.match(await page.evaluate(()=>window.calls.questions[0]),/attention energy/);
+  assert.match(await page.evaluate(()=>window.calls.questions[0]),/parse-one/);
+  await expect(page.getByTestId('rag-availability')).toContainText('工作区文件可检索 2 个');
   await page.getByTestId('rag-index-toggle').click();
   await expect(page.getByRole('button',{name:'返回检索'})).toBeFocused();
   await page.waitForFunction(()=>window.calls.files===1&&window.calls.jobs===1&&window.calls.sourceJobs===1);
@@ -94,9 +102,12 @@ test('query is primary, management loads on demand and returning keeps search re
 });
 
 test('source actions preserve parse and locator identity and support both paper and file hits',async()=>{
+  await expect(page.getByTestId('rag-hit-open-note-hit')).toHaveCount(0);
+  await expect(page.getByTestId('rag-hit-note-hit')).toContainText('此来源暂无可定位原文');
   await page.getByTestId('rag-hit-open-paper-hit').click();
   await page.getByTestId('rag-hit-open-file-hit').click();
   const opened=await page.evaluate(()=>window.calls.opened);
+  assert.deepEqual(await page.evaluate(()=>window.calls.selected),[],'reader navigation owns selection atomically');
   assert.equal(opened[0].parseId,'parse-one');
   assert.equal(opened[0].libraryItemId,'paper-one');
   assert.equal(opened[0].locator,'page:2');
@@ -108,6 +119,19 @@ test('source actions preserve parse and locator identity and support both paper 
   await page.getByTestId('rag-hit-save-file-hit').click();
   assert.deepEqual(await page.evaluate(()=>window.calls.evidence),['file-hit']);
   assert.equal(await page.evaluate(()=>window.calls.notes[0].sourceId),'file-hit');
+});
+
+test('question submission stays locked until assistant handoff and preserves evidence for the question',async()=>{
+  await page.evaluate(()=>{window.holdAssistant=true;});
+  await page.getByTestId('rag-query').press('Enter');
+  await page.waitForFunction(()=>window.calls.questions.length===2);
+  await expect(page.getByTestId('rag-ask')).toBeDisabled();
+  await page.getByTestId('rag-query').press('Enter');
+  assert.equal(await page.evaluate(()=>window.calls.questions.length),2);
+  await page.evaluate(()=>{window.finishAssistant();window.holdAssistant=false;});
+  await expect(page.getByTestId('rag-ask')).toBeEnabled();
+  await expect(page.getByTestId('rag-query')).toHaveValue('attention energy');
+  await expect(page.getByTestId('rag-hit-paper-hit')).toBeVisible();
 });
 
 test('search results retain usable space in narrow and wide canvases with both themes',async()=>{

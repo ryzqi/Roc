@@ -106,7 +106,8 @@ export type LiteratureStore = {
   selectedError: string | null;
   reloadSelected: () => void;
   selected: ResearchLibraryItem | null;
-  select: (id: string | null) => void;
+  /** The optional continuation lets the shell accept its route before committing selection. */
+  select: (id: string | null, whenReady?: (commitSelection: () => void) => void) => void;
   action: LiteratureActionState;
   clearActionError: () => void;
   archiveItem: (item: ResearchLibraryItem, archived: boolean) => Promise<boolean>;
@@ -262,14 +263,19 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
   );
   const items = useMemo(() => list.data ?? [], [list.data]);
 
-  const select = useCallback((id: string | null): void => {
+  const select = useCallback((id: string | null, whenReady?: (commitSelection: () => void) => void): void => {
     if (!mounted.current || scopeRef.current !== scope) return;
     const revision = ++selectionRequest.current;
-    if (id === selectedIdRef.current) return;
+    if (id === selectedIdRef.current && whenReady === undefined) return;
     requestReadingChange(projectId ?? '', () => {
       if (!mounted.current || scopeRef.current !== scope || revision !== selectionRequest.current) return;
-      selectedIdRef.current = id;
-      setSelection({projectId, id});
+      const commitSelection = (): void => {
+        if (!mounted.current || scopeRef.current !== scope || revision !== selectionRequest.current) return;
+        selectedIdRef.current = id;
+        setSelection({projectId, id});
+      };
+      if (whenReady) whenReady(commitSelection);
+      else commitSelection();
     });
   }, [projectId, scope]);
 

@@ -49,7 +49,7 @@ before(async () => {
             coverage:{keyword:'no_results',vector:'not_searched'},candidates:[]}
         })};}}}};
       flushSync(()=>root.render(React.createElement(WorkspaceScopeProvider,{value:{client,writable:true}},
-        React.createElement(RagStudio,{literature:{client,projectId:'p1',action:{error:null}},openInFilesView(){},onOpenInReader(){}}))));
+        React.createElement(RagStudio,{literature:{client,projectId:'p1',assistant:{pending:false,error:null,threadId:null},askAssistant:async()=>{},action:{error:null}},openInFilesView(){},onOpenInReader(){}}))));
     };
     window.mountIndexedRag = () => {
       const path='notes/narrow-canvas-review/long-reference-list-and-measured-results-for-the-current-index-generation.md';
@@ -72,7 +72,7 @@ before(async () => {
         controlIndex:async input=>{window.indexLayoutFixture.controls.push(input);return {ok:true,data:status};}
       }}};
       flushSync(()=>root.render(React.createElement(WorkspaceScopeProvider,{value:{client,writable:true}},
-        React.createElement(RagStudio,{literature:{client,projectId:'p1',action:{error:null}},
+        React.createElement(RagStudio,{literature:{client,projectId:'p1',assistant:{pending:false,error:null,threadId:null},askAssistant:async()=>{},action:{error:null}},
           openInFilesView(){},onOpenInReader(){}}))));
     };
     window.mountJobs = () => {
@@ -95,7 +95,7 @@ before(async () => {
           }));
         }
       }}};
-      flushSync(()=>root.render(React.createElement(KnowledgeJobs,{client:jobsClient,projectId:'p1'})));
+      flushSync(()=>root.render(React.createElement(KnowledgeJobs,{key:'held-jobs',client:jobsClient,projectId:'p1'})));
     };
     window.mountStore = () => flushSync(() => root.render(React.createElement(StoreHarness)));
     const root = createRoot(document.getElementById('root'));
@@ -255,7 +255,7 @@ test('source embedding retry admits one synchronous request, retains a refusal a
 test('retrieval exposes optional reranking and sends the selected mode through IPC',async()=>{
   await page.evaluate(()=>window.mountRag());
   await page.getByTestId('rag-search-options').locator('summary').click();
-  await page.getByLabel('排序方式').selectOption('semantic');
+  await page.getByRole('radio',{name:'语义精排',exact:true}).check();
   await page.getByTestId('rag-query').fill('注意力机制');
   await page.getByTestId('rag-search').focus();await page.keyboard.press('Enter');
   await page.waitForFunction(()=>window.searchInput?.rerank==='semantic');

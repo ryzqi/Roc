@@ -363,9 +363,9 @@ try {
     ]) {
       await selectDestination(page, view);
       for (const tab of tabs) {
-        await page.getByTestId(`literature-subview-${tab}`).click();
+        await page.getByTestId(tab === 'graph' ? 'literature-open-graph' : `literature-subview-${tab}`).click();
         await page.getByTestId(`literature-panel-${tab}`).waitFor({state: 'visible'});
-        await assertControlVisible(page.getByTestId('literature-hub-import'));
+        if (view === 'library') await assertControlVisible(page.getByTestId('literature-hub-import'));
         await capture(page, `${view}-${tab}-${viewport.id}`);
       }
     }

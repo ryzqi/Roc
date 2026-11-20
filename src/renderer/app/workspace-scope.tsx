@@ -25,6 +25,18 @@ import type {OpenResearchArtifact, OpenReviewInspector} from '../artifacts/artif
  * separate, which is the same split the shell already makes.
  */
 
+export type LiteratureOpenTarget =
+  | { kind: 'concept'; claimId: string }
+  | { kind: 'reader'; libraryItemId: string | null; parseId?: string | null;
+      locator?: string | null; text?: string | null; returnToSearch?: boolean };
+
+/** One accepted object-opening command, consumed by the retained literature host. */
+export type LiteratureOpenRequest = {
+  projectId: string;
+  nonce: number;
+  target: LiteratureOpenTarget;
+};
+
 export type WorkspaceScope = {
   client: RocClient;
   projectId: string | null;
@@ -57,7 +69,10 @@ export type WorkspaceScope = {
    * how a second writer of the route contract appears. The literature hub's jump to
    * the files view is the remaining caller.
    */
-  openView: (view: AppViewId) => void;
+  openView: (view: AppViewId, onNavigated?: () => void) => void;
+  openLiterature: (target: LiteratureOpenTarget) => void;
+  literatureRequest: LiteratureOpenRequest | null;
+  consumeLiteratureRequest: (nonce: number) => void;
   tool: WorkbenchTool | null;
   openTool: (tool: WorkbenchTool | null) => void;
   openAssistant: () => void;

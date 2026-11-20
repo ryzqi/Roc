@@ -11,12 +11,14 @@ import { formatBeijingDateTime, formatBytes } from '../shared/format';
 import { fileName } from '../workspace/paths';
 import { listTree, previewFile, writeTextFile } from '../workspace/workspace-store';
 import { SourceEditor } from './SourceEditor';
+import { WorkspaceCompilePanel } from './WorkspaceCompilePanel';
 import { InlineHint, primaryButtonClass } from './panel-shell';
 import {LazyBoundary, retryableLazy} from '../shell/LazyBoundary';
 import './authoring.css';
 
 const ScientificMarkdown = retryableLazy(() => import('../literature/ScientificMarkdown'));
 const ReadingFormula = retryableLazy(() => import('../literature/ReadingFormula'));
+const FilePreview = retryableLazy(async () => ({ default: (await import('../canvas/files/FilePreview')).FilePreview }));
 
 /**
  * 文稿 (P7/T7.5) — the workspace LaTeX/BibTeX editor behind the route's `latex` view.
@@ -34,8 +36,8 @@ const ReadingFormula = retryableLazy(() => import('../literature/ReadingFormula'
  *  - **A truncated preview can never be saved.** `filePreviewResult.truncated` means the content
  *    is a prefix; saving it would overwrite the file with a fragment. The editor is read-only in
  *    that case with the reason.
- *  - **There is no compile button here.** Compiling is the template panel's
- *    `research.template.compile`, whose output the export stage consumes.
+ *  - **Compilation snapshots the saved workspace**, through the existing bounded compiler.
+ *    PDF previews reuse the files.preview protocol and retain the editor beside the result.
  */
 
 const EDITABLE_EXTENSIONS = ['.tex', '.bib', '.cls', '.sty', '.bbl', '.txt', '.md', '.json', '.yaml', '.yml', '.csv'];
@@ -59,6 +61,10 @@ export function LatexPanel(): React.JSX.Element {
   const [baseline, setBaseline] = useState<string | null>(null);
   const [pendingLeave, setPendingLeave] = useState<{ proceed: () => void; kind?: 'unload' } | null>(null);
   const savingRef = useRef(false);
+  const compilingRef = useRef(false);
+  const [compiling, setCompiling] = useState(false);
+  const [pdfPreview, setPdfPreview] = useState<string | null>(null);
+  const [focusLine, setFocusLine] = useState<{ line: number; nonce: number } | null>(null);
   const dirtyRef = useRef(false);
   const [fileQuery, setFileQuery] = useState('');
   const [filesOpen, setFilesOpen] = useState(true);
@@ -154,13 +160,22 @@ export function LatexPanel(): React.JSX.Element {
     setRecovery(null);
     setSelectedPath(path);
     setSelectedFormula('');
+    setFocusLine(null);
   }, [save.reset]);
+
+  useEffect(() => {
+    if (selectedPath !== null || entries.length === 0) return;
+    const initial = scope.openFile != null && isEditable(scope.openFile) ? scope.openFile :
+      entries.find(file => file.path === 'main.tex')?.path ?? entries[0]?.path;
+    if (initial !== undefined) selectFile(initial);
+  }, [entries, scope.openFile, selectFile, selectedPath]);
 
   const dirty = draft !== null && baseline !== null && draft !== baseline;
   dirtyRef.current = dirty;
 
   const requestLeave = (proceed: () => void): void => {
     if (savingRef.current) return;
+    if (compilingRef.current) { setNote('编译进行中，请等待完成或先取消编译。'); return; }
     if (dirtyRef.current) setPendingLeave((current) => current ?? { proceed });
     else proceed();
   };
@@ -190,18 +205,19 @@ export function LatexPanel(): React.JSX.Element {
     const guard = (event: Event): void => {
       const request = event as CustomEvent<NavigationRequest>;
       if (request.detail.next.projectId === scope.projectId && request.detail.next.view === 'writing') return;
-      if (!dirtyRef.current && !savingRef.current) return;
-      if (savingRef.current) {
+      if (!dirtyRef.current && !savingRef.current && !compilingRef.current) return;
+      if (savingRef.current || compilingRef.current) {
         event.preventDefault();
+        if (compilingRef.current) setNote('编译进行中，请等待完成或先取消编译。');
         return;
       }
       setPendingLeave({ proceed: request.detail.defer() });
     };
     const beforeUnload = (event: BeforeUnloadEvent): void => {
-      if (!dirtyRef.current && !savingRef.current) return;
+      if (!dirtyRef.current && !savingRef.current && !compilingRef.current) return;
       event.preventDefault();
       event.returnValue = '';
-      if (!savingRef.current) setPendingLeave((current) => current ?? { kind: 'unload', proceed: () => setNote('修改已处理，请重试关闭或刷新窗口。') });
+      if (!savingRef.current && !compilingRef.current) setPendingLeave((current) => current ?? { kind: 'unload', proceed: () => setNote('修改已处理，请重试关闭或刷新窗口。') });
     };
     window.addEventListener(BEFORE_NAVIGATE, guard);
     window.addEventListener('beforeunload', beforeUnload);
@@ -289,6 +305,13 @@ export function LatexPanel(): React.JSX.Element {
         <h1>文稿</h1><span className="text-muted">{entries.length} 个文件</span>
         <button type="button" className="authoring-refresh" onClick={files.reload} disabled={files.status==='loading'}>重新扫描</button>
       </header>
+      {scope.projectId !== null ? <WorkspaceCompilePanel client={scope.client} projectId={scope.projectId} writable={canWrite}
+        files={entries} beforeCompile={() => dirtyRef.current ? saveDraft() : Promise.resolve(true)}
+        onBusyChange={busy => { compilingRef.current = busy; setCompiling(busy); if (busy) setPdfPreview(null); }} onPreview={path => { setPdfPreview(path); setPreviewOpen(false); }}
+        onDiagnostic={(path, line) => requestLeave(() => {
+          if (path !== selectedPath) selectFile(path);
+          setFocusLine({ line: line ?? 1, nonce: Date.now() });
+        })} /> : null}
       <div className="authoring-layout">
 
       <label className="authoring-file-picker">
@@ -296,6 +319,7 @@ export function LatexPanel(): React.JSX.Element {
         <select
           aria-label="选择文稿文件"
           value={selectedPath ?? ""}
+          disabled={compiling || save.pending}
           onChange={(event) => onSelect(event.target.value === "" ? null : event.target.value)}
           className="h-8 min-w-0 flex-1 rounded-control border-[0.5px] border-line bg-surface px-2 text-ink text-[length:var(--font-meta-size)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
         >
@@ -326,6 +350,7 @@ export function LatexPanel(): React.JSX.Element {
                   data-selected={file.path === selectedPath ? 'true' : 'false'}
                   aria-current={file.path === selectedPath ? 'true' : undefined}
                   onClick={() => onSelect(file.path)}
+                  disabled={compiling || save.pending}
                   className={[
                     'flex w-full min-w-0 flex-col items-start rounded-control px-2 py-1 text-left',
                     'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent',
@@ -359,7 +384,7 @@ export function LatexPanel(): React.JSX.Element {
               <h2 className="min-w-0 flex-1 truncate text-[length:var(--font-ui-size)] font-medium" title={selectedPath}>{fileName(selectedPath)}</h2>
               {isText ? <span role="status" data-testid="latex-dirty-indicator" className="text-muted text-[length:var(--font-meta-size)]">{dirty ? '未保存' : canWrite && !isTruncated ? '已保存' : '只读'}</span> : null}
               {isText&&(markdownPreview||mathPreview)?<button type="button" aria-pressed={previewOpen} onClick={()=>setPreviewOpen(value=>!value)} data-testid="latex-toggle-preview">{markdownPreview?'实时预览':'公式预览'}</button>:null}
-              <button type="button" disabled={save.pending} data-testid="production-latex-reload"
+              <button type="button" disabled={save.pending || compiling} data-testid="production-latex-reload"
                 onClick={() => requestLeave(() => {
                   loadedPathRef.current = null;
                   setDraft(baseline);
@@ -369,8 +394,8 @@ export function LatexPanel(): React.JSX.Element {
                 className="rounded-control px-2 py-1 text-muted hover:bg-[var(--overlay-hover)] disabled:opacity-50">
                 重新读取
               </button>
-              <button type="button" data-testid="production-latex-save" disabled={!canEdit || save.pending || !dirty}
-                onClick={() => void saveDraft()} className={primaryButtonClass} title="保存 (⌘S)">
+              <button type="button" data-testid="production-latex-save" disabled={!canEdit || save.pending || compiling || !dirty}
+                onClick={() => void saveDraft()} className="authoring-secondary" title="保存 (⌘S)">
                 {save.pending ? <Loader2 size={14} aria-hidden="true" className="mr-1 inline animate-spin motion-reduce:animate-none" /> :
                   <Save size={14} aria-hidden="true" className="mr-1 inline" />}{save.pending ? '保存中…' : '保存'}
               </button>
@@ -392,10 +417,13 @@ export function LatexPanel(): React.JSX.Element {
             ) : null}
             {isText ? (
               <>
-                <div className="authoring-editor-layout" data-preview-open={previewOpen&&(markdownPreview||mathPreview)}>
-                  <div className="authoring-source"><SourceEditor key={selectedPath} value={draft ?? previewData.content} readOnly={!canEdit || save.pending}
+                <div className="authoring-editor-layout" data-preview-open={pdfPreview !== null || previewOpen&&(markdownPreview||mathPreview)}>
+                  <div className="authoring-source"><SourceEditor key={selectedPath} value={draft ?? previewData.content} readOnly={!canEdit || save.pending || compiling} focusLine={focusLine}
                     onSelectionChange={setSelectedFormula} onChange={(value) => { setDraft(value); setNote(null); setRecovery(null); }} /></div>
-                  {previewOpen&&(markdownPreview||mathPreview)?<section className="authoring-live-preview" aria-label={markdownPreview?'Markdown 实时预览':'所选公式预览'}>
+                  {pdfPreview !== null ? <section className="authoring-live-preview" aria-label="编译 PDF 预览">
+                    <LazyBoundary fallback={<p role="status">正在打开 PDF…</p>}><FilePreview client={scope.client} projectId={scope.projectId}
+                      workspacePath={scope.workspacePath} relativePath={pdfPreview} writable={canWrite} onClose={() => setPdfPreview(null)} /></LazyBoundary>
+                  </section> : previewOpen&&(markdownPreview||mathPreview)?<section className="authoring-live-preview" aria-label={markdownPreview?'Markdown 实时预览':'所选公式预览'}>
                     <header>{markdownPreview?'实时预览':'所选公式预览'}</header>
                     <div className="authoring-preview-content"><LazyBoundary fallback={<p role="status">正在加载预览…</p>}>
                       {markdownPreview?<ScientificMarkdown text={liveDraft}/>:selectedFormula.trim()?<ReadingFormula text={selectedFormula.trim().replace(/^\\[[(]|\\[)\]]$/g,'')}/>:<p className="text-muted">在源码中选中一段 LaTeX 公式，即可查看渲染结果。</p>}
@@ -404,7 +432,7 @@ export function LatexPanel(): React.JSX.Element {
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-2 border-t-[0.5px] border-line px-3 py-1.5">
                   <span className="text-subtle text-[length:var(--font-meta-size)]" role="status" data-testid="production-latex-state">
-                    {canEdit ? (dirty ? '有未保存的修改' : '与磁盘一致') : '只读'}　{formatBytes(previewData.sizeBytes)}
+                    {canEdit ? (dirty ? '有未保存的修改' : '与磁盘一致') : '只读'}　{formatBytes(entries.find(file => file.path === selectedPath)?.sizeBytes ?? previewData.sizeBytes)}
                   </span>
                   {canWrite ? null : (
                     <span className="text-[var(--st-warn)] text-[length:var(--font-meta-size)]" data-testid="production-latex-readonly">

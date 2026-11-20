@@ -20,15 +20,23 @@ test('literature searches release obsolete results and reload revisited queries'
       import {SWRConfig, useSWRConfig} from 'swr';
       import {APP_SWR_CONFIG} from './src/renderer/app/swr-config';
       import {useLiteratureStore} from './src/renderer/literature/use-literature-store';
+      import {useAppRoute} from './src/renderer/app/use-app-route';
       const root = createRoot(document.getElementById('root'));
       const client = {api: {research: {
         listLibrary: async ({query}) => { window.libraryRequests = (window.libraryRequests ?? 0) + 1; return ({ok: true, data: Array.from({length:200}, (_,n) =>
           ({id:query+':'+n, title:query, abstract:'x'.repeat(4096)}))}); },
         wikiSnapshot: async () => ({ok:true, data:{sources:[]}}),
+        listDocuments: async () => ({ok:true, data:[]}),
         onLibraryChanged: () => () => {}
       }}};
       function CacheCapture() {window.auditCache = useSWRConfig().cache; return null;}
-      function Store({projectId}) {window.auditStore = useLiteratureStore(client, projectId); return null;}
+      function Store({projectId}) {
+        window.auditStore = useLiteratureStore(client, projectId);
+        const {route,navigate}=useAppRoute();
+        window.openGuardedPaper=id=>window.auditStore.select(id,commitSelection=>navigate({...route,projectId,view:'library'},
+          {onNavigated:()=>{commitSelection();window.objectOpened=true;}}));
+        return null;
+      }
       window.mount = (projectId, visible = true) => flushSync(() => root.render(
         React.createElement(SWRConfig, {value:APP_SWR_CONFIG}, React.createElement(CacheCapture),
           visible ? React.createElement(Store, {projectId}) : null)));
@@ -66,6 +74,18 @@ test('literature searches release obsolete results and reload revisited queries'
     await page.evaluate(()=>window.auditStore.setQuery('query-0'));
     await page.waitForFunction(()=>window.auditStore.status === 'ready' && window.auditStore.items[0]?.title === 'query-0');
     assert.equal(await page.evaluate(()=>window.libraryRequests), 23, 'revisited query must read current data');
+    for(const eventName of ['roc:before-reading-change','roc:before-navigate']) {
+      const blocked=await page.evaluate(eventName=>{
+        const veto=event=>event.preventDefault();
+        window.addEventListener(eventName,veto);
+        window.openGuardedPaper('query-0:0');
+        window.removeEventListener(eventName,veto);
+        return {selected:window.auditStore.selectedId,opened:window.objectOpened??false};
+      },eventName);
+      assert.deepEqual(blocked,{selected:null,opened:false},eventName+' must preserve both the selection and object target');
+    }
+    await page.evaluate(()=>window.openGuardedPaper('query-0:0'));
+    await page.waitForFunction(()=>window.auditStore.selectedId==='query-0:0' && window.objectOpened);
     assert.deepEqual(errors,[]);
 
   } finally {

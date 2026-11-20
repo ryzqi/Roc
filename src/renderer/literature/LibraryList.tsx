@@ -31,7 +31,7 @@ import type {LiteratureStore} from './use-literature-store';
 export type LibraryListProps = {
   /** Tight rows/spacing for the 256px sidebar. */
   compact?: boolean;
-  /** The sidebar uses this to open the item in the canvas hub. */
+  /** Owns guarded selection and any navigation; without it the list selects directly. */
   onOpenItem?: (id: string) => void;
   onRequestImport: () => void;
 };
@@ -193,8 +193,8 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
                 <button
                   type="button"
                   onClick={() => {
-                    literature.select(item.id);
-                    onOpenItem?.(item.id);
+                    if (onOpenItem) onOpenItem(item.id);
+                    else literature.select(item.id);
                   }}
                   aria-current={selected ? 'true' : undefined}
                   data-testid={`literature-row-${item.id}`}

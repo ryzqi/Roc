@@ -31,11 +31,12 @@ const sourceTheme = EditorView.theme({
 });
 
 /** CodeMirror owns selection, undo, IME and search; React owns saved/draft text. */
-export function SourceEditor({ value, readOnly, onChange, onSelectionChange }: {
+export function SourceEditor({ value, readOnly, onChange, onSelectionChange, focusLine }: {
   value: string;
   readOnly: boolean;
   onChange: (value: string) => void;
   onSelectionChange?: (selection: string) => void;
+  focusLine?: { line: number; nonce: number } | null;
 }): React.JSX.Element {
   const { preferences } = useContentPreferences();
   const host = useRef<HTMLDivElement>(null);
@@ -82,6 +83,14 @@ export function SourceEditor({ value, readOnly, onChange, onSelectionChange }: {
   useEffect(() => {
     view.current?.dispatch({ effects: readOnlyConfig.current.reconfigure(EditorState.readOnly.of(readOnly)) });
   }, [readOnly]);
+
+  useEffect(() => {
+    const editor = view.current;
+    if (editor === null || focusLine == null) return;
+    const line = editor.state.doc.line(Math.max(1, Math.min(focusLine.line, editor.state.doc.lines)));
+    editor.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: 'center' }) });
+    editor.focus();
+  }, [focusLine]);
 
   useEffect(() => { view.current?.requestMeasure(); }, [preferences.codeSize]);
 

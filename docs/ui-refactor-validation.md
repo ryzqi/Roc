@@ -27,3 +27,15 @@ macOS 27.2.1 arm64，Electron 45，基线提交 `dd7511a`。隔离数据根启�
 发现页默认搜索，来源部分失败保留结果，批量收录展示后端原始分项回执。导入四入口、六能力；阅读器与后台处理展示五阶段，解析不推断索引，缺记录明确待核验。列表增加当前结果排序与批量引用导出。
 
 仓库根 `pnpm typecheck`、设计规则审计通过。`node --test tests/unit/literature-pipeline-state.test.mjs` 5/5；发现 Electron 回归 1/1；导入状态与编辑保护 12/12；阅读与后台处理 20 项均通过（修正旧文案断言后单独复跑失败项）；文献列表与复制动作测试通过。外部搜索和下载未以 fixture 冒充验收。
+
+## P4 知识与写作
+
+提问先检索真实证据，再通过现有助手通路生成答案；知识画布保留检索上下文。问答与知识页是二级入口，关系图从知识页进入。文献/概念跳转携带稳定对象与定位信息，阅读及路由守卫放行后才提交选择。
+
+写作新增工作区编译、取消与原生导出，复用离线 Tectonic、工作区路径校验和资源预算。编译先保存草稿，PDF 使用既有预览协议；只保留 PDF 成果，任务快照与日志在结束后清理。
+
+仓库根 `pnpm build`、`pnpm check:ipc`、设计规则审计通过；`pnpm check:renderer-chunks` 为 486244 bytes / 10 eager files。`node --test tests/renderer/retrieval-workspace.test.mjs` 5/5；`node --test --test-name-pattern='RAG' tests/renderer/desktop-action-guards.test.mjs` 2/2。问答 1100/420px、索引 1100/380px 浅深主题均 `clip.cut=0`，截图检查后删除。
+
+`ROC_WORKSPACE_LATEX_TOOLCHAIN=.runtime/research-toolchain/darwin-arm64 node --test tests/unit/research-workspace-latex.test.mjs` 4/4：含本机真实离线编译，验证有效 PDF、保存内容快照、失败/取消清理及越界/归档/符号链接拒绝。知识问答的模型回答仍需真实模型配置后的 T2 任务验收，不将受控 IPC 测试计为模型质量结果。
+
+`node --test tests/renderer/authoring-tools-layout.test.mjs` 6/6，含保存→编译、构建问题行定位、PDF 预览、导出取消和取消等待回执；浅深色 440/820/1200px 均 `clip.cut=0`。原生另存对话框未手工操作，受控 IPC 只证明界面正确处理成功/取消回执。`node --test --test-concurrency=1 tests/renderer/literature-workspace-layout.test.mjs tests/renderer/literature-retention.test.mjs` 相关 4 项通过（旧 fixture 补齐 `updatedAt` 后复跑）：覆盖双守卫、笔记页跳阅读器、重复概念/证据定位、查询保留。

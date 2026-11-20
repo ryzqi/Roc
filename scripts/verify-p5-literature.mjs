@@ -745,7 +745,7 @@ try {
   assertCheck('4 空数据', '空项目的主张与证据显示空态（没有示意概念页）', wikiEmpty && wikiViewCount === 0, `empty=${wikiEmpty} view=${wikiViewCount}`);
   const wikiText = (await page.textContent('[data-testid="wiki-empty"]')) ?? '';
   assertCheck('4 空数据', '主张投影明确显示尚无概念页', wikiText.includes('尚无概念页'), wikiText.trim().slice(0, 60));
-  await page.click('[data-testid="literature-subview-graph"]');
+  await page.click('[data-testid="literature-open-graph"]');
   const graphEmpty = await appears(page, '[data-testid="graph-empty"]', 30_000);
   const graphCount = await page.locator('[data-testid="knowledge-graph"]').count();
   assertCheck('4 空数据', '空项目的图谱显示空态（不画力导向示意图）', graphEmpty && graphCount === 0, `empty=${graphEmpty} graph=${graphCount}`);

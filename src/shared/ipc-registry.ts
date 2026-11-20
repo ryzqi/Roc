@@ -302,6 +302,8 @@ import {
   researchWorkflowTransitionRequestSchema
 } from './schemas/research';
 import {
+  workspaceLatexCompileRequestSchema, workspaceLatexCompileResultSchema, workspaceLatexCancelRequestSchema,
+  workspaceLatexCancelResultSchema, workspaceLatexExportRequestSchema, workspaceLatexExportResultSchema,
   researchTemplateEntryRequestSchema, researchTemplateFileContentSchema, researchTemplateFileRequestSchema,
   researchTemplateFileSaveRequestSchema, researchTemplateFileSchema, researchTemplateListRequestSchema,
   researchToolchainStatusSchema, researchModelsStatusSchema,
@@ -838,6 +840,9 @@ export const ipcRegistry = {
     request({ key: 'researchProvenanceAdd', channel: 'roc:research:provenance-add', domain: 'research', method: 'addProvenance', kind: 'plugin', capabilityName: 'research.provenance.add', inputTransform: first, contract: methodContract(oneArg(researchProvenanceCreateRequestSchema), researchProvenanceSchema) }),
     request({ key: 'researchProvenanceList', channel: 'roc:research:provenance-list', domain: 'research', method: 'listProvenance', kind: 'plugin', capabilityName: 'research.provenance.list', inputTransform: first, contract: methodContract(oneArg(researchProvenanceListRequestSchema), researchProvenanceSchema.array()) }),
     request({ key: 'researchTemplateImport', channel: 'roc:research:template-import', domain: 'research', method: 'importTemplate', kind: 'plugin', capabilityName: 'research.template.import', inputTransform: first, contract: methodContract(oneArg(researchTemplateImportRequestSchema), researchTemplateSchema) }),
+    request({ key: 'researchWorkspaceLatexCompile', channel: 'roc:research:workspace-latex-compile', domain: 'research', method: 'compileWorkspaceLatex', kind: 'plugin', capabilityName: 'research.workspace.compileLatex', inputTransform: first, contract: methodContract(oneArg(workspaceLatexCompileRequestSchema), workspaceLatexCompileResultSchema) }),
+    request({ key: 'researchWorkspaceLatexCancel', channel: 'roc:research:workspace-latex-cancel', domain: 'research', method: 'cancelWorkspaceLatex', kind: 'plugin', capabilityName: 'research.workspace.cancelLatex', inputTransform: first, contract: methodContract(oneArg(workspaceLatexCancelRequestSchema), workspaceLatexCancelResultSchema) }),
+    request({ key: 'researchWorkspaceLatexExport', channel: 'roc:research:workspace-latex-export', domain: 'research', method: 'exportWorkspaceLatex', kind: 'plugin', capabilityName: 'research.workspace.exportLatex', inputTransform: first, contract: methodContract(oneArg(workspaceLatexExportRequestSchema), workspaceLatexExportResultSchema) }),
     request({ key: 'researchTemplateCompile', channel: 'roc:research:template-compile', domain: 'research', method: 'compileTemplate', kind: 'plugin', capabilityName: 'research.template.compile', inputTransform: first, contract: methodContract(oneArg(researchTemplateCompileRequestSchema), researchTemplateSchema) }),
     request({ key: 'researchToolchainStatus', channel: 'roc:research:toolchain-status', domain: 'research', method: 'getToolchainStatus', kind: 'plugin', capabilityName: 'research.toolchain.status', inputTransform: none, contract: methodContract(noArgs, researchToolchainStatusSchema) }),
     request({ key: 'researchProseLint', channel: 'roc:research:prose-lint', domain: 'research', method: 'lintManuscript', kind: 'plugin', capabilityName: 'research.prose.lint', inputTransform: first, contract: methodContract(oneArg(researchProseLintRequestSchema), researchProseLintReportSchema) }),

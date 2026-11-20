@@ -3,10 +3,10 @@ import { link, lstat, mkdtemp, open, rename, rm, unlink, writeFile } from 'node:
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { z } from 'zod';
 import type { ResearchTemplate, ResearchTemplateCompileRequest, ResearchTemplateImportRequest } from '../../../shared/types';
-import type { researchTemplateEntryRequestSchema, researchTemplateFileContentSchema, researchTemplateFileRequestSchema, researchTemplateFileSaveRequestSchema } from '../../../shared/schemas/research-production';
+import type { WorkspaceLatexCompileRequest, WorkspaceLatexCompileResult, WorkspaceLatexExportRequest, researchTemplateEntryRequestSchema, researchTemplateFileContentSchema, researchTemplateFileRequestSchema, researchTemplateFileSaveRequestSchema } from '../../../shared/schemas/research-production';
 import { compileLatex, discoverLatexEntry } from './latex-service';
 import { ResearchProcessError } from './process-runner';
-import { createResearchDirectory, readResearchFile, researchAbsolutePath, researchContentHash, researchWorkspace } from './research-files';
+import { createResearchDirectory, readResearchFile, researchAbsolutePath, researchContentHash, researchPath, researchWorkspace } from './research-files';
 import { copyTemplateFiles, editableTemplateExtensions, listTemplateFiles, requireTemplateRoot, templateDigest, type TemplateFile } from './template-files';
 import type { ResearchRepository } from './repository';
 import type { ResearchToolchain } from './toolchain';
@@ -18,7 +18,8 @@ export class ResearchTemplateService {
   private readonly operations = new Map<string, Promise<unknown>>();
   private readonly active = new Map<string, { runId: string; controller: AbortController; ownerRunId: string | null }>();
   private readonly imports = new Set<AbortController>();
-  private readonly completions = new Set<Promise<ResearchTemplate>>();
+  private readonly completions = new Set<Promise<unknown>>();
+  private readonly workspaceCompiles = new Map<string, { controller: AbortController; completion: Promise<WorkspaceLatexCompileResult> }>();
   private closed = false;
 
   constructor(
@@ -77,6 +78,65 @@ export class ResearchTemplateService {
         this.onPathStructureChanged?.(workspacePath, 'research.template-import-finished');
       }
     }
+  }
+
+  async compileWorkspace(request: WorkspaceLatexCompileRequest): Promise<WorkspaceLatexCompileResult> {
+    this.requireOpen();
+    const key = JSON.stringify([request.projectId, request.requestId]);
+    const existing = this.workspaceCompiles.get(key);
+    if (existing !== undefined) return existing.completion;
+    const controller = new AbortController();
+    const completion = this.compileWorkspaceFiles(request, controller.signal);
+    this.workspaceCompiles.set(key, { controller, completion });
+    this.completions.add(completion);
+    try { return await completion; }
+    finally { this.workspaceCompiles.delete(key); this.completions.delete(completion); }
+  }
+
+  cancelWorkspace(request: Pick<WorkspaceLatexCompileRequest, 'projectId' | 'requestId'>): { requested: boolean } {
+    const active = this.workspaceCompiles.get(JSON.stringify([request.projectId, request.requestId]));
+    active?.controller.abort();
+    return { requested: active !== undefined };
+  }
+
+  private async compileWorkspaceFiles(request: WorkspaceLatexCompileRequest, signal: AbortSignal): Promise<WorkspaceLatexCompileResult> {
+    const { root, workspacePath } = await this.workspace(request.projectId, true);
+    await researchPath(root, request.entryPath);
+    if (extname(request.entryPath).toLowerCase() !== '.tex') throw new Error('latex_workspace_entry_invalid');
+    const job = await this.job(root);
+    try {
+      const files = await listTemplateFiles(root);
+      const source = join(job, 'source');
+      signal.throwIfAborted();
+      await copyTemplateFiles(root, source, files);
+      const result = await compileLatex({ rootPath: source, entryPath: request.entryPath, outputDir: join(job, 'output'), jobDir: job, signal,
+        runner: input => this.tools.compile({ ...input, admission: { projectId: request.projectId, priority: 'user' } }) });
+      signal.throwIfAborted();
+      if ((await this.workspace(request.projectId, true)).root !== root) throw new Error('research_project_workspace_changed');
+      if (result.status !== 'ready' || result.pdfPath === null) return { requestId: request.requestId, entryPath: request.entryPath,
+        status: 'failed', outputPath: null, pdfHash: null, diagnostics: result.diagnostics };
+      const bytes = await readResearchFile(job, relative(job, result.pdfPath), 64 * 1024 * 1024);
+      await createResearchDirectory(root, '.roc-build/latex');
+      const outputPath = `.roc-build/latex/${request.requestId}.pdf`;
+      await writeFile(researchAbsolutePath(root, outputPath), bytes, { flag: 'wx', mode: 0o600 });
+      return { requestId: request.requestId, entryPath: request.entryPath, status: 'ready', outputPath,
+        pdfHash: result.pdfHash, diagnostics: result.diagnostics };
+    } catch (error) {
+      return { requestId: request.requestId, entryPath: request.entryPath, status: signal.aborted ? 'cancelled' : 'failed',
+        outputPath: null, pdfHash: null, diagnostics: [{ severity: signal.aborted ? 'info' : 'error', file: null, line: null,
+          message: signal.aborted ? '编译已取消。' : error instanceof Error ? error.message : String(error) }] };
+    } finally {
+      await rm(job, { recursive: true, force: true });
+      this.onPathStructureChanged?.(workspacePath, 'research.workspace-compile-finished');
+    }
+  }
+
+  async workspacePdf(request: WorkspaceLatexExportRequest): Promise<Buffer> {
+    const { root } = await this.workspace(request.projectId, false);
+    if (!/^\.roc-build\/latex\/[a-f0-9-]+\.pdf$/u.test(request.outputPath)) throw new Error('latex_workspace_output_invalid');
+    const bytes = await readResearchFile(root, request.outputPath, 64 * 1024 * 1024);
+    if (researchContentHash(bytes) !== request.pdfHash) throw new Error('latex_workspace_pdf_changed');
+    return bytes;
   }
 
   list(projectId: string): ResearchTemplate[] { return this.repository.listTemplates(projectId); }
@@ -232,6 +292,7 @@ export class ResearchTemplateService {
 
   async shutdown(): Promise<void> {
     this.closed = true;
+    for (const { controller } of this.workspaceCompiles.values()) controller.abort();
     for (const controller of this.imports) controller.abort();
     for (const { controller } of this.active.values()) controller.abort();
     await Promise.allSettled([...this.operations.values()]);
