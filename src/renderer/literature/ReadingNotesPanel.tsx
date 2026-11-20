@@ -87,40 +87,62 @@ export default function ReadingNotesPanel({client,projectId,items,writable,itemI
     if(note)open(note);else create(title);
   };
   const backlinks=(list.data??[]).filter(note=>!note.archived && note.id!==draft?.id && note.links.some(title=>title.toLocaleLowerCase()===draft?.title.toLocaleLowerCase()));
-  return <section className="reading-notes flex h-full min-h-0 flex-col" data-testid="notes-panel" aria-label="阅读笔记"
+  const visibleNotes=(list.data??[]).filter(note=>(archived||!note.archived)&&(!itemId||note.itemId===itemId)&&`${note.title} ${note.markdown}`.toLocaleLowerCase().includes(filter.toLocaleLowerCase()));
+  return <section className="reading-notes" data-testid="notes-panel" aria-label="阅读笔记"
     onKeyDown={event=>{if((event.metaKey||event.ctrlKey)&&event.key==='s'&&!event.nativeEvent.isComposing){event.preventDefault();void save();}}}>
-    <div className="reading-toolbar">
-      <NotebookPen size={15}/><span className="font-medium">阅读笔记</span>
-      <button type="button" disabled={!writable || dirty || pending} onClick={()=>create()} data-testid="notes-create"><FilePlus2 size={13}/>新建</button>
-      <input aria-label="搜索笔记" placeholder="搜索标题或正文" value={filter} onChange={event=>setFilter(event.target.value)}/>
-      <label><input type="checkbox" checked={archived} onChange={event=>setArchived(event.target.checked)}/>含归档</label>
-    </div>
+    <header className="reading-toolbar reading-notes-header">
+      <NotebookPen size={15} aria-hidden="true"/><h2>阅读笔记</h2>
+      <span className="text-muted">{visibleNotes.length} 篇</span>
+      <button type="button" disabled={!writable || dirty || pending} onClick={()=>create()} data-testid="notes-create"><FilePlus2 size={13} aria-hidden="true"/>新建</button>
+    </header>
     {list.error?<p role="alert" className="p-2">{list.error}<button type="button" onClick={list.reload}>重试</button></p>:null}
-    <div className="reading-toolbar">
-      <select aria-label="选择笔记" value={draft?.id??''} disabled={dirty||pending} onChange={event=>{const note=list.data?.find(note=>note.id===event.target.value);if(note)open(note);}}>
-        <option value="">选择笔记</option>{(list.data??[]).filter(note=>(archived||!note.archived)&&(!itemId||note.itemId===itemId)&&`${note.title} ${note.markdown}`.toLocaleLowerCase().includes(filter.toLocaleLowerCase()))
-          .map(note=><option key={note.id} value={note.id}>{note.archived?'[归档] ':''}{note.title}</option>)}
-      </select>
-      <span role="status" className="text-muted">{operation==='export'?'导出中…':operation==='reload'?'重读中…':busy?'保存中…':conflict?'保存未完成':dirty?'未保存':draft?'已保存':list.status==='loading'?'读取笔记…':'未选择笔记'}</span>
-      {draft?<button type="button" disabled={!writable||pending||!draft.title.trim()} onClick={()=>void save()} data-testid="notes-save">保存 ⌘S</button>:null}
-    </div>
-    {error||exportNote.error||reread.error?<p role="alert" className="p-2 text-[var(--st-warn)]">{error??exportNote.error??reread.error}</p>:null}
-    {!draft?<div className="m-auto p-6 text-center text-muted">选择笔记，或创建与当前论文关联的笔记。</div>:<>
-      <div className="reading-toolbar">
-        <input aria-label="笔记标题" value={draft.title} maxLength={200} disabled={!writable||draft.archived||operation==='reload'} onChange={event=>setDraft({...draft,title:event.target.value})}/>
-        <select aria-label="关联文献" value={draft.itemId??''} disabled={!writable||draft.archived||operation==='reload'} onChange={event=>setDraft({...draft,itemId:event.target.value||null})}>
-          <option value="">独立笔记</option>{items.map(item=><option key={item.id} value={item.id}>{item.metadata.title}</option>)}
+    <div className="reading-notes-workspace">
+      <aside className="reading-notes-index" aria-label="笔记列表">
+        <div className="reading-notes-search">
+          <input aria-label="搜索笔记" placeholder="搜索笔记" value={filter} onChange={event=>setFilter(event.target.value)}/>
+          <label><input type="checkbox" checked={archived} onChange={event=>setArchived(event.target.checked)}/>含归档</label>
+        </div>
+        <select className="reading-notes-picker" aria-label="选择笔记" value={draft?.id??''} disabled={dirty||pending} onChange={event=>{const note=list.data?.find(note=>note.id===event.target.value);if(note)open(note);}}>
+          <option value="">选择笔记</option>{visibleNotes.map(note=><option key={note.id} value={note.id}>{note.archived?'[归档] ':''}{note.title}</option>)}
         </select>
-        <button type="button" disabled={dirty||pending||!baseline} onClick={()=>void exportStoredNote()}>导出 .md</button>
-        <button type="button" disabled={!writable||pending} onClick={()=>setDraft({...draft,archived:!draft.archived})}>{draft.archived?'恢复笔记':'归档笔记'}</button>
-        {conflict?<button type="button" disabled={pending} onClick={()=>setDiscardOpen(true)}>放弃草稿并重读</button>:null}
-        {conflict?<button type="button" disabled={pending} onClick={()=>{setBaseline(null);setDraft({...draft,id:crypto.randomUUID(),title:`${draft.title}（副本）`});setConflict(false);}}>将草稿另存为副本</button>:null}
+        <ul className="reading-notes-list">
+          {visibleNotes.map(note=><li key={note.id}><button type="button" disabled={dirty||pending} aria-current={draft?.id===note.id?'true':undefined} onClick={()=>open(note)}>
+            <strong>{note.title}</strong>
+            <span className="reading-note-excerpt">{note.markdown.replace(/[#*`$>]/g,'').trim().slice(0,140)||'空白笔记'}</span>
+            <small>{note.archived?'已归档':note.itemId?'文献笔记':'独立笔记'}</small>
+          </button></li>)}
+          {list.status==='ready'&&visibleNotes.length===0?<li className="reading-notes-no-results">{filter?'没有匹配的笔记':'尚无笔记'}</li>:null}
+        </ul>
+      </aside>
+      <div className="reading-note-detail">
+        <div className="reading-toolbar reading-note-savebar">
+          <span role="status" className="text-muted">{operation==='export'?'导出中…':operation==='reload'?'重读中…':busy?'保存中…':conflict?'保存未完成':dirty?'未保存':draft?'已保存':list.status==='loading'?'读取笔记…':'未选择笔记'}</span>
+          {draft?<button type="button" disabled={!writable||pending||!draft.title.trim()} onClick={()=>void save()} data-testid="notes-save">保存 ⌘S</button>:null}
+        </div>
+        {error||exportNote.error||reread.error?<p role="alert" className="p-2 text-[var(--st-warn)]">{error??exportNote.error??reread.error}</p>:null}
+        {!draft?<div className="reading-notes-empty"><NotebookPen size={28} aria-hidden="true"/><h3>记录阅读中的发现</h3><p>选择一篇笔记，或新建笔记。</p></div>:<>
+          <input className="reading-note-title" aria-label="笔记标题" value={draft.title} maxLength={200} disabled={!writable||draft.archived||operation==='reload'} onChange={event=>setDraft({...draft,title:event.target.value})}/>
+          <details className="reading-disclosure reading-note-options">
+            <summary data-testid="notes-options">笔记信息</summary>
+            <div className="reading-toolbar">
+              <label>关联文献 <select aria-label="关联文献" value={draft.itemId??''} disabled={!writable||draft.archived||operation==='reload'} onChange={event=>setDraft({...draft,itemId:event.target.value||null})}>
+                <option value="">独立笔记</option>{items.map(item=><option key={item.id} value={item.id}>{item.metadata.title}</option>)}
+              </select></label>
+              <button type="button" disabled={dirty||pending||!baseline} onClick={()=>void exportStoredNote()}>导出 .md</button>
+              <button type="button" disabled={!writable||pending} onClick={()=>setDraft({...draft,archived:!draft.archived})}>{draft.archived?'恢复笔记':'归档笔记'}</button>
+            </div>
+          </details>
+          {conflict?<div className="reading-toolbar">
+            <button type="button" disabled={pending} onClick={()=>setDiscardOpen(true)}>放弃草稿并重读</button>
+            <button type="button" disabled={pending} onClick={()=>{setBaseline(null);setDraft({...draft,id:crypto.randomUUID(),title:`${draft.title}（副本）`});setConflict(false);}}>将草稿另存为副本</button>
+          </div>:null}
+          <ReadingNoteEditor key={`${draft.id}:${session}:${draft.archived}`} markdown={draft.markdown} editable={writable&&!draft.archived&&operation!=='reload'}
+            titles={(list.data??[]).filter(note=>!note.archived&&note.id!==draft.id).map(note=>note.title)}
+            onChange={markdown=>setDraft(current=>current?{...current,markdown}:current)} onLink={link}/>
+          {backlinks.length?<details className="reading-disclosure reading-note-backlinks"><summary><Link2 size={13} aria-hidden="true"/>反向链接 {backlinks.length}</summary><div className="reading-toolbar">{backlinks.map(note=><button type="button" key={note.id} disabled={dirty||pending} onClick={()=>open(note)}>{note.title}</button>)}</div></details>:null}
+        </>}
       </div>
-      <ReadingNoteEditor key={`${draft.id}:${session}:${draft.archived}`} markdown={draft.markdown} editable={writable&&!draft.archived&&operation!=='reload'}
-        titles={(list.data??[]).filter(note=>!note.archived&&note.id!==draft.id).map(note=>note.title)}
-        onChange={markdown=>setDraft(current=>current?{...current,markdown}:current)} onLink={link}/>
-      <div className="reading-toolbar"><Link2 size={13}/><span>反向链接 {backlinks.length}</span>{backlinks.map(note=><button type="button" key={note.id} disabled={dirty||pending} onClick={()=>open(note)}>{note.title}</button>)}</div>
-    </>}
+    </div>
     <ConfirmDialog open={discardOpen} title="重读当前笔记" message="放弃未保存的草稿并载入已保存版本。重读成功后无法恢复这份草稿。"
       confirmLabel="放弃草稿并重读" tone="destructive" confirmDisabled={pending} testId="notes-discard-dialog"
       onCancel={()=>setDiscardOpen(false)} onConfirm={()=>void reloadStoredNote()}/>

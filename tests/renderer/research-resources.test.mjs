@@ -135,6 +135,7 @@ async function mount(f, overrides = {}) {
   await page.getByTestId('reader-title').waitFor();
 }
 async function open() {
+  if (!await page.getByTestId('reader-tools-disclosure').evaluate(node => node.parentElement.open)) await page.getByTestId('reader-tools-disclosure').click();
   await page.getByTestId('reader-resources-toggle').click(); await page.getByTestId('reader-resources-panel').waitFor();
 }
 async function capture() {

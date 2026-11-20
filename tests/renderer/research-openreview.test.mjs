@@ -118,7 +118,8 @@ async function scene() {
 }
 const state = (f, changes = {}) => ({projectId: f.project.id, selected: f.item, writable: true, ...changes});
 async function mount(f, changes = {}) {active = f; await page.evaluate(value => window.mountReader(value), state(f, changes));}
-async function open() {await page.getByTestId('reader-openreview-toggle').click(); await page.getByTestId('reader-openreview-panel').waitFor();}
+async function open() {
+  if (!await page.getByTestId('reader-tools-disclosure').evaluate(node => node.parentElement.open)) await page.getByTestId('reader-tools-disclosure').click();await page.getByTestId('reader-openreview-toggle').click(); await page.getByTestId('reader-openreview-panel').waitFor();}
 async function query(kind = 'note', target = 'Paper1') {
   await page.getByRole('combobox', {name: '查询范围'}).selectOption(kind);
   await page.getByRole('textbox', {name: kind === 'invitation' ? 'Invitation 标识' : 'Note 或论坛 ID', exact: true}).fill(target);

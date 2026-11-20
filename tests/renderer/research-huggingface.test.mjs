@@ -132,7 +132,8 @@ async function scene(metadataFields = {}) {
 }
 const state = (f, overrides = {}) => ({projectId: f.project.id, selected: f.item, writable: true, ...overrides});
 async function mount(f, overrides = {}) {active = f; await page.evaluate(value => window.mountReader(value), state(f, overrides)); await page.getByTestId('reader-title').waitFor();}
-async function open() {await page.getByTestId('reader-hf-toggle').click(); await page.getByTestId('reader-hf-panel').waitFor();}
+async function open() {
+  if (!await page.getByTestId('reader-tools-disclosure').evaluate(node => node.parentElement.open)) await page.getByTestId('reader-tools-disclosure').click();await page.getByTestId('reader-hf-toggle').click(); await page.getByTestId('reader-hf-panel').waitFor();}
 async function capture() {
   await page.getByRole('textbox', {name: 'Hub 仓库', exact: true}).fill(identity.repo);
   await page.getByRole('textbox', {name: '提交 SHA', exact: true}).fill(identity.revision);

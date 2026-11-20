@@ -17,6 +17,12 @@ before(async () => {
     import {PaperReader} from './src/renderer/literature/PaperReader';
     import {WorkspaceScopeProvider} from './src/renderer/app/workspace-scope';
     import {TaskSummary} from './src/renderer/research/tasks/TaskSummary';
+    let setReaderFocus;
+    function ReaderHarness() {
+      const [focus,setFocus]=React.useState(null);setReaderFocus=setFocus;
+      return <PaperReader literature={store} onClearFocus={()=>{}} openInFilesView={()=>{}} focusParseId={focus?.parseId ?? null} focusLocator={focus?.locator ?? null} focusRequestId={focus?.requestId ?? 0}/>;
+    }
+    window.focusReader=()=>flushSync(()=>setReaderFocus(current=>({parseId:'parse',locator:'page:1',requestId:(current?.requestId??0)+1})));
     import {readingNoteSaveSchema} from './src/shared/schemas/research-reading';
     const root=createRoot(document.getElementById('root'));
     const notes=[];
@@ -36,9 +42,9 @@ before(async () => {
     const store={client,projectId:'fixture',selected,items:[selected],documents:[fixtureDocument],loadDocumentContent,
       action:{pending:false,error:null},assistant:{pending:false,error:null},parseInFlight:null};
     const scope={client,projectId:'fixture',workspacePath:'/tmp/synthetic-reader',writable:true,workspaceStatus:'ready',workspaceError:null,openFileInCanvas:()=>{}};
-    window.mountTranslation=()=>flushSync(()=>root.render(
-      <div style={{height:598,width:420}}><WorkspaceScopeProvider value={scope}>
-        <PaperReader literature={store} onClearFocus={()=>{}} openInFilesView={()=>{}}/>
+    window.mountTranslation=(width=420,height=598)=>flushSync(()=>root.render(
+      <div style={{height,width}}><WorkspaceScopeProvider value={scope}>
+        <ReaderHarness/>
       </WorkspaceScopeProvider></div>));
     window.mountTask=(statusReason=null)=>flushSync(()=>root.render(<div style={{width:320}}><TaskSummary data={{
       task:{goal:'A long scientific research task with a detailed instruction. '.repeat(12),status:statusReason?'failed':'active',statusReason},
@@ -94,4 +100,44 @@ test('provider reply loops have an actionable reason within the task column',asy
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await page.evaluate(()=>window.mountTask('research_stage_inputs_stale'));
   await expect(page.getByTestId('task-reason')).toContainText('research_stage_inputs_stale');
+});
+
+
+test('reader gives content most of the viewport and notes use the full narrow column',async()=>{
+  for(const width of [420,820]) {
+    await page.setViewportSize({width,height:800});
+    await page.evaluate(width=>window.mountTranslation(width,740),width);
+    await page.getByTestId('reader-block-paragraph').waitFor();
+    assert.equal(await page.getByTestId('reader-tools-disclosure').evaluate(node=>node.parentElement.open),false);
+    assert.equal(await page.getByTestId('reader-parse-disclosure').evaluate(node=>node.parentElement.open),false);
+    const reading=await page.getByTestId('reader-content-area').boundingBox();
+    assert.ok(reading.height>=400,`reader content height ${reading.height}px at ${width}px`);
+    await page.getByRole('button',{name:'论文笔记',exact:true}).click();
+    const notes=await page.getByTestId('notes-panel').boundingBox();
+    assert.ok(notes.height>=400,`notes height ${notes.height}px at ${width}px`);
+    assert.ok(notes.width>=(width<=800?width-4:300),`notes width ${notes.width}px at ${width}px`);
+    await page.getByRole('button',{name:'关闭笔记',exact:true}).click();
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  }
+});
+
+
+test('incoming search focus reveals reading content without discarding the mounted note draft',async()=>{
+  await page.setViewportSize({width:420,height:800});
+  await page.evaluate(()=>window.mountTranslation(420,740));
+  await page.getByTestId('reader-block-paragraph').waitFor();
+  await page.getByRole('button',{name:'论文笔记',exact:true}).click();
+  await page.getByTestId('notes-create').click();
+  await page.getByLabel('笔记标题',{exact:true}).fill('Unfinished search note');
+  await page.evaluate(()=>window.focusReader());
+  await expect(page.getByTestId('reader-content-area')).toBeVisible();
+  await expect(page.getByTestId('notes-panel')).toBeHidden();
+  await page.getByRole('button',{name:'论文笔记',exact:true}).click();
+  await expect(page.getByLabel('笔记标题',{exact:true})).toHaveValue('Unfinished search note');
+  await page.evaluate(()=>window.focusReader());
+  await expect(page.getByTestId('reader-content-area')).toBeVisible();
+  await page.getByRole('button',{name:'论文笔记',exact:true}).click();
+  await expect(page.getByLabel('笔记标题',{exact:true})).toHaveValue('Unfinished search note');
+  await page.getByTestId('notes-save').click();
+  await expect(page.getByTestId('notes-panel').getByRole('status')).toHaveText('已保存');
 });

@@ -1,4 +1,4 @@
-import {useState,useEffect} from 'react';
+import {useState,useEffect,useDeferredValue} from 'react';
 import {EditorContent, Node, nodeInputRule, useEditor, type Editor} from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import {Markdown} from '@tiptap/markdown';
@@ -8,6 +8,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import {useImeGuard} from '../shared/hooks/use-ime-guard';
 import 'katex/dist/katex.min.css';
 import './reading.css';
+import ScientificMarkdown, {FormulaPreview} from './ScientificMarkdown';
 
 const WikiLink = Node.create({
   name:'wikiLink',group:'inline',inline:true,atom:true,
@@ -36,13 +37,15 @@ export default function ReadingNoteEditor({markdown,editable,titles,onChange,onL
   markdown:string;editable:boolean;titles:string[];onChange:(markdown:string)=>void;onLink:(title:string)=>void;
 }):React.JSX.Element {
   const [slash,setSlash]=useState(false),[source,setSource]=useState(false),[formula,setFormula]=useState('');
+  const [formulaOpen,setFormulaOpen]=useState(false);
+  const previewMarkdown=useDeferredValue(markdown);
   const [mathPosition,setMathPosition]=useState<{pos:number;block:boolean}|null>(null);
   const formulaIme=useImeGuard();
   const editor=useEditor({extensions:[StarterKit.configure({link:{openOnClick:false}}),Markdown,WikiLink,TableKit,
     Placeholder.configure({placeholder:'写下问题、方法与发现。输入 / 插入内容，[[标题]] 链接笔记。'}),
-    Mathematics.configure({katexOptions:{throwOnError:false,trust:false},
-      inlineOptions:{onClick:(node,pos)=>{setFormula(String(node.attrs.latex));setMathPosition({pos,block:false});}},
-      blockOptions:{onClick:(node,pos)=>{setFormula(String(node.attrs.latex));setMathPosition({pos,block:true});}}})],
+    Mathematics.configure({katexOptions:{throwOnError:false,trust:false,maxExpand:1000},
+      inlineOptions:{onClick:(node,pos)=>{setFormulaOpen(true);setFormula(String(node.attrs.latex));setMathPosition({pos,block:false});}},
+      blockOptions:{onClick:(node,pos)=>{setFormulaOpen(true);setFormula(String(node.attrs.latex));setMathPosition({pos,block:true});}}})],
     content:markdown,contentType:'markdown',editable,shouldRerenderOnTransaction:false,
     editorProps:{attributes:{'aria-label':'笔记正文',role:'textbox','aria-multiline':'true','data-testid':'notes-editor'},
       handleKeyDown:(_view,event)=>{
@@ -58,11 +61,12 @@ export default function ReadingNoteEditor({markdown,editable,titles,onChange,onL
       }},onUpdate:({editor})=>onChange(editor.getMarkdown())});
   useEffect(()=>{editor?.setEditable(editable&&!source);},[editor,editable,source]);
   if(!editor)return <p role="status">加载编辑器…</p>;
-  return <div className="reading-editor flex min-h-0 flex-1 flex-col">
+  return <div className="reading-editor flex min-h-0 flex-1 flex-col" data-mode={source?'source':'rich'}>
     <div className="reading-toolbar" role="toolbar" aria-label="笔记格式">
       <button type="button" disabled={!editable||source} onClick={()=>editor.chain().focus().toggleBold().run()} aria-label="粗体"><b>B</b></button>
       <button type="button" disabled={!editable||source} onClick={()=>editor.chain().focus().toggleItalic().run()} aria-label="斜体"><i>I</i></button>
       <button type="button" disabled={!editable||source} onClick={()=>setSlash(value=>!value)} aria-expanded={slash}>/ 插入</button>
+      <button type="button" disabled={!editable||source} aria-expanded={formulaOpen} onClick={()=>setFormulaOpen(value=>!value)}>公式</button>
       <select aria-label="插入笔记链接" disabled={!editable||source} value="" onChange={event=>{if(event.target.value)editor.chain().focus().insertContent({type:'wikiLink',attrs:{title:event.target.value}}).run();}}>
         <option value="">[[双链]]</option>{titles.map(title=><option key={title}>{title}</option>)}
       </select>
@@ -71,7 +75,7 @@ export default function ReadingNoteEditor({markdown,editable,titles,onChange,onL
       <button type="button" disabled={!editable||source} aria-label="重做" onClick={()=>editor.chain().focus().redo().run()}>重做</button>
     </div>
     {slash&&!source?<div className="reading-toolbar" aria-label="插入块">{actions.map(action=><button type="button" key={action.label} disabled={!editable} onClick={()=>{action.run(editor);setSlash(false);}}>{action.label}</button>)}</div>:null}
-    <form className="reading-toolbar" onCompositionStart={formulaIme.onCompositionStart} onCompositionEnd={formulaIme.onCompositionEnd}
+    {formulaOpen&&!source?<div className="reading-formula-composer"><form className="reading-toolbar" onCompositionStart={formulaIme.onCompositionStart} onCompositionEnd={formulaIme.onCompositionEnd}
       onKeyDown={event=>{if(event.key==='Enter'&&formulaIme.shouldIgnoreKeyDown(event))event.preventDefault();}}
       onSubmit={event=>{event.preventDefault();if(!editable||source||!formula.trim())return;
       if(mathPosition){editor.chain().focus().setNodeSelection(mathPosition.pos).updateAttributes(mathPosition.block?'blockMath':'inlineMath',{latex:formula}).run();}
@@ -79,8 +83,14 @@ export default function ReadingNoteEditor({markdown,editable,titles,onChange,onL
       <input aria-label="LaTeX 公式" placeholder="LaTeX 公式，如 E=mc^2" value={formula} disabled={!editable||source} onChange={event=>setFormula(event.target.value)}/>
       <button type="submit" disabled={!editable || source || !formula.trim()}>{mathPosition?'更新公式':'插入公式'}</button>
       <button type="button" disabled={!editable || source || !formula.trim()} onClick={()=>{editor.chain().focus().insertBlockMath({latex:formula}).run();setFormula('');}}>独立公式</button>
-    </form>
-    {source?<textarea className="min-h-0 flex-1 resize-none bg-surface p-4 font-mono text-ink" aria-label="Markdown 源码" value={markdown} readOnly={!editable}
-      onChange={event=>onChange(event.target.value)}/>:<div className="min-h-0 flex-1 overflow-auto"><EditorContent editor={editor}/></div>}
+    </form><FormulaPreview text={formula} displayMode={mathPosition?.block ?? false}/></div>:null}
+    {source?<div className="reading-source-layout">
+      <label className="reading-source-pane"><span className="reading-pane-label">Markdown 源码</span>
+        <textarea className="reading-source-input" aria-label="Markdown 源码" value={markdown} readOnly={!editable}
+          spellCheck={false} onChange={event=>onChange(event.target.value)}/></label>
+      <section className="reading-preview-pane" aria-label="Markdown 实时预览" data-testid="notes-markdown-preview">
+        <span className="reading-pane-label">实时预览</span><ScientificMarkdown text={previewMarkdown}/>
+      </section>
+    </div>:<div className="reading-rich-text"><EditorContent editor={editor}/></div>}
   </div>;
 }

@@ -76,6 +76,7 @@ async function openStoredNote() {
   await page.evaluate(() => window.mountNotes());
   await page.getByLabel('选择笔记', { exact: true }).selectOption('note');
   await expect(page.getByLabel('笔记标题', { exact: true })).toHaveValue('Stored note');
+  await page.getByTestId('notes-options').click();
 }
 
 async function makeConflict() {
@@ -136,6 +137,7 @@ test('rereading a conflicted note confirms discard, freezes replacement and reta
 
 test('formula composition confirmation does not insert or erase unfinished LaTeX', async () => {
   await openStoredNote();
+  await page.getByRole('button', {name: '公式', exact: true}).click();
   const input = page.getByLabel('LaTeX 公式', { exact: true });
   await input.fill('x^2');
   await input.evaluate(element => {
@@ -166,4 +168,39 @@ test('note save preserves edits made after submission and writes the latest draf
   assert.equal(await page.evaluate(() => window.saveInput.title), 'Later title');
   await expect(page.getByTestId('notes-panel').getByRole('status')).toHaveText('已保存');
   assert.deepEqual(pageErrors, []);
+});
+
+
+test('formula drafts and Markdown source render math live without saving or exposing raw HTML', async () => {
+  await openStoredNote();
+  await page.getByTestId('notes-options').click();
+  await page.getByRole('button', {name:'公式',exact:true}).click();
+  const input=page.getByLabel('LaTeX 公式', {exact:true});
+  await input.fill('\\frac{a}{b}');
+  await expect(page.getByTestId('notes-formula-preview').locator('.katex')).toBeVisible();
+  assert.equal(await page.getByTestId('notes-editor').locator('.katex').count(),0);
+  await input.fill('\\frac{');
+  await expect(page.getByTestId('notes-formula-preview')).toContainText('公式尚未完整');
+  await input.fill('x^2');
+  await expect(page.getByTestId('notes-formula-preview').locator('.katex')).toBeVisible();
+  await page.getByRole('button', {name:'Markdown 源码',exact:true}).click();
+  const source=page.getByLabel('Markdown 源码',{exact:true});
+  await source.fill('# Live preview\n\nInline $E=mc^2$\n\n$$\n\\frac{a}{b}\n$$\n\n<script>window.mathUnsafe=true</script>');
+  const preview=page.getByTestId('notes-markdown-preview');
+  await expect(preview.getByRole('heading',{name:'Live preview'})).toBeVisible();
+  await expect(preview.locator('.katex')).toHaveCount(2);
+  assert.equal(await page.evaluate(()=>window.mathUnsafe),undefined);
+  assert.equal(await preview.locator('script').count(),0);
+  await page.evaluate(()=>{document.getElementById('root').firstElementChild.style.width='420px';});
+  const sourceBounds=await source.boundingBox();
+  const previewBounds=await preview.boundingBox();
+  assert.ok(sourceBounds.y+sourceBounds.height<=previewBounds.y+1,'source must not overlap its live preview');
+  assert.ok(previewBounds.height>=140,'live preview retains a readable height');
+  await source.fill('Unclosed $x +');
+  await expect(preview).toContainText('Unclosed $x +');
+  await source.fill('$$\n\\frac{\n$$');
+  await expect(preview.locator('.katex-error')).toBeVisible();
+  await page.getByTestId('notes-save').click();
+  await expect(page.getByTestId('notes-panel').getByRole('status')).toHaveText('已保存');
+  assert.deepEqual(pageErrors,[]);
 });

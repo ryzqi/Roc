@@ -95,18 +95,22 @@ function ProcessingSession({client, projectId, writable, pickFile, addPdfToItem,
       </button>
       <span role="status" aria-atomic="true" className="min-w-0 flex-1 text-muted tabular-nums">
         {page.data === null ? page.status === 'loading' ? '正在读取后台进度…' : '进度暂不可用' :
-          `共 ${page.data.total} 篇任务，本页 ${jobs.length} 篇：元数据 ${progress.metadata}，PDF ${progress.pdf}，全文索引 ${progress.indexed}，Wiki ${progress.wiki}`}
+          page.data.total === 0 ? '暂无任务' : `共 ${page.data.total} 篇任务`}
       </span>
-      <button type="button" className={buttonClass} onClick={reload} disabled={page.status === 'loading'} aria-label="刷新文献处理进度">
+      <button type="button" className={buttonClass} onClick={reload} disabled={page.status === 'loading'} aria-label="刷新文献处理进度" hidden={!expanded}>
         <RefreshCw size={14} aria-hidden="true"/>
       </button>
-      <button type="button" className={buttonClass} aria-expanded={preferences} onClick={() => setPreferences(value => !value)}>获取偏好</button>
+      <button type="button" className={buttonClass} aria-expanded={preferences} onClick={() => setPreferences(value => !value)} hidden={!expanded && !preferences}>获取偏好</button>
     </div>
     {preferences ? <AcquisitionPreferences client={client} writable={writable}/> : null}
     {page.error !== null ? <p role="alert" className="break-words px-3 py-1 text-[var(--st-bad)]">{page.error}</p> : null}
     {actionError !== null ? <p role="alert" className="break-words px-3 py-1 text-[var(--st-bad)]">{actionError}</p> : null}
     {notice !== null ? <p role="status" className="px-3 py-1 text-muted">{notice}</p> : null}
     <div id="literature-processing-details" hidden={!expanded} className="max-h-60 overflow-y-auto px-3 pb-2">
+      {page.data !== null && jobs.length > 0 ? <p className="flex flex-wrap gap-x-4 gap-y-1 py-2 text-muted tabular-nums" aria-label="本页处理概况">
+        <span>元数据 {progress.metadata} 篇</span><span>PDF {progress.pdf} 篇</span>
+        <span>全文索引 {progress.indexed} 篇</span><span>知识库 {progress.wiki} 篇</span>
+      </p> : null}
       {page.data !== null && jobs.length === 0 ? <p className="py-2 text-muted">当前页无后台任务。仅导入元数据的文献不创建全文任务。</p> : null}
       <ul aria-label="逐篇处理进度" className="m-0 list-none p-0">
         {jobs.map(job => <li key={job.id} className="flex flex-wrap items-start gap-x-3 gap-y-1 border-t-[0.5px] border-line py-2" data-testid={`literature-processing-job-${job.id}`} aria-busy={pending === job.id}>

@@ -106,16 +106,17 @@ const settle = () => page.evaluate(() => new Promise(resolve => requestAnimation
 const toggle = () => page.getByRole('button', {name: '文献处理', exact: true});
 async function mount(options) {
   await page.evaluate(options => mount(options), options);
-  await expect(page.getByRole('status').first()).toContainText(options?.empty ? '共 0 篇任务' : '共 22 篇任务');
+  await expect(page.getByRole('status').first()).toContainText(options?.empty ? '暂无任务' : '共 22 篇任务');
 }
 async function expand() {await toggle().click();}
 
 test('progress is page-local and truthful, with keyboard disclosure, exact stage/errors and existing document actions', async () => {
   await mount();
-  await expect(page.getByRole('status').first()).toContainText('本页 2 篇：元数据 2，PDF 2，全文索引 1，Wiki 1');
+  await expect(page.getByLabel('本页处理概况')).toBeHidden();
   await expect(toggle()).toHaveAttribute('aria-expanded', 'false');
   await toggle().focus(); await page.keyboard.press('Enter');
   await expect(toggle()).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByLabel('本页处理概况')).toHaveText('元数据 2 篇PDF 2 篇全文索引 1 篇知识库 1 篇');
   await expect(page.getByText('全文索引：受阻', {exact: true})).toBeVisible();
   await expect(page.getByText('错误：embedding_unconfigured', {exact: true})).toBeVisible();
   await expect(page.getByText('计划重试：2026-11-19T01:00:00Z', {exact: true})).toBeVisible();
@@ -128,7 +129,7 @@ test('progress is page-local and truthful, with keyboard disclosure, exact stage
 });
 
 test('acquisition preferences save explicit consent and receipt shows actual version/license at desktop size', async () => {
-  await mount();
+  await mount(); await expand();
   await page.getByRole('button', {name:'获取偏好', exact:true}).click();
   await page.getByLabel('PDF 版本偏好').selectOption('published');
   await page.getByLabel('Unpaywall 联系邮箱（可选）').fill('contact@example.org');
@@ -136,14 +137,15 @@ test('acquisition preferences save explicit consent and receipt shows actual ver
   await expect(page.getByText('获取偏好已保存。')).toBeVisible();
   assert.deepEqual(await page.evaluate(() => calls.find(call=>call.method==='saveAcquisitionSettings').input),
     {versionPreference:'published',unpaywallEmail:'contact@example.org'});
-  await expand();
   await expect(page.getByText('全文来源：synthetic · 版本：正式发表版 · 许可证：未标注')).toBeVisible();
   await page.setViewportSize({width:1000,height:700});
-  const {mkdir} = await import('node:fs/promises');
-  await mkdir('.artifacts/literature-p1', {recursive:true});
+  if (process.env.ROC_P5_SCREENSHOT_DIR) {
+    const {mkdir} = await import('node:fs/promises');
+    await mkdir(process.env.ROC_P5_SCREENSHOT_DIR, {recursive:true});
+  }
   for (const theme of ['light','dark']) {
     await page.evaluate(theme=>document.documentElement.setAttribute('data-theme',theme),theme);
-    await page.screenshot({path:'.artifacts/literature-p1/acquisition-'+theme+'.png'});
+    if (process.env.ROC_P5_SCREENSHOT_DIR) await page.screenshot({path:join(process.env.ROC_P5_SCREENSHOT_DIR,'acquisition-'+theme+'.png')});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   }
 });
@@ -282,7 +284,7 @@ test('project switch fences a pending native picker and late query responses', a
   await page.evaluate(() => {held.add('pickFile');});
   await page.getByRole('button', {name: '手动补充 PDF：Paper a', exact:true}).click();
   await page.evaluate(() => {projectId='project-b';response=()=>({jobs:[],total:0,nextOffset:null});renderPanel();});
-  await expect(page.getByRole('status').first()).toContainText('共 0 篇任务');
+  await expect(page.getByRole('status').first()).toContainText('暂无任务');
   await page.evaluate(() => resolveNext('pickFile',{ok:true,data:'/synthetic/old.pdf'}));
   await settle();
   assert.equal(await count('addPdfToItem'), 0);
@@ -292,10 +294,10 @@ test('project switch fences a pending native picker and late query responses', a
   });
   await expect.poll(() => page.evaluate(() => pending.filter(call => call.method==='listAcquisition').length)).toBe(1);
   await page.evaluate(() => {held.delete('listAcquisition');projectId='project-b';renderPanel();});
-  await expect(page.getByRole('status').first()).toContainText('共 0 篇任务');
+  await expect(page.getByRole('status').first()).toContainText('暂无任务');
   await page.evaluate(() => resolveNext('listAcquisition',{ok:true,data:{jobs:[job()],total:1,nextOffset:null}}));
   await settle();
-  await expect(page.getByRole('status').first()).toContainText('共 0 篇任务');
+  await expect(page.getByRole('status').first()).toContainText('暂无任务');
 });
 
 test('unmount ignores a late mutation result and unsubscribes from project changes', async () => {

@@ -41,22 +41,6 @@
   }
 }
 
-@container literature-hub (max-width: 960px) {
-  .literature-toolbar {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .literature-tabs {
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
-
-  .literature-actions {
-    grid-column: 2;
-    grid-row: 1;
-  }
-}
-
 @container skill-files (max-width: 540px) {
   .skill-files-layout {
     grid-template-columns: minmax(0, 1fr);
@@ -68,12 +52,6 @@
     border-top-width: 0.5px;
     padding-left: var(--space-1);
     padding-top: var(--space-3);
-  }
-}
-
-@container workspace-canvas (max-width: 1023px) {
-  .literature-paper-picker {
-    display: flex;
   }
 }
 

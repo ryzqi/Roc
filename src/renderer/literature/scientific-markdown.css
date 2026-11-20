@@ -1,0 +1,5 @@
+.scientific-markdown { min-width: 0; overflow-wrap: anywhere; }
+.scientific-markdown .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 8px 0; }
+.scientific-markdown .katex-error { color: var(--muted) !important; white-space: pre-wrap; overflow-wrap: anywhere; }
+.scientific-markdown pre { max-width: 100%; overflow-x: auto; }
+.reading-formula-preview { min-height: 44px; padding: 12px 16px; overflow: auto; border-top: .5px solid var(--line); }
