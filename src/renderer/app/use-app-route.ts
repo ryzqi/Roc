@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { requestNavigation } from './navigation-guard';
+import { recordScreenOpen, recordUxEvent } from './ux-metrics';
 import type { RocClient } from '../shared/roc-client';
 import { menuIntentForPage, type MenuIntent } from '../../shared/surfaces';
 import { appRouteToSearch, normalizeAppRoute, readAppRoute, sameAppRoute, writeAppRoute, type AppRoute } from './routes';
@@ -38,6 +39,7 @@ export function useAppRoute(): AppRouteController {
   // parser would not produce (e.g. `?view=files` with no project).
   useEffect(() => {
     const initial = readAppRoute();
+    recordScreenOpen(initial);
     if (appRouteToSearch(initial) !== window.location.search.replace(/^\?/u, '')) {
       writeAppRoute(initial);
     }
@@ -53,6 +55,8 @@ export function useAppRoute(): AppRouteController {
         writeAppRoute(next);
         routeRef.current = next;
         setRoute(next);
+        recordUxEvent('back_navigation', next.view);
+        recordScreenOpen(next);
       });
     };
     window.addEventListener('popstate', onPopState);
@@ -69,6 +73,7 @@ export function useAppRoute(): AppRouteController {
       writeAppRoute(normalized, options?.mode ?? 'replace');
       routeRef.current = normalized;
       setRoute(normalized);
+      recordScreenOpen(normalized);
       options?.onNavigated?.();
     });
   }, []);
