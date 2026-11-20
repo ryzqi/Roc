@@ -1,6 +1,6 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp, rm, writeFile} from 'node:fs/promises';
+import {mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import electronPath from 'electron';
@@ -8,8 +8,10 @@ import {_electron, expect} from '@playwright/test';
 import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 
 let directory, app, page;
+const artifacts=join(process.cwd(),'.artifacts/reader-clarity');
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), 'roc-reading-layout-'));
+  await mkdir(artifacts,{recursive:true});
   await buildViteRenderer({directory, script: `
     import React from 'react';
     import {createRoot} from 'react-dom/client';
@@ -26,9 +28,12 @@ before(async () => {
     import {readingNoteSaveSchema} from './src/shared/schemas/research-reading';
     const root=createRoot(document.getElementById('root'));
     const notes=[];
+    const acquisitionListeners=new Set();
+    let acquisition={ok:true,data:{jobs:[],total:0,nextOffset:null}};
+    window.updateAcquisition=value=>{acquisition=value;for(const listener of acquisitionListeners)listener();};
     const client={api:{research:{
-      listAcquisition:async()=>({ok:true,data:{jobs:[],total:0,nextOffset:null}}),
-      onLibraryChanged:()=>()=>{},
+      listAcquisition:async()=>acquisition,
+      onLibraryChanged:listener=>{acquisitionListeners.add(listener);return()=>acquisitionListeners.delete(listener);},
       getModelsStatus:async()=>({ok:true,data:{ready:false,error:null,models:[],downloading:false,selectedPack:'compact'}}),
       getReadingTranslationSettings:async()=>({ok:true,data:{provider:'google',target:'zh-CN',keyConfigured:false,baseUrl:'',model:'',region:''}}),
       translateReading:async()=>({ok:true,data:{text:'Explicit synthetic translation. '.repeat(500)}}),
@@ -44,10 +49,14 @@ before(async () => {
     const store={client,projectId:'fixture',selected,items:[selected],documents:[fixtureDocument],loadDocumentContent,
       action:{pending:false,error:null},assistant:{pending:false,error:null},parseInFlight:null};
     const scope={client,projectId:'fixture',workspacePath:'/tmp/synthetic-reader',writable:true,workspaceStatus:'ready',workspaceError:null,openFileInCanvas:()=>{}};
-    window.mountTranslation=(width=420,height=598)=>flushSync(()=>root.render(
+    window.mountTranslation=(width=420,height=598,metadata=null)=>{
+      selected.metadata.title=metadata?.title??'Synthetic multi agent research paper with a long title';
+      selected.metadata.authors=metadata?.authors??['Fixture Author'];
+      flushSync(()=>root.render(
       <div style={{height,width}}><WorkspaceScopeProvider value={scope}>
         <ReaderHarness/>
       </WorkspaceScopeProvider></div>));
+    };
     window.mountTask=(statusReason=null)=>flushSync(()=>root.render(<div style={{width:320}}><TaskSummary data={{
       task:{goal:'A long scientific research task with a detailed instruction. '.repeat(12),status:statusReason?'failed':'active',statusReason},
       executions:[],usage:{tokens:{settled:0,unknown:0,reserved:0},calls:{models:{total:0},tools:{total:0},children:{total:0}}}
@@ -88,11 +97,48 @@ test('translation output leaves a usable sibling reader and note region in a con
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
 });
 
-test('long task goals truncate inside the task column without expanding grid tracks',async()=>{
+test('long task goals wrap inside the task column without expanding grid tracks',async()=>{
   await page.evaluate(()=>window.mountTask());
-  const title=page.locator('p[title]');
+  const title=page.getByText('A long scientific research task with a detailed instruction. '.repeat(12).trim(),{exact:true});
   assert.ok((await title.boundingBox()).width<=320);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+});
+
+test('long paper metadata leaves at least three quarters of a short column for reading and tools stay keyboard accessible',async()=>{
+  const title='Synthetic long title for a scientific paper about reproducible multi agent research and document understanding. '.repeat(3);
+  const authors=Array.from({length:24},(_,index)=>`Fixture Author ${index+1}`);
+  const rows=[];
+  const auditSource=await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js','utf8');
+  for(const [width,theme] of [[420,'light'],[420,'dark'],[820,'light'],[1100,'dark']]){
+    await page.setViewportSize({width,height:700});
+    await page.emulateMedia({reducedMotion:'reduce'});
+    await page.evaluate(({width,theme,title,authors})=>{
+      document.documentElement.dataset.theme=theme;
+      window.mountTranslation(width,640,{title,authors});
+    },{width,theme,title,authors});
+    await page.getByTestId('reader-block-paragraph').waitFor();
+    const area=page.getByTestId('reader-content-area');
+    await expect.poll(async()=>{const box=await area.boundingBox();return box!==null&&box.height>0&&box.height<=640;}).toBe(true);
+    const geometry=await area.boundingBox();
+    assert.ok(geometry.height>=640*.75,`only ${geometry.height}px of 640px available at ${width}px`);
+    assert.equal(await page.getByTestId('reader-resource-status').count(),0);
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+    assert.equal(await page.getByLabel('结构化阅读分类').isVisible(),false);
+    const audit=await page.evaluate(source=>(0,eval)(source)({root:'#root',viewport:true}),auditSource);
+    assert.equal(audit.cut,0);
+    rows.push({width,theme,readerHeight:640,contentHeight:geometry.height,clipAudit:audit});
+    await page.screenshot({path:join(artifacts,`parsed-${theme}-${width}.png`)});
+    const tools=page.getByTestId('reader-reading-tools');
+    await tools.focus();await page.keyboard.press('Enter');
+    await expect(page.getByLabel('结构化阅读分类')).toBeVisible();
+    await tools.focus();await page.keyboard.press('Enter');
+    const info=page.getByTestId('reader-tools-disclosure');
+    await info.focus();await page.keyboard.press('Enter');
+    await expect(page.locator('.reading-disclosure-body').getByText(authors.join('，'),{exact:true})).toBeVisible();
+    await info.focus();await page.keyboard.press('Enter');
+    assert.equal(await area.isVisible(),true);
+  }
+  await writeFile(join(artifacts,'parsed-geometry.json'),JSON.stringify(rows,null,2));
 });
 
 test('provider reply loops have an actionable reason within the task column',async()=>{
@@ -102,6 +148,19 @@ test('provider reply loops have an actionable reason within the task column',asy
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await page.evaluate(()=>window.mountTask('research_stage_inputs_stale'));
   await expect(page.getByTestId('task-reason')).toContainText('research_stage_inputs_stale');
+});
+
+test('reading hides routine pipeline receipts while acquisition failures and retry remain visible',async()=>{
+  await page.evaluate(()=>window.mountTranslation(420,640));
+  await page.getByTestId('reader-block-paragraph').waitFor();
+  await expect(page.getByTestId('reader-resource-status')).toHaveCount(0);
+  await page.evaluate(()=>window.updateAcquisition({ok:false,error:{message:'Synthetic receipt failure'}}));
+  await expect(page.getByRole('alert')).toContainText('Synthetic receipt failure');
+  await expect(page.getByRole('button',{name:'重试',exact:true})).toBeVisible();
+  await page.evaluate(()=>window.updateAcquisition({ok:true,data:{jobs:[{documentId:'document',status:'failed',stage:'parse',errorCode:'synthetic_parse_failed'}]}}));
+  await expect(page.getByRole('alert')).toHaveText('synthetic_parse_failed');
+  await page.evaluate(()=>window.updateAcquisition({ok:true,data:{jobs:[{documentId:'document',status:'ready',stage:'wiki',errorCode:null}]}}));
+  await expect(page.getByTestId('reader-resource-status')).toHaveCount(0);
 });
 
 

@@ -91,7 +91,7 @@ function KnowledgePage({client, request, graph, onFactFilter}: {
     {read.error ? <><ErrorBar error={{level: 'blocked', message: read.error, retry: restart}}/><button type="button" className={`${formSecondaryButtonClass} self-start m-3`} onClick={restart}>重新检索科研知识</button></> : null}
     {data ? <>
       <div className="knowledge-scientific-status flex flex-wrap items-center justify-between gap-2">
-        <span>当前结果 {rows.length} 项，科学支持未审核</span>
+        <span>{rows.length} 项</span>
         <button type="button" className={formSecondaryButtonClass} onClick={restart}>重新检索科研知识</button>
         {data.unavailable.map(source => <p key={source.documentId} role="status" className="w-full break-words">
           {source.state === 'missing' ? '部分来源的科研知识尚未生成' : '部分科研来源已失效'}

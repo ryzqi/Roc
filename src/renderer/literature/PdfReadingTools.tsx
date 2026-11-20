@@ -63,16 +63,19 @@ export default function PdfReadingTools({client,projectId,documentId,sourceHash,
     if(!segments.length)throw new Error('这些页面没有可提取的文字；扫描件请使用解析文本翻译。');
     if(alive.current)onTranslate(segments,all?'全文翻译':'本页翻译');
   });};
-  return <div className="shrink-0" data-testid="reader-pdf-tools">
-    <div className="reading-toolbar">
+  return <details className="reading-disclosure" data-testid="reader-pdf-tools" open={selection !== null || error !== null ? true : undefined}>
+    <summary>查找与标记</summary>
+    <div className="reading-toolbar reading-pdf-tools-bar">
       <button type="button" aria-expanded={panel==='outline'} onClick={()=>setPanel(panel==='outline'?null:'outline')}>目录 {outline.length}</button>
       <button type="button" aria-expanded={panel==='highlights'} onClick={()=>setPanel(panel==='highlights'?null:'highlights')}>高亮 {highlights.filter(row=>!row.archived).length}</button>
       <input type="search" aria-label="查找 PDF 全文" placeholder="查找全文" value={query} onChange={event=>setQuery(event.target.value)}/>
       {query?<><span role="status">{searching?'查找中…':`${matches.reduce((sum,hit)=>sum+hit.count,0)} 处 / ${matches.length} 页`}</span>
         <button type="button" disabled={!matches.length} onClick={()=>navigate([...matches].reverse().find(hit=>hit.page<page)?.page??matches.at(-1)!.page)}>上一个匹配页</button>
         <button type="button" disabled={!matches.length} onClick={()=>navigate(matches.find(hit=>hit.page>page)?.page??matches[0].page)}>下一个匹配页</button></>:null}
-      <button type="button" disabled={busy} onClick={()=>translatePages(false)}>翻译本页</button>
-      <button type="button" disabled={busy} onClick={()=>translatePages(true)}>翻译全文</button>
+      <details className="reading-disclosure"><summary>翻译</summary><div className="reading-toolbar">
+        <button type="button" disabled={busy} onClick={()=>translatePages(false)}>翻译本页</button>
+        <button type="button" disabled={busy} onClick={()=>translatePages(true)}>翻译全文</button>
+      </div></details>
     </div>
     {selection?<div className="reading-toolbar" data-testid="reader-selection-actions">
       <span className="max-w-40 truncate" title={selection.text}>{selection.text}</span>
@@ -99,5 +102,5 @@ export default function PdfReadingTools({client,projectId,documentId,sourceHash,
         <button type="button" disabled={!writable||busy} onClick={()=>void run(()=>saveHighlight({...row,archived:!row.archived}))}>{row.archived?'恢复高亮':'归档高亮'}</button>
       </div>):<p className="text-muted">在 PDF 中选择文字以创建高亮。</p>}
     </div>:null}
-  </div>;
+  </details>;
 }

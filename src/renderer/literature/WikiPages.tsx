@@ -48,11 +48,8 @@ export function WikiPages({client, projectId, snapshot, writable, onAskAssistant
       <button type="button" className={button} onClick={pages.reload} aria-label="刷新列表" title="刷新列表"><RefreshCw size={14} aria-hidden="true"/></button>
     </header>
     {pages.error && <p role="alert" className="p-3">{pages.error}</p>}
-    {pages.data && searchQuery && <p role="status" className="px-3 pb-2 text-xs text-subtle" data-testid="wiki-search-status">
-      {pages.data.mode === 'hybrid' ? '关键词与语义混合检索' : '关键词检索'}
-      {pages.data.degradation === 'config_missing' ? '，配置嵌入模型后启用语义检索' :
-        pages.data.degradation === 'embedding_failed' ? '，语义服务失败，已降级' :
-          pages.data.degradation === 'index_pending' ? `，语义索引生成中 ${pages.data.indexedSections}/${pages.data.totalSections}` : ''}
+    {searchQuery && pages.data?.degradation === 'embedding_failed' && <p role="status" className="px-3 pb-2 text-xs text-subtle" data-testid="wiki-search-status">
+      语义检索暂不可用，已显示关键词结果。
     </p>}
     <div className="knowledge-browser">
       <aside className="knowledge-directory" aria-label="持久页面列表">
@@ -195,12 +192,15 @@ function PageDetail({client, projectId, pageId, writable, onAskAssistant, onEdit
   useVisiblePolling(page.reload, 3000, !locked);
   const data = page.data;
   if (data === null) return <div><p role={page.error ? 'alert' : 'status'}>{page.error ?? '正在读取页面…'}</p><button className={button} onClick={page.reload}>重试读取</button></div>;
+  // Routine provenance notes stay in the audit data; reading only surfaces actionable issues.
+  const checks = [...new Map(data.lint.filter(issue => issue.code !== 'uncited' && issue.code !== 'isolated')
+    .map(issue => [`${issue.code}:${issue.message}`, issue])).values()];
   return <article className="knowledge-article space-y-3" data-testid="wiki-page-detail" aria-busy={pending}>
     <h2 className="break-words text-[length:var(--font-h2-size)] font-medium">{data.page.title}</h2>
     <p className="flex flex-wrap gap-x-2 text-xs text-subtle" data-testid="wiki-page-status">
       <span>{kinds[data.page.kind]}</span><span className="tabular-nums">草稿 r{data.page.revision}</span>
       <span>{data.page.job ? jobs[data.page.job.status] : '待编译'}</span>
-      {data.paperJob && <span>论文卡片：{data.paperJob.status === 'ready' ? '未审核草稿' : data.paperJob.status === 'failed' ? '生成失败' : '生成中'}</span>}
+      {data.paperJob && data.paperJob.status !== 'ready' && <span>论文卡片：{data.paperJob.status === 'failed' ? '生成失败' : '生成中'}</span>}
       {data.current && <span>{reasons[data.current.reason]}</span>}
     </p>
     <div className="knowledge-page-actions">
@@ -222,12 +222,11 @@ function PageDetail({client, projectId, pageId, writable, onAskAssistant, onEdit
     {historyOpen && <History key={data.page.revision} client={client} projectId={projectId} pageId={pageId} currentRevision={data.page.revision}
       writable={writable && !locked} onPending={onHistoryPending} onChanged={() => {page.reload(); onChanged();}}/>}
     {(data.page.kind === 'comparison' || data.page.kind === 'dispute') && <ClaimComparisonPanel client={client} projectId={projectId}/>}
-    <details open={data.lint.length > 0} className="knowledge-page-checks" data-testid="wiki-page-lint"><summary className="cursor-pointer">
-      <span className="inline-flex flex-wrap gap-x-2"><span>页面检查</span><span className="tabular-nums text-subtle">{data.lint.length} 项</span></span>
+    {checks.length > 0 && <details className="knowledge-page-checks" data-testid="wiki-page-lint"><summary className="cursor-pointer">
+      <span className="inline-flex flex-wrap gap-x-2"><span>来源待处理</span><span className="tabular-nums text-subtle">{checks.length} 项</span></span>
     </summary>
-      <p className="text-xs text-subtle">检查依赖和引用结构，不代表语义或科学支持审核。</p>
-      <ul className="max-h-40 overflow-auto text-xs">{data.lint.map((issue, index) => <li key={index} className="break-words py-1">{issue.message}</li>)}</ul>
-    </details>
+      <ul className="max-h-40 overflow-auto text-xs">{checks.map(issue => <li key={`${issue.code}:${issue.message}`} className="break-words py-1">{issue.message}</li>)}</ul>
+    </details>}
     {edit !== null ? <SectionEditor client={client} projectId={projectId} data={edit.page} section={edit.section} writable={writable}
       onClose={() => setEdit(null)} onSaved={() => {setEdit(null); page.reload(); onChanged();}}/> :
       <div>{data.current?.sections.slice(sectionOffset, sectionOffset + 10).map(section => <section key={section.id} className="knowledge-section">
@@ -238,7 +237,7 @@ function PageDetail({client, projectId, pageId, writable, onAskAssistant, onEdit
           }}>编辑章节</button></div>
         <p className="flex flex-wrap gap-x-2 text-xs text-subtle">
           <span>{section.owner === 'human' ? '人工维护' : '生成草稿'}</span>
-          <span>{section.status === 'stale' ? '依据已改变，待更新' : section.owner === 'human' ? '自动编译保留' : '待核查'}</span>
+          {section.status === 'stale' && <span>依据已改变，待更新</span>}
         </p>
         {section.owner === 'assistant' && section.status === 'stale' && <button className={button} disabled={!writable || pending}
           onClick={() => {void mutate(() => synthesize.run(data, section.id));}}>更新此助手章节</button>}
@@ -305,7 +304,6 @@ function SectionEditor({client, projectId, data, section, writable, onClose, onS
   };
   const disabled = !writable || save.pending;
   return <form className="space-y-3" data-testid="wiki-section-editor" aria-busy={save.pending} onSubmit={event => {event.preventDefault(); void submit();}}>
-    <p className="text-xs">保存后此章节由人工维护；保留本次原始依据，不会批准科学支持。</p>
     <label className="flex flex-col gap-1.5 text-xs">章节标题<input aria-label="章节标题" className={field} value={title} maxLength={300} required disabled={disabled} onChange={event => change({title: event.target.value})}/></label>
     <div className="knowledge-editor-preview">
       <label className="flex min-w-0 flex-col gap-2 text-xs">章节正文<textarea aria-label="章节正文" className={`${field} min-h-64 resize-y py-2`} value={body} maxLength={6000} required disabled={disabled} onChange={event => change({body: event.target.value})}/></label>

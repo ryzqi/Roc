@@ -7,7 +7,7 @@ import {tmpdir} from 'node:os';
 import {build} from 'esbuild';
 import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 import electronPath from 'electron';
-import {_electron} from '@playwright/test';
+import {_electron, expect} from '@playwright/test';
 import {unknownExperiment, createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
 import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
 import {createCanvas, loadImage} from '@napi-rs/canvas';
@@ -578,6 +578,53 @@ test('actual PDF comparison opens sealed bytes lazily with one native worker and
     bitmap, workerUrls, sourceHash:f.actual.sourceHash, coordinateSnapshot:f.collected.coordinates,
     transport:'actual component/PDF.js worker/Chromium protocol with Node-host registry bridge; synthetic sender98', calls
   },null,2));
+});
+
+test('original reading uses the full column with comfortable height and preserves exact source when comparing', async () => {
+  const f=await realPdfScene(),before=await f.changes();
+  const snapshot=f.snapshot();
+  snapshot.selected={...snapshot.selected,metadata:{...snapshot.selected.metadata,
+    title:'Synthetic long paper title about reproducible document understanding and scientific research. '.repeat(3),
+    authors:Array.from({length:24},(_,index)=>`Fixture Author ${index+1}`)}};
+  f.snapshot=()=>snapshot;
+  await mount(f);await textEquals('Synthetic group A mean is 2');
+  assert.equal(await page.evaluate(()=>window.liveWorkers),0);
+  await page.getByTestId('reader-original-pdf').focus();await page.keyboard.press('Enter');
+  await waitForOriginal();
+  assert.equal(await page.getByTestId('reader-content-area').isVisible(),false);
+  const rows=[];
+  for(const [width,theme] of [[420,'light'],[820,'dark'],[1100,'light']]){
+    await app.evaluate(({BrowserWindow},width)=>BrowserWindow.getAllWindows()[0].setSize(width,800),width);
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    await waitForOriginal();
+    const layout=await page.getByTestId('paper-reader').evaluate(element=>{
+      const primary=element.querySelector('.reading-primary'),original=element.querySelector('[data-testid="reader-pdf"]');
+      return {height:element.clientHeight,width:primary.clientWidth,originalWidth:original.clientWidth,
+        scrollHeight:element.querySelector('[data-testid="reader-pdf-scroll"]').clientHeight,
+        overflow:element.scrollWidth-element.clientWidth};
+    });
+    await page.screenshot({path:join(artifacts,`original-reading-${theme}-${width}.png`)});
+    assert.ok(layout.originalWidth>=layout.width-2,JSON.stringify(layout));
+    assert.ok(layout.scrollHeight>=layout.height*.72,JSON.stringify(layout));
+    assert.equal(layout.overflow,0);
+    rows.push({width,theme,...layout});
+  }
+  const tools=page.getByTestId('reader-pdf-tools').locator('summary').first();
+  await tools.focus();await page.keyboard.press('Enter');
+  await page.getByRole('searchbox',{name:'查找 PDF 全文',exact:true}).waitFor();
+  await tools.focus();await page.keyboard.press('Enter');
+  await expect(page.getByTestId('reader-pdf-tools')).toHaveJSProperty('open',false);
+  await expect(page.getByRole('searchbox',{name:'查找 PDF 全文',exact:true})).toBeHidden();
+  await page.getByTestId('reader-compare-pdf').click();await waitForOriginal();
+  assert.equal(await page.getByTestId('reader-content-area').isVisible(),true);
+  assert.equal(await page.evaluate(()=>window.liveWorkers),1);
+  assert.deepEqual(calls.filter(call=>call.method==='previewDocument').map(call=>call.input.parseId),['actual-original-parse']);
+  await page.getByTestId('reader-parsed-text').click();
+  await page.waitForFunction(()=>window.liveWorkers===0);
+  assert.equal(await page.getByTestId('reader-content-area').isVisible(),true);
+  assert.equal(await f.changes(),before);
+  assert.deepEqual(errors,[]);
+  await writeFile(join(artifacts,'original-reading-geometry.json'),JSON.stringify(rows,null,2));
 });
 
 test('uncaptured coordinate history provides page-only positioning; invalid page input and source corruption remain errors', async () => {

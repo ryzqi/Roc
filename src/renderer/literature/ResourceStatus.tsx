@@ -6,7 +6,7 @@ import {useVisiblePolling} from '../shared/view-activity';
 import {PipelineProgress} from './PipelineProgress';
 import {literaturePipeline} from './pipeline-state';
 
-export function ResourceStatus({itemId, document}: {itemId: string; document: ResearchDocument | null}): React.JSX.Element {
+export function ResourceStatus({itemId, document}: {itemId: string; document: ResearchDocument | null}): React.JSX.Element | null {
   const scope = useWorkspaceScope();
   const receipt = useAsyncResource(JSON.stringify(['library-pipeline', scope.projectId, itemId]),
     () => scope.client.api.research.listAcquisition({projectId: scope.projectId,
@@ -16,6 +16,7 @@ export function ResourceStatus({itemId, document}: {itemId: string; document: Re
   const job = document !== null && latestJob?.documentId !== document.id ? null : latestJob;
   useVisiblePolling(receipt.reload, 4000, job?.status === 'queued' || job?.status === 'running');
   useEffect(() => scope.client.api.research.onLibraryChanged(() => receipt.reload()), [scope.client, receipt.reload]);
+  if (receipt.error === null && !job?.errorCode && (job === null || job.status === 'ready')) return null;
   return <section data-testid="reader-resource-status" className="shrink-0 space-y-2 border-b-[0.5px] border-line px-4 py-3">
     {receipt.data === null ? <p role="status" className="text-[length:var(--font-meta-size)] text-muted">
       {receipt.error === null ? '正在核验处理阶段…' : '处理阶段暂不可核验'}

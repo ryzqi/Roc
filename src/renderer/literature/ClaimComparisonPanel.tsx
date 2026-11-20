@@ -20,7 +20,6 @@ export function ClaimComparisonPanel({client, projectId}: {client: RocClient; pr
   }, {label: '比较实验条件'});
   return <details onToggle={event => {if (event.currentTarget.open) setOpened(true);}} data-testid="wiki-claim-comparison">
     <summary className="cursor-pointer">跨论文主张比较</summary>
-    <p className="my-2 text-xs text-muted">比较依赖原始 Evidence。结果是未审核候选；确认关系请回到工件的人工审核入口。</p>
     <div className="flex flex-wrap gap-2">
       {(['left', 'right'] as const).map(side => <label key={side} className="flex min-w-0 flex-1 flex-col gap-1">
         {side === 'left' ? '主张 A' : '主张 B'}

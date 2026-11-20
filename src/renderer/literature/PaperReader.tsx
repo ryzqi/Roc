@@ -1,7 +1,7 @@
 import { useVisiblePolling } from '../shared/view-activity';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
-import { Check, CircleAlert, ClipboardCopy, Columns2, Download, FileSearch, Loader2, Pencil, Save, ScanLine, Sparkles, Square, Timer, Type, X } from 'lucide-react';
+import { Check, CircleAlert, ClipboardCopy, Download, FileSearch, Loader2, Pencil, Save, ScanLine, Sparkles, Square, Timer, Type, X } from 'lucide-react';
 import type { ResearchDocument, ResearchParseTier } from '../../shared/types';
 import { useWorkspaceScope } from '../app/workspace-scope';
 import { useAsyncResource } from '../app/use-async-resource';
@@ -93,10 +93,14 @@ export function PaperReader({
   const [downloadError, setDownloadError] = useState<string | null>(null);
   /** Reader text size (the 字号 toggle). State, not persisted: see the header. */
   const [largeText, setLargeText] = useState(false);
-  const [comparePdf, setComparePdf] = useState(false);
+  const [readingMode, setReadingMode] = useState<'parsed' | 'original' | 'compare'>('parsed');
+  const comparePdf = readingMode === 'compare';
   const [notesOpen,setNotesOpen]=useState(false),[notesVisited,setNotesVisited]=useState(false);
   useEffect(() => {
-    if (focusRequestId > 0 || focusParseId !== null || focusLocator !== null) setNotesOpen(false);
+    if (focusRequestId > 0 || focusParseId !== null || focusLocator !== null) {
+      setNotesOpen(false);
+      setReadingMode(current => current === 'original' ? 'parsed' : current);
+    }
   }, [focusRequestId, focusParseId, focusLocator, focusText, selected?.id]);
   const [noteSeed,setNoteSeed]=useState<{id:string;text:string}|null>(null);
   const [translation,setTranslation]=useState<{id:string;segments:{label:string;text:string}[];label:string}|null>(null);
@@ -243,6 +247,13 @@ export function PaperReader({
   }
 
   const blocks = content === null ? [] : parseDocumentBlocks(content);
+  const paperTitle = selected.metadata.title.trim().length > 0 ? selected.metadata.title : selected.bibliography.title;
+  const paperAuthors = selected.metadata.authors.length === 0 ? '作者未知' : selected.metadata.authors.join('，');
+  const showOriginal = activeDocument?.mediaType === 'application/pdf' && (readingMode !== 'parsed' || reader.parsed === null);
+  const showParsed = !showOriginal || (comparePdf && reader.parsed !== null);
+  const changeReadingMode = (mode: typeof readingMode): void => {
+    requestReadingChange(literature.projectId ?? '', () => setReadingMode(mode));
+  };
   // `null` when the record carries no DOI — never a placeholder, and never the
   // bibliography copy when the metadata one is missing (they are equal by contract:
   // `library-repository.import` rejects a mismatch).
@@ -392,22 +403,24 @@ export function PaperReader({
   };
 
   return (
-    <div className="reading-paper flex h-full min-h-0 min-w-0 flex-col" data-testid="paper-reader" data-library-item={selected.id} data-notes-open={notesOpen}>
+    <div className="reading-paper flex h-full min-h-0 min-w-0 flex-col" data-testid="paper-reader" data-library-item={selected.id} data-notes-open={notesOpen} data-reading-mode={readingMode}>
       <ResourceStatus itemId={selected.id} document={activeDocument}/>
       <header className="reading-paper-header">
         <div className="reading-paper-heading">
-        <h2 className="text-ink" data-testid="reader-title">
-          {selected.metadata.title.trim().length > 0 ? selected.metadata.title : selected.bibliography.title}
+        <h2 className="text-ink" data-testid="reader-title" title={paperTitle}>
+          {paperTitle}
         </h2>
         <p className="flex flex-wrap gap-x-2 text-muted text-[length:var(--font-meta-size)]" data-testid="reader-authors">
-          <span>{selected.metadata.authors.length === 0 ? '作者未知' : selected.metadata.authors.join('，')}</span>
+          <span className="reading-paper-authors" title={paperAuthors}>{paperAuthors}</span>
           {selected.metadata.publishedYear === null ? null : <span>{selected.metadata.publishedYear}</span>}
           {selected.metadata.citationCount === null ? null : <span>被引 {selected.metadata.citationCount}</span>}
         </p>
         </div>
         <details className="reading-disclosure reading-paper-details">
-          <summary data-testid="reader-tools-disclosure">文献信息与工具</summary>
+          <summary data-testid="reader-tools-disclosure">文献信息</summary>
           <div className="reading-disclosure-body">
+        <p className="break-words text-ink">{paperTitle}</p>
+        <p className="break-words text-muted">{paperAuthors}</p>
         <p className="flex flex-wrap items-center gap-2 text-[length:var(--font-micro-size)]">
           <span className="rounded-control border-[0.5px] border-line px-1 font-mono text-muted" data-testid="reader-citation-key">
             {selected.bibliography.citationKey}
@@ -607,18 +620,16 @@ export function PaperReader({
 
           <div className="reading-toolbar reading-navigation">
             <button type="button" aria-expanded={notesOpen} onClick={()=>{setNotesVisited(true);setNotesOpen(!notesOpen);}}>{notesOpen ? '关闭笔记' : '论文笔记'}</button>
-            <select aria-label="结构化阅读分类" value={blockFilter} onChange={event=>setBlockFilter(event.target.value)}>
-              <option value="all">全部内容</option><option value="heading">章节</option><option value="figure">图</option><option value="table">表格</option><option value="formula">公式</option><option value="algorithm">算法</option>
-            </select>
-            <select aria-label="跳转章节" value="" onChange={event=>{setBlockFilter('all');const id=event.target.value;requestAnimationFrame(()=>document.getElementById(`reader-block-${id}`)?.scrollIntoView({block:'start'}));}}>
-              <option value="">跳转章节</option>{blocks.filter(block=>block.kind==='heading').map(block=><option key={block.id} value={block.id}>{block.text}</option>)}
-            </select>
           {activeDocument?.mediaType === 'application/pdf' ? (
             <>
-              <button type="button" onClick={() => requestReadingChange(literature.projectId ?? '', () => setComparePdf(compare => !compare))} aria-pressed={comparePdf}
-                data-testid="reader-compare-pdf" className="flex items-center gap-1 rounded-control border-[0.5px] border-line px-2 py-1 text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)]">
-                <Columns2 size={14}/>{comparePdf ? '仅解析文本' : '原文与解析'}
-              </button>
+              <div role="group" aria-label="阅读视图" className="reading-view-switch">
+                <button type="button" data-testid="reader-original-pdf" aria-pressed={showOriginal && !showParsed}
+                  onClick={() => changeReadingMode('original')}>原文</button>
+                <button type="button" data-testid="reader-parsed-text" aria-pressed={!showOriginal}
+                  disabled={reader.parsed === null} onClick={() => changeReadingMode('parsed')}>解析</button>
+                <button type="button" data-testid="reader-compare-pdf" aria-pressed={comparePdf && showParsed}
+                  disabled={reader.parsed === null} onClick={() => changeReadingMode(comparePdf ? 'parsed' : 'compare')}>对照</button>
+              </div>
               {comparePdf && selectedPdfBlock !== null && content !== null && content.blocks.find(block => block.id === selectedPdfBlock)!.locations.length > 1 ? (
                 <label className="flex items-center gap-1 text-[length:var(--font-meta-size)]">块位置
                   <select aria-label="解析块位置" value={selectedPdfLocation} onChange={event => {
@@ -634,7 +645,7 @@ export function PaperReader({
             </>
           ) : null}
           <details className="reading-disclosure reading-parse-details" key={activeDocumentId} open={activeDocument?.status !== 'ready' ? true : undefined}>
-            <summary data-testid="reader-parse-disclosure">文档处理 <span className="text-muted">{activeDocument === null ? '' : STATUS_LABELS[activeDocument.status]}</span></summary>
+            <summary data-testid="reader-parse-disclosure">处理{activeDocument !== null && activeDocument.status !== 'ready' ? <span className="text-muted">{STATUS_LABELS[activeDocument.status]}</span> : null}</summary>
           {activeDocument === null ? null : (
             <div className="flex shrink-0 flex-wrap items-center gap-2 border-b-[0.5px] border-line px-3 py-2 text-[length:var(--font-meta-size)]">
               <span className="text-muted" data-testid="reader-document-status" data-status={activeDocument.status}>
@@ -784,7 +795,22 @@ export function PaperReader({
           </div>
 
           </details>
-            <details className="reading-disclosure reading-extra-tools"><summary>阅读工具</summary><div className="reading-toolbar">
+            <details className="reading-disclosure reading-extra-tools"><summary data-testid="reader-reading-tools">工具</summary><div className="reading-toolbar">
+            <select aria-label="结构化阅读分类" value={blockFilter} onChange={event=>{
+              const filter=event.target.value;
+              requestReadingChange(literature.projectId ?? '',()=>{setBlockFilter(filter);setReadingMode('parsed');});
+            }}>
+              <option value="all">全部内容</option><option value="heading">章节</option><option value="figure">图</option><option value="table">表格</option><option value="formula">公式</option><option value="algorithm">算法</option>
+            </select>
+            <select aria-label="跳转章节" value="" onChange={event=>{
+              const id=event.target.value;
+              requestReadingChange(literature.projectId ?? '',()=>{
+                setBlockFilter('all');setReadingMode('parsed');
+                requestAnimationFrame(()=>document.getElementById(`reader-block-${id}`)?.scrollIntoView({block:'start'}));
+              });
+            }}>
+              <option value="">跳转章节</option>{blocks.filter(block=>block.kind==='heading').map(block=><option key={block.id} value={block.id}>{block.text}</option>)}
+            </select>
             <button type="button" disabled={!blocks.length} onClick={()=>translate(blocks.filter(block=>block.text.trim()).map(block=>({label:`${block.label}，${block.locator}`,text:block.text})),'解析全文翻译')}>翻译解析全文</button>
             <button type="button" disabled={!blocks.length} onClick={()=>void copy.copy(blocks.map(block=>block.kind==='heading'?`## ${block.text}`:block.kind==='formula'?`$$\n${block.text}\n$$`:block.text).join('\n\n'))}>复制 Markdown</button>
           <button
@@ -826,8 +852,8 @@ export function PaperReader({
           </div>
           <div className="reading-workspace">
           <div className="reading-primary">
-          {!reader.loading && (comparePdf || reader.parsed===null) && activeDocument?.mediaType === 'application/pdf' && literature.projectId !== null ? (
-            <div className={`${reader.parsed===null?'w-full':'w-1/2'} min-h-0 min-w-0 border-r-[0.5px] border-line`}>
+          {!reader.loading && showOriginal && activeDocument !== null && literature.projectId !== null ? (
+            <div className={`reading-original ${showParsed ? 'reading-original-compare' : ''}`}>
               <LazyBoundary fallback={<p role="status" className="p-2 text-muted">加载原文阅读器…</p>}>
                 <PaperPdfView client={literature.client} projectId={literature.projectId} document={activeDocument} parsed={reader.parsed}
                   onNote={addNote} onTranslate={translate}
@@ -838,15 +864,18 @@ export function PaperReader({
                     const next = {parseId: reader.parsed.run.id, ...selection};
                     requestReadingChange(literature.projectId ?? '', () => {
                       setPdfSelection(next);
-                      const target = document.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(selection.blockId)}"]`);
-                      target?.focus({preventScroll: true});
-                      target?.scrollIntoView({block: 'center'});
+                      setBlockFilter('all');
+                      requestAnimationFrame(() => {
+                        const target = document.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(selection.blockId)}"]`);
+                        target?.focus({preventScroll: true});
+                        target?.scrollIntoView({block: 'center'});
+                      });
                     });
                   }}/>
               </LazyBoundary>
             </div>
           ) : null}
-          <div hidden={activeDocument?.mediaType==='application/pdf' && reader.parsed===null} className="reading-content min-h-0 min-w-0 flex-1 overflow-y-auto" data-testid="reader-content-area" onPointerUp={event=>{const selection=window.getSelection();if(selection && event.currentTarget.contains(selection.anchorNode) && event.currentTarget.contains(selection.focusNode))setSelectedText(selection.toString());}}>
+          <div hidden={!showParsed} className="reading-content min-h-0 min-w-0 flex-1 overflow-y-auto" data-testid="reader-content-area" onPointerUp={event=>{const selection=window.getSelection();if(selection && event.currentTarget.contains(selection.anchorNode) && event.currentTarget.contains(selection.focusNode))setSelectedText(selection.toString());}}>
 
             {focusLocator !== null && matchedBlockId === null && content !== null ? (
               <p role="note" className="mb-2 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" data-testid="reader-jump-missed">
@@ -938,7 +967,10 @@ export function PaperReader({
                       <button type="button" disabled={content.blocks[index].locations.length === 0}
                         aria-label={`查看${block.label}原文位置`} aria-pressed={selectedPdfBlock === block.id}
                         data-testid="reader-block-source" className="mt-1 flex items-center gap-1 rounded-control px-1 py-0.5 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
-                        onClick={() => {setComparePdf(true); setPdfSelection({parseId: reader.parsed!.run.id, blockId: block.id, locationIndex: 0});}}>
+                        onClick={() => requestReadingChange(literature.projectId ?? '', () => {
+                          setReadingMode('compare');
+                          setPdfSelection({parseId: reader.parsed!.run.id, blockId: block.id, locationIndex: 0});
+                        })}>
                         <ScanLine size={13}/>{selectedPdfBlock === block.id ? '所选位置' : '原文位置'}
                       </button>
                     ) : null}

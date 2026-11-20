@@ -304,7 +304,7 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
           event.key === 'Home' ? 1 : event.key === 'End' ? current.pdf.numPages : null;
         if (page !== null) {event.preventDefault(); navigate(page);}
       }}>
-      <div className="flex shrink-0 flex-wrap items-center gap-1 border-b-[0.5px] border-line px-2 py-1.5 text-[length:var(--font-meta-size)]">
+      <div className="reading-pdf-navigation flex shrink-0 flex-wrap items-center gap-1 border-b-[0.5px] border-line px-2 py-1.5 text-[length:var(--font-meta-size)]">
         <span className="mr-auto text-muted">原 PDF</span>
         <button type="button" aria-label="上一页" disabled={current === null || pageNumber <= 1} onClick={() => navigate(pageNumber - 1)}
           className="rounded-control p-1 hover:bg-[var(--overlay-hover)] disabled:opacity-40"><ChevronLeft size={14}/></button>
@@ -342,10 +342,10 @@ export default function PaperPdfView({client, projectId, document, parsed, selec
           disabled={currentPaint === null || frame?.kind !== 'pdf' || failure !== null}
           onClick={() => {resetDrag(); setRegionError(null); setRegionMode(selecting ? null : overlayKey);}}
           className="rounded-control p-1 hover:bg-[var(--overlay-hover)] disabled:opacity-40"><ScanLine size={14}/></button> : null}
-      </div>
       {current && onNote && onTranslate?<PdfReadingTools key={key} client={client} projectId={projectId} documentId={document.id} sourceHash={document.sourceHash}
         pdf={current.pdf} page={pageNumber} navigate={navigate} selection={textSelection} writable={canAnnotate} highlights={highlights}
         onHighlights={setHighlights} onQuery={setQuery} onNote={onNote} onTranslate={onTranslate}/>:null}
+      </div>
       <div ref={scrollRef} data-testid="reader-pdf-scroll" className="min-h-0 flex-1 overflow-auto px-2 py-2 [scrollbar-gutter:stable]">
         {failure === null ? null : <ErrorBar error={{level: 'blocked', message: failure, retry: () => setRevision(revision => revision + 1)}}/>}
         {pageError === null ? null : <p role="alert" className="text-[var(--st-warn)]">{pageError}</p>}

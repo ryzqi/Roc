@@ -13,23 +13,30 @@
 .reading-disclosure > summary > span { margin-inline-start: 8px; }
 .reading-disclosure-body { display: flex; flex-direction: column; gap: 12px; padding: 12px; border-top: .5px solid var(--line); }
 .reading-paper { container: reading-paper / inline-size; }
-.reading-paper-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; padding: 16px 20px 0; border-bottom: .5px solid var(--line); flex-shrink: 0; max-height: 38%; overflow: auto; }
+.reading-paper-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px 16px; padding: 12px 16px; border-bottom: .5px solid var(--line); flex-shrink: 0; max-height: 32%; overflow: auto; }
 .reading-paper-heading { min-width: 0; }
-.reading-paper-heading h2 { font-size: var(--font-read-large-size); font-weight: 600; line-height: 1.5; text-wrap: balance; }
-.reading-paper-heading p { margin-top: 4px; }
-.reading-paper-details { grid-column: 1 / -1; }
-.reading-paper-details > summary { padding: 4px 0 8px; }
-.reading-paper-details[open] > summary { padding-bottom: 8px; }
+.reading-paper-heading h2 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: var(--font-read-large-size); font-weight: 600; line-height: 1.5; text-wrap: balance; }
+.reading-paper-heading p { margin-top: 4px; flex-wrap: nowrap; white-space: nowrap; }
+.reading-paper-heading p > span { flex-shrink: 0; }
+.reading-paper-heading p > .reading-paper-authors { min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
+.reading-paper-details > summary { padding: 4px 8px; border-radius: var(--radius-control); white-space: nowrap; }
+.reading-paper-details[open] { grid-column: 1 / -1; }
+.reading-paper-details .reading-disclosure-body { padding-inline: 0; }
 .reading-paper-header > [role=status] { grid-column: 1 / -1; padding-bottom: 8px; }
 .reading-resource-panels { max-height: 38%; flex-shrink: 0; overflow: auto; border-bottom: .5px solid var(--line); }
-.reading-document-controls { max-height: 38%; flex-shrink: 0; overflow-y: auto; }
+.reading-document-controls { max-height: 32%; flex-shrink: 0; overflow-y: auto; }
 .reading-parse-details { border: 0; }
 .reading-parse-details > summary { padding-block: 4px; }
-.reading-navigation { gap: 4px; }
+.reading-navigation { gap: 4px; padding: 8px; }
+.reading-view-switch { display: inline-flex; align-items: center; gap: 0; padding: 2px; border: .5px solid var(--line); border-radius: var(--radius-control); }
+.reading-view-switch button { min-height: 24px; padding: 2px 8px; }
+.reading-view-switch button[aria-pressed=true] { background: var(--overlay-active); color: var(--ink); }
 .reading-translation-region { min-height: 0; max-height: 32%; overflow: auto; flex-shrink: 0; }
 .reading-translation-region > section { max-height: none; }
 .reading-workspace { display: flex; min-height: 0; min-width: 0; flex: 1; }
 .reading-primary { display: flex; min-height: 0; min-width: 0; flex: 1; }
+.reading-original { width: 100%; min-height: 0; min-width: 0; }
+.reading-original-compare { width: 50%; border-inline-end: .5px solid var(--line); }
 .reading-content { padding: 24px clamp(16px, 4cqw, 48px); scrollbar-gutter: stable; }
 .reading-article { display: flex; flex-direction: column; gap: 24px; max-width: 76ch; margin-inline: auto; }
 .reading-article h3 { font-size: var(--font-read-large-size); margin-block: 8px; }
@@ -105,7 +112,7 @@
   .reading-preview-pane { border-inline-start: 0; border-top: .5px solid var(--line); }
 }
 @container reading-paper (max-width: 800px) {
-  .reading-paper-header { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 12px 16px 0; }
+  .reading-paper-header { gap: 8px; padding: 12px; }
 }
 @container reading-paper (max-width: 1100px) {
   .reading-paper-notes { width: 100%; max-width: none; border-inline-start: 0; }
@@ -125,6 +132,6 @@
   .reading-paper[data-notes-open=true] .reading-compare-controls { display: none; }
 }
 
-.reading-navigation > .reading-disclosure > summary { padding: 4px 8px; min-height: 28px; }
-.reading-navigation > .reading-disclosure[open] { flex: 1 0 100%; order: 1; }
-.reading-navigation > .reading-disclosure[open] > .reading-toolbar { padding-inline: 0; }
+:is(.reading-navigation, .reading-pdf-navigation, .reading-pdf-tools-bar) > .reading-disclosure > summary { padding: 4px 8px; min-height: 28px; }
+:is(.reading-navigation, .reading-pdf-navigation, .reading-pdf-tools-bar) > .reading-disclosure[open] { flex: 1 0 100%; order: 1; }
+:is(.reading-navigation, .reading-pdf-navigation, .reading-pdf-tools-bar) > .reading-disclosure[open] > .reading-toolbar { padding-inline: 0; }

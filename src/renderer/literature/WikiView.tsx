@@ -345,18 +345,14 @@ export function WikiView({
                 <LazyBoundary fallback={<p className="whitespace-pre-wrap">{selected.content}</p>}><ScientificMarkdown text={selected.content}/></LazyBoundary>
               </div>
 
-              {selected.evidence.length === 0 ? (
-                <p className="mt-2 text-subtle text-[length:var(--font-micro-size)]" data-testid={`wiki-page-no-evidence-${selected.claimId}`}>
-                  这条主张还没有引用任何证据。
-                </p>
-              ) : (
+              {selected.evidence.length > 0 && (
                 <ul className="mt-2 flex flex-col gap-1.5" data-testid={`wiki-page-evidence-${selected.claimId}`}>
                   {slice(selected.evidence, 'evidence').map((card) => (
                     <li key={card.id} className="knowledge-evidence-row">
                       <p className="text-ink text-[length:var(--font-meta-size)]">{card.title}</p>
-                      <p className="text-[var(--st-warn)] text-[length:var(--font-meta-size)]">
-                        {card.referenceStatus === 'superseded' ? '来源已失效，保留历史摘录' : card.referenceStatus === 'unknown' ? '来源状态未加载' : null}
-                      </p>
+                      {card.referenceStatus !== 'recorded' && <p className="text-[var(--st-warn)] text-[length:var(--font-meta-size)]">
+                        {card.referenceStatus === 'superseded' ? '来源已失效，保留历史摘录' : '来源状态未加载'}
+                      </p>}
                       {card.relations.map(relation => <p key={relation.id} className="break-words text-muted text-[length:var(--font-meta-size)]">
                         {RELATION_LABELS[relation.kind]}：{DECISION_LABELS[relation.status]}
                         {relation.condition ? `；条件：${relation.condition}` : ''}

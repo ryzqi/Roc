@@ -47,7 +47,7 @@ function NeighborPage({client, projectId, entity, type, onSelectEntity}: Props &
     {data?.hits.length === 0 ? <p className="text-xs text-muted">没有当前有效的科研关系。</p> : null}
     <ul className="space-y-2">{data?.hits.map(hit => hit.kind !== 'relation' ? null :
       <li key={scientificHitKey(hit)} className="space-y-1 border-b-[0.5px] border-line pb-2">
-        <p className="text-xs text-muted">{scientificRelationLabels[hit.value.type]}，{hit.value.type}，科学支持未审核</p>
+        <p className="text-xs text-muted">{scientificRelationLabels[hit.value.type]}</p>
         <div className="flex flex-wrap items-center gap-2">{[hit.value.fromEntityId, hit.value.toEntityId].map((id, index) => {
           const endpoint = hit.entities.find(value => value.id === id);
           return <span key={index} className="contents">

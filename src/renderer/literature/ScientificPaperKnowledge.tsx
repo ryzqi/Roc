@@ -32,7 +32,7 @@ export function ScientificPaperKnowledge({client, projectId, reference, record, 
     {read.error ? <ErrorBar error={{level: 'blocked', message: read.error, retry: read.reload}}/> : null}
     {card ? <p className="flex flex-wrap gap-x-3 text-xs text-muted" data-testid="wiki-scientific-source-status">
       <span>{current ? '来源当前有效' : card.state === 'missing' ? '科研知识尚未生成' : '科研来源已失效'}</span>
-      <span>科学支持未审核</span>
+      <span>生成草稿</span>
     </p> : null}
     {card?.configurationError ? <p role="alert" className="break-words text-xs">{card.configurationError}</p> : null}
     <button type="button" className={formSecondaryButtonClass} onClick={read.reload}>刷新科研来源</button>

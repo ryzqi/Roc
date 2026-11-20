@@ -86,12 +86,13 @@ test('real Electron/IPC: capture → create theme → edit human section → inv
   await page.getByLabel('章节正文',{exact:true}).fill('人工维护的比较，仍需科学审核。');
   assert.equal(await page.getByRole('button',{name:'主张与证据',exact:true}).isDisabled(),true);
   await page.getByRole('button',{name:'保存人工章节',exact:true}).click();await detail.getByText('人工维护',{exact:true}).waitFor();
-  await detail.getByText('自动编译保留',{exact:true}).waitFor();
+  assert.equal(await detail.getByText('自动编译保留',{exact:true}).count(),0);
   const topic=(await f.repository.wiki.search(f.project.id)).pages.find(p=>p.kind==='comparison');
   assert.equal(f.repository.wiki.read(f.project.id,topic.id).current.reason,'human');
   await detail.getByRole('button',{name:'交给助手综合',exact:true}).click();assert.match(await page.evaluate(()=>window.promptForAssistant),/research_wiki_draft/);
   f.repository.evidence.invalidateEvidence(f.evidence.id,f.project.id);
   f.repository.wiki.wake();await f.repository.wiki.idle();await detail.getByRole('button',{name:'刷新页面',exact:true}).click();
+  await detail.getByTestId('wiki-page-lint').locator('summary').click();
   await detail.getByTestId('wiki-page-lint').getByText(/原始证据已失效/).waitFor();
   assert.match(await detail.getByTestId('wiki-section-body').innerText(),/人工维护的比较/);
   await detail.locator('summary').filter({hasText:'页面操作'}).click();
@@ -108,7 +109,8 @@ test('real Electron/IPC: capture → create theme → edit human section → inv
   assert.equal(f.repository.wiki.read(f.project.id,topic.id).current.reason,'rollback');
   const search = page.getByLabel('搜索持久页面');
   await search.fill('跨文献比较');
-  await page.getByTestId('wiki-search-status').getByText(/关键词检索/).waitFor();
+  await page.waitForFunction(()=>window.wikiCalls.some(call=>call.method==='searchWiki'&&call.input.query==='跨文献比较'));
+  await page.getByTestId('wiki-page-row').filter({hasText:'跨文献比较草稿'}).waitFor();
   assert.equal(await page.getByTestId('wiki-page-row').count(),1);
   await search.fill('');
   const artifact=f.repository.createArtifact({projectId:f.project.id,stage:'reading',kind:'reading_notes',title:'Conditions',path:null});
@@ -138,6 +140,38 @@ test('real Electron/IPC: capture → create theme → edit human section → inv
     assert.equal(audit.cut,0);assert.equal(await page.evaluate(()=>document.body.scrollWidth>innerWidth),false);
     await page.screenshot({path:join(artifacts,`pages-${theme}-${width}.png`)});
   }
+});
+test('routine audit notes stay out of reading while source problems remain accessible and deduplicated',async()=>{
+  const f=await scene();
+  let value=f.repository.wiki.read(f.project.id,(await f.repository.wiki.search(f.project.id)).pages[0].id);
+  for(const [id,evidenceIds] of [['note-one',[]],['note-two',[]],['shared-source',[f.evidence.id]]]){
+    value=api.withResearchHumanContext({capability:'research.wiki.save',projectId:f.project.id,windowId},()=>
+      f.repository.wiki.save({projectId:f.project.id,pageId:value.page.id,expectedRevision:value.page.revision,
+        expectedBasisDigest:value.basisDigest,section:{id,title:id,body:'Reading content stays visible.',evidenceIds,claimIds:[],links:[]}},'human'));
+  }
+  assert.equal(value.lint.filter(issue=>issue.code==='uncited').length,2);
+  assert.equal(value.lint.some(issue=>issue.code==='isolated'),true);
+  await page.getByTestId('wiki-page-row').click();
+  const detail=page.getByTestId('wiki-page-detail');
+  await detail.getByRole('heading',{name:'note-two',exact:true}).waitFor();
+  assert.equal(await detail.getByTestId('wiki-page-lint').count(),0);
+  assert.doesNotMatch(await detail.innerText(),/不能据此确认科学支持|此页尚无到其他 Wiki|不代表语义或科学支持审核|自动编译保留|待核查/);
+  f.repository.evidence.invalidateEvidence(f.evidence.id,f.project.id);
+  await detail.getByRole('button',{name:'刷新页面',exact:true}).click();
+  const checks=detail.getByTestId('wiki-page-lint');
+  await checks.locator('summary').waitFor();
+  assert.equal(await checks.evaluate(element=>element.open),false);
+  assert.equal(await checks.locator('li').first().isVisible(),false);
+  await detail.getByText('依据已改变，待更新',{exact:true}).first().waitFor();
+  await checks.locator('summary').focus();await page.keyboard.press('Enter');
+  await checks.getByText(/原始证据已失效/).waitFor();
+  const messages=await checks.locator('li').allTextContents();
+  assert.equal(messages.length,new Set(messages).size);
+  assert.doesNotMatch(messages.join('\n'),/不能据此确认科学支持|此页尚无到其他 Wiki/);
+  await checks.locator('summary').focus();await page.keyboard.press('Enter');
+  await detail.getByRole('button',{name:'刷新页面',exact:true}).click();
+  await detail.getByRole('button',{name:'刷新页面',exact:true}).waitFor();
+  assert.equal(await checks.evaluate(element=>element.open),false);
 });
 test('stale edits retain typed text and expose conflict; read-only and no-project views cannot mutate',async()=>{
   const f=await scene();await page.getByTestId('wiki-page-row').click();const detail=page.getByTestId('wiki-page-detail');
