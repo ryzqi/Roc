@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { MessagesSquare, Plus, Trash2 } from 'lucide-react';
+import { MessagesSquare, Plus, Search, Trash2 } from 'lucide-react';
 import type { RocClient } from '../shared/roc-client';
 import { formatRelativeBeijing } from '../shared/format';
 import { ConfirmDialog } from '../shell/ConfirmDialog';
 import { EmptyState } from '../shell/EmptyState';
 import { useChatThreads } from './use-chat-threads';
+import './assistant-workspace.css';
 
 /**
  * 会话 tab (T4.7): the assistant's chat threads.
@@ -35,6 +36,8 @@ export function SessionListView({
   onThreadDeleted
 }: SessionListViewProps): React.JSX.Element {
   const threads = useChatThreads(client);
+  const [query, setQuery] = useState('');
+  const shown = threads.threads.filter(thread => thread.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
 
   if (threads.status === 'loading' && threads.threads.length === 0) {
@@ -62,19 +65,9 @@ export function SessionListView({
     );
   }
 
-  if (threads.threads.length === 0) {
-    return (
-      <EmptyState
-        compact
-        icon={MessagesSquare}
-        title="暂无会话"
-        testId="sidebar-empty-sessions"
-      />
-    );
-  }
 
   return (
-    <div className="flex h-full min-h-0 flex-col" data-testid="session-list">
+    <div className="session-browser flex h-full min-h-0 flex-col" data-testid="session-list">
       <div className="flex shrink-0 items-center gap-1 px-2 py-1.5">
         <button
           type="button"
@@ -86,14 +79,21 @@ export function SessionListView({
           <span className="text-[length:var(--font-meta-size)]">新建会话</span>
         </button>
         <span className="min-w-0 flex-1 truncate text-subtle text-[length:var(--font-micro-size)]">
-          {activeThreadId === null ? '新会话（首次发送时创建）' : ''}
+          {threads.threads.length} 个会话
         </span>
       </div>
-      <ul className="min-h-0 flex-1 overflow-y-auto py-1">
-        {threads.threads.map((thread) => {
+      <label className="session-search">
+        <Search size={14} aria-hidden="true"/>
+        <input aria-label="搜索会话" placeholder="搜索会话" value={query} onChange={event => setQuery(event.target.value)}/>
+        {query ? <button type="button" onClick={() => setQuery('')}>清空</button> : null}
+      </label>
+      {threads.threads.length === 0 ? <EmptyState compact icon={MessagesSquare} title="暂无会话" testId="sidebar-empty-sessions"/> : null}
+      {threads.threads.length > 0 && shown.length === 0 ? <p role="status" className="px-3 py-4 text-muted">没有匹配的会话</p> : null}
+      <ul className="session-results min-h-0 flex-1 overflow-y-auto py-1">
+        {shown.map((thread) => {
           const active = thread.id === activeThreadId;
           return (
-            <li key={thread.id} className="group flex items-center">
+            <li key={thread.id} className="session-row group flex items-center">
               <button
                 type="button"
                 onClick={() => onSelectThread(thread.id)}
@@ -106,7 +106,7 @@ export function SessionListView({
                     : 'flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded-control px-2 py-1 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]'
                 }
               >
-                <span className="w-full truncate text-[length:var(--font-meta-size)]">{thread.title}</span>
+                <span className="session-title text-[length:var(--font-meta-size)]">{thread.title}</span>
                 <span className="text-subtle text-[length:var(--font-micro-size)]">
                   {formatRelativeBeijing(thread.updatedAt)}
                 </span>

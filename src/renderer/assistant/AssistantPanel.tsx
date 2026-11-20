@@ -1,3 +1,4 @@
+import './assistant-workspace.css';
 import type {OpenResearchArtifact, OpenReviewInspector, ReadResearchGateContext} from '../artifacts/artifact-interactions';
 import {ReviewLinkActionsProvider} from './blocks/review-link-actions';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -301,7 +302,7 @@ export function AssistantPanel({
   );
 
   const header = (
-    <div className="flex shrink-0 flex-col gap-1.5 border-b-[0.5px] border-line px-3 py-2">
+    <div className="assistant-header flex shrink-0 flex-col gap-1.5 border-b-[0.5px] border-line px-3 py-2">
       <div className="flex min-w-0 items-center gap-2">
         <Bot size={14} aria-hidden="true" className="shrink-0 text-[var(--icon-agent)]" />
         <span className="min-w-0 truncate font-medium text-ink text-[length:var(--font-meta-size)]">研究助手</span>
@@ -340,7 +341,7 @@ export function AssistantPanel({
       </div>
       <div className="flex min-w-0 items-center gap-2">
         <span
-          className="min-w-0 max-w-[45%] truncate text-subtle text-[length:var(--font-micro-size)]"
+          className="min-w-0 flex-1 truncate text-subtle text-[length:var(--font-micro-size)]"
           data-testid="assistant-context"
           title={projectName ?? '未进入项目'}
         >
@@ -443,7 +444,7 @@ export function AssistantPanel({
       {waitingUser ? (
         <p className="shrink-0 border-t-[0.5px] border-line px-3 py-1 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" data-testid="assistant-waiting-note">
           <AlertTriangle size={10} aria-hidden="true" className="mr-1 inline" />
-          运行已挂起，等待你在上面的卡片里做出决定；刷新后仍会回到这里。
+          等待审批，请在上方卡片中处理。
         </p>
       ) : null}
 

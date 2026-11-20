@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
+import './project-workspace.css';
 import { LayoutGrid, List, Loader2, Plus, Search } from 'lucide-react';
 import type { ResearchProject } from '../../shared/types';
 import { readProjectView, writeProjectView, readRecentProjectIds, type ProjectView } from '../app/ui-state';
@@ -161,8 +162,8 @@ export function ProjectPortalView({
   };
 
   return (
-    <div className="h-full overflow-y-auto" data-testid="portal">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-7 px-4 py-8 sm:px-6 lg:px-8">
+    <div className="project-portal h-full overflow-y-auto" data-testid="portal">
+      <div className="project-portal-content">
         <header className="flex items-center justify-between gap-3 pb-1">
           <h1 className="text-[length:var(--font-h2-size)] font-semibold">研究项目</h1>
           <button type="button" data-testid="portal-new-project" aria-label="新建研究项目" onClick={() => setCreateOpen(true)}
@@ -173,7 +174,7 @@ export function ProjectPortalView({
         {recent.length === 0 || query.trim() !== '' || filter === 'archived' ? null : (
           <section aria-labelledby="portal-recent-heading" data-testid="portal-recent">
             <h2 id="portal-recent-heading" className="mb-2 text-[length:var(--font-ui-size)] font-medium">最近使用</h2>
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+            <div className="project-recent-list">
               {recent.map(project => (
                 <button key={project.id} type="button" onClick={() => onOpenProject(project.id)}
                   className="min-w-0 rounded-control border-[0.5px] border-line p-3 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]">
@@ -185,7 +186,7 @@ export function ProjectPortalView({
           </section>
         )}
         <section aria-labelledby="portal-all-heading" className="flex flex-col gap-3">
-        <h2 id="portal-all-heading" className="flex items-baseline gap-2 text-[length:var(--font-ui-size)] font-medium">全部项目 <span className="font-normal text-muted tabular-nums text-[length:var(--font-meta-size)]">{shown.length}</span></h2>
+        <h2 id="portal-all-heading" className="flex items-baseline gap-2 text-[length:var(--font-ui-size)] font-medium">{filter === 'archived' ? '已归档项目' : filter === 'active' ? '进行中的项目' : '全部项目'} <span className="font-normal text-muted tabular-nums text-[length:var(--font-meta-size)]">{shown.length}</span></h2>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex h-[var(--control-height)] min-w-[160px] flex-1 items-center gap-2 rounded-control border-[0.5px] border-line bg-surface px-2.5">
             <Search size={13} aria-hidden="true" className="shrink-0 text-subtle" />
@@ -294,7 +295,7 @@ export function ProjectPortalView({
             onKeyDown={onListKeyDown}
             data-testid="portal-grid"
             data-project-view={projectView}
-            className={projectView === 'cards' ? 'grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3' : 'flex flex-col'}
+            className={projectView === 'cards' ? 'project-grid' : 'project-list'}
           >
             {shown.map((project, index) => (
               <div role="listitem" key={project.id} data-project-index={index}>

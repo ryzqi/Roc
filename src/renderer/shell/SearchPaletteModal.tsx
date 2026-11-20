@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import { ModalShell } from './ModalShell';
+import './search-palette.css';
 
 /**
  * ⌘K search palette (P1 shell; data sources land in P5/P6).
@@ -141,11 +142,12 @@ export function SearchPaletteModal({
       open={open}
       title="搜索"
       onClose={onClose}
-      widthClassName="w-[640px]"
+      widthClassName="w-[720px]"
       testId="search-palette"
       initialFocusRef={inputRef}
+      footer={<p className="mr-auto text-subtle text-[length:var(--font-meta-size)]">↑ ↓ 选择，Enter 打开，Esc 关闭</p>}
     >
-      <div className="flex flex-col gap-3">
+      <div className="search-palette-content flex flex-col gap-3">
         <div className="flex h-[var(--control-height)] items-center gap-2 rounded-control border-[0.5px] border-line bg-surface-strong px-2.5">
           <Search size={13} aria-hidden="true" className="shrink-0 text-subtle" />
           <input
@@ -161,7 +163,7 @@ export function SearchPaletteModal({
               composingRef.current = false;
               compositionEndedAt.current = performance.now();
             }}
-            placeholder="搜索项目、文献、文件、会话、技能、概念、产物"
+            placeholder="搜索内容"
             role="combobox"
             aria-autocomplete="list"
             aria-expanded={hasQuery}
@@ -190,7 +192,7 @@ export function SearchPaletteModal({
           role="listbox"
           aria-label="搜索结果"
           aria-busy={hasQuery && groups.some((group) => group.status === 'loading')}
-          className="ui-scroll-region max-h-[48vh] min-h-[8rem]"
+          className="search-palette-results ui-scroll-region min-h-[8rem]"
         >
           {!hasQuery ? (
             /* An empty query is not a search that found nothing: rendering the
@@ -207,11 +209,11 @@ export function SearchPaletteModal({
                 key={group.id}
                 role="group"
                 aria-label={group.label}
-                className="mb-3"
+                className="search-palette-group mb-3"
                 data-testid={`search-group-${group.id}`}
                 data-status={group.status}
               >
-                <h3 className="px-1 py-1 text-subtle text-[length:var(--font-micro-size)]">{group.label}</h3>
+                <h3 className="search-palette-group-heading"><span>{group.label}</span>{group.items.length > 0 ? <span className="tabular-nums">{group.items.length} 项</span> : null}</h3>
                 {group.status === 'unavailable' ? (
                   <p className="px-1 py-1.5 text-[var(--st-warn)] text-[length:var(--font-meta-size)]">
                     该分组不可用{group.unavailableReason === undefined ? '' : `：${group.unavailableReason}`}
@@ -250,7 +252,7 @@ export function SearchPaletteModal({
                                 : 'flex w-full flex-col items-start rounded-control px-2 py-1.5 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]'
                             }
                           >
-                            <span className="w-full truncate text-ink">{item.title}</span>
+                            <span className="search-palette-result-title text-ink">{item.title}</span>
                             {item.subtitle === undefined ? null : (
                               <span className="w-full truncate text-muted text-[length:var(--font-micro-size)]">
                                 {item.subtitle}
@@ -267,7 +269,6 @@ export function SearchPaletteModal({
           )}
         </div>
 
-        <p className="text-subtle text-[length:var(--font-micro-size)]">↑ ↓ 选择，Enter 打开，Esc 关闭</p>
       </div>
     </ModalShell>
   );

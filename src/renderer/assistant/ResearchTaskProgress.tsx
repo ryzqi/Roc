@@ -23,7 +23,7 @@ export function ResearchTaskProgress({ client, projectId, threadId, runId, runSt
         resource.status === 'loading' ? <p role="status" className="text-subtle">读取任务中…</p> : null
       ) : (
         <>
-          <TaskSummary data={data} />
+          <TaskSummary data={data} compactUsage />
           <TaskControls key={data.task.id} client={client} data={data} onChanged={resource.reload} />
           <button type="button" className={`${formSecondaryButtonClass} justify-self-start`}
             data-testid="assistant-task-details" onClick={() => onOpenTask(data.task.id)}>查看任务详情</button>

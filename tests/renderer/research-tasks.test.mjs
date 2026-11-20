@@ -428,8 +428,11 @@ test('assistant reads authoritative usage and progress, handles keyboard detail 
   await page.evaluate(() => { reset(); mount(); });
   await ready();
   assert.equal(await page.getByTestId('task-progress').innerText(), '执行已完成 2 / 3 次');
+  await page.getByText('用量与调用', {exact: true}).click();
+  await expect(page.getByTestId('task-usage')).toBeVisible();
+  await expect.poll(() => page.getByTestId('task-usage').innerText()).toContain('已知 80');
   const text = await page.getByTestId('task-usage').innerText();
-  for (const expected of ['已知 80', '未知 100', '预留 50', '模型 3']) assert.ok(text.includes(expected));
+  for (const expected of ['已知 80', '未知 100', '预留 50', '模型 3']) assert.ok(text.includes(expected), JSON.stringify({text,expected}));
   const details = page.getByTestId('assistant-task-details');
   await details.focus();
   await page.keyboard.press('Enter');
@@ -589,7 +592,9 @@ test('project task cursor loads another page and new-task invalidation refreshes
 test('management tasks load without project model budget controls and retain task usage', async () => {
   await page.evaluate(() => { reset(); mountManagementTasks(); });
   await page.getByTestId('mgmt-task-tree').waitFor();
+  await page.getByTestId('mgmt-task-category-python').click();
   await page.getByText('尚未选择 Python 环境。', {exact: true}).waitFor();
+  await page.getByTestId('mgmt-task-category-research').click();
   assert.equal(await page.getByTestId('mgmt-project-budget').count(), 0);
   assert.equal(await page.getByText('项目模型预算', {exact: true}).count(), 0);
   const usage = await page.getByTestId('task-usage').innerText();

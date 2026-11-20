@@ -27,8 +27,8 @@ export function TaskUsage({ usage }: { usage: RunUsageStatus }): React.JSX.Eleme
   );
 }
 
-export function TaskSummary({ data, details = false }: {
-  data: ResearchTaskDiagnostics; details?: boolean;
+export function TaskSummary({ data, details = false, compactUsage = false }: {
+  data: ResearchTaskDiagnostics; details?: boolean; compactUsage?: boolean;
 }): React.JSX.Element {
   const completed = data.executions.filter(execution => execution.status === 'completed' || execution.status === 'complete').length;
   return (
@@ -42,7 +42,10 @@ export function TaskSummary({ data, details = false }: {
       <p className="tabular-nums text-subtle text-[length:var(--font-meta-size)]" data-testid="task-progress">
         执行已完成 {number.format(completed)} / {number.format(data.executions.length)} 次
       </p>
-      <TaskUsage usage={data.usage} />
+      {compactUsage ? <details className="task-usage-disclosure">
+        <summary>用量与调用</summary>
+        <TaskUsage usage={data.usage} />
+      </details> : <TaskUsage usage={data.usage} />}
       {data.task.statusReason === null ? null : (
         <p className="break-words text-[var(--st-warn)]" data-testid="task-reason">
           任务停止原因：{data.task.statusReason === 'research_provider_reply_loop'
