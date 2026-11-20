@@ -843,14 +843,6 @@ export function PaperReader({
           ) : null}
           <div hidden={activeDocument?.mediaType==='application/pdf' && reader.parsed===null} className="reading-content min-h-0 min-w-0 flex-1 overflow-y-auto" data-testid="reader-content-area" onPointerUp={event=>{const selection=window.getSelection();if(selection && event.currentTarget.contains(selection.anchorNode) && event.currentTarget.contains(selection.focusNode))setSelectedText(selection.toString());}}>
 
-            {content?.parseMode === 'ocr' || content?.parseMode === 'mixed' ?
-              <p role="note" className="mb-2 text-[length:var(--font-meta-size)] text-muted" data-testid="reader-quality-ocr">
-                此版本含 OCR 识别内容，请核对数字、单位和公式。
-              </p> : null}
-            {content?.warnings.map((warning,index) => <p key={`${index}:${warning}`} role="note"
-              className="mb-2 break-words text-[length:var(--font-meta-size)] text-muted" data-testid="reader-quality-warning">
-              {warning === 'research_models_missing_native_text_only' ? '此版本仅提取原生文本，未进行 OCR 核查。' : `解析提示：${warning}`}
-            </p>)}
             {focusLocator !== null && matchedBlockId === null && content !== null ? (
               <p role="note" className="mb-2 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" data-testid="reader-jump-missed">
                 locator「{focusLocator}」没有唯一的精确位置，未跳转。

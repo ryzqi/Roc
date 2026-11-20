@@ -1716,7 +1716,7 @@ async function publishAssetLayout(f) {
   data.content.parserVersion='synthetic-asset-layout/v1';data.content.parserFingerprint=hash('synthetic-asset-layout/v1');
   data.content.structure=structureModule.buildPaperStructure(data.content.blocks);
   data.content.parseMode='mixed';
-  data.content.warnings=['synthetic_quality_requires_review'];
+  data.content.warnings=['native_text_viewport_clipped','synthetic_quality_requires_review'];
   data.content.artifacts.structuredContent='artifacts/synthetic-assets.json';
   const artifact=Buffer.from(JSON.stringify({seam:'synthetic table/formula recognition on actual original page pixels',
     blocks:data.content.blocks,coordinateFrames:f.collected.coordinates.pages}));
@@ -1744,15 +1744,17 @@ async function waitForAsset() {
   });
 }
 
-test('parsed table formula assets load lazily as exact original PNG pixels beside raw text with grounded quality facts', async () => {
+test('parsed table formula assets load lazily as exact original PNG pixels beside raw text without parser notices', async () => {
   const f=await realPdfScene();
   await mount(f);await textEquals('Synthetic group A mean is 2');
-  await page.getByText('此版本仅提取原生文本，未进行 OCR 核查。',{exact:true}).waitFor();
+  assert.equal(await page.getByTestId('reader-quality-warning').count(),0);
   await publishAssetLayout(f);await openAssetReader(f);const before=await f.changes();
   assert.equal(calls.some(call=>call.method==='asset'||call.method==='previewDocument'),false);
-  await page.getByTestId('reader-quality-ocr').waitFor();
-  await page.getByText('解析提示：synthetic_quality_requires_review',{exact:true}).waitFor();
+  assert.equal(await page.getByTestId('reader-quality-ocr').count(),0);
+  assert.equal(await page.getByTestId('reader-quality-warning').count(),0);
+  assert.doesNotMatch(await page.getByTestId('reader-content-area').innerText(),/此版本含 OCR|解析提示|native_text_viewport_clipped|synthetic_quality_requires_review/);
   await page.getByTestId('reader-quality-empty').waitFor();
+  await page.screenshot({path:join(artifacts,'reader-parsed-content.png')});
   const table=page.getByTestId('reader-block-table');
   const toggle=table.getByTestId('reader-block-asset-toggle');
   await toggle.focus();await page.keyboard.press('Enter');await waitForAsset();
