@@ -110,8 +110,8 @@ async function runProfile(input) {
     let interactiveMs = 0;
     if (input.eventCount > 0) {
       const interactiveStartedAt = performance.now();
-      // 会话列表在左栏的「会话」tab 里。
-      await page.getByTestId('sidebar-tab-sessions').click();
+      await page.getByTestId('activity-nav-runs').click();
+      if (!await page.getByTestId('context-drawer').isVisible()) await page.getByTestId('titlebar-toggle-sidebar').click();
       await page.getByTestId(`session-row-${input.threadId}`).click();
       try {
         await page.waitForFunction(

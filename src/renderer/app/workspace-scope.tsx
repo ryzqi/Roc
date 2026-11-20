@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { AppViewId, WorkbenchTool } from './routes';
+import type { AppViewTarget, WorkbenchTool } from './routes';
 import type { RocClient } from '../shared/roc-client';
 import type { WorkspaceBindingStatus } from '../workspace/use-bound-workspace';
 import type {OpenResearchArtifact, OpenReviewInspector} from '../artifacts/artifact-interactions';
@@ -68,12 +68,9 @@ export type WorkspaceScope = {
   /**
    * Navigates the canvas to another view in the same project.
    *
-   * Navigation, not state: the view is a URL field and only the shell
-   * writes the route. Without this a view would have to synthesise a URL — which is
-   * how a second writer of the route contract appears. The literature hub's jump to
-   * the files view is the remaining caller.
+   * The shell writes the route, including any discovery or knowledge subview.
    */
-  openView: (view: AppViewId, onNavigated?: () => void) => void;
+  openView: (view: AppViewTarget, onNavigated?: () => void) => void;
   openLiterature: (target: LiteratureOpenTarget) => void;
   literatureRequest: LiteratureOpenRequest | null;
   consumeLiteratureRequest: (nonce: number) => void;

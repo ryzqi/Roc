@@ -143,10 +143,10 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
   useEffect(() => {
     if (hubActive && store.importRequestId !== lastImportRequest.current) {
       lastImportRequest.current = store.importRequestId;
-      setImportTab('document');
+      setImportTab(store.importRequestTab);
       setImportOpen(true);
     }
-  }, [hubActive, store.importRequestId]);
+  }, [hubActive, store.importRequestId, store.importRequestTab]);
 
   const claims = store.claims;
   const evidence = store.evidence;

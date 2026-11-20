@@ -105,11 +105,15 @@ async function openLiteratureHub(page, projectId) {
  * scoped to the sidebar for clicking — and that is also the stronger assertion:
  * the selection must travel from the sidebar to the canvas through the store.
  */
+async function openLibraryContext(page) {
+  const library = page.getByTestId('activity-nav-library');
+  if ((await library.getAttribute('aria-current')) !== 'page') await library.click();
+  if (!await page.getByTestId('context-drawer').isVisible()) await page.getByTestId('titlebar-toggle-sidebar').click();
+}
+
 async function selectLibraryItemViaSidebar(page, itemId) {
-  if ((await page.locator('[data-testid="sidebar-panel-literature"]').count()) === 0) {
-    await page.click('[data-testid="sidebar-tab-literature"]');
-  }
-  const selector = `[data-testid="sidebar-panel-literature"] [data-testid="literature-row-${itemId}"]`;
+  await openLibraryContext(page);
+  const selector = `[data-testid="context-drawer"] [data-testid="literature-row-${itemId}"]`;
   await page.waitForSelector(selector, { timeout: 30_000 });
   await page.click(selector);
 }
@@ -574,11 +578,10 @@ try {
   assertCheck('1 导入 UI', '新条目在服务端检索里可查到', typeof manualId === 'string' && !manualId.startsWith('error:'), String(manualId));
   const hubRowCount = await page.locator(`[data-testid="literature-hub"] [data-testid="literature-row-${manualId}"]`).count();
   assertCheck('1 导入 UI', '画布 hub 的列表渲染了这条（共享 store）', hubRowCount >= 1, `rows=${hubRowCount}`);
-  // 侧栏的文献列表只在文献 tab 挂载；两侧同时存在即“一个 store、两处渲染”的结构性证据。
-  await page.click('[data-testid="sidebar-tab-literature"]');
+  await openLibraryContext(page);
   const sidebarRowCount = await waitForText(
     page,
-    '[data-testid="literature-count"]',
+    '[data-testid="context-drawer"] [data-testid="literature-count"]',
     (text) => text.includes('1 条'),
     20_000
   );
@@ -589,6 +592,7 @@ try {
     bothSurfacesCount >= 2,
     `rows=${bothSurfacesCount} sidebarCount="${sidebarRowCount.trim()}"`
   );
+  if (await page.getByTestId('sidebar-drawer').isVisible()) await page.getByTestId('sidebar-drawer-close').click();
 
   // ---- 闸门 1：真 PDF 导入 → 真解析 → 阅读器（章节 / 公式 / 表格） --------------
   const imported = await page.evaluate(

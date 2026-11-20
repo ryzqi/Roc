@@ -7,18 +7,18 @@ import {BEFORE_NAVIGATE, type NavigationRequest} from './navigation-guard';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LazyBoundary, retryableLazy } from '../shell/LazyBoundary';
 import type { AppStatus } from '../../shared/types';
-import { isCanvasTabId, isDrawerSectionId, type DrawerSectionId, type MenuIntent } from '../../shared/surfaces';
+import { isDrawerSectionId, type DrawerSectionId, type MenuIntent } from '../../shared/surfaces';
 import { errorMessage } from './loaded-state';
-import { DEFAULT_VIEW, routeForMenuIntent, type AppViewId } from './routes';
+import { DEFAULT_VIEW, routeForMenuIntent, routeForView, type AppViewId, type AppViewTarget, type LayoutPreset } from './routes';
 import { useMenuIntentBridge, useAppRoute } from './use-app-route';
 import { useContentPreferenceSync } from './use-content-preferences';
-import { useLayoutState, type LayoutPreset } from './use-layout-state';
+import { useLayoutState } from './use-layout-state';
 import { useKeyboardShortcuts } from './shortcuts';
 import { clearUiState, dismissOnboarding, readOnboardingDismissed, recordProjectVisit, CONTENT_PREFERENCES_CHANGED } from './ui-state';
 import { ViewContent } from './ViewContent';
 import { WorkspaceLayout } from './WorkspaceLayout';
 import { WorkspaceScopeProvider, type WorkspaceScope, type LiteratureOpenRequest, type LiteratureOpenTarget } from './workspace-scope';
-import { WorkspaceCanvas, type CanvasTabId } from '../canvas/WorkspaceCanvas';
+import { WorkspaceCanvas } from '../canvas/WorkspaceCanvas';
 import { clearAssistantComposerDraft } from '../assistant/composer-draft';
 import type { ManagementTabId } from '../management/use-management-stores';
 import { ManagementScopeProvider, type ManagementScope } from '../management/management-scope';
@@ -26,13 +26,16 @@ import { ManagementStoresProvider } from '../management/management-stores-provid
 import { requestManagementEditorChange } from '../management/management-interactions';
 import { ProjectPortalView } from '../project/ProjectPortalView';
 import { useCurrentProject } from '../project/use-projects';
+import { useProjectList } from '../project/use-project-list';
 import { useProjectWorkspace } from '../project/use-project-workspace';
 import { isProjectWritable } from '../project/project-store';
 import type { RocClient } from '../shared/roc-client';
 import { WindowActivity } from '../shared/view-activity';
 import { DelayedFallback } from '../shell/DelayedFallback';
 import { ErrorBar } from '../shell/ErrorBar';
-import { LeftSidebar } from '../shell/LeftSidebar';
+import { ActivityRail } from '../shell/ActivityRail';
+import { ContextDrawer } from '../shell/ContextDrawer';
+import { useGitSummary } from '../shell/use-git-summary';
 import { ModalShell } from '../shell/ModalShell';
 import { SearchPaletteModal } from '../shell/SearchPaletteModal';
 import { useSearchGroups } from '../shell/use-search-groups';
@@ -70,18 +73,6 @@ type BootState =
   | { status: 'loading' }
   | { status: 'failed'; message: string }
   | { status: 'ready'; appStatus: AppStatus };
-
-/**
- * Whether the routed view is one of the three canvas tabs.
- *
- * The tab list lives in the surface table and it comes with a type guard, so this is a narrowing
- * rather than a cast over a locally-kept copy of the list (which is what it used to be: a
- * `PRIMARY_TABS` set here, an `APP_VIEW_IDS` set in `routes.ts`, a `TABS` array in
- * `WorkspaceCanvas`, each covering a different part of the same fact).
- */
-function canvasTabForView(view: AppViewId): CanvasTabId | null {
-  return isCanvasTabId(view) ? view : null;
-}
 
 /**
  * Lazily loaded overlays and panels.
@@ -202,39 +193,33 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
   const openReviewInspector = useCallback<OpenReviewInspector>((request): void => {
     showArtifactSelection({kind: 'review', request});
   }, [showArtifactSelection]);
-  const layout = useLayoutState();
+  const layout = useLayoutState(route.layoutPreset ?? 'research');
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
   useContentPreferenceSync();
 
-  /**
-   * `?tool=files` as a one-shot request to show the 文件 tab.
-   *
-   * The file tree lives in the sidebar now, so the native menu's "文件/工作区" item has nothing
-   * to open in the canvas — what it means is "put me in front of the tree". Handled on the
-   * *transition* into `files`, not on the value: forcing the tab while the parameter is present
-   * would make 会话 unreachable until the URL changed.
-   */
+  const previousTool = useRef(route.tool);
   useEffect(() => {
+    const geometry = layoutRef.current;
+    if (route.tool === 'files') geometry.setDrawerOpen(true);
+    else if (previousTool.current === 'files' && geometry.mode !== 'wide') geometry.setDrawerOpen(false);
+    previousTool.current = route.tool;
     if (route.tool !== null && isDrawerSectionId(route.tool)) {
       setManagementTab(route.tool);
       setManagementOpen(true);
     }
-  }, [route.tool]);
+  }, [route.projectId, route.tool]);
   const closeManagement = (): void => {
     requestManagementEditorChange(() => {
       setManagementOpen(false);
       if (route.tool !== null && isDrawerSectionId(route.tool)) navigate({...route, tool: null});
     });
   };
-  const previousToolRef = useRef(route.tool);
-  useEffect(() => {
-    if (route.tool === 'files' && previousToolRef.current !== 'files') {
-      layout.setSidebarTab('files');
-    }
-    previousToolRef.current = route.tool;
-  }, [route, layout, navigate]);
 
   // The chrome and the read-only gate need the real project, not the raw id.
   const currentProject = useCurrentProject(client, route.projectId);
+  const projects = useProjectList(client).data ?? [];
+  const [assistantRunning, setAssistantRunning] = useState(false);
 
   useAppearanceSync(client, boot.status === 'ready' ? boot.appStatus.appearance : null, override);
 
@@ -254,7 +239,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
    */
   const projectLoadFailed = inProject && currentProject.status === 'error';
 
-  useEffect(() => {setArtifactSelection(null);}, [route.projectId]);
+  useEffect(() => {setArtifactSelection(null); setFilePreview(null); setAssistantRunning(false);}, [route.projectId]);
 
   // A conversation belongs to one project, so a project switch drops the selection.
   useEffect(() => {
@@ -267,6 +252,8 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
   // scopes the backend to it. Every file/Git/terminal call is keyed on the
   // **bound** path, so a project switch rebuilds all three (gate 6).
   const boundWorkspace = useBoundWorkspace(client, project);
+  const gitDrawerOpen = route.tool === 'git';
+  const gitSummary = useGitSummary(client, boundWorkspace.path, gitDrawerOpen);
   const taskCenter = useTaskCenter(client, route.projectId, boundWorkspace.path);
 
   /**
@@ -297,8 +284,9 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
   const openFirstSteps = useCallback((): void => {
     const current = routeRef.current;
     if (current.projectId === null) return;
-    navigate({...current, page: 'research', view: 'overview', tool: null}, {
+    navigate({...current, page: 'research', ...routeForView('overview'), tool: null}, {
       mode: 'push', onNavigated: () => {
+        if (layoutRef.current.mode !== 'wide') layoutRef.current.setDrawerOpen(false);
         setFirstStepsVisible(true);
         setFirstStepsRequestId(current => current + 1);
       }
@@ -318,9 +306,10 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
     if (projectId === null) return;
     const proceed = (commitSelection?: () => void): void => {
       if (routeRef.current.projectId !== projectId) return;
-      navigate({...routeRef.current, view: target.kind === 'concept' ? 'knowledge' : 'library', tool: null}, {
+      navigate({...routeRef.current, ...routeForView(target.kind === 'concept' ? 'knowledge' : 'library'), tool: null}, {
         mode: 'push',
         onNavigated: () => {
+          if (layoutRef.current.mode !== 'wide') layoutRef.current.setDrawerOpen(false);
           commitSelection?.();
           setLiteratureRequest({projectId, nonce: ++literatureRequestNonce.current, target});
           onOpened?.();
@@ -331,69 +320,50 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
     else proceed();
   }, [literature.select, literature.selectedId, navigate]);
 
-  /**
-   * Asks the 文件 tab to reveal a file **and open its preview**.
-   *
-   * There is no canvas `files` view any more (files open from the sidebar tree and the preview
-   * is a modal), so "open a file" is two things now:
-   *
-   *   1. `?file=` — the URL field the tree reads to reveal and select the row;
-   *   2. a nonce the 文件 tab compares against the last one it saw, because which overlay is on
-   *      screen is view state, not navigation, and the panel that owns the modal is mounted
-   *      inside the sidebar.
-   *
-   * Selection and reveal also have to make the 文件 tab *visible*: asking for a file from the
-   * literature hub while the 会话 tab is open would otherwise set a selection nobody can see.
-   * `view` and `tool` are deliberately left alone — touching `tool` would pop the Git drawer
-   * over the preview the user just asked for.
-   */
-  const openFileInCanvas = (relativePath: string): void => {
-    layout.setSidebarTab('files');
-    previewNonceRef.current += 1;
-    setFilePreview({ relativePath, nonce: previewNonceRef.current });
-    navigate({ ...routeRef.current, openFile: relativePath });
-  };
-
-  /**
-   * Opens one management section, on the host it actually has.
-   *
-   * 记忆 / 技能 / MCP exist twice (canvas view and drawer section), so which one the user gets is a
-   * decision, and it used to be written out twice — once for the drawer's own entry and once for the
-   * ⌘K palette, with the two copies already drifting (one merged into `routeRef.current`, the other
-   * into a captured `route`). 任务 has **only** the drawer: ADR 0024 removed the task board because
-   * two surfaces over one dataset diverge, so there is no canvas view to fall back to.
-   */
-  const openManagementSection = useCallback(
-    (section: DrawerSectionId): void => {
-      requestManagementEditorChange(() => {
-        navigate({ ...routeRef.current, tool: section }, {onNavigated: () => {
-          if (section === 'tasks') {
-            setResearchTaskSelection(null);
-            setTaskCenterRequestId(current => current + 1);
-            recordUxEvent('action_initiated', 'tasks');
-          }
-          setManagementTab(section);
-          setManagementOpen(true);
-        }});
-      });
-    },
-    [navigate]
-  );
-  const openManagementDrawer = useCallback((): void => {
-    requestManagementEditorChange(() => {
-      setManagementTab('memory');
-      setManagementOpen(true);
+  const openFileInCanvas = useCallback((relativePath: string): void => {
+    navigate({ ...routeRef.current, ...routeForView('writing'), openFile: relativePath, tool: null }, {
+      onNavigated: () => {
+        layoutRef.current.setDrawerOpen(true);
+        setFilePreview({ relativePath, nonce: ++previewNonceRef.current });
+      }
     });
-  }, []);
-  const openTask = useCallback((projectId: string, taskId: string, closeArtifact = false): void => {
+  }, [navigate]);
+
+  const openView = useCallback((view: AppViewTarget, onNavigated?: () => void): void => {
     requestManagementEditorChange(() => {
-      if (routeRef.current.projectId !== projectId) return;
+      navigate({ ...routeRef.current, page: 'research', ...routeForView(view), tool: null }, {
+        mode: 'push', onNavigated: () => {
+          if (layoutRef.current.mode !== 'wide') layoutRef.current.setDrawerOpen(false);
+          setManagementOpen(false);
+          onNavigated?.();
+        }
+      });
+    });
+  }, [navigate]);
+  const openManagementSection = useCallback((section: DrawerSectionId): void => {
+    if (section === 'tasks' && routeRef.current.projectId !== null) {
+      openView('runs', () => {
+        setResearchTaskSelection(null);
+        setTaskCenterRequestId(current => current + 1);
+        recordUxEvent('action_initiated', 'tasks');
+      });
+      return;
+    }
+    requestManagementEditorChange(() => {
+      const current = routeRef.current;
+      navigate({ ...current, tool: section }, { onNavigated: () => {
+        setManagementTab(section);
+        setManagementOpen(true);
+      }});
+    });
+  }, [navigate, openView]);
+  const openTask = useCallback((projectId: string, taskId: string, closeArtifact = false): void => {
+    if (routeRef.current.projectId !== projectId) return;
+    openView('runs', () => {
       setResearchTaskSelection({projectId, taskId});
       if (closeArtifact) setArtifactSelection(null);
-      setManagementTab('tasks');
-      setManagementOpen(true);
     });
-  }, []);
+  }, [openView]);
   const openSettings = useCallback((): void => {
     requestManagementEditorChange(() => {
       navigate({...routeRef.current, page: 'settings'}, {onNavigated: () => setManagementOpen(false)});
@@ -447,7 +417,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
       firstStepsRequestId,
       openFirstSteps,
       dismissFirstSteps,
-      openView: (view, onNavigated) => navigate({ ...routeRef.current, view, tool: null }, {mode: 'push', onNavigated}),
+      openView,
       openLiterature,
       literatureRequest: literatureRequest?.projectId === route.projectId ? literatureRequest : null,
       consumeLiteratureRequest,
@@ -466,6 +436,8 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
       route.projectId,
       route.openFile,
       route.tool,
+      openView,
+      openFileInCanvas,
       openLiterature,
       literatureRequest,
       consumeLiteratureRequest,
@@ -541,7 +513,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
   );
   const managementStoresScopeKey = JSON.stringify([managementScope.projectId, managementScope.workspacePath]);
   const managementStoresEnabled =
-    managementMounted ||
+    managementMounted || route.view === 'runs' ||
     (route.tool !== null && isDrawerSectionId(route.tool));
 
   /**
@@ -561,6 +533,20 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
     return wikiConceptRows(claims, evidence, literature.wikiSnapshot?.relations);
   }, [literature.claims, literature.evidence, literature.wikiSnapshot]);
 
+  const openProject = (projectId: string | null): void => {
+    if (projectId === route.projectId) return;
+    navigate({ ...route, projectId, ...routeForView(DEFAULT_VIEW), openFile: null, tool: null }, {
+      mode: 'push', onNavigated: () => {
+        if (layout.mode !== 'wide') layout.setDrawerOpen(false);
+      }
+    });
+  };
+  const selectThread = (threadId: string | null): void => {
+    navigate({ ...route, assistantOpen: true }, { onNavigated: () => {
+      if (layout.mode !== 'wide') layout.setDrawerOpen(false);
+      setAssistantThreadId(threadId);
+    }});
+  };
   const searchGroups = useSearchGroups({
     client,
     query: searchQuery,
@@ -572,16 +558,11 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
     conceptsLoaded: literature.claims !== null && literature.evidence !== null,
     onOpenLiterature: (libraryItemId) => openLiterature({kind: 'reader', libraryItemId}),
     onOpenConcept: (claimId) => openLiterature({kind: 'concept', claimId}),
-    onOpenProject: (projectId) => {
-      navigate({ ...route, projectId, view: DEFAULT_VIEW }, { mode: 'push' });
-    },
+    onOpenProject: openProject,
     onOpenManagementView: openManagementSection,
-    onOpenSession: (threadId) => {
-      setAssistantThreadId(threadId);
-      navigate({ ...route, assistantOpen: true });
-    },
+    onOpenSession: selectThread,
     searchToken,
-    onOpenView: (view) => navigate({...route, view, tool: null}, {mode: 'push'})
+    onOpenView: openView
   });
 
   /**
@@ -604,10 +585,10 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
   }, [literature, literatureAssistantThreadId, navigate, route]);
 
   useEffect(() => {
-    if (managementOpen) {
+    if (managementOpen || route.view === 'runs') {
       setManagementMounted(true);
     }
-  }, [managementOpen]);
+  }, [managementOpen, route.view]);
 
   useEffect(() => {
     if (settingsOpen) {
@@ -645,31 +626,34 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
     };
   }, [client]);
 
-  const previousAssistantOpen = useRef<boolean | null>(null);
   const applyLayoutPreset = (next: LayoutPreset): void => {
-    if (layout.preset === 'normal' && next !== 'normal') previousAssistantOpen.current = route.assistantOpen;
-    layout.setPreset(next);
-    if (next === 'collaboration') navigate({ ...route, assistantOpen: true });
-    if (next === 'normal' && previousAssistantOpen.current !== null) {
-      navigate({ ...route, assistantOpen: previousAssistantOpen.current });
-      previousAssistantOpen.current = null;
-    }
+    if (!inProject) return;
+    navigate({ ...route, layoutPreset: next, assistantOpen: next !== 'writing' }, {
+      onNavigated: () => layout.applyPreset(next)
+    });
   };
-  const toggleFocus = (): void => {
-    if (route.projectId !== null) applyLayoutPreset(layout.preset === 'focus' ? 'normal' : 'focus');
-  };
-
+  const closeAssistant = (): void => navigate({ ...route, assistantOpen: false });
   const toggleAssistant = (): void => {
-    if (layout.preset === 'focus') { applyLayoutPreset('normal'); return; }
-    navigate({ ...route, assistantOpen: !route.assistantOpen });
+    if (!inProject) return;
+    const opening = !route.assistantOpen || (layout.mode === 'drawers' && layout.drawerOpen);
+    navigate({ ...route, assistantOpen: opening }, { onNavigated: () => {
+      if (opening && layout.mode === 'drawers') layout.setDrawerOpen(false);
+    }});
   };
-
+  const navigateMode = (view: AppViewId): void => {
+    if (!inProject) return;
+    if (view === 'runs') openManagementSection('tasks');
+    else openView(view);
+  };
+  const toggleDrawer = (): void => {
+    if (inProject) layout.toggleDrawer();
+  };
+  const resetLayout = (): void => {
+    navigate({ ...route, layoutPreset: null }, { onNavigated: layout.reset });
+  };
   useKeyboardShortcuts({
-    onToggleSidebar: layout.toggleSidebar,
-    onToggleAssistant: toggleAssistant,
-    onOpenSearch: openSearch,
-    onToggleFocus: toggleFocus,
-    onCycleTheme: cycleTheme
+    onToggleSidebar: toggleDrawer, onToggleAssistant: toggleAssistant, onOpenSearch: openSearch,
+    onCycleTheme: cycleTheme, onLayoutPreset: applyLayoutPreset, onNavigateMode: navigateMode
   });
 
   if (boot.status === 'loading') {
@@ -679,15 +663,9 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
     return <StartupFailure message={boot.message} />;
   }
 
-  /**
-   * The Git surface is rendered **once** (M-2).
-   *
-   * `?tool=git` drives the drawer, and now it is the **only** Git surface: the canvas
-   * `changes` view is gone, so there is no second `GitPanel` to keep from mounting at the
-   * same time (two instances meant two `useGitWorkspace` states that disagreed after an
-   * action). Git opens as a drawer.
-   */
-  const gitDrawerOpen = route.tool === 'git';
+  const activityRail = <ActivityRail view={inProject && !projectLoadFailed ? route.view : null}
+    onNavigate={navigateMode} themeOverride={override} onCycleTheme={cycleTheme}
+    onResetLayout={resetLayout} onOpenSettings={openSettings} />;
 
   return (
     <ManagementScopeProvider value={managementScope}>
@@ -711,22 +689,13 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
         跳到内容
       </a>
 
-      <WindowChrome
-        projectName={projectName}
-        onBackToPortal={() => navigate({ ...route, projectId: null, view: DEFAULT_VIEW })}
-        onOpenSearch={openSearch}
-        sidebarCollapsed={layout.sidebarCollapsed}
-        onToggleSidebar={layout.toggleSidebar}
-        assistantOpen={route.assistantOpen && layout.preset !== 'focus'}
-        onToggleAssistant={toggleAssistant}
-        onOpenGit={() => navigate({ ...route, tool: 'git' })}
-        onOpenManagement={openManagementDrawer}
-        onOpenTasks={() => openManagementSection('tasks')}
-        onOpenSettings={openSettings}
-        onOpenHelp={openFirstSteps}
-        taskLabel={taskCenter.label}
-        taskSummary={taskCenter.summary}
-      />
+      <WindowChrome projectName={projectName} projectId={route.projectId} projects={projects}
+        onOpenProject={openProject} onBackToPortal={() => openProject(null)} onOpenSearch={openSearch}
+        sidebarCollapsed={!layout.drawerOpen} onToggleSidebar={toggleDrawer}
+        assistantOpen={route.assistantOpen && !(layout.mode === 'drawers' && layout.drawerOpen)}
+        onToggleAssistant={toggleAssistant} assistantRunning={assistantRunning}
+        onOpenGit={() => navigate({ ...route, tool: 'git' })} branchLabel={gitSummary.branch}
+        gitChangeCount={gitSummary.changes} layoutPreset={layout.preset} onChangePreset={applyLayoutPreset} />
 
       {windowState.error === null ? null : (
         <div className="shrink-0 px-4 pt-2" data-testid="shell-window-state-error">
@@ -748,7 +717,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
             <button
               type="button"
               data-testid="project-load-error-back"
-              onClick={() => navigate({ ...route, projectId: null, view: DEFAULT_VIEW })}
+              onClick={() => openProject(null)}
               className="h-[var(--control-height)] rounded-control border-[0.5px] border-line px-3 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
             >
               返回项目列表
@@ -762,48 +731,29 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
           <WorkspaceLayout
           layout={layout}
           assistantOpen={route.assistantOpen}
-          onToggleSidebar={layout.toggleSidebar}
-          onToggleAssistant={toggleAssistant}
-          assistantAvailable
-          sidebar={
-            <LeftSidebar
-              activeView={route.view}
-              onNavigate={(view) => navigate({ ...route, view, tool: null }, {mode: 'push', onNavigated: () => {
-                if (layout.sidebarAsDrawer && !layout.sidebarCollapsed) layout.toggleSidebar();
-              }})}
-              onOpenTerminal={() => navigate({...route, view: 'writing', tool: 'terminal'}, {mode: 'push', onNavigated: () => {
-                if (layout.sidebarAsDrawer && !layout.sidebarCollapsed) layout.toggleSidebar();
-              }})}
-              activeTab={layout.sidebarTab}
-              onTabChange={layout.setSidebarTab}
-              client={client}
-              projectId={route.projectId}
-              projectName={projectName ?? route.projectId ?? ''}
-              binding={boundWorkspace}
-              writable={projectWritable}
-              openFile={route.openFile}
-              onOpenFile={openFileInCanvas}
-              previewRequest={filePreview}
-              // The request is one-shot: once the 文件 tab has adopted it, it must stop existing, so a
-              // remount cannot re-deliver it into a workspace whose files are different. This panel is
-              // keyed on the bound path (`LeftSidebar`), so a project switch does remount it — see
-              // `FileSidebarPanel`'s adopt effect for the failure that produced.
-              onPreviewRequestConsumed={() => setFilePreview(null)}
-              activeThreadId={assistantThreadId}
-              onSelectThread={setAssistantThreadId}
-              onStartNewThread={() => setAssistantThreadId(null)}
+          onCloseAssistant={closeAssistant}
+          activityRail={activityRail}
+          contextDrawer={
+            <ContextDrawer key={route.projectId} view={route.view} client={client} projectId={route.projectId}
+              projects={projects} onOpenProject={openProject} binding={boundWorkspace} writable={projectWritable}
+              openFile={route.openFile} onOpenFile={openFileInCanvas} previewRequest={filePreview}
+              onPreviewRequestConsumed={() => setFilePreview(null)} activeThreadId={assistantThreadId}
+              onSelectThread={selectThread} onStartNewThread={() => selectThread(null)}
               onThreadDeleted={(threadId) => {
                 clearAssistantComposerDraft(route.projectId, threadId);
-                setAssistantThreadId((current) => (current === threadId ? null : current));
+                setAssistantThreadId(current => current === threadId ? null : current);
               }}
-              onSelectWorkspace={workspaceBinding.bind}
-              workspacePending={workspaceBinding.pending}
-              workspaceError={workspaceBinding.error}
-              onBackToPortal={() => navigate({ ...route, projectId: null, view: DEFAULT_VIEW })}
-              onOpenLiterature={(libraryItemId) => openLiterature({kind: 'reader', libraryItemId})}
-              themeOverride={override}
-              onCycleTheme={cycleTheme}
-               onOpenManagement={openManagementDrawer}
+              onSelectWorkspace={workspaceBinding.bind} workspacePending={workspaceBinding.pending}
+              workspaceError={workspaceBinding.error} onOpenHelp={openFirstSteps}
+              onOpenWriting={() => openView('writing', () => layoutRef.current.setDrawerOpen(true))}
+              onOpenTerminal={() => navigate({...route, ...routeForView('writing'), tool: 'terminal'}, {
+                mode: 'push', onNavigated: () => {
+                  if (layout.mode !== 'wide') layout.setDrawerOpen(false);
+                }
+              })}
+              onOpenLiterature={libraryItemId => openLiterature({kind: 'reader', libraryItemId})}
+              onOpenManagement={() => openManagementSection('memory')} onOpenTasks={() => openManagementSection('tasks')}
+              taskLabel={taskCenter.label} taskSummary={taskCenter.summary}
             />
           }
           canvas={
@@ -817,32 +767,11 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
                   项目已归档，仅可阅读：无法启动阶段运行、修改产物或写入文件。恢复项目后才能继续。
                 </p>
               ) : null}
-              <WorkspaceCanvas
-                actions={
-                  <div role="group" aria-label="工作模式" className="flex items-center gap-0.5">
-                    {([['normal', '常规'], ['focus', '专注'], ['collaboration', '协作']] as const).map(([id, label]) => (
-                      <button key={id} type="button" aria-pressed={layout.preset === id} data-testid={`layout-preset-${id}`}
-                        title={id === 'focus' ? '专注工作 (⌘⇧F)' : `${label}模式`}
-                        onClick={() => applyLayoutPreset(id)}
-                        className="rounded-control px-2 py-1 text-[length:var(--font-meta-size)] text-muted hover:bg-[var(--overlay-hover)] aria-pressed:bg-[var(--overlay-active)] aria-pressed:text-ink">
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                }
-                activeTab={canvasTabForView(route.view)}
-                onTabChange={(tab) =>
-                  // Switching canvas tabs clears the drawer tool rather than leaving it open
-                  // behind an unrelated view — a `?tool=git` that survived a tab click would sit
-                  // over the terminal with no way to tell why. No canvas tab is the files view,
-                  // so this cannot drop an open file.
-                  navigate({ ...route, view: tab, tool: null }, {mode: 'push'})
-                }
-              >
+              <WorkspaceCanvas activeTab={route.view} subview={route.subview} onTabChange={openView}>
                 {/* The scope is what lazily loaded views read; the routing
                     props stay on `ViewContent` (see workspace-scope.tsx). */}
                 <WorkspaceScopeProvider value={scope}>
-                  <ViewContent key={route.projectId} view={route.view} projectId={route.projectId} />
+                  <ViewContent key={route.projectId} view={route.view} subview={route.subview} projectId={route.projectId} />
                 </WorkspaceScopeProvider>
               </WorkspaceCanvas>
             </div>
@@ -870,6 +799,7 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
                   // header button cannot drift from the drag handle (the shell previously had it
                   // only on the divider).
                   onResetWidth={layout.resetAssistant}
+                  onRunActivity={setAssistantRunning}
                 />
               </LazyBoundary>
             ) : null
@@ -877,14 +807,17 @@ function AppShellContent({ client, windowState }: { client: RocClient; windowSta
           />
         </LiteratureScopeProvider>
       ) : (
-        <main id="roc-main" className="flex min-h-0 flex-1 flex-col" data-testid="portal-column" tabIndex={-1}>
+        <div className="flex min-h-0 flex-1">
+          {activityRail}
+          <main id="roc-main" className="flex min-w-0 min-h-0 flex-1 flex-col" data-testid="portal-column" tabIndex={-1}>
           <ProjectPortalView
             client={client}
             createFormRequested={route.newProject}
             onRequestConsumed={(requested) => navigate({ ...route, newProject: requested })}
-            onOpenProject={(projectId) => navigate({ ...route, projectId, view: DEFAULT_VIEW }, { mode: 'push' })}
+            onOpenProject={openProject}
           />
-        </main>
+          </main>
+        </div>
       )}
 
       {settingsMounted ? (

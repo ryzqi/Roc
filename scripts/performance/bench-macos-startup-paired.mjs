@@ -66,7 +66,8 @@ try {
         await page.getByTestId('assistant-composer-input').waitFor();
         const inputReadyMs = performance.now() - inputStarted;
         if (events > 0) {
-          await page.getByTestId('sidebar-tab-sessions').click();
+          await page.getByTestId('activity-nav-runs').click();
+          if (!await page.getByTestId('context-drawer').isVisible()) await page.getByTestId('titlebar-toggle-sidebar').click();
           await page.getByTestId(`session-row-thread-profile-${events}`).click();
           await page.waitForFunction(marker =>
             document.querySelector('[data-testid="assistant-transcript"]')?.textContent?.includes(marker),

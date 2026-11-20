@@ -179,15 +179,25 @@ try {
   await waitForAppReady(page, 'smoke-onboarding-dismissed', artifactDir);
   await page.getByTestId('overview').waitFor();
   assertCheck('2 门户', '首次引导可跳过且刷新后保持关闭', await page.getByTestId('overview-first-steps').count() === 0);
-  await page.getByTestId('titlebar-help').click();
+  if (!await page.getByTestId('context-help').isVisible()) await page.getByTestId('titlebar-toggle-sidebar').click();
+  await page.getByTestId('context-help').click();
   await page.getByTestId('overview-first-steps').waitFor();
   assertCheck('2 门户', '帮助入口在同一项目重开首次引导', new URL(page.url()).searchParams.get('project') === preflight.projectId);
   await page.getByTestId('overview-first-steps-skip').click();
-  await page.getByTestId('titlebar-tasks').click();
-  await page.getByTestId('mgmt-task-center').waitFor();
-  assertCheck('2 门户', '顶栏任务入口打开统一任务总览', await page.getByTestId('management-panel').count() === 1);
-  await page.keyboard.press('Escape');
-  await page.getByTestId('management-panel').waitFor({state: 'detached'});
+  await page.getByTestId('activity-nav-runs').click();
+  await page.getByTestId('canvas-task-center').waitFor();
+  assertCheck('2 门户', '活动栏任务入口打开统一任务总览', await page.getByTestId('canvas-task-center').isVisible());
+  await navigate(page, `page=research&project=${preflight.projectId}&view=discover`);
+  await page.getByTestId('literature-panel-search').waitFor();
+  const hub = page.getByTestId('literature-hub');
+  await hub.evaluate(node => { node.dataset.smokeRetained = '1'; });
+  assertCheck('2 门户', '旧发现链接迁移到总览的发现子视图',
+    new URL(page.url()).searchParams.get('view') === 'overview' && new URL(page.url()).searchParams.get('subview') === 'discover');
+  await navigate(page, `page=research&project=${preflight.projectId}&view=knowledge`);
+  await page.getByTestId('literature-panel-rag').waitFor();
+  assertCheck('2 门户', '旧知识链接迁移到文献的知识子视图',
+    new URL(page.url()).searchParams.get('view') === 'library' && new URL(page.url()).searchParams.get('subview') === 'knowledge' &&
+    await hub.getAttribute('data-smoke-retained') === '1');
   await page.screenshot({ path: join(artifactDir, 'canvas.png') });
 
   await navigate(page, `page=research&project=${preflight.projectId}&view=library`);
@@ -330,7 +340,7 @@ try {
   await page.screenshot({ path: join(artifactDir, 'assistant.png') });
 
   // ---- 5 设置打开 → 改一个真字段 → 保存 ------------------------------------------
-  await page.click('[data-testid="titlebar-settings"]');
+  await page.click('[data-testid="activity-settings"]');
   await page.waitForSelector('[data-testid="settings-modal-panel"]', { timeout: 20_000 });
   await page.click('[data-testid="settings-section-tasks"]');
   await page.waitForSelector('[data-testid="settings-long-running-seconds"]', { timeout: 20_000 });
@@ -371,6 +381,18 @@ try {
   const clipSource = readFileSync('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
   try {
     await browserWindow.evaluate(window => {
+      window.setBounds({...window.getBounds(), width: 1184, height: 900});
+    });
+    await page.waitForFunction(() => document.querySelector('[data-testid=workspace-layout]')?.getAttribute('data-layout-mode') === 'balanced');
+    const canvas = page.getByTestId('canvas-column');
+    const left = await canvas.evaluate(node => node.getBoundingClientRect().left);
+    if (!await page.getByTestId('assistant-column').isVisible()) await page.getByTestId('titlebar-toggle-assistant').click();
+    await page.getByTestId('assistant-column').waitFor();
+    await page.getByTestId('titlebar-toggle-assistant').click();
+    assertCheck('窗口', '1184px 下助手与画布并排，画布左边界不移动',
+      await canvas.evaluate(node => node.getBoundingClientRect().left) === left &&
+      await page.getByTestId('assistant-drawer').count() === 0);
+    await browserWindow.evaluate(window => {
       window.setBounds({...window.getBounds(), width: 1280, height: 820});
     });
     await navigate(page, `page=research&project=${preflight.projectId}&view=overview`);
@@ -382,7 +404,8 @@ try {
       await page.keyboard.press('Enter');
       await page.getByTestId('sidebar-drawer').waitFor({state: 'detached'});
     }
-    await page.getByTestId('titlebar-help').focus();
+    await page.getByTestId('titlebar-toggle-sidebar').click();
+    await page.getByTestId('context-help').focus();
     await page.keyboard.press('Enter');
     await page.getByTestId('overview-first-steps').waitFor();
     await page.waitForFunction(() => document.activeElement?.id === 'overview-first-steps-heading');

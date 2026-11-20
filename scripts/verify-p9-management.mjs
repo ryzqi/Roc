@@ -141,7 +141,11 @@ async function waitForProjectRoute() {
 
 async function openManagement(tab = 'memory') {
   if ((await page.locator('[data-testid="management-panel-panel"]').count()) === 0) {
-    await page.click('[data-testid="titlebar-management"]');
+    const runs = page.getByTestId('activity-nav-runs');
+    if ((await runs.getAttribute('aria-current')) !== 'page') await runs.click();
+    const management = page.getByTestId('context-management');
+    if (!await management.isVisible()) await page.getByTestId('titlebar-toggle-sidebar').click();
+    await management.click();
     await page.waitForSelector('[data-testid="management-panel-panel"]', { timeout: 20_000 });
   }
   await openTab(tab);
@@ -904,7 +908,8 @@ try {
   assertCheck('3 MCP', '审批模式的唯一写入口在设置中心（抽屉里给跳转）', openSettingsButton);
 
   // ---- 闸门 4：后台任务（创建 → 调度器 → 看板 → 立即运行 → 真历史） --------------
-  await openTab('tasks');
+  await closeManagement();
+  await page.getByTestId('canvas-task-category-background').click();
   await page.click('[data-testid="mgmt-tasks-create"]');
   await page.waitForSelector('[data-testid="mgmt-task-editor"]', { timeout: 15_000 });
   await page.fill('[data-testid="mgmt-task-draft-goal"]', 'ROC-P9-TASK 每天检查构建');

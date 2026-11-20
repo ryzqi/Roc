@@ -88,55 +88,58 @@ try {
     });
   }
   if (process.env.ROC_UI_PHASE === 'layout') {
-    await check('Focus enlarges canvas and restores previous geometry', async () => {
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1400, 860));
+    await expect(page.getByTestId('workspace-layout')).toHaveAttribute('data-layout-mode', 'wide');
+    await check('Writing expands the canvas without losing its draft', async () => {
+      await page.getByTestId('layout-preset-research').click();
+      await expect(page.getByTestId('assistant-column')).toBeVisible();
       const sidebar = await page.getByTestId('sidebar-column').boundingBox();
       const canvas = await page.getByTestId('canvas-column').boundingBox();
       await editor.fill('layout draft');
-      await page.getByTestId('layout-preset-focus').click();
-      await expect(page.getByTestId('sidebar-column')).toHaveCount(0);
-      await expect(page.getByTestId('assistant-column')).toHaveCount(0);
-      expect((await page.getByTestId('canvas-column').boundingBox()).width).toBeGreaterThan(canvas.width);
+      await page.getByTestId('layout-preset-writing').click();
+      await expect(page.getByTestId('assistant-column')).toBeHidden();
+      const writing = await page.getByTestId('canvas-column').boundingBox();
+      expect(writing.width).toBeGreaterThan(canvas.width);
+      expect(writing.x).toBe(canvas.x);
       await expect(editor).toHaveText('layout draft');
-      await page.screenshot({ path: join(artifact, 'focus.png') });
-      await page.getByTestId('layout-preset-normal').click();
+      await page.getByTestId('layout-preset-research').click();
       expect((await page.getByTestId('sidebar-column').boundingBox()).width).toBe(sidebar.width);
       expect((await page.getByTestId('canvas-column').boundingBox()).width).toBe(canvas.width);
     });
-    await check('Collaboration opens assistant, normal restores prior visibility', async () => {
-      await page.getByTestId('layout-preset-collaboration').click();
+    await check('Review collapses context and widens the assistant', async () => {
+      await page.getByTestId('layout-preset-review').click();
+      await expect(page.getByTestId('sidebar-column')).toBeHidden();
       await expect(page.getByTestId('assistant-column')).toBeVisible();
-      expect((await page.getByTestId('canvas-column').boundingBox()).width).toBeGreaterThanOrEqual(360);
-      await page.getByTestId('layout-preset-normal').click();
-      await expect(page.getByTestId('assistant-column')).toHaveCount(0);
+      expect((await page.getByTestId('assistant-column').boundingBox()).width).toBe(420);
     });
-    await check('Focus shortcut toggles without changing document', async () => {
-      await editor.click(); await page.keyboard.press('Meta+Shift+f');
-      await expect(page.getByTestId('layout-preset-focus')).toHaveAttribute('aria-pressed', 'true');
-      await page.keyboard.press('Meta+Shift+f');
-      await expect(page.getByTestId('layout-preset-normal')).toHaveAttribute('aria-pressed', 'true');
+    await check('Preset shortcuts switch layout without changing the document', async () => {
+      await editor.click(); await page.keyboard.press('Meta+2');
+      await expect(page.getByTestId('layout-preset-writing')).toHaveAttribute('aria-pressed', 'true');
+      await page.keyboard.press('Meta+1');
+      await expect(page.getByTestId('layout-preset-research')).toHaveAttribute('aria-pressed', 'true');
       await expect(editor).toHaveText('layout draft');
     });
   }
   if (process.env.ROC_UI_PHASE === 'transitions') {
     await check('Writing tools and destination switches preserve editor and terminal instances', async () => {
       await editor.evaluate(el => { el.dataset.instance = 'original-editor'; });
-      await page.getByTestId('sidebar-terminal').click();
+      await page.getByTestId('writing-terminal').click();
       const terminal = page.getByTestId('terminal-xterm');
       await terminal.waitFor();
       await terminal.evaluate(el => { el.dataset.instance = 'original-terminal'; });
       await terminal.click(); await page.keyboard.type('echo ROC_KEEP_SESSION'); await page.keyboard.press('Enter');
       await expect(page.locator('.xterm-rows')).toContainText('ROC_KEEP_SESSION');
-      await page.getByTestId('sidebar-nav-writing').click();
+      await page.getByTestId('activity-nav-writing').click();
       await expect(editor).toBeVisible(); await expect(editor).toHaveAttribute('data-instance', 'original-editor');
       await expect(editor).toHaveText('keyboard save');
-      await page.getByTestId('sidebar-terminal').click();
+      await page.getByTestId('writing-terminal').click();
       await expect(terminal).toHaveAttribute('data-instance', 'original-terminal');
       await expect(page.locator('.xterm-rows')).toContainText('ROC_KEEP_SESSION');
-      await page.getByTestId('sidebar-nav-writing').click();
+      await page.getByTestId('activity-nav-writing').click();
       await expect(editor).toBeVisible();
-      await page.getByTestId('sidebar-nav-library').click();
+      await page.getByTestId('activity-nav-library').click();
       await expect(page.getByTestId('literature-hub')).toHaveAttribute('data-workspace', 'library');
-      await page.getByTestId('sidebar-nav-writing').click();
+      await page.getByTestId('activity-nav-writing').click();
       await expect(editor).toHaveAttribute('data-instance', 'original-editor');
     });
     await check('Warm switches have no blank exit phase, including reduced motion', async () => {
@@ -150,12 +153,12 @@ try {
         window.__canvasObserver = new MutationObserver(inspect);
         window.__canvasObserver.observe(document.querySelector('[data-testid="canvas"]'), { subtree: true, attributes: true, childList: true });
       });
-      await page.getByTestId('sidebar-terminal').click();
+      await page.getByTestId('writing-terminal').click();
       await expect(page.getByTestId('terminal-xterm')).toBeVisible();
-      await page.getByTestId('sidebar-nav-writing').click();
-      await page.getByTestId('sidebar-nav-library').click();
+      await page.getByTestId('activity-nav-writing').click();
+      await page.getByTestId('activity-nav-library').click();
       await expect(page.getByTestId('literature-hub')).toBeVisible();
-      await page.getByTestId('sidebar-nav-writing').click();
+      await page.getByTestId('activity-nav-writing').click();
       await expect(editor).toBeVisible();
       expect(await page.evaluate(() => { window.__canvasObserver.disconnect(); return window.__canvasGaps; })).toEqual([]);
       await expect(editor).toHaveAttribute('data-instance', 'original-editor');
@@ -220,23 +223,24 @@ try {
     });
   }
   if (process.env.ROC_UI_PHASE === 'drawers') {
-    await check('Drawer shells survive closing for complete exit', async () => {
+    await check('Narrow windows expose both drawers without replacing the canvas', async () => {
       await app.evaluate(({ BrowserWindow }) => { const w = BrowserWindow.getAllWindows()[0]; w.setMinimumSize(800, 600); w.setSize(980, 760); });
       await navigate(page, `page=research&project=${project.data.id}&view=writing&assistant=1`);
       await page.getByTestId('assistant-drawer-close').click();
-      await expect(page.getByTestId('assistant-drawer')).toHaveCount(1);
       await expect(page.getByTestId('assistant-drawer')).toHaveCount(0);
+      await page.getByTestId('titlebar-toggle-sidebar').click();
+      await expect(page.getByTestId('sidebar-drawer')).toBeVisible();
       await page.getByTestId('sidebar-drawer-close').click();
-      await expect(page.getByTestId('sidebar-drawer')).toHaveCount(1);
       await expect(page.getByTestId('sidebar-drawer')).toHaveCount(0);
+      await expect(page.getByTestId('canvas-column')).toBeVisible();
     });
     await check('Drawer Escape restores opener focus and reduced motion closes', async () => {
       const opener = page.getByTestId('titlebar-toggle-sidebar');
-      await opener.click(); await page.getByTestId('sidebar-drawer-panel').waitFor();
+      await opener.click(); await page.getByTestId('sidebar-drawer').waitFor();
       await page.keyboard.press('Escape');
       await expect(page.getByTestId('sidebar-drawer')).toHaveCount(0); await expect(opener).toBeFocused();
       await page.emulateMedia({ reducedMotion: 'reduce' });
-      await opener.click(); await page.getByTestId('sidebar-drawer-panel').waitFor();
+      await opener.click(); await page.getByTestId('sidebar-drawer').waitFor();
       await page.getByTestId('sidebar-drawer-close').click();
       await expect(page.getByTestId('sidebar-drawer')).toHaveCount(0);
       await page.screenshot({ path: join(artifact, 'drawers-closed.png') });
@@ -250,7 +254,8 @@ try {
         {view: 'discover', tabs: ['radar', 'monitors']},
         {view: 'knowledge', tabs: ['rag', 'wiki']}
       ]) {
-        await page.getByTestId(`sidebar-nav-${view}`).click();
+        await page.getByTestId(`activity-nav-${view === 'discover' ? 'overview' : 'library'}`).click();
+        await page.getByTestId(`canvas-view-${view}`).click();
         await expect(page.getByTestId('literature-hub')).toHaveAttribute('data-workspace', view);
         const first = page.getByTestId(`literature-subview-${tabs[0]}`);
         const next = page.getByTestId(`literature-subview-${tabs[1]}`);
@@ -264,24 +269,24 @@ try {
       }
     });
     await check('Knowledge query survives reading and the library list remains controllable', async () => {
-      await page.getByTestId('sidebar-nav-knowledge').click();
+      await page.getByTestId('canvas-view-knowledge').click();
       await page.getByTestId('literature-subview-rag').click();
       await page.getByTestId('rag-query').fill('persistent research query');
-      await page.getByTestId('sidebar-nav-library').click();
+      await page.getByTestId('canvas-view-library').click();
       await page.getByTestId('literature-subview-reader').click();
       const toggle = page.getByTestId('literature-toggle-navigation');
       if (await toggle.getAttribute('aria-expanded') === 'true') await toggle.click();
       await expect(page.locator('#literature-navigation')).toBeHidden();
       await toggle.click(); await expect(page.locator('#literature-navigation')).toBeVisible();
       await page.screenshot({ path: join(artifact, 'navigation.png') });
-      await page.getByTestId('sidebar-nav-knowledge').click();
+      await page.getByTestId('canvas-view-knowledge').click();
       await expect(page.getByTestId('rag-query')).toHaveValue('persistent research query');
     });
   }
   if (process.env.ROC_UI_PHASE === 'preferences') {
     await navigate(page, `page=research&project=${project.data.id}&view=writing`);
     await file('refs.bib').click();
-    await page.getByTestId('titlebar-settings').click();
+    await page.getByTestId('activity-settings').click();
     await page.getByTestId('settings-section-app').click();
     await check('Density and content sizes apply separately from UI typography', async () => {
       await page.getByTestId('settings-density-comfortable').click();
@@ -304,7 +309,7 @@ try {
       await expect(page.locator('html')).toHaveAttribute('data-density', 'comfortable');
       await file('refs.bib').click();
       await expect(page.locator('.cm-scroller')).toHaveCSS('font-size', '14px');
-      await page.getByTestId('sidebar-tab-files').click();
+      if (!await page.getByTestId('context-drawer').isVisible()) await page.getByTestId('titlebar-toggle-sidebar').click();
       const first = page.getByTestId('file-tree-row-00-overview.txt');
       await expect(first).toHaveCSS('height', '28px');
       const docs = page.getByTestId('file-tree-row-docs');
@@ -319,7 +324,7 @@ try {
   }
   if (process.env.ROC_UI_PHASE === 'preferences') {
     await check('Reset local preferences updates mounted content immediately', async () => {
-      await page.getByTestId('titlebar-settings').click();
+      await page.getByTestId('activity-settings').click();
       await page.getByTestId('settings-section-backup').click();
       await page.getByTestId('settings-reset-ui').click();
       await page.getByTestId('settings-reset-confirm-confirm').click();

@@ -369,7 +369,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
         widthClassName="w-[min(1100px,92vw)] h-[min(86vh,760px)]"
         testId="settings-modal"
         initialFocusRef={activeNavigationRef}
-        returnFocusSelector='[data-testid="titlebar-settings"]'
+        returnFocusSelector='[data-testid="activity-settings"]'
         // The left rail brings its own columns; see `bodyPadding` in `ModalShell`.
         bodyPadding="none"
       >

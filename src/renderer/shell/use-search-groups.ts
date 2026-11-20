@@ -1,6 +1,8 @@
+import { workspaceModes } from './AppNavigation';
+import type { AppViewId } from '../app/routes';
 import { useEffect, useMemo } from 'react';
 import useSWR from 'swr';
-import {canvasTabIds, surfaceFor, type CanvasTabId, type DrawerSectionId} from '../../shared/surfaces';
+import type {DrawerSectionId} from '../../shared/surfaces';
 import type { ResearchLibraryItem, SkillSnapshot } from '../../shared/types';
 import { IpcResourceError } from '../app/ipc-resource';
 import { useAsyncResource, type AsyncStatus } from '../app/use-async-resource';
@@ -74,7 +76,7 @@ export type SearchGroupSources = {
    * ⌘K 永远搜不到它（同一个“读一次就不管”缺陷，P4 在会话列表上踩过一次）。
    */
   searchToken: number;
-  onOpenView: (view: CanvasTabId) => void;
+  onOpenView: (view: AppViewId) => void;
 };
 
 const UNAVAILABLE_GROUPS: Array<{ id: string; label: string; reason: string }> = [
@@ -322,9 +324,9 @@ export function useSearchGroups({
     // then files, then the later phases. Inserting at fixed positions keeps the
     // order stable even when a group is unavailable.
     const navigationGroup: SearchGroup = {
-      id: 'navigation', label: '导航', status: 'ready', items: projectId === null ? [] : canvasTabIds
-        .filter(id => trimmed.length === 0 || surfaceFor(id).label.includes(trimmed))
-        .map(id => ({id: `navigate:${id}`, title: surfaceFor(id).label, subtitle: '当前项目', onOpen: () => onOpenView(id)}))
+      id: 'navigation', label: '导航', status: 'ready', items: projectId === null ? [] : workspaceModes
+        .filter(({label}) => trimmed.length === 0 || label.includes(trimmed))
+        .map(({id, label}) => ({id: `navigate:${id}`, title: label, subtitle: '当前项目', onOpen: () => onOpenView(id)}))
     };
     return [navigationGroup, projectsGroup, literatureGroup, conceptGroup, sessionGroup, ...fileGroups, managementGroup, skillsGroup, ...unavailable];
   }, [

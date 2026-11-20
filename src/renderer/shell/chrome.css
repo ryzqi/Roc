@@ -1,0 +1,64 @@
+@layer components {
+  .chrome-control {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-block-size: 28px;
+    min-inline-size: 28px;
+    border-radius: var(--r-control);
+    padding-inline: 8px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .chrome-control:not(:disabled):hover {
+    color: var(--ink);
+    background: var(--overlay-hover);
+  }
+
+  .chrome-control:not(:disabled):active {
+    background: var(--overlay-active);
+    transform: translateY(1px);
+  }
+
+  .chrome-control[aria-pressed='true'],
+  .chrome-control[aria-current='page'] {
+    color: var(--ink);
+    background: var(--overlay-active);
+  }
+
+  .chrome-control:disabled {
+    opacity: 0.4;
+  }
+}
+
+.activity-destination[aria-current='page']::before {
+  position: absolute;
+  inset-block: 8px;
+  inset-inline-start: -8px;
+  inline-size: 2px;
+  background: var(--accent);
+  content: '';
+}
+
+.titlebar-project-menu:popover-open {
+  position: fixed;
+  inset: 40px auto auto;
+  inset-inline-start: 88px;
+  margin: 0;
+  inline-size: min(256px, calc(100vi - 120px));
+  max-block-size: calc(100dvb - 88px);
+  overflow: auto;
+  scrollbar-gutter: stable;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-card);
+  padding: 4px;
+  color: var(--ink);
+  background: var(--surface-strong);
+  box-shadow: var(--shadow-popover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chrome-control:not(:disabled):active { transform: none; }
+}

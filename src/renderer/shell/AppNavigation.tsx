@@ -1,17 +1,30 @@
-import { BookOpen, Compass, FileText, House, LibraryBig } from 'lucide-react';
-import { canvasTabIds, surfaceFor, type CanvasTabId } from '../../shared/surfaces';
+import { BookOpen, FileText, House, ListChecks } from 'lucide-react';
+import type { AppViewId } from '../app/routes';
+import './chrome.css';
 
-const icons = { overview: House, discover: Compass, library: BookOpen, knowledge: LibraryBig, writing: FileText };
+export const workspaceModes = [
+  { id: 'overview', label: '总览与发现', icon: House },
+  { id: 'library', label: '文献与知识', icon: BookOpen },
+  { id: 'writing', label: '论文写作', icon: FileText },
+  { id: 'runs', label: '会话与任务', icon: ListChecks }
+] as const;
 
-export function AppNavigation({ view, onNavigate }: { view: CanvasTabId; onNavigate: (view: CanvasTabId) => void }): React.JSX.Element {
-  return <nav aria-label="项目导航" className="shrink-0 space-y-1 border-b-[0.5px] border-line p-2">
-    {canvasTabIds.map(id => {
-      const Icon = icons[id];
-      return <button key={id} type="button" aria-current={view === id ? 'page' : undefined}
-        data-testid={`sidebar-nav-${id}`} onClick={() => onNavigate(id)}
-        className="flex min-h-8 w-full items-center gap-2 rounded-control px-3 text-text hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] aria-[current=page]:bg-[var(--overlay-active)] aria-[current=page]:font-medium aria-[current=page]:text-ink focus-visible:outline-2 focus-visible:outline-accent">
-        <Icon size={16} aria-hidden="true" /><span>{surfaceFor(id).label}</span>
-      </button>;
-    })}
-  </nav>;
+export type WorkspaceMode = (typeof workspaceModes)[number]['id'];
+
+export function AppNavigation({ view, onNavigate }: {
+  view: AppViewId;
+  onNavigate: (view: WorkspaceMode) => void;
+}): React.JSX.Element {
+  return (
+    <nav aria-label="项目导航" className="grid gap-1">
+      {workspaceModes.map(({ id, label, icon: Icon }, index) => (
+        <button key={id} type="button" className="chrome-control activity-destination relative size-9"
+          aria-current={view === id ? 'page' : undefined} aria-label={label}
+          aria-keyshortcuts={`Meta+Alt+${index + 1}`} title={`${label}（⌘⌥${index + 1}）`}
+          data-testid={`activity-nav-${id}`} onClick={() => onNavigate(id)}>
+          <Icon size={18} aria-hidden="true" />
+        </button>
+      ))}
+    </nav>
+  );
 }

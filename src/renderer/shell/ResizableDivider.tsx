@@ -12,16 +12,19 @@ export type ResizableDividerProps = {
   onDragChange?: (dragging: boolean) => void;
   atLimit?: 'min' | 'max' | null;
   testId?: string;
+  growToward?: 'start' | 'end';
 };
 
 export function ResizableDivider({
-  ariaLabel, value, min, max, onResize, onReset, onDragChange, atLimit = null, testId
+  ariaLabel, value, min, max, onResize, onReset, onDragChange, atLimit = null, testId, growToward = 'end'
 }: ResizableDividerProps): React.JSX.Element {
   const [dragging, setDragging] = useState(false);
   const cleanupRef = useRef<(() => void) | null>(null);
   const callbacks = useRef({ onResize, onDragChange });
   callbacks.current = { onResize, onDragChange };
   useEffect(() => () => cleanupRef.current?.(), []);
+
+  const direction = growToward === 'start' ? -1 : 1;
 
   const startDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
     if (event.button !== 0 || !event.isPrimary || cleanupRef.current !== null) return;
@@ -58,7 +61,7 @@ export function ResizableDivider({
     };
     const onMove = (moveEvent: PointerEvent): void => {
       if (moveEvent.pointerId !== pointerId) return;
-      pendingWidth = startWidth + moveEvent.clientX - startX;
+      pendingWidth = startWidth + direction * (moveEvent.clientX - startX);
       if (frame === null) {
         frame = window.requestAnimationFrame(() => {
           frame = null;
@@ -94,7 +97,7 @@ export function ResizableDivider({
     } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
       event.preventDefault();
       const step = event.shiftKey ? 32 : 8;
-      onResize(value + (event.key === 'ArrowLeft' ? -step : step));
+      onResize(value + direction * (event.key === 'ArrowLeft' ? -step : step));
     }
   };
 

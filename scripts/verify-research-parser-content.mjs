@@ -53,8 +53,9 @@ try {
   }), { sourcePath, projectId: project.id }));
   record('PDF imported through real IPC');
   await page.getByTestId('literature-refresh').click();
-  await page.getByTestId('sidebar-tab-literature').click();
-  await page.getByTestId('sidebar-panel-literature').getByTestId(`literature-row-${document.libraryItemId}`).click();
+  const sidebar = page.getByTestId('context-drawer');
+  if (!await sidebar.isVisible()) await page.getByTestId('titlebar-toggle-sidebar').click();
+  await sidebar.getByTestId(`literature-row-${document.libraryItemId}`).click();
   await page.getByTestId('paper-reader').waitFor();
   await page.getByTestId('reader-parse-tier').selectOption('complete');
   await page.getByTestId('reader-start-parse').click();

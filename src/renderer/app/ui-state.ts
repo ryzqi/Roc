@@ -14,7 +14,6 @@ export const UI_STATE_PREFIX = 'roc.ui.';
 export const uiStateKeys = {
   sidebarWidth: `${UI_STATE_PREFIX}sidebar.width`,
   sidebarCollapsed: `${UI_STATE_PREFIX}sidebar.collapsed`,
-  sidebarTab: `${UI_STATE_PREFIX}sidebar.tab`,
   assistantWidth: `${UI_STATE_PREFIX}assistant.width`,
   contentPreferences: `${UI_STATE_PREFIX}content.preferences`,
   themeOverride: `${UI_STATE_PREFIX}theme.override`,
@@ -33,7 +32,6 @@ export const uiStateKeys = {
 export type UiStateKey = (typeof uiStateKeys)[keyof typeof uiStateKeys];
 
 export type ThemeOverride = 'system' | 'light' | 'dark';
-export type SidebarTab = 'files' | 'literature' | 'sessions';
 
 /*
  * Deliberately NOT stored here:
@@ -126,8 +124,8 @@ function readStringList(key: UiStateKey): string[] {
 /* Layout                                                              */
 /* ------------------------------------------------------------------ */
 
-export const SIDEBAR_WIDTH = { min: 180, max: 400, default: 232 } as const;
-export const ASSISTANT_WIDTH = { min: 280, default: 440 } as const;
+export const SIDEBAR_WIDTH = { min: 200, max: 340, default: 240 } as const;
+export const ASSISTANT_WIDTH = { min: 280, default: 360 } as const;
 
 export function readSidebarWidth(): number {
   const value = readNumber(uiStateKeys.sidebarWidth);
@@ -144,18 +142,6 @@ export function readSidebarCollapsed(): boolean {
 
 export function writeSidebarCollapsed(collapsed: boolean): void {
   writeRaw(uiStateKeys.sidebarCollapsed, collapsed ? '1' : '0');
-}
-
-export function readSidebarTab(): SidebarTab {
-  const raw = readRaw(uiStateKeys.sidebarTab);
-  if (raw === 'files' || raw === 'literature' || raw === 'sessions') {
-    return raw;
-  }
-  return 'files';
-}
-
-export function writeSidebarTab(tab: SidebarTab): void {
-  writeRaw(uiStateKeys.sidebarTab, tab);
 }
 
 export function readMemoryCategory(): string | null {

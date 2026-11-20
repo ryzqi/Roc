@@ -31,6 +31,8 @@ import type {LiteratureStore} from './use-literature-store';
 export type LibraryListProps = {
   /** Tight rows/spacing for the 256px sidebar. */
   compact?: boolean;
+  /** Bibliography category selected in the context drawer. */
+  entryType?: string | null;
   /** Owns guarded selection and any navigation; without it the list selects directly. */
   onOpenItem?: (id: string) => void;
   onRequestImport: () => void;
@@ -49,14 +51,14 @@ function fullTextLabel(item: ResearchLibraryItem, store: LiteratureStore): strin
   return '全文已保存';
 }
 
-export function LibraryList({ compact = false, onOpenItem, onRequestImport }: LibraryListProps): React.JSX.Element {
+export function LibraryList({ compact = false, entryType = null, onOpenItem, onRequestImport }: LibraryListProps): React.JSX.Element {
   const literature = useLiterature();
   const [searchDraft, setSearchDraft] = useState(literature.query);
   const [sort, setSort] = useState<SortOrder>('updated');
   const [selecting, setSelecting] = useState(false);
   const [checkedIds, setCheckedIds] = useState<ReadonlySet<string>>(() => new Set());
-  useEffect(() => {setCheckedIds(new Set());}, [literature.projectId, literature.query, literature.includeArchived]);
-  const items = [...literature.items].sort((left, right) => sort === 'year'
+  useEffect(() => {setCheckedIds(new Set());}, [literature.projectId, literature.query, literature.includeArchived, entryType]);
+  const items = literature.items.filter(item => entryType === null || item.bibliography.entryType === entryType).sort((left, right) => sort === 'year'
     ? (right.metadata.publishedYear ?? 0) - (left.metadata.publishedYear ?? 0)
     : sort === 'title' ? libraryItemTitle(left).localeCompare(libraryItemTitle(right), 'zh-CN')
       : right.updatedAt.localeCompare(left.updatedAt));
@@ -129,7 +131,7 @@ export function LibraryList({ compact = false, onOpenItem, onRequestImport }: Li
             显示已归档
           </label>
           <span className="tabular-nums text-subtle text-[length:var(--font-micro-size)]" data-testid="literature-count">
-            {literature.status === 'ready' ? `${literature.items.length.toLocaleString('zh-CN')} 条` : ''}
+            {literature.status === 'ready' ? `${items.length.toLocaleString('zh-CN')} 条` : ''}
           </span>
         </div>
         <div className="flex min-w-0 items-center gap-2">

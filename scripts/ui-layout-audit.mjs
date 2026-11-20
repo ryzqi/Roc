@@ -43,8 +43,8 @@ const smokeApiKey = 'smoke-test-key';
 const VIEWPORTS = [
   { id: 'wide', width: 1440, height: 900 },
   { id: 'desktop', width: 1280, height: 820 },
-  { id: 'columns-edge', width: 1200, height: 820 },
-  { id: 'drawers-edge', width: 1199, height: 820 },
+  { id: 'balanced-edge', width: 1080, height: 820 },
+  { id: 'drawers-edge', width: 1079, height: 820 },
   { id: 'native-minimum', width: 1184, height: 820 },
   { id: 'narrow', width: 720, height: 760 },
   { id: 'small', width: 380, height: 760 },
@@ -88,9 +88,9 @@ async function navigate(page, search) {
 }
 
 async function selectDestination(page, view) {
-  const navigation = page.getByTestId(`sidebar-nav-${view}`);
-  if (!await navigation.isVisible()) await page.getByTestId('titlebar-toggle-sidebar').click();
-  await navigation.click();
+  const destination = view === 'discover' ? 'overview' : 'library';
+  await page.getByTestId(`activity-nav-${destination}`).click();
+  if (destination !== view) await page.getByTestId(`canvas-view-${view}`).click();
   await page.getByTestId('sidebar-drawer').waitFor({state: 'detached'});
   await page.waitForFunction(destination =>
     document.querySelector('[data-testid="literature-hub"]')?.getAttribute('data-workspace') === destination, view);
@@ -278,36 +278,32 @@ try {
 
     await navigate(page, `${projectQuery}&view=overview`);
     await page.getByTestId('overview').waitFor();
-    const overviewSidebarOpen = await page.getByTestId('sidebar-drawer').count() > 0;
-    if (overviewSidebarOpen) {
-      await page.getByTestId('sidebar-drawer-close').click();
-      await page.getByTestId('sidebar-drawer').waitFor({state: 'detached'});
-    }
-    await page.getByTestId('titlebar-help').click();
+    if (!await page.getByTestId('context-help').isVisible()) await page.getByTestId('titlebar-toggle-sidebar').click();
+    await page.getByTestId('context-help').click();
     await page.getByTestId('overview-first-steps').waitFor();
     await capture(page, `overview-first-steps-${viewport.id}`);
     await page.getByTestId('overview-first-steps-skip').click();
     await page.getByTestId('overview-first-steps').waitFor({state: 'detached'});
     await capture(page, `overview-${viewport.id}`);
-    if (overviewSidebarOpen) await page.getByTestId('titlebar-toggle-sidebar').click();
 
     await navigate(page, `${projectQuery}&view=writing`);
     await page.waitForSelector('[data-testid="canvas"]', { timeout: 15_000 });
     await capture(page, `canvas-${viewport.id}`);
 
-    const managementOpener = page.getByTestId('titlebar-tasks');
+    await page.getByTestId('activity-nav-runs').click();
+    await page.getByTestId('canvas-task-center').waitFor({state: 'visible'});
+    await capture(page, `task-center-${viewport.id}`);
+    await page.getByTestId('canvas-task-category-research').click();
+    await page.getByTestId('mgmt-research-tasks').getByText('当前项目还没有科研任务。', {exact: true}).waitFor();
+    await assertControlVisible(page.getByTestId('mgmt-task-select'));
+    await capture(page, `research-tasks-${viewport.id}`);
+
+    const managementOpener = page.getByTestId('context-management');
+    if (!await managementOpener.isVisible()) await page.getByTestId('titlebar-toggle-sidebar').click();
     await managementOpener.focus();
     await page.keyboard.press('Enter');
     const management = page.getByTestId('management-panel-panel');
     await management.waitFor({state: 'visible'});
-    await page.getByTestId('mgmt-panel-tasks').waitFor({state: 'visible'});
-    await page.getByTestId('mgmt-task-center').waitFor({state: 'visible'});
-    await capture(page, `task-center-${viewport.id}`);
-    await page.getByTestId('mgmt-task-category-research').click();
-    await page.getByTestId('mgmt-research-tasks').waitFor();
-    await page.getByTestId('mgmt-research-tasks').getByText('当前项目还没有科研任务。', {exact: true}).waitFor();
-    await assertControlVisible(page.getByTestId('mgmt-task-select'));
-    await capture(page, `research-tasks-${viewport.id}`);
     for (const tab of ['memory', 'skills', 'mcp', 'tasks']) {
       await page.getByTestId(`mgmt-tab-${tab}`).click();
       const panel = page.getByTestId(`mgmt-panel-${tab}`);
@@ -396,10 +392,7 @@ try {
     await capture(page, `literature-import-${viewport.id}`);
     await page.keyboard.press('Escape');
     await page.getByTestId('literature-import-dialog-panel').waitFor({state: 'detached'});
-    if (sidebarWasOpen) await page.getByTestId('titlebar-toggle-sidebar').click();
-
-    // 助手在宽窗是**中列**（左栏 | 助手 | 画布，见 ADR 0023），在窄窗是抽屉；
-    // 两种形态都要审。
+    // The canvas precedes the assistant; only the narrow mode overlays it.
     await navigate(page, `${projectQuery}&view=writing&assistant=1`);
     await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 15_000 });
     await page.waitForSelector('[data-testid="assistant-composer-input"]', { timeout: 15_000 });
@@ -410,16 +403,14 @@ try {
       sidebarDrawer: document.querySelector('[data-testid="sidebar-drawer"]') !== null,
       assistantDrawer: document.querySelector('[data-testid="assistant-drawer"]') !== null
     }));
-    const expectedMode = viewport.width < 1200 ? 'drawers' : 'columns';
+    const expectedMode = viewport.width < 1080 ? 'drawers' : viewport.width < 1360 ? 'balanced' : 'wide';
     if (layout.mode !== expectedMode) {
       throw new Error(`assistant layout mode ${layout.mode} at ${viewport.width}px; expected ${expectedMode}`);
     }
-    if (viewport.width < 1200 && (layout.sidebarColumn || layout.assistantColumn || !layout.sidebarDrawer || !layout.assistantDrawer)) {
-      throw new Error(`assistant drawers are incomplete at ${viewport.width}px: ${JSON.stringify(layout)}`);
-    }
-    if (viewport.width >= 1200 && (!layout.sidebarColumn || !layout.assistantColumn || layout.sidebarDrawer || layout.assistantDrawer)) {
-      throw new Error(`assistant columns are incomplete at ${viewport.width}px: ${JSON.stringify(layout)}`);
-    }
+    assert.equal(layout.sidebarColumn, expectedMode === 'wide');
+    assert.equal(layout.sidebarDrawer, false);
+    assert.equal(layout.assistantColumn, expectedMode !== 'drawers');
+    assert.equal(layout.assistantDrawer, expectedMode === 'drawers');
     await capture(page, `assistant-${viewport.id}`);
     await page.getByTestId('assistant-model-settings').hover();
     await capture(page, `assistant-hover-${viewport.id}`);
@@ -433,7 +424,7 @@ try {
     if (viewport.id === 'wide') {
       const divider = page.getByTestId('divider-assistant');
       await divider.focus();
-      for (let index = 0; index < 12; index += 1) await page.keyboard.press('Shift+ArrowLeft');
+      for (let index = 0; index < 12; index += 1) await page.keyboard.press('Shift+ArrowRight');
       await page.waitForFunction(() => {
         const handle = document.querySelector('[data-testid="divider-assistant"]');
         return handle.getAttribute('aria-valuenow') === handle.getAttribute('aria-valuemin');

@@ -1,17 +1,17 @@
 # 科研工作台
 
 Roc 默认打开**项目门户**（`page=research`，未选项目）。进入某一个研究项目后才打开该项目的**三栏工作台**。
-左栏先提供工作台、发现、文献、知识、写作五个目的地；会话、文献、文件仍属于**当前项目**的上下文。助手默认按需打开。
+活动栏提供总览与发现、文献与知识、论文写作、会话与任务四个目的地。左侧上下文随目的地变化，画布在中间，助手在右侧按需打开。1360px 起可同时内联三个面板；1080–1359px 仅左侧上下文改为覆盖抽屉；更窄时助手也使用覆盖抽屉。
 
 术语边界见 [CONTEXT.md](../CONTEXT.md)。
 
 ## 入口
 
-- 壳：`src/renderer/app/AppShell.tsx`（顶栏 + 左栏 + 助手 + 画布）
+- 壳：`src/renderer/app/AppShell.tsx`（顶栏 + 活动栏 + 上下文 + 画布 + 助手）
 - 三栏弹性与窄窗抽屉：`src/renderer/app/WorkspaceLayout.tsx`
-- 顶栏 `src/renderer/shell/WindowChrome.tsx`；左栏 `src/renderer/shell/LeftSidebar.tsx`；
+- 顶栏 `src/renderer/shell/WindowChrome.tsx`；左侧 `src/renderer/shell/ActivityRail.tsx`、`src/renderer/shell/ContextDrawer.tsx`；
   画布 `src/renderer/canvas/WorkspaceCanvas.tsx`；助手 `src/renderer/assistant/AssistantPanel.tsx`
-- 路由：`src/renderer/app/routes.ts`（`page` / `project` / `view` / `tool` / `file` / `assistant`）
+- 路由：`src/renderer/app/routes.ts`（`page` / `project` / `view` / `subview` / `tool` / `file` / `assistant` / `layoutPreset`）
 - **面表**：`src/shared/surfaces.ts`（「有哪些面、每个落在哪」的唯一真理源）
 - 视图注册：`src/renderer/app/view-registry.ts`（懒加载 + 解析跟踪）
 - 主进程：`src/main/plugins/research/`，内置插件按依赖关系与清单顺序加载
@@ -33,15 +33,14 @@ Roc 默认打开**项目门户**（`page=research`，未选项目）。进入某
 
 | 落点 | 面 | 说明 |
 | --- | --- | --- |
-| 侧栏目的地 / 画布视图（`?view=`） | 工作台 / 发现 / 文献 / 知识 / 写作 | `overview/discover/library/knowledge/writing`；画布只显示当前标题 |
+| 活动栏目的地 / 画布视图（`?view=`） | 总览与发现 / 文献与知识 / 论文写作 / 会话与任务 | `overview/library/writing/runs`；旧 `discover`、`knowledge` 链接映射为子视图 |
 | 写作工具 | 终端 | `view=writing&tool=terminal`，保留同一写作上下文 |
-| 抽屉分区 | 记忆 / 技能 / MCP / 任务 | `drawerSectionIds`；**任务只有抽屉一个落点**（两份界面盯一个数据集是发散） |
+| 抽屉分区 | 记忆 / 技能 / MCP / 任务 | `drawerSectionIds`；项目任务的主入口是 `view=runs`，管理抽屉沿用同一任务数据 |
 | 浮层 | ⌘K 搜索 / 设置 | 不进 URL 的瞬时选择器另计 |
 
-缺少画布视图时使用 `overview`（`defaultViewId`）。管理仅有抽屉，不存在管理画布或第二套壳。
+缺少画布视图时使用 `overview`。切换画布时同项目视图保活，离开项目则重置。
 
-**没有画布落点的东西**：文件由左栏文件树 + 预览浮层承载（`?tool=files` 只把左栏切到文件 tab）；
-工作区 diff 由顶栏 Git 抽屉承载（`?tool=git`，`git-panel`）；后台任务只有管理抽屉。
+文件由写作上下文的文件树和预览浮层承载（`?tool=files` 打开文件树）；工作区 diff 由顶栏 Git 抽屉承载（`?tool=git`，`git-panel`）。
 
 分类在面表，URL形状在routes.ts，导航图标与色相在AppNavigation；视觉token和动效规范见 [ADR0023](adr/0023-visual-and-motion-spec.md)。
 
@@ -55,7 +54,7 @@ LaTeX 画布按可用宽度切换文件目录与文件选择器，可筛选文�
 
 设置按「模型与文献」「运行与权限」「扩展与维护」分组；窄窗口使用分区选择器，正文独立滚动，保存区保持可见。切换分区与关闭仍遵循原草稿及写入锁。
 
-记忆、工作技能和外部工具连接使用管理抽屉。技能以可搜索的已安装列表为主，来源与许可详情按需展开。顶栏任务按钮打开同一个任务中心，按当前、待处理、最近结束、失败聚合研究任务、当前工作区后台任务与文献处理；分页数据标为近期，来源失败单独显示。后台配置、科研详情与高级 Python 环境仍可进入，切换保留编辑器和草稿守卫。
+记忆、工作技能和外部工具连接使用管理抽屉。技能以可搜索的已安装列表为主，来源与许可详情按需展开。活动栏的会话与任务打开任务中心，按当前、待处理、最近结束、失败聚合研究任务、当前工作区后台任务与文献处理；分页数据标为近期，来源失败单独显示。后台配置、科研详情与高级 Python 环境仍可进入，切换保留编辑器和草稿守卫。
 
 ## 项目、会话与搜索布局
 
@@ -99,7 +98,7 @@ LaTeX 画布按可用宽度切换文件目录与文件选择器，可筛选文�
 ## 助手与阶段
 
 研究助手是**唯一执行入口**（[ADR 0020](adr/0020-conversation-drives-stages.md)）。它在助手列
-（`assistant-panel`；<1200px 是抽屉 `assistant-drawer`，⌘J / `titlebar-toggle-assistant` 开关），
+（`assistant-panel`；小于 1080px 时为抽屉 `assistant-drawer`，⌘L / `titlebar-toggle-assistant` 开关），
 拿到的科研工具按当前项目绑定（`src/main/plugins/agent/research-tools.ts`；工具名与权限的唯一来源是
 `RESEARCH_TOOL_DESCRIPTORS`）：
 
@@ -180,11 +179,12 @@ LaTeX 文件预览按工作目录与相对路径缓存。只有可写项目中�
 | --- | --- | --- |
 | ⌘, | 设置 | 原生菜单 |
 | ⌘N | 新建研究项目 | 原生菜单 |
-| ⌘B | 折叠 / 展开左栏 | 渲染层 |
-| ⌘J | 折叠 / 展开助手 | 渲染层 |
+| ⌘B | 折叠 / 展开上下文 | 渲染层 |
+| ⌘L | 折叠 / 展开助手 | 渲染层 |
 | ⌘K | 搜索（浮层打开后仍是它） | 渲染层 |
 | ⌘D | 切换主题 | 渲染层 |
-| ⌘⇧F | 切换聚焦模式 | 渲染层；输入法组合中或浮层打开时不触发 |
+| ⌘1 / ⌘2 / ⌘3 | 研究 / 写作 / 审阅布局 | 渲染层 |
+| ⌘⌥1–4 | 切换活动栏目的地 | 渲染层 |
 | ⌘S | 保存 LaTeX 面板已打开的文本文件 | `LatexPanel`；输入法组合中不触发 |
 | Enter / ⌘Enter | 发送助手消息或回复当前提问 | 输入区；输入法组合与候选词提交时不触发 |
 | Shift+Enter | 助手输入区换行 | 输入区 |

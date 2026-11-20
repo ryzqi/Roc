@@ -42,10 +42,10 @@ test('production file preview freezes untrusted notebook bytes through keyboard 
       return page;
     }
     async function open(page, projectId, path = 'analysis.ipynb') {
-      const url = new URL(page.url()); url.searchParams.set('project', projectId);
+      const url = new URL(page.url());
+      url.search = new URLSearchParams({project: projectId, view: 'writing', tool: 'files'}).toString();
       await page.goto(url.href);
       await page.getByTestId('workspace-layout').waitFor();
-      await page.getByTestId('sidebar-tab-files').click();
       await page.getByTestId(`file-tree-row-${path}`).click();
       await page.getByTestId(path === 'analysis.ipynb' ? 'file-notebook-cells' : 'file-preview-text').waitFor();
     }

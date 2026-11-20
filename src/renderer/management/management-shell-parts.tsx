@@ -200,7 +200,11 @@ function McpSectionContent({ scope }: { scope: ManagementScope }): ReactNode {
 
 type TaskCategory = 'overview' | 'background' | 'research' | 'python';
 
-function TasksSectionContent({ scope, canvasView }: { scope: ManagementScope; canvasView: AppViewId | undefined }): ReactNode {
+export function TasksSectionContent({ scope, canvasView, testIdPrefix = 'mgmt' }: {
+  scope: ManagementScope;
+  canvasView?: AppViewId | undefined;
+  testIdPrefix?: 'mgmt' | 'canvas';
+}): ReactNode {
   const store = useManagementStores((stores) => stores.tasks);
   const id = useId();
   const [category, setCategory] = useState<TaskCategory>(() => scope.researchTaskId ? 'research' : 'overview');
@@ -244,12 +248,12 @@ function TasksSectionContent({ scope, canvasView }: { scope: ManagementScope; ca
         {available.map(entry => <button key={entry.id} type="button" role="tab" id={`${id}-${entry.id}-tab`}
           aria-selected={active === entry.id} aria-controls={`${id}-${entry.id}-panel`} tabIndex={active === entry.id ? 0 : -1}
           title={entry.id === 'python' ? 'Python 环境' : undefined}
-          data-category={entry.id} data-testid={`mgmt-task-category-${entry.id}`} disabled={store?.busy}
+          data-category={entry.id} data-testid={`${testIdPrefix}-task-category-${entry.id}`} disabled={store?.busy}
           onClick={() => selectCategory(entry.id)}>{entry.label}</button>)}
       </div>
       {/* Keep editors mounted so hidden drafts, pending operations and their navigation guards survive category changes. */}
       <div role="tabpanel" id={`${id}-overview-panel`} aria-labelledby={`${id}-overview-tab`} hidden={active !== 'overview'}>
-        <TaskCenterOverview center={scope.taskCenter} onOpen={openTask} disabled={store === null || store.busy}/>
+        <TaskCenterOverview center={scope.taskCenter} onOpen={openTask} disabled={store === null || store.busy} testIdPrefix={testIdPrefix} />
       </div>
       <div role="tabpanel" id={`${id}-background-panel`} aria-labelledby={`${id}-background-tab`} hidden={active !== 'background'}>
         {store === null ? <ManagementSectionLoading /> : <BackgroundTasksSection store={store} />}

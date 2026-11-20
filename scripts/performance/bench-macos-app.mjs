@@ -50,7 +50,8 @@ try {
       let historyReadyMs = 0;
       if (eventCount > 0) {
         const historyStarted = performance.now();
-        await page.getByTestId('sidebar-tab-sessions').click();
+        await page.getByTestId('activity-nav-runs').click();
+        if (!await page.getByTestId('context-drawer').isVisible()) await page.getByTestId('titlebar-toggle-sidebar').click();
         await page.getByTestId(`session-row-thread-profile-${eventCount}`).click();
         await page.waitForFunction(marker => document.querySelector('[data-testid="assistant-transcript"]')?.textContent?.includes(marker),
           `profile-marker-${eventCount}-${eventCount}`, { timeout: 15_000 });

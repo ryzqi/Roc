@@ -1,138 +1,87 @@
-import { ModalShell } from '../shell/ModalShell';
+import { useId, useRef, type CSSProperties, type ReactNode } from 'react';
+import { X } from 'lucide-react';
+import { OVERLAY_Z_INDEX } from '../shell/overlay-stack';
 import { ResizableDivider } from '../shell/ResizableDivider';
+import { OverlayFocusRestore, useOverlayBehavior } from '../shell/use-overlay-behavior';
 import { ASSISTANT_WIDTH, SIDEBAR_WIDTH } from './ui-state';
-import type { LayoutState } from './use-layout-state';
+import { ACTIVITY_RAIL_WIDTH, CANVAS_MIN_WIDTH, type LayoutState } from './use-layout-state';
 
-/**
- * Three-column workspace layout: sidebar | assistant | canvas.
- *
- * Extracted from `AppShell` so the geometry rules live in one place and can be
- * reasoned about without the boot/routing/overlay concerns. Widths arrive as CSS
- * variables on the container (`--sidebar-w`, `--assistant-w`) because they are
- * dynamic; colors still come only from the token layer.
- *
- * **Column order is 左栏 | 助手 | 画布** (ADR 0023): sidebar, divider, assistant column,
- * divider, canvas — so the assistant sits *between* the rail and the canvas and the
- * canvas owns the right edge. This is the arrangement a researcher resizes while
- * writing: the canvas keeps `flex-1` and stays the widest surface, and dragging the
- * assistant's divider right grows the assistant.
- *
- * At `< 1200px` the sidebar and assistant become drawers instead of
- * columns. The window's own minimum is 1184px, so that mode mainly exists for
- * the layout audit and for a future lower minimum — it is implemented rather
- * than left as a TODO so the canvas never collapses if it is reached.
- */
+function WorkspacePane({ open, floating, side, title, testId, trigger, width, onClose, children }: {
+  open: boolean;
+  floating: boolean;
+  side: 'start' | 'end';
+  title: string;
+  testId: string;
+  trigger: string;
+  width: string;
+  onClose: () => void;
+  children: ReactNode;
+}): React.JSX.Element {
+  const ref = useRef<HTMLElement>(null);
+  const id = useId();
+  useOverlayBehavior({
+    open: open && floating, panelRef: ref, onRequestClose: onClose, canClose: () => true,
+    overlayId: id, layer: 'ambient', inertBackground: false
+  });
+  return <aside ref={ref} data-testid={open ? `${testId}-${floating ? 'drawer' : 'column'}` : undefined} aria-label={title}
+    role={floating ? 'dialog' : undefined} hidden={!open} inert={!open}
+    className={`${open ? 'flex' : 'hidden'} min-h-0 shrink-0 flex-col bg-[var(--material-sidebar)] ${floating ? 'absolute inset-y-0' : ''}`}
+    style={floating ? {
+      width, maxWidth: `calc(100% - ${ACTIVITY_RAIL_WIDTH + 32}px)`, zIndex: OVERLAY_Z_INDEX.ambient + 1,
+      ...(side === 'start' ? { insetInlineStart: ACTIVITY_RAIL_WIDTH } : { insetInlineEnd: 0 })
+    } : { width }}>
+    {open && floating ? <>
+      <OverlayFocusRestore returnFocusSelector={`[data-testid="${trigger}"]`} />
+      <header className="flex h-10 shrink-0 items-center justify-between border-b-[0.5px] border-line px-3">
+        <span className="font-medium">{title}</span>
+        <button type="button" aria-label={`关闭${title}`} title={`关闭${title} (Esc)`} data-testid={`${testId}-drawer-close`}
+          onClick={onClose} className="grid size-7 place-items-center rounded-control text-muted hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]">
+          <X size={16} aria-hidden="true" />
+        </button>
+      </header>
+    </> : null}
+    <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+  </aside>;
+}
 
-export type WorkspaceLayoutProps = {
+export function WorkspaceLayout({ layout, assistantOpen, onCloseAssistant, activityRail, contextDrawer, canvas, assistant }: {
   layout: LayoutState;
-  /** From the URL (`?assistant=1`), not from layout state. */
   assistantOpen: boolean;
-  onToggleSidebar: () => void;
-  onToggleAssistant: () => void;
-  sidebar: React.ReactNode;
-  canvas: React.ReactNode;
-  assistant: React.ReactNode;
-  /** Assistant is only meaningful inside a project. */
-  assistantAvailable: boolean;
-};
-
-export function WorkspaceLayout({
-  layout,
-  assistantOpen,
-  onToggleSidebar,
-  onToggleAssistant,
-  sidebar,
-  canvas,
-  assistant,
-  assistantAvailable
-}: WorkspaceLayoutProps): React.JSX.Element {
-  const sidebarVisible = !layout.sidebarCollapsed && !layout.sidebarAsDrawer;
-  const assistantVisible = assistantAvailable && assistantOpen && layout.preset !== 'focus' && !layout.assistantAsDrawer;
-
-  // Report the clamp state so the divider can announce why dragging stopped,
-  // instead of the handle silently refusing to move.
-  const sidebarAtLimit =
-    layout.sidebarWidth <= SIDEBAR_WIDTH.min ? 'min' : layout.sidebarWidth >= SIDEBAR_WIDTH.max ? 'max' : null;
-  const assistantAtLimit = layout.assistantWidth <= ASSISTANT_WIDTH.min ? 'min' : layout.assistantWidth >= layout.assistantMaxWidth ? 'max' : null;
-
-  return (
-    <div
-      className="flex min-h-0 flex-1"
-      data-testid="workspace-layout"
-      data-layout-mode={layout.mode}
-      data-layout-preset={layout.preset}
-      style={
-        {
-          '--sidebar-w': `${layout.sidebarWidth}px`,
-          '--assistant-w': `${layout.assistantWidth}px`
-        } as React.CSSProperties
-      }
-    >
-      {sidebarVisible ? (
-        <>
-          <div className="flex w-[var(--sidebar-w)] shrink-0 flex-col" data-testid="sidebar-column">
-            {sidebar}
-          </div>
-          <ResizableDivider
-            ariaLabel="调整左栏宽度"
-            value={layout.sidebarWidth}
-            min={SIDEBAR_WIDTH.min}
-            max={SIDEBAR_WIDTH.max}
-            onResize={layout.resizeSidebar}
-            onReset={layout.resetSidebar}
-            atLimit={sidebarAtLimit}
-            testId="divider-sidebar"
-          />
-        </>
-      ) : null}
-
-      {assistantVisible ? (
-        <>
-          <div className="flex w-[var(--assistant-w)] shrink-0 flex-col" data-testid="assistant-column">
-            {assistant}
-          </div>
-          {/* The divider is *after* the assistant, which is what makes dragging it right
-              widen the panel (see `resizeAssistant`). */}
-          <ResizableDivider
-            ariaLabel="调整助手宽度"
-            value={layout.assistantWidth}
-            min={ASSISTANT_WIDTH.min}
-            max={layout.assistantMaxWidth}
-            onResize={layout.resizeAssistant}
-            onReset={layout.resetAssistant}
-            atLimit={assistantAtLimit}
-            testId="divider-assistant"
-          />
-        </>
-      ) : null}
-
-      <main className="flex min-w-0 flex-1 flex-col" data-testid="canvas-column">
-        {canvas}
-      </main>
-
-        <ModalShell
-          open={layout.sidebarAsDrawer && !layout.sidebarCollapsed && assistantAvailable}
-          kind="drawer"
-          title="项目上下文"
-          onClose={onToggleSidebar}
-          widthClassName="w-[360px]"
-          testId="sidebar-drawer"
-          layer="ambient"
-        >
-          {sidebar}
-        </ModalShell>
-
-        <ModalShell
-          open={layout.assistantAsDrawer && assistantAvailable && assistantOpen && layout.preset !== 'focus'}
-          kind="drawer"
-          title="研究助手"
-          onClose={onToggleAssistant}
-          widthClassName="w-[520px]"
-          testId="assistant-drawer"
-          layer="ambient"
-        >
-          {assistant}
-        </ModalShell>
-    </div>
-  );
+  onCloseAssistant: () => void;
+  activityRail: ReactNode;
+  contextDrawer: ReactNode;
+  canvas: ReactNode;
+  assistant: ReactNode;
+}): React.JSX.Element {
+  const drawerFloating = layout.mode !== 'wide';
+  const assistantFloating = layout.mode === 'drawers';
+  const drawerOverlay = drawerFloating && layout.drawerOpen;
+  const assistantVisible = assistantOpen && !(assistantFloating && drawerOverlay);
+  const assistantOverlay = assistantFloating && assistantVisible;
+  const closeDrawer = (): void => layout.setDrawerOpen(false);
+  return <div className="relative flex min-h-0 min-w-0 flex-1" data-testid="workspace-layout"
+    data-layout-mode={layout.mode} data-layout-preset={layout.preset}
+    style={{ '--drawer-w': `${layout.drawerWidth}px`, '--assistant-w': `${layout.assistantWidth}px` } as CSSProperties}>
+    {activityRail}
+    <WorkspacePane open={layout.drawerOpen} floating={drawerFloating} side="start" title="项目上下文"
+      testId="sidebar" trigger="titlebar-toggle-sidebar" width="var(--drawer-w)" onClose={closeDrawer}>
+      {contextDrawer}
+    </WorkspacePane>
+    {!drawerFloating && layout.drawerOpen ? <ResizableDivider ariaLabel="调整左栏宽度" value={layout.drawerWidth}
+      min={SIDEBAR_WIDTH.min} max={SIDEBAR_WIDTH.max} onResize={layout.resizeDrawer} onReset={layout.resetDrawer}
+      testId="divider-sidebar" /> : null}
+    <main id="roc-main" tabIndex={-1} className="flex flex-1 flex-col" data-testid="canvas-column"
+      inert={drawerOverlay || assistantOverlay} style={{ minWidth: layout.mode === 'drawers' ? 0 : CANVAS_MIN_WIDTH }}>
+      {canvas}
+    </main>
+    {!assistantFloating && assistantVisible ? <ResizableDivider ariaLabel="调整助手宽度" value={layout.assistantWidth}
+      min={ASSISTANT_WIDTH.min} max={layout.assistantMaxWidth} onResize={layout.resizeAssistant} onReset={layout.resetAssistant}
+      growToward="start" testId="divider-assistant" /> : null}
+    <WorkspacePane open={assistantVisible} floating={assistantFloating} side="end" title="研究助手"
+      testId="assistant" trigger="titlebar-toggle-assistant" width={assistantFloating ? '420px' : 'var(--assistant-w)'} onClose={onCloseAssistant}>
+      {assistant}
+    </WorkspacePane>
+    {drawerOverlay || assistantOverlay ? <div aria-hidden="true" className="absolute inset-y-0 end-0 bg-[var(--overlay-scrim)]"
+      style={{ insetInlineStart: ACTIVITY_RAIL_WIDTH, zIndex: OVERLAY_Z_INDEX.ambient }} onClick={drawerOverlay ? closeDrawer : onCloseAssistant} /> : null}
+  </div>;
 }

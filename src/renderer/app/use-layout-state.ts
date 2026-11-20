@@ -1,226 +1,113 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { LayoutPreset } from './routes';
 import {
-  ASSISTANT_WIDTH,
-  SIDEBAR_WIDTH,
-  readAssistantWidth,
-  readSidebarCollapsed,
-  readSidebarTab,
-  readSidebarWidth,
-  writeAssistantWidth,
-  writeSidebarCollapsed,
-  writeSidebarTab,
-  writeSidebarWidth,
-  type SidebarTab
+  ASSISTANT_WIDTH, SIDEBAR_WIDTH, readAssistantWidth, readSidebarCollapsed, readSidebarWidth,
+  writeAssistantWidth, writeSidebarCollapsed, writeSidebarWidth
 } from './ui-state';
 
-/**
- * Layout state for the three-column workspace, persisted as UI preferences.
- *
- * Scope is deliberately narrow: panel geometry and which sidebar tab is
- * showing. Two things that look like layout state are **not** here, because the
- * URL already owns them and a second copy would drift after reload:
- *
- *   - which canvas view is active   → `?view=`
- *   - whether the assistant is open → `?assistant=1`
- *
- * Width rules:
- *   sidebar   180–400, default 256
- *   assistant 280–(window − sidebar − 360), default 440
- * The canvas retains at least 360px, so the assistant cannot squeeze it away.
- */
+export const ACTIVITY_RAIL_WIDTH = 52;
+export const CANVAS_MIN_WIDTH = 520;
+const REVIEW_WIDTH = 420;
 
-/** Width the canvas must retain when sizing the assistant. */
-const CANVAS_MIN_WIDTH = 360;
-
-/** Drawers are reachable at the native 1184px minimum window width. */
-export type LayoutMode = 'columns' | 'drawers';
-
-const DRAWER_THRESHOLD = 1200;
-
-export function layoutModeForWidth(width: number): LayoutMode {
-  return width < DRAWER_THRESHOLD ? 'drawers' : 'columns';
+export function layoutModeForWidth(width: number): 'wide' | 'balanced' | 'drawers' {
+  return width >= 1360 ? 'wide' : width >= 1080 ? 'balanced' : 'drawers';
 }
 
-export type LayoutPreset = 'normal' | 'focus' | 'collaboration';
-
-export type LayoutState = {
-  preset: LayoutPreset;
-  setPreset: (preset: LayoutPreset) => void;
-  mode: LayoutMode;
-  sidebarWidth: number;
-  sidebarCollapsed: boolean;
-  assistantWidth: number;
-  assistantMaxWidth: number;
-  /** Sidebar and assistant render inside drawers rather than as columns. */
-  sidebarAsDrawer: boolean;
-  assistantAsDrawer: boolean;
-  sidebarTab: SidebarTab;
-  toggleSidebar: () => void;
-  resizeSidebar: (width: number) => void;
-  resetSidebar: () => void;
-  resizeAssistant: (width: number) => void;
-  resetAssistant: () => void;
-  setSidebarTab: (tab: SidebarTab) => void;
-};
+export type LayoutState = ReturnType<typeof useLayoutState>;
 
 function clamp(value: number, min: number, max: number): number {
-  return max < min ? min : Math.min(Math.max(value, min), max);
+  return Math.min(Math.max(value, min), max);
 }
 
-/**
- * Upper bound for the assistant so the canvas keeps `CANVAS_MIN_WIDTH`.
- *
- * `sidebarWidth` must be the *effective* width: a collapsed or drawer-mode
- * sidebar occupies nothing, and subtracting its stored width anyway would stop
- * the assistant 256px early with no visible reason.
- */
-function assistantMaxWidth(windowWidth: number, effectiveSidebarWidth: number): number {
-  return Math.max(ASSISTANT_WIDTH.min, windowWidth - effectiveSidebarWidth - CANVAS_MIN_WIDTH);
-}
-
-/** Debounce for persisting drag results; see `schedulePersistWidths`. */
-const PERSIST_DEBOUNCE_MS = 200;
-
-export function useLayoutState(): LayoutState {
+export function useLayoutState(preset: LayoutPreset): {
+  mode: ReturnType<typeof layoutModeForWidth>;
+  preset: LayoutPreset;
+  drawerWidth: number;
+  drawerOpen: boolean;
+  assistantWidth: number;
+  assistantMaxWidth: number;
+  setDrawerOpen: (open: boolean) => void;
+  toggleDrawer: () => void;
+  resizeDrawer: (width: number) => void;
+  resizeAssistant: (width: number) => void;
+  resetDrawer: () => void;
+  resetAssistant: () => void;
+  applyPreset: (preset: LayoutPreset) => void;
+  reset: () => void;
+} {
   const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
-  const [sidebarWidth, setSidebarWidth] = useState(() => readSidebarWidth());
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readSidebarCollapsed());
-  const [assistantWidth, setAssistantWidth] = useState(() => readAssistantWidth());
-  const [sidebarTab, setSidebarTabState] = useState<SidebarTab>(() => readSidebarTab());
-
-  const [preset, setPresetState] = useState<LayoutPreset>('normal');
-  const previousLayout = useRef<{ sidebarWidth: number; assistantWidth: number; sidebarCollapsed: boolean } | null>(null);
-  const setPreset = useCallback((next: LayoutPreset) => {
-    if (next === preset) return;
-    if (preset === 'normal') previousLayout.current = { sidebarWidth, assistantWidth, sidebarCollapsed };
-    if (next === 'normal') {
-      const previous = previousLayout.current;
-      if (previous !== null) {
-        setSidebarWidth(previous.sidebarWidth);
-        setAssistantWidth(previous.assistantWidth);
-        setSidebarCollapsed(previous.sidebarCollapsed);
-      }
-      previousLayout.current = null;
-    } else if (next === 'focus') {
-      setSidebarCollapsed(true);
-    } else {
-      setSidebarCollapsed(false);
-      setSidebarWidth(SIDEBAR_WIDTH.min);
-      setAssistantWidth(Math.max(ASSISTANT_WIDTH.default, Math.floor(windowWidth * 0.4)));
-    }
-    setPresetState(next);
-  }, [preset, sidebarWidth, assistantWidth, sidebarCollapsed, windowWidth]);
-
+  const [drawerWidth, setDrawerWidth] = useState(readSidebarWidth);
+  const [assistantWidth, setAssistantWidth] = useState(readAssistantWidth);
+  const [reviewWidth, setReviewWidth] = useState(REVIEW_WIDTH);
+  const [collapsed, setCollapsed] = useState(readSidebarCollapsed);
+  const [wideOverride, setWideOverride] = useState<{ preset: LayoutPreset; open: boolean } | null>(null);
+  const [floatingOpen, setFloatingOpen] = useState(false);
   const mode = layoutModeForWidth(windowWidth);
-  const effectiveSidebarWidth = sidebarCollapsed || mode === 'drawers' ? 0 : sidebarWidth;
-
-  // Dragging fires a pointermove per frame; writing both widths to localStorage
-  // on each one is pointless churn, so persistence is debounced and reads the
-  // latest values from refs at flush time.
-  const sidebarWidthRef = useRef(sidebarWidth);
-  sidebarWidthRef.current = sidebarWidth;
-  const assistantWidthRef = useRef(assistantWidth);
-  assistantWidthRef.current = assistantWidth;
-  const persistTimerRef = useRef<number | null>(null);
-
-  const schedulePersistWidths = useCallback(() => {
-    if (persistTimerRef.current !== null) {
-      window.clearTimeout(persistTimerRef.current);
-    }
-    persistTimerRef.current = window.setTimeout(() => {
-      persistTimerRef.current = null;
-      if (previousLayout.current !== null) return;
-      writeSidebarWidth(sidebarWidthRef.current);
-      writeAssistantWidth(assistantWidthRef.current);
-    }, PERSIST_DEBOUNCE_MS);
-  }, []);
-
-  useEffect(
-    () => () => {
-      if (persistTimerRef.current !== null) {
-        window.clearTimeout(persistTimerRef.current);
-      }
-    },
-    []
-  );
+  const drawerOpen = mode === 'wide'
+    ? (wideOverride?.preset === preset ? wideOverride.open : preset !== 'review' && !collapsed)
+    : floatingOpen;
+  const drawerInline = mode === 'wide' && drawerOpen;
+  const assistantMaxWidth = Math.max(ASSISTANT_WIDTH.min,
+    windowWidth - ACTIVITY_RAIL_WIDTH - CANVAS_MIN_WIDTH - (drawerInline ? drawerWidth : 0));
 
   useEffect(() => {
-    const onResize = (): void => setWindowWidth(window.innerWidth);
+    const onResize = (): void => {
+      if (layoutModeForWidth(window.innerWidth) !== mode) setFloatingOpen(false);
+      setWindowWidth(window.innerWidth);
+    };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, []);
+  }, [mode]);
 
-  const toggleSidebar = useCallback(() => {
-    setSidebarCollapsed((current) => {
-      const next = !current;
-      if (previousLayout.current === null) writeSidebarCollapsed(next);
-      return next;
-    });
-  }, []);
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      writeSidebarWidth(drawerWidth);
+      writeAssistantWidth(assistantWidth);
+    }, 200);
+    return () => window.clearTimeout(timeout);
+  }, [drawerWidth, assistantWidth]);
 
-  const resizeSidebar = useCallback(
-    (width: number) => {
-      setSidebarWidth((current) => {
-        const next = clamp(width, SIDEBAR_WIDTH.min, SIDEBAR_WIDTH.max);
-        if (next !== current) {
-          schedulePersistWidths();
-        }
-        return next;
-      });
-    },
-    [schedulePersistWidths]
-  );
-
-  const resizeAssistant = useCallback(
-    (width: number) => {
-      setAssistantWidth((current) => {
-        // The divider sits on the assistant's *right* edge, so dragging it right
-        // widens the panel.
-        const next = clamp(width, ASSISTANT_WIDTH.min, assistantMaxWidth(windowWidth, effectiveSidebarWidth));
-        if (next !== current) {
-          schedulePersistWidths();
-        }
-        return next;
-      });
-    },
-    [windowWidth, effectiveSidebarWidth, schedulePersistWidths]
-  );
-
-  const resetSidebar = useCallback(() => {
-    setSidebarWidth(SIDEBAR_WIDTH.default);
-    if (previousLayout.current === null) writeSidebarWidth(SIDEBAR_WIDTH.default);
-  }, []);
-
-  const resetAssistant = useCallback(() => {
-    setAssistantWidth(ASSISTANT_WIDTH.default);
-    if (previousLayout.current === null) writeAssistantWidth(ASSISTANT_WIDTH.default);
-  }, []);
-
-  const setSidebarTab = useCallback((tab: SidebarTab) => {
-    writeSidebarTab(tab);
-    setSidebarTabState(tab);
-  }, []);
+  const setDrawerOpen = (open: boolean): void => {
+    if (mode === 'wide') {
+      setWideOverride({ preset, open });
+      if (preset !== 'review') {
+        setCollapsed(!open);
+        writeSidebarCollapsed(!open);
+      }
+    } else {
+      setFloatingOpen(open);
+    }
+  };
+  const resetDrawer = (): void => setDrawerWidth(SIDEBAR_WIDTH.default);
+  const resetAssistant = (): void => {
+    if (preset === 'review') setReviewWidth(REVIEW_WIDTH);
+    else setAssistantWidth(ASSISTANT_WIDTH.default);
+  };
+  const applyPreset = (next: LayoutPreset): void => {
+    setFloatingOpen(false);
+    setWideOverride(next === 'writing' ? null : { preset: next, open: next === 'research' });
+    if (next === 'review') setReviewWidth(REVIEW_WIDTH);
+  };
 
   return {
-    mode,
-    preset,
-    setPreset,
-    sidebarWidth: clamp(sidebarWidth, SIDEBAR_WIDTH.min, SIDEBAR_WIDTH.max),
-    sidebarCollapsed,
-    assistantWidth: clamp(
-      assistantWidth,
-      ASSISTANT_WIDTH.min,
-      assistantMaxWidth(windowWidth, effectiveSidebarWidth)
-    ),
-    assistantMaxWidth: assistantMaxWidth(windowWidth, effectiveSidebarWidth),
-    sidebarAsDrawer: mode === 'drawers',
-    assistantAsDrawer: mode === 'drawers',
-    sidebarTab,
-    toggleSidebar,
-    resizeSidebar,
-    resetSidebar,
-    resizeAssistant,
-    resetAssistant,
-    setSidebarTab
+    mode, preset, drawerWidth, drawerOpen,
+    assistantWidth: clamp(preset === 'review' ? reviewWidth : assistantWidth, ASSISTANT_WIDTH.min, assistantMaxWidth),
+    assistantMaxWidth,
+    setDrawerOpen,
+    toggleDrawer: () => setDrawerOpen(!drawerOpen),
+    resizeDrawer: width => setDrawerWidth(clamp(width, SIDEBAR_WIDTH.min, SIDEBAR_WIDTH.max)),
+    resizeAssistant: width => {
+      const next = clamp(width, ASSISTANT_WIDTH.min, assistantMaxWidth);
+      if (preset === 'review') setReviewWidth(next);
+      else setAssistantWidth(next);
+    },
+    resetDrawer, resetAssistant, applyPreset,
+    reset: () => {
+      resetDrawer();
+      setAssistantWidth(ASSISTANT_WIDTH.default);
+      setCollapsed(false);
+      writeSidebarCollapsed(false);
+      applyPreset('research');
+    }
   };
 }

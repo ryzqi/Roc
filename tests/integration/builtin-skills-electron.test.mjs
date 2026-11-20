@@ -41,8 +41,11 @@ test('built app reinstalls only skills, confirms completion, and preserves user 
       });
     }, workspace);
     assert.equal(project.ok, true, JSON.stringify(project));
-    await navigate(page, `page=research&project=${project.data.id}&view=latex`);
-    await page.getByTestId('titlebar-management').click();
+    await navigate(page, `page=research&project=${project.data.id}&view=runs`);
+    const management = page.getByTestId('context-management');
+    await expect(management).toBeAttached();
+    if (!await management.isVisible()) await page.getByTestId('titlebar-toggle-sidebar').click();
+    await management.click();
     await page.getByTestId('mgmt-tab-skills').click();
 
     const status = await page.evaluate(() => window.roc.skills.builtinStatus());

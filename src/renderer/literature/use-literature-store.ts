@@ -37,6 +37,7 @@ import {
   writeWorkspaceText
 } from './library-store';
 import { buildLiteratureAssistantPrompt, libraryItemTitle } from './format';
+import type { ImportTabRequest } from './hub-route';
 import {requestReadingChange} from './reading-interactions';
 
 /**
@@ -208,7 +209,8 @@ export type LiteratureStore = {
    * the sidebar having to know anything about the hub's internal state.
    */
   importRequestId: number;
-  requestImport: () => void;
+  importRequestTab: ImportTabRequest;
+  requestImport: (tab?: ImportTabRequest) => void;
 };
 
 type DocumentContentResult = { run: ResearchDocumentRun; content: ResearchDocumentContent };
@@ -240,7 +242,7 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
   }, []);
   const [pending, setPending] = useState(false);
   const [parseInFlight, setParseInFlight] = useState<string | null>(null);
-  const [importRequestId, setImportRequestId] = useState(0);
+  const [importRequest, setImportRequest] = useState<{ id: number; tab: ImportTabRequest }>({ id: 0, tab: 'document' });
   const [actionError, setActionError] = useState<string | null>(null);
   const [assistantPending, setAssistantPending] = useState(false);
   const [assistantError, setAssistantError] = useState<string | null>(null);
@@ -753,8 +755,9 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     derivedStatus: derived.status,
     derivedError: derived.error,
     reloadDerived: derived.reload,
-    importRequestId,
-    requestImport: () => setImportRequestId((current) => current + 1),
+    importRequestId: importRequest.id,
+    importRequestTab: importRequest.tab,
+    requestImport: (tab = 'document') => setImportRequest(current => ({ id: current.id + 1, tab })),
     addPdfToNewItem,
     addPdfToItem,
     startParse,

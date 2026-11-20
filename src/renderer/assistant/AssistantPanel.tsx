@@ -94,6 +94,7 @@ export type AssistantPanelProps = {
    * on a 1px hairline is not discoverable while the header button is.
    */
   onResetWidth?: () => void;
+  onRunActivity?: (running: boolean) => void;
 };
 
 export function AssistantPanel({
@@ -110,7 +111,8 @@ export function AssistantPanel({
   onOpenSettings,
   composerSeed = null,
   onComposerSeedConsumed,
-  onResetWidth
+  onResetWidth,
+  onRunActivity
 }: AssistantPanelProps): React.JSX.Element {
   const reviewLinkScope = useMemo(() => ({projectId, open: onOpenReviewInspector}), [projectId, onOpenReviewInspector]);
   /**
@@ -264,6 +266,7 @@ export function AssistantPanel({
       ? session.runState.runId
       : latestHistoryEvent?.threadId === threadId ? latestHistoryEvent.runId : null;
   const activeRun = runStatus === 'running' || runStatus === 'recovering';
+  useEffect(() => { onRunActivity?.(activeRun); }, [activeRun, onRunActivity]);
   const checkpointReport = useMemo(() => {
     if (diagnosticsRunId === null || threadId === null) return null;
     let report: TaskAcceptance | null = session.runState.activityBlocks

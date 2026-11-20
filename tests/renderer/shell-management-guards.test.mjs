@@ -63,6 +63,7 @@ before(async () => {
         },
         research: {
           getProject: async ({id}) => ok({id, title: id, status: 'active', workspacePath: '/workspace'}),
+          listProjects: async () => ok([]),
           listPythonEnvironmentSelections: async () => ok([]),
           listTasks: async () => ok({tasks: [task('task-a'), task('task-b')], nextTaskId: 'task-b', hasMore: false}),
           listAcquisition: async () => ok({jobs: [], total: 0, nextOffset: null}),
@@ -116,8 +117,9 @@ before(async () => {
           '/shell/use-search-groups.ts': `export function useSearchGroups(input) {
             window.searchEntries = input; return [];
           }`,
-          '/shell/LeftSidebar.tsx': `import React from 'react';
-            export function LeftSidebar(props) {window.sidebarEntries = props; return <aside/>;}`,
+          '/assistant/SessionListView.tsx': `export const SessionListView = () => null;`,
+          '/canvas/files/FileSidebarPanel.tsx': `export const FileSidebarPanel = () => null;`,
+          '/literature/LibraryList.tsx': `export const LibraryList = () => null;`,
           '/project/ProjectPortalView.tsx': `import React from 'react';
             export function ProjectPortalView() {return <section>科研项目</section>;}`,
           '/management/management-stores-provider.tsx': `export const ManagementStoresProvider = ({children}) => children;
@@ -125,11 +127,13 @@ before(async () => {
           '/app/ViewContent.tsx': `import React from 'react';
             import {useWorkspaceScope} from './workspace-scope';
             import {useManagement} from '../management/management-scope';
+            import {RunsView} from '../management/RunsView';
             import {FirstSteps} from '../project/FirstSteps';
             export function ViewContent(props) {
               const scope=useWorkspaceScope();window.workspaceEntries = scope;window.managementEntries = useManagement();
-              return <><section data-testid="shell-canvas-content">{props.view}</section>
-                {props.view==='overview' && scope.firstStepsVisible ? <FirstSteps writable requestId={scope.firstStepsRequestId}
+              return <><section data-testid="shell-canvas-content">{props.subview ?? props.view}</section>
+                {props.view==='runs' ? <RunsView/> : null}
+                {props.view==='overview' && props.subview===null && scope.firstStepsVisible ? <FirstSteps writable requestId={scope.firstStepsRequestId}
                   onDismiss={scope.dismissFirstSteps} onDiscover={()=>scope.openView('discover')}
                   onImport={()=>scope.openView('library')} onRead={()=>scope.openView('library')}
                   onAsk={scope.openAssistant} onWrite={()=>scope.openView('writing')}/> : null}</>;
@@ -208,7 +212,7 @@ test('actual shell assistant and management selections preserve facts until the 
     await page.evaluate(entry => {
       if (entry === 'assistant') assistantEntries.onOpenTask('task-b');
       else if (entry === 'management') managementEntries.onSelectResearchTask('task-b');
-      else document.querySelector('[data-testid="titlebar-management"]').click();
+      else document.querySelector('[data-testid="activity-nav-library"]').click();
     }, entry);
     await discard().waitFor();
     await cancel();
@@ -221,7 +225,7 @@ test('actual shell assistant and management selections preserve facts until the 
   await expect(content()).toHaveValue('');
 });
 
-test('actual shell management exits keep the drawer until facts and navigation guards have both released', async () => {
+test('actual shell management exits keep the task canvas until all guards release', async () => {
   for (const entry of ['settings', 'workspace-settings', 'thread', 'assistant', 'palette']) {
     await openTask();
     await page.evaluate(entry => {
@@ -234,15 +238,15 @@ test('actual shell management exits keep the drawer until facts and navigation g
     }, entry);
     await discard().waitFor();
     await confirm();
-    await expect(page.getByTestId('management-panel')).toBeVisible();
-    assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('view')), 'library');
+    await expect(page.getByTestId('canvas-runs')).toBeVisible();
+    assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('view')), 'runs');
     assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('page')), 'research');
     assert.equal(await page.evaluate(() => assistantEntries.threadId), null);
     assert.equal(await page.evaluate(() => assistantEntries.composerSeed), null);
   }
   await page.evaluate(() => {setVeto('navigation', false); managementEntries.openSettings();});
   await page.getByTestId('shell-settings').waitFor();
-  await expect(page.getByTestId('management-panel')).toHaveCount(0);
+  await expect(page.getByTestId('canvas-runs')).toHaveCount(1);
 });
 
 test('actual shell artifact handoff waits for its inspector guard and returns to the selected task', async () => {
@@ -253,7 +257,7 @@ test('actual shell artifact handoff waits for its inspector guard and returns to
   });
   await discard().waitFor();
   await confirm();
-  await expect(page.getByTestId('management-panel')).toBeVisible();
+  await expect(page.getByTestId('canvas-runs')).toBeVisible();
   await expect(page.getByTestId('shell-artifact')).toHaveCount(0);
   await page.evaluate(() => {
     setVeto('artifact', false);
@@ -265,13 +269,13 @@ test('actual shell artifact handoff waits for its inspector guard and returns to
   await expect(page.getByTestId('shell-artifact')).toHaveCount(0);
 });
 
-test('management facts over writing veto project navigation and native unload while a save is pending', async () => {
+test('pending task facts veto project navigation and native unload during save', async () => {
   await openTask('writing');
   await content().fill('写作任务中未保存的事实');
-  await page.getByTestId('mgmt-task-category-background').click();
+  await page.getByTestId('canvas-task-category-background').click();
   await discard().waitFor();
   await cancel();
-  await expect(page.getByTestId('mgmt-task-category-research')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('canvas-task-category-research')).toHaveAttribute('aria-selected', 'true');
   await expect(content()).toHaveValue('写作任务中未保存的事实');
   await page.evaluate(() => searchEntries.onOpenProject('project-b'));
   await discard().waitFor();
@@ -279,10 +283,10 @@ test('management facts over writing veto project navigation and native unload wh
   await expect(content()).toHaveValue('写作任务中未保存的事实');
   await page.getByTestId('mgmt-task-fact-save').click();
   await expect(content()).toBeDisabled();
-  await page.getByTestId('mgmt-task-category-background').click();
-  await expect(page.getByTestId('mgmt-task-category-research')).toHaveAttribute('aria-selected', 'true');
+  await page.getByTestId('canvas-task-category-background').click();
+  await expect(page.getByTestId('canvas-task-category-research')).toHaveAttribute('aria-selected', 'true');
   await page.evaluate(() => searchEntries.onOpenProject('project-b'));
-  assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('view')), 'writing');
+  assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('view')), 'runs');
   assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('project')), 'project-a');
   assert.equal(await page.evaluate(() => !window.dispatchEvent(new Event('beforeunload', {cancelable: true}))), true);
   await page.evaluate(() => finishSave({ok: false, error: {message: '保留事实以重试'}}));
@@ -293,21 +297,17 @@ test('management facts over writing veto project navigation and native unload wh
   assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('project')), 'project-b');
 });
 
-test('titlebar and workspace task entries open the same task center without replacing the canvas', async () => {
+test('activity and workspace task entries open the same project task canvas', async () => {
   await page.evaluate(() => mount('writing'));
-  await expect(page.getByTestId('titlebar-tasks')).toContainText('执行 2');
-  await page.getByTestId('titlebar-tasks').click();
-  await expect(page.getByTestId('mgmt-task-center')).toBeVisible();
-  await expect(page.getByTestId('mgmt-task-category-overview')).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('management-panel')).toHaveCount(1);
-  await expect(page.getByTestId('mgmt-task-open-research:task-a')).toContainText('task-a');
-  assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('view')), 'writing');
-  await page.keyboard.press('Escape');
-  await expect(page.getByTestId('management-panel')).toHaveCount(0);
+  await page.getByTestId('activity-nav-runs').click();
+  await expect(page.getByTestId('canvas-task-category-overview')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('canvas-task-open-research:task-a')).toContainText('task-a');
+  assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('view')), 'runs');
+  await page.getByTestId('activity-nav-writing').click();
   await page.evaluate(() => workspaceEntries.openTasks());
-  await expect(page.getByTestId('mgmt-task-center')).toBeVisible();
-  await expect(page.getByTestId('management-panel')).toHaveCount(1);
-  await expect(page.getByTestId('shell-canvas-content')).toHaveText('writing');
+  await expect(page.getByTestId('canvas-task-center')).toBeVisible();
+  await expect(page.getByTestId('management-panel')).toHaveCount(0);
+  await expect(page.getByTestId('shell-canvas-content')).toHaveText('runs');
 });
 
 test('first steps can be skipped, persist only dismissal and reopen after navigation accepts',async()=>{
@@ -323,13 +323,14 @@ test('first steps can be skipped, persist only dismissal and reopen after naviga
   assert.equal(dismissal[0].surface,'overview');
 
   await page.evaluate(()=>mount('writing'));
-  await expect(page.getByTestId('titlebar-help')).toBeVisible();
+  if (!await page.getByTestId('context-help').isVisible()) await page.getByTestId('titlebar-toggle-sidebar').click();
+  await expect(page.getByTestId('context-help')).toBeVisible();
   await page.evaluate(()=>setVeto('navigation',true));
-  await page.getByTestId('titlebar-help').click();
+  await page.getByTestId('context-help').click();
   await expect(page.getByTestId('shell-canvas-content')).toHaveText('writing');
   assert.equal(await page.evaluate(()=>window.workspaceEntries.firstStepsVisible),false);
   await page.evaluate(()=>setVeto('navigation',false));
-  await page.getByTestId('titlebar-help').click();
+  await page.getByTestId('context-help').click();
   await expect(page.getByTestId('overview-first-steps')).toBeVisible();
   await expect(page.locator('#overview-first-steps-heading')).toBeFocused();
   assert.equal(await page.evaluate(()=>window.onboardingDismissed()),true);

@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
-import type { AppViewId } from './routes';
+import type { AppSubview, AppViewId, AppViewTarget } from './routes';
 import { DelayedFallback } from '../shell/DelayedFallback';
 import { ErrorBar } from '../shell/ErrorBar';
 import { LazyBoundary } from '../shell/LazyBoundary';
 import { ViewActivity } from '../shared/view-activity';
 import { isViewResolved, loadView, preloadView, retryView, useViewResolution, viewLoadError, viewHostFor, type ViewProps } from './view-registry';
 
-export type { ViewProps };
+type ViewContentProps = {
+  view: AppViewId;
+  subview?: AppSubview | null;
+  projectId: ViewProps['projectId'];
+};
 
 /**
  * Keep the current canvas visible while a cold module loads, then swap immediately.
@@ -14,34 +18,35 @@ export type { ViewProps };
  * sessions and scroll positions. Hidden panels leave the keyboard/accessibility tree.
  * The shell keys this host by project id so no cached workspace crosses project scope.
  */
-export function ViewContent({ view, projectId }: ViewProps): React.JSX.Element {
+export function ViewContent({ view, subview = null, projectId }: ViewContentProps): React.JSX.Element {
   useViewResolution();
-  const [shownView, setShownView] = useState<AppViewId>(view);
-  const [visited, setVisited] = useState<readonly AppViewId[]>(() => [view]);
-  const requestedResident = isViewResolved(view);
-  const loadError = viewLoadError(view);
-  const warming = view !== shownView;
+  const target = subview ?? view;
+  const [shownView, setShownView] = useState<AppViewTarget>(target);
+  const [visited, setVisited] = useState<readonly AppViewTarget[]>(() => [target]);
+  const requestedResident = isViewResolved(target);
+  const loadError = viewLoadError(target);
+  const warming = target !== shownView;
 
   useEffect(() => {
     if (!requestedResident && loadError === null) {
-      preloadView(view);
+      preloadView(target);
       return;
     }
     if (warming && requestedResident) {
       setVisited(current => {
-        const host = viewHostFor(view);
+        const host = viewHostFor(target);
         return current.some(id => viewHostFor(id) === host)
-          ? current.map(id => viewHostFor(id) === host ? view : id)
-          : [...current, view];
+          ? current.map(id => viewHostFor(id) === host ? target : id)
+          : [...current, target];
       });
-      setShownView(view);
+      setShownView(target);
     }
-  }, [warming, requestedResident, loadError, view]);
+  }, [warming, requestedResident, loadError, target]);
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
       {loadError === null ? null : <div className="shrink-0 p-2" data-testid="view-load-error">
-        <ErrorBar error={{level: 'page', message: `视图加载失败：${loadError}`, retry: () => retryView(view)}} />
+        <ErrorBar error={{level: 'page', message: `视图加载失败：${loadError}`, retry: () => retryView(target)}} />
       </div>}
       {!warming || requestedResident || loadError !== null ? null :
         <p role="status" className="shrink-0 px-3 py-1.5 text-muted text-[length:var(--font-meta-size)]">正在加载视图…</p>}

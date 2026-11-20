@@ -44,8 +44,8 @@ test('production management UI selects a real Python environment through preload
       projectUrl.searchParams.set('project', project.id);
       await page.goto(projectUrl.href);
       await page.getByTestId('workspace-layout').waitFor();
-      await page.getByTestId('titlebar-management').click();
-      await page.getByTestId('mgmt-tab-tasks').click();
+      await page.getByTestId('activity-nav-runs').click();
+      await page.getByTestId('canvas-task-category-python').click();
       const selectionButton = page.getByTestId('mgmt-python-environment-select');
       await selectionButton.waitFor();
       await page.waitForFunction(() => !document.querySelector('[data-testid="mgmt-python-environment-select"]').disabled);

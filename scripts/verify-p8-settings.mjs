@@ -135,7 +135,7 @@ async function ensureSettingsOpen() {
 }
 
 async function openSettingsViaGear() {
-  await page.click('[data-testid="titlebar-settings"]');
+  await page.click('[data-testid="activity-settings"]');
   await page.waitForSelector('[data-testid="settings-modal-panel"]', { timeout: 30_000 });
   await page.waitForSelector('[data-testid="settings-sections"]', { timeout: 30_000 });
 }
@@ -786,7 +786,7 @@ try {
   await page.click('[data-testid="settings-discard-confirm"]');
   await page.waitForSelector('[data-testid="settings-modal-panel"]', { state: 'detached', timeout: 15_000 });
   const focusBack = await page.evaluate(() => document.activeElement?.getAttribute('data-testid') ?? null);
-  assertCheck('4 关闭确认', '关闭后焦点回到设置齿轮', focusBack === 'titlebar-settings', String(focusBack));
+  assertCheck('4 关闭确认', '关闭后焦点回到设置齿轮', focusBack === 'activity-settings', String(focusBack));
   const roleAfter = await page.evaluate(async () => {
     const snapshot = await window.roc.settings.get();
     return snapshot.ok ? snapshot.data.settings.memory.charLimits.agents : null;
@@ -989,13 +989,15 @@ try {
   // 再随手写一个同层 z-index 把问题带回来。
   await navigate(page, `page=research&project=${projectId}&view=writing`);
   await waitForProjectRoute();
+  const layout = page.getByTestId('workspace-layout');
+  const narrowLayout = await layout.getAttribute('data-layout-mode');
+  const contextDrawer = page.getByTestId('sidebar-drawer');
+  if (narrowLayout !== 'wide' && !await contextDrawer.isVisible()) {
+    await page.getByTestId('titlebar-toggle-sidebar').click();
+  }
   await ensureSettingsOpen();
   await openSection('guardrail');
   await page.waitForSelector('[data-testid="settings-approval-mode"]', { timeout: 15_000 });
-  const narrowLayout = await page.evaluate(() => {
-    const layout = document.querySelector('[data-testid="workspace-layout"]');
-    return layout?.getAttribute('data-layout-mode') ?? null;
-  });
   const probeApprovalSelect = () =>
     page.evaluate(() => {
       const select = document.querySelector('[data-testid="settings-approval-mode"]');
@@ -1003,6 +1005,8 @@ try {
         return null;
       }
       const box = select.getBoundingClientRect();
+      const settings = select.closest('[data-overlay-layer]');
+      const drawer = document.querySelector('[data-testid="sidebar-drawer"]');
       const at = (x, y) => {
         const hit = document.elementFromPoint(x, y);
         if (hit === null) {
@@ -1013,9 +1017,8 @@ try {
       return {
         leftEdge: at(box.x + 4, box.y + box.height / 2),
         middle: at(box.x + box.width / 2, box.y + box.height / 2),
-        layers: Array.from(document.querySelectorAll('[data-overlay-layer]')).map(
-          (node) => `${node.getAttribute('data-testid')}:${node.getAttribute('data-overlay-layer')}:${getComputedStyle(node).zIndex}`
-        )
+        settingsLayer: settings === null ? null : Number(getComputedStyle(settings).zIndex),
+        drawerLayer: drawer === null ? null : Number(getComputedStyle(drawer).zIndex)
       };
     });
 
@@ -1026,12 +1029,12 @@ try {
     approvalProbe !== null && approvalProbe.leftEdge === 'select' && approvalProbe.middle === 'select',
     JSON.stringify(approvalProbe)
   );
-  if (narrowLayout === 'drawers') {
+  if (narrowLayout !== 'wide') {
     assertCheck(
       '5c 浮层层级',
       '窄窗下左侧抽屉属于环境层，永远画在设置对话框之下',
-      approvalProbe !== null && approvalProbe.layers.includes('sidebar-drawer:ambient:40'),
-      JSON.stringify(approvalProbe?.layers ?? null)
+      approvalProbe?.drawerLayer != null && approvalProbe.settingsLayer != null && approvalProbe.drawerLayer < approvalProbe.settingsLayer,
+      JSON.stringify(approvalProbe)
     );
   } else {
     // 宽窗里没有抽屉，但仍要把那条分层规则记一笔（说明性记录，不参与通过率）。
