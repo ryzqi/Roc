@@ -158,7 +158,7 @@ function NotebookCells({ preview }: { preview: ResearchNotebookPreview }): React
         data-testid="file-notebook-cell" data-cell-id={cell.id}>
         <summary className="cursor-pointer text-xs">
           <span className="mr-2 tabular-nums">{cell.index + 1}</span>
-          <span className="mr-2">{cell.cellType}</span><span className="font-mono break-all">{cell.id}</span>
+          <span className="mr-2">{cell.cellType === 'code' ? '代码' : cell.cellType === 'markdown' ? 'Markdown' : '原始文本'}</span>
           {cell.cellType === 'code' ? <span className="ml-3 text-muted">原执行计数 {cell.executionCount ?? '未执行'}</span> : null}
         </summary>
         <pre className="my-2 overflow-x-auto rounded-control bg-code-surface p-2 font-mono text-xs text-[var(--code-text)]" dir="ltr"
@@ -179,6 +179,7 @@ function NotebookCells({ preview }: { preview: ResearchNotebookPreview }): React
         <details className="mt-2 text-xs text-muted" data-testid="file-notebook-cell-origin">
           <summary className="cursor-pointer">单元格来源</summary>
           <div className="space-y-1 break-all font-mono" dir="ltr">
+            <p>ID {cell.id}</p>
             <p>cell {cell.cellHash}</p><p>source {cell.sourceHash}</p>
             {cell.outputs.map(output => <p key={output.index}>output {output.index + 1} {output.hash}</p>)}
             {cell.attachments.map(attachment => <p key={attachment.name}>attachment {attachment.name} {attachment.hash}</p>)}

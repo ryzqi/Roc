@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { Diff, Hunk, parseDiff, type FileData as GitDiffFileData } from 'react-diff-view';
-import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronDown, Loader2 } from 'lucide-react';
 import 'react-diff-view/style/index.css';
 import type { RocClient } from '../../shared/roc-client';
 import { useAsyncResource } from '../../app/use-async-resource';
@@ -123,12 +123,11 @@ export function GitFileDiff({
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="git-diff">
-      <div className="flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-3 py-1.5">
-        <span className="min-w-0 flex-1 truncate font-mono text-[length:var(--font-meta-size)]" title={relativePath}>
-          {relativePath}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b-[0.5px] border-line px-3 py-1.5">
+        <span className="min-w-0 flex-1 truncate font-mono text-[length:var(--font-meta-size)]" title={buildGitDiffTitle(file)}>
+          {buildGitDiffTitle(file)}
         </span>
         <span className="text-subtle text-[length:var(--font-micro-size)]">{stateLabel}</span>
-        <span className="text-subtle text-[length:var(--font-micro-size)]">{file.type}</span>
         {large ? (
           <button
             type="button"
@@ -139,12 +138,7 @@ export function GitFileDiff({
             <ChevronDown size={11} aria-hidden="true" />
             <span className="text-[length:var(--font-micro-size)]">折叠</span>
           </button>
-        ) : (
-          <span className="flex items-center gap-1 text-subtle text-[length:var(--font-micro-size)]">
-            <ChevronRight size={11} aria-hidden="true" />
-            {buildGitDiffTitle(file)}
-          </span>
-        )}
+        ) : null}
       </div>
       <div className="roc-diff min-h-0 flex-1 overflow-auto" data-selectable="true">
         <Diff diffType={file.type} hunks={file.hunks} viewType="unified">

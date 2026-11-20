@@ -19,6 +19,7 @@ import { GitBranchSwitcher } from './GitBranchSwitcher';
 import { GitChangeLists } from './GitChangeLists';
 import { GitFileDiff } from './GitFileDiff';
 import {useGitCommitDraftGuard, type GitCommitDrafts} from './git-commit-draft';
+import '../tools-workspace.css';
 
 /**
  * Git panel (P3/T3.5) — the whole Git surface, in the top-bar drawer.
@@ -80,6 +81,7 @@ function GitPanelContent({client, workspacePath, writable, layout, commitDrafts,
   const messageRef = useRef(commitMessage);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [discardTarget, setDiscardTarget] = useState<string | null>(null);
+  const [diffFocused, setDiffFocused] = useState(false);
   const [branchOpen, setBranchOpen] = useState(false);
 
   useLayoutEffect(() => {
@@ -134,7 +136,7 @@ function GitPanelContent({client, workspacePath, writable, layout, commitDrafts,
   };
 
   const header = (
-    <div className="flex shrink-0 items-center gap-1.5">
+    <div className="tools-git-header flex shrink-0 items-center gap-1.5">
       <button
         type="button"
         // Branch create/checkout rewrite the working tree, so they are behind the
@@ -175,7 +177,7 @@ function GitPanelContent({client, workspacePath, writable, layout, commitDrafts,
           className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control px-2 text-muted hover:text-ink active:bg-[var(--overlay-active)] disabled:opacity-40"
         >
           <Upload size={12} aria-hidden="true" />
-          <span className="text-[length:var(--font-micro-size)]">Push</span>
+          <span className="text-[length:var(--font-micro-size)]">推送</span>
         </button>
       )}
       <button
@@ -196,7 +198,7 @@ function GitPanelContent({client, workspacePath, writable, layout, commitDrafts,
   );
 
   const commitBox = (
-    <div className="flex shrink-0 flex-col gap-1.5">
+    <div className="tools-git-commit flex shrink-0 flex-col gap-1.5">
       <textarea
         value={commitMessage}
         onChange={(event) => {
@@ -210,7 +212,7 @@ function GitPanelContent({client, workspacePath, writable, layout, commitDrafts,
         disabled={busy || !writable}
         placeholder="提交信息（必填）"
         aria-label="提交信息"
-        rows={2}
+        rows={1}
         data-testid="git-commit-message"
         className="w-full resize-none rounded-control border-[0.5px] border-line bg-surface px-2 py-1.5 text-ink placeholder:text-subtle disabled:opacity-60"
       />
@@ -356,21 +358,13 @@ function GitPanelContent({client, workspacePath, writable, layout, commitDrafts,
           项目已归档，仅可阅读：暂存、提交、推送与丢弃都不可用。
         </p>
       )}
-      {git.actionError === null || discardTarget !== null ? null : (
-        <div className="mb-1">
-          <ErrorBar
-            error={{ level: 'page', message: git.actionError }}
-            onDismiss={git.clearActionError}
-          />
-        </div>
-      )}
       {git.diffStat !== null && git.diffStat.trim().length > 0 ? (
-        <pre
+        <details className="tools-disclosure"><summary>变更统计</summary><pre
           data-testid="git-diff-stat"
           className="mb-1 overflow-x-auto rounded-control bg-code-surface px-2 py-1 font-mono text-[length:var(--font-micro-size)] text-[var(--code-text)]"
         >
           {git.diffStat.trimEnd()}
-        </pre>
+        </pre></details>
       ) : null}
       <GitChangeLists
         groups={groups}
@@ -396,19 +390,22 @@ function GitPanelContent({client, workspacePath, writable, layout, commitDrafts,
         onUnstage={(path) => void git.unstage(path)}
         onDiscard={(path) => setDiscardTarget(path)}
       />
-      {historySection}
+      {git.lastCommit === null ? null : historySection}
     </div>
   );
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col gap-2 p-2"
+      className="tools-git-panel flex h-full min-h-0 flex-col gap-2 p-2"
       data-testid="git-panel"
       data-layout={layout}
       data-state="ready"
     >
       {header}
       {commitBox}
+      {git.actionError === null || discardTarget !== null ? null : (
+        <ErrorBar error={{level: 'page', message: git.actionError}} onDismiss={git.clearActionError} />
+      )}
       {branchOpen ? (
         <GitBranchSwitcher
           client={client}
@@ -423,9 +420,12 @@ function GitPanelContent({client, workspacePath, writable, layout, commitDrafts,
         />
       ) : null}
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2">
-        {listColumn}
-        <div className="flex min-h-[40%] flex-col border-t-[0.5px] border-line-soft pt-1">{diffColumn}</div>
+      <div className="tools-git-workspace" data-diff-focused={diffFocused}>
+        <div className="tools-git-list">{listColumn}</div>
+        <section className="tools-git-diff" aria-label="文件差异">
+          <div className="tools-git-diff-toolbar"><h2>文件差异</h2><button type="button" onClick={()=>setDiffFocused(value=>!value)} aria-pressed={diffFocused} disabled={selectedChange===null} data-testid="git-diff-focus">{diffFocused?'返回变更列表':'展开差异'}</button></div>
+          {diffColumn}
+        </section>
       </div>
 
       {footer}

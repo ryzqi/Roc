@@ -11,6 +11,7 @@ import { useCopyFeedback } from '../../shared/hooks/use-copy-feedback';
 import { formatBytes } from '../../shared/format';
 import { isEditablePreviewKind, previewKindFor } from '../../workspace/paths';
 import { previewFile, previewPdf, writeTextFile } from '../../workspace/workspace-store';
+import '../tools-workspace.css';
 
 /**
  * File preview (P3/T3.3).
@@ -69,6 +70,7 @@ export type FilePreviewProps = {
 };
 
 const WRITE_SOURCE = 'renderer:file-preview';
+const ScientificMarkdown = retryableLazy(() => import('../../literature/ScientificMarkdown'));
 const NotebookPreview = retryableLazy(() => import('./NotebookPreview'));
 
 export function FilePreview(props: FilePreviewProps): React.JSX.Element {
@@ -95,6 +97,9 @@ function OrdinaryFilePreview({
 }: FilePreviewProps): React.JSX.Element {
   const kind = previewKindFor(relativePath);
   const isPdf = kind === 'pdf';
+  const [renderMarkdown, setRenderMarkdown] = useState(false);
+  const [wrapLines, setWrapLines] = useState(true);
+  const isMarkdown = /\.md(?:own)?$/i.test(relativePath);
   const resourceKey = workspacePath === null ? null : JSON.stringify([workspacePath, relativePath]);
 
   // PDFs take a different call; using the wrong resource here would be invisible
@@ -240,6 +245,10 @@ function OrdinaryFilePreview({
       );
     }
 
+    if (isMarkdown && renderMarkdown && loaded.kind === 'text') {
+      return <div className="tools-markdown-preview"><LazyBoundary fallback={<p role="status">正在渲染…</p>}><ScientificMarkdown text={draft ?? content}/></LazyBoundary></div>;
+    }
+
     if (editable && draft !== null) {
       return (
         <textarea
@@ -248,6 +257,7 @@ function OrdinaryFilePreview({
           disabled={saving}
           onChange={(event) => setDraft(event.target.value)}
           spellCheck={false}
+          wrap={wrapLines?'soft':'off'}
           aria-label={`编辑 ${relativePath}`}
           data-testid="file-preview-editor"
           className="h-full w-full resize-none bg-code-surface p-3 font-mono text-[length:var(--font-code-size)] text-[var(--code-text)]"
@@ -261,16 +271,17 @@ function OrdinaryFilePreview({
         tabIndex={0}
         aria-label={`文件内容 ${relativePath}`}
         data-testid="file-preview-text"
+        style={{whiteSpace:wrapLines?'pre-wrap':'pre',overflowWrap:wrapLines?'anywhere':'normal'}}
         className="h-full overflow-auto bg-code-surface p-3 font-mono text-[length:var(--font-code-size)] text-[var(--code-text)]"
       >
         {content}
       </pre>
     );
-  }, [resource, isPdf, pdfResource.data, loaded, content, editable, draft, saving, imageFailed, relativePath, textResource.reload]);
+  }, [resource, isPdf, pdfResource.data, loaded, content, editable, draft, saving, imageFailed, relativePath, textResource.reload, isMarkdown, renderMarkdown, wrapLines]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col" data-testid="file-preview" data-kind={kind}>
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b-[0.5px] border-line px-3 py-2">
+    <div className="tools-file-preview flex h-full min-h-0 flex-col" data-testid="file-preview" data-kind={kind}>
+      <div className="tools-file-toolbar">
         <span className="min-w-0 flex-1 truncate font-mono text-[length:var(--font-meta-size)]" title={relativePath} data-testid="file-preview-path">
           {relativePath}
         </span>
@@ -304,6 +315,10 @@ function OrdinaryFilePreview({
           </button>
         )}
 
+        {loaded?.kind==='text'?<div className="tools-file-view-controls">
+          {isMarkdown?<button type="button" aria-pressed={renderMarkdown} onClick={()=>setRenderMarkdown(value=>!value)} data-testid="file-preview-render">{renderMarkdown?'查看源码':'阅读视图'}</button>:null}
+          {!renderMarkdown?<button type="button" aria-pressed={wrapLines} onClick={()=>setWrapLines(value=>!value)} data-testid="file-preview-wrap">自动换行</button>:null}
+        </div>:null}
         <button
           type="button"
           onClick={() => copy.copy(draft ?? content)}
@@ -318,7 +333,7 @@ function OrdinaryFilePreview({
         {!editable ? null : draft === null ? (
           <button
             type="button"
-            onClick={() => setDraft(content)}
+            onClick={() => {setRenderMarkdown(false);setDraft(content);}}
             data-testid="file-preview-edit"
             className={formSecondaryButtonClass}
           >

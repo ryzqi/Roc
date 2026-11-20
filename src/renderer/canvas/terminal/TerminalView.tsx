@@ -1,3 +1,4 @@
+import '../tools-workspace.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
@@ -107,6 +108,7 @@ function readTerminalTheme(): Record<string, string> {
 
 export function TerminalSessionView({ client, workspacePath, writable }: TerminalSessionViewProps): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null);
+  const terminalRef = useRef<Terminal|null>(null);
   const [session, setSession] = useState<TerminalSessionSnapshot | null>(null);
   const [phase, setPhase] = useState<SessionPhase>(workspacePath === null ? 'error' : 'starting');
   const [error, setError] = useState<string | null>(null);
@@ -137,6 +139,7 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(host);
+    terminalRef.current = terminal;
     fitAddon.fit();
     terminal.focus();
 
@@ -233,6 +236,7 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
         void client.api.terminal.closeSession({ sessionId });
       }
       sessionId = null;
+      terminalRef.current = null;
       terminal.dispose();
     };
   }, [client, workspacePath, writable, sessionNonce]);
@@ -276,6 +280,11 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--terminal-bg)]" data-testid="terminal-view" data-phase={phase}>
+      <header className="tools-terminal-header">
+        <TerminalSquare size={14} aria-hidden="true"/><h1>终端</h1>
+        <span role="status">{phase==='ready'?'已连接':phase==='exited'?'已退出':phase==='error'?'连接失败':'连接中'}</span>
+        <button type="button" disabled={phase!=='ready'} title="清除当前终端显示，不中断运行中的命令" data-testid="terminal-clear" onClick={()=>{terminalRef.current?.clear();terminalRef.current?.focus();}}>清屏</button>
+      </header>
       {error === null ? null : (
         <div className="shrink-0 p-2">
           <ErrorBar error={{ level: 'page', message: error, retry: restart }} />
@@ -287,7 +296,7 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
           ref={hostRef}
           data-testid="terminal-xterm"
           data-session-id={session?.id ?? ''}
-          className="h-full w-full px-1.5 py-1"
+          className="h-full w-full px-3 py-2"
         />
         {phase === 'starting' ? (
           <p

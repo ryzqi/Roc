@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Code2, FileText, Loader2, Save } from 'lucide-react';
+import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react';
+import { Code2, FileText, Loader2, PanelLeft, Save } from 'lucide-react';
 import type { FilePreviewResult } from '../../shared/types';
 import { useAsyncAction, useAsyncResource } from '../app/use-async-resource';
 import { useWorkspaceScope } from '../app/workspace-scope';
@@ -12,6 +12,11 @@ import { fileName } from '../workspace/paths';
 import { listTree, previewFile, writeTextFile } from '../workspace/workspace-store';
 import { SourceEditor } from './SourceEditor';
 import { InlineHint, primaryButtonClass } from './panel-shell';
+import {LazyBoundary, retryableLazy} from '../shell/LazyBoundary';
+import './authoring.css';
+
+const ScientificMarkdown = retryableLazy(() => import('../literature/ScientificMarkdown'));
+const ReadingFormula = retryableLazy(() => import('../literature/ReadingFormula'));
 
 /**
  * 文稿 (P7/T7.5) — the workspace LaTeX/BibTeX editor behind the route's `latex` view.
@@ -55,6 +60,11 @@ export function LatexPanel(): React.JSX.Element {
   const [pendingLeave, setPendingLeave] = useState<{ proceed: () => void; kind?: 'unload' } | null>(null);
   const savingRef = useRef(false);
   const dirtyRef = useRef(false);
+  const [fileQuery, setFileQuery] = useState('');
+  const [filesOpen, setFilesOpen] = useState(true);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [selectedFormula, setSelectedFormula] = useState('');
+  const liveDraft = useDeferredValue(draft ?? '');
   const [note, setNote] = useState<string | null>(null);
 
   const files = useAsyncResource<{
@@ -115,6 +125,9 @@ export function LatexPanel(): React.JSX.Element {
   const isTruncated = isText && previewData.truncated;
   const canEdit = canWrite && preview.status === 'ready' && isText && !isTruncated;
   const entries = files.data?.entries ?? [];
+  const visibleEntries = entries.filter(file => file.path.toLocaleLowerCase().includes(fileQuery.toLocaleLowerCase()));
+  const markdownPreview = selectedPath?.toLowerCase().endsWith('.md') ?? false;
+  const mathPreview = selectedPath?.toLowerCase().endsWith('.tex') ?? false;
 
   /** Latch the loaded text into `draft` once per path, so typing does not fight the reload. */
   const loadedPathRef = useRef<string | null>(null);
@@ -140,6 +153,7 @@ export function LatexPanel(): React.JSX.Element {
     setNote(null);
     setRecovery(null);
     setSelectedPath(path);
+    setSelectedFormula('');
   }, [save.reset]);
 
   const dirty = draft !== null && baseline !== null && draft !== baseline;
@@ -269,8 +283,15 @@ export function LatexPanel(): React.JSX.Element {
       <p className="text-ink">{selectedPath} 有未保存的修改。放弃后无法恢复这些修改。{pendingLeave?.kind === 'unload' ? '处理后请重试关闭或刷新窗口。' : ''}</p>
       {save.error === null ? null : <p role="alert" className="text-[var(--st-bad)]">{save.error}</p>}
     </ModalShell>
-    <div className="production-latex-layout flex h-full min-h-0" data-testid="production-latex">
-      <label className="latex-file-picker hidden shrink-0 items-center gap-2 border-b-[0.5px] border-line px-3 py-2">
+    <div className="authoring-panel" data-testid="production-latex" data-files-open={filesOpen}>
+      <header className="authoring-toolbar">
+        <button type="button" className="authoring-toggle-files" aria-label={filesOpen?'收起文稿列表':'展开文稿列表'} aria-pressed={filesOpen} onClick={()=>setFilesOpen(value=>!value)}><PanelLeft size={15} aria-hidden="true"/></button>
+        <h1>文稿</h1><span className="text-muted">{entries.length} 个文件</span>
+        <button type="button" className="authoring-refresh" onClick={files.reload} disabled={files.status==='loading'}>重新扫描</button>
+      </header>
+      <div className="authoring-layout">
+
+      <label className="authoring-file-picker">
         <span className="shrink-0 text-muted text-[length:var(--font-meta-size)]">文稿</span>
         <select
           aria-label="选择文稿文件"
@@ -286,16 +307,18 @@ export function LatexPanel(): React.JSX.Element {
       </label>
       <nav
         aria-label="文稿文件"
-        className="production-latex-file-list flex w-[200px] shrink-0 flex-col gap-1 overflow-y-auto border-r-[0.5px] border-line p-2"
+        className="authoring-files"
         data-testid="production-latex-files"
       >
         <span className="text-subtle text-[length:var(--font-meta-size)]">
           文稿文件{files.data === null ? '' : `（${entries.length.toLocaleString('zh-CN')}）`}
         </span>
+        <input aria-label="筛选文稿" placeholder="筛选文件名" value={fileQuery} onChange={event=>setFileQuery(event.target.value)} className="authoring-file-search"/>
         {fileState}
+        {entries.length > 0 && visibleEntries.length === 0 ? <p className="p-3 text-muted">没有匹配的文稿</p> : null}
         {entries.length === 0 ? null : (
           <ul className="flex flex-col gap-0.5">
-            {entries.map((file) => (
+            {visibleEntries.map((file) => (
               <li key={file.path}>
                 <button
                   type="button"
@@ -311,13 +334,10 @@ export function LatexPanel(): React.JSX.Element {
                       : 'text-muted hover:bg-[var(--overlay-hover)] hover:text-ink'
                   ].join(' ')}
                 >
-                  <span className="w-full truncate font-mono text-[length:var(--font-meta-size)]" title={file.path}>
-                    {file.path}
+                  <span className="w-full truncate font-mono text-[length:var(--font-meta-size)]" title={`${file.path}\n${formatBytes(file.sizeBytes)}\n${formatBeijingDateTime(file.updatedAt)}`}>
+                    {fileName(file.path)}
                   </span>
-                  <span dir="ltr" className="flex flex-wrap gap-x-2 tabular-nums text-subtle text-[length:var(--font-meta-size)]">
-                    <span>{formatBytes(file.sizeBytes)}</span>
-                    <span>{formatBeijingDateTime(file.updatedAt)}</span>
-                  </span>
+                  {file.path.includes('/')?<span className="authoring-file-parent">{file.path.slice(0,file.path.lastIndexOf('/'))}</span>:null}
                 </button>
               </li>
             ))}
@@ -326,7 +346,7 @@ export function LatexPanel(): React.JSX.Element {
       </nav>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="latex-file-picker hidden shrink-0 flex-col px-2">{fileState}</div>
+        <div className="authoring-file-state">{fileState}</div>
         {selectedPath === null && entries.length > 0 ? (
           <EmptyState
             icon={FileText}
@@ -335,9 +355,10 @@ export function LatexPanel(): React.JSX.Element {
           />
         ) : selectedPath === null ? null : (
           <section className="flex min-h-0 flex-1 flex-col" data-testid="production-latex-editor">
-            <header className="flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-3 py-2">
+            <header className="authoring-editor-toolbar">
               <h2 className="min-w-0 flex-1 truncate text-[length:var(--font-ui-size)] font-medium" title={selectedPath}>{fileName(selectedPath)}</h2>
               {isText ? <span role="status" data-testid="latex-dirty-indicator" className="text-muted text-[length:var(--font-meta-size)]">{dirty ? '未保存' : canWrite && !isTruncated ? '已保存' : '只读'}</span> : null}
+              {isText&&(markdownPreview||mathPreview)?<button type="button" aria-pressed={previewOpen} onClick={()=>setPreviewOpen(value=>!value)} data-testid="latex-toggle-preview">{markdownPreview?'实时预览':'公式预览'}</button>:null}
               <button type="button" disabled={save.pending} data-testid="production-latex-reload"
                 onClick={() => requestLeave(() => {
                   loadedPathRef.current = null;
@@ -371,7 +392,16 @@ export function LatexPanel(): React.JSX.Element {
             ) : null}
             {isText ? (
               <>
-                <SourceEditor key={selectedPath} value={draft ?? previewData.content} readOnly={!canEdit || save.pending} onChange={(value) => { setDraft(value); setNote(null); setRecovery(null); }} />
+                <div className="authoring-editor-layout" data-preview-open={previewOpen&&(markdownPreview||mathPreview)}>
+                  <div className="authoring-source"><SourceEditor key={selectedPath} value={draft ?? previewData.content} readOnly={!canEdit || save.pending}
+                    onSelectionChange={setSelectedFormula} onChange={(value) => { setDraft(value); setNote(null); setRecovery(null); }} /></div>
+                  {previewOpen&&(markdownPreview||mathPreview)?<section className="authoring-live-preview" aria-label={markdownPreview?'Markdown 实时预览':'所选公式预览'}>
+                    <header>{markdownPreview?'实时预览':'所选公式预览'}</header>
+                    <div className="authoring-preview-content"><LazyBoundary fallback={<p role="status">正在加载预览…</p>}>
+                      {markdownPreview?<ScientificMarkdown text={liveDraft}/>:selectedFormula.trim()?<ReadingFormula text={selectedFormula.trim().replace(/^\\[[(]|\\[)\]]$/g,'')}/>:<p className="text-muted">在源码中选中一段 LaTeX 公式，即可查看渲染结果。</p>}
+                    </LazyBoundary></div>
+                  </section>:null}
+                </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-2 border-t-[0.5px] border-line px-3 py-1.5">
                   <span className="text-subtle text-[length:var(--font-meta-size)]" role="status" data-testid="production-latex-state">
                     {canEdit ? (dirty ? '有未保存的修改' : '与磁盘一致') : '只读'}　{formatBytes(previewData.sizeBytes)}
@@ -398,6 +428,7 @@ export function LatexPanel(): React.JSX.Element {
           </section>
         )}
 
+      </div>
       </div>
     </div>
     </>

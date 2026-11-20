@@ -31,16 +31,19 @@ const sourceTheme = EditorView.theme({
 });
 
 /** CodeMirror owns selection, undo, IME and search; React owns saved/draft text. */
-export function SourceEditor({ value, readOnly, onChange }: {
+export function SourceEditor({ value, readOnly, onChange, onSelectionChange }: {
   value: string;
   readOnly: boolean;
   onChange: (value: string) => void;
+  onSelectionChange?: (selection: string) => void;
 }): React.JSX.Element {
   const { preferences } = useContentPreferences();
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const onSelectionRef = useRef(onSelectionChange);
+  onSelectionRef.current = onSelectionChange;
   const readOnlyConfig = useRef(new Compartment());
   const initial = useRef(value);
 
@@ -51,13 +54,17 @@ export function SourceEditor({ value, readOnly, onChange }: {
       state: EditorState.create({
         doc: initial.current,
         extensions: [
-          lineNumbers(), history(), drawSelection(), highlightActiveLine(),
+          lineNumbers(), history(), drawSelection(), highlightActiveLine(), EditorView.lineWrapping,
           StreamLanguage.define(stex), syntaxHighlighting(sourceHighlight), sourceTheme,
           search({ top: true }), keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
           EditorView.contentAttributes.of({ 'aria-label': '文稿源码', 'data-testid': 'production-latex-content', spellcheck: 'false' }),
           readOnlyConfig.current.of(EditorState.readOnly.of(false)),
           EditorView.updateListener.of(update => {
             if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+            if (update.selectionSet || update.docChanged) {
+              const {from,to}=update.state.selection.main;
+              onSelectionRef.current?.(update.state.sliceDoc(from,Math.min(to,from+10_000)));
+            }
           })
         ]
       })

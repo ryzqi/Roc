@@ -1,3 +1,4 @@
+import '../tools-workspace.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FilePlus2, Loader2, Search, X } from 'lucide-react';
 import type { RocClient } from '../../shared/roc-client';
@@ -328,14 +329,14 @@ export function FileSidebarPanel({
   ) : null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col" data-testid="file-sidebar-panel">
+    <div className="tools-file-sidebar flex h-full min-h-0 flex-col" data-testid="file-sidebar-panel">
       <div className="flex shrink-0 items-center gap-1 px-2 py-2">
         <div className="flex h-[var(--control-height-compact)] min-w-0 flex-1 items-center gap-2 rounded-control border-[0.5px] border-line bg-surface px-2">
           <Search size={12} aria-hidden="true" className="shrink-0 text-subtle" />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="按文件名搜索"
+            placeholder="搜索文件名"
             aria-label="按文件名搜索"
             data-testid="file-search-input"
             className="h-full min-w-0 flex-1 bg-transparent text-ink placeholder:text-subtle"
