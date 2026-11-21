@@ -667,6 +667,211 @@ test('explicit resource association binds a real TypeScript execution and surviv
   }
 });
 
+test('native experiment rerun updates a rendered figure, reviewed manuscript and local delivery from the same evidence', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'roc-result-delivery-')));
+  const workspace = join(root, 'workspace');
+  await mkdir(workspace);
+  const f = createResearchFixture(api, 'writing', workspace);
+  const {repository, db, tasks} = f;
+  const projectId = f.project.id;
+  const human = (capability, action) => api.withResearchHumanContext({capability, projectId, windowId: 41}, action);
+  const description = await runtimeDescription();
+  const tools = new api.ResearchToolchain(await realpath('.runtime/research-toolchain/darwin-arm64'));
+  const environment = new api.ResearchExperimentEnvironmentService({typescriptRuntime: async () => description},
+    {resolve: async () => assert.fail('The TypeScript run must use the bundled runtime.')});
+  const errors = [], logger = {error: (...args) => errors.push(args), warn: (...args) => errors.push(args)};
+  const experiments = new api.ResearchExperimentService(repository, environment, root, logger);
+  const results = new api.ResearchExperimentResultService(repository, experiments);
+  const figures = new api.ResearchFigureService(repository, tools, root, logger);
+  const exports = new api.ResearchExportService(repository, new api.ResearchExportSourceService(repository, figures, experiments,
+    new api.ResearchTemplateService(repository, tools)), tools, root, logger);
+  const scientificReviews = new api.ResearchArtifactScientificReviewService(repository, results, figures);
+  const gate = production => api.createResearchHumanGate({repository, production, scientificReviews});
+  const version = artifactId => repository.inspectArtifact({projectId, artifactId, expectedVersion: null}).snapshot.version;
+  const approve = async (stage, production) => gate(production).approve({projectId, expectedStage: stage, action: 'approve',
+    expectedArtifactVersions: captureResearchArtifactVersions(repository, projectId)});
+  const confirmRelations = artifactId => {
+    const actor = {kind: 'user', id: 'fixture-reviewer'};
+    for (const claim of repository.evidence.listClaims({projectId, artifactId})) for (const evidenceId of claim.evidenceIds) {
+      const source = repository.evidence.inspectEvidence(evidenceId, projectId);
+      const relation = repository.evidence.relations.propose({projectId, claimId: claim.id, expectedClaimVersion: claim.version, evidenceId,
+        expectedSourceDigest: api.relationSourceDigest(source), kind: 'supports', condition: null, supersedesRelationId: null}, actor);
+      repository.evidence.relations.review({projectId, relationId: relation.id, expectedVersion: relation.version,
+        expectedClaimVersion: relation.claimVersion, expectedSourceDigest: relation.sourceDigest, decision: 'confirm',
+        note: 'Verified the synthetic measurement used by the fixture.'}, actor);
+    }
+  };
+  const corpus = join(workspace, 'measurements.csv');
+  const reference = receipt => ({resultId: receipt.snapshot.id, expectedHash: receipt.snapshotHash});
+  const execute = async (requestId, csv) => {
+    await writeFile(corpus, csv);
+    const started = await experiments.start({projectId, ownerRunId: null, requestId, label: 'Mean latency', engine: 'typescript',
+      runtime: {kind: 'bundled-node'}, sourceVersion: 1, sourcePath: 'analysis.mts', inputPaths: ['measurements.csv'],
+      parameters: {}, timeoutMs: 15000, network: 'disabled'});
+    const getRun = () => repository.experiments.get(projectId, started.id);
+    await until(() => !['preparing', 'running'].includes(getRun().status));
+    const run = getRun();
+    assert.equal(run.status, 'completed', run.error);
+    const output = run.files.find(file => file.area === 'output' && file.path === 'metrics.json');
+    const receipt = await human('research.experimentResults.review', () => results.review({projectId, runId: run.id,
+      requestId: `${requestId}-review`, expectedInputHash: run.inputHash, resultPath: output.path, expectedResultHash: output.sha256,
+      definitions: [{id: 'mean', label: 'Mean latency', definition: 'Arithmetic mean of all CSV rows', unit: 'ms', direction: 'lower'}],
+      method: {name: 'Arithmetic mean', rationale: 'Summarize all observed values', assumptions: 'Observations in milliseconds',
+        limitations: 'Three descriptive observations without inference'}}));
+    const evidence = await human('research.experimentResults.captureEvidence', () => results.captureEvidence({projectId,
+      ...reference(receipt), metricId: 'mean'}));
+    return {run, receipt, evidence};
+  };
+  let reopened, disk, restoredExperiments;
+  try {
+    await writeFile(join(workspace, 'analysis.mts'), `
+export async function run(context) {
+  const observations = (await context.files.readCsv('measurements.csv')).map(row => Number(row.latency));
+  const unavailable = {kind: 'unavailable', reason: 'Descriptive measurement only'};
+  await context.files.writeText('metrics.json', JSON.stringify({schemaVersion: 1, metrics: [{id: 'mean',
+    value: context.statistics.mean(observations), unit: 'ms', sampleSize: observations.length,
+    uncertainty: unavailable, confidenceInterval: unavailable, effect: unavailable}]}));
+}
+`);
+    const prior = await execute('original-data', 'latency\n1\n2\n3\n');
+    const draft = f.withWorker(() => repository.runs.complete(f.run.id, projectId, {
+      title: 'Measured latency', markdown: 'Mean latency was 2 ms.', verdict: 'ready', sections: [{title: 'Results', claimIndexes: [0]}],
+      claims: [{subjectType: 'paragraph', content: 'Mean latency was 2 ms.', status: 'supported',
+        experiment: {...unknownExperiment}, evidenceIds: [prior.evidence.id]}]
+    }));
+    repository.transitionWorkflow({projectId, expectedStage: 'writing', action: 'complete'});
+    const artifactId = draft.outputArtifactIds[0], scope = {projectId, artifactId};
+    const original = repository.evidence.listClaims(scope)[0];
+    const binding = (claim, result) => ({claimId: claim.id, expectedClaimHash: api.relationClaimHash(claim), surface: 'body',
+      start: 17, end: 18, unit: 'ms', evidenceId: result.evidence.id, resultId: result.receipt.snapshot.id, resultHash: result.receipt.snapshotHash,
+      metricId: 'mean', rule: {conversion: {kind: 'identity'}, rounding: {kind: 'none'},
+        tolerance: {absolute: 0, relative: 0, rationale: 'Exact arithmetic result from fixed CSV fixture'}}});
+    const consistency = new api.ResearchConsistencyService(repository, results);
+    const originalReview = await human('research.consistency.save', () => consistency.save({...scope, requestId: 'original-value',
+      expectedArtifactVersion: version(artifactId), parent: null, rationale: 'Mapped the original measurement.', bindings: [binding(original, prior)]}));
+    const comment = {commentId: 'rerun', reviewer: 'Reviewer 1', comment: 'Rerun on the corrected CSV and update the paper.',
+      status: 'open', response: '', locations: [], evidenceIds: []};
+    const originalResponse = await human('research.responseMatrix.save', () => repository.responseMatrix.save({...scope,
+      requestId: 'original-comment', expectedArtifactVersion: version(artifactId), parent: null, rationale: 'Recorded reviewer request.', rows: [comment]}));
+    await human('research.manuscriptSync.attach', () => repository.manuscriptSync.attach({...scope,
+      expectedArtifactVersion: version(artifactId), mode: 'checkout', texPath: 'paper.tex', bibPath: 'paper.bib'}));
+    const next = await execute('corrected-data', 'latency\n3\n4\n5\n');
+    const derivation = new api.ResearchResultDerivationService(repository, results);
+    const request = {projectId, ...reference(next.receipt), previous: reference(prior.receipt),
+      manuscript: {artifactId, expectedVersion: version(artifactId)}, commentId: comment.commentId};
+    const preview = await derivation.preview(request);
+    assert.deepEqual(preview.previous.differences, ['data']);
+    assert.equal(preview.rows[0].metric.value, 4);
+    assert.equal(preview.rows[0].metric.sampleSize, 3);
+    assert.equal(preview.rows[0].evidenceId, next.evidence.id);
+    assert.match(preview.methods, /typescript.*analysis\.mts.*metrics\.json/u);
+    assert.equal(preview.execution.runId, next.run.id);
+    assert.equal(preview.execution.inputs[0].sha256, hash('latency\n3\n4\n5\n'));
+    assert.equal(preview.responseDraft.row.status, 'open');
+    assert.deepEqual(preview.manuscript.changes.map(({before, after, evidenceId}) => [before, after, evidenceId]), [['2', '4', next.evidence.id]]);
+
+    const files = new api.ResearchWorkspaceFileService(db, repository, () => new Date().toISOString());
+    const sources = new api.ResearchResultFigureSourceService(derivation, files);
+    const figure = preview.figures[0];
+    const sourceRequest = {projectId, ...reference(next.receipt), metricIds: figure.metricIds, sourceHash: figure.sourceHash};
+    const source = await sources.prepare(sourceRequest);
+    assert.deepEqual(await sources.prepare(sourceRequest), source);
+    assert.equal(hash(await readFile(join(workspace, source.sourcePath))), figure.sourceHash);
+    const started = await figures.start({projectId, ownerRunId: null, requestId: 'corrected-figure', label: 'Corrected mean latency',
+      engine: 'vega-lite', sourceVersion: 1, sourcePath: source.sourcePath, expectedSourceHash: source.sourceHash,
+      inputPaths: [], timeoutMs: 15000, figure: {widthInches: 3, heightInches: 2, dpi: 72, seed: 42}});
+    await until(() => !['preparing', 'running'].includes(figures.getRun(projectId, started.id).status));
+    const render = figures.getRun(projectId, started.id);
+    assert.equal(render.status, 'completed', render.error);
+    const traceFile = await figures.readRunFile({projectId, runId: render.id, area: 'output', path: 'figure-data.json'});
+    const trace = JSON.parse(traceFile.bytes);
+    assert.equal(trace.sourceHash, figure.sourceHash);
+    assert.ok(trace.marks.flatMap(mark => mark.items).some(item => item.numericFields.value === 4));
+
+    const paragraph = preview.manuscript.paragraphs[0];
+    assert.equal(paragraph.claimId, original.id);
+    assert.equal(paragraph.after, 'Mean latency was 4 ms.');
+    assert.deepEqual(paragraph.replacement.evidenceIds, [next.evidence.id]);
+    const tex = join(workspace, 'paper.tex'), bib = join(workspace, 'paper.bib');
+    await writeFile(tex, (await readFile(tex, 'utf8')).replace(`${paragraph.before}\\cite{${prior.evidence.id}}`, paragraph.replacement.latex));
+    await writeFile(bib, `${await readFile(bib, 'utf8')}\n${preview.manuscript.bibliography}`);
+    const sync = await repository.manuscriptSync.inspect(scope);
+    assert.equal(sync.status, 'changed', sync.issues.join(', '));
+    const applied = await human('research.manuscriptSync.apply', () => repository.manuscriptSync.apply({...scope,
+      expectedPreviewHash: sync.previewHash, requestId: 'save-corrected-value',
+      changes: [{id: sync.changes[0].id, evidenceIds: paragraph.replacement.evidenceIds}]}));
+    assert.equal(applied.status, 'current');
+    const revised = repository.evidence.getClaim(original.id);
+    assert.equal(revised.content, 'Mean latency was 4 ms.');
+    assert.deepEqual(revised.evidenceIds, [next.evidence.id]);
+    await human('research.consistency.save', () => consistency.save({...scope, requestId: 'corrected-value',
+      expectedArtifactVersion: version(artifactId), parent: {reviewId: originalReview.snapshot.id, reviewHash: originalReview.snapshotHash},
+      rationale: 'Verified the revised Results statement against the corrected execution.', bindings: [binding(revised, next)]}));
+    const response = await human('research.responseMatrix.save', () => repository.responseMatrix.save({...scope,
+      requestId: 'corrected-reply', expectedArtifactVersion: version(artifactId),
+      parent: {reviewId: originalResponse.snapshot.id, reviewHash: originalResponse.snapshotHash}, rationale: 'Reviewed the rerun and verified the revision.',
+      rows: [{...comment, status: 'addressed', response: preview.responseDraft.row.response, evidenceIds: [next.evidence.id],
+        locations: [{claimId: revised.id, claimHash: api.relationClaimHash(revised), start: 0, end: revised.content.length, text: revised.content}]}]}));
+    assert.equal(response.snapshot.request.rows[0].status, 'addressed');
+    confirmRelations(artifactId);
+    await approve('writing');
+
+    // Reopen the figure stage in the fixture and exercise its normal publication and approval.
+    db.prepare("UPDATE research_projects SET current_stage='figure' WHERE id=?").run(projectId);
+    db.prepare("UPDATE research_stage_states SET status='ready' WHERE project_id=? AND stage='figure'").run(projectId);
+    const chart = await figures.publish(projectId, render.id, null);
+    repository.evidence.createClaim({projectId, artifactId: chart.artifactId, subjectType: 'figure',
+      content: 'Corrected mean latency was 4 ms.', status: 'supported', experiment: {...unknownExperiment}, evidenceIds: [next.evidence.id]});
+    confirmRelations(chart.artifactId);
+    repository.transitionWorkflow({projectId, expectedStage: 'figure', action: 'start'});
+    await gate(figures).complete({projectId, expectedStage: 'figure', action: 'complete'});
+    await approve('figure', figures);
+
+    // Seed the accepted review decision so the fixture can focus on the native delivery path.
+    db.prepare("UPDATE research_review_cycles SET status='accepted' WHERE project_id=?").run(projectId);
+    db.prepare("UPDATE research_projects SET current_stage='export' WHERE id=?").run(projectId);
+    db.prepare("UPDATE research_stage_states SET status='ready' WHERE project_id=? AND stage='export'").run(projectId);
+    const submission = {projectId, manuscriptArtifactId: artifactId, figureIds: [chart.id], template: {kind: 'default', language: 'en'}};
+    const output = await exports.prepare({...submission, requestId: 'corrected-delivery', title: 'Corrected measurements',
+      publicationReview: syntheticExportPublicationReview(await exports.inputs(submission))});
+    const getExport = () => repository.exports.get(projectId, output.id);
+    await until(() => getExport().status !== 'preparing');
+    assert.equal(getExport().status, 'ready', getExport().error);
+    const published = await exports.publish(projectId, output.id, null);
+    repository.transitionWorkflow({projectId, expectedStage: 'export', action: 'start'});
+    await gate(exports).complete({projectId, expectedStage: 'export', action: 'complete'});
+    await approve('export', exports);
+    const delivery = await exports.write({projectId, exportId: output.id, destinationPath: join(root, 'corrected.zip')});
+    assert.equal(hash(await readFile(delivery.destinationPath)), delivery.sha256);
+    assert.match(published.sources.manuscript.latex, /Mean latency was 4 ms/u);
+    assert.equal(published.sources.experimentResults[0].snapshotHash, next.receipt.snapshotHash);
+    assert.deepEqual(published.sources.figures.map(figure => figure.id), [chart.id]);
+    const png = chart.validation.files.find(file => file.path.endsWith('.png'));
+    assert.equal(published.files.find(file => file.path === `source/figures/${chart.id}.png`).sha256, png.sha256);
+
+    const databasePath = join(root, 'reopened.sqlite');
+    await db.backup(databasePath);
+    disk = new Database(databasePath);
+    disk.pragma('foreign_keys = ON');
+    api.applyResearchDatabaseSchema(disk);
+    reopened = new api.ResearchRepository(disk, tasks);
+    restoredExperiments = new api.ResearchExperimentService(reopened,
+      {inspect: async () => assert.fail('Reading a frozen result must not prepare another execution.')}, root, logger);
+    const history = new api.ResearchExperimentResultService(reopened, restoredExperiments);
+    assert.deepEqual(await history.get({projectId, ...reference(prior.receipt)}), prior.receipt);
+    assert.deepEqual(await history.get({projectId, ...reference(next.receipt)}), next.receipt);
+    assert.equal((await reopened.manuscriptSync.inspect(scope)).status, 'current');
+    assert.equal(reopened.exports.get(projectId, output.id).archive.sha256, delivery.sha256);
+    assert.deepEqual(errors, []);
+  } finally {
+    await Promise.all([experiments.shutdown(), figures.shutdown(), exports.shutdown(), restoredExperiments?.shutdown()]);
+    if (reopened !== undefined) await Promise.all([reopened.knowledgeJobs.shutdown(), reopened.paperCards.shutdown(), reopened.wiki.shutdown()]);
+    disk?.close();
+    await f.close();
+    await rm(root, {recursive: true, force: true});
+  }
+});
+
 async function runScenario(stages, fault = null) {
   const reportFailure = fault === 'report_failure';
   const fullWorkflow = stages[0] === 'discovery';

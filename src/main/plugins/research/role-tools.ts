@@ -315,7 +315,7 @@ export function createResearchRoleTools(input: {
     start_figure: () => tool(async (request) => {
       const started = await effects().startFigure(input.run.id, input.run.projectId, request);
       return after(summarizeFigure(started));
-    }, { name: 'start_figure', description: '启动当前项目的 Vega-Lite 图稿渲染；sourcePath 为 .vl.json。先用 inspect_figure_environment 读取 expectedEnvironmentHash，不能使用实验环境或文件哈希。项目和运行身份由服务绑定；同一冻结节点的相同业务参数返回已有运行。',
+    }, { name: 'start_figure', description: '启动当前项目的 Vega-Lite 图稿渲染，sourcePath 为 .vl.json。先用 inspect_figure_environment 读取 expectedEnvironmentHash。若来自已生成的结果图源，同时原样传入 expectedSourceHash。项目和运行身份由服务绑定，同一冻结节点的相同业务参数返回已有运行。',
       schema: researchOwnedFigureStartSchema }),
     get_experiment: () => tool(async ({ experimentId, fileOffset = 0, file }) => {
       const execution = (() => {

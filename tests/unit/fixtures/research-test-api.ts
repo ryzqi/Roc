@@ -270,3 +270,6 @@ export {filterPlanModeModelTools, createRocPlanRuntimeToolGuardMiddleware} from 
 export * from '../../../src/shared/schemas/research-proposals';
 export {registerResearchProposalCapabilities} from '../../../src/main/plugins/research/proposal-capabilities';
 export {ResearchProposalService} from '../../../src/main/plugins/research/proposal-service';
+export {ResearchResultFigureSourceService} from '../../../src/main/plugins/research/result-figure-source';
+export {ResearchResultDerivationService} from '../../../src/main/plugins/research/result-derivation-service';
+export {registerResearchResultDerivationCapabilities} from '../../../src/main/plugins/research/result-derivation-capabilities';

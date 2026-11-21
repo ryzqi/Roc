@@ -37,6 +37,9 @@ import type { ResearchLiteratureServices } from './research-plugin-literature';
 import {registerResearchProposalCapabilities} from './proposal-capabilities';
 import {ResearchProposalService} from './proposal-service';
 import {ResearchJournalComplianceService} from './journal-compliance-service';
+import {ResearchResultDerivationService} from './result-derivation-service';
+import {ResearchResultFigureSourceService} from './result-figure-source';
+import {registerResearchResultDerivationCapabilities} from './result-derivation-capabilities';
 
 export async function registerResearchWorkflow(
   context: RocPluginContext, options: ResearchPluginOptions,
@@ -46,9 +49,11 @@ export async function registerResearchWorkflow(
   const { db, visual, figureUnderstanding, researchRepository, researchIndexer, researchPythonEnvironments, researchExperiments,
     researchResults, researchFigures, researchTemplates, researchExports, zenodoPublication,
     productionJob, notifyWorkspacePathStructureChanged } = production;
-  const effects = new ResearchProductionEffectService(researchRepository,
-    new ResearchWorkspaceFileService(db, researchRepository, () => new Date().toISOString(), notifyWorkspacePathStructureChanged),
+  const workspaceFiles = new ResearchWorkspaceFileService(db, researchRepository, () => new Date().toISOString(), notifyWorkspacePathStructureChanged);
+  const effects = new ResearchProductionEffectService(researchRepository, workspaceFiles,
     researchExperiments, researchFigures, researchTemplates, researchExports);
+  const resultDerivation = new ResearchResultDerivationService(researchRepository, researchResults);
+  registerResearchResultDerivationCapabilities(context, resultDerivation, new ResearchResultFigureSourceService(resultDerivation, workspaceFiles));
   const scientificReviews = new ResearchArtifactScientificReviewService(researchRepository, researchResults, researchFigures);
   const humanGate = createResearchHumanGate({ repository: researchRepository, production: productionJob, scientificReviews });
   const runtime = new ResearchStageRuntime(researchRepository, context.capabilities, options.roleExecutor, humanGate, effects,

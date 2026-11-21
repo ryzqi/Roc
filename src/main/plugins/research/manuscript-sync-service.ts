@@ -11,7 +11,7 @@ import {unknownExperiment} from '../../../shared/schemas/research-claim-comparis
 import type {ResearchArtifact, ResearchClaim, ResearchEvidence, ResearchExportBundle} from '../../../shared/types';
 import {requireResearchHuman} from '../../services/research-human-context';
 import {readBibtex, writeBibliography} from './bibliography';
-import {escapeLatex} from './latex-source';
+import {manuscriptBibliographyEntry} from './manuscript-bibliography';
 import type {BibliographyEntry} from './library-repository';
 import {parseManuscriptWorkFile, renderManuscriptWorkFile} from './manuscript-sync-tex';
 import {readResearchFile, researchAbsolutePath, researchContentHash, researchPath, researchRelativePath, researchWorkspace} from './research-files';
@@ -205,7 +205,7 @@ export class ResearchManuscriptSyncService {
       for (const [paragraphIndex, claimId] of section.claimIds.entries()) {
         const claim = claims.get(claimId)!;
         const paragraph = after.paragraphs[paragraphIndex];
-        const material = claim.evidenceIds.map(id => ({id, key: this.entry(this.research.evidence.getEvidence(id, bundle.projectId)).citationKey}));
+        const material = claim.evidenceIds.map(id => ({id, key: manuscriptBibliographyEntry(this.research.evidence.getEvidence(id, bundle.projectId), this.research.library).citationKey}));
         const keys = [...new Set(material.map(item => item.key))];
         if (claim.content !== paragraph.text || !sameKeys(keys, paragraph.citationKeys)) {
           changes.push({id: `claim:${claimId}`, kind: 'claim', label: `${after.title} 第 ${paragraphIndex + 1} 段`,
@@ -238,7 +238,7 @@ export class ResearchManuscriptSyncService {
       if (canonical === undefined) {
         try {
           const record = key.startsWith('evidence_') ? this.research.evidence.getEvidence(key, bundle.projectId) : null;
-          canonical = record === null ? this.research.library.resolveCitationKey(bundle.projectId, key).bibliography : this.entry(record);
+          canonical = record === null ? this.research.library.resolveCitationKey(bundle.projectId, key).bibliography : manuscriptBibliographyEntry(record, this.research.library);
         } catch {throw new Error(`引用键 ${key} 没有可核对的项目书目。`);}
       }
       if (bibliographyIdentity(entry) !== bibliographyIdentity(canonical)) {
@@ -290,29 +290,18 @@ export class ResearchManuscriptSyncService {
   }
 
   private citationKeys(ids: string[], projectId: string): string[] {
-    return [...new Set(ids.map(id => this.entry(this.research.evidence.getEvidence(id, projectId)).citationKey))];
+    return [...new Set(ids.map(id => manuscriptBibliographyEntry(this.research.evidence.getEvidence(id, projectId), this.research.library).citationKey))];
   }
 
   private entries(evidence: ResearchEvidence[]): Map<string, BibliographyEntry> {
     const entries = new Map<string, BibliographyEntry>();
     for (const source of evidence) {
-      const entry = this.entry(source);
+      const entry = manuscriptBibliographyEntry(source, this.research.library);
       const previous = entries.get(entry.citationKey);
       if (previous !== undefined && bibliographyIdentity(previous) !== bibliographyIdentity(entry)) throw new Error('research_manuscript_sync_bibliography_conflict');
       entries.set(entry.citationKey, entry);
     }
     return entries;
-  }
-
-  private entry(evidence: ResearchEvidence): BibliographyEntry {
-    if (evidence.sourceType === 'literature') {
-      const item = this.research.library.get(evidence.sourceId);
-      if (item.archived) throw new Error('research_export_reference_archived');
-      return item.bibliography;
-    }
-    return {citationKey: evidence.id, entryType: 'misc', fields: {title: escapeLatex(evidence.title),
-      note: escapeLatex(`${evidence.sourceType}: ${evidence.sourceId}`)}, preambles: [], csl: null, title: evidence.title,
-      authors: [], doi: null, publishedYear: null, abstract: null, url: null};
   }
 
   private canApply(artifact: ResearchArtifact): boolean {

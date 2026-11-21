@@ -12,6 +12,7 @@ const figureStartFields = {
   sourcePath: researchExperimentPathSchema,
   inputPaths: z.array(researchExperimentPathSchema).max(1000),
   expectedEnvironmentHash: digest.optional(),
+  expectedSourceHash: digest.optional(),
   timeoutMs: z.number().int().min(1000).max(3600000),
   figure: researchFigureOptionsSchema
 } as const;

@@ -9,9 +9,11 @@ import {ExperimentResultReview} from './ExperimentResultReview';
 import {ExperimentResultReceipt} from './ExperimentResultReceipt';
 import {ExperimentResultComparison} from './ExperimentResultComparison';
 import {ExperimentMetricEvidence} from './ExperimentMetricEvidence';
+import {LazyBoundary, retryableLazy} from '../../shell/LazyBoundary';
 import {useArtifactEditorGuard} from '../artifact-editor-guard';
 
 const button=`${formSecondaryButtonClass} border-[0.5px]`,pageSize=20;
+const ResultDerivation = retryableLazy(async () => ({default: (await import('./ExperimentResultDerivation')).ExperimentResultDerivation}));
 export function ExperimentResults({client,run,request,writable}: {
   client: RocClient;run: ResearchExperimentExecution;request: ResearchArtifactInspectRequest;writable: boolean
 }): React.JSX.Element {
@@ -19,6 +21,7 @@ export function ExperimentResults({client,run,request,writable}: {
   const [reviewOpen,setReviewOpen]=useState(false);
   const [historyChoice,setHistoryChoice]=useState<{offset:number;nonce:number}|null>(null);
   const [selection,setSelection]=useState<ResearchExperimentResultGet|null>(null);
+  const [materials, setMaterials] = useState<{hash: string; previous?: Omit<ResearchExperimentResultGet, 'projectId'>} | null>(null);
   const history=useAsyncResource(historyChoice===null?null:`experiment:results:${run.projectId}:${run.id}:${JSON.stringify(historyChoice)}`,()=>{
     if(historyChoice===null)throw new Error('research_result_selection_required');
     return client.api.research.listExperimentResults({projectId:run.projectId,runId:run.id,offset:historyChoice.offset,limit:pageSize});
@@ -28,6 +31,7 @@ export function ExperimentResults({client,run,request,writable}: {
     return client.api.research.getExperimentResult(selection);
   },{label:'复核指标回执来源'});
   const canReview=writable&&run.status==='completed'&&run.inputHash!==null&&run.environment!==null;
+  const materialsOpen = read.data !== null && materials?.hash === read.data.snapshotHash;
   function loadHistory(offset:number):void {
     if(guard.busy())return;
     setHistoryChoice({offset,nonce:(historyChoice?.nonce??0)+1});
@@ -73,7 +77,17 @@ export function ExperimentResults({client,run,request,writable}: {
       <p role="status">已复核实际运行、输出与审核回执。</p>
       <ExperimentResultReceipt receipt={read.data}/>
       <ExperimentMetricEvidence key={`evidence:${read.data.snapshot.id}:${read.data.snapshotHash}`} client={client} receipt={read.data} writable={writable}/>
-      <ExperimentResultComparison key={`${read.data.snapshot.id}:${read.data.snapshotHash}`} client={client} left={read.data}/>
+      <ExperimentResultComparison key={`${read.data.snapshot.id}:${read.data.snapshotHash}`} client={client} left={read.data}
+        onUse={previous => {
+          if (!guard.busy() && read.data !== null) setMaterials({hash: read.data.snapshotHash, previous});
+        }}/>
+      <button type="button" className={`${button} self-start`} disabled={guard.busy()} aria-expanded={materialsOpen}
+        data-testid="artifact-experiment-derivation-toggle" onClick={() => {
+          if (!guard.busy() && read.data !== null) setMaterials(materialsOpen ? null : {hash: read.data.snapshotHash});
+        }}>{materialsOpen ? '收起写作材料' : '生成写作材料'}</button>
+      {!materialsOpen ? null : <LazyBoundary fallback={<p role="status">正在打开写作材料…</p>}>
+        <ResultDerivation key={read.data.snapshotHash} client={client} receipt={read.data} writable={writable} previous={materials?.previous}/>
+      </LazyBoundary>}
     </>}
   </section>;
 }

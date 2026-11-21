@@ -18,7 +18,7 @@ function calculation(value, text, overrides = {}) {
     result: {metrics: [{id: 'mean', value, unit: 'ms'}]}, request: {definitions: [{id: 'mean', unit: 'ms'}]}
   }});
 }
-function scene() {
+function scene(content = 'Mean -2.35 ms and comparison 17 ms.') {
   const f = createResearchFixture(api, 'writing');
   const experiment = f.repository.experiments.create({projectId: f.project.id, ownerRunId: null, requestId: 'measurement',
     label: 'Stored synthetic measurement', engine: 'typescript', sourceVersion: 1, sourcePath: 'analysis.mts', inputPaths: [],
@@ -41,7 +41,7 @@ function scene() {
   f.evidence = f.repository.experimentResults.captureMetric(f.result, 'mean');
   f.artifactId = withResearchTestWorker(api, f.repository, f.run.id, f.project.id, workerRunId => f.repository.runs.complete(workerRunId, f.project.id, {title: 'Measured values',
     markdown: 'Synthetic measured value report', claims: [
-      {experiment: {...unknownExperiment}, subjectType: 'paragraph', content: 'Mean -2.35 ms and comparison 17 ms.', status: 'supported', evidenceIds: [f.evidence.id]}],
+      {experiment: {...unknownExperiment}, subjectType: 'paragraph', content, status: 'supported', evidenceIds: [f.evidence.id]}],
     sections: [{title: 'Results', claimIndexes: [0]}], verdict: 'ready'})).outputArtifactIds[0];
   f.claim = f.repository.evidence.listClaims({projectId: f.project.id, artifactId: f.artifactId})[0];
   f.service = new api.ResearchConsistencyService(f.repository, {evidence: async () => ({receipt: f.result, metricId: 'mean'})});
@@ -216,5 +216,64 @@ test('direct storage cannot map a claim omitted from the saved manuscript', asyn
     /research_consistency_claim_required/u);
     assert.equal(f.changes(), before);
     assert.deepEqual(f.history().items, [saved]);
+  } finally {f.close();}
+});
+
+test('result preview derives only anchored numeric changes and preserves unestimated quantities and source identity', async () => {
+  const original = 'Mean -2.35 ms and comparison 17 ms. Repeated -2.35 ms.';
+  const f = scene(original);
+  try {
+    const binding = f.request().bindings[0];
+    const secondStart = original.lastIndexOf('-2.35');
+    const repeated = {...binding, start: secondStart, end: secondStart + 5};
+    await f.save(f.request({bindings: [binding, repeated]}));
+    const {projectId, artifactId} = f.request();
+    const {snapshot} = f.result;
+    const rerun = f.repository.experiments.create({projectId, ownerRunId: null, requestId: 'rerun',
+      label: 'Synthetic rerun', engine: 'typescript', sourceVersion: 1, sourcePath: 'analysis.mts', inputPaths: [],
+      parameters: {}, runtime: {kind: 'bundled-node'}, timeoutMs: 1000, network: 'disabled'},
+    '/tmp/roc-research-fixture', '/tmp/roc-research-fixture', '/tmp/roc-synthetic-results');
+    const metadata = structuredClone(snapshot);
+    metadata.id = 'rerun-result';
+    metadata.request.requestId = 'reviewed-rerun';
+    metadata.request.runId = metadata.execution.runId = rerun.id;
+    metadata.result.metrics[0].value = -4.125;
+    const updated = f.repository.experimentResults.save({snapshot: metadata, snapshotHash: hash(metadata)});
+    const results = new api.ResearchExperimentResultService(f.repository, {});
+    results.get = async input => f.repository.experimentResults.get(input);
+    const service = new api.ResearchResultDerivationService(f.repository, results);
+    const request = {projectId, resultId: metadata.id, expectedHash: updated.snapshotHash,
+      previous: {resultId: snapshot.id, expectedHash: f.result.snapshotHash},
+      manuscript: {artifactId, expectedVersion: f.request().expectedArtifactVersion}};
+    const unlinked = await service.preview(request);
+    assert.equal(unlinked.manuscript.paragraphs[0].replacement, null);
+    assert.equal(unlinked.manuscript.bibliography, '');
+    const captured = f.repository.experimentResults.captureMetric(updated, 'mean');
+    const before = f.changes(), projected = await service.preview(request);
+    assert.equal(f.changes(), before);
+    assert.deepEqual(projected.manuscript.changes, [binding, repeated].map(binding => ({binding, before: '-2.35', after: '-4.13',
+      result: {resultId: metadata.id, expectedHash: updated.snapshotHash}, evidenceId: captured.id})));
+    const after = 'Mean -4.13 ms and comparison 17 ms. Repeated -4.13 ms.';
+    assert.deepEqual(projected.manuscript.paragraphs, [{claimId: f.claim.id, expectedClaimHash: binding.expectedClaimHash,
+      before: original, after, replacement: {latex: `${after}\\cite{${captured.id}}`, evidenceIds: [captured.id], citationKeys: [captured.id]}}]);
+    assert.ok(projected.manuscript.bibliography.includes(`@misc{${captured.id}`));
+    assert.equal(projected.rows[0].source.pointer, '/metrics/0');
+    assert.equal(projected.rows[0].metric.confidenceInterval.kind, 'unavailable');
+    assert.match(projected.methods, /typescript.*analysis\.mts.*metrics\.json/u);
+    assert.deepEqual(JSON.parse(projected.figures[0].source).data.values[0], {
+      metricId: 'mean', label: 'Mean', value: -4.125, unit: 'ms', sampleSize: 3, metricOrdinal: 0
+    });
+    await assert.rejects(service.preview({...request, metricIds: ['not-recorded']}), /research_result_metric_not_found/u);
+    await assert.rejects(service.preview({...request, manuscript: {...request.manuscript, expectedVersion: 'f'.repeat(64)}}),
+      /research_result_derivation_manuscript_changed/u);
+
+    const changed = structuredClone(metadata);
+    changed.id = 'different-definition';
+    changed.request.requestId = 'reviewed-different-definition';
+    changed.request.definitions[0].definition = 'Different mathematical definition';
+    const newDefinition = f.repository.experimentResults.save({snapshot: changed, snapshotHash: hash(changed)});
+    const incompatible = await service.preview({...request, resultId: changed.id, expectedHash: newDefinition.snapshotHash});
+    assert.deepEqual(incompatible.manuscript.changes, []);
+    assert.deepEqual(incompatible.manuscript.issues, [binding, repeated].map(() => ({metricId: 'mean', claimId: f.claim.id, reason: 'definition_changed'})));
   } finally {f.close();}
 });

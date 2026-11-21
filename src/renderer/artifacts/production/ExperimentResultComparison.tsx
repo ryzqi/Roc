@@ -6,7 +6,8 @@ import {formInputClass,formSecondaryButtonClass} from '../../shared/form-ui';
 import {ExperimentResultReceipt} from './ExperimentResultReceipt';
 
 const button=`${formSecondaryButtonClass} border-[0.5px]`,pageSize=20;
-export function ExperimentResultComparison({client,left}: {client: RocClient;left: ResearchExperimentResultReceipt}): React.JSX.Element {
+export function ExperimentResultComparison({client,left,onUse}: {client: RocClient;left: ResearchExperimentResultReceipt;
+  onUse: (previous: Omit<ResearchExperimentResultGet, 'projectId'>) => void}): React.JSX.Element {
   const projectId=left.snapshot.request.projectId;
   const [runId,setRunId]=useState(''),[selection,setSelection]=useState<{runId:string;offset:number;nonce:number}|null>(null);
   const [right,setRight]=useState<Omit<ResearchExperimentResultGet,'projectId'>|null>(null);
@@ -62,6 +63,10 @@ export function ExperimentResultComparison({client,left}: {client: RocClient;lef
       <p role="status" className="font-medium">{comparison.data.comparable?'冻结合同可比':'冻结合同不可比'}</p>
       <p className="text-muted">此核对不表示科学支持性或统计显著性。</p>
       <ul className="flex flex-col gap-1">{comparison.data.differences.map(value=><li key={value}>{labels[value]}</li>)}</ul>
+      <button type="button" className={`${button} self-start`} onClick={() => {
+        if (comparison.data === null) return;
+        onUse({resultId: comparison.data.right.snapshot.id, expectedHash: comparison.data.right.snapshotHash});
+      }}>用作写作对照</button>
       <section className="flex min-w-0 flex-col gap-2"><h4 className="font-medium">当前结果</h4><ExperimentResultReceipt receipt={comparison.data.left}/></section>
       <section className="flex min-w-0 flex-col gap-2"><h4 className="font-medium">对照结果</h4><ExperimentResultReceipt receipt={comparison.data.right}/></section>
     </section>}

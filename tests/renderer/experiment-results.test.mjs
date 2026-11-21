@@ -19,7 +19,9 @@ const routes={
   compareExperimentResults:['roc:research:experiment-result-compare','research.compareExperimentResults'],
   captureExperimentResultEvidence:['roc:research:experiment-result-evidence-capture','research.captureExperimentResultEvidence'],
   getExperimentResultEvidence:['roc:research:experiment-result-evidence-get','research.getExperimentResultEvidence'],
-  readExperimentFile:['roc:research:experiment-read','research.readExperimentFile']
+  readExperimentFile:['roc:research:experiment-read','research.readExperimentFile'],
+  previewResultDerivation:['roc:research:result-derivation-preview','research.previewResultDerivation'],
+  prepareResultFigureSource:['roc:research:result-figure-source-prepare','research.prepareResultFigureSource']
 };
 const source=`import json, os, statistics
 import roc_experiment as roc
@@ -84,6 +86,9 @@ before(async()=>{
   api.registerResearchProductionInputCapabilities(context,inputs);
   api.registerResearchExperimentResultCapabilities(context,f.repository.experimentResults,results);
   api.registerResearchExperimentCapabilities(context,f.repository.experiments,service);
+  const derivation=new api.ResearchResultDerivationService(f.repository,results);
+  const workspaceFiles=new api.ResearchWorkspaceFileService(f.db,f.repository,()=>new Date().toISOString());
+  api.registerResearchResultDerivationCapabilities(context,derivation,new api.ResearchResultFigureSourceService(derivation,workspaceFiles));
   bridge=api.createPluginCapabilityAdapter({invokeCapability:(name,input)=>handlers.get(name)(input)});
   await buildViteRenderer({directory,script:`
     import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {flushSync} from 'react-dom';
@@ -278,6 +283,22 @@ test('actual repeat is comparable, changed parameters are explicit and both sign
   assert.match(text,/-2 ms/u);assert.match(text,/-4 ms/u);
   const request=calls.filter(value=>value.method==='compareExperimentResults').at(-1).input;
   assert.deepEqual(request,{projectId:f.project.id,left:{resultId:a.snapshot.id,expectedHash:a.snapshotHash},right:{resultId:c.snapshot.id,expectedHash:c.snapshotHash}});
+  assert.equal(calls.some(call=>call.method==='previewResultDerivation'),false);
+  await page.getByRole('button',{name:'用作写作对照'}).click();
+  const methods=page.getByTestId('artifact-experiment-methods');
+  await methods.waitFor();
+  assert.match(await methods.innerText(),/analysis\.py.*1 个冻结输入文件.*metrics\.json.*73/u);
+  const derived=calls.find(call=>call.method==='previewResultDerivation').input;
+  assert.deepEqual(derived,{projectId:f.project.id,resultId:a.snapshot.id,expectedHash:a.snapshotHash,metricIds:['mean'],
+    previous:{resultId:c.snapshot.id,expectedHash:c.snapshotHash}});
+  const prepare=page.getByTestId('artifact-experiment-figure-prepare');
+  await prepare.focus();await page.keyboard.press('Enter');
+  const sourcePath=page.getByTestId('artifact-experiment-figure-source-path');
+  await sourcePath.waitFor();
+  const spec=JSON.parse(await readFile(join(f.project.workspacePath,await sourcePath.innerText()),'utf8'));
+  assert.deepEqual(spec.data.values.map(({metricId,value,unit,sampleSize})=>({metricId,value,unit,sampleSize})),
+    [{metricId:'mean',value:-2,unit:'ms',sampleSize:3}]);
+  assert.equal(spec.usermeta.roc.expectedHash,a.snapshotHash);
   const auditSource=await readFile(resolve('.agents/skills/desktop-agent-ui/scripts/clip-audit.js'),'utf8');
   for(const theme of ['light','dark']) {
     await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);

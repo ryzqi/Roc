@@ -69,6 +69,7 @@ import { researchIdeaCapabilities } from './idea-capabilities';
 import { researchIdeaPlanCapabilities } from './idea-plan-capabilities';
 import {researchProposalCapabilities} from './proposal-capabilities';
 import {researchManuscriptSyncCapabilities} from './manuscript-sync-capabilities';
+import {researchResultDerivationCapabilities} from './result-derivation-capabilities';
 import { researchRunCapabilities } from './run-capabilities';
 import { researchArtifactInspectorCapability, researchGateReviewCapability } from './artifact-inspector-capability';
 import type { RocPluginManifest } from '../../kernel/types';
@@ -120,6 +121,7 @@ export const provenanceCapabilities = {
 const researchCapabilityDescriptors = [
   ...researchProposalCapabilities,
   ...researchManuscriptSyncCapabilities,
+  ...researchResultDerivationCapabilities,
   ...Object.values(workbenchCapabilities),
   ...literatureImportCapabilities,
   ...literatureAcquisitionCapabilities,

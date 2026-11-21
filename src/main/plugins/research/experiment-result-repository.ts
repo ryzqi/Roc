@@ -36,13 +36,28 @@ export class ResearchExperimentResultRepository {
     if(result.snapshotHash!==request.expectedHash)throw new Error('research_result_hash_mismatch');
     return result;
   }
+  findCapturedMetric(receipt:ResearchExperimentResultReceipt,metricId:string):ResearchEvidence|null {
+    const projectId=receipt.snapshot.request.projectId;
+    const source=experimentMetricSource(receipt,metricId);
+    const row=this.metricEvidenceRow(projectId,source.id);
+    if(row===undefined)return null;
+    const record=this.repository.evidence.inspectEvidence(row.id,projectId);
+    if(record.referenceStatus!=='recorded')return null;
+    const metadata=this.repository.evidence.sourceMetadata(projectId,row.id);
+    if(metadata===null)throw new Error('research_result_evidence_changed');
+    assertExperimentMetricEvidence(record.evidence,metadata,receipt);
+    return record.evidence;
+  }
+  private metricEvidenceRow(projectId:string,documentId:string):{id:string}|undefined {
+    return this.db.prepare('SELECT id FROM research_evidence WHERE project_id=? AND document_id=?').get(projectId,documentId) as {id:string}|undefined;
+  }
   captureMetric(receipt:ResearchExperimentResultReceipt,metricId:string):ResearchEvidence {
     const projectId=receipt.snapshot.request.projectId;
     return this.db.transaction(()=>{
       const current=this.get({projectId,resultId:receipt.snapshot.id,expectedHash:receipt.snapshotHash});
       if(this.repository.getProject(projectId).status==='archived')throw new Error('research_project_archived');
       const source=experimentMetricSource(current,metricId);
-      const row=this.db.prepare('SELECT id FROM research_evidence WHERE project_id=? AND document_id=?').get(projectId,source.id) as {id:string}|undefined;
+      const row=this.metricEvidenceRow(projectId,source.id);
       if(row!==undefined) {
         const evidence=this.repository.evidence.getEvidence(row.id,projectId);
         const metadata=this.repository.evidence.sourceMetadata(projectId,row.id);

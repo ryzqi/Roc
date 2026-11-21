@@ -222,6 +222,10 @@ export class ResearchFigureService {
       const rendererEnvironment = getResearchFigureRendererEnvironment();
       const snapshot = await snapshotExperimentInputs(workspace, input, request, rendererEnvironment, signal, {});
       files = snapshot.files;
+      const source = files.find(file => file.path === request.sourcePath);
+      if (source === undefined || (request.expectedSourceHash !== undefined && source.sha256 !== request.expectedSourceHash)) {
+        throw new Error('research_figure_source_changed');
+      }
       await this.verifyRun(initial, signal);
       this.repository.figureRuns.start(initial.projectId, initial.id, rendererEnvironment, files, snapshot.hash);
       started = true;
@@ -239,8 +243,7 @@ export class ResearchFigureService {
         signal
       });
       output = { exitCode: 0, stdout: JSON.stringify(rendered), stderr: '' };
-      const source = files.find((file) => file.area === 'input' && file.path === request.sourcePath);
-      if (source === undefined || source.sha256 !== rendered.sourceHash) throw new Error('research_figure_source_changed');
+      if (source.sha256 !== rendered.sourceHash) throw new Error('research_figure_source_changed');
       if (rendered.rendererHash !== rendererEnvironment.hash || getResearchFigureRendererEnvironment().hash !== rendererEnvironment.hash) {
         throw new Error('research_figure_renderer_changed');
       }
