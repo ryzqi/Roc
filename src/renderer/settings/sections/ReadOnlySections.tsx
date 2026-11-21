@@ -31,8 +31,8 @@ import { RadixSettingsConfirmDialog } from '../radix-dialog-pilot';
 const POLL_INTERVAL_MS = 2_000;
 
 const PACK_LABELS: Readonly<Record<ResearchModelsStatus['selectedPack'], { label: string; note: string }>> = {
-  compact: { label: '轻量结构解析', note: 'PP-OCRv6 Tiny + 文档布局 + 表格，约 19 MB' },
-  complete: { label: '完整解析', note: '在轻量包上增加公式识别和 tokenizer，约 330 MB' }
+  compact: { label: '轻量结构解析', note: '文字、布局与表格识别' },
+  complete: { label: '完整解析', note: '轻量包及公式识别' }
 };
 
 const STATE_LABELS: Readonly<Record<ResearchModelsStatus['packs'][number]['state'], string>> = {

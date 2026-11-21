@@ -55,7 +55,7 @@ export function ArtifactRelations({client, snapshot, current, onChanged}: {
         <option value="conflict">已确认反对</option><option value="pending">存在待审核提议</option>
       </select>
     </label>
-    <p className="text-muted text-[length:var(--font-meta-size)]">按主张原顺序排列。统计当前版本的人工确认与待审核提议；历史关联不计为支持。</p>
+    <p className="text-muted text-[length:var(--font-meta-size)]">仅统计当前版本的人工确认与待审核提议；历史关联不计为支持。</p>
     {visible.length === 0 ? <p className="text-muted">没有符合条件的主张。</p> : <>
       <table className="w-full table-fixed text-left" data-testid="artifact-relations-matrix">
         <colgroup><col className="w-[46%]"/><col className="w-[18%]"/><col className="w-[18%]"/><col className="w-[18%]"/></colgroup>

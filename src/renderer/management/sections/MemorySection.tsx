@@ -50,7 +50,7 @@ export function MemorySection({ scope, store: files }: { scope: ManagementScope;
   return (
     <div className="memory-page" data-testid="mgmt-memory">
       <header className="memory-page-heading">
-        <div><h2>记忆</h2><p>助手长期保留的信息，可查看和修改</p></div>
+        <h2>记忆</h2>
         <button type="button" data-testid="mgmt-memory-reload" disabled={files.status === 'loading' || files.save.pending} onClick={files.reload} className={formSecondaryButtonClass} aria-label="重新读取记忆状态" title="重新读取记忆状态">
           <RefreshCw size={14} aria-hidden="true" />
         </button>
@@ -77,7 +77,7 @@ export function MemorySection({ scope, store: files }: { scope: ManagementScope;
         </nav>
         <section className="memory-document" aria-labelledby={`${instanceId}-title`} data-testid="mgmt-memory-document">
           <header className="memory-document-heading">
-            <div><h3 id={`${instanceId}-title`}>{files.selected.label}</h3><p>{files.selected.purpose}</p><span className="memory-scope">{files.selected.scope === 'workspace' ? `仅适用于 ${memory.workspaceLabel ?? '当前项目'}` : '适用于所有项目'}</span></div>
+            <div><h3 id={`${instanceId}-title`}>{files.selected.label}</h3><span className="memory-scope">{files.selected.scope === 'workspace' ? `仅适用于 ${memory.workspaceLabel ?? '当前项目'}` : '适用于所有项目'}</span></div>
             <button ref={editButtonRef} type="button" data-testid="mgmt-memory-edit" hidden={editing} disabled={!writable || files.contentLoading || files.contentError !== null || files.save.pending} onClick={() => setEditingKey(selectedKey)} className={formSecondaryButtonClass}>
               <Pencil size={12} aria-hidden="true" />{dirty ? '继续编辑' : '编辑'}
             </button>
@@ -108,7 +108,7 @@ export function MemorySection({ scope, store: files }: { scope: ManagementScope;
           ) : (
             <>
               {dirty ? <div className="memory-unsaved-note" role="status"><AlertTriangle size={12} aria-hidden="true" />此分类有未保存的修改，正在展示已保存的内容。<button type="button" onClick={() => setEditingKey(selectedKey)}>继续编辑</button></div> : null}
-              {(files.content ?? '').trim().length === 0 ? <div className="memory-empty" data-testid="mgmt-memory-empty"><FileText size={25} strokeWidth={1.25} aria-hidden="true" /><h4>还没有{files.selected.label}</h4><p>以后保留在这里的信息会显示在此处。</p>{writable ? <button type="button" data-testid="mgmt-memory-add" onClick={() => setEditingKey(selectedKey)} className={formSecondaryButtonClass}>添加内容</button> : null}</div> :
+              {(files.content ?? '').trim().length === 0 ? <div className="memory-empty" data-testid="mgmt-memory-empty"><FileText size={25} strokeWidth={1.25} aria-hidden="true" /><h4>还没有{files.selected.label}</h4>{writable ? <button type="button" data-testid="mgmt-memory-add" onClick={() => setEditingKey(selectedKey)} className={formSecondaryButtonClass}>添加内容</button> : null}</div> :
                 <div className="memory-reading" data-testid="mgmt-memory-reading"><LazyBoundary fallback={<FormNote>正在排版记忆…</FormNote>}><MarkdownView text={files.content ?? ''} /></LazyBoundary></div>}
               {selectedMeta?.updatedAt == null ? null : <p className="memory-updated">最近更新于 {formatBeijingDateTime(selectedMeta.updatedAt)}</p>}
             </>
@@ -132,7 +132,7 @@ function MemoryToolPanel({ tool, scope, files, previewRevision }: { tool: Memory
   if (memory === null) return null;
   if (tool === 'preview') return <MemoryPreview scope={scope} files={files} revision={previewRevision} />;
   if (tool === 'search') return <MemorySessionSearch scope={scope} files={files} />;
-  if (tool === 'audit') return <section data-testid="mgmt-memory-audit"><h3>最近变更</h3><p className="memory-tool-description">助手自动整理记忆的最近记录</p>
+  if (tool === 'audit') return <section data-testid="mgmt-memory-audit"><h3>自动整理记录</h3>
     {memory.autoMemory.recent.length === 0 ? <FormNote>还没有自动整理记录。</FormNote> : <ul className="memory-audit-list" data-testid="mgmt-memory-audit-list">{memory.autoMemory.recent.map((record) => <li key={record.id}>
       <p>{record.summary}</p><div className="memory-audit-meta"><span>{autoMemoryActionLabels[record.action]}</span><span>{formatBeijingDateTime(record.createdAt)}</span></div>
       <details><summary>处理详情</summary><p>{autoMemoryTypeLabels[record.type]}，{record.reason}</p>{record.targetPath === null ? null : <code>{record.targetPath}</code>}</details>
@@ -150,7 +150,7 @@ function MemoryToolPanel({ tool, scope, files, previewRevision }: { tool: Memory
 
 function MemoryPreview({ scope, files, revision }: { scope: ManagementScope; files: MemoryFilesStore; revision: number }): React.JSX.Element {
   const preview = useMemorySnapshot(scope.client, revision);
-  return <section data-testid="mgmt-memory-preview"><h3>生效内容预览</h3><p className="memory-tool-description">显示固定记忆中当前可确认的内容。依赖运行环境的经验需在对话启动后确定。</p>
+  return <section data-testid="mgmt-memory-preview"><h3>生效内容预览</h3><p className="memory-tool-description">仅预览固定记忆；环境相关记忆在对话启动后确定。</p>
     {preview.error !== null ? <FormNote tone="warn" testId="mgmt-memory-preview-error">{preview.error}</FormNote> : preview.status === 'loading' ? <FormNote>正在读取预览…</FormNote> : <>
       <p className="memory-tool-description" data-testid="mgmt-memory-preview-count">{preview.charCount} 字符，{snapshotIncludesSlot(preview.text ?? '', files.selected) ? '包含当前分类' : '未包含当前分类（内容为空或未生效）'}</p>
       <pre data-testid="mgmt-memory-preview-text">{preview.text || '当前没有可带入的记忆。'}</pre>
@@ -160,7 +160,7 @@ function MemoryPreview({ scope, files, revision }: { scope: ManagementScope; fil
 
 function MemorySessionSearch({ scope, files }: { scope: ManagementScope; files: MemoryFilesStore }): React.JSX.Element {
   const search = useSessionSearch(scope.client, files.memory?.workspaceHash ?? null);
-  return <section data-testid="mgmt-memory-search"><h3>从会话中查找</h3><p className="memory-tool-description">查找历史对话中的信息，结果不代表已保存为记忆。</p>
+  return <section data-testid="mgmt-memory-search"><h3>从会话中查找</h3><p className="memory-tool-description">结果不代表已保存为记忆。</p>
     <form className="memory-search-form" onSubmit={(event) => { event.preventDefault(); search.run(); }}>
       <label><span className="sr-only">查找会话内容</span><input value={search.query} onChange={(event) => search.setQuery(event.target.value)} placeholder="输入要查找的内容" data-testid="mgmt-memory-search-input" className={formInputClass} /></label>
       <label><span className="sr-only">查找范围</span><select value={search.workspaceScope} onChange={(event) => search.setWorkspaceScope(event.target.value === 'current' ? 'current' : 'all')} data-testid="mgmt-memory-search-scope" className={formInputClass}><option value="all">全部项目</option><option value="current" disabled={files.memory?.workspaceHash == null}>当前项目{files.memory?.workspaceHash == null ? '（不可用）' : ''}</option></select></label>

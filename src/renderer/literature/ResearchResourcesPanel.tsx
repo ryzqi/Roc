@@ -86,8 +86,8 @@ function ResourcesContent({client, projectId, writable, onLockChange}: Props): R
     run();
   };
   return <section aria-label="项目科研资源" className="space-y-3 px-3 py-2 text-[length:var(--font-body-size)]" data-testid="reader-resources-panel">
-    <p className="text-muted">查询数据集或软件 DOI。元数据许可字段不构成内容下载授权。</p>
-    <label className="block">资源 DOI
+    <p className="text-muted">元数据许可字段不构成内容下载授权。</p>
+    <label className="block">数据集或软件 DOI
       <input className="w-full min-w-0 rounded-control border-[0.5px] border-line bg-surface px-2 py-1 text-ink" value={doi}
         disabled={locked || request !== null || !writable} onChange={event => {
           if (!writable || submitting.current || cancelling.current || associationLock.current || requestRef.current !== null) return;

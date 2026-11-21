@@ -25,7 +25,7 @@ export function ArtifactSourceMigrations({client, projectId, evidenceId, canDeci
           if (!guard.locked()) read.reload();
         }}>刷新候选</button>
     </div>
-    <p className="text-muted">按解析时间和原始块顺序排列。位置捕获只保存新证据；主张与科学审核仍需另行重建。</p>
+    <p className="text-muted">位置捕获只保存新证据；主张与科学审核仍需另行重建。</p>
     {read.status === 'loading' ? <p role="status">正在读取定位候选…</p> : null}
     {read.error === null ? null : <p role="alert" className="text-st-bad">{read.error}</p>}
     {read.status !== 'ready' || read.data === null ? null : read.data.length === 0 ? <p className="text-muted">没有保存的同文档定位候选。</p> :

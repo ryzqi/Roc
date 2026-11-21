@@ -230,7 +230,7 @@ export function RunDiagnostics({
           data-testid="assistant-diagnostics-region"
           className="mt-1 max-h-[min(45vh,24rem)] overflow-y-auto rounded-control border-[0.5px] border-line p-2 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
         >
-          <p className="mb-2 text-subtle">仅本地脱敏数据，终态保留 30 天。未知 usage 不按零计算。</p>
+          <p className="mb-2 text-subtle">诊断数据在本地脱敏保存，运行结束后保留 30 天。未知用量不计为零。</p>
           {runStatus === 'interrupted' || resource.data?.terminalStatus === 'interrupted'
             ? <EffectRecovery key={`${threadId}:${runId}`} client={client} runId={runId} threadId={threadId} onChanged={resource.reload} /> : null}
           {resource.status === 'loading' ? <p role="status" className="text-subtle">读取诊断中…</p> :

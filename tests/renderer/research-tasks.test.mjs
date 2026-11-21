@@ -619,7 +619,7 @@ test('management tasks load without project model budget controls and retain tas
   await openDiagnostics();
   await page.getByTestId('mgmt-task-tree').waitFor();
   await page.getByTestId('mgmt-task-category-python').click();
-  await page.getByText('尚未选择 Python 环境。', {exact: true}).waitFor();
+  await page.getByText('暂无环境记录', {exact: true}).waitFor();
   await page.getByTestId('mgmt-task-category-research').click();
   await openDiagnostics();
   assert.equal(await page.getByTestId('mgmt-project-budget').count(), 0);

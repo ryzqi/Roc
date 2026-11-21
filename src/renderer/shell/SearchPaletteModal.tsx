@@ -199,10 +199,10 @@ export function SearchPaletteModal({
                groups here would show "没有匹配的文件名" the moment ⌘K opens, which
                reads as "your files are gone" rather than "type something". */
             <p className="px-1 py-6 text-center text-muted" data-testid="search-palette-idle">
-              输入关键词开始搜索。
+              输入关键词搜索
             </p>
           ) : groups.length === 0 ? (
-            <p className="px-1 py-6 text-center text-muted">尚未接入任何搜索分组。</p>
+            <p className="px-1 py-6 text-center text-muted">暂无可搜索的内容</p>
           ) : (
             groups.map((group) => (
               <section

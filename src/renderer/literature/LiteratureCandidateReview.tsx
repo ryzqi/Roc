@@ -97,7 +97,7 @@ export function LiteratureCandidateReview({candidate, pending, onAdd, inLibrary 
         {candidate.versionRelations.map((relation, index) => <p key={index} className="break-all text-muted">
           实际观察的 arXiv 修订 {relation.arxivId}：v{relation.older.version} 至 v{relation.newer.version}
         </p>)}
-        <p className="text-muted">主记录选择依据：固定来源优先级，其次来源排名和元数据 hash。引用量不代表可信度。</p>
+        <p className="text-muted">引用量不代表可信度。</p>
       </div>
     </details>
   </li>;

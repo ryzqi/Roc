@@ -455,7 +455,7 @@ export function LatexPanel(): React.JSX.Element {
             ) : null}
             {previewData !== null && previewData.kind !== 'text' ? (
               <InlineHint
-                text={`这个文件是 ${previewData.kind}，不在文稿编辑器里打开（预览请用文件视图）。`}
+                text="此文件无法编辑，请在文件视图中预览。"
                 testId="production-latex-not-text"
               />
             ) : null}
@@ -479,7 +479,7 @@ export function LatexPanel(): React.JSX.Element {
                   </section> : previewOpen&&(markdownPreview||mathPreview)?<section className="authoring-live-preview" aria-label={markdownPreview?'Markdown 实时预览':'所选公式预览'}>
                     <header>{markdownPreview?'实时预览':'所选公式预览'}</header>
                     <div className="authoring-preview-content"><LazyBoundary fallback={<p role="status">正在加载预览…</p>}>
-                      {markdownPreview?<ScientificMarkdown text={liveDraft}/>:selectedFormula.trim()?<ReadingFormula text={selectedFormula.trim().replace(/^\\[[(]|\\[)\]]$/g,'')}/>:<p className="text-muted">在源码中选中一段 LaTeX 公式，即可查看渲染结果。</p>}
+                      {markdownPreview?<ScientificMarkdown text={liveDraft}/>:selectedFormula.trim()?<ReadingFormula text={selectedFormula.trim().replace(/^\\[[(]|\\[)\]]$/g,'')}/>:<p className="text-muted">选中源码中的公式以预览</p>}
                     </LazyBoundary></div>
                   </section>:null}
                 </div>

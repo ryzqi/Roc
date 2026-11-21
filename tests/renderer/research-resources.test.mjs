@@ -141,7 +141,7 @@ async function open() {
   await page.getByTestId('reader-resources-toggle').click(); await page.getByTestId('reader-resources-panel').waitFor();
 }
 async function capture() {
-  await page.getByLabel('资源 DOI', {exact: true}).fill(doi);
+  await page.getByLabel('数据集或软件 DOI', {exact: true}).fill(doi);
   await page.getByRole('button', {name: '查询并保存资源', exact: true}).focus(); await page.keyboard.press('Enter');
   await page.getByTestId('reader-resource-observation').waitFor();
   await page.getByText('尚无人工关联', {exact: true}).waitFor();
@@ -157,7 +157,7 @@ async function fillLink() {
 
 test('resource capture is synchronous and its actual reader toggle cannot unmount the pending request', async () => {
   const f = scene(); await mount(f); await open();
-  await page.getByLabel('资源 DOI', {exact: true}).fill(doi);
+  await page.getByLabel('数据集或软件 DOI', {exact: true}).fill(doi);
   f.holdReply = 'captureResource'; f.replyStarted = deferred(); f.replyHold = deferred();
   await page.evaluate(() => {
     const capture = [...document.querySelectorAll('button')].find(button => button.textContent === '查询并保存资源');
@@ -166,14 +166,14 @@ test('resource capture is synchronous and its actual reader toggle cannot unmoun
   await f.replyStarted.promise;
   assert.equal(calls.filter(call => call.projectId === f.project.id && call.method === 'captureResource').length, 1);
   await expect(page.getByTestId('reader-resources-panel')).toBeVisible();
-  await expect(page.getByLabel('资源 DOI', {exact: true})).toBeDisabled();
+  await expect(page.getByLabel('数据集或软件 DOI', {exact: true})).toBeDisabled();
   f.holdReply = null; f.replyHold.release();
   await page.getByTestId('reader-resource-observation').waitFor();
 });
 
 test('resource cancellation stays independent and preserves the request until the capture actually exits', async () => {
   const f = scene(); f.waitNetwork = true; f.networkStarted = deferred(); f.abortObserved = deferred(); f.abortFinish = deferred();
-  await mount(f); await open(); await page.getByLabel('资源 DOI', {exact: true}).fill(doi);
+  await mount(f); await open(); await page.getByLabel('数据集或软件 DOI', {exact: true}).fill(doi);
   await page.getByRole('button', {name: '查询并保存资源', exact: true}).click(); await f.networkStarted.promise;
   f.holdReply = 'cancelResourceCapture'; f.replyStarted = deferred(); f.replyHold = deferred();
   await page.evaluate(() => {
@@ -185,7 +185,7 @@ test('resource cancellation stays independent and preserves the request until th
   f.holdReply = null; f.replyHold.release();
   await page.getByText('主进程已接收取消信号；等待查询结束。', {exact: true}).waitFor();
   await expect(page.getByRole('button', {name: '取消资源查询', exact: true})).toBeVisible();
-  await expect(page.getByLabel('资源 DOI', {exact: true})).toBeDisabled();
+  await expect(page.getByLabel('数据集或软件 DOI', {exact: true})).toBeDisabled();
   f.abortFinish.release(); await page.getByRole('button', {name: '重试原资源请求', exact: true}).waitFor();
 });
 
@@ -209,14 +209,14 @@ test('association writes synchronously freeze source selection and keep their ex
 });
 
 test('resource DOI and association drafts survive native unload and reading changes until confirmed', async () => {
-  const f = scene(); await mount(f); await open(); await page.getByLabel('资源 DOI', {exact: true}).fill(doi);
+  const f = scene(); await mount(f); await open(); await page.getByLabel('数据集或软件 DOI', {exact: true}).fill(doi);
   assert.equal(await page.evaluate(() => !window.dispatchEvent(new Event('beforeunload', {cancelable: true}))), true);
   const next = state(f, {selected: {...f.item, id: 'another-source'}});
   await page.evaluate(value => window.requestReaderChange(value), next);
   await page.getByTestId('literature-editor-discard').waitFor();
   assert.equal(await page.getByTestId('paper-reader').getAttribute('data-library-item'), f.item.id);
   await page.getByTestId('literature-editor-discard-cancel').click();
-  await expect(page.getByLabel('资源 DOI', {exact: true})).toHaveValue(doi);
+  await expect(page.getByLabel('数据集或软件 DOI', {exact: true})).toHaveValue(doi);
   await expect(page.getByTestId('literature-editor-discard')).toHaveCount(0);
   await capture(); await fillLink();
   await page.getByRole('button', {name: '放弃关联草稿并刷新', exact: true}).click();
@@ -262,7 +262,7 @@ test('unreported fields, explicitly empty sets and failed observations remain di
   await page.getByTestId('reader-resource-relations-disclosure').locator('summary').click();
   await page.getByText('来源报告 0 条关系', {exact: true}).waitFor();
   const failed = scene(); failed.errorStatus = 404; await mount(failed); await open();
-  await page.getByLabel('资源 DOI', {exact: true}).fill(doi);
+  await page.getByLabel('数据集或软件 DOI', {exact: true}).fill(doi);
   await page.getByRole('button', {name: '查询并保存资源', exact: true}).click();
   await page.getByText('失败观察不能关联到论文或实验', {exact: true}).waitFor();
   assert.equal(await page.getByRole('button', {name: '保存人工关联', exact: true}).count(), 0);
@@ -271,10 +271,10 @@ test('unreported fields, explicitly empty sets and failed observations remain di
 
 test('an uncertain capture fixes request identity until exact retry or explicit discard, including readonly mode', async () => {
   const f = scene(); f.dropReply = 'captureResource'; await mount(f); await open();
-  await page.getByLabel('资源 DOI', {exact: true}).fill(doi);
+  await page.getByLabel('数据集或软件 DOI', {exact: true}).fill(doi);
   await page.getByRole('button', {name: '查询并保存资源', exact: true}).click();
   await page.getByRole('button', {name: '重试原资源请求', exact: true}).waitFor();
-  assert.equal(await page.getByLabel('资源 DOI', {exact: true}).isEnabled(), false);
+  assert.equal(await page.getByLabel('数据集或软件 DOI', {exact: true}).isEnabled(), false);
   assert.equal(await page.getByTestId('reader-resources-toggle').isEnabled(), false);
   await page.getByRole('button', {name: '重试原资源请求', exact: true}).click();
   await page.getByTestId('reader-resource-observation').waitFor();
@@ -354,15 +354,15 @@ test('readonly keeps observations and associations accessible, and a readonly un
 
 test('cancel reaches the real service; late capture and history cannot cross project keys', async () => {
   const f = scene(); f.waitNetwork = true; f.networkStarted = deferred();
-  await mount(f); await open(); await page.getByLabel('资源 DOI', {exact: true}).fill(doi);
+  await mount(f); await open(); await page.getByLabel('数据集或软件 DOI', {exact: true}).fill(doi);
   await page.getByRole('button', {name: '查询并保存资源', exact: true}).click(); await f.networkStarted.promise;
   await page.getByRole('button', {name: '取消资源查询', exact: true}).click();
   await page.getByText('主进程已接收取消信号；等待查询结束。', {exact: true}).waitFor();
   assert.equal(f.resources.history({projectId: f.project.id, doi: null, offset: 0, limit: 20}).total, 0);
   await page.getByRole('button', {name: '重试原资源请求', exact: true}).waitFor();
-  await expect(page.getByLabel('资源 DOI', {exact: true})).toBeDisabled();
+  await expect(page.getByLabel('数据集或软件 DOI', {exact: true})).toBeDisabled();
   const held = scene(), next = scene(); held.holdReply = 'captureResource'; held.replyStarted = deferred(); held.replyHold = deferred();
-  await mount(held); await open(); await page.getByLabel('资源 DOI', {exact: true}).fill(doi);
+  await mount(held); await open(); await page.getByLabel('数据集或软件 DOI', {exact: true}).fill(doi);
   await page.getByRole('button', {name: '查询并保存资源', exact: true}).click(); await held.replyStarted.promise;
   active = next; await page.evaluate(value => window.updateReader(value), state(next));
   await page.getByText('尚无资源观察', {exact: true}).waitFor(); held.replyHold.release();

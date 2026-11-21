@@ -152,7 +152,6 @@
 .knowledge-relation-label { color: var(--muted); font-size: var(--font-meta-size); }
 .knowledge-graph-prompt { display: flex; flex: 1; min-height: 0; flex-direction: column; justify-content: center; align-items: center; gap: 16px; padding: 24px; text-align: center; color: var(--muted); }
 .knowledge-graph-prompt svg { color: var(--icon-graph); }
-.knowledge-relation-key { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; font-size: var(--font-meta-size); }
 .knowledge-scientific .knowledge-browser { min-height: 0; }
 .knowledge-scientific-status { padding: 8px 16px; color: var(--muted); font-size: var(--font-meta-size); border-bottom: .5px solid var(--line); }
 

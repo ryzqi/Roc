@@ -71,7 +71,7 @@ function MonitorsContent({client, projectId, items, writable, active, onLockChan
           requestAnimationFrame(() => listHeading.current?.focus({preventScroll:true}));
         }}>返回监控列表</button>
         <h3 ref={detailHeading} tabIndex={-1}>{creating ? '设置监控' : monitor.data?.title ?? '监控详情'}</h3>
-      </div> : <div className="monitor-empty"><h3>选择一项监控</h3><p>查看查询条件、检查记录和文献提醒，或新建一项监控。</p></div>}
+      </div> : <div className="monitor-empty"><h3>选择一项监控</h3></div>}
     {creating ? <MonitorEditor key="new" client={client} projectId={projectId} items={items} writable={writable}
       active={active} monitor={null} version={null} onLockChange={lock}
       onSaved={value => {setCreating(false); setSelected(value.id); refresh();}}/> : null}

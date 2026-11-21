@@ -42,11 +42,11 @@ export function ZoteroSection({client}: {client: RocClient}): React.JSX.Element 
       {connection?.status === 'disabled' ? <p className="text-[length:var(--font-meta-size)] text-muted" data-testid="settings-zotero-help">
         在 Zotero 的高级设置中允许其他应用通信，然后重新检测。
       </p> : connection?.status === 'unreachable' ? <p className="text-[length:var(--font-meta-size)] text-muted" data-testid="settings-zotero-help">
-        打开 Zotero 后重新检测。应用目录检测范围为 /Applications 与 ~/Applications。
+        打开 Zotero 后重新检测。
       </p> : connection?.status === 'unsupported' ? <p className="text-[length:var(--font-meta-size)] text-muted" data-testid="settings-zotero-help">
-        需要支持实例标识的 Zotero 10 或更新版本。
+        需要 Zotero 10 或更新版本。
       </p> : connection?.status === 'invalid_response' ? <p className="text-[length:var(--font-meta-size)] text-muted" data-testid="settings-zotero-help">
-        本地服务响应不符合 Zotero API 合同，请检查客户端。
+        Zotero 返回的数据无效，请检查客户端。
       </p> : null}
       {resource.error === null ? null : <p role="alert" className="flex items-start gap-1 text-[length:var(--font-meta-size)] text-[var(--st-warn)]" data-testid="settings-zotero-error"><AlertTriangle size={14} aria-hidden="true" />{resource.error}</p>}
     </section>

@@ -387,7 +387,7 @@ export function FileTreeView({
   ), [activePath, activateRow, onRowFocused, registerRowRef, selectedPath, tree.errors, tree.loading, tree.rows.length, treeFocused]);
 
   if (workspacePathKey === null) {
-    return <EmptyState compact title="未选择工作区" description="绑定工作目录后才会显示文件树。" testId="file-tree-no-workspace" />;
+    return <EmptyState compact title="未选择工作区" testId="file-tree-no-workspace" />;
   }
 
   /**
@@ -435,7 +435,7 @@ export function FileTreeView({
   }
 
   if (tree.rows.length === 0) {
-    return <EmptyState compact icon={Folder} title="目录为空" description="该工作目录下没有文件。" testId="file-tree-empty" />;
+    return <EmptyState compact icon={Folder} title="目录为空" testId="file-tree-empty" />;
   }
 
   return (

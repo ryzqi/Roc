@@ -36,7 +36,6 @@ function Observations({client, execution}: {client: RocClient; execution: Resear
       {telemetry.trace.droppedSpanCount === 0 ? null : <p className="text-[var(--st-warn)]">时间线已省略 {telemetry.trace.droppedSpanCount} 项。</p>}
     </>}
     {data === null ? null : <>
-      <p className="text-subtle">模型调用耗时来自实际调用；未记录的耗时显示未知。</p>
       <ol className="grid gap-2" aria-label="调用记录">
         {data.calls.calls.map(call => <li key={call.sequence} className="grid gap-1" data-testid="mgmt-task-call">
           <p className="break-all font-mono">调用 {call.callId}</p>

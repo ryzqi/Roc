@@ -65,6 +65,6 @@ export default function ReadingDiscoveryPanel({client,projectId,itemId,writable,
         {article.summary?<details className="ml-5"><summary>摘要</summary><p className="whitespace-pre-wrap">{article.summary}</p></details>:null}
       </article>)}
       {result.nextOffset!==null?<button type="button" disabled={busy} onClick={()=>void load(false,result.nextOffset!)}>加载更多</button>:null}
-    </>:<p className="py-3 text-muted">根据当前论文查找参考文献或引用它的新论文，选中后批量加入当前项目。</p>}
+    </>:null}
   </section>;
 }

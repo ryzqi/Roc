@@ -326,7 +326,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
           )}
           {tasks.runs.length === 0 ? (
             <FormNote testId="mgmt-task-runs-empty">
-              {tasks.runsStatus === 'loading' ? '读取调度记录中…' : '还没有调度记录（手动任务不会产生调度行）。'}
+              {tasks.runsStatus === 'loading' ? '读取调度记录中…' : '暂无调度记录，手动运行不计入。'}
             </FormNote>
           ) : (
             <ul className="flex flex-col gap-0.5" data-testid="mgmt-task-runs">
@@ -351,7 +351,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
         >
           <fieldset disabled={tasks.busy} className="flex min-w-0 flex-col gap-3 disabled:opacity-50">
           <label className="flex flex-col gap-0.5">
-            <span className="text-subtle text-[length:var(--font-micro-size)]">目标（会作为这一轮任务的目标）</span>
+            <span className="text-subtle text-[length:var(--font-micro-size)]">任务目标</span>
             <textarea
               value={draft.goal}
               rows={3}
@@ -377,7 +377,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
               </select>
             </label>
             <label className="flex flex-col gap-0.5">
-              <span className="text-subtle text-[length:var(--font-micro-size)]">触发描述（显示在列表里）</span>
+              <span className="text-subtle text-[length:var(--font-micro-size)]">触发描述</span>
               <input
                 value={draft.triggerDescription}
                 onChange={(event) => tasks.setDraft(draftField(draft, 'triggerDescription', event.target.value))}
@@ -388,7 +388,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
             {draft.triggerType === 'manual' ? null : (
               <label className="flex flex-col gap-0.5">
                 <span className="text-subtle text-[length:var(--font-micro-size)]">
-                  首次运行时间（本地时间；once 就是唯一一次）
+                  首次运行时间（本地时间）
                 </span>
                 <input
                   type="datetime-local"
@@ -435,7 +435,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
           </div>
           {tasks.mode === 'edit' ? (
             <label className="flex flex-col gap-0.5">
-              <span className="text-subtle text-[length:var(--font-micro-size)]">修改原因（必填，会记进任务溯源）</span>
+              <span className="text-subtle text-[length:var(--font-micro-size)]">修改原因（必填）</span>
               <input
                 value={draft.reason}
                 onChange={(event) => tasks.setDraft(draftField(draft, 'reason', event.target.value))}

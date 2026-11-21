@@ -197,7 +197,7 @@ export function GitChangeLists({
   if (noChanges) {
     return (
       <p className="px-2 py-4 text-muted text-[length:var(--font-meta-size)]" data-testid="git-changes-clean">
-        工作区干净，没有未提交的改动。
+        没有未提交的改动
       </p>
     );
   }

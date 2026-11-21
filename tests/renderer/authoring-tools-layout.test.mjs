@@ -141,7 +141,7 @@ test('authoring uses real Markdown math previews and protects drafts when changi
   await expect(page.getByTestId('latex-dirty-indicator')).toHaveText('已保存');
   assert.equal(await page.evaluate(() => window.writes.at(-1).content), '# Updated\n\n$F=ma$');
   await selectFile('main.tex');
-  await expect(page.getByRole('region', {name: '所选公式预览'})).toContainText('选中一段 LaTeX');
+  await expect(page.getByRole('region', {name: '所选公式预览'})).toContainText('选中源码中的公式以预览');
   await source.focus();
   await source.press('Meta+A');
   await expect(page.getByRole('region', {name: '所选公式预览'}).locator('.katex')).toHaveCount(1);

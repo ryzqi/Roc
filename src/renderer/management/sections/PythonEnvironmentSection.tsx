@@ -24,7 +24,7 @@ export function PythonEnvironmentSection({ client, projectId }: {
   return (
     <FormSection title="项目 Python 环境" testId="mgmt-python-environment">
       <p className="text-muted text-[length:var(--font-meta-size)]">
-        Roc 自动检测并核验项目 Python 环境，首次使用时自动记录版本与依赖。无需选择解释器，运行前会再次检查环境。
+        环境自动准备，无需选择解释器。
       </p>
       {resource.status === 'error' ? (
         <div className="grid gap-2">
@@ -37,11 +37,12 @@ export function PythonEnvironmentSection({ client, projectId }: {
         <>
           {data.project.status === 'archived' ? <p className="text-subtle">项目已归档，环境记录只读。</p>
             : data.project.workspacePath === null ? <p className="text-subtle">请先为项目设置工作目录。</p> : null}
-          {data.selections.length === 0 ? <p className="text-subtle">Python 环境将在项目使用时自动准备。</p> : (
+          {data.selections.length === 0 ? <p className="text-subtle">暂无环境记录</p> : (
             <details data-testid="mgmt-python-environment-history">
               <summary className="cursor-pointer text-muted focus-visible:outline-2 focus-visible:outline-focus-ring">
                 环境记录（{data.selections.length}）
               </summary>
+              <p className="mt-2 text-subtle">记录时已核验，运行前会再次检查。</p>
               <ol className="mt-2 grid gap-3 text-[length:var(--font-meta-size)]">
                 {[...data.selections].reverse().map(({ snapshot }) => (
                   <li key={snapshot.id} className="grid min-w-0 gap-1">
@@ -49,7 +50,6 @@ export function PythonEnvironmentSection({ client, projectId }: {
                       <span className="ml-2 text-subtle">记录于 {date.format(new Date(snapshot.recordedAt))}</span>
                     </p>
                     <p dir="ltr" className="break-all font-mono text-muted">{snapshot.selectedExecutable}</p>
-                    <p className="text-subtle">记录时已核验，运行前会再次检查。</p>
                   </li>
                 ))}
               </ol>

@@ -100,7 +100,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
         </label>
         {skills.status === 'loading' && skills.skills.length === 0 ? (
           <FormNote testId="mgmt-skills-loading">正在读取技能目录…</FormNote>
-        ) : visibleSkills.length === 0 ? <p className="management-list-empty" data-testid="mgmt-skills-empty">{skills.skills.length === 0 ? '还没有技能，可导入本地技能或安装内置技能源。' : '没有符合条件的技能，试试其他关键词。'}</p> : (
+        ) : visibleSkills.length === 0 ? <p className="management-list-empty" data-testid="mgmt-skills-empty">{skills.skills.length === 0 ? '尚未安装技能' : '没有符合条件的技能'}</p> : (
           <ul className="flex flex-col gap-1" data-testid="mgmt-skills-rows">
             {visibleSkills.map((skill) => {
               const selected = browserOpen && skill.id === skills.selectedId;

@@ -92,9 +92,9 @@ export function ManagementPanel({
           testIdPrefix="mgmt"
         />
 
-        {tab === 'tasks' ? null : <p className="shrink-0 text-muted text-[length:var(--font-meta-size)]" data-testid="mgmt-summary">
+        {tab === 'skills' || tab === 'mcp' ? <p className="shrink-0 text-muted text-[length:var(--font-meta-size)]" data-testid="mgmt-summary">
           {managementSummary(tab, visibleSummaries)}
-        </p>}
+        </p> : null}
 
         <ManagementSectionBody tab={tab} scope={scope} idPrefix="mgmt-drawer" testIdPrefix="mgmt" />
       </div>

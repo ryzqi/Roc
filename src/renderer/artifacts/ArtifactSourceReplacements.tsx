@@ -51,7 +51,7 @@ export function ArtifactSourceReplacements({client, source, canDecide, onChanged
               <option key={evidence.id} value={evidence.id}>{evidence.title}，{evidence.locator}，{evidence.id}</option>)}
           </select>
         </label>
-        <p className="text-muted">按捕获顺序从新到旧排列；同名或相似文本不代表替代关系。</p>
+        <p className="text-muted">同名或相似文本不代表替代关系。</p>
         {targetId === '' ? null : <ReplacementSelection key={targetId} client={client} projectId={projectId}
           evidenceId={evidenceId} targetId={targetId} onChanged={onChanged} onPending={setPending}/>}
       </>}
@@ -164,7 +164,7 @@ function SelectedSource({label, source, digest}: {
 function RunFacts({previous, current}: {previous: ResearchExperimentExecution; current: ResearchExperimentExecution}): React.JSX.Element {
   return <details data-testid="artifact-source-replacement-runs" className="min-w-0 [&::details-content]:overflow-clip!">
     <summary className="cursor-pointer">实验前后输入、环境与输出</summary>
-    <p className="mt-2 text-muted">以下是保存的运行事实；输出变化与科学等价需另行判断。</p>
+    <p className="mt-2 text-muted">输出变化与科学等价需另行判断。</p>
     <div className="mt-2 flex min-w-0 flex-col gap-2">
       {[{label: '前序', execution: previous}, {label: '重跑', execution: current}].map(({label, execution}) => {
         return <div key={execution.id} className="min-w-0 border-t-[0.5px] border-line pt-2">

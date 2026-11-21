@@ -62,7 +62,7 @@ export default function ResourceAssociationsPanel({client, resource, writable, o
   const nextTarget = targets.data?.nextOffset ?? null, nextHistory = history.data?.nextOffset ?? null;
   return <section aria-label="资源版本关联" className="space-y-2 border-t-[0.5px] border-line pt-3" data-testid="reader-resource-associations">
     <h3 className="font-medium">资源版本关联</h3>
-    <p className="text-muted">人工声明资源与目标相关；不证明实际下载或使用了哪些字节。</p>
+    <p className="text-muted">关联仅为人工声明，不证明资源已下载或使用。</p>
     {!writable ? <p role="status">项目只读，保存历史仍可查看</p> : null}
     {resource.status !== 'ok' ? <p>失败观察不能关联到论文或实验</p> : <>
       <fieldset disabled={!writable || locked} className="space-y-2">

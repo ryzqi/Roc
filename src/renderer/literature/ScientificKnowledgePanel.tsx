@@ -127,7 +127,7 @@ function KnowledgePage({client, request, graph, onFactFilter}: {
                 reference={selected.source} record={{kind: selected.kind, id: selected.value.id, candidateId: selected.value.candidateId}}
                 onSelectEntity={selectEntity} onFactFilter={onFactFilter} graph={graph}/>
             </div></div>
-          </> : <EmptyState icon={Network} title="选择一个知识条目" description="查看实验事实、关系和原始出处。"/>}
+          </> : <EmptyState icon={Network} title="选择一个知识条目"/>}
         </div>
       </div>
     </> : null}

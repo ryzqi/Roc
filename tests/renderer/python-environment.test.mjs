@@ -68,7 +68,7 @@ after(async () => {
   finally { if (directory) rmSync(directory, { recursive: true, force: true }); }
   assert.deepEqual(errors, []);
 });
-const ready = () => page.getByText('Python 环境将在项目使用时自动准备。', {exact: true}).waitFor();
+const ready = () => page.getByText('暂无环境记录', {exact: true}).waitFor();
 
 test('environment prepares automatically without asking for interpreter or lock selection', async () => {
   await page.evaluate(() => { reset(); mount(); });

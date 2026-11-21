@@ -418,11 +418,6 @@ export function McpSection({
                     ? '还没有 MCP 服务'
                     : '没有符合条件的服务'}
                 </p>
-                <p className="text-[length:var(--font-meta-size)]">
-                  {mcp.rows.length === 0
-                    ? '添加服务，让助手使用外部工具。'
-                    : '试试其他关键词，或查看全部服务。'}
-                </p>
                 {mcp.rows.length === 0 ? null : (
                   <button
                     type="button"
@@ -477,7 +472,6 @@ export function McpSection({
           >
             添加服务
           </h3>
-          <p className="text-muted">使用预置服务，或填写自己的服务配置。</p>
           <button
             type="button"
             className={`${actionClass} self-start`}
@@ -602,7 +596,7 @@ export function McpSection({
             manifestToolsForServer(mcp.preview, selected.server.id).length ===
               0 ? (
               <p className="py-3 text-muted">
-                当前预览没有提供工具。可检查配置或工具限制后刷新预览。
+                暂无工具。检查配置或工具限制后刷新。
               </p>
             ) : null}
           </FormSection>
@@ -647,9 +641,6 @@ export function McpSection({
               >
                 {mcp.test.pending ? '校验中…' : '校验配置'}
               </button>
-              <span className="text-[length:var(--font-meta-size)] text-muted">
-                仅检查配置完整性，尚未检查实际连接。
-              </span>
             </div>
             {mcp.test.results[selected.server.id] === undefined ? null : (
               <FormNote

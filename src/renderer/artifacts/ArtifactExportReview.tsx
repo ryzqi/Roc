@@ -36,7 +36,6 @@ export function ArtifactExportReview({client, snapshot, writable, locked, onDirt
   const discard = (): void => {setSelection(null); setChosen(null); setFigureIds([]); setTemplateId(''); setSelectionError(null); reportDirty(false);};
   return <section className="mt-2 flex min-w-0 flex-col gap-3" data-testid="artifact-export-review" aria-label="公开科研导出">
     <h2 className="font-medium">公开科研导出</h2>
-    <p className="text-muted">RO-Crate 1.2，roc-research-1</p>
     {(writable || selection !== null || dirty) && chosen === null ? <>
       <fieldset disabled={controlsLocked || !writable || inputs.status === 'loading'} className="flex min-w-0 flex-col gap-2">
         <legend className="mb-2">已批准图稿</legend>

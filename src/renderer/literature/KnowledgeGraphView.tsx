@@ -216,9 +216,7 @@ function RecordedKnowledgeGraph({
           {selectedNode === undefined ? (
             <div className="knowledge-graph-prompt" data-testid="graph-no-selection">
               <Compass size={32} strokeWidth={1.5} aria-hidden="true"/>
-              <h3 className="text-ink">从一个节点开始探索</h3>
-              <p>选择文献、主张或证据，查看它们如何关联。</p>
-              <p className="knowledge-relation-key"><span>主张</span><span>→ 引用 →</span><span>证据</span><span>→ 来源 →</span><span>文献</span></p>
+              <h3 className="text-ink">选择一个节点</h3>
             </div>
           ) : (
             <>

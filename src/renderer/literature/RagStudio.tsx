@@ -413,7 +413,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
             <ErrorBar error={{ level: 'page', message: filesResource.error ?? '读取索引文件失败', retry: reloadFiles }} />
           ) : filesResource.status === 'loading' ? <p role="status">正在读取索引文件…</p> : indexedFiles.length === 0 ? (
             <p className="text-subtle text-[length:var(--font-micro-size)]" data-testid="rag-no-files">
-              当前工作目录还没有已索引文件。选择「增量扫描」可添加新文件。
+              暂无已索引文件，选择「增量扫描」添加。
             </p>
           ) : (
             <div role="region" aria-label="已索引文件" tabIndex={0} className="max-w-full overflow-x-auto" data-testid="rag-files-scroll">
@@ -597,7 +597,7 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
                   </div>
                 </details>
               </div>
-              {result.hits.length === 0 ? <EmptyState compact icon={Search} title="没有找到相关内容" description="尝试更具体的关键词，或在管理索引中检查资料是否已收录。"
+              {result.hits.length === 0 ? <EmptyState compact icon={Search} title="没有找到相关内容" description="修改关键词，或在管理索引中检查资料。"
                 action={{label: '修改查询', onClick: () => queryRef.current?.focus()}} testId="rag-no-hits" /> : (
                 <ol className="rag-hit-list" data-testid="rag-hits">
                   {result.hits.map((hit, index) => {

@@ -144,7 +144,7 @@ export default function DiscoverySearch({ store, actions, writable, onOpenLibrar
       {receipt === null ? null : <section aria-label="添加结果" data-testid="discovery-receipt" className="mt-4 border-t-[0.5px] border-line pt-4">
         <p role="status" className="tabular-nums">已收录 {receipt.result.counts.created + receipt.result.counts.linked} 篇，重复 {receipt.result.counts.alreadyPresent} 篇，
           需处理 {receipt.result.counts.skippedArchived + receipt.result.counts.cancelled + receipt.result.counts.notProcessed} 篇，失败 {receipt.result.counts.failed} 篇</p>
-        <p className="mt-2 text-muted">论文信息收录结果；全文、解析与索引状态请在文献库查看。</p>
+        <p className="mt-2 text-muted">全文、解析与索引进度见文献库。</p>
         <ul className="mt-2 space-y-2">{receipt.result.items.map(item => <li key={item.entryKey} className="text-muted">
           {item.inputPositions.map(index => receipt.titles[index]).join('、')}：{DISPOSITION[item.disposition]}{item.errorCode === null ? '' : `（${item.errorCode}）`}
         </li>)}</ul>

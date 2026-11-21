@@ -79,7 +79,7 @@ export function WikiPages({client, projectId, snapshot, writable, onAskAssistant
         <div className="knowledge-detail-scroll"><div className="knowledge-reading-column">
         {creating ? <CreatePage client={client} projectId={projectId} snapshot={snapshot} writable={writable}
           onClose={() => {setCreating(false); setBrowsing(selected === null);}} onCreated={id => {setSelected(id); setCreating(false); pages.reload();}}/> :
-          selected === null ? <EmptyState icon={BookOpen} title="选择一页知识" description="从目录打开论文、主题或比较，查看内容和原始来源。"/> :
+          selected === null ? <EmptyState icon={BookOpen} title="选择一页知识"/> :
           <PageDetail key={selected} client={client} projectId={projectId} pageId={selected} writable={writable}
             onAskAssistant={onAskAssistant} onEditing={onEditing} onNavigate={id => {setSelected(id); setBrowsing(false);}} onChanged={pages.reload}/>}
         </div></div>

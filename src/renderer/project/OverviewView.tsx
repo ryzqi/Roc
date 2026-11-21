@@ -90,7 +90,6 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
       </header>
       {project.error === null ? null : <ErrorBar error={{level: 'page', message: project.error, retry: project.reload}}/>}
       {scope.workspaceError === null ? null : <ErrorBar error={{level: 'blocked', message: scope.workspaceError, retry: scope.rebindWorkspace}}/>}
-      {!scope.writable ? <p role="note" className="text-muted">项目已归档，现有文献与成果仍可查看。</p> : null}
 
       {scope.firstStepsVisible ? <FirstSteps writable={scope.writable} requestId={scope.firstStepsRequestId} onDismiss={scope.dismissFirstSteps}
         onDiscover={() => scope.openView('discover')} onImport={addLiterature}
