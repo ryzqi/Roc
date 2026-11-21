@@ -26,7 +26,11 @@
         "fileName": "nature-skills.tar.gz",
         "sha256": "018bcca9d8aa2ce2c89c32212665246915de24c3b753cde41e67968f762fc833",
         "sizeBytes": 31516111
-      }
+      },
+      "referenceDirs": [
+        "nature-shared/core",
+        "nature-shared/journal-formats"
+      ]
     },
     {
       "id": "academic-research-skills",
@@ -56,7 +60,8 @@
         "fileName": "academic-research-skills.tar.gz",
         "sha256": "475c6a0bfaf69c27ec1e8ee35d1253e4e4b3af3443c04196d3fb8a540acf2ec1",
         "sizeBytes": 1410276
-      }
+      },
+      "referenceDirs": []
     }
   ]
 }

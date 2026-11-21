@@ -35,7 +35,8 @@ export class ResearchStageRuntime {
     gate: ResearchHumanGate,
     private readonly effects: ResearchProductionEffectService,
     private readonly onChanged?: (taskId: string, projectId: string) => void,
-    private readonly concurrency: 1 | 2 = 1
+    private readonly concurrency: 1 | 2 = 1,
+    private readonly checkReadiness?: (run: ResearchStageRun, signal: AbortSignal) => Promise<void>
   ) {
     if (executor === undefined || executor === null) throw new Error('research_model_executor_required');
     if (effects === undefined || effects === null) throw new Error('research_effect_coordinator_required');
@@ -427,6 +428,9 @@ export class ResearchStageRuntime {
     signal.throwIfAborted();
     this.repository.tasks.requireExecution('stage', queued.id, queued.projectId);
     this.repository.runs.requireActive(queued.id, queued.projectId);
+    this.repository.runs.assertInputsCurrent(queued);
+    if (this.checkReadiness !== undefined) await withAbort(this.checkReadiness(queued, signal), signal);
+    signal.throwIfAborted();
     if (this.executor === undefined) throw new Error('research_model_executor_unavailable');
     const modelConfig = this.repository.tasks.modelConfigForExecution('stage', queued.id, queued.projectId);
     const prepared = await withAbort(this.executor.prepare(queued.policy.model, modelConfig), signal);

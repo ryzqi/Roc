@@ -4,8 +4,6 @@ import { mkdtemp, readFile, rm, mkdir, cp } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 
 const constructed = [
   'ResearchDiagramService', 'ResearchProseLintService', 'ReferenceCheckService', 'ReadingRepository',
@@ -19,12 +17,7 @@ const constructed = [
   'ResearchReviewQualityAssessmentRepository', 'ResearchReviewStudiesRepository', 'ResearchReviewReportService'
 ];
 
-export async function loadResearchPluginApi({ legacy = false, observe = false, productionWorkers = false, referenceGitSha } = {}) {
-  if (referenceGitSha !== undefined && (!/^[a-f0-9]{7,40}$/u.test(referenceGitSha) || legacy)) {
-    throw new Error('fixture_reference_revision_invalid');
-  }
-  const referenceIndex = referenceGitSha === undefined ? undefined : (await promisify(execFile)('git',
-    ['show', `${referenceGitSha}:src/main/plugins/research/index.ts`], { maxBuffer: 2 * 1024 * 1024 })).stdout;
+export async function loadResearchPluginApi({ observe = false, productionWorkers = false } = {}) {
   const directory = join(process.cwd(), '.runtime', 'tmp', `research-plugin-${randomUUID()}`);
   await mkdir(directory, { recursive: true });
   const outfile = join(directory, 'api.mjs');
@@ -62,9 +55,7 @@ export async function loadResearchPluginApi({ legacy = false, observe = false, p
             loader: 'js'
           }));
           builder.onLoad({ filter: /plugins\/research\/(?:index|research-plugin-[^/]+)\.ts$/ }, async args => {
-            const isIndex = /\/index\.ts$/u.test(args.path);
-            let contents = isIndex && referenceIndex !== undefined ? referenceIndex :
-              await readFile(isIndex && legacy ? 'tests/fixtures/research-plugin-legacy.ts' : args.path, 'utf8');
+            let contents = await readFile(args.path, 'utf8');
             if (observe) {
               // Constructors moved into domain units; instrument only actual constructor sites.
               const names = constructed.filter(name => contents.includes(`new ${name}(`));

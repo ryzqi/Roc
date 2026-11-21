@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "roc-experiment-provenance",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "stage": "experiment",
   "description": "设计可复现实验并记录数据、参数、环境及结果来源。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "eacf619c20285856dd9dd230121d1eacf88b3c24b6f8b0aa43a15642f18f2fa6"
+    "hash": "be016d00af0514a4758721b61f00adcbed1af9f8d12f1c0147655323bfbc3556"
   },
   "references": [],
   "license": {
@@ -20,7 +20,7 @@
     "kind": "project",
     "origin": "Roc/resources/research-skills/experiment",
     "revision": "s05-1.2.0",
-    "hash": "eacf619c20285856dd9dd230121d1eacf88b3c24b6f8b0aa43a15642f18f2fa6"
+    "hash": "be016d00af0514a4758721b61f00adcbed1af9f8d12f1c0147655323bfbc3556"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
@@ -54,5 +54,30 @@
       "hash": "fcfb744f0b1fc25bda423511649bfae0ff606b89c03c60bd0bc7a23f9dc93e2c"
     }
   ],
-  "runtimeContract": "roc-research-stage/v2"
+  "runtimeContract": "roc-research-stage/v2",
+  "sharedReferences": [
+    {
+      "path": "shared/research-integrity.md",
+      "hash": "d681f636786d001f2db03c31e018141dd00b09b4515be303300c7572ee77af52",
+      "license": {
+        "id": "LicenseRef-Roc-Internal",
+        "resource": {
+          "path": "shared/LICENSE.md",
+          "hash": "f433196c52832a86f62312c1fc8ec45547da6ab2167ec47681a41a119c8c97a9"
+        }
+      }
+    },
+    {
+      "path": "shared/production-readiness.md",
+      "hash": "47cdd875e9796cc4312c8605f0a759a7f7912e8fcb07a92bb0bb5ceed3742089",
+      "license": {
+        "id": "LicenseRef-Roc-Internal",
+        "resource": {
+          "path": "shared/LICENSE.md",
+          "hash": "f433196c52832a86f62312c1fc8ec45547da6ab2167ec47681a41a119c8c97a9"
+        }
+      }
+    }
+  ],
+  "readiness": []
 }

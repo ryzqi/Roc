@@ -5,6 +5,7 @@ const id = z.string().regex(/^[a-z][a-z0-9-]*$/u).max(100);
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 const resourcePath = z.string().max(200).regex(/^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*\.[A-Za-z0-9]+$/u);
 const resource = z.object({path: resourcePath, hash}).strict();
+const licenseId = z.enum(['LicenseRef-Roc-Internal', 'MIT', 'Apache-2.0', 'CC-BY-NC-4.0']);
 const capability = z.string().regex(/^research\.[A-Za-z]+(?:\.[A-Za-z]+)+$/u);
 const uniqueCapabilities = z.array(capability).max(100).refine(values => new Set(values).size === values.length);
 
@@ -13,8 +14,15 @@ export const researchSkillManifestSchema = z.object({
   id, version: z.string().regex(/^\d+\.\d+\.\d+$/u), stage: researchStageSchema,
   description: z.string().trim().min(1).max(500),
   entry: resource, references: z.array(resource).max(20),
+  sharedReferences: resource.extend({
+    path: resourcePath.refine(path => path.startsWith('shared/'), 'research_skill_shared_path_required'),
+    license: z.strictObject({id: licenseId, resource: resource.extend({
+      path: resourcePath.refine(path => path.startsWith('shared/'), 'research_skill_shared_path_required')
+    })})
+  }).array().max(20),
+  readiness: z.enum(['figure_renderer', 'export_toolchain']).array().max(2).refine(values => new Set(values).size === values.length),
   license: z.object({
-    id: z.enum(['LicenseRef-Roc-Internal', 'MIT', 'Apache-2.0', 'CC-BY-NC-4.0']),
+    id: licenseId,
     resource
   }).strict(),
   source: z.object({kind: z.enum(['project', 'third_party']), origin: z.string().min(1).max(500),
@@ -30,6 +38,12 @@ export const researchSkillManifestSchema = z.object({
 }).strict().superRefine((value, ctx) => {
   const paths = [value.entry.path, value.license.resource.path, ...value.references.map(entry => entry.path), ...value.evalCases.map(entry => entry.path)];
   if (new Set(paths).size !== paths.length) ctx.addIssue({code: 'custom', message: 'research_skill_resources_duplicate'});
+  if (new Set(value.sharedReferences.map(resource => resource.path)).size !== value.sharedReferences.length) {
+    ctx.addIssue({code: 'custom', message: 'research_skill_resources_duplicate'});
+  }
+  if (value.references.some(resource => resource.path.startsWith('shared/'))) {
+    ctx.addIssue({code: 'custom', message: 'research_skill_shared_license_required'});
+  }
   if (value.source.hash !== value.entry.hash) ctx.addIssue({code: 'custom', message: 'research_skill_source_hash_mismatch'});
   if (value.license.id === 'LicenseRef-Roc-Internal' && value.source.kind !== 'project') {
     ctx.addIssue({code: 'custom', message: 'research_skill_internal_license_requires_project_origin'});

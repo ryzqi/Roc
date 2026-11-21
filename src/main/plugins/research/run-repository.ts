@@ -631,12 +631,12 @@ export class ResearchRunRepository {
     for (const artifactId of artifactIds) {
       const {snapshot} = this.research.inspectArtifact({projectId, artifactId, expectedVersion: null});
       const {artifact, content, origin, claims, evidence, relations, production, ideaCanvas, ideaPlan,
-        ideaOutcomes, citationReviews, consistencyReviews, responseMatrix, journalCompliance, provenance, scientificReview} = snapshot;
+        ideaOutcomes, citationReviews, consistencyReviews, responseMatrix, journalCompliance, provenance, scientificReview, manuscript} = snapshot;
       // UI state (current stage, available actions) changes as this run starts. Only freeze input material.
       versions.set(`artifact:${artifactId}`, {kind: 'artifact', id: artifactId,
         hash: hashStageValue({artifact, content, origin, claims, evidence, relations, production, ideaCanvas,
           ideaPlan, ideaOutcomes, citationReviews, consistencyReviews, responseMatrix, journalCompliance, provenance,
-          ...(scientificReview === undefined ? {} : {scientificReview})})});
+          ...(scientificReview === undefined ? {} : {scientificReview}), ...(manuscript === undefined ? {} : {manuscript})})});
       for (const source of evidence) versions.set(`source:${source.evidence.id}`,
         {kind: 'source', id: source.evidence.id, hash: hashStageValue(source)});
       if (ideaPlan !== null) versions.set(`plan:${artifactId}`, {kind: 'plan', id: artifactId, hash: hashStageValue(ideaPlan)});

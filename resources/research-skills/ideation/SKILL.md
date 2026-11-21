@@ -12,3 +12,5 @@ description: 围绕文献证据形成可检验的研究想法。
 输出完整 ideaCanvas，由系统写入当前项目的 Idea Canvas 工件。
 
 为每个优先方向列出竞争假设、能区分它们的观测、可导致放弃该方向的失败条件，以及既有负结果或替代解释。贡献与 SOTA 只在已检查的比较条件和检索范围内陈述。
+
+[共享参考：research-integrity](../shared/research-integrity.md)

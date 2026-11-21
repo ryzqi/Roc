@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "roc-manuscript-export",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "stage": "export",
   "description": "核查已批准文稿、图稿、来源与可复现材料的完整性。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "d174e7255fb75afc813bc0cc201766c29ececa23eb13fc52dc88568517da75f2"
+    "hash": "fa8c57748568b83c1283d0f10958f6cc1ee6dc0598b9621bc6fd95420ff1a06a"
   },
   "references": [],
   "license": {
@@ -20,7 +20,7 @@
     "kind": "project",
     "origin": "Roc/resources/research-skills/export",
     "revision": "s05-1.2.0",
-    "hash": "d174e7255fb75afc813bc0cc201766c29ececa23eb13fc52dc88568517da75f2"
+    "hash": "fa8c57748568b83c1283d0f10958f6cc1ee6dc0598b9621bc6fd95420ff1a06a"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
@@ -55,5 +55,32 @@
       "hash": "788dfbf87f375e8f52f473c24bc583284bb1d86b4dba844e9b846ffb8ac3e12a"
     }
   ],
-  "runtimeContract": "roc-research-stage/v2"
+  "runtimeContract": "roc-research-stage/v2",
+  "sharedReferences": [
+    {
+      "path": "shared/research-integrity.md",
+      "hash": "d681f636786d001f2db03c31e018141dd00b09b4515be303300c7572ee77af52",
+      "license": {
+        "id": "LicenseRef-Roc-Internal",
+        "resource": {
+          "path": "shared/LICENSE.md",
+          "hash": "f433196c52832a86f62312c1fc8ec45547da6ab2167ec47681a41a119c8c97a9"
+        }
+      }
+    },
+    {
+      "path": "shared/production-readiness.md",
+      "hash": "47cdd875e9796cc4312c8605f0a759a7f7912e8fcb07a92bb0bb5ceed3742089",
+      "license": {
+        "id": "LicenseRef-Roc-Internal",
+        "resource": {
+          "path": "shared/LICENSE.md",
+          "hash": "f433196c52832a86f62312c1fc8ec45547da6ab2167ec47681a41a119c8c97a9"
+        }
+      }
+    }
+  ],
+  "readiness": [
+    "export_toolchain"
+  ]
 }

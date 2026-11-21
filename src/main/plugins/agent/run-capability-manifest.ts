@@ -403,7 +403,7 @@ function compileManifestSkills(skills: SkillSnapshot[]): RunCapabilityManifestSk
     const revision = readSkillRevision(skill.path);
     return { canonicalIdentity: `skill:${skill.id}`, name: skill.name, sourcePath: skill.path,
       description: skill.description, contentHash: revision.contentHash, license: revision.license,
-      licenseHash: revision.licenseHash, sourceRevision: skill.upstreamCommit };
+      licenseHash: revision.licenseHash, sourceRevision: skill.upstreamCommit, resources: revision.resources };
   });
 }
 

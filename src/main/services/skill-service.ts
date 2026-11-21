@@ -86,7 +86,7 @@ export class SkillService {
         cpSync(join(sourceRoot, entry), join(targetRoot, entry), { recursive: true });
       }
     }
-    writeSkillState(targetRoot, { ...priorState, origin: 'user', sourceId: null, upstreamRepo: null, upstreamCommit: null });
+    writeSkillState(targetRoot, { ...priorState, origin: 'user', sourceId: null, upstreamRepo: null, upstreamCommit: null, readonlyResources: [] });
     const imported = this.readSkill(id, this.buildOfficialSkillIndex());
     if (imported === null) {
       throw new RocDomainError({

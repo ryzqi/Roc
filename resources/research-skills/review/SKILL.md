@@ -17,3 +17,5 @@ verdict 为 ready、revise 或 uncertain。无法验证时明确 uncertain，不
 支持、反证、负结果、替代解释和限定条件必须并列审查。已登记的反证不能省略。examinedEvidenceIds 记录检查范围，未检查完整时说明 unexaminedReason；“未发现反例”不等于不存在。
 
 方法与写作角色输出 scientificReview.kind=reviewer。finding 必须含稳定 id、fatal/major/minor、fatal_flaw/method_fit/evidence_sufficiency/novelty_support/reproducibility/writing_integrity 分类、claimIds、原始 references、observation、action、acceptance；缺少证据本身的问题可无引用，但必须定位主张。无 finding 时说明 noFindingsRationale。只生成建议，由人工在修订矩阵中处置；修订后重新核验并关联修改位置。
+
+[共享参考：research-integrity](../shared/research-integrity.md)

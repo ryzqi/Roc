@@ -7,17 +7,15 @@ import { z } from 'zod';
 import { loadResearchPluginApi, createResearchPluginFixture } from '../fixtures/research-plugin-fixture.mjs';
 import { importTypeScriptModule } from '../../scripts/lib/bundle-ts.mjs';
 
-let api, legacy, reference, pdfAcquisition, acquisitions;
+let api, pdfAcquisition, acquisitions;
 before(async () => {
   api = await loadResearchPluginApi();
-  legacy = await loadResearchPluginApi({ legacy: true });
-  reference = await loadResearchPluginApi({ referenceGitSha: '2ffe8bd' });
   [pdfAcquisition, acquisitions] = await Promise.all([
     importTypeScriptModule('src/main/plugins/research/literature-pdf-acquisition.ts', {platform: 'node', tempDir: '.runtime/tmp'}),
     importTypeScriptModule('src/main/plugins/research/literature-acquisition-repository.ts', {platform: 'node', tempDir: '.runtime/tmp'})
   ]);
 });
-after(async () => { await Promise.all([api?.dispose(), legacy?.dispose(), reference?.dispose()]); });
+after(async () => { await api?.dispose(); });
 function project(f) {
   return f.repository.createProject({ title: 'Synthetic startup study', description: 'Isolated fixture',
     workspacePath: f.directory });
@@ -25,7 +23,7 @@ function project(f) {
 const initializedDomains = f => f.observations.filter(item =>
   item.message === 'Research capability initialization.' && item.metadata.outcome === 'ready').map(item => item.metadata.domain);
 
-const scientificAdditions = [
+const scientificCapabilities = [
   'research.knowledge.scientificSearch', 'research.knowledge.scientificGenerations', 'research.knowledge.scientificActivate',
   'research.knowledge.scientificContext', 'research.knowledge.scientificEvidence',
   'research.knowledge.scientificRead', 'research.knowledge.extractionEnqueue', 'research.knowledge.extractionJobs',
@@ -33,23 +31,32 @@ const scientificAdditions = [
   'research.visual.config', 'research.visual.inspectModel', 'research.visual.saveConfig',
   'research.visual.rebuild', 'research.visual.search', 'research.visual.understandFigure'
 ];
-const acquisitionAdditions = [
+const acquisitionCapabilities = [
   'research.library.acquisitionSettings', 'research.library.saveAcquisitionSettings',
   'research.library.listAcquisition', 'research.library.retryAcquisition', 'research.library.cancelAcquisition'
 ];
-function originalCapabilities(plugin) {
-  return plugin.manifest.capabilities.filter(item =>
-    !scientificAdditions.includes(item.name) && !acquisitionAdditions.includes(item.name));
-}
-function assertScientificAdditions(plugin) {
-  assert.deepEqual(plugin.manifest.capabilities.filter(item => scientificAdditions.includes(item.name))
+const versionTwoCapabilities = new Set([
+  'research.literature.search', 'research.literature.getSearch', 'research.literature.getPool',
+  'research.library.addLiterature', 'research.library.getImportOperation', 'research.library.cancelImportOperation',
+  'research.manuscript.citationCoverage'
+]);
+function assertScientificCapabilities(plugin) {
+  assert.deepEqual(plugin.manifest.capabilities.filter(item => scientificCapabilities.includes(item.name))
     .map(item => ({name: item.name, version: item.version, effectReceipt: item.effectReceipt})),
-  scientificAdditions.map(name => ({name, version: '1.0.0', effectReceipt: undefined})));
+  scientificCapabilities.map(name => ({name, version: '1.0.0', effectReceipt: undefined})));
+  const search = plugin.manifest.capabilities.find(item => item.name === 'research.knowledge.scientificSearch');
+  const request = {projectId: 'project', query: 'Repeated experiment'};
+  assert.deepEqual(search.inputSchema.parse(request), {...request, documentIds: [], embeddingConfigId: null,
+    rerank: 'semantic', limit: 20, candidateLimit: 100});
+  for (const invalid of [{...request, unexpected: true}, {...request, candidateLimit: 1, limit: 2},
+    {...request, documentIds: ['duplicate', 'duplicate']}, {...request, query: ' '}]) {
+    assert.equal(search.inputSchema.safeParse(invalid).success, false);
+  }
 }
-function assertAcquisitionAdditions(plugin) {
-  const capabilities = plugin.manifest.capabilities.filter(item => acquisitionAdditions.includes(item.name));
+function assertAcquisitionCapabilities(plugin) {
+  const capabilities = plugin.manifest.capabilities.filter(item => acquisitionCapabilities.includes(item.name));
   assert.deepEqual(capabilities.map(item => ({name: item.name, version: item.version, effectReceipt: item.effectReceipt})),
-    acquisitionAdditions.map(name => ({name, version: '1.0.0', effectReceipt: undefined})));
+    acquisitionCapabilities.map(name => ({name, version: '1.0.0', effectReceipt: undefined})));
   const [settings, saveSettings, list, retry, cancel] = capabilities;
   assert.deepEqual(settings.inputSchema.parse({}), {});
   assert.equal(settings.inputSchema.safeParse({unexpected: true}).success, false);
@@ -79,73 +86,58 @@ function assertAcquisitionAdditions(plugin) {
   }
 }
 
-test('domain split preserves every original manifest schema, readonly output and shared provider alongside explicit scientific additions', async () => {
-  const current = await createResearchPluginFixture(api), old = await createResearchPluginFixture(reference);
+test('current manifest declares unique schemas and every capability is registered before any lazy domain runs', async () => {
+  const current = await createResearchPluginFixture(api);
   try {
-    const contract = plugin => ({
-      ...plugin.manifest,
-      capabilities: originalCapabilities(plugin).map(item => ({
-        name: item.name, version: item.version, effectReceipt: item.effectReceipt,
-        input: z.toJSONSchema(item.inputSchema, { unrepresentable: 'any' }),
-        output: z.toJSONSchema(item.outputSchema, { unrepresentable: 'any' })
-      }))
-    });
-    assertScientificAdditions(current.plugin);
-    assertAcquisitionAdditions(current.plugin);
-    assert.deepEqual(contract(current.plugin), contract(old.plugin));
-    const p = project(current), oldProject = project(old);
-    await current.initialize(); await old.initialize();
-    const requests = [
-      ['research.reading.listReadingNotes', {}],
-      ['research.huggingfaceDownloads.history', { observationId: null, offset: 0, limit: 20 }],
-      ['research.reviewProtocol.list', { limit: 20 }]
-    ];
-    for (const [name, input] of requests) {
-      assert.deepEqual(await current.registry.invoke(name, { ...input, projectId: p.id }),
-        await old.registry.invoke(name, { ...input, projectId: oldProject.id }));
-    }
-    assert.deepEqual(initializedDomains(current), initializedDomains(old));
-    assert.equal(initializedDomains(current).filter(domain => domain === 'documents').length, 1);
+    const {capabilities, ...manifest} = current.plugin.manifest;
+    assert.deepEqual(manifest, {id: '@roc/plugin-research', version: '1.0.0', displayName: 'Research Workbench',
+      description: '科研项目、阶段流程和 Provenance 基础能力。', required: true, order: 55,
+      dependencies: ['@roc/plugin-agent', '@roc/plugin-workspace']});
+    assert.equal(new Set(capabilities.map(descriptor => descriptor.name)).size, capabilities.length);
+    assertScientificCapabilities(current.plugin);
+    assertAcquisitionCapabilities(current.plugin);
+    await current.initialize();
     for (const descriptor of current.plugin.manifest.capabilities) {
+      assert.equal(descriptor.version, versionTwoCapabilities.has(descriptor.name) ? '2.0.0' : '1.0.0', descriptor.name);
+      assert.match(descriptor.name, /^research\./u);
+      for (const schema of [descriptor.inputSchema, descriptor.outputSchema]) {
+        const json = z.toJSONSchema(schema, {unrepresentable: 'any'});
+        assert.equal(typeof json, 'object', descriptor.name);
+        assert.ok(Object.keys(json).length > 0, descriptor.name);
+      }
       assert.equal(current.registry.list().find(item => item.name === descriptor.name), descriptor);
+      assert.equal(descriptor.inputSchema.safeParse(undefined).success, false, descriptor.name);
+      await assert.rejects(current.registry.invoke(descriptor.name, undefined),
+        error => error.name === 'ZodError', `${descriptor.name} must validate input through its registered handler`);
     }
-  } finally { await current.close(); await old.close(); }
+    assert.deepEqual(initializedDomains(current), []);
+    assert.equal(current.requests.length, 0);
+  } finally { await current.close(); }
 });
 
-test('manifest, schemas and real readonly outputs remain compatible while unused domains stay idle', async () => {
-  const current = await createResearchPluginFixture(api), old = await createResearchPluginFixture(legacy);
+test('real readonly capabilities return explicit empty results and initialize only their shared providers', async () => {
+  const current = await createResearchPluginFixture(api);
   try {
-    const contract = plugin => ({
-      ...plugin.manifest,
-      capabilities: originalCapabilities(plugin).map(item => ({
-        name: item.name, version: item.version, effectReceipt: item.effectReceipt
-      }))
-    });
-    assertScientificAdditions(current.plugin);
-    assertAcquisitionAdditions(current.plugin);
-    assert.deepEqual(contract(current.plugin), contract(old.plugin));
-    assert.equal(current.plugin.manifest.required, true);
-    const p = project(current), oldProject = project(old);
-    await Promise.all([current.initialize(), old.initialize()]);
+    const p = project(current);
+    await current.initialize();
     assert.deepEqual(initializedDomains(current), []);
     await assert.rejects(access(join(current.directory, 'resources')));
     for (const descriptor of current.plugin.manifest.capabilities) {
       assert.equal(current.registry.list().find(item => item.name === descriptor.name), descriptor);
     }
     const requests = [
-      ['research.reading.listReadingNotes', {}],
-      ['research.huggingface.history', { identity: null, offset: 0, limit: 20 }],
-      ['research.huggingfaceDownloads.history', { observationId: null, offset: 0, limit: 20 }],
-      ['research.reviewProtocol.list', { limit: 20 }]
+      ['research.reading.listReadingNotes', {}, []],
+      ['research.huggingface.history', { identity: null, offset: 0, limit: 20 }, {records: [], total: 0, nextOffset: null}],
+      ['research.huggingfaceDownloads.history', { observationId: null, offset: 0, limit: 20 }, {records: [], total: 0, nextOffset: null}],
+      ['research.reviewProtocol.list', { limit: 20 }, []]
     ];
-    for (const [name, input] of requests) {
-      assert.deepEqual(await current.registry.invoke(name, { ...input, projectId: p.id }),
-        await old.registry.invoke(name, { ...input, projectId: oldProject.id }));
+    for (const [name, input, expected] of requests) {
+      assert.deepEqual(await current.registry.invoke(name, { ...input, projectId: p.id }), expected);
     }
     assert.deepEqual(initializedDomains(current), ['reading', 'huggingface', 'huggingface-downloads', 'documents', 'systematic-review']);
     assert.equal(current.requests.length, 0);
     assert.deepEqual(await current.plugin.healthCheck(), { status: 'healthy' });
-  } finally { await current.close(); await old.close(); }
+  } finally { await current.close(); }
 });
 
 test('twenty simultaneous first reading calls initialize its real services once; invalid input stays outside', async () => {

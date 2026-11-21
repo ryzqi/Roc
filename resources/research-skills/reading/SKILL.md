@@ -9,3 +9,5 @@ description: 阅读论文并生成带页码或段落定位的证据笔记。
 输出阅读笔记、矛盾证据、适用边界与待验证问题。
 
 每项观察明确列出 evidenceId、原文 locator、方法与样本条件、支持的最小结论和反证。缺少正文或 locator 时标记待核验，不能用摘要补齐。分开记录作者观察、解释与本次推断。
+
+[共享参考：research-integrity](../shared/research-integrity.md)

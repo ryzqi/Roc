@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {posix} from 'node:path';
 import {z} from 'zod';
 import {researchSkillManifestSchema, researchSkillPinSchema,
   type ResearchSkillManifest, type ResearchSkillPin} from '../../../shared/schemas/research-skills';
@@ -49,23 +50,36 @@ export class ResearchSkillRegistry {
     }
     if (!this.acceptedLicenses.includes(manifest.license.id)) throw new Error('research_skill_license_not_accepted');
     this.assertCapabilities(manifest, role.allowedCapabilities);
-    const read = (resource: {path: string; hash: string}): string => {
-      const content = this.bundle.resources[`${stage}/${resource.path}`];
+    const read = (resource: {path: string; hash: string}, scope = stage as string): string => {
+      const content = this.bundle.resources[scope ? `${scope}/${resource.path}` : resource.path];
       if (content === undefined || researchSkillHash(content) !== resource.hash) throw new Error('research_skill_resource_changed');
       return content;
     };
     read(manifest.license.resource);
+    for (const shared of manifest.sharedReferences) {
+      if (!this.acceptedLicenses.includes(shared.license.id)) throw new Error('research_skill_license_not_accepted');
+      if (shared.license.id === 'LicenseRef-Roc-Internal' && manifest.source.kind !== 'project') {
+        throw new Error('research_skill_internal_license_requires_project_origin');
+      }
+      read(shared.license.resource, '');
+    }
     for (const evaluation of manifest.evalCases) {
       const cases = z.object({schemaVersion: z.literal(1), stage: researchStageSchema,
         cases: z.array(z.object({id: z.string().min(1), requirement: z.string().min(1)}).strict()).min(1)}).strict().parse(JSON.parse(read(evaluation)));
       if (cases.stage !== stage) throw new Error('research_skill_eval_stage_mismatch');
     }
-    const resources = [manifest.entry, ...manifest.references];
-    const instructions = resources.map(resource => read(resource)).join('\n\n');
+    const resources = [manifest.entry, ...manifest.references].map(resource => ({path: `${stage}/${resource.path}`, content: read(resource)}));
+    resources.push(...manifest.sharedReferences.map(resource => ({path: resource.path, content: read(resource, '')})));
     const approved = new Set(resources.map(resource => resource.path));
-    for (const match of instructions.matchAll(/\[[^\]]*\]\(([^)]+)\)/gu)) {
-      if (!approved.has(match[1])) throw new Error('research_skill_reference_unapproved');
+    for (const resource of resources) {
+      for (const match of resource.content.matchAll(/\[[^\]]*\]\(([^)]+)\)/gu)) {
+        const target = posix.normalize(posix.join(posix.dirname(resource.path), match[1]));
+        if (!approved.has(target) || match[1].startsWith('/') || /[:\\]/u.test(match[1])) {
+          throw new Error('research_skill_reference_unapproved');
+        }
+      }
     }
+    const instructions = resources.map(resource => resource.content).join('\n\n');
     return {manifest: structuredClone(manifest), pin, instructions};
   }
 

@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "roc-scientific-figure",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "stage": "figure",
   "description": "用可复现代码设计有证据支持的科研图稿。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "4fc54cf8f7e416abddf6c2f4ad0ce6b580fb586b81c206351de908456f22d216"
+    "hash": "e8576f94c2395e5d793a15e8a7dc11aeb906e2e9cf5b7c823b5008550d1a3bff"
   },
   "references": [],
   "license": {
@@ -20,7 +20,7 @@
     "kind": "project",
     "origin": "Roc/resources/research-skills/figure",
     "revision": "s05-1.2.0",
-    "hash": "4fc54cf8f7e416abddf6c2f4ad0ce6b580fb586b81c206351de908456f22d216"
+    "hash": "e8576f94c2395e5d793a15e8a7dc11aeb906e2e9cf5b7c823b5008550d1a3bff"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
@@ -54,5 +54,32 @@
       "hash": "d365b0e8f701fcbf73851b04cea34ac0b9a039de3bd1b99c0e39272489f7d8ad"
     }
   ],
-  "runtimeContract": "roc-research-stage/v2"
+  "runtimeContract": "roc-research-stage/v2",
+  "sharedReferences": [
+    {
+      "path": "shared/research-integrity.md",
+      "hash": "d681f636786d001f2db03c31e018141dd00b09b4515be303300c7572ee77af52",
+      "license": {
+        "id": "LicenseRef-Roc-Internal",
+        "resource": {
+          "path": "shared/LICENSE.md",
+          "hash": "f433196c52832a86f62312c1fc8ec45547da6ab2167ec47681a41a119c8c97a9"
+        }
+      }
+    },
+    {
+      "path": "shared/production-readiness.md",
+      "hash": "47cdd875e9796cc4312c8605f0a759a7f7912e8fcb07a92bb0bb5ceed3742089",
+      "license": {
+        "id": "LicenseRef-Roc-Internal",
+        "resource": {
+          "path": "shared/LICENSE.md",
+          "hash": "f433196c52832a86f62312c1fc8ec45547da6ab2167ec47681a41a119c8c97a9"
+        }
+      }
+    }
+  ],
+  "readiness": [
+    "figure_renderer"
+  ]
 }

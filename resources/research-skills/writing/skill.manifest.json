@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "roc-academic-writing",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "stage": "writing",
   "description": "基于审核过的证据撰写可追溯论文正文。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "7643f97a86b8741b16dd77456d7eb4066611bcae834d457324b3299d642fa430"
+    "hash": "47aa90c9a398e7312efd304593726de33e232499865868c861a68e9da66b01d8"
   },
   "references": [],
   "license": {
@@ -20,7 +20,7 @@
     "kind": "project",
     "origin": "Roc/resources/research-skills/writing",
     "revision": "s05-1.2.0",
-    "hash": "7643f97a86b8741b16dd77456d7eb4066611bcae834d457324b3299d642fa430"
+    "hash": "47aa90c9a398e7312efd304593726de33e232499865868c861a68e9da66b01d8"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
@@ -56,5 +56,19 @@
       "hash": "10b25d5a055cf7b2508eb06cf2adc3ac494673b60294e3d3bc344fea1b0b5ddd"
     }
   ],
-  "runtimeContract": "roc-research-stage/v2"
+  "runtimeContract": "roc-research-stage/v2",
+  "sharedReferences": [
+    {
+      "path": "shared/research-integrity.md",
+      "hash": "d681f636786d001f2db03c31e018141dd00b09b4515be303300c7572ee77af52",
+      "license": {
+        "id": "LicenseRef-Roc-Internal",
+        "resource": {
+          "path": "shared/LICENSE.md",
+          "hash": "f433196c52832a86f62312c1fc8ec45547da6ab2167ec47681a41a119c8c97a9"
+        }
+      }
+    }
+  ],
+  "readiness": []
 }

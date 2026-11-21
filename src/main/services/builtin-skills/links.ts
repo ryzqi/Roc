@@ -99,20 +99,27 @@ function rewriteContent(
     rewritten += 1;
     return next;
   };
+  return { content: mapReferenceTargets(content, replace), rewritten };
+}
+
+/** Match the same explicit local paths during installation and run-resource freezing. */
+export function skillReferenceTargets(content: string): string[] {
+  const targets: string[] = [];
+  mapReferenceTargets(content, target => {targets.push(target); return target;});
+  return targets;
+}
+
+function mapReferenceTargets(content: string, replace: (target: string) => string): string {
   let next = content.replace(/(\]\()([^()\s]+)((?:\s+"[^"]*")?\))/gu, (_match, head: string, target: string, tail: string) => {
     return `${head}${replace(target)}${tail}`;
   });
   next = next.replace(/^(\s*\[[^\]]+\]:\s*)(\S+)/gmu, (_match, head: string, target: string) => {
     return `${head}${replace(target)}`;
   });
-  next = next.replace(/`([^`\n]+)`/gu, (match: string, token: string) => {
+  return next.replace(/`([^`\n]+)`/gu, (match: string, token: string) => {
     const candidate = token.trim();
-    if (!looksLikeRepoPath(candidate)) {
-      return match;
-    }
-    return `\`${replace(candidate)}\``;
+    return looksLikeRepoPath(candidate) ? `\`${replace(candidate)}\`` : match;
   });
-  return { content: next, rewritten };
 }
 
 function looksLikeRepoPath(token: string): boolean {

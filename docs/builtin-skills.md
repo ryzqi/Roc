@@ -103,5 +103,10 @@ Electron 集成测试使用独立的临时 `ROC_DATA_ROOT`，通过管理面板�
 - 技能目录对 agent 只读（`ReadOnlyFilesystemBackend` / `SelectedSkillsFilesystemBackend`），agent 不能改技能。
 - 技能里的脚本仍由用户/agent 按需执行；来源、提交和许可证在管理面板可见，便于审计。
 - 删除一个内置技能只在下次快照提交变化时才会回来；想立刻恢复用「重新安装内置版本」。
-- 阶段运行会按 `selectedSkillIds` 收窄技能根目录，此时只读得到被选中的技能；`_bundles/` 与未选中的兄弟技能对
-  该次运行不可见（通用研究助手不受此限制）。跨技能引用在阶段运行里因此可能读不到，这是选择收窄的预期行为。
+- 主助手每轮按已选技能冻结目录内容和 `resources` 精确文件清单；恢复时重新核对内容、来源提交与许可哈希。
+  安装过程把可解析的同源共享文件引用写入该技能的 `roc.skill.json`（`readonlyResources`），不把文中的例子路径当依赖。
+  旧内置安装缺少清单时须重新安装内置版本；缺失的清单文件、符号链接与版本漂移会在模型运行前明确失败。
+- 共享目录沿用来源目录表的许可范围：Academic 的 `_bundles/academic-research-skills/shared/`，Nature 的
+  `nature-shared/core/` 与 `nature-shared/journal-formats/`。只开放所选技能明确引用的传递文件，兄弟技能的
+  `SKILL.md`、未声明文件和脚本保持不可读；读取、搜索、列举与下载采用同一范围。共享文件不增加 Skill 身份、工具或执行权限。
+- 科研阶段角色使用随应用打包、带哈希的阶段技能清单，仍由阶段能力清单约束执行；它不使用主助手的技能文件后端。

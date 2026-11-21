@@ -26,7 +26,7 @@ test('all 11 stages load approved resources and routing exposes only the catalog
   }
 });
 
-for (const key of ['id', 'version', 'entry', 'license', 'source', 'inputs', 'outputs', 'requiredCapabilities', 'forbiddenEffects', 'qualityGates', 'evalCases', 'runtimeContract']) {
+for (const key of ['id', 'version', 'entry', 'license', 'source', 'inputs', 'outputs', 'requiredCapabilities', 'forbiddenEffects', 'qualityGates', 'evalCases', 'runtimeContract', 'sharedReferences', 'readiness']) {
   test(`manifest requires ${key}`, () => assert.throws(() => load(changed((_value, manifest) => {delete manifest[key];}))));
 }
 for (const path of ['../outside.md', '/etc/passwd', 'references/../../outside.md', 'https://example.invalid/skill.md', 'refs\\outside.md']) {
@@ -37,6 +37,31 @@ test('unknown, unaccepted and false project licenses are rejected', () => {
   assert.throws(() => load(changed((_value, manifest) => {manifest.license.id = 'UNKNOWN';})));
   assert.throws(() => load(changed((_value, manifest) => {manifest.license.id = 'CC-BY-NC-4.0';})), /license_not_accepted/);
   assert.throws(() => load(changed((_value, manifest) => {manifest.source.kind = 'third_party';})), /requires_project_origin/);
+});
+
+test('shared reference closure is explicit, license checked, hash pinned and never expands role capabilities', () => {
+  const registry = new registryApi.ResearchSkillRegistry(bundle);
+  const current = registry.load('figure');
+  assert.ok(current.instructions.includes('可追溯科研材料'));
+  assert.deepEqual(current.manifest.readiness, ['figure_renderer']);
+  assert.deepEqual(current.manifest.sharedReferences.map(reference => reference.path),
+    ['shared/research-integrity.md', 'shared/production-readiness.md']);
+  assert.throws(() => load(changed(value => {value.resources['shared/research-integrity.md'] += ' changed';})), /resource_changed/u);
+  assert.throws(() => load(changed(value => {delete value.resources['shared/research-integrity.md'];})), /resource_changed/u);
+  assert.throws(() => load(changed(value => {value.resources['shared/LICENSE.md'] += ' changed';})), /resource_changed/u);
+  assert.throws(() => load(changed((_value, manifest) => {manifest.sharedReferences[0].license.id = 'CC-BY-NC-4.0';})), /license_not_accepted/u);
+  assert.throws(() => load(changed((value, manifest) => {
+    const resource = manifest.sharedReferences[0];
+    value.resources[resource.path] += '\n[Other stage](../export/SKILL.md)';
+    resource.hash = registryApi.researchSkillHash(value.resources[resource.path]);
+  })), /reference_unapproved/u);
+  const changedClosure = structuredClone(bundle);
+  const manifest = changedClosure.manifests.find(manifest => manifest.stage === 'figure');
+  const resource = manifest.sharedReferences[0];
+  changedClosure.resources[resource.path] += '\nNew permitted guidance.';
+  resource.hash = registryApi.researchSkillHash(changedClosure.resources[resource.path]);
+  assert.throws(() => new registryApi.ResearchSkillRegistry(changedClosure).load('figure', current.pin), /version_changed/u);
+  assert.deepEqual(registry.load('figure').manifest.requiredCapabilities, current.manifest.requiredCapabilities);
 });
 
 test('hash, output schema, role identity and runtime contract changes are rejected', () => {

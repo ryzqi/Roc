@@ -4,11 +4,40 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {after, before, test} from 'node:test';
 import Database from 'better-sqlite3';
-import {withResearchTestWorker, createResearchFixture, loadResearchTestApi} from './fixtures/research-test-kit.mjs';
+import {withResearchTestWorker, createResearchFixture, loadResearchTestApi, unknownExperiment} from './fixtures/research-test-kit.mjs';
 
 let api;
 before(async () => { api = await loadResearchTestApi(); });
 after(() => api.dispose());
+
+test('the frozen stage material includes canonical manuscript section names and paragraph order with the same timestamp', async () => {
+  const f = createResearchFixture(api, 'writing');
+  try {
+    f.repository.runs.terminate(f.run.id, f.project.id, 'failed', 'fixture');
+    f.repository.knowledge.upsertFromSource({id: 'frozen-sections', projectId: f.project.id, sourceType: 'file', sourceId: 'notes.txt',
+      title: 'Observed results', content: 'Observed results', chunks: [{content: 'Observed results', locator: 'block:0'}], embeddingPolicy: 'none'});
+    const source = f.repository.evidence.capture({projectId: f.project.id, chunkId: 'frozen-sections:chunk:0'});
+    const artifact = f.repository.createArtifact({projectId: f.project.id, stage: 'writing', kind: 'manuscript', title: 'Frozen manuscript', path: null});
+    const claims = ['First result', 'Second result'].map(content => f.repository.evidence.createClaim({projectId: f.project.id,
+      artifactId: artifact.id, subjectType: 'paragraph', content, status: 'supported', experiment: {...unknownExperiment}, evidenceIds: [source.id]}));
+    const original = [{title: 'Results', claimIds: claims.map(claim => claim.id)}];
+    f.repository.manuscripts.saveManuscript({artifactId: artifact.id, sections: original});
+    f.db.prepare("UPDATE research_artifacts SET status='approved' WHERE id=?").run(artifact.id);
+    f.db.prepare("UPDATE research_projects SET current_stage='planning' WHERE id=?").run(f.project.id);
+    f.db.prepare("UPDATE research_stage_states SET status='ready' WHERE project_id=? AND stage='planning'").run(f.project.id);
+    const queued = f.repository.runs.begin({projectId: f.project.id, expectedStage: 'planning', instruction: 'Use the same canonical text', requestId: 'sections'});
+    f.repository.runs.assertInputsCurrent(queued);
+    for (const changed of [
+      [{title: 'Revised Results', claimIds: claims.map(claim => claim.id)}],
+      [{title: 'Results', claimIds: claims.map(claim => claim.id).reverse()}]
+    ]) {
+      f.db.prepare('UPDATE research_manuscripts SET sections_json=? WHERE artifact_id=?').run(JSON.stringify(changed), artifact.id);
+      assert.throws(() => f.repository.runs.assertInputsCurrent(queued), /research_stage_inputs_stale/u);
+      f.db.prepare('UPDATE research_manuscripts SET sections_json=? WHERE artifact_id=?').run(JSON.stringify(original), artifact.id);
+      f.repository.runs.assertInputsCurrent(queued);
+    }
+  } finally {await f.close();}
+});
 
 for (const change of ['approval', 'content']) {
   test(`stage rejects changed ${change} before dispatch, completion and retry after reopening`, async () => {

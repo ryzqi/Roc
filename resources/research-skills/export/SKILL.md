@@ -7,3 +7,6 @@ description: 核查已批准文稿、图稿、来源与可复现材料的完整�
 清单包含 LaTeX、PDF、文献、数据/脚本引用、环境摘要、模型运行与来源记录。
 未经支持的主张或过期产物阻断最终导出；不得把仅存在路径的文件当成成功生成。
 输出最终检查结果和交付清单，实际导出由受控生产工具完成。
+
+[共享参考：research-integrity](../shared/research-integrity.md)
+[共享参考：production-readiness](../shared/production-readiness.md)

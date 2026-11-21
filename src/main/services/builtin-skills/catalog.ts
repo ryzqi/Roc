@@ -31,6 +31,8 @@ export type BuiltinSkillSourceSpec = {
   skillRoot: string;
   /** Shared skill resources copied to `_bundles/<id>/`; excludes repository integrations. */
   supportDirs: readonly string[];
+  /** Installed same-source reference subdirectories; never includes a sibling SKILL.md. */
+  referenceDirs: readonly string[];
   /**
    * Whether the license allows shipping the content enabled-by-default inside Roc.
    * `false` sources are bundled but only installed after an explicit user action.
@@ -62,6 +64,7 @@ export const defaultBuiltinSkillSources: readonly BuiltinSkillSourceSpec[] = [
     homepage: 'https://github.com/Yuan1z0825/nature-skills',
     skillRoot: 'skills',
     supportDirs: [],
+    referenceDirs: ['nature-shared/core', 'nature-shared/journal-formats'],
     autoInstall: true,
     excludedDirectoryNames: commonExcludedDirectoryNames,
     commit: '',
@@ -77,6 +80,7 @@ export const defaultBuiltinSkillSources: readonly BuiltinSkillSourceSpec[] = [
     homepage: 'https://github.com/Imbad0202/academic-research-skills',
     skillRoot: '',
     supportDirs: ['shared'],
+    referenceDirs: [],
     autoInstall: false,
     excludedDirectoryNames: [...commonExcludedDirectoryNames, 'audits', 'examples'],
     commit: '',
@@ -137,6 +141,7 @@ function parseSource(value: unknown): BuiltinSkillSourceSpec {
     homepage: typeof record.homepage === 'string' ? record.homepage : null,
     skillRoot: typeof record.skillRoot === 'string' ? record.skillRoot : '',
     supportDirs: readStringArray(record.supportDirs),
+    referenceDirs: readStringArray(record.referenceDirs),
     autoInstall: record.autoInstall !== false,
     excludedDirectoryNames:
       record.excludedDirectoryNames === undefined

@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "roc-literature-retrieval",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "stage": "retrieval",
   "description": "多源查找文献并建立可追溯的证据集。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "7648b53bedcb6d5884e86b88b1cf3a7da37d20a0c8aa4c13a5cfb90fe96e45f9"
+    "hash": "ad1a7f5c2b705acb25ccf9e8e203592b2c90c239ce2a5635b36a8f056182813c"
   },
   "references": [],
   "license": {
@@ -20,7 +20,7 @@
     "kind": "project",
     "origin": "Roc/resources/research-skills/retrieval",
     "revision": "s05-1.2.0",
-    "hash": "7648b53bedcb6d5884e86b88b1cf3a7da37d20a0c8aa4c13a5cfb90fe96e45f9"
+    "hash": "ad1a7f5c2b705acb25ccf9e8e203592b2c90c239ce2a5635b36a8f056182813c"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
@@ -56,5 +56,19 @@
       "hash": "d08c2711da60accd72c4425f2a2208cba7111ce1a0509d943ebf32d09c70cad7"
     }
   ],
-  "runtimeContract": "roc-research-stage/v2"
+  "runtimeContract": "roc-research-stage/v2",
+  "sharedReferences": [
+    {
+      "path": "shared/research-integrity.md",
+      "hash": "d681f636786d001f2db03c31e018141dd00b09b4515be303300c7572ee77af52",
+      "license": {
+        "id": "LicenseRef-Roc-Internal",
+        "resource": {
+          "path": "shared/LICENSE.md",
+          "hash": "f433196c52832a86f62312c1fc8ec45547da6ab2167ec47681a41a119c8c97a9"
+        }
+      }
+    }
+  ],
+  "readiness": []
 }

@@ -7,3 +7,5 @@ description: 按审稿意见修订正文并记录逐项回复与证据变化。
 保留原稿和旧证据；新版本的每个正文段落重新关联 evidenceIds。
 sections 只引用本次输出的 supported 主张，未经验证的内容保留为假设或占位。
 最多两轮修订；仍有重大问题时交还用户决定，不无限自动循环。
+
+[共享参考：research-integrity](../shared/research-integrity.md)

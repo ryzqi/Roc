@@ -11,9 +11,9 @@ const root = realpathSync('resources/research-skills');
 const bundle = {schemaVersion: 1, manifests: [], resources: {}};
 for (const stage of researchStageSchema.options) {
   const directory = resolve(root, stage);
-  const read = path => {
-    const target = resolve(directory, path), real = realpathSync(target);
-    const inside = relative(directory, real);
+  const read = (path, base = directory) => {
+    const target = resolve(base, path), real = realpathSync(target);
+    const inside = relative(base, real);
     if (!inside || inside.startsWith('..') || isAbsolute(inside) || real !== target || !lstatSync(target).isFile()) {
       throw new Error(`research_skill_resource_outside:${stage}/${path}`);
     }
@@ -26,6 +26,9 @@ for (const stage of researchStageSchema.options) {
   bundle.manifests.push(manifest);
   for (const resource of [manifest.entry, ...manifest.references, manifest.license.resource, ...manifest.evalCases]) {
     bundle.resources[`${stage}/${resource.path}`] = read(resource.path);
+  }
+  for (const shared of manifest.sharedReferences) {
+    for (const resource of [shared, shared.license.resource]) bundle.resources[resource.path] = read(resource.path, root);
   }
 }
 const registry = new ResearchSkillRegistry(bundle);

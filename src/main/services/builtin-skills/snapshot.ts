@@ -13,6 +13,7 @@ import { dirname, join } from 'node:path';
 import type { BuiltinSkillSourceSpec } from './catalog';
 import { rewriteInstalledLinks, type LinkRewriteResult } from './links';
 import { readSkillState, writeSkillState } from '../skill-state';
+import {collectBuiltinSkillResources} from './resources';
 
 /**
  * Materialise and install a built-in skill source.
@@ -151,6 +152,11 @@ export function installBuiltinSnapshot(input: {
     }
 
     const links = rewriteInstalledLinks(stagingRoot, input.spec, skillIds);
+    for (const skillId of skillIds) {
+      const directory = join(stagingRoot, skillId);
+      writeSkillState(directory, {...readSkillState(directory),
+        readonlyResources: collectBuiltinSkillResources(stagingRoot, skillId, input.spec)});
+    }
 
     const removedSkillIds: string[] = [];
     for (const previousSkillId of readManagedSkillIds(input.skillsDir, input.spec.id)) {

@@ -37,6 +37,7 @@ import type { ResearchLiteratureServices } from './research-plugin-literature';
 import {registerResearchProposalCapabilities} from './proposal-capabilities';
 import {ResearchProposalService} from './proposal-service';
 import {ResearchJournalComplianceService} from './journal-compliance-service';
+import {ResearchStageReadinessService} from './stage-readiness';
 import {ResearchResultDerivationService} from './result-derivation-service';
 import {ResearchResultFigureSourceService} from './result-figure-source';
 import {registerResearchResultDerivationCapabilities} from './result-derivation-capabilities';
@@ -56,8 +57,9 @@ export async function registerResearchWorkflow(
   registerResearchResultDerivationCapabilities(context, resultDerivation, new ResearchResultFigureSourceService(resultDerivation, workspaceFiles));
   const scientificReviews = new ResearchArtifactScientificReviewService(researchRepository, researchResults, researchFigures);
   const humanGate = createResearchHumanGate({ repository: researchRepository, production: productionJob, scientificReviews });
+  const readiness = new ResearchStageReadinessService(researchRepository, context.capabilities);
   const runtime = new ResearchStageRuntime(researchRepository, context.capabilities, options.roleExecutor, humanGate, effects,
-    (taskId, projectId) => notifyResearchTaskChanged(context, taskId, projectId));
+    (taskId, projectId) => notifyResearchTaskChanged(context, taskId, projectId), 1, (run, signal) => readiness.check(run, signal));
   lifecycle.own('stageRuntime', runtime);
   const taskController = new ResearchTaskController(options.tasks, {
     stages: runtime,

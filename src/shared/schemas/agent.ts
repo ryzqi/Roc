@@ -114,7 +114,11 @@ export const runCapabilityManifestSkillSchema = z
     contentHash: z.string().regex(/^[a-f0-9]{64}$/),
     license: z.string().nullable(),
     licenseHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
-    sourceRevision: z.string().nullable()
+    sourceRevision: z.string().nullable(),
+    resources: z.strictObject({
+      path: z.string().min(1), contentHash: z.string().regex(/^[a-f0-9]{64}$/u),
+      license: z.string().min(1), licenseHash: z.string().regex(/^[a-f0-9]{64}$/u)
+    }).array().max(2000)
   })
   .strict();
 

@@ -44,6 +44,7 @@ before(async () => {
     homepage: 'https://example.invalid',
     skillRoot: 'skills',
     supportDirs: ['shared'],
+    referenceDirs: [],
     autoInstall: true,
     excludedDirectoryNames: ['tests', 'evals'],
     commit: 'commit-one',

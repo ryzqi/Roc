@@ -13,3 +13,6 @@ Notebook 必须引用本项目由用户冻结导入的确切回执；不使用�
 仅对 completed 运行调用 publish_experiment；发布后的工件仍需人工审核。
 核查缺失值、样本量、异常值、数据泄漏和统计假设，保留失败结果。
 结果主张关联数据或运行证据；不得自行生成看似测量所得的数值。
+
+[共享参考：research-integrity](../shared/research-integrity.md)
+[共享参考：production-readiness](../shared/production-readiness.md)

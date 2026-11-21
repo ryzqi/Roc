@@ -21,6 +21,7 @@ export type SkillState = {
   sourceId: string | null;
   upstreamRepo: string | null;
   upstreamCommit: string | null;
+  readonlyResources: string[] | null;
 };
 
 export const skillStateFileName = 'roc.skill.json';
@@ -32,7 +33,8 @@ export function createDefaultSkillState(origin: SkillOrigin = 'user'): SkillStat
     origin,
     sourceId: null,
     upstreamRepo: null,
-    upstreamCommit: null
+    upstreamCommit: null,
+    readonlyResources: origin === 'builtin' ? null : []
   };
 }
 
@@ -60,7 +62,9 @@ export function readSkillState(skillDir: string): SkillState {
     origin: record.origin === 'builtin' ? 'builtin' : 'user',
     sourceId: typeof record.sourceId === 'string' ? record.sourceId : null,
     upstreamRepo: typeof record.upstreamRepo === 'string' ? record.upstreamRepo : null,
-    upstreamCommit: typeof record.upstreamCommit === 'string' ? record.upstreamCommit : null
+    upstreamCommit: typeof record.upstreamCommit === 'string' ? record.upstreamCommit : null,
+    readonlyResources: Array.isArray(record.readonlyResources) && record.readonlyResources.every(path => typeof path === 'string')
+      ? record.readonlyResources : record.origin === 'builtin' ? null : []
   };
 }
 
@@ -71,7 +75,8 @@ export function writeSkillState(skillDir: string, state: SkillState): void {
     origin: state.origin,
     sourceId: state.sourceId,
     upstreamRepo: state.upstreamRepo,
-    upstreamCommit: state.upstreamCommit
+    upstreamCommit: state.upstreamCommit,
+    readonlyResources: state.readonlyResources
   };
   writeFileSync(join(skillDir, skillStateFileName), `${JSON.stringify(next, null, 2)}\n`, 'utf8');
 }

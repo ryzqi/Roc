@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "roc-research-planning",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "stage": "planning",
   "description": "将研究假设转成方案、数据需求和验收标准。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "cf1761f847387e85c27bd306b36230e63619244bb863b77e13c51d18315f6463"
+    "hash": "cb48af58bfcdc90d29c6e61a33ecd8bf231255361e5d808174e0aedc33cc905e"
   },
   "references": [],
   "license": {
@@ -20,7 +20,7 @@
     "kind": "project",
     "origin": "Roc/resources/research-skills/planning",
     "revision": "s05-1.2.0",
-    "hash": "cf1761f847387e85c27bd306b36230e63619244bb863b77e13c51d18315f6463"
+    "hash": "cb48af58bfcdc90d29c6e61a33ecd8bf231255361e5d808174e0aedc33cc905e"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
@@ -56,5 +56,19 @@
       "hash": "d3738d5deb194d680c68992e40749f9f979186159b025a3adcef47f8ba60b792"
     }
   ],
-  "runtimeContract": "roc-research-stage/v2"
+  "runtimeContract": "roc-research-stage/v2",
+  "sharedReferences": [
+    {
+      "path": "shared/research-integrity.md",
+      "hash": "d681f636786d001f2db03c31e018141dd00b09b4515be303300c7572ee77af52",
+      "license": {
+        "id": "LicenseRef-Roc-Internal",
+        "resource": {
+          "path": "shared/LICENSE.md",
+          "hash": "f433196c52832a86f62312c1fc8ec45547da6ab2167ec47681a41a119c8c97a9"
+        }
+      }
+    }
+  ],
+  "readiness": []
 }

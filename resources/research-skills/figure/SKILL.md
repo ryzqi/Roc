@@ -7,3 +7,6 @@ description: 用可复现代码设计有证据支持的科研图稿。
 图稿包含代码、输入数据、运行记录、图注和来源，不得凭空补数据点。
 检查可读性、色觉可访问性、字体与矢量输出；导出 SVG、PDF、PNG。
 图注和图表结论作为 figure 主张关联证据，交由用户审核。
+
+[共享参考：research-integrity](../shared/research-integrity.md)
+[共享参考：production-readiness](../shared/production-readiness.md)

@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "roc-revision-coach",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "stage": "revision",
   "description": "按审稿意见修订正文并记录逐项回复与证据变化。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "6a6407abb7544ca9e458c07ff598c0e161bd4ba68ab26a7ea33de6b2fa38bda3"
+    "hash": "9cc1e53c043b736383849fca688e391751da2770f9c8a4d7138150c258bbf8c0"
   },
   "references": [],
   "license": {
@@ -20,7 +20,7 @@
     "kind": "project",
     "origin": "Roc/resources/research-skills/revision",
     "revision": "s05-1.2.0",
-    "hash": "6a6407abb7544ca9e458c07ff598c0e161bd4ba68ab26a7ea33de6b2fa38bda3"
+    "hash": "9cc1e53c043b736383849fca688e391751da2770f9c8a4d7138150c258bbf8c0"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
@@ -56,5 +56,19 @@
       "hash": "b782dbec59ee13a34c1bbb3b96d0c9fd7d996a22af23c33810bd0f08e85324e6"
     }
   ],
-  "runtimeContract": "roc-research-stage/v2"
+  "runtimeContract": "roc-research-stage/v2",
+  "sharedReferences": [
+    {
+      "path": "shared/research-integrity.md",
+      "hash": "d681f636786d001f2db03c31e018141dd00b09b4515be303300c7572ee77af52",
+      "license": {
+        "id": "LicenseRef-Roc-Internal",
+        "resource": {
+          "path": "shared/LICENSE.md",
+          "hash": "f433196c52832a86f62312c1fc8ec45547da6ab2167ec47681a41a119c8c97a9"
+        }
+      }
+    }
+  ],
+  "readiness": []
 }

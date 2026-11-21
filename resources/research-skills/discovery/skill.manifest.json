@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "roc-research-discovery",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "stage": "discovery",
   "description": "将研究目标转为可执行且可验证的研究问题与检索策略。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "c716ad00a3a0c9186b001cb56259b18020d6a51c6d5a9fa80fa4cd4aa5c62b89"
+    "hash": "6965a23b47726fbab04e62f14201245baf9f6f684e753e94591bafef54b5b60f"
   },
   "references": [],
   "license": {
@@ -20,7 +20,7 @@
     "kind": "project",
     "origin": "Roc/resources/research-skills/discovery",
     "revision": "s05-1.2.0",
-    "hash": "c716ad00a3a0c9186b001cb56259b18020d6a51c6d5a9fa80fa4cd4aa5c62b89"
+    "hash": "6965a23b47726fbab04e62f14201245baf9f6f684e753e94591bafef54b5b60f"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
@@ -57,5 +57,19 @@
       "hash": "0628446a957f0b7d01a4909676bc52912d1fea7fc6b743def4382ea044929ebf"
     }
   ],
-  "runtimeContract": "roc-research-stage/v2"
+  "runtimeContract": "roc-research-stage/v2",
+  "sharedReferences": [
+    {
+      "path": "shared/research-integrity.md",
+      "hash": "d681f636786d001f2db03c31e018141dd00b09b4515be303300c7572ee77af52",
+      "license": {
+        "id": "LicenseRef-Roc-Internal",
+        "resource": {
+          "path": "shared/LICENSE.md",
+          "hash": "f433196c52832a86f62312c1fc8ec45547da6ab2167ec47681a41a119c8c97a9"
+        }
+      }
+    }
+  ],
+  "readiness": []
 }

@@ -33,7 +33,7 @@ export async function verifyMemorySkills(name: string, directory: string, agentD
     assert.equal(revision.license, 'MIT');
     assert.ok(revision.licenseHash);
     const frozen = { canonicalIdentity: 'skill:pilot', name: 'pilot', sourcePath: skill, description: 'Fixture skill',
-      contentHash: revision.contentHash, license: revision.license, licenseHash: revision.licenseHash, sourceRevision: null };
+      contentHash: revision.contentHash, license: revision.license, licenseHash: revision.licenseHash, sourceRevision: null, resources: revision.resources };
     const backend = new SelectedSkillsFilesystemBackend(new FilesystemBackend({ rootDir: root, virtualMode: true }), root, [frozen]);
     assert.equal((await backend.readRaw('/pilot/SKILL.md')).data?.content, body);
     assert.ok((await backend.read('/other/SKILL.md')).error);

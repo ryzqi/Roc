@@ -22,6 +22,7 @@ export * from '../../../src/shared/schemas/research-figure-consistency';
 export { renderResearchFigure } from '../../../src/main/plugins/research/figure-renderer';
 export { ResearchTaskRepository } from '../../../src/main/plugins/research/research-task-repository';
 export { ResearchStageRuntime } from '../../../src/main/plugins/research/stage-runtime';
+export {ResearchStageReadinessService} from '../../../src/main/plugins/research/stage-readiness';
 export { ExecutionGrantBroker, openExecutionGrantBroker, assertResearchDispatchGrant, assertReviewSearchDispatchGrant,
   assertReviewSearchOwner } from '../../../src/main/services/deep-agent/execution-grant-broker';
 export { withResearchDispatchReference } from '../../../src/main/services/research-dispatch-context';

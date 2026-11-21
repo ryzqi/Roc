@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "roc-peer-review",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "stage": "review",
   "description": "独立评估论文的方法、证据与表达并给出可执行修订意见。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "93ec5107d1abe20e4e4f877e3afaef5ca535a25847c436f44793bdc1450ea62f"
+    "hash": "5fe5b105b1ad5b4f24bc3ba51692b0b7f217b1f265889aceb8a3c3e07095f9ff"
   },
   "references": [],
   "license": {
@@ -20,7 +20,7 @@
     "kind": "project",
     "origin": "Roc/resources/research-skills/review",
     "revision": "s05-1.2.0",
-    "hash": "93ec5107d1abe20e4e4f877e3afaef5ca535a25847c436f44793bdc1450ea62f"
+    "hash": "5fe5b105b1ad5b4f24bc3ba51692b0b7f217b1f265889aceb8a3c3e07095f9ff"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
@@ -57,5 +57,19 @@
       "hash": "98e06f874fdef5f8787ba8cca03b33fa2e1757af5ed0be69e2750738068c09b9"
     }
   ],
-  "runtimeContract": "roc-research-stage/v2"
+  "runtimeContract": "roc-research-stage/v2",
+  "sharedReferences": [
+    {
+      "path": "shared/research-integrity.md",
+      "hash": "d681f636786d001f2db03c31e018141dd00b09b4515be303300c7572ee77af52",
+      "license": {
+        "id": "LicenseRef-Roc-Internal",
+        "resource": {
+          "path": "shared/LICENSE.md",
+          "hash": "f433196c52832a86f62312c1fc8ec45547da6ab2167ec47681a41a119c8c97a9"
+        }
+      }
+    }
+  ],
+  "readiness": []
 }

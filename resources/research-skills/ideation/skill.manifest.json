@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "roc-research-ideation",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "stage": "ideation",
   "description": "围绕文献证据形成可检验的研究想法。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "325df73134661969b28e5bc38f991cc540097db5245534b52c252058c04937ff"
+    "hash": "1edf21fbe195150b96f5aa6c4871f7be655325dc89497ecce8bd3b2200788f0f"
   },
   "references": [],
   "license": {
@@ -20,7 +20,7 @@
     "kind": "project",
     "origin": "Roc/resources/research-skills/ideation",
     "revision": "s05-1.2.0",
-    "hash": "325df73134661969b28e5bc38f991cc540097db5245534b52c252058c04937ff"
+    "hash": "1edf21fbe195150b96f5aa6c4871f7be655325dc89497ecce8bd3b2200788f0f"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",
@@ -56,5 +56,19 @@
       "hash": "082fdcacecb8d10ac012480ec760b4a38718b46065982460929bf4a633e9a168"
     }
   ],
-  "runtimeContract": "roc-research-stage/v2"
+  "runtimeContract": "roc-research-stage/v2",
+  "sharedReferences": [
+    {
+      "path": "shared/research-integrity.md",
+      "hash": "d681f636786d001f2db03c31e018141dd00b09b4515be303300c7572ee77af52",
+      "license": {
+        "id": "LicenseRef-Roc-Internal",
+        "resource": {
+          "path": "shared/LICENSE.md",
+          "hash": "f433196c52832a86f62312c1fc8ec45547da6ab2167ec47681a41a119c8c97a9"
+        }
+      }
+    }
+  ],
+  "readiness": []
 }
