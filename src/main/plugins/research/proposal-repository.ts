@@ -22,7 +22,7 @@ type Row = {
 };
 const digest = (value: unknown): string => researchContentHash(JSON.stringify(value));
 const artifactKinds: Record<ResearchProposalCreate['proposal']['kind'], readonly ResearchArtifact['kind'][]> = {
-  submission_profile: ['manuscript'], argument_outline: ['reading_notes', 'manuscript'], idea_plan: ['idea_canvas'], citation_review: ['manuscript'], consistency: ['manuscript', 'figure'],
+  external_experiment: ['reading_notes', 'manuscript', 'research_plan', 'idea_canvas', 'experiment_run'], submission_profile: ['manuscript'], argument_outline: ['reading_notes', 'manuscript'], idea_plan: ['idea_canvas'], citation_review: ['manuscript'], consistency: ['manuscript', 'figure'],
   figure_consistency: ['figure'], response_matrix: ['manuscript'], journal_compliance: ['manuscript'], experiment_result: ['experiment_run']
 };
 
@@ -212,6 +212,9 @@ export class ResearchProposalRepository {
       material.push(value);
     };
     switch (proposal.kind) {
+      case 'external_experiment':
+        material.push(this.research.externalExperiments.validateDraft({...proposal.payload,projectId,requestId:request.requestId}));
+        break;
       case 'submission_profile':
         material.push(this.research.submissionProfiles.validateDraft({...proposal.payload, projectId, requestId: request.requestId}));
         break;

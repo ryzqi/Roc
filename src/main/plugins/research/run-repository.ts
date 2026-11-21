@@ -632,11 +632,12 @@ export class ResearchRunRepository {
     const versions = new Map<string, z.infer<typeof executionInputVersionSchema>>();
     for (const artifactId of artifactIds) {
       const {snapshot} = this.research.inspectArtifact({projectId, artifactId, expectedVersion: null});
-      const {artifact, content, origin, claims, evidence, relations, production, ideaCanvas, ideaPlan,
+      const {artifact, content, origin, claims, evidence, relations, production, ideaCanvas, ideaPlan, externalFeedback,
         ideaOutcomes, citationReviews, consistencyReviews, responseMatrix, journalCompliance, provenance, scientificReview, manuscript} = snapshot;
       // UI state (current stage, available actions) changes as this run starts. Only freeze input material.
       versions.set(`artifact:${artifactId}`, {kind: 'artifact', id: artifactId,
         hash: hashStageValue({artifact, content, origin, claims, evidence, relations, production, ideaCanvas,
+          ...(externalFeedback===undefined?{}:{externalFeedback}),
           ideaPlan, ideaOutcomes, citationReviews, consistencyReviews, responseMatrix, journalCompliance, provenance,
           ...(scientificReview === undefined ? {} : {scientificReview}), ...(manuscript === undefined ? {} : {manuscript})})});
       for (const source of evidence) versions.set(`source:${source.evidence.id}`,

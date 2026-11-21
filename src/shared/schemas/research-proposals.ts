@@ -9,14 +9,16 @@ import {researchExperimentResultReviewSchema} from './research-experiment-result
 import {researchRelationReviewerSchema} from './research-evidence-relations';
 import {researchArgumentOutlineSaveSchema} from './research-argument-outline';
 import {researchSubmissionProfileSaveSchema} from './research-submission-profile';
+import {researchExternalExperimentCreateSchema} from './research-external-experiments';
 
 const id = z.string().trim().min(1).max(300);
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 export const researchProposalKindSchema = z.enum(['idea_plan', 'citation_review', 'consistency',
-  'figure_consistency', 'response_matrix', 'journal_compliance', 'experiment_result', 'argument_outline', 'submission_profile']);
+  'figure_consistency', 'response_matrix', 'journal_compliance', 'experiment_result', 'argument_outline', 'submission_profile', 'external_experiment']);
 
 // Preserve each domain's field contracts; its whole-request refinements run below after scope is supplied.
 export const researchProposalPayloadSchema = z.discriminatedUnion('kind', [
+  z.strictObject({kind:z.literal('external_experiment'),payload:z.strictObject(researchExternalExperimentCreateSchema.shape).omit({projectId:true,requestId:true})}),
   z.strictObject({kind: z.literal('submission_profile'), payload: z.strictObject(researchSubmissionProfileSaveSchema.shape).omit({projectId: true, requestId: true})}),
   z.strictObject({kind: z.literal('argument_outline'), payload: z.strictObject(researchArgumentOutlineSaveSchema.shape).omit({projectId: true, requestId: true})}),
   z.strictObject({kind: z.literal('idea_plan'), payload: z.strictObject(researchIdeaPlanSaveSchema.shape).omit({projectId: true, requestId: true})}),
@@ -29,6 +31,7 @@ export const researchProposalPayloadSchema = z.discriminatedUnion('kind', [
   z.strictObject({kind: z.literal('experiment_result'), payload: z.strictObject(researchExperimentResultReviewSchema.shape).omit({projectId: true, requestId: true})})
 ]);
 const domainSchemas = {
+  external_experiment: researchExternalExperimentCreateSchema,
   submission_profile: researchSubmissionProfileSaveSchema,
   argument_outline: researchArgumentOutlineSaveSchema,
   idea_plan: researchIdeaPlanSaveSchema, citation_review: researchCitationReviewSaveSchema,

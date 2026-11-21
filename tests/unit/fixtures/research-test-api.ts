@@ -281,4 +281,6 @@ export {registerResearchSubmissionProfileCapabilities} from '../../../src/main/p
 export {ResearchSubmissionService} from '../../../src/main/plugins/research/submission-service';
 export {registerResearchSubmissionCapabilities} from '../../../src/main/plugins/research/submission-capabilities';
 export {withResearchPdf,extractResearchPdfPageText} from '../../../src/main/plugins/research/pdf-render';
+export {registerResearchFeedbackCapabilities} from '../../../src/main/plugins/research/feedback-capabilities';
+export {registerResearchExternalExperimentCapabilities} from '../../../src/main/plugins/research/external-experiment-capabilities';
 export {registerResearchResultDerivationCapabilities} from '../../../src/main/plugins/research/result-derivation-capabilities';

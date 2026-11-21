@@ -24,6 +24,7 @@ const JournalCompliance = retryableLazy(async () => ({default: (await import('./
 const ExportReview = retryableLazy(async () => ({default: (await import('./ArtifactExportReview')).ArtifactExportReview}));
 const Impact = retryableLazy(async () => ({default: (await import('./ArtifactImpact')).ArtifactImpact}));
 const ArgumentOutline = retryableLazy(async () => ({default: (await import('./ArtifactArgumentOutline')).ArtifactArgumentOutline}));
+const Collaboration = retryableLazy(async () => ({default: (await import('./ArtifactCollaboration')).ArtifactCollaboration}));
 import {useArtifactEditorActivity, useArtifactEditorGuard} from './artifact-editor-guard';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
@@ -41,6 +42,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
   const [relationSaved, setRelationSaved] = useState(false);
   const [impactOpen, setImpactOpen] = useState(false);
   const [outlineOpen, setOutlineOpen] = useState(false);
+  const [collaborationOpen, setCollaborationOpen] = useState(false);
   const guard = useArtifactEditorGuard();
   const plan = useArtifactEditorActivity('方法计划'), outcome = useArtifactEditorActivity('结果评估');
   const {pending: planPending, dirty: planDirty, setPending: setPlanPending, setDirty: setPlanDirty} = plan;
@@ -162,6 +164,17 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
         <LazyBoundary fallback={<p role="status">正在加载工件正文…</p>}>
           <StageContent snapshot={snapshot} />
         </LazyBoundary>
+        {snapshot.artifact.kind !== 'manuscript' ? null : <section className="border-t-[0.5px] border-line pt-2">
+          <button type="button" className={button} disabled={planLocked} aria-expanded={collaborationOpen}
+            data-testid="artifact-collaboration-toggle" onClick={() => setCollaborationOpen(value => !value)}>
+            {collaborationOpen ? '收起外部协作' : '外部协作与实验回传'}
+          </button>
+          {!collaborationOpen ? null : <LazyBoundary fallback={<p role="status">正在加载外部协作…</p>}>
+            <Collaboration key={`${snapshot.artifact.id}:${snapshot.version}`} client={client} snapshot={snapshot}
+              writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived'}
+              onChanged={() => {baseline.current = null; reading.save(); read.reload();}}/>
+          </LazyBoundary>}
+        </section>}
         {!['reading_notes', 'manuscript'].includes(snapshot.artifact.kind) ? null : <section className="border-t-[0.5px] border-line pt-2">
           <button type="button" className={button} disabled={planLocked} aria-expanded={outlineOpen}
             data-testid="artifact-outline-toggle" onClick={() => setOutlineOpen(value => !value)}>

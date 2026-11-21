@@ -56,6 +56,8 @@ export class ResearchResponseMatrixRepository {
       const review = this.latest(request.projectId, request.artifactId);
       const material = this.captureMaterial(request, review?.snapshot.request.rows ?? []);
       const rows = review?.snapshot.request.rows ?? [];
+      const externalComments = material.externalComments;
+      const unresolvedExternal = externalComments.filter(comment => !rows.some(row => row.commentId === comment.commentId));
       const scientificReviews = this.research.scientificReviews.reportsForManuscript(request.projectId, request.artifactId);
       const reviewCurrent = review !== null && JSON.stringify(material) === JSON.stringify(review.snapshot.material) &&
         this.research.scientificReviews.findingRowsIssue(request.projectId, request.artifactId, rows, scientificReviews) === null;
@@ -64,8 +66,8 @@ export class ResearchResponseMatrixRepository {
         artifactVersion: this.research.inspectArtifact({
           projectId: request.projectId, artifactId: request.artifactId, expectedVersion: null
         }).snapshot.version,
-        material, review, reviewCurrent, scientificReviews, canEdit: this.canEdit(request.projectId, request.artifactId),
-        openCommentIds: rows.filter(row => row.status === 'open').map(row => row.commentId),
+        material, review, reviewCurrent, scientificReviews, externalComments, canEdit: this.canEdit(request.projectId, request.artifactId),
+        openCommentIds: [...rows.filter(row => row.status === 'open').map(row => row.commentId), ...unresolvedExternal.map(comment => comment.commentId)],
         addressedCommentIds: rows.filter(row => row.status === 'addressed').map(row => row.commentId),
         declinedCommentIds: rows.filter(row => row.status === 'declined').map(row => row.commentId)
       };
@@ -150,7 +152,7 @@ export class ResearchResponseMatrixRepository {
     const {manuscript, claims} = this.research.manuscripts.inspectBundle(scope);
     const evidence = [...new Set(rows.flatMap(row => row.evidenceIds))]
       .map(evidenceId => this.research.evidence.inspectEvidence(evidenceId, scope.projectId));
-    return {manuscript, claims, evidence};
+    return {manuscript, claims, evidence, externalComments: this.research.feedback.mergedComments(scope.projectId, scope.artifactId)};
   }
 
   private assertMaterial(snapshot: ResearchResponseMatrixReceipt['snapshot']): void {
@@ -178,6 +180,19 @@ export class ResearchResponseMatrixRepository {
           throw new Error('research_response_source_changed');
         }
       }
+    }
+    const recordedExternal = new Map(material.externalComments.length === 0 ? [] :
+      this.research.feedback.mergedComments(request.projectId, request.artifactId).map(item => [item.commentId, item]));
+    for (const comment of material.externalComments) {
+      const row = request.rows.find(row => row.commentId === comment.commentId);
+      if (row === undefined || row.comment !== comment.comment || row.reviewer !== comment.reviewer || row.finding !== undefined) {
+        throw new Error('research_response_external_comment_changed');
+      }
+      const recorded = recordedExternal.get(comment.commentId);
+      if (recorded === undefined) throw new Error('research_response_external_comment_changed');
+      const {location: _location, ...original} = comment;
+      const {location: _currentLocation, ...current} = recorded;
+      if (JSON.stringify(current) !== JSON.stringify(original)) throw new Error('research_response_external_comment_changed');
     }
   }
 

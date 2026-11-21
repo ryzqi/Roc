@@ -12,7 +12,11 @@ export function ResponseMatrixEditor({client, snapshot, report, writable, onDirt
   client: RocClient; snapshot: ResearchArtifactInspectResult['snapshot']; report: ResearchResponseMatrixInspection['report'];
   writable: boolean; onDirty: (value: boolean) => void; onPending: (value: boolean) => void; onSaved: () => void
 }): React.JSX.Element {
-  const initial = report.review?.snapshot.request.rows ?? [];
+  const savedRows=report.review?.snapshot.request.rows??[];
+  const initial:ResearchResponseMatrixSave['rows']=[...savedRows,...report.externalComments
+    .filter(comment=>!savedRows.some(row=>row.commentId===comment.commentId))
+    .map(comment=>({commentId:comment.commentId,reviewer:comment.reviewer,comment:comment.comment,
+      status:'open' as const,response:'',locations:[],evidenceIds:[]}))];
   const [rows, setRows] = useState(initial), [selected, setSelected] = useState(initial[0]?.commentId ?? '');
   const [rationale, setRationale] = useState(''), [dirty, setDirty] = useState(false), [candidateDirty, setCandidateDirty] = useState(false);
   const [validation, setValidation] = useState<string | null>(null), [nonce, setNonce] = useState(0);

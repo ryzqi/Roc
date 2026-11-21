@@ -47,6 +47,7 @@
 | [变更影响与定向修复](research-impact.md) | 记录依赖、修复输入与新运行 |
 | [科研图稿](research-figures.md) | Vega 定量图稿、Mermaid 方法图与人工数据映射 |
 | [Review Response Matrix](research-response-matrix.md) | 审稿意见与回复矩阵 |
+| [外部反馈与实验回流](research-collaboration.md) | Word/PDF 意见、持久等待和外部报告证据 |
 | [Journal Compliance](research-journal-compliance.md) | 版本化期刊规则与符合性报告 |
 | [投稿配置与投稿包](research-submissions.md) | 复用规则、实际 PDF 预检、署名与匿名变体 |
 | [科研最终导出](research-exports.md) | 冻结正文、审核快照、DOCX/HTML 与 arXiv 候选包 |

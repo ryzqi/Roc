@@ -19,6 +19,9 @@ import {researchRepairStartSchema} from '../../shared/schemas/research-repair';
 import {researchArgumentOutlineSaveSchema, researchArgumentOutlineMaterializeSchema} from '../../shared/schemas/research-argument-outline';
 import {researchSubmissionProfileSaveSchema} from '../../shared/schemas/research-submission-profile';
 import {researchSubmissionPrepareSchema,researchSubmissionDeliverSchema} from '../../shared/schemas/research-submission';
+import {researchFeedbackImportSchema,researchFeedbackMergeSchema} from '../../shared/schemas/research-feedback';
+import {researchExternalExperimentCreateSchema,researchExternalExperimentBindSchema,researchExternalExperimentImportSchema,
+  researchExternalExperimentCaptureSchema} from '../../shared/schemas/research-external-experiments';
 import {pickSubmissionDestination,type SubmissionDestinationPicker} from './submission-destination';
 import { withLiteratureContext } from '../services/literature-context';
 import { researchPythonEnvironmentSelectSchema } from '../../shared/schemas/research-python-environments';
@@ -193,6 +196,20 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker,
         }
         if(target.capabilityName==='research.submissions.prepare'){
           const request=researchSubmissionPrepareSchema.parse(input);
+          return withResearchHumanContext({capability:target.capabilityName,projectId:request.projectId,windowId},
+            ()=>invoker.invokeCapability(target.capabilityName,request));
+        }
+        if(target.capabilityName==='research.feedback.import'||target.capabilityName==='research.feedback.merge'){
+          const request=(target.capabilityName==='research.feedback.import'?researchFeedbackImportSchema:researchFeedbackMergeSchema).parse(input);
+          return withResearchHumanContext({capability:target.capabilityName,projectId:request.projectId,windowId},
+            ()=>invoker.invokeCapability(target.capabilityName,request));
+        }
+        if(target.capabilityName==='research.externalExperiments.create'||target.capabilityName==='research.externalExperiments.bind'||
+          target.capabilityName==='research.externalExperiments.importResult'||target.capabilityName==='research.externalExperiments.captureMetric'){
+          const schema=target.capabilityName==='research.externalExperiments.create'?researchExternalExperimentCreateSchema:
+            target.capabilityName==='research.externalExperiments.bind'?researchExternalExperimentBindSchema:
+            target.capabilityName==='research.externalExperiments.importResult'?researchExternalExperimentImportSchema:researchExternalExperimentCaptureSchema;
+          const request=schema.parse(input);
           return withResearchHumanContext({capability:target.capabilityName,projectId:request.projectId,windowId},
             ()=>invoker.invokeCapability(target.capabilityName,request));
         }

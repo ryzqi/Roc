@@ -62,6 +62,8 @@ import {ResearchRepairService} from './repair-service';
 import {hasResearchHumanContext} from '../../services/research-human-context';
 import {ResearchArgumentOutlineService} from './argument-outline-service';
 import {ResearchSubmissionProfileService} from './submission-profile-service';
+import {ResearchFeedbackService} from './feedback-service';
+import {ExternalExperimentService} from './external-experiment-service';
 import {ResearchIdeaOutcomeRepository} from './idea-outcome-repository';
 import {ResearchCitationReviewRepository} from './citation-review-repository';
 import {ResearchConsistencyRepository} from './consistency-repository';
@@ -100,6 +102,8 @@ export class ResearchRepository {
   readonly manuscripts: ResearchManuscriptRepository;
   readonly argumentOutlines: ResearchArgumentOutlineService;
   readonly submissionProfiles: ResearchSubmissionProfileService;
+  readonly feedback: ResearchFeedbackService;
+  readonly externalExperiments:ExternalExperimentService;
   readonly manuscriptSync: ResearchManuscriptSyncService;
   readonly impact: ResearchImpactService;
   readonly repairs: ResearchRepairService;
@@ -155,6 +159,8 @@ export class ResearchRepository {
     this.manuscriptSync = new ResearchManuscriptSyncService(db, this, now);
     this.argumentOutlines = new ResearchArgumentOutlineService(db, this, now);
     this.submissionProfiles = new ResearchSubmissionProfileService(db, this, now);
+    this.feedback = new ResearchFeedbackService(db, this, now);
+    this.externalExperiments=new ExternalExperimentService(db,this,now);
     this.impact = new ResearchImpactService(db, this);
     this.repairs = new ResearchRepairService(db, this, this.impact, now);
     this.runs = new ResearchRunRepository(db, this, now);
@@ -451,6 +457,7 @@ export class ResearchRepository {
         artifact, projectStatus: project.status, currentStage: project.currentStage,
         stage, content, origin, claims, evidence, relations,
         ...(manuscript === null ? {} : {manuscript: {sections: manuscript.sections, contentHash: manuscript.contentHash, claimsHash: manuscript.claimsHash}}),
+        ...(artifact.kind==='manuscript'?{externalFeedback:this.feedback.mergedComments(project.id,artifact.id).map(comment=>({commentId:comment.commentId,feedbackHash:comment.feedbackHash}))}:{}),
         production, ideaCanvas, ideaPlan, ideaOutcomes, citationReviews, consistencyReviews, responseMatrix, journalCompliance,
         ...(content?.output.scientificReview === undefined ? {} : {scientificReview: this.scientificReviews.inspect(project.id, artifact.id)}),
         provenance: rows.map(toProvenance), availableActions

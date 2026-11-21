@@ -32,6 +32,7 @@ export const researchArtifactInspectionBodySchema = z.object({
   currentStage: researchStageStateSchema.shape.stage, stage: researchStageStateSchema,
   content: researchArtifactContentSchema.nullable(), origin: researchArtifactOriginSchema.nullable(),
   manuscript: researchManuscriptSchema.pick({sections: true, contentHash: true, claimsHash: true}).nullable().optional(),
+  externalFeedback: z.strictObject({commentId:z.string().min(1),feedbackHash:hash}).array().optional(),
   claims: researchClaimSchema.array(), evidence: researchInspectedEvidenceSchema.array(),
   relations: researchEvidenceRelationSchema.array(),
   ideaCanvas: researchIdeaCanvasSchema.nullable(), ideaPlan: researchIdeaPlanInspectionSchema.nullable(),

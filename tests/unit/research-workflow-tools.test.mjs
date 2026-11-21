@@ -114,7 +114,7 @@ test('unmapped and unreviewed numbers survive projection with exact positions an
 
 test('empty response matrix remains missing and stale report remains stale', async () => {
   const data = {status: 'stale', reportHash: H, report: {schemaVersion: 1, projectId: 'project', artifactId: 'paper', artifactVersion: H,
-    material, canEdit: false, review: null, reviewCurrent: false, openCommentIds: [], addressedCommentIds: [], declinedCommentIds: [], scientificReviews: []}};
+    material:{...material,externalComments:[]}, externalComments:[], canEdit: false, review: null, reviewCurrent: false, openCommentIds: [], addressedCommentIds: [], declinedCommentIds: [], scientificReviews: []}};
   const result = await connect(() => data).tool.invoke({kind: 'response_matrix', artifactId: 'paper', expectedHash: 'b'.repeat(64)});
   assert.deepEqual(result.findings.map(item => item.code), ['inspection_changed', 'response_matrix_missing', 'response_matrix_read_only']);
   assert.equal(result.status, 'attention_required'); assert.equal(result.data.status, 'stale');

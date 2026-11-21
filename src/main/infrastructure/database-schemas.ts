@@ -771,6 +771,24 @@ CREATE INDEX idx_performance_samples_sampled
 export const researchSchema: RocDatabaseSchema = {
   version: 75,
   sql: `
+CREATE TABLE research_external_experiments (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  artifact_id TEXT NOT NULL REFERENCES research_artifacts(id) ON DELETE CASCADE, request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)), snapshot_hash TEXT NOT NULL,
+  binding_json TEXT CHECK(binding_json IS NULL OR json_valid(binding_json)), binding_hash TEXT,
+  provider TEXT, external_id TEXT, bind_request_id TEXT,
+  UNIQUE(project_id,request_id), UNIQUE(project_id,provider,external_id), UNIQUE(project_id,bind_request_id)
+);
+CREATE TABLE research_external_experiment_results (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  contract_id TEXT NOT NULL REFERENCES research_external_experiments(id) ON DELETE CASCADE, request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)), snapshot_hash TEXT NOT NULL,
+  original_bytes BLOB NOT NULL, UNIQUE(project_id,request_id)
+);
+CREATE TABLE research_external_experiment_files (
+  result_id TEXT NOT NULL REFERENCES research_external_experiment_results(id) ON DELETE CASCADE,
+  path TEXT NOT NULL, bytes BLOB NOT NULL, PRIMARY KEY(result_id,path)
+);
 CREATE TABLE research_submission_profiles (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
@@ -1391,6 +1409,24 @@ CREATE TABLE research_submission_deliveries (
   submission_id TEXT NOT NULL REFERENCES research_submissions(id) ON DELETE CASCADE,
   request_json TEXT NOT NULL CHECK(json_valid(request_json)), actor_json TEXT NOT NULL CHECK(json_valid(actor_json)),
   receipt_json TEXT NOT NULL CHECK(json_valid(receipt_json)), created_at TEXT NOT NULL
+);
+CREATE TABLE research_feedback_imports (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  artifact_id TEXT NOT NULL REFERENCES research_artifacts(id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL, request_hash TEXT NOT NULL, snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
+  snapshot_hash TEXT NOT NULL, UNIQUE(project_id,request_id)
+);
+CREATE TABLE research_feedback_comments (
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  artifact_id TEXT NOT NULL REFERENCES research_artifacts(id) ON DELETE CASCADE,
+  feedback_id TEXT NOT NULL REFERENCES research_feedback_imports(id) ON DELETE CASCADE,
+  item_id TEXT NOT NULL, snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)), snapshot_hash TEXT NOT NULL,
+  PRIMARY KEY(feedback_id,item_id)
+);
+CREATE TABLE research_feedback_merges (
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE, request_id TEXT NOT NULL,
+  request_hash TEXT NOT NULL, actor_json TEXT NOT NULL CHECK(json_valid(actor_json)),
+  receipt_json TEXT NOT NULL CHECK(json_valid(receipt_json)), PRIMARY KEY(project_id,request_id)
 );
 CREATE UNIQUE INDEX idx_research_repairs_active ON research_repairs(project_id) WHERE status='active';
 CREATE TABLE research_monitor_alerts (

@@ -8,7 +8,7 @@ import type {ResearchRepository} from './repository';
 import {experimentMetricSource} from './experiment-result-evidence';
 import {calculateConsistency} from './consistency-calculation';
 import {relationClaimHash} from './evidence-relation-repository';
-import {researchContentHash} from './research-files';
+import {buildMetricFigureSources} from './metric-figure-source';
 import {writeBibliography, type BibliographyEntry} from './bibliography';
 import {escapeLatex} from './latex-source';
 import {manuscriptBibliographyEntry} from './manuscript-bibliography';
@@ -37,7 +37,7 @@ export class ResearchResultDerivationService {
     return researchResultDerivationSchema.parse({
       result, previous: comparison === null ? null : {...reference(comparison.left), differences: comparison.differences},
       execution: receipt.snapshot.execution, methods: methodsDraft(receipt), rows,
-      figures: figuresFor(receipt, rows), manuscript, responseDraft: this.response(request, rows)
+      figures: buildMetricFigureSources({...reference(receipt), inputHash: receipt.snapshot.execution.inputHash}, rows), manuscript, responseDraft: this.response(request, rows)
     });
   }
 
@@ -144,31 +144,4 @@ function methodsDraft(receipt: ResearchExperimentResultReceipt): string {
     `实际执行使用 ${execution.engine}，从 ${execution.source.path} 运行，读取 ${execution.inputs.length} 个冻结输入文件并写入 ${execution.output.path}${seed}。`,
     `假设：${request.method.assumptions}。局限：${request.method.limitations}`
   ].join('\n');
-}
-
-function figuresFor(receipt: ResearchExperimentResultReceipt, rows: Row[]): ResearchResultDerivation['figures'] {
-  const units = new Map<string, Row[]>();
-  for (const row of rows) {
-    const group = units.get(row.metric.unit);
-    if (group === undefined) units.set(row.metric.unit, [row]);
-    else group.push(row);
-  }
-  return [...units].map(([unit, group]) => {
-    const source = JSON.stringify({
-      description: 'Reviewed experiment metrics',
-      usermeta: {roc: {...reference(receipt), inputHash: receipt.snapshot.execution.inputHash}},
-      data: {values: group.map(({metric, definition, ordinal}) => ({
-        metricId: metric.id, label: definition.label, value: metric.value, unit, sampleSize: metric.sampleSize, metricOrdinal: ordinal
-      }))},
-      mark: {type: 'point', filled: true},
-      encoding: {
-        x: {field: 'metricId', type: 'nominal', title: '指标', sort: group.map(row => row.metric.id)},
-        y: {field: 'value', type: 'quantitative', title: unit},
-        tooltip: [{field: 'label', type: 'nominal'}, {field: 'value', type: 'quantitative'},
-          {field: 'unit', type: 'nominal'}, {field: 'sampleSize', type: 'quantitative'}]
-      }
-    }, null, 2) + '\n';
-    const sourceHash = researchContentHash(source);
-    return {unit, filename: `results-${sourceHash.slice(0, 20)}.vl.json`, source, sourceHash, metricIds: group.map(row => row.metric.id)};
-  });
 }

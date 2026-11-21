@@ -3,6 +3,7 @@ import {researchClaimSchema, researchManuscriptSchema} from './research-evidence
 import {researchInspectedEvidenceSchema} from './research-evidence-source';
 import {researchRelationReviewerSchema} from './research-evidence-relations';
 import {scientificFindingLinkSchema, scientificReviewInspectionSchema} from './research-scientific-review';
+import {researchExternalCommentSchema} from './research-feedback';
 
 const id = z.string().trim().min(1).max(300);
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -39,7 +40,7 @@ export const researchResponseMatrixSaveSchema = z.strictObject({
   'research_response_duplicate_comment');
 export const researchResponseMatrixMaterialSchema = z.strictObject({
   manuscript: researchManuscriptSchema, claims: researchClaimSchema.array(),
-  evidence: researchInspectedEvidenceSchema.array()
+  evidence: researchInspectedEvidenceSchema.array(), externalComments: researchExternalCommentSchema.array()
 });
 export const researchResponseMatrixReceiptSchema = z.strictObject({
   snapshot: z.strictObject({
@@ -60,7 +61,7 @@ export const researchResponseMatrixReportSchema = z.strictObject({
   material: researchResponseMatrixMaterialSchema, canEdit: z.boolean(),
   review: researchResponseMatrixReceiptSchema.nullable(), reviewCurrent: z.boolean(),
   openCommentIds: id.array(), addressedCommentIds: id.array(), declinedCommentIds: id.array(),
-  scientificReviews: scientificReviewInspectionSchema.array()
+  scientificReviews: scientificReviewInspectionSchema.array(), externalComments: researchExternalCommentSchema.array()
 });
 export const researchResponseMatrixInspectionSchema = z.strictObject({
   status: z.enum(['current', 'stale']), reportHash: hash, report: researchResponseMatrixReportSchema

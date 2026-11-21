@@ -163,8 +163,9 @@ for (const type of ['anthropic_compatible', 'openai_compatible']) {
       assert.equal(schema.type, 'object');
       assert.deepEqual(schema.required, ['kind']);
       assert.equal(schema.additionalProperties, false);
-      assert.equal(schema.properties.kind.enum.length, 20);
+      assert.equal(schema.properties.kind.enum.length, 21);
       assert.ok(schema.properties.kind.enum.includes('fulltext_content'));
+      assert.ok(schema.properties.kind.enum.includes('extraction_pilot'));
       assert.equal(schema.properties.expectedBindingHash.pattern, '^[a-f0-9]{64}$');
       for (const key of ['oneOf', 'anyOf', 'allOf', 'not']) assert.equal(key in schema, false);
 

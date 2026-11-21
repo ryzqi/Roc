@@ -46,6 +46,8 @@ import {registerResearchArgumentOutlineCapabilities} from './argument-outline-ca
 import {registerResearchSubmissionProfileCapabilities} from './submission-profile-capabilities';
 import {ResearchSubmissionService} from './submission-service';
 import {registerResearchSubmissionCapabilities} from './submission-capabilities';
+import {registerResearchFeedbackCapabilities} from './feedback-capabilities';
+import {registerResearchExternalExperimentCapabilities} from './external-experiment-capabilities';
 import {join} from 'node:path';
 
 export async function registerResearchWorkflow(
@@ -69,6 +71,8 @@ export async function registerResearchWorkflow(
   submissions.recover();
   lifecycle.ownBackgroundServices([submissions]);
   registerResearchSubmissionCapabilities(context,submissions);
+  registerResearchFeedbackCapabilities(context,researchRepository.feedback);
+  registerResearchExternalExperimentCapabilities(context,researchRepository.externalExperiments,workspaceFiles);
   const scientificReviews = new ResearchArtifactScientificReviewService(researchRepository, researchResults, researchFigures);
   const humanGate = createResearchHumanGate({ repository: researchRepository, production: productionJob, scientificReviews });
   const readiness = new ResearchStageReadinessService(researchRepository, context.capabilities);
