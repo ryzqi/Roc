@@ -75,7 +75,7 @@ function renderSubagentBlock(block: ChatTranscriptSubagentBlock, isStreaming: bo
     );
   }
   if (block.kind === 'reasoning') {
-    return <ReasoningBlock key={block.id} id={block.id} content={block.content} isStreaming={block.isStreaming} />;
+    return <ReasoningBlock key={block.id} content={block.content} isStreaming={block.isStreaming} />;
   }
   return <ToolCallBlock key={block.id} block={block} />;
 }

@@ -18,6 +18,7 @@ import { QuestionInterruptCard } from './question-card';
 import { ReasoningBlock } from './reasoning-block';
 import { SubagentActivityCard } from './subagent-card';
 import { ToolCallBlock } from './tool-call-block';
+import { TranscriptActivityList } from './transcript-activity-list';
 
 const StreamingMarkdown = retryableLazy<{ text: string; isStreaming: boolean }>(async () =>
   ({ default: (await import('./streaming-markdown-view')).StreamingMarkdownView })
@@ -145,9 +146,7 @@ function ChatMessageRowImpl({ message, onApprovalDecision, approvalPending, acti
     >
       {isAssistant ? (
         <article className="flex min-w-0 max-w-full flex-1 flex-col gap-3" data-testid="assistant-message-content">
-          {activityBlocks.map((block) => (
-            <ChatActivityBlockView key={block.id} block={block} />
-          ))}
+          <TranscriptActivityList blocks={activityBlocks} streaming={message.isStreaming} renderBlock={renderActivityBlock} />
           {message.content.length === 0 ? null : (
             <StreamingText text={message.content} isStreaming={message.isStreaming} />
           )}
@@ -303,7 +302,7 @@ function ChatActivityBlockView({ block }: {
   block: ChatTranscriptActivityBlock;
 }): React.JSX.Element {
   if (block.kind === 'reasoning') {
-    return <ReasoningBlock id={block.id} content={block.content} isStreaming={block.isStreaming} />;
+    return <ReasoningBlock content={block.content} isStreaming={block.isStreaming} />;
   }
   if (block.kind === 'tool_call') {
     return <ToolCallBlock block={block} />;
@@ -315,4 +314,8 @@ function ChatActivityBlockView({ block }: {
     return <SubagentActivityCard block={block} />;
   }
   return <GuardrailBlock block={block} />;
+}
+
+function renderActivityBlock(block: ChatTranscriptActivityBlock): React.JSX.Element {
+  return <ChatActivityBlockView key={block.id} block={block} />;
 }
