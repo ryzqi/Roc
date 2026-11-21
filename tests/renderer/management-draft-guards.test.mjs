@@ -7,12 +7,12 @@ import electronPath from 'electron';
 import {_electron, expect} from '@playwright/test';
 import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 
-let directory, app, page;
+let directory, artifacts, app, page;
 const errors = [];
-const artifacts = join(process.cwd(), '.artifacts/management-layout');
 const clipAudit = await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), 'roc-management-draft-guards-'));
+  artifacts = process.env.ROC_UI_AUDIT_DIR ?? join(directory, 'screenshots');
   await buildViteRenderer({directory, style: 'html,body,#root{height:100%;margin:0}', script: `
     import React, {useState} from 'react';
     import {createRoot} from 'react-dom/client';
@@ -63,7 +63,10 @@ before(async () => {
           builtinAutoUpdate: input => skillWrite('autoUpdate', input),
           builtinRestore: input => skillWrite('restore', input),
           onUpdated: () => () => {}},
-        tasks: {listBackgroundTasks: async () => ok(window.backgrounds), getSchedulerStatus: async () => ok({running: false, registeredTaskCount: window.backgrounds.length}),
+        tasks: {listBackgroundTasks: async () => {
+          if (window.deferBackgroundRead) return await new Promise(resolve => {window.finishBackgroundRead = resolve;});
+          return ok(window.backgrounds);
+        }, getSchedulerStatus: async () => ok({running: false, registeredTaskCount: window.backgrounds.length}),
           listScheduledRuns: async () => ok([]),
           updateBackgroundTask: request => {window.updates.push(request); return new Promise(resolve => {window.finishUpdate = resolve;});},
           createBackgroundTaskPreview: request => {window.previews.push(request); return new Promise(resolve => {window.finishPreview = resolve;});},
@@ -112,6 +115,7 @@ before(async () => {
     window.mount = (backgrounds = []) => {
       window.saves = []; window.presets = 0; window.writes = []; window.navigations = 0;
       window.previews = []; window.creates = []; window.updates = []; window.backgrounds = backgrounds;
+      window.deferBackgroundRead = false;
       window.skillWrites = []; window.skillSettlers = []; window.skillReads = 0; window.skillTransport = null;
       window.installedSkills = [{id: 'skill-a', name: 'Skill A', enabled: true, path: '/skills/skill-a',
         description: 'Installed skill', status: 'ready', origin: 'user', sourceId: null,
@@ -421,7 +425,62 @@ test('task cancel and replacement preserve a draft until discard is confirmed', 
 
 const background = id => ({
   id, goal: `Task ${id}`, status: 'paused', triggerType: 'manual', triggerDescription: '手动触发',
-  nextRunAt: null, cronExpression: null, allowedActions: [], forbiddenActions: [], runCount: 0
+  nextRunAt: null, lastRunAt: null, lastRunStatus: null, cronExpression: null,
+  allowedActions: [], forbiddenActions: [], runCount: 0, workspacePath: '/project-a',
+  riskLevel: 'low', requiresConfirmation: false
+});
+
+test('background task list filters without dropping drafts and discloses only selected actions', async () => {
+  await page.evaluate(backgrounds => {window.mount(backgrounds); window.setTab('tasks');}, [
+    background('a'), {...background('b'), status: 'failed', goal: 'Review failed import'}
+  ]);
+  await page.getByTestId('mgmt-task-select-a').waitFor();
+  await expect(page.getByTestId('mgmt-task-edit-a')).toHaveCount(0);
+  await expect(page.getByTestId('mgmt-task-edit-b')).toHaveCount(0);
+  await page.getByTestId('mgmt-task-select-a').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('mgmt-task-edit-a')).toBeVisible();
+  await expect(page.getByTestId('mgmt-task-edit-b')).toHaveCount(0);
+  await page.getByTestId('mgmt-task-edit-a').click();
+  await page.getByTestId('mgmt-task-draft-goal').fill('Retained while filtering');
+  await page.getByTestId('mgmt-tasks-search').fill('Review');
+  await expect(page.getByTestId('mgmt-task-select-a')).toHaveCount(0);
+  await expect(page.getByTestId('mgmt-task-select-b')).toBeVisible();
+  await expect(page.getByTestId('mgmt-tasks-summary')).toHaveText('1 / 2 个任务');
+  await page.getByTestId('mgmt-tasks-status-filter').selectOption('paused');
+  await expect(page.getByTestId('mgmt-tasks-empty')).toContainText('没有符合条件');
+  await page.getByTestId('mgmt-tasks-clear-filters').click();
+  await expect(page.getByTestId('mgmt-task-select-a')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('mgmt-task-draft-goal')).toHaveValue('Retained while filtering');
+  await page.evaluate(() => window.mount());
+});
+
+test('background refresh keeps rows and drafts during pending reads and errors', async () => {
+  await page.evaluate(backgrounds => {window.mount(backgrounds); window.setTab('tasks');}, [background('a')]);
+  await page.getByTestId('mgmt-task-select-a').click();
+  await page.getByTestId('mgmt-task-edit-a').click();
+  await page.getByTestId('mgmt-task-draft-goal').fill('Retained while refreshing');
+  await page.evaluate(() => {window.deferBackgroundRead = true;});
+  await page.getByTestId('mgmt-tasks-reload').click();
+  await expect(page.getByTestId('mgmt-tasks-reload')).toBeDisabled();
+  await expect(page.getByTestId('mgmt-task-select-a')).toBeVisible();
+  await page.waitForFunction(() => typeof window.finishBackgroundRead === 'function');
+  await page.evaluate(() => window.finishBackgroundRead({ok: false, error: {message: 'Read refused'}}));
+  await expect(page.getByTestId('mgmt-tasks-refresh-error')).toContainText('Read refused');
+  await expect(page.getByTestId('mgmt-tasks-reload')).toBeEnabled();
+  await expect(page.getByTestId('mgmt-task-select-a')).toBeVisible();
+  await expect(page.getByTestId('mgmt-task-draft-goal')).toHaveValue('Retained while refreshing');
+  await page.evaluate(() => {window.deferBackgroundRead = false;});
+  await page.getByTestId('mgmt-tasks-reload').click();
+  await expect(page.getByTestId('mgmt-tasks-refresh-error')).toHaveCount(0);
+  await page.evaluate(() => window.mount());
+});
+
+test('background empty state retains its create action', async () => {
+  await page.evaluate(() => {window.mount(); window.setTab('tasks');});
+  await expect(page.getByTestId('mgmt-tasks-empty')).toHaveText('暂无后台任务');
+  await expect(page.getByTestId('mgmt-tasks-search')).toHaveCount(0);
+  await expect(page.getByTestId('mgmt-tasks-create')).toBeEnabled();
 });
 
 async function editBackground() {
@@ -494,7 +553,11 @@ test('task categories retain background drafts and block switching during same-e
 
 test('management content is readable in both themes at desktop and drawer widths', async () => {
   await mkdir(artifacts, {recursive: true});
-  await page.evaluate(() => {window.mount(); window.showLayout();});
+  await page.evaluate(backgrounds => {window.mount(backgrounds); window.showLayout();}, [
+    {...background('a'), goal: '每周整理文献与跟进尚未完成的科研任务', triggerType: 'cron', nextRunAt: '2026-11-23T01:00:00.000Z', runCount: 1234},
+    {...background('b'), goal: 'Review failed import', status: 'failed'},
+    {...background('c'), goal: '更新知识库', status: 'running'}
+  ]);
   const audits = [];
   for (const theme of ['light', 'dark']) {
     await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
@@ -533,8 +596,14 @@ test('management content is readable in both themes at desktop and drawer widths
           await page.screenshot({path: join(artifacts, 'skills-expanded-' + theme + '-' + width + '.png')});
         }
         if (tab === 'tasks') {
-          for (const category of ['research', 'python']) {
+          for (const category of ['background', 'research', 'python']) {
             await page.getByTestId('mgmt-task-category-' + category).click();
+            if (category === 'background') {
+              await page.getByTestId('mgmt-task-select-a').click();
+              await page.getByTestId('mgmt-task-edit-a').hover();
+              await expect(page.getByTestId('mgmt-task-a')).toContainText('1,234');
+              assert.equal(await page.getByTestId('mgmt-tasks').evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
+            }
             const changed = await page.evaluate('(' + clipAudit + ')({root: ".management-surface", viewport: true})');
             assert.equal(changed.cut, 0, JSON.stringify(changed));
             audits.push({theme, width, tab: category, ...changed});

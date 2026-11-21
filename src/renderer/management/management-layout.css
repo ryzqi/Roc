@@ -8,10 +8,11 @@
 .management-body .form-section > header h3 { font-size: var(--font-lead-size); font-weight: var(--font-weight-semibold); }
 .management-body .form-section { gap: var(--space-4); }
 .management-tasks { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
-.management-task-categories { display: flex; flex-wrap: wrap; gap: var(--space-5); border-bottom: .5px solid var(--line); }
-.management-task-categories button { min-height: 36px; border-bottom: 2px solid transparent; margin-bottom: -.5px; color: var(--muted); font-size: var(--font-meta-size); }
-.management-task-categories button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent-ink); font-weight: var(--font-weight-semibold); }
-.management-task-categories button:hover { color: var(--ink); }
+.management-task-categories { display: flex; flex-wrap: wrap; gap: var(--space-1); border-bottom: .5px solid var(--line); padding-bottom: var(--space-2); }
+.management-task-categories button { min-height: 32px; padding: var(--space-1) var(--space-3); border-radius: var(--r-control); color: var(--muted); font-size: var(--font-meta-size); }
+.management-task-categories button[aria-selected="true"] { color: var(--ink); background: var(--overlay-active); font-weight: var(--font-weight-medium); }
+.management-task-categories button:enabled:hover { color: var(--ink); background: var(--overlay-hover); }
+.management-task-categories button:enabled:active { background: var(--overlay-active); }
 .management-task-categories button:disabled { opacity: .5; }
 .management-task-categories button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: var(--r-control); }
 .management-tasks [hidden] { display: none; }
@@ -39,13 +40,12 @@
 @container (max-width: 480px) {
   .management-heading { gap: var(--space-3); }
   .management-heading h2 { display: none; }
-  .management-task-categories { gap: var(--space-4); }
 }
 
 .management-skills { display: flex; min-width: 0; flex-direction: column; gap: var(--space-6); }
 .management-search { position: relative; display: block; }
-.management-search > svg { position: absolute; left: 10px; top: 9px; color: var(--subtle); pointer-events: none; }
-.management-search > input { padding-left: 32px; }
+.management-search > svg { position: absolute; inset-inline-start: var(--space-3); top: 50%; transform: translateY(-50%); color: var(--subtle); pointer-events: none; }
+.management-search > input { padding-inline-start: var(--space-7); }
 .management-list-empty { color: var(--muted); padding-block: var(--space-5); font-size: var(--font-meta-size); }
 .management-skill-description { display: block; margin-top: var(--space-1); color: var(--muted); font-size: var(--font-meta-size); line-height: 1.6; overflow-wrap: anywhere; }
 .management-skills [data-testid="mgmt-skills-rows"] { gap: 0; border-block: .5px solid var(--line); }
@@ -54,3 +54,26 @@
 .management-skills [data-testid="mgmt-skills-import"] { border-top: .5px solid var(--line); padding-top: var(--space-4); }
 .management-skills [data-testid="mgmt-skills-import"] > header { border: 0; padding-bottom: 0; }
 .management-skills [data-testid="mgmt-skills-import"] > header h3 { font-size: var(--font-ui-size); }
+
+.management-background-tasks { display: flex; min-height: 0; min-width: 0; flex-direction: column; gap: var(--space-6); font-variant-numeric: tabular-nums; }
+.management-background-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.management-background-count { flex: 1; color: var(--muted); font-size: var(--font-meta-size); white-space: nowrap; }
+.management-background-filters { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.management-background-filters > .management-search { flex: 1 1 200px; }
+.management-background-filters > label { min-width: 0; }
+.management-background-list { border-block: .5px solid var(--line); }
+.management-background-row { min-width: 0; }
+.management-background-row + .management-background-row { border-top: .5px solid var(--line); }
+.management-background-row[data-selected="true"] { background: var(--overlay-active); }
+.management-background-select { display: flex; flex-direction: column; width: 100%; min-width: 0; gap: var(--space-1); padding: var(--space-3) var(--space-2); text-align: start; border-radius: var(--r-control); }
+.management-background-select:enabled:hover { background: var(--overlay-hover); }
+.management-background-select:enabled:active { background: var(--overlay-active); }
+.management-background-select:disabled { opacity: .5; }
+.management-background-select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.management-background-title { display: flex; width: 100%; align-items: start; gap: var(--space-3); color: var(--ink); font-size: var(--font-ui-size); }
+.management-background-title > :first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; text-wrap: balance; }
+.management-background-status { flex-shrink: 0; padding-inline: var(--space-1); border-radius: var(--r-chip); background: var(--overlay-hover); color: var(--muted); font-size: var(--font-meta-size); }
+.management-background-meta { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); color: var(--muted); font-size: var(--font-meta-size); overflow-wrap: anywhere; }
+.management-background-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 0 var(--space-2) var(--space-3); }
+.management-background-pending { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--muted); font-size: var(--font-meta-size); }
+.management-background-tasks > .form-section > header h3 { font-size: var(--font-ui-size); }

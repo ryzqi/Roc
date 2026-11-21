@@ -119,6 +119,7 @@ export function useBackgroundTasks(client: RocClient, workspacePath: string | nu
 
   useEffect(() => {
     let cancelled = false;
+    setStatus('loading');
     void (async () => {
       try {
         const [list, schedulerStatus] = await Promise.all([listBackgroundTasks(client), getSchedulerStatus(client)]);

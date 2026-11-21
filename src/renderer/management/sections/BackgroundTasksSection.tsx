@@ -1,6 +1,7 @@
 import '../management-layout.css';
-import { useState } from 'react';
-import { CalendarClock, Play, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { CalendarClock, LoaderCircle, Play, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
+import type { TaskStatus } from '../../../shared/types';
 import { ConfirmDialog } from '../../shell/ConfirmDialog';
 import { FormNote, FormSection, KeyValueRow, formInputClass, formSecondaryButtonClass, formTextAreaClass } from '../../shared/form-ui';
 import { formatBeijingDateTime } from '../../shared/format';
@@ -9,7 +10,6 @@ import {
   scheduledRunLine,
   schedulerStatusWord,
   taskIssueFor,
-  taskSummaryLine,
   triggerTypeLabels,
   type TaskDraft
 } from '../background-task-model';
@@ -44,6 +44,8 @@ function draftField(draft: TaskDraft, key: keyof TaskDraft, value: string): Task
 }
 
 export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTasksStore }): React.JSX.Element {
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>('all');
   const [deleteAttempted, setDeleteAttempted] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [pendingEditorAction, setPendingEditorAction] = useState<(() => void) | null>(null);
@@ -52,6 +54,13 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
     if (tasks.dirty) setPendingEditorAction(() => action);
     else action();
   };
+  const visibleTasks = useMemo(() => {
+    const search = query.trim().toLocaleLowerCase();
+    return tasks.tasks.filter(task => (statusFilter === 'all' || task.status === statusFilter) &&
+      `${task.goal} ${task.triggerDescription}`.toLocaleLowerCase().includes(search));
+  }, [tasks.tasks, query, statusFilter]);
+  const filtered = query.trim() !== '' || statusFilter !== 'all';
+  const clearFilters = (): void => { setQuery(''); setStatusFilter('all'); };
 
   // Same rule as the MCP section: only "nothing to show yet" is a loading state; a refresh keeps the
   // list on screen (and keeps the buttons attached).
@@ -59,6 +68,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
     return tasks.status === 'error' ? (
       <FormNote tone="warn" testId="mgmt-tasks-error">
         读取后台任务失败：{tasks.error}
+        <button type="button" onClick={tasks.reload} className={formSecondaryButtonClass}>重试</button>
       </FormNote>
     ) : (
       <FormNote testId="mgmt-tasks-loading">正在读取后台任务…</FormNote>
@@ -69,15 +79,14 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
   const deleteGoal = tasks.tasks.find((task) => task.id === deleteTarget)?.goal ?? null;
 
   return (
-    <div className="flex min-h-0 flex-col gap-3" data-testid="mgmt-tasks">
+    <div className="management-background-tasks" data-testid="mgmt-tasks">
       <FormSection
         title="后台任务"
         testId="mgmt-tasks-list-section"
       >
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-muted text-[length:var(--font-meta-size)]" data-testid="mgmt-tasks-summary">
-            {tasks.tasks.length} 个任务，调度器 {schedulerStatusWord(tasks.scheduler)}，已注册{' '}
-            {tasks.scheduler?.registeredTaskCount ?? '—'}
+        <div className="management-background-toolbar">
+          <span className="management-background-count" data-testid="mgmt-tasks-summary" role="status">
+            {filtered ? `${visibleTasks.length} / ${tasks.tasks.length}` : tasks.tasks.length} 个任务
           </span>
           <button
             type="button"
@@ -86,8 +95,8 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
             onClick={() => tasks.reload()}
             className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
           >
-            <RefreshCw size={11} aria-hidden="true" />
-            重新读取
+            <RefreshCw size={14} aria-hidden="true" />
+            刷新
           </button>
           <button
             type="button"
@@ -96,14 +105,34 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
             onClick={() => changeEditor(tasks.startCreate)}
             className={`${formSecondaryButtonClass} inline-flex items-center gap-1`}
           >
-            <Plus size={11} aria-hidden="true" />
+            <Plus size={14} aria-hidden="true" />
             新建任务
           </button>
         </div>
 
+        {tasks.tasks.length === 0 && !filtered ? null : <div className="management-background-filters">
+          <label className="management-search">
+            <Search size={14} aria-hidden="true" />
+            <span className="sr-only">搜索后台任务</span>
+            <input type="search" value={query} onChange={event => setQuery(event.target.value)}
+              placeholder="搜索任务目标或触发描述" className={formInputClass} data-testid="mgmt-tasks-search" />
+          </label>
+          <label>
+            <span className="sr-only">任务状态</span>
+            <select value={statusFilter} onChange={event => setStatusFilter(event.target.value as TaskStatus | 'all')}
+              className={formInputClass} data-testid="mgmt-tasks-status-filter">
+              <option value="all">全部状态</option>
+              {Object.entries(taskStatusLabels).map(([status, label]) => <option key={status} value={status}>{label}</option>)}
+            </select>
+          </label>
+        </div>}
+
+        {tasks.error === null ? null : <FormNote tone="warn" testId="mgmt-tasks-refresh-error">刷新失败：{tasks.error}</FormNote>}
+
         <details className="management-disclosure" data-testid="mgmt-tasks-scheduler-details">
-          <summary>调度状态{tasks.scheduler?.lastError ? <span className="ml-2">需处理</span> : null}</summary>
+          <summary>调度器 {schedulerStatusWord(tasks.scheduler)}{tasks.scheduler?.lastError ? <span className="ms-2">需处理</span> : null}</summary>
         <dl className="flex flex-col gap-0.5">
+          <KeyValueRow label="已注册" value={`${tasks.scheduler?.registeredTaskCount ?? '—'} 个任务`} testId="mgmt-tasks-registered" />
           <KeyValueRow
             label="下次触发"
             value={tasks.scheduler?.nextFireAt === null || tasks.scheduler?.nextFireAt === undefined ? '—' : formatBeijingDateTime(tasks.scheduler.nextFireAt)}
@@ -111,7 +140,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
           />
           <KeyValueRow
             label="最近跳过"
-            value={String(tasks.scheduler?.recentSkippedCount ?? 0)}
+            value={`${tasks.scheduler?.recentSkippedCount ?? 0} 次`}
             testId="mgmt-tasks-skipped"
           />
           <KeyValueRow label="调度错误" value={tasks.scheduler?.lastError ?? '无'} testId="mgmt-tasks-scheduler-error" />
@@ -124,19 +153,20 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
           </FormNote>
         )}
 
-        {tasks.tasks.length === 0 ? null : (
-          <ul className="flex flex-col gap-1" data-testid="mgmt-tasks-rows">
-            {tasks.tasks.map((task) => {
+        {visibleTasks.length === 0 ? <div className="management-list-empty" data-testid="mgmt-tasks-empty">
+          <p>{tasks.tasks.length === 0 ? '暂无后台任务' : '没有符合条件的任务'}</p>
+          {filtered ? <button type="button" className={formSecondaryButtonClass} onClick={clearFilters}
+            data-testid="mgmt-tasks-clear-filters">清除筛选</button> : null}
+        </div> : (
+          <ul className="management-background-list" data-testid="mgmt-tasks-rows">
+            {visibleTasks.map((task) => {
               const availability = getTaskActionAvailability(task.status);
               const selected = task.id === tasks.selectedId;
               return (
                 <li
                   key={task.id}
-                  className={
-                    selected
-                      ? 'flex flex-col gap-1 rounded-card border-[0.5px] border-line bg-[var(--overlay-active)] px-2 py-1.5'
-                      : 'flex flex-col gap-1 rounded-card border-[0.5px] border-line px-2 py-1.5'
-                  }
+                  className="management-background-row"
+                  data-selected={selected}
                   data-testid={`mgmt-task-${task.id}`}
                 >
                   <button
@@ -145,18 +175,19 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
                     aria-pressed={selected}
                     onClick={() => tasks.select(task.id)}
                     data-testid={`mgmt-task-select-${task.id}`}
-                    className="flex min-w-0 flex-col gap-0.5 text-left"
+                    className="management-background-select"
                   >
-                    <span className="flex flex-wrap items-center gap-2">
-                      <span className="text-ink text-[length:var(--font-meta-size)]">{task.goal}</span>
-                      <span className="text-muted text-[length:var(--font-micro-size)]">{taskStatusLabels[task.status]}</span>
-                      <span className="text-subtle text-[length:var(--font-micro-size)]">
-                        {triggerTypeLabels[task.triggerType]}，{task.triggerDescription}
-                      </span>
+                    <span className="management-background-title">
+                      <span>{task.goal}</span>
+                      <span className="management-background-status">{taskStatusLabels[task.status]}</span>
                     </span>
-                    <span className="text-subtle text-[length:var(--font-micro-size)]">{taskSummaryLine(task)}</span>
+                    <span className="management-background-meta">
+                      <span>{task.triggerDescription || triggerTypeLabels[task.triggerType]}</span>
+                      <span>已运行 {task.runCount.toLocaleString()} 次</span>
+                      {task.nextRunAt === null ? null : <span>下次 {formatBeijingDateTime(task.nextRunAt)}</span>}
+                    </span>
                   </button>
-                  <div className="flex flex-wrap items-center gap-2">
+                  {selected ? <div className="management-background-actions" aria-label="所选任务操作" aria-busy={tasks.action.pending}>
                     {availability.runNow ? (
                       <button
                         type="button"
@@ -231,7 +262,10 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
                         删除
                       </button>
                     ) : null}
-                  </div>
+                    {tasks.action.pending ? <span role="status" className="management-background-pending">
+                      <LoaderCircle size={14} className="motion-safe:animate-spin" aria-hidden="true" />处理中…
+                    </span> : null}
+                  </div> : null}
                 </li>
               );
             })}
