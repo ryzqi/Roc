@@ -34,8 +34,24 @@ before(async()=>{
  assert.equal((await tools.status()).available,true,JSON.stringify(await tools.status()));
  console.log(`Runtime evidence: ${root}`);
 });
-after(async()=>{await rm(bundle,{force:true});});
+after(async()=>{await rm(bundle,{force:true});await rm(root,{recursive:true,force:true});});
 async function directory(name){const path=join(root,name);await mkdir(path);return path;}
+test('real offline Tectonic compiles legacy UTF-8 inputenc documents',async(t)=>{
+ for(const documentClass of ['article','ctexart']) await t.test(documentClass,async()=>{
+  const jobDir=await directory(`inputenc-${documentClass}`),outputDir=join(jobDir,'compiled');
+  await mkdir(outputDir);
+  const declaration=documentClass==='ctexart'?String.raw`\documentclass[fontset=fandol]{ctexart}`:String.raw`\documentclass{article}`;
+  await writeFile(join(jobDir,'main.tex'),declaration+String.raw`
+\usepackage[utf8]{inputenc}
+\begin{document}
+Legacy UTF-8 input: café.
+\end{document}
+`);
+  const result=await tools.compile({rootPath:jobDir,entryPath:'main.tex',outputDir,jobDir,admission:{projectId:'inputenc-regression',priority:'user'}});
+  assert.equal(result.exitCode,0,JSON.stringify(result));
+  assert.match(await pdfText(await readFile(join(outputDir,'main.pdf'))),/Legacy UTF-8 input: café\./);
+ });
+});
 test('real offline Tectonic compiles standard article 11pt and 12pt sizes',async(t)=>{
  for(const size of [11,12]) await t.test(`${size}pt`,async()=>{
   const jobDir=await directory(`article-${size}pt`),outputDir=join(jobDir,'compiled');

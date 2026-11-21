@@ -271,6 +271,7 @@ ibyhyph.tex
 iftex.sty
 ifvtex.sty
 infwarerr.sty
+inputenc.sty
 intcalc.sty
 kanjix.map
 keyval.sty

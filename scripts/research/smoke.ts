@@ -29,7 +29,7 @@ type SmokeParseResult = {
 const smokeOptions = (tier: SmokeParseOptions['tier'], pageRange = ''): SmokeParseOptions => ({
   tier, pageRange, device: 'coreml'
 });
-export const LATEX = "\\documentclass[fontset=fandol]{ctexart}\n\\usepackage{amsmath,booktabs,graphicx}\n\\begin{document}\n\\section{\u7814\u7a76\u6570\u636e\u4e0e\u65b9\u6cd5 Research methods}\nThis experiment compares control and treatment groups.\n\\begin{table}[h]\n\\centering\n\\caption{Study participants and results}\n\\begin{tabular}{lrr}\n\\toprule\nGroup & Patients & Improvement \\\\\n\\midrule\nControl & 12 & 10 \\\\\nTreatment & 18 & 50 \\\\\n\\bottomrule\n\\end{tabular}\n\\end{table}\nThe energy equation is:\n\\begin{equation}E = mc^2\\end{equation}\n\\begin{figure}[h]\n\\centering\n\\includegraphics[width=0.65\\textwidth]{figure.png}\n\\caption{Measured improvement by study group.}\n\\end{figure}\n\\end{document}\n";
+export const LATEX = "\\documentclass[fontset=fandol]{ctexart}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amsmath,booktabs,graphicx}\n\\begin{document}\n\\section{\u7814\u7a76\u6570\u636e\u4e0e\u65b9\u6cd5 Research methods}\nThis experiment compares control and treatment groups.\n\\begin{table}[h]\n\\centering\n\\caption{Study participants and results}\n\\begin{tabular}{lrr}\n\\toprule\nGroup & Patients & Improvement \\\\\n\\midrule\nControl & 12 & 10 \\\\\nTreatment & 18 & 50 \\\\\n\\bottomrule\n\\end{tabular}\n\\end{table}\nThe energy equation is:\n\\begin{equation}E = mc^2\\end{equation}\n\\begin{figure}[h]\n\\centering\n\\includegraphics[width=0.65\\textwidth]{figure.png}\n\\caption{Measured improvement by study group.}\n\\end{figure}\n\\end{document}\n";
 
 type SmokeResult = {
   architecture: string;
