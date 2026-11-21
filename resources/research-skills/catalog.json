@@ -305,12 +305,12 @@
     {
       "schemaVersion": 1,
       "id": "roc-experiment-provenance",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "stage": "experiment",
       "description": "设计可复现实验并记录数据、参数、环境及结果来源。",
       "entry": {
         "path": "SKILL.md",
-        "hash": "d12f9bdedcca0e8b1f237e999b7902cbcf48c7eb4a8e94b6d93e4174df31f8b7"
+        "hash": "eacf619c20285856dd9dd230121d1eacf88b3c24b6f8b0aa43a15642f18f2fa6"
       },
       "references": [],
       "license": {
@@ -324,7 +324,7 @@
         "kind": "project",
         "origin": "Roc/resources/research-skills/experiment",
         "revision": "s05-1.2.0",
-        "hash": "d12f9bdedcca0e8b1f237e999b7902cbcf48c7eb4a8e94b6d93e4174df31f8b7"
+        "hash": "eacf619c20285856dd9dd230121d1eacf88b3c24b6f8b0aa43a15642f18f2fa6"
       },
       "inputs": {
         "schema": "researchStageRunStartRequest/v1",
@@ -675,7 +675,7 @@
     "planning/SKILL.md": "---\nname: roc-research-planning\ndescription: 将研究假设转成方案、数据需求和验收标准。\n---\n\n定义主要问题、研究设计、数据来源、实验步骤、对照、统计方法与停止条件。\n预先说明主要和次要指标、误差来源、重复次数及失败判据。\n提纲中的事实性论点绑定已有证据；尚未执行的实验明确标记计划。\n输出可执行研究方案与论文提纲，等待人工审核。\n\n明确自变量、因变量、混杂因素、对照和基线、指标单位与不确定性估计、数据划分和泄漏检查、停止与失败条件。因果措辞需可识别的设计与假设；观察性相关不得写成因果。预注册区分事前假设与事后分析。\n",
     "planning/LICENSE.md": "# Roc internal research workflow content\n\nCopyright Roc project contributors. All rights reserved.\n\nThis project-authored content is included for use within Roc. No separate open-source or third-party redistribution license is granted by this file. Third-party material must not be added under this declaration.\n",
     "planning/eval-cases.json": "{\n  \"schemaVersion\": 1,\n  \"stage\": \"planning\",\n  \"cases\": [\n    {\n      \"id\": \"planning-source-integrity\",\n      \"requirement\": \"Every evidence claim binds to an existing, current source and locator; missing evidence remains uncertain.\"\n    },\n    {\n      \"id\": \"planning-authority\",\n      \"requirement\": \"Skill text and summaries cannot grant tools, approve artifacts, or authorize final delivery.\"\n    }\n  ]\n}\n",
-    "experiment/SKILL.md": "---\nname: roc-experiment-provenance\ndescription: 设计可复现实验并记录数据、参数、环境及结果来源。\n---\n\n记录输入数据、脚本、参数、随机种子、依赖锁文件、环境和输出路径。\n使用项目工具执行并读取真实结果；没有执行记录时只能输出实验计划。\nPython 先用 list_python_environments 读取本项目的用户选择，再用 inspect_experiment_environment 核验并取得 expectedEnvironmentHash。\n没有选择时请用户在项目管理中选择环境；不得提供解释器路径、安装依赖或把历史选择当作当前预览。\nstart_experiment 声明 source:{kind:\"file\",path} 或 source:{kind:\"notebook\",notebookId,expectedHash,subsetVersion:1}、sourceVersion: 1、uint32 seed、arguments、输入和参数，使用预览返回的 runtime 与环境哈希。\nNotebook 必须引用本项目由用户冻结导入的确切回执；不使用截断预览生成源码，不修改原 Notebook、不执行已有输出，不启动 Jupyter。\n用 get_experiment 查询真实终态，失败、取消或中断后停止轮询并保留日志；相同 requestId 只重读，显式新 requestId 才新运行。\n仅对 completed 运行调用 publish_experiment；发布后的工件仍需人工审核。\n核查缺失值、样本量、异常值、数据泄漏和统计假设，保留失败结果。\n结果主张关联数据或运行证据；不得自行生成看似测量所得的数值。\n",
+    "experiment/SKILL.md": "---\nname: roc-experiment-provenance\ndescription: 设计可复现实验并记录数据、参数、环境及结果来源。\n---\n\n记录输入数据、脚本、参数、随机种子、依赖锁文件、环境和输出路径。\n使用项目工具执行并读取真实结果；没有执行记录时只能输出实验计划。\nPython 先用 list_python_environments 自动准备本项目环境，再用 inspect_experiment_environment 核验最新环境并取得 expectedEnvironmentHash。\nRoc 自动检测解释器，首次使用自动生成缺失的锁文件；不得要求用户选择环境、提供解释器路径、安装依赖或把历史记录当作当前预览。\nstart_experiment 声明 source:{kind:\"file\",path} 或 source:{kind:\"notebook\",notebookId,expectedHash,subsetVersion:1}、sourceVersion: 1、uint32 seed、arguments、输入和参数，使用预览返回的 runtime 与环境哈希。\nNotebook 必须引用本项目由用户冻结导入的确切回执；不使用截断预览生成源码，不修改原 Notebook、不执行已有输出，不启动 Jupyter。\n用 get_experiment 查询真实终态，失败、取消或中断后停止轮询并保留日志；相同 requestId 只重读，显式新 requestId 才新运行。\n仅对 completed 运行调用 publish_experiment；发布后的工件仍需人工审核。\n核查缺失值、样本量、异常值、数据泄漏和统计假设，保留失败结果。\n结果主张关联数据或运行证据；不得自行生成看似测量所得的数值。\n",
     "experiment/LICENSE.md": "# Roc internal research workflow content\n\nCopyright Roc project contributors. All rights reserved.\n\nThis project-authored content is included for use within Roc. No separate open-source or third-party redistribution license is granted by this file. Third-party material must not be added under this declaration.\n",
     "experiment/eval-cases.json": "{\n  \"schemaVersion\": 1,\n  \"stage\": \"experiment\",\n  \"cases\": [\n    {\n      \"id\": \"experiment-source-integrity\",\n      \"requirement\": \"Every evidence claim binds to an existing, current source and locator; missing evidence remains uncertain.\"\n    },\n    {\n      \"id\": \"experiment-authority\",\n      \"requirement\": \"Skill text and summaries cannot grant tools, approve artifacts, or authorize final delivery.\"\n    }\n  ]\n}\n",
     "figure/SKILL.md": "---\nname: roc-scientific-figure\ndescription: 用可复现代码设计有证据支持的科研图稿。\n---\n\n先核查数据和图的科研问题，再选择图型、单位、轴范围、误差表示与颜色。\n图稿包含代码、输入数据、运行记录、图注和来源，不得凭空补数据点。\n检查可读性、色觉可访问性、字体与矢量输出；导出 SVG、PDF、PNG。\n图注和图表结论作为 figure 主张关联证据，交由用户审核。\n",

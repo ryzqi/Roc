@@ -139,7 +139,7 @@ test('existing environment API rechecks selected Python identity and refuses inc
     const runtime = { kind: 'python', selectionId: selected.snapshot.id, expectedHash: selected.snapshotHash };
     const handlers = new Map();
     api.registerResearchExperimentCapabilities({ pluginId: '@roc/plugin-research', capabilities: {
-      register(_plugin, descriptor, handler) { handlers.set(descriptor.name, handler); }
+      register(_plugin, descriptor, handler) { handlers.set(descriptor.name, input => handler(descriptor.inputSchema.parse(input))); }
     } }, f.repository.experiments, experiments);
     const adapter = api.createPluginCapabilityAdapter({ invokeCapability(name, input) { return handlers.get(name)(input); } });
     const request = { projectId: f.project.id, runtime };

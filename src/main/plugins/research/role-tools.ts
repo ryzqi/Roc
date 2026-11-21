@@ -20,6 +20,7 @@ import { requireConfirmedSearchStrategy } from './search-strategy';
 import {relationClaimHash, relationSourceDigest} from './evidence-relation-repository';
 import {knowledgeSearchView} from './knowledge-consumption';
 import {createScientificTools} from '../agent/scientific-tools';
+import { researchPythonEnvironmentSelectionSchema } from '../../../shared/schemas/research-python-environments';
 
 export function createResearchRoleTools(input: {
   run: ResearchStageRun;
@@ -275,13 +276,15 @@ export function createResearchRoleTools(input: {
       schema: z.object({ path: z.string().min(1), content: z.string().max(1024 * 1024), expectedHash: z.string().regex(/^[a-f0-9]{64}$/u).nullable() }).strict() }),
     list_python_environments: () => tool(async ({ offset, limit }) => {
       assertActive();
-      const selections = input.repository.pythonEnvironments.list({ projectId: input.run.projectId });
+      const selections = researchPythonEnvironmentSelectionSchema.array().parse(await input.capabilities.invoke(
+        'research.pythonEnvironments.list', { projectId: input.run.projectId })).reverse();
+      assertActive();
       return { total: selections.length, items: selections.slice(offset, offset + limit).map(({ snapshot, snapshotHash }) => ({
         runtime: { kind: 'python', selectionId: snapshot.id, expectedHash: snapshotHash },
         version: snapshot.version, platform: snapshot.platform, architecture: snapshot.architecture,
         recordedAt: snapshot.recordedAt, codeHash: snapshot.codeHash, lockFile: snapshot.lockFile
       })) };
-    }, { name: 'list_python_environments', description: '分页读取当前项目由用户明确选择的 Python 环境身份。历史选择不证明环境当前可用；启动前用 inspect_experiment_environment 取得当前环境哈希。没有选择时请用户在项目管理中选择环境。',
+    }, { name: 'list_python_environments', description: '自动检测并核验项目 Python 环境，首次使用自动生成缺失的锁文件，返回最新环境优先的分页身份。无需用户选择解释器；启动前用 inspect_experiment_environment 取得当前环境哈希。',
       schema: z.strictObject({ offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(10) }) }),
     inspect_experiment_environment: () => tool(async ({ runtime, offset, limit }) => {
       assertActive();
@@ -299,7 +302,7 @@ export function createResearchRoleTools(input: {
     start_experiment: () => tool(async (request) => {
       const started = await effects().startExperiment(input.run.id, input.run.projectId, request);
       return after(summarizeExperiment(started));
-    }, { name: 'start_experiment', description: '启动当前项目的脚本实验。Python 先读取用户选择并预览环境，明确 source:{kind:"file",path} 或冻结 Notebook 的 source:{kind:"notebook",notebookId,expectedHash,subsetVersion:1}、sourceVersion:1、uint32 seed、arguments 和 expectedEnvironmentHash。项目和运行身份由服务绑定；同一冻结节点的相同业务参数返回已有结果，requestId 变化不重复执行。',
+    }, { name: 'start_experiment', description: '启动当前项目的脚本实验。Python 先自动准备并预览环境，明确 source:{kind:"file",path} 或冻结 Notebook 的 source:{kind:"notebook",notebookId,expectedHash,subsetVersion:1}、sourceVersion:1、uint32 seed、arguments 和 expectedEnvironmentHash。项目和运行身份由服务绑定；同一冻结节点的相同业务参数返回已有结果，requestId 变化不重复执行。',
       schema: researchOwnedExperimentStartSchema }),
     inspect_figure_environment: () => tool(async () => {
       assertActive();

@@ -10,7 +10,10 @@ export const researchPythonEnvironmentGetSchema = z.strictObject({ projectId: id
 export const researchPythonEnvironmentListSchema = z.strictObject({ projectId: id });
 export const researchPythonEnvironmentSnapshotSchema = z.strictObject({
   schemaVersion: z.literal(1), id, request: researchPythonEnvironmentSelectSchema, requestHash: hash,
-  actor: z.strictObject({ kind: z.literal('user'), id: z.string().regex(/^window:[1-9][0-9]*$/u) }),
+  actor: z.discriminatedUnion('kind', [
+    z.strictObject({ kind: z.literal('user'), id: z.string().regex(/^window:[1-9][0-9]*$/u) }),
+    z.strictObject({ kind: z.literal('system'), id: z.literal('roc-python-environment') })
+  ]),
   workspacePath: path, selectedExecutable: path, executable: path, prefix: path, basePrefix: path,
   version: z.string().regex(/^3\.14\.\d+$/u), platform: z.literal('darwin'), architecture: z.literal('arm64'),
   metadataHash: hash, codeHash: hash,

@@ -10,7 +10,7 @@
 
 ## 实验与科研工具
 
-工具链不分发 Python 或 uv。实验支持离线 TypeScript、R、Julia，以及用户选择并绑定项目的 CPython 环境；新建和重跑均须符合当前协议，旧 `bundled-python` / `uv` 快照没有兼容执行路径。环境、冻结输入与发布合同见[实验运行](../../docs/research-experiments.md)和[Python 环境](../../docs/research-python-environment.md)。
+工具链不分发 Python 或 uv。实验支持离线 TypeScript、R、Julia，以及主进程自动检测并绑定项目的 CPython 环境；新建和重跑均须符合当前协议，旧 `bundled-python` / `uv` 快照没有兼容执行路径。环境、冻结输入与发布合同见[实验运行](../../docs/research-experiments.md)和[Python 环境](../../docs/research-python-environment.md)。
 
 TypeScript 使用 Electron 内置 Node 执行版本化 `.mts` 源码，不额外安装转译器；R、Julia 和 Python 使用已检查的外部环境。图稿使用本地 Vega-Lite v6 spec 与快照数据隔离渲染；请求显式声明 engine/sourceVersion、输入、尺寸、DPI 和 seed，运行保存实际环境及 pipeline 身份。可选 `expectedEnvironmentHash` 固定已检查环境；合同见[图稿](../../docs/research-figures.md)。
 

@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { z } from 'zod';
 import type { ResearchExperimentEnvironment } from '../../../shared/schemas/research-experiments';
@@ -55,6 +55,7 @@ type PythonEnvironmentInspectionInput = {
   signal: AbortSignal;
   admission: ResearchProcessScope;
   onProbe: (receipt: ResearchEnvironmentProbeResource) => void;
+  initializeLock?: boolean;
 };
 export type InspectedPythonEnvironment = {
   controls: PythonEnvironmentControls;
@@ -74,7 +75,7 @@ export async function readPythonEnvironmentLock(workspace: string): Promise<{
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     throw new RocDomainError({
       code: 'research_python_lock_required', category: 'validation', retryable: false,
-      message: '项目缺少 roc-python.lock.json。请先在项目根目录创建与所选 Python 版本和已安装依赖一致的环境锁文件，再选择解释器。'
+      message: '项目缺少 roc-python.lock.json，请重新准备项目 Python 环境以自动生成锁文件。'
     });
   }
   try { return { bytes, lock: pythonEnvironmentLockSchema.parse(JSON.parse(bytes.toString('utf8'))) }; }
@@ -89,13 +90,13 @@ export async function readPythonEnvironmentLock(workspace: string): Promise<{
 
 /** Environment inspection does not grant permission to select or execute this runtime. */
 export async function inspectPythonExperimentEnvironment({
-  workspace, selectedExecutable, jobDir, run, signal, admission, onProbe
+  workspace, selectedExecutable, jobDir, run, signal, admission, onProbe, initializeLock = false
 }: PythonEnvironmentInspectionInput): Promise<InspectedPythonEnvironment> {
   const controls = await discoverPythonEnvironmentControls(selectedExecutable, signal);
-  const { bytes: lockBytes, lock } = await readPythonEnvironmentLock(workspace);
-  const lockFile: PythonCodeReceipt['metadataIdentity']['lockFile'] = {
-    path: 'roc-python.lock.json', size: lockBytes.length, sha256: researchContentHash(lockBytes)
-  };
+  let locked = await readPythonEnvironmentLock(workspace).catch(error => {
+    if (initializeLock && error instanceof RocDomainError && error.code === 'research_python_lock_required') return null;
+    throw error;
+  });
   const code = await captureNativeCode(controls.codeRoots, signal);
   const probe = await mkdtemp(join(jobDir, 'python-probe-'));
   try {
@@ -120,17 +121,30 @@ export async function inspectPythonExperimentEnvironment({
     catch { return fail('research_python_environment_report_invalid'); }
     if (report.executable !== controls.selectedExecutable || report.prefix !== controls.prefix || report.basePrefix !== controls.basePrefix
       || JSON.stringify(report.modulePaths) !== JSON.stringify(controls.modulePaths)) fail('research_python_startup_paths_changed');
-    if (report.version !== lock.python.version) fail('research_python_runtime_version_mismatch');
-    const expected = [...lock.distributions].sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
-    if (JSON.stringify(report.distributions) !== JSON.stringify(expected)) fail('research_python_installed_distributions_mismatch');
     if (JSON.stringify(await discoverPythonEnvironmentControls(selectedExecutable, signal)) !== JSON.stringify(controls)) {
       fail('research_python_environment_controls_changed');
     }
+    if ((await captureNativeCode(controls.codeRoots, signal)).hash !== code.hash) fail('research_python_native_code_changed');
+    signal.throwIfAborted();
+    if (locked === null) {
+      const initial = pythonEnvironmentLockSchema.parse({ schemaVersion: 1,
+        python: { implementation: report.implementation, version: report.version,
+          platform: report.platform, architecture: report.architecture }, distributions: report.distributions });
+      // An existing lock is a project contract, even when another caller created it during the probe.
+      try { await writeFile(join(workspace, 'roc-python.lock.json'), `${JSON.stringify(initial, null, 2)}\n`, { flag: 'wx' }); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
+      locked = await readPythonEnvironmentLock(workspace);
+    }
+    const { bytes: lockBytes, lock } = locked;
+    if (report.version !== lock.python.version) fail('research_python_runtime_version_mismatch');
+    const expected = [...lock.distributions].sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+    if (JSON.stringify(report.distributions) !== JSON.stringify(expected)) fail('research_python_installed_distributions_mismatch');
+    const lockFile: PythonCodeReceipt['metadataIdentity']['lockFile'] = {
+      path: 'roc-python.lock.json', size: lockBytes.length, sha256: researchContentHash(lockBytes)
+    };
     if (researchContentHash(await readResearchFile(workspace, lockFile.path, 4 * 1024 ** 2)) !== lockFile.sha256) {
       fail('research_python_lock_changed');
     }
-    if ((await captureNativeCode(controls.codeRoots, signal)).hash !== code.hash) fail('research_python_native_code_changed');
-    signal.throwIfAborted();
     const metadataIdentity: PythonCodeReceipt['metadataIdentity'] = {
       inspectionContractVersion: 1, controls, lockFile, code: code.hash, report, probe: researchContentHash(pythonEnvironmentProbe)
     };

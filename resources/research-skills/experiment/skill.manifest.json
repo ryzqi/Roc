@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "roc-experiment-provenance",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "stage": "experiment",
   "description": "设计可复现实验并记录数据、参数、环境及结果来源。",
   "entry": {
     "path": "SKILL.md",
-    "hash": "d12f9bdedcca0e8b1f237e999b7902cbcf48c7eb4a8e94b6d93e4174df31f8b7"
+    "hash": "eacf619c20285856dd9dd230121d1eacf88b3c24b6f8b0aa43a15642f18f2fa6"
   },
   "references": [],
   "license": {
@@ -20,7 +20,7 @@
     "kind": "project",
     "origin": "Roc/resources/research-skills/experiment",
     "revision": "s05-1.2.0",
-    "hash": "d12f9bdedcca0e8b1f237e999b7902cbcf48c7eb4a8e94b6d93e4174df31f8b7"
+    "hash": "eacf619c20285856dd9dd230121d1eacf88b3c24b6f8b0aa43a15642f18f2fa6"
   },
   "inputs": {
     "schema": "researchStageRunStartRequest/v1",

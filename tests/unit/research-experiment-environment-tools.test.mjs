@@ -21,14 +21,18 @@ function selection(f, index) {
   });
 }
 
-function tools(f, capabilities = {}, signal = new AbortController().signal) {
+function tools(f, capabilities = { async invoke(name, request) {
+  assert.equal(name, 'research.pythonEnvironments.list');
+  assert.deepEqual(request, { projectId: f.project.id });
+  return f.repository.pythonEnvironments.list(request);
+} }, signal = new AbortController().signal) {
   return Object.fromEntries(createResearchTestRoleTools(api, {
     run: f.run, context: f.repository.runs.getContext(f.run.id), repository: f.repository,
     capabilities, signal
   }).map(tool => [tool.name, tool]));
 }
 
-test('experiment role reads only its project selections in bounded pages without native picker authority', async () => {
+test('experiment role automatically prepares only its project environments and returns newest identities first', async () => {
   const f = createResearchFixture(api, 'experiment');
   const other = createResearchFixture(api, 'figure', '/tmp/foreign-environment-tools');
   try {
@@ -37,8 +41,8 @@ test('experiment role reads only its project selections in bounded pages without
     for (let index = 0; index < 12; index++) selection(f, index);
     const first = await entries.list_python_environments.invoke({ offset: 0, limit: 10 });
     assert.equal(first.total, 12); assert.equal(first.items.length, 10);
-    assert.deepEqual(first.items[0].runtime, { kind: 'python', selectionId: 'python-0',
-      expectedHash: f.repository.pythonEnvironments.list({ projectId: f.project.id })[0].snapshotHash });
+    assert.deepEqual(first.items[0].runtime, { kind: 'python', selectionId: 'python-11',
+      expectedHash: f.repository.pythonEnvironments.list({ projectId: f.project.id })[11].snapshotHash });
     assert.equal(Object.hasOwn(first.items[0], 'actor'), false);
     assert.equal(Object.hasOwn(first.items[0], 'selectedExecutable'), false);
     assert.equal((await entries.list_python_environments.invoke({ offset: 10, limit: 10 })).items.length, 2);

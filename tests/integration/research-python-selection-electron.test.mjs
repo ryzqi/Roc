@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, realpath, writeFile, symlink, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, writeFile, readFile, symlink, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { _electron as electron } from '@playwright/test';
 import { waitForAppReady } from '../smoke/lib/assertions.mjs';
 
-test('production management UI selects a real Python environment through preload and preserves its receipt after restart',
+test('production UI automatically prepares Python without a picker or lock and preserves its receipt after restart',
   { timeout: 120000 }, async () => {
     const root = await realpath(await mkdtemp('/private/tmp/roc-python-electron-'));
-    const workspace = join(root, 'workspace'), dataRoot = join(root, 'data'), venv = join(root, 'venv');
-    const output = resolve('.artifacts/research-optimization/pr08-a3b-electron');
+    const workspace = join(root, 'workspace'), dataRoot = join(root, 'data'), venv = join(workspace, '.venv');
+    const output = join(root, 'verification');
     const python = JSON.parse(execFileSync('python3', ['-I', '-S', '-c',
       'import sys,os,json;print(json.dumps({"executable":os.path.realpath(sys.executable),"version":sys.version.split()[0]}))'], { encoding: 'utf8' }));
     assert.match(python.version, /^3\.14\.\d+$/u);
@@ -18,9 +18,6 @@ test('production management UI selects a real Python environment through preload
     const executable = join(venv, 'bin/python3');
     await symlink(python.executable, executable);
     await writeFile(join(venv, 'pyvenv.cfg'), `home = ${dirname(python.executable)}\ninclude-system-site-packages = false\nversion = ${python.version}\n`);
-    await writeFile(join(workspace, 'roc-python.lock.json'), JSON.stringify({
-      schemaVersion: 1, python: { implementation: 'cpython', version: python.version, platform: 'darwin', architecture: 'arm64' }, distributions: []
-    }));
     let app;
     const errors = [];
     async function launch() {
@@ -44,22 +41,14 @@ test('production management UI selects a real Python environment through preload
       projectUrl.searchParams.set('project', project.id);
       await page.goto(projectUrl.href);
       await page.getByTestId('workspace-layout').waitFor();
+      await app.evaluate(({dialog}) => {
+        globalThis.pythonPanelCalls = 0;
+        dialog.showOpenDialog = async () => { globalThis.pythonPanelCalls++; throw new Error('unexpected_python_picker'); };
+      });
       await page.getByTestId('activity-nav-runs').click();
       await page.getByTestId('canvas-task-category-python').click();
-      const selectionButton = page.getByTestId('mgmt-python-environment-select');
-      await selectionButton.waitFor();
-      await page.waitForFunction(() => !document.querySelector('[data-testid="mgmt-python-environment-select"]').disabled);
-      const windowId = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.id);
-      await app.evaluate(({ dialog }, executable) => {
-        globalThis.pythonPanelCalls = [];
-        dialog.showOpenDialog = async (parent, options) => {
-          globalThis.pythonPanelCalls.push({ windowId: parent.webContents.id, options });
-          return { canceled: false, filePaths: [executable] };
-        };
-      }, executable);
-      await selectionButton.focus();
-      await page.keyboard.press('Enter');
-      await page.getByText('环境选择已记录。', { exact: true }).waitFor({ timeout: 60000 });
+      await page.getByTestId('mgmt-python-environment-history').waitFor({timeout: 60000});
+      assert.equal(await page.getByTestId('mgmt-python-environment-select').count(), 0);
       const selected = await page.evaluate(async projectId => {
         const result = await window.roc.research.listPythonEnvironmentSelections({ projectId });
         if (!result.ok) throw new Error(JSON.stringify(result.error));
@@ -69,28 +58,21 @@ test('production management UI selects a real Python environment through preload
       await page.getByTestId('mgmt-python-environment-history').locator('summary').click();
       for (const theme of ['light', 'dark']) {
         await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
-        await selectionButton.hover();
         await page.screenshot({ path: join(output, `${theme}.png`) });
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       }
       assert.equal(selected.snapshot.selectedExecutable, executable);
       assert.equal(selected.snapshot.prefix, venv);
       assert.equal(selected.snapshot.executable, python.executable);
-      assert.deepEqual(selected.snapshot.actor, { kind: 'user', id: `window:${windowId}` });
-      const calls = await app.evaluate(() => globalThis.pythonPanelCalls);
-      assert.equal(calls.length, 1); assert.equal(calls[0].windowId, windowId);
-      assert.deepEqual(calls[0].options.properties, ['openFile', 'noResolveAliases', 'showHiddenFiles']);
+      assert.deepEqual(selected.snapshot.actor, {kind: 'system', id: 'roc-python-environment'});
+      assert.equal(await app.evaluate(() => globalThis.pythonPanelCalls), 0);
+      const lock = JSON.parse(await readFile(join(workspace, 'roc-python.lock.json'), 'utf8'));
+      assert.equal(lock.python.version, python.version); assert.deepEqual(lock.distributions, []);
       const refused = await page.evaluate(async request => window.roc.research.selectPythonEnvironment({ ...request, selectedExecutable: '/tmp/forged' }), request);
       assert.equal(refused.ok, false);
-      assert.equal((await app.evaluate(() => globalThis.pythonPanelCalls)).length, 1);
       const replay = await page.evaluate(async request => window.roc.research.selectPythonEnvironment(request), request);
       assert.equal(replay.ok, true); assert.deepEqual(replay.data, selected);
-      assert.equal((await app.evaluate(() => globalThis.pythonPanelCalls)).length, 1);
-      await app.evaluate(({ dialog }) => { dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] }); });
-      await selectionButton.click();
-      await page.getByText('已取消选择。', { exact: true }).waitFor();
-      const cancelled = await page.evaluate(async projectId => window.roc.research.listPythonEnvironmentSelections({ projectId }), project.id);
-      assert.equal(cancelled.ok, true); assert.deepEqual(cancelled.data, [selected]);
+      assert.equal(await app.evaluate(() => globalThis.pythonPanelCalls), 0);
       await app.close(); app = undefined;
       const reopened = await launch();
       const result = await reopened.evaluate(async input => window.roc.research.getPythonEnvironmentSelection(input), {
@@ -98,10 +80,6 @@ test('production management UI selects a real Python environment through preload
       });
       assert.equal(result.ok, true); assert.deepEqual(result.data, selected);
       assert.deepEqual(errors, []);
-      await writeFile(join(output, 'receipt.json'), JSON.stringify({
-        actualElectron: true, actualPythonProbe: true, actualManagementUi: true, nativePanelStubbed: true,
-        windowId, calls, selected, cancelled, reopened: result
-      }, null, 2));
     } finally {
       if (app !== undefined) await app.close();
       await rm(root, { recursive: true, force: true });

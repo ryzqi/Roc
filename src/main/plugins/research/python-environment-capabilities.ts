@@ -21,7 +21,7 @@ export function registerResearchPythonEnvironmentCapabilities(context: RocPlugin
   }
   register(capabilities.select, request => service.select(request));
   register(capabilities.get, request => repository.get(request));
-  register(capabilities.list, request => repository.list(request));
+  register(capabilities.list, request => service.list(request));
 }
 function descriptor<TInput, TOutput>(name: string, inputSchema: z.ZodType<TInput>, outputSchema: z.ZodType<TOutput>): CapabilityDescriptor<TInput, TOutput> {
   return { name, version: '1.0.0', inputSchema, outputSchema };

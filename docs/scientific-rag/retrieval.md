@@ -63,7 +63,7 @@
 
 ## 可选视觉与维护
 
-[visual-index-service.ts](../../src/main/plugins/research/visual-index-service.ts) 默认关闭。启用需显式选择 Python 环境、检查本地模型身份、保存配置并重建所选 Figure/Table PNG。当前 [Python adapter](../../src/main/plugins/research/visual-python-adapter.ts) 要求 Sentence Transformers 6.0.1、原生 ColPali/ColQwen2、安全本地权重和匹配的环境快照；使用 CPU、禁用网络/GPU，并限制进程资源。普通文本请求不启动视觉模型。
+[visual-index-service.ts](../../src/main/plugins/research/visual-index-service.ts) 默认关闭。启用需自动准备 Python 环境、检查本地模型身份、保存配置并重建所选 Figure/Table PNG。当前 [Python adapter](../../src/main/plugins/research/visual-python-adapter.ts) 要求 Sentence Transformers 6.0.1、原生 ColPali/ColQwen2、安全本地权重和匹配的环境快照；使用 CPU、禁用网络/GPU，并限制进程资源。普通文本请求不启动视觉模型。
 
 视觉排名保留多向量 MaxSim 与原始 PDF 定位；独立代次、模型/图片 hash 和来源检查约束每次读取。缺包、缺图、输入变化及预算超限按实际错误返回。图像相似度不能替代原 cell/text 的精确数值证据。
 

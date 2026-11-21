@@ -12,7 +12,7 @@
 | [科研工件检查器](research-artifact-inspector.md) | 工件快照、生产文件与人工审核版本 |
 | [Idea Canvas、方法计划与结果评估](research-ideas.md) | 构思晋升、方案批准与结果裁决 |
 | [科研实验运行](research-experiments.md) | TypeScript、R、Julia、Python 实验执行 |
-| [Python 环境选择、预检与执行](research-python-environment.md) | CPython 环境选择、冻结检查与执行边界 |
+| [Python 环境自动准备、预检与执行](research-python-environment.md) | CPython 自动发现、冻结检查与执行边界 |
 | [Notebook 导入与执行合同](research-notebooks.md) | Notebook 导入、预览与 Python 子集执行 |
 | [实验指标、审核与比较](research-experiment-results.md) | 结构化结果、指标 Evidence 与可比性 |
 | [科研执行资源治理](research-execution-resources.md) | 计算准入、资源采样、原生隔离与崩溃清理 |

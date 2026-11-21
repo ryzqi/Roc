@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, realpath, writeFile, readFile, symlink, rm, chmod, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import Database from 'better-sqlite3';
-import { unknownExperiment, loadResearchTestApi, createResearchFixture, figureRequest } from '../unit/fixtures/research-test-kit.mjs';
+import { unknownExperiment, loadResearchTestApi, createResearchFixture, createResearchTestRoleTools, withResearchTestWorker, figureRequest } from '../unit/fixtures/research-test-kit.mjs';
 import {ideaCanvasContentFixture, ideaPlanBodyFixture} from '../unit/fixtures/research-idea-plan.mjs';
 
 const python = JSON.parse(execFileSync('python3', ['-I', '-S', '-c',
@@ -775,7 +775,8 @@ async function fixture(code = source, options = {}) {
     assert.fail('Python experiment terminal state timed out');
   };
   return { ...f, path, workspace, packagePath, observed, failures, service, pythonService, request, runtime, preview, read, wait,
-    execute: async overrides => wait((await service.start({ ...request, ...overrides })).id),
+    execute: overrides => withResearchTestWorker(api, f.repository, f.run.id, f.project.id,
+      async () => wait((await service.start({ ...request, ...overrides })).id)),
     async cleanup() { await service.shutdown(); await pythonService.shutdown(); f.close(); } };
 }
 
@@ -955,14 +956,19 @@ while True:
   } finally { await f.cleanup(); }
 });
 
-test('actual experiment role consumes selected Python preview and owns start, terminal polling and publication', async () => {
+test('actual experiment role automatically prepares Python and owns start, terminal polling and publication', async () => {
   const f = await fixture(source, { scenario: 'owned-role-tools' });
   try {
     const registry = new api.CapabilityRegistry();
     for (const descriptor of api.researchExperimentCapabilities) registry.declare('research', descriptor);
     api.registerResearchExperimentCapabilities({ pluginId: 'research', capabilities: registry }, f.repository.experiments, f.service);
+    api.registerResearchPythonEnvironmentCapabilities({ pluginId: 'research', capabilities: {
+      register(pluginId, descriptor, handler) {
+        registry.declare(pluginId, descriptor); registry.register(pluginId, descriptor, handler);
+      }
+    } }, f.repository.pythonEnvironments, f.pythonService);
     const effects = new api.ResearchProductionEffectService(f.repository, undefined, f.service);
-    const tools = Object.fromEntries(api.createResearchRoleTools({
+    const tools = Object.fromEntries(createResearchTestRoleTools(api, {
       run: f.run, context: f.repository.runs.getContext(f.run.id), repository: f.repository,
       capabilities: registry, effects, signal: new AbortController().signal
     }).map(tool => [tool.name, tool]));
@@ -978,7 +984,8 @@ test('actual experiment role consumes selected Python preview and owns start, te
     const polled = await tools.get_experiment.invoke({ experimentId: run.id });
     assert.equal(polled.status, 'completed'); assert.equal(polled.ownerRunId, f.run.id);
     const before = f.observed.length;
-    assert.deepEqual(await tools.start_experiment.invoke(owned), polled);
+    assert.deepEqual(await tools.start_experiment.invoke(owned), started);
+    assert.deepEqual(await tools.get_experiment.invoke({ experimentId: run.id }), polled);
     assert.equal(f.observed.length, before);
     await assert.rejects(tools.start_experiment.invoke({ ...owned, projectId: f.project.id }));
     const published = await tools.publish_experiment.invoke({ experimentId: run.id });
@@ -1195,7 +1202,7 @@ test('actual Notebook execution freezes full original cells and receipts, keeps 
     const registry = new api.CapabilityRegistry();
     for (const descriptor of api.researchExperimentCapabilities) registry.declare('research', descriptor);
     api.registerResearchExperimentCapabilities({ pluginId: 'research', capabilities: registry }, f.repository.experiments, f.service);
-    const tools = Object.fromEntries(api.createResearchRoleTools({ run: f.run, context: f.repository.runs.getContext(f.run.id),
+    const tools = Object.fromEntries(createResearchTestRoleTools(api, { run: f.run, context: f.repository.runs.getContext(f.run.id),
       repository: f.repository, capabilities: registry, effects: new api.ResearchProductionEffectService(f.repository, undefined, f.service),
       signal: new AbortController().signal }).map(tool => [tool.name, tool]));
     const { projectId: _project, ownerRunId: _owner, ...owned } = request;
