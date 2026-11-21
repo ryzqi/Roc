@@ -60,6 +60,7 @@ import {ResearchManuscriptSyncService} from './manuscript-sync-service';
 import {ResearchImpactService} from './impact-service';
 import {ResearchRepairService} from './repair-service';
 import {hasResearchHumanContext} from '../../services/research-human-context';
+import {ResearchArgumentOutlineService} from './argument-outline-service';
 import {ResearchIdeaOutcomeRepository} from './idea-outcome-repository';
 import {ResearchCitationReviewRepository} from './citation-review-repository';
 import {ResearchConsistencyRepository} from './consistency-repository';
@@ -96,6 +97,7 @@ type Clock = () => string;
 export class ResearchRepository {
   readonly evidence: ResearchEvidenceRepository;
   readonly manuscripts: ResearchManuscriptRepository;
+  readonly argumentOutlines: ResearchArgumentOutlineService;
   readonly manuscriptSync: ResearchManuscriptSyncService;
   readonly impact: ResearchImpactService;
   readonly repairs: ResearchRepairService;
@@ -149,6 +151,7 @@ export class ResearchRepository {
       requireEditable: (id) => this.requireEditableArtifact(id)
     }, this.evidence, now);
     this.manuscriptSync = new ResearchManuscriptSyncService(db, this, now);
+    this.argumentOutlines = new ResearchArgumentOutlineService(db, this, now);
     this.impact = new ResearchImpactService(db, this);
     this.repairs = new ResearchRepairService(db, this, this.impact, now);
     this.runs = new ResearchRunRepository(db, this, now);

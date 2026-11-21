@@ -43,6 +43,7 @@
 | --- | --- |
 | [科研写作检查](research-writing-checks.md) | 文献字段、正文一致性、数值映射、引文审核与 Vale |
 | [工作稿同步](research-manuscript-sync.md) | `.tex` / `.bib`、逐段采纳和导出核对 |
+| [证据矩阵与论证大纲](research-argument-outline.md) | 论证结构、正文生成和小样本提取检查 |
 | [变更影响与定向修复](research-impact.md) | 记录依赖、修复输入与新运行 |
 | [科研图稿](research-figures.md) | Vega 定量图稿、Mermaid 方法图与人工数据映射 |
 | [Review Response Matrix](research-response-matrix.md) | 审稿意见与回复矩阵 |

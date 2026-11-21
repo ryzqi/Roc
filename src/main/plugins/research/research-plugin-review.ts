@@ -38,6 +38,8 @@ import type { ResearchPluginLifecycle } from './research-plugin-lifecycle';
 import type { ResearchProductionServices } from './research-plugin-production';
 import type { ResearchLiteratureServices } from './research-plugin-literature';
 import {createPaperSemanticGenerator} from './paper-semantic-service';
+import {ResearchReviewExtractionPilot} from './review-extraction-pilot';
+import {researchReviewPilotCapability,registerResearchReviewPilotCapability} from './review-pilot-capability';
 
 export function registerResearchReview(
   context: RocPluginContext, options: ResearchPluginOptions,
@@ -80,7 +82,7 @@ export function registerResearchReview(
     ...researchSystematicReviewCapabilities, ...researchReviewCorpusCapabilities, ...researchReviewDeduplicationCapabilities,
     ...researchReviewScreeningCapabilities, ...researchReviewFullTextCapabilities, ...researchReviewFullTextScreeningCapabilities,
     ...researchReviewExtractionCapabilities, ...researchReviewQualityCapabilities, ...researchReviewStudiesCapabilities,
-    researchReviewReportCapability
+    researchReviewReportCapability, researchReviewPilotCapability
   ], async (child, signal) => {
     const researchDocuments = await documentProvider.get();
     signal.throwIfAborted();
@@ -101,6 +103,7 @@ export function registerResearchReview(
     registerResearchReviewFullTextScreeningCapabilities(child, reviewFullTextScreening, reviewFullTextArbitration, reviewFullTextFreeze);
     const reviewExtractions = new ResearchReviewExtractionRepository(db, researchRepository, reviewFullTextFreeze, reviewFullTexts, researchDocuments, () => new Date().toISOString());
     registerResearchReviewExtractionCapabilities(child, reviewExtractions);
+    registerResearchReviewPilotCapability(child, new ResearchReviewExtractionPilot(researchRepository, reviewFullTextFreeze, reviewFullTexts, reviewExtractions));
     const reviewQualityPlans = new ResearchReviewQualityPlanRepository(db, researchRepository, reviewExtractions, reviewFullTextFreeze, () => new Date().toISOString());
     const reviewQualityAssessments = new ResearchReviewQualityAssessmentRepository(db, researchRepository, reviewQualityPlans, reviewExtractions, reviewFullTextFreeze, () => new Date().toISOString());
     registerResearchReviewQualityCapabilities(child, reviewQualityPlans, reviewQualityAssessments);

@@ -275,4 +275,6 @@ export {ResearchResultFigureSourceService} from '../../../src/main/plugins/resea
 export {ResearchResultDerivationService} from '../../../src/main/plugins/research/result-derivation-service';
 export {registerResearchImpactCapabilities} from '../../../src/main/plugins/research/impact-capabilities';
 export {ResearchImpactService, deriveResearchImpact} from '../../../src/main/plugins/research/impact-service';
+export {registerResearchArgumentOutlineCapabilities} from '../../../src/main/plugins/research/argument-outline-capabilities';
+export {ResearchReviewExtractionPilot} from '../../../src/main/plugins/research/review-extraction-pilot';
 export {registerResearchResultDerivationCapabilities} from '../../../src/main/plugins/research/result-derivation-capabilities';

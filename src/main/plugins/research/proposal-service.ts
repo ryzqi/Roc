@@ -77,6 +77,7 @@ export class ResearchProposalService {
             report.report.artifactVersion !== request.expectedArtifactVersion) throw new Error('research_proposal_material_changed');
         break;
       }
+      case 'argument_outline':
       case 'idea_plan':
       case 'citation_review':
       case 'response_matrix':

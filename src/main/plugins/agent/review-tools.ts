@@ -34,6 +34,7 @@ import {
   researchReviewLinksSchema, reviewLinksPayload, type ResearchReviewLink, type ResearchReviewLinksArtifact
 } from '../../../shared/schemas/research-review-links';
 import {researchReviewExtractionGetSchema} from '../../../shared/schemas/research-review-extraction';
+import {researchReviewPilotRequestSchema} from '../../../shared/schemas/research-review-pilot';
 import {
   researchReviewQualityPlanGetSchema, researchReviewQualityAssessmentGetSchema
 } from '../../../shared/schemas/research-review-quality';
@@ -68,6 +69,7 @@ const readSchema = z.discriminatedUnion('kind', [
   researchReviewFullTextBindingGetSchema.omit({projectId: true}).extend({kind: z.literal('fulltext_binding')}),
   researchReviewFullTextBindingVerifySchema.omit({projectId: true}).extend({kind: z.literal('fulltext_content'), ...pagination}),
   researchReviewExtractionGetSchema.omit({projectId: true}).extend({kind: z.literal('extraction')}),
+  researchReviewPilotRequestSchema.omit({projectId: true}).extend({kind: z.literal('extraction_pilot')}),
   researchReviewQualityPlanGetSchema.omit({projectId: true}).extend({kind: z.literal('quality_plan')}),
   researchReviewQualityAssessmentGetSchema.omit({projectId: true}).extend({kind: z.literal('quality_assessment')}),
   corpusTarget.extend({kind: z.literal('studies')}),
@@ -91,6 +93,10 @@ const readToolSchema = z.strictObject({
   bindingId: researchReviewFullTextBindingGetSchema.shape.bindingId.optional(),
   expectedBindingHash: researchReviewFullTextBindingVerifySchema.shape.expectedBindingHash.optional(),
   extractionId: researchReviewExtractionGetSchema.shape.extractionId.optional(),
+  expectedFullFreezeHash: researchReviewPilotRequestSchema.shape.expectedFullFreezeHash.optional(),
+  expectedProtocolVersionHash: researchReviewPilotRequestSchema.shape.expectedProtocolVersionHash.optional(),
+  hitIds: researchReviewPilotRequestSchema.shape.hitIds.optional(),
+  expectedReportHash: researchReviewPilotRequestSchema.shape.expectedReportHash.optional(),
   qualityPlanId: researchReviewQualityAssessmentGetSchema.shape.qualityPlanId.optional(),
   section: reportSection.optional(),
   offset: pagination.offset.optional(),
@@ -105,7 +111,7 @@ export function createReviewTools(input: {
 }): StructuredToolInterface[] {
   const invoke = async <T>(name: string, request: object): Promise<T> => {
     input.signal.throwIfAborted();
-    const result = await input.capabilities.invoke<unknown, T>(name, {...request, projectId: input.projectId});
+    const result = await input.capabilities.invoke<unknown, T>(name, {...request, projectId: input.projectId}, input.signal);
     input.signal.throwIfAborted();
     return result;
   };
@@ -251,6 +257,7 @@ async function read(
       };
     }
     case 'extraction': return await invoke('research.reviewExtraction.get', request);
+    case 'extraction_pilot': return await invoke('research.reviewExtraction.pilot', request);
     case 'quality_plan': return await invoke('research.reviewQuality.getPlan', request);
     case 'quality_assessment': return await invoke('research.reviewQuality.getAssessment', request);
     case 'studies': return await invoke('research.reviewStudies.get', request);

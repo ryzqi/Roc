@@ -5,6 +5,7 @@ import type {RocClient} from '../shared/roc-client';
 import {useAsyncResource} from '../app/use-async-resource';
 import {formSecondaryButtonClass} from '../shared/form-ui';
 import {ReviewExtractionEditor} from './ReviewExtractionEditor';
+import {ReviewExtractionPilot} from './ReviewExtractionPilot';
 import {useArtifactEditorGuard} from './artifact-editor-guard';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
@@ -23,6 +24,8 @@ export function ReviewExtractions({client, protocol, phase, writable, onPending}
   const parent = read.data?.find(extraction => extraction.snapshot.request.hitId === hitId) ?? null;
   return <section className="flex min-w-0 flex-col gap-3 border-t-[0.5px] border-line pt-2" data-testid="artifact-review-extractions">
     <h2 className="font-medium">证据提取</h2>
+    <ReviewExtractionPilot key={`pilot:${protocol.versionHash}:${phase.freezeHash}:${JSON.stringify(read.data?.map(item => item.snapshotHash) ?? [])}`}
+      client={client} protocol={protocol} phase={phase} locked={pending || selectionLocked}/>
     <button type="button" className={`${button} self-start`} disabled={pending || selectionLocked || read.status === 'loading'}
       data-testid="artifact-review-extractions-refresh" onClick={() => {if (!guard.locked()) read.reload();}}>重读提取记录</button>
     {read.status !== 'loading' ? null : <p role="status">正在读取准确提取记录…</p>}

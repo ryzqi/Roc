@@ -71,6 +71,8 @@ import {researchProposalCapabilities} from './proposal-capabilities';
 import {researchManuscriptSyncCapabilities} from './manuscript-sync-capabilities';
 import {researchResultDerivationCapabilities} from './result-derivation-capabilities';
 import {researchImpactCapabilities} from './impact-capabilities';
+import {researchArgumentOutlineCapabilities} from './argument-outline-capabilities';
+import {researchReviewPilotCapability} from './review-pilot-capability';
 import { researchRunCapabilities } from './run-capabilities';
 import { researchArtifactInspectorCapability, researchGateReviewCapability } from './artifact-inspector-capability';
 import type { RocPluginManifest } from '../../kernel/types';
@@ -124,6 +126,8 @@ const researchCapabilityDescriptors = [
   ...researchManuscriptSyncCapabilities,
   ...researchResultDerivationCapabilities,
   ...researchImpactCapabilities,
+  ...researchArgumentOutlineCapabilities,
+  researchReviewPilotCapability,
   ...Object.values(workbenchCapabilities),
   ...literatureImportCapabilities,
   ...literatureAcquisitionCapabilities,

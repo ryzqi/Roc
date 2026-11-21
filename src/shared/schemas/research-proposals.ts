@@ -7,14 +7,16 @@ import {researchResponseMatrixSaveSchema} from './research-response-matrix';
 import {researchJournalSaveSchema, researchJournalSelectionSchema} from './research-journal-compliance';
 import {researchExperimentResultReviewSchema} from './research-experiment-results';
 import {researchRelationReviewerSchema} from './research-evidence-relations';
+import {researchArgumentOutlineSaveSchema} from './research-argument-outline';
 
 const id = z.string().trim().min(1).max(300);
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 export const researchProposalKindSchema = z.enum(['idea_plan', 'citation_review', 'consistency',
-  'figure_consistency', 'response_matrix', 'journal_compliance', 'experiment_result']);
+  'figure_consistency', 'response_matrix', 'journal_compliance', 'experiment_result', 'argument_outline']);
 
 // Preserve each domain's field contracts; its whole-request refinements run below after scope is supplied.
 export const researchProposalPayloadSchema = z.discriminatedUnion('kind', [
+  z.strictObject({kind: z.literal('argument_outline'), payload: z.strictObject(researchArgumentOutlineSaveSchema.shape).omit({projectId: true, requestId: true})}),
   z.strictObject({kind: z.literal('idea_plan'), payload: z.strictObject(researchIdeaPlanSaveSchema.shape).omit({projectId: true, requestId: true})}),
   z.strictObject({kind: z.literal('citation_review'), payload: z.strictObject(researchCitationReviewSaveSchema.shape).omit({projectId: true, requestId: true})}),
   z.strictObject({kind: z.literal('consistency'), payload: z.strictObject(researchConsistencySaveSchema.shape).omit({projectId: true, requestId: true})}),
@@ -25,6 +27,7 @@ export const researchProposalPayloadSchema = z.discriminatedUnion('kind', [
   z.strictObject({kind: z.literal('experiment_result'), payload: z.strictObject(researchExperimentResultReviewSchema.shape).omit({projectId: true, requestId: true})})
 ]);
 const domainSchemas = {
+  argument_outline: researchArgumentOutlineSaveSchema,
   idea_plan: researchIdeaPlanSaveSchema, citation_review: researchCitationReviewSaveSchema,
   consistency: researchConsistencySaveSchema, figure_consistency: researchFigureConsistencySaveSchema,
   response_matrix: researchResponseMatrixSaveSchema, journal_compliance: researchJournalSaveSchema,

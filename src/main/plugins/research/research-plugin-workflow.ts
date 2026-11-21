@@ -42,6 +42,7 @@ import {ResearchResultDerivationService} from './result-derivation-service';
 import {ResearchResultFigureSourceService} from './result-figure-source';
 import {registerResearchResultDerivationCapabilities} from './result-derivation-capabilities';
 import {registerResearchImpactCapabilities} from './impact-capabilities';
+import {registerResearchArgumentOutlineCapabilities} from './argument-outline-capabilities';
 
 export async function registerResearchWorkflow(
   context: RocPluginContext, options: ResearchPluginOptions,
@@ -57,6 +58,7 @@ export async function registerResearchWorkflow(
   const resultDerivation = new ResearchResultDerivationService(researchRepository, researchResults);
   registerResearchResultDerivationCapabilities(context, resultDerivation, new ResearchResultFigureSourceService(resultDerivation, workspaceFiles));
   registerResearchImpactCapabilities(context, researchRepository.impact, researchRepository.repairs);
+  registerResearchArgumentOutlineCapabilities(context, researchRepository.argumentOutlines);
   const scientificReviews = new ResearchArtifactScientificReviewService(researchRepository, researchResults, researchFigures);
   const humanGate = createResearchHumanGate({ repository: researchRepository, production: productionJob, scientificReviews });
   const readiness = new ResearchStageReadinessService(researchRepository, context.capabilities);

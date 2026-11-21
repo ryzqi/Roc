@@ -23,6 +23,7 @@ const ResponseMatrix = retryableLazy(async () => ({default: (await import('./Art
 const JournalCompliance = retryableLazy(async () => ({default: (await import('./ArtifactJournalCompliance')).ArtifactJournalCompliance}));
 const ExportReview = retryableLazy(async () => ({default: (await import('./ArtifactExportReview')).ArtifactExportReview}));
 const Impact = retryableLazy(async () => ({default: (await import('./ArtifactImpact')).ArtifactImpact}));
+const ArgumentOutline = retryableLazy(async () => ({default: (await import('./ArtifactArgumentOutline')).ArtifactArgumentOutline}));
 import {useArtifactEditorActivity, useArtifactEditorGuard} from './artifact-editor-guard';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
@@ -39,6 +40,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
   const [reviewNonce, setReviewNonce] = useState(0);
   const [relationSaved, setRelationSaved] = useState(false);
   const [impactOpen, setImpactOpen] = useState(false);
+  const [outlineOpen, setOutlineOpen] = useState(false);
   const guard = useArtifactEditorGuard();
   const plan = useArtifactEditorActivity('方法计划'), outcome = useArtifactEditorActivity('结果评估');
   const {pending: planPending, dirty: planDirty, setPending: setPlanPending, setDirty: setPlanDirty} = plan;
@@ -160,6 +162,17 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
         <LazyBoundary fallback={<p role="status">正在加载工件正文…</p>}>
           <StageContent snapshot={snapshot} />
         </LazyBoundary>
+        {!['reading_notes', 'manuscript'].includes(snapshot.artifact.kind) ? null : <section className="border-t-[0.5px] border-line pt-2">
+          <button type="button" className={button} disabled={planLocked} aria-expanded={outlineOpen}
+            data-testid="artifact-outline-toggle" onClick={() => setOutlineOpen(value => !value)}>
+            {outlineOpen ? '收起论证大纲' : '组织论证大纲'}
+          </button>
+          {!outlineOpen ? null : <LazyBoundary fallback={<p role="status">正在加载论证大纲…</p>}>
+            <ArgumentOutline key={`${snapshot.artifact.id}:${snapshot.version}`} client={client} snapshot={snapshot}
+              writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived'}
+              onSaved={() => {baseline.current = null; reading.save(); read.reload();}}/>
+          </LazyBoundary>}
+        </section>}
         <section className="border-t-[0.5px] border-line pt-2">
           <button type="button" className={button} disabled={planLocked} aria-expanded={impactOpen}
             data-testid="artifact-impact-toggle" onClick={() => setImpactOpen(value => !value)}>

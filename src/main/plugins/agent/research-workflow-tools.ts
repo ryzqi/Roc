@@ -16,6 +16,7 @@ import {
 import {researchJournalInspectionSchema, researchJournalSelectionSchema} from '../../../shared/schemas/research-journal-compliance';
 import {researchArtifactInspectResultSchema} from '../../../shared/schemas/research-artifact-inspector';
 import {researchManuscriptSyncInspectSchema, researchManuscriptSyncInspectionSchema} from '../../../shared/schemas/research-manuscript-sync';
+import {researchArgumentOutlineInspectionSchema} from '../../../shared/schemas/research-argument-outline';
 import {researchFigureConsistencyInspectSchema, researchFigureConsistencyInspectionSchema} from '../../../shared/schemas/research-figure-consistency';
 import {researchExperimentExecutionSchema, researchExperimentFileContentSchema, researchExperimentFileRequestSchema} from '../../../shared/schemas/research-experiments';
 import {
@@ -37,6 +38,8 @@ const readSchema = z.discriminatedUnion('kind', [
   z.strictObject({kind: z.literal('workflow')}),
   artifactTarget.extend({kind: z.literal('artifact')}),
   researchManuscriptSyncInspectSchema.omit({projectId: true}).extend({kind: z.literal('manuscript_sync')}),
+  researchManuscriptSyncInspectSchema.omit({projectId: true}).extend({kind: z.literal('argument_outline'),
+    offset: z.number().int().nonnegative().optional(), limit: z.number().int().min(1).max(20).optional()}),
   researchCitationCoverageRequestSchema.omit({projectId: true}).extend({kind: z.literal('citation_coverage')}),
   artifactTarget.extend({kind: z.literal('consistency')}),
   researchFigureConsistencyInspectSchema.omit({projectId: true}).extend({kind: z.literal('figure_consistency')}),
@@ -142,6 +145,19 @@ async function inspect(target: ReadRequest, invoke: Invoke, projectId: string): 
       if (data.status === 'conflict' || data.status === 'changed') findings.add(`manuscript_sync_${data.status}`,
         '工作稿与受控正文存在差异。', 'human', '在写作工作区核对并采纳选定修改，然后重新检查受影响的来源和审核。', [target.artifactId]);
       return findings.result(target.kind, data, 'current_sources', ['差异仅覆盖工作稿与受控正文。']);
+    }
+    case 'argument_outline': {
+      const data = await invoke('research.argumentOutlines.inspect', {artifactId: target.artifactId}, researchArgumentOutlineInspectionSchema);
+      if (data.latest === null || !data.latestCurrent) findings.add('argument_outline_needs_review', '大纲尚未保存或引用材料已变化。', 'agent',
+        '按每节问题组织准确主张、条件和缺口，保存论证大纲提案后交由人工审核。', [target.artifactId]);
+      const offset = target.offset ?? 0, limit = target.limit ?? 10;
+      const matrix = data.matrix.slice(offset, offset + limit).map(row => ({...row,
+        claim: {...row.claim, content: row.claim.content.slice(0, 1200)},
+        sources: row.sources.slice(0, 6).map(source => ({...source, evidence: {...source.evidence, excerpt: source.evidence.excerpt.slice(0, 400)}})),
+        relations: row.relations.slice(0, 12), sourcesTruncated: row.sources.length > 6, relationsTruncated: row.relations.length > 12}));
+      return findings.result(target.kind, {...data, matrix, total: data.matrix.length,
+        nextOffset: offset + limit < data.matrix.length ? offset + limit : null}, 'stored_receipt',
+        ['矩阵区分已记录的支持、反证和限定，不替代来源阅读；省略的来源按真实 ID 单独读取。']);
     }
     case 'workflow': {
       const data = await invoke('research.workflow.get', {id: projectId}, researchWorkflowSnapshotSchema);

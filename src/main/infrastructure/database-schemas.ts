@@ -771,6 +771,23 @@ CREATE INDEX idx_performance_samples_sampled
 export const researchSchema: RocDatabaseSchema = {
   version: 75,
   sql: `
+CREATE TABLE research_argument_outlines (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  artifact_id TEXT NOT NULL REFERENCES research_artifacts(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL CHECK(version > 0), request_id TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)), snapshot_hash TEXT NOT NULL,
+  UNIQUE(artifact_id,version), UNIQUE(project_id,request_id)
+);
+CREATE TABLE research_argument_materializations (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL, outline_id TEXT NOT NULL REFERENCES research_argument_outlines(id),
+  artifact_id TEXT NOT NULL REFERENCES research_manuscripts(artifact_id),
+  request_hash TEXT NOT NULL, actor_id TEXT NOT NULL,
+  response_json TEXT NOT NULL CHECK(json_valid(response_json)), response_hash TEXT NOT NULL,
+  UNIQUE(project_id,request_id)
+);
 CREATE TABLE research_proposals (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
