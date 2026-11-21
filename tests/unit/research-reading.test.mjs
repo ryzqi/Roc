@@ -22,6 +22,28 @@ test('notes preserve revisions, linked titles, archive recovery and project isol
  assert.throws(()=>f.reading.saveNote({...request,expectedRevision:3}),/已归档/);
  }finally{f.close();}
 });
+test('note deletion checks project, revision and write access without reviving stale drafts',()=>{
+ const f=scene();try{
+ const input={id:'delete-note',projectId:f.project.id,itemId:null,title:'Delete me',markdown:'Saved text',archived:false,expectedRevision:0};
+ const note=f.reading.saveNote(input);
+ const other=f.repository.createProject({title:'Other',description:'',workspacePath:'/tmp/roc-reading-other'});
+ const deletion={projectId:f.project.id,noteId:note.id,expectedRevision:note.revision};
+ assert.throws(()=>f.reading.deleteNote({...deletion,projectId:other.id}),/不存在/);
+ const updated=f.reading.saveNote({...input,markdown:'Updated elsewhere',expectedRevision:note.revision});
+ assert.throws(()=>f.reading.deleteNote(deletion),/其他窗口/);
+ assert.equal(f.reading.notes(f.project.id)[0].markdown,'Updated elsewhere');
+ f.db.prepare("UPDATE research_projects SET status='archived' WHERE id=?").run(f.project.id);
+ assert.throws(()=>f.reading.deleteNote({...deletion,expectedRevision:updated.revision}),/已归档/);
+ f.db.prepare("UPDATE research_projects SET status='active' WHERE id=?").run(f.project.id);
+ f.reading.deleteNote({...deletion,expectedRevision:updated.revision});
+ assert.deepEqual(f.reading.notes(f.project.id),[]);
+ assert.throws(()=>f.reading.saveNote({...input,expectedRevision:updated.revision}),/其他窗口/);
+ assert.throws(()=>f.reading.deleteNote({...deletion,expectedRevision:updated.revision}),/不存在/);
+ const archived=f.reading.saveNote({...input,id:'archived-note',archived:true});
+ f.reading.deleteNote({...deletion,noteId:archived.id,expectedRevision:archived.revision});
+ assert.deepEqual(f.reading.notes(f.project.id),[]);
+ }finally{f.close();}
+});
 test('RSS and Atom parsing sanitize markup and reject malformed or entity documents',()=>{
  const rows=api.parseRadarFeed(rss(),'feed','https://example.org/rss');assert.equal(rows[0].summary,'Abstract');assert.equal(rows[0].arxivId,'2611.00001');
  assert.equal(rows[0].id,api.parseRadarFeed(rss('Renamed'),'feed','https://example.org/rss')[0].id);

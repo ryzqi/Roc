@@ -1,6 +1,6 @@
 import type {Database} from 'better-sqlite3';
 import type {z} from 'zod';
-import {readingNoteSchema, readingHighlightSchema, readingNoteSaveSchema, readingHighlightSaveSchema,
+import {readingNoteSchema, readingHighlightSchema, readingNoteSaveSchema, readingNoteDeleteSchema, readingHighlightSaveSchema,
   type ReadingNote, type ReadingHighlight} from '../../../shared/schemas/research-reading';
 import type {ResearchRepository} from './repository';
 
@@ -37,6 +37,17 @@ export class ReadingRepository {
       const stored = this.notes(input.projectId).find(value => value.id === input.id);
       if (stored === undefined) throw new Error('笔记 ID 已用于其他项目。');
       return stored;
+    })();
+  }
+  deleteNote(raw: z.infer<typeof readingNoteDeleteSchema>): void {
+    const input = readingNoteDeleteSchema.parse(raw);
+    this.scope(input.projectId, true);
+    this.db.transaction(() => {
+      const prior = this.notes(input.projectId).find(note => note.id === input.noteId);
+      if (!prior) throw new Error('笔记不存在或已被删除，请重读笔记列表。');
+      if (prior.revision !== input.expectedRevision) throw new Error('笔记已在其他窗口修改，请重读后再删除；当前草稿仍保留。');
+      this.db.prepare('DELETE FROM research_reading_notes WHERE project_id=? AND id=? AND revision=?')
+        .run(input.projectId, input.noteId, input.expectedRevision);
     })();
   }
   highlights(projectId: string, documentId: string, sourceHash: string): ReadingHighlight[] {

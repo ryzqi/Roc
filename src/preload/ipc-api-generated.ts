@@ -440,6 +440,7 @@ export const rocApi: RocPreloadApi = {
     captureRadarPage: (...args) => ipcRenderer.invoke(ipcChannels.researchCaptureRadarPage, ...args),
     discoverReadingRelations: (...args) => ipcRenderer.invoke(ipcChannels.researchDiscoverReadingRelations, ...args),
     listReadingNotes: (...args) => ipcRenderer.invoke(ipcChannels.researchReadingListReadingNotes, ...args),
+    deleteReadingNote: (...args) => ipcRenderer.invoke(ipcChannels.researchReadingDeleteReadingNote, ...args),
     saveReadingNote: (...args) => ipcRenderer.invoke(ipcChannels.researchReadingSaveReadingNote, ...args),
     exportReadingNote: (...args) => ipcRenderer.invoke(ipcChannels.researchReadingExportReadingNote, ...args),
     listReadingHighlights: (...args) => ipcRenderer.invoke(ipcChannels.researchReadingListReadingHighlights, ...args),

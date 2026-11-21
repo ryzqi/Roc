@@ -15,8 +15,9 @@ before(async () => {
     import React from 'react';
     import { createRoot } from 'react-dom/client';
     import { flushSync } from 'react-dom';
+    import { LazyMotion, domAnimation, MotionConfig } from 'motion/react';
     import ReadingNotesPanel from './src/renderer/literature/ReadingNotesPanel';
-    import { readingNoteSaveSchema, readingNoteExportSchema } from './src/shared/schemas/research-reading';
+    import { readingNoteSaveSchema, readingNoteExportSchema, readingNoteDeleteSchema } from './src/shared/schemas/research-reading';
     const root = createRoot(document.getElementById('root'));
     let session = 0, stored;
     const client = {api:{research:{
@@ -25,7 +26,7 @@ before(async () => {
         if (window.listMode === 'throw') throw new Error('Synthetic reread transport failure');
         if (window.listMode === 'refuse') return Promise.resolve({ok:false,error:{message:'Synthetic reread refused'}});
         if (window.listMode === 'pending') return new Promise(resolve => {window.resolveList = () => resolve({ok:true,data:[stored]});});
-        return Promise.resolve({ok:true,data:[stored]});
+        return Promise.resolve({ok:true,data:stored?[stored]:[]});
       },
       saveReadingNote: raw => {
         const {expectedRevision,...input} = readingNoteSaveSchema.parse(raw);
@@ -39,6 +40,16 @@ before(async () => {
         if (window.saveMode === 'pending') return new Promise(resolve => {window.resolveSave = () => resolve(finish());});
         return Promise.resolve(finish());
       },
+      deleteReadingNote: raw => {
+        readingNoteDeleteSchema.parse(raw);
+        window.deleteCalls++;
+        window.deleteInput = raw;
+        if (window.deleteMode === 'throw') throw new Error('Synthetic delete transport failure');
+        if (window.deleteMode === 'refuse') return Promise.resolve({ok:false,error:{message:'Synthetic delete revision conflict'}});
+        const finish = () => {stored = null;return {ok:true,data:{}};};
+        if (window.deleteMode === 'pending') return new Promise(resolve => {window.resolveDelete = () => resolve(finish());});
+        return Promise.resolve(finish());
+      },
       exportReadingNote: raw => {
         readingNoteExportSchema.parse(raw);
         window.exportCalls++;
@@ -48,14 +59,14 @@ before(async () => {
         return Promise.resolve({ok:true,data:{path:'/tmp/synthetic-note.md'}});
       }
     }}};
-    window.mountNotes = () => {
-      window.listMode = window.saveMode = window.exportMode = 'ready';
-      window.listCalls = window.saveCalls = window.exportCalls = 0;
+    window.mountNotes = (writable = true) => {
+      window.listMode = window.saveMode = window.exportMode = window.deleteMode = 'ready';
+      window.listCalls = window.saveCalls = window.exportCalls = window.deleteCalls = 0;
       stored = {id:'note',projectId:'fixture',itemId:null,title:'Stored note',markdown:'Stored body',
         archived:false,revision:1,links:[],createdAt:'2026-11-10',updatedAt:'2026-11-10'};
-      flushSync(() => root.render(<div style={{height:620,width:620}}>
-        <ReadingNotesPanel key={++session} client={client} projectId="fixture" items={[]} writable={true}/>
-      </div>));
+      flushSync(() => root.render(<LazyMotion features={domAnimation}><MotionConfig reducedMotion="user"><div style={{height:620,width:620}}>
+        <ReadingNotesPanel key={++session} client={client} projectId="fixture" items={[]} writable={writable}/>
+      </div></MotionConfig></LazyMotion>));
     };
   `, style: 'html,body{margin:0}' });
   await writeFile(join(directory, 'main.cjs'), `const {app,BrowserWindow}=require('electron');
@@ -108,6 +119,63 @@ test('note export reports thrown failures without losing the note', async () => 
   await expect(page.getByRole('alert')).toContainText('Synthetic export transport failure');
   await expect(page.getByLabel('笔记标题', { exact: true })).toHaveValue('Stored note');
   assert.deepEqual(pageErrors, []);
+});
+
+test('note deletion requires confirmation, blocks duplicate requests and removes the selected note', async () => {
+  await openStoredNote();
+  await expect(page.getByTestId('notes-delete')).toBeVisible();
+  await page.getByTestId('notes-delete').focus();
+  await expect(page.getByTestId('notes-delete')).toBeFocused();
+  await page.getByTestId('notes-delete').press('Enter');
+  const dialog=page.getByTestId('notes-delete-dialog');
+  await expect(dialog).toContainText('Stored note');
+  await expect(dialog.getByRole('button',{name:'取消',exact:true})).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  assert.equal(await page.evaluate(()=>window.deleteCalls),0);
+  await expect(page.getByTestId('notes-delete')).toBeFocused();
+  await page.evaluate(()=>{window.deleteMode='pending';});
+  await page.getByTestId('notes-delete').click();
+  await page.getByTestId('notes-delete-dialog-confirm').evaluate(button=>{button.click();button.click();});
+  assert.equal(await page.evaluate(()=>window.deleteCalls),1);
+  assert.deepEqual(await page.evaluate(()=>window.deleteInput),{projectId:'fixture',noteId:'note',expectedRevision:1});
+  await expect(page.getByTestId('notes-delete-dialog-confirm')).toBeDisabled();
+  await expect(page.getByTestId('notes-delete-dialog-cancel')).toBeDisabled();
+  await expect(page.getByLabel('笔记标题',{exact:true})).toBeDisabled();
+  await page.evaluate(()=>window.resolveDelete());
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByLabel('笔记标题',{exact:true})).toHaveCount(0);
+  await expect(page.getByLabel('选择笔记',{exact:true}).locator('option[value="note"]')).toHaveCount(0);
+  await expect(page.getByTestId('notes-panel').getByRole('status')).toHaveText('笔记已删除');
+  assert.equal(await page.evaluate(()=>window.saveCalls),0);
+  assert.deepEqual(pageErrors,[]);
+});
+
+test('failed note deletion preserves unsaved drafts and never resumes stale autosave', async () => {
+  await openStoredNote();
+  await page.evaluate(()=>{window.deleteMode='refuse';});
+  await page.getByLabel('笔记标题',{exact:true}).fill('Unsaved draft');
+  await page.getByTestId('notes-delete').click();
+  await page.waitForTimeout(1000);
+  assert.equal(await page.evaluate(()=>window.saveCalls),0);
+  await page.getByTestId('notes-delete-dialog-confirm').click();
+  await expect(page.getByRole('alert')).toContainText('Synthetic delete revision conflict');
+  await expect(page.getByLabel('笔记标题',{exact:true})).toHaveValue('Unsaved draft');
+  await page.evaluate(()=>{window.deleteMode='throw';});
+  await page.getByTestId('notes-delete').click();
+  await page.getByTestId('notes-delete-dialog-confirm').click();
+  await expect(page.getByRole('alert')).toContainText('Synthetic delete transport failure');
+  await expect(page.getByLabel('笔记标题',{exact:true})).toHaveValue('Unsaved draft');
+  await page.waitForTimeout(1000);
+  assert.equal(await page.evaluate(()=>window.saveCalls),0);
+  assert.deepEqual(pageErrors,[]);
+});
+
+test('deletion stays disabled for read-only projects', async () => {
+  await page.evaluate(()=>window.mountNotes(false));
+  await page.getByLabel('选择笔记',{exact:true}).selectOption('note');
+  await page.getByTestId('notes-options').click();
+  await expect(page.getByTestId('notes-delete')).toBeDisabled();
 });
 
 test('rereading a conflicted note confirms discard, freezes replacement and retains the draft on failure', async () => {

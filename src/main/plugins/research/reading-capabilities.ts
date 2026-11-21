@@ -7,12 +7,13 @@ import type {ReadingRepository} from './reading-repository';
 import type {ReadingDiscoveryService} from './reading-discovery';
 import type {RadarService} from './radar-service';
 import type {ReadingTranslationService} from './reading-translation';
-import {readingDiscoveryRequestSchema,readingDiscoveryResultSchema,radarCapturePageSchema,radarArticleMarkSchema,radarArticleSchema,radarArticlesRequestSchema,radarArticlesSchema,radarFeedSaveSchema,radarFeedSchema,radarFeedsSchema,radarImportResultSchema,radarImportSchema,radarRecommendSchema,radarRecommendationsSchema,radarRefreshSchema,readingEmptySchema,readingExportResultSchema,readingHighlightListSchema,readingHighlightSaveSchema,readingHighlightSchema,readingHighlightsSchema,readingNoteExportSchema,readingNoteSaveSchema,readingNoteSchema,readingNotesSchema,readingScopeSchema,readingTranslateSchema,readingTranslationSchema,translationSettingsSaveSchema,translationSettingsSchema} from '../../../shared/schemas/research-reading';
+import {readingDiscoveryRequestSchema,readingDiscoveryResultSchema,radarCapturePageSchema,radarArticleMarkSchema,radarArticleSchema,radarArticlesRequestSchema,radarArticlesSchema,radarFeedSaveSchema,radarFeedSchema,radarFeedsSchema,radarImportResultSchema,radarImportSchema,radarRecommendSchema,radarRecommendationsSchema,radarRefreshSchema,readingEmptySchema,readingExportResultSchema,readingHighlightListSchema,readingHighlightSaveSchema,readingHighlightSchema,readingHighlightsSchema,readingNoteExportSchema,readingNoteDeleteSchema,readingNoteSaveSchema,readingNoteSchema,readingNotesSchema,readingScopeSchema,readingTranslateSchema,readingTranslationSchema,translationSettingsSaveSchema,translationSettingsSchema} from '../../../shared/schemas/research-reading';
 const descriptor = <I,O>(name:string,inputSchema:z.ZodType<I>,outputSchema:z.ZodType<O>): CapabilityDescriptor<I,O> => ({name,version:'1.0.0',inputSchema,outputSchema});
 const capabilities = {
   discoverReadingRelations:descriptor('research.reading.discoverReadingRelations',readingDiscoveryRequestSchema,readingDiscoveryResultSchema),
   captureRadarPage:descriptor('research.reading.captureRadarPage',radarCapturePageSchema,radarArticleSchema),
   listReadingNotes:descriptor('research.reading.listReadingNotes',readingScopeSchema,readingNotesSchema),
+  deleteReadingNote:descriptor('research.reading.deleteReadingNote',readingNoteDeleteSchema,readingEmptySchema),
   saveReadingNote:descriptor('research.reading.saveReadingNote',readingNoteSaveSchema,readingNoteSchema),
   exportReadingNote:descriptor('research.reading.exportReadingNote',readingNoteExportSchema,readingExportResultSchema),
   listReadingHighlights:descriptor('research.reading.listReadingHighlights',readingHighlightListSchema,readingHighlightsSchema),
@@ -37,6 +38,7 @@ export function registerResearchReadingCapabilities(context:RocPluginContext,rea
   register(capabilities.discoverReadingRelations,input=>discovery.discover(input));
   register(capabilities.captureRadarPage,input=>discovery.capturePage(input.projectId,input.url));
   register(capabilities.listReadingNotes,input => reading.notes(input.projectId));
+  register(capabilities.deleteReadingNote,input => {reading.deleteNote(input);return {};});
   register(capabilities.saveReadingNote,input => reading.saveNote(input));
   register(capabilities.exportReadingNote,async input => {const note = reading.notes(input.projectId).find(note => note.id === input.noteId); if (!note || note.revision !== input.expectedRevision) throw new Error("笔记已更新，请重新保存后导出。"); const {canceled,filePath} = await dialog.showSaveDialog({defaultPath: `${note.title.replace(/[\\/:*?"<>|]/gu,"-")}.md`,filters:[{name:"Markdown",extensions:["md"]}]}); if (canceled || !filePath) return {path:null}; await writeFile(filePath,note.markdown,"utf8"); return {path:filePath};});
   register(capabilities.listReadingHighlights,input => reading.highlights(input.projectId,input.documentId,input.sourceHash));

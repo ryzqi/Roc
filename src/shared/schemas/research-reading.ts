@@ -11,6 +11,7 @@ export const readingNotesSchema = z.array(readingNoteSchema);
 export const readingNoteSaveSchema = readingNoteSchema.omit({links: true, revision: true, createdAt: true, updatedAt: true})
   .extend({expectedRevision: z.number().int().nonnegative()});
 export const readingNoteExportSchema = z.strictObject({...project, noteId: id, expectedRevision: z.number().int().positive()});
+export const readingNoteDeleteSchema = z.strictObject({...project, noteId: id, expectedRevision: z.number().int().positive()});
 export const readingExportResultSchema = z.strictObject({path: z.string().nullable()});
 export const readingHighlightSchema = z.strictObject({
   id, ...project, documentId: id, sourceHash: z.string().regex(/^[a-f0-9]{64}$/u), page: z.number().int().positive(),
