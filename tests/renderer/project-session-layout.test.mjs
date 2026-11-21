@@ -87,6 +87,29 @@ test('project search and create action stay visible while the project list scrol
   }
 });
 
+test('short viewports scroll the whole portal so zoom cannot hide every project',async()=>{
+  await page.setViewportSize({width:296,height:160});
+  await page.evaluate(()=>{
+    const root=document.getElementById('root');
+    root.style.width='244px';root.style.height='122px';
+    mount('portal');
+  });
+  try {
+    const result=page.getByTestId('portal-card-open-first');
+    await result.focus();
+    await expect(result).toBeInViewport();
+    assert.ok(await page.getByTestId('portal-content').evaluate(element=>element.clientHeight)>0);
+    assert.ok(await page.getByTestId('portal').evaluate(element=>element.scrollTop)>0);
+    await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(()=>opened.at(-1)),'first');
+    await page.getByTestId('portal-search').focus();
+    await expect(page.getByTestId('portal-search')).toBeInViewport();
+  } finally {
+    await page.setViewportSize({width:1450,height:900});
+    await page.evaluate(()=>{const root=document.getElementById('root');root.style.width='1100px';root.style.height='100%';});
+  }
+});
+
 test('session search filters real titles, clearing preserves selection and empty state retains new action',async()=>{
   await page.evaluate(()=>mount('sessions'));
   await expect(page.getByTestId('session-row-one')).toBeVisible();

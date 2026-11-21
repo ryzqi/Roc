@@ -135,7 +135,9 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
 
       <div className="overview-resources">
       <section className={sectionClass} aria-labelledby="overview-results-heading">
-        <h2 id="overview-results-heading" className="font-medium">近期成果</h2>
+        <header className="flex min-h-8 items-center">
+          <h2 id="overview-results-heading" className="font-medium">近期成果</h2>
+        </header>
         {artifacts.error !== null ? <ErrorBar error={{level: 'page', message: artifacts.error, retry: artifacts.reload}}/> :
           artifacts.data === null ? <EmptyState compact tone="loading" title="正在读取成果"/> :
             recentArtifacts.length === 0 ? <p className="text-muted">尚无研究成果</p> :

@@ -23,6 +23,11 @@
 .project-row-action-list { display: flex; flex-wrap: wrap; gap: 4px; padding-top: 4px; }
 .project-row-action-list button { width: auto; gap: 4px; padding-inline: 8px; font-size: var(--font-meta-size); }
 .project-portal :is(button, input, summary):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+@media (max-height: 400px) {
+  /* At high zoom, let search scroll away before it consumes the entire result area. */
+  .project-portal { overflow-y: auto; scrollbar-gutter: stable; }
+  .project-portal-scroll { flex: none; overflow: visible; }
+}
 @container project-portal (max-width: 560px) {
   .project-portal-heading, .project-portal-content { padding: var(--space-4); }
   .project-portal-content { gap: var(--space-5); }

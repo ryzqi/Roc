@@ -226,11 +226,11 @@ Agent 区分草稿、已受理、执行中、等待批准、已完成、失败�
 | [Microsoft Fluent 2 Layout](https://fluent2.microsoft.design/layout/) | 4px 间距基准，留白表达关系；页面、工具栏、数据区分别承担明确职责 |
 | [Fluent Toolbar](https://fluent2.microsoft.design/components/web/react/core/toolbar/usage/) | 按操作对象分组，图标按钮保留可访问名称；窄栏输入操作分层 |
 | [IBM Carbon Data table](https://www.carbondesignsystem.com/building-blocks/core/components/data-table/guidelines) | 搜索与筛选位于数据区前，批量动作仅在选择后显示；任务与文献采用平面条目 |
-| [shadcn Sidebar](https://ui.shadcn.com/docs/components/radix/sidebar) | 参考头部、滚动内容、底部职责分离；沿用现有唯一壳和分栏状态，不复制第二套 SidebarProvider |
+| [shadcn Sidebar](https://ui.shadcn.com/docs/components/base/sidebar) | 参考头部、滚动内容、底部职责分离；沿用现有唯一壳和分栏状态，不复制第二套 SidebarProvider |
 | [Radix Dialog](https://www.radix-ui.com/primitives/docs/components/dialog) | 复用已装 Dialog 与现有设置壳，保留焦点、嵌套浮层和草稿关闭保护 |
 | [React Virtuoso](https://virtuoso.dev/) | 复用已装虚拟列表；长列表模块动态导入，小列表保持原生列表，保留选中对象和键盘操作 |
 
-项目门户页头固定，查询、状态筛选、显示方式与新建不随数据滚出；最近项目是紧凑入口，完整列表保留目标和更新时间。工作台优先展示任务，近期成果与文献在画布足够宽时并列，窄时按阅读顺序堆叠。尺寸依据所在容器，不能仅凭窗口宽度推断可用空间。
+项目门户页头固定，查询、状态筛选、显示方式与新建不随数据滚出；视口高度不超过 400px 时改为整页滚动，避免高缩放将结果压为零高度；最近项目是紧凑入口，完整列表保留目标和更新时间。工作台优先展示任务，近期成果与文献在画布足够宽时并列，窄时按阅读顺序堆叠。尺寸依据所在容器，不能仅凭窗口宽度推断可用空间。
 
 ## 任务走查与交付证据
 
