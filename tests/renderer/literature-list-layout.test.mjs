@@ -96,6 +96,9 @@ test('large result sets window their rows and preserve selected items and keyboa
   await expect(page.getByTestId('literature-count')).toHaveText('200 条');
   await expect(page.getByTestId('literature-fulltext-paper-150')).toHaveText('全文已解析');
   await page.getByTestId('literature-row-paper-150').focus();
+  await page.locator('.library-virtual-list').evaluate(element=>element.scrollTo({top:0}));
+  await expect(page.getByTestId('literature-row-paper-150')).toHaveCount(0);
+  await expect(page.getByTestId('literature-list-body')).toBeFocused();
   await page.keyboard.press('End');
   await expect(page.getByTestId('literature-row-paper-199')).toBeFocused();
   await page.keyboard.press('Home');
@@ -111,6 +114,11 @@ test('large result sets window their rows and preserve selected items and keyboa
   await page.getByTestId('literature-row-paper-120').focus();
   await page.keyboard.press('Tab');
   await expect(page.getByTestId('literature-citekey-copy-paper-120')).toBeFocused();
+  await page.locator('.library-virtual-list').evaluate(element=>element.scrollTo({top:0}));
+  await expect(page.getByTestId('literature-row-paper-120')).toHaveCount(0);
+  await expect(page.getByTestId('literature-list-body')).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.getByTestId('literature-row-paper-121')).toBeFocused();
   await page.getByTestId('literature-sort').selectOption('title');
   await expect(page.getByTestId('literature-row-paper-120')).toBeVisible();
   await expect(page.getByTestId('literature-row-paper-120')).toHaveAttribute('aria-current','true');

@@ -69,6 +69,7 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
   const [focusedId, setFocusedId] = useState<string | null>(literature.selectedId);
   const [visibleRange, setVisibleRange] = useState({startIndex: 0, endIndex: 0});
   const [virtualizerReady, setVirtualizerReady] = useState(false);
+  const listBodyRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
   const virtualizerRef = useRef<VirtuosoHandle | null>(null);
   const pendingFocusId = useRef<string | null>(null);
@@ -142,7 +143,17 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
       </label> : null}
       <button type="button" tabIndex={tabIndex}
         ref={element => {
-          if (element === null) rowRefs.current.delete(item.id);
+          if (element === null) {
+            const row = rowRefs.current.get(item.id);
+            if (row?.parentElement?.contains(document.activeElement) && pendingFocusId.current === null) {
+              // Manual scrolling may unmount the focused row. Keep keyboard control
+              // within this list without scrolling the user's viewport back.
+              requestAnimationFrame(() => {
+                if (document.activeElement === document.body) listBodyRef.current?.focus({preventScroll: true});
+              });
+            }
+            rowRefs.current.delete(item.id);
+          }
           else rowRefs.current.set(item.id, element);
         }}
         onFocus={() => setFocusedId(item.id)}
@@ -250,7 +261,16 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
           testId="literature-empty"
         />
       ) : (
-        <div className="library-list-body" data-testid="literature-list-body">
+        <div ref={listBodyRef} className="library-list-body" data-testid="literature-list-body"
+          role="group" aria-label="文献列表导航" tabIndex={-1} onKeyDown={event => {
+            if (event.target !== event.currentTarget) return;
+            const next = event.key === 'ArrowDown' ? Math.min(items.length - 1, activeIndex + 1)
+              : event.key === 'ArrowUp' ? Math.max(0, activeIndex - 1)
+                : event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : null;
+            if (next === null) return;
+            event.preventDefault();
+            focusRow(next);
+          }}>
           {virtualize ? <LazyBoundary fallback={<p role="status" className="p-3 text-muted">正在准备文献列表…</p>}>
             <LazyLibraryVirtualizedRows ref={setVirtualizerRef} items={items}
               initialIndex={Math.max(0, items.findIndex(item => item.id === literature.selectedId))}
