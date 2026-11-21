@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import {researchArtifactSchema, researchStageStateSchema, researchProvenanceSchema, researchProjectSchema} from './research';
 import {researchArtifactContentSchema, researchStageRunSchema} from './research-runs';
-import {researchClaimSchema} from './research-evidence';
+import {researchClaimSchema, researchManuscriptSchema} from './research-evidence';
 import {researchProductionInputSchema} from './research-production-inputs';
 import {researchInspectedEvidenceSchema} from './research-evidence-source';
 import {researchEvidenceRelationSchema} from './research-evidence-relations';
@@ -31,6 +31,7 @@ export const researchArtifactInspectionBodySchema = z.object({
   artifact: researchArtifactSchema, projectStatus: researchProjectSchema.shape.status,
   currentStage: researchStageStateSchema.shape.stage, stage: researchStageStateSchema,
   content: researchArtifactContentSchema.nullable(), origin: researchArtifactOriginSchema.nullable(),
+  manuscript: researchManuscriptSchema.pick({sections: true, contentHash: true, claimsHash: true}).nullable().optional(),
   claims: researchClaimSchema.array(), evidence: researchInspectedEvidenceSchema.array(),
   relations: researchEvidenceRelationSchema.array(),
   ideaCanvas: researchIdeaCanvasSchema.nullable(), ideaPlan: researchIdeaPlanInspectionSchema.nullable(),

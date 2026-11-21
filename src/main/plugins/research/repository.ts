@@ -56,6 +56,8 @@ import { ResearchExportRepository } from './export-repository';
 import { ResearchIdeaRepository } from './idea-repository';
 import {ResearchIdeaPlanRepository} from './idea-plan-repository';
 import {ResearchProposalRepository} from './proposal-repository';
+import {ResearchManuscriptSyncService} from './manuscript-sync-service';
+import {hasResearchHumanContext} from '../../services/research-human-context';
 import {ResearchIdeaOutcomeRepository} from './idea-outcome-repository';
 import {ResearchCitationReviewRepository} from './citation-review-repository';
 import {ResearchConsistencyRepository} from './consistency-repository';
@@ -92,6 +94,7 @@ type Clock = () => string;
 export class ResearchRepository {
   readonly evidence: ResearchEvidenceRepository;
   readonly manuscripts: ResearchManuscriptRepository;
+  readonly manuscriptSync: ResearchManuscriptSyncService;
   readonly runs: ResearchRunRepository;
   readonly reviews: ResearchReviewRepository;
   readonly library: ResearchLibraryRepository;
@@ -141,6 +144,7 @@ export class ResearchRepository {
       get: (id) => this.getArtifact(id),
       requireEditable: (id) => this.requireEditableArtifact(id)
     }, this.evidence, now);
+    this.manuscriptSync = new ResearchManuscriptSyncService(db, this, now);
     this.runs = new ResearchRunRepository(db, this, now);
     this.reviews = new ResearchReviewRepository(db, this, now);
     this.library = new ResearchLibraryRepository(db, this, now);
@@ -364,6 +368,7 @@ export class ResearchRepository {
       const project = this.getProject(request.projectId), artifact = this.getArtifact(request.artifactId);
       if (artifact.projectId !== project.id) throw new Error('research_artifact_project_mismatch');
       const content = this.runs.getArtifactContent(project.id, artifact.id);
+      const manuscript = artifact.kind === 'manuscript' ? this.manuscripts.getManuscript(artifact.id) : null;
       const claims = this.evidence.listClaims({projectId: project.id, artifactId: artifact.id});
       const relations = this.evidence.relations.forArtifact(artifact.id, project.id);
       const consistency = this.consistency.latest(project.id, artifact.id);
@@ -433,6 +438,7 @@ export class ResearchRepository {
       const body = researchArtifactInspectionBodySchema.parse({
         artifact, projectStatus: project.status, currentStage: project.currentStage,
         stage, content, origin, claims, evidence, relations,
+        ...(manuscript === null ? {} : {manuscript: {sections: manuscript.sections, contentHash: manuscript.contentHash, claimsHash: manuscript.claimsHash}}),
         production, ideaCanvas, ideaPlan, ideaOutcomes, citationReviews, consistencyReviews, responseMatrix, journalCompliance,
         ...(content?.output.scientificReview === undefined ? {} : {scientificReview: this.scientificReviews.inspect(project.id, artifact.id)}),
         provenance: rows.map(toProvenance), availableActions
@@ -536,6 +542,9 @@ export class ResearchRepository {
   requireEditableArtifact(id: string): ResearchArtifact {
     const artifact = this.getArtifact(id);
     if (artifact.status !== 'draft') throw new Error('research_artifact_immutable');
+    if (artifact.kind === 'manuscript' && hasResearchHumanContext('research.manuscriptSync.apply', artifact.projectId)) {
+      return this.requireRelationReviewableArtifact(id);
+    }
     this.requireEditableStage(artifact.projectId, artifact.stage);
     return artifact;
   }

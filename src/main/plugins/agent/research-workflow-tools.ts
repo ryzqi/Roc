@@ -15,6 +15,7 @@ import {
 } from '../../../shared/schemas/research-response-matrix';
 import {researchJournalInspectionSchema, researchJournalSelectionSchema} from '../../../shared/schemas/research-journal-compliance';
 import {researchArtifactInspectResultSchema} from '../../../shared/schemas/research-artifact-inspector';
+import {researchManuscriptSyncInspectSchema, researchManuscriptSyncInspectionSchema} from '../../../shared/schemas/research-manuscript-sync';
 import {researchFigureConsistencyInspectSchema, researchFigureConsistencyInspectionSchema} from '../../../shared/schemas/research-figure-consistency';
 import {researchExperimentExecutionSchema, researchExperimentFileContentSchema, researchExperimentFileRequestSchema} from '../../../shared/schemas/research-experiments';
 import {
@@ -35,6 +36,7 @@ const artifactTarget = researchConsistencyInspectSchema.omit({projectId: true});
 const readSchema = z.discriminatedUnion('kind', [
   z.strictObject({kind: z.literal('workflow')}),
   artifactTarget.extend({kind: z.literal('artifact')}),
+  researchManuscriptSyncInspectSchema.omit({projectId: true}).extend({kind: z.literal('manuscript_sync')}),
   researchCitationCoverageRequestSchema.omit({projectId: true}).extend({kind: z.literal('citation_coverage')}),
   artifactTarget.extend({kind: z.literal('consistency')}),
   researchFigureConsistencyInspectSchema.omit({projectId: true}).extend({kind: z.literal('figure_consistency')}),
@@ -130,9 +132,16 @@ async function inspect(target: ReadRequest, invoke: Invoke, projectId: string): 
     case 'artifact': {
       const result = await invoke('research.artifacts.inspect', {artifactId: target.artifactId, expectedVersion: target.expectedHash}, researchArtifactInspectResultSchema);
       findings.stale(result.status);
-      const {artifact, version, origin, ideaCanvas, ideaPlan, claims} = result.snapshot;
-      return findings.result(target.kind, {artifact, version, origin, ideaCanvas, ideaPlan, claims: claims.slice(0, 40), claimCount: claims.length},
+      const {artifact, version, origin, ideaCanvas, ideaPlan, claims, manuscript} = result.snapshot;
+      return findings.result(target.kind, {artifact, version, origin, ideaCanvas, ideaPlan, manuscript: manuscript?.sections,
+        claims: claims.slice(0, 40), claimCount: claims.length},
         'stored_receipt', ['工件版本用于锁定建议依据；当前磁盘材料需由对应检查核对。']);
+    }
+    case 'manuscript_sync': {
+      const data = await invoke('research.manuscriptSync.inspect', {artifactId: target.artifactId}, researchManuscriptSyncInspectionSchema);
+      if (data.status === 'conflict' || data.status === 'changed') findings.add(`manuscript_sync_${data.status}`,
+        '工作稿与受控正文存在差异。', 'human', '在写作工作区核对并采纳选定修改，然后重新检查受影响的来源和审核。', [target.artifactId]);
+      return findings.result(target.kind, data, 'current_sources', ['差异仅覆盖工作稿与受控正文。']);
     }
     case 'workflow': {
       const data = await invoke('research.workflow.get', {id: projectId}, researchWorkflowSnapshotSchema);

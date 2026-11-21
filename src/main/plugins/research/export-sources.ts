@@ -44,6 +44,7 @@ export class ResearchExportSourceService {
       signal.throwIfAborted();
       if (!sources.figures.some((figure) => figure.runId === run.id)) await this.experiments.snapshot(request.projectId, run.id);
     }
+    await this.repository.manuscriptSync.assertCurrent(request.projectId, request.manuscriptArtifactId);
     signal.throwIfAborted();
     this.assertCurrent(request, sources);
     return sources;

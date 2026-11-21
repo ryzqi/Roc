@@ -14,6 +14,7 @@ import {resourceAssociationSaveSchema} from '../../shared/schemas/research-resou
 import {hfDownloadStartSchema} from '../../shared/schemas/research-huggingface-downloads';
 import {researchResponseMatrixSaveSchema} from '../../shared/schemas/research-response-matrix';
 import {researchProposalRejectSchema} from '../../shared/schemas/research-proposals';
+import {researchManuscriptSyncAttachSchema, researchManuscriptSyncApplySchema} from '../../shared/schemas/research-manuscript-sync';
 import { withLiteratureContext } from '../services/literature-context';
 import { researchPythonEnvironmentSelectSchema } from '../../shared/schemas/research-python-environments';
 import { researchNotebookImportRequestSchema } from '../../shared/schemas/research-notebooks';
@@ -171,6 +172,12 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
         }
         if (target.capabilityName === 'research.proposals.reject') {
           const request = researchProposalRejectSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
+        if (target.capabilityName === 'research.manuscriptSync.attach' || target.capabilityName === 'research.manuscriptSync.apply') {
+          const request = (target.capabilityName === 'research.manuscriptSync.attach' ?
+            researchManuscriptSyncAttachSchema : researchManuscriptSyncApplySchema).parse(input);
           return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
             () => invoker.invokeCapability(target.capabilityName, request));
         }

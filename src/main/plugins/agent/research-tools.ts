@@ -7,6 +7,7 @@ import {researchDiagramRequestSchema, researchDiagramResultSchema} from '../../.
 import {withResearchDiagramSignal} from '../research/diagram-service';
 import type {ResearchGateReviewContext} from '../../../shared/schemas/research-gate-review';
 import {researchArtifactVersionsSchema} from '../../../shared/schemas/research-artifact-version';
+import {researchArtifactInspectResultSchema} from '../../../shared/schemas/research-artifact-inspector';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import type { StructuredToolInterface } from '@langchain/core/tools';
 import { Annotation, END, START, StateGraph, interrupt } from '@langchain/langgraph';
@@ -247,6 +248,12 @@ export function createResearchTools(input: {
     tool(async ({ artifactId }) => {
       const artifact = await invoke<ResearchArtifact>('research.artifacts.get', { id: artifactId });
       if (artifact.projectId !== projectId) throw new Error('research_artifact_project_mismatch');
+      if (artifact.kind === 'manuscript') {
+        const {snapshot} = researchArtifactInspectResultSchema.parse(await invoke('research.artifacts.inspect',
+          {projectId, artifactId, expectedVersion: null}));
+        return {artifact: artifactSummary(artifact), version: snapshot.version, hasContent: snapshot.manuscript != null,
+          sections: snapshot.manuscript?.sections ?? [], claims: snapshot.claims.slice(0, 40).map(claim => ({...claim, content: clip(claim.content, 600)}))};
+      }
       const content = await invoke<ResearchArtifactContent | null>('research.artifacts.content', { projectId, artifactId });
       if (content === null) {
         return { artifact: artifactSummary(artifact), hasContent: false, note: '该产物没有结构化内容，请直接读取工作目录文件。' };

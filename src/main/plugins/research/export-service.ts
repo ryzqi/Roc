@@ -94,6 +94,7 @@ export class ResearchExportService {
     return await this.session.run(async (signal) => {
       const record = this.repository.exports.get(projectId, id);
       await this.verify(record, signal);
+      await this.repository.manuscriptSync.assertCurrent(projectId, record.request.manuscriptArtifactId);
       this.requireActive(signal);
       if (record.sources === null) throw new Error('research_export_sources_required');
       this.sources.assertCurrent(record.request, record.sources);
@@ -107,6 +108,7 @@ export class ResearchExportService {
       if (stage === undefined) throw new Error('research_stage_not_found');
       const records = stage.artifactIds.map((id) => this.repository.exports.forArtifact(this.repository.getArtifact(id)));
       for (const record of records) await this.verify(record, signal);
+      for (const record of records) await this.repository.manuscriptSync.assertCurrent(projectId, record.request.manuscriptArtifactId);
       this.requireActive(signal);
       for (const record of records) {
         if (record.sources === null) throw new Error('research_export_sources_required');
@@ -149,6 +151,7 @@ export class ResearchExportService {
         files.push({...selection, sha256: file.sha256, size: file.size, md5});
       }
       if (files.reduce((sum, file) => sum + file.size, 0) > 512 * 1024 * 1024) throw new Error('research_zenodo_upload_limit');
+      await this.repository.manuscriptSync.assertCurrent(record.projectId, record.request.manuscriptArtifactId);
       this.requireActive(signal);
       this.sources.assertCurrent(record.request, record.sources);
       assertCurrentExportReviews(this.repository, record);
@@ -197,6 +200,7 @@ export class ResearchExportService {
         const staged = join(temporary, 'export.zip');
         await copyFile(join(this.repository.exports.root(record.projectId, record.id), record.archive.path), staged, constants.COPYFILE_EXCL);
         await hashExportArchive(temporary, { ...record.archive, path: 'export.zip' }, signal);
+        await this.repository.manuscriptSync.assertCurrent(record.projectId, record.request.manuscriptArtifactId);
         this.requireActive(signal);
         this.sources.assertCurrent(record.request, record.sources);
         assertCurrentExportReviews(this.repository, record);
@@ -252,6 +256,7 @@ export class ResearchExportService {
       archive = await this.archive({ root, bundle: writer, scratch, tools: this.tools, signal });
       const current = await this.sources.capture(record.request, signal);
       if (exportSourceHash(current) !== sourceHash || await this.tools.identity() !== toolchainHash) throw new Error('research_export_sources_changed');
+      await this.repository.manuscriptSync.assertCurrent(record.projectId, record.request.manuscriptArtifactId);
       this.requireActive(signal); this.sources.assertCurrent(record.request, sources);
       assertCurrentExportReviews(this.repository, {...record, sources, sourceHash, files: writer.list()});
       this.repository.exports.finish(record.projectId, record.id, { status: 'ready', sources, sourceHash, toolchainHash, files: writer.list(), archive, error: null });

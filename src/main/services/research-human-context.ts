@@ -11,7 +11,7 @@ export type ResearchHumanCapability = 'research.wiki.save' | 'research.wiki.roll
   'research.reviewScreening.createPlan' | 'research.reviewScreening.save' | 'research.reviewScreening.adjudicate' | 'research.reviewScreening.freeze' |
   'research.reviewFullText.save' | 'research.reviewFullTextScreening.save' | 'research.reviewFullTextScreening.adjudicate' | 'research.reviewFullTextScreening.freeze' |
   'research.reviewExtraction.save' | 'research.reviewQuality.createPlan' | 'research.reviewQuality.saveAssessment' | 'research.reviewStudies.save' |
-  'research.proposals.reject';
+  'research.proposals.reject' | 'research.manuscriptSync.attach' | 'research.manuscriptSync.apply';
 type HumanContext = Readonly<{
   capability: ResearchHumanCapability;
   projectId: string;
@@ -39,4 +39,9 @@ export function requireResearchHuman(capability: ResearchHumanCapability, projec
   if (context === undefined || context.capability !== capability) throw new Error('research_human_required');
   if (context.projectId !== projectId) throw new Error('research_human_project_mismatch');
   return context.actor;
+}
+
+export function hasResearchHumanContext(capability: ResearchHumanCapability, projectId: string): boolean {
+  const context = humanContext.getStore();
+  return context?.capability === capability && context.projectId === projectId;
 }

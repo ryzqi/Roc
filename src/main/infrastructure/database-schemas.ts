@@ -1332,6 +1332,20 @@ CREATE TABLE research_manuscripts (
         claims_hash TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+CREATE TABLE research_manuscript_sync_bindings (
+  artifact_id TEXT PRIMARY KEY REFERENCES research_manuscripts(artifact_id) ON DELETE CASCADE,
+  workspace_path TEXT NOT NULL, tex_path TEXT NOT NULL, bib_path TEXT NOT NULL,
+  anchors_json TEXT NOT NULL CHECK(json_valid(anchors_json)),
+  parent_artifact_id TEXT REFERENCES research_manuscripts(artifact_id) ON DELETE SET NULL
+);
+CREATE TABLE research_manuscript_sync_applies (
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  source_artifact_id TEXT NOT NULL REFERENCES research_manuscripts(artifact_id) ON DELETE CASCADE,
+  result_artifact_id TEXT NOT NULL REFERENCES research_manuscripts(artifact_id) ON DELETE CASCADE,
+  request_hash TEXT NOT NULL, actor_id TEXT NOT NULL, source_hash TEXT NOT NULL, recorded_at TEXT NOT NULL,
+  PRIMARY KEY(project_id,request_id)
+);
 CREATE TABLE research_monitor_alerts (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,

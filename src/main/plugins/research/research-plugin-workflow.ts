@@ -19,6 +19,7 @@ import { ResearchProductionEffectService } from './production-effects';
 import { ResearchWorkspaceFileService } from './workspace-files';
 import { registerResearchEvidenceCapabilities } from './evidence-capabilities';
 import { registerResearchManuscriptCapabilities } from './manuscript-capabilities';
+import {registerResearchManuscriptSyncCapabilities} from './manuscript-sync-capabilities';
 import { registerResearchIdeaCapabilities } from './idea-capabilities';
 import { registerResearchIdeaPlanCapabilities } from './idea-plan-capabilities';
 import { registerResearchRunCapabilities } from './run-capabilities';
@@ -81,6 +82,10 @@ export async function registerResearchWorkflow(
   });
   researchRepository.wiki.start();
   registerResearchManuscriptCapabilities(context, researchRepository.manuscripts);
+  registerResearchManuscriptSyncCapabilities(context, researchRepository.manuscriptSync, projectId => {
+    const {workspacePath} = researchRepository.getProject(projectId);
+    if (workspacePath !== null) notifyWorkspacePathStructureChanged(workspacePath, 'research_file_saved');
+  });
   registerResearchIdeaCapabilities(context, researchRepository.ideas);
   registerResearchIdeaPlanCapabilities(context, researchRepository.ideaPlans);
   registerResearchProposalCapabilities(context, new ResearchProposalService(researchRepository, researchExperiments,

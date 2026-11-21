@@ -55,6 +55,11 @@ export function createResearchHumanGate(input: {
         : input.repository.exports.reviewSignature(request.projectId);
       if (signature !== next) throw new Error(current.stage === 'figure' ? 'research_figure_review_changed' : 'research_export_review_changed');
     }
+    for (const {artifactId} of versions) {
+      if (input.repository.getArtifact(artifactId).kind === 'manuscript') {
+        await input.repository.manuscriptSync.assertCurrent(request.projectId, artifactId);
+      }
+    }
     signal?.throwIfAborted();
     const finalWorkflow = input.repository.getWorkflow(request.projectId);
     const finalStage = finalWorkflow.stages.find(stage => stage.stage === current.stage);
