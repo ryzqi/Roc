@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Loader2, Settings2 } from 'lucide-react';
 
 /**
@@ -110,6 +110,27 @@ export function ModelPicker({
     return () => document.removeEventListener('pointerdown', onPointerDown, true);
   }, [open]);
 
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!open || list === null) return;
+    const fitViewport = (): void => {
+      list.style.translate = 'none';
+      const bounds = list.getBoundingClientRect();
+      const gutter = Number.parseFloat(getComputedStyle(list).getPropertyValue('--shadow-popover-gutter')) || 0;
+      const shift = bounds.left < gutter ? gutter - bounds.left :
+        bounds.right > window.innerWidth - gutter ? window.innerWidth - gutter - bounds.right : 0;
+      list.style.translate = `${shift}px 0`;
+    };
+    fitViewport();
+    const resize = new ResizeObserver(fitViewport);
+    resize.observe(list);
+    window.addEventListener('resize', fitViewport);
+    return () => {
+      resize.disconnect();
+      window.removeEventListener('resize', fitViewport);
+    };
+  }, [open]);
+
   // 打开后焦点进入当前项（没有当前项就是第一项）：弹出层若不给焦点，
   // 键盘用户按 ↑/↓ 什么也不会发生。
   useEffect(() => {
@@ -150,7 +171,7 @@ export function ModelPicker({
   }
 
   return (
-    <div ref={containerRef} className="relative min-w-0 flex-1">
+    <div ref={containerRef} className="min-w-0 flex-1">
       <button
         ref={triggerRef}
         type="button"
@@ -225,7 +246,7 @@ export function ModelPicker({
               setOpen(false);
             }
           }}
-          className="absolute bottom-[calc(100%+6px)] left-0 z-30 flex max-h-[320px] w-[min(320px,calc(100vw-24px))] max-w-full flex-col overflow-hidden rounded-card border-[0.5px] border-line-default bg-surface-overlay shadow-[var(--shadow-popover)]"
+          className="absolute bottom-[calc(100%+var(--space-2))] start-0 z-30 flex max-h-[min(320px,50dvh)] w-[320px] max-w-full flex-col overflow-hidden rounded-card border-[0.5px] border-line-default bg-surface-overlay shadow-[var(--shadow-popover)]"
         >
           <div className="flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-2 py-1.5">
             <span className="text-subtle text-[length:var(--font-micro-size)]">默认模型</span>
@@ -246,13 +267,13 @@ export function ModelPicker({
 
           {providerGroups.length === 0 ? (
             <p className="px-2 py-3 text-subtle text-[length:var(--font-micro-size)]">
-              还没有可选的模型，先在上面的端点下添加模型。
+              尚无可用模型。
             </p>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto py-1">
               {providerGroups.map((group) => (
                 <div key={group.providerId} role="group" aria-label={group.providerLabel} className="flex flex-col">
-                  <span className="px-2 pt-1 pb-0.5 text-subtle text-[length:var(--font-micro-size)]">{group.providerLabel}</span>
+                  <span className="wrap-anywhere px-2 py-1 text-subtle text-[length:var(--font-micro-size)]">{group.providerLabel}</span>
                   {group.items.map((choice) => {
                     const selected = choice.key === currentKey;
                     return (
@@ -279,7 +300,7 @@ export function ModelPicker({
                         data-testid={`assistant-model-picker-option-${choice.key}`}
                         className={
                           selected
-                            ? 'flex items-center gap-2 bg-accent-soft px-2 py-1 text-left text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-ring'
+                            ? 'flex items-center gap-2 bg-[var(--overlay-active)] px-2 py-1 text-start text-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-ring'
                             : 'flex items-center gap-2 px-2 py-1 text-left text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-ring disabled:opacity-40'
                         }
                       >
@@ -287,7 +308,7 @@ export function ModelPicker({
                         {choice.enabled ? null : (
                           <span className="shrink-0 text-subtle text-[length:var(--font-micro-size)]">已停用</span>
                         )}
-                        {selected ? <Check size={11} aria-hidden="true" className="shrink-0 text-accent-ink" /> : null}
+                        {selected ? <Check size={12} aria-hidden="true" className="shrink-0 text-muted" /> : null}
                       </button>
                     );
                   })}

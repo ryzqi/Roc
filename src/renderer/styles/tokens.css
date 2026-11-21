@@ -131,13 +131,13 @@
   --shadow-modal-gutter-inline: 42px;
   --shadow-modal-gutter-block: 60px;
   --shadow-popover: 0 14px 32px rgba(0, 0, 0, 0.26);
+  --shadow-popover-gutter: 48px;
 
   /* Interaction layers */
   --overlay-hover: color-mix(in srgb, var(--ink-primary) 6%, transparent);
   --overlay-active: color-mix(in srgb, var(--ink-primary) 8%, transparent);
   --overlay-backdrop: rgba(6, 11, 20, 0.56);
   --overlay-scrim: rgba(6, 11, 20, 0.62);
-  --stripe-width: 3px;
   --lift-hover: none;
   --press-shift: translateY(1px);
   --divider-glow: 0 0 8px rgba(255, 255, 255, 0.25);
@@ -274,6 +274,7 @@
   --shadow-modal-gutter-inline: 32px;
   --shadow-modal-gutter-block: 44px;
   --shadow-popover: 0 8px 20px rgba(20, 40, 80, 0.08);
+  --shadow-popover-gutter: 28px;
   --overlay-backdrop: rgba(15, 23, 42, 0.28);
   --overlay-scrim: rgba(20, 40, 80, 0.32);
   --divider-glow: 0 0 8px rgba(15, 23, 42, 0.2);

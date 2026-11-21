@@ -18,18 +18,20 @@ test('narrow literature navigation contains its list and leaves adjacent reader 
       import {LiteratureScopeProvider} from './src/renderer/literature/literature-scope';
       const item={id:'paper-layout',metadata:{title:'AgentPoison: Red-teaming LLM Agents via Poisoning Memory or Knowledge Bases',
         authors:['Zhaorun Chen','Zhen Xiang','Chaowei Xiao','Dawn Song','Bo Li'],publishedYear:2024,citationCount:null,source:'doi'},
-        bibliography:{citationKey:'chen2024ageredtea',fields:{}},projectIds:['project-layout'],archived:false};
+        bibliography:{citationKey:'chen2024ageredtea',entryType:'article',fields:{}},projectIds:['project-layout'],archived:false};
       const store={items:[item],status:'ready',query:'',selectedId:item.id,projectId:'project-layout',includeArchived:false,
         action:{error:null},setQuery:()=>{},reload:()=>{},setIncludeArchived:()=>{},select:()=>{}};
-      createRoot(document.getElementById('root')).render(<LiteratureScopeProvider value={store}>
+      function Harness(){const [category,setCategory]=React.useState(null);window.setCategory=setCategory;
+        return <LiteratureScopeProvider value={store}>
         <div className="flex h-full" style={{width:427}}>
           <aside data-testid="navigation" className="flex shrink-0" style={{width:170}}>
-            <LibraryList onRequestImport={()=>{}}/>
+            <LibraryList entryType={category} onRequestImport={()=>{window.importRequested=true;}}/>
           </aside>
           <main className="flex-1 min-w-0"><button data-testid="adjacent-control"
             style={{marginTop:220,marginLeft:80}} onClick={()=>window.readerClicked=true}>取消</button></main>
         </div>
-      </LiteratureScopeProvider>);
+      </LiteratureScopeProvider>;}
+      createRoot(document.getElementById('root')).render(<Harness/>);
     `, resolveDir:process.cwd(), loader:'tsx'}, outfile:join(directory,'app.js'),
       bundle:true, platform:'browser', format:'iife', logLevel:'silent'});
     const assets=join(process.cwd(),'dist/renderer/assets');
@@ -51,6 +53,13 @@ test('narrow literature navigation contains its list and leaves adjacent reader 
       await page.getByTestId('adjacent-control').click();
       assert.equal(await page.evaluate(()=>window.readerClicked),true);
     }
+    await page.evaluate(()=>window.setCategory('book'));
+    await page.getByTestId('literature-empty').waitFor();
+    assert.equal(await page.getByTestId('literature-empty').getByText('当前分类没有文献').count(),1);
+    await page.getByTestId('literature-empty').getByRole('button',{name:'导入文献',exact:true}).click();
+    assert.equal(await page.evaluate(()=>window.importRequested),true);
+    await page.evaluate(()=>window.setCategory('article'));
+    await page.getByTestId('literature-row-paper-layout').waitFor();
   } finally {
     try {await app?.close();} finally {await rm(directory,{recursive:true,force:true});}
   }

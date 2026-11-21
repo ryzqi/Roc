@@ -69,8 +69,8 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
     scope.openView('library', literature.requestImport);
   };
 
-  return <div data-testid="overview" className="h-full min-h-0 overflow-y-auto">
-    <div className="mx-auto grid w-full max-w-[var(--content-readable-max,960px)] gap-8 p-[var(--spacing-page,24px)]">
+  return <div data-testid="overview" className="ui-scroll-region h-full">
+    <div className="mx-auto grid w-full max-w-[var(--content-readable-max)] gap-6 p-[var(--spacing-page)]">
       <header className="flex min-w-0 flex-wrap items-start justify-between gap-4">
         <div className="grid min-w-0 flex-1 gap-2">
           <div className="flex flex-wrap items-center gap-3">
@@ -96,6 +96,13 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
         onRead={() => scope.openLiterature({kind: 'reader', libraryItemId: literature.selectedId})}
         onAsk={scope.openAssistant} onWrite={() => scope.openView('writing')}/> : null}
 
+      <nav aria-label="研究操作" className="flex flex-wrap gap-2" data-testid="overview-shortcuts">
+        <button type="button" className={formSecondaryButtonClass} onClick={() => scope.openView('discover')}><Search size={16} aria-hidden="true"/>检索论文</button>
+        <button type="button" className={formSecondaryButtonClass} disabled={!scope.writable} onClick={addLiterature}><Upload size={16} aria-hidden="true"/>导入 PDF</button>
+        <button type="button" className={formSecondaryButtonClass} onClick={() => scope.openView('knowledge')}><BookOpen size={16} aria-hidden="true"/>问我的资料</button>
+        <button type="button" className={formSecondaryButtonClass} onClick={() => scope.openView('writing')}><FileText size={16} aria-hidden="true"/>打开写作</button>
+      </nav>
+
       <section className={sectionClass} aria-labelledby="overview-task-heading">
         <header className="flex items-center justify-between gap-3">
           <h2 id="overview-task-heading" className="font-medium">近期任务</h2>
@@ -103,7 +110,7 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
         </header>
         {tasks.error !== null ? <ErrorBar error={{level: 'page', message: tasks.error, retry: tasks.reload}}/> :
           tasks.data === null ? <EmptyState compact tone="loading" title="正在读取任务" testId="overview-tasks-loading"/> :
-            currentTask === undefined ? <EmptyState compact icon={ListTodo} title="近期没有执行中的任务" testId="overview-tasks-empty"/> :
+            currentTask === undefined ? <p className="text-muted" data-testid="overview-tasks-empty">暂无执行中的任务</p> :
               <button type="button" className={rowClass} data-testid="overview-current-task" onClick={() => scope.openTasks(currentTask.id)}>
                 <ListTodo size={16} aria-hidden="true" className="shrink-0 text-muted"/>
                 <span className="min-w-0 flex-1 break-words">{currentTask.goal}</span>
@@ -129,7 +136,7 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
         <h2 id="overview-results-heading" className="font-medium">近期成果</h2>
         {artifacts.error !== null ? <ErrorBar error={{level: 'page', message: artifacts.error, retry: artifacts.reload}}/> :
           artifacts.data === null ? <EmptyState compact tone="loading" title="正在读取成果"/> :
-            recentArtifacts.length === 0 ? <EmptyState compact icon={FileText} title="尚无研究成果"/> :
+            recentArtifacts.length === 0 ? <p className="text-muted">尚无研究成果</p> :
               <ul className="grid gap-1" data-testid="overview-artifacts">{recentArtifacts.map(artifact => <li key={artifact.id}>
                 <button type="button" className={rowClass} onClick={() => scope.openArtifact(
                   {projectId, artifactId: artifact.id, expectedVersion: null}, () => undefined)}>
@@ -147,8 +154,8 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
         </header>
         {literature.error !== null ? <ErrorBar error={{level: 'page', message: literature.error, retry: literature.reload}}/> :
           literature.status === 'loading' && recentItems.length === 0 ? <EmptyState compact tone="loading" title="正在读取文献"/> :
-            recentItems.length === 0 ? <EmptyState compact icon={BookOpen}
-              title={literature.query.trim() === '' ? '尚未添加文献' : '当前筛选没有文献'}/>: <ul className="grid gap-1" data-testid="overview-literature">
+            recentItems.length === 0 ? <p className="text-muted">
+              {literature.query.trim() === '' ? '尚未添加文献' : '当前筛选没有文献'}</p> : <ul className="grid gap-1" data-testid="overview-literature">
               {recentItems.map(item => <li key={item.id}>
                 <button type="button" className={rowClass} onClick={() => openLiterature(item.id)}>
                   <BookOpen size={16} aria-hidden="true" className="shrink-0 text-muted"/>
@@ -159,12 +166,6 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
             </ul>}
       </section>
 
-      <nav aria-label="快捷开始" className="flex flex-wrap gap-3" data-testid="overview-shortcuts">
-        <button type="button" className={formSecondaryButtonClass} onClick={() => scope.openView('discover')}><Search size={16} aria-hidden="true"/>检索论文</button>
-        <button type="button" className={formSecondaryButtonClass} disabled={!scope.writable} onClick={addLiterature}><Upload size={16} aria-hidden="true"/>导入 PDF</button>
-        <button type="button" className={formSecondaryButtonClass} onClick={() => scope.openView('knowledge')}><BookOpen size={16} aria-hidden="true"/>问我的资料</button>
-        <button type="button" className={formSecondaryButtonClass} onClick={() => scope.openView('writing')}><FileText size={16} aria-hidden="true"/>打开写作</button>
-      </nav>
     </div>
   </div>;
 }

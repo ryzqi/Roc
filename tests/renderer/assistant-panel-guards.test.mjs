@@ -419,7 +419,20 @@ test(`actual assistant ${approval.kind} approval retains focus and shows pending
     if (approval.kind === 'task') await expect(card).toContainText('确认修改任务');
   }
   const approve = page.getByTestId(`${approval.testId}-approve`);
-  await approve.click();
+  const inspect = approval.kind === 'gate' ? page.getByTestId('assistant-gate-refresh') :
+    page.getByTestId(approval.kind === 'tool' ? 'assistant-approval-card' : 'assistant-task-approval-card').locator('summary').first();
+  await inspect.focus();
+  await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(() => resumeCalls.length), 0, 'navigating away must not reject a request');
+  // Exercise the old bulk-approval shortcut on a non-action element for the gate.
+  if (approval.kind === 'gate') {
+    const card = page.getByTestId('assistant-hitl-dock').locator('[data-approval-id]');
+    await card.evaluate(element => { element.tabIndex = -1; element.focus(); });
+    await page.keyboard.press('Meta+Enter');
+    assert.equal(await page.evaluate(() => resumeCalls.length), 0, 'only the approval button can submit a gate decision');
+  }
+  await approve.focus();
+  await page.keyboard.press('Enter');
   await page.waitForFunction(() => resumeCalls.length === 1);
   const pending = await approve.getAttribute('aria-disabled');
   const focused = await approve.evaluate(element => element === document.activeElement);

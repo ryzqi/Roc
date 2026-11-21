@@ -134,7 +134,7 @@ export function BackgroundTasksSection({ store: tasks }: { store: BackgroundTask
                   key={task.id}
                   className={
                     selected
-                      ? 'flex flex-col gap-1 rounded-card bg-accent-soft px-2 py-1.5'
+                      ? 'flex flex-col gap-1 rounded-card border-[0.5px] border-line bg-[var(--overlay-active)] px-2 py-1.5'
                       : 'flex flex-col gap-1 rounded-card border-[0.5px] border-line px-2 py-1.5'
                   }
                   data-testid={`mgmt-task-${task.id}`}

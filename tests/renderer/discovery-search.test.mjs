@@ -21,7 +21,7 @@ before(async () => {
       origins:[{source:'crossref',rank:1,externalId:id,record:record(id),review:{publicationType:null,copies:[],updates:[],retraction:{status:'unknown'}}}]});
     window.searches=[]; window.imports=[];
     const client={api:{research:{
-      searchLiterature:async input=>{window.searches.push(input);return {ok:true,data:{searchId:'search-one',status:'partial',total:3,
+      searchLiterature:async input=>{window.searches.push(input);if(window.holdSearch)await new Promise(resolve=>{window.finishSearch=resolve;});return {ok:true,data:{searchId:'search-one',status:'partial',total:3,
         candidates:['known','first','second'].map(candidate),warnings:[],truncated:false,
         sources:[{source:'crossref',status:'ok',returnedCount:3,errorCode:null,retryAfterMs:null},
           {source:'semantic_scholar',status:'rate_limited',returnedCount:0,errorCode:'rate_limit',retryAfterMs:30000}]}};},
@@ -41,12 +41,31 @@ before(async () => {
   page = await app.firstWindow(); page.setDefaultTimeout(6000);
   page.on('pageerror', error => errors.push(error.message));
 });
+
+test('discovery keeps a real loading state and accepts one request during same-turn repeat submits', async () => {
+  await page.reload();
+  await page.getByLabel('研究主题或关键词').fill('evidence retrieval');
+  await page.evaluate(() => {
+    window.holdSearch = true;
+    const form = document.querySelector('[data-testid="discovery-search"] form');
+    form.dispatchEvent(new Event('submit', {bubbles: true, cancelable: true}));
+    form.dispatchEvent(new Event('submit', {bubbles: true, cancelable: true}));
+  });
+  await expect(page.getByTestId('discovery-submit')).toBeDisabled();
+  await expect(page.getByTestId('discovery-submit')).toHaveAttribute('aria-busy', 'true');
+  await expect(page.getByRole('status')).toContainText('正在检索论文…');
+  assert.equal(await page.evaluate(() => window.searches.length), 1);
+  await page.evaluate(() => window.finishSearch());
+  await expect(page.getByTestId('discovery-submit')).toBeEnabled();
+  await expect(page.getByTestId('discovery-source-report')).toContainText('部分来源未完成');
+});
 after(async () => {
   try { await app?.close(); } finally { if (directory) await rm(directory, { recursive: true, force: true }); }
   assert.deepEqual(errors, []);
 });
 
 test('explicit discovery search reports partial sources and excludes known project papers from bulk import', async () => {
+  await page.reload();
   await page.getByLabel('研究主题或关键词').fill('agent safety');
   await page.getByRole('button', { name: '近 2 年', exact: true }).click();
   assert.equal(await page.evaluate(() => window.searches.length), 0);

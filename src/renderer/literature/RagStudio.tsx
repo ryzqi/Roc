@@ -540,13 +540,13 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
                   onKeyDown={event => {if (event.key === 'Enter' && ime.shouldIgnoreKeyDown(event)) event.preventDefault();}}
                   placeholder="输入问题、关键词或原文片段" data-testid="rag-query" />
               </label>
-              <button type="submit" disabled={!query.trim() || searching || asking || literature.assistant.pending} data-testid="rag-ask" className="rag-search-button" title="检索证据并在助手中回答">
+              <button type="submit" disabled={!query.trim() || searching || asking || literature.assistant.pending} aria-busy={asking} data-testid="rag-ask" className="rag-search-button" title="检索证据并在助手中回答">
                 {asking ? <Loader2 size={14} aria-hidden="true" className="animate-spin" /> : null}
                 {asking ? '提交中' : '提问'}
               </button>
             </form>
             <div className="rag-search-options">
-              <button type="button" disabled={!query.trim() || searching || asking} onClick={() => {void runSearch();}} data-testid="rag-search" className="rag-button">
+              <button type="button" disabled={!query.trim() || searching || asking} aria-busy={searching && !asking} onClick={() => {void runSearch();}} data-testid="rag-search" className="rag-button">
                 {searching && !asking ? <Loader2 size={14} aria-hidden="true" className="animate-spin" /> : <Search size={14} aria-hidden="true" />}
                 {searching && !asking ? '检索中' : '检索证据'}
               </button>
@@ -581,7 +581,8 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
 
           <section className="rag-body rag-results" aria-label="检索结果" aria-busy={searching} data-testid="rag-results">
             {result === null ? (
-              <EmptyState icon={Search} title={searching ? '正在查找相关内容…' : '输入问题，查找项目资料'} testId="rag-search-empty" />
+              <EmptyState tone={searching ? 'loading' : 'empty'} icon={searching ? Loader2 : Search}
+                title={searching ? '正在查找相关内容…' : '输入问题，查找项目资料'} testId="rag-search-empty" />
             ) : <>
               <div className="rag-results-heading">
                 <p role="status" className="min-w-0 break-words"><strong>{result.hits.length} 条结果</strong><span className="ml-2 text-muted">“{result.query}”</span></p>
@@ -596,7 +597,8 @@ function RagStudioContent({ literature, openInFilesView, onOpenInReader }: RagSt
                   </div>
                 </details>
               </div>
-              {result.hits.length === 0 ? <EmptyState compact icon={Search} title="没有找到相关内容" description="尝试更具体的关键词，或在管理索引中检查资料是否已收录。" testId="rag-no-hits" /> : (
+              {result.hits.length === 0 ? <EmptyState compact icon={Search} title="没有找到相关内容" description="尝试更具体的关键词，或在管理索引中检查资料是否已收录。"
+                action={{label: '修改查询', onClick: () => queryRef.current?.focus()}} testId="rag-no-hits" /> : (
                 <ol className="rag-hit-list" data-testid="rag-hits">
                   {result.hits.map((hit, index) => {
                     const expanded = expandedHits.has(hit.chunkId);

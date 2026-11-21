@@ -601,12 +601,20 @@ test('original reading uses the full column with comfortable height and preserve
       const primary=element.querySelector('.reading-primary'),original=element.querySelector('[data-testid="reader-pdf"]');
       return {height:element.clientHeight,width:primary.clientWidth,originalWidth:original.clientWidth,
         scrollHeight:element.querySelector('[data-testid="reader-pdf-scroll"]').clientHeight,
-        overflow:element.scrollWidth-element.clientWidth};
+        overflow:element.scrollWidth-element.clientWidth,
+        controls:[...element.querySelectorAll('.reading-pdf-navigation button, .reading-pdf-navigation input')]
+          .filter(control=>control.checkVisibility()).map(control=>{
+            const rect=control.getBoundingClientRect();
+            return {label:control.getAttribute('aria-label')??control.textContent,width:rect.width,height:rect.height};
+          })};
     });
     await page.screenshot({path:join(artifacts,`original-reading-${theme}-${width}.png`)});
     assert.ok(layout.originalWidth>=layout.width-2,JSON.stringify(layout));
     assert.ok(layout.scrollHeight>=layout.height*.72,JSON.stringify(layout));
     assert.equal(layout.overflow,0);
+    assert.ok(layout.controls.length>=10,'loaded PDF exposes page, zoom and annotation controls');
+    assert.deepEqual(layout.controls.filter(control=>control.height<27.5||control.width<27.5),[],
+      `PDF controls keep the compact hit area at ${width}px in ${theme}`);
     rows.push({width,theme,...layout});
   }
   const tools=page.getByTestId('reader-pdf-tools').locator('summary').first();

@@ -441,14 +441,14 @@ export function FileTreeView({
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="file-tree">
       <div className="flex shrink-0 items-center gap-1 border-b-[0.5px] border-line-soft px-2 py-1">
-        <span className="min-w-0 flex-1 truncate text-subtle text-[length:var(--font-micro-size)]">
-          {tree.rows.length} 项
+        <span className="min-w-0 flex-1 truncate tabular-nums text-subtle text-[length:var(--font-micro-size)]">
+          {tree.rows.length.toLocaleString('zh-CN')} 项
           {tree.truncatedRoot ? '，已截断' : ''}
         </span>
         <button
           type="button"
           onClick={tree.collapseAll}
-          className="rounded-control px-1.5 py-0.5 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
+          className="min-h-[var(--control-height-compact)] rounded-control px-2 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
           data-testid="file-tree-collapse-all"
         >
           <span className="text-[length:var(--font-micro-size)]">折叠</span>
@@ -458,9 +458,9 @@ export function FileTreeView({
           onClick={tree.reload}
           aria-label="刷新文件树"
           data-testid="file-tree-refresh"
-          className="grid size-6 shrink-0 place-items-center rounded-control text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
+          className="grid size-[var(--control-height-compact)] shrink-0 place-items-center rounded-control text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
         >
-          <RefreshCw size={11} aria-hidden="true" />
+          <RefreshCw size={14} aria-hidden="true" />
         </button>
       </div>
 

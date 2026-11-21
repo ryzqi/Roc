@@ -44,17 +44,17 @@ export function LiteratureCandidateReview({candidate, pending, onAdd, inLibrary 
       <button type="button" disabled={pending || inLibrary || candidate.archived} onClick={onAdd} aria-busy={adding}
         title={candidate.archived ? '文献已归档，请先在文献库恢复' : inLibrary ? '已在当前项目文献库' : '加入文献库并提交后台全文处理'}
         data-testid={`literature-import-hit-${candidate.record.id}`}
-        className="inline-flex h-[var(--control-height-compact)] shrink-0 items-center gap-2 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
+        className="inline-flex min-h-[var(--control-height-compact)] shrink-0 items-center gap-2 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-meta-size)] enabled:hover:bg-[var(--overlay-hover)] enabled:active:bg-[var(--overlay-active)] disabled:opacity-40">
         {adding ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : null}
         {adding ? '添加中' : candidate.archived ? '已归档' : inLibrary ? '已在文献库' : candidate.matchedLibraryItemId === null ? '加入' : '关联到项目'}
       </button>
     </div>
     {hasConflicts || retracted || updates.length > 0 ? <p className="mt-2 flex items-start gap-1 text-[var(--st-warn)] text-[length:var(--font-meta-size)]">
       <TriangleAlert size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
-      {retracted ? '有撤稿标记，请核对来源。' : hasConflicts ? '来源信息存在冲突，请核对后收录。' : '有更正/更新关系，请核对对象。'}
+      {retracted ? '来源标记已撤稿，请核对来源。' : hasConflicts ? '来源信息存在冲突，请核对后收录。' : '有更正/更新关系，请核对对象。'}
     </p> : null}
     <details className="mt-2 text-[length:var(--font-meta-size)]">
-      <summary className="cursor-pointer text-muted hover:text-ink" data-testid="literature-candidate-review-toggle">核对来源与冲突</summary>
+      <summary className="min-h-7 cursor-pointer py-1 text-muted hover:text-ink" data-testid="literature-candidate-review-toggle">核对来源与冲突</summary>
       <div className="mt-2 flex min-w-0 flex-col gap-4" data-testid="literature-candidate-review">
         <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-[length:var(--font-meta-size)]">
           <dt className="text-muted">类型</dt><dd className="break-words text-ink">{publicationTypes.join(' / ') || '未知'}</dd>

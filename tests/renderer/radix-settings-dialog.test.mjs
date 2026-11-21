@@ -82,7 +82,7 @@ before(async () => {
             providers, defaultModelId: null,
             permissions: {schemaVersion: 3, mode: 'default', grants: []},
             hostIntegration: {startup: {effectiveOpenAtLogin: false, syncError: null}, globalHotkey: {registered: false, accelerator: null, registrationError: null}},
-            hooks: {config: {schemaVersion: 1, hooks: {}}, handlers: [], errors: [], path: '/tmp/hooks.json', exists: false}
+            hooks: {config: {schemaVersion: 1, hooks: {}}, handlers: [], validationErrors: [], configPath: '/tmp/hooks.json', exists: false}
           };
           return {api: {
             app: {getStatus: async () => ok({appName: 'Roc', version: '0.1.0', defaultModelConfigured: false})},
@@ -337,6 +337,38 @@ test('reset confirmation accepts real pointer clicks and Escape leaves settings 
   await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
 });
 
+test('settings search retains native editing keys and section navigation stays on its tabs', async () => {
+  await page.setViewportSize({width: 900, height: 850});
+  await page.evaluate(() => window.mount());
+  await page.getByTestId('activity-settings').click();
+  const search = page.getByTestId('settings-search');
+  await search.fill('模型');
+  for (const key of ['End', 'Home', 'ArrowDown', 'ArrowUp']) {
+    await search.focus();
+    await page.keyboard.press(key);
+    assert.equal(await search.evaluate(element => document.activeElement === element), true, `${key} keeps search focus`);
+    assert.equal(await page.getByTestId('settings-panel').getAttribute('id'), 'settings-panel-models', `${key} does not change the section`);
+  }
+  await page.getByTestId('settings-section-models').focus();
+  await page.keyboard.press('ArrowDown');
+  await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'settings-section-default-model');
+  await search.fill('没有该设置');
+  await page.getByTestId('settings-search-empty').waitFor();
+  await page.setViewportSize({width: 640, height: 850});
+  const compactSearch = page.getByTestId('settings-search');
+  await compactSearch.fill('Hooks');
+  const compact = page.getByTestId('settings-section-select');
+  assert.equal(await compact.inputValue(), '', 'a filtered-out section must not appear selected');
+  await compact.selectOption('hooks');
+  assert.equal(await page.getByTestId('settings-panel').getAttribute('id'), 'settings-panel-hooks');
+  await compactSearch.fill('没有该设置');
+  assert.equal(await compact.isDisabled(), true);
+  await page.getByTestId('settings-search-empty').waitFor();
+  await page.setViewportSize({width: 900, height: 850});
+  await page.keyboard.press('Escape');
+  await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
+});
+
 test('discard requires confirmation, retains settings, and appearance changes apply immediately', async () => {
   await page.getByTestId('activity-settings').click();
   await clickSection('app');
@@ -452,6 +484,7 @@ test('transient provider drafts survive settings close, section and provider cha
   await page.getByTestId('activity-settings').click();
   const input = page.getByTestId('settings-provider-secret-input');
   await input.fill('transient fixture credential');
+  assert.equal(await page.getByTestId('settings-dirty-bar').textContent(), '编辑内容尚未保存');
   await page.keyboard.press('Escape');
   await page.getByTestId('settings-discard-panel').waitFor();
   await page.getByTestId('settings-discard-cancel').click();

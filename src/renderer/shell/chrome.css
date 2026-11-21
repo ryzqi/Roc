@@ -59,6 +59,20 @@
   box-shadow: var(--shadow-popover);
 }
 
+/* Zoom can make the renderer narrower than the native window minimum. Keep
+   window actions reachable without letting the three grid columns overlap. */
+@media (max-width: 719px) {
+  .titlebar { grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--space-1); }
+  .titlebar [aria-label='工作布局'] { display: none; }
+  .titlebar [data-testid='titlebar-project-name'],
+  .titlebar [data-testid='titlebar-projects'] > .lucide-chevron-down,
+  .titlebar [data-testid='titlebar-search'] span span,
+  .titlebar [data-testid='titlebar-search'] kbd { display: none; }
+  .titlebar [data-testid='titlebar-projects'] { flex-shrink: 0; }
+  .titlebar [data-testid='titlebar-search'] { padding-inline: var(--space-2); }
+  .titlebar > :last-child { gap: var(--space-1); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .chrome-control:not(:disabled):active { transform: none; }
 }

@@ -18,19 +18,21 @@
 .monitor-workspace { display: flex; flex: 1; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; container: monitors / inline-size; font-size: var(--font-body-size); }
 .monitor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 16px 20px; border-bottom: .5px solid var(--line); flex-shrink: 0; }
 .monitor-toolbar > div { flex: 1 1 200px; }
-.monitor-toolbar h2 { font-weight: 600; }
+.monitor-toolbar h2 { font-weight: var(--font-weight-semibold); }
 .monitor-columns { display: flex; flex: 1; min-height: 0; min-width: 0; }
 .monitor-index { width: 260px; min-width: 0; flex-shrink: 0; overflow: auto; padding: 12px; border-inline-end: .5px solid var(--line); }
 .monitor-index h3 { padding: 4px 8px 12px; color: var(--muted); font-size: var(--font-meta-size); }
 .monitor-index-item { display: flex; flex-wrap: wrap; width: 100%; gap: 4px 12px; padding: 12px; text-align: start; border-radius: var(--radius-control); margin-block: 4px; }
-.monitor-index-item > span:first-child { width: 100%; font-weight: 500; overflow-wrap: anywhere; }
+.monitor-index-item > span:first-child { width: 100%; font-weight: var(--font-weight-medium); overflow-wrap: anywhere; }
 .monitor-index-item > span:not(:first-child) { color: var(--muted); font-size: var(--font-meta-size); }
-.monitor-index-item:hover { background: var(--overlay-hover); }
-.monitor-index-item[aria-pressed="true"] { background: var(--accent-soft); box-shadow: inset 2px 0 var(--accent); }
+.monitor-index-item:enabled:hover { background: var(--overlay-hover); }
+.monitor-index-item:enabled:active { background: var(--overlay-active); }
+.monitor-index-item[aria-pressed="true"] { background: var(--overlay-active); }
+.monitor-index-item[aria-pressed="true"] > span:first-child { color: var(--ink-primary); }
 .monitor-index-item:disabled { opacity: .5; }
 .monitor-detail { flex: 1; min-width: 0; overflow: auto; padding: 20px clamp(16px, 3cqw, 32px) 32px; scrollbar-gutter: stable; container: monitor-detail / inline-size; }
 .monitor-detail-header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 20px; }
-.monitor-detail-header h3 { font-size: var(--font-read-large-size); font-weight: 600; overflow-wrap: anywhere; }
+.monitor-detail-header h3 { font-size: var(--font-read-large-size); font-weight: var(--font-weight-semibold); overflow-wrap: anywhere; }
 .monitor-back { display: none; }
 .monitor-editor { max-width: 760px; margin-inline: auto; line-height: 1.65; }
 .monitor-editor :where(label, fieldset, dl, dd, div) { min-width: 0; }

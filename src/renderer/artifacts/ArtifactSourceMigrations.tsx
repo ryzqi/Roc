@@ -27,7 +27,7 @@ export function ArtifactSourceMigrations({client, projectId, evidenceId, canDeci
     </div>
     <p className="text-muted">按解析时间和原始块顺序排列。位置捕获只保存新证据；主张与科学审核仍需另行重建。</p>
     {read.status === 'loading' ? <p role="status">正在读取定位候选…</p> : null}
-    {read.error === null ? null : <p role="alert" className="text-[var(--st-error)]">{read.error}</p>}
+    {read.error === null ? null : <p role="alert" className="text-st-bad">{read.error}</p>}
     {read.status !== 'ready' || read.data === null ? null : read.data.length === 0 ? <p className="text-muted">没有保存的同文档定位候选。</p> :
       read.data.map(inspection => <MigrationCandidate key={`${inspection.proposal.id}:${inspection.proposalHash}:${inspection.decision?.id ?? 'pending'}`}
         client={client} inspection={inspection} canDecide={canDecide} onChanged={read.reload}/>)}
@@ -121,7 +121,7 @@ function MigrationCandidate({client, inspection, canDecide, onChanged}: {
           setChunkId(null); setNote(''); draft.reset({chunkId: null, note: ''}); action.reset();
         }}/>
         {action.pending ? <p role="status">正在保存决定…</p> : null}
-        {action.error === null ? null : <p role="alert" className="text-[var(--st-error)]">{action.error}</p>}
+        {action.error === null ? null : <p role="alert" className="text-st-bad">{action.error}</p>}
       </> : <MigrationDecision decision={decision} currentStatus={inspection.capturedReferenceStatus}/>}
     </div>
   </details>;

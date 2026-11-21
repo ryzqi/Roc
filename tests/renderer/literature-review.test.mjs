@@ -114,8 +114,7 @@ test('candidate review exposes source conflicts and scoped declarations through 
   await search([candidate()]);
   const row = page.locator('[data-testid="literature-candidate"]');
   assert.match(await row.innerText(), /来源标记已撤稿/u);
-  assert.match(await row.innerText(), /出版版本/u);
-  assert.match(await row.innerText(), /Correction/u);
+  assert.equal(await row.locator('details').getAttribute('open'), null, 'source declarations start collapsed');
   assert.deepEqual(await page.evaluate(() => adds), []);
   await inspectState('default');
   await row.locator('button').hover();
@@ -125,6 +124,8 @@ test('candidate review exposes source conflicts and scoped declarations through 
   await page.keyboard.press('Enter');
   const review = row.locator('[data-testid="literature-candidate-review"]');
   await review.waitFor({state: 'visible'});
+  assert.match(await review.innerText(), /出版版本/u);
+  assert.match(await review.innerText(), /Correction/u);
   assert.match(await review.innerText(), /适用副本 https:\/\/example.test\/published-copy/u);
   assert.match(await review.innerText(), /标题冲突/u);
   assert.match(await review.innerText(), /身份冲突 pmid:123/u);
@@ -144,7 +145,11 @@ test('unknown review stays unknown and archived candidate remains disabled', asy
     retraction: {status: 'unknown', field: null}}}];
   await search([paper]);
   const row = page.locator('[data-testid="literature-candidate"]');
-  const text = await row.innerText();
+  await row.locator('summary').focus();
+  await page.keyboard.press('Enter');
+  const review = row.locator('[data-testid="literature-candidate-review"]');
+  await review.waitFor({state: 'visible'});
+  const text = await review.innerText();
   assert.match(text, /未知/u);
   assert.equal(text.includes('来源未报告撤稿'), false);
   assert.equal(await row.locator('button').isDisabled(), true);
@@ -158,6 +163,7 @@ test('long review remains scrollable and readable at 1099 boundary with light da
   await page.emulateMedia({reducedMotion: 'reduce'});
   await search([paper]);
   await page.locator('[data-testid="literature-candidate-review-toggle"]').click();
+  await page.getByTestId('literature-candidate-review').waitFor({state: 'visible'});
   const auditSource = readFileSync(join(process.cwd(), '.agents/skills/desktop-agent-ui/scripts/clip-audit.js'), 'utf8');
   const audits = [];
   for (const theme of ['light', 'dark']) {
@@ -165,18 +171,20 @@ test('long review remains scrollable and readable at 1099 boundary with light da
     for (const width of [1100, 1099, 800]) {
       await page.setViewportSize({width, height: 720});
       const list = page.locator('ul[aria-label="检索结果"]');
+      const scrollRegion = page.getByTestId('literature-import-dialog-panel').locator('.literature-import-content');
       await list.focus();
       await page.keyboard.press('End');
-      await page.waitForFunction(() => document.querySelector('ul[aria-label="检索结果"]').scrollTop > 0);
-      const layout = await list.evaluate(element => ({
+      await page.waitForFunction(() => document.querySelector('[data-testid="literature-import-dialog-panel"] .literature-import-content').scrollTop > 0);
+      const layout = await scrollRegion.evaluate(element => ({
         scrollable: element.scrollHeight > element.clientHeight, scrolled: element.scrollTop > 0,
-        overflow: element.scrollWidth > element.clientWidth, outline: getComputedStyle(element).outlineWidth,
+        overflow: element.scrollWidth > element.clientWidth,
         bodyOverflow: document.body.scrollWidth > document.body.clientWidth
       }));
+      const outline = await list.evaluate(element => getComputedStyle(element).outlineWidth);
       assert.equal(layout.scrollable, true);
       assert.equal(layout.scrolled, true);
       assert.equal(layout.overflow, false);
-      assert.notEqual(layout.outline, '0px');
+      assert.notEqual(outline, '0px');
       assert.equal(layout.bodyOverflow, false);
       await page.screenshot({path: join(artifacts, `${theme}-${width}.png`)});
       const audit = await page.evaluate(`(${auditSource})({root:'body',viewport:true})`);

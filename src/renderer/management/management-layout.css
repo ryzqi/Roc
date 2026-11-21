@@ -16,7 +16,9 @@
 .management-task-categories button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: var(--r-control); }
 .management-tasks [hidden] { display: none; }
 .management-disclosure { border-top: .5px solid var(--line); padding-top: var(--space-3); }
-.management-disclosure > summary { width: fit-content; cursor: pointer; color: var(--muted); font-size: var(--font-meta-size); border-radius: var(--r-control); }
+.management-disclosure > summary { width: fit-content; min-block-size: var(--control-height-compact); padding-block: var(--space-1); cursor: pointer; color: var(--muted); font-size: var(--font-meta-size); border-radius: var(--r-control); }
+.management-disclosure > summary:hover { color: var(--ink); }
+.management-disclosure > summary:active { background: var(--overlay-active); }
 .management-disclosure > summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 .management-disclosure[open] > summary { margin-bottom: var(--space-4); color: var(--ink); }
 .management-body input, .management-body select, .management-body textarea { max-width: 100%; }

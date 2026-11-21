@@ -173,6 +173,23 @@ test('selected LaTeX exposes scoped commands and applies a confirmed replacement
   const replacement = String.raw`\section{Reviewed}`;
   await page.getByTestId('inline-command-replacement-input').fill(replacement);
   await expect(page.getByTestId('inline-command-replacement')).toHaveText(replacement);
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+    await page.setViewportSize({width: 440, height: 540});
+    const apply = page.getByTestId('inline-command-apply-edit');
+    await apply.scrollIntoViewIfNeeded();
+    await apply.focus();
+    await expect.poll(() => commands.evaluate(node => {
+      const {left, top, right, bottom} = node.getBoundingClientRect();
+      const gutter = Number.parseFloat(getComputedStyle(node).getPropertyValue('--shadow-popover-gutter'));
+      return left >= gutter && top >= gutter && right <= innerWidth - gutter && bottom <= innerHeight - gutter;
+    })).toBe(true);
+    await audit();
+    const bounds = await commands.boundingBox();
+    assert.ok(bounds.x >= 28 && bounds.y >= 28 && bounds.x + bounds.width <= 412 && bounds.y + bounds.height <= 512,
+      `selection editor and shadow fit ${theme} short viewport`);
+  }
+  await page.setViewportSize({width: 1200, height: 800});
   await page.getByTestId('inline-command-apply-edit').click();
   await expect(editor).toHaveText(replacement);
   await expect(page.getByTestId('latex-dirty-indicator')).toHaveText('未保存');

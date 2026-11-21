@@ -32,13 +32,13 @@ export function ArtifactSourceReplacements({client, source, canDecide, onChanged
     </div>
     <p className="text-muted">明确选择前后来源会撤销旧引用的有效审核。新证据仍需另行审核主张关系。</p>
     {history.status === 'loading' ? <p role="status">正在读取来源替代历史…</p> : null}
-    {history.error === null ? null : <p role="alert" className="text-[var(--st-error)]">{history.error}</p>}
+    {history.error === null ? null : <p role="alert" className="text-st-bad">{history.error}</p>}
     {history.status !== 'ready' || history.data === null ? null : history.data.length === 0 ?
       <p className="text-muted">没有保存的前后来源关联。</p> : history.data.map(inspection =>
         <ReplacementHistory key={inspection.replacement.id} inspection={inspection} evidenceId={evidenceId}/>)}
     {!canDecide ? <p className="text-muted">重新核对当前工件后再选择；归档项目只读。</p> : <>
       {choices.status === 'loading' ? <p role="status">正在读取本项目证据…</p> : null}
-      {choices.error === null ? null : <p role="alert" className="text-[var(--st-error)]">{choices.error}
+      {choices.error === null ? null : <p role="alert" className="text-st-bad">{choices.error}
         <button type="button" className={`${button} ml-2`} onClick={choices.reload}>重试读取证据</button></p>}
       {choices.status !== 'ready' || choices.data === null ? null : <>
         <label className="flex min-w-0 flex-col gap-1 text-muted">选择新来源证据
@@ -114,7 +114,7 @@ function ReplacementSelection({client, projectId, evidenceId, targetId, onChange
     {original.status === 'loading' || target.status === 'loading' || previousRun.status === 'loading' || currentRun.status === 'loading' ?
       <p role="status">正在核对来源版本与运行…</p> : null}
     {[original.error, target.error, previousRun.error, currentRun.error].filter(error => error !== null).map((error, index) =>
-      <p key={index} role="alert" className="break-words text-[var(--st-error)]">{error}</p>)}
+      <p key={index} role="alert" className="break-words text-st-bad">{error}</p>)}
     {source === undefined ? null : <SelectedSource label="旧来源" source={source} digest={original.data!.sourceDigest}/>}
     {destination === undefined ? null : <SelectedSource label="新来源" source={destination} digest={target.data!.sourceDigest}/>}
     {destination?.referenceStatus === 'superseded' ? <p role="alert">新来源已失效，请选择当前有效证据。</p> : null}
@@ -138,7 +138,7 @@ function ReplacementSelection({client, projectId, evidenceId, targetId, onChange
       setNote(''); draft.reset({note: ''}); action.reset();
     }}/>
     {action.pending ? <p role="status">正在保存来源替代…</p> : null}
-    {action.error === null ? null : <p role="alert" className="text-[var(--st-error)]">{action.error}</p>}
+    {action.error === null ? null : <p role="alert" className="text-st-bad">{action.error}</p>}
   </div>;
 }
 

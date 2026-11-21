@@ -600,7 +600,7 @@ export function AssistantComposer({
             }}
             className="assistant-composer-input w-full min-w-0 resize-none bg-transparent p-1 text-ink text-[length:var(--font-body-size)] leading-relaxed placeholder:text-subtle disabled:opacity-60 focus-visible:outline-offset-[-2px]"
           />
-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+          <div className="relative flex min-w-0 flex-wrap items-center justify-between gap-2">
             <div className="flex min-w-0 flex-1 items-center gap-1">
               <button
                 type="button"

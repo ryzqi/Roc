@@ -49,7 +49,7 @@ before(async () => {
       const [focusDialogOpen, setFocusDialogOpen] = useState(false);
       const [searchOpen, setSearchOpen] = useState(false);
       const [query, setQuery] = useState('');
-      const [canvasTab, setCanvasTab] = useState('literature');
+      const [canvasTab, setCanvasTab] = useState('library');
       const [projectOpen, setProjectOpen] = useState(false);
       const [projectPending, setProjectPending] = useState(false);
       const searchItems = Array.from({length: 24}, (_, index) => ({
@@ -133,8 +133,8 @@ before(async () => {
           onClose={() => setSearchOpen(false)}
           groups={[{id: 'projects', label: '项目', status: 'ready', items: searchItems}]} />
         <div style={{height: 100, marginTop: 12}}>
-          <WorkspaceCanvas activeTab={canvasTab} onTabChange={setCanvasTab}
-            actions={<button data-testid="canvas-action">工作模式</button>}>
+          <WorkspaceCanvas activeTab={canvasTab} subview={null} onTabChange={setCanvasTab}
+            selectionBar={<button data-testid="canvas-action">工作模式</button>}>
             <p>画布内容</p>
           </WorkspaceCanvas>
         </div>
@@ -828,22 +828,24 @@ test('search keyboard selection scrolls into view, resets after filtering and re
   }
 });
 
-test('canvas tabs move physical focus with arrows, Home and End without handling action-button keys', async () => {
-  const literature = page.getByTestId('canvas-tab-literature');
-  const latex = page.getByTestId('canvas-tab-latex');
-  const terminal = page.getByTestId('canvas-tab-terminal');
-  await literature.focus();
+test('canvas view buttons retain native focus and do not intercept action-button keys', async () => {
+  const library = page.getByTestId('canvas-view-library');
+  const knowledge = page.getByTestId('canvas-view-knowledge');
+  await library.focus();
   await page.keyboard.press('ArrowRight');
-  await expect(latex).toBeFocused();
-  await expect(latex).toHaveAttribute('aria-selected', 'true');
-  await page.keyboard.press('End');
-  await expect(terminal).toBeFocused();
+  await expect(library).toBeFocused();
   await page.keyboard.press('Home');
-  await expect(literature).toBeFocused();
+  await page.keyboard.press('End');
+  await expect(library).toBeFocused();
+  await expect(library).toHaveAttribute('aria-current', 'page');
+  await knowledge.focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(knowledge).toBeFocused();
+  await expect(knowledge).not.toHaveAttribute('aria-current', 'page');
   await page.getByTestId('canvas-action').focus();
   await page.keyboard.press('ArrowRight');
   await expect(page.getByTestId('canvas-action')).toBeFocused();
-  await expect(literature).toHaveAttribute('aria-selected', 'true');
+  await expect(library).toHaveAttribute('aria-current', 'page');
 });
 
 test('project save freezes submitted fields and closing until the request settles', async () => {

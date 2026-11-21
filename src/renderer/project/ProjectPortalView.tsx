@@ -7,6 +7,7 @@ import { projectStageLabel } from './project-store';
 import { ErrorBar } from '../shell/ErrorBar';
 import { EmptyState } from '../shell/EmptyState';
 import { ConfirmDialog } from '../shell/ConfirmDialog';
+import { formPrimaryButtonClass } from '../shared/form-ui';
 import { ProjectRow } from './ProjectRow';
 import { ProjectFormDialog, type ProjectFormValues } from './ProjectFormDialog';
 import { isProjectArchived, visibleProjects, type ProjectStatusFilter } from './project-store';
@@ -162,12 +163,12 @@ export function ProjectPortalView({
   };
 
   return (
-    <div className="project-portal h-full overflow-y-auto" data-testid="portal">
+    <div className="project-portal ui-scroll-region h-full" data-testid="portal">
       <div className="project-portal-content">
         <header className="flex items-center justify-between gap-3 pb-1">
           <h1 className="text-[length:var(--font-h2-size)] font-semibold">研究项目</h1>
           <button type="button" data-testid="portal-new-project" aria-label="新建研究项目" onClick={() => setCreateOpen(true)}
-            className="flex h-[var(--control-height)] shrink-0 items-center gap-1.5 rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] hover:bg-[var(--fill-strong-hover)] active:opacity-90">
+            className={formPrimaryButtonClass}>
             <Plus size={14} aria-hidden="true" />新建项目
           </button>
         </header>
@@ -185,10 +186,11 @@ export function ProjectPortalView({
             </div>
           </section>
         )}
-        <section aria-labelledby="portal-all-heading" className="flex flex-col gap-3">
-        <h2 id="portal-all-heading" className="flex items-baseline gap-2 text-[length:var(--font-ui-size)] font-medium">{filter === 'archived' ? '已归档项目' : filter === 'active' ? '进行中的项目' : '全部项目'} <span className="font-normal text-muted tabular-nums text-[length:var(--font-meta-size)]">{shown.length}</span></h2>
+        <section aria-labelledby={all.length > 0 ? 'portal-all-heading' : undefined} className="flex flex-col gap-3">
+        {all.length > 0 ? <>
+        <h2 id="portal-all-heading" className="flex items-baseline gap-2 text-[length:var(--font-ui-size)] font-medium">{filter === 'archived' ? '已归档项目' : filter === 'active' ? '进行中的项目' : '全部项目'} <span className="font-normal text-muted tabular-nums text-[length:var(--font-meta-size)]">{shown.length.toLocaleString('zh-CN')}</span></h2>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex h-[var(--control-height)] min-w-[160px] flex-1 items-center gap-2 rounded-control border-[0.5px] border-line bg-surface px-2.5">
+          <div className="flex min-h-[var(--control-height)] min-w-[min(160px,100%)] flex-1 items-center gap-2 rounded-control border-[0.5px] border-line bg-surface px-2">
             <Search size={13} aria-hidden="true" className="shrink-0 text-subtle" />
             <input
               value={query}
@@ -205,7 +207,7 @@ export function ProjectPortalView({
               <button
                 type="button"
                 onClick={() => setQuery('')}
-                className="rounded-control px-1.5 text-muted hover:text-ink active:bg-[var(--overlay-active)]"
+                className="min-h-6 shrink-0 rounded-control px-2 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
               >
                 清空
               </button>
@@ -245,6 +247,7 @@ export function ProjectPortalView({
             ))}
           </div>
         </div>
+        </> : null}
 
         {projects.list.status === 'error' ? (
           <ErrorBar
@@ -272,7 +275,6 @@ export function ProjectPortalView({
         ) : all.length === 0 ? (
           <EmptyState
             title="还没有研究项目"
-            action={{ label: '新建项目', onClick: () => setCreateOpen(true) }}
             testId="portal-empty"
           />
         ) : shown.length === 0 ? (

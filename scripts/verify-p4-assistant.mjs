@@ -351,7 +351,7 @@ try {
   assertCheck('0 启动', '新壳在 smoke 模式下启动', (await page.getAttribute('[data-testid="roc-app"]', 'data-mode')) === 'smoke');
   const lightTheme = await page.evaluate(() => ({
     theme: document.documentElement.dataset.theme,
-    background: getComputedStyle(document.documentElement).getPropertyValue('--app-zinc-950').trim()
+    background: getComputedStyle(document.documentElement).getPropertyValue('--surface-rail').trim()
   }));
   assertCheck('0 启动', '助手壳可使用浅色主题', lightTheme.theme === 'light' && lightTheme.background !== '', JSON.stringify(lightTheme));
   await page.evaluate(() => window.localStorage.setItem('roc.ui.theme.override', 'dark'));
@@ -359,7 +359,7 @@ try {
   await page.waitForSelector('[data-testid="roc-app"]', { timeout: 30_000 });
   const darkTheme = await page.evaluate(() => ({
     theme: document.documentElement.dataset.theme,
-    background: getComputedStyle(document.documentElement).getPropertyValue('--app-zinc-950').trim()
+    background: getComputedStyle(document.documentElement).getPropertyValue('--surface-rail').trim()
   }));
   assertCheck('0 启动', '助手壳可使用深色主题并切换调色板', darkTheme.theme === 'dark' && darkTheme.background !== lightTheme.background,
     `light=${lightTheme.background} dark=${darkTheme.background}`);
@@ -539,7 +539,7 @@ try {
   const approvalCardText = (await page.locator('[data-testid="assistant-approval-card"]').textContent()) ?? '';
   assertCheck('2 审批', '审批卡显示工具参数', approvalCardText.includes('p4-approval-ok.txt'), '');
   const decisionsText = (await page.locator('[data-testid="assistant-approval-decisions"]').textContent()) ?? '';
-  assertCheck('2 审批', '审批卡显示可用决策', decisionsText.includes('approve'), decisionsText.trim());
+  assertCheck('2 审批', '审批卡显示可用决策', decisionsText.includes('可批准') && decisionsText.includes('可拒绝'), decisionsText.trim());
   assertCheck('2 审批', '等待审批期间输入区不可提交', await page.locator('[data-testid="assistant-composer-input"]').isDisabled(), '');
   assertCheck(
     '2 审批',
@@ -629,7 +629,13 @@ try {
   await waitForStatus(page, 'running', 30_000);
   await page.waitForSelector('[data-testid="assistant-composer-stop"]', { timeout: 20_000 });
   await waitForTranscript(page, 'G4S-0005', 30_000);
-  assertCheck('4 取消', '运行中显示停止按钮且输入区锁定', await page.locator('[data-testid="assistant-composer-input"]').isDisabled(), '');
+  assertCheck(
+    '4 取消',
+    '运行中显示停止按钮且输入区允许文本补充',
+    await page.locator('[data-testid="assistant-composer-stop"]').isVisible() &&
+      await page.locator('[data-testid="assistant-composer-input"]').isEnabled(),
+    ''
+  );
 
   await page.waitForFunction(() => {
     const scroller = document.querySelector('[data-testid="assistant-transcript"]');
@@ -687,8 +693,9 @@ try {
   assertCheck('5 恢复', '运行中出现流式内容', beforeClose.includes('G5S-'), '');
 
   await page.click('[data-testid="titlebar-toggle-assistant"]');
-  await page.waitForSelector('[data-testid="assistant-panel"]', { state: 'detached', timeout: 10_000 });
-  assertCheck('5 恢复', '关闭助手面板后组件真的卸载', (await page.locator('[data-testid="assistant-panel"]').count()) === 0, '');
+  await page.waitForFunction(() => document.querySelector('[aria-label="研究助手"]')?.hidden === true, undefined, {timeout: 10_000});
+  assertCheck('5 恢复', '关闭助手面板后界面隐藏且运行状态可保留',
+    await page.locator('[aria-label="研究助手"]').evaluate(element => element.hidden), '');
   await page.waitForTimeout(1_500);
   await page.click('[data-testid="titlebar-toggle-assistant"]');
   await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 20_000 });
@@ -844,13 +851,13 @@ try {
       }
     });
   }
-  const allowedTimerFiles = ['blocks/use-activity-block-state.ts'];
+  const allowedTimerFiles = ['blocks/use-activity-block-state.ts', 'use-chat-session.ts'];
   const unexpectedTimerHits = assistantTimerHits.filter(
     (hit) => !allowedTimerFiles.some((allowed) => hit.includes(allowed))
   );
   assertCheck(
     '7 无假流式',
-    'assistant/ 下只有 activity 块的 1s 自动收起在用定时器',
+    'assistant/ 定时器仅用于 activity 收起和实际排队输入回执轮询',
     unexpectedTimerHits.length === 0,
     unexpectedTimerHits.length === 0 ? assistantTimerHits.join(', ') : unexpectedTimerHits.join(', ')
   );

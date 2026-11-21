@@ -154,7 +154,8 @@ test('keyboard plan editing locks real drawer, preserves lost save/freeze replie
   await enter('artifact-idea-plan-save');
   await expect(page.getByTestId('artifact-idea-plan-save')).toBeDisabled();
   await expect(page.getByLabel('分析计划', {exact: true})).toBeDisabled();
-  await page.getByTestId('artifact-inspector-close').click();
+  await expect(page.getByTestId('artifact-inspector-close')).toBeDisabled();
+  await page.keyboard.press('Escape');
   await expect(page.getByTestId('artifact-inspector')).toBeVisible();
   assert.equal(history(f).total, 2);
   assert.deepEqual(history(f).items[1].version, saved.version);

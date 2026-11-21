@@ -190,9 +190,8 @@ test('opt-in real drawer maps a negative tie with keyboard and immutable exact r
   await page.getByTestId('artifact-draft-discard-cancel').click();
   await page.getByTestId('artifact-draft-discard-panel').waitFor({state:'detached'});
   await page.getByTestId('artifact-inspector-scrim').click({position: {x: 5, y: 5}});
-  await page.getByTestId('artifact-draft-discard-panel').waitFor();
-  await page.getByTestId('artifact-draft-discard-cancel').click();
-  await page.getByTestId('artifact-draft-discard-panel').waitFor({state:'detached'});
+  assert.equal(await page.getByTestId('artifact-draft-discard-panel').count(), 0, 'form backdrop does not request dismissal');
+  assert.equal(await page.getByTestId('artifact-consistency-fields').getByRole('combobox', {name: '单位转换', exact: true}).inputValue(), 'identity');
   assert.equal(await editor().count(), 1);
   await page.getByTestId('artifact-consistency-discard').click();
   await fillMapping(f);

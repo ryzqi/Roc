@@ -484,6 +484,8 @@ test('late real bridge response cannot replace another artifact selection',async
 
 test('source drawer supports keyboard reading and fixed chrome at light dark 1100 1099 800 and 420 with reduced motion',async()=>{
   await scene({long:true});await openArtifact();
+  await page.getByTestId('artifact-inspector-scrim').click({position:{x:4,y:4}});
+  assert.equal(await page.getByTestId('artifact-inspector-panel').isVisible(),true,'artifact form backdrop keeps its context open');
   await page.locator('details > summary').filter({hasText:'Original synthetic source'}).click();
   for(const theme of ['light','dark'])for(const width of [1100,1099,800,420]){
     await page.setViewportSize({width,height:900});
@@ -1218,6 +1220,7 @@ test('artifact draft protection serializes a pending real relation decision',asy
   await page.waitForFunction(()=>document.querySelector('[data-testid="artifact-inspector-panel"]').textContent.includes('正在保存审核'));
   assert.equal(reads.filter(read=>read.relation==='reviewEvidenceRelation').length,1);
   assert.equal(await page.getByTestId('artifact-inspector-refresh').isDisabled(),true);
+  assert.equal(await page.getByTestId('artifact-inspector-close').isDisabled(),true);
   await page.evaluate(()=>window.navigateAway());
   assert.equal(await page.evaluate(()=>window.navigations),0);
   f.finishRelation();

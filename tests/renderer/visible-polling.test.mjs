@@ -20,9 +20,11 @@ before(async () => {
     import {useWindowState} from './src/renderer/shell/use-window-state';
     import {KnowledgeJobs} from './src/renderer/literature/KnowledgeJobs';
     const root=createRoot(document.getElementById('root'));
-    window.calls=[];window.ticks=[];
+    window.calls=[];window.ticks=[];window.jobStatus='queued';
     const client={api:{window:window.nativeWindow,research:{
-      knowledgeJobs:async ({projectId})=>{window.calls.push(projectId);return {ok:true,data:[]};}
+      knowledgeJobs:async ({projectId})=>{window.calls.push(projectId);return {ok:true,data:[{
+        documentId:'document-'+projectId,title:'Indexing fixture',generation:'generation-1',status:window.jobStatus,error:null
+      }]};}
     }}};
     function Probe({enabled,project}) {
       window.viewSelected=useViewSelected();
@@ -133,6 +135,11 @@ test('native macOS window hide releases polling and show refreshes; disabled job
   const disabled = await counts();
   await page.clock.runFor(3100);
   assert.deepEqual(await counts(), {jobs:disabled.jobs+1,ticks:disabled.ticks});
+  await page.evaluate(() => {window.jobStatus='ready';window.change({project:'completed'});});
+  await expect(page.getByTestId('rag-source-jobs')).toContainText('已完成');
+  const completed = await counts();
+  await page.clock.runFor(9100);
+  assert.deepEqual(await counts(), completed, 'completed jobs stop polling while the view remains active');
   await page.evaluate(() => window.unmount());
   const unmounted = await counts();
   await page.clock.runFor(9000);

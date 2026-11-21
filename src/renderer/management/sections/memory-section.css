@@ -22,7 +22,7 @@
 .memory-navigation-group h3 { color: var(--subtle); font-size: var(--font-meta-size); margin: 0 0 var(--space-2) var(--space-2); }
 .memory-navigation-group button { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: var(--space-1); min-height: var(--control-height); border-radius: var(--r-control); padding: var(--space-2); text-align: left; color: var(--muted); border: 0.5px solid transparent; }
 .memory-navigation-group button:hover:not(:disabled) { background: var(--overlay-hover); color: var(--ink); }
-.memory-navigation-group button[aria-current="page"] { background: var(--accent-soft); color: var(--ink); border-color: var(--line); font-weight: var(--font-weight-semibold); }
+.memory-navigation-group button[aria-current="page"] { background: var(--overlay-active); color: var(--ink); border-color: var(--line); font-weight: var(--font-weight-semibold); }
 .memory-draft-indicator { color: var(--st-warn); }
 .memory-empty-indicator { color: var(--subtle); font-size: var(--font-micro-size); font-weight: 400; }
 .memory-navigation-hint { color: var(--subtle); font-size: var(--font-meta-size); line-height: 1.6; padding: var(--space-3) var(--space-2); }
@@ -64,7 +64,7 @@
 .memory-audit-list p, .memory-search-results p { line-height: 1.7; overflow-wrap: anywhere; }
 .memory-audit-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); color: var(--subtle); font-size: var(--font-meta-size); margin: var(--space-1) 0; }
 .memory-audit-list details { font-size: var(--font-meta-size); color: var(--muted); }
-.memory-audit-list summary { cursor: pointer; width: fit-content; }
+.memory-audit-list summary { cursor: pointer; width: fit-content; min-block-size: var(--control-height-compact); padding-block: var(--space-1); }
 .memory-audit-list details p, .memory-audit-list code { margin-top: var(--space-2); overflow-wrap: anywhere; }
 .memory-search-form { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .memory-search-form label:first-child { flex: 1 1 160px; }

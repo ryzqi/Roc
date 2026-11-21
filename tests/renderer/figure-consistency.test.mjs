@@ -209,9 +209,8 @@ test('opt-in actual figure drawer preserves mappings across pages and retries ex
   await page.getByTestId('artifact-draft-discard-cancel').click();
   await page.getByTestId('artifact-draft-discard-panel').waitFor({state:'detached'});
   await page.getByTestId('artifact-inspector-scrim').click({position: {x: 5, y: 5}});
-  await page.getByTestId('artifact-draft-discard-panel').waitFor();
-  await page.getByTestId('artifact-draft-discard-cancel').click();
-  await page.getByTestId('artifact-draft-discard-panel').waitFor({state:'detached'});
+  assert.equal(await page.getByTestId('artifact-draft-discard-panel').count(), 0, 'form backdrop does not request dismissal');
+  assert.equal(await page.getByRole('combobox', {name: '场景标记', exact: true}).inputValue(), f.mark.name);
   assert.equal(await fields().count(), 1);
   await fields().getByRole('spinbutton', {name: '绝对容差', exact: true}).fill('');
   await page.getByTestId('artifact-figure-consistency-add').click();

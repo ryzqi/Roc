@@ -165,11 +165,11 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
 
       {literature.status === 'loading' && literature.items.length === 0 ? (
         <EmptyState compact tone="loading" icon={Loader2} title="正在读取文献库…" testId="literature-loading" />
-      ) : literature.items.length === 0 && literature.status === 'ready' ? (
+      ) : items.length === 0 && literature.status === 'ready' ? (
         <EmptyState
           compact
           icon={BookOpen}
-          title={literature.query.trim().length > 0 ? '没有匹配的文献' : '尚无文献'}
+          title={literature.query.trim().length > 0 ? '没有匹配的文献' : entryType !== null ? '当前分类没有文献' : '尚无文献'}
           action={literature.query.trim().length > 0
             ? {label: '清除搜索', onClick: () => literature.setQuery('')}
             : {label: '导入文献', onClick: onRequestImport}}

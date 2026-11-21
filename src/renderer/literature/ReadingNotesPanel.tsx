@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {FilePlus2,Link2,NotebookPen} from 'lucide-react';
+import {FilePlus2,Link2,Loader2,NotebookPen} from 'lucide-react';
 import type {ReadingNote} from '../../shared/schemas/research-reading';
 import type {ResearchLibraryItem} from '../../shared/types';
 import type {RocClient} from '../shared/roc-client';
@@ -92,7 +92,7 @@ export default function ReadingNotesPanel({client,projectId,items,writable,itemI
     onKeyDown={event=>{if((event.metaKey||event.ctrlKey)&&event.key==='s'&&!event.nativeEvent.isComposing){event.preventDefault();void save();}}}>
     <header className="reading-toolbar reading-notes-header">
       <NotebookPen size={15} aria-hidden="true"/><h2>阅读笔记</h2>
-      <span className="text-muted">{visibleNotes.length} 篇</span>
+      <span className="tabular-nums text-muted">{visibleNotes.length.toLocaleString('zh-CN')} 篇</span>
       <button type="button" disabled={!writable || dirty || pending} onClick={()=>create()} data-testid="notes-create"><FilePlus2 size={13} aria-hidden="true"/>新建</button>
     </header>
     {list.error?<p role="alert" className="p-2">{list.error}<button type="button" onClick={list.reload}>重试</button></p>:null}
@@ -117,7 +117,8 @@ export default function ReadingNotesPanel({client,projectId,items,writable,itemI
       <div className="reading-note-detail">
         <div className="reading-toolbar reading-note-savebar">
           <span role="status" className="text-muted">{operation==='export'?'导出中…':operation==='reload'?'重读中…':busy?'保存中…':conflict?'保存未完成':dirty?'未保存':draft?'已保存':list.status==='loading'?'读取笔记…':'未选择笔记'}</span>
-          {draft?<button type="button" disabled={!writable||pending||!draft.title.trim()} onClick={()=>void save()} data-testid="notes-save">保存 ⌘S</button>:null}
+          {draft?<button type="button" disabled={!writable||pending||!draft.title.trim()} aria-busy={busy} onClick={()=>void save()} data-testid="notes-save">
+            {busy?<Loader2 size={13} className="animate-spin" aria-hidden="true"/>:null}{busy?'保存中…':'保存 ⌘S'}</button>:null}
         </div>
         {error||exportNote.error||reread.error?<p role="alert" className="p-2 text-[var(--st-warn)]">{error??exportNote.error??reread.error}</p>:null}
         {!draft?<div className="reading-notes-empty"><NotebookPen size={28} aria-hidden="true"/><h3>记录阅读中的发现</h3><p>选择一篇笔记，或新建笔记。</p></div>:<>

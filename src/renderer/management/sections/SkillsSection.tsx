@@ -109,7 +109,7 @@ export function SkillsSection({ store: skills }: { store: SkillsStore }): React.
                   key={skill.id}
                   className={
                     selected
-                      ? 'flex flex-col gap-1 rounded-card bg-accent-soft px-2 py-1.5'
+                      ? 'flex flex-col gap-1 rounded-card bg-[var(--overlay-active)] px-2 py-1.5'
                       : 'flex flex-col gap-1 rounded-card px-2 py-1.5 hover:bg-[var(--overlay-hover)]'
                   }
                   data-testid={`mgmt-skill-${skill.id}`}

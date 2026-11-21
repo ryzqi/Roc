@@ -137,7 +137,7 @@ export function SessionListView({
         title="删除会话？"
         message={`将删除「${pendingDelete?.title ?? ''}」的全部消息记录。`}
         detail="该操作不可恢复。"
-        confirmLabel="删除"
+        confirmLabel="删除会话"
         tone="destructive"
         testId="session-delete-confirm"
         onCancel={() => setPendingDelete(null)}

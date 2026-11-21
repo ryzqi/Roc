@@ -32,6 +32,7 @@ const { dataRoot, workspaceRoot, skillSourceRoot, remoteRoot } = await createSmo
 let app;
 let smokeProvider;
 const audits = [];
+const geometryProblems = [];
 const clipSource = readFileSync('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
 let failure = null;
 let nativeMinimum;
@@ -43,13 +44,21 @@ const smokeApiKey = 'smoke-test-key';
 const VIEWPORTS = [
   { id: 'wide', width: 1440, height: 900 },
   { id: 'desktop', width: 1280, height: 820 },
-  { id: 'balanced-edge', width: 1080, height: 820 },
-  { id: 'drawers-edge', width: 1079, height: 820 },
+  { id: 'balanced-edge', width: 1100, height: 820 },
+  { id: 'drawers-edge', width: 1099, height: 820 },
   { id: 'native-minimum', width: 1184, height: 820 },
   { id: 'narrow', width: 720, height: 760 },
   { id: 'small', width: 380, height: 760 },
   { id: 'short', width: 1200, height: 540 }
 ];
+
+const SETTINGS_SECTIONS = {
+  general: ['app'],
+  models: ['models', 'default-model'],
+  research: ['literature', 'rag', 'memory', 'tasks'],
+  security: ['guardrail', 'sandbox', 'authorization'],
+  advanced: ['backup', 'pilot', 'hooks']
+};
 
 async function capture(page, id) {
   // Ignore continuous activity indicators, but wait for entry and hover motion.
@@ -65,11 +74,18 @@ async function capture(page, id) {
   audit.viewportEmulated = true;
   audit.belowNativeMinimum = audit.viewport.width < nativeMinimum[0];
   audits.push(audit);
-  assert.deepEqual(audit.viewportOverflow, [], `${id}: viewport overflow`);
-  assert.deepEqual(audit.fontSizeViolations, [], `${id}: UI text below 12px`);
-  assert.deepEqual(audit.smallTargets, [], `${id}: controls below 24px`);
-  assert.equal(audit.clip.cut, 0, `${id}: clipped shadows`);
-  console.log(`[layout] ${currentTheme}-${id}: passed`);
+  const problems = [
+    ...audit.viewportOverflow,
+    ...audit.fontSizeViolations,
+    ...audit.smallTargets,
+    ...(audit.clip.cut === 0 ? [] : [audit.clip])
+  ];
+  if (problems.length > 0) {
+    geometryProblems.push(audit.label);
+    console.error(`[layout] ${audit.label}: ${JSON.stringify(problems)}`);
+  } else {
+    console.log(`[layout] ${audit.label}: passed`);
+  }
   return audit;
 }
 
@@ -152,11 +168,21 @@ async function assertFormLayout(panel) {
 }
 
 async function selectSettingsSection(page, section) {
+  const domain = Object.keys(SETTINGS_SECTIONS).find(id => SETTINGS_SECTIONS[id].includes(section));
+  assert.ok(domain, `settings section ${section} has a domain`);
   const compact = page.getByTestId('settings-section-select');
-  const navigation = await compact.count() > 0 ? compact : page.getByTestId(`settings-section-${section}`);
-  await assertControlVisible(navigation);
-  if (await compact.count() > 0) await compact.selectOption(section);
-  else await navigation.click();
+  if (await compact.isVisible()) {
+    const domainSelect = page.getByTestId('settings-domain-select');
+    if (await domainSelect.inputValue() !== domain) await domainSelect.selectOption(domain);
+    await assertControlVisible(compact);
+    await compact.selectOption(section);
+  } else {
+    const domainButton = page.getByTestId(`settings-domain-${domain}`);
+    if (await domainButton.getAttribute('aria-pressed') !== 'true') await domainButton.click();
+    const sectionButton = page.getByTestId(`settings-section-${section}`);
+    await assertControlVisible(sectionButton);
+    await sectionButton.click();
+  }
   await page.waitForFunction(section =>
     document.querySelector('[data-testid="settings-panel"]')?.id === `settings-panel-${section}`, section);
 }
@@ -189,7 +215,10 @@ try {
   page.on('pageerror', (error) => console.error('[renderer:pageerror]', error.message));
   await waitForAppReady(page, 'layout-audit', artifactDir);
   // 冷启动落门户（没有项目时不渲染左栏），所以先等门户容器。
-  await page.waitForSelector('[data-testid="portal"]', { timeout: 15_000 });
+  await page.getByTestId('portal-empty').waitFor();
+  currentTheme = 'light';
+  await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
+  await capture(page, 'portal-empty');
 
   // 种一个项目：门户卡网格要有卡才能审查「门户」这一态。
   const project = await page.evaluate(async ({ workspacePath, endpoint, apiKey }) => {
@@ -269,9 +298,20 @@ try {
     await navigate(page, 'page=research');
     await page.waitForSelector(`[data-testid="portal-card-${project.id}"]`, { timeout: 15_000 });
     await capture(page, `portal-${viewport.id}`);
+    if (['wide', 'small'].includes(viewport.id)) {
+      await page.getByTestId('portal-view-list').click();
+      const projectSearch = page.getByTestId('portal-search');
+      await projectSearch.fill('没有匹配的项目');
+      await page.getByTestId('portal-no-match').waitFor();
+      await capture(page, `portal-filtered-${viewport.id}`);
+      await projectSearch.fill('');
+      await capture(page, `portal-list-${viewport.id}`);
+      await page.getByTestId('portal-view-cards').click();
+    }
     await page.getByTestId('portal-new-project').click();
     await page.getByTestId('portal-create-dialog-panel').waitFor();
     await assertFormLayout(page.getByTestId('portal-create-dialog-panel'));
+    await assertControlVisible(page.getByTestId('project-form-submit'));
     await capture(page, `project-form-${viewport.id}`);
     await page.getByTestId('project-form-cancel').click();
     await page.getByTestId('portal-create-dialog-panel').waitFor({state: 'detached'});
@@ -371,8 +411,8 @@ try {
     await page.getByTestId('terminal-view').waitFor({state: 'visible'});
     await capture(page, `terminal-${viewport.id}`);
     for (const {view, tabs} of [
-      {view: 'library', tabs: ['reader', 'notes']},
       {view: 'discover', tabs: ['search', 'radar', 'monitors']},
+      {view: 'library', tabs: ['reader', 'notes']},
       {view: 'knowledge', tabs: ['rag', 'wiki', 'graph']}
     ]) {
       await selectDestination(page, view);
@@ -403,7 +443,7 @@ try {
       sidebarDrawer: document.querySelector('[data-testid="sidebar-drawer"]') !== null,
       assistantDrawer: document.querySelector('[data-testid="assistant-drawer"]') !== null
     }));
-    const expectedMode = viewport.width < 1080 ? 'drawers' : viewport.width < 1360 ? 'balanced' : 'wide';
+    const expectedMode = viewport.width < 1100 ? 'drawers' : viewport.width < 1360 ? 'balanced' : 'wide';
     if (layout.mode !== expectedMode) {
       throw new Error(`assistant layout mode ${layout.mode} at ${viewport.width}px; expected ${expectedMode}`);
     }
@@ -411,6 +451,15 @@ try {
     assert.equal(layout.sidebarDrawer, false);
     assert.equal(layout.assistantColumn, expectedMode !== 'drawers');
     assert.equal(layout.assistantDrawer, expectedMode === 'drawers');
+    if (layout.assistantColumn) {
+      const assistant = await page.getByTestId('assistant-column').boundingBox();
+      const canvas = await page.getByTestId('canvas-column').boundingBox();
+      assert.ok(assistant.x + assistant.width <= canvas.x + 1, 'assistant precedes canvas');
+      if (layout.sidebarColumn) {
+        const sidebar = await page.getByTestId('sidebar-column').boundingBox();
+        assert.ok(sidebar.x + sidebar.width <= assistant.x + 1, 'sidebar precedes assistant');
+      }
+    }
     await capture(page, `assistant-${viewport.id}`);
     await page.getByTestId('assistant-model-settings').hover();
     await capture(page, `assistant-hover-${viewport.id}`);
@@ -424,7 +473,18 @@ try {
     if (viewport.id === 'wide') {
       const divider = page.getByTestId('divider-assistant');
       await divider.focus();
-      for (let index = 0; index < 12; index += 1) await page.keyboard.press('Shift+ArrowRight');
+      const initialWidth = await divider.getAttribute('aria-valuenow');
+      const handle = await divider.boundingBox();
+      const x = handle.x + handle.width / 2;
+      const y = handle.y + handle.height / 2;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x + 32, y);
+      await page.waitForFunction(width => Number(document.querySelector('[data-testid="divider-assistant"]').getAttribute('aria-valuenow')) > Number(width), initialWidth);
+      await page.keyboard.press('Escape');
+      await page.mouse.up();
+      assert.equal(await divider.getAttribute('aria-valuenow'), initialWidth, 'Escape restores drag baseline');
+      for (let index = 0; index < 12; index += 1) await page.keyboard.press('Shift+ArrowLeft');
       await page.waitForFunction(() => {
         const handle = document.querySelector('[data-testid="divider-assistant"]');
         return handle.getAttribute('aria-valuenow') === handle.getAttribute('aria-valuemin');
@@ -434,6 +494,7 @@ try {
       const column = await page.getByTestId('assistant-column').boundingBox();
       assert.ok(menu.x >= column.x && menu.x + menu.width <= column.x + column.width,
         'model menu stays inside the minimum assistant column');
+      assert.ok(menu.width >= column.width - 48, 'model names have room independent of the trigger width');
       await capture(page, `assistant-minimum-${viewport.id}`);
       await page.keyboard.press('Escape');
       await divider.focus();
@@ -458,8 +519,7 @@ try {
     assert.ok(settingsBody.width >= 240, 'settings form retains a usable column');
     assert.ok(settingsBody.scrollWidth <= settingsBody.width + 1, 'settings form has no horizontal clipping');
     await capture(page, `settings-${viewport.id}`);
-    for (const section of ['models', 'default-model', 'rag', 'literature', 'sandbox', 'guardrail',
-      'app', 'tasks', 'authorization', 'hooks', 'memory', 'pilot', 'backup']) {
+    for (const section of Object.values(SETTINGS_SECTIONS).flat()) {
       await selectSettingsSection(page, section);
       const panel = page.getByTestId('settings-panel');
       await assertFormLayout(panel);
@@ -516,6 +576,7 @@ try {
   await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
   await page.emulateMedia({reducedMotion: 'reduce'});
   }
+  assert.deepEqual(geometryProblems, [], 'viewport, minimum type and targets, and shadow clearance');
 } catch (error) {
   failure = error instanceof Error ? error.message : String(error);
   console.error(error);

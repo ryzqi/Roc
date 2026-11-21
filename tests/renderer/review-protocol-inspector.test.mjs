@@ -207,6 +207,9 @@ test('lost save/freeze replies retry the exact original requests and do not appe
 
 test('window-local draft survives close/reopen; invalid years refuse before any write; native Escape restores opener focus', async () => {
   const f = fixture(); await mount(f); await fillNew();
+  await tid('artifact-inspector-scrim').click({position: {x: 4, y: 4}});
+  assert.equal(await tid('artifact-review').isVisible(), true, 'form backdrop does not dismiss the draft');
+  assert.equal(await page.getByLabel('研究问题', {exact: true}).inputValue(), reviewProtocolBodyFixture().question);
   await page.getByLabel('发表起始年', {exact: true}).fill('2027');
   for(const theme of ['light','dark']) for(const width of [1100,420]) {
     await page.setViewportSize({width,height:800});
@@ -326,6 +329,7 @@ test('pending real commit blocks closing, switching and resubmitting until its r
   await tid('artifact-review-save').click(); await started;
   assert.equal(await tid('artifact-review-save').isDisabled(), true);
   assert.equal(await tid('artifact-review-new').isDisabled(), true);
+  assert.equal(await tid('artifact-inspector-close').isDisabled(), true);
   await page.keyboard.press('Escape');
   assert.equal(await tid('artifact-review').isVisible(), true);
   assert.equal(f.db.prepare('SELECT count(*) FROM research_review_protocol_versions').pluck().get(), 1);

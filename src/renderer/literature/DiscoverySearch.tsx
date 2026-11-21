@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Loader2, Search } from 'lucide-react';
 import type { LiteratureImportResult, LiteratureSearchResult } from '../../shared/schemas/literature-import';
 import { formButtonClass, formInputClass, formPrimaryButtonClass } from '../shared/form-ui';
@@ -34,6 +34,7 @@ export default function DiscoverySearch({ store, actions, writable, onOpenLibrar
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [added, setAdded] = useState<ReadonlySet<string>>(new Set());
   const [pending, setPending] = useState<'search' | 'add' | null>(null);
+  const operationInFlight = useRef(false);
   const [addingIds, setAddingIds] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<{ result: LiteratureImportResult; titles: string[] } | null>(null);
@@ -43,7 +44,8 @@ export default function DiscoverySearch({ store, actions, writable, onOpenLibrar
   const selectable = result?.candidates.filter(candidate => !candidate.archived && !inLibrary(candidate)) ?? [];
 
   const search = async (): Promise<void> => {
-    if (pending !== null || query.trim() === '' || sources.length === 0) return;
+    if (operationInFlight.current || query.trim() === '' || sources.length === 0) return;
+    operationInFlight.current = true;
     setPending('search'); setError(null); setReceipt(null);
     try {
       const year = new Date().getFullYear();
@@ -52,10 +54,11 @@ export default function DiscoverySearch({ store, actions, writable, onOpenLibrar
       if (!response.ok) { setError(response.message); return; }
       setResult(response.result); setResultQuery(query.trim()); setSelected(new Set()); setAdded(new Set());
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
-    finally { setPending(null); }
+    finally { operationInFlight.current = false; setPending(null); }
   };
   const add = async (ids: string[]): Promise<void> => {
-    if (pending !== null || result === null || !writable || ids.length === 0) return;
+    if (operationInFlight.current || result === null || !writable || ids.length === 0) return;
+    operationInFlight.current = true;
     setPending('add'); setAddingIds(new Set(ids)); setError(null); setReceipt(null);
     try {
       const response = await actions.addCandidates(result.searchId, ids);
@@ -67,11 +70,11 @@ export default function DiscoverySearch({ store, actions, writable, onOpenLibrar
       setSelected(current => new Set([...current].filter(id => !successful.includes(id))));
       setReceipt({ result: response.result, titles: ids.map(id => result.candidates.find(candidate => candidate.candidateId === id)!.record.title) });
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
-    finally { setPending(null); setAddingIds(new Set()); }
+    finally { operationInFlight.current = false; setPending(null); setAddingIds(new Set()); }
   };
 
   return <section className="flex h-full min-h-0 flex-col" aria-label="学术搜索" data-testid="discovery-search">
-    <form className="flex shrink-0 flex-col gap-3 border-b-[0.5px] border-line p-4" onSubmit={event => { event.preventDefault(); void search(); }}>
+    <form className="ui-scroll-region flex max-h-[48%] shrink-0 flex-col gap-3 border-b-[0.5px] border-line p-4" onSubmit={event => { event.preventDefault(); void search(); }}>
       <label htmlFor="discovery-query" className="font-medium text-ink">研究主题或关键词</label>
       <div className="flex items-center gap-2">
         <input id="discovery-query" value={query} onChange={event => setQuery(event.target.value)} className={formInputClass}
@@ -90,7 +93,7 @@ export default function DiscoverySearch({ store, actions, writable, onOpenLibrar
         </button>)}
       </div>
       <details>
-        <summary className="cursor-pointer text-muted">检索来源（{sources.length} 个）</summary>
+        <summary className="min-h-7 cursor-pointer py-1 text-muted">检索来源（{sources.length} 个）</summary>
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
           {SOURCES.map(source => <label key={source.id} className="flex min-h-6 items-center gap-2 text-muted">
             <input type="checkbox" checked={sources.includes(source.id)} disabled={pending !== null}
@@ -101,9 +104,10 @@ export default function DiscoverySearch({ store, actions, writable, onOpenLibrar
       </details>
     </form>
 
-    <div className="min-h-0 flex-1 overflow-y-auto p-4">
+    <div className="ui-scroll-region flex-1 p-4" aria-busy={pending === 'search'}>
       {error === null ? null : <p role="alert" className="mb-3 text-[var(--st-bad)]">{error}</p>}
-      {result === null ? <EmptyState compact icon={Search} title="搜索论文后选择加入项目" /> : <>
+      {result === null ? <EmptyState compact tone={pending === 'search' ? 'loading' : 'empty'}
+        icon={pending === 'search' ? Loader2 : Search} title={pending === 'search' ? '正在检索论文…' : '搜索论文后选择加入项目'} /> : <>
         <div role="status" className="flex flex-col gap-2" data-testid="discovery-source-report">
           <h3 className="break-words font-medium text-ink">{resultQuery}</h3>
           <p className="tabular-nums text-ink">{result.status === 'failed' ? '各来源均未完成检索' : result.status === 'partial' ? '部分来源未完成，已保留可用结果' : '检索已返回'}，{result.total.toLocaleString('zh-CN')} 篇候选</p>

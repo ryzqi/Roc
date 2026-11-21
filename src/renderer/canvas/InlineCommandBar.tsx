@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { FileText, MessageSquareText, PenLine, Search, X, type LucideIcon } from 'lucide-react';
 
 export type InlineSelectionSource = 'workspace-file' | 'pdf';
@@ -55,6 +56,7 @@ export function InlineCommandBar({
   onRejectProposal
 }: InlineCommandBarProps): React.JSX.Element | null {
   const firstAction = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState(false);
   const [replacement, setReplacement] = useState('');
 
@@ -62,6 +64,22 @@ export function InlineCommandBar({
     setEditing(false);
     setReplacement(selection?.selectionText ?? '');
   }, [selection]);
+
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (panel === null || anchor === null) return;
+    const place = (): void => {
+      const { width, height } = panel.getBoundingClientRect();
+      // CSS keeps the inset current across viewport and theme changes; explicit
+      // intrinsic width prevents positioning from changing shrink-to-fit width.
+      panel.style.left = `clamp(var(--shadow-popover-gutter), ${anchor.x}px, calc(100vw - ${width}px - var(--shadow-popover-gutter)))`;
+      panel.style.top = `clamp(var(--shadow-popover-gutter), ${anchor.y}px, calc(100dvh - ${height}px - var(--shadow-popover-gutter)))`;
+    };
+    place();
+    const resize = new ResizeObserver(place);
+    resize.observe(panel);
+    return () => resize.disconnect();
+  }, [anchor, selection]);
 
   useEffect(() => {
     if (selection === null) return;
@@ -83,10 +101,10 @@ export function InlineCommandBar({
 
   if (selection === null || selection.selectionText.trim().length === 0 || anchor === null) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed z-40 flex max-w-[min(560px,calc(100vw-24px))] flex-col gap-2 rounded-control border-[0.5px] border-line-default bg-surface-overlay p-1.5 text-ink-primary shadow-lg"
-      style={{ left: Math.max(12, Math.min(anchor.x, window.innerWidth - 572)), top: Math.max(12, anchor.y) }}
+      ref={panelRef}
+      className="ui-scroll-region fixed z-40 flex w-max max-h-[calc(100dvh-2*var(--shadow-popover-gutter))] max-w-[min(560px,calc(100vw-2*var(--shadow-popover-gutter)))] flex-col gap-2 rounded-window border-[0.5px] border-line-default bg-surface-overlay p-2 text-ink-primary shadow-[var(--shadow-popover)]"
       role="toolbar"
       aria-label="文本选区命令"
       data-testid="inline-command-bar"
@@ -110,7 +128,7 @@ export function InlineCommandBar({
             onClick={() => { setReplacement(selection.selectionText); setEditing(true); }} data-testid="inline-command-edit-selection">
             <PenLine size={13} aria-hidden="true" />替换选区
           </button>}
-          <button type="button" aria-label="关闭文本选区命令" title="关闭" className="ml-auto rounded-control p-1 text-ink-muted hover:bg-[var(--overlay-hover)] focus-visible:outline-2 focus-visible:outline-focus-ring" onClick={onDismiss}>
+          <button type="button" aria-label="关闭文本选区命令" title="关闭" className="ms-auto grid size-7 shrink-0 place-items-center rounded-control text-ink-muted hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-focus-ring" onClick={onDismiss}>
             <X size={14} aria-hidden="true" />
           </button>
         </div>
@@ -118,7 +136,7 @@ export function InlineCommandBar({
         <div className="min-w-0 p-1" data-testid="inline-command-proposal">
           <div className="flex items-center justify-between gap-2">
             <span className="font-medium text-[length:var(--font-meta-size)]">修改预览</span>
-            <button type="button" aria-label="关闭修改预览" className="rounded-control p-1 text-ink-muted hover:bg-[var(--overlay-hover)] focus-visible:outline-2 focus-visible:outline-focus-ring" onClick={onRejectProposal}>
+            <button type="button" aria-label="关闭修改预览" className="grid size-7 shrink-0 place-items-center rounded-control text-ink-muted hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-focus-ring" onClick={onRejectProposal}>
               <X size={14} aria-hidden="true" />
             </button>
           </div>
@@ -135,7 +153,7 @@ export function InlineCommandBar({
         <div className="min-w-0 p-1" data-testid="inline-command-edit">
           <div className="flex items-center justify-between gap-2">
             <span className="font-medium text-[length:var(--font-meta-size)]">替换选区</span>
-            <button type="button" aria-label="关闭选区替换" className="rounded-control p-1 text-ink-muted hover:bg-[var(--overlay-hover)] focus-visible:outline-2 focus-visible:outline-focus-ring" onClick={() => setEditing(false)}>
+            <button type="button" aria-label="关闭选区替换" className="grid size-7 shrink-0 place-items-center rounded-control text-ink-muted hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-focus-ring" onClick={() => setEditing(false)}>
               <X size={14} aria-hidden="true" />
             </button>
           </div>
@@ -162,6 +180,7 @@ export function InlineCommandBar({
           </div>
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   );
 }

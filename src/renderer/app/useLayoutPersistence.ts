@@ -10,7 +10,7 @@ export const CANVAS_MIN_WIDTH = 520;
 const REVIEW_WIDTH = 420;
 
 export function layoutModeForWidth(width: number): 'wide' | 'balanced' | 'drawers' {
-  return width >= 1360 ? 'wide' : width >= 1080 ? 'balanced' : 'drawers';
+  return width >= 1360 ? 'wide' : width >= 1100 ? 'balanced' : 'drawers';
 }
 
 export type LayoutPersistence = ReturnType<typeof useLayoutPersistence>;

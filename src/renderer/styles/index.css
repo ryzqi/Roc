@@ -588,10 +588,11 @@ details[open]::details-content {
 }
 
 .roc-prose blockquote {
-  border-left: var(--stripe-width) solid var(--line-strong);
+  border-inline-start: 0.5px solid var(--line-strong);
   color: var(--muted);
   margin: 0.6em 0;
-  padding: 0.1em 0 0.1em 0.8em;
+  padding-block: 0.1em;
+  padding-inline-start: var(--space-3);
 }
 
 .roc-prose code {

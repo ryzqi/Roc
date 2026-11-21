@@ -349,9 +349,9 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
    */
   const issueEntries = store.issues.map((issue) => ({ issue, section: sectionForDraftPath(issue.path) }));
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
-  const visibleSections = SETTINGS_SECTIONS.filter(section => normalizedSearch.length === 0
-    ? domainForSection(section.id).id === activeDomain
-    : settingsSearchText(section.id).includes(normalizedSearch));
+  const matchingSections = SETTINGS_SECTIONS.filter(section => normalizedSearch.length === 0 || settingsSearchText(section.id).includes(normalizedSearch));
+  const visibleSections = matchingSections.filter(section => normalizedSearch.length > 0 || domainForSection(section.id).id === activeDomain);
+  const activeSectionMatches = matchingSections.some(section => section.id === activeSection);
 
   return (
     <SettingsEditorGuardContext.Provider value={editorGuard.context}>
@@ -386,26 +386,25 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
               <select
                 ref={(element) => { activeNavigationRef.current = element; }}
                 aria-label="设置分区"
-                value={activeSection}
-                disabled={busy}
+                value={activeSectionMatches ? activeSection : ''}
+                disabled={busy || matchingSections.length === 0}
                 onChange={(event) => selectSection(event.target.value as SettingsSectionId)}
                 className={`${formInputClass} w-full`}
                 data-testid="settings-section-select"
               >
-                {SETTINGS_SECTIONS.filter(section => normalizedSearch.length === 0 || settingsSearchText(section.id).includes(normalizedSearch)).map((section) => (
+                {activeSectionMatches ? null : <option value="" disabled>{matchingSections.length === 0 ? '没有匹配的设置' : '选择设置分区'}</option>}
+                {matchingSections.map((section) => (
                   <option key={section.id} value={section.id}>
                     {section.label}{store.dirtySections.has(section.id) ? '（未保存）' : ''}
                   </option>
                 ))}
               </select>
+              {matchingSections.length === 0 ? <p role="status" className="pt-2 text-ink-muted text-[length:var(--font-meta-size)]" data-testid="settings-search-empty">没有匹配的设置</p> : null}
             </div>
           ) : (
             <div
               ref={listRef}
-              role="tablist"
-              aria-orientation="vertical"
               aria-label="设置分区"
-              onKeyDown={onListKeyDown}
               className="settings-navigation flex w-[224px] shrink-0 flex-col gap-1 overflow-y-auto border-e-[0.5px] border-line bg-surface-rail p-3"
               data-testid="settings-sections"
             >
@@ -421,7 +420,9 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
                   <span>{domain.label}</span><span className="text-[length:var(--font-micro-size)] tabular-nums">{domain.sectionIds.length}</span>
                 </button>)}
               </nav>
-              <div className="settings-subsections mt-2 grid gap-1 border-t-[0.5px] border-line-default pt-2">
+              <div className="settings-subsections mt-2 grid gap-1 border-t-[0.5px] border-line-default pt-2"
+                role="tablist" aria-label="设置分区" aria-orientation="vertical" onKeyDown={onListKeyDown}>
+              {visibleSections.length === 0 ? <p role="status" className="px-2 py-3 text-ink-muted text-[length:var(--font-meta-size)]" data-testid="settings-search-empty">没有匹配的设置</p> : null}
               {visibleSections.map((section) => {
                 const selected = section.id === activeSection;
                 const sectionDirty = store.dirtySections.has(section.id);

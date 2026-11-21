@@ -272,6 +272,7 @@ export function AssistantPanel({
   const activeRun = runStatus === 'running' || runStatus === 'recovering';
   useEffect(() => { onRunActivity?.(activeRun); }, [activeRun, onRunActivity]);
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const headerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (runStatus === 'failed' || session.errorMessage !== null) setTimelineOpen(true);
   }, [runStatus, session.errorMessage]);
@@ -329,11 +330,11 @@ export function AssistantPanel({
   );
 
   const header = (
-    <div className="relative shrink-0">
+    <div ref={headerRef} className="relative shrink-0">
       <StatusPillHeader projectName={projectName} conversationTitle={conversationTitle} stageLabel={stageLabel} runStatus={runStatus} statusLabel={statusLabel}
         messageCount={session.messages.length} timelineOpen={timelineOpen} onToggleTimeline={() => setTimelineOpen(open => !open)}
         onNewThread={() => onThreadIdChange(null)} onResetWidth={onResetWidth} />
-      <ExecutionTimelineDrawer open={timelineOpen}>
+      <ExecutionTimelineDrawer open={timelineOpen} onClose={() => setTimelineOpen(false)}>
         {projectId === null || diagnosticsRunId === null || threadId === null ? null : (
           <ResearchTaskProgress key={`${projectId}:${threadId}:${diagnosticsRunId}`} client={client} projectId={projectId} threadId={threadId} runId={diagnosticsRunId}
             runStatus={session.runState.runId === diagnosticsRunId ? runStatus : 'history'} onOpenTask={onOpenTask} onOpenArtifact={onOpenArtifact} />
@@ -356,7 +357,14 @@ export function AssistantPanel({
     // `bg-bg`, not `--bg-soft`: all three columns share one colour and are separated by
     // hairlines only. Tinting the transcript wrapper the same colour keeps it deliberately
     // invisible.
-    <div className="flex h-full min-h-0 flex-col bg-surface-rail text-ink-primary" data-testid="assistant-panel">
+    <div className="flex h-full min-h-0 flex-col bg-surface-rail text-ink-primary" data-testid="assistant-panel"
+      onKeyDown={event => {
+        if (event.defaultPrevented || event.nativeEvent.isComposing || event.key !== 'Escape' || !timelineOpen || hasOpenDialog()) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setTimelineOpen(false);
+        headerRef.current?.querySelector<HTMLButtonElement>('[data-testid="assistant-status-pill"]')?.focus({preventScroll: true});
+      }}>
       {header}
 
       {!session.runState.historyComplete ? (

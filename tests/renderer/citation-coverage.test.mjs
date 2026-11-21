@@ -173,9 +173,8 @@ test('human directness save locks the whole review, preserves exact reply-loss r
   await page.getByTestId('artifact-draft-discard-cancel').click();
   await page.getByTestId('artifact-draft-discard-panel').waitFor({state: 'detached'});
   await page.getByTestId('artifact-inspector-scrim').click({position: {x: 5, y: 5}});
-  await page.getByTestId('artifact-draft-discard-panel').waitFor();
-  await page.getByTestId('artifact-draft-discard-cancel').click();
-  await page.getByTestId('artifact-draft-discard-panel').waitFor({state: 'detached'});
+  assert.equal(await page.getByTestId('artifact-draft-discard-panel').count(), 0, 'form backdrop does not request dismissal');
+  assert.equal(await editor().getByRole('combobox', {name: '引用直接性', exact: true}).inputValue(), 'unsupported');
   assert.equal(await editor().count(), 1);
   await page.getByTestId('artifact-citation-review-save').click();
   assert.equal(await editor().getByRole('textbox', {name: '引用直接性审核理由'}).evaluate(element => element.validity.valueMissing), true);

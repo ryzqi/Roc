@@ -66,12 +66,20 @@ before(async () => {
     }
     function ApprovalHarness() {
       const [active, setActive] = useState(false);
+      const [policy, setPolicy] = useState('all');
       window.setApprovalActive = setActive;
+      window.setApprovalPolicy = setPolicy;
       const approval = name => ({kind: 'approval', interruptId: name, actionRequests: [{name, args: {goal: 'Review draft'}}],
-        reviewConfigs: [{actionName: name, allowedDecisions: ['approve', 'reject', 'edit']}]});
+        reviewConfigs: policy === 'missing' ? [] : [{actionName: name, allowedDecisions:
+          policy === 'all' || policy === 'mixed' ? ['approve', 'reject', 'edit'] : [policy]}]});
+      const generic = approval('write_file');
+      if (policy === 'mixed') {
+        generic.actionRequests.push({name: 'mcp_tool', args: {}});
+        generic.reviewConfigs.push({actionName: 'mcp_tool', allowedDecisions: ['reject']});
+      }
       const decide = active ? (id, decisions) => window.decisions.push({id, decisions}) : undefined;
       return <div style={{width: 340}}>
-        <ChatApprovalCard approval={approval('write_file')} onApprovalDecision={decide} />
+        <ChatApprovalCard approval={generic} onApprovalDecision={decide} />
         <TaskApprovalCard approval={approval('update_background_task')} onApprovalDecision={decide} />
       </div>;
     }
@@ -184,6 +192,37 @@ test('historical and resuming approvals disable decisions and retain neutral app
   await page.evaluate(() => window.setApprovalActive(false));
   for (const id of ids) await expect(page.getByTestId(id)).toBeDisabled();
   assert.equal(await page.getByTestId(ids[0]).getAttribute('class'), await page.getByTestId(ids[1]).getAttribute('class'));
+});
+
+test('tool and task approvals expose only current allowed decisions and batch decisions cover every request', async () => {
+  await page.evaluate(() => {window.mount('approval'); window.setApprovalActive(true);});
+  for (const policy of ['reject', 'approve', 'edit', 'mixed', 'missing']) {
+    await page.evaluate(policy => {window.setApprovalPolicy(policy); window.decisions = [];}, policy);
+    for (const prefix of ['assistant-approval', 'assistant-task-approval']) {
+      for (const decision of ['approve', 'reject']) {
+        const button = page.getByTestId(`${prefix}-${decision}`);
+        const allowed = policy === decision || (policy === 'mixed' && (prefix === 'assistant-task-approval' || decision === 'reject'));
+        await expect(button).toBeEnabled({enabled: allowed});
+        if (allowed) {
+          await button.focus();
+          await page.keyboard.press('Enter');
+          const submitted = await page.evaluate(() => window.decisions.at(-1));
+          assert.deepEqual(submitted.decisions, Array.from({length: policy === 'mixed' && prefix === 'assistant-approval' ? 2 : 1},
+            () => ({type: decision})));
+        }
+      }
+    }
+    const edit = page.getByTestId('assistant-approval-edit');
+    if (policy === 'edit') {
+      await edit.click();
+      assert.deepEqual(await page.evaluate(() => window.decisions.at(-1).decisions), [
+        {type: 'edit', editedAction: {name: 'write_file', args: {goal: 'Review draft'}}}
+      ]);
+    } else {
+      await expect(edit).toHaveCount(0);
+    }
+    if (policy === 'missing') assert.deepEqual(await page.evaluate(() => window.decisions), []);
+  }
 });
 
 test('RAG search ignores IME confirmation and refuses duplicate Enter while the request is pending', async () => {

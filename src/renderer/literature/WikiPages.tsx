@@ -1,6 +1,6 @@
 import { useVisiblePolling } from '../shared/view-activity';
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {ArrowLeft, BookOpen, Plus, RefreshCw, Search} from 'lucide-react';
+import {ArrowLeft, BookOpen, Loader2, Plus, RefreshCw, Search} from 'lucide-react';
 import {EmptyState} from '../shell/EmptyState';
 import {LazyBoundary, retryableLazy} from '../shell/LazyBoundary';
 import './knowledge-workspace.css';
@@ -152,7 +152,8 @@ function CreatePage({client, projectId, snapshot, writable, onClose, onCreated}:
             current.current.claimIds.filter(id => id !== claim.id)})}/><span>{claim.content.slice(0, 200)}</span></label>)}
     </details>
     {create.error && <p role="alert">{create.error}</p>}
-    <div className="flex flex-wrap gap-2"><button type="submit" className={formPrimaryButtonClass} disabled={disabled || title.trim() === '' || evidenceIds.length + claimIds.length === 0}>创建草稿</button>
+    <div className="flex flex-wrap gap-2"><button type="submit" className={formPrimaryButtonClass} aria-busy={create.pending} disabled={disabled || title.trim() === '' || evidenceIds.length + claimIds.length === 0}>
+      {create.pending ? <Loader2 size={14} className="animate-spin" aria-hidden="true"/> : null}{create.pending ? '创建中…' : '创建草稿'}</button>
       <button type="button" className={button} disabled={create.pending} onClick={() => editor.request(onClose, '继续将放弃尚未创建的 Wiki 主题草稿。')}>取消</button></div>
   </form>;
 }
@@ -312,7 +313,8 @@ function SectionEditor({client, projectId, data, section, writable, onClose, onS
       </section>
     </div>
     {save.error && <p role="alert">{save.error}</p>}
-    <div className="flex flex-wrap gap-2"><button type="submit" className={formPrimaryButtonClass} disabled={disabled || !body.trim() || !title.trim()}>保存人工章节</button>
+    <div className="flex flex-wrap gap-2"><button type="submit" className={formPrimaryButtonClass} aria-busy={save.pending} disabled={disabled || !body.trim() || !title.trim()}>
+      {save.pending ? <Loader2 size={14} className="animate-spin" aria-hidden="true"/> : null}{save.pending ? '保存中…' : '保存人工章节'}</button>
       <button type="button" className={button} disabled={save.pending} onClick={() => editor.request(onClose, '继续将放弃尚未保存的 Wiki 人工章节。')}>取消编辑</button></div>
   </form>;
 }

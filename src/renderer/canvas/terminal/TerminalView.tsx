@@ -279,7 +279,7 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[var(--terminal-bg)]" data-testid="terminal-view" data-phase={phase}>
+    <div dir="ltr" className="flex h-full min-h-0 flex-col bg-[var(--terminal-bg)]" data-testid="terminal-view" data-phase={phase}>
       <header className="tools-terminal-header">
         <TerminalSquare size={14} aria-hidden="true"/><h1>终端</h1>
         <span role="status">{phase==='ready'?'已连接':phase==='exited'?'已退出':phase==='error'?'连接失败':'连接中'}</span>
@@ -321,7 +321,7 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
             type="button"
             onClick={restart}
             data-testid="terminal-restart"
-            className="flex items-center gap-1 rounded-control px-1.5 text-[var(--terminal-text)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+            className="flex min-h-[var(--control-height-compact)] items-center gap-2 rounded-control px-2 text-[var(--terminal-text)] hover:bg-[var(--terminal-selection)] active:bg-[var(--overlay-active)]"
           >
             <RefreshCw size={11} aria-hidden="true" />
             重新连接

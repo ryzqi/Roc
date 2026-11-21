@@ -32,7 +32,7 @@ export function ProductionFiles({client,input,request,initialLocation,onLocation
       {areaOrder.filter(value=>input.files.some(file=>file.area===value)).map(value=>
         <button type="button" key={value} aria-pressed={area===value} data-testid={`artifact-production-area-${value}`}
           data-reading-key={`production-area:${value}`}
-          className={`${formSecondaryButtonClass} ${area===value?'border-[var(--accent)] bg-[var(--accent-soft)] text-ink':''}`}
+          className={`${formSecondaryButtonClass} ${area===value?'bg-[var(--overlay-active)] text-ink':''}`}
           onClick={()=>{setArea(value);setSelected(null);}}>{areas[value]}</button>)}
     </div>
     {files.length===0?<p className="text-muted">该区域没有保存的文件。</p>:<ul className="flex flex-col">
@@ -45,7 +45,7 @@ export function ProductionFiles({client,input,request,initialLocation,onLocation
               data-reading-key={`production-file:${file.area}:${file.path}`}
               className={`${formSecondaryButtonClass} min-w-0 break-all text-left disabled:cursor-not-allowed disabled:opacity-50`}
               onClick={()=>setSelected(file)}>{file.path}</button>
-            <span className="shrink-0 text-muted text-[length:var(--font-meta-size)]">{file.size.toLocaleString()} B</span>
+            <span className="shrink-0 tabular-nums text-muted text-[length:var(--font-meta-size)]">{file.size.toLocaleString('zh-CN')} B</span>
           </div>
           <p className="break-all font-mono text-muted text-[length:var(--font-meta-size)]">SHA-256 {file.sha256}</p>
           {file.size>previewLimit?<p className="text-muted">超过 4 MiB 预览上限。</p>:

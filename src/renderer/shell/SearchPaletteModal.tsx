@@ -145,10 +145,10 @@ export function SearchPaletteModal({
       widthClassName="w-[720px]"
       testId="search-palette"
       initialFocusRef={inputRef}
-      footer={<p className="mr-auto text-subtle text-[length:var(--font-meta-size)]">↑ ↓ 选择，Enter 打开，Esc 关闭</p>}
+      footer={<p className="me-auto text-subtle text-[length:var(--font-meta-size)]">↑ ↓ 选择，Enter 打开，Esc 关闭</p>}
     >
       <div className="search-palette-content flex flex-col gap-3">
-        <div className="flex h-[var(--control-height)] items-center gap-2 rounded-control border-[0.5px] border-line bg-surface-strong px-2.5">
+        <div className="flex min-h-[var(--control-height)] items-center gap-2 rounded-control border-[0.5px] border-line bg-surface-strong px-2">
           <Search size={13} aria-hidden="true" className="shrink-0 text-subtle" />
           <input
             ref={inputRef}
@@ -171,7 +171,7 @@ export function SearchPaletteModal({
             aria-activedescendant={activeKey === null ? undefined : `${resultsId}-option-${clampedIndex}`}
             aria-label="搜索"
             data-testid="search-palette-input"
-            className="min-w-0 flex-1 bg-transparent text-ink placeholder:text-subtle"
+            className="min-h-6 min-w-0 flex-1 bg-transparent text-ink placeholder:text-subtle"
           />
           {query.length === 0 ? null : (
             <button
@@ -180,7 +180,7 @@ export function SearchPaletteModal({
                 onQueryChange('');
                 inputRef.current?.focus({ preventScroll: true });
               }}
-              className="rounded-control px-1.5 text-muted hover:text-ink active:bg-[var(--overlay-active)]"
+              className="min-h-6 shrink-0 rounded-control px-2 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
             >
               清空
             </button>

@@ -1,5 +1,5 @@
 import type {OpenResearchArtifact, ReadResearchGateContext} from '../artifacts/artifact-interactions';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import * as motion from 'motion/react-m';
 import { ChevronDown } from 'lucide-react';
@@ -88,6 +88,8 @@ export function ChatTranscriptPanel({
 }: ChatTranscriptPanelProps): React.JSX.Element {
   const virtuosoRef = useRef<VirtuosoHandle | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const initialFollowPending = useRef(true);
+  const initialFollowMessageCount = useRef<number | null>(messages.length === 0 ? null : messages.length);
   const virtualIndex = useTranscriptFirstItemIndex({
     threadId,
     messageCount: messages.length,
@@ -106,12 +108,39 @@ export function ChatTranscriptPanel({
   if (previousThreadIdRef.current !== threadId || previousEpochRef.current !== windowEpoch) {
     previousThreadIdRef.current = threadId;
     previousEpochRef.current = windowEpoch;
+    initialFollowPending.current = true;
+    initialFollowMessageCount.current = messages.length === 0 ? null : messages.length;
     setIsAtBottom(true);
     initialWindowRef.current = buildTranscriptVirtuosoWindow({
       firstItemIndex: virtualIndex,
       messageCount: messages.length
     });
   }
+
+  // A tall initial message can grow after Virtuoso's first measurement. Re-apply the
+  // initial end alignment after layout settles so the next live approval remains visible.
+  useEffect(() => {
+    if (!initialFollowPending.current || messages.length === 0) return;
+    if (initialFollowMessageCount.current === null) {
+      initialFollowMessageCount.current = messages.length;
+    } else if (initialFollowMessageCount.current !== messages.length) {
+      // A prepend, trim, or live append owns its own Virtuoso scroll behavior.
+      initialFollowPending.current = false;
+      return;
+    }
+    let settleFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      settleFrame = window.requestAnimationFrame(() => {
+        if (!initialFollowPending.current) return;
+        virtuosoRef.current?.scrollToIndex({index: 'LAST', align: 'end', behavior: 'auto'});
+        initialFollowPending.current = false;
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      if (settleFrame !== 0) window.cancelAnimationFrame(settleFrame);
+    };
+  }, [messages.length, threadId, windowEpoch]);
 
   function handleScrollBottomClick(): void {
     if (loadingLatest) return;

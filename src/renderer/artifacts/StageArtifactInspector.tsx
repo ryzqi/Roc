@@ -86,7 +86,8 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
   }, [result]);
   const statuses = {draft: '草稿', approved: '已批准', superseded: '已被替代'};
   return <ModalShell open kind="drawer" title={snapshot?.artifact.title ?? '科研工件'} onClose={close} bodyRef={reading.bodyRef}
-    widthClassName="artifact-inspector-window" testId="artifact-inspector" beforeClose={() => !guard.busy()}>
+    widthClassName="artifact-inspector-window" testId="artifact-inspector" beforeClose={() => !guard.busy()}
+    closeDisabled={guard.busy()} closeOnBackdrop={false}>
     <div className="artifact-workspace flex flex-col gap-3 text-[length:var(--font-body-size)]">
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={button} disabled={read.status === 'loading' || planLocked}

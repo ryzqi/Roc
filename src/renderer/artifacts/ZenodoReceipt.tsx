@@ -14,7 +14,7 @@ export function ZenodoReceipt({preparation, operation}: {preparation: ZenodoPrep
     </dl>
     <ul className="flex min-w-0 flex-col gap-2" aria-label="拟上传文件">
       {preparation.inputs.files.map(file=><li key={file.name} className="break-all border-t-[0.5px] border-line pt-2">
-        <p>{file.name}，{file.size} B</p><p className="text-muted">{file.area} / {file.path}</p>
+        <p>{file.name}，<span className="tabular-nums">{file.size.toLocaleString('zh-CN')} B</span></p><p className="text-muted">{file.area} / {file.path}</p>
         <p className="font-mono text-muted">SHA-256 {file.sha256}</p><p className="font-mono text-muted">MD5 {file.md5}</p>
       </li>)}
     </ul>
@@ -28,9 +28,9 @@ export function ZenodoReceipt({preparation, operation}: {preparation: ZenodoPrep
         <h3 className="font-medium">完整远端快照</h3>
         <p>草稿 {operation.remote.id}，所有者 {operation.remote.owner}，{operation.remote.state}，{operation.remote.submitted?'已提交':'未提交'}</p>
         <p>远端修改时间 {operation.remote.modified}</p>
-        <pre className="whitespace-pre-wrap break-all font-mono text-[length:var(--font-chrome-size)]" aria-label="远端完整元数据">{JSON.stringify(operation.remote.metadata,null,2)}</pre>
+        <pre className="whitespace-pre-wrap break-all font-mono text-[length:var(--font-code-size)]" aria-label="远端完整元数据">{JSON.stringify(operation.remote.metadata,null,2)}</pre>
         <ul aria-label="远端文件">{operation.remote.files.map(file=><li className="break-all border-t-[0.5px] border-line py-1" key={file.id}>
-          {file.name}，{file.size} B，MD5 {file.md5}，文件 ID {file.id}
+          {file.name}，<span className="tabular-nums">{file.size.toLocaleString('zh-CN')} B</span>，MD5 {file.md5}，文件 ID {file.id}
         </li>)}</ul>
         <p className="break-all">上传目标 {operation.remote.bucket??'未提供'}</p>
         <p className="break-all font-mono">远端 SHA-256 {operation.remote.contentHash}</p>

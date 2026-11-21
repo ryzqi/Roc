@@ -5,6 +5,7 @@ import { truncateMiddle } from '../shared/format';
 import { ModalShell } from '../shell/ModalShell';
 import { ConfirmDialog } from '../shell/ConfirmDialog';
 import { errorMessage } from '../app/loaded-state';
+import { formButtonClass, formPrimaryButtonClass } from '../shared/form-ui';
 import type { WorkspacePickResult } from './use-projects';
 
 /**
@@ -91,6 +92,7 @@ export function ProjectFormDialog({
   const initialValues = useRef(emptyValues);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
+  const formId = useId();
   const titleErrorId = useId();
   const descriptionErrorId = useId();
   // Failure of the native panel is its own error line: collapsing it into
@@ -200,8 +202,23 @@ export function ProjectFormDialog({
       widthClassName="w-[520px]"
       testId={mode === 'create' ? 'portal-create-dialog' : 'portal-edit-dialog'}
       initialFocusRef={titleRef}
+      footer={<>
+        {submitError === null ? null : (
+          <p role="alert" className="basis-full wrap-anywhere text-st-bad" data-testid="project-form-error">{submitError}</p>
+        )}
+        <button type="button" onClick={() => { if (beforeClose()) onCancel(); }} disabled={busy}
+          data-testid="project-form-cancel" className={formButtonClass}>
+          取消
+        </button>
+        <button type="submit" form={formId} disabled={busy} aria-busy={pending}
+          data-testid="project-form-submit" className={formPrimaryButtonClass}>
+          {pending ? <Loader2 size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : null}
+          {pending ? '正在保存…' : mode === 'create' ? '创建项目' : '保存修改'}
+        </button>
+      </>}
     >
       <form
+        id={formId}
         className="flex flex-col gap-3"
         aria-busy={busy}
         onSubmit={(event) => {
@@ -216,6 +233,11 @@ export function ProjectFormDialog({
             value={values.title}
             disabled={busy}
             onChange={(event) => setValues((current) => ({ ...current, title: event.target.value }))}
+            onBlur={() => {
+              if (values.title !== initialValues.current.title || errors.title !== undefined) {
+                setErrors((current) => ({ ...current, title: validate(values, mode).title }));
+              }
+            }}
             aria-invalid={errors.title !== undefined}
             aria-describedby={errors.title === undefined ? undefined : titleErrorId}
             data-testid="project-form-title"
@@ -235,6 +257,11 @@ export function ProjectFormDialog({
             disabled={busy}
             rows={4}
             onChange={(event) => setValues((current) => ({ ...current, description: event.target.value }))}
+            onBlur={() => {
+              if (values.description !== initialValues.current.description || errors.description !== undefined) {
+                setErrors((current) => ({ ...current, description: validate(values, mode).description }));
+              }
+            }}
             aria-invalid={errors.description !== undefined}
             aria-describedby={errors.description === undefined ? undefined : descriptionErrorId}
             data-testid="project-form-description"
@@ -326,33 +353,6 @@ export function ProjectFormDialog({
           )}
         </div>
 
-        {submitError === null ? null : (
-          <p role="alert" className="rounded-control border-[0.5px] border-[var(--st-bad-line)] px-2 py-2 text-st-bad" data-testid="project-form-error">
-            {submitError}
-          </p>
-        )}
-
-        <div className="mt-1 flex flex-wrap items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => { if (beforeClose()) onCancel(); }}
-            disabled={busy}
-            data-testid="project-form-cancel"
-            className="min-h-[var(--control-height)] rounded-control border-[0.5px] border-line px-3 text-ink enabled:hover:bg-[var(--overlay-hover)] enabled:active:bg-[var(--overlay-active)] disabled:opacity-50"
-          >
-            取消
-          </button>
-          <button
-            type="submit"
-            disabled={busy}
-            aria-busy={pending}
-            data-testid="project-form-submit"
-            className="inline-flex min-h-[var(--control-height)] items-center gap-2 rounded-control bg-[var(--fill-strong)] px-3 text-[var(--fill-strong-text)] enabled:hover:bg-[var(--fill-strong-hover)] enabled:active:opacity-90 disabled:opacity-50"
-          >
-            {pending ? <Loader2 size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : null}
-            {pending ? '正在保存…' : mode === 'create' ? '创建' : '保存'}
-          </button>
-        </div>
       </form>
     </ModalShell>
     <ConfirmDialog

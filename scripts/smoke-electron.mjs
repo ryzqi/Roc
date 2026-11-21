@@ -405,12 +405,14 @@ try {
     });
     await page.waitForFunction(() => document.querySelector('[data-testid=workspace-layout]')?.getAttribute('data-layout-mode') === 'balanced');
     const canvas = page.getByTestId('canvas-column');
-    const left = await canvas.evaluate(node => node.getBoundingClientRect().left);
+    const right = await canvas.evaluate(node => node.getBoundingClientRect().right);
     if (!await page.getByTestId('assistant-column').isVisible()) await page.getByTestId('titlebar-toggle-assistant').click();
     await page.getByTestId('assistant-column').waitFor();
+    const assistantEnd = await page.getByTestId('assistant-column').evaluate(node => node.getBoundingClientRect().right);
+    const canvasStart = await canvas.evaluate(node => node.getBoundingClientRect().left);
     await page.getByTestId('titlebar-toggle-assistant').click();
-    assertCheck('窗口', '1184px 下助手与画布并排，画布左边界不移动',
-      await canvas.evaluate(node => node.getBoundingClientRect().left) === left &&
+    assertCheck('窗口', '1184px 下助手在画布左侧，画布右边界不移动',
+      canvasStart >= assistantEnd - 1 && await canvas.evaluate(node => node.getBoundingClientRect().right) === right &&
       await page.getByTestId('assistant-drawer').count() === 0);
     await browserWindow.evaluate(window => {
       window.setBounds({...window.getBounds(), width: 1280, height: 820});

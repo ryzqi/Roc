@@ -48,7 +48,12 @@ export function isTaskApproval(approval: ChatPendingApproval): boolean {
 
 // Approval choices carry equal emphasis; the labels describe the decision.
 function approvalButtonClass(_kind: 'approve' | 'neutral' | 'reject' | 'edit'): string {
-  return 'min-h-[var(--control-height)] rounded-control border-[0.5px] border-line px-3 text-ink hover:border-line-strong hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-focus-ring';
+  return 'min-h-[var(--control-height)] rounded-control border-[0.5px] border-line px-3 text-ink enabled:aria-[disabled=false]:hover:border-line-strong enabled:aria-[disabled=false]:hover:bg-[var(--overlay-hover)] enabled:aria-[disabled=false]:active:bg-[var(--overlay-active)] disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-focus-ring';
+}
+
+function allowsDecision(approval: ChatPendingApproval, decision: 'approve' | 'reject' | 'edit'): boolean {
+  return approval.actionRequests.length > 0 && approval.actionRequests.every(request =>
+    approval.reviewConfigs.find(config => config.actionName === request.name)?.allowedDecisions.includes(decision) === true);
 }
 
 function ApprovalShell({
@@ -119,7 +124,9 @@ export function ChatApprovalCard({
   approvalPending?: boolean;
 }): React.JSX.Element {
   const request = approval.actionRequests.length === 1 ? approval.actionRequests[0] : undefined;
-  const canEdit = approval.reviewConfigs.some((config) => config.allowedDecisions.includes('edit'));
+  const canApprove = allowsDecision(approval, 'approve');
+  const canReject = allowsDecision(approval, 'reject');
+  const canEdit = allowsDecision(approval, 'edit');
   /**
    * `editedAction` is validated against `hitlActionSchema`, which is a **strict** object of
    * exactly `{ name, args }`. The interrupt's `actionRequests[0]` can carry extra fields such
@@ -159,11 +166,11 @@ export function ChatApprovalCard({
         <button
           type="button"
           data-testid="assistant-approval-approve"
-          disabled={onApprovalDecision === undefined}
-          aria-disabled={approvalPending || onApprovalDecision === undefined}
+          disabled={!canApprove || onApprovalDecision === undefined}
+          aria-disabled={!canApprove || approvalPending || onApprovalDecision === undefined}
           className={approvalButtonClass('approve')}
           onClick={() =>
-            !approvalPending && onApprovalDecision?.(
+            canApprove && !approvalPending && onApprovalDecision?.(
               approval.interruptId,
               approval.actionRequests.map(() => ({ type: 'approve' }))
             )
@@ -174,11 +181,11 @@ export function ChatApprovalCard({
         <button
           type="button"
           data-testid="assistant-approval-reject"
-          disabled={onApprovalDecision === undefined}
-          aria-disabled={approvalPending || onApprovalDecision === undefined}
+          disabled={!canReject || onApprovalDecision === undefined}
+          aria-disabled={!canReject || approvalPending || onApprovalDecision === undefined}
           className={approvalButtonClass('reject')}
           onClick={() =>
-            !approvalPending && onApprovalDecision?.(
+            canReject && !approvalPending && onApprovalDecision?.(
               approval.interruptId,
               approval.actionRequests.map(() => ({ type: 'reject' }))
             )
@@ -193,7 +200,7 @@ export function ChatApprovalCard({
             disabled={onApprovalDecision === undefined}
             aria-disabled={approvalPending || onApprovalDecision === undefined}
             className={approvalButtonClass('edit')}
-            onClick={() => { if (!approvalPending) onApprovalDecision?.(approval.interruptId, [{ type: 'edit', editedAction: editableAction }]); }}
+            onClick={() => { if (canEdit && !approvalPending) onApprovalDecision?.(approval.interruptId, [{ type: 'edit', editedAction: editableAction }]); }}
           >
             按原文执行
           </button>
@@ -419,6 +426,8 @@ export function TaskApprovalCard({
   const args = request?.args ?? null;
   const isCancel = name === 'cancel_background_task';
   const patch = args?.patch;
+  const canApprove = allowsDecision(approval, 'approve');
+  const canReject = allowsDecision(approval, 'reject');
 
   return (
     <ApprovalShell
@@ -436,20 +445,20 @@ export function TaskApprovalCard({
         <button
           type="button"
           data-testid="assistant-task-approval-approve"
-          disabled={onApprovalDecision === undefined}
-          aria-disabled={approvalPending || onApprovalDecision === undefined}
+          disabled={!canApprove || onApprovalDecision === undefined}
+          aria-disabled={!canApprove || approvalPending || onApprovalDecision === undefined}
           className={approvalButtonClass('approve')}
-          onClick={() => { if (!approvalPending) onApprovalDecision?.(approval.interruptId, [{ type: 'approve' }]); }}
+          onClick={() => { if (canApprove && !approvalPending) onApprovalDecision?.(approval.interruptId, [{ type: 'approve' }]); }}
         >
           {isCancel ? '确认取消任务' : '确认修改任务'}
         </button>
         <button
           type="button"
           data-testid="assistant-task-approval-reject"
-          disabled={onApprovalDecision === undefined}
-          aria-disabled={approvalPending || onApprovalDecision === undefined}
+          disabled={!canReject || onApprovalDecision === undefined}
+          aria-disabled={!canReject || approvalPending || onApprovalDecision === undefined}
           className={approvalButtonClass('reject')}
-          onClick={() => { if (!approvalPending) onApprovalDecision?.(approval.interruptId, [{ type: 'reject' }]); }}
+          onClick={() => { if (canReject && !approvalPending) onApprovalDecision?.(approval.interruptId, [{ type: 'reject' }]); }}
         >
           拒绝
         </button>

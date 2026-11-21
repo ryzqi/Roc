@@ -1,9 +1,9 @@
 .authoring-panel { display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0; container: authoring / inline-size; }
 .authoring-toolbar, .authoring-editor-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 12px; border-bottom: .5px solid var(--line); flex-shrink: 0; font-size: var(--font-meta-size); }
-.authoring-toolbar h1 { font-size: var(--font-ui-size); font-weight: 600; }
+.authoring-toolbar h1 { font-size: var(--font-ui-size); font-weight: var(--font-weight-semibold); }
 .authoring-toolbar button, .authoring-editor-toolbar button:not([data-testid=production-latex-save]) { min-height: 28px; border-radius: var(--r-control); padding: 4px 8px; color: var(--muted); }
-.authoring-toolbar button:hover, .authoring-editor-toolbar button:not([data-testid=production-latex-save]):hover { background: var(--overlay-hover); color: var(--ink); }
-.authoring-toolbar button:active, .authoring-editor-toolbar button:not([data-testid=production-latex-save]):active,
+.authoring-toolbar button:enabled:hover, .authoring-editor-toolbar button:enabled:not([data-testid=production-latex-save]):hover { background: var(--overlay-hover); color: var(--ink); }
+.authoring-toolbar button:enabled:active, .authoring-editor-toolbar button:enabled:not([data-testid=production-latex-save]):active,
 .authoring-toolbar button[aria-pressed=true], .authoring-editor-toolbar button[aria-pressed=true] { background: var(--overlay-active); color: var(--ink); }
 .authoring-toolbar button:disabled, .authoring-editor-toolbar button:disabled { opacity: .4; }
 .authoring-refresh { margin-inline-start: auto; }

@@ -41,7 +41,7 @@ export function ReviewInspector({client, request, writable, drafts, onClose}: {
       return client.api.research.getReviewProtocolHistory({projectId: request.projectId, protocolId: current.version.protocolId});
     }, {label: '读取协议修订历史'});
   return <ModalShell open kind="drawer" title="综述核查" onClose={onClose} beforeClose={() => !guard.busy()}
-    widthClassName="artifact-inspector-window" testId="artifact-inspector">
+    widthClassName="artifact-inspector-window" testId="artifact-inspector" closeDisabled={guard.busy()} closeOnBackdrop={false}>
     <div className="artifact-workspace flex min-w-0 flex-col gap-3 text-[length:var(--font-body-size)]" data-testid="artifact-review">
       {request.mode === 'readonly' ? <ReviewReadonlyContent client={client} link={request} /> : <>
       <div className="flex flex-wrap gap-2">
