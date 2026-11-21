@@ -248,7 +248,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
           </section>}
         {snapshot.ideaCanvas === null ? null : <LazyBoundary fallback={<p role="status">正在加载方法计划…</p>}>
           <IdeaPlans key={`${snapshot.artifact.id}:${snapshot.ideaCanvas.contentHash}:${snapshot.ideaPlan?.versionHash ?? 'new'}:${snapshot.ideaPlan?.freezeHash ?? 'draft'}`}
-            client={client} canvas={snapshot.ideaCanvas} current={snapshot.ideaPlan}
+            client={client} canvas={snapshot.ideaCanvas} artifactVersion={snapshot.version} current={snapshot.ideaPlan}
             locked={plan.locked}
             writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived' && snapshot.artifact.status !== 'superseded'}
             onPending={setPlanPending} onDirty={setPlanDirty}
@@ -262,7 +262,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
             onSaved={() => {setOutcomePending(false); setOutcomeDirty(false); baseline.current = null; reading.save(); read.reload();}}/>
         </LazyBoundary>}
         {!productionOpen||snapshot.production===null ? null : <LazyBoundary fallback={<p role="status">正在加载生产视图…</p>}>
-          <ProductionView key={snapshot.version} client={client} writable={writable && !planLocked && result?.status === 'current' && snapshot.projectStatus !== 'archived'} request={{projectId:request.projectId,
+          <ProductionView key={snapshot.version} client={client} writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived'} request={{projectId:request.projectId,
             artifactId:request.artifactId,expectedVersion:snapshot.version}}
             initialLocation={reading.location?.productionFile ?? null} onLocationChange={reading.setProductionFile}/>
         </LazyBoundary>}

@@ -5,11 +5,11 @@ Core 位于 `data/core.db`，插件库位于 `data/plugins/@roc/plugin-<name>.db
 当前结构定义在 `src/main/infrastructure/database-schemas.ts`；Wiki 的结构单独维护在 `wiki-schema.ts`。
 
 空库在单个事务内直接创建当前表、索引、触发器与 `schema_metadata`。当前版本为
-Core 1、Agent 25、Memory 2、Task 1、Workspace 1、Diagnostics 1、Research 74。
+Core 1、Agent 25、Memory 2、Task 1、Workspace 1、Diagnostics 1、Research 75。
 已有库必须具有匹配的结构、数据库身份、版本和结构校验和；重复打开不改写数据或元数据。
 版本号相同也不能替代结构和校验和验证。
 结构不兼容时返回 `database_schema_current_required`，保留原库，不进行自动升级、回填或重建。
-仓库不提供启动时的一次性转换逻辑或逐版本升级账本。Research v71、v72、v73 到 v74
+仓库不提供启动时的一次性转换逻辑或逐版本升级账本。Research v71、v72、v73、v74 到 v75
 使用独立离线工具，先生成候选库，再经实际应用启动验证和显式发布；其他历史结构仍拒绝。
 
 `pnpm database:backup` 和 `pnpm database:restore` 使用构建后的维护 CLI；恢复来源同样必须符合当前结构。
@@ -30,7 +30,7 @@ Research 历史库迁移工具位于 `scripts/database/`。在 macOS 上先停�
 匹配时，才可在核准的数据根执行 `node scripts/database/publish-research-migration.mjs --data-root <隔离数据根> --migration <迁移目录>`。
 发布会替换指定数据根中的 Research 数据库；离线验收入口
 `node scripts/verify-research-schema-migration.mjs <全新输出目录>`只操作它新建的合成数据，不触碰 Roc 用户数据。
-固定 v73 来源快照、输入文件哈希和来源提交记录在 `scripts/database/schemas/manifest.json`。
+各版本的来源快照、输入文件哈希和来源提交记录在 `scripts/database/schemas/manifest.json`。
 
 科研文档重解析后的来源定位候选属于当前业务数据，仍按[证据来源合同](research-evidence-relations.md)保存和审核。
 

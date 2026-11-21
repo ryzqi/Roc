@@ -5,6 +5,7 @@ import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
 import {CitationReviewReceipt, directnessLabels} from './CitationReviewReceipt';
+import {ResearchProposalPicker} from './ResearchProposalPicker';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 const pageSize = 10;
@@ -37,6 +38,12 @@ export function CitationReviewEditor({client, report, reportHash, claimId, evide
   return <section className="flex min-w-0 flex-col gap-3 border-t-[0.5px] border-line pt-2"
     aria-label="人工引用直接性审核" data-testid="artifact-citation-review-editor">
     <h3 className="font-medium">人工引用直接性审核</h3>
+    <ResearchProposalPicker client={client} projectId={report.projectId} artifactId={report.artifactId}
+      artifactVersion={report.artifactVersion} kind="citation_review" targetKey={`${claimId}:${evidenceId}`}
+      disabled={!writable || locked}
+      matches={proposal => proposal.kind === 'citation_review' && proposal.payload.claimId === claimId && proposal.payload.evidenceId === evidenceId}
+      onPick={proposal => {if (proposal.kind !== 'citation_review') return;
+        setDirectness(proposal.payload.directness); setRationale(proposal.payload.rationale); change();}}/>
     <p className="whitespace-pre-wrap break-words">{paragraph.claim.content}</p>
     <p className="whitespace-pre-wrap break-words text-muted">来源原文：{source.source.evidence.excerpt}</p>
     <p className="break-all text-muted">证据 {evidenceId}</p>

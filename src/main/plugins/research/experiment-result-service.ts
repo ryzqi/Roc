@@ -17,7 +17,7 @@ const sorted=<T>(values:T[],key:(value:T)=>string):T[]=>[...values].sort((a,b)=>
 const canonicalParameters=(parameters:Record<string,string>):string=>JSON.stringify(Object.entries(parameters).sort(([a],[b])=>a.localeCompare(b)));
 export class ResearchExperimentResultService {
   constructor(private readonly repository:ResearchRepository,
-    private readonly experiments:Pick<ResearchExperimentService,'snapshot'|'source'>,
+    private readonly experiments:Pick<ResearchExperimentService,'verifyExecution'|'source'>,
     private readonly now:()=>string=()=>new Date().toISOString()) {}
 
   async review(value:ResearchExperimentResultReview):Promise<ResearchExperimentResultReceipt> {
@@ -31,7 +31,7 @@ export class ResearchExperimentResultService {
       return previous;
     }
     this.requireWritable(request.projectId);
-    const run=await this.experiments.snapshot(request.projectId,request.runId);
+    const run=await this.experiments.verifyExecution(request.projectId,request.runId);
     if(run.inputHash!==request.expectedInputHash||run.environment===null)throw new Error('research_result_input_changed');
     const {bytes,file:output}=await this.experiments.source({projectId:request.projectId,runId:run.id,area:'output',path:request.resultPath});
     if(output.sha256!==request.expectedResultHash)throw new Error('research_result_output_changed');
@@ -43,7 +43,7 @@ export class ResearchExperimentResultService {
       if(definition===undefined||definition.unit!==metric.unit)throw new Error('research_result_definition_mismatch');
     }
     const execution=this.execution(run,request.resultPath);
-    const current=await this.experiments.snapshot(request.projectId,request.runId);
+    const current=await this.experiments.verifyExecution(request.projectId,request.runId);
     if(JSON.stringify(this.execution(current,request.resultPath))!==JSON.stringify(execution))throw new Error('research_result_execution_changed');
     this.requireWritable(request.projectId);
     const snapshot=researchExperimentResultSnapshotSchema.parse({
@@ -54,7 +54,7 @@ export class ResearchExperimentResultService {
   }
   async get(request:ResearchExperimentResultGet):Promise<ResearchExperimentResultReceipt> {
     const result=this.repository.experimentResults.get(request);
-    const run=await this.experiments.snapshot(request.projectId,result.snapshot.execution.runId);
+    const run=await this.experiments.verifyExecution(request.projectId,result.snapshot.execution.runId);
     if(JSON.stringify(this.execution(run,result.snapshot.execution.output.path))!==JSON.stringify(result.snapshot.execution)) {
       throw new Error('research_result_execution_changed');
     }

@@ -7,6 +7,7 @@ import {useAsyncAction} from '../app/use-async-resource';
 import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
 import {ConsistencyBindingFields} from './ConsistencyBindingFields';
 import {consistencySurfaces} from './ConsistencyReceipt';
+import {ResearchProposalPicker} from './ResearchProposalPicker';
 
 export function ConsistencyEditor({client, snapshot, report, writable, onDirty, onPending, onSaved}: {
   client: RocClient; snapshot: ResearchArtifactInspectResult['snapshot']; report: ResearchConsistencyInspection['report']; writable: boolean;
@@ -21,6 +22,10 @@ export function ConsistencyEditor({client, snapshot, report, writable, onDirty, 
   const save = useAsyncAction((request: ResearchConsistencySave) => client.api.research.saveConsistencyReview(request), {label: '保存数值审核'});
   const change = (): void => {setDirty(true); onDirty(true); requestId.current = crypto.randomUUID(); setValidation(null); save.reset();};
   return <section className="flex min-w-0 flex-col gap-3 border-t-[0.5px] border-line pt-2" data-testid="artifact-consistency-editor">
+    <ResearchProposalPicker client={client} projectId={report.projectId} artifactId={report.artifactId}
+      artifactVersion={report.artifactVersion} kind="consistency" disabled={!writable || dirty || save.pending}
+      onPick={proposal => {if (proposal.kind !== 'consistency') return;
+        setBindings(structuredClone(proposal.payload.bindings)); setRationale(proposal.payload.rationale); change();}}/>
     <ConsistencyBindingFields key={fieldsKey} client={client} snapshot={snapshot} report={report} disabled={!writable || save.pending}
       onChange={() => {setCandidateDirty(true); change();}}
       onDiscard={() => setCandidateDirty(false)}

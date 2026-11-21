@@ -33,6 +33,9 @@ import type { ResearchPluginOptions } from './research-plugin-options';
 import type { ResearchPluginLifecycle } from './research-plugin-lifecycle';
 import type { ResearchProductionServices } from './research-plugin-production';
 import type { ResearchLiteratureServices } from './research-plugin-literature';
+import {registerResearchProposalCapabilities} from './proposal-capabilities';
+import {ResearchProposalService} from './proposal-service';
+import {ResearchJournalComplianceService} from './journal-compliance-service';
 
 export async function registerResearchWorkflow(
   context: RocPluginContext, options: ResearchPluginOptions,
@@ -80,6 +83,8 @@ export async function registerResearchWorkflow(
   registerResearchManuscriptCapabilities(context, researchRepository.manuscripts);
   registerResearchIdeaCapabilities(context, researchRepository.ideas);
   registerResearchIdeaPlanCapabilities(context, researchRepository.ideaPlans);
+  registerResearchProposalCapabilities(context, new ResearchProposalService(researchRepository, researchExperiments,
+    researchResults, researchFigures, new ResearchJournalComplianceService(researchRepository, researchFigures)));
   context.capabilities.register(pluginId, lifecycleCapabilities.createArtifact, async (input) =>
     researchRepository.createArtifact(researchArtifactCreateRequestSchema.parse(input)));
   context.capabilities.register(pluginId, lifecycleCapabilities.getArtifact, async (input) =>

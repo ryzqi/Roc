@@ -13,6 +13,7 @@ import {researchJournalSaveSchema} from '../../shared/schemas/research-journal-c
 import {resourceAssociationSaveSchema} from '../../shared/schemas/research-resource-associations';
 import {hfDownloadStartSchema} from '../../shared/schemas/research-huggingface-downloads';
 import {researchResponseMatrixSaveSchema} from '../../shared/schemas/research-response-matrix';
+import {researchProposalRejectSchema} from '../../shared/schemas/research-proposals';
 import { withLiteratureContext } from '../services/literature-context';
 import { researchPythonEnvironmentSelectSchema } from '../../shared/schemas/research-python-environments';
 import { researchNotebookImportRequestSchema } from '../../shared/schemas/research-notebooks';
@@ -165,6 +166,11 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
         }
         if (target.capabilityName === 'research.responseMatrix.save') {
           const request = researchResponseMatrixSaveSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
+        if (target.capabilityName === 'research.proposals.reject') {
+          const request = researchProposalRejectSchema.parse(input);
           return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
             () => invoker.invokeCapability(target.capabilityName, request));
         }

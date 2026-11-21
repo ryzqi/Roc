@@ -55,6 +55,7 @@ import { ResearchFigureRunRepository } from './figure-run-repository';
 import { ResearchExportRepository } from './export-repository';
 import { ResearchIdeaRepository } from './idea-repository';
 import {ResearchIdeaPlanRepository} from './idea-plan-repository';
+import {ResearchProposalRepository} from './proposal-repository';
 import {ResearchIdeaOutcomeRepository} from './idea-outcome-repository';
 import {ResearchCitationReviewRepository} from './citation-review-repository';
 import {ResearchConsistencyRepository} from './consistency-repository';
@@ -110,6 +111,7 @@ export class ResearchRepository {
   readonly exports: ResearchExportRepository;
   readonly ideas: ResearchIdeaRepository;
   readonly ideaPlans: ResearchIdeaPlanRepository;
+  readonly proposals: ResearchProposalRepository;
   readonly ideaOutcomes: ResearchIdeaOutcomeRepository;
   readonly citationReviews: ResearchCitationReviewRepository;
   readonly journalCompliance: ResearchJournalComplianceRepository;
@@ -157,6 +159,7 @@ export class ResearchRepository {
     this.exports = new ResearchExportRepository(db, this, now);
     this.ideas = new ResearchIdeaRepository(db, this, now);
     this.ideaPlans = new ResearchIdeaPlanRepository(db, this, now);
+    this.proposals = new ResearchProposalRepository(db, this, now);
     this.ideaOutcomes = new ResearchIdeaOutcomeRepository(db, this, now);
     this.citationReviews = new ResearchCitationReviewRepository(db, this, now);
     this.journalCompliance = new ResearchJournalComplianceRepository(db, this, now);

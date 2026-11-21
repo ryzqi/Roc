@@ -6,6 +6,7 @@ import type {RocClient} from '../../shared/roc-client';
 import {useAsyncAction,useAsyncResource} from '../../app/use-async-resource';
 import {formInputClass,formPrimaryButtonClass,formSecondaryButtonClass} from '../../shared/form-ui';
 import {ArtifactDraftDiscard,useArtifactDraft,useArtifactEditorGuard} from '../artifact-editor-guard';
+import {ResearchProposalPicker} from '../ResearchProposalPicker';
 
 const input=`${formInputClass} border-[0.5px]`;
 export function ExperimentResultReview({client,run,request,writable,onSaved}: {
@@ -39,12 +40,12 @@ export function ExperimentResultReview({client,run,request,writable,onSaved}: {
         onClick={()=>{if(!guard.locked())preview.reload();}}>重读指标输出</button>
     </>}
     {preview.status!=='ready'||preview.data===null||file===undefined?null:<ExperimentResultReviewForm
-      key={`${file.path}:${file.sha256}`} client={client} run={run} file={file} metrics={preview.data.metrics} writable={writable} onSaved={onSaved}/>}
+      key={`${file.path}:${file.sha256}`} client={client} run={run} request={request} file={file} metrics={preview.data.metrics} writable={writable} onSaved={onSaved}/>}
   </section>;
 }
 
-function ExperimentResultReviewForm({client,run,file,metrics,writable,onSaved}: {
-  client: RocClient;run: ResearchExperimentExecution;file: ResearchExperimentExecution['files'][number];
+function ExperimentResultReviewForm({client,run,request,file,metrics,writable,onSaved}: {
+  client: RocClient;run: ResearchExperimentExecution;request: ResearchArtifactInspectRequest;file: ResearchExperimentExecution['files'][number];
   metrics: ResearchExperimentResultReceipt['snapshot']['result']['metrics'];writable: boolean;
   onSaved: (receipt: ResearchExperimentResultReceipt)=>void
 }): React.JSX.Element {
@@ -76,6 +77,16 @@ function ExperimentResultReviewForm({client,run,file,metrics,writable,onSaved}: 
       if(result.ok){draft.saved();onSaved(result.data);}
     });
   }}>
+    <ResearchProposalPicker client={client} projectId={run.projectId} artifactId={request.artifactId}
+      artifactVersion={request.expectedVersion!} kind="experiment_result" targetKey={`${run.id}:${file.path}:${file.sha256}`}
+      disabled={!writable||draft.dirty||draft.locked||save.pending}
+      matches={proposal=>proposal.kind==='experiment_result'&&proposal.payload.runId===run.id&&proposal.payload.resultPath===file.path&&
+        proposal.payload.expectedInputHash===run.inputHash&&proposal.payload.expectedResultHash===file.sha256}
+      onPick={proposal=>{if(proposal.kind!=='experiment_result')return;
+        const byId=new Map(proposal.payload.definitions.map(definition=>[definition.id,definition]));
+        setDefinitions(metrics.map(metric=>({id:metric.id,unit:metric.unit,label:byId.get(metric.id)?.label??'',
+          definition:byId.get(metric.id)?.definition??'',direction:byId.get(metric.id)?.direction??''})));
+        setMethod({...proposal.payload.method});save.reset();}}/>
     <p className="text-muted">确认全部指标定义和统计方法后，保存不可修改的审核回执。</p>
     <fieldset disabled={!writable||save.pending||draft.locked} className="flex min-w-0 flex-col gap-3">
       {metrics.map((metric,index)=><section key={metric.id} className="flex min-w-0 flex-col gap-2 border-t-[0.5px] border-line pt-2">

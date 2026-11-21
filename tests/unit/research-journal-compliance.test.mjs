@@ -7,6 +7,7 @@ import {join} from 'node:path';
 import Database from 'better-sqlite3';
 import {unknownExperiment, withResearchTestWorker, createResearchFixture, loadResearchTestApi, captureResearchArtifactVersions} from './fixtures/research-test-kit.mjs';
 import {createPublishedFigureFixture} from './fixtures/research-production-test-kit.mjs';
+import {proposalChat} from './fixtures/research-proposal-origin.mjs';
 
 let api;
 before(async () => {api = await loadResearchTestApi();});
@@ -394,5 +395,33 @@ test('actual figure file dimensions and bytes obey explicit raster rules; vector
     const output = f.productionRun.files.find(file => file.area === 'output' && file.path === 'figure.png');
     await writeFile(join(f.repository.figureRuns.root(f.project.id, f.productionRun.id), 'output', output.path), 'changed figure');
     await assert.rejects(() => inspect(selected), /research_figure_snapshot_changed/u);
+  } finally {await f.dispose();}
+});
+
+test('a journal proposal replays its original receipt when a selected supplement changes', async () => {
+  const f = await scene();
+  try {
+    const path = join(f.root, 'supplement.txt');
+    await writeFile(path, 'first supplement');
+    const {projectId, requestId: _humanRequest, ...payload} = await f.request({...selection(), supplementPaths: ['supplement.txt']});
+    const args = {projectId, artifactId: f.artifactId, expectedArtifactVersion: payload.expectedArtifactVersion,
+      rationale: 'Check declared supplement', basis: [], proposal: {kind: 'journal_compliance', payload}};
+    const chat = proposalChat(api, f), operation = chat.operation(args);
+    const request = {...args, requestId: operation.idempotencyKey};
+    const proposals = new api.ResearchProposalService(f.repository, {}, {}, {}, f.service);
+    const submit = () => api.runWithCapabilityOperationContext(operation, () => proposals.create(request));
+    const recorded = await submit();
+    assert.equal(recorded.freshness, 'current');
+    assert.equal(f.history().total, 0);
+    assert.equal(api.researchProposalCreateSchema.safeParse({...request, proposal: {...request.proposal, payload: {...payload,
+      selection: {...payload.selection, manualReviews: [{ruleId: 'judgement', decision: 'pass', rationale: 'Agent decided'}]}}}}).success, false);
+    await writeFile(path, 'changed supplement');
+    const before = f.changes();
+    const replay = await submit();
+    assert.equal(replay.freshness, 'stale');
+    assert.deepEqual(replay.snapshot, recorded.snapshot);
+    assert.equal(replay.snapshotHash, recorded.snapshotHash);
+    assert.deepEqual(await proposals.get({projectId, proposalId: recorded.snapshot.id}), replay);
+    assert.equal(f.changes(), before);
   } finally {await f.dispose();}
 });

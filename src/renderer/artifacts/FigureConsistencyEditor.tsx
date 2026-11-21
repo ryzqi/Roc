@@ -6,6 +6,7 @@ import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction} from '../app/use-async-resource';
 import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
 import {FigureConsistencyScene} from './FigureConsistencyScene';
+import {ResearchProposalPicker} from './ResearchProposalPicker';
 
 const sameLocation = (a: ResearchFigureConsistencyBinding, b: ResearchFigureConsistencyBinding): boolean =>
   a.markName === b.markName && a.channel === b.channel && JSON.stringify(a.scenePath) === JSON.stringify(b.scenePath);
@@ -30,6 +31,10 @@ export function FigureConsistencyEditor({client, snapshot, report, editing, writ
       onAdd={binding => {setBindings(previous => [...previous.filter(value => !sameLocation(value, binding)), binding]);
         setCandidateDirty(false); change();}}/>
     {!editing ? null : <>
+      <ResearchProposalPicker client={client} projectId={report.projectId} artifactId={report.artifactId}
+        artifactVersion={report.artifactVersion} kind="figure_consistency" disabled={!writable || externalLocked || dirty || save.pending}
+        onPick={proposal => {if (proposal.kind !== 'figure_consistency') return;
+          setBindings(structuredClone(proposal.payload.bindings)); setRationale(proposal.payload.rationale); change();}}/>
       <h3 className="font-medium" data-testid="artifact-figure-consistency-draft-count">待保存图稿映射，共 {bindings.length} 项</h3>
       <ul className="flex min-w-0 flex-col gap-2">
         {bindings.map((binding, index) => <li className="min-w-0 break-words" key={JSON.stringify([binding.markName, binding.channel, binding.scenePath])}>

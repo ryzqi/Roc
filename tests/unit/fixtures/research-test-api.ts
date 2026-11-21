@@ -267,3 +267,6 @@ export * from '../../../src/shared/schemas/research-reading';
 export {researchWikiCapabilities, registerResearchWikiCapabilities} from '../../../src/main/plugins/research/wiki-capabilities';
 export {createWikiTools, WIKI_TOOL_DESCRIPTORS} from '../../../src/main/plugins/agent/wiki-tools';
 export {filterPlanModeModelTools, createRocPlanRuntimeToolGuardMiddleware} from '../../../src/main/services/deep-agent/model-tool-exposure';
+export * from '../../../src/shared/schemas/research-proposals';
+export {registerResearchProposalCapabilities} from '../../../src/main/plugins/research/proposal-capabilities';
+export {ResearchProposalService} from '../../../src/main/plugins/research/proposal-service';

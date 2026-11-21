@@ -15,6 +15,8 @@ import { z } from 'zod';
 
 import { createLiteratureTools, createLiteratureProcessingTools, literatureProcessingToolNames } from './literature-tools';
 import {createReviewTools, REVIEW_TOOL_DESCRIPTORS} from './review-tools';
+import {createResearchWorkflowTools, RESEARCH_WORKFLOW_TOOL_DESCRIPTORS} from './research-workflow-tools';
+import {createResearchProposalTools, RESEARCH_PROPOSAL_TOOL_DESCRIPTORS} from './research-proposal-tools';
 import {createReviewQueryTools, REVIEW_QUERY_TOOL_DESCRIPTORS, type DispatchReviewQuery} from './review-query-tools';
 import { researchStageSchema } from '../../../shared/schemas/research';
 import {referenceCheckRequestSchema, referenceCheckReportSchema} from '../../../shared/schemas/research-reference-check';
@@ -52,6 +54,8 @@ const readScopes: ResearchToolDescriptor['executionScopes'] = ['main', 'subagent
 export const RESEARCH_TOOL_DESCRIPTORS: readonly ResearchToolDescriptor[] = [
   ...WIKI_TOOL_DESCRIPTORS,
   ...REVIEW_TOOL_DESCRIPTORS,
+  ...RESEARCH_WORKFLOW_TOOL_DESCRIPTORS,
+  ...RESEARCH_PROPOSAL_TOOL_DESCRIPTORS,
   ...REVIEW_QUERY_TOOL_DESCRIPTORS,
   { name: scientificToolNames.search, scope: 'memory', effectClass: 'network_read', riskLevel: 'low', executionScopes: readScopes },
   { name: scientificToolNames.context, scope: 'memory', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
@@ -219,6 +223,8 @@ export function createResearchTools(input: {
   return [
     ...createWikiTools(input),
     ...createReviewTools(input),
+    ...createResearchWorkflowTools(input),
+    ...createResearchProposalTools(input),
     ...createReviewQueryTools(input),
     ...createScientificTools(input),
     tool(async () => summarizeOverview(

@@ -273,6 +273,8 @@ function buildResearchPrompt(toolNames: ReadonlySet<string>): string {
   return [
     '你在这个对话里是当前研究项目的执行者，用户主要靠对话改论文、跑运行和推进阶段。',
     ...(toolNames.has('research_overview') ? ['需要项目状态时先用 research_overview 看清研究目标、当前阶段和下一步；上下文已有充分信息时不重复查询。'] : []),
+    ...(toolNames.has('research_inspect_workflow') ? ['需要核对引用、数值、回复、期刊规则、方法计划或结果时用 research_inspect_workflow 的对应 kind，依据真实 findings 和 nextActions 补材料或提案。workflow 只读阶段状态；空报告、缺审核、历史列表不能当作检查通过，也不能代替人工科学批准。'] : []),
+    ...(toolNames.has('research_propose_change') ? ['科研审核材料可用 research_propose_change 保存为带真实依据的提案，再从目标工件检查器审阅；用 research_read_proposals 跟进版本与拒绝原因。提案不代表人工采纳、科学批准或已执行修改，不得把 pending/current 解释为 accepted。'] : []),
     ...(toolNames.has('research_run_stage') ? ['推进阶段只用 research_run_stage。'] : []),
     '尊重阶段人工闸门，绝不替用户批准或退回。',
     ...(toolNames.has('research_approve_gate') ? ['需要人工闸门时，用 research_approve_gate 请用户在对话里确认。'] : []),

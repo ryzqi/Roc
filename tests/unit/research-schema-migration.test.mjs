@@ -6,7 +6,7 @@ import {join, resolve} from 'node:path';
 import {test} from 'node:test';
 import Database from 'better-sqlite3';
 import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
-import {convertHistorical, validateHistorical, verifyPair, fingerprintTable}
+import {convertHistorical, validateHistorical, verifyPair, fingerprintTable, targetSchema}
   from '../../scripts/database/research-migration-lib.mjs';
 import {prepareResearchMigration, assertOffline, hashFile} from '../../scripts/database/migrate-research-schema.mjs';
 import {verifyResearchMigration} from '../../scripts/database/verify-research-migration.mjs';
@@ -20,14 +20,14 @@ const [{ScientificIndexRepository},{buildPaperIR},{assessPdfQuality}]=await Prom
 ]);
 
 
-for (const version of [71, 72, 73]) test(`v${version} conversion preserves every business row, locator, revision and binary vector`, () => {
+for (const version of [71, 72, 73, 74]) test(`v${version} conversion preserves every business row, locator, revision and binary vector`, () => {
   const source = seed(':memory:', version), target = new Database(':memory:');
   try {
     const before = source.serialize(), result = convertHistorical(source, target);
     assert.deepEqual(source.serialize(), before);
-    assert.equal(target.prepare('SELECT current_version FROM schema_metadata').pluck().get(), 74);
+    assert.equal(target.prepare('SELECT current_version FROM schema_metadata').pluck().get(), targetSchema.version);
     assert.ok(Object.keys(result.tables).length > 70);
-    assert.ok(result.addedTables.length > 0);
+    assert.ok(result.addedTables.includes('research_proposals'));
     assert.equal(target.prepare('SELECT count(*) FROM research_wiki_pages').pluck().get(),
       source.prepare('SELECT count(*) FROM research_wiki_pages').pluck().get(), 'copy must not replay evidence-insert effects');
     for (const name of ['research_knowledge_chunks_fts','research_knowledge_documents_fts','research_knowledge_keywords','research_wiki_fts']) {
@@ -38,7 +38,7 @@ for (const version of [71, 72, 73]) test(`v${version} conversion preserves every
   } finally {source.close(); target.close();}
 });
 
-for (const version of [71,72,73]) test(`v${version} converted database rebuilds scientific generations from retained source objects`, () => {
+for (const version of [71,72,73,74]) test(`v${version} converted database rebuilds scientific generations from retained source objects`, () => {
   const source=seed(':memory:',version), target=new Database(':memory:');
   try {
     convertHistorical(source,target);
@@ -104,7 +104,7 @@ test('v73 offline conversion preserves the original PDF bytes, parse artifacts a
     const sourceHash = hashFile(path), pdfHash = hashFile(assets.pdfPath), artifactHash = hashFile(assets.artifactPath);
     const migration = join(root, 'migration');
     const receipt = await prepareResearchMigration({dataRoot: root, output: migration});
-    assert.equal(receipt.fromVersion, 73); assert.equal(receipt.toVersion, 74);
+    assert.equal(receipt.fromVersion, 73); assert.equal(receipt.toVersion, targetSchema.version);
     assert.equal(hashFile(path), sourceHash);
     assert.equal(hashFile(assets.pdfPath), pdfHash); assert.equal(pdfHash, assets.pdfHash);
     assert.equal(hashFile(assets.artifactPath), artifactHash); assert.equal(artifactHash, assets.artifactHash);

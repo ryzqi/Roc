@@ -6,6 +6,7 @@ import type {RocClient} from '../shared/roc-client';
 import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
 import {IdeaPlanFields, PlanText} from './IdeaPlanFields';
+import {ResearchProposalPicker} from './ResearchProposalPicker';
 
 const button = `${formSecondaryButtonClass} border-[0.5px] self-start`;
 const primary = `${formPrimaryButtonClass} border-[0.5px] self-start`;
@@ -41,8 +42,8 @@ export function IdeaPlanReceipt({plan}: {plan: ResearchIdeaPlanInspection}): Rea
   </section>;
 }
 
-export function IdeaPlans({client, canvas, current, writable, locked, onPending, onDirty, onSaved}: {
-  client: RocClient; canvas: ResearchIdeaCanvas; current: ResearchIdeaPlanInspection | null; writable: boolean; locked: boolean;
+export function IdeaPlans({client, canvas, artifactVersion, current, writable, locked, onPending, onDirty, onSaved}: {
+  client: RocClient; canvas: ResearchIdeaCanvas; artifactVersion: string; current: ResearchIdeaPlanInspection | null; writable: boolean; locked: boolean;
   onPending: (pending: boolean) => void; onDirty: (dirty: boolean) => void; onSaved: () => void
 }): React.JSX.Element {
   const [body, setBody] = useState(() => current === null ? newBody(canvas) : structuredClone(current.version.request.body));
@@ -53,6 +54,7 @@ export function IdeaPlans({client, canvas, current, writable, locked, onPending,
     current === null ? '' : body.observation.kind);
   const [revisionReason, setRevisionReason] = useState('');
   const [reviewNote, setReviewNote] = useState('');
+  const [dirty, setDirty] = useState(false);
   const [validation, setValidation] = useState<string[]>([]);
   const [historyOffset, setHistoryOffset] = useState<number | null>(null);
   const [selection, setSelection] = useState<{versionId: string; expectedHash: string} | null>(null);
@@ -71,16 +73,23 @@ export function IdeaPlans({client, canvas, current, writable, locked, onPending,
   const selected = useAsyncResource(selection === null ? null : `idea:version:${canvas.artifactId}:${JSON.stringify(selection)}`,
     () => client.api.research.getIdeaPlan({projectId: canvas.projectId, artifactId: canvas.artifactId, ...selection!}),
     {label: '复核历史方法计划'});
-  const change = (): void => {requests.current.save = crypto.randomUUID(); onDirty(true); setValidation([]); save.reset();};
+  const change = (): void => {requests.current.save = crypto.randomUUID(); setDirty(true); onDirty(true); setValidation([]); save.reset();};
   const updateBody = (value: ResearchIdeaPlanBody): void => {setBody(value); change();};
   const finish = (result: {ok: true; data: ResearchIdeaPlanInspection} | {ok: false; error: string}): void => {
     busy.current = false;
     if (!mounted.current) return;
     onPending(false);
-    if (result.ok) {onDirty(false); onSaved();}
+    if (result.ok) {setDirty(false); onDirty(false); onSaved();}
   };
   return <section className="flex min-w-0 flex-col gap-3 border-t-[0.5px] border-line pt-2" data-testid="artifact-idea-plans">
     <h2 className="font-medium">假设与方法计划</h2>
+    <ResearchProposalPicker client={client} projectId={canvas.projectId} artifactId={canvas.artifactId}
+      artifactVersion={artifactVersion} kind="idea_plan" disabled={!canEdit || locked || dirty || pending || reviewNote.length > 0}
+      onPick={proposal => {if (proposal.kind !== 'idea_plan') return;
+        const next = structuredClone(proposal.payload.body);
+        setBody(next); setParameters(next.sampleSize.kind === 'calculated' ?
+          Object.entries(next.sampleSize.parameters).map(([key, value]) => `${key}=${value}`).join('\n') : '');
+        setObservationChoice(''); setRevisionReason(proposal.payload.revisionReason ?? ''); setEditing(true); change();}}/>
     {current === null ? <p className="text-muted">尚无已保存方法计划。</p> : <IdeaPlanReceipt plan={current}/>}
     {!canEdit || editing ? null : <button type="button" className={button} disabled={pending || locked} data-testid="artifact-idea-plan-revise"
       onClick={() => {setEditing(true); updateBody({...body, hypothesis: canvas.hypothesis});}}>修订方法计划</button>}
@@ -118,7 +127,7 @@ export function IdeaPlans({client, canvas, current, writable, locked, onPending,
         </button>
         <button type="button" className={button} disabled={pending || locked} data-testid="artifact-idea-plan-discard" onClick={() => {
           const restored = current === null ? newBody(canvas) : structuredClone(current.version.request.body);
-          onDirty(false); setEditing(false); setBody(restored);
+          setDirty(false); onDirty(false); setEditing(false); setBody(restored);
           setObservationChoice(current === null ? '' : restored.observation.kind);
           setParameters(restored.sampleSize.kind === 'calculated' ?
             Object.entries(restored.sampleSize.parameters).map(([key, value]) => `${key}=${value}`).join('\n') : '');

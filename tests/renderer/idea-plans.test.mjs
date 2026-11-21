@@ -9,6 +9,7 @@ import {_electron, expect} from '@playwright/test';
 import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 import {createResearchFixture, loadResearchTestApi} from '../unit/fixtures/research-test-kit.mjs';
 import {ideaCanvasContentFixture, ideaPlanBodyFixture} from '../unit/fixtures/research-idea-plan.mjs';
+import {proposalChat} from '../unit/fixtures/research-proposal-origin.mjs';
 
 let api, directory, app, page, active, windowId;
 const fixtures = [], calls = [], errors = [];
@@ -19,7 +20,10 @@ const routes = {
   saveIdeaPlan: ['roc:research:idea-plan-save', 'research.saveIdeaPlan'],
   freezeIdeaPlan: ['roc:research:idea-plan-freeze', 'research.freezeIdeaPlan'],
   getIdeaPlan: ['roc:research:idea-plan-get', 'research.getIdeaPlan'],
-  getIdeaPlanHistory: ['roc:research:idea-plan-history', 'research.getIdeaPlanHistory']
+  getIdeaPlanHistory: ['roc:research:idea-plan-history', 'research.getIdeaPlanHistory'],
+  listResearchProposals: ['roc:research:proposal-list', 'research.listResearchProposals'],
+  getResearchProposal: ['roc:research:proposal-get', 'research.getResearchProposal'],
+  rejectResearchProposal: ['roc:research:proposal-reject', 'research.rejectResearchProposal']
 };
 before(async () => {
   api = await loadResearchTestApi();
@@ -79,14 +83,31 @@ function fixture() {
   const context = {pluginId: 'fixture', capabilities: {register(_id, descriptor, handler) {handlers.set(descriptor.name, handler);}}};
   api.registerResearchArtifactInspectorCapability(context, f.repository);
   api.registerResearchIdeaPlanCapabilities(context, f.repository.ideaPlans);
-  const bridge = api.createPluginCapabilityAdapter({invokeCapability: (name, request) => handlers.get(name)(request)});
+  const registry = new api.CapabilityRegistry();
+  api.registerResearchProposalCapabilities({pluginId: 'fixture', capabilities: {register(pluginId, descriptor, handler) {
+    registry.declare(pluginId, descriptor); registry.register(pluginId, descriptor, handler);
+  }}}, new api.ResearchProposalService(f.repository, {}, {}, {}, {}));
+  const bridge = api.createPluginCapabilityAdapter({invokeCapability: (name, request) =>
+    handlers.has(name) ? handlers.get(name)(request) : registry.invoke(name, request)});
   const save = (body, parent = null, id = 'direct') => api.withResearchHumanContext({
     capability: 'research.ideaPlans.save', projectId: f.project.id, windowId
   }, () => f.repository.ideaPlans.save({projectId: f.project.id, artifactId, requestId: id,
     canvas: {version: canvas.version, contentHash: canvas.contentHash},
     parent: parent === null ? null : {versionId: parent.version.id, versionHash: parent.versionHash},
     revisionReason: parent === null ? null : `Explicit revision ${id}`, body}));
-  return {...f, artifactId, canvas, bridge, save};
+  const propose = (body, rationale) => {
+    const {runId, threadId, manifest, operation} = proposalChat(api, f);
+    const tool = api.createManifestAuthorizedResearchTools({researchProjectId: f.project.id, runId, threadId,
+      abortSignal: new AbortController().signal, capabilityManifest: manifest,
+      executionGrantBroker: new api.ExecutionGrantBroker(f.agentDb), capabilities: registry})
+      .find(tool => tool.name === 'research_propose_change');
+    const {version} = f.repository.inspectArtifact({projectId: f.project.id, artifactId, expectedVersion: null}).snapshot;
+    const request = {artifactId, expectedArtifactVersion: version, rationale, basis: [],
+      proposal: {kind: 'idea_plan', payload: {artifactId, canvas: {version: canvas.version, contentHash: canvas.contentHash},
+        parent: null, revisionReason: null, body}}};
+    return api.runWithCapabilityOperationContext(operation(request), () => tool.invoke(request));
+  };
+  return {...f, artifactId, canvas, bridge, save, propose};
 }
 async function scene(f = fixture(), writable = true) {
   active = f; calls.length = 0;
@@ -113,6 +134,53 @@ async function receiptVersion(version) {
 }
 const history = f => f.repository.ideaPlans.history({projectId: f.project.id, artifactId: f.artifactId, offset: 0, limit: 100});
 const changes = f => f.db.prepare('SELECT total_changes()').pluck().get();
+
+test('proposal prefill keeps the declaration and save with the human reviewer', async () => {
+  const f = await scene();
+  const body = {...ideaPlanBodyFixture(), analysisPlan: 'Include all retained observations and report the interval.'};
+  const proposal = await f.propose(body, 'Draft analysis using a preregistered threshold.');
+  await enter('artifact-proposal-load');
+  await expect(page.getByTestId('artifact-proposal-item')).toContainText(proposal.snapshot.request.rationale);
+  await enter('artifact-proposal-fill');
+  await expect(page.getByLabel('分析计划', {exact: true})).toHaveValue(body.analysisPlan);
+  await expect(page.getByLabel('观察时序声明', {exact: true})).toHaveValue('');
+  await expect(page.getByTestId('artifact-inspector-refresh')).toBeDisabled();
+  assert.equal(history(f).total, 0);
+  await enter('artifact-idea-plan-save');
+  assert.equal(calls.some(call => call.method === 'saveIdeaPlan'), false);
+  await page.getByLabel('观察时序声明', {exact: true}).selectOption('before_data');
+  await enter('artifact-idea-plan-save'); await receiptVersion(1);
+  const saved = history(f).items[0];
+  assert.equal(saved.version.actor.id, `window:${windowId}`);
+  assert.deepEqual(saved.version.request.body, body);
+  assert.equal(saved.freeze, null);
+  const reloaded = f.repository.proposals.get({projectId: f.project.id, proposalId: proposal.snapshot.id});
+  assert.equal(reloaded.freshness, 'stale');
+  assert.equal(reloaded.status, 'pending');
+});
+
+test('proposal recheck refuses stale material and keeps rejection attributable to the window', async () => {
+  const f = await scene();
+  const proposal = await f.propose(ideaPlanBodyFixture(), 'Use every declared observation.');
+  await enter('artifact-proposal-load');
+  await expect(page.getByTestId('artifact-proposal-fill')).toBeEnabled();
+  f.save(ideaPlanBodyFixture());
+  await enter('artifact-proposal-fill');
+  await expect(page.getByTestId('artifact-proposal-item')).toContainText('来源已变化');
+  await expect(page.getByTestId('artifact-proposal-fill')).toBeDisabled();
+  await expect(page.getByLabel('分析计划', {exact: true})).not.toHaveValue(ideaPlanBodyFixture().analysisPlan);
+  await enter('artifact-proposal-reject-open');
+  await page.getByLabel('拒绝提案理由').fill('已按新版本完成方法审核。');
+  f.defer = 'rejectResearchProposal';
+  await enter('artifact-proposal-reject');
+  await expect(page.getByTestId('artifact-inspector-close')).toBeDisabled();
+  f.finish();
+  await expect(page.getByTestId('artifact-proposal-item')).toContainText('已拒绝');
+  const rejected = f.repository.proposals.get({projectId: f.project.id, proposalId: proposal.snapshot.id});
+  assert.equal(rejected.rejection.actor.id, `window:${windowId}`);
+  assert.equal(rejected.rejection.request.reason, '已按新版本完成方法审核。');
+  assert.equal(history(f).total, 1);
+});
 
 test('keyboard plan editing locks real drawer, preserves lost save/freeze replies and invalidates exact human review versions', async () => {
   const f = await scene();

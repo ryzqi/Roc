@@ -156,12 +156,28 @@ export class ResearchExperimentService {
     catch { return { file: record, content: bytes.toString('base64'), encoding: 'base64' }; }
   }
 
+  private async verifyCompletedRun(run: ResearchExperimentExecution, signal: AbortSignal): Promise<void> {
+    if (run.status !== 'completed') throw new Error('research_experiment_completed_required');
+    for (const {area, path} of run.files) {
+      signal.throwIfAborted();
+      await this.source({projectId: run.projectId, runId: run.id, area, path});
+    }
+    await this.verifyResources(run);
+    signal.throwIfAborted();
+  }
+
+  async verifyExecution(projectId: string, runId: string): Promise<ResearchExperimentExecution> {
+    return await this.session.run(async signal => {
+      const run = this.repository.experiments.get(projectId, runId);
+      await this.verifyCompletedRun(run, signal);
+      return run;
+    });
+  }
+
   async snapshot(projectId: string, runId: string): Promise<ResearchExperimentExecution> {
     return await this.session.run(async (signal) => {
       const run = this.repository.experiments.get(projectId, runId);
-      if (run.status !== 'completed') throw new Error('research_experiment_completed_required');
-      for (const file of run.files) { signal.throwIfAborted(); await this.source({ projectId, runId, area: file.area, path: file.path }); }
-      await this.verifyResources(run);
+      await this.verifyCompletedRun(run, signal);
       const { artifactId: _artifactId, ...manifest } = run;
       await writeFrozenManifest({
         root: this.repository.experiments.root(projectId, runId),
@@ -185,12 +201,7 @@ export class ResearchExperimentService {
       if (researchContentHash(bytes) !== researchContentHash(JSON.stringify(manifest, null, 2))) {
         throw new Error('research_experiment_manifest_changed');
       }
-      for (const file of run.files) {
-        signal.throwIfAborted();
-        await this.source({projectId, runId: run.id, area: file.area, path: file.path});
-      }
-      await this.verifyResources(run);
-      signal.throwIfAborted();
+      await this.verifyCompletedRun(run, signal);
       return run;
     });
   }

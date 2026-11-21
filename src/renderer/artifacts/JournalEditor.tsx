@@ -6,6 +6,7 @@ import {useAsyncAction, useAsyncResource} from '../app/use-async-resource';
 import {formInputClass, formTextAreaClass, formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
 import {JournalRuleEditor, journalRuleDraft, journalRuleInput, journalLines} from './JournalRuleEditor';
 import {journalStatusLabels} from './JournalReceipt';
+import {ResearchProposalPicker} from './ResearchProposalPicker';
 
 const input = `${formInputClass} border-[0.5px]`, textarea = `${formTextAreaClass} border-[0.5px] font-sans`;
 export function JournalEditor({client, report, writable, onDirty, onPending, onSaved}: {
@@ -63,6 +64,15 @@ export function JournalEditor({client, report, writable, onDirty, onPending, onS
         if (reply.ok) {setDirty(false); onDirty(false); onSaved();}
       });
     }}>
+    <ResearchProposalPicker client={client} projectId={report.projectId} artifactId={report.artifactId}
+      artifactVersion={report.artifactVersion} kind="journal_compliance" disabled={!writable || dirty || pending}
+      onPick={proposal => {if (proposal.kind !== 'journal_compliance') return;
+        const selection = proposal.payload.selection;
+        const {rules: suggestedRules, ...suggestedProfile} = selection.profile;
+        setProfile(suggestedProfile);
+        setRules(suggestedRules.map(rule => journalRuleDraft(rule)));
+        setSelected(selection.profile.rules[0]?.id ?? ''); setFigureIds([...selection.figureIds]);
+        setPaths(selection.supplementPaths.join('\n')); setRationale(proposal.payload.rationale); change();}}/>
     <fieldset disabled={!writable || pending} className="flex min-w-0 flex-col gap-3">
       {profileText('journal', '期刊名称')}
       {profileText('articleType', '文章类型')}

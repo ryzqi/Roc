@@ -42,6 +42,14 @@ approve/reject 和审稿接受/修订/退回须携带非空、唯一、完整的
 `stored_receipt` 历史只核验保存内容、哈希与版本链，不证明当前来源有效。当前核验另走各模块的来源检查。
 特殊合同见[方法与评估](research-ideas.md)、[实验指标](research-experiment-results.md)、[写作检查](research-writing-checks.md)、[图稿](research-figures.md)、[回复矩阵](research-response-matrix.md)、[期刊检查](research-journal-compliance.md)和[导出](research-exports.md)。
 
+## Agent 提案与下一步
+
+`research_inspect_workflow` 读取真实阶段状态、工件版本和各领域检查报告，返回问题、涉及对象、建议行动和需人工处理的事项。期刊候选规则可预检，人工判断留待审核。历史页和实时检查分别标明验证范围。
+
+当前项目的主助手可通过 `research_propose_change` 保存方法计划、引用直接性、正文或图稿数值映射、回复矩阵、期刊规则和实验结果审核提案。宿主从有效的工具执行记录取得运行、会话和能力清单，记录目标版本、相关工件版本和材料依据。`research_read_proposals` 可读取提案状态和版本变化原因。
+
+在对应工件表单中读取提案，核对依据后可填入当前草稿或填写理由拒绝。填入前重验提案和来源，保存通过原人工接口校验。后续版本变化会使旧提案过期，历史和拒绝记录仍可阅读。
+
 ## 生产文件核对
 
 `inspectProductionReview` 要求 projectId、artifactId、非空 expectedVersion，再核对实际生产文件；`readProductionReviewFile` 另要求 area、manifest 相对 path 与 expectedFileHash。保存发布源决定读取器和根目录，renderer不能选择任意路径。读前及异步读后均校验工件版本，bytes/hash/size须匹配捕获值和当前 metadata。

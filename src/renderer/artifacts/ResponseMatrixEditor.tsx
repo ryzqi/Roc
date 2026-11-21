@@ -6,6 +6,7 @@ import {useAsyncAction} from '../app/use-async-resource';
 import {formInputClass, formPrimaryButtonClass, formSecondaryButtonClass, formTextAreaClass} from '../shared/form-ui';
 import {ResponseMatrixRow} from './ResponseMatrixRow';
 import {responseStatusLabels} from './ResponseMatrixReceipt';
+import {ResearchProposalPicker} from './ResearchProposalPicker';
 
 export function ResponseMatrixEditor({client, snapshot, report, writable, onDirty, onPending, onSaved}: {
   client: RocClient; snapshot: ResearchArtifactInspectResult['snapshot']; report: ResearchResponseMatrixInspection['report'];
@@ -42,6 +43,11 @@ export function ResponseMatrixEditor({client, snapshot, report, writable, onDirt
       if (reply.ok) {setDirty(false); onDirty(false); onSaved();}
     });
   }}>
+    <ResearchProposalPicker client={client} projectId={report.projectId} artifactId={report.artifactId}
+      artifactVersion={report.artifactVersion} kind="response_matrix" disabled={!writable || dirty || save.pending}
+      onPick={proposal => {if (proposal.kind !== 'response_matrix') return;
+        const next = structuredClone(proposal.payload.rows);
+        setRows(next); setSelected(next[0]?.commentId ?? ''); setRationale(proposal.payload.rationale); change();}}/>
     <fieldset disabled={!writable || save.pending} className="flex min-w-0 flex-col gap-3">
       {availableFindings.length === 0 ? null : <label className="flex min-w-0 flex-col gap-1 text-muted">纳入独立审稿意见
         <select aria-label="纳入独立审稿意见" className={`${formInputClass} border-[0.5px]`} value=""

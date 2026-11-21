@@ -67,6 +67,7 @@ import { researchEvidenceCapabilities } from './evidence-capabilities';
 import { researchManuscriptCapabilities } from './manuscript-capabilities';
 import { researchIdeaCapabilities } from './idea-capabilities';
 import { researchIdeaPlanCapabilities } from './idea-plan-capabilities';
+import {researchProposalCapabilities} from './proposal-capabilities';
 import { researchRunCapabilities } from './run-capabilities';
 import { researchArtifactInspectorCapability, researchGateReviewCapability } from './artifact-inspector-capability';
 import type { RocPluginManifest } from '../../kernel/types';
@@ -116,6 +117,7 @@ export const provenanceCapabilities = {
   list: descriptor('research.provenance.list', researchProvenanceListRequestSchema, researchProvenanceSchema.array())
 };
 const researchCapabilityDescriptors = [
+  ...researchProposalCapabilities,
   ...Object.values(workbenchCapabilities),
   ...literatureImportCapabilities,
   ...literatureAcquisitionCapabilities,

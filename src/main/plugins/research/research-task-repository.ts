@@ -21,6 +21,8 @@ import {ResearchTaskGraphRepository} from './execution/task-graph';
 import {researchWorkerLease} from './execution/worker-context';
 import {ResearchWorkerEffects} from './execution/worker-effects';
 import {AgentToolEffectStore} from '../../services/deep-agent/tool-effect-store';
+import type {CapabilityOperationContext} from '../../kernel/capability-operation-context';
+import {researchProposalOriginSchema, type ResearchProposalOrigin} from '../../../shared/schemas/research-proposals';
 
 type ExecutionIdentity = Pick<ResearchTaskExecution, 'kind' | 'executionId'>;
 type ExecutionInput = Omit<ResearchTaskExecution, 'schemaVersion' | 'createdAt' | 'nodeBinding' | 'origin' | 'frozenInputs' | 'associationState'> &
@@ -53,6 +55,33 @@ export class ResearchTaskRepository {
     this.workerEffects = new ResearchWorkerEffects(this.graph, new AgentToolEffectStore(db));
     this.facts = new ResearchTaskFactsStore(db);
     this.observability = new ResearchTaskObservabilityStore(db);
+  }
+
+  /** Derive proposal attribution from the live durable tool effect, never from wire arguments. */
+  requireProposalOrigin(projectId: string, operation: CapabilityOperationContext): ResearchProposalOrigin {
+    if (operation.capabilityName !== 'research.proposals.create' || operation.toolName !== 'research_propose_change') {
+      throw new Error('research_proposal_operation_required');
+    }
+    const effect = this.db.prepare(`SELECT run_id,thread_id FROM agent_tool_effects
+      WHERE operation_id=? AND idempotency_key=? AND tool_call_id=? AND tool_name=?
+      AND canonical_tool_identity=? AND tool_version=? AND attempt_id=? AND lease_generation=?
+      AND execution_path='main' AND effect_class='workspace_mutation' AND status='in_progress' AND identity_version=1`).get(operation.operationId, operation.idempotencyKey,
+      operation.toolCallId, operation.toolName, operation.canonicalToolIdentity, operation.toolVersion,
+      operation.attemptId, operation.leaseGeneration) as {run_id: string; thread_id: string} | undefined;
+    if (effect === undefined) throw new Error('research_proposal_operation_required');
+    const run = this.db.prepare('SELECT snapshot_json FROM agent_runs WHERE id=?').get(effect.run_id) as
+      {snapshot_json: string} | undefined;
+    if (run === undefined) throw new Error('research_proposal_origin_invalid');
+    const snapshot = parseChatSnapshot(run.snapshot_json);
+    const manifestHash = snapshot.capabilityManifest.manifestHash;
+    this.requireReviewSearchParent({projectId, runId: effect.run_id, threadId: effect.thread_id, manifestHash});
+    const tool = snapshot.capabilityManifest.tools.find(entry => entry.modelVisibleName === operation.toolName);
+    if (tool === undefined || !tool.executionScopes.includes('main') || tool.canonicalIdentity !== operation.canonicalToolIdentity ||
+        tool.toolVersion !== operation.toolVersion || tool.effectClass !== 'workspace_mutation') throw new Error('research_proposal_capability_denied');
+    return researchProposalOriginSchema.parse({kind: 'chat', runId: effect.run_id, threadId: effect.thread_id,
+      manifestHash, operationId: operation.operationId, idempotencyKey: operation.idempotencyKey,
+      toolCallId: operation.toolCallId, toolName: operation.toolName,
+      canonicalToolIdentity: operation.canonicalToolIdentity, toolVersion: operation.toolVersion});
   }
 
   get(id: string, projectId: string): ResearchTask {
