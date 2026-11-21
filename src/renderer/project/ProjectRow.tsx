@@ -41,12 +41,7 @@ export function ProjectRow({
     project.workspacePath === null
       ? null
       : project.workspacePath.split('/').filter(Boolean).pop() ?? project.workspacePath;
-  const statusTone =
-    project.status === 'paused' || project.status === 'archived'
-      ? 'bg-[var(--tool-st-progress-bg)] text-[var(--st-warn)]'
-      : project.status === 'active'
-        ? 'bg-[var(--tool-st-end-bg)] text-[var(--st-ok)]'
-        : 'bg-[var(--overlay-hover)] text-muted';
+
 
   return (
     <div
@@ -65,21 +60,21 @@ export function ProjectRow({
         data-testid={`portal-card-open-${project.id}`}
         className="flex min-w-0 flex-1 items-start rounded-control px-3 py-3 text-left hover:bg-[var(--surface-card-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-ring"
       >
-        <span className="flex min-w-0 flex-1 flex-col gap-2">
-          <span className="flex min-w-0 items-center gap-1.5">
+        <span className="project-row-content">
+          <span className="project-row-heading flex min-w-0 items-center gap-2">
             {pinned ? (
-              <Pin size={12} aria-hidden="true" className="shrink-0 fill-current text-accent-ink" data-testid="portal-card-pinned" />
+              <Pin size={12} aria-hidden="true" className="shrink-0 fill-current text-ink" data-testid="portal-card-pinned" />
             ) : null}
             <span className="project-row-title text-[length:var(--font-ui-size)] font-medium text-ink" title={project.title}>
               {project.title}
             </span>
           </span>
-          <span className="flex min-w-0 flex-wrap items-center gap-x-2 text-[length:var(--font-meta-size)]">
+          <span className="project-row-meta flex min-w-0 flex-wrap items-center gap-x-2 text-[length:var(--font-meta-size)]">
             <span className="text-muted" data-testid="portal-card-stage">
               {projectStageLabel(project.currentStage)}
             </span>
             {showStatus ? (
-              <span className={`rounded-chip px-1.5 py-0.5 ${statusTone}`} data-testid="portal-card-status">
+              <span className={`rounded-chip px-1.5 py-0.5 bg-[var(--overlay-hover)] text-muted`} data-testid="portal-card-status">
                 {projectStatusLabel(project.status)}
               </span>
             ) : null}
@@ -95,7 +90,7 @@ export function ProjectRow({
             </span>
           </span>
           {project.description.trim() ? <span className="project-row-goal text-muted">{project.description}</span> : null}
-          <time dateTime={project.updatedAt} className="text-subtle tabular-nums text-[length:var(--font-meta-size)]">更新于 {formatBeijingDateTime(project.updatedAt)}</time>
+          <time dateTime={project.updatedAt} className="project-row-updated text-subtle tabular-nums text-[length:var(--font-meta-size)]">更新于 {formatBeijingDateTime(project.updatedAt)}</time>
         </span>
       </button>
 
@@ -107,7 +102,7 @@ export function ProjectRow({
           aria-label={pinned ? `取消置顶 ${project.title}` : `本机置顶 ${project.title}`}
           title={pinned ? '取消置顶' : '本机置顶'}
           data-testid={`portal-card-pin-${project.id}`}
-          className={pinned ? `${ROW_ACTION} bg-accent-soft text-accent-ink` : ROW_ACTION}
+          className={pinned ? `${ROW_ACTION} bg-[var(--overlay-active)] text-ink` : ROW_ACTION}
         >
           <Pin size={14} aria-hidden="true" />
         </button>

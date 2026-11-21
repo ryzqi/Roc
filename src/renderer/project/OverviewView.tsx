@@ -12,6 +12,7 @@ import {formatBeijingDateTime} from '../shared/format';
 import {useViewActive} from '../shared/view-activity';
 import {projectStatusLabel} from './project-store';
 import {FirstSteps} from './FirstSteps';
+import './project-workspace.css';
 
 const rowClass = 'flex min-h-12 w-full min-w-0 items-center gap-3 rounded-control px-3 py-3 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-ring';
 const sectionClass = 'grid min-w-0 gap-3 border-t-[0.5px] border-line pt-4';
@@ -69,8 +70,8 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
     scope.openView('library', literature.requestImport);
   };
 
-  return <div data-testid="overview" className="ui-scroll-region h-full">
-    <div className="mx-auto grid w-full max-w-[var(--content-readable-max)] gap-6 p-[var(--spacing-page)]">
+  return <div data-testid="overview" className="overview ui-scroll-region h-full">
+    <div className="overview-content">
       <header className="flex min-w-0 flex-wrap items-start justify-between gap-4">
         <div className="grid min-w-0 flex-1 gap-2">
           <div className="flex flex-wrap items-center gap-3">
@@ -96,7 +97,7 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
         onRead={() => scope.openLiterature({kind: 'reader', libraryItemId: literature.selectedId})}
         onAsk={scope.openAssistant} onWrite={() => scope.openView('writing')}/> : null}
 
-      <nav aria-label="研究操作" className="flex flex-wrap gap-2" data-testid="overview-shortcuts">
+      <nav aria-label="研究操作" className="overview-shortcuts" data-testid="overview-shortcuts">
         <button type="button" className={formSecondaryButtonClass} onClick={() => scope.openView('discover')}><Search size={16} aria-hidden="true"/>检索论文</button>
         <button type="button" className={formSecondaryButtonClass} disabled={!scope.writable} onClick={addLiterature}><Upload size={16} aria-hidden="true"/>导入 PDF</button>
         <button type="button" className={formSecondaryButtonClass} onClick={() => scope.openView('knowledge')}><BookOpen size={16} aria-hidden="true"/>问我的资料</button>
@@ -132,17 +133,20 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
         </ul>
       </section>}
 
+      <div className="overview-resources">
       <section className={sectionClass} aria-labelledby="overview-results-heading">
         <h2 id="overview-results-heading" className="font-medium">近期成果</h2>
         {artifacts.error !== null ? <ErrorBar error={{level: 'page', message: artifacts.error, retry: artifacts.reload}}/> :
           artifacts.data === null ? <EmptyState compact tone="loading" title="正在读取成果"/> :
             recentArtifacts.length === 0 ? <p className="text-muted">尚无研究成果</p> :
               <ul className="grid gap-1" data-testid="overview-artifacts">{recentArtifacts.map(artifact => <li key={artifact.id}>
-                <button type="button" className={rowClass} onClick={() => scope.openArtifact(
+                <button type="button" className={`${rowClass} overview-resource-row`} onClick={() => scope.openArtifact(
                   {projectId, artifactId: artifact.id, expectedVersion: null}, () => undefined)}>
-                  <FileText size={16} aria-hidden="true" className="shrink-0 text-muted"/>
-                  <span className="min-w-0 flex-1 break-words">{artifact.title}</span>
-                  <time dateTime={artifact.updatedAt} className="text-[length:var(--font-meta-size)] tabular-nums text-muted">{formatBeijingDateTime(artifact.updatedAt)}</time>
+                  <FileText size={16} aria-hidden="true" className="mt-1 shrink-0 text-muted"/>
+                  <span className="overview-row-copy">
+                    <span>{artifact.title}</span>
+                    <time dateTime={artifact.updatedAt} className="text-[length:var(--font-meta-size)] tabular-nums text-muted">{formatBeijingDateTime(artifact.updatedAt)}</time>
+                  </span>
                 </button>
               </li>)}</ul>}
       </section>
@@ -157,15 +161,17 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
             recentItems.length === 0 ? <p className="text-muted">
               {literature.query.trim() === '' ? '尚未添加文献' : '当前筛选没有文献'}</p> : <ul className="grid gap-1" data-testid="overview-literature">
               {recentItems.map(item => <li key={item.id}>
-                <button type="button" className={rowClass} onClick={() => openLiterature(item.id)}>
-                  <BookOpen size={16} aria-hidden="true" className="shrink-0 text-muted"/>
-                  <span className="min-w-0 flex-1 break-words">{libraryItemTitle(item)}</span>
-                  {item.metadata.publishedYear === null ? null : <span className="shrink-0 text-[length:var(--font-meta-size)] tabular-nums text-muted">{item.metadata.publishedYear} 年</span>}
+                <button type="button" className={`${rowClass} overview-resource-row`} onClick={() => openLiterature(item.id)}>
+                  <BookOpen size={16} aria-hidden="true" className="mt-1 shrink-0 text-muted"/>
+                  <span className="overview-row-copy">
+                    <span>{libraryItemTitle(item)}</span>
+                    {item.metadata.publishedYear === null ? null : <span className="text-[length:var(--font-meta-size)] tabular-nums text-muted">{item.metadata.publishedYear} 年</span>}
+                  </span>
                 </button>
               </li>)}
             </ul>}
       </section>
-
+      </div>
     </div>
   </div>;
 }

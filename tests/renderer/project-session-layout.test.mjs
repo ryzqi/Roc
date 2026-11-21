@@ -25,7 +25,7 @@ before(async()=>{
     const ok=data=>({ok:true,data});
     const project=(id,title,status='active')=>({id,title,status,description:'研究科学证据的可追溯性，保留实验条件与原始来源以便复核。',workspacePath:'/synthetic/'+id,language:'zh',origin:null,currentStage:'reading',createdAt:'2026-11-20T00:00:00Z',updatedAt:'2026-11-20T00:00:00Z'});
     const projects=[project('first','科学证据与可重复研究方法的完整验证计划'),project('second','图像与文本模型比较'),project('archived','已完成研究','archived')];
-    window.opened=[];window.deleted=[];window.created=0;window.updates=[];
+    window.projectData=projects;window.opened=[];window.deleted=[];window.created=0;window.updates=[];
     window.threadData=[{id:'one',kind:'chat',title:'分析实验方法和科学证据的可靠性与可重复性',goal:'',status:'completed',updatedAt:'2026-11-20T00:00:00Z'}, {id:'two',kind:'chat',title:'文献摘要',goal:'',status:'active',updatedAt:'2026-11-19T00:00:00Z'}];
     const client={api:{research:{listProjects:async()=>ok(projects),updateProject:async request=>{window.updates.push(request);return ok({...projects.find(p=>p.id===request.id),...request});}},workspace:{selectFromDialog:async()=>ok({path:'/synthetic/new'})},tasks:{getSnapshot:async()=>ok({threads:window.threadData}),onUpdated:()=>()=>{},deleteThread:async({threadId})=>{window.deleted.push(threadId);return ok(null);}}}};
     function Search(){const [query,setQuery]=useState('研究');return <SearchPaletteModal open onClose={()=>{}} query={query} onQueryChange={setQuery} groups={[{id:'project',label:'项目',status:'ready',items:projects.map(p=>({id:p.id,title:p.title,subtitle:p.description,onOpen:()=>window.opened.push(p.id)}))}]}/>;}
@@ -58,7 +58,33 @@ test('project actions disclose locally and editing retains the current project a
   await expect(page.getByTestId('portal-edit-dialog')).toHaveCount(0);
   assert.equal(await page.evaluate(()=>updates[0].id),'first');
   await page.getByTestId('portal-filter-archived').click();
-  await expect(page.getByRole('heading',{name:'已归档项目 1'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'已归档项目 1 个'})).toBeVisible();
+});
+
+test('project search and create action stay visible while the project list scrolls',async()=>{
+  await page.evaluate(()=>{
+    document.getElementById('root').style.width='1100px';
+    for(let index=0;index<40;index++) window.projectData.push({...window.projectData[0],id:'long-'+index,title:'研究项目 '+index});
+    mount('portal');
+  });
+  try {
+    await page.getByTestId('portal-view-list').click();
+    const header=page.getByTestId('portal-header');
+    const before=await header.boundingBox();
+    const content=page.getByTestId('portal-content');
+    await content.evaluate(element=>{element.scrollTop=element.scrollHeight;});
+    assert.ok(await content.evaluate(element=>element.scrollTop)>0);
+    assert.deepEqual(await header.boundingBox(),before);
+    await expect(page.getByTestId('portal-new-project')).toBeInViewport();
+    await page.getByTestId('portal-search').fill('研究项目 39');
+    await expect(page.locator('[data-project-body]')).toHaveCount(1);
+    const result=page.getByTestId('portal-card-open-long-39');
+    await result.focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(()=>opened.at(-1)),'long-39');
+  } finally {
+    await page.evaluate(()=>{window.projectData.splice(3);mount('portal');});
+  }
 });
 
 test('session search filters real titles, clearing preserves selection and empty state retains new action',async()=>{

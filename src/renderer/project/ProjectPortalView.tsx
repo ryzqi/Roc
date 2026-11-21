@@ -163,173 +163,180 @@ export function ProjectPortalView({
   };
 
   return (
-    <div className="project-portal ui-scroll-region h-full" data-testid="portal">
-      <div className="project-portal-content">
-        <header className="flex items-center justify-between gap-3 pb-1">
-          <h1 className="text-[length:var(--font-h2-size)] font-semibold">研究项目</h1>
-          <button type="button" data-testid="portal-new-project" aria-label="新建研究项目" onClick={() => setCreateOpen(true)}
-            className={formPrimaryButtonClass}>
-            <Plus size={14} aria-hidden="true" />新建项目
-          </button>
-        </header>
-        {recent.length === 0 || query.trim() !== '' || filter === 'archived' ? null : (
-          <section aria-labelledby="portal-recent-heading" data-testid="portal-recent">
-            <h2 id="portal-recent-heading" className="mb-2 text-[length:var(--font-ui-size)] font-medium">最近使用</h2>
-            <div className="project-recent-list">
-              {recent.map(project => (
-                <button key={project.id} type="button" onClick={() => onOpenProject(project.id)}
-                  className="min-w-0 rounded-control border-[0.5px] border-line p-3 text-left hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]">
-                  <span className="block truncate font-medium">{project.title}</span>
-                  <span className="text-muted text-[length:var(--font-meta-size)]">{projectStageLabel(project.currentStage)}</span>
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
-        <section aria-labelledby={all.length > 0 ? 'portal-all-heading' : undefined} className="flex flex-col gap-3">
-        {all.length > 0 ? <>
-        <h2 id="portal-all-heading" className="flex items-baseline gap-2 text-[length:var(--font-ui-size)] font-medium">{filter === 'archived' ? '已归档项目' : filter === 'active' ? '进行中的项目' : '全部项目'} <span className="font-normal text-muted tabular-nums text-[length:var(--font-meta-size)]">{shown.length.toLocaleString('zh-CN')}</span></h2>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex min-h-[var(--control-height)] min-w-[min(160px,100%)] flex-1 items-center gap-2 rounded-control border-[0.5px] border-line bg-surface px-2">
-            <Search size={13} aria-hidden="true" className="shrink-0 text-subtle" />
-            <input
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setFocusedIndex(0);
-              }}
-              placeholder="搜索项目"
-              aria-label="搜索项目"
-              data-testid="portal-search"
-              className="min-h-6 min-w-0 flex-1 bg-transparent text-ink placeholder:text-subtle"
-            />
-            {query.length === 0 ? null : (
-              <button
-                type="button"
-                onClick={() => setQuery('')}
-                className="min-h-6 shrink-0 rounded-control px-2 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
-              >
-                清空
-              </button>
-            )}
+    <div className="project-portal h-full" data-testid="portal">
+      <header className="project-portal-header" data-testid="portal-header">
+        <div className="project-portal-heading">
+          <div className="flex items-center justify-between gap-3">
+            <h1 className="text-[length:var(--font-h2-size)] font-semibold">研究项目</h1>
+            <button type="button" data-testid="portal-new-project" aria-label="新建研究项目" onClick={() => setCreateOpen(true)}
+              className={formPrimaryButtonClass}>
+              <Plus size={14} aria-hidden="true" />新建项目
+            </button>
           </div>
-          <div role="group" aria-label="项目状态筛选" className="flex items-center gap-0.5 rounded-control bg-[var(--overlay-hover)] p-0.5">
-            {STATUS_FILTERS.map((entry) => {
-              const selected = entry.id === filter;
-              return (
-                <button
-                  key={entry.id}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() => {
-                    setFilter(entry.id);
+          {all.length > 0 ? (
+            <div className="project-portal-filters">
+              <div className="flex min-h-[var(--control-height)] min-w-[min(160px,100%)] flex-1 items-center gap-2 rounded-control border-[0.5px] border-line bg-surface px-2">
+                <Search size={13} aria-hidden="true" className="shrink-0 text-subtle" />
+                <input
+                  value={query}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
                     setFocusedIndex(0);
                   }}
-                  data-testid={`portal-filter-${entry.id}`}
-                  className={
-                    selected
-                      ? 'h-[var(--control-height-compact)] rounded-chip bg-surface px-2.5 font-medium text-ink active:bg-[var(--accent-soft-strong)]'
-                      : 'h-[var(--control-height-compact)] rounded-chip px-2.5 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]'
-                  }
-                >
-                  <span className="text-[length:var(--font-meta-size)]">{entry.label}</span>
-                </button>
-              );
-            })}
-          </div>
-          <div role="group" aria-label="项目显示方式" className="flex items-center gap-0.5">
-            {([['cards', '卡片视图', LayoutGrid], ['list', '紧凑列表', List]] as const).map(([id, label, Icon]) => (
-              <button key={id} type="button" aria-label={label} title={label} aria-pressed={projectView === id}
-                data-testid={`portal-view-${id}`} onClick={() => { setProjectView(id); writeProjectView(id); }}
-                className="flex h-7 w-7 items-center justify-center rounded-control text-muted hover:bg-[var(--overlay-hover)] aria-pressed:bg-[var(--overlay-active)] aria-pressed:text-ink">
-                <Icon size={14} aria-hidden="true" />
-              </button>
-            ))}
-          </div>
-        </div>
-        </> : null}
-
-        {projects.list.status === 'error' ? (
-          <ErrorBar
-            error={{
-              level: 'page',
-              message: projects.list.error ?? '读取科研项目失败',
-              retry: projects.list.reload
-            }}
-            onDismiss={undefined}
-          />
-        ) : null}
-
-        {writeError === null ? null : (
-          <p role="alert" className="rounded-card border-[0.5px] border-[var(--st-bad-line)] px-3 py-2 text-[var(--st-bad)]" data-testid="portal-write-error">
-            {writeError}
-          </p>
-        )}
-
-        {projects.list.status === 'error' && projects.list.data === null ? null :
-        projects.list.status === 'loading' && projects.list.data === null ? (
-          <div className="flex items-center gap-2 px-1 py-6 text-muted" role="status">
-            <Loader2 size={14} aria-hidden="true" className="animate-spin" />
-            正在读取科研项目…
-          </div>
-        ) : all.length === 0 ? (
-          <EmptyState
-            title="还没有研究项目"
-            testId="portal-empty"
-          />
-        ) : shown.length === 0 ? (
-          <EmptyState
-            title={query.trim().length > 0 ? '没有匹配的项目' : '该状态下没有项目'}
-            action={{
-              label: query.trim().length > 0 ? '清空搜索' : '查看全部',
-              onClick: () => {
-                setQuery('');
-                setFilter('all');
-              }
-            }}
-            testId="portal-no-match"
-          />
-        ) : (
-          <div
-            ref={listRef}
-            role="list"
-            aria-label="研究项目"
-            onKeyDown={onListKeyDown}
-            data-testid="portal-grid"
-            data-project-view={projectView}
-            className={projectView === 'cards' ? 'project-grid' : 'project-list'}
-          >
-            {shown.map((project, index) => (
-              <div role="listitem" key={project.id} data-project-index={index}>
-                <ProjectRow
-                  project={project}
-                  variant={projectView}
-                  pinned={projects.pinnedIds.includes(project.id)}
-                  archived={isProjectArchived(project)}
-                  focused={index === safeFocusedIndex}
-                  showStatus
-                  actionsDisabled={busy}
-                  onFocus={() => setFocusedIndex(index)}
-                  onOpen={() => onOpenProject(project.id)}
-                  onTogglePin={() => projects.togglePin(project.id)}
-                  onEdit={() => {
-                    projects.update.reset();
-                    setEditing(project);
-                  }}
-                  onToggleArchive={() => {
-                    projects.update.reset();
-                    setArchiving(project);
-                  }}
-                  onDelete={() => {
-                    projects.remove.reset();
-                    setDeleting(project);
-                  }}
+                  placeholder="搜索项目"
+                  aria-label="搜索项目"
+                  data-testid="portal-search"
+                  className="min-h-6 min-w-0 flex-1 bg-transparent text-ink placeholder:text-subtle"
                 />
+                {query.length === 0 ? null : (
+                  <button
+                    type="button"
+                    onClick={() => setQuery('')}
+                    className="min-h-6 shrink-0 rounded-control px-2 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
+                  >
+                    清空
+                  </button>
+                )}
               </div>
-            ))}
-          </div>
-        )}
-        </section>
+              <div role="group" aria-label="项目状态筛选" className="flex items-center gap-0.5 rounded-control bg-[var(--overlay-hover)] p-0.5">
+                {STATUS_FILTERS.map((entry) => {
+                  const selected = entry.id === filter;
+                  return (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => {
+                        setFilter(entry.id);
+                        setFocusedIndex(0);
+                      }}
+                      data-testid={`portal-filter-${entry.id}`}
+                      className={
+                        selected
+                          ? 'h-[var(--control-height-compact)] rounded-chip bg-surface px-2.5 font-medium text-ink active:bg-[var(--accent-soft-strong)]'
+                          : 'h-[var(--control-height-compact)] rounded-chip px-2.5 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]'
+                      }
+                    >
+                      <span className="text-[length:var(--font-meta-size)]">{entry.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div role="group" aria-label="项目显示方式" className="flex items-center gap-0.5">
+                {([['cards', '卡片视图', LayoutGrid], ['list', '紧凑列表', List]] as const).map(([id, label, Icon]) => (
+                  <button key={id} type="button" aria-label={label} title={label} aria-pressed={projectView === id}
+                    data-testid={`portal-view-${id}`} onClick={() => { setProjectView(id); writeProjectView(id); }}
+                    className="flex h-7 w-7 items-center justify-center rounded-control text-muted hover:bg-[var(--overlay-hover)] aria-pressed:bg-[var(--overlay-active)] aria-pressed:text-ink">
+                    <Icon size={14} aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </header>
+      <div className="project-portal-scroll ui-scroll-region" data-testid="portal-content">
+        <div className="project-portal-content">
+          {recent.length === 0 || query.trim() !== '' || filter === 'archived' ? null : (
+            <section aria-labelledby="portal-recent-heading" data-testid="portal-recent">
+              <h2 id="portal-recent-heading" className="mb-2 text-[length:var(--font-ui-size)] font-medium">最近使用</h2>
+              <div className="project-recent-list">
+                {recent.map(project => (
+                  <button key={project.id} type="button" onClick={() => onOpenProject(project.id)}
+                    className="project-recent-row">
+                    <span className="min-w-0 flex-1 truncate font-medium">{project.title}</span>
+                    <span className="shrink-0 text-muted text-[length:var(--font-meta-size)]">{projectStageLabel(project.currentStage)}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+          <section aria-labelledby={all.length > 0 ? 'portal-all-heading' : undefined} className="flex flex-col gap-3">
+          {all.length > 0 ?
+          <h2 id="portal-all-heading" className="flex items-baseline gap-2 text-[length:var(--font-ui-size)] font-medium">{filter === 'archived' ? '已归档项目' : filter === 'active' ? '进行中的项目' : '全部项目'} <span className="font-normal text-muted tabular-nums text-[length:var(--font-meta-size)]">{shown.length.toLocaleString('zh-CN')} 个</span></h2> : null}
+
+          {projects.list.status === 'error' ? (
+            <ErrorBar
+              error={{
+                level: 'page',
+                message: projects.list.error ?? '读取科研项目失败',
+                retry: projects.list.reload
+              }}
+              onDismiss={undefined}
+            />
+          ) : null}
+
+          {writeError === null ? null : (
+            <p role="alert" className="rounded-card border-[0.5px] border-[var(--st-bad-line)] px-3 py-2 text-[var(--st-bad)]" data-testid="portal-write-error">
+              {writeError}
+            </p>
+          )}
+
+          {projects.list.status === 'error' && projects.list.data === null ? null :
+          projects.list.status === 'loading' && projects.list.data === null ? (
+            <div className="flex items-center gap-2 px-1 py-6 text-muted" role="status">
+              <Loader2 size={14} aria-hidden="true" className="animate-spin" />
+              正在读取科研项目…
+            </div>
+          ) : all.length === 0 ? (
+            <EmptyState
+              title="还没有研究项目"
+              testId="portal-empty"
+            />
+          ) : shown.length === 0 ? (
+            <EmptyState
+              title={query.trim().length > 0 ? '没有匹配的项目' : '该状态下没有项目'}
+              action={{
+                label: query.trim().length > 0 ? '清空搜索' : '查看全部',
+                onClick: () => {
+                  setQuery('');
+                  setFilter('all');
+                }
+              }}
+              testId="portal-no-match"
+            />
+          ) : (
+            <div
+              ref={listRef}
+              role="list"
+              aria-label="研究项目"
+              onKeyDown={onListKeyDown}
+              data-testid="portal-grid"
+              data-project-view={projectView}
+              className={projectView === 'cards' ? 'project-grid' : 'project-list'}
+            >
+              {shown.map((project, index) => (
+                <div role="listitem" key={project.id} data-project-index={index}>
+                  <ProjectRow
+                    project={project}
+                    variant={projectView}
+                    pinned={projects.pinnedIds.includes(project.id)}
+                    archived={isProjectArchived(project)}
+                    focused={index === safeFocusedIndex}
+                    showStatus
+                    actionsDisabled={busy}
+                    onFocus={() => setFocusedIndex(index)}
+                    onOpen={() => onOpenProject(project.id)}
+                    onTogglePin={() => projects.togglePin(project.id)}
+                    onEdit={() => {
+                      projects.update.reset();
+                      setEditing(project);
+                    }}
+                    onToggleArchive={() => {
+                      projects.update.reset();
+                      setArchiving(project);
+                    }}
+                    onDelete={() => {
+                      projects.remove.reset();
+                      setDeleting(project);
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          </section>
+        </div>
       </div>
 
       <ProjectFormDialog
