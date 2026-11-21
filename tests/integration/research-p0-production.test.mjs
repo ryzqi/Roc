@@ -685,6 +685,7 @@ test('native experiment rerun updates a rendered figure, reviewed manuscript and
   const figures = new api.ResearchFigureService(repository, tools, root, logger);
   const exports = new api.ResearchExportService(repository, new api.ResearchExportSourceService(repository, figures, experiments,
     new api.ResearchTemplateService(repository, tools)), tools, root, logger);
+  const submissions = new api.ResearchSubmissionService(db, repository, exports, tools, join(root, 'submissions'));
   const scientificReviews = new api.ResearchArtifactScientificReviewService(repository, results, figures);
   const gate = production => api.createResearchHumanGate({repository, production, scientificReviews});
   const version = artifactId => repository.inspectArtifact({projectId, artifactId, expectedVersion: null}).snapshot.version;
@@ -735,8 +736,10 @@ export async function run(context) {
 `);
     const prior = await execute('original-data', 'latency\n1\n2\n3\n');
     const draft = f.withWorker(() => repository.runs.complete(f.run.id, projectId, {
-      title: 'Measured latency', markdown: 'Mean latency was 2 ms.', verdict: 'ready', sections: [{title: 'Results', claimIndexes: [0]}],
+      title: 'Measured latency', markdown: 'Mean latency was 2 ms.', verdict: 'ready', sections: [{title: 'Results', claimIndexes: [0, 1]}],
       claims: [{subjectType: 'paragraph', content: 'Mean latency was 2 ms.', status: 'supported',
+        experiment: {...unknownExperiment}, evidenceIds: [prior.evidence.id]},
+      {subjectType: 'paragraph', content: 'Synthetic Author conducted this engineering measurement.', status: 'supported',
         experiment: {...unknownExperiment}, evidenceIds: [prior.evidence.id]}]
     }));
     repository.transitionWorkflow({projectId, expectedStage: 'writing', action: 'complete'});
@@ -849,6 +852,83 @@ export async function run(context) {
     const png = chart.validation.files.find(file => file.path.endsWith('.png'));
     assert.equal(published.files.find(file => file.path === `source/figures/${chart.id}.png`).sha256, png.sha256);
 
+    const parentSnapshot = JSON.stringify(repository.exports.get(projectId, output.id));
+    const profile = anonymous => human('research.submissionProfiles.save', () => repository.submissionProfiles.save({projectId,
+      requestId: anonymous ? 'anonymous-profile' : 'named-profile', profileId: null, parent: null,
+      profile: {journal: 'Synthetic integration journal', articleType: 'Engineering article', submissionStage: 'initial',
+        version: 'fixture-1', revisionDate: '2026-11-22', dateAuthority: 'human_transcription', retrievedAt: '2026-11-22T00:00:00.000Z',
+        rules: [{id: 'results', label: 'Results section', sourceUrl: 'https://example.org/synthetic-instructions', excerpt: 'Include Results.',
+          authority: 'required', kind: 'sections', titles: ['Results']}]},
+      requirements: {maximumPages: 10, anonymous, requiredDeclarations: [], minimumEditableTables: 0, supplementPaths: []}}));
+    let anonymousReceipt;
+    for (const anonymous of [false, true]) {
+      const selected = profile(anonymous);
+      const mode = anonymous ? 'anonymous' : 'named';
+      const request = {projectId, exportId: output.id, expectedSourceHash: getExport().sourceHash,
+        profile: {versionId: selected.snapshot.id, expectedHash: selected.snapshotHash}, requestId: `${mode}-submission`, mode,
+        title: 'Synthetic Author — corrected measurements', replacements: anonymous ? [{find: 'Synthetic Author', replace: 'Anonymous Author'}] : [],
+        supplementPaths: []};
+      await assert.rejects(submissions.prepare(request), /research_human_required/u);
+      if (anonymous) await assert.rejects(human('research.submissions.prepare', () => submissions.prepare({...request,
+        replacements: [{find: '4', replace: '6'}]})));
+      const prepared = await human('research.submissions.prepare', () => submissions.prepare(request));
+      assert.equal(prepared.record.status, 'ready', prepared.record.error);
+      assert.notEqual(prepared.record.preflight.status, 'fail', JSON.stringify(prepared.record.preflight));
+      assert.equal(prepared.record.preflight.pdf.readableText, true);
+      assert.equal(prepared.record.sourceHash, getExport().sourceHash);
+      assert.deepEqual(await human('research.submissions.prepare', () => submissions.prepare(request)), prepared);
+      const submitRoot = join(root, 'submissions', prepared.record.id);
+      const manuscript = await readFile(join(submitRoot, 'bundle/source/manuscript.tex'), 'utf8');
+      assert.match(manuscript, /Mean latency was 4 ms/u);
+      assert.equal(manuscript.includes('Synthetic Author'), !anonymous);
+      assert.equal(manuscript.includes('Anonymous Author'), anonymous);
+      const pdfText = await api.withResearchPdf(Uint8Array.from(await readFile(join(submitRoot, 'bundle/paper.pdf'))), async document => {
+        const text = [];
+        for (let index = 1; index <= document.numPages; index++) text.push(await api.extractResearchPdfPageText(await document.getPage(index), index));
+        return text.join('\n');
+      });
+      assert.equal(pdfText.includes('Synthetic Author'), !anonymous);
+      assert.equal(pdfText.includes('Anonymous Author'), anonymous);
+      assert.match(pdfText, /Mean latency was 4 ms/u);
+      assert.equal(prepared.record.manualReviewRequired, anonymous, 'Anonymous figure imagery requires an explicit manual check.');
+      const deliveryRequest = {projectId, submissionId: prepared.record.id, expectedHash: prepared.recordHash,
+        destinationPath: join(root, `${mode}-submission.zip`), manualReviewNote: null};
+      if (anonymous) await assert.rejects(human('research.submissions.deliver', () => submissions.deliver(deliveryRequest)), /manual_review_required/u);
+      const submitted = await human('research.submissions.deliver', () => submissions.deliver({...deliveryRequest,
+        manualReviewNote: anonymous ? 'Human inspected the fixture figure and all visible identifiers.' : null}));
+      assert.equal(hash(await readFile(submitted.destinationPath)), prepared.record.archive.sha256);
+      await assert.rejects(human('research.submissions.deliver', () => submissions.deliver({...deliveryRequest,
+        manualReviewNote: anonymous ? 'Reviewed once more.' : null})), /destination_exists/u);
+      const zip = await new Promise((resolve, reject) => yauzl.open(submitted.destinationPath, {lazyEntries: true}, (error, zip) => error ? reject(error) : resolve(zip)));
+      const entries = [];
+      await new Promise((resolve, reject) => {
+        zip.on('error', reject); zip.on('end', resolve);
+        zip.on('entry', entry => zip.openReadStream(entry, (error, stream) => {
+          if (error) {reject(error); return;}
+          const chunks = []; stream.on('data', chunk => chunks.push(chunk)); stream.on('error', reject);
+          stream.on('end', () => {entries.push({path: entry.fileName, bytes: Buffer.concat(chunks)}); zip.readEntry();});
+        }));
+        zip.readEntry();
+      });
+      assert.ok(entries.some(entry => entry.path === 'paper.pdf'));
+      assert.ok(entries.every(entry => !entry.path.startsWith('provenance/') && !entry.path.includes('ro-crate')));
+      if (anonymous) {
+        assert.ok(entries.every(entry => !entry.bytes.toString('utf8').includes('Synthetic Author')));
+        assert.ok(!JSON.stringify(prepared).includes('Synthetic Author'));
+        const privateRequest = db.prepare('SELECT request_json FROM research_submissions WHERE id=?').pluck().get(prepared.record.id);
+        assert.ok(privateRequest.includes('Synthetic Author'));
+        anonymousReceipt = prepared;
+        const rejected = await human('research.submissions.prepare', () => submissions.prepare({...request,
+          requestId: 'identity-still-visible', replacements: [{find: 'Synthetic Author', replace: 'Synthetic Author'}]}));
+        assert.equal(rejected.record.status, 'failed');
+        assert.equal(rejected.record.error, 'research_submission_preflight_failed');
+        assert.equal(rejected.record.archive, null);
+        assert.equal(rejected.record.preflight.checks.find(check => check.kind === 'anonymity').status, 'fail');
+        assert.ok(!JSON.stringify(rejected).includes('Synthetic Author'));
+      }
+      assert.equal(JSON.stringify(repository.exports.get(projectId, output.id)), parentSnapshot);
+    }
+
     const databasePath = join(root, 'reopened.sqlite');
     await db.backup(databasePath);
     disk = new Database(databasePath);
@@ -862,9 +942,12 @@ export async function run(context) {
     assert.deepEqual(await history.get({projectId, ...reference(next.receipt)}), next.receipt);
     assert.equal((await reopened.manuscriptSync.inspect(scope)).status, 'current');
     assert.equal(reopened.exports.get(projectId, output.id).archive.sha256, delivery.sha256);
+    const restoredSubmissions = new api.ResearchSubmissionService(disk, reopened, exports, tools, join(root, 'submissions'));
+    assert.deepEqual(restoredSubmissions.get({projectId, submissionId: anonymousReceipt.record.id}), anonymousReceipt);
+    await restoredSubmissions.shutdown();
     assert.deepEqual(errors, []);
   } finally {
-    await Promise.all([experiments.shutdown(), figures.shutdown(), exports.shutdown(), restoredExperiments?.shutdown()]);
+    await Promise.all([experiments.shutdown(), figures.shutdown(), exports.shutdown(), submissions.shutdown(), restoredExperiments?.shutdown()]);
     if (reopened !== undefined) await Promise.all([reopened.knowledgeJobs.shutdown(), reopened.paperCards.shutdown(), reopened.wiki.shutdown()]);
     disk?.close();
     await f.close();

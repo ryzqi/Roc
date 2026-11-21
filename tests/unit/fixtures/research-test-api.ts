@@ -277,4 +277,8 @@ export {registerResearchImpactCapabilities} from '../../../src/main/plugins/rese
 export {ResearchImpactService, deriveResearchImpact} from '../../../src/main/plugins/research/impact-service';
 export {registerResearchArgumentOutlineCapabilities} from '../../../src/main/plugins/research/argument-outline-capabilities';
 export {ResearchReviewExtractionPilot} from '../../../src/main/plugins/research/review-extraction-pilot';
+export {registerResearchSubmissionProfileCapabilities} from '../../../src/main/plugins/research/submission-profile-capabilities';
+export {ResearchSubmissionService} from '../../../src/main/plugins/research/submission-service';
+export {registerResearchSubmissionCapabilities} from '../../../src/main/plugins/research/submission-capabilities';
+export {withResearchPdf,extractResearchPdfPageText} from '../../../src/main/plugins/research/pdf-render';
 export {registerResearchResultDerivationCapabilities} from '../../../src/main/plugins/research/result-derivation-capabilities';

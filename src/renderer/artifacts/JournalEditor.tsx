@@ -7,6 +7,10 @@ import {formInputClass, formTextAreaClass, formPrimaryButtonClass, formSecondary
 import {JournalRuleEditor, journalRuleDraft, journalRuleInput, journalLines} from './JournalRuleEditor';
 import {journalStatusLabels} from './JournalReceipt';
 import {ResearchProposalPicker} from './ResearchProposalPicker';
+import {LazyBoundary, retryableLazy} from '../shell/LazyBoundary';
+import {useArtifactEditorGuard} from './artifact-editor-guard';
+
+const SubmissionProfiles = retryableLazy(async () => ({default: (await import('./SubmissionProfiles')).SubmissionProfiles}));
 
 const input = `${formInputClass} border-[0.5px]`, textarea = `${formTextAreaClass} border-[0.5px] font-sans`;
 export function JournalEditor({client, report, writable, onDirty, onPending, onSaved}: {
@@ -24,13 +28,15 @@ export function JournalEditor({client, report, writable, onDirty, onPending, onS
   const [figureIds, setFigureIds] = useState(initial?.figureIds ?? []), [paths, setPaths] = useState(initial?.supplementPaths.join('\n') ?? '');
   const [rationale, setRationale] = useState(''), [dirty, setDirty] = useState(false), [validation, setValidation] = useState<string | null>(null);
   const [preview, setPreview] = useState<ResearchJournalInspection | null>(null);
+  const [profilesOpen, setProfilesOpen] = useState(false), [profilesDirty, setProfilesDirty] = useState(false), [profilesPending, setProfilesPending] = useState(false);
+  const guard = useArtifactEditorGuard();
   const requestId = useRef(crypto.randomUUID()), busy = useRef(false), mounted = useRef(true);
   useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
   const inspect = useAsyncAction((request: ResearchJournalInspect) => client.api.research.inspectJournalCompliance(request), {label: '预览投稿检查'});
   const save = useAsyncAction((request: ResearchJournalSave) => client.api.research.saveJournalCompliance(request), {label: '保存投稿检查'});
   const figures = useAsyncResource(`journal:figures:${report.projectId}:${report.artifactId}:${report.artifactVersion}`,
     () => client.api.research.listFigures({projectId: report.projectId, limit: 200}), {label: '读取项目图稿'});
-  const pending = inspect.pending || save.pending, rule = rules.find(value => value.id === selected);
+  const pending = inspect.pending || save.pending || profilesPending, rule = rules.find(value => value.id === selected);
   const change = (): void => {
     setDirty(true); onDirty(true); setPreview(null); setValidation(null); requestId.current = crypto.randomUUID(); inspect.reset(); save.reset();
   };
@@ -48,7 +54,7 @@ export function JournalEditor({client, report, writable, onDirty, onPending, onS
   return <form className="flex min-w-0 flex-col gap-3 border-t-[0.5px] border-line pt-2" data-testid="artifact-journal-editor"
     onSubmit={event => {
       event.preventDefault();
-      if (!writable || busy.current) return;
+      if (!writable || busy.current || profilesDirty || profilesPending) return;
       const parent = report.review;
       const parsed = researchJournalSaveSchema.safeParse({
         projectId: report.projectId, artifactId: report.artifactId, expectedArtifactVersion: report.artifactVersion,
@@ -64,8 +70,24 @@ export function JournalEditor({client, report, writable, onDirty, onPending, onS
         if (reply.ok) {setDirty(false); onDirty(false); onSaved();}
       });
     }}>
+    <button type="button" className={`${formSecondaryButtonClass} self-start`} disabled={dirty || pending} aria-expanded={profilesOpen}
+      data-testid="artifact-submission-profiles-toggle" onClick={() => guard.request(() => {
+        setProfilesOpen(!profilesOpen); setProfilesDirty(false); onDirty(false);
+      }, '收起将放弃投稿配置修改。')}>{profilesOpen ? '收起投稿配置' : '复用投稿配置'}</button>
+    {!profilesOpen ? null : <LazyBoundary fallback={<p role="status">正在加载投稿配置…</p>}>
+      <SubmissionProfiles client={client} projectId={report.projectId} artifactId={report.artifactId} artifactVersion={report.artifactVersion}
+        profile={report.selection?.profile ?? null}
+        writable={writable && !dirty && !inspect.pending && !save.pending}
+        onDirty={value => {setProfilesDirty(value); onDirty(value);}}
+        onPending={value => {setProfilesPending(value); onPending(value);}}
+        onFill={receipt => {
+          const {rules: savedRules, ...savedProfile} = receipt.snapshot.request.profile;
+          setProfile(savedProfile); setRules(savedRules.map(rule => journalRuleDraft(rule))); setSelected(savedRules[0]?.id ?? '');
+          setPaths(receipt.snapshot.request.requirements.supplementPaths.join('\n')); change();
+        }}/>
+    </LazyBoundary>}
     <ResearchProposalPicker client={client} projectId={report.projectId} artifactId={report.artifactId}
-      artifactVersion={report.artifactVersion} kind="journal_compliance" disabled={!writable || dirty || pending}
+      artifactVersion={report.artifactVersion} kind="journal_compliance" disabled={!writable || dirty || profilesDirty || pending}
       onPick={proposal => {if (proposal.kind !== 'journal_compliance') return;
         const selection = proposal.payload.selection;
         const {rules: suggestedRules, ...suggestedProfile} = selection.profile;
@@ -73,7 +95,7 @@ export function JournalEditor({client, report, writable, onDirty, onPending, onS
         setRules(suggestedRules.map(rule => journalRuleDraft(rule)));
         setSelected(selection.profile.rules[0]?.id ?? ''); setFigureIds([...selection.figureIds]);
         setPaths(selection.supplementPaths.join('\n')); setRationale(proposal.payload.rationale); change();}}/>
-    <fieldset disabled={!writable || pending} className="flex min-w-0 flex-col gap-3">
+    <fieldset disabled={!writable || pending || profilesDirty} className="flex min-w-0 flex-col gap-3">
       {profileText('journal', '期刊名称')}
       {profileText('articleType', '文章类型')}
       {profileText('submissionStage', '投稿阶段')}

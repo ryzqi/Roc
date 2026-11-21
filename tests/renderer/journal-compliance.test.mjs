@@ -21,7 +21,8 @@ before(async () => {
     import {LazyMotion,MotionConfig,domAnimation} from 'motion/react';
     import {ArtifactInspector} from './src/renderer/artifacts/ArtifactInspector';
     const root=createRoot(document.getElementById('root'));
-    const methods=['inspectArtifact','inspectJournalCompliance','saveJournalCompliance','getJournalComplianceHistory','listFigures'];
+    const methods=['inspectArtifact','inspectJournalCompliance','saveJournalCompliance','getJournalComplianceHistory','listFigures',
+      'saveSubmissionProfile','getSubmissionProfile','listSubmissionProfiles'];
     const client={api:{research:Object.fromEntries(methods.map(method=>[method,input=>window.fromMain(method,input)]))}};
     function Harness({initial}) {
       const [request,setRequest]=useState(initial),[writable,setWritable]=useState(true);
@@ -46,7 +47,8 @@ before(async () => {
     const f = active; calls.push({method, input});
     const channel = {inspectArtifact: 'roc:research:artifact-inspect', inspectJournalCompliance: 'roc:research:journal-inspect',
       saveJournalCompliance: 'roc:research:journal-save', getJournalComplianceHistory: 'roc:research:journal-history',
-      listFigures: 'roc:research:figure-list'}[method];
+      listFigures: 'roc:research:figure-list', saveSubmissionProfile: 'roc:research:submission-profile-save',
+      getSubmissionProfile: 'roc:research:submission-profile-get', listSubmissionProfiles: 'roc:research:submission-profile-list'}[method];
     api.parseIpcRequestArgs(channel, [input]);
     const result = await f.bridge.invoke(`research.${method}`, [input], 73);
     const hold = f.holds.get(method);
@@ -83,6 +85,7 @@ async function scene() {
   }};
   api.registerResearchArtifactInspectorCapability(context, f.repository);
   api.registerResearchJournalComplianceCapabilities(context, f.service, f.repository.journalCompliance);
+  api.registerResearchSubmissionProfileCapabilities(context, f.repository.submissionProfiles);
   handlers.set('research.figure.list', input => f.repository.figures.list(input.projectId, input.limit));
   f.bridge = api.createPluginCapabilityAdapter({invokeCapability: (name, input) => handlers.get(name)(input)});
   f.request = {projectId: f.project.id, artifactId: f.artifactId, expectedVersion: null};
@@ -170,6 +173,39 @@ test('lazy native form requires explicit rules and preview, locks the drawer, an
   assert.equal(writes.length, 2); assert.deepEqual(writes[0].input, writes[1].input);
   assert.equal(f.history().total, 1); assert.equal(f.changes(), before);
   assert.equal(f.repository.getArtifact(f.artifactId).status, 'draft');
+});
+
+test('saved journal rules become a reusable exact profile and retry a lost profile receipt without duplication', async () => {
+  const f = await scene();
+  await openReport(); await openEditor(); await prepare(); await preview();
+  await page.getByTestId('artifact-journal-save').click();
+  await editor().waitFor({state: 'hidden'}); await page.getByTestId('artifact-journal-hash').waitFor();
+  await openEditor();
+  await page.getByTestId('artifact-submission-profiles-toggle').focus(); await page.keyboard.press('Enter');
+  const panel = page.getByTestId('artifact-submission-profiles');
+  await panel.getByLabel('最多页数（留空不限制）', {exact: true}).fill('8');
+  await panel.getByLabel('匿名审稿', {exact: true}).check();
+  await panel.getByLabel('必要声明（每行一项）', {exact: true}).fill('Data availability\nCompeting interests');
+  assert.equal(await page.getByTestId('artifact-inspector-refresh').isDisabled(), true);
+  const hold = f.hold('saveSubmissionProfile', true);
+  await panel.getByTestId('artifact-submission-profile-save').click(); await hold.ready.promise;
+  assert.equal(await page.getByTestId('artifact-inspector-close').isDisabled(), true);
+  hold.release(); f.holds.delete('saveSubmissionProfile');
+  await panel.getByRole('alert').filter({hasText: '连接中断'}).waitFor();
+  await panel.getByTestId('artifact-submission-profile-save').click();
+  await panel.getByRole('button', {name: '保存配置新版本', exact: true}).waitFor();
+  const stored = f.repository.submissionProfiles.list({projectId: f.project.id, offset: 0, limit: 10});
+  assert.equal(stored.total, 1);
+  const saved = stored.items[0];
+  assert.equal(saved.snapshot.actor.id, 'window:73');
+  assert.deepEqual(saved.snapshot.request.profile, f.history().items[0].snapshot.request.selection.profile);
+  assert.deepEqual(saved.snapshot.request.requirements, {maximumPages: 8, anonymous: true,
+    requiredDeclarations: ['Data availability', 'Competing interests'], minimumEditableTables: 0, supplementPaths: []});
+  const requests = calls.filter(call => call.method === 'saveSubmissionProfile').map(call => call.input);
+  assert.deepEqual(requests, [saved.snapshot.request, saved.snapshot.request]);
+  await panel.getByRole('button', {name: '填入期刊规则', exact: true}).click();
+  assert.equal(await page.getByTestId('artifact-journal-save').isDisabled(), true, 'reused rules require a fresh material preview');
+  assert.equal(f.history().total, 1, 'profile reuse cannot save another journal review implicitly');
 });
 
 test('all six rule kinds retain guidance failures and independent manual judgment with real selected supplements', async () => {

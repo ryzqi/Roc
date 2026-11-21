@@ -43,6 +43,10 @@ import {ResearchResultFigureSourceService} from './result-figure-source';
 import {registerResearchResultDerivationCapabilities} from './result-derivation-capabilities';
 import {registerResearchImpactCapabilities} from './impact-capabilities';
 import {registerResearchArgumentOutlineCapabilities} from './argument-outline-capabilities';
+import {registerResearchSubmissionProfileCapabilities} from './submission-profile-capabilities';
+import {ResearchSubmissionService} from './submission-service';
+import {registerResearchSubmissionCapabilities} from './submission-capabilities';
+import {join} from 'node:path';
 
 export async function registerResearchWorkflow(
   context: RocPluginContext, options: ResearchPluginOptions,
@@ -59,6 +63,12 @@ export async function registerResearchWorkflow(
   registerResearchResultDerivationCapabilities(context, resultDerivation, new ResearchResultFigureSourceService(resultDerivation, workspaceFiles));
   registerResearchImpactCapabilities(context, researchRepository.impact, researchRepository.repairs);
   registerResearchArgumentOutlineCapabilities(context, researchRepository.argumentOutlines);
+  registerResearchSubmissionProfileCapabilities(context, researchRepository.submissionProfiles);
+  const submissions=new ResearchSubmissionService(db,researchRepository,researchExports,production.toolchain,
+    options.exportRoot===undefined?null:join(options.exportRoot,'submissions'));
+  submissions.recover();
+  lifecycle.ownBackgroundServices([submissions]);
+  registerResearchSubmissionCapabilities(context,submissions);
   const scientificReviews = new ResearchArtifactScientificReviewService(researchRepository, researchResults, researchFigures);
   const humanGate = createResearchHumanGate({ repository: researchRepository, production: productionJob, scientificReviews });
   const readiness = new ResearchStageReadinessService(researchRepository, context.capabilities);

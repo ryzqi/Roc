@@ -20,6 +20,7 @@ import {createResearchWorkflowTools, RESEARCH_WORKFLOW_TOOL_DESCRIPTORS} from '.
 import {createResearchProposalTools, RESEARCH_PROPOSAL_TOOL_DESCRIPTORS} from './research-proposal-tools';
 import {createResearchResultTools, RESEARCH_RESULT_TOOL_DESCRIPTORS} from './research-result-tools';
 import {createResearchImpactTools, RESEARCH_IMPACT_TOOL_DESCRIPTORS} from './research-impact-tools';
+import {createResearchSubmissionTools,RESEARCH_SUBMISSION_TOOL_DESCRIPTORS} from './research-submission-tools';
 import {createReviewQueryTools, REVIEW_QUERY_TOOL_DESCRIPTORS, type DispatchReviewQuery} from './review-query-tools';
 import { researchStageSchema } from '../../../shared/schemas/research';
 import {referenceCheckRequestSchema, referenceCheckReportSchema} from '../../../shared/schemas/research-reference-check';
@@ -61,6 +62,7 @@ export const RESEARCH_TOOL_DESCRIPTORS: readonly ResearchToolDescriptor[] = [
   ...RESEARCH_PROPOSAL_TOOL_DESCRIPTORS,
   ...RESEARCH_RESULT_TOOL_DESCRIPTORS,
   ...RESEARCH_IMPACT_TOOL_DESCRIPTORS,
+  ...RESEARCH_SUBMISSION_TOOL_DESCRIPTORS,
   ...REVIEW_QUERY_TOOL_DESCRIPTORS,
   { name: scientificToolNames.search, scope: 'memory', effectClass: 'network_read', riskLevel: 'low', executionScopes: readScopes },
   { name: scientificToolNames.context, scope: 'memory', effectClass: 'none', riskLevel: 'low', executionScopes: readScopes },
@@ -232,6 +234,7 @@ export function createResearchTools(input: {
     ...createResearchProposalTools(input),
     ...createResearchResultTools(input),
     ...createResearchImpactTools(input),
+    ...createResearchSubmissionTools(input),
     ...createReviewQueryTools(input),
     ...createScientificTools(input),
     tool(async () => summarizeOverview(

@@ -222,6 +222,7 @@ function createMcpToolCards(server: McpServerSnapshot, approvalMode: ApprovalMod
     'research_read_proposals',
     'research_derive_results',
     'research_inspect_impact',
+    'research_submission_read',
     'research_prepare_result_figure',
     'research_read_artifact',
     'research_run_stage',

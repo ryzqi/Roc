@@ -17,6 +17,9 @@ import {researchProposalRejectSchema} from '../../shared/schemas/research-propos
 import {researchManuscriptSyncAttachSchema, researchManuscriptSyncApplySchema} from '../../shared/schemas/research-manuscript-sync';
 import {researchRepairStartSchema} from '../../shared/schemas/research-repair';
 import {researchArgumentOutlineSaveSchema, researchArgumentOutlineMaterializeSchema} from '../../shared/schemas/research-argument-outline';
+import {researchSubmissionProfileSaveSchema} from '../../shared/schemas/research-submission-profile';
+import {researchSubmissionPrepareSchema,researchSubmissionDeliverSchema} from '../../shared/schemas/research-submission';
+import {pickSubmissionDestination,type SubmissionDestinationPicker} from './submission-destination';
 import { withLiteratureContext } from '../services/literature-context';
 import { researchPythonEnvironmentSelectSchema } from '../../shared/schemas/research-python-environments';
 import { researchNotebookImportRequestSchema } from '../../shared/schemas/research-notebooks';
@@ -58,7 +61,8 @@ export type PluginCapabilityAdapter = {
 
 export { pluginCapabilityMappings };
 
-export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker): PluginCapabilityAdapter {
+export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker,
+  submissionDestination:SubmissionDestinationPicker=pickSubmissionDestination): PluginCapabilityAdapter {
   const mappingsByMethod = new Map<string, PluginCapabilityMapping>(
     pluginCapabilityMappings.map((item) => [item.preloadMethod, item])
   );
@@ -181,6 +185,24 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
           const request = researchRepairStartSchema.parse(input);
           return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
             () => invoker.invokeCapability(target.capabilityName, request));
+        }
+        if (target.capabilityName === 'research.submissionProfiles.save') {
+          const request = researchSubmissionProfileSaveSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
+        if(target.capabilityName==='research.submissions.prepare'){
+          const request=researchSubmissionPrepareSchema.parse(input);
+          return withResearchHumanContext({capability:target.capabilityName,projectId:request.projectId,windowId},
+            ()=>invoker.invokeCapability(target.capabilityName,request));
+        }
+        if(target.capabilityName==='research.submissions.deliver'){
+          const request=researchSubmissionDeliverSchema.omit({destinationPath:true}).parse(input);
+          return withResearchHumanContext({capability:target.capabilityName,projectId:request.projectId,windowId},async()=>{
+            const destinationPath=await submissionDestination(windowId);
+            if(destinationPath===null)return null;
+            return invoker.invokeCapability(target.capabilityName,{...request,destinationPath});
+          });
         }
         if (target.capabilityName === 'research.argumentOutlines.save' || target.capabilityName === 'research.argumentOutlines.materialize') {
           const request = (target.capabilityName === 'research.argumentOutlines.save' ?

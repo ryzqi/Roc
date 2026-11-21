@@ -17,9 +17,11 @@ test('one lifecycle waits startup during shutdown and releases services acquired
     starts++;
     await gate;
     lifecycle.own('stageRuntime', { shutdown: async () => { order.push('parent'); } });
-    lifecycle.ownBackgroundServices(['cards', 'wiki', 'knowledge'].map(name => ({
+    const background=['cards', 'wiki', 'knowledge'].map(name => ({
       shutdown: async () => { order.push(name); }
-    })));
+    }));
+    lifecycle.ownBackgroundServices(background.slice(0,2));
+    lifecycle.ownBackgroundServices(background.slice(1));
     lifecycle.own('reviewSearch', { shutdown: async () => { order.push('review'); } });
     lifecycle.own('library', { shutdown: async () => { order.push('library'); } });
   });

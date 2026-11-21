@@ -9,13 +9,15 @@ import {ExportPublicationReceipt} from './ExportPublicationReceipt';
 export const exportStatusLabels = {preparing: '正在生成', ready: '已生成', failed: '失败', cancelled: '已取消', interrupted: '已中断'} as const;
 const approvals = {unpublished: '尚未登记科研工件', draft: '等待科研审核', approved: '科研审核已批准', superseded: '已被替代'} as const;
 const Zenodo = retryableLazy(async () => ({default: (await import('./ZenodoPanel')).ZenodoPanel}));
+const Submission = retryableLazy(async () => ({default: (await import('./SubmissionPanel')).SubmissionPanel}));
 export function ExportExecutionReceipt({client, record, writable, onPending, onDirty}: {
   client: RocClient; record: ResearchExportExecution; writable: boolean; onPending: (value: boolean) => void;
   onDirty: (value: boolean) => void
 }): React.JSX.Element {
   const [zenodoOpen, setZenodoOpen] = useState(false), [zenodoDirty, setZenodoDirty] = useState(false);
   const [zenodoPending, setZenodoPending] = useState(false);
-  const zenodoLocked = zenodoDirty || zenodoPending;
+  const [submissionOpen, setSubmissionOpen] = useState(false), [submissionDirty, setSubmissionDirty] = useState(false), [submissionPending, setSubmissionPending] = useState(false);
+  const zenodoLocked = zenodoDirty || zenodoPending || submissionDirty || submissionPending;
   const mounted = useRef(true), busy = useRef(false);
   useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
   const read = useAsyncResource(`export:execution:${record.projectId}:${record.id}`,
@@ -54,6 +56,13 @@ export function ExportExecutionReceipt({client, record, writable, onPending, onD
       <ExportPublicationReceipt review={record.request.publicationReview}/>
     </details>
     {current?.status !== 'ready' ? null : <>
+      <button type="button" className={`${formSecondaryButtonClass} self-start`} disabled={zenodoLocked} aria-expanded={submissionOpen}
+        data-testid="artifact-submission-toggle" onClick={() => setSubmissionOpen(!submissionOpen)}>{submissionOpen ? '收起投稿包' : '准备期刊投稿包'}</button>
+      {!submissionOpen ? null : <LazyBoundary fallback={<p role="status">正在加载投稿包…</p>}>
+        <Submission key={`${current.id}:${current.sourceHash}`} client={client} record={current} writable={writable && current.approval === 'approved' && !zenodoDirty && !zenodoPending}
+          onDirty={value => {setSubmissionDirty(value); onDirty(value);}}
+          onPending={value => {setSubmissionPending(value); onPending(value);}}/>
+      </LazyBoundary>}
       <button type="button" className={`${formSecondaryButtonClass} border-[0.5px] self-start`}
         aria-expanded={zenodoOpen} disabled={zenodoLocked} data-testid="artifact-zenodo-toggle"
         onClick={() => setZenodoOpen(value => !value)}>{zenodoOpen ? '收起 Zenodo 发布' : '审查 Zenodo 发布'}</button>

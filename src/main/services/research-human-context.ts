@@ -12,7 +12,8 @@ export type ResearchHumanCapability = 'research.wiki.save' | 'research.wiki.roll
   'research.reviewFullText.save' | 'research.reviewFullTextScreening.save' | 'research.reviewFullTextScreening.adjudicate' | 'research.reviewFullTextScreening.freeze' |
   'research.reviewExtraction.save' | 'research.reviewQuality.createPlan' | 'research.reviewQuality.saveAssessment' | 'research.reviewStudies.save' |
   'research.proposals.reject' | 'research.manuscriptSync.attach' | 'research.manuscriptSync.apply' | 'research.impact.repair' |
-  'research.argumentOutlines.save' | 'research.argumentOutlines.materialize';
+  'research.argumentOutlines.save' | 'research.argumentOutlines.materialize' | 'research.submissionProfiles.save' |
+  'research.submissions.prepare' | 'research.submissions.deliver';
 type HumanContext = Readonly<{
   capability: ResearchHumanCapability;
   projectId: string;
