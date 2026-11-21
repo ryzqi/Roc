@@ -22,6 +22,7 @@ const FigureConsistency = retryableLazy(async () => ({default: (await import('./
 const ResponseMatrix = retryableLazy(async () => ({default: (await import('./ArtifactResponseMatrix')).ArtifactResponseMatrix}));
 const JournalCompliance = retryableLazy(async () => ({default: (await import('./ArtifactJournalCompliance')).ArtifactJournalCompliance}));
 const ExportReview = retryableLazy(async () => ({default: (await import('./ArtifactExportReview')).ArtifactExportReview}));
+const Impact = retryableLazy(async () => ({default: (await import('./ArtifactImpact')).ArtifactImpact}));
 import {useArtifactEditorActivity, useArtifactEditorGuard} from './artifact-editor-guard';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
@@ -37,6 +38,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
   const snapshot = result?.snapshot;
   const [reviewNonce, setReviewNonce] = useState(0);
   const [relationSaved, setRelationSaved] = useState(false);
+  const [impactOpen, setImpactOpen] = useState(false);
   const guard = useArtifactEditorGuard();
   const plan = useArtifactEditorActivity('方法计划'), outcome = useArtifactEditorActivity('结果评估');
   const {pending: planPending, dirty: planDirty, setPending: setPlanPending, setDirty: setPlanDirty} = plan;
@@ -158,6 +160,17 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
         <LazyBoundary fallback={<p role="status">正在加载工件正文…</p>}>
           <StageContent snapshot={snapshot} />
         </LazyBoundary>
+        <section className="border-t-[0.5px] border-line pt-2">
+          <button type="button" className={button} disabled={planLocked} aria-expanded={impactOpen}
+            data-testid="artifact-impact-toggle" onClick={() => setImpactOpen(value => !value)}>
+            {impactOpen ? '收起变更影响' : '检查变更影响'}
+          </button>
+          {!impactOpen ? null : <LazyBoundary fallback={<p role="status">正在加载影响检查…</p>}>
+            <Impact key={`${snapshot.artifact.id}:${snapshot.version}`} client={client} snapshot={snapshot}
+              writable={writable && result?.status === 'current' && snapshot.projectStatus !== 'archived'}
+              onRepaired={() => {baseline.current = null; reading.save(); read.reload();}}/>
+          </LazyBoundary>}
+        </section>
         {snapshot.artifact.kind !== 'manuscript' ? null : <section className="border-t-[0.5px] border-line pt-2">
           <button type="button" className={button} aria-expanded={coverageOpen} disabled={planLocked}
             data-testid="artifact-citation-coverage-toggle" data-reading-key="citation-coverage-toggle"

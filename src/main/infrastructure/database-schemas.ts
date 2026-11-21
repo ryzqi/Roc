@@ -1346,6 +1346,16 @@ CREATE TABLE research_manuscript_sync_applies (
   request_hash TEXT NOT NULL, actor_id TEXT NOT NULL, source_hash TEXT NOT NULL, recorded_at TEXT NOT NULL,
   PRIMARY KEY(project_id,request_id)
 );
+CREATE TABLE research_repairs (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL, request_json TEXT NOT NULL CHECK(json_valid(request_json)),
+  request_hash TEXT NOT NULL, actor_json TEXT NOT NULL CHECK(json_valid(actor_json)),
+  plan_json TEXT NOT NULL CHECK(json_valid(plan_json)), plan_hash TEXT NOT NULL, created_at TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('active','completed','cancelled')),
+  UNIQUE(project_id,request_id)
+);
+CREATE UNIQUE INDEX idx_research_repairs_active ON research_repairs(project_id) WHERE status='active';
 CREATE TABLE research_monitor_alerts (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,

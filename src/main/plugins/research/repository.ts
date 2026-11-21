@@ -57,6 +57,8 @@ import { ResearchIdeaRepository } from './idea-repository';
 import {ResearchIdeaPlanRepository} from './idea-plan-repository';
 import {ResearchProposalRepository} from './proposal-repository';
 import {ResearchManuscriptSyncService} from './manuscript-sync-service';
+import {ResearchImpactService} from './impact-service';
+import {ResearchRepairService} from './repair-service';
 import {hasResearchHumanContext} from '../../services/research-human-context';
 import {ResearchIdeaOutcomeRepository} from './idea-outcome-repository';
 import {ResearchCitationReviewRepository} from './citation-review-repository';
@@ -95,6 +97,8 @@ export class ResearchRepository {
   readonly evidence: ResearchEvidenceRepository;
   readonly manuscripts: ResearchManuscriptRepository;
   readonly manuscriptSync: ResearchManuscriptSyncService;
+  readonly impact: ResearchImpactService;
+  readonly repairs: ResearchRepairService;
   readonly runs: ResearchRunRepository;
   readonly reviews: ResearchReviewRepository;
   readonly library: ResearchLibraryRepository;
@@ -145,6 +149,8 @@ export class ResearchRepository {
       requireEditable: (id) => this.requireEditableArtifact(id)
     }, this.evidence, now);
     this.manuscriptSync = new ResearchManuscriptSyncService(db, this, now);
+    this.impact = new ResearchImpactService(db, this);
+    this.repairs = new ResearchRepairService(db, this, this.impact, now);
     this.runs = new ResearchRunRepository(db, this, now);
     this.reviews = new ResearchReviewRepository(db, this, now);
     this.library = new ResearchLibraryRepository(db, this, now);
@@ -849,6 +855,7 @@ export class ResearchRepository {
   ): void {
     this.requireStatus(current, ['ready', 'paused', 'blocked', 'failed', 'completed'], 'research_stage_cannot_move');
     if (current.activeRunId !== null) throw new Error('research_stage_run_active');
+    this.repairs.cancelForMove(projectId);
     const targetIndex = researchStages.indexOf(target);
     const retainedManuscript = ['review', 'revision', 'export'].includes(target)
       ? this.reviews.get(projectId)?.manuscriptArtifactId ?? null : null;
@@ -875,9 +882,14 @@ export class ResearchRepository {
 
   private completeStage(projectId: string, stage: ResearchStageState['stage'], timestamp: string, reviewDecision?: 'accept' | 'revise'): void {
     const index = researchStages.indexOf(stage);
-    const nextStage = this.reviews.afterApproval(projectId, stage, this.readStage(projectId, stage).artifactIds, reviewDecision) ?? researchStages[index + 1];
+    const artifacts = this.readStage(projectId, stage).artifactIds;
+    const repairing = this.repairs.complete(projectId, stage, artifacts);
+    const mandated = this.reviews.afterApproval(projectId, stage, artifacts, reviewDecision);
+    const nextStage = mandated ?? (repairing ? researchStages.slice(index + 1).find(candidate =>
+      this.readStage(projectId, candidate).status !== 'completed') : researchStages[index + 1]);
     this.updateStage(projectId, stage, { status: 'completed', completedAt: timestamp });
     if (nextStage === undefined) {
+      this.repairs.finish(projectId);
       this.updateProjectStatus(projectId, 'completed', timestamp);
       this.appendEvent(projectId, stage, 'workflow_completed', '科研流程已完成。', {}, timestamp);
       return;

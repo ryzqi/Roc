@@ -277,3 +277,19 @@ test('result preview derives only anchored numeric changes and preserves unestim
     assert.deepEqual(incompatible.manuscript.issues, [binding, repeated].map(() => ({metricId: 'mean', claimId: f.claim.id, reason: 'definition_changed'})));
   } finally {f.close();}
 });
+
+test('result impact follows captured metric evidence and current numeric mappings without changing scientific receipts', async () => {
+  const f = scene();
+  try {
+    await f.save();
+    const request = {projectId: f.project.id, source: {kind: 'result', resultId: f.result.snapshot.id, expectedHash: f.result.snapshotHash}};
+    const before = f.changes(), report = f.repository.impact.inspect(request);
+    assert.equal(report.stale, false);
+    assert.deepEqual(report.affected.map(item => item.artifactId), [f.artifactId]);
+    assert.ok(report.affected[0].reasons.some(reason => reason.kind === 'numeric_mapping'));
+    assert.ok(report.affected[0].reasons.some(reason => reason.kind === 'claim_evidence'));
+    assert.equal(f.repository.impact.inspect({...request, source: {...request.source, expectedHash: 'f'.repeat(64)}}).stale, true);
+    assert.equal(f.changes(), before);
+    assert.deepEqual(f.history().items[0].snapshot.request.bindings, f.request().bindings);
+  } finally {f.close();}
+});

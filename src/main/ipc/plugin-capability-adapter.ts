@@ -15,6 +15,7 @@ import {hfDownloadStartSchema} from '../../shared/schemas/research-huggingface-d
 import {researchResponseMatrixSaveSchema} from '../../shared/schemas/research-response-matrix';
 import {researchProposalRejectSchema} from '../../shared/schemas/research-proposals';
 import {researchManuscriptSyncAttachSchema, researchManuscriptSyncApplySchema} from '../../shared/schemas/research-manuscript-sync';
+import {researchRepairStartSchema} from '../../shared/schemas/research-repair';
 import { withLiteratureContext } from '../services/literature-context';
 import { researchPythonEnvironmentSelectSchema } from '../../shared/schemas/research-python-environments';
 import { researchNotebookImportRequestSchema } from '../../shared/schemas/research-notebooks';
@@ -172,6 +173,11 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker):
         }
         if (target.capabilityName === 'research.proposals.reject') {
           const request = researchProposalRejectSchema.parse(input);
+          return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
+            () => invoker.invokeCapability(target.capabilityName, request));
+        }
+        if (target.capabilityName === 'research.impact.repair') {
+          const request = researchRepairStartSchema.parse(input);
           return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},
             () => invoker.invokeCapability(target.capabilityName, request));
         }

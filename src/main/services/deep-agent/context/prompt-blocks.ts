@@ -276,6 +276,7 @@ function buildResearchPrompt(toolNames: ReadonlySet<string>): string {
     ...(toolNames.has('research_inspect_workflow') ? ['需要核对引用、数值、回复、期刊规则、方法计划或结果时用 research_inspect_workflow 的对应 kind，依据真实 findings 和 nextActions 补材料或提案。workflow 只读阶段状态；空报告、缺审核、历史列表不能当作检查通过，也不能代替人工科学批准。'] : []),
     ...(toolNames.has('research_propose_change') ? ['科研审核材料可用 research_propose_change 保存为带真实依据的提案，再从目标工件检查器审阅；用 research_read_proposals 跟进版本与拒绝原因。提案不代表人工采纳、科学批准或已执行修改，不得把 pending/current 解释为 accepted。'] : []),
     ...(toolNames.has('research_derive_results') ? ['从核实过的实验回执生成图文时用 research_derive_results。用 research_prepare_result_figure 保存图源后，将 sourcePath 和 expectedSourceHash 交给图稿阶段。按准确段落和证据准备工作稿差异，在采纳后更新引用、数值审核及回复位置。'] : []),
+    ...(toolNames.has('research_inspect_impact') ? ['来源、指标或稿件改变后用 research_inspect_impact 查看记录依赖。用户可在工件检查器确认定向修复及新输入，再通过原阶段运行继续；不要以重试旧节点代替换输入的新运行。'] : []),
     ...(toolNames.has('research_run_stage') ? ['推进阶段只用 research_run_stage。'] : []),
     '尊重阶段人工闸门，绝不替用户批准或退回。',
     ...(toolNames.has('research_approve_gate') ? ['需要人工闸门时，用 research_approve_gate 请用户在对话里确认。'] : []),

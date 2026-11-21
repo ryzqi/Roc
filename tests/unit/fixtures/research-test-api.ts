@@ -273,4 +273,6 @@ export {registerResearchProposalCapabilities} from '../../../src/main/plugins/re
 export {ResearchProposalService} from '../../../src/main/plugins/research/proposal-service';
 export {ResearchResultFigureSourceService} from '../../../src/main/plugins/research/result-figure-source';
 export {ResearchResultDerivationService} from '../../../src/main/plugins/research/result-derivation-service';
+export {registerResearchImpactCapabilities} from '../../../src/main/plugins/research/impact-capabilities';
+export {ResearchImpactService, deriveResearchImpact} from '../../../src/main/plugins/research/impact-service';
 export {registerResearchResultDerivationCapabilities} from '../../../src/main/plugins/research/result-derivation-capabilities';

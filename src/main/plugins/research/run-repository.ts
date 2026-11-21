@@ -609,7 +609,9 @@ export class ResearchRunRepository {
 
   private captureContext(projectId: string, stage: ResearchStageRun['stage']): ResearchExecutionContext {
     const cycle = this.research.reviews.requireForStage(projectId, stage);
+    const selection = this.research.repairs.selection(projectId, stage);
     const inputs = this.research.listArtifacts(projectId).filter((artifact) => artifact.status === 'approved')
+        .filter(artifact => selection === null || selection.includes(artifact.id))
         .filter((artifact) => stage !== 'review' || artifact.kind !== 'review_report')
         .filter((artifact) => cycle === null || artifact.kind !== 'manuscript' || artifact.id === cycle.manuscriptArtifactId)
         .filter((artifact) => stage !== 'revision' || artifact.kind !== 'review_report' || cycle?.reportArtifactIds.includes(artifact.id))
@@ -626,7 +628,7 @@ export class ResearchRunRepository {
     };
   }
 
-  private captureInputVersions(projectId: string, artifactIds: string[]): ResearchExecutionContext['inputVersions'] {
+  captureInputVersions(projectId: string, artifactIds: string[]): ResearchExecutionContext['inputVersions'] {
     const versions = new Map<string, z.infer<typeof executionInputVersionSchema>>();
     for (const artifactId of artifactIds) {
       const {snapshot} = this.research.inspectArtifact({projectId, artifactId, expectedVersion: null});
