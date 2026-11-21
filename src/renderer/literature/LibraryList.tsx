@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import { AlertCircle, Archive, BookOpen, Check, Copy, FilePlus2, Loader2, RefreshCw, Search } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { VirtuosoHandle } from 'react-virtuoso';
+import { AlertCircle, Archive, BookOpen, Check, Copy, FilePlus2, ListChecks, Loader2, RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
 import type { ResearchLibraryItem } from '../../shared/types';
 import { EmptyState } from '../shell/EmptyState';
 import { ErrorBar } from '../shell/ErrorBar';
@@ -8,6 +9,8 @@ import { useLiterature } from './literature-scope';
 import { useCopyFeedback } from '../shared/hooks/use-copy-feedback';
 import {useAsyncAction} from '../app/use-async-resource';
 import {formSecondaryButtonClass, formSelectClass} from '../shared/form-ui';
+import {LazyBoundary, retryableLazy} from '../shell/LazyBoundary';
+import './library-list.css';
 import type {LiteratureStore} from './use-literature-store';
 
 /**
@@ -40,6 +43,12 @@ export type LibraryListProps = {
 
 type SortOrder = 'updated' | 'year' | 'title';
 
+const VIRTUALIZE_THRESHOLD = 60;
+const LazyLibraryVirtualizedRows = retryableLazy(async () => {
+  const module = await import('./LibraryVirtualizedRows');
+  return {default: module.LibraryVirtualizedRows};
+});
+
 function fullTextLabel(item: ResearchLibraryItem, store: LiteratureStore): string {
   if (item.id !== store.selectedId || store.documentsStatus !== 'ready') return '全文待核验';
   const documents = store.documents.filter(document => document.libraryItemId === item.id);
@@ -56,12 +65,19 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
   const [searchDraft, setSearchDraft] = useState(literature.query);
   const [sort, setSort] = useState<SortOrder>('updated');
   const [selecting, setSelecting] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [focusedId, setFocusedId] = useState<string | null>(literature.selectedId);
+  const [visibleRange, setVisibleRange] = useState({startIndex: 0, endIndex: 0});
+  const [virtualizerReady, setVirtualizerReady] = useState(false);
+  const rowRefs = useRef(new Map<string, HTMLButtonElement>());
+  const virtualizerRef = useRef<VirtuosoHandle | null>(null);
+  const pendingFocusId = useRef<string | null>(null);
   const [checkedIds, setCheckedIds] = useState<ReadonlySet<string>>(() => new Set());
   useEffect(() => {setCheckedIds(new Set());}, [literature.projectId, literature.query, literature.includeArchived, entryType]);
-  const items = literature.items.filter(item => entryType === null || item.bibliography.entryType === entryType).sort((left, right) => sort === 'year'
+  const items = useMemo(() => literature.items.filter(item => entryType === null || item.bibliography.entryType === entryType).sort((left, right) => sort === 'year'
     ? (right.metadata.publishedYear ?? 0) - (left.metadata.publishedYear ?? 0)
     : sort === 'title' ? libraryItemTitle(left).localeCompare(libraryItemTitle(right), 'zh-CN')
-      : right.updatedAt.localeCompare(left.updatedAt));
+      : right.updatedAt.localeCompare(left.updatedAt)), [literature.items, entryType, sort]);
   const checkedItems = items.filter(item => checkedIds.has(item.id));
 
   // Keep the box in sync when something else changes the query (e.g. clearing it
@@ -69,82 +85,140 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
   useEffect(() => {
     setSearchDraft(literature.query);
   }, [literature.query]);
+  useEffect(() => {
+    setFocusedId(literature.selectedId);
+  }, [literature.projectId, literature.selectedId]);
 
-  const rowPad = compact ? 'px-2 py-2' : 'px-3 py-2';
-  const bodyClass = compact ? 'min-h-0 flex-1 overflow-y-auto py-1' : 'min-h-0 flex-1 overflow-y-auto p-2';
+  const virtualize = items.length > VIRTUALIZE_THRESHOLD;
+  const activeId = items.some(item => item.id === focusedId) ? focusedId
+    : items.some(item => item.id === literature.selectedId) ? literature.selectedId : items[0]?.id;
+  const activeIndex = items.findIndex(item => item.id === activeId);
+  // A manually scrolled list keeps a Tab entry within the mounted range.
+  const tabStopId = virtualize && (activeIndex < visibleRange.startIndex || activeIndex > visibleRange.endIndex)
+    ? items[visibleRange.startIndex]?.id : activeId;
+  const setVirtualizerRef = useCallback((handle: VirtuosoHandle | null): void => {
+    virtualizerRef.current = handle;
+    setVirtualizerReady(handle !== null);
+  }, []);
+  useEffect(() => {
+    const index = items.findIndex(item => item.id === literature.selectedId);
+    if (index < 0) return;
+    if (virtualize) virtualizerRef.current?.scrollIntoView({index, behavior: 'auto'});
+    else rowRefs.current.get(literature.selectedId!)?.scrollIntoView({block: 'nearest'});
+  }, [items, literature.selectedId, virtualize, virtualizerReady]);
+
+  const focusRow = (index: number): void => {
+    const item = items[index];
+    if (item === undefined) return;
+    setFocusedId(item.id);
+    pendingFocusId.current = item.id;
+    const focusMountedRow = (): void => {
+      if (pendingFocusId.current !== item.id) return;
+      const row = rowRefs.current.get(item.id);
+      if (row === undefined) return;
+      pendingFocusId.current = null;
+      row.focus({preventScroll: true});
+      if (!virtualize) row.scrollIntoView({block: 'nearest'});
+    };
+    if (virtualize) virtualizerRef.current?.scrollIntoView({index, behavior: 'auto', done: () => {
+      requestAnimationFrame(focusMountedRow);
+    }});
+    else focusMountedRow();
+  };
+  const renderRow = (index: number, item: ResearchLibraryItem): React.JSX.Element => {
+    const selected = item.id === literature.selectedId;
+    const venue = readVenue(item.bibliography);
+    const tabIndex = item.id === tabStopId ? 0 : -1;
+    return <div className="library-row" data-selected={selected}>
+      {selecting ? <label className="library-row-selection">
+        <input type="checkbox" checked={checkedIds.has(item.id)} tabIndex={tabIndex}
+          aria-label={`选择文献 ${libraryItemTitle(item)}`}
+          onChange={event => setCheckedIds(current => {
+            const next = new Set(current);
+            if (event.target.checked) next.add(item.id); else next.delete(item.id);
+            return next;
+          })}/>
+        <span className="sr-only">选择</span>
+      </label> : null}
+      <button type="button" tabIndex={tabIndex}
+        ref={element => {
+          if (element === null) rowRefs.current.delete(item.id);
+          else rowRefs.current.set(item.id, element);
+        }}
+        onFocus={() => setFocusedId(item.id)}
+        onKeyDown={event => {
+          const next = event.key === 'ArrowDown' ? Math.min(items.length - 1, index + 1)
+            : event.key === 'ArrowUp' ? Math.max(0, index - 1)
+              : event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : null;
+          if (next === null) return;
+          event.preventDefault();
+          focusRow(next);
+        }}
+        onClick={() => {
+          if (onOpenItem) onOpenItem(item.id);
+          else literature.select(item.id);
+        }}
+        aria-current={selected ? 'true' : undefined}
+        data-testid={`literature-row-${item.id}`} className="library-row-open">
+        <span className="library-row-title" title={libraryItemTitle(item)}>{libraryItemTitle(item)}</span>
+        <span className="library-row-metadata">
+          <span>{formatAuthorList(item.metadata.authors)}</span>
+          <span className="tabular-nums">{formatYear(item.metadata.publishedYear)}</span>
+          {venue === null ? null : <span title={venue}>{venue}</span>}
+        </span>
+        {selected || item.archived ? <span className="library-row-status">
+          {selected ? <span data-testid={`literature-fulltext-${item.id}`}>{fullTextLabel(item, literature)}</span> : null}
+          {item.archived ? <span><Archive size={12} aria-hidden="true"/>已归档</span> : null}
+        </span> : null}
+      </button>
+      <CitationKeyCopy key={item.bibliography.citationKey} itemId={item.id}
+        citationKey={item.bibliography.citationKey} tabIndex={tabIndex}/>
+    </div>;
+  };
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 w-full flex-col" data-testid="literature-list">
-      <div className={compact ? 'flex shrink-0 flex-col gap-2 px-2 py-2' : 'flex shrink-0 flex-col gap-2 px-3 py-2'}>
-        <div className="flex items-center gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-control border-[0.5px] border-line bg-surface px-2">
-            <Search size={11} aria-hidden="true" className="shrink-0 text-subtle" />
-            <input
-              type="search"
-              value={searchDraft}
-              onChange={(event) => {
-                setSearchDraft(event.target.value);
-                literature.setQuery(event.target.value);
-              }}
-              placeholder="搜索文献"
-              aria-label="搜索文献"
-              data-testid="literature-search"
-              className="h-[var(--control-height-compact)] min-w-0 flex-1 bg-transparent text-ink text-[length:var(--font-meta-size)] placeholder:text-subtle"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={literature.reload}
-            aria-label="重新读取文献库"
-            title="重新读取文献库"
-            data-testid="literature-refresh"
-            disabled={literature.status === 'loading'}
-            aria-busy={literature.status === 'loading'}
-            className="flex h-[var(--control-height-compact)] w-[var(--control-height-compact)] shrink-0 items-center justify-center rounded-control border-[0.5px] border-line text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
-          >
-            {literature.status === 'loading' ? (
-              <Loader2 size={12} aria-hidden="true" className="animate-spin" />
-            ) : (
-              <RefreshCw size={12} aria-hidden="true" />
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={onRequestImport}
-            aria-label="导入文献"
-            title="导入文献（DOI / 参考文献文件 / 手工录入 / 文档）"
-            data-testid="literature-import-open"
-            className="flex h-[var(--control-height-compact)] w-[var(--control-height-compact)] shrink-0 items-center justify-center rounded-control border-[0.5px] border-line text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
-          >
-            <FilePlus2 size={12} aria-hidden="true" />
-          </button>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <label className="flex min-h-6 items-center gap-2 text-muted text-[length:var(--font-meta-size)]">
-            <input
-              type="checkbox"
-              checked={literature.includeArchived}
-              onChange={(event) => literature.setIncludeArchived(event.target.checked)}
-              data-testid="literature-archived-toggle"
-              className="h-3 w-3 accent-[var(--accent)]"
-            />
-            显示已归档
+    <div className="library-list" data-compact={compact} data-selecting={selecting} data-testid="literature-list">
+      <div className="library-list-toolbar">
+        <div className="library-search-row">
+          <label className="library-search">
+            <Search size={14} aria-hidden="true"/>
+            <input type="search" value={searchDraft}
+              onChange={event => {setSearchDraft(event.target.value); literature.setQuery(event.target.value);}}
+              placeholder="搜索文献" aria-label="搜索文献" data-testid="literature-search"/>
           </label>
-          <span className="tabular-nums text-subtle text-[length:var(--font-micro-size)]" data-testid="literature-count">
-            {literature.status === 'ready' ? `${items.length.toLocaleString('zh-CN')} 条` : ''}
-          </span>
+          <button type="button" onClick={literature.reload} aria-label="重新读取文献库" title="重新读取文献库"
+            data-testid="literature-refresh" disabled={literature.status === 'loading'} aria-busy={literature.status === 'loading'}
+            className="library-icon-button">
+            {literature.status === 'loading' ? <Loader2 size={14} aria-hidden="true" className="animate-spin"/>
+              : <RefreshCw size={14} aria-hidden="true"/>}
+          </button>
+          <button type="button" onClick={onRequestImport} aria-label="导入文献" title="导入文献"
+            data-testid="literature-import-open" className="library-icon-button">
+            <FilePlus2 size={14} aria-hidden="true"/>
+          </button>
         </div>
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="library-filter-row">
           <select aria-label="当前结果排序" value={sort} onChange={event => setSort(event.target.value as SortOrder)}
-            data-testid="literature-sort" className={`${formSelectClass} flex-1 text-[length:var(--font-meta-size)]`}>
+            data-testid="literature-sort" className={formSelectClass}>
             <option value="updated">最近更新</option><option value="year">发表年份</option><option value="title">文献题名</option>
           </select>
-          <button type="button" className={formSecondaryButtonClass} aria-pressed={selecting}
+          <button type="button" className="library-icon-button" aria-label="文献筛选" title="文献筛选"
+            aria-expanded={filtersOpen} aria-pressed={literature.includeArchived}
+            data-testid="literature-filter-toggle" onClick={() => setFiltersOpen(current => !current)}>
+            <SlidersHorizontal size={14} aria-hidden="true"/>
+          </button>
+          <button type="button" className="library-icon-button" aria-pressed={selecting}
+            aria-label={selecting ? '结束多选' : '多选文献'} title={selecting ? '结束多选' : '多选文献'}
             data-testid="literature-multiselect" onClick={() => {setSelecting(current => !current); setCheckedIds(new Set());}}>
-            {selecting ? '完成' : '多选'}
+            <ListChecks size={14} aria-hidden="true"/>
           </button>
         </div>
-        {selecting ? <label className="flex min-h-6 items-center gap-2 text-[length:var(--font-meta-size)] text-muted">
+        {filtersOpen ? <label className="library-filter-option">
+          <input type="checkbox" checked={literature.includeArchived}
+            onChange={event => literature.setIncludeArchived(event.target.checked)} data-testid="literature-archived-toggle"/>
+          显示已归档
+        </label> : null}
+        {selecting ? <label className="library-filter-option">
           <input type="checkbox" checked={items.length > 0 && checkedItems.length === items.length} disabled={items.length === 0}
             onChange={event => setCheckedIds(new Set(event.target.checked ? items.map(item => item.id) : []))}/>
           选择当前结果
@@ -176,72 +250,25 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
           testId="literature-empty"
         />
       ) : (
-        <ul className={bodyClass} role="list" aria-label="文献列表">
-          {items.map((item) => {
-            const selected = item.id === literature.selectedId;
-            const venue = readVenue(item.bibliography);
-            const copyKey = item.bibliography.citationKey;
-            return (
-              <li key={item.id} className="relative min-w-0">
-                {selecting ? <label className="flex min-h-6 items-center gap-2 px-2 text-[length:var(--font-meta-size)] text-muted">
-                  <input type="checkbox" checked={checkedIds.has(item.id)} aria-label={`选择文献 ${libraryItemTitle(item)}`}
-                    onChange={event => setCheckedIds(current => {
-                      const next = new Set(current);
-                      if (event.target.checked) next.add(item.id); else next.delete(item.id);
-                      return next;
-                    })}/>
-                  选择
-                </label> : null}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (onOpenItem) onOpenItem(item.id);
-                    else literature.select(item.id);
-                  }}
-                  aria-current={selected ? 'true' : undefined}
-                  data-testid={`literature-row-${item.id}`}
-                  className={`flex min-w-0 w-full flex-col gap-2 rounded-control pr-8 text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus-ring ${rowPad} ${
-                    selected
-                      ? 'bg-accent-soft active:bg-[var(--accent-soft-strong)]'
-                      : 'hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]'
-                  }`}
-                >
-                  <span className="line-clamp-2 break-words font-medium text-ink text-[length:var(--font-body-size)]" title={libraryItemTitle(item)}>{libraryItemTitle(item)}</span>
-                  <span className="flex w-full min-w-0 items-baseline gap-2 text-muted text-[length:var(--font-meta-size)]">
-                    <span className="min-w-0 truncate">{formatAuthorList(item.metadata.authors)}</span>
-                    <span className="shrink-0 tabular-nums">{formatYear(item.metadata.publishedYear)}</span>
-                    {venue === null ? null : <span className="min-w-0 truncate" title={venue}>{venue}</span>}
-                  </span>
-                  <span className="flex flex-wrap items-center gap-2 text-[length:var(--font-meta-size)] text-muted">
-                    <span data-testid={`literature-fulltext-${item.id}`}>{fullTextLabel(item, literature)}</span>
-                    <span title="打开文献查看解析、索引与知识生成的实际状态">检索待核验</span>
-                    {item.archived ? (
-                      <span className="flex items-center gap-1">
-                        <Archive size={12} aria-hidden="true" />
-                        已归档
-                      </span>
-                    ) : null}
-                  </span>
-                </button>
-                <CitationKeyCopy key={copyKey} itemId={item.id} citationKey={copyKey}/>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="library-list-body" data-testid="literature-list-body">
+          {virtualize ? <LazyBoundary fallback={<p role="status" className="p-3 text-muted">正在准备文献列表…</p>}>
+            <LazyLibraryVirtualizedRows ref={setVirtualizerRef} items={items}
+              initialIndex={Math.max(0, items.findIndex(item => item.id === literature.selectedId))}
+              onRangeChanged={setVisibleRange} renderRow={renderRow}/>
+          </LazyBoundary> : <ul aria-label="文献列表" className="library-plain-list">
+            {items.map((item, index) => <li key={item.id}>{renderRow(index, item)}</li>)}
+          </ul>}
+        </div>
       )}
 
       {selecting && checkedItems.length > 0 ? <BulkCitationActions key={checkedItems.map(item => item.id).join(':')}
         items={checkedItems} literature={literature}/> : null}
 
-      {literature.status === 'ready' && literature.items.length >= 200 ? (
-        <p
-          className="shrink-0 px-2 pb-2 text-subtle text-[length:var(--font-micro-size)]"
-          data-testid="literature-truncated"
-          role="note"
-        >
-          只显示前 200 条。
-        </p>
-      ) : null}
+      {literature.status === 'ready' ? <div className="library-list-footer">
+        <span data-testid="literature-count">{items.length.toLocaleString('zh-CN')} 条</span>
+        {literature.includeArchived ? <span>含已归档</span> : null}
+        {literature.items.length >= 200 ? <span data-testid="literature-truncated" role="note">仅前 200 条</span> : null}
+      </div> : null}
 
       {literature.action.error === null ? null : (
         <div className="shrink-0 px-2 pb-2">
@@ -255,16 +282,16 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
   );
 }
 
-function CitationKeyCopy({itemId, citationKey}: {itemId: string; citationKey: string}): React.JSX.Element {
+function CitationKeyCopy({itemId, citationKey, tabIndex}: {itemId: string; citationKey: string; tabIndex: number}): React.JSX.Element {
   const {copied, error, copy} = useCopyFeedback();
   return <>
-    <button type="button" onClick={() => copy(citationKey)}
+    <button type="button" tabIndex={tabIndex} onClick={() => copy(citationKey)}
       aria-label={`${copied ? '已复制引用键' : '复制引用键'} ${citationKey}`}
       title={copied ? '已复制' : '复制引用键'} data-testid={`literature-citekey-copy-${itemId}`}
-      className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-control text-subtle hover:bg-[var(--overlay-hover)] hover:text-ink focus-visible:bg-[var(--overlay-hover)] focus-visible:outline-2 focus-visible:outline-focus-ring active:bg-[var(--overlay-active)]">
+      className="library-row-copy library-icon-button">
       {copied ? <Check size={11} aria-hidden="true"/> : <Copy size={11} aria-hidden="true"/>}
     </button>
-    {error ? <p role="alert" className="px-2 py-1 text-[var(--st-bad)] text-[length:var(--font-meta-size)]">{error}</p> : null}
+    {error ? <p role="alert" className="library-row-error">{error}</p> : null}
   </>;
 }
 
