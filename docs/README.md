@@ -6,7 +6,7 @@
 
 | 文档 | 内容 |
 | --- | --- |
-| [任务导航与组件设计契约](design-system.md) | 五目的地、对象打开、状态与视觉约束 |
+| [任务导航与组件设计契约](design-system.md) | 四个目的地及子视图、对象打开、状态与视觉约束、官方设计参考 |
 | [UI 重构验证](ui-refactor-validation.md) | 阶段工程证据、验收缺口与回滚范围 |
 | [科研工作台](research-workbench.md) | 壳层、路由、助手输入与停止确认、文稿编辑和异步表单 |
 | [科研工件检查器](research-artifact-inspector.md) | 工件快照、生产文件与人工审核版本 |

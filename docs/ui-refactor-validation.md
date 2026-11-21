@@ -88,3 +88,34 @@ macOS 27.2.1 arm64，Electron 45，基线提交 `dd7511a`。隔离数据根启�
 每阶段使用独立本地提交：P0 `243720b`、P1 `39d940b`、P2 `cec5f23`、P3 `cb8644b`、P4 `e13e0e9`、P5 `320766b`，P6 为本节及最终收尾所在提交。需要回滚时，从目标阶段的后续提交开始逆序 `git revert`，再构建并运行受影响的检查；不使用 reset 清除历史。本轮未执行回滚或远端发布。回滚代码不会删除已有文献、项目文件、编译 PDF 或用户数据，也不应为回滚界面而重置数据库。
 
 工程截图、隔离 smoke 数据和临时计划在检查后清理；保留本记录、设计契约、回归检查及用户原始方案。
+
+
+## 2026-11-21 页面密度与组件复用
+
+本轮以 `1d6865c` 为起点，核对 Apple HIG、Microsoft Fluent、IBM Carbon 的布局与组件指导，参考成熟 Sidebar、Radix Dialog 和 Virtuoso，沿用既有 token、单壳与依赖。来源和应用位置见[设计契约](design-system.md#官方参考与组件复用)。没有新增组件库，也没有新增临时方案文档。
+
+完成项目门户固定查询区、工作台成果/文献自适应并列、文献两层工具栏与虚拟列表、助手分层输入与历史成功工具披露、后台任务平面列表和筛选。补齐虚拟行卸载后的键盘焦点、流式结束后的工具 DOM/展开态保留、高缩放短视口门户滚动。现有文档的栏序、断点、四目的地与设置分组同步到当前代码。
+
+本地提交：`3de1ce0` 项目布局、`5cc2603` 后台任务、`38ef779` 文献列表、`0a14048` 虚拟焦点、`3d33800` 助手、`75405a3` 高缩放与对齐；文档收尾使用后续独立提交。
+
+环境：macOS 27.2.1 arm64，Electron 45.3.4。以下命令在 `/Users/Apple_501/Desktop/Roc/Roc` 执行：
+
+```sh
+pnpm build
+pnpm check:renderer-chunks
+python3 .agents/skills/b-end-design-system/scripts/audit-design-rules.py src/renderer
+node --test --test-concurrency=1 tests/renderer/project-session-layout.test.mjs tests/renderer/literature-list-layout.test.mjs tests/renderer/literature-action-guards.test.mjs tests/renderer/management-draft-guards.test.mjs tests/renderer/task-center.test.mjs tests/renderer/assistant-activity-layout.test.mjs tests/renderer/assistant-panel-guards.test.mjs tests/renderer/desktop-interactions.test.mjs
+ROC_SMOKE_TARGET=dist ROC_UI_AUDIT_DIR=/tmp/roc-ui-refactor-MS2nxb/final-layout pnpm audit:layout
+git diff 1d6865c --check
+```
+
+- 构建、内含类型检查、chunk 门禁、差异检查通过；258 个组件通过脚本已实现的设计规则。
+- 合并 Electron 回归 **101/101**，无跳过。覆盖项目筛选/编辑、文献虚拟列表/批选/复制、后台刷新失败与草稿、助手输入/停止/审批、CJK 事件守卫、浮层焦点与缩放对应短视口。
+- 全应用布局 **771 状态**、**2079 次控件焦点与无遮挡检查**通过，所有阴影审计 `cut=0`。浅/深主题覆盖 1440×900、1280×820、1100×820、1099×820、1184×820、720×760、380×760、1200×540，以及减弱动效、hover、展开和普通动效落点。门户、工作台并列、助手模型浮层、窄设置等截图已查看。原生最小窗口仍为 1184×640；低于此尺寸使用隔离 Electron 窗口内的 renderer viewport 模拟。
+- 审查在真实 Electron 1184×640、400% 缩放复现门户列表归零后，新增不超过 400px 高度的整页滚动规则；随后上述最终 101 项回归在 296×160 CSS 视口及 244×122 壳内内容空间验证入口与搜索均可聚焦。此追加规则只影响全矩阵未覆盖的极短视口，未重复整套矩阵。
+- 文献 200 条实测只挂载 13 行；按需加载虚拟组件，首末跳转、排序、外部选择、手动滚动卸载和复制动作均有行为回归。
+- 历史 500 次成功工具调用折叠时组内 DOM 少于 20 个节点；展开可查看全部回执。当前流式消息完成后保留同一焦点节点与输出节点，错误、审批、推理和可导航综述回执不被聚合隐藏。
+- 最终 eager JS **502830 bytes / 10 files**，对比本轮既有构建基线 **501716 bytes** 增加 1114 bytes（约 0.22%）。应用入口与各应用懒模块均低于 500000 bytes 门禁；总 eager 预算由脚本维护。编辑器、PDF、终端与图谱继续懒加载。构建保留 Mermaid/ELK 上游大模块提示，未调整门槛。
+- 更新的 Markdown 本地链接已核验。所有本轮临时截图、日志、隔离运行目录已清理；未创建中间计划或报告文件。
+
+状态为 **Verified passing**，范围是本轮代码与上述工程检查。未重新打包或发布应用；人工系统输入法、VoiceOver、真实滚轮、长期 CPU/内存和真实外部服务任务不属于这些自动化结果。README 保留注明日期的既有真实业务截图，不把受控测试截图替换成真实业务证据。
