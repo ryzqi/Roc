@@ -37,6 +37,9 @@ export async function captureNativeCode(paths: readonly string[], signal: AbortS
         if (!sameVersion(before, await file.stat({ bigint: true }))) throw new Error('research_experiment_native_code_changed');
         const hash = createHash('sha256');
         let bytesRead = 0;
+        // Metadata reads can yield to shutdown. A pre-aborted FileHandle stream
+        // can emit an unhandled error after its iterator has already rejected.
+        signal.throwIfAborted();
         for await (const bytes of file.createReadStream({ autoClose: false, start: 0, highWaterMark: 1024 * 1024, signal })) {
           bytesRead += bytes.length;
           if (bytesRead > size) throw new Error('research_experiment_native_code_changed');

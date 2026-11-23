@@ -4,6 +4,8 @@ import {readFile, writeFile, readdir, mkdtemp, realpath, rm, symlink} from 'node
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import {importTypeScriptModule} from '../../scripts/lib/bundle-ts.mjs';
 import {loadScientificSearchApi, scientificSearchFixture, hash} from './fixtures/scientific-search-fixture.mjs';
 let api, visual;
@@ -157,6 +159,37 @@ test('model inspection binds actual local bytes and forbids executable modules o
     await symlink(join(root,'config.json'),join(root,'linked.json'));
     await assert.rejects(visual.inspectVisualModel(root,'colpali',signal()),/symlink/);
   } finally {await rm(root,{recursive:true,force:true});}
+});
+
+test('model cancellation during file open closes the descriptor without an uncaught stream error', async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'roc-visual-model-abort-')));
+  try {
+    await writeFile(join(root, 'model.safetensors'), 'controlled fixture');
+    const result = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', `
+      import assert from 'node:assert/strict';
+      import fs from 'node:fs/promises';
+      import {syncBuiltinESMExports} from 'node:module';
+      import {importTypeScriptModule} from './scripts/lib/bundle-ts.mjs';
+      const {inspectVisualModel} = await importTypeScriptModule(
+        'src/main/plugins/research/visual-model-files.ts', {platform: 'node'});
+      const original = fs.open, controller = new AbortController(), reason = new Error('controlled_model_cancel');
+      let opened;
+      fs.open = async (...args) => {
+        opened = await original(...args);
+        controller.abort(reason);
+        return opened;
+      };
+      syncBuiltinESMExports();
+      try {
+        await assert.rejects(inspectVisualModel(process.argv[1], 'colpali', controller.signal), error => error === reason);
+        assert.equal(opened.fd, -1);
+        await new Promise(resolve => setImmediate(resolve));
+        console.log('model_abort_caught');
+      } finally {fs.open = original; syncBuiltinESMExports();}
+    `, root], {timeout: 10_000});
+    assert.equal(result.stdout.trim(), 'model_abort_caught');
+    assert.equal(result.stderr, '');
+  } finally {await rm(root, {recursive: true, force: true});}
 });
 
 test('explicit Table image candidates retain the table locator and exact original cells', async () => {

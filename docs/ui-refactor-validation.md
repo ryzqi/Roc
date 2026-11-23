@@ -1,5 +1,13 @@
 # UI 重构验证记录
 
+## 2026-11-24 P8.3：文件校验取消的主进程异常
+
+状态：**Verified passing**（取消边界与定向单元范围）。preflight7在第三次应用启动前出现原生未捕获异常弹窗；目标进程采样及可访问性文本确定为 `FileHandle.createReadStream` 的AbortError，来源是原生代码校验。真实子进程复现：异步元数据读取期间取消，已取消信号进入读取流后，迭代虽拒绝仍另发未处理错误。原生代码和同模式视觉模型扫描在异步读取/打开后、创建流前同步检查取消；保留读取中的取消、原始I/O失败及文件描述符关闭。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。`node --test tests/unit/research-native-code.test.mjs tests/unit/visual-retrieval.test.mjs` **27/27**；新回归验证元数据时取消、读取中取消、EIO透传和视觉模型打开时取消，子进程无未捕获错误且fd已关闭。运行时为Node 26.13.1，修复后的完整Electron启动和打包另验；`pnpm build`通过。原生异常进程被定向终止，隔离资料根由finally清理，没有访问真实用户资料。
+
+最新UI组合 `node --test --test-concurrency=1 tests/renderer/radix-settings-dialog.test.mjs tests/renderer/desktop-interactions.test.mjs tests/renderer/artifact-dock.test.mjs tests/renderer/literature-list-layout.test.mjs` **69/69**，包含原生400%缩放、保存/取消/放弃、浮层及侧栏状态；该结果不代替完整布局矩阵。
+
 ## 2026-11-24 P7.7：长回复交接与虚拟列表跟随
 
 状态：**Verified passing**（消息生命周期定向范围）。生产长流预检曾在下一轮收流时停留旧长回复，先复现上一轮实时终态被替换后、持久历史稍后重新插入的高度突变；有界保留一条终态回答至持久投影接管。进一步用5,000条增量、100条分页和400条保留窗口复现测高期间短暂离底，外部状态反向关闭Virtuoso跟随。现由 `followOutput="auto"` 使用虚拟器自身的底部/滚动判断，保留主动上滚阅读，不逐增量强制滚动。

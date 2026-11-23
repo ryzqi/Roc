@@ -74,6 +74,49 @@ test('cancelled native code capture returns the real abort reason', async () => 
   await assert.rejects(identity([await directory()], controller.signal), /controlled_native_hash_abort/);
 });
 
+test('native file cancellation and read errors reject without uncaught stream errors or leaked descriptors', async (t) => {
+  const path = await directory();
+  await writeFile(join(path, 'native.dylib'), 'code bytes');
+  for (const mode of ['metadata-abort', 'read-abort', 'read-error']) await t.test(mode, async () => {
+    const result = await exec(process.execPath, ['--input-type=module', '-e', `
+    import assert from 'node:assert/strict';
+    import {open} from 'node:fs/promises';
+    import {join} from 'node:path';
+    import {pathToFileURL} from 'node:url';
+    const {captureNativeCode} = await import(pathToFileURL(process.argv[1]).href);
+    const handle = await open(join(process.argv[2], 'native.dylib'));
+    const prototype = Object.getPrototypeOf(handle), original = prototype.stat, originalRead = prototype.read;
+    await handle.close();
+    const controller = new AbortController(), mode = process.argv[3];
+    const reason = new Error('controlled_cancel');
+    const ioError = Object.assign(new Error('controlled_read_failure'), {code: 'EIO'});
+    let opened;
+    prototype.stat = async function (...args) {
+      opened = this;
+      const result = await original.apply(this, args);
+      if (mode === 'metadata-abort') controller.abort(reason);
+      return result;
+    };
+    prototype.read = async function (...args) {
+      if (mode === 'read-error') throw ioError;
+      const result = await originalRead.apply(this, args);
+      if (mode === 'read-abort') controller.abort(reason);
+      return result;
+    };
+    try {
+      await assert.rejects(captureNativeCode([process.argv[2]], controller.signal), error =>
+        mode === 'metadata-abort' ? error === reason : mode === 'read-error' ? error === ioError :
+          error.name === 'AbortError' && error.cause === reason);
+      assert.equal(opened.fd, -1);
+      await new Promise(resolve => setImmediate(resolve));
+      console.log('file_failure_caught');
+    } finally {prototype.stat = original; prototype.read = originalRead;}
+    `, api.modulePath, path, mode], {timeout: 10_000});
+    assert.equal(result.stdout.trim(), 'file_failure_caught');
+    assert.equal(result.stderr, '');
+  });
+});
+
 test('native code receipt cryptographically connects complete inventory to original environment metadata identity', async () => {
   const path = await directory(); await writeFile(join(path, 'native.dylib'), 'original code');
   const code = await api.captureNativeCode([path], new AbortController().signal);

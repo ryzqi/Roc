@@ -36,6 +36,8 @@ export async function inspectVisualModel(path: string, family: VisualModel['fami
       const file = await open(p, constants.O_RDONLY | constants.O_NOFOLLOW), hash = createHash('sha256');
       let size = 0;
       try {
+        // open() may complete after cancellation; fence before constructing a stream.
+        signal.throwIfAborted();
         for await (const bytes of file.createReadStream({autoClose: false, highWaterMark: 1024 ** 2, signal})) {
           size += bytes.length; if (size > s.size) throw new Error('research_visual_model_changed'); hash.update(bytes);
         }
