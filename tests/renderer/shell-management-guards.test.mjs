@@ -201,7 +201,7 @@ async function openTask(view = 'library') {
   await page.evaluate(view => {mount(view);}, view);
   await page.getByTestId('shell-assistant-content').waitFor();
   await page.evaluate(() => assistantEntries.onOpenTask('task-a'));
-  await page.getByTestId('mgmt-task-select').waitFor();
+  await page.getByTestId('canvas-task-row-task-a').waitFor();
   await expect(page.getByTestId('titlebar-toggle-assistant')).toHaveAttribute('aria-pressed', 'false');
   await content().fill('当前任务尚未保存的事实');
 }
@@ -352,11 +352,11 @@ test('actual shell assistant and management selections preserve facts until the 
     await discard().waitFor();
     await cancel();
     await expect(content()).toHaveValue('当前任务尚未保存的事实');
-    await expect(page.getByTestId('mgmt-task-select')).toHaveValue('task-a');
+    await expect(page.getByTestId('canvas-task-row-task-a')).toHaveAttribute('aria-pressed', 'true');
   }
   await page.evaluate(() => assistantEntries.onOpenTask('task-b'));
   await confirm();
-  await expect(page.getByTestId('mgmt-task-select')).toHaveValue('task-b');
+  await expect(page.getByTestId('canvas-task-row-task-b')).toHaveAttribute('aria-pressed', 'true');
   await expect(content()).toHaveValue('');
 });
 
@@ -400,7 +400,7 @@ test('actual shell artifact handoff waits for its inspector guard and returns to
   });
   await page.getByTestId('shell-artifact').waitFor();
   await page.evaluate(() => artifactEntries.onOpenTask('task-b'));
-  await expect(page.getByTestId('mgmt-task-select')).toHaveValue('task-b');
+  await expect(page.getByTestId('canvas-task-row-task-b')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('shell-artifact')).toHaveCount(0);
 });
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { ResearchTaskExecutionDiagnostics } from '../../../shared/schemas/research-task-diagnostics';
 import type { ResearchTask, ResearchTaskEvent } from '../../../shared/schemas/research-tasks';
 import { useAsyncResource } from '../../app/use-async-resource';
@@ -201,8 +201,9 @@ export function ResearchTasksSection(props: ResearchTasksSectionProps): React.JS
   </ManagementEditorBoundary>;
 }
 
-function ResearchTasksContent({ client, projectId, selectedTaskId, onSelectTask, onOpenArtifact }: ResearchTasksSectionProps): React.JSX.Element {
+function ResearchTasksContent({ client, projectId, selectedTaskId, onSelectTask, onOpenArtifact, canvasView }: ResearchTasksSectionProps): React.JSX.Element {
   const guard = useManagementEditor();
+  const detailId = useId();
   const [afterTaskId, setAfterTaskId] = useState<string | null>(null);
   const [previousTasks, setPreviousTasks] = useState<ResearchTask[]>([]);
   const resource = useAsyncResource(
@@ -222,42 +223,77 @@ function ResearchTasksContent({ client, projectId, selectedTaskId, onSelectTask,
     }
   }), [client, projectId, reload]);
   const tasks = [...previousTasks, ...(resource.data?.tasks ?? [])];
+  const selectTask = (next: string): void => {
+    if (next === selectedTaskId) return;
+    requestManagementEditorChange(() => onSelectTask(next));
+  };
+  const listState = resource.status === 'error' ? (
+    <div>
+      <p role="alert" className="break-words text-[var(--st-bad)]">{resource.error}</p>
+      <button type="button" className={formSecondaryButtonClass} onClick={reload}>重试任务列表</button>
+    </div>
+  ) : resource.status === 'loading' ? <p role="status" className="text-subtle">读取科研任务中…</p> :
+    tasks.length === 0 ? <p className="text-subtle">当前项目还没有科研任务。</p> : null;
+  const moreTasks = resource.data?.hasMore ? (
+    <button type="button" className={`${formSecondaryButtonClass} justify-self-start`}
+      data-testid="mgmt-task-list-more" disabled={resource.status === 'loading'} onClick={() => {
+        const page = resource.data;
+        if (resource.status !== 'ready' || page === null || consumedTasks.current === page ||
+          page.nextTaskId === afterTaskId) return;
+        consumedTasks.current = page;
+        setPreviousTasks(current => [...current, ...page.tasks]);
+        setAfterTaskId(page.nextTaskId);
+      }}>加载更多任务</button>
+  ) : null;
+  const detail = selectedTaskId === null ? null :
+    <TaskDetail key={`${projectId}:${selectedTaskId}`} client={client} projectId={projectId} taskId={selectedTaskId} onOpenArtifact={onOpenArtifact}/>;
+
+  if (canvasView === 'runs') {
+    return <div className="research-task-browser" data-testid="canvas-task-browser">
+      <FormSection title="科研任务" testId="mgmt-research-tasks">
+        <div className="research-task-layout">
+          <aside className="research-task-master" aria-label="科研任务列表" data-testid="canvas-task-list">
+            <p className="research-task-count">已加载 {number.format(tasks.length)} 项{resource.data?.hasMore ? ' / 还有更多' : ''}</p>
+            <ul className="research-task-list">
+              {tasks.map(task => <li key={task.id}>
+                <button type="button" className="research-task-row" data-testid={`canvas-task-row-${task.id}`}
+                  aria-pressed={task.id === selectedTaskId} aria-controls={detailId}
+                  disabled={guard.busy()} onClick={() => selectTask(task.id)}>
+                  <span className="research-task-goal">{task.goal}</span>
+                  <span className="research-task-meta">
+                    <span>{researchTaskStatusLabels[task.status]}</span>
+                    <time dateTime={task.updatedAt}>{formatBeijingDateTime(task.updatedAt)}</time>
+                  </span>
+                </button>
+              </li>)}
+            </ul>
+            {selectedTaskId !== null && !tasks.some(task => task.id === selectedTaskId) ?
+              <p className="research-task-unlisted">当前任务尚未在已加载列表中。<span>{selectedTaskId}</span></p> : null}
+            {listState}
+            {moreTasks}
+          </aside>
+          <section id={detailId} className="research-task-detail" aria-label="科研任务详情" data-testid="canvas-task-detail">
+            {detail ?? <p className="text-subtle">从任务列表选择一项，查看进度、成果与执行记录。</p>}
+          </section>
+        </div>
+      </FormSection>
+    </div>;
+  }
   return (
     <FormSection title="科研任务" testId="mgmt-research-tasks">
       <label className="grid gap-1">
         <span className="text-subtle">选择任务</span>
         <select className={formSelectClass} value={selectedTaskId ?? ''} data-testid="mgmt-task-select"
-          disabled={guard.busy()} onChange={event => {
-            const next = event.target.value;
-            if (next === selectedTaskId) return;
-            requestManagementEditorChange(() => onSelectTask(next));
-          }}>
+          disabled={guard.busy()} onChange={event => selectTask(event.target.value)}>
           <option value="" disabled>选择科研任务</option>
           {selectedTaskId !== null && !tasks.some(task => task.id === selectedTaskId) ?
             <option value={selectedTaskId}>当前任务 {selectedTaskId}</option> : null}
           {tasks.map(task => <option key={task.id} value={task.id}>{task.goal} / {researchTaskStatusLabels[task.status]}</option>)}
         </select>
       </label>
-      {resource.status === 'error' ? (
-        <div>
-          <p role="alert" className="break-words text-[var(--st-bad)]">{resource.error}</p>
-          <button type="button" className={formSecondaryButtonClass} onClick={reload}>重试任务列表</button>
-        </div>
-      ) : resource.status === 'loading' ? <p role="status" className="text-subtle">读取科研任务中…</p> :
-        tasks.length === 0 ? <p className="text-subtle">当前项目还没有科研任务。</p> : null}
-      {resource.data?.hasMore ? (
-        <button type="button" className={`${formSecondaryButtonClass} justify-self-start`}
-          data-testid="mgmt-task-list-more" disabled={resource.status === 'loading'} onClick={() => {
-            const page = resource.data;
-            if (resource.status !== 'ready' || page === null || consumedTasks.current === page ||
-              page.nextTaskId === afterTaskId) return;
-            consumedTasks.current = page;
-            setPreviousTasks(current => [...current, ...page.tasks]);
-            setAfterTaskId(page.nextTaskId);
-          }}>加载更多任务</button>
-      ) : null}
-      {selectedTaskId === null ? null :
-        <TaskDetail key={`${projectId}:${selectedTaskId}`} client={client} projectId={projectId} taskId={selectedTaskId} onOpenArtifact={onOpenArtifact}/>}
+      {listState}
+      {moreTasks}
+      {detail}
     </FormSection>
   );
 }

@@ -37,6 +37,28 @@
 .task-center-row-title { display: flex; width: 100%; align-items: start; justify-content: space-between; gap: var(--space-2); font-size: var(--font-ui-size); }
 .task-center-row-meta { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); color: var(--muted); font-size: var(--font-meta-size); }
 .task-center-empty { padding: var(--space-2); color: var(--subtle); font-size: var(--font-meta-size); }
+.research-task-browser { min-width: 0; container: research-tasks / inline-size; }
+.research-task-layout { display: grid; min-width: 0; grid-template-columns: 260px minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+.research-task-master { display: flex; min-width: 0; flex-direction: column; gap: var(--space-3); padding-inline-end: var(--space-4); border-inline-end: .5px solid var(--line); }
+.research-task-count, .research-task-unlisted { color: var(--muted); font-size: var(--font-meta-size); }
+.research-task-unlisted > span { display: block; overflow-wrap: anywhere; }
+.research-task-list { max-block-size: 65vh; overflow-y: auto; scrollbar-gutter: stable; border-block: .5px solid var(--line); }
+.research-task-list > li + li { border-top: .5px solid var(--line); }
+.research-task-row { display: flex; width: 100%; min-width: 0; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-2); border-radius: var(--r-control); text-align: start; }
+.research-task-row[aria-pressed="true"] { background: var(--overlay-active); }
+.research-task-row[aria-pressed="true"] > .research-task-goal { font-weight: var(--font-weight-semibold); }
+.research-task-row:enabled:hover { background: var(--overlay-hover); }
+.research-task-row:enabled:active { background: var(--overlay-active); }
+.research-task-row:disabled { opacity: .5; }
+.research-task-row:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.research-task-goal { overflow-wrap: anywhere; color: var(--ink); font-size: var(--font-ui-size); }
+.research-task-meta { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); color: var(--muted); font-size: var(--font-meta-size); }
+.research-task-detail { min-width: 0; }
+@container research-tasks (max-width: 700px) {
+  .research-task-layout { grid-template-columns: minmax(0, 1fr); }
+  .research-task-master { padding-inline-end: 0; padding-block-end: var(--space-4); border-inline-end: 0; border-block-end: .5px solid var(--line); }
+  .research-task-list { max-block-size: 240px; }
+}
 @container (max-width: 480px) {
   .management-heading { gap: var(--space-3); }
   .management-heading h2 { display: none; }

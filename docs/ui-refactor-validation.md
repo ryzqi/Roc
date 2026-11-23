@@ -1,5 +1,13 @@
 # UI 重构验证记录
 
+## 2026-11-23 P6.2：运行任务列表与详情
+
+状态：**Verified passing**。运行画布以260px任务列表配合既有TaskDetail，700px以下堆叠；管理抽屉保留原选择器。任务每页25条并去重，未加载的深链目标仍可打开独立详情，列表失败显式重试。任务事实、审批、恢复、回执与诊断沿用同一权威数据和草稿守卫；高级诊断按需展开。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`：`ROC_UI_CAPTURE_DIR=/tmp/roc-ui-p6-captures-20261123 node --test --test-concurrency=1 tests/renderer/research-tasks.test.mjs tests/renderer/shell-management-guards.test.mjs` **40/40**。已查看深色宽窗任务主从截图，另覆盖浅深窄窗、长目标、键盘焦点、分页/失败/深链、项目切换与编辑保护。
+
+此前跨阶段组合70/75：4项壳夹具仍等待已移除的任务下拉框，1项焦点断言在鼠标模式下仅调用focus。现改用真实任务行aria-pressed与Tab/Shift+Tab后确认焦点和outline，未放宽运行或编辑守卫。截图审阅后清理。P2对象Dock接线与最终全量回归另行验证。
+
 ## 2026-11-23 P6.1：工具失败与执行反馈
 
 状态：**Verified passing**。工具、Hook与子代理失败状态首次出现时展开真实原因；用户随后手动折叠不会被重复事件强制展开，新的失败边沿可再次提示。成功历史继续按需挂载，保留原始参数、输出、顺序与回执，自动披露不移动输入焦点。

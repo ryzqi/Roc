@@ -143,14 +143,14 @@ before(async () => {
             onOpenTask: taskId => opened.push(taskId), onOpenArtifact: request => calls.push({method: 'artifact-open', request})
           }))
         ));
-        window.mountDrawer = (taskId = 'task-a', projectId = 'project-a') => flushSync(() => render(
+        window.mountDrawer = (taskId = 'task-a', projectId = 'project-a', canvasView) => flushSync(() => render(
           React.createElement(React.StrictMode, null, React.createElement(ResearchTasksSection, {
-            key: projectId, client, projectId, selectedTaskId: taskId,
+            key: projectId, client, projectId, selectedTaskId: taskId, canvasView,
             onOpenArtifact: request => calls.push({method: 'artifact-open', request}),
             onSelectTask: taskId => {
               opened.push(taskId);
               response = {ok: true, data: makeData(projectId, taskId)};
-              mountDrawer(taskId, projectId);
+              mountDrawer(taskId, projectId, canvasView);
             }
           }))
         ));
@@ -234,7 +234,8 @@ before(async () => {
   });
   const cssDirectory = join(process.cwd(), 'dist/renderer/assets');
   const css = readdirSync(cssDirectory).filter(name => name.endsWith('.css'))
-    .map(name => readFileSync(join(cssDirectory, name), 'utf8')).join('\n');
+    .map(name => readFileSync(join(cssDirectory, name), 'utf8')).join('\n') + '\n' +
+    readFileSync(join(process.cwd(), 'src/renderer/management/management-layout.css'), 'utf8');
   writeFileSync(join(directory, 'tasks.css'), css);
   writeFileSync(join(directory, 'index.html'), `<html data-theme="light"><link rel="stylesheet" href="tasks.css">
     <style>body {margin:0;padding:16px;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,sans-serif}
@@ -265,6 +266,116 @@ after(async () => {
 
 const ready = () => page.getByTestId('task-status').waitFor();
 const openDiagnostics = () => page.getByTestId('mgmt-task-diagnostics').locator(':scope > summary').click();
+
+test('runs task rows preserve unsaved facts and keyboard selection keeps the authoritative task identity', async () => {
+  await page.evaluate(() => {
+    reset(); listResponse.data.tasks.push(makeData('project-a', 'task-b').task);
+    mountDrawer('task-a', 'project-a', 'runs');
+  });
+  await ready();
+  await expect(page.getByTestId('mgmt-task-select')).toHaveCount(0);
+  await expect(page.getByTestId('canvas-task-row-task-a')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('mgmt-task-fact-content').fill('保留当前任务事实草稿');
+  const next = page.getByTestId('canvas-task-row-task-b');
+  await next.focus();
+  await page.keyboard.press('Enter');
+  const discard = page.getByTestId('mgmt-editor-discard');
+  await expect(discard).toBeVisible();
+  assert.deepEqual(await page.evaluate(() => opened), []);
+  await discard.getByRole('button', {name: '继续编辑', exact: true}).click();
+  await expect(page.getByTestId('mgmt-task-fact-content')).toHaveValue('保留当前任务事实草稿');
+  await expect(page.getByTestId('canvas-task-row-task-a')).toHaveAttribute('aria-pressed', 'true');
+  await next.focus();
+  await page.keyboard.press('Enter');
+  await discard.getByRole('button', {name: '放弃修改并继续', exact: true}).click();
+  await expect(next).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('canvas-task-detail')).toContainText('验证科研任务 task-b');
+  await expect(page.getByTestId('mgmt-task-fact-content')).toHaveValue('');
+  assert.deepEqual(await page.evaluate(() => opened), ['task-b']);
+  assert.deepEqual(await page.evaluate(() => calls.filter(row => row.method === 'diagnostics').at(-1).request),
+    {projectId: 'project-a', taskId: 'task-b'});
+});
+
+test('runs task list retains cursor coverage and can retry while a selected task is outside loaded pages', async () => {
+  await page.evaluate(() => {
+    reset(); listResponse.data.hasMore = true;
+    response = {ok: true, data: makeData('project-a', 'task-z')};
+    mountDrawer('task-z', 'project-a', 'runs');
+  });
+  await ready();
+  const list = page.getByTestId('canvas-task-list');
+  await expect(list).toContainText('已加载 1 项 / 还有更多');
+  await expect(list).toContainText('当前任务尚未在已加载列表中');
+  await expect(page.getByTestId('canvas-task-detail')).toContainText('验证科研任务 task-z');
+  await page.evaluate(() => {
+    listResponse = {ok: true, data: {tasks: [makeData('project-a', 'task-b').task], nextTaskId: 'task-b', hasMore: false}};
+    const more = document.querySelector('[data-testid="mgmt-task-list-more"]');
+    more.click(); more.click();
+  });
+  await expect(list).toContainText('已加载 2 项');
+  await expect(list.getByRole('button')).toHaveCount(2);
+  await expect(page.getByTestId('mgmt-task-list-more')).toHaveCount(0);
+  assert.equal(await page.evaluate(() => calls.filter(row => row.method === 'list' && row.request.afterTaskId === 'task-a').length), 1);
+  await page.evaluate(() => {
+    listResponse = {ok: false, error: {message: '任务列表读取失败'}};
+    for (const listener of listeners) listener({projectId: 'project-a', taskId: 'task-z'});
+  });
+  await expect(list.getByRole('alert')).toHaveText('任务列表读取失败');
+  await expect(page.getByTestId('canvas-task-detail')).toContainText('验证科研任务 task-z');
+  await page.evaluate(() => {
+    listResponse = {ok: true, data: {tasks: [makeData('project-a', 'task-z').task], nextTaskId: 'task-z', hasMore: false}};
+  });
+  await list.getByRole('button', {name: '重试任务列表', exact: true}).click();
+  await expect(page.getByTestId('canvas-task-row-task-z')).toHaveAttribute('aria-pressed', 'true');
+  await expect(list).not.toContainText('当前任务尚未在已加载列表中');
+  await expect(list.getByRole('alert')).toHaveCount(0);
+});
+
+test('runs task list uses a 260px master column and stacks in a narrow canvas in both themes', async () => {
+  try {
+    for (const theme of ['light', 'dark']) {
+      await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setSize(1100, 850));
+      await page.evaluate(theme => {
+        document.documentElement.dataset.theme = theme;
+        document.getElementById('root').style.maxWidth = '1000px';
+        reset(); listResponse.data.tasks[0].goal = '需要完整换行的任务目标'.repeat(12);
+        mountDrawer('task-a', 'project-a', 'runs');
+      }, theme);
+      await ready();
+      const list = page.getByTestId('canvas-task-list');
+      const detail = page.getByTestId('canvas-task-detail');
+      await expect.poll(async () => (await list.boundingBox()).width).toBe(260);
+      let listBox = await list.boundingBox();
+      let detailBox = await detail.boundingBox();
+      assert.ok(detailBox.x >= listBox.x + listBox.width);
+      assert.ok(Math.abs(detailBox.y - listBox.y) <= 1);
+      await page.getByTestId('canvas-task-row-task-a').focus();
+      await page.keyboard.press('Tab');
+      await page.keyboard.press('Shift+Tab');
+      await expect(page.getByTestId('canvas-task-row-task-a')).toBeFocused();
+      assert.notEqual(await page.getByTestId('canvas-task-row-task-a').evaluate(element => getComputedStyle(element).outlineStyle), 'none');
+      await page.screenshot({path: join(artifacts, 'runs-wide-' + theme + '.png')});
+
+      await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setSize(620, 850));
+      await expect.poll(async () => {
+        const master = await list.boundingBox();
+        const selected = await detail.boundingBox();
+        return selected.y >= master.y + master.height;
+      }).toBe(true);
+      listBox = await list.boundingBox();
+      detailBox = await detail.boundingBox();
+      assert.ok(Math.abs(detailBox.x - listBox.x) <= 1);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+      await page.screenshot({path: join(artifacts, 'runs-narrow-' + theme + '.png')});
+    }
+  } finally {
+    await page.evaluate(() => {
+      clear(); document.getElementById('root').style.maxWidth = '';
+      document.documentElement.dataset.theme = 'light';
+    });
+    await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setSize(760, 680));
+  }
+});
 
 test('task controls serialize same-event opposing actions and ignore completion after unmount', async () => {
   for (const [button, status, restore] of [

@@ -47,6 +47,8 @@ The export operation has no network path. Diagnostic receipts describe observed 
 
 ## Desktop behavior
 
+The `runs` canvas presents the loaded research tasks in a 260px list alongside the selected task's existing detail view. At container widths of 700px or less, the list moves above the detail. Rows show the persisted goal, status and update time; keyboard activation uses the same unsaved-facts guard as the management drawer's compact selector. The loaded count and “more” state describe only fetched pages. A selected task outside those pages remains readable without implying that it was deleted. List failures retain their retry action, and selection never fabricates a new task or execution identity.
+
 The existing task execution tree uses native, initially closed `<details>` for observations. Opening or refreshing reads current persisted telemetry. Calls and replay have independent 50-row pages that replace the displayed page. Loading, failure, missing observations, unknown token usage and replay gaps are visible states. The export action prevents duplicate dispatch while pending and displays the real local receipt; late replies cannot populate another project/task panel.
 
 ## Task facts and context
