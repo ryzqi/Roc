@@ -38,7 +38,8 @@ export type HookCallBlockProps = {
 export function HookCallBlock({ block }: HookCallBlockProps): React.JSX.Element {
   const state = HOOK_STATE[block.status];
   const { open, setOpen } = useActivityBlockState({
-    defaultOpen: block.status === 'failed' || block.status === 'blocked'
+    defaultOpen: false,
+    revealOn: block.status === 'failed' || block.status === 'blocked'
   });
 
   const rows: Array<{ label: string; value: string }> = [

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 
 export function useActivityBlockState(input: {
   defaultOpen: boolean;
+  /** Reveal a newly important receipt once; later updates preserve manual disclosure. */
+  revealOn?: boolean;
   forceOpenWhileStreaming?: boolean;
   isStreaming?: boolean;
   autoCloseDelayMs?: number;
@@ -9,8 +11,14 @@ export function useActivityBlockState(input: {
   open: boolean;
   setOpen: (open: boolean) => void;
 } {
-  const [open, setOpenState] = useState(input.defaultOpen || Boolean(input.forceOpenWhileStreaming && input.isStreaming));
+  const [open, setOpenState] = useState(input.defaultOpen || Boolean(input.revealOn) || Boolean(input.forceOpenWhileStreaming && input.isStreaming));
   const wasStreamingRef = useRef(Boolean(input.isStreaming));
+
+  useEffect(() => {
+    // Depend on the condition's edge, not on open or the changing receipt payload:
+    // a new failure is revealed, then the user's choice to collapse it is retained.
+    if (input.revealOn) setOpenState(true);
+  }, [input.revealOn]);
 
   useEffect(() => {
     if (input.forceOpenWhileStreaming && input.isStreaming && !open) {

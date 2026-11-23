@@ -30,7 +30,7 @@ export function ToolCallBlock({ block }: ToolCallBlockProps): React.JSX.Element 
   const hasOutput = block.output !== null && block.output !== undefined;
   const hasError = block.error !== null && block.error !== undefined;
   const hasData = hasInput || hasOutput || hasError;
-  const { open, setOpen } = useActivityBlockState({ defaultOpen: block.status === 'error' });
+  const { open, setOpen } = useActivityBlockState({defaultOpen: false, revealOn: block.status === 'error'});
   const state = TOOL_STATE[block.status];
 
   return <div className="flex min-w-0 flex-col gap-1.5">

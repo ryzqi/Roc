@@ -131,6 +131,57 @@ test('finishing a streamed message preserves the focused tool and expanded paylo
   await expect(page.getByTestId('assistant-completed-tools')).toHaveCount(0);
 });
 
+test('a live tool failure reveals its receipt once without moving focus or overriding later disclosure', async () => {
+  await page.evaluate(block => window.resetActivity([block], true), tool('live-failure', 'progress', null));
+  const receipt = page.getByTestId('assistant-activity-tool');
+  const summary = page.getByTestId('assistant-activity-tool-summary');
+  await expect(receipt).not.toHaveAttribute('open');
+  const composer = page.getByTestId('assistant-composer-input');
+  await composer.fill('保留正在输入的草稿');
+  await composer.focus();
+  await page.evaluate(block => window.setActivity([block], true), tool('live-failure', 'error', {savedFile: 'result.txt'}));
+  await expect(receipt).toHaveAttribute('open', '');
+  await expect(page.getByTestId('assistant-tool-data-输入')).toContainText('live-failure');
+  await expect(page.getByTestId('assistant-tool-data-输出')).toContainText('result.txt');
+  await expect(page.getByTestId('assistant-tool-data-错误')).toContainText('工具执行失败');
+  await expect(composer).toBeFocused();
+  await expect(composer).toHaveValue('保留正在输入的草稿');
+
+  await summary.focus();
+  await page.keyboard.press('Enter');
+  await expect(receipt).not.toHaveAttribute('open');
+  await page.evaluate(block => window.setActivity([block]),
+    {...tool('live-failure', 'error', {savedFile: 'result.txt'}), error: '工具执行失败，已保存部分结果'});
+  await expect(summary).toBeFocused();
+  await expect(receipt).not.toHaveAttribute('open');
+  await expect(page.getByTestId('assistant-tool-data-错误')).toBeHidden();
+
+  // A retry is a new state transition. Its failure is important new information.
+  await page.evaluate(block => window.setActivity([block], true), tool('live-failure', 'progress', null));
+  await page.evaluate(block => window.setActivity([block], true), tool('live-failure', 'error'));
+  await expect(receipt).toHaveAttribute('open', '');
+  await expect(summary).toBeFocused();
+});
+
+test('live Hook failures and blocks reveal their authoritative reason and remain user collapsible', async () => {
+  const hook = status => ({id: 'hook-live', kind: 'hook_call', status, event: 'PreToolUse',
+    commandDisplay: 'check workspace policy', handlerId: 'policy-handler', durationMs: status === 'running' ? null : 30,
+    message: status === 'failed' ? '策略检查失败' : status === 'blocked' ? '目标路径不在授权范围' : null,
+    additionalContext: null, requestContinue: null});
+  for (const status of ['failed', 'blocked']) {
+    await page.evaluate(block => window.resetActivity([block], true), hook('running'));
+    const receipt = page.getByTestId('assistant-activity-hook');
+    await expect(receipt).not.toHaveAttribute('open');
+    await page.evaluate(block => window.setActivity([block], true), hook(status));
+    await expect(receipt).toHaveAttribute('open', '');
+    await expect(page.getByTestId('assistant-hook-body')).toContainText(hook(status).message);
+    await page.getByTestId('assistant-activity-hook-summary').click();
+    await expect(receipt).not.toHaveAttribute('open');
+    await page.evaluate(block => window.setActivity([block]), hook(status));
+    await expect(receipt).not.toHaveAttribute('open');
+  }
+});
+
 test('compact header and layered composer fit both themes with no clipped shadows', async t => {
   await page.evaluate(() => window.setActivity([]));
   const clipSource = await readFile('scripts/ui-audit/clip-audit.js', 'utf8');
