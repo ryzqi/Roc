@@ -21,10 +21,10 @@ import { createGateRecorder, finishGate, navigate, prepareArtifactDir } from './
  * 运行：
  *   rm -rf dist/renderer && pnpm build
  *   node scripts/verify-p4-assistant.mjs
- * 结果写入 `.artifacts/p4-gates/`（report.json + 截图）。
+ * 结果写入 `ROC_SMOKE_ARTIFACT_DIR/p4-gates` 或 `.artifacts/p4-gates/`（report.json + 截图）。
  */
 
-const artifactDir = prepareArtifactDir(resolve('.artifacts/p4-gates'));
+const artifactDir = prepareArtifactDir(resolve(process.env.ROC_SMOKE_ARTIFACT_DIR ?? '.artifacts', 'p4-gates'));
 
 const { results, record, fail, assertCheck } = createGateRecorder();
 
@@ -96,6 +96,13 @@ async function openAssistant(page, projectId) {
   await openSessions(page);
   await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 20_000 });
   await page.waitForSelector('[data-testid="assistant-composer-input"]', { timeout: 20_000 });
+  // At the native default width, opening sessions uses a modal sidebar drawer.
+  // Close it before interacting with the assistant, which is correctly inert
+  // while that drawer is open. The mounted session list still receives updates.
+  if (await page.getByTestId('sidebar-drawer').isVisible()) {
+    await page.getByTestId('sidebar-drawer-close').click();
+    await page.getByTestId('sidebar-drawer').waitFor({state: 'detached'});
+  }
 }
 
 async function openSessions(page) {

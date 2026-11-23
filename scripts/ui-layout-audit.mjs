@@ -112,6 +112,15 @@ async function selectDestination(page, view) {
     document.querySelector('[data-testid="literature-hub"]')?.getAttribute('data-workspace') === destination, view);
 }
 
+// The active list owns import. The hub exposes its fallback only when neither
+// the shell context nor the reader's local list is visible.
+async function literatureImportControl(page) {
+  const control = page.locator('[data-testid="literature-hub-import"]:visible, [data-testid="literature-import-open"]:visible');
+  await control.waitFor({ state: 'visible' });
+  assert.equal(await control.count(), 1, 'library exposes exactly one visible import action');
+  return control;
+}
+
 async function assertControlVisible(control) {
   // Native textarea focus only reveals its caret. Scroll the full control into
   // view first, as a user can, then measure its focus outline against each pane.
@@ -418,12 +427,12 @@ try {
       for (const tab of tabs) {
         await page.getByTestId(tab === 'graph' ? 'literature-open-graph' : `literature-subview-${tab}`).click();
         await page.getByTestId(`literature-panel-${tab}`).waitFor({state: 'visible'});
-        if (view === 'library') await assertControlVisible(page.getByTestId('literature-hub-import'));
+        if (view === 'library') await assertControlVisible(await literatureImportControl(page));
         await capture(page, `${view}-${tab}-${viewport.id}`);
       }
     }
     await selectDestination(page, 'library');
-    await page.getByTestId('literature-hub-import').click();
+    await (await literatureImportControl(page)).click();
     await page.getByTestId('literature-import-dialog-panel').waitFor();
     await page.getByTestId('literature-import-other').click();
     await page.getByTestId('literature-import-tab-manual').click();

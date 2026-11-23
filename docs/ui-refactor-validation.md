@@ -27,6 +27,30 @@ git diff --check
 
 工作目录 `/Users/Apple_501/Desktop/Roc/Roc`：`node --test --test-name-pattern='sidebar import requests' tests/renderer/literature-workspace-layout.test.mjs` 修复前复现失败；修复后 `node --test tests/renderer/literature-workspace-layout.test.mjs` **5/5**，`pnpm typecheck`、`git diff --check` 通过。完整应用的返回项目路径将在 P0.2 重新构建后复跑，不以组件回归代替全布局结果。
 
+## 2026-11-23 P0.2：当前工程基线
+
+状态：**Verified passing**（以下工程基线范围）。应用基线为 `42c3a78`（包含 P0.1 和导入请求修复）。本次布局驱动按当前可见列表选择唯一导入入口，仍校验恰有一个入口；完整 smoke 的 P4 子闸门也支持把诊断放入指定临时目录。没有放宽几何、业务或分包门槛。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`，以下命令通过：
+
+```sh
+pnpm build
+pnpm check:ipc
+pnpm check:renderer-chunks
+pnpm audit:design
+ROC_SMOKE_TARGET=dist ROC_UI_AUDIT_DIR=/tmp/roc-ui-p0-layout-complete-20261123 pnpm audit:layout
+node scripts/performance/bench-macos-app.mjs /tmp/roc-ui-p0-performance-final-20261123.json --samples 5 --idle-minutes 0
+ROC_SMOKE_TARGET=dist ROC_SMOKE_ARTIFACT_DIR=/tmp/roc-ui-p0-smoke-final-20261123 pnpm smoke:electron
+```
+
+- 构建含类型检查通过；eager JS **503389 bytes / 10 files**，各应用 chunk 低于 500000 bytes。保留上游 Mermaid/ELK 提示，未改预算。
+- 布局 **771 状态 / 2079 次焦点与无遮挡检查**通过，阴影裁切最大 `cut=0`。浅/深各覆盖 1440×900、1280×820、1100×820、1099×820、1184×820、720×760、380×760、1200×540，以及普通/减弱动效。原生最小宽度保持 1184px，较窄尺寸是测试窗口内的 CSS 视口模拟。已查看浅色工作台、深色文献阅读、380px 模型设置截图。夹具为空/少量受控内容，不能当海量真实文献或 PDF 证据。
+- 前次矩阵在浅色 1099px 的截图步骤出现 `Target page, context or browser has been closed`，无足够诊断确定原因；完整同参数重跑通过，保留中断记录，不声明已修复其根因。此前导入入口和请求重放两处阻塞已分别修正。
+- **15 次**同机启动/历史加载量测完成，结果与逐样本证据见[性能方法及基线](research-performance.md#2026-11-23-ui-工程基线)。0/1,000/10,000 合成消息的主窗就绪 P95 分别 1289.8/1347.2/1276.6ms；后两组采样均挂载 13 条消息。测量期间没有并行运行 Electron 测试或构建。
+- 完整 smoke：核心 **23/23**，助手深度路径 **64/64**。涵盖隔离工作区真实文件/Git/PTY、本地受控 provider、批准/拒绝的实际文件结果、停止与恢复、检查点进程重启、516 条消息下有界回放与滚动、125% 缩放。首轮深度路径打开侧栏后未关闭覆盖抽屉，助手正确处于 inert；修复脚本操作顺序后完整重跑通过。运行应用仍是上述 P0 构建，末尾类型检查同时覆盖工作区中正在实现的 P1.1 源码。真实外部模型和人工输入法未由这些结果验证。
+
+P0 尚有独立验收缺口：100 个项目，100/2,000/10,000 篇文献，500/5,000 条流式消息，200 页 PDF 连续翻页，20 次面板切换，30 分钟空闲 CPU/RSS、输入到绘制/FPS/Profiler，以及真实服务 T1/T2/T3、系统输入法与 VoiceOver。P1 可在已固定的工程基线上按切片推进，这些缺口不记为已完成。
+
 ## P0 工程基线（2026-11-20）
 
 macOS 27.2.1 arm64，Electron 45，基线提交 `dd7511a`。隔离数据根启动当天既有 dist，窗口 1320×860，原生最小 1184×640。门户、默认写作、文献、发现（雷达）、知识（RAG）五面均成功加载，无 pageerror、无页面横向溢出，阴影审计均 `cut=0`。截图检查确认默认空写作页、重复文件列表，以及文献七标签带来的多层导航。

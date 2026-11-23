@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { _electron as electron } from '@playwright/test';
 import { cpSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { importTypeScriptModule } from '../lib/bundle-ts.mjs';
 import { waitForAppReady } from '../../tests/smoke/lib/assertions.mjs';
 import { makeReport, protocol, readArguments, saveReport, summarizeRows } from './report-lib.mjs';
@@ -11,11 +11,13 @@ import { observeElectronLoop, sampleElectronProcesses } from './electron-metrics
 assert.equal(process.platform, 'darwin', 'macos_required');
 assert.equal(process.arch, 'arm64', 'arm64_required');
 const options = readArguments('.artifacts/mac-performance/app-before.json');
-const report = makeReport('macos-app', { events: protocol.app.events, samples: options.samples, idleMinutes: options.idleMinutes },
+const viewport = { width: 1440, height: 900 };
+const report = makeReport('macos-app', { events: protocol.app.events, samples: options.samples, idleMinutes: options.idleMinutes, viewport },
   ['src/main/index.ts', 'src/main/main-kernel-bootstrap.ts', 'src/main/plugins/research/index.ts',
-    'src/renderer/assistant/use-chat-run.ts', 'dist/main/index.js', 'dist/preload/index.cjs']);
+    'src/renderer/assistant/use-chat-run.ts', 'scripts/performance/bench-macos-app.mjs',
+    'dist/renderer/.vite/manifest.json', 'dist/main/index.js', 'dist/preload/index.cjs']);
 const root = mkdtempSync(join(tmpdir(), 'roc-app-performance-'));
-const artifactDir = resolve('.artifacts/mac-performance');
+const artifactDir = dirname(resolve(options.outputPath));
 mkdirSync(artifactDir, { recursive: true });
 let app;
 
@@ -34,7 +36,12 @@ try {
         env: { ...process.env, ROC_SMOKE: '1', ROC_DATA_ROOT: dataRoot } });
       await observeElectronLoop(app);
       const page = await app.firstWindow();
+      const pageErrors = [];
+      page.on('pageerror', error => pageErrors.push(error.message));
+      await app.evaluate(({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setContentSize(size.width, size.height), viewport);
       await waitForAppReady(page, `app-${eventCount}-${iteration}`, artifactDir);
+      assert.deepEqual(await page.evaluate(() => ({ width: innerWidth, height: innerHeight })), viewport,
+        'actual_renderer_viewport');
       const rendererReadyMs = performance.now() - startedAt;
       await page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
       const firstPaintMs = await page.evaluate(() => performance.getEntriesByName('first-contentful-paint')[0]?.startTime ?? null);
@@ -58,9 +65,27 @@ try {
         historyReadyMs = performance.now() - historyStarted;
       }
       const metrics = await sampleElectronProcesses(app);
+      const cdp = await page.context().newCDPSession(page);
+      let renderer;
+      try {
+        await cdp.send('Performance.enable');
+        const { metrics: values } = await cdp.send('Performance.getMetrics');
+        const measured = Object.fromEntries(values.map(({ name, value }) => [name, value]));
+        renderer = {
+          rendererHeapUsedBytes: measured.JSHeapUsedSize,
+          rendererHeapTotalBytes: measured.JSHeapTotalSize,
+          rendererDomNodes: measured.Nodes,
+          rendererDocuments: measured.Documents,
+          mountedMessageRows: await page.locator('[data-testid="assistant-message-user"], [data-testid="assistant-message-assistant"]').count()
+        };
+        assert.ok(Object.values(renderer).every(Number.isFinite), 'renderer_metrics_missing');
+      } finally {
+        await cdp.detach();
+      }
+      assert.deepEqual(pageErrors, [], 'renderer_page_errors');
       report.host.display = metrics.display;
       processSamples.push(metrics);
-      rows.push({ rendererReadyMs, firstPaintMs, inputReadyMs, historyReadyMs, mainRssBytes: metrics.main.rss,
+      rows.push({ rendererReadyMs, firstPaintMs, inputReadyMs, historyReadyMs, ...renderer, mainRssBytes: metrics.main.rss,
         mainHeapUsedBytes: metrics.main.heapUsed, mainExternalBytes: metrics.main.external, mainArrayBufferBytes: metrics.main.arrayBuffers,
         mainPrivateMemoryBytes: metrics.mainPrivateMemoryBytes,
         processWorkingSetSumBytes: metrics.processes.reduce((sum, metric) => sum + metric.workingSetBytes, 0) });
@@ -99,6 +124,7 @@ try {
     saveReport(options.outputPath, report);
   }
   report.limitations.push('Fresh isolated profiles/launches; OS filesystem cache remains warm.',
+    'Renderer DOM and JS heap are CDP point-in-time samples after history readiness; neither peak heap nor a leak verdict. Fixture events are user messages, not streaming model output.',
     'Native close-to-hide and second-instance reopen exercise production host forwarding; each idle checkpoint confirms the Renderer received hidden=true.',
     'Summed working sets include shared pages; not application exclusive footprint.',
     'CPU interval averages share app.getAppMetrics sampling intervals with diagnostics.',
