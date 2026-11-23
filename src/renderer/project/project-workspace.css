@@ -8,7 +8,7 @@
 .project-recent-row { display: flex; min-width: 0; align-items: center; gap: var(--space-3); padding: var(--space-3); border-radius: var(--r-control); background: var(--surface-rail); text-align: start; }
 .project-recent-row:hover { background: var(--overlay-hover); }
 .project-recent-row:active { background: var(--overlay-active); }
-.project-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+.project-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .project-list { display: flex; flex-direction: column; }
 .project-row[data-variant=list] { flex-wrap: wrap; }
 .project-row-content { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: var(--space-2); }
@@ -29,6 +29,7 @@
   .project-portal-scroll { flex: none; overflow: visible; }
 }
 @container project-portal (max-width: 560px) {
+  .project-grid { grid-template-columns: minmax(0, 1fr); }
   .project-portal-heading, .project-portal-content { padding: var(--space-4); }
   .project-portal-content { gap: var(--space-5); }
   .project-row[data-variant=list] > button { flex-basis: 100%; }
@@ -45,12 +46,11 @@
 
 .overview { container: overview / inline-size; }
 .overview-content { display: grid; width: 100%; max-width: 1120px; gap: var(--space-6); margin-inline: auto; padding: var(--spacing-page); }
-.overview-resources { display: grid; min-width: 0; gap: var(--space-6); }
-.overview-row-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: var(--space-1); overflow-wrap: anywhere; }
-.overview-resource-row { align-items: flex-start; }
 .overview-shortcuts { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.overview-goal { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.overview-priorities { display: grid; min-width: 0; gap: var(--space-6); }
 @container overview (min-width: 900px) {
-  .overview-resources { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-7); }
+  .overview-priorities { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: var(--space-7); }
 }
 @container overview (max-width: 560px) {
   .overview-content { padding: var(--space-4); gap: var(--space-5); }

@@ -12,6 +12,14 @@ export const researchTaskStatusLabels: Record<ResearchTask['status'], string> = 
   active: '进行中', paused: '已暂停', waiting_approval: '等待审批', interrupted: '运行中断',
   completed: '已完成', cancelled: '已取消', failed: '失败'
 };
+
+export function researchTaskReasonLabel(reason: string | null): string | null {
+  if (reason === 'research_task_cleanup_failed') return '资源清理尚未确认，请查看任务详情中的停止回执。';
+  if (reason === 'research_provider_reply_loop') return '模型服务检测到循环回复并终止生成。请在模型设置中更换模型后继续当前任务。';
+  if (reason === 'research_stage_inputs_stale') return '阶段输入已变化，请在任务详情核对当前输入和已有成果。';
+  // Unknown machine codes are useful in diagnostics, but are not explanations for users.
+  return reason !== null && /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/u.test(reason) ? null : reason;
+}
 const number = new Intl.NumberFormat('zh-CN');
 const executionLabels = {chat: '主助手', stage: '科研阶段', experiment: '实验', figure: '图稿', export: '导出', review_search: '综述查询'};
 const executionLabel = (execution: ResearchTaskExecutionDiagnostics): string =>
@@ -82,11 +90,13 @@ export function TaskSummary({ data, onOpenArtifact, surface = 'tasks' }: {
         </li>)}</ul>
       </details>}
       {data.task.statusReason === null ? null : (
-        <p className="break-words text-[var(--st-warn)]" data-testid="task-reason">
-          {data.task.statusReason === 'research_task_cleanup_failed' ? '资源清理尚未确认，请查看任务详情中的停止回执。' : <>任务停止原因：{data.task.statusReason === 'research_provider_reply_loop'
-            ? '模型服务检测到循环回复并终止生成。请在模型设置中更换模型后继续当前任务。'
-            : data.task.statusReason}</>}
-        </p>
+        <div className="break-words text-[var(--st-warn)]" data-testid="task-reason">
+          <p>{researchTaskReasonLabel(data.task.statusReason) ?? '查看任务详情中的停止回执。'}</p>
+          {/^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/u.test(data.task.statusReason) ? <details className="mt-1 text-muted">
+            <summary className="cursor-pointer rounded-control focus-visible:outline-2 focus-visible:outline-focus-ring">错误标识</summary>
+            <code className="break-all" data-testid="task-reason-code">{data.task.statusReason}</code>
+          </details> : null}
+        </div>
       )}
     </div>
   );

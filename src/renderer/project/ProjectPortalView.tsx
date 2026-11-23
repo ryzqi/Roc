@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './project-workspace.css';
 import { LayoutGrid, List, Loader2, Plus, Search } from 'lucide-react';
 import type { ResearchProject } from '../../shared/types';
@@ -8,6 +8,7 @@ import { ErrorBar } from '../shell/ErrorBar';
 import { EmptyState } from '../shell/EmptyState';
 import { ConfirmDialog } from '../shell/ConfirmDialog';
 import { formPrimaryButtonClass } from '../shared/form-ui';
+import {PageHeader} from '../shared/page-ui';
 import { ProjectRow } from './ProjectRow';
 import { ProjectFormDialog, type ProjectFormValues } from './ProjectFormDialog';
 import { isProjectArchived, visibleProjects, type ProjectStatusFilter } from './project-store';
@@ -65,7 +66,9 @@ export function ProjectPortalView({
   const [archiving, setArchiving] = useState<ResearchProject | null>(null);
   const [deleting, setDeleting] = useState<ResearchProject | null>(null);
   const [focusedIndex, setFocusedIndex] = useState(0);
+  const [visibleLimit, setVisibleLimit] = useState(40);
   const listRef = useRef<HTMLDivElement>(null);
+  const pendingFocus = useRef<number | null>(null);
 
   // Adopt later requests (a second ⌘N after the user closed the form).
   if (createFormRequested && !createOpen) {
@@ -91,6 +94,14 @@ export function ProjectPortalView({
    * "open project" action would become unreachable by keyboard.
    */
   const safeFocusedIndex = shown.length === 0 ? 0 : Math.min(focusedIndex, shown.length - 1);
+  const rendered = shown.slice(0, Math.max(visibleLimit, safeFocusedIndex + 1));
+  useEffect(() => {
+    if (pendingFocus.current === null) return;
+    const target = listRef.current?.querySelector<HTMLButtonElement>(`[data-project-index="${pendingFocus.current}"] [data-project-body]`);
+    if (target === null || target === undefined) return;
+    pendingFocus.current = null;
+    target.focus();
+  }, [visibleLimit, safeFocusedIndex]);
 
   const closeCreate = (): void => {
     setCreateOpen(false);
@@ -112,13 +123,20 @@ export function ProjectPortalView({
       ? getComputedStyle(listRef.current).gridTemplateColumns.split(' ').length : 1;
     const delta = event.key === 'ArrowDown' ? columns : event.key === 'ArrowUp' ? -columns
       : event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
-    if (delta === 0) {
+    if (delta === 0 && event.key !== 'Home' && event.key !== 'End') {
       return;
     }
     event.preventDefault();
-    const next = Math.min(Math.max(safeFocusedIndex + delta, 0), shown.length - 1);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? shown.length - 1 :
+      Math.min(Math.max(safeFocusedIndex + delta, 0), shown.length - 1);
+    if (next >= rendered.length) setVisibleLimit(Math.min(shown.length, Math.max(next + 1, visibleLimit + 40)));
+    pendingFocus.current = next;
     setFocusedIndex(next);
-    listRef.current?.querySelector<HTMLButtonElement>(`[data-project-index="${next}"] [data-project-body]`)?.focus();
+    const nextButton = listRef.current?.querySelector<HTMLButtonElement>(`[data-project-index="${next}"] [data-project-body]`);
+    if (nextButton !== null && nextButton !== undefined) {
+      pendingFocus.current = null;
+      nextButton.focus();
+    }
   };
 
   const busy = projects.create.pending || projects.update.pending || projects.remove.pending;
@@ -164,15 +182,12 @@ export function ProjectPortalView({
 
   return (
     <div className="project-portal h-full" data-testid="portal">
-      <header className="project-portal-header" data-testid="portal-header">
+      <div className="project-portal-header" data-testid="portal-header">
         <div className="project-portal-heading">
-          <div className="flex items-center justify-between gap-3">
-            <h1 className="text-[length:var(--font-h2-size)] font-semibold">研究项目</h1>
-            <button type="button" data-testid="portal-new-project" aria-label="新建研究项目" onClick={() => setCreateOpen(true)}
+          <PageHeader title="研究项目" action={<button type="button" data-testid="portal-new-project" aria-label="新建研究项目" onClick={() => setCreateOpen(true)}
               className={formPrimaryButtonClass}>
-              <Plus size={14} aria-hidden="true" />新建项目
-            </button>
-          </div>
+              <Plus size={14} aria-hidden="true" />{all.length === 0 && projects.list.status === 'ready' ? '新建第一个研究项目' : '新建项目'}
+            </button>}/>
           {all.length > 0 ? (
             <div className="project-portal-filters">
               <div className="flex min-h-[var(--control-height)] min-w-[min(160px,100%)] flex-1 items-center gap-2 rounded-control border-[0.5px] border-line bg-surface px-2">
@@ -182,6 +197,7 @@ export function ProjectPortalView({
                   onChange={(event) => {
                     setQuery(event.target.value);
                     setFocusedIndex(0);
+                    setVisibleLimit(40);
                   }}
                   placeholder="搜索项目"
                   aria-label="搜索项目"
@@ -191,7 +207,11 @@ export function ProjectPortalView({
                 {query.length === 0 ? null : (
                   <button
                     type="button"
-                    onClick={() => setQuery('')}
+                    onClick={() => {
+                      setQuery('');
+                      setFocusedIndex(0);
+                      setVisibleLimit(40);
+                    }}
                     className="min-h-6 shrink-0 rounded-control px-2 text-muted hover:bg-[var(--overlay-hover)] hover:text-ink active:bg-[var(--overlay-active)]"
                   >
                     清空
@@ -209,6 +229,7 @@ export function ProjectPortalView({
                       onClick={() => {
                         setFilter(entry.id);
                         setFocusedIndex(0);
+                        setVisibleLimit(40);
                       }}
                       data-testid={`portal-filter-${entry.id}`}
                       className={
@@ -234,7 +255,7 @@ export function ProjectPortalView({
             </div>
           ) : null}
         </div>
-      </header>
+      </div>
       <div className="project-portal-scroll ui-scroll-region" data-testid="portal-content">
         <div className="project-portal-content">
           {recent.length === 0 || query.trim() !== '' || filter === 'archived' ? null : (
@@ -281,6 +302,7 @@ export function ProjectPortalView({
           ) : all.length === 0 ? (
             <EmptyState
               title="还没有研究项目"
+              description="按研究目标整理文献、任务和写作成果。从上方新建第一个项目。"
               testId="portal-empty"
             />
           ) : shown.length === 0 ? (
@@ -291,11 +313,14 @@ export function ProjectPortalView({
                 onClick: () => {
                   setQuery('');
                   setFilter('all');
+                  setFocusedIndex(0);
+                  setVisibleLimit(40);
                 }
               }}
               testId="portal-no-match"
             />
           ) : (
+            <>
             <div
               ref={listRef}
               role="list"
@@ -305,7 +330,7 @@ export function ProjectPortalView({
               data-project-view={projectView}
               className={projectView === 'cards' ? 'project-grid' : 'project-list'}
             >
-              {shown.map((project, index) => (
+              {rendered.map((project, index) => (
                 <div role="listitem" key={project.id} data-project-index={index}>
                   <ProjectRow
                     project={project}
@@ -334,6 +359,13 @@ export function ProjectPortalView({
                 </div>
               ))}
             </div>
+            {rendered.length >= shown.length ? null : <button type="button" className="self-start rounded-control px-3 py-2 text-muted hover:bg-[var(--overlay-hover)]"
+              data-testid="portal-load-more" onClick={() => {
+                pendingFocus.current = rendered.length;
+                setFocusedIndex(rendered.length);
+                setVisibleLimit(current => current + 40);
+              }}>显示更多项目（剩余 {shown.length - rendered.length} 个）</button>}
+            </>
           )}
           </section>
         </div>

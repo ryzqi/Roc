@@ -147,7 +147,12 @@ test('provider reply loops have an actionable reason within the task column',asy
   await expect(page.getByTestId('task-reason')).toContainText('更换模型后继续');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await page.evaluate(()=>window.mountTask('research_stage_inputs_stale'));
-  await expect(page.getByTestId('task-reason')).toContainText('research_stage_inputs_stale');
+  await expect(page.getByTestId('task-reason')).toContainText('阶段输入已变化');
+  await expect(page.getByTestId('task-reason-code')).toBeHidden();
+  const identifier=page.getByTestId('task-reason').getByText('错误标识',{exact:true});
+  await identifier.focus();await page.keyboard.press('Enter');
+  await expect(page.getByTestId('task-reason-code')).toBeVisible();
+  await expect(page.getByTestId('task-reason-code')).toHaveText('research_stage_inputs_stale');
 });
 
 test('reading hides routine pipeline receipts while acquisition failures and retry remain visible',async()=>{

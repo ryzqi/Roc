@@ -65,7 +65,7 @@ export function ProjectRow({
             {pinned ? (
               <Pin size={12} aria-hidden="true" className="shrink-0 fill-current text-ink" data-testid="portal-card-pinned" />
             ) : null}
-            <span className="project-row-title text-[length:var(--font-ui-size)] font-medium text-ink" title={project.title}>
+            <span className={`project-row-title ${variant === 'cards' ? 'text-[length:var(--font-read-large-size)]' : 'text-[length:var(--font-ui-size)]'} font-medium text-ink`} title={project.title}>
               {project.title}
             </span>
           </span>

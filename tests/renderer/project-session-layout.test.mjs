@@ -27,7 +27,7 @@ before(async()=>{
     const projects=[project('first','科学证据与可重复研究方法的完整验证计划'),project('second','图像与文本模型比较'),project('archived','已完成研究','archived')];
     window.projectData=projects;window.opened=[];window.deleted=[];window.created=0;window.updates=[];
     window.threadData=[{id:'one',kind:'chat',title:'分析实验方法和科学证据的可靠性与可重复性',goal:'',status:'completed',updatedAt:'2026-11-20T00:00:00Z'}, {id:'two',kind:'chat',title:'文献摘要',goal:'',status:'active',updatedAt:'2026-11-19T00:00:00Z'}];
-    const client={api:{research:{listProjects:async()=>ok(projects),updateProject:async request=>{window.updates.push(request);return ok({...projects.find(p=>p.id===request.id),...request});}},workspace:{selectFromDialog:async()=>ok({path:'/synthetic/new'})},tasks:{
+    const client={api:{research:{listProjects:async()=>ok(projects),createProject:async request=>{const created=project('created',request.title);projects.push({...created,...request});return ok({...created,...request});},updateProject:async request=>{window.updates.push(request);return ok({...projects.find(p=>p.id===request.id),...request});}},workspace:{selectFromDialog:async()=>ok({path:'/synthetic/new'})},tasks:{
       getSnapshot:async()=>{
         if(window.holdThreads) return new Promise(resolve=>{window.finishThreads=resolve;});
         return ok({threads:window.threadData});
@@ -63,6 +63,54 @@ test('project actions disclose locally and editing retains the current project a
   assert.equal(await page.evaluate(()=>updates[0].id),'first');
   await page.getByTestId('portal-filter-archived').click();
   await expect(page.getByRole('heading',{name:'已归档项目 1 个'})).toBeVisible();
+});
+
+test('zero and one project keep creation and keyboard opening available',async()=>{
+  await page.evaluate(()=>{window.savedProjects=structuredClone(window.projectData);window.projectData.length=0;mount('portal');});
+  try {
+    await expect(page.getByTestId('portal-empty')).toContainText('按研究目标整理文献');
+    await expect(page.getByTestId('portal-new-project')).toHaveText('新建第一个研究项目');
+    await page.getByTestId('portal-new-project').focus();await page.keyboard.press('Enter');
+    await expect(page.getByTestId('portal-create-dialog')).toBeVisible();
+    await page.getByTestId('project-form-cancel').click();
+    await page.evaluate(()=>{window.projectData.push(window.savedProjects[0]);mount('portal');});
+    await expect(page.locator('[data-project-body]')).toHaveCount(1);
+    await page.getByTestId('portal-card-open-first').focus();await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(()=>window.opened.at(-1)),'first');
+  } finally {
+    await page.evaluate(()=>{window.projectData.splice(0,window.projectData.length,...window.savedProjects);delete window.savedProjects;mount('portal');});
+  }
+});
+
+test('one hundred projects mount progressively while search and keyboard reach every identity',async()=>{
+  await page.evaluate(()=>{
+    window.savedProjects=structuredClone(window.projectData);
+    const base=window.projectData[0];window.projectData.length=0;
+    for(let index=0;index<100;index++)window.projectData.push({...base,id:'scale-'+index,title:index===99?'长标题'.repeat(400):'规模项目 '+index});
+    mount('portal');
+  });
+  try {
+    await page.getByTestId('portal-view-list').click();
+    await expect(page.locator('[data-project-body]')).toHaveCount(40);
+    await expect(page.getByRole('heading',{name:'进行中的项目 100 个'})).toBeVisible();
+    await page.getByTestId('portal-search').fill('长标题');
+    await expect(page.locator('[data-project-body]')).toHaveCount(1);
+    await expect(page.getByTestId('portal-card-open-scale-99')).toBeVisible();
+    await page.getByTestId('portal-search').fill('');
+    await expect(page.locator('[data-project-body]')).toHaveCount(40);
+    await page.getByTestId('portal-load-more').click();
+    await expect(page.locator('[data-project-body]')).toHaveCount(80);
+    await expect(page.getByTestId('portal-card-open-scale-40')).toBeFocused();
+    await page.keyboard.press('End');
+    await expect(page.getByTestId('portal-card-open-scale-99')).toBeFocused();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(()=>window.opened.at(-1)),'scale-99');
+    await page.keyboard.press('Home');
+    await expect(page.getByTestId('portal-card-open-scale-0')).toBeFocused();
+    assert.equal(await page.getByTestId('portal').evaluate(element=>element.scrollWidth>element.clientWidth),false);
+  } finally {
+    await page.evaluate(()=>{window.projectData.splice(0,window.projectData.length,...window.savedProjects);delete window.savedProjects;mount('portal');});
+  }
 });
 
 test('project search and create action stay visible while the project list scrolls',async()=>{

@@ -1,5 +1,13 @@
 # UI 重构验证记录
 
+## 2026-11-23 P3：项目门户与研究总览
+
+状态：**Verified passing**。门户每次挂载40项，搜索、计数与键盘Home/End仍遍历完整项目集合；总览按当前任务、最多3项待处理与真实类型成果组织，长目标可展开。继续研究的文案来自实际诊断，按钮只导航；不存在项目归属的会话不会被伪造。技术原因保留在可展开的错误标识中。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。串行执行 `node --test --test-concurrency=1 tests/renderer/project-overview.test.mjs tests/renderer/project-session-layout.test.mjs tests/renderer/discovery-search.test.mjs tests/renderer/literature-review.test.mjs tests/renderer/reading-layout.test.mjs tests/renderer/reading-note-guards.test.mjs tests/renderer/reading-tool-guards.test.mjs tests/renderer/authoring-tools-layout.test.mjs tests/renderer/manuscript-sync.test.mjs tests/renderer/file-tree-virtualization.test.mjs tests/renderer/assistant-activity-layout.test.mjs tests/renderer/canvas-view-loading.test.mjs`：总计66/67，P3两文件11/11及阅读文件的任务原因测试通过；唯一失败为P7新增切页生命周期夹具，另行修复记录。组合设置 `ROC_UI_AUDIT_DIR=/tmp/roc-ui-p3-captures-20261123` 与 `ROC_UI_CAPTURE_DIR=/tmp/roc-ui-p6-captures-20261123`，截图审阅后清理。已查看1184px浅色紧凑与1440px深色舒适总览，长目标、焦点与内容边界正常。
+
+此前44/45组合中TaskSummary夹具仍要求主层显示原始错误码；现改为检查可读原因与键盘展开原始标识，未删除诊断信息。真实外部服务恢复不在此夹具的证明范围。
+
 ## 2026-11-23 P4.1：文献游标分页
 
 状态：**Verified passing**（分页接口和界面回归范围）。新 `research.library.listPage` 保留旧数组接口，按(updatedAt DESC,id ASC)稳定排序，单页事务返回真实total/hasMore/nextCursor；项目、归档和搜索由后端完整集合过滤，特殊LIKE字符按字面处理。前端每页200条，显式加载更多/重试；查询、刷新与项目切换隔离迟到响应，追加去重并保留选择与阅读详情，不跳回先前选中行。标题/年份排序和类型分类仍仅作用于已加载条目，界面已明确标记；不是全库排序。
