@@ -806,6 +806,55 @@ test('12k sequenced events preserve hidden flush, subagents and terminal deliver
   await page.evaluate(() => clearHook());
 });
 
+test('hidden run approvals and continuation update authoritative state immediately in event order', async () => {
+  await replayBudgetFixture();
+  const transitions = await page.evaluate(() => {
+    beginBudgetRun(0, 'hidden-control');
+    hiddenListeners.get(0)({hidden:true});
+    const emit=(sequence,event)=>emitBudgetEvent(0,'hidden-control',sequence,event);
+    const snapshot=()=>{
+      const state=runPair[0].getCurrentState();
+      return {status:state.status,text:state.assistantMessage,interrupts:state.pendingInterrupts.map(item=>item.interruptId),error:state.errorMessage};
+    };
+    emit(2,{type:'assistant_block',block:{kind:'text',blockId:'text',phase:'delta',text:'Before approval. '}});
+    const buffered=snapshot();
+    const interrupt=interruptId=>({type:'run_interrupted',threadId:'a',interruptId,payload:{kind:'approval',request:{
+      actionRequests:[{name:'write_file',args:{file_path:'draft.md'},description:'Write the reviewed draft'}],
+      reviewConfigs:[{actionName:'write_file',allowedDecisions:['approve','reject']}]
+    }}});
+    emit(3,interrupt('first-approval'));
+    const first=snapshot();
+    emit(4,interrupt('second-approval'));
+    const both=snapshot();
+    emit(5,{type:'run_resumed',threadId:'a',interruptId:'first-approval'});
+    const oneRemaining=snapshot();
+    emit(6,{type:'run_resumed',threadId:'a',interruptId:'second-approval'});
+    const resumed=snapshot();
+    emit(7,{type:'assistant_block',block:{kind:'text',blockId:'text',phase:'delta',text:'After approval. '}});
+    emit(8,{type:'run_failed',threadId:'a',code:'provider_unavailable',message:'Retry required',retryable:true});
+    const failed=snapshot();
+    emit(9,{type:'run_continued',threadId:'a',continuedAt:'now'});
+    const continued=snapshot();
+    emit(10,{type:'assistant_block',block:{kind:'text',blockId:'text',phase:'delta',text:'Continued.'}});
+    // Already observed wrappers must not reintroduce approvals or duplicate output.
+    emit(4,interrupt('second-approval'));
+    hiddenListeners.get(0)({hidden:false});
+    return {buffered,first,both,oneRemaining,resumed,failed,continued,visible:snapshot()};
+  });
+  assert.equal(transitions.buffered.text,'','ordinary hidden output remains batched');
+  assert.deepEqual(transitions.first,{status:'waiting_user',text:'Before approval. ',interrupts:['first-approval'],error:null});
+  assert.deepEqual(transitions.both.interrupts,['first-approval','second-approval']);
+  assert.deepEqual(transitions.oneRemaining.interrupts,['second-approval']);
+  assert.equal(transitions.oneRemaining.status,'waiting_user');
+  assert.deepEqual(transitions.resumed,{status:'running',text:'Before approval. ',interrupts:[],error:null});
+  assert.deepEqual(transitions.failed,{status:'failed',text:'Before approval. After approval. ',interrupts:[],error:'Retry required'});
+  assert.deepEqual(transitions.continued,{status:'running',text:'Before approval. After approval. ',interrupts:[],error:null});
+  assert.deepEqual(transitions.visible,{status:'running',text:'Before approval. After approval. Continued.',interrupts:[],error:null});
+  await page.waitForFunction(()=>runPair[0].state.assistantMessage==='Before approval. After approval. Continued.');
+  await page.evaluate(()=>clearHook());
+  assert.deepEqual(await page.evaluate(()=>[rendererReplayByteBudget.snapshot().storedBytes,runListeners.size,hiddenListeners.size]),[0,0,0]);
+});
+
 test('conversation switch releases the old shared replay allocation', async () => {
   await chatFixture();
   await page.evaluate(() => {

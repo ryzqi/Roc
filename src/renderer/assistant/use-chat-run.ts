@@ -331,7 +331,11 @@ export function useChatRun(client: RocClient, scope: {
         setErrorMessage(event.message);
       }
 
-      if (isTerminalChatRunEvent(event) || pendingEventsRef.current.length >= maxPendingChatRunEvents) {
+      // Approval and continuation are control state, including while a hidden
+      // window has no animation frames. Flush preceding output in sequence so
+      // getCurrentState() never reports running after an interrupt arrived.
+      const controlTransition = event.type === 'run_interrupted' || event.type === 'run_resumed' || event.type === 'run_continued';
+      if (controlTransition || isTerminalChatRunEvent(event) || pendingEventsRef.current.length >= maxPendingChatRunEvents) {
         if (rafHandleRef.current !== null) {
           cancelAnimationFrame(rafHandleRef.current);
           rafHandleRef.current = null;
