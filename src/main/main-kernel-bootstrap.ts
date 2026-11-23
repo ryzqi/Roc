@@ -24,6 +24,7 @@ import { createMcpPlugin } from './plugins/mcp';
 import { createMemoryPlugin } from './plugins/memory';
 import { createRuntimeToolsPlugin } from './plugins/runtime-tools';
 import { createResearchPlugin } from './plugins/research';
+import {ResearchProjectWorkspaceContract} from './plugins/research/research-project-workspace-contract';
 import { createResearchRoleExecutor } from './plugins/research/role-executor';
 import { createSkillsPlugin } from './plugins/skills';
 import { createTaskPlugin } from './plugins/task';
@@ -285,7 +286,8 @@ function createDefaultMainKernelPlugins(input: {
     createTaskPlugin({
       agentTaskHistory: new AgentTaskHistoryContract(agentDatabase)
     }),
-    createWorkspacePlugin({ rootDir: input.paths.root, workspaceService }),
+    createWorkspacePlugin({ rootDir: input.paths.root, workspaceService,
+      projectWorkspace: new ResearchProjectWorkspaceContract(input.databasePool.getConnection('@roc/plugin-research')) }),
     createResearchPlugin({
       modelFactory: input.modelFactory,
       diagnosticsRoot: input.paths.diagnosticsDir,

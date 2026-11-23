@@ -92,20 +92,26 @@ async function launchSmokeApp() {
 }
 
 async function openAssistant(page, projectId) {
-  await navigate(page, `page=research&project=${projectId}&view=overview&assistant=1`);
+  await navigate(page, `page=research&project=${projectId}&view=overview`);
   await openSessions(page);
-  await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 20_000 });
-  await page.waitForSelector('[data-testid="assistant-composer-input"]', { timeout: 20_000 });
-  // At the native default width, opening sessions uses a modal sidebar drawer.
-  // Close it before interacting with the assistant, which is correctly inert
-  // while that drawer is open. The mounted session list still receives updates.
+  await revealAssistant(page);
+}
+
+async function revealAssistant(page) {
+  // A canvas destination dismisses the floating assistant. Open it only after
+  // establishing the sessions context, and release any narrow sidebar overlay first.
   if (await page.getByTestId('sidebar-drawer').isVisible()) {
     await page.getByTestId('sidebar-drawer-close').click();
     await page.getByTestId('sidebar-drawer').waitFor({state: 'detached'});
   }
+  if (!await page.getByTestId('assistant-panel').isVisible()) await page.getByTestId('titlebar-toggle-assistant').click();
+  await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 20_000 });
+  await page.waitForSelector('[data-testid="assistant-composer-input"]', { timeout: 20_000 });
 }
 
 async function openSessions(page) {
+  // An assistant overlay makes the background context inert even when visible.
+  if (await page.getByTestId('assistant-drawer').isVisible()) await page.getByTestId('titlebar-toggle-assistant').click();
   const runs = page.getByTestId('activity-nav-runs');
   if ((await runs.getAttribute('aria-current')) !== 'page') await runs.click();
   if (!await page.getByTestId('context-drawer').isVisible()) await page.getByTestId('titlebar-toggle-sidebar').click();
@@ -520,7 +526,7 @@ try {
     sessionRowAppeared,
     sessionRowAppeared ? '' : await describeSessionList(page, threadId)
   );
-  if (await page.getByTestId('sidebar-drawer').isVisible()) await page.getByTestId('sidebar-drawer-close').click();
+  await revealAssistant(page);
 
   if (process.env.P4_RESTART_ONLY === '1') {
     await verifyCrashCheckpointResume(threadId, projectId);

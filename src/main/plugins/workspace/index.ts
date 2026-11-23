@@ -49,6 +49,7 @@ import type {
   WorkspaceSelectRequest
 } from '../../../shared/types';
 import type { CapabilityDescriptor, EventSubscription, RocPlugin, RocPluginContext } from '../../kernel/types';
+import type {ResearchProjectWorkspaceContract} from '../research/research-project-workspace-contract';
 import { FileService, type FileRecoveryPointDatabase } from '../../services/file-service';
 import { GitService } from '../../services/git-service';
 import { RocPaths } from '../../services/paths';
@@ -121,6 +122,7 @@ const workspaceCapabilityDescriptors = [
 export type WorkspacePluginOptions = {
   rootDir?: string;
   workspaceService?: WorkspaceService;
+  projectWorkspace?: Pick<ResearchProjectWorkspaceContract, 'requireWritableWorkspace'>;
 };
 
 export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): RocPlugin {
@@ -173,12 +175,10 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
       });
       terminalService = new TerminalSessionService(paths, workspaceService, (projectId, workspacePath) => {
         if (projectId === null) return;
-        const project = context.database.getConnection().prepare(
-          'SELECT workspace_path, status FROM research_projects WHERE id = ?'
-        ).get(projectId) as {workspace_path: string | null; status: string} | undefined;
-        if (project === undefined || project.workspace_path !== workspacePath || project.status === 'archived') {
-          throw new RocDomainError({code:'terminal_project_workspace_mismatch', message:'项目已归档或工作目录已变更，无法连接此终端。', category:'permission', retryable:false});
+        if (options.projectWorkspace === undefined) {
+          throw new RocDomainError({code: 'terminal_project_access_unavailable', message: '项目访问校验暂不可用，请重新打开应用。', category: 'internal', retryable: true});
         }
+        options.projectWorkspace.requireWritableWorkspace(projectId, workspacePath);
       });
       unsubscribeTerminalOwnerClosed = context.eventBus.subscribe<number>('terminal.owner.closed', event => {
         terminalService?.closeOwner(event.payload);

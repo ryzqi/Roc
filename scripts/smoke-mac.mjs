@@ -85,25 +85,27 @@ try {
     };
     unwrap(await window.roc.workspace.select({ path: workspacePath }));
     const preview = unwrap(await window.roc.files.preview({ relativePath: 'nested/probe.txt' }));
-    const session = unwrap(await window.roc.terminal.createSession({ cwd: workspacePath, cols: 80, rows: 24 }));
+    const attachment = unwrap(await window.roc.terminal.attachSession({ cwd: workspacePath, cols: 80, rows: 24 }));
+    const session = attachment.session;
+    const identity = {sessionId: session.id, attachmentId: attachment.attachmentId};
     let dispose;
     let timer;
     try {
       const output = new Promise((resolvePromise, reject) => {
-        let text = '';
+        let text = attachment.replay.data;
         dispose = window.roc.terminal.onOutput((event) => {
-          if (event.sessionId !== session.id) return;
+          if (event.sessionId !== session.id || event.attachmentId !== attachment.attachmentId) return;
           text += event.data;
-          if (text.includes('ROC_IPC_PTY_OK')) resolvePromise('ROC_IPC_PTY_OK');
+          if (/(?:^|\r?\n)ROC_IPC_PTY_OK(?:\r?\n|$)/u.test(text)) resolvePromise('ROC_IPC_PTY_OK');
         });
         timer = setTimeout(() => reject(new Error('Terminal IPC output timed out.')), 10000);
       });
-      unwrap(await window.roc.terminal.writeInput({ sessionId: session.id, data: "printf 'ROC_%s\\n' IPC_PTY_OK\r" }));
+      unwrap(await window.roc.terminal.writeInput({ ...identity, data: "printf '\\nROC_%s\\n' IPC_PTY_OK\r" }));
       await output;
     } finally {
       clearTimeout(timer);
       dispose?.();
-      unwrap(await window.roc.terminal.closeSession({ sessionId: session.id }));
+      unwrap(await window.roc.terminal.closeSession(identity));
     }
     const shell = unwrap(await window.roc.shell.execute({ command: 'printf ROC_IPC_SHELL_OK', cwd: workspacePath }));
     return { preview: preview.content, terminalShell: session.shell, terminal: 'ROC_IPC_PTY_OK', shell };

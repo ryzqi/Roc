@@ -81,7 +81,8 @@ async function navigate(page, search) {
 }
 
 async function terminalText(page) {
-  return await page.evaluate(() => document.querySelector('.xterm-rows')?.textContent ?? '');
+  return await page.evaluate(() => Array.from(document.querySelectorAll('[data-testid="terminal-xterm"] .xterm-rows > div'),
+    row => row.textContent ?? '').join('\n'));
 }
 
 async function waitForTerminalText(page, needle, timeoutMs = 20_000) {
@@ -89,7 +90,7 @@ async function waitForTerminalText(page, needle, timeoutMs = 20_000) {
   let last = '';
   while (Date.now() < deadline) {
     last = await terminalText(page);
-    if (last.includes(needle)) {
+    if (last.split('\n').some(line => line.trim() === needle)) {
       return last;
     }
     await page.waitForTimeout(120);
@@ -230,11 +231,17 @@ try {
 
   await navigate(page, `page=research&project=${preflight.projectId}&view=writing&tool=terminal`);
   await page.waitForSelector('[data-testid="terminal-xterm"]', { timeout: 20_000 });
+  await page.waitForFunction(() => {
+    const terminal = document.querySelector('[data-testid="terminal-view"]');
+    if (terminal?.getAttribute('data-phase') === 'error') throw new Error(terminal.querySelector('[role="alert"]')?.textContent ?? 'Terminal connection failed.');
+    return terminal?.getAttribute('data-phase') === 'ready';
+  }, null, {timeout: 20_000});
   await page.click('[data-testid="terminal-xterm"]');
-  await page.keyboard.type("printf 'ROC_SMOKE_PTY_OK\\n'");
+  // The marker must be produced by the shell; the input's echo cannot satisfy it.
+  await page.keyboard.type("printf '\\nROC_%s_PTY_OK\\n' SMOKE");
   await page.keyboard.press('Enter');
   const terminal = await waitForTerminalText(page, 'ROC_SMOKE_PTY_OK');
-  assertCheck('6 工作区', '终端会话真的执行了命令并回显输出', terminal.includes('ROC_SMOKE_PTY_OK'), terminal.slice(-80));
+  assertCheck('6 工作区', '终端会话真的执行了命令并回显输出', terminal.split('\n').some(line => line.trim() === 'ROC_SMOKE_PTY_OK'), terminal.slice(-80));
 
   // ---- 3 助手一轮 run -----------------------------------------------------------
   // 真 run 需要一个可用的 provider：把 stub provider 写进设置并把密钥放进 safeStorage
@@ -405,15 +412,26 @@ try {
     });
     await page.waitForFunction(() => document.querySelector('[data-testid=workspace-layout]')?.getAttribute('data-layout-mode') === 'balanced');
     const canvas = page.getByTestId('canvas-column');
-    const right = await canvas.evaluate(node => node.getBoundingClientRect().right);
-    if (!await page.getByTestId('assistant-column').isVisible()) await page.getByTestId('titlebar-toggle-assistant').click();
-    await page.getByTestId('assistant-column').waitFor();
-    const assistantEnd = await page.getByTestId('assistant-column').evaluate(node => node.getBoundingClientRect().right);
-    const canvasStart = await canvas.evaluate(node => node.getBoundingClientRect().left);
+    const measureCanvas = () => canvas.evaluate(node => {
+      const {left, right, width} = node.getBoundingClientRect(); return {left, right, width};
+    });
+    if (await page.getByTestId('assistant-drawer').isVisible()) await page.getByTestId('titlebar-toggle-assistant').click();
+    const beforeAssistant = await measureCanvas();
     await page.getByTestId('titlebar-toggle-assistant').click();
-    assertCheck('窗口', '1184px 下助手在画布左侧，画布右边界不移动',
-      canvasStart >= assistantEnd - 1 && await canvas.evaluate(node => node.getBoundingClientRect().right) === right &&
-      await page.getByTestId('assistant-drawer').count() === 0);
+    await page.getByTestId('assistant-drawer').waitFor();
+    const assistantBounds = await page.getByTestId('assistant-drawer').evaluate(node => {
+      const {left, right, width} = node.getBoundingClientRect(); return {left, right, width};
+    });
+    const withAssistant = await measureCanvas();
+    await page.getByTestId('titlebar-toggle-assistant').click();
+    const afterAssistant = await measureCanvas();
+    assertCheck('窗口', '1184px 下右侧助手覆盖显示，画布至少 760px 且开关前后边界不变',
+      beforeAssistant.width >= 760 && assistantBounds.left > beforeAssistant.left &&
+      Math.abs(assistantBounds.right - beforeAssistant.right) <= 1 &&
+      [withAssistant, afterAssistant].every(bounds => Math.abs(bounds.left - beforeAssistant.left) <= 1 &&
+        Math.abs(bounds.right - beforeAssistant.right) <= 1 && Math.abs(bounds.width - beforeAssistant.width) <= 1) &&
+      await page.getByTestId('assistant-drawer').count() === 0 && await page.getByTestId('assistant-column').count() === 0,
+      JSON.stringify({beforeAssistant, withAssistant, afterAssistant, assistantBounds}));
     await browserWindow.evaluate(window => {
       window.setBounds({...window.getBounds(), width: 1280, height: 820});
     });

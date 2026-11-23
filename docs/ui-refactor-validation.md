@@ -1,5 +1,13 @@
 # UI 重构验证记录
 
+## 2026-11-23 P8：终端数据库边界与完整助手路径
+
+状态：**Verified passing**（本段终端与助手范围）。完整smoke首次终端回显失败，实际原因是项目权限查询误用了workspace/core数据库，后者没有research_projects表。权限由ResearchProjectWorkspaceContract从科研数据库读取并注入工作区插件；归档、删除或目录变化继续拒绝连接/输入/调整尺寸，清理仍可执行。新增真正分离的双SQLite回归先复现失败再验证修复。smoke改为等待真实ready并核对shell生成的独立输出行，输入回显不能通过；打包smoke同步连接令牌合同。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。`node --test tests/unit/workspace-terminal-project.test.mjs tests/unit/terminal-session-lifecycle.test.mjs tests/unit/terminal-ipc-owner.test.mjs tests/integration/terminal-session-reattach.test.mjs` **21/21**；`node --test tests/unit/main-kernel-startup.test.mjs` **1/1**；`pnpm typecheck`及`pnpm build`通过。`ROC_SMOKE_TARGET=dist ROC_SMOKE_ARTIFACT_DIR=/tmp/roc-ui-final-smoke3-20261123 pnpm smoke:electron` 主体 **23/23**，真实终端、助手、设置和125%缩放通过；1184px助手覆盖右侧，画布开关前/中/后均为900px宽且边界不变。深度路径首次因旧夹具假设助手默认展开而失败，已改为先进入会话上下文再显式打开助手，背景导航前先关闭覆盖层。
+
+随后 `ROC_SMOKE_TARGET=dist ROC_SMOKE_ARTIFACT_DIR=/tmp/roc-ui-final-p4-20261123 node scripts/verify-p4-assistant.mjs` **64/64**，包括真实工具/批准/拒绝/提问/取消、切项目恢复、SIGKILL崩溃后检查点续跑且工具不重复。516条消息只挂载17行、回放窗口115条，输入与滚动通过。结果来自本地受控HTTP provider，未宣称远端模型质量。最终CSS修复后的完整一轮验收另记。
+
 ## 2026-11-23 P5.3：真实选区润色与编辑器状态保留
 
 状态：**Verified passing**（写作交互和运行合同范围）。学术润色通过原chat.startRun发起plan只读运行，接受实际JSON合同已校验的终轮响应，显示差异并由用户确认修改可撤销草稿。订阅早于启动、补读终态回放，项目/路径/磁盘/完整草稿/选区身份全程核对；编辑后撤销、移动选区和旧运行结果均不能误应用。已校验响应随终态/outbox/快照持久化，有整体容量保护，不从混合会话文本猜测JSON。plan仍有只读工具及自动记忆，文档明确此权限边界。
