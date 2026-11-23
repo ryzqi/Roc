@@ -96,6 +96,38 @@ git diff --check
 
 最终生命周期完整文件连续 **5 轮 85/85**；消息流、文献列表、按钮和设置组合 **102/102**；语法与差异检查通过。先前 898 项全量运行仍按原成绩保留；文献列表偶发失败的根因尚未证实，不标为已修复。
 
+## 2026-11-23 P1.2：共享表单反馈、只读与模型字段校验
+
+状态：**Verified passing**（本子项和最终 70 项组合范围；首次 Escape 偶发仍记录如下）。
+
+共享 `TextField`、`NumberField`、`SelectField` 统一独立标签、说明和错误关联，`CheckboxField` 将说明从名称中分离。文本/数值使用原生只读并显示标记；数值提交检查只读、自身及祖先 fieldset 的禁用状态，复用 IME 守卫，保留空值、零及失焦/Enter 提交契约。沿用现有 tokens，不新增校验规则。
+
+模型设置接入当前 `validateDraft`：名称、类型、接入地址、模型标识/显示名及高级数值的错误显示在对应字段，供应商重排后按 ID 重新定位校验路径；错误首次出现时展开高级参数，修正后保持展开。既有嵌入配置 ID 改为可聚焦、可选择复制的只读字段；新配置 ID 可编辑，保存期间仍由整个 fieldset 禁用。全局校验汇总与既有写入、草稿、密钥保护继续保留。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`：
+
+```sh
+pnpm build
+pnpm check:renderer-chunks
+pnpm audit:design
+ROC_UI_AUDIT_DIR=/tmp/roc-ui-p1-form-fields-captures node --test tests/renderer/form-fields.test.mjs
+node --test --test-concurrency=1 tests/renderer/form-fields.test.mjs tests/renderer/model-provider-settings.test.mjs tests/renderer/settings-write-guards.test.mjs tests/renderer/action-button.test.mjs tests/renderer/radix-settings-dialog.test.mjs tests/renderer/management-draft-guards.test.mjs
+node --test --test-name-pattern='settings dialog layers|reset confirmation accepts' tests/renderer/radix-settings-dialog.test.mjs
+node --test tests/renderer/radix-settings-dialog.test.mjs
+node --test --test-name-pattern='reduced motion preserves' tests/renderer/action-button.test.mjs
+node --check tests/renderer/form-fields.test.mjs
+node --check tests/renderer/model-provider-settings.test.mjs
+node --check tests/renderer/settings-write-guards.test.mjs
+node --check tests/renderer/action-button.test.mjs
+git diff --check
+```
+
+表单语义回归先复现缺少 NumberField 描述、只读属性及 IME Enter 误提交，再修正实现。最终表单 **4/4**；画廊检查浅/深 × 紧凑/舒适 × 1184/1280/1440px，以及 320px 容器，无横溢出、`clip.cut=0`、焦点可见；已人工查看浅色紧凑 1184px、深色舒适 1440px 与模型设置高级参数截图。构建（含类型检查）、分包及设计扫描 270 文件通过；eager JS **505042 bytes / 10 files**，应用 entry chunk 预算未改变。
+
+首轮设置集成 **12/14**，两项新增断言错误分别为 Zod 实际提示 `>0` 与 macOS 全选键；修正后该组全部通过。首次扩大组合 **68/70**：设置放弃确认的 Escape 未关闭，导致下一用例被残留弹窗阻挡；未修改弹窗，原失败对 **2/2**、完整文件 **22/22** 均通过，偶发根因尚未确认。第二次组合 **69/70**，失败为既有 ActionButton 的减弱动效即时取样。单项复现和探针确认 `:active=true`，CSS 过渡为 0.01ms，同帧 opacity 为 1、下一帧为 0.9；改用既有超时内轮询视觉生效，保留无位移断言，未改生产样式或增加固定等待。最终结果见本节末尾。
+
+最终六文件组合 **70/70**，耗时 58.5 秒；语法和差异检查通过。合成 composition 事件与复制事件只验证浏览器交互，不代表系统中文输入法、系统剪贴板服务或 VoiceOver 已人工验收。本次未重跑 898 项全量 renderer；P0.3 中的历史成绩和文献列表偶发问题仍保留。截图、日志与临时运行目录审阅后删除；只保留正式代码、回归夹具和文档。模型设置独立测试改为仅在指定 `ROC_UI_AUDIT_DIR` 时导出截图。
+
 ## P0 工程基线（2026-11-20）
 
 macOS 27.2.1 arm64，Electron 45，基线提交 `dd7511a`。隔离数据根启动当天既有 dist，窗口 1320×860，原生最小 1184×640。门户、默认写作、文献、发现（雷达）、知识（RAG）五面均成功加载，无 pageerror、无页面横向溢出，阴影审计均 `cut=0`。截图检查确认默认空写作页、重复文件列表，以及文献七标签带来的多层导航。

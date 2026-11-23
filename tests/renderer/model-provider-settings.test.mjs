@@ -5,15 +5,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as esbuild from 'esbuild';
 import electronPath from 'electron';
-import { _electron } from '@playwright/test';
+import { _electron, expect } from '@playwright/test';
 
 let directory, app, page;
 const errors = [];
-const artifacts = join(process.cwd(), '.artifacts/model-provider-settings');
+const artifacts = process.env.ROC_UI_AUDIT_DIR;
 
 before(async () => {
   directory = mkdtempSync(join(tmpdir(), 'roc-provider-settings-ui-'));
-  mkdirSync(artifacts, { recursive: true });
+  if (artifacts) mkdirSync(artifacts, { recursive: true });
   await esbuild.build({
     stdin: {
       contents: `
@@ -22,6 +22,7 @@ before(async () => {
         import { flushSync } from 'react-dom';
         import { LazyMotion, MotionConfig, domMax } from 'motion/react';
         import { ModelsSection } from './src/renderer/settings/sections/ModelsSection';
+        import { validateDraft } from './src/renderer/settings/settings-validation';
         import { SettingsEditorGuardContext, useSettingsEditorGuards } from './src/renderer/settings/settings-editor-guard';
         import { RadixSettingsConfirmDialog } from './src/renderer/settings/radix-dialog-pilot';
         const root = createRoot(document.getElementById('root'));
@@ -44,6 +45,7 @@ before(async () => {
           }}}));
           const store = {
             draft, base: seed, snapshot: { providerSecretStatus: [] },
+            issues: validateDraft(draft === null ? null : { ...draft, index: null }),
             client, reload() {},
             update(mutator) {
               setDraft(previous => {
@@ -148,7 +150,7 @@ test('empty state fits light and dark desktop layouts', async () => {
       assert.equal(await page.getByTestId('settings-section-models-body')
         .evaluate(element => element.scrollWidth > element.clientWidth), false);
     }
-    await page.screenshot({ path: join(artifacts, `empty-${theme}.png`) });
+    if (artifacts) await page.screenshot({ path: join(artifacts, `models-empty-${theme}.png`) });
   }
 });
 
@@ -218,4 +220,80 @@ test('connectivity never reports a previous provider or tests an unsaved endpoin
   assert.equal(await page.getByTestId('settings-test-result').count(), 0);
   await page.getByTestId('settings-provider-endpoint').fill('https://edited.example/v1');
   assert.equal(await page.getByTestId('settings-test-provider').isEnabled(), false);
+});
+
+test('schema errors describe the exact field and clear after editing', async () => {
+  await page.evaluate(seed => window.mount(seed), seededProviders());
+  const name = page.getByTestId('settings-provider-name');
+  const endpoint = page.getByTestId('settings-provider-endpoint');
+  const modelId = page.getByTestId('settings-model-id-1');
+  const modelName = page.getByTestId('settings-model-name-1');
+  await name.fill(' ');
+  await endpoint.fill('');
+  await modelId.fill('m1');
+  await modelName.fill(' ');
+  for (const [field, label, message] of [
+    [name, '名称', '供应商名称不能为空。'],
+    [endpoint, '接入地址', '接入地址不能为空。'],
+    [modelId, '模型标识', '同一供应商下模型标识重复：m1'],
+    [modelName, '显示名称', '模型显示名不能为空。']
+  ]) {
+    await expect(field).toHaveAccessibleName(label);
+    await expect(field).toHaveAttribute('aria-invalid', 'true');
+    await expect(field).toHaveAccessibleDescription(message);
+  }
+  await expect(page.getByTestId('settings-model-id-0')).not.toHaveAttribute('aria-invalid', 'true');
+  await name.fill('Fixed');
+  await endpoint.fill('https://fixed.example/v1');
+  await modelId.fill('m2');
+  await modelName.fill('Fixed model');
+  for (const field of [name, endpoint, modelId, modelName]) {
+    await expect(field).not.toHaveAttribute('aria-invalid', 'true');
+    await expect(field).not.toHaveAttribute('aria-describedby');
+  }
+});
+
+test('advanced validation opens hidden parameters and preserves the editor while correcting them', async () => {
+  const seed = seededProviders();
+  seed.providers[0].models[0].options = {maxTokens: 0};
+  await page.evaluate(seed => window.mount(seed), seed);
+  const maxTokens = page.getByTestId('settings-model-maxtokens-0');
+  await expect(maxTokens).toBeVisible();
+  await expect(maxTokens).toHaveAttribute('aria-invalid', 'true');
+  await expect(maxTokens).toHaveAccessibleDescription(/>0/);
+  await maxTokens.fill('1.5');
+  await maxTokens.press('Enter');
+  await expect(maxTokens).toHaveAccessibleDescription(/int/);
+  await maxTokens.fill('2048');
+  await maxTokens.press('Enter');
+  await expect(maxTokens).not.toHaveAttribute('aria-invalid', 'true');
+  await expect(maxTokens).toBeVisible();
+  await page.getByTestId('settings-model-advanced-0').locator('summary').click();
+  await expect(maxTokens).toBeHidden();
+  // A later imported/shared draft can invalidate a previously collapsed group.
+  await page.evaluate(() => {
+    const next = structuredClone(window.currentDraft);
+    next.providers[0].models[0].options.maxTokens = 0;
+    window.replaceDraft(next);
+  });
+  await expect(maxTokens).toBeVisible();
+  await expect(maxTokens).toHaveAttribute('aria-invalid', 'true');
+});
+
+test('field feedback follows provider identity after selection and array reordering', async () => {
+  const seed = seededProviders();
+  seed.providers[1].endpoint = '';
+  await page.evaluate(seed => window.mount(seed), seed);
+  const endpoint = page.getByTestId('settings-provider-endpoint');
+  await expect(endpoint).not.toHaveAttribute('aria-invalid', 'true');
+  await page.getByTestId('settings-provider-select').selectOption('second');
+  await expect(endpoint).toHaveAccessibleDescription('接入地址不能为空。');
+  await page.evaluate(() => window.replaceDraft({...window.currentDraft, providers: [...window.currentDraft.providers].reverse()}));
+  await expect(page.getByTestId('settings-provider-select')).toHaveValue('second');
+  await expect(endpoint).toHaveAccessibleDescription('接入地址不能为空。');
+  await page.getByTestId('settings-provider-select').selectOption('first');
+  await expect(endpoint).not.toHaveAttribute('aria-invalid', 'true');
+  await page.getByTestId('settings-provider-select').selectOption('second');
+  await endpoint.fill('https://second.example/v1');
+  await expect(endpoint).not.toHaveAttribute('aria-invalid', 'true');
 });

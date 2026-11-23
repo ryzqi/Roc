@@ -146,9 +146,14 @@ test('reduced motion preserves press feedback and a static loading indicator',as
     const before=await visual(button);
     await page.mouse.down();
     try {
-      const pressed=await visual(button);
-      assert.equal(pressed.translate,'none');
-      assert.ok(pressed.background!==before.background || pressed.opacity!==before.opacity);
+      assert.equal(await button.evaluate(element=>element.matches(':active')),true);
+      // Reduced motion keeps a 0.01ms CSS transition; its end style can land on
+      // the next frame even though the pointer is already in the active state.
+      await expect.poll(async()=>{
+        const pressed=await visual(button);
+        assert.equal(pressed.translate,'none');
+        return pressed.background!==before.background || pressed.opacity!==before.opacity;
+      }).toBe(true);
     } finally {await page.mouse.up();}
     assert.equal(await page.getByTestId(`action-${variant}-loading`).locator('svg').evaluate(element=>getComputedStyle(element).animationName),'none');
   }

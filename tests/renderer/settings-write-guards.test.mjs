@@ -115,13 +115,25 @@ test('provider secret writes freeze transient input and preserve a refused key f
 
 test('embedding writes freeze all replacement paths and retain failed input', async () => {
   await page.evaluate(() => window.mount('embedding'));
+  const id = page.getByTestId('settings-embedding-id');
+  await expect(id).toBeEnabled();
+  await expect(id).toHaveAttribute('readonly', '');
+  await expect(id).toHaveAccessibleName('标识');
+  await expect(id).toHaveAccessibleDescription('只读');
+  await id.focus();
+  await expect(id).toBeFocused();
+  await id.press('Meta+A');
+  assert.equal(await id.evaluate(input => input.value.slice(input.selectionStart, input.selectionEnd)), 'embedding-a');
+  await id.press('Backspace');
+  await expect(id).toHaveValue('embedding-a');
   const name = page.getByTestId('settings-embedding-name');
   const key = page.getByTestId('settings-embedding-apikey');
   await name.fill('Submitted embedding');
   await key.fill('fixture-key');
   await page.getByTestId('settings-embedding-save').evaluate(button => {button.click(); button.click();});
   assert.equal(await page.evaluate(() => window.embeddings.length), 1);
-  for (const id of ['settings-embedding-name', 'settings-embedding-baseurl', 'settings-embedding-model',
+  assert.equal(await page.evaluate(() => window.embeddings[0].id), 'embedding-a');
+  for (const id of ['settings-embedding-id', 'settings-embedding-name', 'settings-embedding-baseurl', 'settings-embedding-model',
     'settings-embedding-dimensions', 'settings-embedding-apikey', 'settings-embedding-enabled',
     'settings-embedding-add', 'settings-embedding-pull', 'settings-embedding-select-embedding-a']) {
     await expect(page.getByTestId(id)).toBeDisabled();
@@ -130,6 +142,8 @@ test('embedding writes freeze all replacement paths and retain failed input', as
   await expect(page.getByTestId('settings-embedding-save-error')).toContainText('Embedding refused');
   await expect(name).toHaveValue('Submitted embedding');
   await expect(key).toHaveValue('fixture-key');
+  await expect(id).toBeEnabled();
+  await expect(id).toHaveAttribute('readonly', '');
   await page.getByTestId('settings-embedding-save').click();
   await page.evaluate(() => window.finishEmbedding({ok: true, data: {
     id: 'embedding-a', name: 'Submitted embedding', baseUrl: 'http://localhost:7777/v1',
@@ -137,6 +151,17 @@ test('embedding writes freeze all replacement paths and retain failed input', as
   }}));
   await expect(key).toHaveValue('');
   await expect(name).toHaveValue('Submitted embedding');
+});
+
+test('new embedding identifiers remain editable', async () => {
+  await page.evaluate(() => window.mount('embedding'));
+  await expect(page.getByTestId('settings-embedding-id')).toHaveAttribute('readonly', '');
+  await page.getByTestId('settings-embedding-add').click();
+  const id = page.getByTestId('settings-embedding-id');
+  await expect(id).toBeEditable();
+  await expect(id).not.toHaveAttribute('aria-describedby');
+  await id.fill('new-embedding');
+  await expect(id).toHaveValue('new-embedding');
 });
 
 test('uninstalling a parsing pack requires confirmation and reports a refused removal', async () => {

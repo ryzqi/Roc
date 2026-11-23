@@ -377,7 +377,7 @@ export function RagSection({ store }: { store: SettingsStore }): React.JSX.Eleme
               <TextField
                 label="标识"
                 value={form.id}
-                disabled={selectedConfig !== null}
+                readOnly={selectedConfig !== null}
                 onChange={(id) => setForm({ ...form, id })}
                 testId="settings-embedding-id"
               />

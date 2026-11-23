@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type ComponentPropsWithRef, type InputHTMLAttributes, type ReactNode } from 'react';
 import { AlertTriangle, Info, LoaderCircle } from 'lucide-react';
+import { useImeGuard } from './hooks/use-ime-guard';
 
 /**
  * Shared form primitives (extracted in P9 from P8's `settings/settings-ui.tsx`).
@@ -137,11 +138,35 @@ export function Field({
   );
 }
 
+function fieldDescriptionIds(id: string, description?: string, issue?: string | null, readOnly = false): string | undefined {
+  return [description === undefined ? '' : `${id}-description`, issue === undefined || issue === null ? '' : `${id}-issue`,
+    readOnly ? `${id}-readonly` : ''].filter(Boolean).join(' ') || undefined;
+}
+
+function FieldLabel({id, label, readOnly = false}: {id: string; label: string; readOnly?: boolean}): React.JSX.Element {
+  return <span className="flex min-w-0 flex-wrap items-baseline gap-2">
+    <span id={`${id}-label`} className="text-muted text-[length:var(--font-meta-size)]">{label}</span>
+    {readOnly ? <span id={`${id}-readonly`} className="rounded-control border-[0.5px] border-line px-1.5 text-muted text-[length:var(--font-meta-size)]">只读</span> : null}
+  </span>;
+}
+
+function FieldFeedback({id, description, issue}: {id: string; description?: string; issue?: string | null}): React.JSX.Element {
+  return <>
+    {description === undefined ? null : <span id={`${id}-description`} className="text-subtle text-[length:var(--font-meta-size)]">{description}</span>}
+    {issue === undefined || issue === null ? null : (
+      <span id={`${id}-issue`} className="flex items-start gap-1 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" role="alert">
+        <AlertTriangle size={11} aria-hidden="true" className="mt-0.5 shrink-0" />{issue}
+      </span>
+    )}
+  </>;
+}
+
 export function TextField({
   label,
   value,
   onChange,
   disabled = false,
+  readOnly = false,
   placeholder,
   issue,
   testId,
@@ -153,6 +178,7 @@ export function TextField({
   value: string;
   onChange: (next: string) => void;
   disabled?: boolean;
+  readOnly?: boolean;
   placeholder?: string;
   issue?: string | null;
   testId: string;
@@ -164,29 +190,23 @@ export function TextField({
   const hasIssue = issue !== undefined && issue !== null;
   return (
     <label className="flex min-w-0 flex-col gap-1.5" data-testid={`${testId}-field`}>
-      <span id={`${id}-label`} className="text-muted text-[length:var(--font-meta-size)]">{label}</span>
+      <FieldLabel id={id} label={label} readOnly={readOnly} />
       <input
+        id={id}
         type={type}
         inputMode={inputMode}
         aria-labelledby={`${id}-label`}
         aria-invalid={hasIssue || undefined}
-        aria-describedby={[description === undefined ? '' : `${id}-description`, hasIssue ? `${id}-issue` : ''].filter(Boolean).join(' ') || undefined}
+        aria-describedby={fieldDescriptionIds(id, description, issue, readOnly)}
         value={value}
         disabled={disabled}
+        readOnly={readOnly}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
         data-testid={testId}
         className={formInputClass}
       />
-      {description === undefined ? null : (
-        <span id={`${id}-description`} className="text-subtle text-[length:var(--font-meta-size)]">{description}</span>
-      )}
-      {!hasIssue ? null : (
-        <span id={`${id}-issue`} className="flex items-start gap-1 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" role="alert">
-          <AlertTriangle size={11} aria-hidden="true" className="mt-0.5 shrink-0" />
-          {issue}
-        </span>
-      )}
+      <FieldFeedback id={id} description={description} issue={issue} />
     </label>
   );
 }
@@ -204,34 +224,40 @@ export function NumberField({
   value,
   onChange,
   disabled = false,
+  readOnly = false,
   min,
   max,
   step = 1,
   allowEmpty = false,
   emptyValue = undefined,
   issue,
+  description,
   testId
 }: {
   label: string;
   value: number | null | undefined;
   onChange: (next: number | null | undefined) => void;
   disabled?: boolean;
+  readOnly?: boolean;
   min?: number;
   max?: number;
   step?: number;
   allowEmpty?: boolean;
   emptyValue?: null | undefined;
   issue?: string | null;
+  description?: string;
   testId: string;
 }): React.JSX.Element {
   const id = useId();
+  const ime = useImeGuard();
   const hasIssue = issue !== undefined && issue !== null;
   const [text, setText] = useState(() => (value === null || value === undefined ? '' : String(value)));
   useEffect(() => {
     setText(value === null || value === undefined ? '' : String(value));
   }, [value]);
 
-  const commit = (): void => {
+  const commit = (input: HTMLInputElement): void => {
+    if (disabled || readOnly || input.matches(':disabled')) return;
     const trimmed = text.trim();
     if (trimmed.length === 0) {
       if (allowEmpty) {
@@ -251,34 +277,33 @@ export function NumberField({
 
   return (
     <label className="flex min-w-0 flex-col gap-1.5" data-testid={`${testId}-field`}>
-      <span id={`${id}-label`} className="text-muted text-[length:var(--font-meta-size)]">{label}</span>
+      <FieldLabel id={id} label={label} readOnly={readOnly} />
       <input
+        id={id}
         type="number"
         inputMode="decimal"
         aria-labelledby={`${id}-label`}
         aria-invalid={hasIssue || undefined}
-        aria-describedby={hasIssue ? `${id}-issue` : undefined}
+        aria-describedby={fieldDescriptionIds(id, description, issue, readOnly)}
         value={text}
         disabled={disabled}
+        readOnly={readOnly}
         min={min}
         max={max}
         step={step}
         onChange={(event) => setText(event.target.value)}
-        onBlur={commit}
+        onBlur={(event) => commit(event.currentTarget)}
+        onCompositionStart={ime.onCompositionStart}
+        onCompositionEnd={ime.onCompositionEnd}
         onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            commit();
+          if (!ime.shouldIgnoreKeyDown(event) && event.key === 'Enter') {
+            commit(event.currentTarget);
           }
         }}
         data-testid={testId}
         className={formInputClass}
       />
-      {!hasIssue ? null : (
-        <span id={`${id}-issue`} className="flex items-start gap-1 text-[var(--st-warn)] text-[length:var(--font-micro-size)]" role="alert">
-          <AlertTriangle size={11} aria-hidden="true" className="mt-0.5 shrink-0" />
-          {issue}
-        </span>
-      )}
+      <FieldFeedback id={id} description={description} issue={issue} />
     </label>
   );
 }
@@ -298,10 +323,14 @@ export function CheckboxField({
   description?: string;
   testId: string;
 }): React.JSX.Element {
+  const id = useId();
   return (
     <label className="flex min-h-6 min-w-0 items-start gap-2 py-0.5" data-testid={`${testId}-field`}>
       <input
+        id={id}
         type="checkbox"
+        aria-labelledby={`${id}-label`}
+        aria-describedby={fieldDescriptionIds(id, description)}
         checked={checked}
         disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}
@@ -309,9 +338,9 @@ export function CheckboxField({
         className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded-[3px] border-[0.5px] border-line accent-[var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
       />
       <span className="min-w-0">
-        <span className="block text-ink text-[length:var(--font-meta-size)]">{label}</span>
+        <span id={`${id}-label`} className="block text-ink text-[length:var(--font-meta-size)]">{label}</span>
         {description === undefined ? null : (
-          <span className="block text-muted text-[length:var(--font-meta-size)]">{description}</span>
+          <span id={`${id}-description`} className="block text-muted text-[length:var(--font-meta-size)]">{description}</span>
         )}
       </span>
     </label>
@@ -324,6 +353,8 @@ export function SelectField<T extends string>({
   options,
   onChange,
   disabled = false,
+  description,
+  issue,
   testId
 }: {
   label: string;
@@ -331,12 +362,20 @@ export function SelectField<T extends string>({
   options: ReadonlyArray<{ value: T; label: string }>;
   onChange: (next: T) => void;
   disabled?: boolean;
+  description?: string;
+  issue?: string | null;
   testId: string;
 }): React.JSX.Element {
+  const id = useId();
+  const hasIssue = issue !== undefined && issue !== null;
   return (
     <label className="flex min-w-0 flex-col gap-1.5" data-testid={`${testId}-field`}>
-      <span className="text-muted text-[length:var(--font-meta-size)]">{label}</span>
+      <FieldLabel id={id} label={label} />
       <select
+        id={id}
+        aria-labelledby={`${id}-label`}
+        aria-describedby={fieldDescriptionIds(id, description, issue)}
+        aria-invalid={hasIssue || undefined}
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value as T)}
@@ -349,6 +388,7 @@ export function SelectField<T extends string>({
           </option>
         ))}
       </select>
+      <FieldFeedback id={id} description={description} issue={issue} />
     </label>
   );
 }

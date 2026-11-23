@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ChevronRight, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import type { ProviderConfig, ProviderTestResult, RemoteModelEntry } from '../../../shared/types';
 import { buildProviderModelKey, parseProviderModelKey } from '../../../shared/provider-model-key';
@@ -78,7 +78,32 @@ export function ModelsSection({ store }: { store: SettingsStore }): React.JSX.El
   );
 }
 
+function ModelAdvancedOptions({ hasIssue, testId, children }: {
+  hasIssue: boolean;
+  testId: string;
+  children: ReactNode;
+}): React.JSX.Element {
+  const disclosure = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    // Reveal invalid options without closing the editor when the user fixes them.
+    if (hasIssue && disclosure.current !== null) disclosure.current.open = true;
+  }, [hasIssue]);
+  return (
+    <details ref={disclosure} className="group" data-testid={testId}>
+      <summary className="flex w-fit cursor-pointer list-none items-center gap-1 rounded-control py-1 text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring">
+        <ChevronRight size={14} aria-hidden="true" className="group-open:rotate-90" />参数与能力
+      </summary>
+      {children}
+    </details>
+  );
+}
+
 function ProviderEditor({ provider, store }: { provider: ProviderConfig; store: SettingsStore }): React.JSX.Element {
+  // Validation paths use array positions; resolve the selected identity on every
+  // render so replacing or reordering the shared draft cannot move its feedback.
+  const providerIndex = store.draft?.providers.findIndex((entry) => entry.id === provider.id);
+  const issueFor = (field: string): string | undefined =>
+    store.issues?.find((issue) => issue.path === `providers.${providerIndex}.${field}`)?.message;
   const [secretInput, setSecretInput] = useState('');
   const secretInFlight = useRef(false);
   const lifetime = useRef(0);
@@ -129,12 +154,14 @@ function ProviderEditor({ provider, store }: { provider: ProviderConfig; store: 
     <>
       <div className="form-grid">
         <TextField label="名称" value={provider.name} onChange={(name) => patchProvider((entry) => void (entry.name = name))}
-          testId="settings-provider-name" />
+          issue={issueFor('name')} testId="settings-provider-name" />
         <SelectField label="类型" value={provider.type}
           options={CREATABLE_PROVIDER_TYPES.map((type) => ({ value: type, label: PROVIDER_TYPE_LABELS[type] }))}
+          issue={issueFor('type')}
           onChange={(type) => patchProvider((entry) => void (entry.type = type))} testId="settings-provider-type" />
       </div>
       <TextField label="接入地址" value={provider.endpoint}
+        issue={issueFor('endpoint')}
         onChange={(endpoint) => patchProvider((entry) => void (entry.endpoint = endpoint))} testId="settings-provider-endpoint" />
       <CheckboxField label="启用供应商" checked={provider.enabled}
         onChange={(enabled) => patchProvider((entry) => void (entry.enabled = enabled))} testId="settings-provider-enabled" />
@@ -190,8 +217,10 @@ function ProviderEditor({ provider, store }: { provider: ProviderConfig; store: 
             <li key={`${provider.id}:${modelIndex}`} className="flex flex-col gap-3 py-4 first:pt-0" data-testid={`settings-model-${modelIndex}`}>
               <div className="form-grid">
                 <TextField label="模型标识" value={model.id}
+                  issue={issueFor(`models.${modelIndex}.id`)}
                   onChange={(id) => patchModel(modelIndex, (target) => void (target.id = id))} testId={`settings-model-id-${modelIndex}`} />
                 <TextField label="显示名称" value={model.displayName}
+                  issue={issueFor(`models.${modelIndex}.displayName`)}
                   onChange={(displayName) => patchModel(modelIndex, (target) => void (target.displayName = displayName))} testId={`settings-model-name-${modelIndex}`} />
               </div>
               <div className="flex items-center justify-between gap-3">
@@ -202,19 +231,19 @@ function ProviderEditor({ provider, store }: { provider: ProviderConfig; store: 
                   <Trash2 size={14} aria-hidden="true" />移除模型
                 </button>
               </div>
-              <details className="group" data-testid={`settings-model-advanced-${modelIndex}`}>
-                <summary className="flex w-fit cursor-pointer list-none items-center gap-1 rounded-control py-1 text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring">
-                  <ChevronRight size={14} aria-hidden="true" className="group-open:rotate-90" />参数与能力
-                </summary>
+              <ModelAdvancedOptions testId={`settings-model-advanced-${modelIndex}`}
+                hasIssue={issueFor(`models.${modelIndex}.options.temperature`) !== undefined || issueFor(`models.${modelIndex}.options.maxTokens`) !== undefined}>
                 <div className="flex flex-col gap-3 p-1 pt-3">
                   <div className="form-grid">
                     <NumberField label="温度" value={model.options?.temperature} allowEmpty step={0.1} min={0}
+                      issue={issueFor(`models.${modelIndex}.options.temperature`)}
                       onChange={(temperature) => patchModel(modelIndex, (target) => {
                         target.options = { ...(target.options ?? {}) };
                         if (typeof temperature !== 'number') delete target.options.temperature;
                         else target.options.temperature = temperature;
                       })} testId={`settings-model-temperature-${modelIndex}`} />
                     <NumberField label="最大 token" value={model.options?.maxTokens} allowEmpty min={1}
+                      issue={issueFor(`models.${modelIndex}.options.maxTokens`)}
                       onChange={(maxTokens) => patchModel(modelIndex, (target) => {
                         target.options = { ...(target.options ?? {}) };
                         if (typeof maxTokens !== 'number') delete target.options.maxTokens;
@@ -232,7 +261,7 @@ function ProviderEditor({ provider, store }: { provider: ProviderConfig; store: 
                       onChange={(thinking) => patchModel(modelIndex, (target) => { target.options = { ...(target.options ?? {}), thinking }; })} testId={`settings-model-thinking-${modelIndex}`} />
                   </div>
                 </div>
-              </details>
+              </ModelAdvancedOptions>
             </li>
           ))}
         </ul>
