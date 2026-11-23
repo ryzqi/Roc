@@ -55,6 +55,10 @@ React 专用入口要求已有普通 `pnpm build` 产物。它以 `electron.prof
 
 [固定基线数据](ui-performance-baseline-2026-11-23.json)保留每次样本、进程采样及源码/构建摘要，供后续阶段同机比较。应用源码为 `42c3a78a0e45a017c389870edf06c07ae3c80def`；量测时未提交差异仅为本次 benchmark、审计脚本和文档，未修改被测生产代码。基准脚本 SHA256 为 `8cdbe04759a0b6e9a1297eba34b48462c6d0320dcfb6190cea148bf58f99543f`，renderer manifest 为 `7624252b6a1ca3b09e7b29460654df06363d43374f008b0ae50a6b2aad8b2fec`。
 
+P0 的实际量测脚本随后提交于 `e57ec6c`，其内容摘要与上述 SHA256 完全一致；不能直接把 `42c3a78` 当作当时工作树中的脚本版本。静态核对确认，当前普通 `dist`、`--idle-minutes 0` 且未启用 UI / profiling 的启动计时边界、1440×900 视口、CDP 采样、事件规模和 P0 相同。普通启动夹具保留原有 0/1,000/10,000 事件数据，不新增 append cursor；只有需要真实追加消息的 UI 夹具显式初始化 `next_sequence`。单元回归分别检查原始启动数据和 UI 连续追加，避免修复流式夹具时改变启动对照。
+
+当前启动报告在 fixture 中显式增加 `buildMode: production` 与 `appBuildDir: dist`，因此 `fixtureSha256` 与 P0 不同，通用 `compare-reports.mjs` 仍会拒绝直接比较。人工对照只能在两份原始报告之外说明这两个字段是 P0 默认值的显式记录，并逐项核对协议、依赖锁、同机环境 / 显示器 / 电源配置、实际构建模式、0/1,000/10,000 场景与各 5 次样本一致；记录原始摘要和本次源码 / 构建摘要，不改写旧报告或放宽通用比较器。必须单独运行普通启动入口，不能取 UI / Profiler 报告内不同 fixture 的启动样本替代。若还有其他差异，只并列展示并说明限制；脚本与口径核对本身不构成性能通过证据。
+
 环境：Apple M1 Pro / 32 GiB、macOS 27.2.1 arm64、Node 26.13.1、Electron 45.3.4、pnpm 12.21.0；显示器 1512×982、scale 2，实际 CSS 视口 1440×900。每组 5 次独立资料根启动，串行运行；OS 缓存未清除。以下为 P50 / P95，5 次样本的 nearest-rank P95 等于最大值。
 
 | 合成用户消息 | 主窗就绪 ms | 首次内容绘制 ms | 首次助手输入区就绪 ms | 历史末条可见 ms | Renderer heap MiB | 已挂载消息行 |

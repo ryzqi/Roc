@@ -8,6 +8,8 @@
 
 ## 2026-11-23 P7.5：性能工具与短预检
 
+启动对照补充：普通启动夹具保持P0原始事件与无append cursor数据，仅真实流式UI夹具显式初始化追加游标。`node --test tests/unit/performance-profile-seed.test.mjs tests/unit/performance-report.test.mjs` **9/9**。P0实际harness内容对应后续 `e57ec6c`，当前普通启动计时逻辑相同；新增构建模式/路径元数据导致fixture摘要不同，最终只按[明确口径](research-performance.md)人工对照，保留通用比较器严格拒绝，不能把静态核对记作性能通过。
+
 状态：**Verified passing**（测量工具与短预检；正式五轮另记）。普通UI、PDF、长流/空闲和独立React profiling入口均使用隔离资料根，按独立进程轮次汇总并校验源码、构建、fixture和主机身份。专用profiling构建保护普通dist，计数器不保留正文；失败状态、完成轮数和损坏子报告证据进入最终报告。子进程清除继承的测量参数与开发Renderer URL，避免测到不同应用。
 
 工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。`node --test tests/unit/performance-profile-seed.test.mjs tests/unit/performance-profiling.test.mjs tests/unit/performance-repeated-workloads.test.mjs tests/unit/performance-sustained-stream.test.mjs tests/unit/performance-ui-runs.test.mjs tests/unit/renderer-workload-metrics.test.mjs tests/unit/performance-child-environment.test.mjs tests/unit/performance-child-report.test.mjs tests/unit/performance-report.test.mjs` **37/37**。

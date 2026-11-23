@@ -66,7 +66,9 @@ export function seedUiPerformanceProfile(dataRoot: string): void {
         }
       }
     })();
-    for (const count of [500, 5_000]) seedHistory(pool, count, `thread-profile-${count}`);
+    for (const count of [500, 5_000]) {
+      seedHistory(pool, count, `thread-profile-${count}`, { initializeAppendCursor: true });
+    }
     const projects = db.prepare('SELECT COUNT(*) FROM research_projects').pluck().get();
     const papers = db.prepare('SELECT COUNT(*) FROM research_library').pluck().get();
     const histories = pool.getConnection('@roc/plugin-agent').prepare('SELECT thread_id, COUNT(*) AS count FROM agent_events GROUP BY thread_id')
@@ -118,7 +120,12 @@ function seedProfile(dataRoot: string, eventCount: number, threadId: string): vo
   }
 }
 
-function seedHistory(pool: DatabasePool, eventCount: number, threadId: string): void {
+function seedHistory(
+  pool: DatabasePool,
+  eventCount: number,
+  threadId: string,
+  options: { initializeAppendCursor?: boolean } = {}
+): void {
   const agentDb = pool.getConnection('@roc/plugin-agent');
   agentDb
     .prepare(
@@ -151,10 +158,12 @@ function seedHistory(pool: DatabasePool, eventCount: number, threadId: string): 
         new Date(Date.UTC(2026, 6, 10, 0, 0, 0, sequence)).toISOString()
       );
     }
-    // Raw event insertion must advance the production append cursor too. Without
-    // it, the first real user message retries sequence 1 and violates uniqueness.
-    agentDb.prepare('INSERT INTO agent_thread_event_cursors (thread_id, next_sequence) VALUES (?, ?)')
-      .run(threadId, eventCount + 1);
+    // UI workloads append real events and need a contiguous production cursor.
+    // Read-only startup profiles preserve the original P0 database contents.
+    if (options.initializeAppendCursor === true) {
+      agentDb.prepare('INSERT INTO agent_thread_event_cursors (thread_id, next_sequence) VALUES (?, ?)')
+        .run(threadId, eventCount + 1);
+    }
   })();
 }
 
