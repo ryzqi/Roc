@@ -42,6 +42,16 @@
   content: '';
 }
 
+/* Native zoom can leave less height than the navigation and bottom actions.
+   Keep their targets intact and let the rail reveal each focused action. */
+[data-testid='activity-rail'] {
+  min-block-size: 0;
+  overflow-y: auto;
+  scroll-padding-block: var(--space-2);
+}
+
+[data-testid='activity-rail'] > * { flex-shrink: 0; }
+
 .titlebar-project-menu:popover-open,
 .titlebar-layout-menu:popover-open {
   position: fixed;

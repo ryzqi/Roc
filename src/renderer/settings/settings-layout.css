@@ -24,3 +24,19 @@
   .settings-form-content { padding-top: var(--space-1); }
   .settings-form-content > .form-section { gap: var(--panel-padding); }
 }
+
+/* At high native zoom the fixed navigation and save bar can consume the
+   entire form viewport. Use one scroll owner so controls keep their size. */
+@media (max-width: 719px) and (max-height: 400px) {
+  .settings-dialog {
+    width: calc(100vw - 2 * var(--space-2));
+    height: calc(100dvh - 2 * var(--space-2));
+  }
+  .settings-layout {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scroll-padding-block: var(--space-2);
+  }
+  .settings-content, .settings-form-scroll { flex: none; }
+  .settings-form-scroll { overflow: visible; }
+}

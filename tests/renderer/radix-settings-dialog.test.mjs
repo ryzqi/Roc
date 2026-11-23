@@ -63,6 +63,8 @@ before(async () => {
         import { LazyMotion, MotionConfig, domMax } from 'motion/react';
         import { SettingsModal } from './src/renderer/settings/SettingsModal';
         import { ModalShell } from './src/renderer/shell/ModalShell';
+        import { ConfirmDialog } from './src/renderer/shell/ConfirmDialog';
+        import { ActivityRail } from './src/renderer/shell/ActivityRail';
         import { useKeyboardShortcuts } from './src/renderer/app/shortcuts';
         import { useAppRoute } from './src/renderer/app/use-app-route';
         import { BEFORE_NAVIGATE } from './src/renderer/app/navigation-guard';
@@ -154,6 +156,31 @@ before(async () => {
 
         const root = createRoot(document.getElementById('root'));
         window.unmount = () => flushSync(() => root.unmount());
+        function ConfirmationFixture() {
+          const [open, setOpen] = useState(true);
+          return React.createElement(ConfirmDialog, {open, title: '放弃未保存的修改？',
+            message: '该文稿有未保存的修改。放弃后无法恢复这些修改。',
+            detail: '关闭当前编辑器前，请选择继续编辑或明确放弃这次修改。',
+            confirmLabel: '放弃修改', cancelLabel: '继续编辑', testId: 'short-confirmation',
+            onCancel: () => {window.confirmationActions.push('cancel');setOpen(false);},
+            onConfirm: () => {window.confirmationActions.push('confirm');setOpen(false);}});
+        }
+        window.mountConfirmation = () => {
+          window.confirmationActions = [];
+          flushSync(() => root.render(React.createElement(MotionConfig, {reducedMotion: 'always'},
+            React.createElement(LazyMotion, {features: domMax, strict: true},
+              React.createElement(ConfirmationFixture, {key: ++generation})))));
+        };
+        window.mountActivityRail = () => {
+          window.railActions = [];
+          flushSync(() => root.render(React.createElement('div', {style: {display: 'flex', height: '100%'}},
+            React.createElement(ActivityRail, {view: 'writing', themeOverride: 'light',
+              onNavigate: view => window.railActions.push(view),
+              onCycleTheme: () => window.railActions.push('theme'),
+              onResetLayout: () => window.railActions.push('reset'),
+              onOpenSettings: () => window.railActions.push('settings')})
+          )));
+        };
         let navigationGuard = null;
         window.setNavigationGuard = mode => {
           if (navigationGuard) window.removeEventListener(BEFORE_NAVIGATE, navigationGuard);
@@ -236,6 +263,172 @@ const labelBySection = {
   memory: '记忆策略', tasks: '任务与调度', guardrail: '智能体安全', sandbox: '编译与沙箱', authorization: '授权与安全',
   hooks: 'Hooks', pilot: '受限试点', backup: '偏好与备份'
 };
+
+async function assertScrollableControlVisible(control) {
+  await control.scrollIntoViewIfNeeded();
+  await control.focus();
+  const problems = await control.evaluate(element => {
+    const box = element.getBoundingClientRect(), style = getComputedStyle(element);
+    const ring = style.outlineStyle === 'none' ? 0 : Math.max(0, parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset));
+    const failures = [];
+    for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+      const bounds = parent.getBoundingClientRect(), css = getComputedStyle(parent);
+      if (/(auto|scroll|hidden|clip)/u.test(css.overflowY) &&
+        (box.top - ring < bounds.top + parent.clientTop - 1 || box.bottom + ring > bounds.top + parent.clientTop + parent.clientHeight + 1)) failures.push('vertical clipping');
+      if (/(auto|scroll|hidden|clip)/u.test(css.overflowX) &&
+        (box.left - ring < bounds.left + parent.clientLeft - 1 || box.right + ring > bounds.left + parent.clientLeft + parent.clientWidth + 1)) failures.push('horizontal clipping');
+    }
+    const x = (box.left + box.right) / 2, y = (box.top + box.bottom) / 2;
+    for (const [left, top] of [[x, y], [x, box.top + 4], [x, box.bottom - 4], [box.left + 4, y], [box.right - 4, y]]) {
+      if (!element.contains(document.elementFromPoint(left, top))) failures.push('covered control');
+    }
+    return failures;
+  });
+  assert.deepEqual(problems, [], `${await control.getAttribute('data-testid')} remains fully visible with its focus ring`);
+}
+
+test('short viewport scrolls every activity destination and bottom action without shrinking targets', async () => {
+  await page.setViewportSize({width: 360, height: 225});
+  await page.evaluate(() => window.mountActivityRail());
+  await page.keyboard.press('Tab');
+  for (const id of ['nav-overview', 'nav-library', 'nav-writing', 'nav-runs', 'theme', 'reset-layout', 'settings']) {
+    const control = page.getByTestId(`activity-${id}`);
+    await assertScrollableControlVisible(control);
+    const box = await control.boundingBox();
+    assert.ok(box.width >= 28 && box.height >= 28, 'activity target size is retained');
+    await control.press('Enter');
+  }
+  assert.deepEqual(await page.evaluate(() => window.railActions), ['overview', 'library', 'writing', 'runs', 'theme', 'reset', 'settings']);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight), true, 'rail scrolling does not overflow the window');
+  await page.evaluate(() => window.mount());
+  await page.setViewportSize({width: 900, height: 700});
+});
+
+test('short settings viewport reveals navigation, form fields, textarea and save actions in both themes', async () => {
+  try {
+    await page.setViewportSize({width: 360, height: 225});
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(theme => {window.mount();document.documentElement.dataset.theme = theme;}, theme);
+      await page.getByTestId('activity-settings').click();
+      await page.keyboard.press('Tab');
+      for (const id of ['settings-search', 'settings-domain-select', 'settings-section-select']) {
+        await assertScrollableControlVisible(page.getByTestId(id));
+      }
+      await selectSection('app');
+      await assertScrollableControlVisible(page.getByTestId('settings-global-hotkey'));
+      await page.getByTestId('settings-open-at-login').check();
+      await assertScrollableControlVisible(page.getByTestId('settings-discard-draft'));
+      await assertScrollableControlVisible(page.getByTestId('settings-save'));
+      await page.getByTestId('settings-save').press('Enter');
+      await expect(page.getByTestId('settings-impact-confirm-panel')).toBeVisible();
+      await page.evaluate(() => window.mount());
+      await page.getByTestId('activity-settings').click();
+      await selectSection('backup');
+      await assertScrollableControlVisible(page.getByTestId('settings-import-text'));
+      const audit = await page.evaluate('(' + clipAudit + ')({root: "body", viewport: true})');
+      assert.equal(audit.cut, 0, JSON.stringify(audit));
+      assert.equal(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight), true);
+      await page.keyboard.press('Escape');
+      await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
+    }
+  } finally {
+    await page.evaluate(() => window.mount());
+    await page.setViewportSize({width: 900, height: 700});
+  }
+});
+
+test('native 400 percent zoom preserves save and discard confirmation controls and guards', async () => {
+  // A fresh native window has no device metrics left from earlier CSS viewport
+  // cases; clearing another CDP session does not reliably clear their override.
+  const previousPage = page;
+  const created = app.waitForEvent('window');
+  await app.evaluate(({BrowserWindow}, entry) => {
+    const window = new BrowserWindow({show: true, width: 1440, height: 900, useContentSize: true});
+    void window.loadFile(entry);
+  }, join(tempDir, 'index.html'));
+  page = await created;
+  page.setDefaultTimeout(8000);
+  page.on('pageerror', error => rendererErrors.push(error.stack ?? error.message));
+  const browserWindow = await app.browserWindow(page);
+  try {
+    await page.waitForFunction(() => typeof window.mount === 'function');
+    await browserWindow.evaluate(window => window.setContentSize(1440, 900));
+    const nativeSize = await browserWindow.evaluate(window => {window.webContents.setZoomFactor(4);return window.getContentSize();});
+    assert.deepEqual(nativeSize, [1440, 900]);
+    await page.waitForFunction(size => Math.abs(innerWidth - size[0] / 4) <= 1 && Math.abs(innerHeight - size[1] / 4) <= 1, nativeSize);
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(theme => {window.mount();document.documentElement.dataset.theme = theme;}, theme);
+      await page.getByTestId('activity-settings').press('Enter');
+      await selectSection('app');
+      const startup = page.getByTestId('settings-open-at-login');
+      await assertScrollableControlVisible(startup);
+      await startup.press('Space');
+      await expect(startup).toBeChecked();
+      const save = page.getByTestId('settings-save');
+      await assertScrollableControlVisible(save);
+      await save.press('Enter');
+      const confirm = page.getByTestId('settings-impact-confirm-panel');
+      await confirm.waitFor();
+      await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'settings-impact-confirm-cancel');
+      await assertScrollableControlVisible(page.getByTestId('settings-impact-confirm-message'));
+      for (const action of ['close', 'confirm', 'cancel']) await assertScrollableControlVisible(page.getByTestId(`settings-impact-confirm-${action}`));
+      await page.getByTestId('settings-impact-confirm-cancel').press('Enter');
+      await confirm.waitFor({state: 'detached'});
+      await expect(startup).toBeChecked();
+      assert.equal(await page.evaluate(() => window.settingsSaveRequests.length), 0, 'cancelling confirmation never saves');
+      await save.press('Enter');
+      await confirm.waitFor();
+      await assertScrollableControlVisible(page.getByTestId('settings-impact-confirm-confirm'));
+      await page.getByTestId('settings-impact-confirm-confirm').press('Enter');
+      await confirm.waitFor({state: 'detached'});
+      await expect(save).toBeDisabled();
+      assert.equal(await page.evaluate(() => window.settingsSaveRequests.length), 1);
+      await assertScrollableControlVisible(startup);
+      await startup.press('Space');
+      await page.getByTestId('settings-modal-close').press('Enter');
+      const discard = page.getByTestId('settings-discard-panel');
+      await discard.waitFor();
+      await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'settings-discard-cancel');
+      await assertScrollableControlVisible(page.getByTestId('settings-discard-message'));
+      for (const action of ['close', 'confirm', 'cancel']) await assertScrollableControlVisible(page.getByTestId(`settings-discard-${action}`));
+      const audit = await page.evaluate('(' + clipAudit + ')({root: "body", viewport: true})');
+      assert.equal(audit.cut, 0, JSON.stringify(audit));
+      await page.getByTestId('settings-discard-cancel').press('Enter');
+      await discard.waitFor({state: 'detached'});
+      await expect(startup).not.toBeChecked();
+      await page.getByTestId('settings-modal-close').press('Enter');
+      await discard.waitFor();
+      await assertScrollableControlVisible(page.getByTestId('settings-discard-confirm'));
+      await page.getByTestId('settings-discard-confirm').press('Enter');
+      await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
+      assert.equal(await page.evaluate(() => window.settingsSaveRequests.length), 1, 'discard never writes the changed draft');
+    }
+  } finally {
+    await browserWindow.evaluate(window => {window.webContents.setZoomFactor(1);window.destroy();});
+    page = previousPage;
+  }
+});
+
+test('short shared confirmation reveals its complete actions and preserves cancel-first focus', async () => {
+  try {
+    await page.setViewportSize({width: 360, height: 225});
+    for (const theme of ['light', 'dark']) for (const outcome of ['cancel', 'confirm']) {
+      await page.evaluate(theme => {window.mountConfirmation();document.documentElement.dataset.theme = theme;}, theme);
+      await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'short-confirmation-cancel');
+      await assertScrollableControlVisible(page.getByTestId('short-confirmation-message'));
+      for (const action of ['close', 'cancel', 'confirm']) await assertScrollableControlVisible(page.getByTestId(`short-confirmation-${action}`));
+      const audit = await page.evaluate('(' + clipAudit + ')({root: "body", viewport: true})');
+      assert.equal(audit.cut, 0, JSON.stringify(audit));
+      await page.getByTestId(`short-confirmation-${outcome}`).press('Enter');
+      await page.getByTestId('short-confirmation-panel').waitFor({state: 'detached'});
+      assert.deepEqual(await page.evaluate(() => window.confirmationActions), [outcome]);
+    }
+  } finally {
+    await page.evaluate(() => window.mount());
+    await page.setViewportSize({width: 900, height: 700});
+  }
+});
+
 async function clickSection(section) {
   const domain = domainBySection[section];
   const compactDomain = page.getByTestId('settings-domain-select');

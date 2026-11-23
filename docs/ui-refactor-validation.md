@@ -1,5 +1,13 @@
 # UI 重构验证记录
 
+## 2026-11-23 P8.2：高缩放短视口与确认操作
+
+状态：**Verified passing**（短视口与原生缩放定向范围）。真实400%缩放留下360×225 CSS视口，活动栏原固定高度溢出，设置表单可用区过低；共用ConfirmDialog的取消按钮另复现垂直裁切和遮挡。活动栏改为独立滚动，短视口模态壳收减外留白并由面板承接滚动，设置的分区/表单/保存栏共享滚动区域。保留字号、目标尺寸、取消初焦点与草稿守卫。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。`pnpm build`通过；`node --test --test-name-pattern='short viewport|short settings|native 400|short shared confirmation' tests/renderer/radix-settings-dialog.test.mjs` **4/4**。覆盖浅/深主题、七个活动栏动作、设置导航/输入/文本区、保存取消后草稿仍在、确认后实际写入、关闭取消后保留修改、放弃确认关闭且不写入；正文及各确认按钮的焦点环、五点命中与阴影裁切通过。原生测试使用无CSS仿真历史的新BrowserWindow，核对1440×900窗口、zoom4和360×225实际视口，避免把CSS视口模拟当作原生缩放。
+
+布局审计增加真实webContents 125%/200%/400%缩放，逐路由重新应用并核对倍率与实际CSS尺寸，以原生capturePage保留完整窗口截图。仅跳过普通矩阵的临时定向入口检查 **12/12** 缩放状态通过；完整矩阵另记，不合并宣称同轮通过。已检查400%深色设置截图，输入焦点完整可见。临时入口和截图在最终清理时移除；长期合同见[设计系统](design-system.md)。
+
 ## 2026-11-23 P8：终端数据库边界与完整助手路径
 
 状态：**Verified passing**（本段终端与助手范围）。完整smoke首次终端回显失败，实际原因是项目权限查询误用了workspace/core数据库，后者没有research_projects表。权限由ResearchProjectWorkspaceContract从科研数据库读取并注入工作区插件；归档、删除或目录变化继续拒绝连接/输入/调整尺寸，清理仍可执行。新增真正分离的双SQLite回归先复现失败再验证修复。smoke改为等待真实ready并核对shell生成的独立输出行，输入回显不能通过；打包smoke同步连接令牌合同。

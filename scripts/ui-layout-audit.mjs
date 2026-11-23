@@ -10,7 +10,7 @@
  * 覆盖深浅主题、列/抽屉断点、窄窗口、任务抽屉与键盘焦点。
  */
 import { _electron as electron } from '@playwright/test';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -39,6 +39,7 @@ let nativeMinimum;
 let currentTheme;
 let importedSkill = false;
 let controlsChecked = 0;
+let nativeZoomFactor = null;
 const smokeApiKey = 'smoke-test-key';
 
 const VIEWPORTS = [
@@ -60,7 +61,7 @@ const SETTINGS_SECTIONS = {
   advanced: ['backup', 'pilot', 'hooks']
 };
 
-async function capture(page, id) {
+async function capture(page, id, nativeWindow = null) {
   // Ignore continuous activity indicators, but wait for entry and hover motion.
   await page.waitForFunction(() =>
     document.getAnimations().filter(animation => Number.isFinite(animation.effect?.getComputedTiming().iterations))
@@ -68,10 +69,21 @@ async function capture(page, id) {
     [...document.querySelectorAll('[data-overlay-kind] [data-testid$="-panel"]')]
       .every(panel => Number(getComputedStyle(panel).opacity) === 1));
   const audit = await auditLayout(page, `${currentTheme}-${id}`);
+  if (nativeWindow !== null) {
+    const native = await nativeWindow.evaluate(window => ({factor: window.webContents.getZoomFactor(), size: window.getContentSize()}));
+    assert.ok(Math.abs(native.factor - nativeZoomFactor) < 1e-8, 'native zoom remains applied');
+    assert.ok(Math.abs(audit.viewport.width - native.size[0] / native.factor) <= 1 &&
+      Math.abs(audit.viewport.height - native.size[1] / native.factor) <= 1, 'captured CSS viewport matches native zoom');
+    // CDP screenshots can crop an Electron page at native zoom. Capture the
+    // complete visible native surface for visual inspection instead.
+    const png = await nativeWindow.evaluate(async window => (await window.webContents.capturePage()).toPNG().toString('base64'));
+    writeFileSync(resolve(artifactDir, `${currentTheme}-${id}.png`), Buffer.from(png, 'base64'));
+  }
   audit.clip = await page.evaluate(`(${clipSource})({viewport: true})`);
   audit.theme = currentTheme;
   audit.reducedMotion = await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
-  audit.viewportEmulated = true;
+  audit.viewportEmulated = nativeZoomFactor === null;
+  if (nativeZoomFactor !== null) audit.nativeZoomFactor = nativeZoomFactor;
   audit.belowNativeMinimum = audit.viewport.width < nativeMinimum[0];
   audits.push(audit);
   const problems = [
@@ -187,10 +199,16 @@ async function selectSettingsSection(page, section) {
     await compact.selectOption(section);
   } else {
     const domainButton = page.getByTestId(`settings-domain-${domain}`);
-    if (await domainButton.getAttribute('aria-pressed') !== 'true') await domainButton.click();
+    if (await domainButton.getAttribute('aria-pressed') !== 'true') {
+      if (nativeZoomFactor === null) await domainButton.click();
+      else {await assertControlVisible(domainButton); await domainButton.press('Enter');}
+    }
     const sectionButton = page.getByTestId(`settings-section-${section}`);
     await assertControlVisible(sectionButton);
-    await sectionButton.click();
+    // Native zoom and CDP pointer coordinates differ. Keep the five-point CSS
+    // hit test above and exercise actual keyboard activation at this scale.
+    if (nativeZoomFactor === null) await sectionButton.click();
+    else await sectionButton.press('Enter');
   }
   await page.waitForFunction(section =>
     document.querySelector('[data-testid="settings-panel"]')?.id === `settings-panel-${section}`, section);
@@ -344,7 +362,9 @@ try {
     await capture(page, `task-center-${viewport.id}`);
     await page.getByTestId('canvas-task-category-research').click();
     await page.getByTestId('mgmt-research-tasks').getByText('当前项目还没有科研任务。', {exact: true}).waitFor();
-    await assertControlVisible(page.getByTestId('mgmt-task-select'));
+    await page.getByTestId('canvas-task-list').waitFor({state: 'visible'});
+    await page.getByTestId('canvas-task-detail').getByText('从任务列表选择一项，查看进度、成果与执行记录。', {exact: true}).waitFor();
+    await assertControlVisible(page.getByTestId('canvas-task-category-research'));
     await capture(page, `research-tasks-${viewport.id}`);
 
     const managementOpener = page.getByTestId('titlebar-management');
@@ -584,6 +604,46 @@ try {
   await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
   await page.emulateMedia({reducedMotion: 'reduce'});
   }
+  // Measure actual webContents zoom separately from the CSS viewport matrix.
+  // Clear Playwright's emulation first; otherwise this would only resize a mock viewport.
+  const zoomCdp = await page.context().newCDPSession(page);
+  try {
+    await zoomCdp.send('Emulation.clearDeviceMetricsOverride');
+    await browserWindow.evaluate(window => window.setContentSize(1440, 900));
+    const applyNativeZoom = async factor => {
+      const size = await browserWindow.evaluate((window, zoom) => {
+        window.webContents.setZoomFactor(zoom);
+        return window.getContentSize();
+      }, factor);
+      await page.waitForFunction(({size, factor}) => Math.abs(innerWidth - size[0] / factor) <= 1 &&
+        Math.abs(innerHeight - size[1] / factor) <= 1, {size, factor});
+    };
+    for (const theme of ['light', 'dark']) {
+      currentTheme = theme;
+      await page.evaluate(value => {document.documentElement.dataset.theme = value;}, theme);
+      for (const factor of [1.25, 2, 4]) {
+        nativeZoomFactor = factor;
+        await navigate(page, `${projectQuery}&view=writing&assistant=0`);
+        await page.getByTestId('canvas').waitFor();
+        await applyNativeZoom(factor);
+        await capture(page, `native-zoom-${factor}-canvas`, browserWindow);
+        await navigate(page, `page=settings&project=${project.id}&view=writing&assistant=0`);
+        await page.getByTestId('settings-modal-panel').waitFor();
+        // A file URL route change can restore Chromium's per-URL zoom. Verify
+        // the native factor and CSS dimensions after each actual surface opens.
+        await applyNativeZoom(factor);
+        await selectSettingsSection(page, 'app');
+        await assertFormLayout(page.getByTestId('settings-panel'));
+        await capture(page, `native-zoom-${factor}-settings`, browserWindow);
+        await page.keyboard.press('Escape');
+        await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
+      }
+    }
+  } finally {
+    await browserWindow.evaluate(window => window.webContents.setZoomFactor(1));
+    nativeZoomFactor = null;
+    await zoomCdp.detach();
+  }
   assert.deepEqual(geometryProblems, [], 'viewport, minimum type and targets, and shadow clearance');
 } catch (error) {
   failure = error instanceof Error ? error.message : String(error);
@@ -596,7 +656,7 @@ try {
     controlsChecked,
     target: smokeTarget, reducedMotion: ['reduce', 'no-preference'],
     narrowScope: 'emulated renderer viewport in disposable Electron window; native minimum and display correction remain enforced',
-    audits, viewports: VIEWPORTS});
+    audits, viewports: VIEWPORTS, nativeZoomFactors: [1.25, 2, 4]});
   try {
     if (app !== undefined) {
       if (failure !== null) {
