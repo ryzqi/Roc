@@ -179,7 +179,7 @@ export class ResearchSubmissionService {
         }
         const file = parent.files.find(file => file.path === path);
         if (file === undefined) throw new Error('research_submission_extra_missing');
-        extras.push(await writer.copy(sourceRoot, file, `extras/${path}`));
+        extras.push({...await writer.copy(sourceRoot, file, `extras/${path}`), logicalPath: path});
       }
       const compiled = await compileLatex({rootPath: join(writer.root, 'source'), entryPath: 'main.tex', outputDir: join(scratch, 'compiled'), jobDir: scratch,
         signal, runner: async input => {
@@ -196,7 +196,7 @@ export class ResearchSubmissionService {
       const cleanPdf = Buffer.from(await pdf.save());
       await writer.write('paper.pdf', cleanPdf);
       const selection = {profile: profile.snapshot.request.profile, figureIds: current.figures.map(figure => figure.id),
-        supplementPaths: extras.map(file => file.path), manualReviews: []};
+        supplementPaths: extras.flatMap(file => [file.logicalPath, file.path]), manualReviews: []};
       const facts = this.research.journalCompliance.captureFacts(request.projectId, current.manuscriptArtifact.id, selection);
       if (facts.manuscript.contentHash !== current.manuscript.contentHash || facts.manuscript.claimsHash !== current.manuscript.claimsHash ||
           facts.figures.some(figure => !current.figures.some(original => original.id === figure.id && original.manifestHash === figure.manifestHash))) {
@@ -204,8 +204,10 @@ export class ResearchSubmissionService {
       }
       const checks = checkJournalCompliance(selection, {...facts,
         manuscript: {...facts.manuscript, sections: sources.manuscript.sections},
-        claims: facts.claims.map(claim => sources.claims.find(candidate => candidate.id === claim.id) ?? claim), supplements: extras});
-      const files = await Promise.all(writer.list().map(async file => ({path: file.path,
+        claims: facts.claims.map(claim => sources.claims.find(candidate => candidate.id === claim.id) ?? claim),
+        supplements: extras.flatMap(({path, logicalPath, sha256, size}) => [{path: logicalPath, sha256, size}, {path, sha256, size}])});
+      const logicalPaths = new Map(extras.map(file => [file.path, file.logicalPath]));
+      const files = await Promise.all(writer.list().map(async file => ({path: file.path, logicalPath: logicalPaths.get(file.path),
         bytes: new Uint8Array(await readResearchFile(writer.root, file.path, exportFileLimit))})));
       const preflight = await inspectSubmissionPreflight({profile, pdf: cleanPdf, files, journalChecks: checks,
         privateIdentityTokens: request.replacements.map(rule => rule.find), signal});

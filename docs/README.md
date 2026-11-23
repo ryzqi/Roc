@@ -68,6 +68,7 @@
 | --- | --- |
 | [数据库存储](database-storage.md) | 当前结构初始化、维护与不兼容库处理 |
 | [开发指南](development.md) | 构建、测试选择、smoke 替代行为与运行产物 |
+| [科研工作流实施验收](research-workflow-validation-2026-11-23.md) | 八项优化提交、原生闭环、回归命令及验证边界 |
 | [评测指南](../evaluation/README.md) | 套件、输入资格、运行、对照与证据保留 |
 | [文献检索与获取评测](literature-evaluation.md) | 公网捕获、独立标注、排名与获取指标及受控工程检查 |
 | [macOS GitHub 发布](github-releases.md) | main 自动预发布、版本标签发布、本地预演与失败重试 |

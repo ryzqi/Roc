@@ -11,6 +11,7 @@ import {researchJournalCheckSchema} from '../../../shared/schemas/research-journ
 import {withResearchPdf, extractResearchPdfPageText} from './pdf-render';
 import {ArchivePolicy} from './archive-policy';
 import {researchContentHash} from './research-files';
+import {researchExperimentPathSchema} from '../../../shared/schemas/research-experiments';
 
 type Check = ResearchSubmissionPreflight['checks'][number];
 const fileLimit = 64 * 1024 * 1024;
@@ -19,7 +20,7 @@ const wordNamespaces = new Set(['http://schemas.openxmlformats.org/wordprocessin
 
 /** Verify actual selected bytes. Public findings contain locations and counts, never private identity tokens or metadata. */
 export async function inspectSubmissionPreflight(input: {
-  profile: ResearchSubmissionProfileReceipt; pdf: Uint8Array; files: Array<{path: string; bytes: Uint8Array}>;
+  profile: ResearchSubmissionProfileReceipt; pdf: Uint8Array; files: Array<{path: string; bytes: Uint8Array; logicalPath?: string}>;
   privateIdentityTokens?: string[]; journalChecks?: z.infer<typeof researchJournalCheckSchema>[]; signal?: AbortSignal;
 }): Promise<ResearchSubmissionPreflight> {
   const profile = researchSubmissionProfileReceiptSchema.parse(input.profile);
@@ -88,6 +89,11 @@ export async function inspectSubmissionPreflight(input: {
   for (const [index, file] of input.files.entries()) {
     abort();
     policy.add({name: file.path, uncompressedSize: file.bytes.length}); paths.add(file.path);
+    if (file.logicalPath !== undefined) {
+      const logicalPath = researchExperimentPathSchema.parse(file.logicalPath);
+      if (file.path !== `extras/${logicalPath}`) throw new Error('research_submission_file_mapping_invalid');
+      paths.add(logicalPath);
+    }
     identities.push({slot: `file:${index + 1}:name`, text: file.path});
     if (file.path === 'paper.pdf') {
       if (researchContentHash(Buffer.from(file.bytes)) !== pdfHash) throw new Error('research_submission_pdf_mismatch');
@@ -119,7 +125,8 @@ export async function inspectSubmissionPreflight(input: {
           '所给身份词未在可检查的正文、元数据、批注和文件名中命中；图像、未知二进制内容及未列出的身份线索仍需人工核对，不能据此保证匿名。');
   }
   abort();
-  const files = input.files.map((file, index) => ({subjectId: `file:${index + 1}`, sha256: researchContentHash(Buffer.from(file.bytes)), size: file.bytes.length}));
+  const files = input.files.map((file, index) => ({subjectId: `file:${index + 1}`, sha256: researchContentHash(Buffer.from(file.bytes)),
+    size: file.bytes.length, logicalPathHash: file.logicalPath === undefined ? null : researchContentHash(file.logicalPath)}));
   const report = {files, profile: {versionId: profile.snapshot.id, expectedHash: profile.snapshotHash},
     pdf: {sha256: pdfHash, size: input.pdf.length, pages, readableText}, checks,
     status: checks.some(check => check.status === 'fail') ? 'fail' as const : checks.some(check => check.status === 'manual') ? 'manual' as const : 'pass' as const};

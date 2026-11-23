@@ -70,3 +70,21 @@ test('missing journal checks stay unchecked; malformed payloads and cancellation
   const controller=new AbortController();controller.abort();
   await assert.rejects(api.inspectSubmissionPreflight({...input,signal:controller.signal}),{name:'AbortError'});
 });
+
+test('copied selected extras retain their original logical supplement path with actual-byte-bound private mapping hashes',async()=>{
+  const bytes=await docx('<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:tbl><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl></w:body></w:document>');
+  const document=await pdf(),selected=profile({minimumEditableTables:1,supplementPaths:['table.docx','extras/table.docx']});
+  const input={profile:selected,pdf:document,journalChecks};
+  const correct=await api.inspectSubmissionPreflight({...input,files:[{path:'extras/table.docx',logicalPath:'table.docx',bytes}]});
+  assert.equal(correct.checks.find(check=>check.kind==='supplements').status,'pass');
+  assert.equal(correct.checks.find(check=>check.kind==='editable_tables').status,'pass');
+  assert.equal(correct.files[0].sha256,hash(bytes));
+  assert.equal(correct.files[0].logicalPathHash,hash('table.docx'));
+  assert.ok(!JSON.stringify(correct).includes('table.docx'));
+  const missing=await api.inspectSubmissionPreflight({...input,files:[]});
+  assert.equal(missing.checks.find(check=>check.kind==='supplements').status,'fail');
+  const unbound=await api.inspectSubmissionPreflight({...input,files:[{path:'extras/table.docx',bytes}]});
+  assert.equal(unbound.checks.find(check=>check.kind==='supplements').status,'fail');
+  assert.notEqual(unbound.reportHash,correct.reportHash);
+  await assert.rejects(api.inspectSubmissionPreflight({...input,files:[{path:'extras/other.docx',logicalPath:'table.docx',bytes}]}),/file_mapping_invalid/u);
+});

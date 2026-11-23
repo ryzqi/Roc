@@ -27,7 +27,7 @@ export const researchSubmissionProfileDifferenceSchema = z.strictObject({addedRu
 export const researchSubmissionProfileListResultSchema = z.strictObject({items: researchSubmissionProfileReceiptSchema.array(), total: z.number().int().nonnegative()});
 export const researchSubmissionPreflightSchema = z.strictObject({
   profile: z.strictObject({versionId: id, expectedHash: hash}),
-  files: z.strictObject({subjectId: z.string().min(1), sha256: hash, size: z.number().int().nonnegative()}).array(),
+  files: z.strictObject({subjectId: z.string().min(1), sha256: hash, size: z.number().int().nonnegative(), logicalPathHash: hash.nullable()}).array(),
   pdf: z.strictObject({sha256: hash, size: z.number().int().positive(), pages: z.number().int().positive(), readableText: z.boolean()}),
   checks: z.strictObject({kind: z.enum(['journal_rules', 'pages', 'declarations', 'anonymity', 'editable_tables', 'supplements']),
     status: z.enum(['pass', 'fail', 'manual']), subjectIds: z.string().min(1).array(), detail: z.string().min(1)}).array(),
