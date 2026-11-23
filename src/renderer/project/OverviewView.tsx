@@ -1,5 +1,5 @@
 import {useEffect, useRef} from 'react';
-import {ArrowRight, BookOpen, Bot, FileText, ListTodo, Search, Upload} from 'lucide-react';
+import {ArrowRight, BookOpen, FileText, ListTodo, Search, Upload} from 'lucide-react';
 import {useWorkspaceScope} from '../app/workspace-scope';
 import {useAsyncResource} from '../app/use-async-resource';
 import {useLiterature} from '../literature/literature-scope';
@@ -7,7 +7,7 @@ import {libraryItemTitle} from '../literature/format';
 import {researchTaskStatusLabels} from '../research/tasks/TaskSummary';
 import {EmptyState} from '../shell/EmptyState';
 import {ErrorBar} from '../shell/ErrorBar';
-import {formPrimaryButtonClass, formSecondaryButtonClass} from '../shared/form-ui';
+import {formSecondaryButtonClass} from '../shared/form-ui';
 import {formatBeijingDateTime} from '../shared/format';
 import {useViewActive} from '../shared/view-activity';
 import {projectStatusLabel} from './project-store';
@@ -58,7 +58,6 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
   const currentTask = recentTasks.find(task => task.status === 'active');
   const pendingTasks = recentTasks.filter(task =>
     task.status === 'waiting_approval' || task.status === 'interrupted' || task.status === 'failed' || task.status === 'paused');
-  const nextTask = pendingTasks[0] ?? currentTask;
   const recentItems = [...literature.items].filter(item => !item.archived)
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 3);
   const recentArtifacts = [...(artifacts.data ?? [])].filter(artifact => artifact.status !== 'superseded')
@@ -82,11 +81,6 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
           </div>
           {project.data === null ? null : <p data-testid="overview-goal" className="whitespace-pre-wrap break-words leading-normal text-muted">{project.data.description}</p>}
         </div>
-        <button type="button" className={formPrimaryButtonClass} data-testid="overview-primary"
-          onClick={() => nextTask === undefined ? scope.openAssistant() : scope.openTasks(nextTask.id)}>
-          {nextTask === undefined ? <Bot size={16} aria-hidden="true"/> : <ListTodo size={16} aria-hidden="true"/>}
-          {nextTask === undefined ? '打开助手' : '查看任务'}
-        </button>
       </header>
       {project.error === null ? null : <ErrorBar error={{level: 'page', message: project.error, retry: project.reload}}/>}
       {scope.workspaceError === null ? null : <ErrorBar error={{level: 'blocked', message: scope.workspaceError, retry: scope.rebindWorkspace}}/>}
@@ -94,13 +88,15 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
       {scope.firstStepsVisible ? <FirstSteps writable={scope.writable} requestId={scope.firstStepsRequestId} onDismiss={scope.dismissFirstSteps}
         onDiscover={() => scope.openView('discover')} onImport={addLiterature}
         onRead={() => scope.openLiterature({kind: 'reader', libraryItemId: literature.selectedId})}
-        onAsk={scope.openAssistant} onWrite={() => scope.openView('writing')}/> : null}
+        onWrite={() => scope.openView('writing')}/> : null}
 
       <nav aria-label="研究操作" className="overview-shortcuts" data-testid="overview-shortcuts">
-        <button type="button" className={formSecondaryButtonClass} onClick={() => scope.openView('discover')}><Search size={16} aria-hidden="true"/>检索论文</button>
-        <button type="button" className={formSecondaryButtonClass} disabled={!scope.writable} onClick={addLiterature}><Upload size={16} aria-hidden="true"/>导入 PDF</button>
+        {scope.firstStepsVisible ? null : <>
+          <button type="button" className={formSecondaryButtonClass} onClick={() => scope.openView('discover')}><Search size={16} aria-hidden="true"/>检索论文</button>
+          <button type="button" className={formSecondaryButtonClass} disabled={!scope.writable} onClick={addLiterature}><Upload size={16} aria-hidden="true"/>导入 PDF</button>
+          <button type="button" className={formSecondaryButtonClass} onClick={() => scope.openView('writing')}><FileText size={16} aria-hidden="true"/>打开写作</button>
+        </>}
         <button type="button" className={formSecondaryButtonClass} onClick={() => scope.openView('knowledge')}><BookOpen size={16} aria-hidden="true"/>问我的资料</button>
-        <button type="button" className={formSecondaryButtonClass} onClick={() => scope.openView('writing')}><FileText size={16} aria-hidden="true"/>打开写作</button>
       </nav>
 
       <section className={sectionClass} aria-labelledby="overview-task-heading">
@@ -155,7 +151,7 @@ function ProjectOverview({projectId}: {projectId: string}): React.JSX.Element {
       <section className={sectionClass} aria-labelledby="overview-library-heading">
         <header className="flex items-center justify-between gap-3">
           <h2 id="overview-library-heading" className="font-medium">{literature.query.trim() === '' ? '近期文献' : '当前筛选文献'}</h2>
-          <button type="button" className={formSecondaryButtonClass} onClick={() => scope.openView('library')}>打开文献库</button>
+          {scope.firstStepsVisible ? null : <button type="button" className={formSecondaryButtonClass} onClick={() => scope.openView('library')}>打开文献库</button>}
         </header>
         {literature.error !== null ? <ErrorBar error={{level: 'page', message: literature.error, retry: literature.reload}}/> :
           literature.status === 'loading' && recentItems.length === 0 ? <EmptyState compact tone="loading" title="正在读取文献"/> :

@@ -302,18 +302,13 @@ export function LatexPanel(): React.JSX.Element {
 
 
   const fileState = files.status === 'error' ? (
-    <ErrorBar error={{level: 'page', message: files.error ?? '扫描文件失败', retry: files.reload}} />
+    <ErrorBar error={{level: 'page', message: files.error ?? '扫描文件失败'}} />
   ) : files.status === 'loading' && files.data === null ? (
     <EmptyState compact tone="loading" title="正在读取文稿列表…" />
   ) : files.data?.partial ? (
-    <div className="flex flex-wrap items-baseline gap-2 text-xs">
-      <p role="status">部分文稿未列出</p>
-      <button type="button" onClick={files.reload} disabled={files.status === 'loading'}
-        className="rounded-control px-2 py-1 text-muted hover:bg-[var(--overlay-hover)] disabled:opacity-50">重新扫描</button>
-    </div>
+    <p role="status" className="text-xs">部分文稿未列出</p>
   ) : entries.length === 0 ? (
-    <EmptyState compact title="没有可编辑的文稿文件" testId="production-latex-empty"
-      action={{label: '重新扫描', onClick: files.reload}} />
+    <EmptyState compact title="没有可编辑的文稿文件" testId="production-latex-empty" />
   ) : null;
 
   return (

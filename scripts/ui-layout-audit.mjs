@@ -338,8 +338,7 @@ try {
     await assertControlVisible(page.getByTestId('mgmt-task-select'));
     await capture(page, `research-tasks-${viewport.id}`);
 
-    const managementOpener = page.getByTestId('context-management');
-    if (!await managementOpener.isVisible()) await page.getByTestId('titlebar-toggle-sidebar').click();
+    const managementOpener = page.getByTestId('titlebar-management');
     await managementOpener.focus();
     await page.keyboard.press('Enter');
     const management = page.getByTestId('management-panel-panel');

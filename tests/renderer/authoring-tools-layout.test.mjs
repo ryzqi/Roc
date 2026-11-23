@@ -31,11 +31,14 @@ before(async () => {
     window.writes = []; window.inlineCommands = []; window.terminalCreates = []; window.terminalInputs = []; window.terminalCloses = [];
     window.addEventListener('roc:inline-selection-command', event => window.inlineCommands.push(event.detail));
     window.compiles = []; window.exports = []; window.pdfRequests = []; window.compileMode = 'ready'; window.exportPath = null;
+    window.fileListMode = 'ready'; window.fileScans = 0;
     const client = {api: {
       workspace: {onChanged: () => () => {}},
       files: {
-        listTree: async () => ok({relativePath: '', truncated: false, entries: Object.keys(contents).map(name =>
-          ({name, relativePath: name, type: 'file', size: contents[name].length, updatedAt: '2026-11-12T00:00:00.000Z'}))}),
+        listTree: async () => {window.fileScans++;
+          return window.fileListMode === 'error' ? {ok:false,error:{message:'Scan unavailable'}} :
+            ok({relativePath: '', truncated: window.fileListMode === 'partial', entries: window.fileListMode === 'empty' ? [] : Object.keys(contents).map(name =>
+              ({name, relativePath: name, type: 'file', size: contents[name].length, updatedAt: '2026-11-12T00:00:00.000Z'}))});},
         preview: async ({relativePath}) => ok({relativePath, kind: 'text', content: contents[relativePath],
           sizeBytes: contents[relativePath].length, truncated: false, mediaType: 'text/plain'}),
         previewPdf: async request => {window.pdfRequests.push(request); return ok({relativePath: request.relativePath, resourceUrl: 'about:blank', sizeBytes: 1024});},
@@ -121,6 +124,25 @@ async function selectFile(path) {
   else await page.getByTestId('production-latex-file-' + path).click();
   await expect(page.getByTestId('production-latex-content')).toBeVisible();
 }
+
+test('partial empty and failed manuscript lists keep one scan action', async () => {
+  try {
+    for (const mode of ['partial', 'empty', 'error']) {
+      await page.evaluate(mode => {window.fileListMode=mode;window.mount('latex');}, mode);
+      if (mode === 'partial') await expect(page.getByText('部分文稿未列出',{exact:true}).first()).toBeVisible();
+      else if (mode === 'empty') await expect(page.getByTestId('production-latex-empty').first()).toBeVisible();
+      else await expect(page.getByRole('alert').first()).toContainText('Scan unavailable');
+      const scan=page.getByRole('button',{name:/^(重新扫描|重试)$/});
+      await expect(scan).toHaveCount(1);
+      const before=await page.evaluate(()=>{window.fileListMode='ready';return window.fileScans;});
+      await scan.focus();await page.keyboard.press('Enter');
+      await expect(page.getByTestId('production-latex-file-main.tex')).toBeVisible();
+      assert.equal(await page.evaluate(()=>window.fileScans),before+1);
+    }
+  } finally {
+    await page.evaluate(()=>{window.fileListMode='ready';window.mount('latex');});
+  }
+});
 
 test('authoring uses real Markdown math previews and protects drafts when changing files', async () => {
   await page.evaluate(() => window.mount('latex'));

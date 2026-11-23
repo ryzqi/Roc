@@ -503,7 +503,7 @@ try {
 
   // ---- 闸门 1：导入对话框（真实 UI 断言） ------------------------------------
   await openLiteratureHub(page, projectId);
-  await page.click('[data-testid="literature-hub-import"]');
+  await page.locator('[data-testid="literature-hub-import"], [data-testid="literature-import-open"]').filter({visible: true}).click();
   await page.waitForSelector('[data-testid="literature-import-dialog"]', { timeout: 20_000 });
   const tabs = await page.locator('[data-testid^="literature-import-tab-"]').allTextContents();
   assertCheck(

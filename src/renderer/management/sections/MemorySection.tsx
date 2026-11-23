@@ -79,7 +79,7 @@ export function MemorySection({ scope, store: files }: { scope: ManagementScope;
           <header className="memory-document-heading">
             <div><h3 id={`${instanceId}-title`}>{files.selected.label}</h3><span className="memory-scope">{files.selected.scope === 'workspace' ? `仅适用于 ${memory.workspaceLabel ?? '当前项目'}` : '适用于所有项目'}</span></div>
             <button ref={editButtonRef} type="button" data-testid="mgmt-memory-edit" hidden={editing} disabled={!writable || files.contentLoading || files.contentError !== null || files.save.pending} onClick={() => setEditingKey(selectedKey)} className={formSecondaryButtonClass}>
-              <Pencil size={12} aria-hidden="true" />{dirty ? '继续编辑' : '编辑'}
+              <Pencil size={12} aria-hidden="true" />{dirty ? '继续编辑' : (files.content ?? '').trim().length === 0 ? '添加内容' : '编辑'}
             </button>
           </header>
           {files.contentError !== null ? <FormNote tone="warn" testId="mgmt-memory-content-error">读取内容失败：{files.contentError}</FormNote> : null}
@@ -107,8 +107,8 @@ export function MemorySection({ scope, store: files }: { scope: ManagementScope;
             </div>
           ) : (
             <>
-              {dirty ? <div className="memory-unsaved-note" role="status"><AlertTriangle size={12} aria-hidden="true" />此分类有未保存的修改，正在展示已保存的内容。<button type="button" onClick={() => setEditingKey(selectedKey)}>继续编辑</button></div> : null}
-              {(files.content ?? '').trim().length === 0 ? <div className="memory-empty" data-testid="mgmt-memory-empty"><FileText size={25} strokeWidth={1.25} aria-hidden="true" /><h4>还没有{files.selected.label}</h4>{writable ? <button type="button" data-testid="mgmt-memory-add" onClick={() => setEditingKey(selectedKey)} className={formSecondaryButtonClass}>添加内容</button> : null}</div> :
+              {dirty ? <div className="memory-unsaved-note" role="status"><AlertTriangle size={12} aria-hidden="true" />此分类有未保存的修改，正在展示已保存的内容。</div> : null}
+              {(files.content ?? '').trim().length === 0 ? <div className="memory-empty" data-testid="mgmt-memory-empty"><FileText size={25} strokeWidth={1.25} aria-hidden="true" /><h4>还没有{files.selected.label}</h4></div> :
                 <div className="memory-reading" data-testid="mgmt-memory-reading"><LazyBoundary fallback={<FormNote>正在排版记忆…</FormNote>}><MarkdownView text={files.content ?? ''} /></LazyBoundary></div>}
               {selectedMeta?.updatedAt == null ? null : <p className="memory-updated">最近更新于 {formatBeijingDateTime(selectedMeta.updatedAt)}</p>}
             </>

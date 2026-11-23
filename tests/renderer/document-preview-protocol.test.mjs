@@ -113,13 +113,15 @@ test('actual Chromium sends HEAD/Range and receives exact 206/416 metadata from 
     const head = await fetch(url, {method: 'HEAD'}), session = head.headers.get('x-roc-preview-session');
     const source = new URL(url); source.searchParams.set('session', session);
     const range = await fetch(source, {headers: {range: 'bytes=0-15'}});
+    // Releasing the lease intentionally cancels its streams; finish reading it first.
+    const bytes = Array.from(new Uint8Array(await range.arrayBuffer()));
     const invalid = await fetch(source, {headers: {range: 'bytes=0-1,3-4'}});
     source.searchParams.set('release', '1');
     const release = await fetch(source, {method: 'HEAD'});
     source.searchParams.delete('release');
     const expired = await fetch(source, {headers: {range: 'bytes=0-15'}});
     return {head: head.status, size: Number(head.headers.get('content-length')), accept: head.headers.get('accept-ranges'),
-      status: range.status, contentRange: range.headers.get('content-range'), bytes: Array.from(new Uint8Array(await range.arrayBuffer())),
+      status: range.status, contentRange: range.headers.get('content-range'), bytes,
       invalid: invalid.status, invalidRange: invalid.headers.get('content-range'), release: release.status, expired: expired.status};
   }, url);
   assert.equal(result.head, 200); assert.equal(result.size, sourceBytes.length); assert.equal(result.accept, 'bytes');

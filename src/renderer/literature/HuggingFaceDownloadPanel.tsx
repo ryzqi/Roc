@@ -184,7 +184,8 @@ export default function HuggingFaceDownloadPanel({client, observation, paths, se
       <summary className="cursor-pointer text-muted tabular-nums">下载历史{history.data === null ? '' : `（${history.data.total.toLocaleString('zh-CN')} 条）`}</summary>
       {history.status === 'loading' ? <p role="status">读取下载历史中</p> : null}
       {history.error === null ? null : <div role="alert"><p>{history.error}</p>
-        <button type="button" className={scholarlyButton} onClick={history.reload}>重试下载历史</button></div>}
+        {history.data === null ? <button type="button" className={scholarlyButton} disabled={busy}
+          onClick={history.reload}>重试下载历史</button> : null}</div>}
       {history.data === null ? null : <>
         {history.data.records.length === 0 ? <p className="text-muted">尚无下载记录</p> : <ul className="space-y-1 py-1">
           {history.data.records.map(record => <li key={record.id}><button type="button" className={`${scholarlyButton} max-w-full text-left`}
@@ -198,7 +199,8 @@ export default function HuggingFaceDownloadPanel({client, observation, paths, se
             onClick={() => changeReceipt(() => setHistoryOffset(value => Math.max(0, value - 20)))}>下载历史上一页</button>
           <button type="button" className={scholarlyButton} disabled={locked || history.status === 'loading' || history.data.nextOffset === null}
             onClick={() => changeReceipt(() => setHistoryOffset(history.data!.nextOffset!))}>下载历史下一页</button>
-          <button type="button" className={scholarlyButton} disabled={busy} onClick={history.reload}>刷新下载历史</button>
+          <button type="button" className={scholarlyButton} disabled={busy || history.status === 'loading'}
+            onClick={history.reload}>{history.error === null ? '刷新下载历史' : '重试下载历史'}</button>
         </div>
       </>}
     </details>

@@ -29,7 +29,7 @@ before(async () => {
         status: async () => ok({root: '/memory', workspaceHash: 'workspace-a', workspaceLabel: 'Project A',
           files: MEMORY_SLOTS.map(meta), autoMemory: {recent: []}, snapshot: {enabled: true, totalChars: 5, totalLimit: 20000},
           sessionMessages: {totalRows: 0, retentionDays: 30, oldestAt: null}, fullTextIndex: {healthy: true}}),
-        readFile: async () => ok('Saved'),
+        readFile: async () => ok(window.memoryContent),
         writeFile: request => {window.writes.push(request); return new Promise(resolve => {window.finishWrite = resolve;});}
       },
       sessions: {search: request => {
@@ -69,7 +69,8 @@ before(async () => {
     }
     const root = createRoot(document.getElementById('root'));
     let instance = 0;
-    window.mount = mode => {
+    window.mount = (mode, memoryContent = 'Saved') => {
+      window.memoryContent = memoryContent;
       window.imports = []; window.picks = 0; window.searches = []; window.writes = []; window.sessionQueries = [];
       window.throwImport = false; window.throwPick = false; window.throwSearch = false; window.navigations = 0;
       window.throwSessionQuery = false;
@@ -191,6 +192,23 @@ test('literature queries expose search state and discard responses from previous
   await page.getByTestId('literature-import-search-submit').click();
   await expect(page.getByTestId('literature-import-panel-search').getByRole('alert')).toContainText('Literature search disconnected');
   await expect(page.getByTestId('literature-import-search-submit')).toBeEnabled();
+});
+
+test('memory reading exposes one edit action for empty content and retained drafts', async () => {
+  await page.evaluate(() => window.mount('memory', ''));
+  const document = page.getByTestId('mgmt-memory-document');
+  await expect(page.getByTestId('mgmt-memory-empty')).toBeVisible();
+  await expect(document.getByRole('button', {name: /^(编辑|继续编辑|添加内容)$/})).toHaveCount(1);
+  await document.getByRole('button', {name: '添加内容', exact: true}).click();
+  await page.getByTestId('mgmt-memory-textarea').fill('Retained empty-slot draft');
+  await page.getByTestId('mgmt-memory-slot-global-user').click();
+  await page.getByTestId('mgmt-memory-slot-workspace-memory').click();
+  await expect(document.getByRole('button', {name: /^(编辑|继续编辑|添加内容)$/})).toHaveCount(1);
+  await document.getByRole('button', {name: '继续编辑', exact: true}).click();
+  await expect(page.getByTestId('mgmt-memory-textarea')).toHaveValue('Retained empty-slot draft');
+  await page.getByTestId('mgmt-memory-discard').click();
+  await expect(page.getByTestId('mgmt-memory-edit')).toBeFocused();
+  await expect(document.getByRole('button', {name: '添加内容', exact: true})).toHaveCount(1);
 });
 
 test('memory editor saves respect IME confirmation and preserve refused writes for retry', async () => {

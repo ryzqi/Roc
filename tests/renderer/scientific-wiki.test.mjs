@@ -224,7 +224,7 @@ test('20-candidate pages keep distinct alias-bound proposals and reject changed 
   await page.getByRole('button', {name: '前 20 条', exact: true}).click();
   await page.getByTestId('error-blocked').waitFor(); assert.equal(await rows().count(), 0);
   assert.equal(searched(f).at(-1).ok, false);
-  await page.getByRole('button', {name: '重新检索科研知识', exact: true}).click(); await rows().first().waitFor();
+  await page.getByTestId('error-blocked').getByRole('button', {name: '重试', exact: true}).click(); await rows().first().waitFor();
   assert.equal(searched(f).at(-1).input.offset, 0); assert.equal(searched(f).at(-1).input.basisDigest, null);
 });
 
@@ -290,6 +290,19 @@ test('complete equation/figure inspectors preserve raw LaTeX, original captions 
   await source().locator('img').waitFor();
   await page.waitForFunction(() => [...document.querySelectorAll('[data-testid="wiki-scientific-source"] img')].some(img => img.complete && img.naturalWidth === 96));
   assert.equal(calls.some(call => call.projectId === f.project.id && call.method === 'asset'), true);
+});
+
+test('scientific search failures expose one retry action and recover through it', async () => {
+  const f = await scene();
+  await rows().first().waitFor();
+  f.failMethod = 'searchWikiKnowledge';
+  await page.getByRole('button', {name: '重新检索科研知识', exact: true}).click();
+  await page.getByTestId('error-blocked').getByText('科研来源读取失败注入', {exact: true}).waitFor();
+  assert.equal(await page.getByRole('button', {name: /^(重试|重新检索科研知识)$/}).count(), 1);
+  f.failMethod = null;
+  await page.getByRole('button', {name: '重试', exact: true}).click();
+  await rows().first().waitFor();
+  assert.equal(await page.getByRole('button', {name: /^(重试|重新检索科研知识)$/}).count(), 1);
 });
 
 test('reload, parse corruption, read errors and retired scientific source hide previously loaded data', async () => {

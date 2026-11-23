@@ -98,7 +98,8 @@ export default function ScholarlyRelationsPanel({client, projectId, item, writab
       <summary className="cursor-pointer text-muted">保存历史{history.data === null ? '' : `（${history.data.total}）`}</summary>
       {history.status === 'loading' ? <p role="status">读取历史中</p> : null}
       {history.error === null ? null : <div role="alert"><p>{history.error}</p>
-        <button type="button" className={scholarlyButton} onClick={history.reload}>重试历史</button></div>}
+        {history.data === null ? <button type="button" className={scholarlyButton} disabled={busy}
+          onClick={history.reload}>重试历史</button> : null}</div>}
       {history.data === null ? null : <>
         {history.data.records.length === 0 ? <p className="py-1 text-muted">尚无保存记录</p> :
           <ul className="space-y-1 py-1">{history.data.records.map(record => <li key={record.id}>
@@ -113,7 +114,8 @@ export default function ScholarlyRelationsPanel({client, projectId, item, writab
             onClick={() => setHistoryOffset(current => Math.max(0, current - 20))}>历史上一页</button>
           <button type="button" className={scholarlyButton} disabled={busy || historyNext === null}
             onClick={() => setHistoryOffset(historyNext!)}>历史下一页</button>
-          <button type="button" className={scholarlyButton} disabled={busy} onClick={history.reload}>刷新历史</button>
+          <button type="button" className={scholarlyButton} disabled={busy || history.status === 'loading'}
+            onClick={history.reload}>{history.error === null ? '刷新历史' : '重试历史'}</button>
         </div>
       </>}
     </details>

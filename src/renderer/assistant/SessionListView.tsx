@@ -40,32 +40,6 @@ export function SessionListView({
   const shown = threads.threads.filter(thread => thread.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
 
-  if (threads.status === 'loading' && threads.threads.length === 0) {
-    return (
-      <p className="px-3 py-4 text-muted" role="status" data-testid="session-list-loading">
-        正在读取会话…
-      </p>
-    );
-  }
-
-  if (threads.error !== null) {
-    return (
-      <div className="px-3 py-4">
-        <p role="alert" className="text-[var(--st-bad)] text-[length:var(--font-meta-size)]" data-testid="session-list-error">
-          {threads.error}
-        </p>
-        <button
-          type="button"
-          onClick={threads.reload}
-          className="mt-2 h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
-        >
-          <span className="text-[length:var(--font-meta-size)]">重试</span>
-        </button>
-      </div>
-    );
-  }
-
-
   return (
     <div className="session-browser flex h-full min-h-0 flex-col" data-testid="session-list">
       <div className="flex shrink-0 items-center gap-1 px-2 py-1.5">
@@ -78,10 +52,28 @@ export function SessionListView({
           <Plus size={11} aria-hidden="true" />
           <span className="text-[length:var(--font-meta-size)]">新建会话</span>
         </button>
-        <span className="min-w-0 flex-1 truncate text-subtle text-[length:var(--font-micro-size)]">
+        {threads.status === 'ready' || threads.threads.length > 0 ? <span className="min-w-0 flex-1 truncate text-subtle text-[length:var(--font-micro-size)]">
           {threads.threads.length} 个会话
-        </span>
+        </span> : null}
       </div>
+      {threads.status === 'loading' && threads.threads.length === 0 ? (
+        <p className="px-3 py-4 text-muted" role="status" data-testid="session-list-loading">
+          正在读取会话…
+        </p>
+      ) : threads.error !== null ? (
+        <div className="px-3 py-4">
+          <p role="alert" className="text-[var(--st-bad)] text-[length:var(--font-meta-size)]" data-testid="session-list-error">
+            {threads.error}
+          </p>
+          <button
+            type="button"
+            onClick={threads.reload}
+            className="mt-2 h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)]"
+          >
+            <span className="text-[length:var(--font-meta-size)]">重试</span>
+          </button>
+        </div>
+      ) : <>
       <label className="session-search">
         <Search size={14} aria-hidden="true"/>
         <input aria-label="搜索会话" placeholder="搜索会话" value={query} onChange={event => setQuery(event.target.value)}/>
@@ -125,6 +117,7 @@ export function SessionListView({
           );
         })}
       </ul>
+      </>}
 
       {threads.removeError === null ? null : (
         <p role="alert" className="px-3 pb-2 text-[var(--st-bad)] text-[length:var(--font-micro-size)]">

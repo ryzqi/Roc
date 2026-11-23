@@ -76,6 +76,8 @@ export type AssistantPanelProps = {
    */
   threadId: string | null;
   onThreadIdChange: (threadId: string | null) => void;
+  /** The visible session list owns the new-thread action when both panels share the window. */
+  showNewThread?: boolean;
   onOpenTask: (taskId: string) => void;
   onOpenArtifact: OpenResearchArtifact;
   onOpenReviewInspector: OpenReviewInspector;
@@ -106,6 +108,7 @@ export function AssistantPanel({
   projectId,
   threadId,
   onThreadIdChange,
+  showNewThread = true,
   onOpenTask,
   onOpenArtifact,
   onOpenReviewInspector,
@@ -333,7 +336,7 @@ export function AssistantPanel({
     <div ref={headerRef} className="relative shrink-0">
       <StatusPillHeader projectName={projectName} conversationTitle={conversationTitle} stageLabel={stageLabel} runStatus={runStatus} statusLabel={statusLabel}
         messageCount={session.messages.length} timelineOpen={timelineOpen} onToggleTimeline={() => setTimelineOpen(open => !open)}
-        onNewThread={() => onThreadIdChange(null)} onResetWidth={onResetWidth} />
+        onNewThread={showNewThread ? () => onThreadIdChange(null) : undefined} onResetWidth={onResetWidth} />
       <ExecutionTimelineDrawer open={timelineOpen} onClose={() => setTimelineOpen(false)}>
         {projectId === null || diagnosticsRunId === null || threadId === null ? null : (
           <ResearchTaskProgress key={`${projectId}:${threadId}:${diagnosticsRunId}`} client={client} projectId={projectId} threadId={threadId} runId={diagnosticsRunId}

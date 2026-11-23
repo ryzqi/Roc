@@ -1,6 +1,6 @@
 import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp, readFile, readdir, rm, writeFile} from 'node:fs/promises';
+import {mkdir, mkdtemp, readFile, readdir, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {build} from 'esbuild';
@@ -21,9 +21,10 @@ before(async () => {
       import {AppShell} from './src/renderer/app/AppShell';
       import {BEFORE_NAVIGATE} from './src/renderer/app/navigation-guard';
       import {BEFORE_ARTIFACT_CHANGE} from './src/renderer/artifacts/artifact-interactions';
-      import {readOnboardingDismissed} from './src/renderer/app/ui-state';
+      import {clearUiState, readOnboardingDismissed} from './src/renderer/app/ui-state';
       import {exportUxMetrics} from './src/renderer/app/ux-metrics';
       window.onboardingDismissed=readOnboardingDismissed;
+      window.resetUiState=clearUiState;
       window.uxMetrics=()=>JSON.parse(exportUxMetrics());
       const ok = data => ({ok: true, data});
       const task = id => ({id, projectId: 'project-a', goal: id, status: 'active', statusReason: null,
@@ -54,7 +55,7 @@ before(async () => {
           backgroundTasks: {running: 0, pendingConfirmation: 0, failed: 0},
           researchTasks: {running: 0, pendingConfirmation: 0, failed: 0}})},
         workspace:{onChanged:()=>()=>{}},
-        tasks: {listBackgroundTasks: async () => ok([]), onUpdated: () => () => {}},
+        tasks: {listBackgroundTasks: async () => ok([]), getSnapshot: async () => ok({threads: []}), onUpdated: () => () => {}},
         rtk:{status:async()=>({ok:false,error:{message:'Synthetic RTK unavailable'}})},
         git:{
           status:async()=>ok(gitSnapshot()),diffStat:async()=>ok({workspacePath:gitSnapshot().workspacePath,stat:''}),
@@ -65,7 +66,8 @@ before(async () => {
           getProject: async ({id}) => ok({id, title: id, status: 'active', workspacePath: '/workspace'}),
           listProjects: async () => ok([]),
           listPythonEnvironmentSelections: async () => ok([]),
-          listTasks: async () => ok({tasks: [task('task-a'), task('task-b')], nextTaskId: 'task-b', hasMore: false}),
+          listTasks: async () => ok({tasks: window.overviewTasks ?? [task('task-a'), task('task-b')], nextTaskId: 'task-b', hasMore: false}),
+          listArtifacts: async () => ok([]),
           listAcquisition: async () => ok({jobs: [], total: 0, nextOffset: null}),
           onLibraryChanged: () => () => {},
           getTaskDiagnostics: async ({taskId}) => ok(diagnostics(taskId)),
@@ -112,12 +114,12 @@ before(async () => {
           });`,
           '/literature/use-literature-store.ts': `export const useLiteratureStore = () => ({
             items: [], claims: null, evidence: null, wikiSnapshot: null, assistant: {threadId: null},
+            query: '', error: null, status: 'ready', selectedId: null, requestImport: () => {},
             select: () => {}, adoptAssistantThread: () => {}
           });`,
           '/shell/use-search-groups.ts': `export function useSearchGroups(input) {
             window.searchEntries = input; return [];
           }`,
-          '/assistant/SessionListView.tsx': `export const SessionListView = () => null;`,
           '/canvas/files/FileSidebarPanel.tsx': `export const FileSidebarPanel = () => null;`,
           '/literature/LibraryList.tsx': `export const LibraryList = () => null;`,
           '/project/ProjectPortalView.tsx': `import React from 'react';
@@ -128,19 +130,17 @@ before(async () => {
             import {useWorkspaceScope} from './workspace-scope';
             import {useManagement} from '../management/management-scope';
             import {RunsView} from '../management/RunsView';
-            import {FirstSteps} from '../project/FirstSteps';
+            import {OverviewView} from '../project/OverviewView';
             export function ViewContent(props) {
               const scope=useWorkspaceScope();window.workspaceEntries = scope;window.managementEntries = useManagement();
               return <><section data-testid="shell-canvas-content">{props.subview ?? props.view}</section>
                 {props.view==='runs' ? <RunsView/> : null}
-                {props.view==='overview' && props.subview===null && scope.firstStepsVisible ? <FirstSteps writable requestId={scope.firstStepsRequestId}
-                  onDismiss={scope.dismissFirstSteps} onDiscover={()=>scope.openView('discover')}
-                  onImport={()=>scope.openView('library')} onRead={()=>scope.openView('library')}
-                  onAsk={scope.openAssistant} onWrite={()=>scope.openView('writing')}/> : null}</>;
+                {props.view==='overview' && props.subview===null ? <OverviewView/> : null}</>;
             }`,
           '/assistant/AssistantPanel.tsx': `import React from 'react';
             export function AssistantPanel(props) {window.assistantEntries = props;
-              return <section data-testid="shell-assistant-content">助手</section>;}`,
+              return <section data-testid="shell-assistant-content">助手
+                {props.showNewThread ? <button onClick={()=>props.onThreadIdChange(null)}>新建会话</button> : null}</section>;}`,
           '/settings/SettingsModal.tsx': `import React from 'react';
             import {ModalShell} from '../shell/ModalShell';
             export function SettingsModal({open, onClose}) {
@@ -205,6 +205,139 @@ async function openTask(view = 'library') {
   await page.evaluate(() => document.querySelector('[data-testid="titlebar-toggle-assistant"]').click());
   await content().fill('当前任务尚未保存的事实');
 }
+
+test('project management stays reachable from every view without opening the assistant or sidebar', async () => {
+  for (const view of ['overview', 'library', 'writing', 'runs']) {
+    await page.evaluate(view => mount(view), view);
+    await page.getByTestId('shell-assistant-content').waitFor();
+    await page.getByTestId('titlebar-toggle-assistant').click();
+    const sidebar = page.getByTestId('titlebar-toggle-sidebar');
+    if (await sidebar.getAttribute('aria-pressed') === 'true') await sidebar.click();
+    const management = page.getByRole('button', {name: '管理', exact: true});
+    await expect(management).toHaveCount(1);
+    await expect(management).toBeVisible();
+    await management.click();
+    await expect(page.getByTestId('management-panel-panel')).toBeVisible();
+    await expect(page.getByTestId('mgmt-tab-memory')).toHaveAttribute('aria-selected', 'true');
+    assert.equal(new URL(page.url()).searchParams.get('view'), view);
+    await expect(page.getByTestId('titlebar-toggle-assistant')).toHaveAttribute('aria-pressed', 'false');
+    await page.getByTestId('management-panel-close').click();
+  }
+});
+
+test('layout choices share one trigger and opening it does not open the assistant', async () => {
+  await page.evaluate(() => mount());
+  await page.getByTestId('shell-assistant-content').waitFor();
+  await page.getByTestId('titlebar-toggle-assistant').click();
+  await expect(page.getByTestId('layout-preset-research')).toBeHidden();
+  await expect(page.getByTestId('layout-preset-writing')).toBeHidden();
+  await expect(page.getByTestId('layout-preset-review')).toBeHidden();
+  const trigger = page.getByRole('button', {name: '工作布局', exact: true});
+  await expect(trigger).toHaveCount(1);
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('layout-preset-research')).toBeVisible();
+  await expect(page.getByTestId('titlebar-toggle-assistant')).toHaveAttribute('aria-pressed', 'false');
+  await page.getByTestId('layout-preset-writing').click();
+  await expect(page.getByTestId('layout-preset-writing')).toBeHidden();
+  assert.equal(new URL(page.url()).searchParams.get('layoutPreset'), 'writing');
+  await expect(page.getByTestId('titlebar-toggle-assistant')).toHaveAttribute('aria-pressed', 'false');
+  await trigger.click();
+  await page.getByTestId('layout-preset-review').click();
+  assert.equal(new URL(page.url()).searchParams.get('layoutPreset'), 'review');
+  await expect(page.getByTestId('titlebar-toggle-assistant')).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('overview onboarding and shortcuts never repeat the same action', async () => {
+  await page.evaluate(() => {window.overviewTasks = []; mount('overview');});
+  const overview = page.getByTestId('overview');
+  await page.getByTestId('overview-first-steps').waitFor();
+  for (const name of ['检索论文', '导入 PDF', '打开写作', '问我的资料', '打开文献库']) {
+    await expect(overview.getByRole('button', {name, exact: true})).toHaveCount(1);
+  }
+  await expect(overview.getByRole('button', {name: '打开助手', exact: true})).toHaveCount(0);
+  await page.getByTestId('overview-first-steps-skip').click();
+  for (const name of ['检索论文', '导入 PDF', '打开写作', '问我的资料', '打开文献库']) {
+    await expect(overview.getByRole('button', {name, exact: true})).toHaveCount(1);
+  }
+  await page.evaluate(() => {delete window.overviewTasks;});
+});
+
+test('new session has one reachable action when context and assistant share the window', async () => {
+  await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setContentSize(1440, 900));
+  try {
+    await page.evaluate(() => {resetUiState(); mount('runs');});
+    await expect(page.getByTestId('workspace-layout')).toHaveAttribute('data-layout-mode', 'wide');
+    await expect(page.getByTestId('sidebar-column')).toBeVisible();
+    await expect(page.getByRole('button', {name: '新建会话', exact: true})).toHaveCount(1);
+    await page.getByTestId('titlebar-toggle-assistant').click();
+    await expect(page.getByTestId('session-new')).toBeVisible();
+    await page.getByTestId('session-new').click();
+    await expect(page.getByTestId('titlebar-toggle-assistant')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', {name: '新建会话', exact: true})).toHaveCount(1);
+    await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setContentSize(1184, 900));
+    await expect(page.getByTestId('workspace-layout')).toHaveAttribute('data-layout-mode', 'balanced');
+    await page.getByTestId('titlebar-toggle-sidebar').click();
+    await expect(page.getByTestId('session-new')).toBeVisible();
+    await expect(page.getByRole('button', {name: '新建会话', exact: true})).toHaveCount(1);
+  } finally {
+    await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setContentSize(1280, 900));
+  }
+});
+
+test('titlebar actions remain distinct and keyboard reachable across desktop sizes and themes', async () => {
+  const audit = await readFile('.agents/skills/desktop-agent-ui/scripts/clip-audit.js', 'utf8');
+  const captureDir = process.env.ROC_ACTION_CAPTURE;
+  if (captureDir) await mkdir(captureDir, {recursive: true});
+  const auditChrome = async () => {
+    const result = await page.evaluate(source => (0, eval)(source)({root: '.app-shell', viewport: true}), audit);
+    assert.equal(result.cut, 0, JSON.stringify(result.issues));
+  };
+  try {
+    for (const theme of ['light', 'dark']) for (const width of [640, 920, 1099, 1184, 1280, 1440]) {
+      await app.evaluate(({BrowserWindow}, width) => BrowserWindow.getAllWindows()[0].setContentSize(width, 900), width);
+      await page.evaluate(() => mount('writing'));
+      await page.getByTestId('shell-assistant-content').waitFor();
+      await page.getByTestId('titlebar-toggle-assistant').click();
+      await page.evaluate(theme => {document.documentElement.dataset.theme = theme;}, theme);
+      const buttons = page.getByTestId('titlebar').getByRole('button');
+      const boxes = await buttons.evaluateAll(elements => elements.map(element => {
+        const rect = element.getBoundingClientRect();
+        return {id: element.dataset.testid, x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom};
+      }));
+      for (let index = 0; index < boxes.length; index++) {
+        const box = boxes[index];
+        assert.ok(box.x >= 0 && box.right <= width, JSON.stringify({theme, width, box}));
+        for (const other of boxes.slice(index + 1)) {
+          assert.ok(Math.min(box.right, other.right) <= Math.max(box.x, other.x), JSON.stringify({theme, width, box, other}));
+        }
+      }
+      await auditChrome();
+      const layout = page.getByTestId('titlebar-layout');
+      await layout.hover();
+      await auditChrome();
+      await layout.focus();
+      await page.keyboard.press('Enter');
+      await expect(page.getByTestId('layout-preset-research')).toBeVisible();
+      await auditChrome();
+      if (captureDir && [640, 1184, 1440].includes(width)) {
+        await page.screenshot({path: join(captureDir, `titlebar-${theme}-${width}.png`)});
+      }
+      await page.keyboard.press('Escape');
+      await expect(page.getByTestId('layout-preset-research')).toBeHidden();
+      await auditChrome();
+      await page.getByTestId('titlebar-management').focus();
+      await page.keyboard.press('Enter');
+      await expect(page.getByTestId('management-panel-panel')).toBeVisible();
+      await expect(page.getByTestId('titlebar-toggle-assistant')).toHaveAttribute('aria-pressed', 'false');
+      await page.getByTestId('management-panel-close').click();
+      await expect(page.getByTestId('titlebar-management')).toBeFocused();
+    }
+  } finally {
+    await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setContentSize(1280, 900));
+    await page.evaluate(() => {document.documentElement.dataset.theme = 'light';});
+  }
+});
 
 test('actual shell assistant and management selections preserve facts until the selected transition is accepted', async () => {
   for (const entry of ['assistant', 'management', 'chrome']) {
@@ -311,14 +444,15 @@ test('activity and workspace task entries open the same project task canvas', as
 });
 
 test('first steps can be skipped, persist only dismissal and reopen after navigation accepts',async()=>{
-  await page.evaluate(()=>mount('overview'));
+  const dismissedBefore=await page.evaluate(()=>window.uxMetrics().events.filter(event=>event.event==='onboarding_dismissed').length);
+  await page.evaluate(()=>{resetUiState();mount('overview');});
   await expect(page.getByTestId('overview-first-steps')).toBeVisible();
   await expect(page.getByTestId('overview-first-steps').locator('ol > li')).toHaveCount(3);
   await page.getByTestId('overview-first-steps-skip').click();
   await expect(page.getByTestId('overview-first-steps')).toHaveCount(0);
   assert.equal(await page.evaluate(()=>window.onboardingDismissed()),true);
   const dismissal=await page.evaluate(()=>window.uxMetrics().events.filter(event=>event.event==='onboarding_dismissed'));
-  assert.equal(dismissal.length,1);
+  assert.equal(dismissal.length,dismissedBefore+1);
   assert.deepEqual(Object.keys(dismissal[0]).sort(),['elapsedMs','event','surface']);
   assert.equal(dismissal[0].surface,'overview');
 

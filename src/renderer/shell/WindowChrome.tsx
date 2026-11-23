@@ -1,5 +1,5 @@
 import { useId, useRef } from 'react';
-import { Bot, Check, ChevronDown, Columns2, FolderOpen, GitBranch, PanelLeft, PanelLeftClose, PencilLine, Search, Telescope } from 'lucide-react';
+import { Bot, Check, ChevronDown, Columns2, FolderOpen, GitBranch, PanelLeft, PanelLeftClose, PencilLine, Search, Sliders, Telescope } from 'lucide-react';
 import type { LayoutPreset } from '../app/routes';
 import './chrome.css';
 
@@ -18,6 +18,7 @@ export type WindowChromeProps = {
   onToggleAssistant: () => void;
   assistantRunning: boolean;
   onOpenGit: () => void;
+  onOpenManagement: () => void;
   branchLabel?: string | null;
   gitChangeCount?: number | null;
   layoutPreset: LayoutPreset;
@@ -32,11 +33,13 @@ const presets = [
 
 export function WindowChrome({
   projectName, projectId, projects, onOpenProject, onBackToPortal, onOpenSearch, sidebarCollapsed, onToggleSidebar,
-  assistantOpen, onToggleAssistant, assistantRunning, onOpenGit, branchLabel = null, gitChangeCount = null, layoutPreset, onChangePreset
+  assistantOpen, onToggleAssistant, assistantRunning, onOpenGit, onOpenManagement, branchLabel = null, gitChangeCount = null, layoutPreset, onChangePreset
 }: WindowChromeProps): React.JSX.Element {
   const inProject = projectId !== null;
   const menuId = useId();
   const projectMenu = useRef<HTMLDivElement>(null);
+  const layoutMenuId = useId();
+  const layoutMenu = useRef<HTMLDivElement>(null);
   const branch = branchLabel ?? 'Git';
   const gitLabel = gitChangeCount === null ? branch : `${branch}，${gitChangeCount.toLocaleString('zh-CN')} 项变更`;
 
@@ -98,15 +101,32 @@ export function WindowChrome({
             <span dir="ltr" className="hidden truncate font-mono min-[920px]:block" data-testid="titlebar-branch">{branch}</span>
             {gitChangeCount !== null && gitChangeCount > 0 ? <span dir="ltr" aria-hidden="true" className="tabular-nums">{gitChangeCount.toLocaleString('zh-CN')}</span> : null}
           </button>
-          <div role="group" aria-label="工作布局" className="no-drag flex shrink-0 items-center gap-1">
+          <button type="button" popoverTarget={layoutMenuId} aria-label="工作布局" title="工作布局"
+            className="no-drag chrome-control shrink-0" data-testid="titlebar-layout">
+            <Columns2 size={14} aria-hidden="true" />
+            <span className="titlebar-action-label">布局</span>
+            <ChevronDown size={12} aria-hidden="true" />
+          </button>
+          <div popover="auto" ref={layoutMenu} id={layoutMenuId} role="group" aria-label="工作布局"
+            className="no-drag titlebar-layout-menu">
             {presets.map(({ id, label, icon: Icon }, index) => (
-              <button key={id} type="button" onClick={() => onChangePreset(id)} className="chrome-control"
+              <button key={id} type="button" onClick={() => {
+                layoutMenu.current?.hidePopover();
+                onChangePreset(id);
+              }} className="chrome-control w-full justify-start"
                 aria-label={label} aria-pressed={layoutPreset === id} aria-keyshortcuts={`Meta+${index + 1}`}
                 title={`${label}（⌘${index + 1}）`} data-testid={`layout-preset-${id}`}>
                 <Icon size={14} aria-hidden="true" />
+                <span>{label}</span>
+                <kbd dir="ltr" aria-hidden="true" className="ms-auto font-mono">⌘{index + 1}</kbd>
               </button>
             ))}
           </div>
+          <button type="button" onClick={onOpenManagement} aria-label="管理" title="管理"
+            className="no-drag chrome-control shrink-0" data-testid="titlebar-management">
+            <Sliders size={14} aria-hidden="true" />
+            <span className="titlebar-action-label">管理</span>
+          </button>
           <button type="button" onClick={onToggleAssistant} aria-pressed={assistantOpen} aria-keyshortcuts="Meta+L"
             aria-label={`${assistantOpen ? '收起助手' : '打开助手'}${assistantRunning ? '，正在运行' : ''}`}
             title={assistantOpen ? '收起助手（⌘L）' : '打开助手（⌘L）'} data-testid="titlebar-toggle-assistant"

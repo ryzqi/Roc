@@ -74,8 +74,7 @@ export default function ResourceAssociationsPanel({client, resource, writable, o
           }}><option value="literature">论文</option><option value="experiment">已完成的托管实验</option></select>
         </label>
         {targets.status === 'loading' ? <p role="status">读取目标版本中</p> : null}
-        {targets.error === null ? null : <div role="alert"><p>{targets.error}</p>
-          <button type="button" className={scholarlyButton} onClick={targets.reload}>重试目标</button></div>}
+        {targets.error === null ? null : <p role="alert">{targets.error}</p>}
         <label className="block">目标版本
           <select className={control} value={target === null ? '' : JSON.stringify(target.target)}
             disabled={targets.status !== 'ready' || targets.data === null} onChange={event => {
@@ -95,7 +94,8 @@ export default function ResourceAssociationsPanel({client, resource, writable, o
             onClick={() => setTargetOffset(value => Math.max(0, value - 20))}>目标上一页</button>
           <button type="button" className={scholarlyButton} disabled={nextTarget === null || target !== null}
             onClick={() => setTargetOffset(nextTarget!)}>目标下一页</button>
-          <button type="button" className={scholarlyButton} disabled={target !== null} onClick={targets.reload}>刷新目标</button>
+          <button type="button" className={scholarlyButton} disabled={targets.status === 'loading' || (target !== null && targets.error === null)}
+            onClick={targets.reload}>{targets.error === null ? '刷新目标' : '重试目标'}</button>
         </div>
         <label className="block">关联依据
           <textarea className={control} rows={3} maxLength={8192} value={rationale} onChange={event => {
@@ -124,7 +124,8 @@ export default function ResourceAssociationsPanel({client, resource, writable, o
       <summary className="cursor-pointer text-muted">关联历史{history.data === null ? '' : `（${history.data.total}）`}</summary>
       {history.status === 'loading' ? <p role="status">读取关联历史中</p> : null}
       {history.error === null ? null : <div role="alert"><p>{history.error}</p>
-        <button type="button" className={scholarlyButton} onClick={history.reload}>重试关联历史</button></div>}
+        {history.data === null ? <button type="button" className={scholarlyButton} disabled={save.pending}
+          onClick={history.reload}>重试关联历史</button> : null}</div>}
       {history.data === null ? null : <>
         {history.data.records.length === 0 ? <p className="text-muted">尚无人工关联</p> :
           <ul className="space-y-2 py-1">{history.data.records.map(record => <li key={record.association.id} className="border-b-[0.5px] border-line pb-2">
@@ -141,7 +142,8 @@ export default function ResourceAssociationsPanel({client, resource, writable, o
             onClick={() => setHistoryOffset(value => Math.max(0, value - 20))}>关联历史上一页</button>
           <button type="button" className={scholarlyButton} disabled={save.pending || nextHistory === null}
             onClick={() => setHistoryOffset(nextHistory!)}>关联历史下一页</button>
-          <button type="button" className={scholarlyButton} disabled={save.pending} onClick={history.reload}>刷新关联历史</button>
+          <button type="button" className={scholarlyButton} disabled={save.pending || history.status === 'loading'}
+            onClick={history.reload}>{history.error === null ? '刷新关联历史' : '重试关联历史'}</button>
         </div>
       </>}
     </details>

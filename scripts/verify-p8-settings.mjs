@@ -1083,7 +1083,7 @@ try {
   //
   // 这里断言的是**控件**而不是文案：2da070b5 删掉了原先那句「…在设置中心，不在这里」的
   // 提示，若继续等那句话，这条闸门会在功能完全正确的时候报红（它就是这么红的——不是回归）。
-  await page.click('[data-testid="literature-hub-import"]');
+  await page.locator('[data-testid="literature-hub-import"], [data-testid="literature-import-open"]').filter({visible: true}).click();
   await page.waitForSelector('[data-testid="literature-import-dialog-panel"]', { timeout: 20_000 });
   const importDialogText = ((await page.locator('[data-testid="literature-import-dialog-panel"]').textContent()) ?? '').replace(/\s+/gu, ' ');
   const importParseControls = await page

@@ -241,8 +241,7 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
           <ErrorBar
             error={{
               level: 'page',
-              message: literature.error ?? '读取文献库失败',
-              retry: literature.reload
+              message: literature.error ?? '读取文献库失败'
             }}
           />
         </div>
@@ -257,7 +256,7 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
           title={literature.query.trim().length > 0 ? '没有匹配的文献' : entryType !== null ? '当前分类没有文献' : '尚无文献'}
           action={literature.query.trim().length > 0
             ? {label: '清除搜索', onClick: () => literature.setQuery('')}
-            : {label: '导入文献', onClick: onRequestImport}}
+            : undefined}
           testId="literature-empty"
         />
       ) : (

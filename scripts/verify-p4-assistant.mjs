@@ -92,7 +92,8 @@ async function launchSmokeApp() {
 }
 
 async function openAssistant(page, projectId) {
-  await navigate(page, `page=research&project=${projectId}&view=runs&assistant=1`);
+  await navigate(page, `page=research&project=${projectId}&view=overview&assistant=1`);
+  await openSessions(page);
   await page.waitForSelector('[data-testid="assistant-panel"]', { timeout: 20_000 });
   await page.waitForSelector('[data-testid="assistant-composer-input"]', { timeout: 20_000 });
 }

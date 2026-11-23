@@ -47,6 +47,7 @@ before(async () => {
     const f = active;
     calls.push({projectId: f.project.id, method, input});
     api.parseIpcRequestArgs(channels[method], [input]);
+    if (f.failHistory && method === 'getScholarlyHistory') return {ok:false,error:{message:'History unavailable'}};
     if (f.holdHistory && method === 'getScholarlyHistory') {await hold.promise;}
     try {
       const result = method === 'captureScholarlyRelations' ? await f.service.capture(input) :
@@ -298,4 +299,18 @@ test('history paging and narrow light/dark layout preserve keyboard access witho
     await page.screenshot({path: join(artifacts, `${theme}-650-relations.png`)});
   }
   assert.deepEqual(errors, []);
+});
+
+test('scholarly history keeps one retry action after a failed refresh', async () => {
+  const f=scene();await mount(f);await open();
+  const history=page.getByTestId('reader-scholarly-history');
+  await expect(history.getByText('尚无保存记录',{exact:true})).toBeVisible();
+  f.failHistory=true;
+  await history.getByRole('button',{name:'刷新历史',exact:true}).click();
+  await expect(history.getByRole('alert')).toContainText('History unavailable');
+  const retry=history.getByRole('button',{name:/^(重试历史|刷新历史)$/});
+  await expect(retry).toHaveCount(1);
+  f.failHistory=false;await retry.focus();await page.keyboard.press('Enter');
+  await expect(history.getByRole('alert')).toHaveCount(0);
+  await expect(history.getByRole('button',{name:'刷新历史',exact:true})).toBeVisible();
 });

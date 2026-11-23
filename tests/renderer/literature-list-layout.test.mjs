@@ -26,11 +26,12 @@ before(async()=>{
         updatedAt:new Date(Date.UTC(2026,0,200-index)).toISOString()});
       function Harness({count,initialSelection}){
         const [all]=useState(()=>Array.from({length:count},(_,index)=>record(count===1?'paper-layout':'paper-'+index,index)));
-        const [category,setCategory]=useState(null),[selectedId,setSelected]=useState(initialSelection),[query,setQuery]=useState(''),[includeArchived,setIncludeArchived]=useState(false);
+        const [category,setCategory]=useState(null),[selectedId,setSelected]=useState(initialSelection),[query,setQuery]=useState(''),[includeArchived,setIncludeArchived]=useState(false),[status,setStatus]=useState('ready');
         window.setCategory=setCategory;window.selectExternally=setSelected;
-        const store={items:all.filter(item=>item.metadata.title.includes(query)),status:'ready',query,selectedId,projectId:'project-layout',includeArchived,
+        window.setLibraryStatus=setStatus;
+        const store={items:all.filter(item=>item.metadata.title.includes(query)),status,error:status==='error'?'Library unavailable':null,query,selectedId,projectId:'project-layout',includeArchived,
           documentsStatus:'ready',documents:[{libraryItemId:selectedId,currentParseId:'parse',status:'ready'}],
-          action:{error:null},setQuery,reload:()=>{},setIncludeArchived,select:id=>{window.opened.push(id);setSelected(id);},
+          action:{error:null},setQuery,reload:()=>{window.reloads++;setStatus('ready');},setIncludeArchived,select:id=>{window.opened.push(id);setSelected(id);},
           client:{api:{research:{exportBibliography:async()=>({ok:true,data:{content:'bibtex'}})}}}};
         return <LiteratureScopeProvider value={store}>
           <div className="flex h-full" style={{width:650}}>
@@ -43,7 +44,7 @@ before(async()=>{
         </LiteratureScopeProvider>;
       }
       const root=createRoot(document.getElementById('root'));let key=0;
-      window.mount=(count=1,initialSelection='paper-layout')=>{window.opened=[];
+      window.mount=(count=1,initialSelection='paper-layout')=>{window.opened=[];window.reloads=0;window.importRequested=false;
         flushSync(()=>root.render(<Harness key={++key} count={count} initialSelection={initialSelection}/>));};
     `});
   await writeFile(join(directory,'main.cjs'),`const {app,BrowserWindow}=require('electron');
@@ -54,6 +55,22 @@ before(async()=>{
   await page.waitForFunction(()=>typeof window.mount==='function');
 });
 after(async()=>{try{await app?.close();}finally{if(directory)await rm(directory,{recursive:true,force:true});}assert.deepEqual(errors,[]);});
+
+test('empty and failed literature lists keep one import and one reload action',async()=>{
+  await page.evaluate(()=>mount(0,null));
+  await expect(page.getByTestId('literature-empty')).toBeVisible();
+  const importer=page.getByRole('button',{name:'导入文献',exact:true});
+  await expect(importer).toHaveCount(1);
+  await importer.focus();await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(()=>window.importRequested),true);
+  await page.evaluate(()=>window.setLibraryStatus('error'));
+  await expect(page.getByRole('alert')).toContainText('Library unavailable');
+  const reload=page.getByRole('button',{name:/重试|重新读取文献库/});
+  await expect(reload).toHaveCount(1);
+  await reload.click();
+  assert.equal(await page.evaluate(()=>window.reloads),1);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
 
 test('narrow literature navigation contains its filters and leaves reader controls clickable',async()=>{
   await page.evaluate(()=>mount());
@@ -81,7 +98,7 @@ test('narrow literature navigation contains its filters and leaves reader contro
   }
   await page.evaluate(()=>window.setCategory('book'));
   await expect(page.getByTestId('literature-empty')).toContainText('当前分类没有文献');
-  await page.getByTestId('literature-empty').getByRole('button',{name:'导入文献',exact:true}).click();
+  await page.getByTestId('literature-import-open').click();
   assert.equal(await page.evaluate(()=>window.importRequested),true);
   await page.evaluate(()=>window.setCategory('article'));
   await expect(page.getByTestId('literature-row-paper-layout')).toBeVisible();

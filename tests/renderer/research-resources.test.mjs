@@ -58,6 +58,7 @@ before(async () => {
     const f = active;
     calls.push({projectId: f.project.id, method, input});
     api.parseIpcRequestArgs(channels[method], [input]);
+    if (f.failRead === method) return {ok:false,error:{message:'Association read unavailable'}};
     if (method === 'getScholarlyHistory') return {ok: true, data: f.scholarly.history(input)};
     if (f.holdRead === method) {f.readStarted.release(); await f.readHold.promise;}
     const result = await f.bridge.invoke(`research.${method}`, [input], 74);
@@ -458,4 +459,20 @@ test('both reader disclosures share one bounded scroller and leave document cont
   assert.ok(layout.scroll > layout.height);
   await page.getByText('这条文献还没有文档', {exact: true}).waitFor();
   assert.equal(f.network.length, 1);
+});
+
+test('resource targets and association history keep one retry after refresh failure', async () => {
+  const f=scene();await mount(f);await open();await capture();
+  for (const [method,refresh,retryLabel] of [
+    ['getResourceTargets','刷新目标','重试目标'],
+    ['getResourceAssociationHistory','刷新关联历史','重试关联历史']
+  ]) {
+    f.failRead=method;
+    await page.getByRole('button',{name:refresh,exact:true}).click();
+    await expect(page.getByTestId('reader-resource-associations').getByRole('alert')).toContainText('Association read unavailable');
+    const retry=page.getByRole('button',{name:new RegExp('^('+refresh+'|'+retryLabel+')$')});
+    await expect(retry).toHaveCount(1);
+    f.failRead=null;await retry.focus();await page.keyboard.press('Enter');
+    await expect(page.getByTestId('reader-resource-associations').getByRole('alert')).toHaveCount(0);
+  }
 });

@@ -42,7 +42,8 @@
   content: '';
 }
 
-.titlebar-project-menu:popover-open {
+.titlebar-project-menu:popover-open,
+.titlebar-layout-menu:popover-open {
   position: fixed;
   inset: 40px auto auto;
   inset-inline-start: 88px;
@@ -59,11 +60,17 @@
   box-shadow: var(--shadow-popover);
 }
 
+.titlebar-layout-menu:popover-open {
+  inset-inline-start: auto;
+  inset-inline-end: 80px;
+  inline-size: min(224px, calc(100vi - 24px));
+}
+
 /* Zoom can make the renderer narrower than the native window minimum. Keep
    window actions reachable without letting the three grid columns overlap. */
 @media (max-width: 719px) {
   .titlebar { grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--space-1); }
-  .titlebar [aria-label='工作布局'] { display: none; }
+  .titlebar .titlebar-action-label { display: none; }
   .titlebar [data-testid='titlebar-project-name'],
   .titlebar [data-testid='titlebar-projects'] > .lucide-chevron-down,
   .titlebar [data-testid='titlebar-search'] span span,

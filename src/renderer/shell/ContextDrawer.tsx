@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, CircleHelp, FileText, FolderOpen, FolderTree, ListChecks, Loader2, RotateCcw, Sliders, Terminal, type LucideIcon } from 'lucide-react';
+import { ChevronDown, CircleHelp, FileText, FolderOpen, FolderTree, ListChecks, Loader2, RotateCcw, type LucideIcon } from 'lucide-react';
 import type { AppViewId } from '../app/routes';
 import { useAsyncResource } from '../app/use-async-resource';
 import { readRecentProjectIds } from '../app/ui-state';
@@ -19,9 +19,7 @@ type ContextDrawerProps = SessionListViewProps & Parameters<typeof WritingFiles>
   projects: readonly ProjectOption[];
   onOpenProject: (projectId: string) => void;
   onOpenLiterature: (libraryItemId: string | null) => void;
-  onOpenTerminal: () => void;
   onOpenTasks: () => void;
-  onOpenManagement: () => void;
   onOpenHelp: () => void;
   onOpenWriting: () => void;
   taskLabel?: string;
@@ -243,7 +241,7 @@ function LiteratureResources({ onOpenLiterature }: Pick<ContextDrawerProps, 'onO
 
 export function ContextDrawer(props: ContextDrawerProps): React.JSX.Element {
   const { view, client, activeThreadId, onSelectThread, onStartNewThread, onThreadDeleted,
-    onOpenTerminal, onOpenTasks, onOpenManagement, onOpenHelp, taskLabel, taskSummary } = props;
+    onOpenTasks, onOpenHelp, taskLabel, taskSummary } = props;
   return (
     <aside aria-label={headings[view]} data-testid="context-drawer"
       className="flex h-full min-h-0 flex-col overflow-hidden bg-surface-rail text-[length:var(--font-meta-size)] text-ink-secondary">
@@ -261,8 +259,6 @@ export function ContextDrawer(props: ContextDrawerProps): React.JSX.Element {
           </div>
         </>}
       <div className="shrink-0 border-t-[0.5px] border-line p-2">
-        {view === 'writing' ? <ContextAction icon={Terminal} label="终端" onClick={onOpenTerminal} testId="sidebar-terminal" /> : null}
-        {view === 'runs' ? <ContextAction icon={Sliders} label="管理" onClick={onOpenManagement} testId="context-management" /> : null}
         <ContextAction icon={CircleHelp} label="开始引导" onClick={onOpenHelp} testId="context-help" />
       </div>
     </aside>

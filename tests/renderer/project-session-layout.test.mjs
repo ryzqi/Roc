@@ -27,7 +27,11 @@ before(async()=>{
     const projects=[project('first','科学证据与可重复研究方法的完整验证计划'),project('second','图像与文本模型比较'),project('archived','已完成研究','archived')];
     window.projectData=projects;window.opened=[];window.deleted=[];window.created=0;window.updates=[];
     window.threadData=[{id:'one',kind:'chat',title:'分析实验方法和科学证据的可靠性与可重复性',goal:'',status:'completed',updatedAt:'2026-11-20T00:00:00Z'}, {id:'two',kind:'chat',title:'文献摘要',goal:'',status:'active',updatedAt:'2026-11-19T00:00:00Z'}];
-    const client={api:{research:{listProjects:async()=>ok(projects),updateProject:async request=>{window.updates.push(request);return ok({...projects.find(p=>p.id===request.id),...request});}},workspace:{selectFromDialog:async()=>ok({path:'/synthetic/new'})},tasks:{getSnapshot:async()=>ok({threads:window.threadData}),onUpdated:()=>()=>{},deleteThread:async({threadId})=>{window.deleted.push(threadId);return ok(null);}}}};
+    const client={api:{research:{listProjects:async()=>ok(projects),updateProject:async request=>{window.updates.push(request);return ok({...projects.find(p=>p.id===request.id),...request});}},workspace:{selectFromDialog:async()=>ok({path:'/synthetic/new'})},tasks:{
+      getSnapshot:async()=>{
+        if(window.holdThreads) return new Promise(resolve=>{window.finishThreads=resolve;});
+        return ok({threads:window.threadData});
+      },onUpdated:()=>()=>{},deleteThread:async({threadId})=>{window.deleted.push(threadId);return ok(null);}}}};
     function Search(){const [query,setQuery]=useState('研究');return <SearchPaletteModal open onClose={()=>{}} query={query} onQueryChange={setQuery} groups={[{id:'project',label:'项目',status:'ready',items:projects.map(p=>({id:p.id,title:p.title,subtitle:p.description,onOpen:()=>window.opened.push(p.id)}))}]}/>;}
     const root=createRoot(document.getElementById('root'));let key=0;
     window.mount=(surface)=>flushSync(()=>root.render(<SWRConfig value={{provider:()=>new Map()}}><MotionConfig reducedMotion="always"><LazyMotion features={domMax} strict><React.Fragment key={++key}>
@@ -122,6 +126,30 @@ test('session search filters real titles, clearing preserves selection and empty
   await expect(page.getByTestId('sidebar-empty-sessions')).toBeVisible();
   await page.getByTestId('session-new').focus();await page.keyboard.press('Enter');
   assert.equal(await page.evaluate(()=>created),1);
+});
+
+test('new session remains available while history loads or fails, and retry still recovers',async()=>{
+  const before=await page.evaluate(()=>{window.holdThreads=true;mount('sessions');return window.created;});
+  try {
+    await expect(page.getByTestId('session-list-loading')).toBeVisible();
+    const create=page.getByRole('button',{name:'新建会话',exact:true});
+    await expect(create).toHaveCount(1);
+    await create.focus();await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(()=>window.created),before+1);
+    await page.evaluate(()=>window.finishThreads({ok:false,error:{message:'Session history unavailable'}}));
+    await expect(page.getByTestId('session-list-error')).toContainText('Session history unavailable');
+    await expect(create).toHaveCount(1);
+    await create.click();
+    assert.equal(await page.evaluate(()=>window.created),before+2);
+    await page.evaluate(()=>{window.holdThreads=false;});
+    await page.getByRole('button',{name:'重试',exact:true}).click();
+    await expect(page.getByTestId('session-list-error')).toHaveCount(0);
+    await expect(page.getByTestId('session-list-loading')).toHaveCount(0);
+    await expect(create).toHaveCount(1);
+    await expect(page.getByLabel('搜索会话')).toBeVisible();
+  } finally {
+    await page.evaluate(()=>{window.holdThreads=false;window.finishThreads?.({ok:true,data:{threads:window.threadData}});});
+  }
 });
 
 test('project and search surfaces keep long content readable in narrow and wide themes',async()=>{

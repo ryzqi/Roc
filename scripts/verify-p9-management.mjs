@@ -141,11 +141,7 @@ async function waitForProjectRoute() {
 
 async function openManagement(tab = 'memory') {
   if ((await page.locator('[data-testid="management-panel-panel"]').count()) === 0) {
-    const runs = page.getByTestId('activity-nav-runs');
-    if ((await runs.getAttribute('aria-current')) !== 'page') await runs.click();
-    const management = page.getByTestId('context-management');
-    if (!await management.isVisible()) await page.getByTestId('titlebar-toggle-sidebar').click();
-    await management.click();
+    await page.getByTestId('titlebar-management').click();
     await page.waitForSelector('[data-testid="management-panel-panel"]', { timeout: 20_000 });
   }
   await openTab(tab);

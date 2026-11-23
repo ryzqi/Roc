@@ -1,10 +1,10 @@
 import {useEffect, useRef} from 'react';
 import {formSecondaryButtonClass} from '../shared/form-ui';
 
-export function FirstSteps({writable, requestId, onDismiss, onDiscover, onImport, onRead, onAsk, onWrite}: {
+export function FirstSteps({writable, requestId, onDismiss, onDiscover, onImport, onRead, onWrite}: {
   requestId: number;
   writable: boolean; onDismiss: () => void; onDiscover: () => void; onImport: () => void;
-  onRead: () => void; onAsk: () => void; onWrite: () => void;
+  onRead: () => void; onWrite: () => void;
 }): React.JSX.Element {
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -31,11 +31,8 @@ export function FirstSteps({writable, requestId, onDismiss, onDiscover, onImport
         <button type="button" className={formSecondaryButtonClass} data-testid="overview-first-steps-read" onClick={onRead}>打开文献库</button>
       </div></li>
       <li><div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-        <span className="text-ink">提问或写作</span>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className={formSecondaryButtonClass} data-testid="overview-first-steps-ask" onClick={onAsk}>打开助手</button>
-          <button type="button" className={formSecondaryButtonClass} data-testid="overview-first-steps-write" onClick={onWrite}>打开写作</button>
-        </div>
+        <span className="text-ink">撰写论文</span>
+        <button type="button" className={formSecondaryButtonClass} data-testid="overview-first-steps-write" onClick={onWrite}>打开写作</button>
       </div></li>
     </ol>
   </section>;

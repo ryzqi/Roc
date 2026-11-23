@@ -88,7 +88,7 @@ function KnowledgePage({client, request, graph, onFactFilter}: {
     setSelected({kind: 'entity', value: entity, source, exactMatch: false});
   return <div className="knowledge-scientific-results flex min-h-0 min-w-0 flex-1 flex-col" data-browsing={selected === null}>
     {read.status === 'loading' ? <p role="status" className="p-4 text-xs">核对科研知识与原始来源…</p> : null}
-    {read.error ? <><ErrorBar error={{level: 'blocked', message: read.error, retry: restart}}/><button type="button" className={`${formSecondaryButtonClass} self-start m-3`} onClick={restart}>重新检索科研知识</button></> : null}
+    {read.error ? <ErrorBar error={{level: 'blocked', message: read.error, retry: restart}}/> : null}
     {data ? <>
       <div className="knowledge-scientific-status flex flex-wrap items-center justify-between gap-2">
         <span>{rows.length} 项</span>

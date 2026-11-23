@@ -67,7 +67,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
   const onMonitorLock = useCallback((locked: boolean) => {monitorLockRef.current = locked; setMonitorLock(locked);}, []);
   const hubRef = useRef<HTMLDivElement>(null);
   const paperPickerRef = useRef<HTMLSelectElement>(null);
-  const navigationOpen = subView === 'reader' && (navigationOverride ?? (!narrow && store.selected === null));
+  const navigationOpen = subView === 'reader' && !scope.contextDrawerOpen && (navigationOverride ?? (!narrow && store.selected === null));
   const selectSubView = (id: SubViewId, onSelected?: () => void): void => {
     if (monitorLockRef.current && id !== 'monitors') return;
     const destination = workspaceForSubView(id);
@@ -222,7 +222,7 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
             <button type="button" data-testid="literature-return-search" onClick={() => selectSubView('rag', () => setReturnToSearch(false))}
               className="h-7 rounded-control px-2 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)]">返回检索结果</button>
           ) : null}
-          {workspace === 'library' ? <button
+          {workspace === 'library' && !navigationOpen && !scope.contextDrawerOpen ? <button
             type="button"
             disabled={!scope.writable}
             onClick={() => openImport('document')}
@@ -241,13 +241,13 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
         onOpenItem={libraryItemId => scope.openLiterature({kind: 'reader', libraryItemId})}/>}
 
       {subView === 'reader' ? <div className="literature-paper-picker flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-3 py-1">
-        <button type="button" onClick={() => setNavigationOverride(!navigationOpen)}
+        {scope.contextDrawerOpen ? null : <button type="button" onClick={() => setNavigationOverride(!navigationOpen)}
           aria-label={navigationOpen ? '收起文献列表' : '展开文献列表'} aria-expanded={navigationOpen}
           aria-controls="literature-navigation" data-testid="literature-toggle-navigation"
           className="flex h-7 shrink-0 items-center justify-center gap-1 rounded-control px-2 text-muted text-[length:var(--font-meta-size)] hover:bg-[var(--overlay-hover)] focus-visible:outline-2 focus-visible:outline-focus-ring">
           <PanelLeft size={14} aria-hidden="true" />
           文献列表
-        </button>
+        </button>}
             <select
               ref={paperPickerRef}
               aria-label="选择当前文献"

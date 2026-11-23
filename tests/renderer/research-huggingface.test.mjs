@@ -400,3 +400,16 @@ test('650px light/dark keyboard focus and8 clip states pass inside the shared bo
   });
   assert.equal(layout.same, true); assert.equal(layout.overflow, 'auto'); assert.ok(layout.height <= layout.reader * .55 + 1);
 });
+
+test('download history keeps one retry action after a failed refresh', async () => {
+  const f=await scene();await mount(f);await open();await capture();
+  const history=page.getByTestId('reader-hf-download-history');
+  f.failRead='getHuggingFaceDownloads';
+  await history.getByRole('button',{name:'刷新下载历史',exact:true}).click();
+  await expect(history.getByRole('alert')).toContainText('真实读取失败注入');
+  const retry=history.getByRole('button',{name:/^(重试下载历史|刷新下载历史)$/});
+  await expect(retry).toHaveCount(1);
+  f.failRead=null;await retry.focus();await page.keyboard.press('Enter');
+  await expect(history.getByRole('alert')).toHaveCount(0);
+  await expect(history.getByRole('button',{name:'刷新下载历史',exact:true})).toBeVisible();
+});

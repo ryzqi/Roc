@@ -9,32 +9,15 @@ import { discardManagementDrafts, managementDraftState } from './management-draf
 import { requestManagementEditorChange } from './management-interactions';
 
 /**
- * Management drawer (P1 shell, P9 content).
- *
- * Same component is opened from two places (assistant-adjacent 管理 button and the canvas service
- * entry), rendered as a right-hand drawer so neither entry has to know the other's placement. The
- * tab set is fixed at four — memory / skills / MCP / background tasks — and deliberately excludes
- * guardrails (they are settings, §7) and telemetry/eval (no backend entity; metrics live in the run
- * diagnostics view).
- *
- * **The width changed in P9** from 560px to `min(720px, 92vw)`: the four tabs carry a markdown
- * editor with an outline, a file browser with a preview, an MCP form and a task form, and a 560px
- * column forced the editors into a scroll of their own (the draft and its outline could not be seen
- * together). The tab strip, the per-tab summary and the section bodies come from
- * `management-shell-parts` so the canvas views cannot drift from the drawer.
- *
- * **The 「在画布中打开」 button is gone (P10).** It competed with the tab strip for the same row
- * and it was not the only way in: the command palette (⌘K → 管理) reaches every canvas management
- * view through `AppShell`'s `openManagementSection`. The drawer is the drawer; canvas management is
- * entered from the palette (menu intents do not carry canvas views — `menuPages` has settings /
- * new-project / chat / tasks).
+ * Shared management drawer, opened from the persistent titlebar action or a command.
+ * The shell owns the active tab; all entry points reuse the same stores and draft guards.
+ * Section bodies are shared with the task canvas. The wider drawer keeps editors readable.
  */
 
 export type ManagementPanelProps = {
   open: boolean;
   onClose: () => void;
-  /** Controlled: the assistant-adjacent button and the canvas service entry open different tabs,
-   *  so the owner holds the selection. */
+  /** Controlled so the titlebar and commands can select the appropriate section. */
   activeTab: ManagementTabId;
   onTabChange: (tab: ManagementTabId) => void;
 };

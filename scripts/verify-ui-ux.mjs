@@ -91,22 +91,26 @@ try {
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1400, 860));
     await expect(page.getByTestId('workspace-layout')).toHaveAttribute('data-layout-mode', 'wide');
     await check('Writing expands the canvas without losing its draft', async () => {
+      await page.getByTestId('titlebar-layout').click();
       await page.getByTestId('layout-preset-research').click();
       await expect(page.getByTestId('assistant-column')).toBeVisible();
       const sidebar = await page.getByTestId('sidebar-column').boundingBox();
       const canvas = await page.getByTestId('canvas-column').boundingBox();
       await editor.fill('layout draft');
+      await page.getByTestId('titlebar-layout').click();
       await page.getByTestId('layout-preset-writing').click();
       await expect(page.getByTestId('assistant-column')).toBeHidden();
       const writing = await page.getByTestId('canvas-column').boundingBox();
       expect(writing.width).toBeGreaterThan(canvas.width);
       expect(writing.x).toBe(canvas.x);
       await expect(editor).toHaveText('layout draft');
+      await page.getByTestId('titlebar-layout').click();
       await page.getByTestId('layout-preset-research').click();
       expect((await page.getByTestId('sidebar-column').boundingBox()).width).toBe(sidebar.width);
       expect((await page.getByTestId('canvas-column').boundingBox()).width).toBe(canvas.width);
     });
     await check('Review collapses context and widens the assistant', async () => {
+      await page.getByTestId('titlebar-layout').click();
       await page.getByTestId('layout-preset-review').click();
       await expect(page.getByTestId('sidebar-column')).toBeHidden();
       await expect(page.getByTestId('assistant-column')).toBeVisible();

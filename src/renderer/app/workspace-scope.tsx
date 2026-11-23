@@ -65,6 +65,8 @@ export type WorkspaceScope = {
   firstStepsRequestId: number;
   openFirstSteps: () => void;
   dismissFirstSteps: () => void;
+  /** Whether project context is visible, so canvas views can avoid duplicate navigation. */
+  contextDrawerOpen: boolean;
   /**
    * Navigates the canvas to another view in the same project.
    *
@@ -76,7 +78,6 @@ export type WorkspaceScope = {
   consumeLiteratureRequest: (nonce: number) => void;
   tool: WorkbenchTool | null;
   openTool: (tool: WorkbenchTool | null) => void;
-  openAssistant: () => void;
   openTasks: (taskId?: string) => void;
   openReviewInspector: OpenReviewInspector;
   openArtifact: OpenResearchArtifact;

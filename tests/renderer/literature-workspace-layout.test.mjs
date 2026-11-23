@@ -17,6 +17,7 @@ before(async () => {
     import {createRoot} from 'react-dom/client';
     import {flushSync} from 'react-dom';
     import {LiteratureHubView} from './src/renderer/literature/LiteratureHubView';
+    import {LibraryList} from './src/renderer/literature/LibraryList';
     import {LiteratureScopeProvider} from './src/renderer/literature/literature-scope';
     import {WorkspaceScopeProvider} from './src/renderer/app/workspace-scope';
     import './src/renderer/styles/index.css';
@@ -41,9 +42,11 @@ before(async () => {
     function Harness(){
       const [selectedId,setSelected]=useState('paper');
       const [view,setView]=useState('library');
+      const [contextDrawerOpen,setContextDrawerOpen]=useState(false);
       const [literatureRequest,setLiteratureRequest]=useState(null);
       const requestNonce=useRef(0);
       window.selectWorkspace=setView;
+      window.setContextDrawerOpen=setContextDrawerOpen;
       const openLiterature=target=>{
         if(target.kind==='reader')setSelected(target.libraryItemId??selectedId);
         setView(target.kind==='concept'?'knowledge':'library');
@@ -58,8 +61,14 @@ before(async () => {
         action:{pending:false,error:null},assistant:{pending:false,error:null},parseInFlight:null,
         select:(id,whenReady)=>whenReady?whenReady(()=>setSelected(id)):setSelected(id),reload(){},reloadDocuments(){},reloadDerived(){},setQuery(){},setIncludeArchived(){},
         loadDocumentContent:async()=>ok({run:{id:'parse',documentId:'document'},content:{sourceHash:'source',pageCount:1,parseMode:'native-text',warnings:[],assets:[],blocks}})};
-      return <WorkspaceScopeProvider value={{...scope,openView:(view,onNavigated)=>{setView(view);onNavigated?.();},openLiterature,literatureRequest,
-        consumeLiteratureRequest:nonce=>setLiteratureRequest(current=>current?.nonce===nonce?null:current)}}><LiteratureScopeProvider value={store}><LiteratureHubView view={view} projectId="fixture"/></LiteratureScopeProvider></WorkspaceScopeProvider>;
+      return <WorkspaceScopeProvider value={{...scope,contextDrawerOpen,openView:(view,onNavigated)=>{setView(view);onNavigated?.();},openLiterature,literatureRequest,
+        consumeLiteratureRequest:nonce=>setLiteratureRequest(current=>current?.nonce===nonce?null:current)}}><LiteratureScopeProvider value={store}>
+          <div style={{display:'flex',height:'100%',minWidth:0}}>
+            {contextDrawerOpen?<aside data-testid="fixture-context-library" style={{width:220,flexShrink:0}}><LibraryList compact
+              onOpenItem={id=>openLiterature({kind:'reader',libraryItemId:id})} onRequestImport={()=>{}}/></aside>:null}
+            <div style={{flex:1,minWidth:0}}><LiteratureHubView view={view} projectId="fixture"/></div>
+          </div>
+        </LiteratureScopeProvider></WorkspaceScopeProvider>;
     }
     const root=createRoot(document.getElementById('root'));
     window.mount=()=>flushSync(()=>root.render(<Harness/>));
@@ -151,4 +160,43 @@ test('object navigation opens the requested paper or claim and returns to the re
   await page.getByTestId('literature-return-search').click();
   await expect(page.getByTestId('literature-hub')).toHaveAttribute('data-workspace','knowledge');
   await expect(page.getByTestId('rag-query')).toHaveValue('How does the evidence support this claim?');
+});
+
+test('sidebar and canvas share one visible literature list without losing local navigation state',async()=>{
+  for(const width of [820,1280]) {
+    await page.evaluate(width=>{
+      document.getElementById('root').style.width=width+'px';
+      window.setContextDrawerOpen(false);
+      window.openObject({kind:'reader',libraryItemId:'paper'});
+    },width);
+    await expect(page.getByTestId('reader-title')).toContainText('Understanding');
+    const toggle=page.getByTestId('literature-toggle-navigation');
+    const localList=page.locator('#literature-navigation');
+    const importer=page.getByRole('button',{name:/^(添加文献|导入文献)$/});
+    await expect(importer).toHaveCount(1);
+    await expect(page.getByTestId('literature-hub-import')).toBeVisible();
+    await toggle.click();
+    await expect(localList).toBeVisible();
+    await expect(importer).toHaveCount(1);
+    await expect(localList.getByTestId('literature-import-open')).toBeVisible();
+    await localList.getByLabel('当前结果排序').selectOption('title');
+    await page.evaluate(()=>window.setContextDrawerOpen(true));
+    await expect(page.getByTestId('fixture-context-library')).toBeVisible();
+    await expect(toggle).toBeHidden();
+    await expect(localList).toBeHidden();
+    await expect(importer).toHaveCount(1);
+    await expect(page.getByTestId('fixture-context-library').getByTestId('literature-import-open')).toBeVisible();
+    await expect(page.getByLabel('搜索文献').filter({visible:true})).toHaveCount(1);
+    await expect(page.getByTestId('reader-title')).toContainText('Understanding');
+    await page.evaluate(()=>window.setContextDrawerOpen(false));
+    await expect(toggle).toHaveAttribute('aria-expanded','true');
+    await expect(localList).toBeVisible();
+    await expect(importer).toHaveCount(1);
+    await expect(localList.getByLabel('当前结果排序')).toHaveValue('title');
+    await localList.getByTestId('literature-row-second').click();
+    await expect(page.getByTestId('reader-title')).toHaveText('Second paper for navigation');
+    await expect(toggle).toHaveAttribute('aria-expanded','false');
+    await expect(importer).toHaveCount(1);
+    await expect(page.getByTestId('literature-hub-import')).toBeVisible();
+  }
 });

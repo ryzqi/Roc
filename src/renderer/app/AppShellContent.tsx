@@ -412,13 +412,13 @@ export function AppShellContent({ client, windowState }: { client: RocClient; wi
       firstStepsRequestId,
       openFirstSteps,
       dismissFirstSteps,
+      contextDrawerOpen: layout.drawerOpen,
       openView,
       openLiterature,
       literatureRequest: literatureRequest?.projectId === route.projectId ? literatureRequest : null,
       consumeLiteratureRequest,
       tool: route.tool,
       openTool: (tool) => navigate({ ...routeRef.current, tool }),
-      openAssistant: () => navigate({ ...routeRef.current, assistantOpen: true }),
       openTasks: (taskId) => {
         if (taskId !== undefined && route.projectId !== null) openTask(route.projectId, taskId);
         else openManagementSection('tasks');
@@ -441,6 +441,7 @@ export function AppShellContent({ client, windowState }: { client: RocClient; wi
       navigate,
       projectName,
       projectWritable,
+      layout.drawerOpen,
       boundWorkspace.path,
       boundWorkspace.status,
       boundWorkspace.error,
@@ -689,6 +690,7 @@ export function AppShellContent({ client, windowState }: { client: RocClient; wi
         sidebarCollapsed={!layout.drawerOpen} onToggleSidebar={toggleDrawer}
         assistantOpen={route.assistantOpen && !(layout.mode === 'drawers' && layout.drawerOpen)}
         onToggleAssistant={toggleAssistant} assistantRunning={assistantRunning}
+        onOpenManagement={() => openManagementSection('memory')}
         onOpenGit={() => navigate({ ...route, tool: 'git' })} branchLabel={gitSummary.branch}
         gitChangeCount={gitSummary.changes} layoutPreset={layout.preset} onChangePreset={applyLayoutPreset} />
 
@@ -741,13 +743,8 @@ export function AppShellContent({ client, windowState }: { client: RocClient; wi
               onSelectWorkspace={workspaceBinding.bind} workspacePending={workspaceBinding.pending}
               workspaceError={workspaceBinding.error} onOpenHelp={openFirstSteps}
               onOpenWriting={() => openView('writing', () => layoutRef.current.setDrawerOpen(true))}
-              onOpenTerminal={() => navigate({...route, ...routeForView('writing'), tool: 'terminal'}, {
-                mode: 'push', onNavigated: () => {
-                  if (layout.mode !== 'wide') layout.setDrawerOpen(false);
-                }
-              })}
               onOpenLiterature={libraryItemId => openLiterature({kind: 'reader', libraryItemId})}
-              onOpenManagement={() => openManagementSection('memory')} onOpenTasks={() => openManagementSection('tasks')}
+              onOpenTasks={() => openManagementSection('tasks')}
               taskLabel={taskCenter.label} taskSummary={taskCenter.summary}
             />
           }
@@ -779,6 +776,7 @@ export function AppShellContent({ client, windowState }: { client: RocClient; wi
                   projectId={route.projectId}
                   threadId={assistantThreadId}
                   onThreadIdChange={setAssistantThreadId}
+                  showNewThread={route.view !== 'runs' || !layout.drawerOpen}
                   onOpenArtifact={openArtifact}
                   onOpenReviewInspector={openReviewInspector}
                   onOpenTask={(taskId) => {

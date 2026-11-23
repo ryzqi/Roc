@@ -143,7 +143,7 @@ try {
     assert.equal(processing.total, 0, 'metadata_only must not enqueue fulltext acquisition');
   });
   await check('dialog pure search and repeated add reuse library identity', async () => {
-    await page.click('[data-testid="literature-hub-import"]');
+    await page.locator('[data-testid="literature-hub-import"], [data-testid="literature-import-open"]').filter({visible: true}).click();
     await page.click('[data-testid="literature-import-tab-search"]');
     await page.fill('[data-testid="literature-import-search"]', 'ROC-AGENT-IMPORT-FIXTURE');
     await page.click('[data-testid="literature-import-search-submit"]');
