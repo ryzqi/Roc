@@ -1,6 +1,6 @@
 import { before, after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as esbuild from 'esbuild';
@@ -123,7 +123,13 @@ before(async () => {
     `, resolveDir: process.cwd(), loader: 'js' },
     outfile: join(dir, 'hooks.js'), bundle: true, platform: 'browser', format: 'iife', logLevel: 'silent'
   });
+  const assets = join(process.cwd(), 'dist/renderer/assets');
+  // Virtuoso measures row boxes. Without production CSS, default paragraph margins
+  // collapse outside those boxes and make the fixture's scroll estimates invalid.
+  writeFileSync(join(dir, 'app.css'), readdirSync(assets).filter(file => file.endsWith('.css'))
+    .map(file => readFileSync(join(assets, file), 'utf8')).join('\n'));
   writeFileSync(join(dir, 'index.html'), `
+    <link rel="stylesheet" href="app.css">
     <style>
       #transcript-fixture > [data-testid="assistant-transcript-host"] { height: 100%; flex: 1 1 0; min-height: 0; }
     </style>
@@ -1275,6 +1281,28 @@ test('transcript virtual index preserves the visible key across prepend, trim, a
   assert.equal(await page.evaluate(() => latest), beforeTrimIndex + 50);
 });
 
+async function transcriptMetrics() {
+  return page.evaluate(() => {
+    const parent = document.querySelector('[data-testid="assistant-transcript"]');
+    if (!parent) return {missing: true};
+    const parentRect = parent.getBoundingClientRect();
+    const rows = [...parent.querySelectorAll('[data-testid="assistant-message-user"], [data-testid="assistant-message-assistant"]')];
+    const visible = rows.filter(row => {
+      const rect = row.getBoundingClientRect();
+      return row.checkVisibility({visibilityProperty: true}) && rect.bottom > parentRect.top && rect.top < parentRect.bottom;
+    });
+    const describe = row => row ? {text: row.textContent.slice(0, 100), top: row.getBoundingClientRect().top - parentRect.top,
+      height: row.getBoundingClientRect().height, visible: row.checkVisibility({visibilityProperty: true}),
+      index: row.closest('[data-index]')?.getAttribute('data-index')} : null;
+    return {scrollTop: parent.scrollTop, scrollHeight: parent.scrollHeight, clientHeight: parent.clientHeight,
+      firstItemIndex: parent.dataset.firstItemIndex, messageCount: parent.dataset.messageCount,
+      mountedCount: rows.length, firstMounted: describe(rows[0]), lastMounted: describe(rows.at(-1)),
+      firstVisible: describe(visible[0]), lastVisible: describe(visible.at(-1)),
+      list: parent.querySelector('[data-testid="virtuoso-item-list"]')?.getAttribute('style'),
+      visibility: document.visibilityState};
+  });
+}
+
 test('rendered transcript keeps the same visible message anchored across prepend and retention trim', async () => {
   const initial = Array.from({length: 80}, (_, index) => ({
     key: `event-${index}`,
@@ -1307,32 +1335,51 @@ test('rendered transcript keeps the same visible message anchored across prepend
     loadingOlder: false
   };
   await page.evaluate(props => mountTranscript({...props, loadOlder: async () => {}, onJumpToLatest: async () => {}}), props);
+  await page.waitForFunction(() => {
+    const parent = document.querySelector('[data-testid="assistant-transcript"]');
+    return parent.querySelector('[data-testid="virtuoso-item-list"]').checkVisibility({visibilityProperty: true}) &&
+      parent.scrollTop > 0 && parent.scrollHeight - parent.clientHeight - parent.scrollTop <= 2;
+  }).catch(async error => {
+    throw new Error(`Initial anchor transcript position: ${JSON.stringify(await transcriptMetrics())}`, {cause: error});
+  });
+  // Preserve a history-reading anchor. A reader already at the bottom intentionally
+  // follows the new tail messages included in the retention update below.
+  await page.evaluate(() => {
+    const parent = document.querySelector('[data-testid="assistant-transcript"]');
+    parent.scrollTop = Math.floor(parent.scrollTop / 2);
+  });
+  await page.getByTestId('assistant-scroll-bottom').waitFor();
   const visibleAnchorHandle = await page.waitForFunction(() => {
     const parent = document.querySelector('[data-testid="assistant-transcript"]');
     if (!parent) return null;
     const parentRect = parent.getBoundingClientRect();
     const anchor = Array.from(document.querySelectorAll('[data-testid="assistant-message-user"]')).find(element => {
       const rect = element.getBoundingClientRect();
-      return rect.bottom > parentRect.top && rect.top < parentRect.bottom;
+      return element.checkVisibility({visibilityProperty: true}) && rect.bottom > parentRect.top && rect.top < parentRect.bottom;
     });
     if (!anchor) return null;
     return {
       content: anchor.textContent,
-      top: anchor.getBoundingClientRect().top - parentRect.top
+      top: anchor.getBoundingClientRect().top - parentRect.top,
+      index: Number(anchor.closest('[data-index]').dataset.index)
     };
   });
   const visibleAnchor = await visibleAnchorHandle.jsonValue();
-  const readAnchorTop = async () => {
-    const handle = await page.waitForFunction(content => {
+  const readAnchorTop = async addedLeadingItems => {
+    const handle = await page.waitForFunction(({content, index}) => {
       const parent = document.querySelector('[data-testid="assistant-transcript"]');
       const anchor = Array.from(document.querySelectorAll('[data-testid="assistant-message-user"]'))
         .find(element => element.textContent === content);
-      if (!parent || !anchor) return null;
+      if (!parent || !anchor || !anchor.checkVisibility({visibilityProperty: true})) return null;
+      // Virtuoso may still expose the previous rows while it applies a prepend or trim.
+      if (Number(anchor.closest('[data-index]').dataset.index) !== index) return null;
       const parentRect = parent.getBoundingClientRect();
       const rect = anchor.getBoundingClientRect();
       if (rect.bottom <= parentRect.top || rect.top >= parentRect.bottom) return null;
       return {top: rect.top - parentRect.top};
-    }, visibleAnchor.content);
+    }, {content: visibleAnchor.content, index: visibleAnchor.index + addedLeadingItems}).catch(async error => {
+      throw new Error(`Transcript anchor ${JSON.stringify(visibleAnchor)}: ${JSON.stringify(await transcriptMetrics())}`, {cause: error});
+    });
     return (await handle.jsonValue()).top;
   };
   const beforeTop = visibleAnchor.top;
@@ -1346,7 +1393,7 @@ test('rendered transcript keeps the same visible message anchored across prepend
       onJumpToLatest: async () => {}
     });
   }, {props, prepended});
-  const afterTop = await readAnchorTop();
+  const afterTop = await readAnchorTop(20);
   assert.ok(Math.abs(afterTop - beforeTop) <= 2, `visible message moved from ${beforeTop}px to ${afterTop}px`);
 
   const retainedWindow = [
@@ -1373,7 +1420,7 @@ test('rendered transcript keeps the same visible message anchored across prepend
       onJumpToLatest: async () => {}
     });
   }, {props, retainedWindow});
-  const afterTrimTop = await readAnchorTop();
+  const afterTrimTop = await readAnchorTop(10);
   assert.ok(Math.abs(afterTrimTop - afterTop) <= 2, `visible message moved from ${afterTop}px to ${afterTrimTop}px after trim`);
 });
 
@@ -1395,7 +1442,8 @@ test('transcript follows a live review gate after opening a message taller than 
   });
   await page.waitForFunction(() => {
     const parent = document.querySelector('[data-testid="assistant-transcript"]');
-    return parent.scrollHeight > parent.clientHeight &&
+    return parent.querySelector('[data-testid="virtuoso-item-list"]').checkVisibility({visibilityProperty: true}) &&
+      parent.scrollHeight > parent.clientHeight &&
       parent.scrollHeight - parent.clientHeight - parent.scrollTop <= 2;
   }).catch(async error => {
     const metrics = await page.getByTestId('assistant-transcript').evaluate(parent => ({
@@ -1446,7 +1494,10 @@ test('transcript preserves an intentional scroll away from the bottom when new o
   });
   await page.waitForFunction(() => {
     const parent = document.querySelector('[data-testid="assistant-transcript"]');
-    return parent.scrollTop > 0 && parent.scrollHeight - parent.clientHeight - parent.scrollTop <= 2;
+    return parent.querySelector('[data-testid="virtuoso-item-list"]').checkVisibility({visibilityProperty: true}) &&
+      parent.scrollTop > 0 && parent.scrollHeight - parent.clientHeight - parent.scrollTop <= 2;
+  }).catch(async error => {
+    throw new Error(`Initial reading transcript position: ${JSON.stringify(await transcriptMetrics())}`, {cause: error});
   });
   await page.evaluate(() => {
     const parent = document.querySelector('[data-testid="assistant-transcript"]');

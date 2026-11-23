@@ -73,9 +73,28 @@ node --test tests/renderer/literature-list-layout.test.mjs
 
 构建、分包、设计门禁和按钮定向检查通过：定向 **14/14**；eager JS **503800 bytes / 10 files**，比 P0 增加 411 bytes，分包预算未改变；设计扫描 270 文件。
 
-完整 renderer **895/898 通过**，耗时 1875 秒，3 个失败均为滚动断言：`lifecycles.test.mjs` 历史裁剪后原消息锚点不可见（1376 行），下一会话未到初始底部（1447 行）；`literature-list-layout.test.mjs` 滚到顶部后第 120 行仍挂载（135 行）。未修改测试的定向复跑中，文献完整文件 **3/3**，两项消息流测试 **1/2**（初始底部失败仍复现）。文献同类失败在 P0 已出现；消息流问题继续单独诊断，不把重跑结果写成全量通过，不改动断言容差或延长超时。
+完整 renderer **895/898 通过**，耗时 1875 秒，3 个失败均为滚动断言：`lifecycles.test.mjs` 历史裁剪后原消息锚点不可见（当时 1376 行），下一会话未到初始底部（当时 1447 行）；`literature-list-layout.test.mjs` 滚到顶部后第 120 行仍挂载（135 行）。未修改测试的定向复跑中，文献完整文件 **3/3**，两项消息流测试 **1/2**（初始底部失败仍复现）。文献同类失败在 P0 已出现；消息流后续诊断与修复见下节，不把重跑结果写成全量通过，不改动断言容差或延长超时。
 
 本子项不代表 P1 的 tokens、输入/菜单、状态、列表与检视器全部完成。临时日志和截图在审阅、提取必要诊断后清理，正式组件夹具和验证记录保留。
+
+## 2026-11-23 P0.3：消息流回归夹具校正
+
+状态：**Verified passing**（夹具校正及以下组合验证范围）。
+
+全量失败的两个消息流用例已定位到夹具问题。旧夹具没有应用 CSS，默认段落外边距使测量行高约 22.5px、实际行距 38.5px；80 条消息的初始滚动停在 1520px，而实际内容高度为 2244px、视口 320px。几何相交检查还把 Virtuoso `visibility:hidden` 的初始化行当作可见锚点，历史更新会与尚未结束的初始化定位重叠。探针确认 `checkVisibility()` 默认不检查 CSS visibility，必须显式传入 `visibilityProperty: true`。
+
+夹具现与其他 renderer 测试一致读取本轮 `pnpm build` 生成的 CSS，等待真实可见的初始化列表，并按 Virtuoso `data-index` 确认 prepend/trim 已应用。保锚场景明确先上滚阅读历史；位于底部时继续追随新尾部仍由独立用例验证。原 2px 断言和超时保留，未新增固定等待或改动生产消息流。仅保留失败时的几何诊断，临时滚动钩子、轨迹及探针均已删除。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`：
+
+```sh
+node --test tests/renderer/lifecycles.test.mjs
+node --test --test-concurrency=1 tests/renderer/lifecycles.test.mjs tests/renderer/literature-list-layout.test.mjs tests/renderer/action-button.test.mjs tests/renderer/settings-write-guards.test.mjs tests/renderer/model-provider-settings.test.mjs
+node --check tests/renderer/lifecycles.test.mjs
+git diff --check
+```
+
+最终生命周期完整文件连续 **5 轮 85/85**；消息流、文献列表、按钮和设置组合 **102/102**；语法与差异检查通过。先前 898 项全量运行仍按原成绩保留；文献列表偶发失败的根因尚未证实，不标为已修复。
 
 ## P0 工程基线（2026-11-20）
 
