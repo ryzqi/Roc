@@ -412,6 +412,9 @@ import {
   shellConfirmationResultSchema,
   shellExecutionIpcRequestSchema,
   shellExecutionResultSchema,
+  terminalSessionAttachmentSchema,
+  terminalSessionAttachRequestSchema,
+  terminalSessionDetachRequestSchema,
   terminalSessionCloseRequestSchema,
   terminalSessionCreateRequestSchema,
   terminalSessionExitEventSchema,
@@ -1067,6 +1070,8 @@ export const ipcRegistry = {
     request({ key: 'terminalWriteInput', channel: 'roc:terminal:write-input', domain: 'terminal', method: 'writeInput', kind: 'plugin', capabilityName: 'terminal.writeInput', inputTransform: first, contract: methodContract(oneArg(terminalSessionInputRequestSchema), deliveredResultSchema) }),
     request({ key: 'terminalResize', channel: 'roc:terminal:resize', domain: 'terminal', method: 'resize', kind: 'plugin', capabilityName: 'terminal.resize', inputTransform: first, contract: methodContract(oneArg(terminalSessionResizeRequestSchema), terminalSessionSnapshotSchema) }),
     request({ key: 'terminalCloseSession', channel: 'roc:terminal:close-session', domain: 'terminal', method: 'closeSession', kind: 'plugin', capabilityName: 'terminal.closeSession', inputTransform: first, contract: methodContract(oneArg(terminalSessionCloseRequestSchema), closedResultSchema) }),
+    request({ key: 'terminalAttachSession', channel: 'roc:terminal:attach-session', domain: 'terminal', method: 'attachSession', kind: 'plugin', capabilityName: 'terminal.attachSession', inputTransform: first, contract: methodContract(oneArg(terminalSessionAttachRequestSchema), terminalSessionAttachmentSchema) }),
+    request({ key: 'terminalDetachSession', channel: 'roc:terminal:detach-session', domain: 'terminal', method: 'detachSession', kind: 'plugin', capabilityName: 'terminal.detachSession', inputTransform: first, contract: methodContract(oneArg(terminalSessionDetachRequestSchema), closedResultSchema) }),
     request({ key: 'rtkStatus', channel: 'roc:rtk:status', domain: 'rtk', method: 'status', kind: 'plugin', capabilityName: 'rtk.status', inputTransform: none, contract: methodContract(noArgs, rtkStatusSchema) }),
     request({ key: 'shellExecute', channel: 'roc:shell:execute', domain: 'shell', method: 'execute', kind: 'plugin', capabilityName: 'shell.execute', inputTransform: first, contract: methodContract(oneArg(shellExecutionIpcRequestSchema), shellExecutionResultSchema) }),
     request({ key: 'shellConfirm', channel: 'roc:shell:confirm', domain: 'shell', method: 'confirm', kind: 'direct', contract: methodContract(oneArg(shellConfirmationRequestSchema), shellConfirmationResultSchema) })

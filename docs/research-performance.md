@@ -71,11 +71,11 @@ Contract 2 要求来源/chunk 与实际上下文 embedding 输入哈希、向量
 | --- | --- | --- |
 | `overview` | 成功切换后卸载，后台只读宿主预算为 0 | 无编辑草稿；再次进入重新读取项目、任务与成果，总览展开状态和滚动位置重置 |
 | `library` | 访问后固定保留一个宿主 | 阅读笔记、Wiki 草稿、检索上下文及监控未决操作仍由内部组件持有 |
-| `writing` | 访问后固定保留一个宿主 | 未保存文稿、编辑器选区、同步提议与终端会话仍依赖组件生命周期 |
+| `writing` | 访问后固定保留一个宿主 | 未保存文稿、编辑器选区与同步提议仍依赖组件生命周期；PTY 由主进程持有 |
 | `runs` | 访问后固定保留一个宿主 | 后台任务编辑器的未保存配置、待完成操作及导航守卫 |
 
 当前最多挂载 3 个草稿/会话宿主，以及正在显示的只读总览；显示草稿/会话宿主时最多挂载 3 个。只有目标模块成功解析后才执行释放；冷导入期间和导入失败时保留当前画布。再次进入总览会复用已加载模块，不重复下载 chunk。
 
-固定保留宿主继续通过 `ViewActivity` 暂停已接入的隐藏资源与轮询；这不是所有隐藏 DOM 的释放方案。不能直接把这些宿主改为卸载或 React `Activity`：草稿导航监听仍在组件 effect 内，且 `TerminalSessionView` 的 cleanup 会调用 `terminal.closeSession`，主进程随后终止 PTY。终端 DOM 与主进程会话的分离需要独立的重新连接、输出恢复和项目生命周期合同；本次保留该边界，不把后台会话误当作可丢弃缓存。
+固定保留宿主继续通过 `ViewActivity` 暂停已接入的隐藏资源与轮询；草稿导航监听仍在组件 effect 内，不能把整个宿主直接改为卸载或 React `Activity`。终端内部已单独分离生命周期：隐藏时释放 xterm DOM、尺寸观察和输出订阅，主进程继续持有 PTY；重新进入按窗口、项目和目录恢复同一会话及有界序号输出。显式结束、窗口销毁和应用退出释放 PTY。详见[终端会话合同](terminal-sessions.md)。
 
-`tests/unit/renderer-view-retention.test.mjs` 验证预算与共享身份；`tests/renderer/canvas-view-loading.test.mjs` 在 Electron 中使用受控视图导入器验证冷加载/失败衔接、20 次切换的挂载数、草稿/选区/导航监听保留和项目键重建后的清理。生命周期计数是宿主回归证据，不是实际 PTY 恢复或内存节省的测量；性能变化仍以同构建的正式报告为准。
+`tests/unit/renderer-view-retention.test.mjs` 验证预算与共享身份；`tests/renderer/canvas-view-loading.test.mjs` 在 Electron 中使用受控视图导入器验证冷加载/失败衔接、20 次切换的挂载数、草稿/选区/导航监听保留和项目键重建后的清理。生命周期计数是宿主回归证据，不是内存节省的测量；真实 PTY 恢复另由 `tests/integration/terminal-session-reattach.test.mjs` 验证，性能变化仍以同构建的正式报告为准。

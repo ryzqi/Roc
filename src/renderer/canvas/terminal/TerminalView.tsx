@@ -4,68 +4,19 @@ import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import { Loader2, RefreshCw, TerminalSquare } from 'lucide-react';
-import type { TerminalSessionSnapshot } from '../../../shared/types';
+import type { TerminalSessionSnapshot, TerminalSessionOutputEvent, TerminalSessionExitEvent, TerminalSessionAttachment } from '../../../shared/types';
 import { useWorkspaceScope } from '../../app/workspace-scope';
 import type { RocClient } from '../../shared/roc-client';
 import { EmptyState } from '../../shell/EmptyState';
 import { ErrorBar } from '../../shell/ErrorBar';
+import {ConfirmDialog} from '../../shell/ConfirmDialog';
+import {useViewActive} from '../../shared/view-activity';
+import {TerminalOutputCursor} from './terminal-output-cursor';
 
-/**
- * Embedded terminal (P3/T3.6) — a real PTY session, not a replay.
- *
- * `terminal.createSession` opens a pty on the main process; output arrives as
- * `terminal.onOutput` events and keystrokes go back through
- * `terminal.writeInput`. The session key is the bound workspace, so switching
- * projects closes the old pty and starts a new one in the new directory — the
- * "no data may leak across projects" rule of gate 6 applies to a shell process
- * more than to anything else in the app.
- *
- * Details that are easy to get wrong, and are therefore explicit here:
- *
- *   - **Geometry before creation.** The terminal is opened and fitted first, then
- *     `createSession` is given the *measured* `cols`/`rows`. Creating the session
- *     with guessed numbers and resizing afterwards makes the first prompt wrap
- *     oddly, and the pty's line editor would already be running with wrong
- *     dimensions.
- *   - **Resize through the fit addon**, driven by a `ResizeObserver` on the host:
- *     `fit()` recomputes rows/cols from the new box, and only then does
- *     `terminal.resize` tell the pty. Window resizes therefore keep the prompt
- *     geometry in sync (gate 5).
- *   - **Output is filtered by session id.** Events are broadcast to the renderer,
- *     so echoing another session's bytes is a one-line mistake with confusing
- *     symptoms.
- *   - **The terminal is always dark** (`--terminal-bg`): the theme is read from
- *     the token layer at mount, never hard-coded, and the light theme does not
- *     override it.
- *   - **Copy and paste are left to the system.** xterm's own clipboard handling
- *     plus the native Edit-menu roles cover ⌘C/⌘V; intercepting keys here would
- *     break ⌘K-style passthrough and is exactly what the plan forbids.
- *
- * ## Not ported: 「在终端里运行这个脚本」
- *
- * The canvas has one hand-off on this surface: a plot/script panel calls
- * `onRunScriptInTerminal(code)`, which switches to the terminal tab with a command
- * prefilled (`python src/plot_benchmarks.py`) and the terminal runs it on mount
- * (`initialCommand`).
- *
- * That has no counterpart here, and the reason is structural rather than an omission:
- * the command has to travel from the caller to this view, and every route for it is closed.
- *
- *   - **A route parameter** (`?view=terminal&run=…`) would extend the frozen route
- *     contract and its round-trip tests for a once-per-run hand-off.
- *   - **A new prefill entry in the workspace scope** means inventing the caller as well:
- *     this build has no plot panel that owns a script path — experiments and figures are
- *     records in the backend, and the script that produced them is not addressable from
- *     the renderer (the same reason the reader cannot embed the source PDF, B16).
- *
- * The user path is not lost, it is just not automated: the workspace file tree opens the
- * script and the terminal is right next to it, and the agent can run it through
- * `run_shell_command` (each call visible, and subject to its own approval policy). Recorded
- * so the next person does not read this file and conclude nobody noticed.
- */
-
+/** The main process owns PTYs; this view owns only an attached xterm display. */
 export type TerminalSessionViewProps = {
   client: RocClient;
+  projectId?: string | null;
   /** Absolute path of the bound workspace, or null when none is bound. */
   workspacePath: string | null;
   /** Archived projects are read-only — see the gate in `TerminalView`. */
@@ -106,7 +57,12 @@ function readTerminalTheme(): Record<string, string> {
   };
 }
 
-export function TerminalSessionView({ client, workspacePath, writable }: TerminalSessionViewProps): React.JSX.Element {
+export function TerminalSessionView({ client, projectId = null, workspacePath, writable }: TerminalSessionViewProps): React.JSX.Element {
+  const active = useViewActive();
+  const attachmentRef = useRef<TerminalSessionAttachment | null>(null);
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [truncated, setTruncated] = useState(false);
   const hostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal|null>(null);
   const [session, setSession] = useState<TerminalSessionSnapshot | null>(null);
@@ -116,13 +72,16 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
 
   useEffect(() => {
     const host = hostRef.current;
-    if (host === null || workspacePath === null || !writable) {
+    if (!active || host === null || workspacePath === null || !writable) {
       return;
     }
 
     setPhase('starting');
     setError(null);
     setSession(null);
+    setTruncated(false);
+    setCloseOpen(false);
+    setClosing(false);
 
     const terminal = new Terminal({
       convertEol: true,
@@ -145,31 +104,48 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
 
     let disposed = false;
     let sessionId: string | null = null;
-
-    const onOutputDispose = client.api.terminal.onOutput((event) => {
-      if (event.sessionId !== sessionId) {
-        return;
+    let attachmentId: string | null = null;
+    let cursor: TerminalOutputCursor | null = null;
+    let queued: TerminalSessionOutputEvent[] = [];
+    let queuedLength = 0;
+    let queuedExit: TerminalSessionExitEvent | null = null;
+    const writeOutput = (event: TerminalSessionOutputEvent): void => {
+      const next = cursor?.accept(event);
+      if (next === null || next === undefined) return;
+      if (next.gap) {setTruncated(true); terminal.reset();}
+      terminal.write(next.data);
+    };
+    const onOutputDispose = client.api.terminal.onOutput(event => {
+      if (disposed) return;
+      if (cursor !== null) {writeOutput(event); return;}
+      queued.push(event);
+      queuedLength += event.data.length;
+      while (queuedLength > 256 * 1024 && queued.length > 1) queuedLength -= queued.shift()!.data.length;
+      if (queuedLength > 256 * 1024) {
+        const tail = queued[0]!;
+        queued[0] = {...tail, startSequence: tail.sequence - 256 * 1024, data: tail.data.slice(-256 * 1024)};
+        queuedLength = 256 * 1024;
       }
-      terminal.write(event.data);
     });
-
-    const onExitDispose = client.api.terminal.onExit((event) => {
-      if (event.sessionId !== sessionId) {
-        return;
-      }
-      sessionId = null;
+    const exit = (event: TerminalSessionExitEvent): void => {
+      if (event.sessionId !== sessionId || event.attachmentId !== attachmentId) return;
       setPhase('exited');
-      setSession((current) =>
-        current === null ? current : { ...current, status: 'exited', exitCode: event.exitCode }
-      );
+      setSession(current => current === null ? current : {...current, status: 'exited', exitCode: event.exitCode});
+      if (attachmentRef.current) attachmentRef.current = {...attachmentRef.current,
+        session: {...attachmentRef.current.session, status: 'exited', exitCode: event.exitCode}};
       terminal.write(`\r\n[进程已退出，退出码 ${event.exitCode ?? '未知'}]\r\n`);
+    };
+    const onExitDispose = client.api.terminal.onExit(event => {
+      if (disposed) return;
+      if (cursor === null) queuedExit = event;
+      else exit(event);
     });
 
     const dataDisposable = terminal.onData((data) => {
-      if (sessionId === null) {
+      if (sessionId === null || attachmentId === null || attachmentRef.current?.session.status !== 'ready') {
         return;
       }
-      void client.api.terminal.writeInput({ sessionId, data });
+      void client.api.terminal.writeInput({ sessionId, projectId, attachmentId, data });
     });
 
     /**
@@ -177,11 +153,11 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
      * The snapshot also supplies the shell and working directory shown by this view.
      */
     const pushGeometry = (): void => {
-      if (sessionId === null) {
+      if (sessionId === null || attachmentId === null || attachmentRef.current === null) {
         return;
       }
       void client.api.terminal
-        .resize({ sessionId, cols: Math.max(20, terminal.cols), rows: Math.max(5, terminal.rows) })
+        .resize({ sessionId, projectId, attachmentId, cols: Math.max(20, terminal.cols), rows: Math.max(5, terminal.rows) })
         .then((result) => {
           if (!disposed && result.ok && result.data.id === sessionId) {
             setSession(result.data);
@@ -199,17 +175,15 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
     resizeObserver.observe(host);
 
     void (async () => {
-      const result = await client.api.terminal.createSession({
+      const result = await client.api.terminal.attachSession({
+        projectId,
         cwd: workspacePath,
         cols: Math.max(20, terminal.cols),
         rows: Math.max(5, terminal.rows)
       });
       if (disposed) {
-        if (result.ok) {
-          // The panel closed while the pty was starting: release it instead of
-          // leaking a shell process per unmount.
-          void client.api.terminal.closeSession({ sessionId: result.data.id });
-        }
+        if (result.ok) void client.api.terminal.detachSession({sessionId: result.data.session.id,
+          projectId, attachmentId: result.data.attachmentId}).catch(() => {});
         return;
       }
       if (!result.ok) {
@@ -217,14 +191,22 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
         setError(result.error.message);
         return;
       }
-      sessionId = result.data.id;
-      setSession(result.data);
-      setPhase('ready');
+      sessionId = result.data.session.id;
+      attachmentId = result.data.attachmentId;
+      attachmentRef.current = result.data;
+      setSession(result.data.session);
+      setPhase(result.data.session.status);
+      cursor = new TerminalOutputCursor(sessionId, attachmentId, result.data.replay.sequence);
+      if (result.data.replay.truncated) {setTruncated(true); terminal.reset();}
+      terminal.write(result.data.replay.data);
+      for (const event of queued) writeOutput(event);
+      queued = [];
+      if (queuedExit !== null) exit(queuedExit);
       // The pty was created with the measured geometry; re-fit and push once more in
       // case the first layout pass changed the host's size while the session started.
       fitAddon.fit();
       pushGeometry();
-    })();
+    })().catch(cause => {if (!disposed) {setPhase('error'); setError(cause instanceof Error ? cause.message : String(cause));}});
 
     return () => {
       disposed = true;
@@ -232,18 +214,49 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
       dataDisposable.dispose();
       onOutputDispose();
       onExitDispose();
-      if (sessionId !== null) {
-        void client.api.terminal.closeSession({ sessionId });
+      if (sessionId !== null && attachmentId !== null) {
+        void client.api.terminal.detachSession({ sessionId, projectId, attachmentId }).catch(() => {});
       }
+      attachmentRef.current = null;
+      queued = [];
       sessionId = null;
       terminalRef.current = null;
       terminal.dispose();
     };
-  }, [client, workspacePath, writable, sessionNonce]);
+  }, [active, client, projectId, workspacePath, writable, sessionNonce]);
 
-  const restart = useCallback(() => {
-    setSessionNonce((value) => value + 1);
-  }, []);
+  const restart = useCallback(async () => {
+    const current = attachmentRef.current;
+    try {
+      if (current !== null) {
+        const result = await client.api.terminal.closeSession({sessionId: current.session.id, projectId, attachmentId: current.attachmentId});
+        if (attachmentRef.current?.attachmentId !== current.attachmentId) return;
+        if (!result.ok) {setError(result.error.message); return;}
+      }
+      setSessionNonce(value => value + 1);
+    } catch (cause) {
+      if (attachmentRef.current?.attachmentId === current?.attachmentId) setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }, [client, projectId]);
+
+  const endSession = async (): Promise<void> => {
+    const current = attachmentRef.current;
+    if (current === null || closing) return;
+    setClosing(true);
+    try {
+      const result = await client.api.terminal.closeSession({sessionId: current.session.id, projectId, attachmentId: current.attachmentId});
+      if (attachmentRef.current?.attachmentId !== current.attachmentId) return;
+      if (!result.ok) {setError(result.error.message); return;}
+      attachmentRef.current = null;
+      setCloseOpen(false);
+      setPhase('exited');
+      terminalRef.current?.write('\r\n[会话已结束]\r\n');
+    } catch (cause) {
+      if (attachmentRef.current?.attachmentId === current.attachmentId) setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      if (attachmentRef.current === null || attachmentRef.current.attachmentId === current.attachmentId) setClosing(false);
+    }
+  };
 
   if (workspacePath === null) {
     return (
@@ -284,7 +297,9 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
         <TerminalSquare size={14} aria-hidden="true"/><h1>终端</h1>
         <span role="status">{phase==='ready'?'已连接':phase==='exited'?'已退出':phase==='error'?'连接失败':'连接中'}</span>
         <button type="button" disabled={phase!=='ready'} title="清除当前终端显示，不中断运行中的命令" data-testid="terminal-clear" onClick={()=>{terminalRef.current?.clear();terminalRef.current?.focus();}}>清屏</button>
+        <button type="button" disabled={phase !== 'ready' || closing} data-testid="terminal-end" onClick={() => setCloseOpen(true)}>结束会话</button>
       </header>
+      {truncated ? <p role="status" data-testid="terminal-replay-truncated" className="shrink-0 px-3 py-2 text-[var(--terminal-text)] text-xs">已恢复最近输出；更早内容超出回放容量，终端显示已重置。</p> : null}
       {error === null ? null : (
         <div className="shrink-0 p-2">
           <ErrorBar error={{ level: 'page', message: error, retry: restart }} />
@@ -309,6 +324,8 @@ export function TerminalSessionView({ client, workspacePath, writable }: Termina
         ) : null}
       </div>
 
+      <ConfirmDialog open={active && closeOpen} title="结束终端会话" message="将终止此会话及正在运行的命令，未完成的工作可能丢失。"
+        confirmLabel="结束会话" pending={closing} error={error} onConfirm={endSession} onCancel={() => setCloseOpen(false)} testId="terminal-end-confirm"/>
       <div
         className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-0.5 border-t-[0.5px] border-[var(--terminal-line)] px-2 py-1 text-[var(--terminal-text)] text-[length:var(--font-micro-size)]"
         data-testid="terminal-footer"
@@ -345,6 +362,7 @@ export function TerminalView(): React.JSX.Element {
   return (
     <TerminalSessionView
       client={scope.client}
+      projectId={scope.projectId}
       workspacePath={scope.workspacePath}
       writable={scope.writable}
     />

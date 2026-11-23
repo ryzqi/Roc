@@ -217,7 +217,7 @@ export const gitPushResultSchema = z
   .strict();
 
 export const terminalSessionCreateRequestSchema = z
-  .object({ cwd: z.string().optional(), cols: z.number(), rows: z.number() })
+  .object({ cwd: z.string().optional(), projectId: z.string().nullable().optional(), cols: z.number(), rows: z.number() })
   .strict();
 
 export const terminalSessionSnapshotSchema = z
@@ -233,21 +233,30 @@ export const terminalSessionSnapshotSchema = z
   .strict();
 
 export const terminalSessionInputRequestSchema = z
-  .object({ sessionId: z.string(), data: z.string() })
+  .object({ sessionId: z.string(), projectId: z.string().nullable().optional(), attachmentId: z.string().optional(), data: z.string() })
   .strict();
 
 export const terminalSessionResizeRequestSchema = z
-  .object({ sessionId: z.string(), cols: z.number(), rows: z.number() })
+  .object({ sessionId: z.string(), projectId: z.string().nullable().optional(), attachmentId: z.string().optional(), cols: z.number(), rows: z.number() })
   .strict();
 
-export const terminalSessionCloseRequestSchema = z.object({ sessionId: z.string() }).strict();
+export const terminalSessionCloseRequestSchema = z.object({ sessionId: z.string(), projectId: z.string().nullable().optional(), attachmentId: z.string().optional() }).strict();
+
+export const terminalSessionAttachRequestSchema = terminalSessionCreateRequestSchema.extend({sessionId: z.string().optional()});
+export const terminalSessionDetachRequestSchema = terminalSessionCloseRequestSchema.extend({attachmentId: z.string()});
+export const terminalSessionReplaySchema = z.object({
+  startSequence: z.number().int().nonnegative(), sequence: z.number().int().nonnegative(), data: z.string(), truncated: z.boolean()
+}).strict();
+export const terminalSessionAttachmentSchema = z.object({
+  session: terminalSessionSnapshotSchema, attachmentId: z.string(), replay: terminalSessionReplaySchema
+}).strict();
 
 export const terminalSessionOutputEventSchema = z
-  .object({ sessionId: z.string(), data: z.string() })
+  .object({ sessionId: z.string(), ownerId: z.number().int().nonnegative(), attachmentId: z.string().nullable(), startSequence: z.number().int().nonnegative(), sequence: z.number().int().nonnegative(), data: z.string() })
   .strict();
 
 export const terminalSessionExitEventSchema = z
-  .object({ sessionId: z.string(), exitCode: z.number().nullable() })
+  .object({ sessionId: z.string(), ownerId: z.number().int().nonnegative(), attachmentId: z.string().nullable(), exitCode: z.number().nullable() })
   .strict();
 
 const rtkBypassReasonSchema = z.enum([

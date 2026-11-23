@@ -15,10 +15,11 @@
 .tools-git-workspace[data-diff-focused=true] > .tools-git-list { display: none; }
 .tools-disclosure { padding: 4px 8px; color: var(--muted); font-size: var(--font-meta-size); }
 .tools-disclosure summary { cursor: pointer; min-height: 28px; padding: 4px 0; }
-.tools-terminal-header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: .5px solid var(--terminal-line); color: var(--terminal-text); flex-shrink: 0; font-size: var(--font-meta-size); }
+.tools-terminal-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: .5px solid var(--terminal-line); color: var(--terminal-text); flex-shrink: 0; font-size: var(--font-meta-size); }
 .tools-terminal-header h1 { font-weight: var(--font-weight-medium); }
 .tools-terminal-header > span { opacity: .75; }
-.tools-terminal-header button { margin-inline-start: auto; padding: 4px 8px; border-radius: var(--r-control); min-height: 28px; }
+.tools-terminal-header button:first-of-type { margin-inline-start: auto; }
+.tools-terminal-header button { padding: 4px 8px; border-radius: var(--r-control); min-height: 28px; }
 .tools-terminal-header button:enabled:hover { background: var(--terminal-selection); }
 .tools-terminal-header button:enabled:active { opacity: .8; }
 .tools-terminal-header button:disabled { opacity: .4; }

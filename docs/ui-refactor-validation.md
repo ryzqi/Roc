@@ -1,5 +1,11 @@
 # UI 重构验证记录
 
+## 2026-11-23 P7.2：终端隐藏、恢复与进程归属
+
+状态：**Verified passing**。终端隐藏时释放 xterm DOM、尺寸观察和 IPC 订阅，主进程继续运行 PTY；按真实窗口、项目和目录恢复同一会话。输出使用有界 256 Ki UTF-16 缓冲和连接令牌，裁掉重播/实时重复区间并拒绝旧连接输入；超过容量明确提示截断。输出只发回所属窗口。显式结束需确认，窗口销毁和应用退出清理进程，项目归档/工作区变化重新校验权限。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`：`pnpm typecheck`、`pnpm check:ipc`、`git diff --check` 通过；`node --test tests/unit/terminal-session-lifecycle.test.mjs tests/unit/terminal-ipc-owner.test.mjs tests/integration/terminal-session-reattach.test.mjs` **20/20**；`node --test --test-concurrency=1 tests/renderer/authoring-tools-layout.test.mjs` **13/13**。真实 node-pty 验证隐藏前后 shell PID 不变、隐藏期间输出恢复、结束/owner销毁/shutdown 后 PID 消失；界面验证 DOM 释放、重新连接、截断提示和结束回调先于 IPC 返回时确认框仍能正确关闭。完整窗口/打包路径另在 P8 验收，不能据此宣称所有子进程树或备用屏幕程序均可完整恢复。合同见[终端会话](terminal-sessions.md)；测试临时资料根自动清理。
+
 ## 2026-11-23 P8准备：原子写入并发夹具
 
 状态：**Verified passing**（修正后的单文件范围）。仓库根 `pnpm test:unit` 首轮共2697项，2695通过、1失败、1跳过，446.1秒；失败为既有 `tests/unit/agent-filesystem-path-invalidation.test.mjs` 对同路径两次相互依赖编辑错误要求调用先后FIFO。路径规范化在入锁之前异步执行，第二次可先入锁；一次性门控探针证明入锁顺序反转但最大临界区并发仍为1，未发现生产互斥故障。

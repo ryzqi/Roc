@@ -311,6 +311,13 @@ async function createWindow(): Promise<void> {
   bindDisplayBoundsCorrection();
   bindSystemAppearanceBroadcast();
   hostService.bindMainWindow(mainWindow);
+  const terminalOwnerId = mainWindow.webContents.id;
+  mainWindow.webContents.once('destroyed', () => {
+    void kernel.runtime.publishEvent({type: 'terminal.owner.closed', source: '@roc/main',
+      payload: terminalOwnerId, createdAt: new Date().toISOString()}).catch(() => {
+      // During application shutdown the workspace plugin already releases every PTY.
+    });
+  });
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -422,9 +429,7 @@ async function createWindow(): Promise<void> {
   const terminalOutputBatcher = createTerminalOutputBatcher({
     intervalMs: 16,
     send: (event) => {
-      broadcastToWindows([mainWindow], ipcChannels.terminalOutput, event, {
-        include: (_window, index) => index === 0
-      });
+      if (mainWindow?.webContents.id === event.ownerId) sendToWindow(mainWindow, ipcChannels.terminalOutput, event);
     }
   });
   kernel.subscribeEvent<TerminalSessionOutputEvent>(terminalSessionOutputEventType, (event) => {
@@ -432,9 +437,7 @@ async function createWindow(): Promise<void> {
   });
   kernel.subscribeEvent<TerminalSessionExitEvent>(terminalSessionExitEventType, (event) => {
     terminalOutputBatcher.flush();
-    broadcastToWindows([mainWindow], ipcChannels.terminalExit, event.payload, {
-      include: (_window, index) => index === 0
-    });
+    if (mainWindow?.webContents.id === event.payload.ownerId) sendToWindow(mainWindow, ipcChannels.terminalExit, event.payload);
   });
   kernel.subscribeEvent<BuiltinSkillsStatus>(builtinSkillsUpdatedEventType, (event) => {
     broadcastToWindows([mainWindow], ipcChannels.skillsUpdated, event.payload, {

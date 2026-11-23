@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import {RocDomainError} from '../../services/errors';
 
 import {
   closedResultSchema,
@@ -31,6 +32,9 @@ import {
   gitPushResultSchema,
   gitPushRequestSchema,
   gitStatusResultSchema,
+  terminalSessionAttachmentSchema,
+  terminalSessionAttachRequestSchema,
+  terminalSessionDetachRequestSchema,
   terminalSessionCloseRequestSchema,
   terminalSessionCreateRequestSchema,
   terminalSessionInputRequestSchema,
@@ -101,7 +105,9 @@ const workspaceCapabilityDescriptors = [
   descriptor('files.streamPdfPreviewResource', relativePathRequestSchema, z.custom<Response>()),
   // 追加到末尾：registerFileCapabilities / git / terminal 都按位置下标切分，插在中间会静默错位。
   descriptor('files.searchByName', fileNameSearchRequestSchema, fileNameSearchResultSchema),
-  descriptor('git.cancel', gitCancelRequestSchema, z.boolean())
+  descriptor('git.cancel', gitCancelRequestSchema, z.boolean()),
+  descriptor('terminal.attachSession', terminalSessionAttachRequestSchema, terminalSessionAttachmentSchema),
+  descriptor('terminal.detachSession', terminalSessionDetachRequestSchema, closedResultSchema)
 ] as const satisfies readonly CapabilityDescriptor[];
 
 /**
@@ -120,6 +126,7 @@ export type WorkspacePluginOptions = {
 export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): RocPlugin {
   let terminalService: TerminalSessionService | null = null;
   let workspaceChangeWatcher: WorkspaceChangeWatcherService | null = null;
+  let unsubscribeTerminalOwnerClosed: EventSubscription | null = null;
   let unsubscribeTerminalOutput: EventSubscription | null = null;
   let unsubscribeTerminalExit: EventSubscription | null = null;
   let unsubscribePathStructureChange: EventSubscription | null = null;
@@ -164,7 +171,18 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
         }
         fileService.invalidateFileNameSnapshot(payload.workspacePath, payload.reason);
       });
-      terminalService = new TerminalSessionService(paths, workspaceService);
+      terminalService = new TerminalSessionService(paths, workspaceService, (projectId, workspacePath) => {
+        if (projectId === null) return;
+        const project = context.database.getConnection().prepare(
+          'SELECT workspace_path, status FROM research_projects WHERE id = ?'
+        ).get(projectId) as {workspace_path: string | null; status: string} | undefined;
+        if (project === undefined || project.workspace_path !== workspacePath || project.status === 'archived') {
+          throw new RocDomainError({code:'terminal_project_workspace_mismatch', message:'项目已归档或工作目录已变更，无法连接此终端。', category:'permission', retryable:false});
+        }
+      });
+      unsubscribeTerminalOwnerClosed = context.eventBus.subscribe<number>('terminal.owner.closed', event => {
+        terminalService?.closeOwner(event.payload);
+      });
       unsubscribeTerminalOutput = terminalService.onOutput((payload) => {
         void context.eventBus.publish({
           type: terminalSessionOutputEventType,
@@ -204,7 +222,7 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
         cancelDescriptor: workspaceCapabilityDescriptors[26],
         onWorkspacePathsChanged: (workspacePath, reason) => fileService.invalidateFileNameSnapshot(workspacePath, reason)
       });
-      registerTerminalCapabilities(context, workspaceCapabilityDescriptors.slice(20, 24), terminalService);
+      registerTerminalCapabilities(context, [...workspaceCapabilityDescriptors.slice(20, 24), ...workspaceCapabilityDescriptors.slice(27, 29)], terminalService);
       context.capabilities.register(pluginId, workspaceCapabilityDescriptors[24], async (input) =>
         await fileService.streamPdfPreviewResource((input as { relativePath: string }).relativePath)
       );
@@ -213,6 +231,8 @@ export function createWorkspacePlugin(options: WorkspacePluginOptions = {}): Roc
       );
     },
     shutdown: async () => {
+      unsubscribeTerminalOwnerClosed?.();
+      unsubscribeTerminalOwnerClosed = null;
       if (unsubscribeTerminalOutput !== null) {
         unsubscribeTerminalOutput();
       }

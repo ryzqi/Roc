@@ -51,6 +51,7 @@ import {
 } from '../../shared/ipc';
 import type { IpcResult } from '../../shared/types';
 import { wrapIpc } from '../services/errors';
+import {withTerminalOwner} from '../services/terminal-owner-context';
 import type { TimedHandle } from './ipc-common';
 
 export type PluginCapabilityInvoker = {
@@ -79,6 +80,9 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker,
       }
       return await wrapIpc(async () => {
         const input = transformInput(target.inputTransform, args);
+        if (target.capabilityName.startsWith('terminal.')) {
+          return withTerminalOwner(windowId, () => invoker.invokeCapability(target.capabilityName, input));
+        }
         if (target.capabilityName === 'research.wiki.save' || target.capabilityName === 'research.wiki.rollback') {
           const request = target.capabilityName === 'research.wiki.save' ? wikiSaveSchema.parse(input) : wikiRollbackSchema.parse(input);
           return withResearchHumanContext({capability: target.capabilityName, projectId: request.projectId, windowId},

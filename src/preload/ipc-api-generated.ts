@@ -619,6 +619,8 @@ export const rocApi: RocPreloadApi = {
     writeInput: (...args) => ipcRenderer.invoke(ipcChannels.terminalWriteInput, ...args),
     resize: (...args) => ipcRenderer.invoke(ipcChannels.terminalResize, ...args),
     closeSession: (...args) => ipcRenderer.invoke(ipcChannels.terminalCloseSession, ...args),
+    attachSession: (...args) => ipcRenderer.invoke(ipcChannels.terminalAttachSession, ...args),
+    detachSession: (...args) => ipcRenderer.invoke(ipcChannels.terminalDetachSession, ...args),
     onOutput: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
       ipcRenderer.on(ipcChannels.terminalOutput, listener);

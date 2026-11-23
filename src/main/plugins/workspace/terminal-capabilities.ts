@@ -1,4 +1,6 @@
 import type {
+  TerminalSessionAttachRequest,
+  TerminalSessionDetachRequest,
   TerminalSessionCloseRequest,
   TerminalSessionCreateRequest,
   TerminalSessionInputRequest,
@@ -28,4 +30,8 @@ export function registerTerminalCapabilities(
   context.capabilities.register(pluginId, descriptors[3], async (input) =>
     terminalService.closeSession(input as TerminalSessionCloseRequest)
   );
+  context.capabilities.register(pluginId, descriptors[4], async input =>
+    terminalService.attachSession(input as TerminalSessionAttachRequest));
+  context.capabilities.register(pluginId, descriptors[5], async input =>
+    terminalService.detachSession(input as TerminalSessionDetachRequest));
 }

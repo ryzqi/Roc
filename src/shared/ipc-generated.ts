@@ -533,6 +533,8 @@ export const ipcChannels = {
   terminalWriteInput: 'roc:terminal:write-input',
   terminalResize: 'roc:terminal:resize',
   terminalCloseSession: 'roc:terminal:close-session',
+  terminalAttachSession: 'roc:terminal:attach-session',
+  terminalDetachSession: 'roc:terminal:detach-session',
   rtkStatus: 'roc:rtk:status',
   shellExecute: 'roc:shell:execute',
   shellConfirm: 'roc:shell:confirm',
@@ -1081,6 +1083,8 @@ export const ipcRequestChannelKeys = [
   'terminalWriteInput',
   'terminalResize',
   'terminalCloseSession',
+  'terminalAttachSession',
+  'terminalDetachSession',
   'rtkStatus',
   'shellExecute',
   'shellConfirm'
@@ -1632,6 +1636,8 @@ export const ipcRequestDefinitions = [
   { key: 'terminalWriteInput', channel: ipcChannels.terminalWriteInput, domain: 'terminal', method: 'writeInput', kind: 'plugin' },
   { key: 'terminalResize', channel: ipcChannels.terminalResize, domain: 'terminal', method: 'resize', kind: 'plugin' },
   { key: 'terminalCloseSession', channel: ipcChannels.terminalCloseSession, domain: 'terminal', method: 'closeSession', kind: 'plugin' },
+  { key: 'terminalAttachSession', channel: ipcChannels.terminalAttachSession, domain: 'terminal', method: 'attachSession', kind: 'plugin' },
+  { key: 'terminalDetachSession', channel: ipcChannels.terminalDetachSession, domain: 'terminal', method: 'detachSession', kind: 'plugin' },
   { key: 'rtkStatus', channel: ipcChannels.rtkStatus, domain: 'rtk', method: 'status', kind: 'plugin' },
   { key: 'shellExecute', channel: ipcChannels.shellExecute, domain: 'shell', method: 'execute', kind: 'plugin' },
   { key: 'shellConfirm', channel: ipcChannels.shellConfirm, domain: 'shell', method: 'confirm', kind: 'direct' }
@@ -2163,6 +2169,8 @@ export const pluginCapabilityMappings = [
   { domain: 'terminal', preloadMethod: 'terminal.writeInput', channel: ipcChannels.terminalWriteInput, capabilityName: 'terminal.writeInput', inputTransform: { kind: 'first' } },
   { domain: 'terminal', preloadMethod: 'terminal.resize', channel: ipcChannels.terminalResize, capabilityName: 'terminal.resize', inputTransform: { kind: 'first' } },
   { domain: 'terminal', preloadMethod: 'terminal.closeSession', channel: ipcChannels.terminalCloseSession, capabilityName: 'terminal.closeSession', inputTransform: { kind: 'first' } },
+  { domain: 'terminal', preloadMethod: 'terminal.attachSession', channel: ipcChannels.terminalAttachSession, capabilityName: 'terminal.attachSession', inputTransform: { kind: 'first' } },
+  { domain: 'terminal', preloadMethod: 'terminal.detachSession', channel: ipcChannels.terminalDetachSession, capabilityName: 'terminal.detachSession', inputTransform: { kind: 'first' } },
   { domain: 'rtk', preloadMethod: 'rtk.status', channel: ipcChannels.rtkStatus, capabilityName: 'rtk.status', inputTransform: { kind: 'none' } },
   { domain: 'shell', preloadMethod: 'shell.execute', channel: ipcChannels.shellExecute, capabilityName: 'shell.execute', inputTransform: { kind: 'first' } }
 ] as const;

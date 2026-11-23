@@ -30,8 +30,11 @@ before(async () => {
     const ok = data => ({ok: true, data});
     const contents = {'main.tex': ${JSON.stringify(formula)}, 'notes.md': ${JSON.stringify(markdown)}, 'chapters/intro.tex':'Introduction'};
     window.setWorkspaceFile=(path,content)=>{if(content===null)delete contents[path];else contents[path]=content;};
-    const snapshot = {id: 'terminal-fixture', cwd: '/synthetic', shell: '/bin/zsh', status: 'running', exitCode: null};
-    window.writes = []; window.inlineCommands = []; window.terminalCreates = []; window.terminalInputs = []; window.terminalCloses = [];
+    const snapshot = {id: 'terminal-fixture', cwd: '/synthetic', shell: '/bin/zsh', status: 'ready', exitCode: null};
+    window.writes = []; window.inlineCommands = []; window.terminalCreates = []; window.terminalInputs = []; window.terminalCloses = []; window.terminalDetaches = []; window.terminalAttaches = [];
+    let terminalOutput='', terminalSequence=0, terminalLease=0, outputListener=null, exitListener=null;
+    window.emitOutput=event=>{const startSequence=terminalSequence;terminalOutput+=event.data;terminalSequence+=event.data.length;outputListener?.({...event,attachmentId:String(terminalLease),startSequence,sequence:terminalSequence});};
+    window.emitExit=event=>exitListener?.({...event,attachmentId:String(terminalLease)});
     window.addEventListener('roc:inline-selection-command', event => window.inlineCommands.push(event.detail));
     window.compiles = []; window.exports = []; window.pdfRequests = []; window.compileMode = 'ready'; window.exportPath = null;
     window.fileListMode = 'ready'; window.fileScans = 0; window.fileReads=[]; window.includeNested=false;
@@ -75,12 +78,17 @@ before(async () => {
       },
       rtk: {status: async () => ok({binaryPath: '/rtk', configPath: '/config', teeDir: '', resourceState: 'ready', enabledForAgentCommands: true})},
       terminal: {
-        onOutput: callback => {window.emitOutput = callback; return () => {window.emitOutput = null;};},
-        onExit: callback => {window.emitExit = callback; return () => {window.emitExit = null;};},
+        onOutput: callback => {outputListener = callback; return () => {outputListener = null;};},
+        onExit: callback => {exitListener = callback; return () => {exitListener = null;};},
         createSession: async request => {window.terminalCreates.push(request); return ok({...snapshot, ...request});},
+        attachSession: async request => {window.terminalAttaches.push(request);if(terminalLease===0)window.terminalCreates.push(request);
+          return ok({session:{...snapshot,...request},attachmentId:String(++terminalLease),
+            replay:{startSequence:0,sequence:terminalSequence,data:terminalOutput,truncated:!!window.replayTruncated}});},
+        detachSession: async request => {window.terminalDetaches.push(request);return ok({closed:true});},
         resize: async request => ok({...snapshot, ...request}),
         writeInput: async request => {window.terminalInputs.push(request); return ok(true);},
-        closeSession: async request => {window.terminalCloses.push(request); return ok(true);}
+        closeSession: async request => {window.terminalCloses.push(request);
+          window.emitExit({sessionId:request.sessionId,exitCode:0}); await Promise.resolve(); return ok(true);}
       }
     }};
     const scope = {client, projectId: 'fixture', workspacePath: '/synthetic', writable: true,
@@ -95,6 +103,12 @@ before(async () => {
       window.setWritingActive=setWritingActive;
       return <ViewActivity active={writingActive}><div hidden={!writingActive} style={{height:'100%'}}><LatexPanel key={writerEpoch}/></div></ViewActivity>;
     }
+    function TerminalFixture(){
+      const [active,setActive]=useState(true);window.setTerminalActive=setActive;
+      return <ViewActivity active={active}><div hidden={!active} style={{height:'100%'}}>
+        <TerminalSessionView client={client} projectId="fixture" workspacePath="/synthetic" writable />
+      </div></ViewActivity>;
+    }
     let epoch = 0;
     window.unmount = () => flushSync(() => root.render(null));
     window.mount = mode => {
@@ -102,7 +116,7 @@ before(async () => {
       const child = mode === 'latex' ? <WritingFixture /> : mode === 'file' ?
         <FilePreview client={client} projectId="fixture" workspacePath="/synthetic" relativePath="notes.md" writable /> :
         mode === 'git' ? <GitPanel client={client} workspacePath="/synthetic" writable layout="drawer" /> :
-        <TerminalSessionView client={client} workspacePath="/synthetic" writable />;
+        <TerminalFixture />;
       flushSync(() => root.render(<MotionConfig reducedMotion="always"><LazyMotion features={domMax} strict>
         <WorkspaceScopeProvider value={scope}><main key={++epoch} style={{height: '100%', minWidth: 0}}>{child}</main></WorkspaceScopeProvider>
       </LazyMotion></MotionConfig>));
@@ -422,6 +436,35 @@ test('terminal clear preserves the connected PTY and still forwards subsequent i
   await page.evaluate(() => window.emitExit({sessionId: 'terminal-fixture', exitCode: 0}));
   await expect(page.getByTestId('terminal-clear')).toBeDisabled();
   await expect(page.getByRole('status')).toContainText('已退出');
+});
+
+test('hidden terminal releases xterm DOM and reconnects with retained output without closing its PTY', async () => {
+  await page.evaluate(() => window.mount('terminal'));
+  await expect(page.getByTestId('terminal-view')).toHaveAttribute('data-phase', 'ready');
+  const before = await page.evaluate(() => ({creates:window.terminalCreates.length,closes:window.terminalCloses.length,attaches:window.terminalAttaches.length}));
+  await page.evaluate(() => window.setTerminalActive(false));
+  await expect(page.locator('.xterm')).toHaveCount(0);
+  await page.evaluate(() => window.emitOutput({sessionId:'terminal-fixture',data:'RETAINED WHILE HIDDEN\r\n'}));
+  await page.evaluate(() => window.setTerminalActive(true));
+  await expect(page.getByTestId('terminal-view')).toHaveAttribute('data-phase', 'ready');
+  await page.waitForFunction(() => document.querySelector('.xterm-rows')?.textContent.includes('RETAINED WHILE HIDDEN'));
+  assert.deepEqual(await page.evaluate(() => ({creates:window.terminalCreates.length,closes:window.terminalCloses.length})),{creates:before.creates,closes:before.closes});
+  assert.equal(await page.evaluate(() => window.terminalAttaches.length),before.attaches+1);
+  await page.getByTestId('terminal-end').click();
+  await expect(page.getByTestId('terminal-end-confirm')).toBeVisible();
+  await page.getByTestId('terminal-end-confirm').getByRole('button',{name:'取消',exact:true}).click();
+  assert.equal(await page.evaluate(() => window.terminalCloses.length),before.closes);
+  await page.getByTestId('terminal-end').click();
+  await page.getByTestId('terminal-end-confirm').getByRole('button',{name:'结束会话',exact:true}).click();
+  await expect(page.getByTestId('terminal-view')).toHaveAttribute('data-phase','exited');
+  await expect(page.getByTestId('terminal-end-confirm')).toHaveCount(0);
+  assert.equal(await page.evaluate(() => window.terminalCloses.length),before.closes+1);
+});
+
+test('truncated terminal replay is explicit in the interface', async () => {
+  await page.evaluate(() => {window.replayTruncated=true;window.mount('terminal');});
+  await expect(page.getByTestId('terminal-replay-truncated')).toContainText('更早内容超出回放容量');
+  await page.evaluate(() => {window.replayTruncated=false;window.unmount();});
 });
 
 test('tool surfaces retain usable content space and unclipped controls in both themes', async () => {

@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { createWriteStream, mkdirSync, type WriteStream } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { userInfo } from 'node:os';
 import { EventEmitter } from 'node:events';
 import { spawn } from 'node-pty';
 import type {
+  TerminalSessionAttachment,
+  TerminalSessionAttachRequest,
+  TerminalSessionDetachRequest,
   TerminalSessionCloseRequest,
   TerminalSessionCreateRequest,
   TerminalSessionExitEvent,
@@ -16,10 +19,21 @@ import type {
 import { RocDomainError } from './errors';
 import type { RocPaths } from './paths';
 import type { WorkspaceService } from './workspace-service';
+import {terminalOwner} from './terminal-owner-context';
 
 type PtyInstance = ReturnType<typeof spawn>;
 
+export const TERMINAL_REPLAY_LIMIT = 256 * 1024;
+const MAX_OWNER_SESSIONS = 16;
+
 type SessionRecord = {
+  owner: number;
+  projectId: string | null;
+  workspacePath: string;
+  attachmentId: string | null;
+  attached: boolean;
+  sequence: number;
+  output: string;
   logStream: WriteStream;
   logStreamClosed: boolean;
   pausedForLog: boolean;
@@ -33,13 +47,19 @@ export class TerminalSessionService {
 
   constructor(
     private readonly paths: RocPaths,
-    private readonly workspaceService: WorkspaceService
+    private readonly workspaceService: WorkspaceService,
+    private readonly validateProject: (projectId: string | null, workspacePath: string) => void = () => {}
   ) {
     this.events.setMaxListeners(100);
   }
 
   createSession(request: TerminalSessionCreateRequest): TerminalSessionSnapshot {
-    const cwd = request.cwd ?? this.workspaceService.requireWorkspace().path;
+    const workspacePath = this.workspaceService.requireWorkspace().path;
+    const cwd = resolve(request.cwd ?? workspacePath);
+    this.validateProject(request.projectId ?? null, workspacePath);
+    if ([...this.sessions.values()].filter(record => record.owner === terminalOwner()).length >= MAX_OWNER_SESSIONS) {
+      throw new RocDomainError({code:'terminal_session_limit', message:'此窗口的终端会话已达 16 个，请先结束不再使用的会话。', category:'validation', retryable:true});
+    }
     if (!this.workspaceService.isPathInsideCurrentWorkspace(cwd)) {
       throw new RocDomainError({
         code: 'terminal_session_outside_workspace',
@@ -97,6 +117,8 @@ export class TerminalSessionService {
       exitCode: null
     };
     const sessionRecord: SessionRecord = {
+      owner: terminalOwner(), projectId: request.projectId ?? null, workspacePath,
+      attachmentId: null, attached: true, sequence: 0, output: '',
       logStream,
       logStreamClosed: false,
       pausedForLog: false,
@@ -116,54 +138,101 @@ export class TerminalSessionService {
           activeRecord.pty.pause();
         }
       }
-      const payload: TerminalSessionOutputEvent = { sessionId, data };
-      this.events.emit('output', payload);
+      const startSequence = activeRecord.sequence;
+      activeRecord.sequence += data.length;
+      activeRecord.output = (activeRecord.output + data).slice(-TERMINAL_REPLAY_LIMIT);
+      // A replay never starts inside a UTF-16 surrogate pair.
+      if (/^[\uDC00-\uDFFF]/u.test(activeRecord.output)) activeRecord.output = activeRecord.output.slice(1);
+      if (activeRecord.attached) {
+        const payload: TerminalSessionOutputEvent = { sessionId, ownerId: activeRecord.owner, attachmentId: activeRecord.attachmentId,
+          startSequence, sequence: activeRecord.sequence, data };
+        this.events.emit('output', payload);
+      }
     });
     pty.onExit(({ exitCode }) => {
+      if (this.sessions.get(sessionId) !== sessionRecord) return;
       sessionRecord.snapshot = {
         ...sessionRecord.snapshot,
         status: 'exited',
         exitCode
       };
-      const payload: TerminalSessionExitEvent = { sessionId, exitCode };
-      this.events.emit('exit', payload);
+      const payload: TerminalSessionExitEvent = { sessionId, ownerId: sessionRecord.owner, attachmentId: sessionRecord.attachmentId, exitCode };
+      if (sessionRecord.attached) this.events.emit('exit', payload);
       this.closeLogStream(sessionRecord);
-      this.sessions.delete(sessionId);
     });
 
     this.sessions.set(sessionId, sessionRecord);
     return snapshot;
   }
 
+  attachSession(request: TerminalSessionAttachRequest): TerminalSessionAttachment {
+    const workspacePath = this.workspaceService.requireWorkspace().path;
+    const cwd = resolve(request.cwd ?? workspacePath);
+    this.validateProject(request.projectId ?? null, workspacePath);
+    let record = request.sessionId === undefined ? [...this.sessions.values()].find(value =>
+      value.owner === terminalOwner() && value.projectId === (request.projectId ?? null) &&
+      value.workspacePath === workspacePath && value.snapshot.cwd === cwd
+    ) : this.requireSession({...request, sessionId: request.sessionId}, true, false);
+    if (record !== undefined && record.snapshot.cwd !== cwd) throw new RocDomainError({code:'terminal_session_scope_mismatch', message:'终端连接已变更，请重新连接当前项目的终端。', category:'permission', retryable:true});
+    if (record === undefined) record = this.sessions.get(this.createSession(request).id)!;
+    record.attachmentId = randomUUID();
+    record.attached = true;
+    if (record.snapshot.status === 'ready') {
+      const cols = this.validCols(request.cols), rows = this.validRows(request.rows);
+      record.pty.resize(cols, rows);
+      record.snapshot = {...record.snapshot, cols, rows};
+    }
+    // Truncated raw streams can begin inside an ANSI control sequence. Resume
+    // only after a complete line and reset the fresh emulator before replay.
+    const truncated = record.sequence > record.output.length;
+    let data = record.output;
+    if (truncated) {
+      const line = data.indexOf('\n');
+      data = line < 0 ? '' : data.slice(line + 1);
+    }
+    return {session: record.snapshot, attachmentId: record.attachmentId,
+      replay: {startSequence: record.sequence - data.length, sequence: record.sequence, data, truncated}};
+  }
+
+  detachSession(request: TerminalSessionDetachRequest): {closed: true} {
+    const record = this.requireSession(request, false, false);
+    // Cleanup from an older view can arrive after a replacement has attached.
+    if (record.attachmentId === request.attachmentId) record.attached = false;
+    return {closed: true};
+  }
+
   writeInput(request: TerminalSessionInputRequest): { delivered: true } {
-    const record = this.requireSession(request.sessionId);
+    const record = this.requireSession(request, true);
+    if (record.snapshot.status !== 'ready' || !record.attached) throw new RocDomainError({code:'terminal_session_not_ready', message:'终端会话已经退出或当前显示已断开。', category:'validation', retryable:true});
     record.pty.write(request.data);
     return { delivered: true };
   }
 
   resize(request: TerminalSessionResizeRequest): TerminalSessionSnapshot {
-    const record = this.requireSession(request.sessionId);
-    const cols = this.validCols(request.cols);
-    const rows = this.validRows(request.rows);
-    record.pty.resize(cols, rows);
+    const record = this.requireSession(request, true);
+    const cols = this.validCols(request.cols), rows = this.validRows(request.rows);
+    if (record.snapshot.status === 'ready') record.pty.resize(cols, rows);
     record.snapshot = { ...record.snapshot, cols, rows };
     return record.snapshot;
   }
 
   closeSession(request: TerminalSessionCloseRequest): { closed: true } {
-    const record = this.requireSession(request.sessionId);
-    record.pty.kill();
-    this.closeLogStream(record);
-    this.sessions.delete(request.sessionId);
+    this.release(this.requireSession(request, false));
     return { closed: true };
   }
 
+  closeOwner(owner: number): void {
+    for (const record of this.sessions.values()) if (record.owner === owner) this.release(record);
+  }
+
   shutdown(): void {
-    for (const [sessionId, record] of this.sessions.entries()) {
-      record.pty.kill();
-      this.closeLogStream(record);
-      this.sessions.delete(sessionId);
-    }
+    for (const record of this.sessions.values()) this.release(record);
+  }
+
+  private release(record: SessionRecord): void {
+    this.sessions.delete(record.snapshot.id);
+    this.closeLogStream(record);
+    if (record.snapshot.status === 'ready') record.pty.kill();
   }
 
   onOutput(listener: (event: TerminalSessionOutputEvent) => void): () => void {
@@ -176,8 +245,8 @@ export class TerminalSessionService {
     return () => this.events.off('exit', listener);
   }
 
-  private requireSession(sessionId: string): SessionRecord {
-    const record = this.sessions.get(sessionId);
+  private requireSession(request: TerminalSessionCloseRequest, currentWorkspace: boolean, checkAttachment = true): SessionRecord {
+    const record = this.sessions.get(request.sessionId);
     if (record === undefined) {
       throw new RocDomainError({
         code: 'terminal_session_missing',
@@ -187,6 +256,12 @@ export class TerminalSessionService {
         userAction: '请重新打开终端工作台，建立新的终端会话。'
       });
     }
+    if (record.owner !== terminalOwner() || record.projectId !== (request.projectId ?? null) ||
+      (currentWorkspace && record.workspacePath !== this.workspaceService.requireWorkspace().path) ||
+      (checkAttachment && record.attachmentId !== null && record.attachmentId !== request.attachmentId)) {
+      throw new RocDomainError({code:'terminal_session_scope_mismatch', message:'终端连接已变更，请重新连接当前项目的终端。', category:'permission', retryable:true});
+    }
+    if (currentWorkspace) this.validateProject(record.projectId, record.workspacePath);
     return record;
   }
 
