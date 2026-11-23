@@ -135,18 +135,16 @@ export function LiteratureHubView({ view }: ViewProps): React.JSX.Element {
 
   /**
    * The sidebar's 导入 button lives in the same store, so a request from there has
-   * to open *this* dialog (the only one). The counter is compared against the last
-   * value seen, so a request that arrives while the hub is already mounted still
-   * opens it, and re-rendering does not re-open a dialog the user just closed.
+   * to open *this* dialog (the only one). Acknowledge it in the shared store so it
+   * survives a lazy mount, but never replays after this hub has been remounted.
    */
-  const lastImportRequest = useRef(0);
   useEffect(() => {
-    if (hubActive && store.importRequestId !== lastImportRequest.current) {
-      lastImportRequest.current = store.importRequestId;
+    if (hubActive && store.importRequestId !== 0) {
+      store.consumeImportRequest(store.importRequestId);
       setImportTab(store.importRequestTab);
       setImportOpen(true);
     }
-  }, [hubActive, store.importRequestId, store.importRequestTab]);
+  }, [hubActive, store.importRequestId, store.importRequestTab, store.consumeImportRequest]);
 
   const claims = store.claims;
   const evidence = store.evidence;

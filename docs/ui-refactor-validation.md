@@ -21,6 +21,12 @@ git diff --check
 
 本部分不改变生产 UI。当前构建、全布局与性能数字在 P0.2 记录；T1/T2/T3 外部服务、人工输入法和 VoiceOver 仍需各自验证。临时日志与截图在本轮审阅后清理。
 
+## 2026-11-23 P0 基线修复：导入请求只消费一次
+
+状态：**Verified passing**（导入请求生命周期）。全布局检查发现：从侧栏打开并关闭导入弹窗，返回项目入口，再进入同一项目，已关闭弹窗会重开并遮住发现页。原因是请求存在共享 store，而已消费标记仅存在 Hub 的局部 ref，卸载后丢失。消费确认现保存在共享 store，按请求 ID 确认，保留冷挂载前和非活动期间的新请求。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`：`node --test --test-name-pattern='sidebar import requests' tests/renderer/literature-workspace-layout.test.mjs` 修复前复现失败；修复后 `node --test tests/renderer/literature-workspace-layout.test.mjs` **5/5**，`pnpm typecheck`、`git diff --check` 通过。完整应用的返回项目路径将在 P0.2 重新构建后复跑，不以组件回归代替全布局结果。
+
 ## P0 工程基线（2026-11-20）
 
 macOS 27.2.1 arm64，Electron 45，基线提交 `dd7511a`。隔离数据根启动当天既有 dist，窗口 1320×860，原生最小 1184×640。门户、默认写作、文献、发现（雷达）、知识（RAG）五面均成功加载，无 pageerror、无页面横向溢出，阴影审计均 `cut=0`。截图检查确认默认空写作页、重复文件列表，以及文献七标签带来的多层导航。

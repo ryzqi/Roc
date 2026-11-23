@@ -201,16 +201,17 @@ export type LiteratureStore = {
   derivedError: string | null;
   reloadDerived: () => void;
   /**
-   * A request to open the import dialog, as a monotonic counter.
+   * The pending request to open the import dialog; zero means already consumed.
    *
    * The dialog lives in the canvas hub, but the 文献 tab in the sidebar has its own
-   * 导入 button, and both surfaces share this store. A counter (rather than a
-   * boolean) lets the hub react to *every* request, including two in a row, without
-   * the sidebar having to know anything about the hub's internal state.
+   * 导入 button, and both surfaces share this store. Monotonic request IDs let the
+   * hub acknowledge each request without consuming a newer one. Consumption lives
+   * here so remounting the hub cannot replay a dialog the user already closed.
    */
   importRequestId: number;
   importRequestTab: ImportTabRequest;
   requestImport: (tab?: ImportTabRequest) => void;
+  consumeImportRequest: (id: number) => void;
 };
 
 type DocumentContentResult = { run: ResearchDocumentRun; content: ResearchDocumentContent };
@@ -242,7 +243,10 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
   }, []);
   const [pending, setPending] = useState(false);
   const [parseInFlight, setParseInFlight] = useState<string | null>(null);
-  const [importRequest, setImportRequest] = useState<{ id: number; tab: ImportTabRequest }>({ id: 0, tab: 'document' });
+  const [importRequest, setImportRequest] = useState<{ id: number; tab: ImportTabRequest; pending: boolean }>({ id: 0, tab: 'document', pending: false });
+  const consumeImportRequest = useCallback((id: number): void => {
+    setImportRequest(current => current.id === id && current.pending ? {...current, pending: false} : current);
+  }, []);
   const [actionError, setActionError] = useState<string | null>(null);
   const [assistantPending, setAssistantPending] = useState(false);
   const [assistantError, setAssistantError] = useState<string | null>(null);
@@ -755,9 +759,10 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     derivedStatus: derived.status,
     derivedError: derived.error,
     reloadDerived: derived.reload,
-    importRequestId: importRequest.id,
+    importRequestId: importRequest.pending ? importRequest.id : 0,
     importRequestTab: importRequest.tab,
-    requestImport: (tab = 'document') => setImportRequest(current => ({ id: current.id + 1, tab })),
+    requestImport: (tab = 'document') => setImportRequest(current => ({ id: current.id + 1, tab, pending: true })),
+    consumeImportRequest,
     addPdfToNewItem,
     addPdfToItem,
     startParse,

@@ -18,8 +18,10 @@ before(async () => {
     import {flushSync} from 'react-dom';
     import {LiteratureHubView} from './src/renderer/literature/LiteratureHubView';
     import {LibraryList} from './src/renderer/literature/LibraryList';
+    import {useLiteratureStore} from './src/renderer/literature/use-literature-store';
     import {LiteratureScopeProvider} from './src/renderer/literature/literature-scope';
     import {WorkspaceScopeProvider} from './src/renderer/app/workspace-scope';
+    import {ViewActivity} from './src/renderer/shared/view-activity';
     import './src/renderer/styles/index.css';
     const ok=data=>({ok:true,data});
     const item={id:'paper',revision:1,archived:false,projectIds:['fixture'],updatedAt:'2026-11-20T00:00:00.000Z',
@@ -30,6 +32,7 @@ before(async () => {
     const blocks=[{id:'heading',kind:'heading',label:'Introduction',text:'Evidence and understanding',locator:'page:1',locations:[],imageAssetId:null},
       {id:'paragraph',kind:'paragraph',label:'Introduction',text:'A useful reading workspace keeps the paper in focus. '.repeat(100),locator:'page:1',locations:[],imageAssetId:null}];
     const client={api:{research:{
+      listLibrary:async()=>ok([item,second]),wikiSnapshot:async()=>ok({claims:[],sources:[]}),
       getModelsStatus:async()=>ok({ready:false,error:null,models:[],downloading:false,selectedPack:'compact'}),
       listAcquisition:async()=>ok({jobs:[],total:0,nextOffset:null}),onLibraryChanged:()=>()=>{},
       resolveDocumentParse:async()=>ok(paperDocument),
@@ -40,12 +43,18 @@ before(async () => {
     }}};
     const scope={client,projectId:'fixture',workspacePath:'/synthetic',writable:true,workspaceStatus:'ready',workspaceError:null,openFileInCanvas(){}};
     function Harness(){
+      const sharedStore=useLiteratureStore(client,'fixture');
       const [selectedId,setSelected]=useState('paper');
       const [view,setView]=useState('library');
+      const [hubMounted,setHubMounted]=useState(true);
+      const [hubActive,setHubActive]=useState(true);
       const [contextDrawerOpen,setContextDrawerOpen]=useState(false);
       const [literatureRequest,setLiteratureRequest]=useState(null);
       const requestNonce=useRef(0);
       window.selectWorkspace=setView;
+      window.setHubMounted=setHubMounted;
+      window.setHubActive=setHubActive;
+      window.requestImport=sharedStore.requestImport;
       window.setContextDrawerOpen=setContextDrawerOpen;
       const openLiterature=target=>{
         if(target.kind==='reader')setSelected(target.libraryItemId??selectedId);
@@ -54,8 +63,8 @@ before(async () => {
       };
       window.openObject=openLiterature;
       const selected=selectedId==='paper'?item:second;
-      const store={client,projectId:'fixture',items:[item,second],selected,selectedId,documents:selectedId==='paper'?[paperDocument]:[],
-        status:'ready',selectedStatus:'ready',query:'',includeArchived:false,importRequestId:0,
+      const store={...sharedStore,client,projectId:'fixture',items:[item,second],selected,selectedId,documents:selectedId==='paper'?[paperDocument]:[],
+        status:'ready',selectedStatus:'ready',query:'',includeArchived:false,
         claims:Array.from({length:3},(_,i)=>({id:'c-'+i,content:'Claim '+i,status:'supported',evidenceIds:['shared']})),
         evidence:[{id:'shared',title:'Shared evidence',locator:'page:1',sourceType:'file',sourceId:'unloaded'}],derivedStatus:'ready',derivedError:null,
         action:{pending:false,error:null},assistant:{pending:false,error:null},parseInFlight:null,
@@ -65,8 +74,8 @@ before(async () => {
         consumeLiteratureRequest:nonce=>setLiteratureRequest(current=>current?.nonce===nonce?null:current)}}><LiteratureScopeProvider value={store}>
           <div style={{display:'flex',height:'100%',minWidth:0}}>
             {contextDrawerOpen?<aside data-testid="fixture-context-library" style={{width:220,flexShrink:0}}><LibraryList compact
-              onOpenItem={id=>openLiterature({kind:'reader',libraryItemId:id})} onRequestImport={()=>{}}/></aside>:null}
-            <div style={{flex:1,minWidth:0}}><LiteratureHubView view={view} projectId="fixture"/></div>
+              onOpenItem={id=>openLiterature({kind:'reader',libraryItemId:id})} onRequestImport={()=>sharedStore.requestImport()}/></aside>:null}
+            <div style={{flex:1,minWidth:0}}>{hubMounted?<ViewActivity active={hubActive}><LiteratureHubView view={view} projectId="fixture"/></ViewActivity>:null}</div>
           </div>
         </LiteratureScopeProvider></WorkspaceScopeProvider>;
     }
@@ -199,4 +208,40 @@ test('sidebar and canvas share one visible literature list without losing local 
     await expect(importer).toHaveCount(1);
     await expect(page.getByTestId('literature-hub-import')).toBeVisible();
   }
+});
+
+test('sidebar import requests open once across hub remounts and wait for an active canvas',async()=>{
+  const dialog=page.getByTestId('literature-import-dialog');
+  await page.evaluate(()=>window.setContextDrawerOpen(true));
+  await page.getByTestId('fixture-context-library').getByTestId('literature-import-open').click();
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+
+  // The shell retains the shared store while leaving and reentering a project.
+  await page.evaluate(()=>window.setHubMounted(false));
+  await expect(page.getByTestId('literature-hub')).toHaveCount(0);
+  await page.evaluate(()=>{window.selectWorkspace('discover');window.setHubMounted(true);});
+  await expect(page.getByTestId('literature-hub')).toBeVisible();
+  await expect(dialog).toBeHidden();
+  await page.getByTestId('literature-subview-search').click();
+
+  // A sidebar request can precede the lazy canvas's first mount.
+  await page.evaluate(()=>window.setHubMounted(false));
+  await expect(page.getByTestId('literature-hub')).toHaveCount(0);
+  await page.evaluate(()=>window.requestImport('doi'));
+  await page.evaluate(()=>window.setHubMounted(true));
+  await expect(dialog).toBeVisible();
+  await expect(page.getByTestId('literature-import-tab-doi')).toHaveAttribute('aria-selected','true');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+
+  await page.evaluate(()=>window.setHubActive(false));
+  await page.evaluate(()=>window.requestImport('document'));
+  await expect(dialog).toBeHidden();
+  await page.evaluate(()=>window.setHubActive(true));
+  await expect(dialog).toBeVisible();
+  await expect(page.getByTestId('literature-import-tab-document')).toHaveAttribute('aria-selected','true');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
 });
