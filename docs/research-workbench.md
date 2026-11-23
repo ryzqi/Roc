@@ -1,13 +1,13 @@
 # 科研工作台
 
 Roc 默认打开**项目门户**（`page=research`，未选项目）。进入某一个研究项目后才打开该项目的**三栏工作台**。
-活动栏提供总览与发现、文献与知识、论文写作、会话与任务四个目的地。左侧上下文随目的地变化，栏序为左栏、助手、画布，助手按需打开。1360px 起可同时内联三个面板；1100–1359px 仅左侧上下文改为覆盖抽屉；更窄时助手也使用覆盖抽屉。
+活动栏提供总览与发现、文献与知识、论文写作、会话与任务四个目的地。左侧上下文随目的地变化，栏序为左栏、中央画布、右侧助手。1440px 起且画布仍有 760px 时可内联三个面板；1100–1439px 保留左栏、助手按需覆盖；更窄时左栏也使用抽屉。打开画布对象会关闭覆盖助手，保留会话与输入草稿。
 
 术语边界见 [CONTEXT.md](../CONTEXT.md)。
 
 ## 入口
 
-- 壳：`src/renderer/app/AppShell.tsx`（顶栏 + 活动栏 + 上下文 + 助手 + 画布）
+- 壳：`src/renderer/app/AppShell.tsx`（顶栏 + 活动栏 + 上下文 + 画布 + 右侧助手）
 - 三栏弹性与窄窗抽屉：`src/renderer/app/WorkspaceLayout.tsx`
 - 顶栏 `src/renderer/shell/WindowChrome.tsx`；左侧 `src/renderer/shell/ActivityRail.tsx`、`src/renderer/shell/ContextDrawer.tsx`；
   画布 `src/renderer/canvas/WorkspaceCanvas.tsx`；助手 `src/renderer/assistant/AssistantPanel.tsx`
@@ -102,7 +102,7 @@ LaTeX 画布按可用宽度切换文件目录与文件选择器，可筛选文�
 ## 助手与阶段
 
 研究助手是**唯一执行入口**（[ADR 0020](adr/0020-conversation-drives-stages.md)）。它在助手列
-（`assistant-panel`；小于 1100px 时为抽屉 `assistant-drawer`，⌘L / `titlebar-toggle-assistant` 开关），
+（`assistant-panel`；小于 1440px 或画布宽度不足时为抽屉 `assistant-drawer`，⌘L / `titlebar-toggle-assistant` 开关），
 拿到的科研工具按当前项目绑定（`src/main/plugins/agent/research-tools.ts`；工具名与权限的唯一来源是
 `RESEARCH_TOOL_DESCRIPTORS`）：
 

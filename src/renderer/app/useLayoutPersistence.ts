@@ -6,11 +6,11 @@ import {
 } from './ui-state';
 
 export const ACTIVITY_RAIL_WIDTH = 52;
-export const CANVAS_MIN_WIDTH = 520;
+export const CANVAS_MIN_WIDTH = 760;
 const REVIEW_WIDTH = 420;
 
 export function layoutModeForWidth(width: number): 'wide' | 'balanced' | 'drawers' {
-  return width >= 1360 ? 'wide' : width >= 1100 ? 'balanced' : 'drawers';
+  return width >= 1440 ? 'wide' : width >= 1100 ? 'balanced' : 'drawers';
 }
 
 export type LayoutPersistence = ReturnType<typeof useLayoutPersistence>;
@@ -26,6 +26,8 @@ export function useLayoutPersistence(preset: LayoutPreset): {
   drawerOpen: boolean;
   assistantWidth: number;
   assistantMaxWidth: number;
+  assistantFloating: boolean;
+  drawerFloating: boolean;
   setDrawerOpen: (open: boolean) => void;
   toggleDrawer: () => void;
   resizeDrawer: (width: number) => void;
@@ -43,12 +45,16 @@ export function useLayoutPersistence(preset: LayoutPreset): {
   const [wideOverride, setWideOverride] = useState<{ preset: LayoutPreset; open: boolean } | null>(null);
   const [floatingOpen, setFloatingOpen] = useState(false);
   const mode = layoutModeForWidth(windowWidth);
-  const drawerOpen = mode === 'wide'
+  const drawerOpen = mode !== 'drawers'
     ? (wideOverride?.preset === preset ? wideOverride.open : preset !== 'review' && !collapsed)
     : floatingOpen;
-  const drawerInline = mode === 'wide' && drawerOpen;
+  const visibleDrawerWidth = Math.min(drawerWidth, Math.max(SIDEBAR_WIDTH.min, windowWidth - ACTIVITY_RAIL_WIDTH - CANVAS_MIN_WIDTH));
+  const drawerInline = mode !== 'drawers' && drawerOpen;
   const assistantMaxWidth = Math.max(ASSISTANT_WIDTH.min,
-    windowWidth - ACTIVITY_RAIL_WIDTH - CANVAS_MIN_WIDTH - (drawerInline ? drawerWidth : 0));
+    windowWidth - ACTIVITY_RAIL_WIDTH - CANVAS_MIN_WIDTH - (drawerInline ? visibleDrawerWidth : 0));
+  const requestedAssistantWidth = preset === 'review' ? reviewWidth : assistantWidth;
+  const assistantFloating = mode !== 'wide' ||
+    windowWidth - ACTIVITY_RAIL_WIDTH - (drawerInline ? visibleDrawerWidth : 0) - requestedAssistantWidth < CANVAS_MIN_WIDTH;
 
   useEffect(() => {
     const onResize = (): void => {
@@ -68,7 +74,7 @@ export function useLayoutPersistence(preset: LayoutPreset): {
   }, [drawerWidth, assistantWidth]);
 
   const setDrawerOpen = (open: boolean): void => {
-    if (mode === 'wide') {
+    if (mode !== 'drawers') {
       setWideOverride({ preset, open });
       if (preset !== 'review') {
         setCollapsed(!open);
@@ -90,8 +96,9 @@ export function useLayoutPersistence(preset: LayoutPreset): {
   };
 
   return {
-    mode, preset, drawerWidth, drawerOpen,
-    assistantWidth: clamp(preset === 'review' ? reviewWidth : assistantWidth, ASSISTANT_WIDTH.min, assistantMaxWidth),
+    mode, preset, drawerWidth: visibleDrawerWidth, drawerOpen,
+    drawerFloating: mode === 'drawers', assistantFloating,
+    assistantWidth: clamp(requestedAssistantWidth, ASSISTANT_WIDTH.min, assistantFloating ? 520 : assistantMaxWidth),
     assistantMaxWidth,
     setDrawerOpen,
     toggleDrawer: () => setDrawerOpen(!drawerOpen),

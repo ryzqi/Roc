@@ -79,6 +79,8 @@ export type WorkspaceScope = {
   tool: WorkbenchTool | null;
   openTool: (tool: WorkbenchTool | null) => void;
   openTasks: (taskId?: string) => void;
+  /** Open the current project's composer without starting a run. */
+  openAssistant: () => void;
   openReviewInspector: OpenReviewInspector;
   openArtifact: OpenResearchArtifact;
 };

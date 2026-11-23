@@ -5,7 +5,7 @@ import { ResizableDivider } from '../shell/ResizableDivider';
 import { OverlayFocusRestore, useOverlayBehavior } from '../shell/use-overlay-behavior';
 import { ViewActivity } from '../shared/view-activity';
 import { ASSISTANT_WIDTH, SIDEBAR_WIDTH } from './ui-state';
-import { ACTIVITY_RAIL_WIDTH, CANVAS_MIN_WIDTH, type LayoutPersistence } from './useLayoutPersistence';
+import { ACTIVITY_RAIL_WIDTH, type LayoutPersistence } from './useLayoutPersistence';
 
 function WorkspacePane({ open, floating, inactive = false, side, title, testId, trigger, width, onClose, children }: {
   open: boolean;
@@ -57,8 +57,7 @@ export function WorkspaceLayout({ layout, assistantOpen, onCloseAssistant, activ
   canvas: ReactNode;
   assistant: ReactNode;
 }): React.JSX.Element {
-  const drawerFloating = layout.mode !== 'wide';
-  const assistantFloating = layout.mode === 'drawers';
+  const { drawerFloating, assistantFloating } = layout;
   const drawerOverlay = drawerFloating && layout.drawerOpen;
   const assistantVisible = assistantOpen && !(assistantFloating && drawerOverlay);
   const assistantOverlay = assistantFloating && assistantVisible;
@@ -67,24 +66,24 @@ export function WorkspaceLayout({ layout, assistantOpen, onCloseAssistant, activ
     data-layout-mode={layout.mode} data-layout-preset={layout.preset}
     style={{ '--drawer-w': `${layout.drawerWidth}px`, '--assistant-w': `${layout.assistantWidth}px` } as CSSProperties}>
     {activityRail}
-    <WorkspacePane open={layout.drawerOpen} floating={drawerFloating} side="start" title="项目上下文"
+    <WorkspacePane open={layout.drawerOpen} floating={drawerFloating} inactive={assistantOverlay} side="start" title="项目上下文"
       testId="sidebar" trigger="titlebar-toggle-sidebar" width="var(--drawer-w)" onClose={closeDrawer}>
       {contextDrawer}
     </WorkspacePane>
     {!drawerFloating && layout.drawerOpen ? <ResizableDivider ariaLabel="调整左栏宽度" value={layout.drawerWidth}
       min={SIDEBAR_WIDTH.min} max={SIDEBAR_WIDTH.max} onResize={layout.resizeDrawer} onReset={layout.resetDrawer}
       testId="divider-sidebar" /> : null}
-    <WorkspacePane open={assistantVisible} floating={assistantFloating} inactive={drawerOverlay} side="end" title="研究助手"
-      testId="assistant" trigger="titlebar-toggle-assistant" width={assistantFloating ? '420px' : 'var(--assistant-w)'} onClose={onCloseAssistant}>
-      {assistant}
-    </WorkspacePane>
-    {!assistantFloating && assistantVisible && !drawerOverlay ? <ResizableDivider ariaLabel="调整助手宽度" value={layout.assistantWidth}
-      min={ASSISTANT_WIDTH.min} max={layout.assistantMaxWidth} onResize={layout.resizeAssistant} onReset={layout.resetAssistant}
-      testId="divider-assistant" /> : null}
-    <main id="roc-main" tabIndex={-1} className="flex flex-1 flex-col" data-testid="canvas-column"
-      inert={drawerOverlay || assistantOverlay} style={{ minWidth: layout.mode === 'drawers' ? 0 : CANVAS_MIN_WIDTH }}>
+    <main id="roc-main" tabIndex={-1} className="flex min-w-0 flex-1 flex-col" data-testid="canvas-column"
+      inert={drawerOverlay || assistantOverlay}>
       {canvas}
     </main>
+    {!assistantFloating && assistantVisible && !drawerOverlay ? <ResizableDivider ariaLabel="调整助手宽度" value={layout.assistantWidth}
+      min={ASSISTANT_WIDTH.min} max={layout.assistantMaxWidth} onResize={layout.resizeAssistant} onReset={layout.resetAssistant}
+      growToward="start" testId="divider-assistant" /> : null}
+    <WorkspacePane open={assistantVisible} floating={assistantFloating} inactive={drawerOverlay} side="end" title="研究助手"
+      testId="assistant" trigger="titlebar-toggle-assistant" width="var(--assistant-w)" onClose={onCloseAssistant}>
+      {assistant}
+    </WorkspacePane>
     {drawerOverlay || assistantOverlay ? <div aria-hidden="true" className="absolute inset-y-0 end-0 bg-[var(--overlay-scrim)]"
       style={{ insetInlineStart: ACTIVITY_RAIL_WIDTH, zIndex: OVERLAY_Z_INDEX.ambient }} onClick={drawerOverlay ? closeDrawer : onCloseAssistant} /> : null}
   </div>;

@@ -182,7 +182,7 @@ export function AppShellContent({ client, windowState }: { client: RocClient; wi
   useEffect(() => {
     const geometry = layoutRef.current;
     if (route.tool === 'files') geometry.setDrawerOpen(true);
-    else if (previousTool.current === 'files' && geometry.mode !== 'wide') geometry.setDrawerOpen(false);
+    else if (previousTool.current === 'files' && geometry.drawerFloating) geometry.setDrawerOpen(false);
     previousTool.current = route.tool;
     if (route.tool !== null && isDrawerSectionId(route.tool)) {
       setManagementTab(route.tool);
@@ -261,9 +261,10 @@ export function AppShellContent({ client, windowState }: { client: RocClient; wi
   const openFirstSteps = useCallback((): void => {
     const current = routeRef.current;
     if (current.projectId === null) return;
-    navigate({...current, page: 'research', ...routeForView('overview'), tool: null}, {
+    navigate({...current, page: 'research', ...routeForView('overview'), tool: null,
+      assistantOpen: layoutRef.current.assistantFloating ? false : current.assistantOpen}, {
       mode: 'push', onNavigated: () => {
-        if (layoutRef.current.mode !== 'wide') layoutRef.current.setDrawerOpen(false);
+        if (layoutRef.current.drawerFloating) layoutRef.current.setDrawerOpen(false);
         setFirstStepsVisible(true);
         setFirstStepsRequestId(current => current + 1);
       }
@@ -283,10 +284,11 @@ export function AppShellContent({ client, windowState }: { client: RocClient; wi
     if (projectId === null) return;
     const proceed = (commitSelection?: () => void): void => {
       if (routeRef.current.projectId !== projectId) return;
-      navigate({...routeRef.current, ...routeForView(target.kind === 'concept' ? 'knowledge' : 'library'), tool: null}, {
+      navigate({...routeRef.current, ...routeForView(target.kind === 'concept' ? 'knowledge' : 'library'), tool: null,
+        assistantOpen: layoutRef.current.assistantFloating ? false : routeRef.current.assistantOpen}, {
         mode: 'push',
         onNavigated: () => {
-          if (layoutRef.current.mode !== 'wide') layoutRef.current.setDrawerOpen(false);
+          if (layoutRef.current.drawerFloating) layoutRef.current.setDrawerOpen(false);
           commitSelection?.();
           setLiteratureRequest({projectId, nonce: ++literatureRequestNonce.current, target});
           onOpened?.();
@@ -298,9 +300,10 @@ export function AppShellContent({ client, windowState }: { client: RocClient; wi
   }, [literature.select, literature.selectedId, navigate]);
 
   const openFileInCanvas = useCallback((relativePath: string): void => {
-    navigate({ ...routeRef.current, ...routeForView('writing'), openFile: relativePath, tool: null }, {
+    navigate({ ...routeRef.current, ...routeForView('writing'), openFile: relativePath, tool: null,
+      assistantOpen: layoutRef.current.assistantFloating ? false : routeRef.current.assistantOpen }, {
       onNavigated: () => {
-        layoutRef.current.setDrawerOpen(true);
+        layoutRef.current.setDrawerOpen(!layoutRef.current.drawerFloating);
         setFilePreview({ relativePath, nonce: ++previewNonceRef.current });
       }
     });
@@ -308,9 +311,10 @@ export function AppShellContent({ client, windowState }: { client: RocClient; wi
 
   const openView = useCallback((view: AppViewTarget, onNavigated?: () => void): void => {
     requestManagementEditorChange(() => {
-      navigate({ ...routeRef.current, page: 'research', ...routeForView(view), tool: null }, {
+      navigate({ ...routeRef.current, page: 'research', ...routeForView(view), tool: null,
+        assistantOpen: layoutRef.current.assistantFloating ? false : routeRef.current.assistantOpen }, {
         mode: 'push', onNavigated: () => {
-          if (layoutRef.current.mode !== 'wide') layoutRef.current.setDrawerOpen(false);
+          if (layoutRef.current.drawerFloating) layoutRef.current.setDrawerOpen(false);
           setManagementOpen(false);
           onNavigated?.();
         }
@@ -344,6 +348,16 @@ export function AppShellContent({ client, windowState }: { client: RocClient; wi
   const openSettings = useCallback((): void => {
     requestManagementEditorChange(() => {
       navigate({...routeRef.current, page: 'settings'}, {onNavigated: () => setManagementOpen(false)});
+    });
+  }, [navigate]);
+  const openAssistant = useCallback((): void => {
+    requestManagementEditorChange(() => {
+      const current = routeRef.current;
+      if (current.projectId === null) return;
+      navigate({...current, assistantOpen: true}, {onNavigated: () => {
+        if (layoutRef.current.drawerFloating) layoutRef.current.setDrawerOpen(false);
+        setManagementOpen(false);
+      }});
     });
   }, [navigate]);
 
@@ -424,7 +438,8 @@ export function AppShellContent({ client, windowState }: { client: RocClient; wi
         else openManagementSection('tasks');
       },
       openReviewInspector,
-      openArtifact
+      openArtifact,
+      openAssistant
     }),
     [
       client,
@@ -452,7 +467,8 @@ export function AppShellContent({ client, windowState }: { client: RocClient; wi
       openFirstSteps,
       dismissFirstSteps,
       openReviewInspector,
-      openArtifact
+      openArtifact,
+      openAssistant
     ]
   );
 
@@ -533,13 +549,13 @@ export function AppShellContent({ client, windowState }: { client: RocClient; wi
     if (projectId === route.projectId) return;
     navigate({ ...route, projectId, ...routeForView(DEFAULT_VIEW), openFile: null, tool: null }, {
       mode: 'push', onNavigated: () => {
-        if (layout.mode !== 'wide') layout.setDrawerOpen(false);
+        if (layout.drawerFloating) layout.setDrawerOpen(false);
       }
     });
   };
   const selectThread = (threadId: string | null): void => {
     navigate({ ...route, assistantOpen: true }, { onNavigated: () => {
-      if (layout.mode !== 'wide') layout.setDrawerOpen(false);
+      if (layout.drawerFloating) layout.setDrawerOpen(false);
       setAssistantThreadId(threadId);
     }});
   };

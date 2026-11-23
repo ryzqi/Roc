@@ -451,21 +451,21 @@ try {
       sidebarDrawer: document.querySelector('[data-testid="sidebar-drawer"]') !== null,
       assistantDrawer: document.querySelector('[data-testid="assistant-drawer"]') !== null
     }));
-    const expectedMode = viewport.width < 1100 ? 'drawers' : viewport.width < 1360 ? 'balanced' : 'wide';
+    const expectedMode = viewport.width < 1100 ? 'drawers' : viewport.width < 1440 ? 'balanced' : 'wide';
     if (layout.mode !== expectedMode) {
       throw new Error(`assistant layout mode ${layout.mode} at ${viewport.width}px; expected ${expectedMode}`);
     }
-    assert.equal(layout.sidebarColumn, expectedMode === 'wide');
+    assert.equal(layout.sidebarColumn, expectedMode !== 'drawers');
     assert.equal(layout.sidebarDrawer, false);
-    assert.equal(layout.assistantColumn, expectedMode !== 'drawers');
-    assert.equal(layout.assistantDrawer, expectedMode === 'drawers');
+    assert.equal(layout.assistantColumn, expectedMode === 'wide');
+    assert.equal(layout.assistantDrawer, expectedMode !== 'wide');
     if (layout.assistantColumn) {
       const assistant = await page.getByTestId('assistant-column').boundingBox();
       const canvas = await page.getByTestId('canvas-column').boundingBox();
-      assert.ok(assistant.x + assistant.width <= canvas.x + 1, 'assistant precedes canvas');
+      assert.ok(canvas.x + canvas.width <= assistant.x + 1, 'canvas precedes the right assistant dock');
       if (layout.sidebarColumn) {
         const sidebar = await page.getByTestId('sidebar-column').boundingBox();
-        assert.ok(sidebar.x + sidebar.width <= assistant.x + 1, 'sidebar precedes assistant');
+        assert.ok(sidebar.x + sidebar.width <= canvas.x + 1, 'sidebar precedes canvas');
       }
     }
     await capture(page, `assistant-${viewport.id}`);
@@ -487,12 +487,12 @@ try {
       const y = handle.y + handle.height / 2;
       await page.mouse.move(x, y);
       await page.mouse.down();
-      await page.mouse.move(x + 32, y);
+      await page.mouse.move(x - 32, y);
       await page.waitForFunction(width => Number(document.querySelector('[data-testid="divider-assistant"]').getAttribute('aria-valuenow')) > Number(width), initialWidth);
       await page.keyboard.press('Escape');
       await page.mouse.up();
       assert.equal(await divider.getAttribute('aria-valuenow'), initialWidth, 'Escape restores drag baseline');
-      for (let index = 0; index < 12; index += 1) await page.keyboard.press('Shift+ArrowLeft');
+      for (let index = 0; index < 12; index += 1) await page.keyboard.press('Shift+ArrowRight');
       await page.waitForFunction(() => {
         const handle = document.querySelector('[data-testid="divider-assistant"]');
         return handle.getAttribute('aria-valuenow') === handle.getAttribute('aria-valuemin');

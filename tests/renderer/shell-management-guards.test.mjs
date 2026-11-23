@@ -202,7 +202,7 @@ async function openTask(view = 'library') {
   await page.getByTestId('shell-assistant-content').waitFor();
   await page.evaluate(() => assistantEntries.onOpenTask('task-a'));
   await page.getByTestId('mgmt-task-select').waitFor();
-  await page.evaluate(() => document.querySelector('[data-testid="titlebar-toggle-assistant"]').click());
+  await expect(page.getByTestId('titlebar-toggle-assistant')).toHaveAttribute('aria-pressed', 'false');
   await content().fill('当前任务尚未保存的事实');
 }
 
@@ -250,6 +250,7 @@ test('layout choices share one trigger and opening it does not open the assistan
 
 test('overview onboarding and shortcuts never repeat the same action', async () => {
   await page.evaluate(() => {window.overviewTasks = []; mount('overview');});
+  await page.getByTestId('titlebar-toggle-assistant').click();
   const overview = page.getByTestId('overview');
   await page.getByTestId('overview-first-steps').waitFor();
   for (const name of ['检索论文', '导入 PDF', '打开写作', '问我的资料', '打开文献库']) {
@@ -277,7 +278,8 @@ test('new session has one reachable action when context and assistant share the 
     await expect(page.getByRole('button', {name: '新建会话', exact: true})).toHaveCount(1);
     await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setContentSize(1184, 900));
     await expect(page.getByTestId('workspace-layout')).toHaveAttribute('data-layout-mode', 'balanced');
-    await page.getByTestId('titlebar-toggle-sidebar').click();
+    await expect(page.getByTestId('sidebar-column')).toBeVisible();
+    await page.getByTestId('titlebar-toggle-assistant').click();
     await expect(page.getByTestId('session-new')).toBeVisible();
     await expect(page.getByRole('button', {name: '新建会话', exact: true})).toHaveCount(1);
   } finally {
@@ -446,6 +448,7 @@ test('activity and workspace task entries open the same project task canvas', as
 test('first steps can be skipped, persist only dismissal and reopen after navigation accepts',async()=>{
   const dismissedBefore=await page.evaluate(()=>window.uxMetrics().events.filter(event=>event.event==='onboarding_dismissed').length);
   await page.evaluate(()=>{resetUiState();mount('overview');});
+  await page.getByTestId('titlebar-toggle-assistant').click();
   await expect(page.getByTestId('overview-first-steps')).toBeVisible();
   await expect(page.getByTestId('overview-first-steps').locator('ol > li')).toHaveCount(3);
   await page.getByTestId('overview-first-steps-skip').click();
@@ -457,6 +460,7 @@ test('first steps can be skipped, persist only dismissal and reopen after naviga
   assert.equal(dismissal[0].surface,'overview');
 
   await page.evaluate(()=>mount('writing'));
+  await page.getByTestId('titlebar-toggle-assistant').click();
   if (!await page.getByTestId('context-help').isVisible()) await page.getByTestId('titlebar-toggle-sidebar').click();
   await expect(page.getByTestId('context-help')).toBeVisible();
   await page.evaluate(()=>setVeto('navigation',true));

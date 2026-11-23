@@ -1,5 +1,13 @@
 # UI 重构验证记录
 
+## 2026-11-23 P2.1：画布优先与右侧助手
+
+状态：**Verified passing**（几何、导航和以下回归范围）。栏序改为左栏、画布、右侧助手，默认232/344px；1440px起且画布保留760px才内联助手，1100–1439px保留左栏、助手覆盖，1099px以下双抽屉。分隔条向左扩大右侧助手，Home重置，Escape撤销；断点变化不卸载输入草稿。打开文件、文献、任务或引导会关闭覆盖助手，原导航与草稿守卫决定实际跳转。WorkspaceScope新增仅打开输入区的openAssistant命令。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`：`pnpm build`、`pnpm check:renderer-chunks`、`pnpm audit:design` 通过；`node --test --test-concurrency=1 tests/renderer/workspace-frame.test.mjs tests/renderer/page-ui.test.mjs tests/renderer/shell-management-guards.test.mjs` **19/19**。`ROC_SMOKE_TARGET=dist ROC_UI_AUDIT_DIR=/tmp/roc-ui-p2-layout-20261123 pnpm audit:layout` **771状态、2079焦点检查**通过，裁切为零，包含浅深、1184/1280/1440px及缩放对应窄窗、hover/展开/动效落点。已查看宽窗写作与右侧助手、原生最小宽暗色助手、阅读页面截图。运行使用隔离profile，截图、日志和审计临时目录已清理。
+
+首次组合16/19揭示覆盖助手阻挡画布与旧测试假设；修正对象导航后第二轮10/14，原因是旧openTask夹具再次点击助手开关，将已关闭的助手重新打开。改为断言导航后已关闭，未放宽草稿/审批/副作用断言；最终19/19通过。完整布局另包含并行开发中P3/P4的当时快照，各阶段行为验证仍单独记录。AGENTS.md在本机被忽略，其栏序说明已同步但不强制加入仓库。
+
 ## 2026-11-23 P1.3：页头、信息区与标准条目
 
 状态：**Verified passing**。`shared/page-ui.tsx` 提供 PageHeader、PageSection、原生 PageListRow，复用 EmptyState/ErrorBar；导航、选择与异步状态仍归业务所有。永久夹具覆盖正常、空、加载、错误、受限状态。
