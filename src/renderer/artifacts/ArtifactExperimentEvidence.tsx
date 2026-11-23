@@ -4,8 +4,10 @@ import type {RocClient} from '../shared/roc-client';
 import {useAsyncResource} from '../app/use-async-resource';
 import {formSecondaryButtonClass} from '../shared/form-ui';
 import {ExperimentResultReceipt} from './production/ExperimentResultReceipt';
+import {useViewSelected} from '../shared/view-activity';
 
 export function ArtifactExperimentEvidence({client,evidence}:{client:RocClient;evidence:ResearchEvidence}):React.JSX.Element {
+  const selected = useViewSelected();
   const [showOutput,setShowOutput]=useState(false);
   const trace=useAsyncResource(`experiment:evidence:${evidence.projectId}:${evidence.id}:${evidence.sourceVersion}`,
     ()=>client.api.research.getExperimentResultEvidence({projectId:evidence.projectId,evidenceId:evidence.id}),{label:'复核指标证据来源'});
@@ -28,12 +30,12 @@ export function ArtifactExperimentEvidence({client,evidence}:{client:RocClient;e
     {trace.status==='ready'&&trace.data===null?<p className="text-muted">此证据引用原始实验输出，未关联指标审核回执。</p>:null}
     {receipt==null?null:<>
       <p role="status">已复核指标 {trace.data!.metricId} 的固定结果来源。</p>
-      <ExperimentResultReceipt receipt={receipt}/>
+      {!selected ? null : <ExperimentResultReceipt receipt={receipt}/>}
       <button type="button" aria-expanded={showOutput} className={`${formSecondaryButtonClass} border-[0.5px] self-start`}
         onClick={()=>setShowOutput(value=>!value)} data-testid="artifact-experiment-evidence-output-toggle">{showOutput?'收起实际指标输出':'查看实际指标输出'}</button>
       {read.status==='loading'?<p role="status">正在读取实际指标输出…</p>:null}
       {read.error===null?null:<p role="alert" className="break-words text-[var(--st-warn)]">{read.error}</p>}
-      {read.status!=='ready'||read.data===null?null:<pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]"
+      {!selected||read.status!=='ready'||read.data===null?null:<pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]"
         data-testid="artifact-experiment-evidence-output">{read.data.content}</pre>}
     </>}
   </section>;

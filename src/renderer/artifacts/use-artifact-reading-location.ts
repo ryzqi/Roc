@@ -3,11 +3,12 @@ import type {ResearchArtifactInspectRequest} from '../../shared/schemas/research
 import type {ArtifactReadingLocations, ProductionFileLocation} from './artifact-reading-location';
 
 export function useArtifactReadingLocation(
-  request: ResearchArtifactInspectRequest,
+  request: Pick<ResearchArtifactInspectRequest, 'projectId' | 'artifactId'>,
   version: string | undefined,
   locations: ArtifactReadingLocations,
   productionOpen: boolean,
-  restoreFocus = true
+  restoreFocus = true,
+  selected = true
 ) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const productionFileRef = useRef<{version: string | undefined; location: ProductionFileLocation} | null>(null);
@@ -17,12 +18,12 @@ export function useArtifactReadingLocation(
   const scope = JSON.stringify([request.projectId, request.artifactId]);
   const saved = locations.get(scope);
   const location = saved !== undefined && saved.version === version ? saved : null;
-  const latestRef = useRef({version, productionOpen});
-  latestRef.current = {version, productionOpen};
 
   const save = (): void => {
+    // A hidden pane has no usable layout; preserve its last visible capture.
+    if (!selected) return;
     const body = bodyRef.current;
-    const current = latestRef.current;
+    const current = {version, productionOpen};
     if (body === null || current.version === undefined) return;
     const active = document.activeElement;
     locations.set(scope, {
@@ -43,6 +44,7 @@ export function useArtifactReadingLocation(
   useLayoutEffect(() => () => saveRef.current(), [scope]);
 
   useLayoutEffect(() => {
+    if (!selected) return;
     const body = bodyRef.current;
     if (body === null || location === null) return;
     // Source modules and verified files mount asynchronously. Follow actual DOM/layout
@@ -72,7 +74,7 @@ export function useArtifactReadingLocation(
       stop();
       for (const event of ['pointerdown', 'keydown', 'wheel']) body.removeEventListener(event, stop, true);
     };
-  }, [scope, version, restoreFocus]); // Restore only a verified version, with the owning surface's focus policy.
+  }, [scope, version, restoreFocus, selected]); // Restore only a verified version, with the owning surface's focus policy.
 
   return {bodyRef, location, setProductionFile, save};
 }

@@ -25,8 +25,11 @@ before(async () => {
     import {clearUiState} from './src/renderer/app/ui-state';
     clearUiState();
     window.calls=[];
+    window.protocols=[];
     const client={api:{research:{
-      listReviewProtocols:async request=>{calls.push({method:'list',request});return {ok:true,data:[]};},
+      listReviewProtocols:async request=>{calls.push({method:'list',request});return {ok:true,data:window.protocols};},
+      getReviewProtocol:async request=>{calls.push({method:'get',request});return {ok:true,data:window.protocols.find(item=>item.version.id===request.versionId)};},
+      getReviewProtocolHistory:async()=>({ok:true,data:window.protocols}),
       saveReviewProtocol:request=>{calls.push({method:'save',request});return new Promise(resolve=>{
         window.finishSave=()=>resolve({ok:false,error:{message:'Synthetic save failure'}});
       });}
@@ -38,30 +41,32 @@ before(async () => {
       const [reviewDrafts]=useState(()=>new Map());
       useReviewProtocolDraftGuard(reviewDrafts);
       const layout=useLayoutPersistence('research','project-a');
-      const close=()=>requestArtifactInspectorChange(()=>setSelection(null));
-      const open=()=>{layout.setDrawerOpen(!layout.drawerFloating);requestArtifactInspectorChange(()=>setSelection({
+      const close=()=>requestArtifactInspectorChange(()=>{setSelection(null);setAssistant(true);});
+      const open=()=>{layout.setDrawerOpen(!layout.drawerFloating);requestArtifactInspectorChange(()=>{setAssistant(false);setSelection({
         kind:'review',request:{mode:'manage',projectId:'project-a',versionId:null}
-      }));};
+      });});};
+      window.openReadonly=target=>flushSync(()=>{setAssistant(false);setSelection({kind:'review',request:{
+        mode:'readonly',projectId:'project-a',title:'固定协议',target
+      }});});
+      window.showAssistant=value=>flushSync(()=>setAssistant(value));
       window.closeDock=close;
       window.seedReviewDraft=body=>reviewDrafts.set(JSON.stringify(['project-a',null]),{
         body,deviationReason:'',reviewNote:'',editing:true,saveRequestId:crypto.randomUUID(),freezeRequestId:crypto.randomUUID()
       });
-      window.resetDock=()=>flushSync(()=>{setSelection(null);setAssistant(true);reviewDrafts.clear();layout.reset();calls=[];});
+      window.resetDock=()=>flushSync(()=>{setSelection(null);setAssistant(true);reviewDrafts.clear();readingLocations.clear();layout.reset();calls=[];window.protocols=[];});
       return <div className="flex h-full flex-col">
         <header><button data-testid="titlebar-toggle-sidebar" onClick={layout.toggleDrawer}>上下文</button>
-          <button data-testid="titlebar-toggle-assistant" onClick={()=>requestArtifactInspectorChange(()=>{
-            setSelection(null);setAssistant(value=>!value);
-          })}>助手</button></header>
+          <button data-testid="titlebar-toggle-assistant" onClick={()=>setAssistant(value=>!value)}>助手</button></header>
         <WorkspaceLayout layout={layout} assistantOpen={assistant} onCloseAssistant={()=>setAssistant(false)}
           activityRail={<nav style={{width:52,flexShrink:0}}>导航</nav>}
           contextDrawer={<button>项目文件</button>}
           canvas={<><button data-testid="canvas-open-review" onClick={open}>核查综述</button>
             <input data-testid="canvas-draft" defaultValue="正文草稿"/></>}
           assistant={<input data-testid="assistant-draft" defaultValue="助手草稿"/>}
-          inspectorOpen={selection!==null} onCloseInspector={close}
+          inspectorOpen={selection!==null&&!assistant} onCloseInspector={close}
           inspector={<ArtifactDock client={client} projectId="project-a" artifactSelection={selection} projectWritable
             artifactReadingLocations={readingLocations} reviewProtocolDrafts={reviewDrafts}
-            onCloseArtifact={()=>setSelection(null)} onOpenTask={()=>{throw Error('unexpected task navigation');}}/>}/>
+            onCloseArtifact={()=>{setSelection(null);setAssistant(true);}} onOpenTask={()=>{throw Error('unexpected task navigation');}}/>}/>
       </div>;
     }
     const root=createRoot(document.getElementById('root'));
@@ -156,7 +161,9 @@ test('pending review save blocks dock dismissal and failure retains the original
   await page.setViewportSize({width: 620, height: 900});
   await page.evaluate(body => {window.resetDock();window.seedReviewDraft(body);}, reviewProtocolBodyFixture());
   // The assistant starts open at this width; dismiss it to reach the canvas entry.
+  await expect(page.getByTestId('assistant-drawer')).toBeVisible();
   await page.keyboard.press('Escape');
+  await expect(page.getByTestId('assistant-drawer')).toHaveCount(0);
   await openReview();
   await page.getByTestId('artifact-review-new').click();
   await page.getByTestId('artifact-review-save').click();
@@ -165,10 +172,74 @@ test('pending review save blocks dock dismissal and failure retains the original
   await page.evaluate(() => window.closeDock());
   await expect(page.getByTestId('inspector-drawer')).toBeVisible();
   assert.equal(await page.evaluate(() => calls.filter(call=>call.method==='save').length), 1);
+  await page.evaluate(() => window.showAssistant(true));
+  await expect(page.getByTestId('artifact-review-save-form')).toBeHidden();
+  await page.evaluate(() => window.closeDock());
+  await expect(page.getByTestId('artifact-review-save-form')).toHaveCount(1);
   await page.evaluate(() => window.finishSave());
+  await page.evaluate(() => window.showAssistant(false));
   await expect(page.getByRole('alert')).toContainText('Synthetic save failure');
   await expect(page.getByLabel('研究问题', {exact: true})).toHaveValue(reviewProtocolBodyFixture().question);
   await expect(page.getByTestId('artifact-inspector-close')).toBeEnabled();
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('artifact-inspector')).toHaveCount(0);
+});
+
+function savedProtocol(version, body, isLatest = true) {
+  return {version:{id:'version-'+version,protocolId:'protocol-a',projectId:'project-a',version,body,
+    actor:{kind:'user',id:'fixture'},recordedAt:'2026-11-23T00:00:00.000Z',deviationReason:null},
+    versionHash:String(version).repeat(64),freeze:null,freezeHash:null,isLatest};
+}
+
+test('assistant switching retains the selected protocol version and the exact dirty editor instance', async () => {
+  await page.setViewportSize({width:1440,height:900});
+  const protocols=[savedProtocol(1,reviewProtocolBodyFixture(),false),
+    savedProtocol(2,{...reviewProtocolBodyFixture(),question:'Selected second version'})];
+  await page.evaluate(protocols=>{window.resetDock();window.protocols=protocols;},protocols);
+  await openReview();
+  await page.getByTestId('artifact-review-protocol').nth(1).click();
+  await page.getByTestId('artifact-review-revise').click();
+  const question=page.getByLabel('研究问题',{exact:true});
+  await question.fill('Retain revision of second version');
+  await question.evaluate(element=>window.protocolEditor=element);
+  const reads=await page.evaluate(()=>calls.filter(call=>call.method==='get').length);
+  await page.getByTestId('titlebar-toggle-assistant').click();
+  await expect(question).toBeHidden();
+  assert.equal(await page.evaluate(()=>!window.dispatchEvent(new Event('beforeunload',{cancelable:true}))),true);
+  await page.getByTestId('assistant-draft').fill('Continue in assistant');
+  await page.getByTestId('titlebar-toggle-assistant').click();
+  await expect(question).toHaveValue('Retain revision of second version');
+  await expect(page.getByTestId('artifact-review-protocol').nth(1)).toHaveAttribute('aria-pressed','true');
+  assert.equal(await question.evaluate(element=>element===window.protocolEditor),true);
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='get').length),reads);
+  await page.getByTestId('artifact-inspector-close').click();
+});
+
+test('hidden readonly review releases receipt DOM and restores expanded reading state', async () => {
+  await page.setViewportSize({width:1440,height:900});
+  const protocol=savedProtocol(1,{...reviewProtocolBodyFixture(),question:'Fixed protocol '.repeat(80)});
+  await page.evaluate(protocol=>{
+    window.resetDock();window.protocols=[protocol];window.openReadonly({kind:'protocol',versionId:protocol.version.id,
+      expectedVersionHash:protocol.versionHash,expectedFreezeHash:null});
+  },protocol);
+  await page.getByTestId('artifact-review-readonly-protocol').waitFor();
+  const receipt=page.locator('[data-reading-key="review-protocol-receipt"]');
+  await receipt.locator('summary').click();
+  const before=await page.getByTestId('artifact-inspector-panel').evaluate(panel=>{
+    const body=panel.querySelector('[data-testid="artifact-review"]').parentElement;
+    body.scrollTop=200;return body.scrollTop;
+  });
+  assert.ok(before>0);
+  await page.evaluate(()=>window.showAssistant(true));
+  await expect(page.getByTestId('artifact-review-readonly-protocol')).toHaveCount(0);
+  assert.equal(await page.getByTestId('artifact-review-readonly').locator('pre').count(),0);
+  await page.evaluate(()=>window.showAssistant(false));
+  await page.getByTestId('artifact-review-readonly-protocol').waitFor();
+  await page.waitForFunction(top=>{
+    const body=document.querySelector('[data-testid="artifact-review"]').parentElement;
+    return Math.abs(body.scrollTop-top)<2;
+  },before);
+  assert.equal(await receipt.evaluate(element=>element.open),true);
+  assert.equal(await page.evaluate(()=>calls.filter(call=>call.method==='get').length),1);
+  await page.getByTestId('artifact-inspector-close').click();
 });

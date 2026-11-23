@@ -29,7 +29,7 @@ function InspectorContent({client, selection, writable, readingLocations, review
       embedded={presentation === 'embedded'} readingLocations={readingLocations} onClose={close}
       onOpenTask={taskId => guard.request(() => onOpenTask(taskId))} /> :
     <LazyBoundary fallback={<p role="status">正在加载综述核查…</p>}>
-      <ReviewInspector client={client} request={selection.request} writable={writable} drafts={reviewDrafts}
+      <ReviewInspector client={client} request={selection.request} writable={writable} drafts={reviewDrafts} readingLocations={readingLocations}
         embedded={presentation === 'embedded'} onClose={close} />
     </LazyBoundary>;
 }

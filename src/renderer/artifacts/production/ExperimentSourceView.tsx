@@ -3,11 +3,13 @@ import type {ResearchProductionInput} from '../../../shared/schemas/research-pro
 import type {ResearchArtifactInspectRequest} from '../../../shared/schemas/research-artifact-inspector';
 import type {RocClient} from '../../shared/roc-client';
 import {ExperimentResults} from './ExperimentResults';
+import {useViewSelected} from '../../shared/view-activity';
 
 export function ExperimentSourceView({source,client,request,writable}: {
   source: Extract<ResearchProductionInput['source'],{kind:'experiment'}>;client: RocClient;
   request: ResearchArtifactInspectRequest;writable: boolean
 }): React.JSX.Element {
+  const selected = useViewSelected();
   const run=source.execution;
   return <section className="flex flex-col gap-2" data-testid="artifact-production-experiment">
     <h2 className="font-medium">实验执行来源</h2>
@@ -21,7 +23,7 @@ export function ExperimentSourceView({source,client,request,writable}: {
       <dt>输入 SHA-256</dt><dd className="break-all font-mono text-[length:var(--font-meta-size)]">{run.inputHash??'未记录'}</dd>
     </dl>
     <details data-reading-key="experiment-request" className="text-muted"><summary data-reading-key="experiment-request-summary" className="cursor-pointer">保存的运行参数</summary>
-      <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(run.request,null,2)}</pre>
+      {!selected ? null : <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(run.request,null,2)}</pre>}
     </details>
     <ExperimentResults client={client} run={run} request={request} writable={writable}/>
   </section>;

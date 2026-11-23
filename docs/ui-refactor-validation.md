@@ -1,5 +1,11 @@
 # UI 重构验证记录
 
+## 2026-11-23 P7.3：工件只读资源释放
+
+状态：**Verified passing**（工件生命周期范围）。隐藏检视器释放只读Markdown、JSON、来源图像、综述报告/记录与生产文件字节；编辑器、草稿、协议版本、未决保存和关闭守卫继续存活。返回按同一版本恢复展开、分页、文件选择及阅读位置，不抢当前焦点；异步文件重新按原SHA读取。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`：`node --test --test-concurrency=1 tests/renderer/artifact-dock.test.mjs tests/renderer/artifact-inspector.test.mjs tests/renderer/artifact-production.test.mjs` **52/53**。唯一失败为夹具在原生宽度变化尚未显示助手覆盖层时提前发Escape；改为等待真实覆盖层可见再关闭，`node --test --test-concurrency=1 tests/renderer/artifact-dock.test.mjs tests/renderer/authoring-tools-layout.test.mjs` **21/21**，其中Dock **5/5**。未放宽编辑器身份、保存锁、阅读位置或资源释放断言。此前全量renderer **944/944**，新变更以本段定向复验为准。文档见[工件检查器](research-artifact-inspector.md)。
+
 ## 2026-11-23 P4.4：检索快照分页与来源进度合同
 
 状态：**Verified passing**（主进程与IPC合同）。发现页可显式请求每页30条，后续页读取同一可信owner/project和7天有效期快照；最多保留本次实际获取的900条融合候选，普通Agent工具仍受原limit限制。每个来源真实完成后只向发起窗口发送只读原始记录；候选身份仅在最终融合后生成，完成顺序不改变融合排序。

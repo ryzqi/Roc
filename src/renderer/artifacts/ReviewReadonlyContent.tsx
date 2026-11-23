@@ -10,6 +10,7 @@ import {ReviewCorpusRecords} from './ReviewCorpusRecords';
 import {ReviewReportBody} from './ReviewReport';
 import {ReviewSearchPool} from './ReviewSearchPool';
 import {reviewSearchStatuses} from './ReviewSearchQuery';
+import {useViewSelected} from '../shared/view-activity';
 
 type Inspection =
   | {kind: 'protocol'; protocol: ResearchReviewProtocolInspection}
@@ -18,6 +19,7 @@ type Inspection =
   | {kind: 'report'; report: ResearchReviewReportInspection};
 
 export function ReviewReadonlyContent({client, link}: {client: RocClient; link: ResearchReviewLink}): React.JSX.Element {
+  const selected = useViewSelected();
   const read = useAsyncResource<Inspection>(`review:readonly:${JSON.stringify([link.projectId, link.target])}`, async () => {
     const {projectId, target} = link;
     switch (target.kind) {
@@ -69,16 +71,18 @@ export function ReviewReadonlyContent({client, link}: {client: RocClient; link: 
     {read.status !== 'loading' ? null : <p role="status">正在读取准确综述回执…</p>}
     {read.error === null ? null : <p role="alert" className="break-words text-[var(--st-warn)]">{read.error}</p>}
     {read.data === null || read.status === 'ready' ? null : <p className="text-muted">以下为上次已核对的回执。</p>}
-    <details><summary className="cursor-pointer text-muted">链接目标与校验依据</summary>
-      <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">
+    <details data-reading-key="review-link-target"><summary className="cursor-pointer text-muted">链接目标与校验依据</summary>
+      {!selected ? null : <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">
         {JSON.stringify({projectId: link.projectId, target: link.target}, null, 2)}
-      </pre>
+      </pre>}
     </details>
     {read.data === null ? null : <ReceiptBody key={JSON.stringify(link.target)} client={client} inspection={read.data} />}
   </section>;
 }
 
-function ProtocolBody({protocol}: {protocol: ResearchReviewProtocolInspection}): React.JSX.Element {
+function ProtocolBody({protocol}: {protocol: ResearchReviewProtocolInspection}): React.JSX.Element | null {
+  const selected = useViewSelected();
+  if (!selected) return null;
   const {body} = protocol.version;
   return <section className="flex min-w-0 flex-col gap-2" data-testid="artifact-review-readonly-protocol">
     <h3 className="font-medium whitespace-pre-wrap break-words">{body.question}</h3>
@@ -102,13 +106,13 @@ function ProtocolBody({protocol}: {protocol: ResearchReviewProtocolInspection}):
     <h4 className="font-medium">排除标准</h4>
     <ol className="list-decimal pl-5">{body.exclusionCriteria.map(criterion =>
       <li key={criterion.id} className="whitespace-pre-wrap break-words">{criterion.text}</li>)}</ol>
-    <details><summary className="cursor-pointer font-medium">分库查询 {body.databases.length}</summary>
+    <details data-reading-key="review-protocol-databases"><summary className="cursor-pointer font-medium">分库查询 {body.databases.length}</summary>
       <ul className="mt-2 flex flex-col gap-2">{body.databases.map(database => <li key={database.source}>
         <p>{database.source} 每页 {database.pageSize} 条 最多 {database.maxPages} 页</p>
         <ol className="list-decimal pl-5">{database.queries.map(query => <li key={query} className="whitespace-pre-wrap break-words">{query}</li>)}</ol>
       </li>)}</ul>
     </details>
-    <details><summary className="cursor-pointer font-medium">质量框架与提取字段</summary>
+    <details data-reading-key="review-protocol-fields"><summary className="cursor-pointer font-medium">质量框架与提取字段</summary>
       <ul className="mt-2 flex flex-col gap-1">{body.qualityAssessment.map((framework, index) => <li key={index} className="break-words">
         {framework.studyDesign} {framework.framework} {framework.version}
       </li>)}</ul>
@@ -116,7 +120,7 @@ function ProtocolBody({protocol}: {protocol: ResearchReviewProtocolInspection}):
         {field.label} {field.unit ?? '未声明单位'} {field.required ? '必填' : '可选'}
       </li>)}</ul>
     </details>
-    <details><summary className="cursor-pointer text-muted">完整协议与冻结回执</summary>
+    <details data-reading-key="review-protocol-receipt"><summary className="cursor-pointer text-muted">完整协议与冻结回执</summary>
       <pre tabIndex={0} className="max-h-96 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">
         {JSON.stringify(protocol, null, 2)}
       </pre>
@@ -125,6 +129,7 @@ function ProtocolBody({protocol}: {protocol: ResearchReviewProtocolInspection}):
 }
 
 function ReceiptBody({client, inspection}: {client: RocClient; inspection: Inspection}): React.JSX.Element {
+  const selected = useViewSelected();
   switch (inspection.kind) {
     case 'protocol': return <ProtocolBody protocol={inspection.protocol} />;
     case 'report': return <ReviewReportBody report={inspection.report} />;
@@ -134,10 +139,10 @@ function ReceiptBody({client, inspection}: {client: RocClient; inspection: Inspe
       <p data-testid="artifact-review-readonly-corpus">准确语料原始记录 {inspection.corpus.identifiedRecords}
         {' '}{inspection.corpus.searchCoverageComplete ? '查询分页覆盖完整' : '查询分页覆盖有缺口'}
         {' '}{inspection.corpus.currentProtocol ? '对应当前协议' : '协议版本已变化'}</p>
-      <details><summary className="cursor-pointer text-muted">固定查询来源与回执</summary>
-        <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">
+      <details data-reading-key="review-corpus-receipt"><summary className="cursor-pointer text-muted">固定查询来源与回执</summary>
+        {!selected ? null : <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">
           {JSON.stringify(inspection.corpus.snapshot.sources, null, 2)}
-        </pre>
+        </pre>}
       </details>
       <ReviewCorpusRecords client={client} corpus={inspection.corpus} disabled={false} onSelect={null} />
     </>;
@@ -147,6 +152,7 @@ function ReceiptBody({client, inspection}: {client: RocClient; inspection: Inspe
 function QueryBody({client, search, protocol}: {
   client: RocClient; search: ResearchReviewSearchInspection; protocol: ResearchReviewProtocolInspection
 }): React.JSX.Element {
+  const selected = useViewSelected();
   const {snapshot} = search, parameters = snapshot.parameters;
   return <section className="flex min-w-0 flex-col gap-2" data-testid="artifact-review-readonly-query">
     <h3 className="font-medium">{parameters.sources.join(' / ')} 查询回执</h3>
@@ -165,10 +171,10 @@ function QueryBody({client, search, protocol}: {
     </dl>
     {search.receipt?.errorCode == null ? null :
       <p role="alert" className="break-words text-[var(--st-warn)]">{search.receipt.errorCode}</p>}
-    <details><summary className="cursor-pointer text-muted">准确请求、来源与终态回执</summary>
-      <pre tabIndex={0} className="max-h-96 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">
+    <details data-reading-key="review-query-receipt"><summary className="cursor-pointer text-muted">准确请求、来源与终态回执</summary>
+      {!selected ? null : <pre tabIndex={0} className="max-h-96 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">
         {JSON.stringify(search, null, 2)}
-      </pre>
+      </pre>}
     </details>
     {search.receipt?.poolHash == null ? <p className="text-muted">{search.receipt === null ?
       '原始记录等待终态回执。' : '本次未产生原始记录回执。'}</p> :

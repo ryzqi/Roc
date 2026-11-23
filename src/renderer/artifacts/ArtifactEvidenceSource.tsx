@@ -4,6 +4,7 @@ import type {ResearchInspectedEvidence} from '../../shared/schemas/research-evid
 import type {RocClient} from '../shared/roc-client';
 import {formSecondaryButtonClass} from '../shared/form-ui';
 import {useArtifactEditorGuard} from './artifact-editor-guard';
+import {useViewSelected} from '../shared/view-activity';
 
 const SourceMigrations = retryableLazy(async () => ({default: (await import('./ArtifactSourceMigrations')).ArtifactSourceMigrations}));
 const SourceReplacements = retryableLazy(async () => ({default: (await import('./ArtifactSourceReplacements')).ArtifactSourceReplacements}));
@@ -13,6 +14,7 @@ const ExperimentSource = retryableLazy(async () => ({default:(await import('./Ar
 export function ArtifactEvidenceSource({client, source, canDecide, onChanged}: {
   client: RocClient; source: ResearchInspectedEvidence; canDecide: boolean; onChanged: () => void
 }): React.JSX.Element {
+  const selected = useViewSelected();
   const [showMigrations, setShowMigrations] = useState(false);
   const [showReplacements, setShowReplacements] = useState(false);
   const [showDocument, setShowDocument] = useState(false);
@@ -23,11 +25,11 @@ export function ArtifactEvidenceSource({client, source, canDecide, onChanged}: {
     <summary data-reading-key={`evidence-summary:${evidence.id}`} className="cursor-pointer break-words text-ink">{evidence.title}
       <span className="ml-2 text-muted">{source.referenceStatus === 'superseded' ? '来源引用已失效' : '已保存的来源片段'}</span>
     </summary>
-    <p className="mt-2 break-words text-muted">{evidence.locator}</p>
+    {!selected ? null : <><p className="mt-2 break-words text-muted">{evidence.locator}</p>
     <blockquote className="mt-1 whitespace-pre-wrap break-words text-ink">{evidence.excerpt}</blockquote>
     {source.invalidatedAt === null ? null : <p className="text-muted">失效时间 {source.invalidatedAt}</p>}
     <p className="break-all text-muted">来源版本 {evidence.sourceVersion}</p>
-    <p className="break-all font-mono text-[length:var(--font-meta-size)] text-muted">SHA-256 {evidence.contentHash}</p>
+    <p className="break-all font-mono text-[length:var(--font-meta-size)] text-muted">SHA-256 {evidence.contentHash}</p></>}
     {evidence.sourceType!=='experiment'?null:<>
       <button type="button" className={`${formSecondaryButtonClass} mt-2 border-[0.5px]`} aria-expanded={showExperiment}
         data-testid={`artifact-experiment-evidence-toggle-${evidence.id}`} onClick={()=>setShowExperiment(value=>!value)}>

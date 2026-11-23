@@ -10,6 +10,8 @@ import type {ArtifactReadingLocations} from './artifact-reading-location';
 import {useArtifactReadingLocation} from './use-artifact-reading-location';
 import {ArtifactEvidenceSource} from './ArtifactEvidenceSource';
 import './artifact-workspace.css';
+import {useViewSelected} from '../shared/view-activity';
+import {ArtifactReadingBoundary} from './ArtifactReadingBoundary';
 
 const StageContent = retryableLazy(async () => ({default: (await import('./ArtifactStageContent')).ArtifactStageContent}));
 const ProductionView = retryableLazy(async () => ({default: (await import('./ArtifactProductionView')).ArtifactProductionView}));
@@ -34,6 +36,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
   writable: boolean; onReviewContext: (context: ResearchGateReviewContext) => void; readingLocations: ArtifactReadingLocations;
   embedded?: boolean;
 }): React.JSX.Element {
+  const selected = useViewSelected();
   const baseline = useRef(request.expectedVersion);
   const read = useAsyncResource(`artifact:inspect:${JSON.stringify(request)}`,
     () => client.api.research.inspectArtifact({...request, expectedVersion: baseline.current}), {label: '读取科研工件'});
@@ -78,7 +81,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
   const [productionChoice,setProductionChoice] = useState<{version: string; open: boolean} | null>(null);
   const productionOpen = snapshot !== undefined && (productionChoice?.version === snapshot.version ?
     productionChoice.open : savedLocation !== undefined && savedLocation.version === snapshot.version && savedLocation.productionOpen);
-  const reading = useArtifactReadingLocation(request, snapshot?.version, readingLocations, productionOpen, !embedded);
+  const reading = useArtifactReadingLocation(request, snapshot?.version, readingLocations, productionOpen, !embedded, selected);
   const close = (): void => {if (guard.busy()) return; reading.save(); onClose();};
   const review = useAsyncResource(reviewNonce > 0 ? `gate:${JSON.stringify(request)}:${reviewNonce}` : null,
     () => {
@@ -92,7 +95,8 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
     if (result?.status === 'current') baseline.current = result.snapshot.version;
   }, [result]);
   const statuses = {draft: '草稿', approved: '已批准', superseded: '已被替代'};
-  return <ModalShell open kind="drawer" embedded={embedded} title={snapshot?.artifact.title ?? '科研工件'} onClose={close} bodyRef={reading.bodyRef}
+  return <ArtifactReadingBoundary selected={selected} onSuspend={reading.save}>
+    <ModalShell open kind="drawer" embedded={embedded} title={snapshot?.artifact.title ?? '科研工件'} onClose={close} bodyRef={reading.bodyRef}
     widthClassName="artifact-inspector-window" testId="artifact-inspector" beforeClose={() => !guard.busy()}
     closeDisabled={guard.busy()} closeOnBackdrop={false}>
     <div className="artifact-workspace flex flex-col gap-3 text-[length:var(--font-body-size)]">
@@ -162,9 +166,9 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
             snapshot.stage.status === 'waiting_approval' ? '等待人工审核' : '尚未通过'}</dd>
           <dt>快照版本</dt><dd className="break-all font-mono text-[length:var(--font-meta-size)]">{snapshot.version}</dd>
         </dl>
-        <LazyBoundary fallback={<p role="status">正在加载工件正文…</p>}>
+        {!selected ? null : <LazyBoundary fallback={<p role="status">正在加载工件正文…</p>}>
           <StageContent snapshot={snapshot} />
-        </LazyBoundary>
+        </LazyBoundary>}
         {snapshot.artifact.kind !== 'manuscript' ? null : <section className="border-t-[0.5px] border-line pt-2">
           <button type="button" className={button} disabled={planLocked} aria-expanded={collaborationOpen}
             data-testid="artifact-collaboration-toggle" onClick={() => setCollaborationOpen(value => !value)}>
@@ -318,9 +322,9 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
             onChanged={() => {reading.save(); setRelationSaved(true); read.reload();}}/>
         </LazyBoundary>
         <details data-reading-key="raw-snapshot" className="text-muted"><summary data-reading-key="raw-snapshot-summary" className="cursor-pointer">工件与来源快照原文</summary>
-          <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(snapshot, null, 2)}</pre>
+          {!selected ? null : <pre data-testid="artifact-inspector-raw-snapshot" className="mt-2 whitespace-pre-wrap break-all font-mono text-[length:var(--font-meta-size)]">{JSON.stringify(snapshot, null, 2)}</pre>}
         </details>
       </>}
     </div>
-  </ModalShell>;
+  </ModalShell></ArtifactReadingBoundary>;
 }

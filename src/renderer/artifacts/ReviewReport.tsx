@@ -4,6 +4,7 @@ import type {RocClient} from '../shared/roc-client';
 import {useAsyncResource} from '../app/use-async-resource';
 import {formSecondaryButtonClass} from '../shared/form-ui';
 import {ReviewReportEvidence} from './ReviewReportEvidence';
+import {useViewSelected} from '../shared/view-activity';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 export function ReviewReport({client, projectId, corpusId, disabled}: {
@@ -30,9 +31,11 @@ function ReportPage({label, offset, total, onOffset}: {
     <button type="button" className={button} disabled={offset + 10 >= total} onClick={() => onOffset(offset + 10)}>下一页{label}</button>
   </div>;
 }
-export function ReviewReportBody({report}: {report: ResearchReviewReportInspection}): React.JSX.Element {
+export function ReviewReportBody({report}: {report: ResearchReviewReportInspection}): React.JSX.Element | null {
+  const selected = useViewSelected();
   const {body} = report, c = body.counts;
   const [recordOffset, setRecordOffset] = useState(0), [exclusionOffset, setExclusionOffset] = useState(0), [evidenceOffset, setEvidenceOffset] = useState(0);
+  if (!selected) return null;
   const evidenceStatus = new Map(report.evidenceStatus.map(status => [status.hitId, status]));
   return <section className="flex min-w-0 flex-col gap-3" data-testid="artifact-review-report-body">
     <p className="text-muted break-all">正文 SHA-256 {report.bodyHash}</p>
@@ -50,43 +53,43 @@ export function ReviewReportBody({report}: {report: ResearchReviewReportInspecti
       <p>纳入报告 {c.includedReports} 人工声明研究 {c.includedStudies === null ? '尚未审核，未报告' : c.includedStudies}</p>
       <p className="text-muted">计数依据 PRISMA 2020 的记录、报告与研究定义。正式模板尚需确认综述类型及全部检索来源。</p>
     </section>
-    <details data-testid="artifact-review-report-basis"><summary className="cursor-pointer font-medium">准确冻结依据与协议</summary>
+    <details data-reading-key="review-report-basis" data-testid="artifact-review-report-basis"><summary className="cursor-pointer font-medium">准确冻结依据与协议</summary>
       <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify({
         basis: body.basis, protocol: body.protocol, deduplication: body.deduplication, title: body.title, fullText: body.fullText, studyGrouping: body.studyGrouping
       }, null, 2)}</pre>
     </details>
-    <details data-testid="artifact-review-report-queries"><summary className="cursor-pointer font-medium">查询附录 {body.queries.length}</summary>
+    <details data-reading-key="review-report-queries" data-testid="artifact-review-report-queries"><summary className="cursor-pointer font-medium">查询附录 {body.queries.length}</summary>
       <ol className="mt-2 flex flex-col gap-3">{body.queries.map(query => <li key={query.source.reviewSearchId} className="flex min-w-0 flex-col gap-1">
         <p className="whitespace-pre-wrap break-words">{query.search.snapshot.parameters.query}</p>
         <p className="text-muted">分库 {query.source.databaseIndex + 1} 查询 {query.source.queryIndex + 1} 原始记录 {query.source.rawRecordCount}</p>
         <p className="text-muted break-words">{query.source.status} {query.source.coverageComplete ? '分页覆盖完整' : '分页覆盖有缺口'}
           {' '}开始 {query.search.snapshot.startedAt} 结束 {query.search.receipt!.endedAt}</p>
-        <details><summary className="cursor-pointer text-muted">查询参数、来源错误与真实回执</summary>
+        <details data-reading-key={`review-report-query:${query.source.reviewSearchId}`}><summary className="cursor-pointer text-muted">查询参数、来源错误与真实回执</summary>
           <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(query, null, 2)}</pre>
         </details>
       </li>)}</ol>
     </details>
-    <details data-testid="artifact-review-report-records"><summary className="cursor-pointer font-medium">全部原始记录 {body.records.length}</summary>
+    <details data-reading-key="review-report-records" data-testid="artifact-review-report-records"><summary className="cursor-pointer font-medium">全部原始记录 {body.records.length}</summary>
       <ol start={recordOffset + 1} className="mt-2 flex flex-col gap-3">{body.records.slice(recordOffset, recordOffset + 10).map(row => <li key={row.hit.id} className="flex min-w-0 flex-col gap-1">
         <p className="break-words">{row.record.record.title}</p>
         <p className="text-muted">原始命中 {row.hit.recordIndex + 1} 年份 {row.record.record.publishedYear ?? '未报告'}</p>
-        <details><summary className="cursor-pointer text-muted">原始元数据与准确命中</summary>
+        <details data-reading-key={`review-report-record:${row.hit.id}`}><summary className="cursor-pointer text-muted">原始元数据与准确命中</summary>
           <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(row, null, 2)}</pre>
         </details>
       </li>)}</ol>
       <ReportPage label="原始记录" offset={recordOffset} total={body.records.length} onOffset={setRecordOffset} />
     </details>
-    <details data-testid="artifact-review-report-exclusions"><summary className="cursor-pointer font-medium">人工排除清单 {body.exclusions.length}</summary>
+    <details data-reading-key="review-report-exclusions" data-testid="artifact-review-report-exclusions"><summary className="cursor-pointer font-medium">人工排除清单 {body.exclusions.length}</summary>
       <ol start={exclusionOffset + 1} className="mt-2 flex flex-col gap-3">{body.exclusions.slice(exclusionOffset, exclusionOffset + 10).map(row => <li key={row.hit.id} className="flex min-w-0 flex-col gap-1">
         <p>{row.phase === 'title_abstract' ? '标题摘要排除' : '全文资格排除'} 原始命中 {row.hit.recordIndex + 1}</p>
         <p className="break-words">主原因 {row.criterion.text}</p>
-        <details><summary className="cursor-pointer text-muted">人工决定、仲裁与来源引用</summary>
+        <details data-reading-key={`review-report-exclusion:${row.hit.id}`}><summary className="cursor-pointer text-muted">人工决定、仲裁与来源引用</summary>
           <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(row, null, 2)}</pre>
         </details>
       </li>)}</ol>
       <ReportPage label="排除清单" offset={exclusionOffset} total={body.exclusions.length} onOffset={setExclusionOffset} />
     </details>
-    <details data-testid="artifact-review-report-evidence"><summary className="cursor-pointer font-medium">报告级证据表 {body.evidenceTable.length}</summary>
+    <details data-reading-key="review-report-evidence" data-testid="artifact-review-report-evidence"><summary className="cursor-pointer font-medium">报告级证据表 {body.evidenceTable.length}</summary>
       <ul className="mt-2 flex flex-col gap-3">{body.evidenceTable.slice(evidenceOffset, evidenceOffset + 10).map(row => <li key={row.hit.id}>
         <ReviewReportEvidence row={row} status={evidenceStatus.get(row.hit.id)!} />
       </li>)}</ul>

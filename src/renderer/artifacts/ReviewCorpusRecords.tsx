@@ -3,12 +3,14 @@ import type {ResearchReviewCorpusInspection} from '../../shared/schemas/research
 import type {RocClient} from '../shared/roc-client';
 import {useAsyncResource} from '../app/use-async-resource';
 import {formSecondaryButtonClass} from '../shared/form-ui';
+import {useViewSelected} from '../shared/view-activity';
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 export function ReviewCorpusRecords({client, corpus, disabled, onSelect}: {
   client: RocClient; corpus: ResearchReviewCorpusInspection; disabled: boolean;
   onSelect: ((side: 'left' | 'right', hitId: string) => void) | null
-}): React.JSX.Element {
+}): React.JSX.Element | null {
+  const selected = useViewSelected();
   const [offset, setOffset] = useState(0);
   const hits = corpus.snapshot.hits.slice(offset, offset + 10);
   const read = useAsyncResource(`review:corpus-records:${corpus.snapshotHash}:${offset}`, async () => {
@@ -22,6 +24,7 @@ export function ReviewCorpusRecords({client, corpus, disabled, onSelect}: {
     }
     return {ok: true as const, data: items};
   }, {label: '读取固定原始记录'});
+  if (!selected) return null;
   return <section className="flex min-w-0 flex-col gap-2" data-testid="artifact-review-corpus-records">
     <h3 className="font-medium">固定原始记录</h3>
     {read.status !== 'loading' ? null : <p role="status">正在读取准确原始记录…</p>}
@@ -39,7 +42,7 @@ export function ReviewCorpusRecords({client, corpus, disabled, onSelect}: {
           <button type="button" className={button} disabled={disabled} data-testid="artifact-review-record-right"
             onClick={() => onSelect('right', item.reference.id)}>选为记录 B</button>
         </div>}
-        <details><summary className="cursor-pointer text-muted">核对完整原始元数据</summary>
+        <details data-reading-key={`review-corpus-record:${item.reference.id}`}><summary className="cursor-pointer text-muted">核对完整原始元数据</summary>
           <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono" tabIndex={0}>
             {JSON.stringify(item.record, null, 2)}
           </pre>

@@ -6,6 +6,7 @@ import type {RocClient} from '../shared/roc-client';
 import {useAsyncResource} from '../app/use-async-resource';
 import {ErrorBar} from '../shell/ErrorBar';
 import {documentContentHash} from '../literature/document-content-hash';
+import {useViewSelected} from '../shared/view-activity';
 
 const PaperPdfView = retryableLazy(() => import('../literature/PaperPdfView'));
 const PaperBlockAsset = retryableLazy(() => import('../literature/PaperBlockAsset'));
@@ -14,6 +15,7 @@ const PaperBlockAsset = retryableLazy(() => import('../literature/PaperBlockAsse
 export function ArtifactDocumentSource({client, evidence, locator}: {
   client: RocClient; evidence: ResearchEvidence; locator: ResearchSourceLocator
 }): React.JSX.Element {
+  const viewSelected = useViewSelected();
   const key = JSON.stringify([evidence.projectId, evidence.id, locator]);
   const read = useAsyncResource(key, async () => {
     const resolved = await client.api.research.resolveDocumentParse({projectId: evidence.projectId, parseId: locator.parseId});
@@ -79,8 +81,8 @@ export function ArtifactDocumentSource({client, evidence, locator}: {
         className="min-w-0 focus-visible:outline-2 focus-visible:outline-focus-ring">
         <p className="break-words text-muted">{block.label}，{block.locator}</p>
         <div className={comparingAsset ? 'grid grid-cols-2 items-start gap-2' : undefined}>
-        <p className="whitespace-pre-wrap break-words text-ink">{block.text}</p>
-        {!comparingAsset ? null : <LazyBoundary fallback={<p role="status" className="text-muted">加载固定解析图像…</p>}>
+        {!viewSelected ? null : <p className="whitespace-pre-wrap break-words text-ink">{block.text}</p>}
+        {!viewSelected || !comparingAsset ? null : <LazyBoundary fallback={<p role="status" className="text-muted">加载固定解析图像…</p>}>
           <PaperBlockAsset client={client} projectId={evidence.projectId} document={loaded.document} parsed={loaded.parsed} block={block}/>
         </LazyBoundary>}
         </div>

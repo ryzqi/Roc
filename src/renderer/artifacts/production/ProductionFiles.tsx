@@ -5,6 +5,7 @@ import type {RocClient} from '../../shared/roc-client';
 import {useAsyncResource} from '../../app/use-async-resource';
 import {formSecondaryButtonClass} from '../../shared/form-ui';
 import type {ProductionFileLocation} from '../artifact-reading-location';
+import {useViewSelected} from '../../shared/view-activity';
 
 type File=ResearchProductionInput['files'][number];
 const areas: Record<File['area'],string>={input:'输入',output:'输出',log:'日志',bundle:'交付文件'};
@@ -17,15 +18,10 @@ export function ProductionFiles({client,input,request,initialLocation,onLocation
   client: RocClient;input: ResearchProductionInput;request: ResearchArtifactInspectRequest;
   initialLocation: ProductionFileLocation | null;onLocationChange: (location: ProductionFileLocation) => void
 }): React.JSX.Element {
+  const viewSelected = useViewSelected();
   const [area,setArea]=useState<File['area']>(initialLocation?.area ?? (input.source.kind==='export'?'bundle':'output'));
   const [selected,setSelected]=useState<File|null>(initialLocation?.selected ?? null);
   useEffect(()=>{onLocationChange({area,selected});},[area,selected,onLocationChange]);
-  const read=useAsyncResource(selected===null?null:`production:file:${JSON.stringify([request,selected])}`,()=>{
-    if(selected===null||request.expectedVersion===null) throw new Error('research_production_file_selection_required');
-    return client.api.research.readProductionReviewFile({projectId:request.projectId,artifactId:request.artifactId,
-      expectedVersion:request.expectedVersion,area:selected.area,path:selected.path,expectedFileHash:selected.sha256});
-  },{label:'读取生产文件'});
-  const content=read.status==='ready'?read.data:null;
   const files=input.files.filter(file=>file.area===area);
   return <section className="flex flex-col gap-2" aria-label="保存的生产文件">
     <div className="flex flex-wrap gap-1" aria-label="文件区域">
@@ -35,7 +31,7 @@ export function ProductionFiles({client,input,request,initialLocation,onLocation
           className={`${formSecondaryButtonClass} ${area===value?'bg-[var(--overlay-active)] text-ink':''}`}
           onClick={()=>{setArea(value);setSelected(null);}}>{areas[value]}</button>)}
     </div>
-    {files.length===0?<p className="text-muted">该区域没有保存的文件。</p>:<ul className="flex flex-col">
+    {!viewSelected ? null : files.length===0?<p className="text-muted">该区域没有保存的文件。</p>:<ul className="flex flex-col">
       {files.map(file=>{
         const type=extension(file.path),unsupported=['pdf','zip'].includes(type);
         return <li key={`${file.area}:${file.path}`} className="flex flex-col gap-1 border-b-[0.5px] border-line py-2">
@@ -54,6 +50,22 @@ export function ProductionFiles({client,input,request,initialLocation,onLocation
         </li>;
       })}
     </ul>}
+    {!viewSelected || selected === null ? null : <ProductionFileContent key={JSON.stringify([request, selected])}
+      client={client} request={request} file={selected} title={input.artifact.title}/>}
+  </section>;
+}
+
+/** Disposable bytes and DOM; the parent retains only the verified file selection. */
+function ProductionFileContent({client, request, file, title}: {
+  client: RocClient; request: ResearchArtifactInspectRequest; file: File; title: string
+}): React.JSX.Element {
+  const read=useAsyncResource(`production:file:${JSON.stringify([request,file])}`,()=>{
+    if(request.expectedVersion===null) throw new Error('research_production_file_selection_required');
+    return client.api.research.readProductionReviewFile({projectId:request.projectId,artifactId:request.artifactId,
+      expectedVersion:request.expectedVersion,area:file.area,path:file.path,expectedFileHash:file.sha256});
+  },{label:'读取生产文件'});
+  const content=read.status==='ready'?read.data:null;
+  return <>
     {read.status==='loading'?<p role="status">正在读取选定文件…</p>:null}
     {read.error===null?null:<div className="flex flex-col items-start gap-2">
       <p role="alert" className="break-words text-[var(--st-warn)]">{read.error}</p>
@@ -68,7 +80,7 @@ export function ProductionFiles({client,input,request,initialLocation,onLocation
         className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words font-mono text-[length:var(--font-meta-size)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-focus-ring">{content.content}</pre>:
         rasterTypes.get(extension(content.file.path))===undefined?<p className="text-muted">文件是二进制内容，当前没有对应预览类型。</p>:
           <img data-testid="artifact-production-image" className="max-h-[480px] max-w-full self-start object-contain"
-            alt={`${input.artifact.title} ${content.file.path}`} src={`data:${rasterTypes.get(extension(content.file.path))};base64,${content.content}`}/>}
+            alt={`${title} ${content.file.path}`} src={`data:${rasterTypes.get(extension(content.file.path))};base64,${content.content}`}/>}
     </section>}
-  </section>;
+  </>;
 }

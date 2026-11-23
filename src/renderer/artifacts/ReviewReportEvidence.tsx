@@ -21,7 +21,7 @@ export function ReviewReportEvidence({row, status}: {row: Row; status: Status}):
           <dd className="text-muted break-all">{field.evidence.map(ref => `Evidence ${ref.id} SHA-256 ${ref.expectedHash}`).join('\n')}</dd>
         </div>;
       })}</dl>
-      <details><summary className="cursor-pointer text-muted">字段及原文定位的完整提取</summary>
+      <details data-reading-key={`review-report-extraction:${row.hit.id}`}><summary className="cursor-pointer text-muted">字段及原文定位的完整提取</summary>
         <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(row.extraction, null, 2)}</pre>
       </details>
     </>}
@@ -29,7 +29,7 @@ export function ReviewReportEvidence({row, status}: {row: Row; status: Status}):
       <p className="font-medium">{row.qualityPlan.snapshot.request.framework.framework} {row.qualityPlan.snapshot.request.framework.version}</p>
       <p className="text-muted">{status.qualityPlan!.currentExtraction && status.qualityPlan!.referenceStatus === 'current' ?
         '质量框架对应当前提取来源' : '质量框架引用已变化'}</p>
-      <details><summary className="cursor-pointer text-muted">用户声明的框架定义</summary>
+      <details data-reading-key={`review-report-quality-plan:${row.hit.id}`}><summary className="cursor-pointer text-muted">用户声明的框架定义</summary>
         <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(row.qualityPlan, null, 2)}</pre>
       </details>
     </>}
@@ -38,7 +38,7 @@ export function ReviewReportEvidence({row, status}: {row: Row; status: Status}):
       <p>总体 {row.assessment.snapshot.request.overall.value.kind === 'judged' ? row.assessment.snapshot.request.overall.value.judgement : '无法判断'}</p>
       <p className="text-muted">{status.assessment!.currentExtraction && status.assessment!.referenceStatus === 'current' ?
         '评价对应当前提取来源' : '评价引用已变化'}</p>
-      <details><summary className="cursor-pointer text-muted">逐域判断、理由及准确证据</summary>
+      <details data-reading-key={`review-report-assessment:${row.hit.id}`}><summary className="cursor-pointer text-muted">逐域判断、理由及准确证据</summary>
         <pre tabIndex={0} className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-[length:var(--font-meta-size)] font-mono">{JSON.stringify(row.assessment, null, 2)}</pre>
       </details>
     </>}

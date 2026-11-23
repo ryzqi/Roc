@@ -28,6 +28,7 @@ before(async()=>{
     import {ArtifactInspector} from './src/renderer/artifacts/ArtifactInspector';
     import {requestArtifactInspectorChange} from './src/renderer/artifacts/artifact-interactions';
     import {requestNavigation} from './src/renderer/app/navigation-guard';
+    import {ViewActivity} from './src/renderer/shared/view-activity';
     const root=createRoot(document.getElementById('root'));
     window.disposeHarness=()=>flushSync(()=>root.render(null));
     const client={api:{research:{inspectArtifact:input=>window.inspectFromMain(input),getGateReviewContext:input=>window.readGateFromMain(input),
@@ -46,6 +47,8 @@ before(async()=>{
     function Harness({link,initialApproval}) {
       const [request,setRequest]=useState(null);
       const [embedded,setEmbedded]=useState(false);
+      const [selected,setSelected]=useState(true);
+      window.setInspectorSelected=value=>flushSync(()=>setSelected(value));
       window.setEmbeddedInspector=value=>flushSync(()=>setEmbedded(value));
       window.closeInspectorDock=()=>requestArtifactInspectorChange(()=>setRequest(null));
       const [readingLocations]=useState(()=>new Map());
@@ -66,12 +69,14 @@ before(async()=>{
             if(result.approval!==null) window.replaceApproval(result.approval);
           }).catch(error=>window.resumeError=error.message);
         }}/>
-        <div style={embedded ? {display:'flex',width:344,height:760,minHeight:0} : undefined}>
+        <button data-testid="inspector-return-focus">助手输入入口</button>
+        <div hidden={!selected} inert={!selected} style={embedded ? {display:selected?'flex':'none',width:344,height:760,minHeight:0} : undefined}>
+        <ViewActivity active={selected}>
         {request===null ? null : <ArtifactInspector key={JSON.stringify(request)} client={client}
           presentation={embedded ? 'embedded' : 'drawer'}
           selection={{kind:'stage',request,onReviewContext:context=>reviewCallback?.(context)}} writable={true}
           readingLocations={readingLocations} reviewDrafts={reviewDrafts}
-          onClose={()=>setRequest(null)} onOpenTask={taskId=>{window.tasks.push(taskId);setRequest(null);}}/>}</div></main>;
+          onClose={()=>setRequest(null)} onOpenTask={taskId=>{window.tasks.push(taskId);setRequest(null);}}/>}</ViewActivity></div></main>;
     }
     let generation=0;
      window.mount=(link,approval)=>{window.decisions=[];window.tasks=[];window.navigations=0;window.resumeResult=null;window.resumeError=null;flushSync(()=>root.render(
@@ -456,6 +461,40 @@ test('same saved version restores native source expansion reading scroll and foc
   assert.equal(await summary.evaluate(element=>element.parentElement.open),true);
   assert.deepEqual(await page.evaluate(()=>decisions),[]);
   assert.equal(f.repository.getArtifact(f.link.artifactId).status,'draft');
+});
+
+test('hidden embedded inspector releases readonly DOM and restores the same version reading position without stealing focus',async()=>{
+  await scene({long:true});
+  await page.evaluate(()=>window.setEmbeddedInspector(true));
+  await openArtifact();
+  const source=page.locator('details > summary').filter({hasText:'Original synthetic source'});
+  await source.click();
+  const raw=page.locator('[data-reading-key="raw-snapshot"]');
+  await raw.locator('summary').click();
+  await page.getByTestId('artifact-inspector-raw-snapshot').scrollIntoViewIfNeeded();
+  const before=await page.evaluate(()=>{
+    const body=document.querySelector('[data-reading-key="refresh"]').parentElement.parentElement.parentElement;
+    body.scrollTop=Math.min(240,body.scrollHeight-body.clientHeight);
+    document.querySelector('[data-testid="inspector-return-focus"]').focus({preventScroll:true});
+    return body.scrollTop;
+  });
+  assert.ok(before>0);
+  const inspectReads=reads.filter(read=>read.artifactId).length;
+  await page.evaluate(()=>window.setInspectorSelected(false));
+  assert.equal(await page.getByTestId('artifact-inspector-panel').count(),1);
+  assert.equal(await page.getByTestId('artifact-inspector-content').count(),0);
+  assert.equal(await page.getByTestId('artifact-inspector-raw-snapshot').count(),0);
+  assert.equal(await page.locator('blockquote').count(),0);
+  await page.evaluate(()=>window.setInspectorSelected(true));
+  await page.getByTestId('artifact-inspector-content').waitFor();
+  await page.waitForFunction(top=>{
+    const body=document.querySelector('[data-reading-key="refresh"]').parentElement.parentElement.parentElement;
+    return Math.abs(body.scrollTop-top)<2;
+  },before);
+  assert.equal(await source.evaluate(element=>element.parentElement.open),true);
+  assert.equal(await raw.evaluate(element=>element.open),true);
+  assert.equal(await page.getByTestId('inspector-return-focus').evaluate(element=>element===document.activeElement),true);
+  assert.equal(reads.filter(read=>read.artifactId).length,inspectReads);
 });
 
 test('real empty missing denied and damaged-source states do not become placeholder content or approval',async()=>{
@@ -1195,6 +1234,13 @@ test('embedded artifact close and dock replacement preserve real relation drafts
   assert.equal(await page.getByTestId('artifact-inspector-scrim').count(),0);
   assert.equal(await page.getByTestId('artifact-inspector-panel').getAttribute('aria-modal'),null);
   assert.equal(await page.getByTestId('artifact-inspector-panel').evaluate(element=>element.getBoundingClientRect().width),344);
+  await page.getByTestId(`artifact-relation-condition-${claim.id}`).evaluate(element=>window.relationDraftNode=element);
+  await page.evaluate(()=>window.setInspectorSelected(false));
+  assert.equal(await page.getByTestId('artifact-inspector-content').count(),0);
+  assert.equal(await page.getByTestId(`artifact-relation-condition-${claim.id}`).inputValue(),'Retain this authored qualification.');
+  assert.equal(await page.evaluate(()=>!window.dispatchEvent(new Event('beforeunload',{cancelable:true}))),true);
+  await page.evaluate(()=>window.setInspectorSelected(true));
+  assert.equal(await page.getByTestId(`artifact-relation-condition-${claim.id}`).evaluate(element=>element===window.relationDraftNode),true);
   await page.getByTestId('artifact-inspector-close').click();
   await page.getByTestId('artifact-draft-discard-panel').waitFor();
   await page.getByTestId('artifact-draft-discard-cancel').click();
@@ -1215,10 +1261,14 @@ test('embedded dock cannot dismiss a pending real relation save',async()=>{
   f.deferRelation='reviewEvidenceRelation';
   await page.getByTestId(`artifact-relation-confirm-${proposed.id}`).click();
   await page.waitForFunction(()=>document.querySelector('[data-testid="artifact-inspector-close"]').disabled);
+  await page.evaluate(()=>window.setInspectorSelected(false));
+  assert.equal(await page.getByTestId('artifact-inspector-content').count(),0);
   await page.evaluate(()=>window.closeInspectorDock());
   assert.equal(await page.getByTestId('artifact-inspector-panel').count(),1);
   assert.equal(await page.getByTestId('artifact-draft-discard-panel').count(),0);
   f.finishRelation();
+  await page.getByTestId('artifact-inspector-recapture').waitFor({state:'attached'});
+  await page.evaluate(()=>window.setInspectorSelected(true));
   await page.getByTestId('artifact-inspector-recapture').waitFor();
 });
 

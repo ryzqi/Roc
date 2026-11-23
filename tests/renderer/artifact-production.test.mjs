@@ -30,6 +30,7 @@ before(async()=>{
     import {ArtifactInspector} from './src/renderer/artifacts/ArtifactInspector';
     import {ArtifactProductionView} from './src/renderer/artifacts/ArtifactProductionView';
     import {ArtifactEditorBoundary} from './src/renderer/artifacts/artifact-editor-guard';
+    import {ViewActivity} from './src/renderer/shared/view-activity';
     const client={api:{research:Object.fromEntries(['inspectArtifact','inspectProductionReview','readProductionReviewFile','getGateReviewContext']
       .map(method=>[method,input=>window.callMain(method,input)]))}};
     const root=createRoot(document.getElementById('root'));
@@ -37,13 +38,17 @@ before(async()=>{
       const [readingLocations]=useState(()=>new Map());
       const [reviewDrafts]=useState(()=>new Map());
       const [open,setOpen]=useState(true);
+      const [selected,setSelected]=useState(true),[embedded,setEmbedded]=useState(false);
+      window.selectProduction=value=>flushSync(()=>setSelected(value));
+      window.embedProduction=()=>flushSync(()=>setEmbedded(true));
       window.reopen=()=>flushSync(()=>setOpen(true));
       return <main className="p-4"><button data-testid="artifact-reopen" onClick={()=>setOpen(true)}>重新打开工件</button>
-        {!open?null:inspector?<ArtifactInspector client={client} selection={{kind:'stage',request,onReviewContext:()=>{}}} writable={true}
+        <div hidden={!selected} inert={!selected} style={embedded?{height:760,width:344,display:selected?'flex':'none'}:undefined}><ViewActivity active={selected}>
+        {!open?null:inspector?<ArtifactInspector client={client} presentation={embedded?'embedded':'drawer'} selection={{kind:'stage',request,onReviewContext:()=>{}}} writable={true}
           readingLocations={readingLocations} reviewDrafts={reviewDrafts} onClose={()=>setOpen(false)} onOpenTask={()=>{}}/>:
           <ArtifactEditorBoundary projectId={request.projectId}>
             <ArtifactProductionView client={client} request={request} writable={true} initialLocation={null} onLocationChange={()=>{}}/>
-          </ArtifactEditorBoundary>}
+          </ArtifactEditorBoundary>}</ViewActivity></div>
       </main>;
     }
     let generation=0;
@@ -140,6 +145,35 @@ test('real draft figure uses explicit production and file reads, actual PNG dime
   assert.match(await page.getByTestId('artifact-production-text').innerText(),/group,value/u);
   assert.equal(f.db.prepare('SELECT total_changes()').pluck().get(),before);
   assert.equal(f.repository.getArtifact(f.artifactId).status,'draft');
+});
+
+test('hidden production preview releases image bytes and fences late reads while retaining the exact file selection',async()=>{
+  const f=await realScene({long:true});
+  await page.evaluate(()=>window.embedProduction());
+  await openProduction();await readPng();
+  const request=calls.at(-1).input;
+  const before=calls.filter(call=>call.method==='readProductionReviewFile').length;
+  await page.evaluate(()=>window.selectProduction(false));
+  assert.equal(await page.getByTestId('artifact-production-content').count(),0);
+  assert.equal(await page.getByTestId('artifact-production-image').count(),0);
+  assert.equal(await page.getByTestId('artifact-production-file').count(),0);
+  await page.evaluate(()=>window.selectProduction(true));
+  await page.waitForFunction(()=>document.querySelector('[data-testid="artifact-production-image"]')?.naturalWidth>0);
+  assert.equal(await file('figure.png').getAttribute('aria-pressed'),'true');
+  assert.deepEqual(calls.at(-1).input,request);
+  assert.equal(calls.filter(call=>call.method==='readProductionReviewFile').length,before+1);
+  f.defer=true;delete f.finish;
+  await file('figure.svg').click();
+  while(typeof f.finish!=='function')await new Promise(resolve=>setTimeout(resolve,5));
+  const finish=f.finish;f.defer=false;
+  await page.evaluate(()=>window.selectProduction(false));
+  finish();
+  assert.equal(await page.getByTestId('artifact-production-content').count(),0);
+  await page.evaluate(()=>window.selectProduction(true));
+  await page.getByTestId('artifact-production-text').waitFor();
+  assert.equal(await file('figure.svg').getAttribute('aria-pressed'),'true');
+  assert.match(await page.getByTestId('artifact-production-text').innerText(),/<svg/u);
+  assert.equal(await page.getByTestId('artifact-production-image').count(),0);
 });
 
 test('a source change refuses the old file version; refreshing the actual artifact clears old content and binds new reads',async()=>{
