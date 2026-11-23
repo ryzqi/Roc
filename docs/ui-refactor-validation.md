@@ -1,5 +1,13 @@
 # UI 重构验证记录
 
+## 2026-11-23 P6.4：设置布局与首个 Escape
+
+状态：**Verified passing**。设置分类宽度统一 208px，表单上限 680px；即时主题、密度和字号附影响说明及可访问描述。设置、模型表单与粘底保存继续共享原浮层和草稿守卫。
+
+此前两次设置 Escape 偶发已定位为 Radix 最高层监听器更新落后于新确认框 autofocus：父层旧监听器先消费 Escape，确认框没有关闭。新增确定性回归在首次 focusin 同步发键，修复前稳定失败。Roc 浮层归属改在 layout 阶段登记，仅纯确认框启用 window capture 按当前栈处理 Escape；设置主窗、远端模型选择器的焦点、Tab 与 Escape 仍由 Radix 管理，原生 select 先关闭自身选择层。没有增加固定等待或放宽断言。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`：`pnpm typecheck`、`node --check tests/renderer/radix-settings-dialog.test.mjs`、`git diff --check` 通过；overlay stack 单元 4/4；`node --test --test-concurrency=1 tests/renderer/radix-settings-dialog.test.mjs tests/renderer/desktop-interactions.test.mjs tests/renderer/artifact-dock.test.mjs` **58/58**，54.7 秒。包含首聚焦 Escape、原生选择层两次 Escape、放弃/重置/删除、模型及密钥、背景抽屉、内联/覆盖 Dock、输入与导航，浅深两密度及 1440/1280/1184/800/640px 无横溢出且裁切为零。系统输入法和 VoiceOver 不由这些浏览器键盘事件代替。
+
 ## 2026-11-23 P7.2：终端隐藏、恢复与进程归属
 
 状态：**Verified passing**。终端隐藏时释放 xterm DOM、尺寸观察和 IPC 订阅，主进程继续运行 PTY；按真实窗口、项目和目录恢复同一会话。输出使用有界 256 Ki UTF-16 缓冲和连接令牌，裁掉重播/实时重复区间并拒绝旧连接输入；超过容量明确提示截断。输出只发回所属窗口。显式结束需确认，窗口销毁和应用退出清理进程，项目归档/工作区变化重新校验权限。

@@ -24,6 +24,8 @@ import { OVERLAY_Z_INDEX } from '../shell/overlay-stack';
  */
 export type RadixSettingsDialogShellProps = Omit<ModalShellProps, 'kind'> & {
   descriptionId?: string;
+  /** Plain confirmations have no inner popup; they must own Escape from first autofocus. */
+  captureEscape?: boolean;
 };
 
 export function RadixSettingsDialogShell({
@@ -41,7 +43,8 @@ export function RadixSettingsDialogShell({
   descriptionId,
   closeOnBackdrop = true,
   bodyPadding = 'default',
-  layer = 'dialog'
+  layer = 'dialog',
+  captureEscape = false
 }: RadixSettingsDialogShellProps): React.JSX.Element {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const openerRef = useRef<HTMLElement | null>(null);
@@ -65,8 +68,9 @@ export function RadixSettingsDialogShell({
     onClose();
   }, [canClose, onClose]);
 
-  // Radix owns the focus trap, Escape handling, and modal accessibility. Roc still owns
-  // its cross-layer stack so ambient drawers and app shortcuts keep their existing order.
+  // Radix owns focus, Tab and modal accessibility. Plain confirmations opt into Roc's
+  // Escape capture because Radix's highest-layer listener can lag behind first autofocus.
+  // Form dialogs retain Radix's handling so inner selects/popups keep their Escape behavior.
   useOverlayBehavior({
     open: radixOpen,
     panelRef,
@@ -75,7 +79,8 @@ export function RadixSettingsDialogShell({
     overlayId,
     layer,
     inertBackground: false,
-    manageFocus: false
+    manageFocus: false,
+    captureEscape
   });
 
   return (
@@ -224,6 +229,7 @@ export function RadixSettingsConfirmDialog({
       onClose={onCancel}
       closeDisabled={pending}
       closeOnBackdrop={false}
+      captureEscape
       descriptionId={messageId}
       widthClassName="w-[400px]"
       testId={testId}

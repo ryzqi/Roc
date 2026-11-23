@@ -132,7 +132,7 @@ export function AppSection({
       </div>
 
       <section className="flex flex-col gap-4 border-t-[0.5px] border-line pt-4" aria-label="外观">
-        <PreferenceRow label="外观" value={themeOverride}
+        <PreferenceRow label="外观" description="立即切换界面主题；自动模式跟随系统。" value={themeOverride}
           options={THEME_OVERRIDES.map(value => ({ value, label: THEME_LABELS[value] }))}
           onChange={onThemeOverrideChange} testId="settings-theme" />
         <ContentPreferences />

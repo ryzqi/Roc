@@ -73,7 +73,7 @@ const SECTION_ICONS: Readonly<Record<SettingsSectionId, LucideIcon>> = {
  *
  * ## Fixed shape
  *
- * `min(1100px, 92vw)` × `min(86vh, 760px)`, a 192px grouped section list with 36px rows, an action footer
+ * `min(1100px, 92vw)` × `min(86vh, 760px)`, a 208px grouped section list and a form capped at 680px, an action footer
  * pinned below the scrolling form, and the thirteen sections in their normative order. The height is passed through `widthClassName` because `ModalShell` only caps its panel; a
  * settings window that scrolls the whole modal (header and section list included) loses the
  * dirty bar exactly when it matters.
@@ -405,7 +405,7 @@ export function SettingsModal(props: SettingsModalProps): React.JSX.Element {
             <div
               ref={listRef}
               aria-label="设置分区"
-              className="settings-navigation flex w-[224px] shrink-0 flex-col gap-1 overflow-y-auto border-e-[0.5px] border-line bg-surface-rail p-3"
+              className="settings-navigation flex shrink-0 flex-col gap-1 overflow-y-auto border-e-[0.5px] border-line bg-surface-rail p-3"
               data-testid="settings-sections"
             >
               <label className="settings-search flex shrink-0 items-center gap-2 rounded-control border-[0.5px] border-line-default bg-surface-raised px-2">

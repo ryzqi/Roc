@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as esbuild from 'esbuild';
 import electronPath from 'electron';
-import { _electron } from '@playwright/test';
+import { _electron, expect } from '@playwright/test';
 
 let tempDir;
 let app;
@@ -315,6 +315,35 @@ test('settings dialog layers focus, Escape, animations, shortcuts, and ambient d
   await page.getByTestId('sidebar-drawer-panel').waitFor({state: 'detached'});
 });
 
+test('nested settings Escape belongs to the confirmation from its first focus event', async () => {
+  await page.evaluate(() => window.mount());
+  await page.getByTestId('activity-settings').click();
+  await clickSection('app');
+  await page.getByTestId('settings-open-at-login').click();
+  await page.evaluate(() => {
+    window.firstConfirmationEscape = null;
+    const onFocus = event => {
+      if (event.target?.getAttribute('data-testid') !== 'settings-discard-cancel') return;
+      document.removeEventListener('focusin', onFocus);
+      // Enter at the exact focus handoff, before a subsequent render can repair listener order.
+      const escape = new KeyboardEvent('keydown', {key: 'Escape', code: 'Escape', bubbles: true, cancelable: true});
+      event.target.dispatchEvent(escape);
+      window.firstConfirmationEscape = {target: event.target.getAttribute('data-testid'), handled: escape.defaultPrevented};
+    };
+    document.addEventListener('focusin', onFocus);
+  });
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => window.firstConfirmationEscape !== null);
+  assert.deepEqual(await page.evaluate(() => window.firstConfirmationEscape), {target: 'settings-discard-cancel', handled: true});
+  await page.getByTestId('settings-discard-panel').waitFor({state: 'detached'});
+  assert.equal(await page.getByTestId('settings-modal-panel').count(), 1);
+  assert.equal(await page.getByTestId('settings-open-at-login').isChecked(), true, 'Escape preserves the dirty setting');
+  await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'settings-open-at-login');
+  await page.getByTestId('settings-open-at-login').click();
+  await page.keyboard.press('Escape');
+  await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
+});
+
 
 test('reset confirmation accepts real pointer clicks and Escape leaves settings open', async () => {
   await page.getByTestId('activity-settings').click();
@@ -369,6 +398,24 @@ test('settings search retains native editing keys and section navigation stays o
   await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
 });
 
+test('Escape closes an open native settings select before the settings dialog', async () => {
+  await page.setViewportSize({width: 900, height: 850});
+  await page.evaluate(() => window.mount());
+  await page.getByTestId('activity-settings').click();
+  await selectSection('guardrail');
+  const select = page.getByTestId('settings-approval-mode');
+  const original = await select.inputValue();
+  await select.click();
+  await page.waitForFunction(() => document.querySelector('[data-testid="settings-approval-mode"]')?.matches(':open'));
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('[data-testid="settings-approval-mode"]')?.matches(':open'));
+  assert.equal(await page.getByTestId('settings-modal-panel').count(), 1, 'first Escape only closes the native picker');
+  assert.equal(await select.inputValue(), original);
+  assert.equal(await select.evaluate(element => document.activeElement === element), true);
+  await page.keyboard.press('Escape');
+  await page.getByTestId('settings-modal-panel').waitFor({state: 'detached'});
+});
+
 test('discard requires confirmation, retains settings, and appearance changes apply immediately', async () => {
   await page.getByTestId('activity-settings').click();
   await clickSection('app');
@@ -410,6 +457,8 @@ test('backup preview, import validation and settings layout work in both themes 
   await page.getByTestId('settings-import-ok').waitFor();
   await clickSection('app');
   assert.equal(await page.getByTestId('settings-open-at-login').isChecked(), true);
+  await expect(page.getByRole('group', {name: '外观', exact: true})).toHaveAccessibleDescription('立即切换界面主题；自动模式跟随系统。');
+  await expect(page.getByRole('group', {name: '界面密度', exact: true})).toHaveAccessibleDescription('立即调整列表行高、控件与面板间距。');
   await page.getByTestId('settings-discard-draft').click();
   await page.getByTestId('settings-discard-confirm').click();
   await page.getByTestId('settings-discard-panel').waitFor({state: 'detached'});
@@ -421,13 +470,19 @@ test('backup preview, import validation and settings layout work in both themes 
       await selectSection('app');
       await page.getByTestId('settings-theme-' + theme).click();
       await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
-      for (const width of [1440, 800, 640]) {
+      for (const width of [1440, 1280, 1184, 800, 640]) {
         await page.setViewportSize({width, height: 850});
         for (const section of ['models', 'app', 'backup']) {
           await selectSection(section);
           await page.waitForTimeout(150);
           const overflow = await page.getByTestId('settings-panel').evaluate(el => el.scrollWidth > el.clientWidth + 1);
           assert.equal(overflow, false, section + ' has no horizontal overflow');
+          if (width >= 1184) {
+            const navigation = await page.locator('.settings-navigation').boundingBox();
+            const form = await page.locator('.settings-form-content').boundingBox();
+            assert.ok(navigation.width >= 200 && navigation.width <= 220, 'desktop categories retain a stable readable width');
+            assert.ok(form.width >= 560 && form.width <= 700, 'desktop forms retain the intended reading measure');
+          }
           const save = await page.getByTestId('settings-save').boundingBox();
           const panel = await page.getByTestId('settings-modal-panel').boundingBox();
           assert.ok(save.y >= panel.y && save.y + save.height <= panel.y + panel.height, 'save remains visible');

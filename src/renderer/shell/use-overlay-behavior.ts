@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
 import { captureDialogOpener, focusDialogInitialElement, restoreDialogFocus, trapDialogTabFocus } from './focus-trap';
 import { hasOpenDialog, popOverlay, pushOverlay, topOverlayId, type OverlayLayer } from './overlay-stack';
 
@@ -63,8 +63,10 @@ export type OverlayBehaviorOptions = {
   layer?: OverlayLayer;
   /** Set false to leave the app accessible behind this overlay (non-modal). */
   inertBackground?: boolean;
-  /** Set false when an accessibility primitive owns focus trapping and Escape. */
+  /** Set false when a primitive owns focus/Tab; captureEscape can still assign Escape to Roc. */
   manageFocus?: boolean;
+  /** Own Escape before a primitive's document listener; focus and Tab can remain delegated. */
+  captureEscape?: boolean;
   /** A responsive pane keeps an already focused editor when becoming a drawer. */
   preserveFocus?: boolean;
 };
@@ -79,6 +81,7 @@ export function useOverlayBehavior({
   layer = 'dialog',
   inertBackground = true,
   manageFocus = true,
+  captureEscape = false,
   preserveFocus = false
 }: OverlayBehaviorOptions): void {
   // Keep the latest callbacks reachable from a listener installed once per open.
@@ -87,7 +90,9 @@ export function useOverlayBehavior({
   closeRef.current = onRequestClose;
   canCloseRef.current = canClose;
 
-  useEffect(() => {
+  // FocusScope can autofocus during passive effects before a primitive has rerendered its
+  // highest-layer keyboard listener. Register ownership before that focus handoff.
+  useLayoutEffect(() => {
     if (!open) {
       return;
     }
@@ -102,17 +107,29 @@ export function useOverlayBehavior({
       root.setAttribute('aria-hidden', 'true');
     }
 
+    const onEscape = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape' || event.defaultPrevented || topOverlayId() !== overlayId) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (canCloseRef.current()) closeRef.current();
+    };
+    if (captureEscape) window.addEventListener('keydown', onEscape, true);
+    return () => {
+      if (captureEscape) window.removeEventListener('keydown', onEscape, true);
+      popOverlay(overlayId);
+      // Only re-expose the app once no dialog is layered on it any more.
+      if (inertBackground && !hasOpenDialog() && root !== null) {
+        root.removeAttribute('aria-hidden');
+      }
+    };
+  }, [open, overlayId, layer, inertBackground, captureEscape]);
+
+  useEffect(() => {
+    if (!open || !manageFocus) return;
     const panel = panelRef.current;
-    if (manageFocus && panel !== null && !(preserveFocus && panel.contains(document.activeElement))) {
+    if (panel !== null && !(preserveFocus && panel.contains(document.activeElement))) {
       focusDialogInitialElement(panel, initialFocusRef?.current ?? null);
     }
-
-    const requestClose = (): void => {
-      if (!canCloseRef.current()) {
-        return;
-      }
-      closeRef.current();
-    };
 
     const onKeyDown = (event: KeyboardEvent): void => {
       // Nested controls get first refusal (e.g. Escape closes a model popover).
@@ -128,26 +145,17 @@ export function useOverlayBehavior({
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
-        requestClose();
+        if (canCloseRef.current()) closeRef.current();
         return;
       }
       trapDialogTabFocus(current, event);
     };
 
-    if (manageFocus) {
-      window.addEventListener('keydown', onKeyDown);
-    }
+    window.addEventListener('keydown', onKeyDown);
     return () => {
-      if (manageFocus) {
-        window.removeEventListener('keydown', onKeyDown);
-      }
-      popOverlay(overlayId);
-      // Only re-expose the app once no dialog is layered on it any more.
-      if (inertBackground && !hasOpenDialog() && root !== null) {
-        root.removeAttribute('aria-hidden');
-      }
+      window.removeEventListener('keydown', onKeyDown);
     };
-  }, [open, overlayId, layer, panelRef, initialFocusRef, inertBackground, manageFocus, preserveFocus]);
+  }, [open, overlayId, panelRef, initialFocusRef, manageFocus, preserveFocus]);
 }
 
 /**
