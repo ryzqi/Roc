@@ -39,6 +39,7 @@ type SearchOutcome = {
 };
 export type LiteratureRequestAudit = (phase: 'started' | 'finished', source: LiteratureSearchResult['sources'][number]['source'],
   receipt: LiteratureSearchResult['sources'][number]['requests'][number]) => void;
+type SourceCompleted = (outcome: {source: SourceOutcome; records: RankedLiteratureRecord[]}) => void;
 type ProviderContext = {signal: AbortSignal; receipts: LiteratureSearchResult['sources'][number]['requests']; projectId: string | null;
   cacheHit: CachedLiteratureResponse | null; pendingCache: {key: string; response: CachedLiteratureResponse} | null;
   fetchedAt: string | null; host: string; release: (() => void) | null;
@@ -59,10 +60,10 @@ export class LiteratureSearchService {
 
   private readonly requests = new AsyncLocalStorage<ProviderContext>();
 
-  async searchDetailed(input: unknown, signal?: AbortSignal, audit?: LiteratureRequestAudit): Promise<SearchOutcome> {
+  async searchDetailed(input: unknown, signal?: AbortSignal, audit?: LiteratureRequestAudit, onSourceCompleted?: SourceCompleted): Promise<SearchOutcome> {
     this.lifetime.signal.throwIfAborted();
     const {request} = routeLiteratureSources(literatureSearchInputSchema.parse(input));
-    const pending = this.executeSearch(request, signal, audit);
+    const pending = this.executeSearch(request, signal, audit, onSourceCompleted);
     this.active.add(pending);
     try { return await pending; }
     finally { this.active.delete(pending); }
@@ -131,7 +132,8 @@ export class LiteratureSearchService {
     } finally { context.release?.(); context.release = null; }
   }
 
-  private async executeSearch(request: ResolvedLiteratureSearch, signal?: AbortSignal, audit?: LiteratureRequestAudit): Promise<SearchOutcome> {
+  private async executeSearch(request: ResolvedLiteratureSearch, signal?: AbortSignal, audit?: LiteratureRequestAudit,
+    onSourceCompleted?: SourceCompleted): Promise<SearchOutcome> {
     const hasCollection = request.sources.some(source => source === 'acl' || source === 'cvf');
     const deadline = AbortSignal.any([this.lifetime.signal, ...(signal === undefined ? [] : [signal]), AbortSignal.timeout(hasCollection ? 60_000 : 30_000)]);
     const sources: LiteratureSearchResult['sources'] = [];
@@ -139,7 +141,13 @@ export class LiteratureSearchService {
     const selected = literatureSourcePriority.filter(source => request.sources.includes(source));
     for (let offset = 0; offset < selected.length; offset += 3) {
       const outcomes = await Promise.allSettled(selected.slice(offset, offset + 3)
-        .map(source => this.executeSource(request, source, deadline, signal, audit)));
+        .map(async source => {
+          const outcome = await this.executeSource(request, source, deadline, signal, audit);
+          signal?.throwIfAborted();
+          this.lifetime.signal.throwIfAborted();
+          onSourceCompleted?.(outcome);
+          return outcome;
+        }));
       const rejection = outcomes.find(outcome => outcome.status === 'rejected');
       if (rejection?.status === 'rejected') throw rejection.reason;
       for (const outcome of outcomes) {

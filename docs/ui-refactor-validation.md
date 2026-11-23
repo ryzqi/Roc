@@ -1,5 +1,11 @@
 # UI 重构验证记录
 
+## 2026-11-23 P4.4：检索快照分页与来源进度合同
+
+状态：**Verified passing**（主进程与IPC合同）。发现页可显式请求每页30条，后续页读取同一可信owner/project和7天有效期快照；最多保留本次实际获取的900条融合候选，普通Agent工具仍受原limit限制。每个来源真实完成后只向发起窗口发送只读原始记录；候选身份仅在最终融合后生成，完成顺序不改变融合排序。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`：`node --test tests/unit/literature-import.test.mjs tests/unit/literature-query-planner.test.mjs tests/unit/literature-domain-sources.test.mjs tests/unit/literature-search-progress-ipc.test.mjs` **103/103**；`pnpm check:ipc`通过。覆盖65条分30/30/5页、后页真实导入、旧limit、窗口/项目/过期隔离、先完成来源事件、相同requestId的不同窗口不串流。前端交互和真实外部服务另验；快照total不代表来源全部命中。合同见[文献融合](research-literature-fusion.md)。
+
 ## 2026-11-23 P6.4：设置布局与首个 Escape
 
 状态：**Verified passing**。设置分类宽度统一 208px，表单上限 680px；即时主题、密度和字号附影响说明及可访问描述。设置、模型表单与粘底保存继续共享原浮层和草稿守卫。

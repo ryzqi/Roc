@@ -553,6 +553,11 @@ export const rocApi: RocPreloadApi = {
       const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
       ipcRenderer.on(ipcChannels.researchLibraryChanged, listener);
       return () => ipcRenderer.off(ipcChannels.researchLibraryChanged, listener);
+    },
+    onLiteratureSearchProgress: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
+      ipcRenderer.on(ipcChannels.researchLiteratureSearchProgress, listener);
+      return () => ipcRenderer.off(ipcChannels.researchLiteratureSearchProgress, listener);
     }
   },
   agent: {

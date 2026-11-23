@@ -204,6 +204,92 @@ async function candidate(f) {
   return { result, entry: { kind: 'candidate', searchId: result.searchId, candidateId: result.candidates[0].candidateId } };
 }
 
+test('UI paging retains bounded candidates across pages without changing ordinary search limits or ownership', async () => {
+  const f = setup({records: Array.from({length: 65}, (_, index) => record(`paging-${index}`))});
+  try {
+    const input = {query: 'paging', sources: ['crossref'], limit: 30, maxPages: 3};
+    const ordinary = await f.run(() => f.service.search(input));
+    assert.equal(ordinary.total, 30);
+    assert.equal(ordinary.nextOffset, null);
+    const first = await f.run(() => f.service.search({...input, pageSize: 30, requestId: 'ui-paging'}));
+    assert.equal(first.total, 65);
+    assert.equal(first.candidates.length, 30);
+    assert.equal(first.nextOffset, 30);
+    const second = f.run(() => f.service.readSearch({searchId: first.searchId, offset: first.nextOffset, limit: 30}));
+    const third = f.run(() => f.service.readSearch({searchId: first.searchId, offset: second.nextOffset, limit: 30}));
+    assert.equal(second.nextOffset, 60);
+    assert.equal(third.nextOffset, null);
+    assert.equal(third.candidates.length, 5);
+    const ids = [...first.candidates, ...second.candidates, ...third.candidates].map(value => value.candidateId);
+    assert.equal(new Set(ids).size, 65);
+    assert.deepEqual(f.run(() => f.service.readSearch({searchId: first.searchId, offset: 30, limit: 30})), second);
+    for (const scope of [{owner: 'window:other'}, {projectId: null}]) {
+      assert.throws(() => f.run(() => f.service.readSearch({searchId: first.searchId, offset: 30}), scope), /literature_search_not_found/u);
+    }
+    const imported = await f.run(() => f.service.add({requestId: 'page-two-import',
+      entries: [{kind: 'candidate', searchId: first.searchId, candidateId: second.candidates[0].candidateId}]}));
+    assert.equal(imported.items[0].disposition, 'created');
+    f.setTime('2026-10-31T00:00:00.000Z');
+    assert.throws(() => f.run(() => f.service.readSearch({searchId: first.searchId, offset: 30})), /literature_search_expired/u);
+  } finally {f.close();}
+});
+
+test('source completion arrives before a slower sibling while final source ordering remains deterministic', async () => {
+  let releaseSlow, notifyFirst;
+  const slow = new Promise(resolve => {releaseSlow = resolve;});
+  const firstProgress = new Promise(resolve => {notifyFirst = resolve;});
+  const service = new api.LiteratureSearchService(async url => {
+    if (url.includes('crossref')) {await slow; return new Response('invalid', {status: 200});}
+    return new Response(JSON.stringify({results: [{id: 'W123', title: 'Early observed paper'}]}));
+  });
+  const received = [];
+  let finished = false;
+  const pending = service.searchDetailed({query: 'early', sources: ['crossref', 'openalex'], limit: 30},
+    undefined, undefined, outcome => {received.push(outcome); notifyFirst();}).then(value => {finished = true; return value;});
+  try {
+    await firstProgress;
+    assert.equal(finished, false);
+    assert.equal(received[0].source.source, 'openalex');
+    assert.equal(received[0].records[0].record.title, 'Early observed paper');
+    releaseSlow();
+    const result = await pending;
+    assert.deepEqual(received.map(value => value.source.source), ['openalex', 'crossref']);
+    assert.deepEqual(result.sources.map(value => [value.source, value.status]), [['crossref', 'error'], ['openalex', 'ok']]);
+  } finally {releaseSlow(); await service.shutdown();}
+});
+
+test('import search emits bounded provisional observations with trusted scope and unique completed-source count', async () => {
+  let fakeSearch;
+  const f = setup({records: Array.from({length: 65}, (_, index) => record(`progress-${index}`)),
+    search: {searchDetailed: (...args) => fakeSearch(...args)}});
+  try {
+    const source = {source: 'crossref', status: 'ok', returnedCount: 65, errorCode: null, retryAfterMs: null,
+      requests: [], governance: api.createLiteratureProviderGovernor().observe('api.crossref.org'),
+      coverage: {state: 'unknown', apiHitCount: null, validatedPages: 3, nextPage: null}, stopReason: 'page_limit', pages: []};
+    const records = rankedRecords(Array.from({length: 65}, (_, index) => record(`progress-${index}`)));
+    fakeSearch = async (_request, _signal, _audit, onSourceCompleted) => {
+      onSourceCompleted({source, records});
+      return {records, sources: [source], status: 'complete', truncated: true, warnings: []};
+    };
+    const progress = [];
+    const input = {query: 'progress', sources: ['crossref', 'crossref'], limit: 30, maxPages: 3, pageSize: 30, requestId: 'request-progress',
+      projectId: 'untrusted-input-project'};
+    await f.run(() => f.service.search(input), {onSearchProgress: event => progress.push(event)});
+    assert.equal(progress.length, 1);
+    assert.equal(progress[0].requestId, input.requestId);
+    assert.equal(progress[0].projectId, f.project.id);
+    assert.equal(progress[0].completedSources, 1);
+    assert.equal(progress[0].totalSources, 1);
+    assert.equal(progress[0].source.returnedCount, 65);
+    assert.equal(progress[0].records.length, 30);
+    assert.equal('searchId' in progress[0], false);
+    assert.equal('candidateId' in progress[0].records[0], false);
+    const {requestId: _requestId, ...withoutProgress} = input;
+    await f.run(() => f.service.search(withoutProgress), {onSearchProgress: event => progress.push(event)});
+    assert.equal(progress.length, 1);
+  } finally {f.close();}
+});
+
 test('native date filters survive actual provider pagination and are recorded in receipts', async () => {
   for (const source of ['openalex', 'crossref', 'semantic_scholar', 'arxiv', 'pubmed', 'europe_pmc']) {
     const urls = [];

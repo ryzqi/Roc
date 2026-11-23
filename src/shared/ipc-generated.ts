@@ -540,6 +540,7 @@ export const ipcChannels = {
   shellConfirm: 'roc:shell:confirm',
   researchTaskUpdated: 'roc:research:task-updated',
   researchLibraryChanged: 'roc:research:library-changed',
+  researchLiteratureSearchProgress: 'roc:research:literature-search-progress',
   appearanceUpdated: 'roc:appearance:updated',
   navigate: 'roc:navigate',
   windowHidden: 'roc:window:hidden',
@@ -1093,6 +1094,7 @@ export const ipcRequestChannelKeys = [
 export const ipcEventChannelKeys = [
   'researchTaskUpdated',
   'researchLibraryChanged',
+  'researchLiteratureSearchProgress',
   'appearanceUpdated',
   'navigate',
   'windowHidden',
@@ -1646,6 +1648,7 @@ export const ipcRequestDefinitions = [
 export const ipcEventDefinitions = [
   { key: 'researchTaskUpdated', channel: ipcChannels.researchTaskUpdated, domain: 'research', method: 'onTaskUpdated' },
   { key: 'researchLibraryChanged', channel: ipcChannels.researchLibraryChanged, domain: 'research', method: 'onLibraryChanged' },
+  { key: 'researchLiteratureSearchProgress', channel: ipcChannels.researchLiteratureSearchProgress, domain: 'research', method: 'onLiteratureSearchProgress' },
   { key: 'appearanceUpdated', channel: ipcChannels.appearanceUpdated, domain: 'app', method: 'onAppearanceUpdated' },
   { key: 'navigate', channel: ipcChannels.navigate, domain: 'app', method: 'onNavigate' },
   { key: 'windowHidden', channel: ipcChannels.windowHidden, domain: 'window', method: 'onHidden' },

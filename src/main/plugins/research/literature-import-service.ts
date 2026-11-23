@@ -443,11 +443,22 @@ export class LiteratureImportService {
     try {
       const signal = AbortSignal.any([this.lifetime.signal, ...(context.signal === undefined ? [] : [context.signal])]);
       const audit = this.searchLedger.audit(executionId);
+      let completedSources = 0;
       const found = await this.searchService.searchDetailed(scopedRequest, signal, (phase, source, receipt) => {
         if (phase === 'started') {
           try { this.requireActive(context); } catch (cause) { throw new LiteratureRequestAuditError(cause); }
         }
         audit(phase, source, receipt);
+      }, ({source, records}) => {
+        this.requireActive(context);
+        completedSources++;
+        if (request.requestId !== undefined) context.onSearchProgress?.({
+          requestId: request.requestId, projectId: context.projectId, completedSources,
+          totalSources: new Set(scopedRequest.sources).size,
+          source: {source: source.source, status: source.status, returnedCount: source.returnedCount,
+            errorCode: source.errorCode, retryAfterMs: source.retryAfterMs},
+          records: records.slice(0, 30).map(entry => entry.record)
+        });
       });
       this.requireActive(context);
       const createdAt = this.now();
@@ -460,7 +471,9 @@ export class LiteratureImportService {
         return matches;
       });
       const reranked = request.rerank === 'lexical' ? rerankLiterature(request.query, grouped) : null;
-      const candidates: LiteratureCandidate[] = (reranked?.candidates ?? grouped).slice(0, request.limit).map(candidate => {
+      const retainedLimit = request.pageSize === undefined ? request.limit :
+        request.limit * request.maxPages * new Set(scopedRequest.sources).size;
+      const candidates: LiteratureCandidate[] = (reranked?.candidates ?? grouped).slice(0, retainedLimit).map(candidate => {
         let match;
         try { match = this.library.findByIdentity(candidate.identity, candidate.aliases); }
         catch (error) {
@@ -477,7 +490,7 @@ export class LiteratureImportService {
       const result: LiteratureSearchResult = { schemaVersion: 14, ranking: literatureRanking(scopedRequest.sources), executionId, strategy,
         planning: routed.receipt, ...(reranked === null ? {} : {reranking: reranked.receipt}),
         searchId: `search_${randomUUID()}`, createdAt, expiresAt: new Date(Date.parse(createdAt) + 7 * 86400_000).toISOString(),
-        status: found.status, candidates, sources: found.sources, truncated: found.truncated || grouped.length > request.limit,
+        status: found.status, candidates, sources: found.sources, truncated: found.truncated || grouped.length > retainedLimit,
         warnings: [...found.warnings, ...(unknownYear ? ['年份未知的候选未计入年份筛选结果。'] : []),
           ...(request.dateFrom !== undefined || request.dateTo !== undefined ?
             ['日期条件已下推来源；本地元数据仅核验年份，arXiv 使用提交日期，不能视为出版日期完全一致。'] : [])],
@@ -490,7 +503,10 @@ export class LiteratureImportService {
           .run(result.searchId, context.owner, context.projectId, JSON.stringify(scopedRequest), JSON.stringify(result), result.expiresAt);
         this.searchLedger.finish(executionId, result.status, result.searchId, null);
       })();
-      return result;
+      return request.pageSize === undefined ? result : {
+        ...result, candidates: candidates.slice(0, request.pageSize),
+        nextOffset: request.pageSize < result.total ? request.pageSize : null
+      };
     } catch (error) {
       const interrupted = this.closed || error instanceof Error &&
         ['literature_service_closed', 'research_run_interrupted_by_shutdown'].includes(error.message);

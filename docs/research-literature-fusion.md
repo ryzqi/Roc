@@ -89,6 +89,10 @@ Discovery 的结构化 searchPlan 保留阶段 instruction 原样作为 research
 
 limit 默认 10、最多 30，限制每页原始条数与最终候选数；maxPages 默认 1、最多 3。OpenAlex 用 page，Crossref/arXiv 用 offset，Semantic 用响应 offset，PubMed/Europe PMC 用 opaque cursor。查询/每页条数固定，cursor 不能改变主机；重复 cursor、倒退/重叠位置拒绝。排名缺口保留，不重新编号。Semantic 后页越过 1,000 条范围时停止。
 
+发现页的 IPC 输入可显式传 `pageSize`（1–30），保存本次已请求页面的全部融合候选，最多为 `limit × maxPages × 去重来源数`（上限 900），首响应只返回一页。`total` 是保存候选数，`nextOffset` 用于 `readLiteratureSearch({searchId, offset, limit, projectId})` 读取同一快照，后续页不会重新请求 Provider。未传 `pageSize` 的普通调用仍只保留最终 `limit` 个候选；Agent 工具不接受这两个 UI 字段。分页不改变可信 owner/project、7 天期限、排序或批量导入最多 30 条的边界，也不把快照总量冒充来源全部命中。
+
+发现页先订阅 `research.onLiteratureSearchProgress`，再携带本次唯一 `requestId` 发起搜索，并在结束时取消订阅。每个来源真实完成时发送 `requestId/projectId/completedSources/totalSources/source/records`；`source` 保留成功、空结果、部分、超时或错误，`records` 最多 30 条来源观察，仅可作为只读预览，没有 `searchId/candidateId`，最终响应返回正式候选后才可选择导入。主进程作用域将事件直接路由至发起请求的可信 sender，不广播给其他窗口；`requestId` 只做关联，不授予访问权限。来源事件按实际完成顺序发送，最终融合仍按确定性的来源/排名规则。完成来源计数不表示本地融合和快照发布已经完成。
+
 coverage 保存实际 API 声明总量、校验页数、分页范围和后续位置。未知统计为 null/unknown，不以返回条数补造命中总数；reported_end 只表示响应报告的查询终点，limited/truncated 表示仍有限制。stopReason 区分 reported_end/page_limit/provider_limit/continuation_unavailable/failed。首轮全部来源失败为 failed，后页失败且已有结果为 partial；已校验页与错误保留。complete 表示本次请求成功，不能证明学术 Recall 或穷尽检索。
 
 每次实际 GET 保存 URL、位置、起止时间、HTTP状态、Retry-After、响应原始字节 SHA-256及传输错误。重试独立记账，退避不算 HTTP执行时间；200无效载荷保留200/hash但标为数据失败。缓存页保留原始抓取时间/hash、独立 hit/miss；命中不生成新 HTTP回执。

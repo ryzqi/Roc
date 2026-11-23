@@ -24,6 +24,7 @@ import {researchExternalExperimentCreateSchema,researchExternalExperimentBindSch
   researchExternalExperimentCaptureSchema} from '../../shared/schemas/research-external-experiments';
 import {pickSubmissionDestination,type SubmissionDestinationPicker} from './submission-destination';
 import { withLiteratureContext } from '../services/literature-context';
+import {literatureSearchProgressSchema, type LiteratureSearchProgress} from '../../shared/schemas/literature-import';
 import { researchPythonEnvironmentSelectSchema } from '../../shared/schemas/research-python-environments';
 import { researchNotebookImportRequestSchema } from '../../shared/schemas/research-notebooks';
 import { researchExperimentResultReviewSchema,researchExperimentResultEvidenceCaptureSchema } from '../../shared/schemas/research-experiment-results';
@@ -46,6 +47,7 @@ import {
   researchEvidenceRelationProposalSchema, researchEvidenceRelationReviewSchema
 } from '../../shared/schemas/research-evidence-relations';
 import {
+  ipcChannels,
   pluginCapabilityMappings,
   type GeneratedPluginCapabilityMapping
 } from '../../shared/ipc';
@@ -60,7 +62,8 @@ export type PluginCapabilityInvoker = {
 
 export type PluginCapabilityMapping = GeneratedPluginCapabilityMapping;
 export type PluginCapabilityAdapter = {
-  invoke(preloadMethod: string, args: readonly unknown[], windowId?: number): Promise<IpcResult<unknown>>;
+  invoke(preloadMethod: string, args: readonly unknown[], windowId?: number,
+    onSearchProgress?: (progress: LiteratureSearchProgress) => void): Promise<IpcResult<unknown>>;
 };
 
 export { pluginCapabilityMappings };
@@ -71,7 +74,7 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker,
     pluginCapabilityMappings.map((item) => [item.preloadMethod, item])
   );
   return {
-    async invoke(preloadMethod, args, windowId = 0) {
+    async invoke(preloadMethod, args, windowId = 0, onSearchProgress) {
       const target = mappingsByMethod.get(preloadMethod);
       if (target === undefined) {
         return await wrapIpc(() => {
@@ -400,7 +403,9 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker,
           'research.zotero.attachmentImportRead', 'research.zotero.attachmentImportCancel', 'research.zotero.children'].includes(target.capabilityName);
         if (!scoped) return invoker.invokeCapability(target.capabilityName, input);
         const projectId = typeof input === 'object' && input !== null && !Array.isArray(input) && 'projectId' in input && typeof input.projectId === 'string' ? input.projectId : null;
-        return withLiteratureContext({ owner: `window:${windowId}`, projectId }, () => invoker.invokeCapability(target.capabilityName, input));
+        return withLiteratureContext({ owner: `window:${windowId}`, projectId,
+          ...(target.capabilityName === 'research.literature.search' && onSearchProgress !== undefined ? {onSearchProgress} : {})
+        }, () => invoker.invokeCapability(target.capabilityName, input));
       });
     }
   };
@@ -409,7 +414,13 @@ export function createPluginCapabilityAdapter(invoker: PluginCapabilityInvoker,
 export function registerPluginCapabilityIpc(timedHandle: TimedHandle, invoker: PluginCapabilityInvoker): void {
   const adapter = createPluginCapabilityAdapter(invoker);
   for (const target of pluginCapabilityMappings) {
-    timedHandle(target.channel, (event: { sender: { id: number } }, ...args: unknown[]) => adapter.invoke(target.preloadMethod, args, event.sender.id));
+    timedHandle(target.channel, (event: {sender: {id: number; isDestroyed(): boolean; send(channel: string, payload: unknown): void}},
+      ...args: unknown[]) => adapter.invoke(target.preloadMethod, args, event.sender.id, progress => {
+      // The callback closes over the trusted sender. requestId never selects a window or owner.
+      if (!event.sender.isDestroyed()) {
+        event.sender.send(ipcChannels.researchLiteratureSearchProgress, literatureSearchProgressSchema.parse(progress));
+      }
+    }));
   }
 }
 

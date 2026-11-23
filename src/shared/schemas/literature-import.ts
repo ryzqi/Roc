@@ -34,7 +34,12 @@ export const literatureSearchToolSchema = z.object({
     const to = [input.dateTo, input.yearTo === undefined ? undefined : `${input.yearTo}-12-31`].filter(value => value !== undefined).sort().at(0);
     return from === undefined || to === undefined || from <= to;
   }, 'literature_date_range_invalid');
-export const literatureSearchInputSchema = literatureSearchToolSchema.safeExtend({ projectId: z.string().min(1).nullable().optional() });
+export const literatureSearchInputSchema = literatureSearchToolSchema.safeExtend({
+  projectId: z.string().min(1).nullable().optional(),
+  // UI paging retains the bounded fetched pool; ordinary/tool calls retain only limit candidates.
+  pageSize: z.number().int().min(1).max(30).optional(),
+  requestId: z.string().trim().min(1).max(200).optional()
+});
 /** Persisted requests must identify the sources actually executed, without inferred defaults. */
 export const literatureResolvedSearchInputSchema = literatureSearchInputSchema.safeExtend({
   sources: z.array(literatureNetworkSourceSchema).min(1).max(10)
@@ -137,6 +142,16 @@ export const literatureSearchResultSchema = z.object({
   }).strict().optional()
 }).strict();
 const page = { offset: z.number().int().nonnegative().default(0), limit: z.number().int().min(1).max(30).default(10) };
+export const literatureSearchProgressSchema = z.object({
+  requestId: z.string().min(1).max(200), projectId: z.string().min(1).nullable(),
+  completedSources: z.number().int().min(1).max(10), totalSources: z.number().int().min(1).max(10),
+  source: literatureSearchResultSchema.shape.sources.element.pick({
+    source: true, status: true, returnedCount: true, errorCode: true, retryAfterMs: true
+  }),
+  // Provisional provider observations, never importable candidate references.
+  records: z.array(researchLiteratureSchema).max(30)
+}).strict().refine(value => value.completedSources <= value.totalSources, 'literature_search_progress_invalid');
+export type LiteratureSearchProgress = z.infer<typeof literatureSearchProgressSchema>;
 export const literatureReadSearchSchema = z.object({ searchId: z.string().min(1), ...page, projectId: z.string().nullable().optional() }).strict();
 const reason = z.string().trim().max(500).optional();
 export const literatureAddSchema = z.object({

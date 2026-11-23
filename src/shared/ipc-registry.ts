@@ -140,7 +140,8 @@ import {researchArtifactInspectRequestSchema, researchArtifactInspectResultSchem
 import {researchGateReviewRequestSchema, researchGateReviewContextSchema} from './schemas/research-gate-review';
 import {researchProductionReviewRequestSchema, researchProductionReviewReadSchema} from './schemas/research-production-review';
 import { literatureAddSchema, literatureCancelImportSchema, literatureGetImportSchema, literatureImportResultSchema,
-  literatureReadSearchSchema, literatureSearchInputSchema, literatureSearchResultSchema, literatureLibraryChangedSchema } from './schemas/literature-import';
+  literatureReadSearchSchema, literatureSearchInputSchema, literatureSearchResultSchema, literatureLibraryChangedSchema,
+  literatureSearchProgressSchema } from './schemas/literature-import';
 import {changePaperAcquisitionSchema, listPaperAcquisitionSchema, listPaperAcquisitionResultSchema,
   paperAcquisitionJobSchema, literatureAcquisitionSettingsSchema} from './schemas/literature-acquisition';
 import {literatureReadIdentifiersSchema, literatureIdentifierRecordsResultSchema} from './schemas/literature-identifiers';
@@ -1079,6 +1080,7 @@ export const ipcRegistry = {
   events: [
     event({ key: 'researchTaskUpdated', channel: 'roc:research:task-updated', domain: 'research', method: 'onTaskUpdated', contract: eventContract(researchTaskUpdatedSchema) }),
     event({ key: 'researchLibraryChanged', channel: 'roc:research:library-changed', domain: 'research', method: 'onLibraryChanged', contract: eventContract(literatureLibraryChangedSchema) }),
+    event({ key: 'researchLiteratureSearchProgress', channel: 'roc:research:literature-search-progress', domain: 'research', method: 'onLiteratureSearchProgress', contract: eventContract(literatureSearchProgressSchema) }),
     event({ key: 'appearanceUpdated', channel: 'roc:appearance:updated', domain: 'app', method: 'onAppearanceUpdated', contract: eventContract(systemAppearanceSnapshotSchema) }),
     event({ key: 'navigate', channel: 'roc:navigate', domain: 'app', method: 'onNavigate', contract: eventContract(z.string()) }),
     event({ key: 'windowHidden', channel: 'roc:window:hidden', domain: 'window', method: 'onHidden', contract: eventContract(windowHiddenSnapshotSchema) }),
