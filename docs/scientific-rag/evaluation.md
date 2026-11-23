@@ -91,15 +91,15 @@ E/G/H/I 的正式质量结论仍需上述测量与独立参考。若没有实际
 | [benchmark-scientific-public-pdf.mjs](../../scripts/benchmark-scientific-public-pdf.mjs)、[verify-scientific-public-pdf.mjs](../../scripts/verify-scientific-public-pdf.mjs) | 准备真实原 PDF、对应模型/配置和新的输出；独立回读范围限于实际输入与已实现指标。 |
 | [scientific-query-binding.mjs](../../evaluation/lib/scientific-query-binding.mjs)、[scientific-evidence-resolution.mjs](../../evaluation/lib/scientific-evidence-resolution.mjs)、[scientific-evidence-scoring.mjs](../../evaluation/lib/scientific-evidence-scoring.mjs) | 显式绑定问题与请求；按 source/parse/版本解析精确块和完整证据范围。解析失败不提升为有效对应。 |
 | [run-scientific-agent-pilot.mjs](../../scripts/run-scientific-agent-pilot.mjs) | 需真实 provider、授权项目/工具、完整输入和预算。诊断成功不自动取得最终答案验收资格。 |
-| [benchmark-scientific-parser-ir-ablation.mjs](../../scripts/benchmark-scientific-parser-ir-ablation.mjs) | 固定读取指定来源报告并限制输出根，是专项离线回放脚本。先核对源码中全部固定输入；仅替换输出参数不足以适配新 cohort。 |
-| [benchmark-scientific-typed-retrieval-context.mjs](../../scripts/benchmark-scientific-typed-retrieval-context.mjs) | 固定读取 matched cohort、IR、标签和 SQLite，同时限定输出位置；缺输入时不能直接复跑，更不能据保存摘要恢复原运行。 |
 
-其他 `benchmark/verify/check-scientific-*` 脚本也应先阅读参数及固定输入。源码入口存在不保证运行数据、模型或原始请求仍可取得。任何重放都须具备被消费的原字节、摘要、失败记录和完整依赖；仅有汇总 JSON 或旧 hash 不足以独立重评分。
+绑定已丢失历史快照或不存在 Git 基线的专项脚本已移除，包括旧 Parser/IR 回放、typed retrieval/context 对照、GROBID 阶段对照及桌面演练准备。新实验须重新冻结输入与基线，不能据保存摘要恢复原运行。
+
+其他 `benchmark/verify/check-scientific-*` 脚本也应先阅读参数及输入。源码入口存在不保证运行数据、模型或原始请求仍可取得。任何重放都须具备被消费的原字节、摘要、失败记录和完整依赖；仅有汇总 JSON 或旧 hash 不足以独立重评分。
 
 ## 性能、成本与复验
 
 性能报告区分解析、索引、检索、上下文、模型 transport、桌面渲染与完整 ingestion。固定设备、并发、缓存模式和输入，保留 P50/P95、RSS、实际样本及失败；fixture 向量能测吞吐，不能测语义 Recall。连接冷启动不能写成 OS cache 清空。
 
-OCR 资源入口为 [benchmark-scientific-resources.mjs](../../scripts/benchmark-scientific-resources.mjs)、[benchmark-scientific-sustained.mjs](../../scripts/benchmark-scientific-sustained.mjs) 与[独立 verifier](../../scripts/verify-scientific-resources.py)；检索预算见[性能协议](../research-performance-protocol.json)。同样先确认脚本中的固定基线与实际输入，不能把旧测量当当前设备承诺。
+持续解析资源入口为 [benchmark-scientific-sustained.mjs](../../scripts/benchmark-scientific-sustained.mjs)，结果用[独立 verifier](../../scripts/verify-scientific-resources.py) 的 `--sustained` 模式核验；检索预算见[性能协议](../research-performance-protocol.json)。先确认实际输入、模型与测量范围，不能把旧测量当当前设备承诺。
 
 费用需要真实 provider usage 与可信计价，未知值为 null。重复运行固定输入与评分版本，确定性输出应一致；延迟/RSS 使用实际样本，不要求逐位相等。质量、各类别不劣、错误来源上限及资源阈值须在比较前确定；未测项目保持未验收。

@@ -308,7 +308,7 @@ pnpm evaluate run --resume /absolute/unsealed-run
 
 ## 证据与故障
 
-生成目录 `datasets/`、`environments/`、`runs/`、`comparisons/`、`local/`、`.runtime/` 均被忽略，数据 registry/source lock 两个定义文件跟踪入库。每轮与每个 trial 独立；隐藏真值与评分器留在 worker 之外。运行中不要修改 `src/`、`scripts/`、`resources/`、`evaluation/` 或依赖，结束时复核源码身份。
+本地生成目录 `datasets/`、`environments/`、`runs/`、`results/`、`comparisons/`、`local/`、`.runtime/` 均被忽略，数据 registry/source lock 两个定义文件跟踪入库。目录由所属命令按需创建，清理后可以不存在；被忽略不表示内容均可丢弃。每轮与每个 trial 独立；隐藏真值与评分器留在 worker 之外。运行中不要修改 `src/`、`scripts/`、`resources/`、`evaluation/` 或依赖，结束时复核源码身份。
 
 每轮保存 manifest、run-plan、budget-state、events、trials、summary/report 和 seal；application trials 另存实际 tool schema、请求响应、transcript、SQLite、聚合输出、独立 verification 与最终答案。RAG 保存源索引、排名/context、capability/reranker receipts 和独立 verification。trace pointers 绑定产物哈希，诊断标签只作定位线索。
 
@@ -329,7 +329,11 @@ seal 是文件哈希清单，不是签名或不可改写存储。证据缺失/�
 
 ## 保留与验证
 
-`evaluation/results/` 中的历史报告可能包含本机路径和运行证据，仅在本地留存，由 Git 忽略；全新克隆不包含这些报告，也不能依赖已清理的 Git 历史恢复它们。它们是 provenance 记录，不是应用运行依赖。保留本地 JSON 的原始字节，不改写路径、哈希或报告字段；需要历史报告的评测脚本应先取得对应的本地报告或重新运行生成步骤。
+`evaluation/local/sources/`、`local/corpora/`、`local/review-materials/` 分别保存原始来源、准备好的语料和审核材料，属于评测输入，不是可批量清空的运行缓存。`datasets/registry.json`、`datasets/sources.lock.json` 与 Python 脚本的 `.py.lock` 是维护中的定义和依赖锁，须保留。
+
+`evaluation/results/` 由 Git 忽略，全新克隆不包含本地报告，也不能依赖已清理的 Git 历史恢复它们。保留仍被当前语料流程消费的 `baseline/sciegqa-correspondence.json`，以及 `baseline/sciegqa-export.json`、`baseline/scidqa-export.json`、`baseline/sciegqa-review-materials.json` 来源与审核记录。保留记录的原始字节，不改写路径、哈希或字段；缺少时先运行对应来源准备、对齐和审核流程。
+
+旧阶段脚本及其原始证据已缺失、没有当前消费者的运行摘要已清理；旧矩阵汇总和固定历史 ablation 入口也已移除。新报告按实际输入、有效运行与保留关系管理，不能仅因没有静态引用或文件已被忽略就删除。
 
 比较必须使用符合当前合同且原始证据仍可读取的 matched runs；缺失时重新生成，文字摘要不能代替证据。清理需要覆盖具体目标的删除授权。清理先生成明确路径、inventory/hash 与 owner 的预览，再应用同一计划；变更、活动 owner、新保留记录引用或路径/链接异常会拒绝删除。QASPER 原始锁定归档先复制并核验至 `local/sources`，再移除可再生缓存；用户配置、凭据、生产数据库和无关产物不在范围内。测试回收各自拥有的临时目录。`--output-root PATH` 支持独立输出父目录。
 

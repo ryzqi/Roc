@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const requiredRepoPaths = ['.npmrc', '.runtime', '.artifacts', 'src', 'tests'];
+// Generated directories are created by their owning commands and may be absent after cleanup.
+const requiredRepoPaths = ['.npmrc', 'package.json', 'pnpm-workspace.yaml', 'src', 'tests'];
 const missing = requiredRepoPaths.filter((item) => !existsSync(resolve(item)));
 
 if (missing.length > 0) {

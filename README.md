@@ -539,6 +539,8 @@ DOCX／HTML 不复刻导入 TeX 模板的复杂排版，不带 Zotero Word 动�
 
 按改动选择必要检查，完整环境与测试边界见[开发指南](docs/development.md)；科研质量评价、基准及证据保留见[评测指南](evaluation/README.md)和[文献评测](docs/literature-evaluation.md)。隔离 smoke 通过不证明默认 `~/.roc` 用户资料能启动。
 
+构建、截图和缓存的清理边界见[运行产物](docs/development.md#运行产物)。生成目录按需重建；科研工具链、模型、评测原始来源和审核材料按各自用途保留。
+
 若 Finder 启动失败，先看 `~/.roc/logs/app.jsonl`，核对真实数据库结构与构建要求，再按维护文档处理；完整启动诊断同见[数据库存储](docs/database-storage.md)。
 
 推送 `main` 后，[发布工作流](.github/workflows/release-mac.yml)在 macOS arm64 构建、检查并上传 ZIP 预发布；版本标签与 `package.json` 一致时发布正式版。已有 Release 不覆盖，具体规则见[GitHub 发布](docs/github-releases.md)。
