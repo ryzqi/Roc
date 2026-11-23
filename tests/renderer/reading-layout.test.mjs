@@ -8,9 +8,10 @@ import {_electron, expect} from '@playwright/test';
 import {buildViteRenderer} from './fixtures/build-vite-renderer.mjs';
 
 let directory, app, page;
-const artifacts=join(process.cwd(),'.artifacts/reader-clarity');
+let artifacts;
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), 'roc-reading-layout-'));
+  artifacts=join(directory,'captures');
   await mkdir(artifacts,{recursive:true});
   await buildViteRenderer({directory, script: `
     import React from 'react';
@@ -47,8 +48,16 @@ before(async () => {
     const content={sourceHash:'source',pageCount:1,parseMode:'native-text',warnings:[],assets:[],blocks:[{id:'block',kind:'paragraph',label:'Synthetic page',text:'Explicit synthetic source. '.repeat(400),locator:'page:1',locations:[],imageAssetId:null}]};
     const loadDocumentContent=async()=>({ok:true,data:{run:{id:'parse',documentId:'document'},content}});
     const store={client,projectId:'fixture',selected,items:[selected],documents:[fixtureDocument],loadDocumentContent,
+      derivedStatus:'ready',derivedError:null,reloadDerived(){},wikiSnapshot:{papers:[],sources:[{
+        evidence:{id:'captured-evidence',sourceId:'paper',title:'Captured source',locator:'page:1',excerpt:'Explicit synthetic source.'},
+        referenceStatus:'superseded',sourceLocator:{parseId:'historical-parse',rawLocator:'page:1'}
+      },{evidence:{id:'unrelated-evidence',sourceId:'another-paper',title:'Other source',locator:'page:9',excerpt:'Not this paper.'},
+        referenceStatus:'recorded',sourceLocator:null}]},
+      exportItem:async()=>({filename:'fixture.bib',content:'@article{fixture2026}'}),
+      writeToWorkspace:async input=>{window.writtenBibtex=input;return input.relativePath;},
       action:{pending:false,error:null},assistant:{pending:false,error:null},parseInFlight:null};
-    const scope={client,projectId:'fixture',workspacePath:'/tmp/synthetic-reader',writable:true,workspaceStatus:'ready',workspaceError:null,openFileInCanvas:()=>{}};
+    const scope={client,projectId:'fixture',workspacePath:'/tmp/synthetic-reader',writable:true,workspaceStatus:'ready',workspaceError:null,
+      openFileInCanvas:()=>{},openLiterature:target=>{window.openedEvidence=target;}};
     window.mountTranslation=(width=420,height=598,metadata=null)=>{
       selected.metadata.title=metadata?.title??'Synthetic multi agent research paper with a long title';
       selected.metadata.authors=metadata?.authors??['Fixture Author'];
@@ -72,6 +81,33 @@ before(async () => {
   page.setDefaultTimeout(5000);
   await page.waitForFunction(()=>typeof window.mountTranslation==='function');
 });
+
+test('reader inspector retains notes, reuses citation actions and opens the captured evidence parse',async()=>{
+  await page.setViewportSize({width:1200,height:800});
+  await page.evaluate(()=>window.mountTranslation(1200,740));
+  await page.getByTestId('reader-block-paragraph').waitFor();
+  await page.getByTestId('reader-inspector-toggle').click();
+  await expect(page.getByTestId('notes-panel')).toBeVisible();
+  await page.getByTestId('notes-create').click();
+  await page.getByLabel('笔记标题',{exact:true}).fill('Inspector retained note');
+  const notes=page.getByRole('tab',{name:'笔记',exact:true});
+  await notes.focus();await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('tab',{name:'引用',exact:true})).toBeFocused();
+  await expect(page.getByTestId('reader-copy-bibtex')).toBeVisible();
+  await page.getByTestId('reader-export-bibtex').click();
+  await expect.poll(()=>page.evaluate(()=>window.writtenBibtex?.relativePath)).toBe('literature/fixture.bib');
+  await page.getByRole('tab',{name:'证据',exact:true}).click();
+  await expect(page.getByTestId('reader-evidence')).toContainText('来源已失效，保留历史摘录');
+  await expect(page.getByTestId('reader-evidence')).not.toContainText('Not this paper.');
+  await page.getByTestId('reader-evidence-open-captured-evidence').click();
+  assert.deepEqual(await page.evaluate(()=>window.openedEvidence),{kind:'reader',libraryItemId:'paper',
+    parseId:'historical-parse',locator:'page:1',text:'Explicit synthetic source.'});
+  await notes.click();
+  await expect(page.getByLabel('笔记标题',{exact:true})).toHaveValue('Inspector retained note');
+  await page.getByTestId('notes-save').click();
+  await expect(page.getByTestId('notes-panel').getByRole('status')).toHaveText('已保存');
+  await page.getByTestId('reader-inspector-toggle').click();
+});
 after(async () => {try {await app?.close();} finally {if(directory)await rm(directory,{recursive:true,force:true});}});
 
 test('translation output leaves a usable sibling reader and note region in a constrained column',async()=>{
@@ -79,7 +115,7 @@ test('translation output leaves a usable sibling reader and note region in a con
   await page.getByTestId('reader-block-paragraph').getByRole('button',{name:'翻译',exact:true}).click();
   await page.getByRole('button',{name:'开始翻译',exact:true}).click();
   await page.getByRole('button',{name:'译文存为笔记',exact:true}).waitFor();
-  await page.getByRole('button',{name:'论文笔记',exact:true}).click();
+  await page.getByTestId('reader-inspector-toggle').click();
   await page.getByTestId('notes-create').waitFor();
   const body=await page.getByTestId('notes-panel').boundingBox();
   assert.ok(body.height>=100,`reader notes collapsed to ${body.height}px`);
@@ -178,11 +214,11 @@ test('reader gives content most of the viewport and notes use the full narrow co
     assert.equal(await page.getByTestId('reader-parse-disclosure').evaluate(node=>node.parentElement.open),false);
     const reading=await page.getByTestId('reader-content-area').boundingBox();
     assert.ok(reading.height>=400,`reader content height ${reading.height}px at ${width}px`);
-    await page.getByRole('button',{name:'论文笔记',exact:true}).click();
+    await page.getByTestId('reader-inspector-toggle').click();
     const notes=await page.getByTestId('notes-panel').boundingBox();
     assert.ok(notes.height>=400,`notes height ${notes.height}px at ${width}px`);
     assert.ok(notes.width>=(width<=800?width-4:300),`notes width ${notes.width}px at ${width}px`);
-    await page.getByRole('button',{name:'关闭笔记',exact:true}).click();
+    await page.getByTestId('reader-inspector-toggle').click();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   }
 });
@@ -192,17 +228,17 @@ test('incoming search focus reveals reading content without discarding the mount
   await page.setViewportSize({width:420,height:800});
   await page.evaluate(()=>window.mountTranslation(420,740));
   await page.getByTestId('reader-block-paragraph').waitFor();
-  await page.getByRole('button',{name:'论文笔记',exact:true}).click();
+  await page.getByTestId('reader-inspector-toggle').click();
   await page.getByTestId('notes-create').click();
   await page.getByLabel('笔记标题',{exact:true}).fill('Unfinished search note');
   await page.evaluate(()=>window.focusReader());
   await expect(page.getByTestId('reader-content-area')).toBeVisible();
   await expect(page.getByTestId('notes-panel')).toBeHidden();
-  await page.getByRole('button',{name:'论文笔记',exact:true}).click();
+  await page.getByTestId('reader-inspector-toggle').click();
   await expect(page.getByLabel('笔记标题',{exact:true})).toHaveValue('Unfinished search note');
   await page.evaluate(()=>window.focusReader());
   await expect(page.getByTestId('reader-content-area')).toBeVisible();
-  await page.getByRole('button',{name:'论文笔记',exact:true}).click();
+  await page.getByTestId('reader-inspector-toggle').click();
   await expect(page.getByLabel('笔记标题',{exact:true})).toHaveValue('Unfinished search note');
   await page.getByTestId('notes-save').click();
   await expect(page.getByTestId('notes-panel').getByRole('status')).toHaveText('已保存');

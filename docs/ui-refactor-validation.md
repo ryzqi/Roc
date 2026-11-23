@@ -1,5 +1,11 @@
 # UI 重构验证记录
 
+## 2026-11-23 P4.3：阅读检视器
+
+状态：**Verified passing**。阅读检视器提供笔记、引用、证据三个原生键盘标签；笔记切换后保留草稿，引用复用BibTeX复制/导出与命名动作。证据来自wikiSnapshot，明确失效历史摘录，按实际parseId/rawLocator定位；PDF选中文字仍写入私人笔记，不伪造支持证据。窄窗检视器展开与原文回跳沿用已有阅读位置保护。
+
+工作目录及完整组合命令见本日P3记录；其中 `tests/renderer/reading-layout.test.mjs`、`tests/renderer/reading-note-guards.test.mjs`、`tests/renderer/reading-tool-guards.test.mjs` **21/21**。覆盖笔记跨标签保留、引用输出、历史解析定位、翻译取消、删除/冲突保护、IME公式、晚到保存与重复提交。截图改放夹具临时目录并自动清理。真实PDF长翻页及完整外部服务T2另在P7/P8验收。
+
 ## 2026-11-23 P4.2：发现列表与候选预览
 
 状态：**Verified passing**。900px容器起结果与预览按65:35排列，预览展示真实摘要、来源冲突、DOI和原入库动作；窄容器改为内联详情，返回/Escape恢复原候选焦点、筛选与滚动。部分来源失败保留有效结果；批量导入仍使用真实回执。

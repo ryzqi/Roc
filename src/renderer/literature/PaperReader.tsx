@@ -17,6 +17,7 @@ import type {ReadingTranslationGuard} from './ReadingTranslationPanel';
 import {requestReadingChange} from './reading-interactions';
 import './reading.css';
 import {ResourceStatus} from './ResourceStatus';
+import {ReaderEvidencePanel} from './ReaderEvidencePanel';
 
 const ReadingDiscoveryPanel = retryableLazy(() => import('./ReadingDiscoveryPanel'));
 const ReadingNotesPanel = retryableLazy(() => import('./ReadingNotesPanel'));
@@ -96,6 +97,8 @@ export function PaperReader({
   const [readingMode, setReadingMode] = useState<'parsed' | 'original' | 'compare'>('parsed');
   const comparePdf = readingMode === 'compare';
   const [notesOpen,setNotesOpen]=useState(false),[notesVisited,setNotesVisited]=useState(false);
+  const [inspectorTab, setInspectorTab] = useState<'notes' | 'citations' | 'evidence'>('notes');
+  const revealNotes = (): void => {setInspectorTab('notes'); setNotesVisited(true); setNotesOpen(true);};
   useEffect(() => {
     if (focusRequestId > 0 || focusParseId !== null || focusLocator !== null) {
       setNotesOpen(false);
@@ -106,7 +109,7 @@ export function PaperReader({
   const [translation,setTranslation]=useState<{id:string;segments:{label:string;text:string}[];label:string}|null>(null);
   const translationGuardRef=useRef<ReadingTranslationGuard|null>(null);
   const [blockFilter,setBlockFilter]=useState('all'),[selectedText,setSelectedText]=useState('');
-  const addNote=(text:string):void=>{setNoteSeed({id:crypto.randomUUID(),text});setNotesVisited(true);setNotesOpen(true);};
+  const addNote=(text:string):void=>{setNoteSeed({id:crypto.randomUUID(),text});revealNotes();};
   const changeTranslation=(proceed:()=>void):void=>{
     if(translationGuardRef.current)translationGuardRef.current.request(proceed);
     else proceed();
@@ -363,6 +366,7 @@ export function PaperReader({
    * relative path, with the absolute one the scope knows, rather than "导出成功".
    */
   const exportBibtexToWorkspace = (): void => {
+    if (!scope.writable) return;
     void runHeaderAction(async () => {
       const exported = await literature.exportItem(selected, 'bibtex');
       if (exported === null) {
@@ -380,6 +384,7 @@ export function PaperReader({
   };
 
   const saveCitationKey = (): void => {
+    if (!scope.writable) return;
     const next = (keyDraft ?? '').trim();
     if (!isCitationKeyValid(next)) {
       setActionNote('引用键含有不支持的字符，请移除空格、逗号、花括号、反斜杠、%、# 或引号。');
@@ -401,6 +406,126 @@ export function PaperReader({
       return null;
     });
   };
+
+  const citationControls = <section className="reading-inspector-scroll" aria-label="文献引用">
+    <p className="mb-3 break-all font-mono">{selected.bibliography.citationKey}</p>
+    <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={actionBusy}
+            onClick={copyBibtex}
+            data-testid="reader-copy-bibtex"
+            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+          >
+            {copy.copied ? <Check size={11} aria-hidden="true" /> : <ClipboardCopy size={11} aria-hidden="true" />}
+            {copy.copied ? '已复制' : '复制 BibTeX'}
+          </button>
+          <button
+            type="button"
+            disabled={actionBusy || !scope.writable}
+            onClick={exportBibtexToWorkspace}
+            data-testid="reader-export-bibtex"
+            title="导出到项目工作目录"
+            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+          >
+            <Save size={11} aria-hidden="true" />
+            导出 .bib 到工作区
+          </button>
+          <button
+            type="button"
+            disabled={actionBusy || !scope.writable}
+            onClick={() => setKeyDraft(selected.bibliography.citationKey)}
+            data-testid="reader-edit-key"
+            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+          >
+            <Pencil size={11} aria-hidden="true" />
+            修改引用键
+          </button>
+        {keyDraft === null ? null : (
+          <div className="flex flex-wrap items-center gap-1.5" data-testid="reader-key-editor">
+            <input
+              value={keyDraft}
+              onChange={(event) => setKeyDraft(event.target.value)}
+              aria-label="引用 key"
+              data-testid="reader-key-input"
+              disabled={!scope.writable}
+              className="h-[var(--control-height-compact)] min-w-0 max-w-full flex-1 rounded-control border-[0.5px] border-line bg-surface px-2 font-mono text-ink text-[length:var(--font-micro-size)]"
+            />
+            <button
+              type="button"
+              disabled={actionBusy || !scope.writable}
+              onClick={saveCitationKey}
+              data-testid="reader-key-save"
+              className="h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
+            >
+              保存
+            </button>
+            <button
+              type="button"
+              disabled={!scope.writable}
+              onClick={() => setKeyDraft(deriveCitationKey({
+                title: selected.metadata.title,
+                authors: selected.metadata.authors,
+                year: selected.metadata.publishedYear
+              }) ?? '')}
+              data-testid="reader-key-derive"
+              className="h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-muted text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink"
+            >
+              推导
+            </button>
+            <button
+              type="button"
+              onClick={() => setKeyDraft(null)}
+              data-testid="reader-key-cancel"
+              className="flex h-[var(--control-height-compact)] items-center gap-0.5 rounded-control border-[0.5px] border-line px-2 text-muted text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink"
+            >
+              <X size={10} aria-hidden="true" />
+              取消
+            </button>
+          </div>
+        )}
+
+    </div>
+  </section>;
+
+  const inspectorTabs = [{id: 'notes', label: '笔记'}, {id: 'citations', label: '引用'}, {id: 'evidence', label: '证据'}] as const;
+  const chooseInspectorTab = (tab: typeof inspectorTab): void => {
+    setInspectorTab(tab);
+    if (tab === 'notes') setNotesVisited(true);
+  };
+  const toggleInspector = <button type="button" aria-expanded={notesOpen} aria-controls="reader-inspector"
+    data-testid="reader-inspector-toggle" onClick={() => {
+      if (!notesOpen && inspectorTab === 'notes') setNotesVisited(true);
+      setNotesOpen(!notesOpen);
+    }}>{notesOpen ? '关闭检视器' : '笔记 / 引用 / 证据'}</button>;
+  const inspector = (notesOpen || notesVisited) && literature.projectId ? <aside id="reader-inspector" hidden={!notesOpen}
+    className="reading-paper-notes" aria-label="文献检视器" data-testid="reader-inspector">
+    <div className="reading-toolbar reading-inspector-tabs" role="tablist" aria-label="文献检视内容">
+      {inspectorTabs.map((tab, index) => <button key={tab.id} type="button" role="tab" id={`reader-inspector-tab-${tab.id}`}
+        aria-controls={`reader-inspector-panel-${tab.id}`} aria-selected={inspectorTab === tab.id}
+        tabIndex={inspectorTab === tab.id ? 0 : -1} onClick={() => chooseInspectorTab(tab.id)} onKeyDown={event => {
+          const next = event.key === 'ArrowRight' ? (index + 1) % inspectorTabs.length
+            : event.key === 'ArrowLeft' ? (index + inspectorTabs.length - 1) % inspectorTabs.length
+              : event.key === 'Home' ? 0 : event.key === 'End' ? inspectorTabs.length - 1 : null;
+          if (next === null) return;
+          event.preventDefault(); chooseInspectorTab(inspectorTabs[next].id);
+          event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
+        }}>{tab.label}</button>)}
+    </div>
+    <div className="reading-inspector-panel" role="tabpanel" id="reader-inspector-panel-notes" aria-labelledby="reader-inspector-tab-notes"
+      hidden={inspectorTab !== 'notes'}>
+      {notesVisited ? <LazyBoundary fallback={<p role="status">加载笔记…</p>}><ReadingNotesPanel key={literature.projectId}
+        client={literature.client} projectId={literature.projectId}
+        items={literature.items.some(item => item.id === selected.id) ? literature.items : [selected, ...literature.items]}
+        itemId={selected.id} writable={scope.writable} seed={noteSeed} onReveal={revealNotes} onSeedConsumed={() => setNoteSeed(null)}/></LazyBoundary> : null}
+    </div>
+    <div className="reading-inspector-panel" role="tabpanel" id="reader-inspector-panel-citations" aria-labelledby="reader-inspector-tab-citations"
+      hidden={inspectorTab !== 'citations'}>{citationControls}</div>
+    <div className="reading-inspector-panel" role="tabpanel" id="reader-inspector-panel-evidence" aria-labelledby="reader-inspector-tab-evidence"
+      hidden={inspectorTab !== 'evidence'}>
+      {inspectorTab === 'evidence' ? <ReaderEvidencePanel key={selected.id} literature={literature}/> : null}
+    </div>
+  </aside> : null;
 
   return (
     <div className="reading-paper flex h-full min-h-0 min-w-0 flex-col" data-testid="paper-reader" data-library-item={selected.id} data-notes-open={notesOpen} data-reading-mode={readingMode}>
@@ -463,79 +588,7 @@ export function PaperReader({
             className="min-h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] active:bg-[var(--overlay-active)] disabled:opacity-40">
             OpenReview
           </button>
-          <button
-            type="button"
-            disabled={actionBusy}
-            onClick={copyBibtex}
-            data-testid="reader-copy-bibtex"
-            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
-          >
-            {copy.copied ? <Check size={11} aria-hidden="true" /> : <ClipboardCopy size={11} aria-hidden="true" />}
-            {copy.copied ? '已复制' : '复制 BibTeX'}
-          </button>
-          <button
-            type="button"
-            disabled={actionBusy}
-            onClick={exportBibtexToWorkspace}
-            data-testid="reader-export-bibtex"
-            title="导出到项目工作目录"
-            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
-          >
-            <Save size={11} aria-hidden="true" />
-            导出 .bib 到工作区
-          </button>
-          <button
-            type="button"
-            disabled={actionBusy}
-            onClick={() => setKeyDraft(selected.bibliography.citationKey)}
-            data-testid="reader-edit-key"
-            className="flex h-[var(--control-height-compact)] items-center gap-1 rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
-          >
-            <Pencil size={11} aria-hidden="true" />
-            修改引用键
-          </button>
         </div>
-        {keyDraft === null ? null : (
-          <div className="flex flex-wrap items-center gap-1.5" data-testid="reader-key-editor">
-            <input
-              value={keyDraft}
-              onChange={(event) => setKeyDraft(event.target.value)}
-              aria-label="引用 key"
-              data-testid="reader-key-input"
-              className="h-[var(--control-height-compact)] w-56 rounded-control border-[0.5px] border-line bg-surface px-2 font-mono text-ink text-[length:var(--font-micro-size)]"
-            />
-            <button
-              type="button"
-              disabled={actionBusy}
-              onClick={saveCitationKey}
-              data-testid="reader-key-save"
-              className="h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-ink text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] disabled:opacity-40"
-            >
-              保存
-            </button>
-            <button
-              type="button"
-              onClick={() => setKeyDraft(deriveCitationKey({
-                title: selected.metadata.title,
-                authors: selected.metadata.authors,
-                year: selected.metadata.publishedYear
-              }) ?? '')}
-              data-testid="reader-key-derive"
-              className="h-[var(--control-height-compact)] rounded-control border-[0.5px] border-line px-2 text-muted text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink"
-            >
-              推导
-            </button>
-            <button
-              type="button"
-              onClick={() => setKeyDraft(null)}
-              data-testid="reader-key-cancel"
-              className="flex h-[var(--control-height-compact)] items-center gap-0.5 rounded-control border-[0.5px] border-line px-2 text-muted text-[length:var(--font-micro-size)] hover:bg-[var(--overlay-hover)] hover:text-ink"
-            >
-              <X size={10} aria-hidden="true" />
-              取消
-            </button>
-          </div>
-        )}
           </div>
         </details>
         {actionNote === null && copy.error === null && literature.assistant.error === null ? null : (
@@ -575,12 +628,16 @@ export function PaperReader({
       </div> : null}
 
       {documents.length === 0 ? (
-        <div className="min-h-0 flex-1">
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="reading-toolbar reading-navigation">{toggleInspector}</div>
+          <div className="reading-translation-region" hidden/>
+          <div className="reading-workspace"><div className="reading-primary">
           <EmptyState
             icon={FileSearch}
             title="这条文献还没有文档"
             testId="reader-no-document"
           />
+          </div>{inspector}</div>
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
@@ -619,7 +676,7 @@ export function PaperReader({
           </div>          ) : null}
 
           <div className="reading-toolbar reading-navigation">
-            <button type="button" aria-expanded={notesOpen} onClick={()=>{setNotesVisited(true);setNotesOpen(!notesOpen);}}>{notesOpen ? '关闭笔记' : '论文笔记'}</button>
+            {toggleInspector}
           {activeDocument?.mediaType === 'application/pdf' ? (
             <>
               <div role="group" aria-label="阅读视图" className="reading-view-switch">
@@ -981,10 +1038,7 @@ export function PaperReader({
             )}
           </div>
           </div>
-          {notesVisited && literature.projectId?<aside hidden={!notesOpen} className="reading-paper-notes" aria-label="论文关联笔记">
-            <LazyBoundary fallback={<p role="status">加载笔记…</p>}><ReadingNotesPanel key={literature.projectId} client={literature.client} projectId={literature.projectId}
-              items={literature.items} itemId={selected.id} writable={scope.writable} seed={noteSeed} onReveal={()=>setNotesOpen(true)} onSeedConsumed={()=>setNoteSeed(null)}/></LazyBoundary>
-          </aside>:null}
+          {inspector}
           </div>
 
         </div>
