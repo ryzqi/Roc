@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronDown, CircleHelp, FileText, FolderOpen, FolderTree, ListChecks, Loader2, RotateCcw, type LucideIcon } from 'lucide-react';
 import type { AppViewId } from '../app/routes';
 import { useAsyncResource } from '../app/use-async-resource';
@@ -198,13 +198,16 @@ function OverviewResources({ client, projectId, binding, projects, onOpenProject
 function LiteratureResources({ onOpenLiterature }: Pick<ContextDrawerProps, 'onOpenLiterature'>): React.JSX.Element {
   const literature = useLiterature();
   const [category, setCategory] = useState<string | null>(null);
-  const counts = new Map<string, number>();
-  let zoteroCount = 0;
-  for (const item of literature.items) {
-    const type = item.bibliography.entryType;
-    counts.set(type, (counts.get(type) ?? 0) + 1);
-    if (item.metadata.source === 'zotero' || item.sources.some(({ metadata }) => metadata.source === 'zotero')) zoteroCount += 1;
-  }
+  const { counts, zoteroCount } = useMemo(() => {
+    const counts = new Map<string, number>();
+    let zoteroCount = 0;
+    for (const item of literature.items) {
+      const type = item.bibliography.entryType;
+      counts.set(type, (counts.get(type) ?? 0) + 1);
+      if (item.metadata.source === 'zotero' || item.sources.some(({ metadata }) => metadata.source === 'zotero')) zoteroCount += 1;
+    }
+    return { counts, zoteroCount };
+  }, [literature.items]);
   const selectedCategory = category !== null && counts.has(category) ? category : null;
   return <>
     <div className="shrink-0 space-y-1 border-b-[0.5px] border-line px-2 py-1">

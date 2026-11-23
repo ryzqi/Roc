@@ -105,4 +105,6 @@ Contract 2 要求来源/chunk 与实际上下文 embedding 输入哈希、向量
 
 固定保留宿主继续通过 `ViewActivity` 暂停已接入的隐藏资源与轮询；草稿导航监听仍在组件 effect 内，不能把整个宿主直接改为卸载或 React `Activity`。终端内部已单独分离生命周期：隐藏时释放 xterm DOM、尺寸观察和输出订阅，主进程继续持有 PTY；重新进入按窗口、项目和目录恢复同一会话及有界序号输出。显式结束、窗口销毁和应用退出释放 PTY。详见[终端会话合同](terminal-sessions.md)。
 
+文献上下文侧栏保留分类、搜索、排序、多选和虚拟列表状态；关闭侧栏不会释放全部列表 DOM，已加载结果仍由虚拟化限制挂载行数。分类与 Zotero 统计只在文献数组变化时重算，批量所选条目及键盘导航索引按各自依赖缓存，避免加载状态、动作反馈等更新反复扫描整库。隐藏期间仍接收真实 store 的查询、项目与动作更新，查询往返或项目切换照常清空失效多选，不冻结整份 store。`tests/renderer/literature-list-layout.test.mjs` 在真实 Electron 中验证统计刷新、隐藏前后筛选与滚动保留、外部焦点不被抢走，以及隐藏期间查询往返和项目切换的多选失效。
+
 `tests/unit/renderer-view-retention.test.mjs` 验证预算与共享身份；`tests/renderer/canvas-view-loading.test.mjs` 在 Electron 中使用受控视图导入器验证冷加载/失败衔接、20 次切换的挂载数、草稿/选区/导航监听保留和项目键重建后的清理。生命周期计数是宿主回归证据，不是内存节省的测量；真实 PTY 恢复另由 `tests/integration/terminal-session-reattach.test.mjs` 验证，性能变化仍以同构建的正式报告为准。

@@ -1,5 +1,11 @@
 # UI 重构验证记录
 
+## 2026-11-23 P7.6：文献侧栏派生计算
+
+状态：**Verified passing**（侧栏行为定向范围）。Profiler短预检发现隐藏文献侧栏仍随store状态更新渲染；分类/Zotero统计、多选条目和键盘索引现按实际数据依赖缓存。保留搜索、排序、分类、多选和虚拟列表状态，隐藏期间继续处理查询和项目变化，不冻结权限与动作状态；此改动不等于释放全部隐藏列表DOM，正式性能收益另验。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。`node --test tests/renderer/literature-list-layout.test.mjs` **5/5**，覆盖统计随新条目更新、状态更新不重扫分类、隐藏后筛选与滚动保留、外部焦点保留，以及隐藏期间查询往返和项目切换清空失效多选。取样等待虚拟行测高稳定，设两秒超时；追加超时后 `node --check tests/renderer/literature-list-layout.test.mjs` 与 `git diff --check` 通过，统一构建另记。临时夹具自动清理。
+
 ## 2026-11-23 P7.5：性能工具与短预检
 
 状态：**Verified passing**（测量工具与短预检；正式五轮另记）。普通UI、PDF、长流/空闲和独立React profiling入口均使用隔离资料根，按独立进程轮次汇总并校验源码、构建、fixture和主机身份。专用profiling构建保护普通dist，计数器不保留正文；失败状态、完成轮数和损坏子报告证据进入最终报告。子进程清除继承的测量参数与开发Renderer URL，避免测到不同应用。

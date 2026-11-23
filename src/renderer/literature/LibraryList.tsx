@@ -80,7 +80,8 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
     ? (right.metadata.publishedYear ?? 0) - (left.metadata.publishedYear ?? 0)
     : sort === 'title' ? libraryItemTitle(left).localeCompare(libraryItemTitle(right), 'zh-CN')
       : right.updatedAt.localeCompare(left.updatedAt)), [literature.items, entryType, sort]);
-  const checkedItems = items.filter(item => checkedIds.has(item.id));
+  const checkedItems = useMemo(() => checkedIds.size === 0 ? [] : items.filter(item => checkedIds.has(item.id)), [items, checkedIds]);
+  const checkedItemsKey = useMemo(() => checkedItems.map(item => item.id).join(':'), [checkedItems]);
 
   // Keep the box in sync when something else changes the query (e.g. clearing it
   // from a view switch) without fighting the user's typing.
@@ -92,9 +93,12 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
   }, [literature.projectId, literature.selectedId]);
 
   const virtualize = items.length > VIRTUALIZE_THRESHOLD;
-  const activeId = items.some(item => item.id === focusedId) ? focusedId
-    : items.some(item => item.id === literature.selectedId) ? literature.selectedId : items[0]?.id;
-  const activeIndex = items.findIndex(item => item.id === activeId);
+  const selectedIndex = useMemo(() => items.findIndex(item => item.id === literature.selectedId), [items, literature.selectedId]);
+  const activeIndex = useMemo(() => {
+    const focusedIndex = items.findIndex(item => item.id === focusedId);
+    return focusedIndex < 0 ? (items.length === 0 ? -1 : Math.max(0, selectedIndex)) : focusedIndex;
+  }, [items, focusedId, selectedIndex]);
+  const activeId = items[activeIndex]?.id;
   // A manually scrolled list keeps a Tab entry within the mounted range.
   const tabStopId = virtualize && (activeIndex < visibleRange.startIndex || activeIndex > visibleRange.endIndex)
     ? items[visibleRange.startIndex]?.id : activeId;
@@ -103,14 +107,13 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
     setVirtualizerReady(handle !== null);
   }, []);
   useEffect(() => {
-    const index = items.findIndex(item => item.id === literature.selectedId);
-    if (index < 0) {lastScrolledSelection.current = null; return;}
+    if (selectedIndex < 0) {lastScrolledSelection.current = null; return;}
     const key = JSON.stringify([literature.projectId, literature.selectedId, literature.query, sort, entryType, virtualize, virtualizerReady]);
     if (lastScrolledSelection.current === key) return;
     lastScrolledSelection.current = key;
-    if (virtualize) virtualizerRef.current?.scrollIntoView({index, behavior: 'auto'});
+    if (virtualize) virtualizerRef.current?.scrollIntoView({index: selectedIndex, behavior: 'auto'});
     else rowRefs.current.get(literature.selectedId!)?.scrollIntoView({block: 'nearest'});
-  }, [items, literature.projectId, literature.selectedId, literature.query, sort, entryType, virtualize, virtualizerReady]);
+  }, [selectedIndex, literature.projectId, literature.selectedId, literature.query, sort, entryType, virtualize, virtualizerReady]);
 
   const focusRow = (index: number): void => {
     const item = items[index];
@@ -277,7 +280,7 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
           }}>
           {virtualize ? <LazyBoundary fallback={<p role="status" className="p-3 text-muted">正在准备文献列表…</p>}>
             <LazyLibraryVirtualizedRows ref={setVirtualizerRef} items={items}
-              initialIndex={Math.max(0, items.findIndex(item => item.id === literature.selectedId))}
+              initialIndex={Math.max(0, selectedIndex)}
               onRangeChanged={setVisibleRange} renderRow={renderRow}/>
           </LazyBoundary> : <ul aria-label="文献列表" className="library-plain-list">
             {items.map((item, index) => <li key={item.id}>{renderRow(index, item)}</li>)}
@@ -285,7 +288,7 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
         </div>
       )}
 
-      {selecting && checkedItems.length > 0 ? <BulkCitationActions key={checkedItems.map(item => item.id).join(':')}
+      {selecting && checkedItems.length > 0 ? <BulkCitationActions key={checkedItemsKey}
         items={checkedItems} literature={literature}/> : null}
 
       {literature.status === 'ready' ? <div className="library-list-footer">
