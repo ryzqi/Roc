@@ -72,20 +72,23 @@ test('agent atomic writes serialize same-path edits and record prepared, publish
     recordReceipt: receipt => receipts.push(receipt)
   });
 
-  const first = await runWithCapabilityOperationContext(operation, () => backend.write('/notes.md', 'first'));
+  const initialContent = 'first\nsecond';
+  const first = await runWithCapabilityOperationContext(operation, () => backend.write('/notes.md', initialContent));
   assert.equal(first.error, undefined);
   assert.equal(operation.hasPublishedSideEffect(), true);
   assert.deepEqual(receipts.map(receipt => receipt.phase), ['prepared', 'published', 'durable']);
   assert.equal(receipts[0].expectedVersion, null);
-  assert.equal(receipts[2].resultHash, createHash('sha256').update('first').digest('hex'));
+  assert.equal(receipts[2].resultHash, createHash('sha256').update(initialContent).digest('hex'));
 
+  // Canonical-path resolution may complete out of order before callers enter
+  // the lock. Independent edits must both survive either serialized order.
   const [editOne, editTwo] = await Promise.all([
-    backend.edit('/notes.md', 'first', 'second'),
-    backend.edit('/notes.md', 'second', 'third')
+    backend.edit('/notes.md', 'first', 'updated first'),
+    backend.edit('/notes.md', 'second', 'updated second')
   ]);
   assert.equal(editOne.error, undefined);
   assert.equal(editTwo.error, undefined);
-  assert.equal(await readFile(join(workspacePath, 'notes.md'), 'utf8'), 'third');
+  assert.equal(await readFile(join(workspacePath, 'notes.md'), 'utf8'), 'updated first\nupdated second');
 });
 
 test('agent atomic writes reject a target version change before rename', async () => {

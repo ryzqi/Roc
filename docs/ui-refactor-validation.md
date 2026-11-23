@@ -1,5 +1,11 @@
 # UI 重构验证记录
 
+## 2026-11-23 P8准备：原子写入并发夹具
+
+状态：**Verified passing**（修正后的单文件范围）。仓库根 `pnpm test:unit` 首轮共2697项，2695通过、1失败、1跳过，446.1秒；失败为既有 `tests/unit/agent-filesystem-path-invalidation.test.mjs` 对同路径两次相互依赖编辑错误要求调用先后FIFO。路径规范化在入锁之前异步执行，第二次可先入锁；一次性门控探针证明入锁顺序反转但最大临界区并发仍为1，未发现生产互斥故障。
+
+现两次并发编辑分别更新同文件的独立原文，仍要求两次成功、最终两处更新和prepared/published/durable真实回执。`node --test tests/unit/agent-filesystem-path-invalidation.test.mjs` 连续20轮 **80/80**；移除锁的一次性探针确认相同检查会发现版本冲突/丢更新。生产写入合同未修改，所有探针已清理。定向结果不写成全量一次通过，最终全量另记。
+
 ## 2026-11-23 P6.3：隐藏窗口的审批与继续状态
 
 状态：**Verified passing**。原逻辑暂停隐藏窗口RAF，也延迟了run_interrupted/resumed/continued状态；现在三类控制事件同步冲刷同一顺序队列，先提交之前的文字再更新控制状态。文字增量仍按帧合批，原始序号事件先记录后投影，主进程权限、回执持久化及输入回执路径未改变。
