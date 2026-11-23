@@ -8,25 +8,28 @@ import {ArtifactEditorBoundary, useArtifactEditorGuard} from './artifact-editor-
 
 const ReviewInspector = retryableLazy(async () => ({default: (await import('./ReviewInspector')).ReviewInspector}));
 
-export function ArtifactInspector({client, selection, writable, readingLocations, reviewDrafts, onClose, onOpenTask}: {
+export function ArtifactInspector({client, selection, writable, readingLocations, reviewDrafts, onClose, onOpenTask, presentation = 'drawer'}: {
   client: RocClient; selection: ArtifactInspectorSelection; writable: boolean;
   readingLocations: ArtifactReadingLocations; reviewDrafts: ReviewProtocolDrafts;
+  presentation?: 'drawer' | 'embedded';
   onClose: () => void; onOpenTask: (taskId: string) => void
 }): React.JSX.Element {
   return <ArtifactEditorBoundary projectId={selection.request.projectId}>
     <InspectorContent client={client} selection={selection} writable={writable} readingLocations={readingLocations}
-      reviewDrafts={reviewDrafts} onClose={onClose} onOpenTask={onOpenTask} />
+      reviewDrafts={reviewDrafts} onClose={onClose} onOpenTask={onOpenTask} presentation={presentation} />
   </ArtifactEditorBoundary>;
 }
 
-function InspectorContent({client, selection, writable, readingLocations, reviewDrafts, onClose, onOpenTask}:
+function InspectorContent({client, selection, writable, readingLocations, reviewDrafts, onClose, onOpenTask, presentation}:
   React.ComponentProps<typeof ArtifactInspector>): React.JSX.Element {
   const guard = useArtifactEditorGuard();
   const close = (): void => guard.request(onClose);
   return selection.kind === 'stage' ?
     <StageArtifactInspector client={client} request={selection.request} writable={writable} onReviewContext={selection.onReviewContext}
-      readingLocations={readingLocations} onClose={close} onOpenTask={taskId => guard.request(() => onOpenTask(taskId))} /> :
+      embedded={presentation === 'embedded'} readingLocations={readingLocations} onClose={close}
+      onOpenTask={taskId => guard.request(() => onOpenTask(taskId))} /> :
     <LazyBoundary fallback={<p role="status">正在加载综述核查…</p>}>
-      <ReviewInspector client={client} request={selection.request} writable={writable} drafts={reviewDrafts} onClose={close} />
+      <ReviewInspector client={client} request={selection.request} writable={writable} drafts={reviewDrafts}
+        embedded={presentation === 'embedded'} onClose={close} />
     </LazyBoundary>;
 }

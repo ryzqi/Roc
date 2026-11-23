@@ -49,6 +49,8 @@ export type ModalShellProps = {
   open: boolean;
   title: string;
   kind?: OverlayKind;
+  /** Reuse the header, guarded close and scrolling body inside a workspace pane. */
+  embedded?: boolean;
   onClose: () => void;
   children: React.ReactNode;
   /** Rendered in a fixed footer, below the scrolling body. */
@@ -103,6 +105,7 @@ export function ModalShell({
   open,
   title,
   kind = 'modal',
+  embedded = false,
   onClose,
   children,
   footer,
@@ -136,7 +139,7 @@ export function ModalShell({
 
   // Background inertness lives in the hook, which reference-counts the overlay
   // stack so layers closing out of order cannot leave `#root` hidden forever.
-  useOverlayBehavior({ open, panelRef, overlayId, layer, onRequestClose: onClose, canClose, initialFocusRef });
+  useOverlayBehavior({ open: open && !embedded, panelRef, overlayId, layer, onRequestClose: onClose, canClose, initialFocusRef });
 
   const close = (): void => {
     if (!openRef.current || !canClose()) {
@@ -144,6 +147,57 @@ export function ModalShell({
     }
     onClose();
   };
+
+  const content = <>
+    {hideHeader ? <h2 id={titleId} className="sr-only">{title}</h2> : (
+    <div className="flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-4 py-2">
+      <h2 id={titleId} className="min-w-0 flex-1 wrap-anywhere text-balance text-ink text-[length:var(--font-h3-size)]">
+        {title}
+      </h2>
+      <button
+        type="button"
+        onClick={close}
+        disabled={closeDisabled}
+        aria-label={`关闭${title}`}
+        data-testid={testId === undefined ? undefined : `${testId}-close`}
+        className="flex size-7 shrink-0 items-center justify-center rounded-control text-muted enabled:hover:bg-[var(--overlay-hover)] enabled:hover:text-ink enabled:active:bg-[var(--overlay-active)] disabled:opacity-50"
+      >
+        <X size={14} aria-hidden="true" />
+      </button>
+    </div>
+    )}
+
+    <div
+      id={bodyId}
+      ref={bodyRef}
+      className={
+        bodyPadding === 'none'
+          ? 'min-h-0 min-w-0 flex-1 overflow-hidden'
+          : 'ui-scroll-region flex-1 px-4 py-3'
+      }
+    >
+      {children}
+    </div>
+
+    {footer === undefined ? null : (
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t-[0.5px] border-line px-4 py-2">
+        {footer}
+      </div>
+    )}
+  </>;
+
+  if (embedded) {
+    return open ? <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid={testId ?? 'overlay'}
+      data-presentation="embedded">
+      <OverlayFocusRestore returnFocusSelector={returnFocusSelector} />
+      <section ref={panelRef} aria-labelledby={titleId} aria-describedby={bodyId}
+        data-testid={testId === undefined ? undefined : `${testId}-panel`}
+        className={`flex min-h-0 min-w-0 flex-1 flex-col bg-surface-rail ${widthClassName ?? ''}`}
+        style={{width: '100%'}}>
+        {content}
+      </section>
+    </div> : null;
+  }
 
   return createPortal(
     // The container is a `motion.div` so presence is propagated to the scrim and
@@ -200,41 +254,7 @@ export function ModalShell({
                 : `relative z-10 row-start-2 mx-auto flex max-h-[min(86vh,calc(100dvh-2*var(--shadow-modal-gutter-block)))] max-w-[min(92vw,calc(100vw-2*var(--shadow-modal-gutter-inline)))] flex-col overflow-clip rounded-window border-[0.5px] border-line-default bg-surface-overlay shadow-[var(--shadow-modal)] ${widthClassName ?? 'w-[680px]'}`
             }
           >
-            {hideHeader ? <h2 id={titleId} className="sr-only">{title}</h2> : (
-            <div className="flex shrink-0 items-center gap-2 border-b-[0.5px] border-line px-4 py-2">
-              <h2 id={titleId} className="min-w-0 flex-1 wrap-anywhere text-balance text-ink text-[length:var(--font-h3-size)]">
-                {title}
-              </h2>
-              <button
-                type="button"
-                onClick={close}
-                disabled={closeDisabled}
-                aria-label={`关闭${title}`}
-                data-testid={testId === undefined ? undefined : `${testId}-close`}
-                className="flex size-7 shrink-0 items-center justify-center rounded-control text-muted enabled:hover:bg-[var(--overlay-hover)] enabled:hover:text-ink enabled:active:bg-[var(--overlay-active)] disabled:opacity-50"
-              >
-                <X size={14} aria-hidden="true" />
-              </button>
-            </div>
-            )}
-
-            <div
-              id={bodyId}
-              ref={bodyRef}
-              className={
-                bodyPadding === 'none'
-                  ? 'min-h-0 min-w-0 flex-1 overflow-hidden'
-                  : 'ui-scroll-region flex-1 px-4 py-3'
-              }
-            >
-              {children}
-            </div>
-
-            {footer === undefined ? null : (
-              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t-[0.5px] border-line px-4 py-2">
-                {footer}
-              </div>
-            )}
+            {content}
           </motion.div>
         </motion.div>
       ) : null}

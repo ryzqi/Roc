@@ -26,6 +26,7 @@ before(async()=>{
     import {LazyMotion,MotionConfig,domAnimation} from 'motion/react';
     import {ResearchGateApprovalCard} from './src/renderer/assistant/blocks/approval-cards';
     import {ArtifactInspector} from './src/renderer/artifacts/ArtifactInspector';
+    import {requestArtifactInspectorChange} from './src/renderer/artifacts/artifact-interactions';
     import {requestNavigation} from './src/renderer/app/navigation-guard';
     const root=createRoot(document.getElementById('root'));
     window.disposeHarness=()=>flushSync(()=>root.render(null));
@@ -44,6 +45,9 @@ before(async()=>{
       getExperiment:input=>window.relationFromMain('getExperiment',input)}}};
     function Harness({link,initialApproval}) {
       const [request,setRequest]=useState(null);
+      const [embedded,setEmbedded]=useState(false);
+      window.setEmbeddedInspector=value=>flushSync(()=>setEmbedded(value));
+      window.closeInspectorDock=()=>requestArtifactInspectorChange(()=>setRequest(null));
       const [readingLocations]=useState(()=>new Map());
       const [reviewDrafts]=useState(()=>new Map());
       const [reviewCallback,setReviewCallback]=useState(null);
@@ -62,10 +66,12 @@ before(async()=>{
             if(result.approval!==null) window.replaceApproval(result.approval);
           }).catch(error=>window.resumeError=error.message);
         }}/>
+        <div style={embedded ? {display:'flex',width:344,height:760,minHeight:0} : undefined}>
         {request===null ? null : <ArtifactInspector key={JSON.stringify(request)} client={client}
+          presentation={embedded ? 'embedded' : 'drawer'}
           selection={{kind:'stage',request,onReviewContext:context=>reviewCallback?.(context)}} writable={true}
           readingLocations={readingLocations} reviewDrafts={reviewDrafts}
-          onClose={()=>setRequest(null)} onOpenTask={taskId=>{window.tasks.push(taskId);setRequest(null);}}/>}</main>;
+          onClose={()=>setRequest(null)} onOpenTask={taskId=>{window.tasks.push(taskId);setRequest(null);}}/>}</div></main>;
     }
     let generation=0;
      window.mount=(link,approval)=>{window.decisions=[];window.tasks=[];window.navigations=0;window.resumeResult=null;window.resumeError=null;flushSync(()=>root.render(
@@ -781,8 +787,9 @@ test('late migration reads and successful pending capture cannot affect another 
   assert.equal(await page.getByTestId('artifact-source-migrations').count(),0);
   await page.evaluate(request=>selectArtifact(request),{projectId:f.project.id,artifactId:f.link.artifactId,expectedVersion:null});
   await page.getByTestId('artifact-inspector-content').waitFor();
-  await activateRendered(page.locator(`[data-reading-key="evidence-summary:${f.source.id}"]`));
-  await activateRendered(page.getByTestId(`artifact-source-migrations-toggle-${f.source.id}`));
+  assert.equal(await page.locator(`[data-reading-key="evidence:${f.source.id}"]`).evaluate(element=>element.open),true,
+    'replacing the selected artifact preserves its expanded source for the return visit');
+  await expandMigrationSource(f);
   const candidate=await openMigrationCandidate(f);
   await candidate.getByTestId('artifact-source-migration-target-1').check();
   f.deferRelation='captureSourceMigration';delete f.finishRelation;
@@ -1171,14 +1178,49 @@ test('a missing figure caption is saved through real IPC and still requires huma
   } finally {await f.dispose();}
 });
 
-async function draftRelation() {
+async function draftRelation(embedded = false) {
   const f=await scene();
+  if (embedded) await page.evaluate(()=>window.setEmbeddedInspector(true));
   await openArtifact();
   const claim=await openRelationClaim(f);
   await activateRendered(page.locator(`[data-reading-key="relation-proposal-summary:${claim.id}"]`));
   await page.getByTestId(`artifact-relation-condition-${claim.id}`).fill('Retain this authored qualification.');
   return {f,claim};
 }
+
+test('embedded artifact close and dock replacement preserve real relation drafts until explicit discard',async()=>{
+  const {claim}=await draftRelation(true);
+  const inspector=page.getByTestId('artifact-inspector');
+  assert.equal(await inspector.getAttribute('data-presentation'),'embedded');
+  assert.equal(await page.getByTestId('artifact-inspector-scrim').count(),0);
+  assert.equal(await page.getByTestId('artifact-inspector-panel').getAttribute('aria-modal'),null);
+  assert.equal(await page.getByTestId('artifact-inspector-panel').evaluate(element=>element.getBoundingClientRect().width),344);
+  await page.getByTestId('artifact-inspector-close').click();
+  await page.getByTestId('artifact-draft-discard-panel').waitFor();
+  await page.getByTestId('artifact-draft-discard-cancel').click();
+  assert.equal(await page.getByTestId(`artifact-relation-condition-${claim.id}`).inputValue(),'Retain this authored qualification.');
+  await page.evaluate(()=>window.closeInspectorDock());
+  await page.getByTestId('artifact-draft-discard-panel').waitFor();
+  assert.equal(await inspector.count(),1);
+  await page.getByTestId('artifact-draft-discard-confirm').click();
+  await inspector.waitFor({state:'detached'});
+  await page.getByTestId('artifact-draft-discard-panel').waitFor({state:'detached'});
+});
+
+test('embedded dock cannot dismiss a pending real relation save',async()=>{
+  const f=await scene();
+  await page.evaluate(()=>window.setEmbeddedInspector(true));
+  await openArtifact();
+  const proposed=await proposeRelation(f);
+  f.deferRelation='reviewEvidenceRelation';
+  await page.getByTestId(`artifact-relation-confirm-${proposed.id}`).click();
+  await page.waitForFunction(()=>document.querySelector('[data-testid="artifact-inspector-close"]').disabled);
+  await page.evaluate(()=>window.closeInspectorDock());
+  assert.equal(await page.getByTestId('artifact-inspector-panel').count(),1);
+  assert.equal(await page.getByTestId('artifact-draft-discard-panel').count(),0);
+  f.finishRelation();
+  await page.getByTestId('artifact-inspector-recapture').waitFor();
+});
 
 test('artifact draft protection retains relation inputs when the drawer is closed',async()=>{
   const {claim}=await draftRelation();

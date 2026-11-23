@@ -14,8 +14,9 @@ import './artifact-workspace.css';
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 type Selection = {kind: 'new'} | {kind: 'version'; versionId: string} | null;
 
-export function ReviewInspector({client, request, writable, drafts, onClose}: {
-  client: RocClient; request: ReviewInspectorRequest; writable: boolean; drafts: ReviewProtocolDrafts; onClose: () => void
+export function ReviewInspector({client, request, writable, drafts, onClose, embedded = false}: {
+  client: RocClient; request: ReviewInspectorRequest; writable: boolean; drafts: ReviewProtocolDrafts; onClose: () => void;
+  embedded?: boolean;
 }): React.JSX.Element {
   const [selection, setSelection] = useState<Selection>(() => request.mode === 'readonly' || request.versionId === null ? null :
     {kind: 'version', versionId: request.versionId});
@@ -40,7 +41,7 @@ export function ReviewInspector({client, request, writable, drafts, onClose}: {
       if (current === null) throw new Error('research_review_protocol_required');
       return client.api.research.getReviewProtocolHistory({projectId: request.projectId, protocolId: current.version.protocolId});
     }, {label: '读取协议修订历史'});
-  return <ModalShell open kind="drawer" title="综述核查" onClose={onClose} beforeClose={() => !guard.busy()}
+  return <ModalShell open kind="drawer" embedded={embedded} title="综述核查" onClose={onClose} beforeClose={() => !guard.busy()}
     widthClassName="artifact-inspector-window" testId="artifact-inspector" closeDisabled={guard.busy()} closeOnBackdrop={false}>
     <div className="artifact-workspace flex min-w-0 flex-col gap-3 text-[length:var(--font-body-size)]" data-testid="artifact-review">
       {request.mode === 'readonly' ? <ReviewReadonlyContent client={client} link={request} /> : <>

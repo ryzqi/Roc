@@ -1,5 +1,13 @@
 # UI 重构验证记录
 
+## 2026-11-23 P2.3：壳控制层与右侧对象检视
+
+状态：**Verified passing**（以下壳与对象回归范围）。AppShellContent只组合启动、主题、布局与快捷键；共享资源、对象动作及运行关注分别由workspace/panel/run-attention控制层持有，use-app-route保持唯一URL写入点。对象动作沿用同一导航、脏草稿和待保存守卫，未创建任务状态副本。
+
+工件在默认344px右栏显示，与助手互斥；宽窗内联，窄窗复用已有覆盖策略。嵌入检查器复用ModalShell标题与滚动正文，不增加portal/模态焦点圈。切助手仅隐藏检查器、保留编辑器草稿与待完成写入；关闭/替换仍走原工件守卫。内联与覆盖互换保留输入焦点，阅读位置捕获涵盖已接受的卸载。已查看1440px浅色内联与620px深色覆盖截图。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`：`pnpm typecheck`通过；路由/守卫单测21/21（命令见P5.1）。P2.2记录的Electron组合 **107/108**，Dock3/3、工作区4/4、桌面31/31、综述9/9、壳14/14、冷加载10/10通过。唯一旧迁移测试切回后无条件Enter，关闭了现在正确恢复的details；修正为先确认恢复展开再用幂等展开helper，完整 `tests/renderer/artifact-inspector.test.mjs` **37/37**，随 `node --test --test-concurrency=1 tests/renderer/artifact-inspector.test.mjs tests/renderer/retrieval-workspace.test.mjs tests/renderer/literature-workspace-layout.test.mjs tests/renderer/knowledge-graph.test.mjs tests/renderer/scientific-wiki.test.mjs` 执行。后组65/67，2项知识夹具失败见P5.2；未把跨阶段组合记作一次全绿。
+
 ## 2026-11-23 P7.1：画布宿主保留预算
 
 状态：**Verified passing**（宿主生命周期范围）。成功切换后卸载只读总览，后台只读预算为0；文献、写作、运行三个草稿/会话宿主明确固定保留。发现/知识/文献仍为同一宿主，冷加载失败不移除当前画布，切项目释放旧宿主。此策略没有把全部重DOM独立于状态，也不宣称已经实现PTY重连；终端cleanup仍会终止PTY，故不能直接卸载写作。

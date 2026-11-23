@@ -29,9 +29,10 @@ import {useArtifactEditorActivity, useArtifactEditorGuard} from './artifact-edit
 
 const button = `${formSecondaryButtonClass} border-[0.5px]`;
 
-export function StageArtifactInspector({client, request, writable, onClose, onOpenTask, onReviewContext, readingLocations}: {
+export function StageArtifactInspector({client, request, writable, onClose, onOpenTask, onReviewContext, readingLocations, embedded = false}: {
   client: RocClient; request: ResearchArtifactInspectRequest; onClose: () => void; onOpenTask: (taskId: string) => void;
-  writable: boolean; onReviewContext: (context: ResearchGateReviewContext) => void; readingLocations: ArtifactReadingLocations
+  writable: boolean; onReviewContext: (context: ResearchGateReviewContext) => void; readingLocations: ArtifactReadingLocations;
+  embedded?: boolean;
 }): React.JSX.Element {
   const baseline = useRef(request.expectedVersion);
   const read = useAsyncResource(`artifact:inspect:${JSON.stringify(request)}`,
@@ -77,7 +78,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
   const [productionChoice,setProductionChoice] = useState<{version: string; open: boolean} | null>(null);
   const productionOpen = snapshot !== undefined && (productionChoice?.version === snapshot.version ?
     productionChoice.open : savedLocation !== undefined && savedLocation.version === snapshot.version && savedLocation.productionOpen);
-  const reading = useArtifactReadingLocation(request, snapshot?.version, readingLocations, productionOpen);
+  const reading = useArtifactReadingLocation(request, snapshot?.version, readingLocations, productionOpen, !embedded);
   const close = (): void => {if (guard.busy()) return; reading.save(); onClose();};
   const review = useAsyncResource(reviewNonce > 0 ? `gate:${JSON.stringify(request)}:${reviewNonce}` : null,
     () => {
@@ -91,7 +92,7 @@ export function StageArtifactInspector({client, request, writable, onClose, onOp
     if (result?.status === 'current') baseline.current = result.snapshot.version;
   }, [result]);
   const statuses = {draft: '草稿', approved: '已批准', superseded: '已被替代'};
-  return <ModalShell open kind="drawer" title={snapshot?.artifact.title ?? '科研工件'} onClose={close} bodyRef={reading.bodyRef}
+  return <ModalShell open kind="drawer" embedded={embedded} title={snapshot?.artifact.title ?? '科研工件'} onClose={close} bodyRef={reading.bodyRef}
     widthClassName="artifact-inspector-window" testId="artifact-inspector" beforeClose={() => !guard.busy()}
     closeDisabled={guard.busy()} closeOnBackdrop={false}>
     <div className="artifact-workspace flex flex-col gap-3 text-[length:var(--font-body-size)]">

@@ -19,6 +19,30 @@ const ArtifactInspector = retryableLazy(async () => ({ default: (await import('.
 
 type Navigate = (next: AppRoute, options?: NavigateOptions) => void;
 
+export type ArtifactDockProps = {
+  client: RocClient;
+  projectId: string | null;
+  artifactSelection: ArtifactInspectorSelection | null;
+  projectWritable: boolean;
+  artifactReadingLocations: ArtifactReadingLocations;
+  reviewProtocolDrafts: ReviewProtocolDrafts;
+  onCloseArtifact: () => void;
+  onOpenTask: (projectId: string, taskId: string, closeArtifact?: boolean) => void;
+};
+
+/** The workspace owns placement; the existing inspector owns data and draft protection. */
+export function ArtifactDock({client, projectId, artifactSelection, projectWritable, artifactReadingLocations,
+  reviewProtocolDrafts, onCloseArtifact, onOpenTask}: ArtifactDockProps): React.JSX.Element | null {
+  if (artifactSelection === null || artifactSelection.request.projectId !== projectId) return null;
+  return <LazyBoundary label="工件检查器加载失败" resetKey={JSON.stringify(artifactSelection.request)}
+    fallback={<DelayedFallback label="正在加载工件检查器…" />}
+    renderError={content => <ModalShell open embedded title="工件检查器" testId="artifact-load" onClose={onCloseArtifact}>{content}</ModalShell>}>
+    <ArtifactInspector key={JSON.stringify(artifactSelection.request)} client={client} selection={artifactSelection}
+      presentation="embedded" writable={projectWritable} readingLocations={artifactReadingLocations} reviewDrafts={reviewProtocolDrafts}
+      onClose={onCloseArtifact} onOpenTask={taskId => onOpenTask(artifactSelection.request.projectId, taskId, true)} />
+  </LazyBoundary>;
+}
+
 export type OverlayHostProps = {
   client: RocClient;
   route: AppRoute;
@@ -36,11 +60,6 @@ export type OverlayHostProps = {
   onCloseSearch: () => void;
   onSearchQueryChange: (query: string) => void;
   searchGroups: React.ComponentProps<typeof SearchPaletteModal>['groups'];
-  artifactSelection: ArtifactInspectorSelection | null;
-  artifactReadingLocations: ArtifactReadingLocations;
-  reviewProtocolDrafts: ReviewProtocolDrafts;
-  onCloseArtifact: () => void;
-  onOpenTask: (projectId: string, taskId: string, closeArtifact?: boolean) => void;
   managementMounted: boolean;
   managementOpen: boolean;
   managementTab: ManagementTabId;
@@ -58,7 +77,6 @@ export function OverlayHost(props: OverlayHostProps): React.JSX.Element {
     client, route, navigate, projectWritable, workspacePath,
     settingsMounted, settingsOpen, themeOverride, onThemeOverrideChange, onResetUiPreferences, onCloseSettings,
     searchOpen, searchQuery, onCloseSearch, onSearchQueryChange, searchGroups,
-    artifactSelection, artifactReadingLocations, reviewProtocolDrafts, onCloseArtifact, onOpenTask,
     managementMounted, managementOpen, managementTab, onCloseManagement, onManagementTabChange,
     gitDrawerOpen, gitBusy, commitDrafts, onGitBusyChange
   } = props;
@@ -72,16 +90,6 @@ export function OverlayHost(props: OverlayHostProps): React.JSX.Element {
 
     <SearchPaletteModal open={searchOpen} onClose={onCloseSearch} query={searchQuery}
       onQueryChange={onSearchQueryChange} groups={searchGroups} />
-
-    {artifactSelection === null || artifactSelection.request.projectId !== route.projectId ? null : (
-      <LazyBoundary label="工件检查器加载失败" resetKey={JSON.stringify(artifactSelection.request)}
-        fallback={<DelayedFallback label="正在加载工件检查器…" />}
-        renderError={content => <ModalShell open kind="drawer" title="工件检查器" testId="artifact-load" onClose={onCloseArtifact}>{content}</ModalShell>}>
-        <ArtifactInspector key={JSON.stringify(artifactSelection.request)} client={client} selection={artifactSelection}
-          writable={projectWritable} readingLocations={artifactReadingLocations} reviewDrafts={reviewProtocolDrafts}
-          onClose={onCloseArtifact} onOpenTask={taskId => onOpenTask(artifactSelection.request.projectId, taskId, true)} />
-      </LazyBoundary>
-    )}
 
     {managementMounted ? <LazyBoundary active={managementOpen} label="管理面板加载失败" fallback={<DelayedFallback label="正在加载管理面板…" />}
       renderError={content => <ModalShell open={managementOpen} kind="drawer" title="管理" testId="mgmt-load" onClose={onCloseManagement}>{content}</ModalShell>}>

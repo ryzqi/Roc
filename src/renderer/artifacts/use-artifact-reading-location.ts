@@ -6,7 +6,8 @@ export function useArtifactReadingLocation(
   request: ResearchArtifactInspectRequest,
   version: string | undefined,
   locations: ArtifactReadingLocations,
-  productionOpen: boolean
+  productionOpen: boolean,
+  restoreFocus = true
 ) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const productionFileRef = useRef<{version: string | undefined; location: ProductionFileLocation} | null>(null);
@@ -37,6 +38,10 @@ export function useArtifactReadingLocation(
     });
   };
 
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  useLayoutEffect(() => () => saveRef.current(), [scope]);
+
   useLayoutEffect(() => {
     const body = bodyRef.current;
     if (body === null || location === null) return;
@@ -49,7 +54,7 @@ export function useArtifactReadingLocation(
       }
       const focus = Array.from(body.querySelectorAll<HTMLElement>('[data-reading-key]'))
         .find(element => element.dataset.readingKey === location.focusKey);
-      if (focus !== undefined && focus.getClientRects().length > 0 && !focus.hasAttribute('disabled')) {
+      if (restoreFocus && focus !== undefined && focus.getClientRects().length > 0 && !focus.hasAttribute('disabled')) {
         focus.focus({preventScroll: true});
       }
       const text = body.querySelector<HTMLElement>('[data-testid="artifact-production-text"]');
@@ -67,7 +72,7 @@ export function useArtifactReadingLocation(
       stop();
       for (const event of ['pointerdown', 'keydown', 'wheel']) body.removeEventListener(event, stop, true);
     };
-  }, [scope, version]); // Only a freshly verified version can restore a reading location.
+  }, [scope, version, restoreFocus]); // Restore only a verified version, with the owning surface's focus policy.
 
   return {bodyRef, location, setProductionFile, save};
 }

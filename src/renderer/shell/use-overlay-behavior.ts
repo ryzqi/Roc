@@ -65,6 +65,8 @@ export type OverlayBehaviorOptions = {
   inertBackground?: boolean;
   /** Set false when an accessibility primitive owns focus trapping and Escape. */
   manageFocus?: boolean;
+  /** A responsive pane keeps an already focused editor when becoming a drawer. */
+  preserveFocus?: boolean;
 };
 
 export function useOverlayBehavior({
@@ -76,7 +78,8 @@ export function useOverlayBehavior({
   overlayId,
   layer = 'dialog',
   inertBackground = true,
-  manageFocus = true
+  manageFocus = true,
+  preserveFocus = false
 }: OverlayBehaviorOptions): void {
   // Keep the latest callbacks reachable from a listener installed once per open.
   const closeRef = useRef(onRequestClose);
@@ -100,7 +103,7 @@ export function useOverlayBehavior({
     }
 
     const panel = panelRef.current;
-    if (manageFocus && panel !== null) {
+    if (manageFocus && panel !== null && !(preserveFocus && panel.contains(document.activeElement))) {
       focusDialogInitialElement(panel, initialFocusRef?.current ?? null);
     }
 
@@ -144,7 +147,7 @@ export function useOverlayBehavior({
         root.removeAttribute('aria-hidden');
       }
     };
-  }, [open, overlayId, layer, panelRef, initialFocusRef, inertBackground, manageFocus]);
+  }, [open, overlayId, layer, panelRef, initialFocusRef, inertBackground, manageFocus, preserveFocus]);
 }
 
 /**
@@ -161,8 +164,13 @@ export function useOverlayBehavior({
  * `document.activeElement` is the body and focus would land nowhere. When the selector
  * matches nothing the captured opener wins.
  */
-export function OverlayFocusRestore({ returnFocusSelector }: { returnFocusSelector?: string | undefined }): null {
+export function OverlayFocusRestore({ returnFocusSelector, restoreWhen }: {
+  returnFocusSelector?: string | undefined;
+  restoreWhen?: () => boolean;
+}): null {
   const openerRef = useRef<HTMLElement | null>(null);
+  const restoreWhenRef = useRef(restoreWhen);
+  restoreWhenRef.current = restoreWhen;
 
   useEffect(() => {
     // Runs before `useOverlayBehavior`'s effect (child effects fire first), so the
@@ -173,7 +181,7 @@ export function OverlayFocusRestore({ returnFocusSelector }: { returnFocusSelect
         : document.querySelector<HTMLElement>(returnFocusSelector) ?? captureDialogOpener();
 
     return () => {
-      restoreDialogFocus(openerRef.current);
+      if (restoreWhenRef.current?.() ?? true) restoreDialogFocus(openerRef.current);
     };
   }, [returnFocusSelector]);
 
