@@ -6,7 +6,7 @@ import { researchLiteratureSchema } from '../../../shared/schemas/research';
 import {
   researchBibliographyEntrySchema, researchLibraryItemSchema, type researchLibraryListRequestSchema
 } from '../../../shared/schemas/research-library';
-import type { ResearchLiterature } from '../../../shared/types';
+import type { ResearchLibraryListPageRequest, ResearchLibraryPage, ResearchLiterature } from '../../../shared/types';
 import { citationKeySet } from './cite-key';
 import { bibliographyIdentity, literatureIdentity, literatureIdentityAliases, normalizeResearchDoi } from './literature-identity';
 import { groupLiteratureIdentities } from './literature-identity-graph';
@@ -112,6 +112,29 @@ export class ResearchLibraryRepository {
       AND (metadata_json LIKE ? ESCAPE '\\' OR json_extract(bibliography_json, '$.citationKey') LIKE ? ESCAPE '\\')
       ORDER BY updated_at DESC, id LIMIT ?`)
       .all(request.includeArchived ? 1 : 0, request.projectId, request.projectId, query, query, request.limit) as Array<{ id: string }>).map((row) => this.get(row.id));
+  }
+
+  /** Each page and its total share one read transaction; subsequent pages see live changes. */
+  listPage(request: ResearchLibraryListPageRequest): ResearchLibraryPage {
+    if (request.projectId !== null) this.research.getProject(request.projectId);
+    const query = `%${request.query.trim().replace(/[\\%_]/gu, '\\$&')}%`;
+    const filter = `(? = 1 OR l.archived = 0)
+      AND (? IS NULL OR EXISTS (SELECT 1 FROM research_library_projects p WHERE p.item_id = l.id AND p.project_id = ?))
+      AND (l.metadata_json LIKE ? ESCAPE '\\' OR json_extract(l.bibliography_json, '$.citationKey') LIKE ? ESCAPE '\\')`;
+    const args = [request.includeArchived ? 1 : 0, request.projectId, request.projectId, query, query];
+    return this.db.transaction(() => {
+      const total = this.db.prepare(`SELECT COUNT(*) FROM research_library l WHERE ${filter}`).pluck().get(...args) as number;
+      const rows = this.db.prepare(`SELECT l.id,l.updated_at FROM research_library l WHERE ${filter}
+        ${request.cursor === null ? '' : 'AND (l.updated_at < ? OR (l.updated_at = ? AND l.id > ?))'}
+        ORDER BY l.updated_at DESC,l.id ASC LIMIT ?`).all(...args,
+          ...(request.cursor === null ? [] : [request.cursor.updatedAt, request.cursor.updatedAt, request.cursor.id]),
+          request.limit + 1) as Array<{id: string; updated_at: string}>;
+      const hasMore = rows.length > request.limit;
+      const page = rows.slice(0, request.limit);
+      const last = page.at(-1);
+      return {items: page.map(row => this.get(row.id)), total, hasMore,
+        nextCursor: hasMore && last !== undefined ? {updatedAt: last.updated_at, id: last.id} : null};
+    })();
   }
 
   import(entries: readonly { metadata: ResearchLiterature; bibliography: BibliographyEntry; providerRecord?: ResearchLiterature;

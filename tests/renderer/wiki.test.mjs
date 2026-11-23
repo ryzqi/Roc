@@ -24,7 +24,7 @@ before(async () => {
     import {WikiView} from './src/renderer/literature/WikiView';
     import {researchKnowledgeSearchResultSchema} from './src/shared/schemas/research';
     const client = {api:{research:{
-      listLibrary: async () => ({ok:true,data:[]}),
+      listLibraryPage: async () => ({ok:true,data:{items:[],total:0,hasMore:false,nextCursor:null}}),
       getLibraryItem: async ({id}) => id === 'missing' ? ({ok:false,error:{message:'Item missing'}}) :
         ({ok:true,data:{id,metadata:{title:'Loaded outside library page'}}}),
       listDocuments: async () => ({ok:true,data:[]}),

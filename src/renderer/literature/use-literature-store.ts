@@ -29,7 +29,6 @@ import {
   importLibraryRecord,
   linkLibraryItem,
   listDocuments,
-  listLibrary,
   parseDocument,
   parseDocuments,
   setLibraryCitationKey,
@@ -39,6 +38,7 @@ import {
 import { buildLiteratureAssistantPrompt, libraryItemTitle } from './format';
 import type { ImportTabRequest } from './hub-route';
 import {requestReadingChange} from './reading-interactions';
+import {useLibraryPages} from './use-library-pages';
 
 /**
  * The one literature store, created once in `AppShell` and shared by the sidebar's
@@ -97,6 +97,11 @@ export type LiteratureStore = {
   status: AsyncStatus;
   error: string | null;
   items: ResearchLibraryItem[];
+  total: number | null;
+  hasMore: boolean;
+  loadingMore: boolean;
+  loadMoreError: string | null;
+  loadMore: () => void;
   query: string;
   setQuery: (next: string) => void;
   includeArchived: boolean;
@@ -216,14 +221,6 @@ export type LiteratureStore = {
 
 type DocumentContentResult = { run: ResearchDocumentRun; content: ResearchDocumentContent };
 
-/**
- * `library.list` needs all four fields, and the backend rejects a `limit` above
- * 500 — so the page size is a named constant rather than a magic number at the
- * call site. Paging beyond this is deliberately not built: when the list is
- * truncated the UI says so instead of silently dropping rows.
- */
-const LIBRARY_PAGE_LIMIT = 200;
-
 export function useLiteratureStore(client: RocClient, projectId: string | null): LiteratureStore {
   const [query, setQuery] = useState('');
   const [includeArchived, setIncludeArchived] = useState(false);
@@ -252,22 +249,8 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
   const [assistantError, setAssistantError] = useState<string | null>(null);
   const [assistantThreadId, setAssistantThreadId] = useState<string | null>(null);
 
-  // This store is shared by the shell. Keep only its current query result,
-  // rather than retaining every search in the application-wide SWR cache.
-  const listKey = projectId === null ? null : JSON.stringify([
-    'research', 'library', projectId, debouncedQuery, includeArchived, LIBRARY_PAGE_LIMIT
-  ]);
-  const list = useAsyncResource(
-    listKey,
-    () => listLibrary(client, {
-      projectId: projectId ?? '',
-      query: debouncedQuery,
-      includeArchived,
-      limit: LIBRARY_PAGE_LIMIT
-    }),
-    { label: '读取文献列表' }
-  );
-  const items = useMemo(() => list.data ?? [], [list.data]);
+  const list = useLibraryPages(client, projectId, debouncedQuery, includeArchived, query !== debouncedQuery);
+  const items = list.items;
 
   const select = useCallback((id: string | null, whenReady?: (commitSelection: () => void) => void): void => {
     if (!mounted.current || scopeRef.current !== scope) return;
@@ -730,6 +713,11 @@ export function useLiteratureStore(client: RocClient, projectId: string | null):
     status: list.status,
     error: list.error,
     items,
+    total: list.total,
+    hasMore: list.hasMore,
+    loadingMore: list.loadingMore,
+    loadMoreError: list.loadMoreError,
+    loadMore: list.loadMore,
     query,
     setQuery,
     includeArchived,

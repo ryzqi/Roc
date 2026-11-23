@@ -5,7 +5,7 @@ import {
   researchLibraryArchiveRequestSchema, researchLibraryCitationKeyRequestSchema, researchLibraryDoiImportRequestSchema,
   researchLibraryExportRequestSchema, researchLibraryExportSchema, researchLibraryFileImportRequestSchema,
   researchLibraryIdRequestSchema, researchLibraryImportResultSchema, researchLibraryItemSchema, researchLibraryLinkRequestSchema,
-  researchLibraryListRequestSchema, researchLibraryRecordImportRequestSchema,
+  researchLibraryListRequestSchema, researchLibraryListPageRequestSchema, researchLibraryPageSchema, researchLibraryRecordImportRequestSchema,
   researchLibraryRetractionRequestSchema, researchLibraryRetractionResultSchema
 } from '../../../shared/schemas/research-library';
 import type { CapabilityDescriptor, RocPluginContext } from '../../kernel/types';
@@ -16,6 +16,7 @@ import type { ResearchLibraryService } from './library-service';
 
 const capabilities = {
   list: descriptor('research.library.list', researchLibraryListRequestSchema, researchLibraryItemSchema.array()),
+  listPage: descriptor('research.library.listPage', researchLibraryListPageRequestSchema, researchLibraryPageSchema),
   get: descriptor('research.library.get', researchLibraryIdRequestSchema, researchLibraryItemSchema),
   record: descriptor('research.library.importRecord', researchLibraryRecordImportRequestSchema, researchLibraryImportResultSchema),
   doi: descriptor('research.library.importDoi', researchLibraryDoiImportRequestSchema, researchLibraryImportResultSchema),
@@ -75,6 +76,7 @@ export function registerResearchLibraryCapabilities(context: RocPluginContext, r
     });
   }
   register(capabilities.list, (input) => repository.list(input));
+  register(capabilities.listPage, (input) => repository.listPage(input));
   register(capabilities.get, (input) => repository.get(input.id));
   register(capabilities.record, (input) => service.importRecord(input));
   register(capabilities.doi, (input) => service.importDoi(input));

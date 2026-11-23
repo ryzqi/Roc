@@ -38,6 +38,8 @@ import type {
   researchBibliographyFormatSchema,
   researchLibraryItemSchema,
   researchLibraryListRequestSchema,
+  researchLibraryListPageRequestSchema,
+  researchLibraryPageSchema,
   researchLibraryImportResultSchema,
   researchLibraryExportSchema
 } from '../schemas/research-library';
@@ -46,6 +48,8 @@ export type ResearchBibliographyEntry = z.infer<typeof researchBibliographyEntry
 export type ResearchBibliographyFormat = z.infer<typeof researchBibliographyFormatSchema>;
 export type ResearchLibraryItem = z.infer<typeof researchLibraryItemSchema>;
 export type ResearchLibraryListRequest = z.infer<typeof researchLibraryListRequestSchema>;
+export type ResearchLibraryListPageRequest = z.infer<typeof researchLibraryListPageRequestSchema>;
+export type ResearchLibraryPage = z.infer<typeof researchLibraryPageSchema>;
 export type ResearchLibraryImportResult = z.infer<typeof researchLibraryImportResultSchema>;
 export type ResearchLibraryExport = z.infer<typeof researchLibraryExportSchema>;
 import type {

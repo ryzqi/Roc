@@ -30,6 +30,7 @@ before(async()=>{
         window.setCategory=setCategory;window.selectExternally=setSelected;
         window.setLibraryStatus=setStatus;
         const store={items:all.filter(item=>item.metadata.title.includes(query)),status,error:status==='error'?'Library unavailable':null,query,selectedId,projectId:'project-layout',includeArchived,
+          total:all.filter(item=>item.metadata.title.includes(query)).length,hasMore:false,loadingMore:false,loadMoreError:null,loadMore:()=>{},
           documentsStatus:'ready',documents:[{libraryItemId:selectedId,currentParseId:'parse',status:'ready'}],
           action:{error:null},setQuery,reload:()=>{window.reloads++;setStatus('ready');},setIncludeArchived,select:id=>{window.opened.push(id);setSelected(id);},
           client:{api:{research:{exportBibliography:async()=>({ok:true,data:{content:'bibtex'}})}}}};
@@ -110,7 +111,7 @@ test('large result sets window their rows and preserve selected items and keyboa
   const mounted=await page.locator('[data-testid^="literature-row-"]').count();
   assert.ok(mounted>0 && mounted<40,`Expected bounded DOM for 200 results, received ${mounted}`);
   t.diagnostic(`${mounted} mounted rows for 200 literature results`);
-  await expect(page.getByTestId('literature-count')).toHaveText('200 条');
+  await expect(page.getByTestId('literature-count')).toHaveText('已加载 200 / 200 条');
   await expect(page.getByTestId('literature-fulltext-paper-150')).toHaveText('全文已解析');
   await page.getByTestId('literature-row-paper-150').focus();
   await page.locator('.library-virtual-list').evaluate(element=>element.scrollTo({top:0}));
@@ -140,10 +141,10 @@ test('large result sets window their rows and preserve selected items and keyboa
   await expect(page.getByTestId('literature-row-paper-120')).toBeVisible();
   await expect(page.getByTestId('literature-row-paper-120')).toHaveAttribute('aria-current','true');
   await page.getByTestId('literature-multiselect').click();
-  await page.getByRole('checkbox',{name:'选择当前结果'}).check();
+  await page.getByRole('checkbox',{name:'选择已加载结果'}).check();
   await expect(page.getByTestId('literature-bulk-actions')).toContainText('已选 200 篇');
   await page.getByTestId('literature-search').fill('120 Agent');
-  await expect(page.getByTestId('literature-count')).toHaveText('1 条');
+  await expect(page.getByTestId('literature-count')).toHaveText('已加载 1 / 1 条');
   await expect(page.getByTestId('literature-row-paper-120')).toHaveAttribute('aria-current','true');
   await expect(page.getByTestId('literature-bulk-actions')).toHaveCount(0);
   await expect(page.getByTestId('literature-row-paper-120')).toHaveAttribute('tabindex','0');

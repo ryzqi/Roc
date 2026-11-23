@@ -73,6 +73,7 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
   const virtualizerRef = useRef<VirtuosoHandle | null>(null);
   const pendingFocusId = useRef<string | null>(null);
+  const lastScrolledSelection = useRef<string | null>(null);
   const [checkedIds, setCheckedIds] = useState<ReadonlySet<string>>(() => new Set());
   useEffect(() => {setCheckedIds(new Set());}, [literature.projectId, literature.query, literature.includeArchived, entryType]);
   const items = useMemo(() => literature.items.filter(item => entryType === null || item.bibliography.entryType === entryType).sort((left, right) => sort === 'year'
@@ -103,10 +104,13 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
   }, []);
   useEffect(() => {
     const index = items.findIndex(item => item.id === literature.selectedId);
-    if (index < 0) return;
+    if (index < 0) {lastScrolledSelection.current = null; return;}
+    const key = JSON.stringify([literature.projectId, literature.selectedId, literature.query, sort, entryType, virtualize, virtualizerReady]);
+    if (lastScrolledSelection.current === key) return;
+    lastScrolledSelection.current = key;
     if (virtualize) virtualizerRef.current?.scrollIntoView({index, behavior: 'auto'});
     else rowRefs.current.get(literature.selectedId!)?.scrollIntoView({block: 'nearest'});
-  }, [items, literature.selectedId, virtualize, virtualizerReady]);
+  }, [items, literature.projectId, literature.selectedId, literature.query, sort, entryType, virtualize, virtualizerReady]);
 
   const focusRow = (index: number): void => {
     const item = items[index];
@@ -209,7 +213,7 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
           </button>
         </div>
         <div className="library-filter-row">
-          <select aria-label="当前结果排序" value={sort} onChange={event => setSort(event.target.value as SortOrder)}
+          <select aria-label="已加载结果排序" value={sort} onChange={event => setSort(event.target.value as SortOrder)}
             data-testid="literature-sort" className={formSelectClass}>
             <option value="updated">最近更新</option><option value="year">发表年份</option><option value="title">文献题名</option>
           </select>
@@ -232,7 +236,7 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
         {selecting ? <label className="library-filter-option">
           <input type="checkbox" checked={items.length > 0 && checkedItems.length === items.length} disabled={items.length === 0}
             onChange={event => setCheckedIds(new Set(event.target.checked ? items.map(item => item.id) : []))}/>
-          选择当前结果
+          选择已加载结果
         </label> : null}
       </div>
 
@@ -253,7 +257,8 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
         <EmptyState
           compact
           icon={BookOpen}
-          title={literature.query.trim().length > 0 ? '没有匹配的文献' : entryType !== null ? '当前分类没有文献' : '尚无文献'}
+          title={entryType !== null && literature.hasMore ? '已加载文献中没有当前分类'
+            : literature.query.trim().length > 0 ? '没有匹配的文献' : entryType !== null ? '当前分类没有文献' : '尚无文献'}
           action={literature.query.trim().length > 0
             ? {label: '清除搜索', onClick: () => literature.setQuery('')}
             : undefined}
@@ -284,9 +289,16 @@ export function LibraryList({ compact = false, entryType = null, onOpenItem, onR
         items={checkedItems} literature={literature}/> : null}
 
       {literature.status === 'ready' ? <div className="library-list-footer">
-        <span data-testid="literature-count">{items.length.toLocaleString('zh-CN')} 条</span>
+        <span data-testid="literature-count">已加载 {literature.items.length.toLocaleString('zh-CN')} / {literature.total?.toLocaleString('zh-CN')} 条</span>
+        {entryType !== null ? <span>当前分类 {items.length.toLocaleString('zh-CN')} 条</span> : null}
         {literature.includeArchived ? <span>含已归档</span> : null}
-        {literature.items.length >= 200 ? <span data-testid="literature-truncated" role="note">仅前 200 条</span> : null}
+        {literature.hasMore ? <button type="button" className={formSecondaryButtonClass}
+          data-testid="literature-load-more" disabled={literature.loadingMore} aria-busy={literature.loadingMore}
+          onClick={literature.loadMore}>
+          {literature.loadingMore ? <Loader2 size={12} aria-hidden="true" className="animate-spin"/> : null}
+          {literature.loadingMore ? '正在加载…' : literature.loadMoreError === null ? '加载更多' : '重试加载'}
+        </button> : null}
+        {literature.loadMoreError ? <p role="alert">{literature.loadMoreError}</p> : null}
       </div> : null}
 
       {literature.action.error === null ? null : (

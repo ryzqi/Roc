@@ -1,5 +1,13 @@
 # UI 重构验证记录
 
+## 2026-11-23 P4.1：文献游标分页
+
+状态：**Verified passing**（分页接口和界面回归范围）。新 `research.library.listPage` 保留旧数组接口，按(updatedAt DESC,id ASC)稳定排序，单页事务返回真实total/hasMore/nextCursor；项目、归档和搜索由后端完整集合过滤，特殊LIKE字符按字面处理。前端每页200条，显式加载更多/重试；查询、刷新与项目切换隔离迟到响应，追加去重并保留选择与阅读详情，不跳回先前选中行。标题/年份排序和类型分类仍仅作用于已加载条目，界面已明确标记；不是全库排序。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`：`pnpm check:ipc`、`pnpm typecheck`；`node --test tests/unit/research-plugin-lazy.test.mjs tests/unit/research-library-pagination.test.mjs` **15/15**。`ROC_UI_AUDIT_DIR=/tmp/roc-ui-p3-captures-20261123 node --test --test-concurrency=1 tests/renderer/project-overview.test.mjs tests/renderer/project-session-layout.test.mjs tests/renderer/literature-pagination.test.mjs tests/renderer/literature-retention.test.mjs tests/renderer/literature-list-layout.test.mjs tests/renderer/literature-workspace-layout.test.mjs tests/renderer/literature-processing.test.mjs tests/renderer/literature-action-guards.test.mjs tests/renderer/wiki.test.mjs tests/renderer/lifecycles.test.mjs` **146/147**。唯一失败为旧夹具仍查找“当前结果排序”，已更新为真实“已加载结果排序”；完整`node --test tests/renderer/literature-workspace-layout.test.mjs`随后 **5/5**。
+
+数据库覆盖437条跨页、时间戳相同、总数、引用键、归档、游标行删除及新前置记录；Electron覆盖400条追加、多选保留、页失败重试、查询/项目隔离与独立详情。2k/10k资源测量在P7记录，不以小夹具替代。临时测试数据库由夹具清理。
+
 ## 2026-11-23 P2.1：画布优先与右侧助手
 
 状态：**Verified passing**（几何、导航和以下回归范围）。栏序改为左栏、画布、右侧助手，默认232/344px；1440px起且画布保留760px才内联助手，1100–1439px保留左栏、助手覆盖，1099px以下双抽屉。分隔条向左扩大右侧助手，Home重置，Escape撤销；断点变化不卸载输入草稿。打开文件、文献、任务或引导会关闭覆盖助手，原导航与草稿守卫决定实际跳转。WorkspaceScope新增仅打开输入区的openAssistant命令。

@@ -20,6 +20,17 @@ export const researchLibraryListRequestSchema = z.object({
   projectId: z.string().min(1).nullable(), query: z.string().max(1000), includeArchived: z.boolean(),
   limit: z.number().int().min(1).max(500)
 }).strict();
+/** Keyset position in the live library's updatedAt DESC, id ASC ordering. */
+export const researchLibraryCursorSchema = z.object({
+  updatedAt: z.string().min(1).max(100), id: z.string().min(1).max(500)
+}).strict();
+export const researchLibraryListPageRequestSchema = researchLibraryListRequestSchema.extend({
+  cursor: researchLibraryCursorSchema.nullable()
+});
+export const researchLibraryPageSchema = z.object({
+  items: researchLibraryItemSchema.array().max(500), total: z.number().int().nonnegative(),
+  hasMore: z.boolean(), nextCursor: researchLibraryCursorSchema.nullable()
+}).strict();
 export const researchLibraryIdRequestSchema = z.object({ id: z.string().min(1) }).strict();
 export const researchLibraryDoiImportRequestSchema = z.object({
   doi: z.string().trim().min(1).max(2000), projectId: z.string().min(1).nullable()

@@ -17,6 +17,8 @@ import type {
   ResearchLibraryImportResult,
   ResearchLibraryItem,
   ResearchLibraryListRequest,
+  ResearchLibraryListPageRequest,
+  ResearchLibraryPage,
   ResearchLiterature,
   ResearchParseTier
 } from '../../shared/types';
@@ -49,6 +51,13 @@ export function listLibrary(
   request: ResearchLibraryListRequest
 ): Promise<IpcResult<ResearchLibraryItem[]>> {
   return client.api.research.listLibrary(request);
+}
+
+export function listLibraryPage(
+  client: RocClient,
+  request: ResearchLibraryListPageRequest
+): Promise<IpcResult<ResearchLibraryPage>> {
+  return client.api.research.listLibraryPage(request);
 }
 
 export function importLibraryRecord(

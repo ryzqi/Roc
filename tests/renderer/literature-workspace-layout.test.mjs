@@ -32,7 +32,7 @@ before(async () => {
     const blocks=[{id:'heading',kind:'heading',label:'Introduction',text:'Evidence and understanding',locator:'page:1',locations:[],imageAssetId:null},
       {id:'paragraph',kind:'paragraph',label:'Introduction',text:'A useful reading workspace keeps the paper in focus. '.repeat(100),locator:'page:1',locations:[],imageAssetId:null}];
     const client={api:{research:{
-      listLibrary:async()=>ok([item,second]),wikiSnapshot:async()=>ok({claims:[],sources:[]}),
+      listLibraryPage:async()=>ok({items:[item,second],total:2,hasMore:false,nextCursor:null}),wikiSnapshot:async()=>ok({claims:[],sources:[]}),
       getModelsStatus:async()=>ok({ready:false,error:null,models:[],downloading:false,selectedPack:'compact'}),
       listAcquisition:async()=>ok({jobs:[],total:0,nextOffset:null}),onLibraryChanged:()=>()=>{},
       resolveDocumentParse:async()=>ok(paperDocument),
@@ -188,7 +188,7 @@ test('sidebar and canvas share one visible literature list without losing local 
     await expect(localList).toBeVisible();
     await expect(importer).toHaveCount(1);
     await expect(localList.getByTestId('literature-import-open')).toBeVisible();
-    await localList.getByLabel('当前结果排序').selectOption('title');
+    await localList.getByLabel('已加载结果排序').selectOption('title');
     await page.evaluate(()=>window.setContextDrawerOpen(true));
     await expect(page.getByTestId('fixture-context-library')).toBeVisible();
     await expect(toggle).toBeHidden();
@@ -201,7 +201,7 @@ test('sidebar and canvas share one visible literature list without losing local 
     await expect(toggle).toHaveAttribute('aria-expanded','true');
     await expect(localList).toBeVisible();
     await expect(importer).toHaveCount(1);
-    await expect(localList.getByLabel('当前结果排序')).toHaveValue('title');
+    await expect(localList.getByLabel('已加载结果排序')).toHaveValue('title');
     await localList.getByTestId('literature-row-second').click();
     await expect(page.getByTestId('reader-title')).toHaveText('Second paper for navigation');
     await expect(toggle).toHaveAttribute('aria-expanded','false');

@@ -23,8 +23,8 @@ test('literature searches release obsolete results and reload revisited queries'
       import {useAppRoute} from './src/renderer/app/use-app-route';
       const root = createRoot(document.getElementById('root'));
       const client = {api: {research: {
-        listLibrary: async ({query}) => { window.libraryRequests = (window.libraryRequests ?? 0) + 1; return ({ok: true, data: Array.from({length:200}, (_,n) =>
-          ({id:query+':'+n, title:query, abstract:'x'.repeat(4096)}))}); },
+        listLibraryPage: async ({query}) => { window.libraryRequests = (window.libraryRequests ?? 0) + 1; return ({ok: true, data: {items:Array.from({length:200}, (_,n) =>
+          ({id:query+':'+n, title:query, abstract:'x'.repeat(4096)})),total:200,hasMore:false,nextCursor:null}}); },
         wikiSnapshot: async () => ({ok:true, data:{sources:[]}}),
         listDocuments: async () => ({ok:true, data:[]}),
         onLibraryChanged: () => () => {}

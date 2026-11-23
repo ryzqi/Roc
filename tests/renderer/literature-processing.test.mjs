@@ -40,7 +40,7 @@ before(async () => {
       saveAcquisitionSettings: input => call('saveAcquisitionSettings',input,input),
       retryAcquisition: input => call('retryAcquisition',input,job(input.jobId.slice(4),{generation:'generation-new',documentId:input.replacementDocumentId??null})),
       cancelAcquisition: input => call('cancelAcquisition',input,job(input.jobId.slice(4),{status:'cancelled'})),
-      listLibrary: async () => ok([]),
+      listLibraryPage: async () => ok({items:[],total:0,hasMore:false,nextCursor:null}),
       wikiSnapshot: async () => ok({sources:[]}),
       importDocument: input => call('importDocument',input,{id:'manual-document'}),
       onLibraryChanged: listener => {listeners.add(listener); return ()=>listeners.delete(listener);}

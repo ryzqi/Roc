@@ -68,6 +68,7 @@ before(async () => {
       const onImported = () => window.imported++;
       const library={items:[{id:'paper-copy',metadata:{title:'Citation paper',authors:[],publishedYear:2026,citationCount:null,source:'doi'},
         bibliography:{citationKey:'author2026paper',fields:{}},projectIds:['project-a'],archived:false}],status:'ready',
+        total:1,hasMore:false,loadingMore:false,loadMoreError:null,loadMore:()=>{},
         query:'',selectedId:null,projectId:'project-a',includeArchived:false,action:{error:null},
         setQuery:()=>{},reload:()=>{},setIncludeArchived:()=>{},select:()=>{}};
       flushSync(() => root.render(<MotionConfig reducedMotion="user"><LazyMotion features={domAnimation} strict><div style={{height:700}}>

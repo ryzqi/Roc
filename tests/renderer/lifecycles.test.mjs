@@ -162,7 +162,7 @@ async function mountLiteratureSelection() {
   await page.evaluate(() => {
     clearHook();
     window.literatureProps = {projectId: 'project-a', client: {api: {research: {
-      listLibrary: () => Promise.resolve(ok([])),
+      listLibraryPage: () => Promise.resolve(ok({items:[],total:0,hasMore:false,nextCursor:null})),
       getLibraryItem: ({id}) => Promise.resolve(ok({id})),
       listDocuments: () => Promise.resolve(ok([])),
       wikiSnapshot: () => Promise.resolve(ok({sources: [], claims: []})),

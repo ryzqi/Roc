@@ -354,7 +354,7 @@ import {
   researchLibraryArchiveRequestSchema, researchLibraryCitationKeyRequestSchema, researchLibraryDoiImportRequestSchema,
   researchLibraryExportRequestSchema, researchLibraryExportSchema, researchLibraryFileImportRequestSchema,
   researchLibraryIdRequestSchema, researchLibraryImportResultSchema, researchLibraryItemSchema, researchLibraryLinkRequestSchema,
-  researchLibraryListRequestSchema, researchLibraryRecordImportRequestSchema
+  researchLibraryListRequestSchema, researchLibraryListPageRequestSchema, researchLibraryPageSchema, researchLibraryRecordImportRequestSchema
 } from './schemas/research-library';
 import {
   researchDocumentIdRequestSchema, researchDocumentImportRequestSchema, researchDocumentListRequestSchema,
@@ -927,6 +927,7 @@ export const ipcRegistry = {
     request({ key: 'researchTemplateSetEntry', channel: 'roc:research:template-set-entry', domain: 'research', method: 'setTemplateEntry', kind: 'plugin', capabilityName: 'research.template.setEntry', inputTransform: first, contract: methodContract(oneArg(researchTemplateEntryRequestSchema), researchTemplateSchema) }),
     request({ key: 'researchTemplateCancel', channel: 'roc:research:template-cancel', domain: 'research', method: 'cancelTemplateCompile', kind: 'plugin', capabilityName: 'research.template.cancel', inputTransform: first, contract: methodContract(oneArg(researchTemplateCompileRequestSchema), researchTemplateSchema) }),
     request({ key: 'researchLibraryList', channel: 'roc:research:library-list', domain: 'research', method: 'listLibrary', kind: 'plugin', capabilityName: 'research.library.list', inputTransform: first, contract: methodContract(oneArg(researchLibraryListRequestSchema), researchLibraryItemSchema.array()) }),
+    request({ key: 'researchLibraryListPage', channel: 'roc:research:library-list-page', domain: 'research', method: 'listLibraryPage', kind: 'plugin', capabilityName: 'research.library.listPage', inputTransform: first, contract: methodContract(oneArg(researchLibraryListPageRequestSchema), researchLibraryPageSchema) }),
     request({ key: 'researchLibraryGet', channel: 'roc:research:library-get', domain: 'research', method: 'getLibraryItem', kind: 'plugin', capabilityName: 'research.library.get', inputTransform: first, contract: methodContract(oneArg(researchLibraryIdRequestSchema), researchLibraryItemSchema) }),
     request({ key: 'researchLibraryIdentifiers', channel: 'roc:research:library-identifiers', domain: 'research', method: 'getLibraryIdentifiers', kind: 'plugin', capabilityName: 'research.library.getIdentifiers', inputTransform: first, contract: methodContract(oneArg(literatureReadIdentifiersSchema), literatureIdentifierRecordsResultSchema) }),
     request({ key: 'researchLibraryReviews', channel: 'roc:research:library-reviews', domain: 'research', method: 'getLibraryReviews', kind: 'plugin', capabilityName: 'research.library.getReviews', inputTransform: first, contract: methodContract(oneArg(literatureReadReviewsSchema), literatureReviewRecordsResultSchema) }),

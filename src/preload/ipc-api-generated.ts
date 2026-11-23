@@ -447,6 +447,7 @@ export const rocApi: RocPreloadApi = {
     setTemplateEntry: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateSetEntry, ...args),
     cancelTemplateCompile: (...args) => ipcRenderer.invoke(ipcChannels.researchTemplateCancel, ...args),
     listLibrary: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryList, ...args),
+    listLibraryPage: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryListPage, ...args),
     getLibraryItem: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryGet, ...args),
     getLibraryIdentifiers: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryIdentifiers, ...args),
     getLibraryReviews: (...args) => ipcRenderer.invoke(ipcChannels.researchLibraryReviews, ...args),
