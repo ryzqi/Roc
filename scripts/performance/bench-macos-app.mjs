@@ -10,6 +10,7 @@ import { observeElectronLoop, sampleElectronProcesses } from './electron-metrics
 import {rendererSnapshot} from './renderer-workload-metrics.mjs';
 import {runUiWorkloads, uiWorkloadFixture} from './ui-workload-scenarios.mjs';
 import {sustainedStreamConfig} from './sustained-stream-scenario.mjs';
+import {closeBenchmarkElectron, launchBenchmarkElectron, recordBenchmarkFailure} from './electron-lifecycle.mjs';
 
 assert.equal(process.platform, 'darwin', 'macos_required');
 assert.equal(process.arch, 'arm64', 'arm64_required');
@@ -30,6 +31,7 @@ const report = makeReport('macos-app', { events: protocol.app.events, samples: o
     'src/renderer/assistant/use-chat-run.ts', 'scripts/performance/bench-macos-app.mjs',
     'scripts/performance/renderer-workload-metrics.mjs', 'scripts/performance/ui-workload-scenarios.mjs',
     'scripts/performance/sustained-stream-scenario.mjs',
+    'scripts/performance/electron-lifecycle.mjs',
     'tests/smoke/lib/performance-profile-seed.ts', 'tests/smoke/lib/fixtures.mjs',
     join(appBuildDir,'renderer/.vite/manifest.json'), join(appBuildDir,'main/index.js'), join(appBuildDir,'preload/index.cjs')]);
 const root = mkdtempSync(join(tmpdir(), 'roc-app-performance-'));
@@ -39,6 +41,8 @@ const artifactDir = process.env.ROC_PERF_KEEP_ARTIFACTS === '1'
 mkdirSync(artifactDir, { recursive: true });
 if (process.env.ROC_PERF_KEEP_ARTIFACTS === '1') report.artifactRoot = artifactDir;
 let app;
+let currentScenario = 'prepare';
+report.status = 'incomplete';
 
 try {
   const { seedPerformanceProfiles, seedUiPerformanceProfile } = await importTypeScriptModule('tests/smoke/lib/performance-profile-seed.ts',
@@ -47,20 +51,29 @@ try {
   seedPerformanceProfiles(templates);
   for (const eventCount of protocol.app.events) {
     const rows = [], processSamples = [], idleSamples = [];
+    const scenario = {id: `events-${eventCount}`, summary: {}, samples: rows, processSamples, idleSamples};
+    report.scenarios.push(scenario);
     for (let iteration = 0; iteration < options.samples; iteration++) {
       const dataRoot = join(root, `${eventCount}-${iteration}`);
       cpSync(eventCount === 0 ? templates.empty : eventCount === 1000 ? templates.profile1000 : templates.profile10000, dataRoot, { recursive: true });
       const startedAt = performance.now();
-      app = await electron.launch({ args: [`--user-data-dir=${join(dataRoot, 'chromium')}`, resolve(appBuildDir,'main/index.js')],
-        env: { ...process.env, ROC_SMOKE: '1', ROC_DATA_ROOT: dataRoot } });
-      await observeElectronLoop(app);
-      const page = await app.firstWindow();
+      currentScenario = `events-${eventCount}-sample-${iteration + 1}`;
       const pageErrors = [];
-      page.on('pageerror', error => pageErrors.push(error.message));
-      await app.evaluate(({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setContentSize(size.width, size.height), viewport);
-      await waitForAppReady(page, `app-${eventCount}-${iteration}`, artifactDir);
-      assert.deepEqual(await page.evaluate(() => ({ width: innerWidth, height: innerHeight })), viewport,
-        'actual_renderer_viewport');
+      const launched = await launchBenchmarkElectron(electron, {
+        args: [`--user-data-dir=${join(dataRoot, 'chromium')}`, resolve(appBuildDir,'main/index.js')],
+        env: { ...process.env, ROC_SMOKE: '1', ROC_DATA_ROOT: dataRoot }
+      }, async application => {
+        await observeElectronLoop(application);
+        const page = await application.firstWindow();
+        page.on('pageerror', error => pageErrors.push(error.message));
+        await application.evaluate(({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setContentSize(size.width, size.height), viewport);
+        await waitForAppReady(page, `app-${eventCount}-${iteration}`, artifactDir);
+        assert.deepEqual(await page.evaluate(() => ({ width: innerWidth, height: innerHeight })), viewport,
+          'actual_renderer_viewport');
+        return page;
+      });
+      app = launched.app;
+      const page = launched.value;
       const rendererReadyMs = performance.now() - startedAt;
       await page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
       const firstPaintMs = await page.evaluate(() => performance.getEntriesByName('first-contentful-paint')[0]?.startTime ?? null);
@@ -108,6 +121,7 @@ try {
         mainHeapUsedBytes: metrics.main.heapUsed, mainExternalBytes: metrics.main.external, mainArrayBufferBytes: metrics.main.arrayBuffers,
         mainPrivateMemoryBytes: metrics.mainPrivateMemoryBytes,
         processWorkingSetSumBytes: metrics.processes.reduce((sum, metric) => sum + metric.workingSetBytes, 0) });
+      scenario.summary = summarizeRows(rows);
       if (options.idleMinutes > 0 && eventCount === 0 && iteration === 0) {
         await page.evaluate(() => {
           window.__rocBenchmarkHidden = false;
@@ -154,21 +168,27 @@ try {
           report.reopenMs = performance.now() - reopenStarted;
         }
       }
-      await app.close(); app = null;
+      await closeBenchmarkElectron(app); app = null;
       console.log(JSON.stringify({ eventCount, sample: iteration + 1, rendererReadyMs }));
     }
-    report.scenarios.push({ id: `events-${eventCount}`, summary: summarizeRows(rows), samples: rows, processSamples, idleSamples });
     saveReport(options.outputPath, report);
   }
   if (uiWorkloads) {
     const dataRoot = join(root, 'ui-workloads');
     seedUiPerformanceProfile(dataRoot);
-    app = await electron.launch({args: [`--user-data-dir=${join(dataRoot, 'chromium')}`, resolve(appBuildDir,'main/index.js')],
-      env: {...process.env, ROC_SMOKE: '1', ROC_DATA_ROOT: dataRoot}});
-    await observeElectronLoop(app);
-    const page = await app.firstWindow();
-    await app.evaluate(({BrowserWindow}, size) => BrowserWindow.getAllWindows()[0].setContentSize(size.width, size.height), viewport);
-    await waitForAppReady(page, 'ui-workloads', artifactDir);
+    currentScenario = 'ui-workloads';
+    const launched = await launchBenchmarkElectron(electron, {
+      args: [`--user-data-dir=${join(dataRoot, 'chromium')}`, resolve(appBuildDir,'main/index.js')],
+      env: {...process.env, ROC_SMOKE: '1', ROC_DATA_ROOT: dataRoot}
+    }, async application => {
+      await observeElectronLoop(application);
+      const page = await application.firstWindow();
+      await application.evaluate(({BrowserWindow}, size) => BrowserWindow.getAllWindows()[0].setContentSize(size.width, size.height), viewport);
+      await waitForAppReady(page, 'ui-workloads', artifactDir);
+      return page;
+    });
+    app = launched.app;
+    const page = launched.value;
     try {
       await runUiWorkloads({app, page, report, sustainedStream, save: () => saveReport(options.outputPath, report)});
     } catch (error) {
@@ -184,7 +204,7 @@ try {
       saveReport(options.outputPath, report);
       throw error;
     }
-    await app.close(); app = null;
+    await closeBenchmarkElectron(app); app = null;
   }
   if (profilingBuild) report.limitations.push('This is a dedicated React production profiling build with explicit component boundaries and preload IPC counters. Instrumentation adds overhead; its wall-clock, CPU, heap and startup observations cannot be substituted for the ordinary production benchmark.');
   report.limitations.push('Fresh isolated profiles/launches; OS filesystem cache remains warm.',
@@ -195,8 +215,19 @@ try {
     'Idle visibility is asserted in both BrowserWindow and Renderer forwarding. visible+hidden observes two separate intervals in that order; checkpoints alone cannot prove zero activity between samples.',
     'mainCpuOneCorePercent uses process.cpuUsage delta / elapsed wall time; 100% means one logical CPU core. It is not normalized by host logical CPU count and differs from Electron process interval metrics.',
     'PDF/OCR, background-busy and long idle are separate explicitly selected workloads; this startup report does not establish them.');
+  report.status = 'complete';
   saveReport(options.outputPath, report);
+} catch (error) {
+  recordBenchmarkFailure(report, error, currentScenario);
+  saveReport(options.outputPath, report);
+  throw error;
 } finally {
-  try {if (app) await app.close();}
+  try {if (app) await closeBenchmarkElectron(app);}
+  catch (error) {
+    const hadFailure = report.status === 'failed';
+    recordBenchmarkFailure(report, error, currentScenario);
+    saveReport(options.outputPath, report);
+    if (!hadFailure) throw error;
+  }
   finally {rmSync(root, { recursive: true, force: true });}
 }

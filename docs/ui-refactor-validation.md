@@ -1,5 +1,11 @@
 # UI 重构验证记录
 
+## 2026-11-24 P7.5：测量进程超时与失败保留
+
+状态：**Verified passing**（工具回归范围）。启动至界面就绪限制30秒，正常关闭限制15秒；发生原生模态卡住时仅终止本轮持有的进程并等待退出，再清理隔离资料根。长流/空闲测量窗口不受这些时限影响。诊断读取和取消订阅也有界，失败JSON/Markdown保留阶段、已有样本和清理异常，避免挂住或误写成功。
+
+工作目录 `/Users/Apple_501/Desktop/Roc/Roc`。`node --test tests/unit/performance-electron-lifecycle.test.mjs tests/unit/performance-repeated-workloads.test.mjs tests/unit/performance-child-report.test.mjs tests/unit/performance-ui-runs.test.mjs tests/unit/performance-profiling.test.mjs tests/unit/performance-report.test.mjs` **34/34**；真实Node子进程验证挂住、退出等待、仅清理所属进程及旁路进程存活。相关脚本 `node --check` 和 `git diff --check` 通过；真实Electron预检另记。
+
 ## 2026-11-24 P8.3：文件校验取消的主进程异常
 
 状态：**Verified passing**（取消边界与定向单元范围）。preflight7在第三次应用启动前出现原生未捕获异常弹窗；目标进程采样及可访问性文本确定为 `FileHandle.createReadStream` 的AbortError，来源是原生代码校验。真实子进程复现：异步元数据读取期间取消，已取消信号进入读取流后，迭代虽拒绝仍另发未处理错误。原生代码和同模式视觉模型扫描在异步读取/打开后、创建流前同步检查取消；保留读取中的取消、原始I/O失败及文件描述符关闭。

@@ -21,6 +21,7 @@ const report = makeReport('macos-ui-workloads', {independentRuns: options.sample
   scenarioIds: uiScenarioIds, viewport: {width: 1440, height: 900}}, [
   'scripts/performance/bench-ui-workloads.mjs', 'scripts/performance/summarize-ui-runs.mjs',
   'scripts/performance/child-environment.mjs', 'scripts/performance/child-report.mjs',
+  'scripts/performance/electron-lifecycle.mjs',
   'scripts/performance/bench-macos-app.mjs', 'scripts/performance/renderer-workload-metrics.mjs',
   'scripts/performance/ui-workload-scenarios.mjs', 'tests/smoke/lib/performance-profile-seed.ts',
   'dist/renderer/.vite/manifest.json', 'dist/main/index.js', 'dist/preload/index.cjs']);

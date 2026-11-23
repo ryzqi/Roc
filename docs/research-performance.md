@@ -31,6 +31,8 @@ UI 基线先执行 `pnpm build`，随后串行量测，期间不并行运行 Ele
 
 普通 UI、React Profiler 与重复工作负载的上层入口统一清除继承的 `ROC_PERF_*`、`ELECTRON_RENDERER_URL` 和 `ELECTRON_RUN_AS_NODE`，再显式指定本轮模式、构建目录及清理策略，防止工作站开发服务或上一轮选项改变实际被测对象。需要自选原始 trace 等选项时，使用相应底层入口。子报告读取采用共同的容错路径：缺失报告保留 null；截断或无效 JSON 保留解析错误及原始内容，不因再次解析失败跳过最终失败状态保存。
 
+上述正式入口使用的 macOS 应用、PDF Reader 及配对启动脚本统一限制启动至界面就绪为 30 秒、正常关闭为 15 秒。启动预算包括首次窗口、Main 初始化观察器和 Renderer 就绪，不改变原始启动计时起止点，也不覆盖长期空闲或流式工作负载。关闭超时或失败只终止本次 Playwright 返回的进程，等待其退出后再清理资料根；不枚举或终止其他 Electron 进程。失败报告保留已采样场景、场景名、`startup` / `close` / `workload` 阶段及清理异常，JSON 和 Markdown 均标记 `failed`；成功状态须在正常关闭后才能写入。回归入口为 `node --test tests/unit/performance-electron-lifecycle.test.mjs`，使用真实 Node 子进程模拟挂住和旁路进程，不能替代真实 Electron 预检。
+
 `ROC_PERF_IDLE_VISIBILITY` 可选 `visible`、`hidden`、`both`，默认 `hidden` 兼容已有协议。`both` 总计观察两段独立空闲时长。空闲期间不启用 tracing 或 RAF 循环；每个检查点同时验证原生窗口可见性与 Renderer 收到的 hidden 状态。`mainCpuOneCorePercent` 为 `process.cpuUsage()` 差值 / 墙钟时长，100% 表示占满一个逻辑核；它不除以逻辑核数，也不等同 Electron 各进程自己的采样区间 CPU 百分比。检查点能证明采样状态，不能证明两个点之间没有任何活动。
 
 大规模交互与连续 PDF 翻页使用短窗口 CDP `devtools.timeline,toplevel,blink.user_timing` trace。报告保留事件总数、Renderer 主线程标识、顶层任务总耗时、≥50ms 长任务数量/耗时、Layout/Paint 各自的嵌套耗时，以及 RAF 间隔分位和输入事件到第二次 RAF 的代理延迟。Layout/Paint 不再累加进顶层 busy 时间，避免重复计量。RAF 频率不是合成器 FPS，第二次 RAF 是绘制机会代理，不能当作显示器呈现延迟；tracing/RAF 观察器本身有开销。默认只保留上述摘要；显式设置 `ROC_PERF_RAW_TRACE_DIR=<本次临时目录>` 可输出完整 Chrome trace JSON，使用独占创建防止覆盖已有 trace，复核后删除该临时目录。

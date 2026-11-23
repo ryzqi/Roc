@@ -20,6 +20,7 @@ try {
     viewport:{width:1440,height:900}},[
     'electron.profiling.config.ts','scripts/performance/bench-react-profiler.mjs',
     'scripts/performance/child-environment.mjs','scripts/performance/child-report.mjs',
+    'scripts/performance/electron-lifecycle.mjs',
     'scripts/performance/profile-metrics.mjs','scripts/performance/renderer-workload-metrics.mjs',
     ...['build-app','build-plugin','collectors','preload-runtime','renderer-runtime','summarize-runs']
       .map(name=>`scripts/performance/profiling/${name}.mjs`),

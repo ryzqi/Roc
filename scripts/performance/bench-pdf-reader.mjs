@@ -10,6 +10,7 @@ import { waitForAppReady } from '../../tests/smoke/lib/assertions.mjs';
 import { observeElectronLoop, sampleElectronProcesses } from './electron-metrics.mjs';
 import { makeReport, readArguments, saveReport, sha256, summarizeRows } from './report-lib.mjs';
 import {measureRendererWorkload} from './renderer-workload-metrics.mjs';
+import {closeBenchmarkElectron, launchBenchmarkElectron, recordBenchmarkFailure, withBenchmarkTimeout} from './electron-lifecycle.mjs';
 
 const options = readArguments('.artifacts/mac-performance/reader-before.json');
 const nativeReopen = process.env.ROC_PERF_PDF_BACKGROUND_REOPEN === '1';
@@ -28,6 +29,7 @@ const report = makeReport('pdf-reader', { pdfSha256: sha256(bytes), pages: 400, 
   nativeReopen, nativeReopenHiddenMs, ...(pageTurns > 0 ? {pageTurns} : {}), nativeReopenInputProbe: nativeReopen ? 'shell-and-pdf' : null },
 ['src/renderer/literature/PaperPdfView.tsx', 'src/main/pdf-preview-protocol.ts',
   'scripts/performance/bench-pdf-reader.mjs', 'scripts/performance/renderer-workload-metrics.mjs',
+  'scripts/performance/electron-lifecycle.mjs',
   'src/main/plugins/research/document-service.ts', 'dist/main/index.js', 'dist/preload/index.cjs']);
 report.rendererBuild = {
   variant: referenceRenderer === undefined ? 'current' : 'frozen-pr-10-reader',
@@ -43,6 +45,7 @@ const artifactRoot = process.env.ROC_PERF_KEEP_ARTIFACTS === '1'
 mkdirSync(artifactRoot, {recursive: true});
 if (process.env.ROC_PERF_KEEP_ARTIFACTS === '1') report.artifactRoot = artifactRoot;
 let app, page;
+report.status = 'incomplete';
 try {
   const { seedPerformanceProfiles } = await importTypeScriptModule('tests/smoke/lib/performance-profile-seed.ts',
     { platform: 'node', external: ['better-sqlite3'], tempDir: resolve('.runtime/performance') });
@@ -50,15 +53,19 @@ try {
   seedPerformanceProfiles(roots);
   const sourcePath = join(root, '400-pages.pdf');
   writeFileSync(sourcePath, bytes);
-  app = await electron.launch({ args: [`--user-data-dir=${join(root, 'chromium')}`, resolve('dist/main/index.js')],
+  const errors = [];
+  const launched = await launchBenchmarkElectron(electron, { args: [`--user-data-dir=${join(root, 'chromium')}`, resolve('dist/main/index.js')],
     env: { ...process.env, ROC_SMOKE: '1', ROC_DATA_ROOT: roots.empty,
       ...(referenceRenderer === undefined ? {} :
-        {ELECTRON_RENDERER_URL: pathToFileURL(join(rendererRoot, 'index.html')).href}) } });
-  await observeElectronLoop(app);
-  page = await app.firstWindow();
-  const errors = [];
-  page.on('pageerror', error => errors.push(error.message));
-  await waitForAppReady(page, 'pdf-reader', artifactRoot);
+        {ELECTRON_RENDERER_URL: pathToFileURL(join(rendererRoot, 'index.html')).href}) } }, async application => {
+    await observeElectronLoop(application);
+    const page = await application.firstWindow();
+    page.on('pageerror', error => errors.push(error.message));
+    await waitForAppReady(page, 'pdf-reader', artifactRoot);
+    return page;
+  });
+  app = launched.app;
+  page = launched.value;
   await page.evaluate(() => {
     window.__rocBenchmarkHidden = false;
     window.roc.window.onHidden(snapshot => { window.__rocBenchmarkHidden = snapshot.hidden; });
@@ -281,15 +288,32 @@ try {
   if (pageTurns > 0) report.limitations.push('Continuous PDF turns use the real Next page control from page 1 and require the requested page, a fresh canvas allocation and completed visible raster for every step. Tracing/RAF observers add overhead; RAF cadence is not compositor FPS.');
   if (referenceRenderer !== undefined) report.limitations.push(
     'Reference replaces only PaperPdfView.tsx with the exact PR-10 source in a separately built production Renderer. Main, preload, source protocol, shell and dependencies are current; reference intentionally retains the hidden Worker/canvas.');
+  await closeBenchmarkElectron(app); app = null;
+  report.status = 'complete';
   console.log(saveReport(options.outputPath, report));
 } catch (error) {
+  recordBenchmarkFailure(report, error, 'pdf-reader');
+  saveReport(options.outputPath, report);
   if (page && !page.isClosed()) {
-    await page.screenshot({ path: join(artifactRoot, 'reader-failure.png') });
-    writeFileSync(join(artifactRoot, 'reader-failure.html'), await page.content());
+    try {
+      await withBenchmarkTimeout('diagnostics', async () => {
+        await page.screenshot({ path: join(artifactRoot, 'reader-failure.png'), timeout: 5_000 });
+        writeFileSync(join(artifactRoot, 'reader-failure.html'), await page.content());
+      }, 5_000);
+    } catch (diagnosticsError) {
+      report.diagnosticsError = String(diagnosticsError);
+      saveReport(options.outputPath, report);
+    }
   }
   throw error;
 } finally {
-  try {if (app) await app.close();}
+  try {if (app) await closeBenchmarkElectron(app);}
+  catch (error) {
+    const hadFailure = report.status === 'failed';
+    recordBenchmarkFailure(report, error, 'pdf-reader');
+    saveReport(options.outputPath, report);
+    if (!hadFailure) throw error;
+  }
   finally {rmSync(root, { recursive: true, force: true });}
 }
 

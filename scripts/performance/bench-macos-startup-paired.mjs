@@ -7,6 +7,7 @@ import { importTypeScriptModule } from '../lib/bundle-ts.mjs';
 import { waitForAppReady } from '../../tests/smoke/lib/assertions.mjs';
 import { makeReport, readArguments, saveReport, summarizeRows, sha256 } from './report-lib.mjs';
 import { observeElectronLoop, sampleElectronProcesses } from './electron-metrics.mjs';
+import {closeBenchmarkElectron, launchBenchmarkElectron, recordBenchmarkFailure} from './electron-lifecycle.mjs';
 
 const options = readArguments('.artifacts/mac-performance/mac-startup-pr-10-paired-valid.json');
 const paths = { before: resolve(process.env.ROC_PERF_FROZEN_DIST ?? '.runtime'),
@@ -20,7 +21,7 @@ for (const path of Object.values(paths)) {
 const fixture = { version: 1, eventCounts: [0, 10000], order: 'alternating pairs',
   beforeGitSha: process.env.ROC_PERF_FROZEN_GIT_SHA ?? 'f1c6d792', samples: options.samples, nativeDialogs: false };
 const report = makeReport('macos-startup-paired', fixture, ['src/main/plugins/research/index.ts',
-  'src/main/plugins/research/research-plugin-lifecycle.ts', 'dist/main/index.js']);
+  'src/main/plugins/research/research-plugin-lifecycle.ts', 'scripts/performance/electron-lifecycle.mjs', 'dist/main/index.js']);
 report.builtMainHashes = Object.fromEntries(Object.entries(paths).map(([variant, path]) =>
   [variant, sha256(readFileSync(join(path, 'main/index.js')))]));
 report.limitations.push(
@@ -32,6 +33,8 @@ report.limitations.push(
 );
 const root = mkdtempSync(join(tmpdir(), 'roc-startup-pairs-'));
 let app;
+let currentScenario = 'prepare';
+report.status = 'incomplete';
 try {
   const { seedPerformanceProfiles } = await importTypeScriptModule('tests/smoke/lib/performance-profile-seed.ts',
     { platform: 'node', external: ['better-sqlite3'], tempDir: resolve('.runtime/performance') });
@@ -41,18 +44,26 @@ try {
   mkdirSync(artifacts, { recursive: true });
   for (const events of fixture.eventCounts) {
     const rows = { before: [], after: [] };
+    const scenarios = Object.fromEntries(Object.entries(rows).map(([variant, samples]) =>
+      [variant, {id: `events-${events}-${variant}`, samples, summary: {}}]));
+    report.scenarios.push(...Object.values(scenarios));
     for (let i = 0; i < options.samples; i++) {
       for (const variant of i % 2 === 0 ? ['before', 'after'] : ['after', 'before']) {
         const dataRoot = join(root, `${events}-${i}-${variant}`);
         cpSync(events === 0 ? templates.empty : templates.profile10000, dataRoot, { recursive: true });
         const started = performance.now();
-        app = await electron.launch({
+        currentScenario = `events-${events}-pair-${i + 1}-${variant}`;
+        const launched = await launchBenchmarkElectron(electron, {
           args: [`--user-data-dir=${join(dataRoot, 'chromium')}`, join(paths[variant], 'main/index.js')],
           env: {...process.env, ROC_SMOKE: '1', ROC_DATA_ROOT: dataRoot}
+        }, async application => {
+          await observeElectronLoop(application);
+          const page = await application.firstWindow();
+          await waitForAppReady(page, `startup-pair-${events}-${i}-${variant}`, artifacts);
+          return page;
         });
-        await observeElectronLoop(app);
-        const page = await app.firstWindow();
-        await waitForAppReady(page, `startup-pair-${events}-${i}-${variant}`, artifacts);
+        app = launched.app;
+        const page = launched.value;
         const rendererReadyMs = performance.now() - started;
         await page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
         const firstPaintMs = await page.evaluate(() => performance.getEntriesByName('first-contentful-paint')[0]?.startTime);
@@ -79,17 +90,25 @@ try {
           rendererReadyMs, firstPaintMs, inputReadyMs, mainRssBytes: metrics.main.rss,
           processWorkingSetSumBytes: metrics.processes.reduce((sum, metric) => sum + metric.workingSetBytes, 0)
         });
-        await app.close(); app = null;
+        scenarios[variant].summary = summarizeRows(rows[variant]);
+        await closeBenchmarkElectron(app); app = null;
       }
       console.log(`Startup events-${events} pair ${i + 1}/${options.samples}`);
     }
-    for (const [variant, samples] of Object.entries(rows)) report.scenarios.push({
-      id: `events-${events}-${variant}`, samples, summary: summarizeRows(samples)
-    });
     saveReport(options.outputPath, report);
   }
+  report.status = 'complete';
   console.log(saveReport(options.outputPath, report));
+} catch (error) {
+  recordBenchmarkFailure(report, error, currentScenario);
+  saveReport(options.outputPath, report);
+  throw error;
 } finally {
-  if (app) await app.close();
-  rmSync(root, { recursive: true, force: true });
+  try {if (app) await closeBenchmarkElectron(app);}
+  catch (error) {
+    const hadFailure = report.status === 'failed';
+    recordBenchmarkFailure(report, error, currentScenario);
+    saveReport(options.outputPath, report);
+    if (!hadFailure) throw error;
+  } finally {rmSync(root, { recursive: true, force: true });}
 }

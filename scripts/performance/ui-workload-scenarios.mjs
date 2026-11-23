@@ -5,6 +5,7 @@ import {sampleElectronProcesses} from './electron-metrics.mjs';
 import {measureRendererWorkload} from './renderer-workload-metrics.mjs';
 import {summarizeRows} from './report-lib.mjs';
 import {runSustainedStream} from './sustained-stream-scenario.mjs';
+import {withBenchmarkTimeout} from './electron-lifecycle.mjs';
 
 export const uiWorkloadFixture = {projects: 100, literature: [100, 2000, 10000],
   historyMessages: [500, 5000], streamChunks: [500, 5000], streamChunkIntervalMs: 1,
@@ -21,7 +22,8 @@ export async function runUiWorkloads({app, page, report, save, sustainedStream =
   page.on('pageerror', onError);
   let provider, activeWorkloadId = 'ui-workload-setup';
   const captureFailure = async (id, error) => {
-    report.failedWorkload = {id, error: String(error), state: await page.evaluate(() => ({
+    let diagnosticsError;
+    report.failedWorkload = {id, error: String(error), state: await withBenchmarkTimeout('diagnostics', () => page.evaluate(() => ({
       text: document.body.innerText.slice(-2000), terminals: window.__rocWorkloadTerminals,
       stream: window.__rocWorkloadStream, events: window.__rocWorkloadEventCount,
       transcript: (() => {
@@ -35,7 +37,7 @@ export async function runUiWorkloads({app, page, report, save, sustainedStream =
       composerMode: document.querySelector('[data-testid="assistant-composer-mode"]')?.getAttribute('aria-label'),
       send: document.querySelector('[data-testid="assistant-composer-send"]')?.textContent,
       sendDisabled: document.querySelector('[data-testid="assistant-composer-send"]')?.disabled
-    })).catch(() => null), providerRequests: (provider?.requests ?? []).map(request => ({
+    })), 5_000).catch(error => {diagnosticsError = String(error); return null;}), providerRequests: (provider?.requests ?? []).map(request => ({
       method: request.method, url: request.url, model: request.body?.model,
       stream: request.body?.stream, messageCount: request.body?.messages?.length,
       scriptedTurns: request.body?.messages?.flatMap(message => {
@@ -43,6 +45,7 @@ export async function runUiWorkloads({app, page, report, save, sustainedStream =
         return text?.match(/ROC-P4-(?:RUN|SLOW-TAG):[A-Za-z0-9_-]+/gu) ?? [];
       })
     }))};
+    if (diagnosticsError !== undefined) report.failedWorkload.diagnosticsError = diagnosticsError;
     save();
   };
   const record = async (id, action) => {
@@ -224,7 +227,13 @@ export async function runUiWorkloads({app, page, report, save, sustainedStream =
     throw error;
   } finally {
     try {
-      if (!page.isClosed()) await page.evaluate(() => {window.__rocWorkloadUnsubscribe?.(); delete window.__rocWorkloadUnsubscribe;});
+      if (!page.isClosed()) await withBenchmarkTimeout('cleanup', () => page.evaluate(() => {
+        window.__rocWorkloadUnsubscribe?.(); delete window.__rocWorkloadUnsubscribe;
+      }), 5_000);
+    } catch (cleanupError) {
+      if (report.failedWorkload === undefined) throw cleanupError;
+      report.failedWorkload.cleanupError = String(cleanupError);
+      save();
     } finally {
       try {await provider?.close({force: true});}
       finally {page.off('pageerror', onError);}

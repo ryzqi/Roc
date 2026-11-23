@@ -16,6 +16,7 @@ const report = makeReport(`macos-${options.workload}-repeated`, {independentRuns
     : {pdfPages: 400, pageTurns: pdfPageTurns})}, [
   'scripts/performance/bench-repeated-workloads.mjs', 'scripts/performance/repeated-workload-runner.mjs',
   'scripts/performance/child-environment.mjs', 'scripts/performance/child-report.mjs',
+  'scripts/performance/electron-lifecycle.mjs',
   'scripts/performance/summarize-repeated-workloads.mjs', 'scripts/performance/summarize-ui-runs.mjs',
   'scripts/performance/report-lib.mjs', 'scripts/performance/bench-macos-app.mjs', 'scripts/performance/bench-pdf-reader.mjs',
   'scripts/performance/sustained-stream-scenario.mjs', 'scripts/performance/renderer-workload-metrics.mjs',
